@@ -14,6 +14,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<CurrentAccount> CurrentAccounts => Set<CurrentAccount>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
+    public DbSet<Personnel> Personnel => Set<Personnel>();
+    public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,6 +27,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigureCurrentAccounts(modelBuilder);
         ConfigureProjects(modelBuilder);
         ConfigureWarehouses(modelBuilder);
+        ConfigurePersonnel(modelBuilder);
+        ConfigurePersonnelAssignments(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -210,4 +214,83 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
+
+    private static void ConfigurePersonnel(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Personnel>(entity =>
+        {
+            entity.ToTable("personnel");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.EmployeeNumber })
+                .IsUnique();
+
+            entity.HasIndex(x => x.IdentityNumber)
+                .IsUnique();
+
+            entity.Property(x => x.EmployeeNumber)
+                .HasMaxLength(40)
+                .IsRequired();
+
+            entity.Property(x => x.FirstName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.LastName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.IdentityNumber).HasMaxLength(20);
+            entity.Property(x => x.Phone).HasMaxLength(30);
+            entity.Property(x => x.Email).HasMaxLength(200);
+            entity.Property(x => x.JobTitle).HasMaxLength(150);
+            entity.Property(x => x.Profession).HasMaxLength(150);
+            entity.Property(x => x.SgkRegistrationNumber).HasMaxLength(50);
+            entity.Property(x => x.MonthlySalary).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Branch)
+                .WithMany()
+                .HasForeignKey(x => x.BranchId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigurePersonnelAssignments(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PersonnelAssignment>(entity =>
+        {
+            entity.ToTable("personnel_assignments");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.PersonnelId,
+                x.ProjectId,
+                x.StartDate
+            });
+
+            entity.Property(x => x.Role).HasMaxLength(150);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Personnel)
+                .WithMany(x => x.Assignments)
+                .HasForeignKey(x => x.PersonnelId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
 }
