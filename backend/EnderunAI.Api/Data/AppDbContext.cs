@@ -19,6 +19,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
 
+    public DbSet<EngineeringPosition> EngineeringPositions
+        => Set<EngineeringPosition>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -33,6 +36,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigurePersonnelAssignments(modelBuilder);
         ConfigurePurchaseRequests(modelBuilder);
         ConfigurePurchaseRequestItems(modelBuilder);
+        ConfigureEngineeringPositions(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -362,6 +366,73 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany(x => x.Items)
                 .HasForeignKey(x => x.PurchaseRequestId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+
+    private static void ConfigureEngineeringPositions(
+        ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EngineeringPosition>(entity =>
+        {
+            entity.ToTable("engineering_positions");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.CompanyId,
+                x.Code
+            }).IsUnique();
+
+            entity.HasIndex(x => new
+            {
+                x.CompanyId,
+                x.Source,
+                x.Discipline
+            });
+
+            entity.Property(x => x.Code)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.Name)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.Unit)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.OfficialInstitution)
+                .HasMaxLength(150);
+
+            entity.Property(x => x.OfficialCode)
+                .HasMaxLength(80);
+
+            entity.Property(x => x.Category)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.TechnicalSpecification)
+                .HasMaxLength(4000);
+
+            entity.Property(x => x.SearchKeywords)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.DefaultMasterHours)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.DefaultHelperHours)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.DefaultMachineHours)
+                .HasPrecision(18, 4);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
