@@ -284,6 +284,19 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
             .OrderByDescending(x => x.Count)
             .ToListAsync(cancellationToken);
 
+        var purchaseRequestCount = await db.PurchaseRequests
+            .AsNoTracking()
+            .CountAsync(x => x.ProjectId == id, cancellationToken);
+
+        var pendingPurchaseCount = await db.PurchaseRequests
+            .AsNoTracking()
+            .CountAsync(
+                x => x.ProjectId == id &&
+                     x.Status != PurchaseRequestStatus.Completed &&
+                     x.Status != PurchaseRequestStatus.Cancelled &&
+                     x.Status != PurchaseRequestStatus.Rejected,
+                cancellationToken);
+
         return Ok(new
         {
             project,
@@ -293,8 +306,8 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 PrimaryPersonnelCount = primaryPersonnelCount,
                 project.WarehouseCount,
 
-                PurchaseRequestCount = 0,
-                PendingPurchaseCount = 0,
+                PurchaseRequestCount = purchaseRequestCount,
+                PendingPurchaseCount = pendingPurchaseCount,
 
                 ClaimCount = 0,
                 PendingClaimCount = 0,

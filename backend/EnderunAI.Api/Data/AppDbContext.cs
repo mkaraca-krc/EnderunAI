@@ -16,6 +16,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<Personnel> Personnel => Set<Personnel>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
+    public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
+    public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,6 +31,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigureWarehouses(modelBuilder);
         ConfigurePersonnel(modelBuilder);
         ConfigurePersonnelAssignments(modelBuilder);
+        ConfigurePurchaseRequests(modelBuilder);
+        ConfigurePurchaseRequestItems(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -288,6 +292,76 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany()
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+
+    private static void ConfigurePurchaseRequests(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PurchaseRequest>(entity =>
+        {
+            entity.ToTable("purchase_requests");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.RequestNumber })
+                .IsUnique();
+
+            entity.Property(x => x.RequestNumber)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.RequestedByName)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.CancellationReason).HasMaxLength(500);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigurePurchaseRequestItems(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PurchaseRequestItem>(entity =>
+        {
+            entity.ToTable("purchase_request_items");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.PurchaseRequestId,
+                x.LineNumber
+            }).IsUnique();
+
+            entity.Property(x => x.MaterialDescription)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+
+            entity.Property(x => x.Unit)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.PurchaseRequest)
+                .WithMany(x => x.Items)
+                .HasForeignKey(x => x.PurchaseRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
