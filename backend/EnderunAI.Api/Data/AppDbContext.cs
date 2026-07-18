@@ -18,6 +18,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
+    public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
+    public DbSet<WarehouseStock> WarehouseStocks => Set<WarehouseStock>();
+    public DbSet<StockMovement> StockMovements => Set<StockMovement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,6 +36,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigurePersonnelAssignments(modelBuilder);
         ConfigurePurchaseRequests(modelBuilder);
         ConfigurePurchaseRequestItems(modelBuilder);
+        ConfigureInventoryItems(modelBuilder);
+        ConfigureWarehouseStocks(modelBuilder);
+        ConfigureStockMovements(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -363,6 +369,62 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .HasForeignKey(x => x.PurchaseRequestId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+
+    private static void ConfigureInventoryItems(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InventoryItem>(entity =>
+        {
+            entity.ToTable("inventory_items");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Category).HasMaxLength(150);
+            entity.Property(x => x.Brand).HasMaxLength(150);
+            entity.Property(x => x.Model).HasMaxLength(150);
+            entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Barcode).HasMaxLength(100);
+            entity.Property(x => x.MinimumStock).HasPrecision(18, 4);
+            entity.Property(x => x.MaximumStock).HasPrecision(18, 4);
+            entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureWarehouseStocks(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<WarehouseStock>(entity =>
+        {
+            entity.ToTable("warehouse_stocks");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.WarehouseId, x.InventoryItemId }).IsUnique();
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.ReservedQuantity).HasPrecision(18, 4);
+            entity.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.InventoryItem).WithMany(x => x.WarehouseStocks).HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureStockMovements(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<StockMovement>(entity =>
+        {
+            entity.ToTable("stock_movements");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.WarehouseId, x.InventoryItemId, x.MovementDate });
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.ReferenceNumber).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.RelatedWarehouse).WithMany().HasForeignKey(x => x.RelatedWarehouseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.InventoryItem).WithMany(x => x.StockMovements).HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.PurchaseRequest).WithMany().HasForeignKey(x => x.PurchaseRequestId).OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
