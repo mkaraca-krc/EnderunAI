@@ -52,3 +52,11 @@ Thumbs.db
 
 # Sunucuya özgü aktif release kaydı
 /deploy/CURRENT_RELEASE
+
+# Eski frontend yedekleri ve geçici dosyalar
+frontend/**/app-yedek-*/
+frontend/**/app_backup_*/
+frontend/**/components_backup_*/
+frontend/**/*.save
+frontend/**/*~
+frontend/**/*.backup-*
