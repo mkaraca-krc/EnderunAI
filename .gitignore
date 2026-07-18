@@ -1,0 +1,54 @@
+# Ortam ve gizli bilgiler
+.env
+.env.*
+!.env.example
+*.secret
+*.key
+*.pem
+appsettings.Production.json
+
+# Backend çıktıları
+backend/**/bin/
+backend/**/obj/
+backend/**/.vs/
+backend/**/appsettings.Development.json
+publish/
+publis/
+
+# Frontend çıktıları
+frontend/**/node_modules/
+frontend/**/.next/
+frontend/**/out/
+frontend/**/.turbo/
+frontend/**/npm-debug.log*
+frontend/**/yarn-debug.log*
+frontend/**/yarn-error.log*
+frontend/**/.env*
+!frontend/**/.env.example
+
+# Canlı veriler ve operasyon klasörleri
+uploads/
+backups/
+releases/
+deploy/logs/
+storage/
+logs/
+temp/
+
+# Editör ve sistem dosyaları
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+*.log
+
+# Kök dizindeki kurulum paketleri
+/*.zip
+
+# Manuel backend yedekleri
+/backend/*-yedek-*/
+
+# Sunucuya özgü aktif release kaydı
+/deploy/CURRENT_RELEASE
