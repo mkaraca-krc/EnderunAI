@@ -14,7 +14,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<CurrentAccount> CurrentAccounts => Set<CurrentAccount>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
-    public DbSet<EngineeringPosition> EngineeringPositions => Set<EngineeringPosition>();
     public DbSet<Personnel> Personnel => Set<Personnel>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
@@ -38,7 +37,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigureCurrentAccounts(modelBuilder);
         ConfigureProjects(modelBuilder);
         ConfigureWarehouses(modelBuilder);
-        ConfigureEngineeringPositions(modelBuilder);
         ConfigurePersonnel(modelBuilder);
         ConfigurePersonnelAssignments(modelBuilder);
         ConfigurePurchaseRequests(modelBuilder);
@@ -629,38 +627,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasOne(x => x.ManufacturerPriceListItem)
                 .WithMany()
                 .HasForeignKey(x => x.ManufacturerPriceListItemId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasQueryFilter(x => !x.IsDeleted);
-        });
-    }
-
-
-    private static void ConfigureEngineeringPositions(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<EngineeringPosition>(entity =>
-        {
-            entity.ToTable("engineering_positions");
-            entity.HasKey(x => x.Id);
-
-            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
-            entity.HasIndex(x => new { x.CompanyId, x.Source, x.Discipline });
-
-            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Name).HasMaxLength(500).IsRequired();
-            entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
-            entity.Property(x => x.OfficialInstitution).HasMaxLength(150);
-            entity.Property(x => x.OfficialCode).HasMaxLength(80);
-            entity.Property(x => x.Category).HasMaxLength(200);
-            entity.Property(x => x.SearchKeywords).HasMaxLength(1000);
-            entity.Property(x => x.DefaultLaborHours).HasPrecision(18, 4);
-            entity.Property(x => x.DefaultHelperHours).HasPrecision(18, 4);
-            entity.Property(x => x.DefaultMachineHours).HasPrecision(18, 4);
-            entity.Ignore(x => x.RevisionCode);
-
-            entity.HasOne(x => x.Company)
-                .WithMany()
-                .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

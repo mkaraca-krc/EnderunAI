@@ -1,3 +1,4 @@
+using EnderunAI.Api.Services.DocumentNumbers;
 using EnderunAI.Api.Services.AI;
 using System.Text;
 using EnderunAI.Api.Data;
@@ -73,6 +74,7 @@ builder.Services
 
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
+builder.Services.AddScoped<IDocumentNumberService, DocumentNumberService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
