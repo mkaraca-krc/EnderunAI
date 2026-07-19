@@ -18,8 +18,31 @@ import {
   offerService,
   type OfferItemPayload,
 } from "@/services/offer.service";
+import {
+  engineeringPositionService,
+  type EngineeringPositionListItem,
+} from "@/services/engineering-position.service";
+import {
+  engineeringRecipeService,
+} from "@/services/engineering-recipe.service";
+import {
+  offerCostingService,
+  type EstimatedMaterialCost,
+} from "@/services/offer-costing.service";
 
 type Line = {
+  engineeringPositionId: string;
+  recipeId: string;
+  recipeVersion: string;
+  recipeSummary: string;
+  estimatedLaborHours: string;
+  estimatedMaterialCost: string;
+  estimatedLaborCost: string;
+  estimatedMachineCost: string;
+  pricedMaterialCount: string;
+  unpricedMaterialCount: string;
+  costMaterials: EstimatedMaterialCost[];
+  costWarnings: string[];
   positionNumber: string;
   description: string;
   manufacturerName: string;
@@ -42,6 +65,18 @@ const today = new Date().toISOString().slice(0, 10);
 
 function emptyLine(): Line {
   return {
+    engineeringPositionId: "",
+    recipeId: "",
+    recipeVersion: "",
+    recipeSummary: "",
+    estimatedLaborHours: "0",
+    estimatedMaterialCost: "0",
+    estimatedLaborCost: "0",
+    estimatedMachineCost: "0",
+    pricedMaterialCount: "0",
+    unpricedMaterialCount: "0",
+    costMaterials: [],
+    costWarnings: [],
     positionNumber: "",
     description: "",
     manufacturerName: "",
@@ -107,6 +142,10 @@ export default function NewOfferPage() {
 
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [positions, setPositions] = useState<EngineeringPositionListItem[]>([]);
+  const [loadingRecipeLine, setLoadingRecipeLine] = useState<number | null>(null);
+  const [laborHourRate, setLaborHourRate] = useState("500");
+  const [machineHourRate, setMachineHourRate] = useState("750");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -126,13 +165,15 @@ export default function NewOfferPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [companyRows, projectRows] = await Promise.all([
+        const [companyRows, projectRows, positionRows] = await Promise.all([
           companyService.getAll(),
           projectService.getAll(),
+          engineeringPositionService.getAll({ status: 1 }),
         ]);
 
         setCompanies(companyRows);
         setProjects(projectRows);
+        setPositions(positionRows);
 
         if (companyRows.length === 1) {
           setForm((current) => ({
@@ -184,6 +225,231 @@ export default function NewOfferPage() {
         lineIndex === index ? { ...line, [key]: value } : line
       ),
     }));
+  }
+
+  async function selectEngineeringPosition(
+    index: number,
+    positionId: string
+  ) {
+    if (!positionId) {
+
+
+      setForm((current) => ({
+        ...current,
+        items: current.items.map((line, lineIndex) =>
+          lineIndex === index
+            ? {
+                ...emptyLine(),
+                quantity: line.quantity,
+                profitRate: line.profitRate,
+                generalExpenseRate: line.generalExpenseRate,
+                financeRate: line.financeRate,
+                freightRate: line.freightRate,
+              }
+            : line
+        ),
+      }));
+      return;
+    }
+
+    const position = positions.find((item) => item.id === positionId);
+
+    if (!position) {
+      setError("Seçilen mühendislik pozu bulunamadı.");
+      return;
+    }
+
+    setLoadingRecipeLine(index);
+    setError("");
+
+    try {
+      const recipes =
+        await engineeringRecipeService.getByPosition(positionId);
+
+      const selectedRecipe =
+        recipes.find((item) => item.isDefault) ?? recipes[0] ?? null;
+
+      let recipeId = "";
+      let recipeVersion = "";
+      let recipeSummary = "Bu poz için kayıtlı reçete bulunmuyor.";
+      let laborHours = position.totalLaborHours ?? 0;
+      let wasteRate = 0;
+
+      if (selectedRecipe) {
+        const detail =
+          await engineeringRecipeService.getById(selectedRecipe.id);
+
+        recipeId = detail.id;
+        recipeVersion = `V${detail.version}`;
+
+        laborHours = detail.labors.reduce(
+          (sum, labor) =>
+            sum + Number(labor.personCount) * Number(labor.hours),
+          0
+        );
+
+        const materialWasteRates = detail.materials
+          .map((material) => Number(material.wastePercent || 0))
+          .filter((value) => Number.isFinite(value));
+
+        wasteRate =
+          materialWasteRates.length > 0
+            ? materialWasteRates.reduce((sum, value) => sum + value, 0) /
+              materialWasteRates.length
+            : 0;
+
+        const machineHours = detail.machines.reduce(
+          (sum, machine) =>
+            sum + Number(machine.quantity) * Number(machine.hours),
+          0
+        );
+
+        recipeSummary = [
+          `Reçete ${recipeVersion}`,
+          `${detail.materials.length} malzeme`,
+          `${detail.labors.length} işçilik`,
+          `${detail.machines.length} makine`,
+          `${laborHours.toLocaleString("tr-TR", {
+            maximumFractionDigits: 2,
+          })} adam/saat`,
+          `${machineHours.toLocaleString("tr-TR", {
+            maximumFractionDigits: 2,
+          })} makine/saat`,
+        ].join(" · ");
+      }
+
+      let costing = null;
+
+      if (form.companyId && selectedRecipe) {
+        costing = await offerCostingService.estimatePosition({
+          companyId: form.companyId,
+          engineeringPositionId: position.id,
+          currency: form.currency,
+          laborHourRate: Number(laborHourRate || 0),
+          machineHourRate: Number(machineHourRate || 0),
+        });
+      }
+
+      const costWarnings: string[] = [];
+
+      if (costing) {
+        if (costing.unpricedMaterialCount > 0) {
+          costWarnings.push(
+            `${costing.unpricedMaterialCount} malzemenin güncel fiyatı bulunamadı.`
+          );
+        }
+
+        if (
+          costing.pricedMaterialCount === 0 &&
+          costing.materials.length > 0
+        ) {
+          costWarnings.push(
+            "Hiçbir reçete malzemesi üretici fiyat listesiyle eşleşmedi."
+          );
+        }
+
+        const highWasteMaterials = costing.materials.filter(
+          (material) => Number(material.wastePercent) > 3
+        );
+
+        if (highWasteMaterials.length > 0) {
+          costWarnings.push(
+            `${highWasteMaterials.length} malzemede fire oranı %3'ün üzerinde.`
+          );
+        }
+
+        if (
+          costing.materialCost > 0 &&
+          costing.laborCost / costing.materialCost > 0.5
+        ) {
+          costWarnings.push(
+            "İşçilik maliyeti malzeme maliyetinin %50'sinden yüksek."
+          );
+        }
+
+        if (
+          costing.machineCost > costing.laborCost &&
+          costing.machineCost > 0
+        ) {
+          costWarnings.push(
+            "Makine maliyeti işçilik maliyetinden yüksek; ekipman süresini kontrol edin."
+          );
+        }
+
+        if (costing.unpricedMaterialCount === 0) {
+          costWarnings.push(
+            "Tüm reçete malzemeleri aktif fiyat listeleriyle eşleşti."
+          );
+        }
+      }
+
+      setForm((current) => ({
+        ...current,
+        items: current.items.map((line, lineIndex) =>
+          lineIndex === index
+            ? {
+                ...line,
+                engineeringPositionId: position.id,
+                recipeId,
+                recipeVersion,
+                recipeSummary,
+                estimatedLaborHours: String(
+                  costing?.laborHours ?? laborHours
+                ),
+                estimatedMaterialCost: String(
+                  costing?.materialCost ?? 0
+                ),
+                estimatedLaborCost: String(
+                  costing?.laborCost ?? 0
+                ),
+                estimatedMachineCost: String(
+                  costing?.machineCost ?? 0
+                ),
+                pricedMaterialCount: String(
+                  costing?.pricedMaterialCount ?? 0
+                ),
+                unpricedMaterialCount: String(
+                  costing?.unpricedMaterialCount ?? 0
+                ),
+                costMaterials: costing?.materials ?? [],
+                costWarnings,
+                positionNumber: position.code,
+                description: position.name,
+                unit: position.unit,
+                listPrice: String(
+                  costing?.unitCost ?? line.listPrice
+                ),
+                wasteRate: String(
+                  Number(wasteRate.toFixed(2))
+                ),
+                manufacturerName:
+                  costing?.materials.find(
+                    (material) => material.priceFound
+                  )?.manufacturer ??
+                  line.manufacturerName,
+                notes: costing
+                  ? [
+                      recipeSummary,
+                      `Malzeme: ${costing.materialCost.toLocaleString("tr-TR")}`,
+                      `İşçilik: ${costing.laborCost.toLocaleString("tr-TR")}`,
+                      `Makine: ${costing.machineCost.toLocaleString("tr-TR")}`,
+                      `Fiyatlanan: ${costing.pricedMaterialCount}`,
+                      `Eksik fiyat: ${costing.unpricedMaterialCount}`,
+                    ].join(" · ")
+                  : recipeSummary,
+              }
+            : line
+        ),
+      }));
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Poz reçetesi teklif satırına aktarılamadı."
+      );
+    } finally {
+      setLoadingRecipeLine(null);
+    }
   }
 
   function addLine() {
@@ -391,6 +657,63 @@ export default function NewOfferPage() {
           </CardContent>
         </Card>
 
+        <Card className="mb-6">
+          <CardHeader>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Maliyet Motoru Parametreleri
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Reçete işçilik ve makine maliyetlerinde kullanılacak saat ücretleri
+              </p>
+            </div>
+          </CardHeader>
+
+          <CardContent>
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+              <Input
+                label="İşçilik Saat Ücreti"
+                type="number"
+                min="0"
+                step="0.01"
+                value={laborHourRate}
+                onChange={(event) =>
+                  setLaborHourRate(event.target.value)
+                }
+              />
+
+              <Input
+                label="Makine Saat Ücreti"
+                type="number"
+                min="0"
+                step="0.01"
+                value={machineHourRate}
+                onChange={(event) =>
+                  setMachineHourRate(event.target.value)
+                }
+              />
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <span className="text-xs text-slate-500">
+                  Hesaplama Para Birimi
+                </span>
+                <strong className="mt-1 block text-lg text-slate-900">
+                  {form.currency}
+                </strong>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <span className="text-xs text-slate-500">
+                  Maliyet Kaynağı
+                </span>
+                <strong className="mt-1 block text-lg text-slate-900">
+                  Reçete + Fiyat Listesi
+                </strong>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <Card>
             <CardHeader>
@@ -411,10 +734,12 @@ export default function NewOfferPage() {
 
             <CardContent>
               <div className="overflow-x-auto">
-                <table className="min-w-[1500px] border-separate border-spacing-0 text-sm">
+                <table className="min-w-[1850px] border-separate border-spacing-0 text-sm">
                   <thead>
                     <tr className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <th className="border-b px-3 py-3">Poz</th>
+                      <th className="border-b px-3 py-3">Poz Seç</th>
+                      <th className="border-b px-3 py-3">Reçete</th>
+                      <th className="border-b px-3 py-3">Adam/Saat</th>
                       <th className="border-b px-3 py-3">Açıklama</th>
                       <th className="border-b px-3 py-3">Marka</th>
                       <th className="border-b px-3 py-3">Miktar</th>
@@ -440,17 +765,204 @@ export default function NewOfferPage() {
                       return (
                         <tr key={index} className="align-top">
                           <td className="border-b p-2">
-                            <input
-                              value={line.positionNumber}
+                            <select
+                              value={line.engineeringPositionId}
                               onChange={(event) =>
-                                updateLine(
+                                void selectEngineeringPosition(
                                   index,
-                                  "positionNumber",
                                   event.target.value
                                 )
                               }
-                              className="w-28 rounded-lg border border-slate-300 px-2 py-2"
-                            />
+                              className="w-64 rounded-lg border border-slate-300 bg-white px-2 py-2"
+                            >
+                              <option value="">Poz seçin...</option>
+                              {positions.map((position) => (
+                                <option value={position.id} key={position.id}>
+                                  {position.code} · {position.name}
+                                </option>
+                              ))}
+                            </select>
+
+                            {line.positionNumber && (
+                              <small className="mt-1 block text-slate-500">
+                                {line.positionNumber}
+                              </small>
+                            )}
+                          </td>
+
+                          <td className="border-b p-2">
+                            <div className="w-40">
+                              <strong className="block text-slate-800">
+                                {loadingRecipeLine === index
+                                  ? "Yükleniyor..."
+                                  : line.recipeVersion || "Reçete yok"}
+                              </strong>
+                              <small
+                                className="mt-1 block text-slate-500"
+                                title={line.recipeSummary}
+                              >
+                                {line.recipeSummary || "Poz seçilmedi"}
+                              </small>
+
+                              {line.recipeId && (
+                                <div className="mt-2 space-y-1 text-xs text-slate-500">
+                                  <div>
+                                    Malzeme:{" "}
+                                    {money(
+                                      Number(line.estimatedMaterialCost || 0),
+                                      form.currency
+                                    )}
+                                  </div>
+                                  <div>
+                                    İşçilik:{" "}
+                                    {money(
+                                      Number(line.estimatedLaborCost || 0),
+                                      form.currency
+                                    )}
+                                  </div>
+                                  <div>
+                                    Makine:{" "}
+                                    {money(
+                                      Number(line.estimatedMachineCost || 0),
+                                      form.currency
+                                    )}
+                                  </div>
+                                  <div>
+                                    Fiyatlanan: {line.pricedMaterialCount} ·
+                                    Eksik: {line.unpricedMaterialCount}
+                                  </div>
+
+                                  {line.costWarnings.length > 0 && (
+                                    <div className="mt-2 space-y-1">
+                                      {line.costWarnings.map((warning, warningIndex) => (
+                                        <div
+                                          key={warningIndex}
+                                          className={
+                                            warning.includes("Tüm reçete")
+                                              ? "rounded bg-emerald-50 px-2 py-1 text-emerald-700"
+                                              : "rounded bg-amber-50 px-2 py-1 text-amber-700"
+                                          }
+                                        >
+                                          {warning}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {line.costMaterials.length > 0 && (
+                                    <details className="mt-3">
+                                      <summary className="cursor-pointer font-medium text-slate-700">
+                                        Malzeme maliyet dökümü
+                                      </summary>
+
+                                      <div className="mt-2 max-h-72 min-w-[520px] overflow-auto rounded-lg border border-slate-200 bg-white">
+                                        <table className="w-full text-xs">
+                                          <thead className="sticky top-0 bg-slate-50">
+                                            <tr>
+                                              <th className="px-2 py-2 text-left">
+                                                Malzeme
+                                              </th>
+                                              <th className="px-2 py-2 text-left">
+                                                Üretici
+                                              </th>
+                                              <th className="px-2 py-2 text-right">
+                                                Efektif Miktar
+                                              </th>
+                                              <th className="px-2 py-2 text-right">
+                                                Birim Fiyat
+                                              </th>
+                                              <th className="px-2 py-2 text-right">
+                                                Toplam
+                                              </th>
+                                            </tr>
+                                          </thead>
+
+                                          <tbody>
+                                            {line.costMaterials.map((material) => (
+                                              <tr
+                                                key={material.recipeMaterialId}
+                                                className="border-t border-slate-100"
+                                              >
+                                                <td className="px-2 py-2">
+                                                  <strong className="block">
+                                                    {material.materialName}
+                                                  </strong>
+                                                  <span className="text-slate-500">
+                                                    {material.materialCode || "Kod yok"}
+                                                    {" · "}
+                                                    Fire %{material.wastePercent}
+                                                  </span>
+                                                </td>
+
+                                                <td className="px-2 py-2">
+                                                  {material.priceFound ? (
+                                                    <>
+                                                      <strong className="block">
+                                                        {material.manufacturer || "Üretici"}
+                                                      </strong>
+                                                      <span className="text-slate-500">
+                                                        {material.brand ||
+                                                          material.productCode ||
+                                                          "Ürün"}
+                                                      </span>
+                                                    </>
+                                                  ) : (
+                                                    <span className="font-medium text-amber-700">
+                                                      Fiyat bulunamadı
+                                                    </span>
+                                                  )}
+                                                </td>
+
+                                                <td className="px-2 py-2 text-right">
+                                                  {Number(
+                                                    material.effectiveQuantity
+                                                  ).toLocaleString("tr-TR", {
+                                                    maximumFractionDigits: 4,
+                                                  })}
+                                                </td>
+
+                                                <td className="px-2 py-2 text-right">
+                                                  {money(
+                                                    Number(material.unitPrice),
+                                                    material.currency
+                                                  )}
+                                                </td>
+
+                                                <td className="px-2 py-2 text-right font-semibold">
+                                                  {money(
+                                                    Number(material.totalPrice),
+                                                    material.currency
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </details>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="border-b px-3 py-3 text-right">
+                            <strong className="text-slate-900">
+                              {(
+                                Number(line.estimatedLaborHours || 0) *
+                                Number(line.quantity || 0)
+                              ).toLocaleString("tr-TR", {
+                                maximumFractionDigits: 2,
+                              })}
+                            </strong>
+                            <small className="mt-1 block text-slate-500">
+                              Birim:{" "}
+                              {Number(
+                                line.estimatedLaborHours || 0
+                              ).toLocaleString("tr-TR", {
+                                maximumFractionDigits: 2,
+                              })}
+                            </small>
                           </td>
                           <td className="border-b p-2">
                             <input
@@ -512,7 +1024,15 @@ export default function NewOfferPage() {
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                value={line[key as keyof Line]}
+                                value={(() => {
+                                  const inputValue =
+                                    line[key as keyof Line];
+
+                                  return typeof inputValue === "string" ||
+                                    typeof inputValue === "number"
+                                    ? inputValue
+                                    : "";
+                                })()}
                                 onChange={(event) =>
                                   updateLine(
                                     index,
