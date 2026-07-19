@@ -1,3 +1,4 @@
+using EnderunAI.Api.Services.Costing;
 using EnderunAI.Api.Services.DocumentNumbers;
 using EnderunAI.Api.Services.AI;
 using System.Text;
@@ -31,6 +32,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
+builder.Services.AddScoped<ICostEngine, CostEngine>();
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
