@@ -477,6 +477,14 @@ export default function NewOfferPage() {
     try {
       const items: OfferItemPayload[] = form.items.map((line) => ({
         positionNumber: line.positionNumber || null,
+        engineeringPositionId:
+          line.engineeringPositionId || null,
+        engineeringRecipeId:
+          line.recipeId || null,
+        recipeVersion:
+          Number(
+            line.recipeVersion.replace(/^V/i, "")
+          ) || null,
         description: line.description,
         manufacturerPriceListItemId: null,
         manufacturerName: line.manufacturerName || null,

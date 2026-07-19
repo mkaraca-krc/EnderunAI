@@ -278,6 +278,11 @@ public sealed class OffersController(
             {
                 LineNumber = lineNumber++,
                 PositionNumber = item.PositionNumber?.Trim(),
+
+                EngineeringPositionId = item.EngineeringPositionId,
+                EngineeringRecipeId = item.EngineeringRecipeId,
+                RecipeVersion = item.RecipeVersion,
+
                 Description = item.Description.Trim(),
                 ManufacturerPriceListItemId = item.ManufacturerPriceListItemId,
                 ManufacturerName = item.ManufacturerName?.Trim(),

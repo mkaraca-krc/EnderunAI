@@ -28,6 +28,9 @@ export type OfferItem = {
   id: string;
   lineNumber: number;
   positionNumber?: string | null;
+  engineeringPositionId?: string | null;
+  engineeringRecipeId?: string | null;
+  recipeVersion?: number | null;
   description: string;
   manufacturerPriceListItemId?: string | null;
   manufacturerName?: string | null;
@@ -59,6 +62,9 @@ export type OfferDetail = Omit<OfferListItem, "itemCount"> & {
 
 export type OfferItemPayload = {
   positionNumber?: string | null;
+  engineeringPositionId?: string | null;
+  engineeringRecipeId?: string | null;
+  recipeVersion?: number | null;
   description: string;
   manufacturerPriceListItemId?: string | null;
   manufacturerName?: string | null;

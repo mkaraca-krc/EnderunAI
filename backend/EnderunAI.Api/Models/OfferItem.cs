@@ -8,6 +8,13 @@ public sealed class OfferItem : BaseEntity
     public int LineNumber { get; set; }
 
     public string? PositionNumber { get; set; }
+
+    public Guid? EngineeringPositionId { get; set; }
+    public EngineeringPosition? EngineeringPosition { get; set; }
+
+    public Guid? EngineeringRecipeId { get; set; }
+    public int? RecipeVersion { get; set; }
+
     public string Description { get; set; } = string.Empty;
 
     public Guid? ManufacturerPriceListItemId { get; set; }

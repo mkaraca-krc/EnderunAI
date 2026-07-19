@@ -3,6 +3,7 @@ using System;
 using EnderunAI.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EnderunAI.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260719095122_AddEngineeringRecipeEngine")]
+    partial class AddEngineeringRecipeEngine
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1100,12 +1103,6 @@ namespace EnderunAI.Api.Migrations
                         .HasPrecision(9, 4)
                         .HasColumnType("numeric(9,4)");
 
-                    b.Property<Guid?>("EngineeringPositionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("EngineeringRecipeId")
-                        .HasColumnType("uuid");
-
                     b.Property<decimal>("FinanceRate")
                         .HasPrecision(9, 4)
                         .HasColumnType("numeric(9,4)");
@@ -1169,9 +1166,6 @@ namespace EnderunAI.Api.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)");
 
-                    b.Property<int?>("RecipeVersion")
-                        .HasColumnType("integer");
-
                     b.Property<decimal>("SalesTotal")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -1200,8 +1194,6 @@ namespace EnderunAI.Api.Migrations
                         .HasColumnType("numeric(9,4)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("EngineeringPositionId");
 
                     b.HasIndex("ManufacturerPriceListItemId");
 
@@ -2019,10 +2011,6 @@ namespace EnderunAI.Api.Migrations
 
             modelBuilder.Entity("EnderunAI.Api.Models.OfferItem", b =>
                 {
-                    b.HasOne("EnderunAI.Api.Models.EngineeringPosition", "EngineeringPosition")
-                        .WithMany()
-                        .HasForeignKey("EngineeringPositionId");
-
                     b.HasOne("EnderunAI.Api.Models.ManufacturerPriceListItem", "ManufacturerPriceListItem")
                         .WithMany()
                         .HasForeignKey("ManufacturerPriceListItemId")
@@ -2033,8 +2021,6 @@ namespace EnderunAI.Api.Migrations
                         .HasForeignKey("OfferId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("EngineeringPosition");
 
                     b.Navigation("ManufacturerPriceListItem");
 
