@@ -107,6 +107,7 @@ app.UseRouting();
 app.UseCors("Frontend");
 
 app.UseAuthentication();
+app.UseMiddleware<PermissionAuthorizationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
