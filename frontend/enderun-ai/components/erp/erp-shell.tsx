@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { apiClient } from "@/lib/api/api-client";
 
 type ErpShellProps = {
   title: string;
@@ -21,6 +22,55 @@ type MenuGroup = {
   label: string;
   items: MenuItem[];
 };
+
+type CurrentSession = {
+  id?: string | null;
+  username?: string | null;
+  fullName?: string | null;
+  roles: string[];
+  permissions: string[];
+};
+
+function requiredPermissionForPath(pathname: string): string | null {
+  if (pathname.startsWith("/sistem-yonetimi")) return "system.users.manage";
+  if (/^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|avanslar)/.test(pathname)) {
+    return "payroll.view";
+  }
+  if (/^\/insan-kaynaklari\/(puantaj|gunluk-puantaj|izinler|fazla-mesai)/.test(pathname)) {
+    return "attendance.view";
+  }
+  if (pathname.startsWith("/insan-kaynaklari")) return "personnel.view";
+  if (pathname.startsWith("/muhasebe")) return "accounting.view";
+  if (pathname.startsWith("/finans")) return "finance.view";
+  if (
+    pathname.startsWith("/hakedis") ||
+    pathname.startsWith("/fiyat-farki") ||
+    pathname.startsWith("/metrajlar")
+  ) return "hakedis.view";
+  if (pathname.startsWith("/satin-alma")) return "purchasing.view";
+  if (pathname.startsWith("/depo")) return "inventory.view";
+  if (
+    pathname.startsWith("/muhendislik") ||
+    pathname.startsWith("/kesifler")
+  ) return "engineering.view";
+  if (
+    pathname.startsWith("/projeler") ||
+    pathname.startsWith("/teklifler")
+  ) return "projects.view";
+  if (
+    pathname.startsWith("/sekreterya") ||
+    pathname.startsWith("/dokumanlar")
+  ) return "secretariat.view";
+  if (pathname.startsWith("/gorevler")) return "tasks.view";
+  if (pathname.startsWith("/raporlar")) return "reports.view";
+  if (pathname.startsWith("/ai-asistan")) return "ai.use";
+  if (
+    pathname.startsWith("/sirketler") ||
+    pathname.startsWith("/subeler") ||
+    pathname.startsWith("/cariler")
+  ) return "companies.view";
+  return null;
+}
 
 const groups: MenuGroup[] = [
   {
@@ -414,6 +464,17 @@ const groups: MenuGroup[] = [
     ],
   },
   {
+    key: "system",
+    label: "SİSTEM YÖNETİMİ",
+    items: [
+      {
+        label: "Kullanıcılar ve Yetkiler",
+        href: "/sistem-yonetimi/kullanicilar",
+        icon: "⚿",
+      },
+    ],
+  },
+  {
     key: "ai",
     label: "ENDERUN AI",
     items: [
@@ -439,17 +500,61 @@ export default function ErpShell({
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const navRef = useRef<HTMLElement | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentSession | null>(null);
 
+  useEffect(() => {
+    let active = true;
+
+    void apiClient<CurrentSession>("auth/me")
+      .then((session) => {
+        if (active) setCurrentUser(session);
+      })
+      .catch(() => {
+        if (active) setCurrentUser(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const visibleGroups = useMemo(() => {
+    if (
+      !currentUser ||
+      currentUser.roles.includes("Admin") ||
+      currentUser.roles.includes("Genel Müdür")
+    ) {
+      return groups;
+    }
+
+    const permissions = new Set(currentUser.permissions);
+    return groups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => {
+          const required = requiredPermissionForPath(item.href);
+          return !required || permissions.has(required);
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [currentUser]);
+
+  const sessionInitials = (currentUser?.fullName || currentUser?.username || "K")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toLocaleUpperCase("tr-TR"))
+    .join("");
 
   const activeGroup = useMemo(
     () =>
-      groups.find((group) =>
+      visibleGroups.find((group) =>
         group.items.some((item) => {
           const href = pathOnly(item.href);
           return pathname === href || pathname.startsWith(`${href}/`);
         })
       )?.key,
-    [pathname]
+    [pathname, visibleGroups]
   );
 
   useEffect(() => {
@@ -470,7 +575,7 @@ export default function ErpShell({
 
       const initial: Record<string, boolean> = {};
 
-      for (const group of groups) {
+      for (const group of visibleGroups) {
         initial[group.key] =
           group.key === activeGroup ||
           [
@@ -611,7 +716,7 @@ export default function ErpShell({
             {!collapsed && <span>Onay Merkezi</span>}
           </Link>
 
-          {groups.map((group) => {
+          {visibleGroups.map((group) => {
             const isOpen = openGroups[group.key];
 
             return (
@@ -659,11 +764,11 @@ export default function ErpShell({
         </nav>
 
         <div className="erp-sidebar-footer">
-          <div className="erp-user-avatar">MK</div>
+          <div className="erp-user-avatar">{sessionInitials}</div>
           {!collapsed && (
             <div className="erp-user-info">
-              <strong>Mehmet Karacabey</strong>
-              <span>Yönetici</span>
+              <strong>{currentUser?.fullName || currentUser?.username || "Kullanıcı"}</strong>
+              <span>{currentUser?.roles[0] || "Kullanıcı"}</span>
             </div>
           )}
           <button
