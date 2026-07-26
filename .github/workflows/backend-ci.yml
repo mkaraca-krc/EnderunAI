@@ -30,6 +30,9 @@ jobs:
           cache: true
           cache-dependency-path: backend/EnderunAI.Api/EnderunAI.Api.csproj
 
+      - name: SDK information
+        run: dotnet --info
+
       - name: Restore
         run: dotnet restore backend/EnderunAI.Api/EnderunAI.Api.csproj
 
