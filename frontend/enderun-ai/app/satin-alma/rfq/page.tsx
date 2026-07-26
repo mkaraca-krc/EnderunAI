@@ -1,0 +1,2 @@
+import ErpShell from "@/components/erp/erp-shell";
+export default function Page(){return <ErpShell title="RFQ ve Teklifler" description="Teklif talebi, tedarikçi daveti ve teklif karşılaştırma"><div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"><h2 className="m-0 text-lg">RFQ Yönetimi</h2><p className="mt-3 text-sm text-slate-500">RFQ listesi, davet gönderimi ve teklif değerlendirme ekranı sıradaki frontend paketinde tamamlanacak.</p></div></ErpShell>}
