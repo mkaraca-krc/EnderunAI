@@ -15,6 +15,13 @@ jobs:
         working-directory: backend/EnderunAI.Api
     steps:
       - uses: actions/checkout@v4
+      - name: Show checked out revision
+        working-directory: .
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          git rev-parse HEAD
+          git status --short --branch
+          find backend/EnderunAI.Api/Services/AI -maxdepth 1 -type f -name '*Hizir*' -print | sort
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
