@@ -15,6 +15,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<EngineeringPosition> EngineeringPositions => Set<EngineeringPosition>();
+    public DbSet<EngineeringRecipe> EngineeringRecipes => Set<EngineeringRecipe>();
+    public DbSet<EngineeringRecipeMaterial> EngineeringRecipeMaterials => Set<EngineeringRecipeMaterial>();
+    public DbSet<EngineeringRecipeLabor> EngineeringRecipeLabors => Set<EngineeringRecipeLabor>();
+    public DbSet<EngineeringRecipeMachine> EngineeringRecipeMachines => Set<EngineeringRecipeMachine>();
     public DbSet<Personnel> Personnel => Set<Personnel>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
@@ -39,6 +43,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigureProjects(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigureEngineeringPositions(modelBuilder);
+        ConfigureEngineeringRecipes(modelBuilder);
         ConfigurePersonnel(modelBuilder);
         ConfigurePersonnelAssignments(modelBuilder);
         ConfigurePurchaseRequests(modelBuilder);
@@ -662,6 +667,92 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany()
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+
+    private static void ConfigureEngineeringRecipes(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EngineeringRecipe>(entity =>
+        {
+            entity.ToTable("engineering_recipes");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.EngineeringPositionId, x.Version })
+                .IsUnique();
+
+            entity.Property(x => x.Description).HasMaxLength(500);
+
+            entity.HasOne(x => x.EngineeringPosition)
+                .WithMany()
+                .HasForeignKey(x => x.EngineeringPositionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<EngineeringRecipeMaterial>(entity =>
+        {
+            entity.ToTable("engineering_recipe_materials");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.MaterialCode)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.MaterialName)
+                .HasMaxLength(300)
+                .IsRequired();
+
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.WastePercent).HasPrecision(8, 4);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+
+            entity.HasOne(x => x.EngineeringRecipe)
+                .WithMany(x => x.Materials)
+                .HasForeignKey(x => x.EngineeringRecipeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<EngineeringRecipeLabor>(entity =>
+        {
+            entity.ToTable("engineering_recipe_labors");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.PersonCount).HasPrecision(18, 4);
+            entity.Property(x => x.Hours).HasPrecision(18, 4);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+
+            entity.HasOne(x => x.EngineeringRecipe)
+                .WithMany(x => x.Labors)
+                .HasForeignKey(x => x.EngineeringRecipeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<EngineeringRecipeMachine>(entity =>
+        {
+            entity.ToTable("engineering_recipe_machines");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.MachineName)
+                .HasMaxLength(250)
+                .IsRequired();
+
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.Hours).HasPrecision(18, 4);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+
+            entity.HasOne(x => x.EngineeringRecipe)
+                .WithMany(x => x.Machines)
+                .HasForeignKey(x => x.EngineeringRecipeId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
