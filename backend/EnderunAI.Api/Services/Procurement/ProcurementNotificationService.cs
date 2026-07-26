@@ -38,11 +38,12 @@ public sealed class ProcurementNotificationService(
             })
             .ToList();
 
-        var existingKeys = await notificationDb.Notifications
+        var existingKeyList = await notificationDb.Notifications
             .IgnoreQueryFilters()
             .Where(x => keys.Contains(x.DeduplicationKey))
             .Select(x => x.DeduplicationKey)
-            .ToHashSetAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+        var existingKeys = existingKeyList.ToHashSet(StringComparer.Ordinal);
 
         var created = 0;
         foreach (var step in pendingSteps)
