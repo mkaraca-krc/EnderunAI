@@ -30,11 +30,19 @@ jobs:
           cache: true
           cache-dependency-path: backend/EnderunAI.Api/EnderunAI.Api.csproj
 
-      - name: SDK information
-        run: dotnet --info
-
       - name: Restore
-        run: dotnet restore backend/EnderunAI.Api/EnderunAI.Api.csproj
+        run: dotnet restore backend/EnderunAI.Api/EnderunAI.Api.csproj --verbosity quiet
 
-      - name: Build
-        run: dotnet build backend/EnderunAI.Api/EnderunAI.Api.csproj --configuration Release --no-restore
+      - name: Build with concise diagnostics
+        shell: bash
+        run: |
+          set +e
+          dotnet build backend/EnderunAI.Api/EnderunAI.Api.csproj --configuration Release --no-restore --verbosity minimal > build.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo '--- BUILD ERRORS ---'
+            grep -E 'error (CS|NU|NETSDK)|error:' build.log | tail -n 120 || tail -n 120 build.log
+          else
+            tail -n 20 build.log
+          fi
+          exit "$status"
