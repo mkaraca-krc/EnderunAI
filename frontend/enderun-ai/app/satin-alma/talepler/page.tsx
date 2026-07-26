@@ -1,0 +1,2 @@
+import ErpShell from "@/components/erp/erp-shell";
+export default function Page(){return <ErpShell title="Satın Alma Talepleri" description="Talep oluşturma, onaya gönderme ve takip ekranı"><div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"><h2 className="m-0 text-lg">Satın Alma Talepleri</h2><p className="mt-3 text-sm text-slate-500">Liste, yeni talep formu ve onay işlemleri bu ekranda geliştirilecek.</p></div></ErpShell>}
