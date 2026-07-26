@@ -49,7 +49,7 @@ public sealed class ProcurementDashboardService(
     AppDbContext appDb,
     ProcurementDbContext procurementDb,
     ProcurementApprovalDbContext approvalDb,
-    ProcurementBudgetDbContext budgetDb,
+    ProjectBudgetDbContext budgetDb,
     SupplierPerformanceDbContext supplierDb) : IProcurementDashboardService
 {
     public async Task<ProcurementDashboardSnapshot> GetAsync(Guid companyId, int months = 12, CancellationToken cancellationToken = default)
@@ -128,11 +128,10 @@ public sealed class ProcurementDashboardService(
             cancellationToken);
 
         var criticalBudgetAlerts = await budgetDb.Alerts.CountAsync(
-            x => x.CompanyId == companyId && !x.IsResolved &&
-                 (x.Level == BudgetAlertLevel.Critical || x.Level == BudgetAlertLevel.Exceeded),
+            x => x.CompanyId == companyId && !x.IsResolved && x.Level == BudgetAlertLevel.Critical,
             cancellationToken);
 
-        var criticalSupplierRisks = await supplierDb.Scorecards.CountAsync(
+        var criticalSupplierRisks = await supplierDb.Snapshots.CountAsync(
             x => x.CompanyId == companyId && x.RiskLevel == SupplierRiskLevel.Critical,
             cancellationToken);
 
@@ -199,10 +198,10 @@ public sealed class ProcurementDashboardService(
             .Where(x => supplierIds.Contains(x.Id))
             .ToDictionaryAsync(x => x.Id, x => x.Title, cancellationToken);
 
-        var latestScores = await supplierDb.Scorecards
+        var latestScores = await supplierDb.Snapshots
             .AsNoTracking()
             .Where(x => x.CompanyId == companyId && supplierIds.Contains(x.SupplierCurrentAccountId))
-            .OrderByDescending(x => x.CalculatedAtUtc)
+            .OrderByDescending(x => x.PeriodEndUtc)
             .ToListAsync(cancellationToken);
 
         var latestScoreBySupplier = latestScores
@@ -228,7 +227,7 @@ public sealed class ProcurementDashboardService(
 
         var activeBudgets = await budgetDb.Budgets
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId && x.Status == ProjectBudgetStatus.Active)
+            .Where(x => x.CompanyId == companyId && x.Status == BudgetStatus.Active)
             .ToListAsync(cancellationToken);
 
         var budgets = new List<ProcurementBudgetKpi>();
@@ -241,13 +240,15 @@ public sealed class ProcurementDashboardService(
                 .Where(x => x.ProjectBudgetId == budget.Id && x.Type == BudgetConsumptionType.Actual)
                 .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
             var used = committed + actual;
-            var remaining = budget.TotalBudgetAmount - used;
-            var usageRate = budget.TotalBudgetAmount <= 0 ? 0 : used / budget.TotalBudgetAmount * 100m;
-            var status = usageRate >= 100m ? "Exceeded" : usageRate >= budget.CriticalThresholdPercent ? "Critical" : usageRate >= budget.WarningThresholdPercent ? "Warning" : "Healthy";
+            var remaining = budget.BaseAmount - used;
+            var usageRate = budget.BaseAmount <= 0 ? 0 : used / budget.BaseAmount * 100m;
+            var status = usageRate >= budget.CriticalThresholdPercent
+                ? "Critical"
+                : usageRate >= budget.WarningThresholdPercent ? "Warning" : "Healthy";
             budgets.Add(new ProcurementBudgetKpi(
                 budget.ProjectId,
                 projectNames.GetValueOrDefault(budget.ProjectId, "Bilinmeyen proje"),
-                decimal.Round(budget.TotalBudgetAmount, 2),
+                decimal.Round(budget.BaseAmount, 2),
                 decimal.Round(committed, 2),
                 decimal.Round(actual, 2),
                 decimal.Round(remaining, 2),
