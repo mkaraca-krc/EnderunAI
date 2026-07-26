@@ -8,8 +8,22 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Route("api/hizir")]
 [Authorize]
-public sealed class HizirController(IHizirChatService chatService) : ControllerBase
+public sealed class HizirController(
+    IHizirChatService chatService,
+    IHizirDashboardAggregator dashboardAggregator
+) : ControllerBase
 {
+    [HttpGet("dashboard")]
+    [ProducesResponseType(typeof(HizirDashboardSnapshot), StatusCodes.Status200OK)]
+    public async Task<ActionResult<HizirDashboardSnapshot>> Dashboard(
+        CancellationToken cancellationToken
+    )
+    {
+        return Ok(
+            await dashboardAggregator.GetSnapshotAsync(cancellationToken)
+        );
+    }
+
     [HttpPost("chat")]
     [ProducesResponseType(typeof(HizirChatResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<HizirChatResponse>> Chat(
