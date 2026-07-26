@@ -955,11 +955,15 @@ public sealed class SecretariatService(
         var overdueDocuments = await incoming.CountAsync(
             x => x.DueDate < DateTime.UtcNow && pendingStatuses.Contains(x.Status), cancellationToken);
         var cargoInTransit = await cargo.CountAsync(
-            x => x.Status is CargoStatus.Registered or CargoStatus.InTransit, cancellationToken);
+            x => x.Status == CargoStatus.Registered ||
+                 x.Status == CargoStatus.InTransit,
+            cancellationToken);
         var visitorsInside = await visitors.CountAsync(
             x => x.Status == VisitorStatus.CheckedIn, cancellationToken);
         var openPhoneNotes = await notes.CountAsync(
-            x => x.Status is PhoneNoteStatus.New or PhoneNoteStatus.Informed, cancellationToken);
+            x => x.Status == PhoneNoteStatus.New ||
+                 x.Status == PhoneNoteStatus.Informed,
+            cancellationToken);
         var todayMeetings = await schedule.CountAsync(
             x => x.Type == SecretariatScheduleType.Meeting &&
                  x.StartAtUtc >= start && x.StartAtUtc < end &&
