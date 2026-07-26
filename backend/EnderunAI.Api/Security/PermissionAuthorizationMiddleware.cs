@@ -1,19 +1,15 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using EnderunAI.Api.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Security;
 
 public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
 {
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, AppDbContext db)
     {
         if (context.User.Identity?.IsAuthenticated != true)
-        {
-            await next(context);
-            return;
-        }
-
-        var requiredPermission = ResolveRequiredPermission(context.Request);
-        if (requiredPermission is null)
         {
             await next(context);
             return;
@@ -26,6 +22,45 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             .Concat(context.User.FindAll("roles").Select(claim => claim.Value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+        var userIdValue =
+            context.User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+            context.User.FindFirstValue(JwtRegisteredClaimNames.Sub) ??
+            context.User.FindFirstValue("sub");
+
+        if (Guid.TryParse(userIdValue, out var userId))
+        {
+            var currentUser = await db.Users
+                .AsNoTracking()
+                .Where(user => user.Id == userId)
+                .Select(user => new
+                {
+                    user.IsActive,
+                    RoleNames = user.UserRoles
+                        .Select(userRole => userRole.Role.Name)
+                        .ToArray()
+                })
+                .SingleOrDefaultAsync(context.RequestAborted);
+
+            if (currentUser is null || !currentUser.IsActive)
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    message = "Kullanıcı hesabı pasif veya bulunamadı."
+                });
+                return;
+            }
+
+            roleNames = currentUser.RoleNames;
+        }
+
+        var requiredPermission = ResolveRequiredPermission(context.Request);
+        if (requiredPermission is null)
+        {
+            await next(context);
+            return;
+        }
 
         if (roleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase) ||
             PermissionCatalog.Resolve(roleNames).Contains(requiredPermission))
