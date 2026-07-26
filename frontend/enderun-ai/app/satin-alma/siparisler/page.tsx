@@ -1,0 +1,2 @@
+import ErpShell from "@/components/erp/erp-shell";
+export default function Page(){return <ErpShell title="Satın Alma Siparişleri" description="Sipariş oluşturma, onay, PDF ve teslimat takibi"><div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"><h2 className="m-0 text-lg">Satın Alma Siparişleri</h2><p className="mt-3 text-sm text-slate-500">Sipariş listesi, detay, PDF önizleme ve bütçe kontrolü sıradaki frontend paketlerinde geliştirilecek.</p></div></ErpShell>}
