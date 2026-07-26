@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using EnderunAI.Api.Contracts;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Security;
@@ -16,15 +17,24 @@ public sealed class AuthController(
 {
     [AllowAnonymous]
     [HttpPost("login")]
-    public async Task<IActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Login(
+        LoginRequest request,
+        CancellationToken cancellationToken)
     {
+        var username = request.Username.Trim().ToLowerInvariant();
         var user = await db.Users
-            .Include(x => x.UserRoles)
-            .ThenInclude(x => x.Role)
-            .SingleOrDefaultAsync(x => x.Username == request.Username.Trim(), cancellationToken);
+            .Include(item => item.UserRoles)
+            .ThenInclude(userRole => userRole.Role)
+            .SingleOrDefaultAsync(
+                item => item.Username.ToLower() == username,
+                cancellationToken);
 
-        if (user is null || !user.IsActive ||
-            !passwordService.Verify(request.Password, user.PasswordHash, user.PasswordSalt))
+        if (user is null ||
+            !user.IsActive ||
+            !passwordService.Verify(
+                request.Password,
+                user.PasswordHash,
+                user.PasswordSalt))
         {
             return Unauthorized(new { message = "Kullanıcı adı veya şifre hatalı." });
         }
@@ -32,16 +42,54 @@ public sealed class AuthController(
         user.LastLoginAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
-        var roles = user.UserRoles.Select(x => x.Role.Name).ToArray();
+        var roleNames = user.UserRoles
+            .Select(userRole => userRole.Role.Name)
+            .ToArray();
+        var visibleRoles = roleNames
+            .Where(PermissionCatalog.IsPresetRole)
+            .ToArray();
+        var permissions = PermissionCatalog.Resolve(roleNames)
+            .OrderBy(permission => permission)
+            .ToArray();
+
         return Ok(new
         {
-            token = tokenService.Create(user, roles),
+            token = tokenService.Create(user, roleNames, permissions),
             expiresInSeconds = 43200,
-            user = new { user.Id, user.Username, user.FullName, user.Email, roles }
+            user = new
+            {
+                user.Id,
+                user.Username,
+                user.FullName,
+                user.Email,
+                roles = visibleRoles,
+                permissions
+            }
         });
     }
 
     [Authorize]
     [HttpGet("me")]
-    public IActionResult Me() => Ok(new { username = User.Identity?.Name });
+    public IActionResult Me()
+    {
+        var roles = User.FindAll(ClaimTypes.Role)
+            .Select(claim => claim.Value)
+            .Where(PermissionCatalog.IsPresetRole)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var permissions = User.FindAll("permissions")
+            .Select(claim => claim.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(permission => permission)
+            .ToArray();
+
+        return Ok(new
+        {
+            id = User.FindFirstValue(ClaimTypes.NameIdentifier),
+            username = User.Identity?.Name,
+            fullName = User.FindFirstValue("full_name"),
+            roles,
+            permissions
+        });
+    }
 }
