@@ -5,10 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Services.AI;
 
-public sealed class HizirActionService(
-    AppDbContext db,
-    IHizirDashboardAggregator dashboardAggregator
-) : IHizirActionService
+public sealed class HizirActionService(AppDbContext db) : IHizirActionService
 {
     public Task<HizirActionPreview> PreviewAsync(
         HizirActionRequest request,
@@ -50,7 +47,42 @@ public sealed class HizirActionService(
 
         if (request.ActionType == HizirActionType.RefreshDashboard)
         {
-            var snapshot = await dashboardAggregator.GetSnapshotAsync(cancellationToken);
+            var snapshot = new
+            {
+                GeneratedAtUtc = DateTime.UtcNow,
+                Projects = new
+                {
+                    Total = await db.Projects.CountAsync(cancellationToken),
+                    Active = await db.Projects.CountAsync(
+                        x => x.Status == ProjectStatus.Active,
+                        cancellationToken),
+                    AtRisk = await db.Projects.CountAsync(
+                        x => x.Status == ProjectStatus.Active &&
+                             x.HealthStatus == ProjectHealthStatus.Red,
+                        cancellationToken)
+                },
+                Purchasing = new
+                {
+                    TotalRequests = await db.PurchaseRequests.CountAsync(cancellationToken),
+                    WaitingApproval = await db.PurchaseRequests.CountAsync(
+                        x => x.Status == PurchaseRequestStatus.Submitted,
+                        cancellationToken),
+                    Critical = await db.PurchaseRequests.CountAsync(
+                        x => x.Priority == PurchaseRequestPriority.Critical &&
+                             x.Status != PurchaseRequestStatus.Completed &&
+                             x.Status != PurchaseRequestStatus.Cancelled &&
+                             x.Status != PurchaseRequestStatus.Rejected,
+                        cancellationToken)
+                },
+                Personnel = new
+                {
+                    Total = await db.Personnel.CountAsync(cancellationToken),
+                    Active = await db.Personnel.CountAsync(
+                        x => x.IsActive,
+                        cancellationToken)
+                }
+            };
+
             return new HizirActionResult(
                 request.ActionType,
                 true,
@@ -79,7 +111,7 @@ public sealed class HizirActionService(
         if (!projectExists)
             throw new InvalidOperationException("Seçilen proje bulunamadı.");
 
-        var requestNumber = $"HZR-{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var requestNumber = $"HZR-{DateTime.UtcNow:yyyyMMddHHmmssfff}";
         var entity = new PurchaseRequest
         {
             CompanyId = request.CompanyId!.Value,
