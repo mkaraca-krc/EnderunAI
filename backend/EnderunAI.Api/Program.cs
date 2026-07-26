@@ -45,6 +45,7 @@ builder.Services.AddScoped<ITechnicalComplianceService, TechnicalComplianceServi
 builder.Services.AddScoped<ISupplierPerformanceService, SupplierPerformanceService>();
 builder.Services.AddScoped<IProjectBudgetService, ProjectBudgetService>();
 builder.Services.AddScoped<IProcurementDashboardService, ProcurementDashboardService>();
+builder.Services.AddScoped<IProcurementPdfService, ProcurementPdfService>();
 builder.Services.AddHostedService<ProcurementNotificationWorker>();
 
 builder.Services.AddScoped<PasswordService>();
