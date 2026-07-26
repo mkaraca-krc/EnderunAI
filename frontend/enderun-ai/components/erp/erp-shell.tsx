@@ -406,6 +406,11 @@ const groups: MenuGroup[] = [
     label: "SEKRETERYA",
     items: [
       {
+        label: "Sekreterya Merkezi",
+        href: "/sekreterya",
+        icon: "▦",
+      },
+      {
         label: "Gelen / Giden Evrak",
         href: "/sekreterya/evrak",
         icon: "✉",
