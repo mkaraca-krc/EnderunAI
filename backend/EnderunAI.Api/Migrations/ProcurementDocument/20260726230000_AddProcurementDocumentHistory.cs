@@ -1,11 +1,15 @@
 using System;
+using EnderunAI.Api.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace EnderunAI.Api.Migrations.ProcurementDocument;
 
-public partial class AddProcurementDocumentHistory : Migration
+[DbContext(typeof(ProcurementDocumentDbContext))]
+[Migration("20260726230000_AddProcurementDocumentHistory")]
+public sealed class AddProcurementDocumentHistory : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
