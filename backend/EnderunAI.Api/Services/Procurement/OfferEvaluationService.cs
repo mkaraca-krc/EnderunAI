@@ -27,7 +27,7 @@ public sealed class OfferEvaluationService(AppDbContext db) : IOfferEvaluationSe
 {
     public async Task<IReadOnlyList<OfferScoreBreakdown>> EvaluateAsync(Guid rfqId, CancellationToken cancellationToken = default)
     {
-        var offers = await db.SupplierOffers
+        var offers = await db.Set<SupplierOffer>()
             .AsNoTracking()
             .Include(x => x.Items)
             .Include(x => x.CheckTerms)
