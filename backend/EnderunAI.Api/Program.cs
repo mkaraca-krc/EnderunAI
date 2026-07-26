@@ -24,6 +24,7 @@ var jwtSecret =
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddDbContext<ProcurementDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddDbContext<ProcurementApprovalDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<ProcurementDocumentDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services.AddHttpClient("OpenAI", client => client.Timeout = TimeSpan.FromSeconds(90));
 
@@ -78,6 +79,9 @@ using (var scope = app.Services.CreateScope())
 
     var approvalDb = scope.ServiceProvider.GetRequiredService<ProcurementApprovalDbContext>();
     await approvalDb.Database.MigrateAsync();
+
+    var documentDb = scope.ServiceProvider.GetRequiredService<ProcurementDocumentDbContext>();
+    await documentDb.Database.MigrateAsync();
 
     var passwordService = scope.ServiceProvider.GetRequiredService<PasswordService>();
     await DatabaseSeeder.SeedAsync(db, passwordService, builder.Configuration);
