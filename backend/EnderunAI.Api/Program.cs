@@ -25,6 +25,7 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddDbContext<ProcurementDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddDbContext<ProcurementApprovalDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddDbContext<ProcurementDocumentDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<ProcurementNotificationDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services.AddHttpClient("OpenAI", client => client.Timeout = TimeSpan.FromSeconds(90));
 
@@ -36,6 +37,8 @@ builder.Services.AddScoped<IHizirActionService, HizirActionService>();
 builder.Services.AddScoped<IGoodsReceiptPostingService, GoodsReceiptPostingService>();
 builder.Services.AddScoped<IOfferEvaluationService, OfferEvaluationService>();
 builder.Services.AddScoped<IProcurementApprovalService, ProcurementApprovalService>();
+builder.Services.AddScoped<IProcurementNotificationService, ProcurementNotificationService>();
+builder.Services.AddHostedService<ProcurementNotificationWorker>();
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
@@ -82,6 +85,9 @@ using (var scope = app.Services.CreateScope())
 
     var documentDb = scope.ServiceProvider.GetRequiredService<ProcurementDocumentDbContext>();
     await documentDb.Database.MigrateAsync();
+
+    var notificationDb = scope.ServiceProvider.GetRequiredService<ProcurementNotificationDbContext>();
+    await notificationDb.Database.MigrateAsync();
 
     var passwordService = scope.ServiceProvider.GetRequiredService<PasswordService>();
     await DatabaseSeeder.SeedAsync(db, passwordService, builder.Configuration);
