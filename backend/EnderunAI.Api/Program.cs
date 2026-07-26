@@ -37,6 +37,7 @@ builder.Services.AddHttpClient("OpenAI", client =>
 
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
+builder.Services.AddScoped<IHizirDashboardAggregator, HizirDashboardAggregator>();
 builder.Services.AddScoped<IHizirChatService, HizirChatService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 
