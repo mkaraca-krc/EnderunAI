@@ -1,0 +1,2 @@
+import ErpShell from "@/components/erp/erp-shell";
+export default function Page(){return <ErpShell title="Proje Bütçeleri" description="Bütçe, taahhüt, gerçekleşen maliyet ve sapma takibi"><div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"><h2 className="m-0 text-lg">Proje Bütçeleri</h2><p className="mt-3 text-sm text-slate-500">Bütçe oluşturma, revizyon ve kullanım detayları bu ekranda geliştirilecek.</p></div></ErpShell>}
