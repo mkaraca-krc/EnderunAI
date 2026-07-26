@@ -60,6 +60,25 @@ export type CreatePersonnelRequest = {
   monthlySalary?: number | null;
 };
 
+export type UpdatePersonnelRequest = {
+  branchId?: string | null;
+  firstName: string;
+  lastName: string;
+  identityNumber?: string | null;
+  birthDate?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  jobTitle?: string | null;
+  profession?: string | null;
+  sgkRegistrationNumber?: string | null;
+  employmentStartDate?: string | null;
+  employmentEndDate?: string | null;
+  monthlySalary?: number | null;
+  status: number;
+  isActive: boolean;
+};
+
 export type AssignPersonnelRequest = {
   projectId: string;
   startDate: string;
@@ -107,6 +126,13 @@ export const personnelService = {
       lastName: string;
     }>("personnel", {
       method: "POST",
+      body: payload,
+    });
+  },
+
+  update(id: string, payload: UpdatePersonnelRequest) {
+    return apiClient<{ message: string }>(`personnel/${id}`, {
+      method: "PUT",
       body: payload,
     });
   },
