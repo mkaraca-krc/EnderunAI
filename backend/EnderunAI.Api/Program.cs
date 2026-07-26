@@ -1,5 +1,6 @@
 using EnderunAI.Api.Services.AI;
 using EnderunAI.Api.Services.Inventory;
+using EnderunAI.Api.Services.Procurement;
 using System.Text;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Security;
@@ -29,6 +30,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString);
 });
 
+builder.Services.AddDbContext<ProcurementDbContext>(options =>
+{
+    options.UseNpgsql(connectionString);
+});
+
 builder.Services.AddHttpClient("OpenAI", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(90);
@@ -40,6 +46,7 @@ builder.Services.AddScoped<IHizirDashboardAggregator, HizirDashboardAggregator>(
 builder.Services.AddScoped<IHizirChatService, HizirChatService>();
 builder.Services.AddScoped<IHizirActionService, HizirActionService>();
 builder.Services.AddScoped<IGoodsReceiptPostingService, GoodsReceiptPostingService>();
+builder.Services.AddScoped<IOfferEvaluationService, OfferEvaluationService>();
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
@@ -95,6 +102,12 @@ using (var scope = app.Services.CreateScope())
             .GetRequiredService<AppDbContext>();
 
     await db.Database.MigrateAsync();
+
+    var procurementDb =
+        scope.ServiceProvider
+            .GetRequiredService<ProcurementDbContext>();
+
+    await procurementDb.Database.MigrateAsync();
 
     var passwordService =
         scope.ServiceProvider
