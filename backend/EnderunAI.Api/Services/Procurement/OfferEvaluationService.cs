@@ -23,11 +23,11 @@ public interface IOfferEvaluationService
     Task<IReadOnlyList<OfferScoreBreakdown>> EvaluateAsync(Guid rfqId, CancellationToken cancellationToken = default);
 }
 
-public sealed class OfferEvaluationService(AppDbContext db) : IOfferEvaluationService
+public sealed class OfferEvaluationService(ProcurementDbContext db) : IOfferEvaluationService
 {
     public async Task<IReadOnlyList<OfferScoreBreakdown>> EvaluateAsync(Guid rfqId, CancellationToken cancellationToken = default)
     {
-        var offers = await db.Set<SupplierOffer>()
+        var offers = await db.SupplierOffers
             .AsNoTracking()
             .Include(x => x.Items)
             .Include(x => x.CheckTerms)
@@ -70,7 +70,7 @@ public sealed class OfferEvaluationService(AppDbContext db) : IOfferEvaluationSe
                     warnings.Add($"Teklif edilen miktarın yalnızca %{stockRatio * 100m:0.#} kadarı mevcut stokta.");
                 if (deliveryDays > 30)
                     warnings.Add($"Teslim süresi {deliveryDays} gün.");
-                if (offer.CurrencyCode != "TRY")
+                if (!string.Equals(offer.CurrencyCode, "TRY", StringComparison.OrdinalIgnoreCase))
                     warnings.Add($"{offer.CurrencyCode} kur riski bulunuyor.");
                 if (!offer.AllowsPartialShipment && stockRatio < 1m)
                     warnings.Add("Kısmi sevkiyat kabul edilmiyor ve stok yetersiz.");
