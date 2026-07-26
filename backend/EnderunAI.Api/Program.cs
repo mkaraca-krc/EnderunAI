@@ -1,4 +1,5 @@
 using EnderunAI.Api.Services.AI;
+using EnderunAI.Api.Services.Inventory;
 using System.Text;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Security;
@@ -38,6 +39,7 @@ builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<IHizirDashboardAggregator, HizirDashboardAggregator>();
 builder.Services.AddScoped<IHizirChatService, HizirChatService>();
 builder.Services.AddScoped<IHizirActionService, HizirActionService>();
+builder.Services.AddScoped<IGoodsReceiptPostingService, GoodsReceiptPostingService>();
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
