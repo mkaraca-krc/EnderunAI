@@ -1,3 +1,5 @@
+import { apiClient } from "@/lib/api/api-client";
+
 export type InventoryItemType = 0 | 1 | 2;
 
 export interface InventoryItemListItem {
@@ -38,39 +40,6 @@ export interface CompanyOption {
   name: string;
 }
 
-function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL ?? "";
-}
-
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
-
-  if (!response.ok) {
-    let message = "İşlem sırasında bir hata oluştu.";
-
-    try {
-      const body = (await response.json()) as { message?: string };
-      message = body.message ?? message;
-    } catch {
-      // API JSON dönmezse genel hata mesajını kullan.
-    }
-
-    throw new Error(message);
-  }
-
-  return response.json() as Promise<T>;
-}
-
 export const inventoryService = {
   async getItems(params?: {
     companyId?: string;
@@ -82,22 +51,22 @@ export const inventoryService = {
     if (params?.search) query.set("search", params.search);
 
     const suffix = query.size > 0 ? `?${query.toString()}` : "";
-    return request<InventoryItemListItem[]>(`/api/inventory/items${suffix}`);
+    return apiClient<InventoryItemListItem[]>(`inventory/items${suffix}`);
   },
 
   async createItem(
     payload: CreateInventoryItemRequest,
   ): Promise<{ id: string; code: string; name: string; message: string }> {
-    return request("/api/inventory/items", {
+    return apiClient("inventory/items", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: payload,
     });
   },
 
   async getCompanies(): Promise<CompanyOption[]> {
-    const result = await request<
+    const result = await apiClient<
       CompanyOption[] | { items?: CompanyOption[]; data?: CompanyOption[] }
-    >("/api/companies");
+    >("companies");
 
     if (Array.isArray(result)) return result;
     return result.items ?? result.data ?? [];
