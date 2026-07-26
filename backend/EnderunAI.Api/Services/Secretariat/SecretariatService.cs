@@ -26,10 +26,10 @@ public sealed class SecretariatService(
         if (direction is null or SecretariatDocumentDirection.Incoming)
         {
             var query = db.IncomingDocuments.AsNoTracking();
-            if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId);
-            if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId);
-            if (status.HasValue) query = query.Where(x => x.Status == status);
-            if (startDate.HasValue) query = query.Where(x => x.DocumentDate >= startDate);
+            if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
+            if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId.Value);
+            if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+            if (startDate.HasValue) query = query.Where(x => x.DocumentDate >= startDate.Value);
             if (endDate.HasValue) query = query.Where(x => x.DocumentDate < endDate.Value.Date.AddDays(1));
             if (term is not null)
             {
@@ -55,10 +55,10 @@ public sealed class SecretariatService(
         if (direction is null or SecretariatDocumentDirection.Outgoing)
         {
             var query = db.OutgoingDocuments.AsNoTracking();
-            if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId);
-            if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId);
-            if (status.HasValue) query = query.Where(x => x.Status == status);
-            if (startDate.HasValue) query = query.Where(x => x.DocumentDate >= startDate);
+            if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
+            if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId.Value);
+            if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+            if (startDate.HasValue) query = query.Where(x => x.DocumentDate >= startDate.Value);
             if (endDate.HasValue) query = query.Where(x => x.DocumentDate < endDate.Value.Date.AddDays(1));
             if (term is not null)
             {
@@ -430,7 +430,7 @@ public sealed class SecretariatService(
         CancellationToken cancellationToken = default)
     {
         var query = db.DocumentCategories.AsNoTracking();
-        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId);
+        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
         return await query
             .OrderByDescending(x => x.IsDefault)
             .ThenBy(x => x.Name)
@@ -502,10 +502,10 @@ public sealed class SecretariatService(
         CancellationToken cancellationToken = default)
     {
         var query = db.CargoShipments.AsNoTracking();
-        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId);
-        if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId);
-        if (direction.HasValue) query = query.Where(x => x.Direction == direction);
-        if (status.HasValue) query = query.Where(x => x.Status == status);
+        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
+        if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId.Value);
+        if (direction.HasValue) query = query.Where(x => x.Direction == direction.Value);
+        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
         var term = Normalize(search);
         if (term is not null)
         {
@@ -605,10 +605,10 @@ public sealed class SecretariatService(
         CancellationToken cancellationToken = default)
     {
         var query = db.VisitorRecords.AsNoTracking();
-        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId);
-        if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId);
-        if (status.HasValue) query = query.Where(x => x.Status == status);
-        if (startDate.HasValue) query = query.Where(x => x.PlannedVisitAtUtc >= startDate);
+        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
+        if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId.Value);
+        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+        if (startDate.HasValue) query = query.Where(x => x.PlannedVisitAtUtc >= startDate.Value);
         if (endDate.HasValue) query = query.Where(x => x.PlannedVisitAtUtc < endDate.Value.Date.AddDays(1));
         var term = Normalize(search);
         if (term is not null)
@@ -706,9 +706,9 @@ public sealed class SecretariatService(
         CancellationToken cancellationToken = default)
     {
         var query = db.PhoneNotes.AsNoTracking();
-        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId);
-        if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId);
-        if (status.HasValue) query = query.Where(x => x.Status == status);
+        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
+        if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId.Value);
+        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
         var term = Normalize(search);
         if (term is not null)
         {
@@ -806,10 +806,10 @@ public sealed class SecretariatService(
         CancellationToken cancellationToken = default)
     {
         var query = db.SecretariatScheduleEntries.AsNoTracking().Where(x => x.Type == type);
-        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId);
-        if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId);
-        if (status.HasValue) query = query.Where(x => x.Status == status);
-        if (startDate.HasValue) query = query.Where(x => x.StartAtUtc >= startDate);
+        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
+        if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId.Value);
+        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+        if (startDate.HasValue) query = query.Where(x => x.StartAtUtc >= startDate.Value);
         if (endDate.HasValue) query = query.Where(x => x.StartAtUtc < endDate.Value.Date.AddDays(1));
         var term = Normalize(search);
         if (term is not null)
@@ -930,12 +930,12 @@ public sealed class SecretariatService(
         var schedule = db.SecretariatScheduleEntries.AsNoTracking();
         if (companyId.HasValue)
         {
-            incoming = incoming.Where(x => x.CompanyId == companyId);
-            outgoing = outgoing.Where(x => x.CompanyId == companyId);
-            cargo = cargo.Where(x => x.CompanyId == companyId);
-            visitors = visitors.Where(x => x.CompanyId == companyId);
-            notes = notes.Where(x => x.CompanyId == companyId);
-            schedule = schedule.Where(x => x.CompanyId == companyId);
+            incoming = incoming.Where(x => x.CompanyId == companyId.Value);
+            outgoing = outgoing.Where(x => x.CompanyId == companyId.Value);
+            cargo = cargo.Where(x => x.CompanyId == companyId.Value);
+            visitors = visitors.Where(x => x.CompanyId == companyId.Value);
+            notes = notes.Where(x => x.CompanyId == companyId.Value);
+            schedule = schedule.Where(x => x.CompanyId == companyId.Value);
         }
 
         var pendingStatuses = new[]
@@ -971,7 +971,7 @@ public sealed class SecretariatService(
 
         var activities = new List<SecretariatRecentActivityResponse>();
         activities.AddRange(await db.DocumentWorkflows.AsNoTracking()
-            .Where(x => !companyId.HasValue || x.CompanyId == companyId)
+            .Where(x => !companyId.HasValue || x.CompanyId == companyId.Value)
             .OrderByDescending(x => x.ActionAtUtc)
             .Take(8)
             .Select(x => new SecretariatRecentActivityResponse(
