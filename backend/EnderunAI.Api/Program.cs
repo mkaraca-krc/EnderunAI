@@ -30,8 +30,14 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString);
 });
 
+builder.Services.AddHttpClient("OpenAI", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(90);
+});
+
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
+builder.Services.AddScoped<IHizirChatService, HizirChatService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 
 builder.Services.AddScoped<PasswordService>();
