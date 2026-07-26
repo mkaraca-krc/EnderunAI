@@ -134,7 +134,7 @@ public sealed class ProcurementApprovalsController(
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Forbid(ex.Message);
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -145,7 +145,7 @@ public sealed class ProcurementApprovalsController(
     [HttpGet("my-pending")]
     public async Task<ActionResult> MyPending(CancellationToken cancellationToken)
     {
-        var roles = User.FindAll(ClaimTypes.Role).Select(x => x.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var roles = User.FindAll(ClaimTypes.Role).Select(x => x.Value).ToArray();
         var result = await db.InstanceSteps
             .AsNoTracking()
             .Include(x => x.Instance)
