@@ -1,0 +1,2 @@
+import ErpShell from "@/components/erp/erp-shell";
+export default function Page(){return <ErpShell title="Tedarikçi Performansı" description="Teslimat, kalite, fiyat ve risk puanları"><div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"><h2 className="m-0 text-lg">Tedarikçi Performansı</h2><p className="mt-3 text-sm text-slate-500">Tedarikçi puan kartları ve risk analizi ekranı bu modülde geliştirilecek.</p></div></ErpShell>}
