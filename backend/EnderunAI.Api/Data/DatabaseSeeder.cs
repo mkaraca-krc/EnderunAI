@@ -11,23 +11,38 @@ public static class DatabaseSeeder
         PasswordService passwordService,
         IConfiguration configuration)
     {
-        var adminRole = await db.Roles.SingleOrDefaultAsync(x => x.Name == "Admin");
-        if (adminRole is null)
+        foreach (var preset in PermissionCatalog.RolePresets)
         {
-            adminRole = new AppRole { Name = "Admin", Description = "Tam sistem yetkisi" };
-            db.Roles.Add(adminRole);
-            await db.SaveChangesAsync();
+            var roleExists = await db.Roles.AnyAsync(role => role.Name == preset.Name);
+            if (!roleExists)
+            {
+                db.Roles.Add(new AppRole
+                {
+                    Name = preset.Name,
+                    Description = preset.Description
+                });
+            }
         }
+
+        await db.SaveChangesAsync();
+        var adminRole = await db.Roles.SingleAsync(role => role.Name == "Admin");
 
         var username = Environment.GetEnvironmentVariable("SEED_ADMIN_USERNAME");
         var password = Environment.GetEnvironmentVariable("SEED_ADMIN_PASSWORD");
-        var fullName = Environment.GetEnvironmentVariable("SEED_ADMIN_FULLNAME") ?? "Mehmet Karacabey";
+        var fullName =
+            Environment.GetEnvironmentVariable("SEED_ADMIN_FULLNAME") ??
+            "Mehmet Karacabey";
 
-        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        if (string.IsNullOrWhiteSpace(username) ||
+            string.IsNullOrWhiteSpace(password))
+        {
             return;
+        }
 
-        var user = await db.Users.Include(x => x.UserRoles)
-            .SingleOrDefaultAsync(x => x.Username == username);
+        username = username.Trim().ToLowerInvariant();
+        var user = await db.Users
+            .Include(item => item.UserRoles)
+            .SingleOrDefaultAsync(item => item.Username == username);
 
         if (user is null)
         {
@@ -44,9 +59,13 @@ public static class DatabaseSeeder
             await db.SaveChangesAsync();
         }
 
-        if (!user.UserRoles.Any(x => x.RoleId == adminRole.Id))
+        if (!user.UserRoles.Any(userRole => userRole.RoleId == adminRole.Id))
         {
-            db.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = adminRole.Id });
+            db.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id,
+                RoleId = adminRole.Id
+            });
             await db.SaveChangesAsync();
         }
     }
