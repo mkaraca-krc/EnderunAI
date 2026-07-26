@@ -7,7 +7,8 @@ namespace EnderunAI.Api.Services.AI;
 
 public sealed class HizirChatService(
     IHttpClientFactory httpClientFactory,
-    IConfiguration configuration
+    IConfiguration configuration,
+    IHizirDashboardAggregator dashboardAggregator
 ) : IHizirChatService
 {
     private const string Instructions = """
@@ -15,7 +16,8 @@ Sen Enderun AI içindeki Hızır adlı kurumsal dijital asistansın.
 Türkçe konuş. Resmî, sakin, kısa ve net ol; laubali olma.
 Önce en önemli konuyu söyle, sonra gerekçeyi ve önerilen aksiyonu ver.
 Tahmin ile kesin bilgiyi açıkça ayır. Bilmediğin şeyi uydurma.
-Şirket verisi sağlanmadıysa bunu belirt ve veri varmış gibi konuşma.
+Sana verilen ERP anlık görüntüsünü kesin şirket verisi olarak kullan.
+Bir modülün IsAvailable değeri false ise o modüle ait veri henüz bağlı değildir; bu konuda sayı uydurma.
 Kullanıcı onayı olmadan ödeme, sipariş, e-posta, görev, takvim veya kayıt işlemi yapılmış gibi davranma.
 Kritik işlemler için açık onay iste.
 Kullanıcıya Mehmet Bey diye hitap et.
@@ -43,7 +45,18 @@ Kullanıcıya Mehmet Bey diye hitap et.
             ?? Environment.GetEnvironmentVariable("OPENAI_MODEL")
             ?? "gpt-5";
 
-        var input = new List<object>();
+        var snapshot = await dashboardAggregator.GetSnapshotAsync(cancellationToken);
+        var snapshotJson = JsonSerializer.Serialize(snapshot);
+
+        var input = new List<object>
+        {
+            new
+            {
+                role = "developer",
+                content = "ENDERUN AI ERP ANLIK GÖRÜNTÜSÜ (UTC):\n" + snapshotJson
+            }
+        };
+
         if (request.History is not null)
         {
             foreach (var item in request.History.TakeLast(12))
