@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using EnderunAI.Api.Contracts;
 using EnderunAI.Api.Data;
@@ -70,24 +71,40 @@ public sealed class AuthController(
 
     [Authorize]
     [HttpGet("me")]
-    public IActionResult Me()
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
     {
-        var roles = User.FindAll(ClaimTypes.Role)
-            .Select(claim => claim.Value)
+        var idValue =
+            User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+            User.FindFirstValue(JwtRegisteredClaimNames.Sub) ??
+            User.FindFirstValue("sub");
+        if (!Guid.TryParse(idValue, out var userId))
+            return Unauthorized(new { message = "Oturum kullanıcısı doğrulanamadı." });
+
+        var user = await db.Users
+            .AsNoTracking()
+            .Include(item => item.UserRoles)
+            .ThenInclude(userRole => userRole.Role)
+            .SingleOrDefaultAsync(item => item.Id == userId, cancellationToken);
+
+        if (user is null || !user.IsActive)
+            return Unauthorized(new { message = "Kullanıcı hesabı pasif veya bulunamadı." });
+
+        var roleNames = user.UserRoles
+            .Select(userRole => userRole.Role.Name)
+            .ToArray();
+        var roles = roleNames
             .Where(PermissionCatalog.IsPresetRole)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var permissions = User.FindAll("permissions")
-            .Select(claim => claim.Value)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        var permissions = PermissionCatalog.Resolve(roleNames)
             .OrderBy(permission => permission)
             .ToArray();
 
         return Ok(new
         {
-            id = User.FindFirstValue(ClaimTypes.NameIdentifier),
-            username = User.Identity?.Name,
-            fullName = User.FindFirstValue("full_name"),
+            id = user.Id,
+            user.Username,
+            user.FullName,
             roles,
             permissions
         });
