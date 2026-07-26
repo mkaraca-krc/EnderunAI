@@ -29,6 +29,7 @@ builder.Services.AddDbContext<ProcurementNotificationDbContext>(options => optio
 builder.Services.AddDbContext<ProcurementTechnicalDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddDbContext<SupplierPerformanceDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddDbContext<ProjectBudgetDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<RfqInvitationDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services.AddHttpClient("OpenAI", client => client.Timeout = TimeSpan.FromSeconds(90));
 
@@ -46,6 +47,7 @@ builder.Services.AddScoped<ISupplierPerformanceService, SupplierPerformanceServi
 builder.Services.AddScoped<IProjectBudgetService, ProjectBudgetService>();
 builder.Services.AddScoped<IProcurementDashboardService, ProcurementDashboardService>();
 builder.Services.AddScoped<IProcurementPdfService, ProcurementPdfService>();
+builder.Services.AddScoped<IRfqInvitationService, RfqInvitationService>();
 builder.Services.AddHostedService<ProcurementNotificationWorker>();
 
 builder.Services.AddScoped<PasswordService>();
@@ -105,6 +107,9 @@ using (var scope = app.Services.CreateScope())
 
     var projectBudgetDb = scope.ServiceProvider.GetRequiredService<ProjectBudgetDbContext>();
     await projectBudgetDb.Database.MigrateAsync();
+
+    var invitationDb = scope.ServiceProvider.GetRequiredService<RfqInvitationDbContext>();
+    await invitationDb.Database.MigrateAsync();
 
     var passwordService = scope.ServiceProvider.GetRequiredService<PasswordService>();
     await DatabaseSeeder.SeedAsync(db, passwordService, builder.Configuration);
