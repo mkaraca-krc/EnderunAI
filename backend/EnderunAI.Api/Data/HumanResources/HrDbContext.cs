@@ -130,11 +130,16 @@ public sealed class HrDbContext(DbContextOptions<HrDbContext> options)
         {
             entity.ToTable("hr_positions");
             ConfigureBase(entity);
+            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
             entity.HasIndex(x => new { x.DepartmentId, x.Code }).IsUnique();
             entity.HasIndex(x => x.DepartmentId);
             entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Title)
+                .HasColumnName("Name")
+                .HasMaxLength(200)
+                .IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.Level).HasDefaultValue(0).IsRequired();
         });
 
     }
