@@ -10,6 +10,9 @@ public sealed class HrDbContext(DbContextOptions<HrDbContext> options)
     public DbSet<HrOvertimeRequest> OvertimeRequests => Set<HrOvertimeRequest>();
     public DbSet<HrAdvanceRequest> AdvanceRequests => Set<HrAdvanceRequest>();
     public DbSet<HrPayrollRecord> PayrollRecords => Set<HrPayrollRecord>();
+    public DbSet<HrSalaryDefinition> SalaryDefinitions => Set<HrSalaryDefinition>();
+    public DbSet<HrDepartment> Departments => Set<HrDepartment>();
+    public DbSet<HrPosition> Positions => Set<HrPosition>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -94,6 +97,46 @@ public sealed class HrDbContext(DbContextOptions<HrDbContext> options)
             entity.Property(x => x.PaymentReference).HasMaxLength(150);
             entity.Property(x => x.Description).HasMaxLength(2000);
         });
+        modelBuilder.Entity<HrSalaryDefinition>(entity =>
+        {
+            entity.ToTable("hr_salary_definitions");
+            ConfigureBase(entity);
+            entity.HasIndex(x => new { x.PersonnelId, x.EffectiveStartDate }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.PersonnelId });
+            entity.Property(x => x.EffectiveStartDate).HasColumnType("date");
+            entity.Property(x => x.EffectiveEndDate).HasColumnType("date");
+            entity.Property(x => x.GrossSalary).HasPrecision(18, 2);
+            entity.Property(x => x.NetSalary).HasPrecision(18, 2);
+            entity.Property(x => x.DailyRate).HasPrecision(18, 2);
+            entity.Property(x => x.HourlyRate).HasPrecision(18, 2);
+            entity.Property(x => x.OvertimeMultiplier).HasPrecision(8, 4);
+            entity.Property(x => x.SundayMultiplier).HasPrecision(8, 4);
+            entity.Property(x => x.PublicHolidayMultiplier).HasPrecision(8, 4);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<HrDepartment>(entity =>
+        {
+            entity.ToTable("hr_departments");
+            ConfigureBase(entity);
+            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+            entity.HasIndex(x => x.ParentDepartmentId);
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        });
+
+        modelBuilder.Entity<HrPosition>(entity =>
+        {
+            entity.ToTable("hr_positions");
+            ConfigureBase(entity);
+            entity.HasIndex(x => new { x.DepartmentId, x.Code }).IsUnique();
+            entity.HasIndex(x => x.DepartmentId);
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+        });
+
     }
 
     private static void ConfigureBase<TEntity>(
