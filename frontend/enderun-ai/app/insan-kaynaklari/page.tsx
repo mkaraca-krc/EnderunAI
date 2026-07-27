@@ -435,15 +435,15 @@ export default function HumanResourcesDashboardPage() {
             .slice(0, 10);
 
         const [
-          personnelRows,
-          currentPayrollRows,
-          salaryRows,
-          allPayrollRows,
-          leaveRows,
-          overtimeRows,
-          advanceRows,
-          branchRows,
-        ] = await Promise.all([
+          personnelResult,
+          currentPayrollResult,
+          salaryResult,
+          allPayrollResult,
+          leaveResult,
+          overtimeResult,
+          advanceResult,
+          branchResult,
+        ] = await Promise.allSettled([
           hrDashboardService
             .getPersonnel(companyId),
 
@@ -485,6 +485,74 @@ export default function HumanResourcesDashboardPage() {
             companyId
           ),
         ]);
+
+        const personnelRows =
+          personnelResult.status ===
+          "fulfilled"
+            ? personnelResult.value
+            : [];
+
+        const currentPayrollRows =
+          currentPayrollResult.status ===
+          "fulfilled"
+            ? currentPayrollResult.value
+            : [];
+
+        const salaryRows =
+          salaryResult.status ===
+          "fulfilled"
+            ? salaryResult.value
+            : [];
+
+        const allPayrollRows =
+          allPayrollResult.status ===
+          "fulfilled"
+            ? allPayrollResult.value
+            : [];
+
+        const leaveRows =
+          leaveResult.status ===
+          "fulfilled"
+            ? leaveResult.value
+            : [];
+
+        const overtimeRows =
+          overtimeResult.status ===
+          "fulfilled"
+            ? overtimeResult.value
+            : [];
+
+        const advanceRows =
+          advanceResult.status ===
+          "fulfilled"
+            ? advanceResult.value
+            : [];
+
+        const branchRows =
+          branchResult.status ===
+          "fulfilled"
+            ? branchResult.value
+            : [];
+
+        const failedSourceCount = [
+          personnelResult,
+          currentPayrollResult,
+          salaryResult,
+          allPayrollResult,
+          leaveResult,
+          overtimeResult,
+          advanceResult,
+          branchResult,
+        ].filter(
+          (result) =>
+            result.status === "rejected"
+        ).length;
+
+        if (failedSourceCount > 0) {
+          setError(
+            `${failedSourceCount} veri kaynağı alınamadı; ulaşılabilen İK verileri gösteriliyor.`
+          );
+        }
 
         setPersonnel(personnelRows);
         setPayrolls(
