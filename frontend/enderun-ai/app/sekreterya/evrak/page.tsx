@@ -35,7 +35,10 @@ const directionLabels: Record<number, string> = {
 const statusLabels: Record<number, string> = {
   [CorrespondenceStatus.Draft]: "Taslak",
   [CorrespondenceStatus.Registered]: "Kayıtlı",
-  [CorrespondenceStatus.Delivered]: "Teslim Edildi",
+  [CorrespondenceStatus.Assigned]: "Atandı",
+  [CorrespondenceStatus.InProgress]: "İşlemde",
+  [CorrespondenceStatus.Answered]: "Yanıtlandı",
+  [CorrespondenceStatus.Completed]: "Tamamlandı",
   [CorrespondenceStatus.Archived]: "Arşivlendi",
   [CorrespondenceStatus.Cancelled]: "İptal",
 };
@@ -246,7 +249,7 @@ export default function CorrespondencePage() {
     }
   }
 
-  async function deleteDocument(id: string) {
+  async function deleteDocument(id: string, direction: CorrespondenceDirection) {
     const confirmed = window.confirm(
       "Bu evrak kaydını silmek istediğinize emin misiniz?"
     );
@@ -260,7 +263,7 @@ export default function CorrespondencePage() {
     setSuccess("");
 
     try {
-      await correspondenceService.delete(id);
+      await correspondenceService.delete(id, direction);
       setSuccess("Evrak kaydı silindi.");
       await load();
     } catch (err) {
@@ -673,7 +676,7 @@ export default function CorrespondencePage() {
                         <button
                           type="button"
                           disabled={processingId === item.id}
-                          onClick={() => void deleteDocument(item.id)}
+                          onClick={() => void deleteDocument(item.id, item.direction)}
                           className="text-sm font-medium text-red-600 disabled:opacity-50"
                         >
                           {processingId === item.id
