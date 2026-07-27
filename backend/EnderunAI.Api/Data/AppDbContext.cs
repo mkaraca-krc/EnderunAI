@@ -16,6 +16,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     public DbSet<AccountingAccount> AccountingAccounts =>
         Set<AccountingAccount>();
+    public DbSet<AccountingVoucher> AccountingVouchers =>
+        Set<AccountingVoucher>();
+    public DbSet<AccountingVoucherLine> AccountingVoucherLines =>
+        Set<AccountingVoucherLine>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<EngineeringPosition> EngineeringPositions => Set<EngineeringPosition>();
@@ -54,6 +58,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigureBranches(modelBuilder);
         ConfigureCurrentAccounts(modelBuilder);
         ConfigureAccountingAccounts(modelBuilder);
+        ConfigureAccountingVouchers(modelBuilder);
+        ConfigureAccountingVoucherLines(modelBuilder);
         ConfigureProjects(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigureEngineeringPositions(modelBuilder);
@@ -237,6 +243,150 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         });
     }
 
+
+    private static void ConfigureAccountingVouchers(
+        ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AccountingVoucher>(entity =>
+        {
+            entity.ToTable("accounting_vouchers");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+                {
+                    x.CompanyId,
+                    x.VoucherNumber
+                })
+                .IsUnique();
+
+            entity.HasIndex(x => new
+                {
+                    x.CompanyId,
+                    x.VoucherDate
+                });
+
+            entity.HasIndex(x => new
+                {
+                    x.CompanyId,
+                    x.Status
+                });
+
+            entity.Property(x => x.VoucherNumber)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.VoucherType)
+                .HasConversion<int>()
+                .IsRequired();
+
+            entity.Property(x => x.Status)
+                .HasConversion<int>()
+                .IsRequired();
+
+            entity.Property(x => x.CurrencyCode)
+                .HasMaxLength(3)
+                .IsRequired();
+
+            entity.Property(x => x.ExchangeRate)
+                .HasPrecision(18, 6);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.ReferenceNumber)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.SourceModule)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.TotalDebit)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.TotalCredit)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CancellationReason)
+                .HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(x => x.Lines)
+                .WithOne(x => x.AccountingVoucher)
+                .HasForeignKey(x => x.AccountingVoucherId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureAccountingVoucherLines(
+        ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AccountingVoucherLine>(entity =>
+        {
+            entity.ToTable("accounting_voucher_lines");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+                {
+                    x.AccountingVoucherId,
+                    x.LineNumber
+                })
+                .IsUnique();
+
+            entity.HasIndex(x => x.AccountingAccountId);
+            entity.HasIndex(x => x.CurrentAccountId);
+            entity.HasIndex(x => x.ProjectId);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.DebitAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CreditAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CurrencyCode)
+                .HasMaxLength(3)
+                .IsRequired();
+
+            entity.Property(x => x.ExchangeRate)
+                .HasPrecision(18, 6);
+
+            entity.Property(x => x.DebitAmountLocal)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CreditAmountLocal)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CostCenterCode)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.DocumentNumber)
+                .HasMaxLength(100);
+
+            entity.HasOne(x => x.AccountingAccount)
+                .WithMany()
+                .HasForeignKey(x => x.AccountingAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CurrentAccount)
+                .WithMany()
+                .HasForeignKey(x => x.CurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
 
     private static void ConfigureProjects(ModelBuilder modelBuilder)
     {
