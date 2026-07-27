@@ -3,9 +3,11 @@ using EnderunAI.Api.Services.DocumentNumbers;
 using EnderunAI.Api.Services.AI;
 using System.Text;
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.Upload;
 using EnderunAI.Api.Services.Secretariat;
+using EnderunAI.Api.Services.HumanResources;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -31,10 +33,16 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString);
 });
 
+builder.Services.AddDbContext<HrDbContext>(options =>
+{
+    options.UseNpgsql(connectionString);
+});
+
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 builder.Services.AddScoped<ISecretariatService, SecretariatService>();
+builder.Services.AddScoped<IHrApprovalService, HrApprovalService>();
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
@@ -92,6 +100,12 @@ using (var scope = app.Services.CreateScope())
             .GetRequiredService<AppDbContext>();
 
     await db.Database.MigrateAsync();
+
+    var hrDb =
+        scope.ServiceProvider
+            .GetRequiredService<HrDbContext>();
+
+    await hrDb.Database.MigrateAsync();
 
     var passwordService =
         scope.ServiceProvider
