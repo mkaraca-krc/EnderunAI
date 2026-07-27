@@ -31,7 +31,7 @@ public sealed class HrSalaryDefinitionsController(
 
         if (effectiveDate.HasValue)
         {
-            var date = effectiveDate.Value.Date;
+            var date = UtcDate(effectiveDate.Value);
             query = query.Where(x =>
                 x.EffectiveStartDate <= date &&
                 (!x.EffectiveEndDate.HasValue || x.EffectiveEndDate.Value >= date));
@@ -65,8 +65,8 @@ public sealed class HrSalaryDefinitionsController(
         {
             CompanyId = request.CompanyId,
             PersonnelId = request.PersonnelId,
-            EffectiveStartDate = request.EffectiveStartDate.Date,
-            EffectiveEndDate = request.EffectiveEndDate?.Date,
+            EffectiveStartDate = UtcDate(request.EffectiveStartDate),
+            EffectiveEndDate = UtcDate(request.EffectiveEndDate),
             GrossSalary = request.GrossSalary,
             NetSalary = request.NetSalary,
             DailyRate = request.DailyRate,
@@ -107,8 +107,8 @@ public sealed class HrSalaryDefinitionsController(
         if (validation is not null)
             return validation;
 
-        item.EffectiveStartDate = request.EffectiveStartDate.Date;
-        item.EffectiveEndDate = request.EffectiveEndDate?.Date;
+        item.EffectiveStartDate = UtcDate(request.EffectiveStartDate);
+        item.EffectiveEndDate = UtcDate(request.EffectiveEndDate);
         item.GrossSalary = request.GrossSalary;
         item.NetSalary = request.NetSalary;
         item.DailyRate = request.DailyRate;
@@ -152,7 +152,7 @@ public sealed class HrSalaryDefinitionsController(
         CancellationToken cancellationToken)
     {
         if (effectiveEndDate.HasValue &&
-            effectiveEndDate.Value.Date < effectiveStartDate.Date)
+            UtcDate(effectiveEndDate.Value) < UtcDate(effectiveStartDate))
         {
             return BadRequest(new
             {
@@ -174,8 +174,8 @@ public sealed class HrSalaryDefinitionsController(
             });
         }
 
-        var start = effectiveStartDate.Date;
-        var end = effectiveEndDate?.Date;
+        var start = UtcDate(effectiveStartDate);
+        var end = UtcDate(effectiveEndDate);
         var overlaps = await hrDb.SalaryDefinitions.AnyAsync(
             x => x.PersonnelId == personnelId &&
                  (!excludedId.HasValue || x.Id != excludedId.Value) &&
@@ -201,6 +201,12 @@ public sealed class HrSalaryDefinitionsController(
 
     private static string? NormalizeText(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static DateTime UtcDate(DateTime value) =>
+        DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
+
+    private static DateTime? UtcDate(DateTime? value) =>
+        value.HasValue ? UtcDate(value.Value) : null;
 }
 
 [ApiController]
