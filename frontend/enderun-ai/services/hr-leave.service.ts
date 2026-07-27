@@ -56,37 +56,18 @@ export type UpdateHrLeaveRequest = {
 
 function buildQuery(filters?: HrLeaveFilters) {
   const query = new URLSearchParams();
-
-  if (filters?.companyId) {
-    query.set("companyId", filters.companyId);
-  }
-
-  if (filters?.personnelId) {
-    query.set("personnelId", filters.personnelId);
-  }
-
-  if (filters?.projectId) {
-    query.set("projectId", filters.projectId);
-  }
-
+  if (filters?.companyId) query.set("companyId", filters.companyId);
+  if (filters?.personnelId) query.set("personnelId", filters.personnelId);
+  if (filters?.projectId) query.set("projectId", filters.projectId);
   if (filters?.leaveType !== undefined) {
     query.set("leaveType", String(filters.leaveType));
   }
-
   if (filters?.status !== undefined) {
     query.set("status", String(filters.status));
   }
-
-  if (filters?.startDate) {
-    query.set("startDate", filters.startDate);
-  }
-
-  if (filters?.endDate) {
-    query.set("endDate", filters.endDate);
-  }
-
+  if (filters?.startDate) query.set("startDate", filters.startDate);
+  if (filters?.endDate) query.set("endDate", filters.endDate);
   const value = query.toString();
-
   return value ? `?${value}` : "";
 }
 
@@ -105,21 +86,16 @@ export const hrLeaveService = {
   },
 
   update(id: string, payload: UpdateHrLeaveRequest) {
-    return apiClient<HrLeaveListItem>(
-      `hr/workforce/leaves/${id}`,
-      {
-        method: "PUT",
-        body: payload,
-      }
-    );
+    return apiClient<HrLeaveListItem>(`hr/workforce/leaves/${id}`, {
+      method: "PUT",
+      body: payload,
+    });
   },
 
   approve(id: string) {
     return apiClient<HrLeaveListItem>(
       `hr/workforce/leaves/${id}/approve`,
-      {
-        method: "POST",
-      }
+      { method: "POST" }
     );
   },
 
@@ -128,19 +104,14 @@ export const hrLeaveService = {
       `hr/workforce/leaves/${id}/reject`,
       {
         method: "POST",
-        body: JSON.stringify({
-          reason: reason.trim(),
-        }),
+        body: { reason: reason.trim() },
       }
     );
   },
 
   delete(id: string) {
-    return apiClient<{ message: string }>(
-      `hr/workforce/leaves/${id}`,
-      {
-        method: "DELETE",
-      }
-    );
+    return apiClient<{ message: string }>(`hr/workforce/leaves/${id}`, {
+      method: "DELETE",
+    });
   },
 };
