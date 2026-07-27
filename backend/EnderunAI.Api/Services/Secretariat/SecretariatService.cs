@@ -608,8 +608,20 @@ public sealed class SecretariatService(
         if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
         if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId.Value);
         if (status.HasValue) query = query.Where(x => x.Status == status.Value);
-        if (startDate.HasValue) query = query.Where(x => x.PlannedVisitAtUtc >= startDate.Value);
-        if (endDate.HasValue) query = query.Where(x => x.PlannedVisitAtUtc < endDate.Value.Date.AddDays(1));
+        if (startDate.HasValue)
+        {
+            var startDateUtc = DateTime.SpecifyKind(startDate.Value.Date, DateTimeKind.Utc);
+            query = query.Where(x => x.PlannedVisitAtUtc >= startDateUtc);
+        }
+
+        if (endDate.HasValue)
+        {
+            var endDateExclusiveUtc = DateTime.SpecifyKind(
+                endDate.Value.Date.AddDays(1),
+                DateTimeKind.Utc);
+
+            query = query.Where(x => x.PlannedVisitAtUtc < endDateExclusiveUtc);
+        }
         var term = Normalize(search);
         if (term is not null)
         {
