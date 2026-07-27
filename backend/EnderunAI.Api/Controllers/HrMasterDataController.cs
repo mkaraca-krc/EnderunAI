@@ -464,6 +464,7 @@ public sealed class HrPositionsController(HrDbContext hrDb) : ControllerBase
                 x.position.Title,
                 Name = x.position.Title,
                 x.position.Description,
+                x.position.Level,
                 x.position.IsManagerial,
                 x.position.IsActive,
                 x.position.CreatedAtUtc
@@ -495,12 +496,19 @@ public sealed class HrPositionsController(HrDbContext hrDb) : ControllerBase
         if (validation is not null)
             return validation;
 
+        var companyId = await hrDb.Departments.AsNoTracking()
+            .Where(x => x.Id == request.DepartmentId)
+            .Select(x => x.CompanyId)
+            .SingleAsync(cancellationToken);
+
         var item = new HrPosition
         {
+            CompanyId = companyId,
             DepartmentId = request.DepartmentId,
             Code = request.Code.Trim().ToUpperInvariant(),
             Title = request.Title.Trim(),
             Description = NormalizeText(request.Description),
+            Level = Math.Max(0, request.Level),
             IsManagerial = request.IsManagerial
         };
 
@@ -525,10 +533,17 @@ public sealed class HrPositionsController(HrDbContext hrDb) : ControllerBase
         if (validation is not null)
             return validation;
 
+        var companyId = await hrDb.Departments.AsNoTracking()
+            .Where(x => x.Id == request.DepartmentId)
+            .Select(x => x.CompanyId)
+            .SingleAsync(cancellationToken);
+
+        item.CompanyId = companyId;
         item.DepartmentId = request.DepartmentId;
         item.Code = request.Code.Trim().ToUpperInvariant();
         item.Title = request.Title.Trim();
         item.Description = NormalizeText(request.Description);
+        item.Level = Math.Max(0, request.Level);
         item.IsManagerial = request.IsManagerial;
         item.IsActive = request.IsActive;
         item.UpdatedAtUtc = DateTime.UtcNow;
@@ -630,7 +645,8 @@ public record SavePositionRequest(
     string Code,
     string Title,
     string? Description,
-    bool IsManagerial);
+    bool IsManagerial,
+    int Level = 0);
 
 public record UpdatePositionRequest(
     Guid DepartmentId,
@@ -638,4 +654,5 @@ public record UpdatePositionRequest(
     string Title,
     string? Description,
     bool IsManagerial,
-    bool IsActive);
+    bool IsActive,
+    int Level = 0);
