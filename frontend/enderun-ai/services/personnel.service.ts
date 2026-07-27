@@ -110,11 +110,11 @@ export const personnelService = {
 
     const suffix = query.toString() ? `?${query.toString()}` : "";
 
-    return apiClient<PersonnelListItem[]>(`personnel${suffix}`);
+    return apiClient<PersonnelListItem[]>(`hr/personnel${suffix}`);
   },
 
   getById(id: string) {
-    return apiClient<PersonnelDetail>(`personnel/${id}`);
+    return apiClient<PersonnelDetail>(`hr/personnel/${id}`);
   },
 
   create(payload: CreatePersonnelRequest) {
@@ -124,14 +124,14 @@ export const personnelService = {
       employeeNumber: string;
       firstName: string;
       lastName: string;
-    }>("personnel", {
+    }>("hr/personnel", {
       method: "POST",
       body: payload,
     });
   },
 
   update(id: string, payload: UpdatePersonnelRequest) {
-    return apiClient<{ message: string }>(`personnel/${id}`, {
+    return apiClient<{ message: string }>(`hr/personnel/${id}`, {
       method: "PUT",
       body: payload,
     });
@@ -139,7 +139,7 @@ export const personnelService = {
 
   assignToProject(id: string, payload: AssignPersonnelRequest) {
     return apiClient<{ message: string; id: string }>(
-      `personnel/${id}/assignments`,
+      `hr/personnel/${id}/assignments`,
       {
         method: "POST",
         body: payload,
@@ -153,7 +153,7 @@ export const personnelService = {
       : "";
 
     return apiClient<{ message: string }>(
-      `personnel/assignments/${assignmentId}/close${query}`,
+      `hr/personnel/assignments/${assignmentId}/close${query}`,
       {
         method: "PUT",
       }
