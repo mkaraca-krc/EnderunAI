@@ -56,18 +56,14 @@ export type UpdateHrOvertimeRequest = {
 
 function buildQuery(filters?: HrOvertimeFilters) {
   const query = new URLSearchParams();
-
   if (filters?.companyId) query.set("companyId", filters.companyId);
   if (filters?.personnelId) query.set("personnelId", filters.personnelId);
   if (filters?.projectId) query.set("projectId", filters.projectId);
-
   if (filters?.status !== undefined) {
     query.set("status", String(filters.status));
   }
-
   if (filters?.startDate) query.set("startDate", filters.startDate);
   if (filters?.endDate) query.set("endDate", filters.endDate);
-
   const value = query.toString();
   return value ? `?${value}` : "";
 }
@@ -87,21 +83,16 @@ export const hrOvertimeService = {
   },
 
   update(id: string, payload: UpdateHrOvertimeRequest) {
-    return apiClient<HrOvertimeItem>(
-      `hr/workforce/overtimes/${id}`,
-      {
-        method: "PUT",
-        body: payload,
-      }
-    );
+    return apiClient<HrOvertimeItem>(`hr/workforce/overtimes/${id}`, {
+      method: "PUT",
+      body: payload,
+    });
   },
 
   approve(id: string) {
     return apiClient<HrOvertimeItem>(
       `hr/workforce/overtimes/${id}/approve`,
-      {
-        method: "POST",
-      }
+      { method: "POST" }
     );
   },
 
@@ -110,19 +101,14 @@ export const hrOvertimeService = {
       `hr/workforce/overtimes/${id}/reject`,
       {
         method: "POST",
-        body: JSON.stringify({
-          reason: reason.trim(),
-        }),
+        body: { reason: reason.trim() },
       }
     );
   },
 
   delete(id: string) {
-    return apiClient<{ message: string }>(
-      `hr/workforce/overtimes/${id}`,
-      {
-        method: "DELETE",
-      }
-    );
+    return apiClient<{ message: string }>(`hr/workforce/overtimes/${id}`, {
+      method: "DELETE",
+    });
   },
 };
