@@ -5,6 +5,7 @@ using System.Text;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.Upload;
+using EnderunAI.Api.Services.Secretariat;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -33,6 +34,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
+builder.Services.AddScoped<ISecretariatService, SecretariatService>();
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
