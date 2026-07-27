@@ -13,6 +13,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<CurrentAccount> CurrentAccounts => Set<CurrentAccount>();
+
+    public DbSet<AccountingAccount> AccountingAccounts =>
+        Set<AccountingAccount>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<EngineeringPosition> EngineeringPositions => Set<EngineeringPosition>();
@@ -50,6 +53,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigureCompanies(modelBuilder);
         ConfigureBranches(modelBuilder);
         ConfigureCurrentAccounts(modelBuilder);
+        ConfigureAccountingAccounts(modelBuilder);
         ConfigureProjects(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigureEngineeringPositions(modelBuilder);
@@ -184,6 +188,55 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
+
+    private static void ConfigureAccountingAccounts(
+        ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AccountingAccount>(entity =>
+        {
+            entity.ToTable("accounting_accounts");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.Code })
+                .IsUnique();
+
+            entity.HasIndex(x => x.ParentAccountId);
+
+            entity.Property(x => x.Code)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.Name)
+                .HasMaxLength(250)
+                .IsRequired();
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CurrencyCode)
+                .HasMaxLength(3);
+
+            entity.Property(x => x.Nature)
+                .HasConversion<int>()
+                .IsRequired();
+
+            entity.Property(x => x.Level)
+                .IsRequired();
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ParentAccount)
+                .WithMany(x => x.ChildAccounts)
+                .HasForeignKey(x => x.ParentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
 
     private static void ConfigureProjects(ModelBuilder modelBuilder)
     {
