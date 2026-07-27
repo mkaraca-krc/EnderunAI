@@ -42,6 +42,7 @@ builder.Services.AddDbContext<HrDbContext>(options =>
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddScoped<IAccountingAccountService, AccountingAccountService>();
 builder.Services.AddScoped<IAccountingAccountSeedService, AccountingAccountSeedService>();
+builder.Services.AddScoped<IAccountingVoucherService, AccountingVoucherService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 builder.Services.AddScoped<ISecretariatService, SecretariatService>();
