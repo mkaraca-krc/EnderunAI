@@ -1,4 +1,5 @@
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Models.Secretariat;
 using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Data;
@@ -31,6 +32,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ManufacturerPriceListItem> ManufacturerPriceListItems => Set<ManufacturerPriceListItem>();
     public DbSet<Offer> Offers => Set<Offer>();
     public DbSet<OfferItem> OfferItems => Set<OfferItem>();
+    public DbSet<DocumentCategory> DocumentCategories => Set<DocumentCategory>();
+    public DbSet<IncomingDocument> IncomingDocuments => Set<IncomingDocument>();
+    public DbSet<OutgoingDocument> OutgoingDocuments => Set<OutgoingDocument>();
+    public DbSet<DocumentWorkflow> DocumentWorkflows => Set<DocumentWorkflow>();
+    public DbSet<DocumentAttachment> DocumentAttachments => Set<DocumentAttachment>();
+    public DbSet<CargoShipment> CargoShipments => Set<CargoShipment>();
+    public DbSet<VisitorRecord> VisitorRecords => Set<VisitorRecord>();
+    public DbSet<PhoneNote> PhoneNotes => Set<PhoneNote>();
+    public DbSet<SecretariatScheduleEntry> SecretariatScheduleEntries => Set<SecretariatScheduleEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -56,6 +66,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigureManufacturerPriceListItems(modelBuilder);
         ConfigureOffers(modelBuilder);
         ConfigureOfferItems(modelBuilder);
+        ConfigureSecretariat(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -754,6 +765,183 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .HasForeignKey(x => x.EngineeringRecipeId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+
+    private static void ConfigureSecretariat(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<DocumentCategory>(entity =>
+        {
+            entity.ToTable("document_categories");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<IncomingDocument>(entity =>
+        {
+            entity.ToTable("incoming_documents");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.DocumentNumber }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.Status, x.DocumentDate });
+            entity.Property(x => x.DocumentNumber).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.ExternalDocumentNumber).HasMaxLength(100);
+            entity.Property(x => x.SenderName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.SenderOrganization).HasMaxLength(250);
+            entity.Property(x => x.Subject).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.DeliveryMethod).HasMaxLength(100);
+            entity.Property(x => x.AssignedToName).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<DocumentCategory>().WithMany().HasForeignKey(x => x.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<OutgoingDocument>(entity =>
+        {
+            entity.ToTable("outgoing_documents");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.DocumentNumber }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.Status, x.DocumentDate });
+            entity.Property(x => x.DocumentNumber).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.RecipientName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.RecipientOrganization).HasMaxLength(250);
+            entity.Property(x => x.Subject).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.DeliveryMethod).HasMaxLength(100);
+            entity.Property(x => x.ReferenceNumber).HasMaxLength(100);
+            entity.Property(x => x.SignedByName).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<DocumentCategory>().WithMany().HasForeignKey(x => x.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<DocumentWorkflow>(entity =>
+        {
+            entity.ToTable("document_workflows");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Direction, x.DocumentId, x.ActionAtUtc });
+            entity.Property(x => x.FromUserName).HasMaxLength(200);
+            entity.Property(x => x.ToUserName).HasMaxLength(200);
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<DocumentAttachment>(entity =>
+        {
+            entity.ToTable("document_attachments");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Direction, x.DocumentId });
+            entity.Property(x => x.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(x => x.StoredFileName).HasMaxLength(255).IsRequired();
+            entity.Property(x => x.FilePath).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(150);
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<CargoShipment>(entity =>
+        {
+            entity.ToTable("cargo_shipments");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.TrackingNumber }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.Status, x.CargoDate });
+            entity.Property(x => x.TrackingNumber).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.CargoCompany).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.SenderName).HasMaxLength(200);
+            entity.Property(x => x.RecipientName).HasMaxLength(200);
+            entity.Property(x => x.InstitutionName).HasMaxLength(250);
+            entity.Property(x => x.DeliveredToName).HasMaxLength(200);
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<VisitorRecord>(entity =>
+        {
+            entity.ToTable("visitor_records");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.Status, x.PlannedVisitAtUtc });
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.IdentityNumber).HasMaxLength(20);
+            entity.Property(x => x.PhoneNumber).HasMaxLength(30);
+            entity.Property(x => x.Email).HasMaxLength(200);
+            entity.Property(x => x.CompanyName).HasMaxLength(250);
+            entity.Property(x => x.VehiclePlate).HasMaxLength(20);
+            entity.Property(x => x.VisitorCardNumber).HasMaxLength(50);
+            entity.Property(x => x.PersonToVisit).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.DepartmentName).HasMaxLength(150);
+            entity.Property(x => x.VisitPurpose).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.ApprovedByName).HasMaxLength(200);
+            entity.Property(x => x.ReceivedByName).HasMaxLength(200);
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<PhoneNote>(entity =>
+        {
+            entity.ToTable("phone_notes");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.Status, x.ReceivedAtUtc });
+            entity.Property(x => x.CallerName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.PhoneNumber).HasMaxLength(30);
+            entity.Property(x => x.InstitutionName).HasMaxLength(250);
+            entity.Property(x => x.Subject).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Message).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.ResponsibleName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<SecretariatScheduleEntry>(entity =>
+        {
+            entity.ToTable("secretariat_schedule_entries");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.Type, x.Status, x.StartAtUtc });
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.ContactName).HasMaxLength(200);
+            entity.Property(x => x.CompanyName).HasMaxLength(250);
+            entity.Property(x => x.Location).HasMaxLength(300);
+            entity.Property(x => x.OwnerName).HasMaxLength(200);
+            entity.Property(x => x.Participants).HasMaxLength(2000);
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
