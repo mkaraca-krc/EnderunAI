@@ -12,35 +12,37 @@ namespace EnderunAI.Api.Controllers;
 public sealed class AccountingReportsController(AppDbContext db)
     : ControllerBase
 {
-    private sealed record ReportRow(
-        Guid VoucherId,
-        DateTime VoucherDate,
-        string VoucherNumber,
-        int VoucherType,
-        string? VoucherDescription,
-        string? ReferenceNumber,
-        string? SourceModule,
-        int LineNumber,
-        Guid AccountingAccountId,
-        string AccountCode,
-        string AccountName,
-        string? LineDescription,
-        Guid? CurrentAccountId,
-        string? CurrentAccountCode,
-        string? CurrentAccountTitle,
-        Guid? ProjectId,
-        string? ProjectCode,
-        string? ProjectName,
-        string? CostCenterCode,
-        string? DocumentNumber,
-        DateTime? DocumentDate,
-        DateTime? DueDate,
-        string CurrencyCode,
-        decimal ExchangeRate,
-        decimal DebitAmount,
-        decimal CreditAmount,
-        decimal DebitAmountLocal,
-        decimal CreditAmountLocal);
+    private sealed class ReportRow
+    {
+        public Guid VoucherId { get; init; }
+        public DateTime VoucherDate { get; init; }
+        public string VoucherNumber { get; init; } = string.Empty;
+        public int VoucherType { get; init; }
+        public string? VoucherDescription { get; init; }
+        public string? ReferenceNumber { get; init; }
+        public string? SourceModule { get; init; }
+        public int LineNumber { get; init; }
+        public Guid AccountingAccountId { get; init; }
+        public string AccountCode { get; init; } = string.Empty;
+        public string AccountName { get; init; } = string.Empty;
+        public string? LineDescription { get; init; }
+        public Guid? CurrentAccountId { get; init; }
+        public string? CurrentAccountCode { get; init; }
+        public string? CurrentAccountTitle { get; init; }
+        public Guid? ProjectId { get; init; }
+        public string? ProjectCode { get; init; }
+        public string? ProjectName { get; init; }
+        public string? CostCenterCode { get; init; }
+        public string? DocumentNumber { get; init; }
+        public DateTime? DocumentDate { get; init; }
+        public DateTime? DueDate { get; init; }
+        public string CurrencyCode { get; init; } = string.Empty;
+        public decimal ExchangeRate { get; init; }
+        public decimal DebitAmount { get; init; }
+        public decimal CreditAmount { get; init; }
+        public decimal DebitAmountLocal { get; init; }
+        public decimal CreditAmountLocal { get; init; }
+    }
 
     [HttpGet("journal")]
     public async Task<IActionResult> Journal(
@@ -444,43 +446,45 @@ public sealed class AccountingReportsController(AppDbContext db)
     private static IQueryable<ReportRow> Project(
         IQueryable<AccountingVoucherLine> query)
     {
-        return query.Select(x => new ReportRow(
-            x.AccountingVoucherId,
-            x.AccountingVoucher.VoucherDate,
-            x.AccountingVoucher.VoucherNumber,
-            (int)x.AccountingVoucher.VoucherType,
-            x.AccountingVoucher.Description,
-            x.AccountingVoucher.ReferenceNumber,
-            x.AccountingVoucher.SourceModule,
-            x.LineNumber,
-            x.AccountingAccountId,
-            x.AccountingAccount.Code,
-            x.AccountingAccount.Name,
-            x.Description,
-            x.CurrentAccountId,
-            x.CurrentAccount != null
+        return query.Select(x => new ReportRow
+        {
+            VoucherId = x.AccountingVoucherId,
+            VoucherDate = x.AccountingVoucher.VoucherDate,
+            VoucherNumber = x.AccountingVoucher.VoucherNumber,
+            VoucherType = (int)x.AccountingVoucher.VoucherType,
+            VoucherDescription = x.AccountingVoucher.Description,
+            ReferenceNumber = x.AccountingVoucher.ReferenceNumber,
+            SourceModule = x.AccountingVoucher.SourceModule,
+            LineNumber = x.LineNumber,
+            AccountingAccountId = x.AccountingAccountId,
+            AccountCode = x.AccountingAccount.Code,
+            AccountName = x.AccountingAccount.Name,
+            LineDescription = x.Description,
+            CurrentAccountId = x.CurrentAccountId,
+            CurrentAccountCode = x.CurrentAccount != null
                 ? x.CurrentAccount.Code
                 : null,
-            x.CurrentAccount != null
+            CurrentAccountTitle = x.CurrentAccount != null
                 ? x.CurrentAccount.Title
                 : null,
-            x.ProjectId,
-            x.Project != null
+            ProjectId = x.ProjectId,
+            ProjectCode = x.Project != null
                 ? x.Project.Code
                 : null,
-            x.Project != null
+            ProjectName = x.Project != null
                 ? x.Project.Name
                 : null,
-            x.CostCenterCode,
-            x.DocumentNumber,
-            x.DocumentDate,
-            x.DueDate,
-            x.CurrencyCode,
-            x.ExchangeRate,
-            x.DebitAmount,
-            x.CreditAmount,
-            x.DebitAmountLocal,
-            x.CreditAmountLocal));
+            CostCenterCode = x.CostCenterCode,
+            DocumentNumber = x.DocumentNumber,
+            DocumentDate = x.DocumentDate,
+            DueDate = x.DueDate,
+            CurrencyCode = x.CurrencyCode,
+            ExchangeRate = x.ExchangeRate,
+            DebitAmount = x.DebitAmount,
+            CreditAmount = x.CreditAmount,
+            DebitAmountLocal = x.DebitAmountLocal,
+            CreditAmountLocal = x.CreditAmountLocal
+        });
     }
 
     private static DateTime UtcDate(DateTime value)
