@@ -10,6 +10,7 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/personnel")]
+[Route("api/hr/personnel")]
 public sealed class PersonnelController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
