@@ -1,6 +1,7 @@
 using EnderunAI.Api.Services.Costing;
 using EnderunAI.Api.Services.DocumentNumbers;
 using EnderunAI.Api.Services.AI;
+using EnderunAI.Api.Services.Accounting;
 using System.Text;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Data.HumanResources;
@@ -39,6 +40,8 @@ builder.Services.AddDbContext<HrDbContext>(options =>
 });
 
 builder.Services.AddSingleton<IUploadService, UploadService>();
+builder.Services.AddScoped<IAccountingAccountService, AccountingAccountService>();
+builder.Services.AddScoped<IAccountingAccountSeedService, AccountingAccountSeedService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 builder.Services.AddScoped<ISecretariatService, SecretariatService>();
