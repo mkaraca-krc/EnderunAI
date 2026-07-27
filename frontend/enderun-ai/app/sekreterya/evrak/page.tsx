@@ -226,7 +226,6 @@ export default function CorrespondencePage() {
         referenceNumber:
           form.referenceNumber.trim() || null,
         description: form.description.trim() || null,
-        attachmentPath: null,
       });
 
       setSuccess("Evrak başarıyla kaydedildi.");
