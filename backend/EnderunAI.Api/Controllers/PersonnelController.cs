@@ -202,14 +202,14 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName.Trim(),
             IdentityNumber = request.IdentityNumber?.Trim(),
-            BirthDate = request.BirthDate,
+            BirthDate = UtcDate(request.BirthDate),
             Phone = request.Phone?.Trim(),
             Email = request.Email?.Trim(),
             Address = request.Address?.Trim(),
             JobTitle = request.JobTitle?.Trim(),
             Profession = request.Profession?.Trim(),
             SgkRegistrationNumber = request.SgkRegistrationNumber?.Trim(),
-            EmploymentStartDate = request.EmploymentStartDate,
+            EmploymentStartDate = UtcDate(request.EmploymentStartDate),
             MonthlySalary = request.MonthlySalary,
             Status = PersonnelStatus.Active
         };
@@ -264,15 +264,15 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
         personnel.FirstName = request.FirstName.Trim();
         personnel.LastName = request.LastName.Trim();
         personnel.IdentityNumber = request.IdentityNumber?.Trim();
-        personnel.BirthDate = request.BirthDate;
+        personnel.BirthDate = UtcDate(request.BirthDate);
         personnel.Phone = request.Phone?.Trim();
         personnel.Email = request.Email?.Trim();
         personnel.Address = request.Address?.Trim();
         personnel.JobTitle = request.JobTitle?.Trim();
         personnel.Profession = request.Profession?.Trim();
         personnel.SgkRegistrationNumber = request.SgkRegistrationNumber?.Trim();
-        personnel.EmploymentStartDate = request.EmploymentStartDate;
-        personnel.EmploymentEndDate = request.EmploymentEndDate;
+        personnel.EmploymentStartDate = UtcDate(request.EmploymentStartDate);
+        personnel.EmploymentEndDate = UtcDate(request.EmploymentEndDate);
         personnel.MonthlySalary = request.MonthlySalary;
         personnel.Status = (PersonnelStatus)request.Status;
         personnel.IsActive = request.IsActive;
@@ -349,8 +349,8 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
         {
             PersonnelId = id,
             ProjectId = request.ProjectId,
-            StartDate = request.StartDate,
-            EndDate = request.EndDate,
+            StartDate = UtcDate(request.StartDate),
+            EndDate = UtcDate(request.EndDate),
             Role = request.Role?.Trim(),
             Notes = request.Notes?.Trim(),
             IsPrimaryAssignment = request.IsPrimaryAssignment
@@ -380,7 +380,9 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
         if (assignment is null)
             return NotFound(new { message = "Proje görevlendirmesi bulunamadı." });
 
-        assignment.EndDate = endDate ?? DateTime.UtcNow.Date;
+        assignment.EndDate = endDate.HasValue
+            ? UtcDate(endDate.Value)
+            : UtcDate(DateTime.UtcNow);
         assignment.IsActive = false;
         assignment.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -388,4 +390,16 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
 
         return Ok(new { message = "Proje görevlendirmesi kapatıldı." });
     }
+    private static DateTime UtcDate(DateTime value)
+    {
+        return DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
+    }
+
+    private static DateTime? UtcDate(DateTime? value)
+    {
+        return value.HasValue
+            ? UtcDate(value.Value)
+            : null;
+    }
+
 }
