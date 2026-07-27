@@ -30,9 +30,11 @@ public sealed class HrDepartment : BaseEntity
 
 public sealed class HrPosition : BaseEntity
 {
+    public Guid CompanyId { get; set; }
     public Guid DepartmentId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public int Level { get; set; }
     public bool IsManagerial { get; set; }
 }
