@@ -40,6 +40,9 @@ export type AccountingVoucherLine = {
   projectId?: string | null;
   projectCode?: string | null;
   projectName?: string | null;
+  projectHierarchyNodeId?: string | null;
+  projectHierarchyNodeCode?: string | null;
+  projectHierarchyNodeName?: string | null;
   costCenterCode?: string | null;
   documentNumber?: string | null;
   documentDate?: string | null;
@@ -64,6 +67,7 @@ export type AccountingVoucherLineRequest = {
   exchangeRate: number;
   currentAccountId?: string | null;
   projectId?: string | null;
+  projectHierarchyNodeId?: string | null;
   costCenterCode?: string | null;
   documentNumber?: string | null;
   documentDate?: string | null;
@@ -100,6 +104,7 @@ function buildQuery(filters?: {
   startDate?: string;
   endDate?: string;
   search?: string;
+  hierarchyNodeId?: string;
 }) {
   const query = new URLSearchParams();
 
@@ -127,6 +132,10 @@ function buildQuery(filters?: {
     query.set("search", filters.search.trim());
   }
 
+  if (filters?.hierarchyNodeId) {
+    query.set("hierarchyNodeId", filters.hierarchyNodeId);
+  }
+
   const value = query.toString();
   return value ? `?${value}` : "";
 }
@@ -139,6 +148,7 @@ export const accountingVoucherService = {
     startDate?: string;
     endDate?: string;
     search?: string;
+    hierarchyNodeId?: string;
   }) {
     return apiClient<AccountingVoucherListItem[]>(
       `accounting-vouchers${buildQuery(filters)}`
