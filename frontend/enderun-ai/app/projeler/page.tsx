@@ -26,6 +26,10 @@ const initialForm = {
   currencyCode: "TRY",
   vatRate: "20",
   withholdingRate: "",
+  increaseRate: "0",
+  cashRetentionRate: "0",
+  withholdingTaxRate: "0",
+  materialDeductionRate: "0",
   plannedStartDate: "",
   plannedEndDate: "",
   city: "",
@@ -40,6 +44,7 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [form, setForm] = useState(initialForm);
   const [showForm, setShowForm] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -112,18 +117,14 @@ export default function ProjectsPage() {
     }));
   }, [filteredBranches, approvedCustomers]);
 
-  async function createProject(event: FormEvent<HTMLFormElement>) {
+  async function saveProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setMessage("");
     setError("");
 
     try {
-      const result = await projectService.create({
-        companyId: form.companyId,
-        branchId: form.branchId,
-        employerCurrentAccountId: form.employerCurrentAccountId,
-        code: form.code.trim().toUpperCase(),
+      const financialPayload = {
         name: form.name.trim(),
         contractNumber: form.contractNumber || null,
         contractDate: form.contractDate || null,
@@ -133,17 +134,35 @@ export default function ProjectsPage() {
         currencyCode: form.currencyCode,
         vatRate: Number(form.vatRate),
         withholdingRate: form.withholdingRate || null,
+        increaseRate: Number(form.increaseRate || 0),
+        cashRetentionRate: Number(form.cashRetentionRate || 0),
+        withholdingTaxRate: Number(form.withholdingTaxRate || 0),
+        materialDeductionRate: Number(form.materialDeductionRate || 0),
         plannedStartDate: form.plannedStartDate || null,
         plannedEndDate: form.plannedEndDate || null,
         city: form.city || null,
         district: form.district || null,
         address: form.address || null,
-      });
+      };
+
+      const result = editingProjectId
+        ? await projectService.update(editingProjectId, financialPayload)
+        : await projectService.create({
+            companyId: form.companyId,
+            branchId: form.branchId,
+            employerCurrentAccountId: form.employerCurrentAccountId,
+            code: form.code.trim().toUpperCase(),
+            ...financialPayload,
+          });
 
       const response = result as { message?: string };
       setMessage(
-        response.message ?? "Proje ve şantiye deposu oluşturuldu."
+        response.message ??
+          (editingProjectId
+            ? "Proje bilgileri güncellendi."
+            : "Proje ve şantiye deposu oluşturuldu.")
       );
+      setEditingProjectId(null);
       setShowForm(false);
       setForm({
         ...initialForm,
@@ -152,7 +171,90 @@ export default function ProjectsPage() {
       await loadData();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Proje oluşturulamadı."
+        err instanceof Error ? err.message : "Proje kaydedilemedi."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function editProject(projectId: string) {
+    setSaving(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const detail = (await projectService.getById(projectId)) as {
+        id: string;
+        companyId?: string;
+        branchId?: string;
+        employerCurrentAccountId?: string;
+        code: string;
+        name: string;
+        contractNumber?: string | null;
+        contractDate?: string | null;
+        contractAmount?: number | null;
+        currencyCode: string;
+        vatRate: number;
+        withholdingRate?: string | null;
+        increaseRate?: number;
+        cashRetentionRate?: number;
+        withholdingTaxRate?: number;
+        materialDeductionRate?: number;
+        plannedStartDate?: string | null;
+        plannedEndDate?: string | null;
+        city?: string | null;
+        district?: string | null;
+        address?: string | null;
+      };
+
+      const listProject = projects.find((x) => x.id === projectId);
+
+      setEditingProjectId(projectId);
+      setForm({
+        companyId: detail.companyId || listProject?.companyId || "",
+        branchId: detail.branchId || listProject?.branchId || "",
+        employerCurrentAccountId:
+          detail.employerCurrentAccountId ||
+          listProject?.employerCurrentAccountId ||
+          "",
+        code: detail.code || "",
+        name: detail.name || "",
+        contractNumber: detail.contractNumber || "",
+        contractDate: detail.contractDate
+          ? detail.contractDate.slice(0, 10)
+          : "",
+        contractAmount:
+          detail.contractAmount == null
+            ? ""
+            : String(detail.contractAmount),
+        currencyCode: detail.currencyCode || "TRY",
+        vatRate: String(detail.vatRate ?? 20),
+        withholdingRate: detail.withholdingRate || "",
+        increaseRate: String(detail.increaseRate ?? 0),
+        cashRetentionRate: String(detail.cashRetentionRate ?? 0),
+        withholdingTaxRate: String(detail.withholdingTaxRate ?? 0),
+        materialDeductionRate: String(
+          detail.materialDeductionRate ?? 0
+        ),
+        plannedStartDate: detail.plannedStartDate
+          ? detail.plannedStartDate.slice(0, 10)
+          : "",
+        plannedEndDate: detail.plannedEndDate
+          ? detail.plannedEndDate.slice(0, 10)
+          : "",
+        city: detail.city || "",
+        district: detail.district || "",
+        address: detail.address || "",
+      });
+
+      setShowForm(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Proje bilgileri yüklenemedi."
       );
     } finally {
       setSaving(false);
@@ -183,9 +285,9 @@ export default function ProjectsPage() {
       {error && <div className="erp-alert error">{error}</div>}
 
       {showForm && (
-        <form className="erp-form-card" onSubmit={createProject}>
+        <form className="erp-form-card" onSubmit={saveProject}>
           <div className="erp-form-header">
-            <h2>Yeni Proje</h2>
+            <h2>{editingProjectId ? "Projeyi Düzenle" : "Yeni Proje"}</h2>
             <p>
               İşveren yalnızca onaylanmış müşteri cari kartından seçilebilir.
             </p>
@@ -196,6 +298,7 @@ export default function ProjectsPage() {
               <span>Şirket *</span>
               <select
                 required
+                disabled={Boolean(editingProjectId)}
                 value={form.companyId}
                 onChange={(event) =>
                   setForm({ ...form, companyId: event.target.value })
@@ -214,6 +317,7 @@ export default function ProjectsPage() {
               <span>Şube *</span>
               <select
                 required
+                disabled={Boolean(editingProjectId)}
                 value={form.branchId}
                 onChange={(event) =>
                   setForm({ ...form, branchId: event.target.value })
@@ -232,6 +336,7 @@ export default function ProjectsPage() {
               <span>İşveren Cari Kartı *</span>
               <select
                 required
+                disabled={Boolean(editingProjectId)}
                 value={form.employerCurrentAccountId}
                 onChange={(event) =>
                   setForm({
@@ -253,6 +358,7 @@ export default function ProjectsPage() {
               <span>Proje Kodu *</span>
               <input
                 required
+                disabled={Boolean(editingProjectId)}
                 value={form.code}
                 onChange={(event) =>
                   setForm({
@@ -349,6 +455,71 @@ export default function ProjectsPage() {
             </label>
 
             <label>
+              <span>Artış Yüzdesi</span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={form.increaseRate}
+                onChange={(event) =>
+                  setForm({ ...form, increaseRate: event.target.value })
+                }
+              />
+            </label>
+
+            <label>
+              <span>Nakit Teminat Kesintisi %</span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={form.cashRetentionRate}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    cashRetentionRate: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              <span>Stopaj Kesintisi %</span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={form.withholdingTaxRate}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    withholdingTaxRate: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              <span>Malzeme Kesintisi %</span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={form.materialDeductionRate}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    materialDeductionRate: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
               <span>Başlangıç</span>
               <input
                 type="date"
@@ -418,7 +589,14 @@ export default function ProjectsPage() {
             <button
               type="button"
               className="erp-secondary-button"
-              onClick={() => setShowForm(false)}
+              onClick={() => {
+                setShowForm(false);
+                setEditingProjectId(null);
+                setForm({
+                  ...initialForm,
+                  companyId: form.companyId,
+                });
+              }}
             >
               Vazgeç
             </button>
@@ -434,8 +612,10 @@ export default function ProjectsPage() {
               }
             >
               {saving
-                ? "Oluşturuluyor..."
-                : "Projeyi ve Depoyu Oluştur"}
+                ? "Kaydediliyor..."
+                : editingProjectId
+                  ? "Değişiklikleri Kaydet"
+                  : "Projeyi ve Depoyu Oluştur"}
             </button>
           </div>
         </form>
@@ -493,12 +673,29 @@ export default function ProjectsPage() {
                       </span>
                     </td>
                     <td>
-                      <Link
-                        className="erp-row-link"
-                        href={`/projeler/${project.id}`}
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "8px",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                        }}
                       >
-                        Proje Merkezini Aç →
-                      </Link>
+                        <button
+                          type="button"
+                          className="erp-secondary-button"
+                          onClick={() => editProject(project.id)}
+                        >
+                          Düzenle
+                        </button>
+
+                        <Link
+                          className="erp-row-link"
+                          href={`/projeler/${project.id}`}
+                        >
+                          Proje Merkezini Aç →
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
