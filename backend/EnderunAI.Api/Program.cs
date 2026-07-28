@@ -53,6 +53,7 @@ builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IUserAuthorizationService, UserAuthorizationService>();
 builder.Services.AddScoped<ICurrentDataScopeService, CurrentDataScopeService>();
+builder.Services.AddScoped<ISecurityAuditService, SecurityAuditService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 

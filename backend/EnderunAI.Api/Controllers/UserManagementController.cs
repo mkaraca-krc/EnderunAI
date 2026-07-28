@@ -18,7 +18,8 @@ namespace EnderunAI.Api.Controllers;
 public sealed class UserManagementController(
     AppDbContext db,
     PasswordService passwordService,
-    ICurrentUserService currentUser) : ControllerBase
+    ICurrentUserService currentUser,
+    ISecurityAuditService securityAudit) : ControllerBase
 {
     private static readonly Regex UsernamePattern =
         new("^[a-zA-Z0-9._-]+$", RegexOptions.Compiled);
@@ -96,6 +97,20 @@ public sealed class UserManagementController(
         return Ok(roles);
     }
 
+    [HttpGet("audit-events")]
+    public async Task<IActionResult> GetAuditEvents(
+        [FromQuery] int take = 100,
+        CancellationToken cancellationToken = default)
+    {
+        take = Math.Clamp(take, 1, 500);
+        var events = await db.SecurityAuditEvents
+            .AsNoTracking()
+            .OrderByDescending(item => item.OccurredAtUtc)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+        return Ok(events);
+    }
+
     [HttpPut("roles/{id:guid}/permissions")]
     public async Task<IActionResult> UpdateRolePermissions(
         Guid id,
@@ -148,6 +163,17 @@ public sealed class UserManagementController(
             user.SecurityStamp = Guid.NewGuid().ToString("N");
 
         await db.SaveChangesAsync(cancellationToken);
+        await securityAudit.WriteAsync(
+            "role.permissions.updated",
+            nameof(AppRole),
+            role.Id,
+            new
+            {
+                role.Name,
+                PermissionKeys = permissionKeys,
+                AffectedUserIds = affectedUsers.Select(user => user.Id)
+            },
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         return Ok(new
@@ -255,6 +281,20 @@ public sealed class UserManagementController(
             dataScopes,
             cancellationToken);
 
+        await securityAudit.WriteAsync(
+            "user.created",
+            nameof(AppUser),
+            user.Id,
+            new
+            {
+                user.Username,
+                user.PersonnelId,
+                RoleName = request.RoleName,
+                AllowedPermissions = request.AllowedPermissions,
+                DeniedPermissions = request.DeniedPermissions,
+                DataScopes = dataScopes
+            },
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         var createdUser = await LoadUserAsync(user.Id, cancellationToken);
         return Ok(new
@@ -356,6 +396,21 @@ public sealed class UserManagementController(
             dataScopes,
             cancellationToken);
 
+        await securityAudit.WriteAsync(
+            "user.updated",
+            nameof(AppUser),
+            user.Id,
+            new
+            {
+                user.Username,
+                user.PersonnelId,
+                user.IsActive,
+                RoleName = request.RoleName,
+                AllowedPermissions = request.AllowedPermissions,
+                DeniedPermissions = request.DeniedPermissions,
+                DataScopes = dataScopes
+            },
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         var updatedUser = await LoadUserAsync(id, cancellationToken);
         return Ok(new
@@ -393,6 +448,16 @@ public sealed class UserManagementController(
         user.SecurityStamp = Guid.NewGuid().ToString("N");
 
         await db.SaveChangesAsync(cancellationToken);
+        await securityAudit.WriteAsync(
+            "user.password.reset",
+            nameof(AppUser),
+            user.Id,
+            new
+            {
+                user.Username,
+                request.RequirePasswordChange
+            },
+            cancellationToken);
 
         return Ok(new
         {

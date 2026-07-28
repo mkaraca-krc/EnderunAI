@@ -24,6 +24,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<UserPermissionOverride> UserPermissionOverrides =>
         Set<UserPermissionOverride>();
     public DbSet<UserDataScope> UserDataScopes => Set<UserDataScope>();
+    public DbSet<SecurityAuditEvent> SecurityAuditEvents =>
+        Set<SecurityAuditEvent>();
 
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<Branch> Branches => Set<Branch>();
@@ -283,6 +285,26 @@ public sealed class AppDbContext : DbContext
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<SecurityAuditEvent>(entity =>
+        {
+            entity.ToTable("security_audit_events");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.OccurredAtUtc);
+            entity.HasIndex(x => new { x.ActorUserId, x.OccurredAtUtc });
+            entity.HasIndex(x => new
+            {
+                x.EntityType,
+                x.EntityId,
+                x.OccurredAtUtc
+            });
+            entity.Property(x => x.ActorUsername).HasMaxLength(100);
+            entity.Property(x => x.Action).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.EntityType).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.DetailsJson).HasColumnType("jsonb");
+            entity.Property(x => x.IpAddress).HasMaxLength(64);
+            entity.Property(x => x.UserAgent).HasMaxLength(500);
         });
     }
 
