@@ -45,6 +45,10 @@ type ProjectDetail = {
   currencyCode: string;
   vatRate: number;
   withholdingRate?: string | null;
+  increaseRate: number;
+  cashRetentionRate: number;
+  withholdingTaxRate: number;
+  materialDeductionRate: number;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   city?: string | null;
@@ -77,6 +81,13 @@ function formatMoney(value?: number | null, currency = "TRY") {
         style: "currency",
         currency,
       }).format(value);
+}
+
+function formatPercentage(value?: number | null) {
+  return `%${new Intl.NumberFormat("tr-TR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  }).format(value ?? 0)}`;
 }
 
 export default function ProjectCenterPage() {
@@ -124,6 +135,14 @@ export default function ProjectCenterPage() {
 
         setProfitability(
           profitabilityResult
+        );
+
+        setDailyReports(
+          dailyReportResult
+        );
+
+        setSiteAnalysis(
+          siteAnalysisResult
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Proje yüklenemedi.");
@@ -226,6 +245,69 @@ export default function ProjectCenterPage() {
                   {[project.address, project.district, project.city]
                     .filter(Boolean)
                     .join(", ") || "—"}
+                </strong>
+              </div>
+            </div>
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Finansal Sözleşme Oranları</h2>
+                <p>
+                  Hakediş hesaplamalarında varsayılan olarak kullanılacak
+                  proje oranları
+                </p>
+              </div>
+
+              <Link
+                href={`/projeler/${project.id}/kesintiler`}
+                className="erp-button secondary"
+              >
+                Kesinti Politikasını Aç
+              </Link>
+            </div>
+
+            <div className="erp-detail-grid">
+              <div>
+                <span>Sözleşme Artış Oranı</span>
+                <strong>
+                  {formatPercentage(project.increaseRate)}
+                </strong>
+              </div>
+
+              <div>
+                <span>Nakit Teminat Kesintisi</span>
+                <strong>
+                  {formatPercentage(project.cashRetentionRate)}
+                </strong>
+              </div>
+
+              <div>
+                <span>Stopaj Kesintisi</span>
+                <strong>
+                  {formatPercentage(project.withholdingTaxRate)}
+                </strong>
+              </div>
+
+              <div>
+                <span>Malzeme Kesintisi</span>
+                <strong>
+                  {formatPercentage(project.materialDeductionRate)}
+                </strong>
+              </div>
+
+              <div>
+                <span>KDV Oranı</span>
+                <strong>
+                  {formatPercentage(project.vatRate)}
+                </strong>
+              </div>
+
+              <div>
+                <span>Tevkifat Oranı</span>
+                <strong>
+                  {project.withholdingRate || "—"}
                 </strong>
               </div>
             </div>
