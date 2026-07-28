@@ -31,7 +31,12 @@ jobs:
           cache-dependency-path: backend/EnderunAI.Api/EnderunAI.Api.csproj
 
       - name: Restore
-        run: dotnet restore backend/EnderunAI.Api/EnderunAI.Api.csproj
+        run: |
+          dotnet restore backend/EnderunAI.Api/EnderunAI.Api.csproj
+          dotnet restore backend/EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj
 
       - name: Build
         run: dotnet build backend/EnderunAI.Api/EnderunAI.Api.csproj --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test backend/EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj --configuration Release --no-restore
