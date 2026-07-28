@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 
@@ -33,6 +38,14 @@ import {
   currentAccountService,
   type CurrentAccountSummary,
 } from "@/services/current-account.service";
+import {
+  projectService,
+  type ProjectListItem,
+} from "@/services/project.service";
+import {
+  projectHierarchyService,
+  type ProjectHierarchyNode,
+} from "@/services/project-hierarchy.service";
 
 
 const money = new Intl.NumberFormat(
@@ -44,6 +57,14 @@ const money = new Intl.NumberFormat(
   }
 );
 
+function flattenHierarchy(
+  nodes: ProjectHierarchyNode[]
+): ProjectHierarchyNode[] {
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenHierarchy(node.children),
+  ]);
+}
 
 export default function FinancePage() {
 
@@ -70,11 +91,28 @@ export default function FinancePage() {
 
   const [error,setError] =
     useState("");
+  const [availableProjects, setAvailableProjects] =
+    useState<ProjectListItem[]>([]);
+  const [hierarchyNodes, setHierarchyNodes] =
+    useState<ProjectHierarchyNode[]>([]);
+  const [selectedProjectId, setSelectedProjectId] =
+    useState("");
+  const [
+    selectedHierarchyNodeId,
+    setSelectedHierarchyNodeId,
+  ] = useState("");
 
+  const scopeFilter = useMemo(() => ({
+    projectId: selectedProjectId || undefined,
+    hierarchyNodeId:
+      selectedHierarchyNodeId || undefined,
+  }), [selectedProjectId, selectedHierarchyNodeId]);
 
-  async function load(){
+  const load = useCallback(async () => {
 
     try {
+      setLoading(true);
+      setError("");
 
       const [
         result,
@@ -84,12 +122,12 @@ export default function FinancePage() {
         aiResult,
         supplierResult,
       ] = await Promise.all([
-        financeService.getDashboard(),
-        currentAccountService.getSummary(),
-        projectFinanceService.getSummary(),
-        cashFlowService.getSummary(),
+        financeService.getDashboard(scopeFilter),
+        currentAccountService.getSummary(scopeFilter),
+        projectFinanceService.getSummary(scopeFilter),
+        cashFlowService.getSummary(scopeFilter),
         financeAIService.analyze(),
-        supplierBalanceService.getSummary(),
+        supplierBalanceService.getSummary(scopeFilter),
       ]);
 
       setData(result);
@@ -115,16 +153,40 @@ export default function FinancePage() {
 
     }
 
-  }
+  }, [scopeFilter]);
 
 
   useEffect(()=>{
 
     void load();
 
-  },[]);
+  },[load]);
 
+  useEffect(() => {
+    void projectService.getAll()
+      .then(setAvailableProjects)
+      .catch(() => {
+        setAvailableProjects([]);
+      });
+  }, []);
 
+  useEffect(() => {
+    setSelectedHierarchyNodeId("");
+
+    if (!selectedProjectId) {
+      setHierarchyNodes([]);
+      return;
+    }
+
+    void projectHierarchyService
+      .getTree(selectedProjectId)
+      .then((tree) => setHierarchyNodes(
+        flattenHierarchy(tree.nodes)
+      ))
+      .catch(() => {
+        setHierarchyNodes([]);
+      });
+  }, [selectedProjectId]);
 
   const cards = data ? [
 
@@ -221,6 +283,62 @@ export default function FinancePage() {
       title="Finans Merkezi"
       description="Hakediş, fiyat farkı ve nakit görünümü"
     >
+
+      <section className="erp-panel">
+        <div className="erp-panel-header">
+          <div>
+            <h2>Finans Kapsamı</h2>
+            <p>
+              Tüm finans göstergelerini proje ve
+              hiyerarşi kırılımında filtreleyin.
+            </p>
+          </div>
+        </div>
+
+        <div className="erp-form-grid">
+          <label>
+            Proje
+            <select
+              value={selectedProjectId}
+              onChange={(event) =>
+                setSelectedProjectId(event.target.value)
+              }
+            >
+              <option value="">Tüm projeler</option>
+              {availableProjects.map((project) => (
+                <option
+                  key={project.id}
+                  value={project.id}
+                >
+                  {project.code} - {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Hiyerarşi Düğümü
+            <select
+              value={selectedHierarchyNodeId}
+              disabled={!selectedProjectId}
+              onChange={(event) =>
+                setSelectedHierarchyNodeId(
+                  event.target.value
+                )
+              }
+            >
+              <option value="">
+                Tüm proje kapsamı
+              </option>
+              {hierarchyNodes.map((node) => (
+                <option key={node.id} value={node.id}>
+                  {node.path}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </section>
 
 
       {error && (
