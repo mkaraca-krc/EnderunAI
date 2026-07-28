@@ -33,6 +33,132 @@ public sealed class UserManagementController(
         });
     }
 
+    [HttpGet("scope-options")]
+    public async Task<IActionResult> GetScopeOptions(
+        CancellationToken cancellationToken)
+    {
+        var companies = await db.Companies
+            .AsNoTracking()
+            .Where(item => item.IsActive)
+            .OrderBy(item => item.Name)
+            .Select(item => new { item.Id, item.Code, item.Name })
+            .ToListAsync(cancellationToken);
+        var branches = await db.Branches
+            .AsNoTracking()
+            .Where(item => item.IsActive)
+            .OrderBy(item => item.Name)
+            .Select(item => new
+            {
+                item.Id,
+                item.CompanyId,
+                item.Code,
+                item.Name
+            })
+            .ToListAsync(cancellationToken);
+        var projects = await db.Projects
+            .AsNoTracking()
+            .Where(item => item.IsActive)
+            .OrderBy(item => item.Name)
+            .Select(item => new
+            {
+                item.Id,
+                item.CompanyId,
+                item.BranchId,
+                item.Code,
+                item.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new { companies, branches, projects });
+    }
+
+    [HttpGet("roles")]
+    public async Task<IActionResult> GetRoles(
+        CancellationToken cancellationToken)
+    {
+        var roles = await db.Roles
+            .AsNoTracking()
+            .Where(role => !role.Name.StartsWith(PermissionCatalog.AllowPrefix) &&
+                           !role.Name.StartsWith(PermissionCatalog.DenyPrefix))
+            .OrderBy(role => role.Name)
+            .Select(role => new
+            {
+                role.Id,
+                role.Name,
+                role.Description,
+                permissions = role.RolePermissions
+                    .Select(item => item.Permission.Key)
+                    .OrderBy(item => item),
+                userCount = role.UserRoles.Count
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(roles);
+    }
+
+    [HttpPut("roles/{id:guid}/permissions")]
+    public async Task<IActionResult> UpdateRolePermissions(
+        Guid id,
+        UpdateManagedRolePermissionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var role = await db.Roles
+            .Include(item => item.RolePermissions)
+            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (role is null)
+            return NotFound(new { message = "Rol bulunamadı." });
+        if (role.Name.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                message = "Admin rolünün tam yetkisi değiştirilemez."
+            });
+        }
+
+        var permissionKeys = PermissionCatalog
+            .SanitizeOverrides(request.Permissions);
+        if (permissionKeys.Length == 0 ||
+            permissionKeys.Length != request.Permissions
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count())
+        {
+            return BadRequest(new
+            {
+                message = "Rol için en az bir geçerli yetki seçilmelidir."
+            });
+        }
+
+        var permissions = await db.Permissions
+            .Where(item => permissionKeys.Contains(item.Key))
+            .ToListAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            cancellationToken);
+        db.RolePermissions.RemoveRange(role.RolePermissions);
+        db.RolePermissions.AddRange(permissions.Select(permission =>
+            new RolePermission
+            {
+                RoleId = role.Id,
+                PermissionId = permission.Id
+            }));
+
+        var affectedUsers = await db.Users
+            .Where(user => user.UserRoles.Any(item => item.RoleId == role.Id))
+            .ToListAsync(cancellationToken);
+        foreach (var user in affectedUsers)
+            user.SecurityStamp = Guid.NewGuid().ToString("N");
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Rol yetkileri güncellendi; etkilenen oturumlar kapatıldı.",
+            role.Id,
+            role.Name,
+            permissions = permissionKeys
+        });
+    }
+
     [HttpGet("users")]
     public async Task<IActionResult> GetUsers(CancellationToken cancellationToken)
     {
@@ -44,6 +170,7 @@ public sealed class UserManagementController(
             .ThenInclude(rolePermission => rolePermission.Permission)
             .Include(user => user.PermissionOverrides)
             .ThenInclude(permissionOverride => permissionOverride.Permission)
+            .Include(user => user.DataScopes)
             .Include(user => user.Personnel)
             .OrderByDescending(user => user.IsActive)
             .ThenBy(user => user.FullName)
@@ -73,6 +200,14 @@ public sealed class UserManagementController(
             cancellationToken);
         if (personnelValidation is not null)
             return BadRequest(new { message = personnelValidation });
+
+        var (dataScopes, dataScopeError) = await NormalizeDataScopesAsync(
+            request.RoleName,
+            request.PersonnelId,
+            request.DataScopes,
+            cancellationToken);
+        if (dataScopeError is not null)
+            return BadRequest(new { message = dataScopeError });
 
         var username = NormalizeUsername(request.Username);
         if (await db.Users.AnyAsync(
@@ -115,6 +250,10 @@ public sealed class UserManagementController(
             request.AllowedPermissions,
             request.DeniedPermissions,
             cancellationToken);
+        await SyncUserDataScopesAsync(
+            user.Id,
+            dataScopes,
+            cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
         var createdUser = await LoadUserAsync(user.Id, cancellationToken);
@@ -155,6 +294,14 @@ public sealed class UserManagementController(
             cancellationToken);
         if (personnelValidation is not null)
             return BadRequest(new { message = personnelValidation });
+
+        var (dataScopes, dataScopeError) = await NormalizeDataScopesAsync(
+            request.RoleName,
+            request.PersonnelId,
+            request.DataScopes,
+            cancellationToken);
+        if (dataScopeError is not null)
+            return BadRequest(new { message = dataScopeError });
 
         var currentUserId = currentUser.UserId;
         if (currentUserId == id &&
@@ -203,6 +350,10 @@ public sealed class UserManagementController(
             request.RoleName,
             request.AllowedPermissions,
             request.DeniedPermissions,
+            cancellationToken);
+        await SyncUserDataScopesAsync(
+            id,
+            dataScopes,
             cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
@@ -286,6 +437,17 @@ public sealed class UserManagementController(
                 .Select(item => item.Permission.Key)
                 .OrderBy(name => name),
             effectivePermissions = ResolvePermissions(user)
+                .OrderBy(item => item),
+            dataScopes = user.DataScopes
+                .Where(item => item.IsActive)
+                .OrderBy(item => item.ScopeType)
+                .Select(item => new
+                {
+                    item.ScopeType,
+                    item.CompanyId,
+                    item.BranchId,
+                    item.ProjectId
+                })
         };
     }
 
@@ -318,6 +480,7 @@ public sealed class UserManagementController(
             .ThenInclude(rolePermission => rolePermission.Permission)
             .Include(user => user.PermissionOverrides)
             .ThenInclude(permissionOverride => permissionOverride.Permission)
+            .Include(user => user.DataScopes)
             .Include(user => user.Personnel)
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
     }
@@ -428,6 +591,174 @@ public sealed class UserManagementController(
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    private async Task SyncUserDataScopesAsync(
+        Guid userId,
+        IReadOnlyCollection<NormalizedDataScope> scopes,
+        CancellationToken cancellationToken)
+    {
+        await db.UserDataScopes
+            .Where(item => item.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+        db.UserDataScopes.AddRange(scopes.Select(scope => new UserDataScope
+        {
+            UserId = userId,
+            ScopeType = scope.ScopeType,
+            CompanyId = scope.CompanyId,
+            BranchId = scope.BranchId,
+            ProjectId = scope.ProjectId,
+            CreatedByUserId = currentUser.UserId
+        }));
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<(IReadOnlyCollection<NormalizedDataScope> Scopes, string? Error)>
+        NormalizeDataScopesAsync(
+            string roleName,
+            Guid? personnelId,
+            IEnumerable<ManagedUserDataScopeRequest>? requests,
+            CancellationToken cancellationToken)
+    {
+        var requested = (requests ?? []).ToArray();
+        if (requested.Length == 0)
+        {
+            if (roleName.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
+                roleName.Equals("Genel Müdür", StringComparison.OrdinalIgnoreCase))
+            {
+                return ([new NormalizedDataScope(DataScopeType.All, null, null, null)], null);
+            }
+
+            if (personnelId.HasValue)
+            {
+                var personnel = await db.Personnel
+                    .AsNoTracking()
+                    .SingleAsync(item => item.Id == personnelId, cancellationToken);
+                return personnel.BranchId.HasValue
+                    ? ([new NormalizedDataScope(
+                        DataScopeType.Branch,
+                        personnel.CompanyId,
+                        personnel.BranchId,
+                        null)], null)
+                    : ([new NormalizedDataScope(
+                        DataScopeType.Company,
+                        personnel.CompanyId,
+                        null,
+                        null)], null);
+            }
+
+            return (
+                Array.Empty<NormalizedDataScope>(),
+                "Operasyonel kullanıcı için en az bir şirket, şube veya proje kapsamı seçilmelidir.");
+        }
+
+        var normalized = new List<NormalizedDataScope>();
+        foreach (var request in requested)
+        {
+            switch (request.ScopeType)
+            {
+                case DataScopeType.All:
+                    if (!roleName.Equals("Admin", StringComparison.OrdinalIgnoreCase) &&
+                        !roleName.Equals(
+                            "Genel Müdür",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        return (
+                            Array.Empty<NormalizedDataScope>(),
+                            "Tüm şirketler kapsamı yalnızca Admin veya Genel Müdür rolüne verilebilir.");
+                    }
+
+                    normalized.Add(new NormalizedDataScope(
+                        DataScopeType.All,
+                        null,
+                        null,
+                        null));
+                    break;
+
+                case DataScopeType.Company:
+                    if (request.CompanyId is not Guid companyId ||
+                        !await db.Companies.AsNoTracking().AnyAsync(
+                            item => item.Id == companyId && item.IsActive,
+                            cancellationToken))
+                    {
+                        return (
+                            Array.Empty<NormalizedDataScope>(),
+                            "Geçerli ve aktif bir şirket kapsamı seçilmelidir.");
+                    }
+
+                    normalized.Add(new NormalizedDataScope(
+                        DataScopeType.Company,
+                        companyId,
+                        null,
+                        null));
+                    break;
+
+                case DataScopeType.Branch:
+                    if (request.BranchId is not Guid branchId)
+                    {
+                        return (
+                            Array.Empty<NormalizedDataScope>(),
+                            "Şube kapsamı için şube seçilmelidir.");
+                    }
+
+                    var branch = await db.Branches
+                        .AsNoTracking()
+                        .SingleOrDefaultAsync(
+                            item => item.Id == branchId && item.IsActive,
+                            cancellationToken);
+                    if (branch is null)
+                    {
+                        return (
+                            Array.Empty<NormalizedDataScope>(),
+                            "Seçilen şube bulunamadı veya pasif.");
+                    }
+
+                    normalized.Add(new NormalizedDataScope(
+                        DataScopeType.Branch,
+                        branch.CompanyId,
+                        branch.Id,
+                        null));
+                    break;
+
+                case DataScopeType.Project:
+                    if (request.ProjectId is not Guid projectId)
+                    {
+                        return (
+                            Array.Empty<NormalizedDataScope>(),
+                            "Proje kapsamı için proje seçilmelidir.");
+                    }
+
+                    var project = await db.Projects
+                        .AsNoTracking()
+                        .SingleOrDefaultAsync(
+                            item => item.Id == projectId && item.IsActive,
+                            cancellationToken);
+                    if (project is null)
+                    {
+                        return (
+                            Array.Empty<NormalizedDataScope>(),
+                            "Seçilen proje bulunamadı veya pasif.");
+                    }
+
+                    normalized.Add(new NormalizedDataScope(
+                        DataScopeType.Project,
+                        project.CompanyId,
+                        project.BranchId,
+                        project.Id));
+                    break;
+
+                default:
+                    return (
+                        Array.Empty<NormalizedDataScope>(),
+                        "Geçersiz veri kapsamı türü.");
+            }
+        }
+
+        return (
+            normalized
+                .Distinct()
+                .ToArray(),
+            null);
+    }
+
     private async Task<bool> RemovingLastAdminAsync(
         Guid userId,
         string requestedRole,
@@ -499,4 +830,10 @@ public sealed class UserManagementController(
         var bytes = RandomNumberGenerator.GetBytes(16);
         return new string(bytes.Select(value => alphabet[value % alphabet.Length]).ToArray());
     }
+
+    private sealed record NormalizedDataScope(
+        DataScopeType ScopeType,
+        Guid? CompanyId,
+        Guid? BranchId,
+        Guid? ProjectId);
 }

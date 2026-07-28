@@ -9,7 +9,14 @@ public sealed record UserAuthorizationSnapshot(
     bool IsActive,
     string SecurityStamp,
     IReadOnlyCollection<string> RoleNames,
-    IReadOnlyCollection<string> Permissions);
+    IReadOnlyCollection<string> Permissions,
+    IReadOnlyCollection<UserDataScopeGrant> DataScopes);
+
+public sealed record UserDataScopeGrant(
+    DataScopeType ScopeType,
+    Guid? CompanyId,
+    Guid? BranchId,
+    Guid? ProjectId);
 
 public interface IUserAuthorizationService
 {
@@ -33,6 +40,7 @@ public sealed class UserAuthorizationService(
             .ThenInclude(item => item.Permission)
             .Include(item => item.PermissionOverrides)
             .ThenInclude(item => item.Permission)
+            .Include(item => item.DataScopes)
             .SingleOrDefaultAsync(item => item.Id == userId, cancellationToken);
 
         if (user is null)
@@ -61,6 +69,14 @@ public sealed class UserAuthorizationService(
             user.IsActive,
             user.SecurityStamp,
             roleNames,
-            permissions.OrderBy(item => item).ToArray());
+            permissions.OrderBy(item => item).ToArray(),
+            user.DataScopes
+                .Where(item => item.IsActive)
+                .Select(item => new UserDataScopeGrant(
+                    item.ScopeType,
+                    item.CompanyId,
+                    item.BranchId,
+                    item.ProjectId))
+                .ToArray());
     }
 }

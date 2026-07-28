@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,12 +11,18 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/companies")]
-public sealed class CompaniesController(AppDbContext db) : ControllerBase
+public sealed class CompaniesController(
+    AppDbContext db,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
-        var items = await db.Companies
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+
+        var items = await scope.Apply(db.Companies)
             .AsNoTracking()
             .OrderBy(x => x.Name)
             .Select(x => new
@@ -41,7 +48,11 @@ public sealed class CompaniesController(AppDbContext db) : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var item = await db.Companies
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+
+        var item = await scope.Apply(db.Companies)
             .AsNoTracking()
             .Where(x => x.Id == id)
             .Select(x => new
@@ -72,6 +83,12 @@ public sealed class CompaniesController(AppDbContext db) : ControllerBase
         CreateCompanyRequest request,
         CancellationToken cancellationToken)
     {
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+        if (!scope.HasGlobalAccess)
+            return Forbid();
+
         var code = request.Code.Trim().ToUpperInvariant();
 
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(request.Name))
@@ -105,7 +122,11 @@ public sealed class CompaniesController(AppDbContext db) : ControllerBase
         UpdateCompanyRequest request,
         CancellationToken cancellationToken)
     {
-        var company = await db.Companies
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+
+        var company = await scope.Apply(db.Companies)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (company is null)

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using EnderunAI.Api.Models;
 
 namespace EnderunAI.Api.Contracts;
 
@@ -22,6 +23,7 @@ public sealed class CreateManagedUserRequest
     public bool IsActive { get; set; } = true;
     public Guid? PersonnelId { get; set; }
     public bool MustChangePassword { get; set; } = true;
+    public ManagedUserDataScopeRequest[] DataScopes { get; set; } = [];
     public string[] AllowedPermissions { get; set; } = [];
     public string[] DeniedPermissions { get; set; } = [];
 }
@@ -43,6 +45,7 @@ public sealed class UpdateManagedUserRequest
     public bool IsActive { get; set; } = true;
     public Guid? PersonnelId { get; set; }
     public bool MustChangePassword { get; set; }
+    public ManagedUserDataScopeRequest[] DataScopes { get; set; } = [];
     public string[] AllowedPermissions { get; set; } = [];
     public string[] DeniedPermissions { get; set; } = [];
 }
@@ -53,4 +56,18 @@ public sealed class ResetManagedUserPasswordRequest
     public string? NewPassword { get; set; }
 
     public bool RequirePasswordChange { get; set; } = true;
+}
+
+public sealed class ManagedUserDataScopeRequest
+{
+    public DataScopeType ScopeType { get; set; }
+    public Guid? CompanyId { get; set; }
+    public Guid? BranchId { get; set; }
+    public Guid? ProjectId { get; set; }
+}
+
+public sealed class UpdateManagedRolePermissionsRequest
+{
+    [MinLength(1)]
+    public string[] Permissions { get; set; } = [];
 }

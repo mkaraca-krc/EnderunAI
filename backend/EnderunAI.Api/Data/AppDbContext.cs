@@ -23,6 +23,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserPermissionOverride> UserPermissionOverrides =>
         Set<UserPermissionOverride>();
+    public DbSet<UserDataScope> UserDataScopes => Set<UserDataScope>();
 
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<Branch> Branches => Set<Branch>();
@@ -251,6 +252,37 @@ public sealed class AppDbContext : DbContext
                 .WithMany(x => x.UserOverrides)
                 .HasForeignKey(x => x.PermissionId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserDataScope>(entity =>
+        {
+            entity.ToTable("user_data_scopes");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new
+            {
+                x.UserId,
+                x.ScopeType,
+                x.CompanyId,
+                x.BranchId,
+                x.ProjectId
+            }).IsUnique();
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.DataScopes)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Branch)
+                .WithMany()
+                .HasForeignKey(x => x.BranchId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
 

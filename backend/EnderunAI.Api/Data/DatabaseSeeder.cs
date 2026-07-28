@@ -115,17 +115,17 @@ public static class DatabaseSeeder
                 .Select(item => item.PermissionId)
                 .ToHashSet();
 
-            db.RolePermissions.RemoveRange(
-                role.RolePermissions.Where(item =>
-                    !desiredPermissionIds.Contains(item.PermissionId)));
-            foreach (var permissionId in desiredPermissionIds.Except(
-                         currentPermissionIds))
+            if (role.RolePermissions.Count == 0)
             {
-                db.RolePermissions.Add(new RolePermission
+                foreach (var permissionId in desiredPermissionIds.Except(
+                             currentPermissionIds))
                 {
-                    RoleId = role.Id,
-                    PermissionId = permissionId
-                });
+                    db.RolePermissions.Add(new RolePermission
+                    {
+                        RoleId = role.Id,
+                        PermissionId = permissionId
+                    });
+                }
             }
         }
 

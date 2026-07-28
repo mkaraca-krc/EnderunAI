@@ -19,4 +19,6 @@ public sealed class AppUser
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
     public ICollection<UserPermissionOverride> PermissionOverrides { get; set; } =
         new List<UserPermissionOverride>();
+    public ICollection<UserDataScope> DataScopes { get; set; } =
+        new List<UserDataScope>();
 }

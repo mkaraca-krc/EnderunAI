@@ -1820,6 +1820,70 @@ namespace EnderunAI.Api.Migrations
                     b.ToTable("user_roles", (string)null);
                 });
 
+            modelBuilder.Entity("EnderunAI.Api.Models.UserDataScope", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ScopeType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex(
+                            "UserId",
+                            "ScopeType",
+                            "CompanyId",
+                            "BranchId",
+                            "ProjectId")
+                        .IsUnique();
+
+                    b.ToTable("user_data_scopes", (string)null);
+                });
+
             modelBuilder.Entity("EnderunAI.Api.Models.UserPermissionOverride", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -2294,6 +2358,38 @@ namespace EnderunAI.Api.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("EnderunAI.Api.Models.UserDataScope", b =>
+                {
+                    b.HasOne("EnderunAI.Api.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("EnderunAI.Api.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("EnderunAI.Api.Models.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("EnderunAI.Api.Models.AppUser", "User")
+                        .WithMany("DataScopes")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("EnderunAI.Api.Models.UserPermissionOverride", b =>
                 {
                     b.HasOne("EnderunAI.Api.Models.AppPermission", "Permission")
@@ -2393,6 +2489,8 @@ namespace EnderunAI.Api.Migrations
 
             modelBuilder.Entity("EnderunAI.Api.Models.AppUser", b =>
                 {
+                    b.Navigation("DataScopes");
+
                     b.Navigation("PermissionOverrides");
 
                     b.Navigation("UserRoles");

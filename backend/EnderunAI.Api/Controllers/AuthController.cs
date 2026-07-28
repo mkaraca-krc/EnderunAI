@@ -72,7 +72,8 @@ public sealed class AuthController(
                 user.MustChangePassword,
                 personnelId = user.PersonnelId,
                 roles = visibleRoles,
-                permissions
+                permissions,
+                dataScopes = authorization.DataScopes
             }
         });
     }
@@ -127,7 +128,8 @@ public sealed class AuthController(
                     user.Personnel.BranchId
                 },
             roles,
-            permissions
+            permissions,
+            dataScopes = authorization.DataScopes
         });
     }
 }

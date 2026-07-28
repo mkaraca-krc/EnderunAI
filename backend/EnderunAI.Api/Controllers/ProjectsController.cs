@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,14 +11,20 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/projects")]
-public sealed class ProjectsController(AppDbContext db) : ControllerBase
+public sealed class ProjectsController(
+    AppDbContext db,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         CancellationToken cancellationToken)
     {
-        var query = db.Projects.AsNoTracking();
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+
+        var query = scope.Apply(db.Projects).AsNoTracking();
 
         if (companyId.HasValue)
             query = query.Where(x => x.CompanyId == companyId.Value);
@@ -52,7 +59,11 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
         Guid id,
         CancellationToken cancellationToken)
     {
-        var project = await db.Projects
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+
+        var project = await scope.Apply(db.Projects)
             .AsNoTracking()
             .Where(x => x.Id == id)
             .Select(x => new
@@ -100,6 +111,12 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
         CreateProjectRequest request,
         CancellationToken cancellationToken)
     {
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+        if (!scope.CanAccessBranch(request.CompanyId, request.BranchId))
+            return Forbid();
+
         var company = await db.Companies
             .SingleOrDefaultAsync(
                 x => x.Id == request.CompanyId && x.IsActive,
@@ -221,7 +238,11 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
         Guid id,
         CancellationToken cancellationToken)
     {
-        var project = await db.Projects
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+
+        var project = await scope.Apply(db.Projects)
             .AsNoTracking()
             .Where(x => x.Id == id)
             .Select(x => new
@@ -337,7 +358,11 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
         Guid id,
         CancellationToken cancellationToken)
     {
-        var projectExists = await db.Projects
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+
+        var projectExists = await scope.Apply(db.Projects)
             .AsNoTracking()
             .AnyAsync(x => x.Id == id, cancellationToken);
 

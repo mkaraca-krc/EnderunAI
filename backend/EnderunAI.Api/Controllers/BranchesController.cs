@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,14 +11,20 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/branches")]
-public sealed class BranchesController(AppDbContext db) : ControllerBase
+public sealed class BranchesController(
+    AppDbContext db,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         CancellationToken cancellationToken)
     {
-        var query = db.Branches.AsNoTracking();
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+
+        var query = scope.Apply(db.Branches).AsNoTracking();
 
         if (companyId.HasValue)
             query = query.Where(x => x.CompanyId == companyId.Value);
@@ -47,6 +54,12 @@ public sealed class BranchesController(AppDbContext db) : ControllerBase
         CreateBranchRequest request,
         CancellationToken cancellationToken)
     {
+        var scope = await dataScope.GetAsync(cancellationToken);
+        if (scope is null)
+            return Unauthorized();
+        if (!scope.CanAccessCompany(request.CompanyId))
+            return Forbid();
+
         var companyExists = await db.Companies
             .AnyAsync(x => x.Id == request.CompanyId && x.IsActive, cancellationToken);
 
