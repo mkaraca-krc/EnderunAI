@@ -11,6 +11,7 @@ public interface IAccountingVoucherService
         DateTime? startDate,
         DateTime? endDate,
         string? search,
+        Guid? hierarchyNodeId,
         CancellationToken cancellationToken);
 
     Task<AccountingVoucherDetailResponse> GetByIdAsync(
