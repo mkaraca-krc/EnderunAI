@@ -10,15 +10,35 @@ export interface FinanceDashboard {
   progressPaymentCount: number;
 }
 
+export type FinanceScopeFilter = {
+  companyId?: string;
+  projectId?: string;
+  hierarchyNodeId?: string;
+};
 
-export const financeService = {
+export function financeScopeQuery(
+  filter: FinanceScopeFilter = {}
+) {
+  const query = new URLSearchParams();
 
-  getDashboard() {
-
-    return apiClient<FinanceDashboard>(
-      "finance/dashboard"
-    );
-
+  if (filter.companyId) {
+    query.set("companyId", filter.companyId);
+  }
+  if (filter.projectId) {
+    query.set("projectId", filter.projectId);
+  }
+  if (filter.hierarchyNodeId) {
+    query.set("hierarchyNodeId", filter.hierarchyNodeId);
   }
 
+  const value = query.toString();
+  return value ? `?${value}` : "";
+}
+
+export const financeService = {
+  getDashboard(filter: FinanceScopeFilter = {}) {
+    return apiClient<FinanceDashboard>(
+      `finance/dashboard${financeScopeQuery(filter)}`
+    );
+  }
 };
