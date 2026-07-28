@@ -32,6 +32,10 @@ import {
   projectService,
   type ProjectListItem,
 } from "@/services/project.service";
+import {
+  projectHierarchyService,
+  type ProjectHierarchyNode,
+} from "@/services/project-hierarchy.service";
 
 type VoucherLineForm = {
   key: string;
@@ -41,6 +45,7 @@ type VoucherLineForm = {
   creditAmount: string;
   currentAccountId: string;
   projectId: string;
+  projectHierarchyNodeId: string;
   costCenterCode: string;
   documentNumber: string;
   documentDate: string;
@@ -65,6 +70,7 @@ function blankLine(): VoucherLineForm {
     creditAmount: "",
     currentAccountId: "",
     projectId: "",
+    projectHierarchyNodeId: "",
     costCenterCode: "",
     documentNumber: "",
     documentDate: "",
@@ -76,6 +82,15 @@ const money = new Intl.NumberFormat("tr-TR", {
   style: "currency",
   currency: "TRY",
 });
+
+function flattenHierarchy(
+  nodes: ProjectHierarchyNode[]
+): ProjectHierarchyNode[] {
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenHierarchy(node.children),
+  ]);
+}
 
 export default function EditAccountingVoucherPage() {
   const params = useParams<{ id: string }>();
@@ -106,6 +121,8 @@ export default function EditAccountingVoucherPage() {
   const [projects, setProjects] = useState<
     ProjectListItem[]
   >([]);
+  const [hierarchyByProject, setHierarchyByProject] =
+    useState<Record<string, ProjectHierarchyNode[]>>({});
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -156,6 +173,8 @@ export default function EditAccountingVoucherPage() {
             currentAccountId:
               line.currentAccountId ?? "",
             projectId: line.projectId ?? "",
+            projectHierarchyNodeId:
+              line.projectHierarchyNodeId ?? "",
             costCenterCode:
               line.costCenterCode ?? "",
             documentNumber:
@@ -206,6 +225,37 @@ export default function EditAccountingVoucherPage() {
     void load();
   }, [id]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all(
+      projects.map(async (project) => {
+        const tree =
+          await projectHierarchyService.getTree(project.id);
+        return [
+          project.id,
+          flattenHierarchy(tree.nodes),
+        ] as const;
+      })
+    )
+      .then((entries) => {
+        if (!cancelled) {
+          setHierarchyByProject(
+            Object.fromEntries(entries)
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHierarchyByProject({});
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projects]);
+
   const totals = useMemo(() => {
     const debit = lines.reduce(
       (sum, line) =>
@@ -248,6 +298,9 @@ export default function EditAccountingVoucherPage() {
               ...(field === "creditAmount" &&
               Number(value) > 0
                 ? { debitAmount: "" }
+                : {}),
+              ...(field === "projectId"
+                ? { projectHierarchyNodeId: "" }
                 : {}),
             }
           : line
@@ -322,6 +375,8 @@ export default function EditAccountingVoucherPage() {
         currentAccountId:
           line.currentAccountId || null,
         projectId: line.projectId || null,
+        projectHierarchyNodeId:
+          line.projectHierarchyNodeId || null,
         costCenterCode:
           line.costCenterCode.trim() || null,
         documentNumber:
@@ -550,6 +605,7 @@ export default function EditAccountingVoucherPage() {
                   <th>Açıklama</th>
                   <th>Cari</th>
                   <th>Proje</th>
+                  <th>Hiyerarşi</th>
                   <th>Masraf Merkezi</th>
                   <th>Borç</th>
                   <th>Alacak</th>
@@ -659,6 +715,38 @@ export default function EditAccountingVoucherPage() {
                           >
                             {project.code} -{" "}
                             {project.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    <td>
+                      <select
+                        value={
+                          line.projectHierarchyNodeId
+                        }
+                        disabled={!line.projectId}
+                        onChange={(event) =>
+                          updateLine(
+                            line.key,
+                            "projectHierarchyNodeId",
+                            event.target.value
+                          )
+                        }
+                      >
+                        <option value="">
+                          Tüm proje
+                        </option>
+                        {(
+                          hierarchyByProject[
+                            line.projectId
+                          ] ?? []
+                        ).map((node) => (
+                          <option
+                            key={node.id}
+                            value={node.id}
+                          >
+                            {node.path}
                           </option>
                         ))}
                       </select>
