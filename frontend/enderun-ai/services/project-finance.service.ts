@@ -1,4 +1,8 @@
 import { apiClient } from "@/lib/api/api-client";
+import {
+  financeScopeQuery,
+  type FinanceScopeFilter,
+} from "@/services/finance.service";
 
 export interface ProjectFinanceSummary {
   projectId: string;
@@ -13,9 +17,9 @@ export interface ProjectFinanceSummary {
 
 export const projectFinanceService = {
 
-  getSummary() {
+  getSummary(filter: FinanceScopeFilter = {}) {
     return apiClient<ProjectFinanceSummary[]>(
-      "finance/projects-summary"
+      `finance/projects-summary${financeScopeQuery(filter)}`
     );
   }
 
