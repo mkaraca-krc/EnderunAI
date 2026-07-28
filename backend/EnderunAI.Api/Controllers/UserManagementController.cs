@@ -1,11 +1,10 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using EnderunAI.Api.Contracts;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Security.CurrentUser;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,11 +12,13 @@ using Microsoft.EntityFrameworkCore;
 namespace EnderunAI.Api.Controllers;
 
 [ApiController]
-[Authorize(Roles = "Admin,Genel Müdür")]
+[Authorize]
+[RequirePermission(PermissionCatalog.Keys.SystemUsersManage)]
 [Route("api/user-management")]
 public sealed class UserManagementController(
     AppDbContext db,
-    PasswordService passwordService) : ControllerBase
+    PasswordService passwordService,
+    ICurrentUserService currentUser) : ControllerBase
 {
     private static readonly Regex UsernamePattern =
         new("^[a-zA-Z0-9._-]+$", RegexOptions.Compiled);
@@ -129,7 +130,7 @@ public sealed class UserManagementController(
         if (user is null)
             return NotFound(new { message = "Kullanıcı bulunamadı." });
 
-        var currentUserId = GetCurrentUserId();
+        var currentUserId = currentUser.UserId;
         if (currentUserId == id &&
             (!request.IsActive ||
              !string.Equals(request.RoleName, "Admin", StringComparison.OrdinalIgnoreCase)))
@@ -350,15 +351,6 @@ public sealed class UserManagementController(
                 user.IsActive &&
                 user.UserRoles.Any(userRole => userRole.Role.Name == "Admin"),
             cancellationToken);
-    }
-
-    private Guid? GetCurrentUserId()
-    {
-        var value =
-            User.FindFirstValue(ClaimTypes.NameIdentifier) ??
-            User.FindFirstValue(JwtRegisteredClaimNames.Sub);
-
-        return Guid.TryParse(value, out var id) ? id : null;
     }
 
     private static string? ValidateUserInput(
