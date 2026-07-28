@@ -1,3 +1,5 @@
+using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Finance;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -6,55 +8,122 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/finance")]
-public sealed class FinanceDashboardController : ControllerBase
+public sealed class FinanceDashboardController(
+    IFinanceDashboardService service)
+    : ControllerBase
 {
     [HttpGet("dashboard")]
-    public IActionResult Dashboard()
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> Dashboard(
+        [FromQuery] Guid? companyId,
+        [FromQuery] Guid? projectId,
+        [FromQuery] Guid? hierarchyNodeId,
+        CancellationToken cancellationToken)
     {
-        return Ok(new
+        try
         {
-            totalContractAmount = 0m,
-            totalProgressPaymentAmount = 0m,
-            totalPriceDifferenceAmount = 0m,
-            totalDeductionAmount = 0m,
-            totalNetPayableAmount = 0m,
-            activeProjectCount = 0,
-            progressPaymentCount = 0
-        });
+            return Ok(await service.GetDashboardAsync(
+                companyId,
+                projectId,
+                hierarchyNodeId,
+                cancellationToken));
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or KeyNotFoundException)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
     }
 
     [HttpGet("cari-summary")]
-    public IActionResult CurrentAccountSummary()
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> CurrentAccountSummary(
+        [FromQuery] Guid? companyId,
+        [FromQuery] Guid? projectId,
+        [FromQuery] Guid? hierarchyNodeId,
+        CancellationToken cancellationToken)
     {
-        return Ok(new
+        try
         {
-            totalReceivable = 0m,
-            totalPayable = 0m,
-            netBalance = 0m,
-            accountCount = 0
-        });
+            return Ok(await service.GetCurrentAccountSummaryAsync(
+                companyId,
+                projectId,
+                hierarchyNodeId,
+                cancellationToken));
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or KeyNotFoundException)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
     }
 
     [HttpGet("projects-summary")]
-    public IActionResult ProjectsSummary()
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> ProjectsSummary(
+        [FromQuery] Guid? companyId,
+        [FromQuery] Guid? projectId,
+        [FromQuery] Guid? hierarchyNodeId,
+        CancellationToken cancellationToken)
     {
-        return Ok(Array.Empty<object>());
+        try
+        {
+            return Ok(await service.GetProjectsSummaryAsync(
+                companyId,
+                projectId,
+                hierarchyNodeId,
+                cancellationToken));
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or KeyNotFoundException)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
     }
 
     [HttpGet("cash-flow")]
-    public IActionResult CashFlow()
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> CashFlow(
+        [FromQuery] Guid? companyId,
+        [FromQuery] Guid? projectId,
+        [FromQuery] Guid? hierarchyNodeId,
+        CancellationToken cancellationToken)
     {
-        return Ok(new
+        try
         {
-            totalIncome = 0m,
-            totalExpense = 0m,
-            netCash = 0m
-        });
+            return Ok(await service.GetCashFlowAsync(
+                companyId,
+                projectId,
+                hierarchyNodeId,
+                cancellationToken));
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or KeyNotFoundException)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
     }
 
     [HttpGet("suppliers-summary")]
-    public IActionResult SuppliersSummary()
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> SuppliersSummary(
+        [FromQuery] Guid? companyId,
+        [FromQuery] Guid? projectId,
+        [FromQuery] Guid? hierarchyNodeId,
+        CancellationToken cancellationToken)
     {
-        return Ok(Array.Empty<object>());
+        try
+        {
+            return Ok(await service.GetSuppliersSummaryAsync(
+                companyId,
+                projectId,
+                hierarchyNodeId,
+                cancellationToken));
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or KeyNotFoundException)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
     }
 }
