@@ -31,6 +31,7 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             .Select(user => new
             {
                 user.IsActive,
+                user.SecurityStamp,
                 RoleNames = user.UserRoles
                     .Select(userRole => userRole.Role.Name)
                     .ToArray()
@@ -42,6 +43,18 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             await WriteUnauthorizedAsync(
                 context,
                 "Kullanıcı hesabı pasif veya bulunamadı.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(currentUser.SecurityStamp) ||
+            !string.Equals(
+                currentUser.SecurityStamp,
+                userSnapshot.SecurityStamp,
+                StringComparison.Ordinal))
+        {
+            await WriteUnauthorizedAsync(
+                context,
+                "Oturum güvenlik bilgisi güncellendi. Lütfen yeniden giriş yapın.");
             return;
         }
 

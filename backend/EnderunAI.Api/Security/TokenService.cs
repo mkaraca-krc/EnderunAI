@@ -26,7 +26,8 @@ public sealed class TokenService(IConfiguration configuration)
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(JwtRegisteredClaimNames.UniqueName, user.Username),
-            new("full_name", user.FullName)
+            new("full_name", user.FullName),
+            new("security_stamp", user.SecurityStamp)
         };
 
         foreach (var roleName in roleNames)

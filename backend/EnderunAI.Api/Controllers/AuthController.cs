@@ -26,6 +26,7 @@ public sealed class AuthController(
         var user = await db.Users
             .Include(item => item.UserRoles)
             .ThenInclude(userRole => userRole.Role)
+            .Include(item => item.Personnel)
             .SingleOrDefaultAsync(
                 item => item.Username.ToLower() == username,
                 cancellationToken);
@@ -63,6 +64,8 @@ public sealed class AuthController(
                 user.Username,
                 user.FullName,
                 user.Email,
+                user.MustChangePassword,
+                personnelId = user.PersonnelId,
                 roles = visibleRoles,
                 permissions
             }
@@ -84,6 +87,7 @@ public sealed class AuthController(
             .AsNoTracking()
             .Include(item => item.UserRoles)
             .ThenInclude(userRole => userRole.Role)
+            .Include(item => item.Personnel)
             .SingleOrDefaultAsync(item => item.Id == userId, cancellationToken);
 
         if (user is null || !user.IsActive)
@@ -105,6 +109,17 @@ public sealed class AuthController(
             id = user.Id,
             user.Username,
             user.FullName,
+            user.MustChangePassword,
+            personnel = user.Personnel is null
+                ? null
+                : new
+                {
+                    user.Personnel.Id,
+                    user.Personnel.EmployeeNumber,
+                    user.Personnel.FullName,
+                    user.Personnel.CompanyId,
+                    user.Personnel.BranchId
+                },
             roles,
             permissions
         });

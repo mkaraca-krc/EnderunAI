@@ -20,6 +20,8 @@ public sealed class CreateManagedUserRequest
     public string? Password { get; set; }
 
     public bool IsActive { get; set; } = true;
+    public Guid? PersonnelId { get; set; }
+    public bool MustChangePassword { get; set; } = true;
     public string[] AllowedPermissions { get; set; } = [];
     public string[] DeniedPermissions { get; set; } = [];
 }
@@ -39,6 +41,8 @@ public sealed class UpdateManagedUserRequest
     public string RoleName { get; set; } = string.Empty;
 
     public bool IsActive { get; set; } = true;
+    public Guid? PersonnelId { get; set; }
+    public bool MustChangePassword { get; set; }
     public string[] AllowedPermissions { get; set; } = [];
     public string[] DeniedPermissions { get; set; } = [];
 }
@@ -47,4 +51,6 @@ public sealed class ResetManagedUserPasswordRequest
 {
     [MinLength(10)]
     public string? NewPassword { get; set; }
+
+    public bool RequirePasswordChange { get; set; } = true;
 }

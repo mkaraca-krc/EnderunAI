@@ -10,6 +10,8 @@ public interface ICurrentUserService
 
     string? FullName { get; }
 
+    string? SecurityStamp { get; }
+
     IReadOnlyCollection<string> Roles { get; }
 
     IReadOnlyCollection<string> Permissions { get; }

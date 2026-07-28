@@ -40,6 +40,7 @@ public sealed class UserManagementController(
             .AsNoTracking()
             .Include(user => user.UserRoles)
             .ThenInclude(userRole => userRole.Role)
+            .Include(user => user.Personnel)
             .OrderByDescending(user => user.IsActive)
             .ThenBy(user => user.FullName)
             .ToListAsync(cancellationToken);
@@ -61,6 +62,13 @@ public sealed class UserManagementController(
 
         if (validation is not null)
             return BadRequest(new { message = validation });
+
+        var personnelValidation = await ValidatePersonnelLinkAsync(
+            request.PersonnelId,
+            null,
+            cancellationToken);
+        if (personnelValidation is not null)
+            return BadRequest(new { message = personnelValidation });
 
         var username = NormalizeUsername(request.Username);
         if (await db.Users.AnyAsync(
@@ -85,9 +93,15 @@ public sealed class UserManagementController(
             Email = NormalizeOptional(request.Email),
             PasswordHash = password.Hash,
             PasswordSalt = password.Salt,
-            IsActive = request.IsActive
+            SecurityStamp = Guid.NewGuid().ToString("N"),
+            MustChangePassword = request.MustChangePassword,
+            PasswordChangedAtUtc = DateTime.UtcNow,
+            IsActive = request.IsActive,
+            PersonnelId = request.PersonnelId
         };
 
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            cancellationToken);
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -98,6 +112,7 @@ public sealed class UserManagementController(
             request.DeniedPermissions,
             cancellationToken);
 
+        await transaction.CommitAsync(cancellationToken);
         var createdUser = await LoadUserAsync(user.Id, cancellationToken);
         return Ok(new
         {
@@ -129,6 +144,13 @@ public sealed class UserManagementController(
 
         if (user is null)
             return NotFound(new { message = "Kullanıcı bulunamadı." });
+
+        var personnelValidation = await ValidatePersonnelLinkAsync(
+            request.PersonnelId,
+            id,
+            cancellationToken);
+        if (personnelValidation is not null)
+            return BadRequest(new { message = personnelValidation });
 
         var currentUserId = currentUser.UserId;
         if (currentUserId == id &&
@@ -165,7 +187,12 @@ public sealed class UserManagementController(
         user.FullName = request.FullName.Trim();
         user.Email = NormalizeOptional(request.Email);
         user.IsActive = request.IsActive;
+        user.PersonnelId = request.PersonnelId;
+        user.MustChangePassword = request.MustChangePassword;
+        user.SecurityStamp = Guid.NewGuid().ToString("N");
 
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await SyncUserRolesAsync(
             id,
@@ -174,6 +201,7 @@ public sealed class UserManagementController(
             request.DeniedPermissions,
             cancellationToken);
 
+        await transaction.CommitAsync(cancellationToken);
         var updatedUser = await LoadUserAsync(id, cancellationToken);
         return Ok(new
         {
@@ -205,6 +233,9 @@ public sealed class UserManagementController(
         var password = passwordService.Hash(temporaryPassword);
         user.PasswordHash = password.Hash;
         user.PasswordSalt = password.Salt;
+        user.PasswordChangedAtUtc = DateTime.UtcNow;
+        user.MustChangePassword = request.RequirePasswordChange;
+        user.SecurityStamp = Guid.NewGuid().ToString("N");
 
         await db.SaveChangesAsync(cancellationToken);
 
@@ -230,6 +261,17 @@ public sealed class UserManagementController(
             user.IsActive,
             user.CreatedAtUtc,
             user.LastLoginAtUtc,
+            user.MustChangePassword,
+            personnel = user.Personnel is null
+                ? null
+                : new
+                {
+                    user.Personnel.Id,
+                    user.Personnel.EmployeeNumber,
+                    user.Personnel.FullName,
+                    user.Personnel.CompanyId,
+                    user.Personnel.BranchId
+                },
             roleName = PermissionCatalog.GetPrimaryRole(roleNames) ?? "Rol tanımsız",
             allowedPermissions = roleNames
                 .Where(name => name.StartsWith(
@@ -255,7 +297,37 @@ public sealed class UserManagementController(
             .AsNoTracking()
             .Include(user => user.UserRoles)
             .ThenInclude(userRole => userRole.Role)
+            .Include(user => user.Personnel)
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
+    }
+
+    private async Task<string?> ValidatePersonnelLinkAsync(
+        Guid? personnelId,
+        Guid? currentUserId,
+        CancellationToken cancellationToken)
+    {
+        if (personnelId is null)
+            return null;
+
+        var personnelExists = await db.Personnel
+            .AsNoTracking()
+            .AnyAsync(
+                personnel => personnel.Id == personnelId && personnel.IsActive,
+                cancellationToken);
+        if (!personnelExists)
+            return "Seçilen aktif personel kaydı bulunamadı.";
+
+        var linkedToAnotherUser = await db.Users
+            .AsNoTracking()
+            .AnyAsync(
+                user =>
+                    user.PersonnelId == personnelId &&
+                    user.Id != currentUserId,
+                cancellationToken);
+
+        return linkedToAnotherUser
+            ? "Bu personel kaydı başka bir kullanıcıyla eşleştirilmiş."
+            : null;
     }
 
     private async Task SyncUserRolesAsync(

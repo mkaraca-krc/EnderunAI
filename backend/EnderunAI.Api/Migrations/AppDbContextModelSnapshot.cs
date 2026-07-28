@@ -69,13 +69,27 @@ namespace EnderunAI.Api.Migrations
                     b.Property<DateTime?>("LastLoginAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("PasswordChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("PasswordSalt")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("PersonnelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Username")
                         .IsRequired()
@@ -83,6 +97,9 @@ namespace EnderunAI.Api.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PersonnelId")
+                        .IsUnique();
 
                     b.HasIndex("Username")
                         .IsUnique();
@@ -1752,6 +1769,16 @@ namespace EnderunAI.Api.Migrations
                     b.HasIndex("RoleId");
 
                     b.ToTable("user_roles", (string)null);
+                });
+
+            modelBuilder.Entity("EnderunAI.Api.Models.AppUser", b =>
+                {
+                    b.HasOne("EnderunAI.Api.Models.Personnel", "Personnel")
+                        .WithOne()
+                        .HasForeignKey("EnderunAI.Api.Models.AppUser", "PersonnelId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Personnel");
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.Warehouse", b =>

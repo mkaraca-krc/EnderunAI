@@ -15,12 +15,14 @@ public sealed class CurrentUserServiceTests
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim(ClaimTypes.Name, "mehmet"),
             new Claim("full_name", "Mehmet Karacabey"),
+            new Claim("security_stamp", "stamp-1"),
             new Claim(ClaimTypes.Role, "Teknik Koordinatör"));
 
         Assert.True(service.IsAuthenticated);
         Assert.Equal(userId, service.UserId);
         Assert.Equal("mehmet", service.Username);
         Assert.Equal("Mehmet Karacabey", service.FullName);
+        Assert.Equal("stamp-1", service.SecurityStamp);
         Assert.True(service.IsInRole("teknik koordinatör"));
     }
 

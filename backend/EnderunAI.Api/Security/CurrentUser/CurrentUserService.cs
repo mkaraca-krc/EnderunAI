@@ -37,6 +37,9 @@ public sealed class CurrentUserService(
         Principal?.FindFirstValue(ClaimTypes.GivenName) ??
         Username;
 
+    public string? SecurityStamp =>
+        Principal?.FindFirstValue("security_stamp");
+
     public IReadOnlyCollection<string> Roles =>
         GetDistinctClaimValues(
             ClaimTypes.Role,
