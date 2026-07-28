@@ -1,4 +1,8 @@
 import { apiClient } from "@/lib/api/api-client";
+import {
+  financeScopeQuery,
+  type FinanceScopeFilter,
+} from "@/services/finance.service";
 
 
 export interface CurrentAccountListItem {
@@ -54,10 +58,10 @@ export const currentAccountService = {
   },
 
 
-  getSummary() {
+  getSummary(filter: FinanceScopeFilter = {}) {
 
     return apiClient<CurrentAccountSummary>(
-      "finance/cari-summary"
+      `finance/cari-summary${financeScopeQuery(filter)}`
     );
 
   }
