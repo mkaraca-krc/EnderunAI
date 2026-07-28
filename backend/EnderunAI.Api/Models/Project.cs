@@ -56,4 +56,10 @@ public sealed class Project : BaseEntity
     public Guid? ProjectManagerUserId { get; set; }
 
     public ICollection<Warehouse> Warehouses { get; set; } = new List<Warehouse>();
+    public ICollection<ProjectHierarchyLevel> HierarchyLevels { get; set; }
+        = new List<ProjectHierarchyLevel>();
+    public ICollection<ProjectHierarchyNode> HierarchyNodes { get; set; }
+        = new List<ProjectHierarchyNode>();
+    public ICollection<ProjectModuleScope> ModuleScopes { get; set; }
+        = new List<ProjectModuleScope>();
 }

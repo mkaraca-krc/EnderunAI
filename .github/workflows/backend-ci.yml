@@ -31,34 +31,7 @@ jobs:
           cache-dependency-path: backend/EnderunAI.Api/EnderunAI.Api.csproj
 
       - name: Restore
-        run: dotnet restore backend/EnderunAI.Api/EnderunAI.Api.csproj --verbosity quiet
+        run: dotnet restore backend/EnderunAI.Api/EnderunAI.Api.csproj
 
-      - name: Build and capture diagnostics
-        id: compile
-        shell: bash
-        run: |
-          set +e
-          dotnet build backend/EnderunAI.Api/EnderunAI.Api.csproj --configuration Release --no-restore --verbosity minimal > build.log 2>&1
-          status=$?
-          echo "$status" > build.status
-          exit 0
-
-      - name: Upload build diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-build-diagnostics
-          path: |
-            build.log
-            build.status
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Enforce build result
-        shell: bash
-        run: |
-          status=$(cat build.status)
-          if [ "$status" -ne 0 ]; then
-            grep -E 'error (CS|NU|NETSDK)|error:' build.log | tail -n 120 || tail -n 120 build.log
-            exit "$status"
-          fi
-          tail -n 20 build.log
+      - name: Build
+        run: dotnet build backend/EnderunAI.Api/EnderunAI.Api.csproj --configuration Release --no-restore

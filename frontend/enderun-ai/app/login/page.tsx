@@ -54,13 +54,6 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.user) {
-        localStorage.setItem(
-          "enderun_user",
-          JSON.stringify(data.user)
-        );
-      }
-
       router.push("/dashboard");
       router.refresh();
     } catch {

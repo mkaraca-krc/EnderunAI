@@ -1,0 +1,835 @@
+"use client";
+
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import ErpShell from "@/components/erp/erp-shell";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  EmptyState,
+  StatCard,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui";
+import {
+  purchaseOrderService,
+  type PurchaseOrderDetail,
+} from "@/services/purchase-order.service";
+
+import {
+  reportService,
+} from "@/services/report.service";
+
+const statusLabels: Record<number, string> = {
+  0: "Taslak",
+  1: "Onay Bekliyor",
+  2: "Onaylandı",
+  3: "Kısmi Teslim",
+  4: "Tamamlandı",
+  5: "İptal",
+  6: "Reddedildi",
+};
+
+function statusVariant(status: number) {
+  if (status === 2 || status === 4) return "success" as const;
+  if (status === 1 || status === 3) return "warning" as const;
+  if (status === 5 || status === 6) return "danger" as const;
+  return "default" as const;
+}
+
+function formatDate(value?: string | null) {
+  return value
+    ? new Date(value).toLocaleDateString("tr-TR")
+    : "—";
+}
+
+function formatDateTime(value?: string | null) {
+  return value
+    ? new Date(value).toLocaleString("tr-TR")
+    : "—";
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("tr-TR", {
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
+function formatMoney(value: number, currency: string) {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+export default function PurchaseOrderDetailPage() {
+  const params = useParams<{ id: string }>();
+
+  const [order, setOrder] =
+    useState<PurchaseOrderDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] =
+    useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const load = useCallback(async () => {
+    if (!params.id) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const result = await purchaseOrderService.getById(
+        params.id
+      );
+
+      setOrder(result);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Satın alma siparişi yüklenemedi."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [params.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const receivedTotal = useMemo(
+    () =>
+      order?.items.reduce(
+        (total, item) => total + item.receivedQuantity,
+        0
+      ) ?? 0,
+    [order]
+  );
+
+  const orderedTotal = useMemo(
+    () =>
+      order?.items.reduce(
+        (total, item) => total + item.quantity,
+        0
+      ) ?? 0,
+    [order]
+  );
+
+  const deliveryRate =
+    orderedTotal > 0
+      ? (receivedTotal / orderedTotal) * 100
+      : 0;
+
+  async function downloadPurchaseOrderPdf() {
+    if (!order?.id) {
+      setError(
+        "PDF oluşturmak için sipariş bilgisi bulunamadı."
+      );
+      return;
+    }
+
+    try {
+      setDownloadingPdf(true);
+      setError("");
+
+      await reportService.downloadPurchaseOrderPdf(
+        order.id
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Sipariş PDF'i indirilemedi."
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
+
+  async function runAction(
+    action: "submit" | "approve" | "reject" | "cancel"
+  ) {
+    if (!order) return;
+
+    let reason = "";
+
+    if (action === "reject") {
+      reason =
+        window.prompt("Red gerekçesini yazın:")?.trim() ?? "";
+
+      if (!reason) {
+        setError("Red gerekçesi zorunludur.");
+        return;
+      }
+
+      if (
+        !window.confirm(
+          "Bu satın alma siparişi reddedilsin mi?"
+        )
+      ) {
+        return;
+      }
+    }
+
+    if (action === "cancel") {
+      reason =
+        window.prompt("İptal gerekçesini yazın:")?.trim() ?? "";
+
+      if (!reason) {
+        setError("İptal gerekçesi zorunludur.");
+        return;
+      }
+
+      if (
+        !window.confirm(
+          "Bu satın alma siparişi iptal edilsin mi?"
+        )
+      ) {
+        return;
+      }
+    }
+
+    if (
+      action === "submit" &&
+      !window.confirm(
+        "Satın alma siparişi onaya gönderilsin mi?"
+      )
+    ) {
+      return;
+    }
+
+    if (
+      action === "approve" &&
+      !window.confirm(
+        "Satın alma siparişi onaylansın mı?"
+      )
+    ) {
+      return;
+    }
+
+    setProcessing(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const result =
+        action === "submit"
+          ? await purchaseOrderService.submit(order.id)
+          : action === "approve"
+            ? await purchaseOrderService.approve(order.id)
+            : action === "reject"
+              ? await purchaseOrderService.reject(
+                  order.id,
+                  reason
+                )
+              : await purchaseOrderService.cancel(
+                  order.id,
+                  reason
+                );
+
+      setSuccess(result.message);
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "İşlem gerçekleştirilemedi."
+      );
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  return (
+    <ErpShell
+      title={order?.orderNumber ?? "Satın Alma Siparişi"}
+      description={
+        order
+          ? `${order.supplierTitle} · ${order.projectCode}`
+          : "Sipariş bilgileri yükleniyor"
+      }
+    >
+      <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+        <Link
+          href="/satin-alma/siparis"
+          className="hover:text-slate-900"
+        >
+          Satın Alma Siparişleri
+        </Link>
+
+        <span>›</span>
+
+        <strong className="text-slate-800">
+          {order?.orderNumber ?? "Sipariş"}
+        </strong>
+      </div>
+
+      {error && (
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {success}
+        </div>
+      )}
+
+      {loading ? (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-slate-500">
+            Sipariş bilgileri yükleniyor...
+          </CardContent>
+        </Card>
+      ) : !order ? (
+        <EmptyState
+          title="Satın alma siparişi bulunamadı"
+          description="Kayıt silinmiş veya erişim yetkiniz olmayabilir."
+        />
+      ) : (
+        <>
+          <Card className="mb-6">
+            <CardContent className="py-5">
+              <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={statusVariant(order.status)}>
+                      {statusLabels[order.status]}
+                    </Badge>
+
+                    <Badge variant="info">
+                      {order.currency}
+                    </Badge>
+                  </div>
+
+                  <h2 className="mt-3 text-2xl font-semibold text-slate-900">
+                    {order.orderNumber}
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    {order.supplierTitle} · {order.projectCode}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  {order.status === 0 && (
+                    <Button
+                      loading={processing}
+                      onClick={() => runAction("submit")}
+                    >
+                      Onaya Gönder
+                    </Button>
+                  )}
+
+                  {order.status === 1 && (
+                    <>
+                      <Button
+                        loading={processing}
+                        onClick={() => runAction("approve")}
+                      >
+                        Onayla
+                      </Button>
+
+                      <Button
+                        variant="danger"
+                        loading={processing}
+                        onClick={() => runAction("reject")}
+                      >
+                        Reddet
+                      </Button>
+                    </>
+                  )}
+
+                  {[0, 1, 6].includes(order.status) && (
+                    <Button
+                      variant="danger"
+                      loading={processing}
+                      onClick={() => runAction("cancel")}
+                    >
+                      İptal Et
+                    </Button>
+                  )}
+
+                  {order.status === 2 && (
+                    <span className="inline-flex h-10 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-medium text-emerald-700">
+                      Depo Kabulüne Hazır
+                    </span>
+                  )}
+
+                  <Button
+                    variant="secondary"
+                    loading={downloadingPdf}
+                    disabled={downloadingPdf}
+                    onClick={downloadPurchaseOrderPdf}
+                  >
+                    Sipariş PDF İndir
+                  </Button>
+
+                  <Link
+                    href={`/satin-alma/siparis/${order.id}/yazdir`}
+                    target="_blank"
+                    className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
+                  >
+                    Yazdır
+                  </Link>
+
+                  <Link
+                    href={`/satin-alma/rfq/${order.rfqId}`}
+                    className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    RFQ Aç
+                  </Link>
+
+                  <Link
+                    href={`/satin-alma/${order.purchaseRequestId}`}
+                    className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Satın Alma Talebini Aç
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              title="Sipariş Kalemi"
+              value={order.items.length}
+              icon="▤"
+            />
+
+            <StatCard
+              title="Sipariş Toplamı"
+              value={formatMoney(
+                order.grandTotal,
+                order.currency
+              )}
+              icon="₺"
+            />
+
+            <StatCard
+              title="Teslim Alınan"
+              value={formatNumber(receivedTotal)}
+              icon="✓"
+            />
+
+            <StatCard
+              title="Teslim Oranı"
+              value={`%${deliveryRate.toLocaleString("tr-TR", {
+                maximumFractionDigits: 2,
+              })}`}
+              icon="%"
+            />
+          </div>
+
+          <div className="mb-6 grid gap-6 xl:grid-cols-3">
+            <Card className="xl:col-span-2">
+              <CardHeader>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Sipariş Bilgileri
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Belge, proje ve teslim bilgileri
+                  </p>
+                </div>
+              </CardHeader>
+
+              <CardContent>
+                <dl className="grid gap-5 md:grid-cols-2">
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Sipariş Tarihi
+                    </dt>
+                    <dd className="mt-1 text-slate-900">
+                      {formatDate(order.orderDate)}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Beklenen Teslim
+                    </dt>
+                    <dd className="mt-1 text-slate-900">
+                      {formatDate(
+                        order.expectedDeliveryDate
+                      )}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Proje
+                    </dt>
+                    <dd className="mt-1 font-medium text-slate-900">
+                      {order.projectCode} · {order.projectName}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Kaynak RFQ
+                    </dt>
+                    <dd className="mt-1 font-medium text-slate-900">
+                      {order.rfqNumber}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Satın Alma Talebi
+                    </dt>
+                    <dd className="mt-1 font-medium text-slate-900">
+                      {order.purchaseRequestNumber}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Ödeme Koşulu
+                    </dt>
+                    <dd className="mt-1 text-slate-900">
+                      {order.paymentTerm || "—"}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Para Birimi
+                    </dt>
+                    <dd className="mt-1 text-slate-900">
+                      {order.currency}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Kur
+                    </dt>
+                    <dd className="mt-1 text-slate-900">
+                      {formatNumber(order.exchangeRate)}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Onay Tarihi
+                    </dt>
+                    <dd className="mt-1 text-slate-900">
+                      {formatDateTime(order.approvedAtUtc)}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Teslim Adresi
+                    </dt>
+                    <dd className="mt-1 whitespace-pre-wrap text-slate-900">
+                      {order.deliveryAddress || "—"}
+                    </dd>
+                  </div>
+                </dl>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Tedarikçi
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Cari ve iletişim bilgileri
+                  </p>
+                </div>
+              </CardHeader>
+
+              <CardContent>
+                <h3 className="text-lg font-semibold text-slate-950">
+                  {order.supplierTitle}
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {order.supplierCode}
+                </p>
+
+                <dl className="mt-5 space-y-4">
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Yetkili
+                    </dt>
+                    <dd className="mt-1 text-sm text-slate-900">
+                      {order.supplierAuthorizedPerson || "—"}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Telefon
+                    </dt>
+                    <dd className="mt-1 text-sm text-slate-900">
+                      {order.supplierPhone || "—"}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      E-posta
+                    </dt>
+                    <dd className="mt-1 break-all text-sm text-slate-900">
+                      {order.supplierEmail || "—"}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Adres
+                    </dt>
+                    <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-900">
+                      {order.supplierAddress || "—"}
+                    </dd>
+                  </div>
+                </dl>
+              </CardContent>
+            </Card>
+          </div>
+
+          {(order.description || order.notes) && (
+            <Card className="mb-6">
+              <CardHeader>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Açıklama ve Notlar
+                  </h2>
+                </div>
+              </CardHeader>
+
+              <CardContent>
+                {order.description && (
+                  <p className="whitespace-pre-wrap text-sm text-slate-700">
+                    {order.description}
+                  </p>
+                )}
+
+                {order.notes && (
+                  <>
+                    {order.description && (
+                      <hr className="my-4 border-slate-200" />
+                    )}
+
+                    <p className="whitespace-pre-wrap text-sm text-slate-500">
+                      {order.notes}
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="mb-6">
+            <CardHeader>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Sipariş Kalemleri
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  RFQ kazanan teklifinden aktarılan malzeme ve fiyatlar
+                </p>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              {order.items.length === 0 ? (
+                <EmptyState
+                  title="Sipariş kalemi bulunamadı"
+                  description="Bu siparişe bağlı malzeme satırı bulunmuyor."
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>No</TableHead>
+                        <TableHead className="min-w-64">
+                          Malzeme
+                        </TableHead>
+                        <TableHead>Marka / Model</TableHead>
+                        <TableHead className="text-right">
+                          Miktar
+                        </TableHead>
+                        <TableHead>Birim</TableHead>
+                        <TableHead className="text-right">
+                          Birim Fiyat
+                        </TableHead>
+                        <TableHead className="text-right">
+                          İskonto
+                        </TableHead>
+                        <TableHead className="text-right">
+                          Net Birim
+                        </TableHead>
+                        <TableHead>Termin</TableHead>
+                        <TableHead>Teslim Tarihi</TableHead>
+                        <TableHead className="text-right">
+                          Teslim Alınan
+                        </TableHead>
+                        <TableHead className="text-right">
+                          Toplam
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+
+                    <TableBody>
+                      {order.items.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            {item.lineNumber}
+                          </TableCell>
+
+                          <TableCell>
+                            <strong className="text-slate-900">
+                              {item.materialDescription}
+                            </strong>
+
+                            {item.notes && (
+                              <span className="mt-1 block text-xs text-slate-500">
+                                {item.notes}
+                              </span>
+                            )}
+                          </TableCell>
+
+                          <TableCell>
+                            <span className="block text-slate-900">
+                              {item.brand || "—"}
+                            </span>
+                            <span className="mt-1 block text-xs text-slate-500">
+                              {item.model || "—"}
+                            </span>
+                          </TableCell>
+
+                          <TableCell className="text-right font-medium">
+                            {formatNumber(item.quantity)}
+                          </TableCell>
+
+                          <TableCell>{item.unit}</TableCell>
+
+                          <TableCell className="text-right">
+                            {formatMoney(
+                              item.unitPrice,
+                              order.currency
+                            )}
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            %{formatNumber(item.discountRate)}
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            {formatMoney(
+                              item.netUnitPrice,
+                              order.currency
+                            )}
+                          </TableCell>
+
+                          <TableCell>
+                            {item.deliveryDays !== null &&
+                            item.deliveryDays !== undefined
+                              ? `${item.deliveryDays} gün`
+                              : "—"}
+                          </TableCell>
+
+                          <TableCell>
+                            {formatDate(
+                              item.expectedDeliveryDate
+                            )}
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            {formatNumber(
+                              item.receivedQuantity
+                            )}
+                          </TableCell>
+
+                          <TableCell className="text-right font-semibold">
+                            {formatMoney(
+                              item.totalPrice,
+                              order.currency
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Sipariş Özeti
+                </h2>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              <div className="ml-auto grid max-w-lg gap-3">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                  <span className="text-sm text-slate-500">
+                    Ara Toplam
+                  </span>
+                  <strong className="text-slate-900">
+                    {formatMoney(
+                      order.subtotal,
+                      order.currency
+                    )}
+                  </strong>
+                </div>
+
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                  <span className="text-sm text-slate-500">
+                    Toplam İskonto
+                  </span>
+                  <strong className="text-slate-900">
+                    {formatMoney(
+                      order.discountTotal,
+                      order.currency
+                    )}
+                  </strong>
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-base font-semibold text-slate-900">
+                    Genel Toplam
+                  </span>
+                  <strong className="text-2xl text-slate-950">
+                    {formatMoney(
+                      order.grandTotal,
+                      order.currency
+                    )}
+                  </strong>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </ErpShell>
+  );
+}

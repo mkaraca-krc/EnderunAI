@@ -215,4 +215,162 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
             throw;
         }
     }
+
+    [HttpGet("{id:guid}/summary")]
+    public async Task<IActionResult> GetSummary(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var project = await db.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new
+            {
+                x.Id,
+                x.CompanyId,
+                CompanyName = x.Company.Name,
+                x.BranchId,
+                BranchName = x.Branch.Name,
+                x.EmployerCurrentAccountId,
+                EmployerName = x.EmployerCurrentAccount.Title,
+                x.Code,
+                x.Name,
+                x.ContractNumber,
+                x.ContractDate,
+                x.ContractAmount,
+                x.CurrencyCode,
+                x.VatRate,
+                x.WithholdingRate,
+                x.PlannedStartDate,
+                x.PlannedEndDate,
+                x.ActualStartDate,
+                x.ActualEndDate,
+                x.City,
+                x.District,
+                x.Address,
+                x.Status,
+                x.HealthStatus,
+                x.HealthReason,
+                WarehouseCount = x.Warehouses.Count(w => w.IsActive)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (project is null)
+            return NotFound(new { message = "Proje bulunamadı." });
+
+        var personnelQuery = db.PersonnelAssignments
+            .AsNoTracking()
+            .Where(x =>
+                x.ProjectId == id &&
+                x.IsActive &&
+                x.EndDate == null &&
+                x.Personnel.IsActive);
+
+        var activePersonnelCount =
+            await personnelQuery.CountAsync(cancellationToken);
+
+        var primaryPersonnelCount =
+            await personnelQuery.CountAsync(
+                x => x.IsPrimaryAssignment,
+                cancellationToken);
+
+        var personnelByRole = await personnelQuery
+            .GroupBy(x => x.Role ?? "Görev Belirtilmedi")
+            .Select(group => new
+            {
+                Role = group.Key,
+                Count = group.Count()
+            })
+            .OrderByDescending(x => x.Count)
+            .ToListAsync(cancellationToken);
+
+        var purchaseRequestCount = await db.PurchaseRequests
+            .AsNoTracking()
+            .CountAsync(x => x.ProjectId == id, cancellationToken);
+
+        var pendingPurchaseCount = await db.PurchaseRequests
+            .AsNoTracking()
+            .CountAsync(
+                x => x.ProjectId == id &&
+                     x.Status != PurchaseRequestStatus.Completed &&
+                     x.Status != PurchaseRequestStatus.Cancelled &&
+                     x.Status != PurchaseRequestStatus.Rejected,
+                cancellationToken);
+
+        return Ok(new
+        {
+            project,
+            metrics = new
+            {
+                ActivePersonnelCount = activePersonnelCount,
+                PrimaryPersonnelCount = primaryPersonnelCount,
+                project.WarehouseCount,
+
+                PurchaseRequestCount = purchaseRequestCount,
+                PendingPurchaseCount = pendingPurchaseCount,
+
+                ClaimCount = 0,
+                PendingClaimCount = 0,
+
+                DocumentCount = 0,
+                VehicleCount = 0,
+                RiskCount = 0,
+                CriticalRiskCount = 0
+            },
+            personnelByRole,
+            aiSummary = new
+            {
+                CriticalAlertCount = 0,
+                WarningCount = activePersonnelCount == 0 ? 1 : 0,
+                Messages = activePersonnelCount == 0
+                    ? new[]
+                    {
+                        "Projeye henüz aktif personel atanmamış."
+                    }
+                    : Array.Empty<string>()
+            }
+        });
+    }
+
+    [HttpGet("{id:guid}/personnel")]
+    public async Task<IActionResult> GetProjectPersonnel(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var projectExists = await db.Projects
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == id, cancellationToken);
+
+        if (!projectExists)
+            return NotFound(new { message = "Proje bulunamadı." });
+
+        var items = await db.PersonnelAssignments
+            .AsNoTracking()
+            .Where(x => x.ProjectId == id)
+            .OrderByDescending(x => x.IsActive)
+            .ThenByDescending(x => x.StartDate)
+            .Select(x => new
+            {
+                AssignmentId = x.Id,
+                x.PersonnelId,
+                x.Personnel.EmployeeNumber,
+                x.Personnel.FirstName,
+                x.Personnel.LastName,
+                FullName =
+                    x.Personnel.FirstName + " " + x.Personnel.LastName,
+                x.Personnel.Phone,
+                x.Personnel.JobTitle,
+                x.Personnel.Profession,
+                x.Role,
+                x.StartDate,
+                x.EndDate,
+                x.IsPrimaryAssignment,
+                AssignmentIsActive = x.IsActive,
+                PersonnelIsActive = x.Personnel.IsActive
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(items);
+    }
+
 }

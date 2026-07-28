@@ -6,6 +6,24 @@ import { useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { projectService } from "@/services/project.service";
 
+import {
+  projectProfitabilityService,
+  type ProjectProfitability,
+} from "@/services/project-profitability.service";
+
+import {
+  projectDailyReportService,
+  type ProjectDailyReport,
+} from "@/services/project-daily-report.service";
+
+import {
+  projectSiteAnalysisService,
+  type ProjectSiteAnalysisResponse,
+} from "@/services/project-site-analysis.service";
+
+
+
+
 type Warehouse = {
   id: string;
   code: string;
@@ -38,11 +56,13 @@ type ProjectDetail = {
 };
 
 const modules = [
+  { label: "Proje Hiyerarşisi", href: "hiyerarsi", icon: "⌘", text: "Şehir, fabrika, blok, kat ve mahal kırılımları" },
   { label: "Hakedişler", href: "/hakedis", icon: "▧", text: "Hakediş kayıtları ve kontrolleri" },
   { label: "Satın Alma", href: "/satin-alma", icon: "⌑", text: "Malzeme talepleri ve teklifler" },
   { label: "Personel", href: "/personel", icon: "♙", text: "Projeye bağlı personel" },
-  { label: "Depolar", href: "/depo", icon: "⌂", text: "Şantiye deposu ve stoklar" },
+  { label: "Depo & Stok", href: "/depo-stok", icon: "⌂", text: "Şantiye deposu ve stoklar" },
   { label: "Finans", href: "/finans", icon: "₺", text: "Proje finansal görünümü" },
+  { label: "Kesinti Politikası", href: "kesintiler", icon: "%", text: "Hakediş otomatik kesinti kuralları" },
   { label: "Dokümanlar", href: "/dokumanlar", icon: "□", text: "Sözleşme ve proje evrakları" },
   { label: "AI Analizleri", href: "/ai-asistan", icon: "⌘", text: "Risk, eksik ve öneriler" },
 ];
@@ -63,14 +83,49 @@ function formatMoney(value?: number | null, currency = "TRY") {
 export default function ProjectCenterPage() {
   const params = useParams<{ id: string }>();
   const [project, setProject] = useState<ProjectDetail | null>(null);
+
+  const [profitability, setProfitability] =
+    useState<ProjectProfitability | null>(null);
+
+  const [dailyReports, setDailyReports] =
+    useState<ProjectDailyReport[]>([]);
+
+
+  const [siteAnalysis, setSiteAnalysis] =
+    useState<ProjectSiteAnalysisResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     async function load() {
       try {
-        const result = await projectService.getById(params.id);
+        const result =
+          await projectService.getById(params.id);
+
+        const profitabilityResult =
+          await projectProfitabilityService.getById(
+            params.id
+          );
+
+
+        const dailyReportResult =
+          await projectDailyReportService.getByProject(
+            params.id
+          );
+
+
+        const siteAnalysisResult =
+          await projectSiteAnalysisService.getById(
+            params.id
+          );
+
+
+
         setProject(result as ProjectDetail);
+
+        setProfitability(
+          profitabilityResult
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Proje yüklenemedi.");
       } finally {
@@ -134,7 +189,14 @@ export default function ProjectCenterPage() {
           <div className="enderun-project-center-tabs">
             <a className="active" href="#genel">Genel</a>
             {modules.map((module) => (
-              <Link key={module.label} href={module.href}>
+              <Link
+                key={module.label}
+                href={
+                  module.href.startsWith("/")
+                    ? module.href
+                    : `/projeler/${project.id}/${module.href}`
+                }
+              >
                 {module.label}
               </Link>
             ))}
@@ -169,6 +231,200 @@ export default function ProjectCenterPage() {
               </div>
             </div>
           </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Proje Karlılık Analizi</h2>
+                <p>Gelir, maliyet ve kârlılık durumu</p>
+              </div>
+            </div>
+
+            {!profitability ? (
+              <div className="erp-empty-state">
+                <strong>Karlılık verisi bulunamadı</strong>
+              </div>
+            ) : (
+              <div className="erp-detail-grid">
+
+                <div>
+                  <span>Gelir</span>
+                  <strong>
+                    {formatMoney(
+                      profitability.revenue,
+                      project.currencyCode
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Toplam Maliyet</span>
+                  <strong>
+                    {formatMoney(
+                      profitability.totalCost,
+                      project.currencyCode
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Kar</span>
+                  <strong>
+                    {formatMoney(
+                      profitability.profit,
+                      project.currencyCode
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Kar Marjı</span>
+                  <strong>
+                    %{profitability.profitMargin}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Malzeme</span>
+                  <strong>
+                    {formatMoney(
+                      profitability.materialCost,
+                      project.currencyCode
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>İşçilik</span>
+                  <strong>
+                    {formatMoney(
+                      profitability.laborCost,
+                      project.currencyCode
+                    )}
+                  </strong>
+                </div>
+
+              </div>
+            )}
+          </section>
+
+
+
+          <section className="erp-panel erp-mt">
+
+            <div className="erp-panel-header">
+              <div>
+                <h2>Proje Şantiye Günlükleri</h2>
+                <p>Saha ilerleme ve günlük operasyon kayıtları</p>
+              </div>
+            </div>
+
+
+            {dailyReports.length === 0 ? (
+
+              <div className="erp-empty-state">
+                Günlük rapor bulunmuyor.
+              </div>
+
+            ) : (
+
+              <div className="erp-project-list">
+
+                {dailyReports.map(report => (
+
+                  <div
+                    className="erp-project-list-item"
+                    key={report.id}
+                  >
+
+                    <div>
+
+                      <strong>
+                        {formatDate(report.reportDate)}
+                      </strong>
+
+                      <span>
+                        {report.summary}
+                      </span>
+
+                      <span>
+                        Personel: {report.workerCount}
+                      </span>
+
+                    </div>
+
+
+                    <div>
+
+                      <span>
+                        {report.weather}
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                ))}
+
+              </div>
+
+            )}
+
+          </section>
+
+
+
+          <section className="erp-panel erp-mt">
+
+            <div className="erp-panel-header">
+              <div>
+                <h2>AI Şantiye Analizi</h2>
+                <p>Günlük saha verilerine göre yapay zeka değerlendirmesi</p>
+              </div>
+            </div>
+
+
+            {!siteAnalysis ? (
+
+              <div className="erp-empty-state">
+                AI analizi bulunamadı.
+              </div>
+
+            ) : (
+
+              <div className="erp-project-list">
+
+                {siteAnalysis.items.map((item,index)=>(
+
+                  <div
+                    className="erp-project-list-item"
+                    key={index}
+                  >
+
+                    <div>
+                      <strong>
+                        {item.title}
+                      </strong>
+
+                      <span>
+                        {item.message}
+                      </span>
+                    </div>
+
+                    <span>
+                      {item.module}
+                    </span>
+
+                  </div>
+
+                ))}
+
+              </div>
+
+            )}
+
+          </section>
+
 
           <div className="enderun-project-module-grid">
             {modules.map((module) => (
