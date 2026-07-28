@@ -1,3 +1,4 @@
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Costing;
 using EnderunAI.Api.Services.DocumentNumbers;
 using EnderunAI.Api.Services.AI;
@@ -94,6 +95,9 @@ builder.Services.AddScoped<IDocumentNumberService, DocumentNumberService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Purchasing.Automation.IPurchaseRequestGenerator, EnderunAI.Api.Services.Purchasing.Automation.PurchaseRequestGenerator>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 var app = builder.Build();
 
