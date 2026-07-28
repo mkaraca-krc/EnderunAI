@@ -96,8 +96,7 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
         ResolveRequiredPermissions(HttpContext context)
     {
         var explicitPermissions = context
-            .GetEndpoint()?
-            .Metadata
+            .GetEndpoint()?.Metadata
             .GetOrderedMetadata<RequirePermissionAttribute>()
             .Select(attribute => attribute.Permission)
             .Distinct(StringComparer.OrdinalIgnoreCase)
