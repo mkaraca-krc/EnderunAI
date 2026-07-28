@@ -108,50 +108,69 @@ export default function ProjectCenterPage() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError("");
+
       try {
-        const result =
-          await projectService.getById(params.id);
-
-        const profitabilityResult =
-          await projectProfitabilityService.getById(
-            params.id
-          );
-
-
-        const dailyReportResult =
-          await projectDailyReportService.getByProject(
-            params.id
-          );
-
-
-        const siteAnalysisResult =
-          await projectSiteAnalysisService.getById(
-            params.id
-          );
-
-
-
+        const result = await projectService.getById(params.id);
         setProject(result as ProjectDetail);
-
-        setProfitability(
-          profitabilityResult
-        );
-
-        setDailyReports(
-          dailyReportResult
-        );
-
-        setSiteAnalysis(
-          siteAnalysisResult
-        );
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Proje yüklenemedi.");
-      } finally {
+        setProject(null);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Proje yüklenemedi."
+        );
         setLoading(false);
+        return;
       }
+
+      const [
+        profitabilityResult,
+        dailyReportResult,
+        siteAnalysisResult,
+      ] = await Promise.allSettled([
+        projectProfitabilityService.getById(params.id),
+        projectDailyReportService.getByProject(params.id),
+        projectSiteAnalysisService.getById(params.id),
+      ]);
+
+      if (profitabilityResult.status === "fulfilled") {
+        setProfitability(profitabilityResult.value);
+      } else {
+        setProfitability(null);
+        console.warn(
+          "Proje karlılık verisi yüklenemedi:",
+          profitabilityResult.reason
+        );
+      }
+
+      if (dailyReportResult.status === "fulfilled") {
+        setDailyReports(dailyReportResult.value);
+      } else {
+        setDailyReports([]);
+        console.warn(
+          "Proje günlükleri yüklenemedi:",
+          dailyReportResult.reason
+        );
+      }
+
+      if (siteAnalysisResult.status === "fulfilled") {
+        setSiteAnalysis(siteAnalysisResult.value);
+      } else {
+        setSiteAnalysis(null);
+        console.warn(
+          "AI şantiye analizi yüklenemedi:",
+          siteAnalysisResult.reason
+        );
+      }
+
+      setLoading(false);
     }
 
-    if (params.id) load();
+    if (params.id) {
+      load();
+    }
   }, [params.id]);
 
   return (
