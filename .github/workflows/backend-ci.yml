@@ -28,10 +28,23 @@ jobs:
         with:
           dotnet-version: '8.0.x'
           cache: true
-          cache-dependency-path: backend/EnderunAI.Api/EnderunAI.Api.csproj
+          cache-dependency-path: |
+            backend/EnderunAI.Api/EnderunAI.Api.csproj
+            backend/EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj
 
       - name: Restore
-        run: dotnet restore backend/EnderunAI.Api/EnderunAI.Api.csproj
+        run: dotnet restore backend/EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj
 
       - name: Build
-        run: dotnet build backend/EnderunAI.Api/EnderunAI.Api.csproj --configuration Release --no-restore
+        run: dotnet build backend/EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test backend/EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj --configuration Release --no-build --verbosity normal
+
+      - name: Install EF CLI
+        run: dotnet tool install --global dotnet-ef --version 8.0.11
+
+      - name: Verify migration model
+        env:
+          DB_CONNECTION: Host=localhost;Port=5432;Database=enderun_ci;Username=postgres;Password=postgres
+        run: dotnet ef migrations has-pending-model-changes --project backend/EnderunAI.Api/EnderunAI.Api.csproj --startup-project backend/EnderunAI.Api/EnderunAI.Api.csproj --configuration Release --no-build
