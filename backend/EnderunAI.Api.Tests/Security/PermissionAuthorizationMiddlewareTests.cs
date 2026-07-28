@@ -47,7 +47,7 @@ public sealed class PermissionAuthorizationMiddlewareTests
 
         await middleware.InvokeAsync(
             context,
-            db,
+            new UserAuthorizationService(db),
             new CurrentUserService(accessor));
 
         Assert.False(nextCalled);

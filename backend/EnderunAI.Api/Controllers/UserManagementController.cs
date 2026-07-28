@@ -40,6 +40,10 @@ public sealed class UserManagementController(
             .AsNoTracking()
             .Include(user => user.UserRoles)
             .ThenInclude(userRole => userRole.Role)
+            .ThenInclude(role => role.RolePermissions)
+            .ThenInclude(rolePermission => rolePermission.Permission)
+            .Include(user => user.PermissionOverrides)
+            .ThenInclude(permissionOverride => permissionOverride.Permission)
             .Include(user => user.Personnel)
             .OrderByDescending(user => user.IsActive)
             .ThenBy(user => user.FullName)
@@ -273,20 +277,33 @@ public sealed class UserManagementController(
                     user.Personnel.BranchId
                 },
             roleName = PermissionCatalog.GetPrimaryRole(roleNames) ?? "Rol tanımsız",
-            allowedPermissions = roleNames
-                .Where(name => name.StartsWith(
-                    PermissionCatalog.AllowPrefix,
-                    StringComparison.OrdinalIgnoreCase))
-                .Select(name => name[PermissionCatalog.AllowPrefix.Length..])
+            allowedPermissions = user.PermissionOverrides
+                .Where(item => item.Effect == PermissionOverrideEffect.Allow)
+                .Select(item => item.Permission.Key)
                 .OrderBy(name => name),
-            deniedPermissions = roleNames
-                .Where(name => name.StartsWith(
-                    PermissionCatalog.DenyPrefix,
-                    StringComparison.OrdinalIgnoreCase))
-                .Select(name => name[PermissionCatalog.DenyPrefix.Length..])
+            deniedPermissions = user.PermissionOverrides
+                .Where(item => item.Effect == PermissionOverrideEffect.Deny)
+                .Select(item => item.Permission.Key)
                 .OrderBy(name => name),
-            effectivePermissions = PermissionCatalog.Resolve(roleNames).OrderBy(name => name)
+            effectivePermissions = ResolvePermissions(user)
         };
+    }
+
+    private static IReadOnlyCollection<string> ResolvePermissions(AppUser user)
+    {
+        var permissions = user.UserRoles
+            .SelectMany(item => item.Role.RolePermissions)
+            .Select(item => item.Permission.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        permissions.UnionWith(
+            user.PermissionOverrides
+                .Where(item => item.Effect == PermissionOverrideEffect.Allow)
+                .Select(item => item.Permission.Key));
+        permissions.ExceptWith(
+            user.PermissionOverrides
+                .Where(item => item.Effect == PermissionOverrideEffect.Deny)
+                .Select(item => item.Permission.Key));
+        return permissions.OrderBy(item => item).ToArray();
     }
 
     private async Task<AppUser?> LoadUserAsync(
@@ -297,6 +314,10 @@ public sealed class UserManagementController(
             .AsNoTracking()
             .Include(user => user.UserRoles)
             .ThenInclude(userRole => userRole.Role)
+            .ThenInclude(role => role.RolePermissions)
+            .ThenInclude(rolePermission => rolePermission.Permission)
+            .Include(user => user.PermissionOverrides)
+            .ThenInclude(permissionOverride => permissionOverride.Permission)
             .Include(user => user.Personnel)
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
     }
@@ -342,58 +363,67 @@ public sealed class UserManagementController(
             .Except(allowed, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var desiredRoleNames = new[] { roleName.Trim() }
-            .Concat(allowed.Select(permission =>
-                $"{PermissionCatalog.AllowPrefix}{permission}"))
-            .Concat(denied.Select(permission =>
-                $"{PermissionCatalog.DenyPrefix}{permission}"))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
         await db.UserRoles
             .Where(userRole => userRole.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        var roles = await db.Roles
-            .Where(role => desiredRoleNames.Contains(role.Name))
-            .ToListAsync(cancellationToken);
-
-        var knownRoleNames = roles
-            .Select(role => role.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var missingRoleName in desiredRoleNames.Where(
-                     name => !knownRoleNames.Contains(name)))
+        var normalizedRoleName = roleName.Trim();
+        var role = await db.Roles.SingleOrDefaultAsync(
+            item => item.Name.ToLower() == normalizedRoleName.ToLower(),
+            cancellationToken);
+        if (role is null)
         {
-            var role = new AppRole
+            role = new AppRole
             {
-                Name = missingRoleName,
-                Description = missingRoleName.StartsWith(
-                    PermissionCatalog.AllowPrefix,
-                    StringComparison.OrdinalIgnoreCase)
-                    ? "Kullanıcıya özel ek izin"
-                    : missingRoleName.StartsWith(
-                        PermissionCatalog.DenyPrefix,
-                        StringComparison.OrdinalIgnoreCase)
-                        ? "Kullanıcıya özel kısıtlama"
-                        : PermissionCatalog.RolePresets
-                            .First(item => item.Name.Equals(
-                                missingRoleName,
-                                StringComparison.OrdinalIgnoreCase))
-                            .Description
+                Name = normalizedRoleName,
+                Description = PermissionCatalog.RolePresets
+                    .First(item => item.Name.Equals(
+                        normalizedRoleName,
+                        StringComparison.OrdinalIgnoreCase))
+                    .Description
             };
-
             db.Roles.Add(role);
-            roles.Add(role);
+            await db.SaveChangesAsync(cancellationToken);
         }
 
-        await db.SaveChangesAsync(cancellationToken);
-
-        db.UserRoles.AddRange(roles.Select(role => new UserRole
+        db.UserRoles.Add(new UserRole
         {
             UserId = userId,
             RoleId = role.Id
-        }));
+        });
+
+        await db.UserPermissionOverrides
+            .Where(item => item.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var overrideEffects = allowed
+            .Select(permission => new
+            {
+                Permission = permission,
+                Effect = PermissionOverrideEffect.Allow
+            })
+            .Concat(denied.Select(permission => new
+            {
+                Permission = permission,
+                Effect = PermissionOverrideEffect.Deny
+            }))
+            .ToDictionary(
+                item => item.Permission,
+                item => item.Effect,
+                StringComparer.OrdinalIgnoreCase);
+        var overrideKeys = overrideEffects.Keys.ToArray();
+        var permissions = await db.Permissions
+            .Where(item => overrideKeys.Contains(item.Key))
+            .ToListAsync(cancellationToken);
+        db.UserPermissionOverrides.AddRange(
+            permissions.Select(permission => new UserPermissionOverride
+            {
+                UserId = userId,
+                PermissionId = permission.Id,
+                Effect = overrideEffects[permission.Key],
+                UpdatedAtUtc = DateTime.UtcNow,
+                UpdatedByUserId = currentUser.UserId
+            }));
 
         await db.SaveChangesAsync(cancellationToken);
     }

@@ -47,9 +47,9 @@ public sealed class CurrentUserService(
             "roles");
 
     public IReadOnlyCollection<string> Permissions =>
-        PermissionCatalog.Resolve(Roles)
-            .OrderBy(permission => permission)
-            .ToArray();
+        GetDistinctClaimValues(
+            "permissions",
+            "permission");
 
     public bool IsInRole(string role) =>
         !string.IsNullOrWhiteSpace(role) &&

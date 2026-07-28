@@ -14,7 +14,8 @@ namespace EnderunAI.Api.Controllers;
 public sealed class AuthController(
     AppDbContext db,
     PasswordService passwordService,
-    TokenService tokenService) : ControllerBase
+    TokenService tokenService,
+    IUserAuthorizationService authorizationService) : ControllerBase
 {
     [AllowAnonymous]
     [HttpPost("login")]
@@ -44,19 +45,23 @@ public sealed class AuthController(
         user.LastLoginAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
-        var roleNames = user.UserRoles
-            .Select(userRole => userRole.Role.Name)
-            .ToArray();
-        var visibleRoles = roleNames
+        var authorization = await authorizationService.GetAsync(
+            user.Id,
+            cancellationToken);
+        if (authorization is null)
+            return Unauthorized(new { message = "Kullanıcı yetkileri yüklenemedi." });
+
+        var visibleRoles = authorization.RoleNames
             .Where(PermissionCatalog.IsPresetRole)
             .ToArray();
-        var permissions = PermissionCatalog.Resolve(roleNames)
-            .OrderBy(permission => permission)
-            .ToArray();
+        var permissions = authorization.Permissions;
 
         return Ok(new
         {
-            token = tokenService.Create(user, roleNames, permissions),
+            token = tokenService.Create(
+                user,
+                authorization.RoleNames,
+                permissions),
             expiresInSeconds = 43200,
             user = new
             {
@@ -93,16 +98,17 @@ public sealed class AuthController(
         if (user is null || !user.IsActive)
             return Unauthorized(new { message = "Kullanıcı hesabı pasif veya bulunamadı." });
 
-        var roleNames = user.UserRoles
-            .Select(userRole => userRole.Role.Name)
-            .ToArray();
-        var roles = roleNames
+        var authorization = await authorizationService.GetAsync(
+            user.Id,
+            cancellationToken);
+        if (authorization is null)
+            return Unauthorized(new { message = "Kullanıcı yetkileri yüklenemedi." });
+
+        var roles = authorization.RoleNames
             .Where(PermissionCatalog.IsPresetRole)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var permissions = PermissionCatalog.Resolve(roleNames)
-            .OrderBy(permission => permission)
-            .ToArray();
+        var permissions = authorization.Permissions;
 
         return Ok(new
         {

@@ -1,6 +1,4 @@
-using EnderunAI.Api.Data;
 using EnderunAI.Api.Security.CurrentUser;
-using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Security;
 
@@ -8,7 +6,7 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(
         HttpContext context,
-        AppDbContext db,
+        IUserAuthorizationService authorizationService,
         ICurrentUserService currentUser)
     {
         if (!currentUser.IsAuthenticated)
@@ -25,18 +23,9 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             return;
         }
 
-        var userSnapshot = await db.Users
-            .AsNoTracking()
-            .Where(user => user.Id == userId)
-            .Select(user => new
-            {
-                user.IsActive,
-                user.SecurityStamp,
-                RoleNames = user.UserRoles
-                    .Select(userRole => userRole.Role.Name)
-                    .ToArray()
-            })
-            .SingleOrDefaultAsync(context.RequestAborted);
+        var userSnapshot = await authorizationService.GetAsync(
+            userId,
+            context.RequestAborted);
 
         if (userSnapshot is null || !userSnapshot.IsActive)
         {
@@ -67,14 +56,13 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             return;
         }
 
-        var roleNames = userSnapshot.RoleNames;
-        var effectivePermissions =
-            PermissionCatalog.Resolve(roleNames);
-
-        if (roleNames.Contains(
+        if (userSnapshot.RoleNames.Contains(
                 "Admin",
                 StringComparer.OrdinalIgnoreCase) ||
-            requiredPermissions.All(effectivePermissions.Contains))
+            requiredPermissions.All(permission =>
+                userSnapshot.Permissions.Contains(
+                    permission,
+                    StringComparer.OrdinalIgnoreCase)))
         {
             await next(context);
             return;

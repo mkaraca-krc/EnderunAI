@@ -17,4 +17,6 @@ public sealed class AppUser
     public Guid? PersonnelId { get; set; }
     public Personnel? Personnel { get; set; }
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+    public ICollection<UserPermissionOverride> PermissionOverrides { get; set; } =
+        new List<UserPermissionOverride>();
 }

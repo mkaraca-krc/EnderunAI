@@ -27,20 +27,17 @@ public sealed class CurrentUserServiceTests
     }
 
     [Fact]
-    public void DenyOverrideWinsOverStalePermissionClaim()
+    public void ReadsServerValidatedPermissionClaims()
     {
         var service = CreateService(
             new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
             new Claim(ClaimTypes.Role, "Teknik Koordinatör"),
-            new Claim(
-                ClaimTypes.Role,
-                $"{PermissionCatalog.DenyPrefix}{PermissionCatalog.Keys.ProjectsManage}"),
             new Claim("permissions", PermissionCatalog.Keys.ProjectsManage));
 
-        Assert.DoesNotContain(
+        Assert.Contains(
             PermissionCatalog.Keys.ProjectsManage,
             service.Permissions);
-        Assert.False(
+        Assert.True(
             service.HasPermission(PermissionCatalog.Keys.ProjectsManage));
     }
 
@@ -50,9 +47,7 @@ public sealed class CurrentUserServiceTests
         var service = CreateService(
             new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
             new Claim(ClaimTypes.Role, "Tekniker"),
-            new Claim(
-                ClaimTypes.Role,
-                $"{PermissionCatalog.AllowPrefix}{PermissionCatalog.Keys.FinanceView}"));
+            new Claim("permissions", PermissionCatalog.Keys.FinanceView));
 
         Assert.True(service.HasPermission(PermissionCatalog.Keys.FinanceView));
     }

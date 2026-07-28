@@ -22,6 +22,40 @@ namespace EnderunAI.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("EnderunAI.Api.Models.AppPermission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("permissions", (string)null);
+                });
+
             modelBuilder.Entity("EnderunAI.Api.Models.AppRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1674,6 +1708,21 @@ namespace EnderunAI.Api.Migrations
                     b.ToTable("purchase_request_items", (string)null);
                 });
 
+            modelBuilder.Entity("EnderunAI.Api.Models.RolePermission", b =>
+                {
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RoleId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("role_permissions", (string)null);
+                });
+
             modelBuilder.Entity("EnderunAI.Api.Models.StockMovement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1769,6 +1818,30 @@ namespace EnderunAI.Api.Migrations
                     b.HasIndex("RoleId");
 
                     b.ToTable("user_roles", (string)null);
+                });
+
+            modelBuilder.Entity("EnderunAI.Api.Models.UserPermissionOverride", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Effect")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("UserId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("user_permission_overrides", (string)null);
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.AppUser", b =>
@@ -2202,6 +2275,44 @@ namespace EnderunAI.Api.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("EnderunAI.Api.Models.RolePermission", b =>
+                {
+                    b.HasOne("EnderunAI.Api.Models.AppPermission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EnderunAI.Api.Models.AppRole", "Role")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("EnderunAI.Api.Models.UserPermissionOverride", b =>
+                {
+                    b.HasOne("EnderunAI.Api.Models.AppPermission", "Permission")
+                        .WithMany("UserOverrides")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EnderunAI.Api.Models.AppUser", "User")
+                        .WithMany("PermissionOverrides")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("EnderunAI.Api.Models.UserRole", b =>
                 {
                     b.HasOne("EnderunAI.Api.Models.AppRole", "Role")
@@ -2266,13 +2377,24 @@ namespace EnderunAI.Api.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("EnderunAI.Api.Models.AppPermission", b =>
+                {
+                    b.Navigation("RolePermissions");
+
+                    b.Navigation("UserOverrides");
+                });
+
             modelBuilder.Entity("EnderunAI.Api.Models.AppRole", b =>
                 {
+                    b.Navigation("RolePermissions");
+
                     b.Navigation("UserRoles");
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.AppUser", b =>
                 {
+                    b.Navigation("PermissionOverrides");
+
                     b.Navigation("UserRoles");
                 });
 

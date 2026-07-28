@@ -19,6 +19,10 @@ public sealed class AppDbContext : DbContext
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<AppRole> Roles => Set<AppRole>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<AppPermission> Permissions => Set<AppPermission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<UserPermissionOverride> UserPermissionOverrides =>
+        Set<UserPermissionOverride>();
 
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<Branch> Branches => Set<Branch>();
@@ -207,6 +211,45 @@ public sealed class AppDbContext : DbContext
             entity.HasOne(x => x.Role)
                 .WithMany(x => x.UserRoles)
                 .HasForeignKey(x => x.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AppPermission>(entity =>
+        {
+            entity.ToTable("permissions");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Key).IsUnique();
+            entity.Property(x => x.Key).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Module).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+        });
+
+        modelBuilder.Entity<RolePermission>(entity =>
+        {
+            entity.ToTable("role_permissions");
+            entity.HasKey(x => new { x.RoleId, x.PermissionId });
+            entity.HasOne(x => x.Role)
+                .WithMany(x => x.RolePermissions)
+                .HasForeignKey(x => x.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Permission)
+                .WithMany(x => x.RolePermissions)
+                .HasForeignKey(x => x.PermissionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserPermissionOverride>(entity =>
+        {
+            entity.ToTable("user_permission_overrides");
+            entity.HasKey(x => new { x.UserId, x.PermissionId });
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.PermissionOverrides)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Permission)
+                .WithMany(x => x.UserOverrides)
+                .HasForeignKey(x => x.PermissionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
