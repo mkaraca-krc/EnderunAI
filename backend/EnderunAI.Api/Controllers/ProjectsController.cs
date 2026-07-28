@@ -38,6 +38,12 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.ContractNumber,
                 x.ContractAmount,
                 x.CurrencyCode,
+                x.VatRate,
+                x.WithholdingRate,
+                x.IncreaseRate,
+                x.CashRetentionRate,
+                x.WithholdingTaxRate,
+                x.MaterialDeductionRate,
                 x.Status,
                 x.HealthStatus,
                 WarehouseCount = x.Warehouses.Count
@@ -72,6 +78,10 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.CurrencyCode,
                 x.VatRate,
                 x.WithholdingRate,
+                x.IncreaseRate,
+                x.CashRetentionRate,
+                x.WithholdingTaxRate,
+                x.MaterialDeductionRate,
                 x.PlannedStartDate,
                 x.PlannedEndDate,
                 x.City,
@@ -155,15 +165,21 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 Code = code,
                 Name = request.Name.Trim(),
                 ContractNumber = request.ContractNumber?.Trim(),
-                ContractDate = request.ContractDate,
+                ContractDate = request.ContractDate.HasValue
+                    ? DateTime.SpecifyKind(request.ContractDate.Value, DateTimeKind.Utc)
+                    : null,
                 ContractAmount = request.ContractAmount,
                 CurrencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode)
                     ? "TRY"
                     : request.CurrencyCode.Trim().ToUpperInvariant(),
                 VatRate = request.VatRate,
                 WithholdingRate = request.WithholdingRate?.Trim(),
-                PlannedStartDate = request.PlannedStartDate,
-                PlannedEndDate = request.PlannedEndDate,
+                PlannedStartDate = request.PlannedStartDate.HasValue
+                    ? DateTime.SpecifyKind(request.PlannedStartDate.Value, DateTimeKind.Utc)
+                    : null,
+                PlannedEndDate = request.PlannedEndDate.HasValue
+                    ? DateTime.SpecifyKind(request.PlannedEndDate.Value, DateTimeKind.Utc)
+                    : null,
                 City = request.City?.Trim(),
                 District = request.District?.Trim(),
                 Address = request.Address?.Trim(),
@@ -209,11 +225,121 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 }
             });
         }
-        catch
+        catch (Exception ex)
         {
             await transaction.RollbackAsync(cancellationToken);
-            throw;
+
+            return StatusCode(500, new
+            {
+                message = ex.Message,
+                detail = ex.InnerException?.Message,
+                type = ex.GetType().FullName,
+                stack = ex.StackTrace
+            });
         }
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Update(
+        Guid id,
+        UpdateProjectRequest request,
+        CancellationToken cancellationToken)
+    {
+        var project = await db.Projects
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (project is null)
+            return NotFound(new { message = "Proje bulunamadı." });
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return BadRequest(new { message = "Proje adı zorunludur." });
+
+        if (request.VatRate < 0 || request.VatRate > 100)
+            return BadRequest(new { message = "KDV oranı 0 ile 100 arasında olmalıdır." });
+
+        if (request.IncreaseRate < 0 || request.IncreaseRate > 100)
+            return BadRequest(new { message = "Artış yüzdesi 0 ile 100 arasında olmalıdır." });
+
+        if (request.CashRetentionRate < 0 ||
+            request.CashRetentionRate > 100)
+        {
+            return BadRequest(new
+            {
+                message = "Nakit teminat kesintisi 0 ile 100 arasında olmalıdır."
+            });
+        }
+
+        if (request.WithholdingTaxRate < 0 ||
+            request.WithholdingTaxRate > 100)
+        {
+            return BadRequest(new
+            {
+                message = "Stopaj kesintisi 0 ile 100 arasında olmalıdır."
+            });
+        }
+
+        if (request.MaterialDeductionRate < 0 ||
+            request.MaterialDeductionRate > 100)
+        {
+            return BadRequest(new
+            {
+                message = "Malzeme kesintisi 0 ile 100 arasında olmalıdır."
+            });
+        }
+
+        var plannedStartDate = ToUtc(request.PlannedStartDate);
+        var plannedEndDate = ToUtc(request.PlannedEndDate);
+
+        if (plannedStartDate.HasValue &&
+            plannedEndDate.HasValue &&
+            plannedEndDate.Value < plannedStartDate.Value)
+        {
+            return BadRequest(new
+            {
+                message = "Planlanan bitiş tarihi başlangıç tarihinden önce olamaz."
+            });
+        }
+
+        project.Name = request.Name.Trim();
+        project.ContractNumber = request.ContractNumber?.Trim();
+        project.ContractDate = ToUtc(request.ContractDate);
+        project.ContractAmount = request.ContractAmount;
+        project.CurrencyCode =
+            string.IsNullOrWhiteSpace(request.CurrencyCode)
+                ? "TRY"
+                : request.CurrencyCode.Trim().ToUpperInvariant();
+
+        project.VatRate = request.VatRate;
+        project.WithholdingRate = request.WithholdingRate?.Trim();
+        project.IncreaseRate = request.IncreaseRate;
+        project.CashRetentionRate = request.CashRetentionRate;
+        project.WithholdingTaxRate = request.WithholdingTaxRate;
+        project.MaterialDeductionRate = request.MaterialDeductionRate;
+
+        project.PlannedStartDate = plannedStartDate;
+        project.PlannedEndDate = plannedEndDate;
+        project.City = request.City?.Trim();
+        project.District = request.District?.Trim();
+        project.Address = request.Address?.Trim();
+        project.UpdatedAtUtc = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Proje bilgileri güncellendi.",
+            project.Id,
+            project.Code,
+            project.Name,
+            project.ContractAmount,
+            project.CurrencyCode,
+            project.VatRate,
+            project.WithholdingRate,
+            project.IncreaseRate,
+            project.CashRetentionRate,
+            project.WithholdingTaxRate,
+            project.MaterialDeductionRate
+        });
     }
 
     [HttpGet("{id:guid}/summary")]
@@ -241,6 +367,10 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.CurrencyCode,
                 x.VatRate,
                 x.WithholdingRate,
+                x.IncreaseRate,
+                x.CashRetentionRate,
+                x.WithholdingTaxRate,
+                x.MaterialDeductionRate,
                 x.PlannedStartDate,
                 x.PlannedEndDate,
                 x.ActualStartDate,
@@ -373,4 +503,17 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
         return Ok(items);
     }
 
+
+    private static DateTime? ToUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+            return null;
+
+        return value.Value.Kind switch
+        {
+            DateTimeKind.Utc => value.Value,
+            DateTimeKind.Local => value.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+        };
+    }
 }
