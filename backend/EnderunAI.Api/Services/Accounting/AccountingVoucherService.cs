@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Accounting;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +9,8 @@ namespace EnderunAI.Api.Services.Accounting;
 
 public sealed class AccountingVoucherService(
     AppDbContext dbContext,
-    IDocumentNumberService documentNumberService)
+    IDocumentNumberService documentNumberService,
+    ICurrentUserService currentUser)
     : IAccountingVoucherService
 {
     public async Task<IReadOnlyCollection<AccountingVoucherListItemResponse>>
@@ -19,6 +21,7 @@ public sealed class AccountingVoucherService(
             DateTime? startDate,
             DateTime? endDate,
             string? search,
+            Guid? hierarchyNodeId,
             CancellationToken cancellationToken)
     {
         var query = dbContext.AccountingVouchers
@@ -68,6 +71,19 @@ public sealed class AccountingVoucherService(
                  x.ReferenceNumber.ToLower().Contains(normalized)));
         }
 
+        if (hierarchyNodeId.HasValue)
+        {
+            query = query.Where(voucher =>
+                voucher.Lines.Any(line =>
+                    !line.IsDeleted &&
+                    dbContext.ProjectModuleScopes.Any(scope =>
+                        !scope.IsDeleted &&
+                        scope.ModuleType == ProjectModuleType.Finance &&
+                        scope.ProjectHierarchyNodeId ==
+                            hierarchyNodeId.Value &&
+                        scope.RecordId == line.Id)));
+        }
+
         return await query
             .OrderByDescending(x => x.VoucherDate)
             .ThenByDescending(x => x.VoucherNumber)
@@ -103,7 +119,11 @@ public sealed class AccountingVoucherService(
                 "Muhasebe fişi bulunamadı.");
         }
 
-        return MapDetail(voucher);
+        var hierarchyScopes = await LoadHierarchyScopesAsync(
+            voucher.Lines.Select(line => line.Id),
+            cancellationToken);
+
+        return MapDetail(voucher, hierarchyScopes);
     }
 
     public async Task<AccountingVoucherDetailResponse> CreateAsync(
@@ -155,7 +175,7 @@ public sealed class AccountingVoucherService(
                 request.Description),
             ReferenceNumber = NormalizeNullable(
                 request.ReferenceNumber),
-            SourceModule = NormalizeNullable(
+            SourceModule = NormalizeSourceModule(
                 request.SourceModule),
             SourceEntityId = request.SourceEntityId
         };
@@ -163,6 +183,7 @@ public sealed class AccountingVoucherService(
         ApplyLinesAndTotals(voucher, validatedLines);
 
         dbContext.AccountingVouchers.Add(voucher);
+        AddHierarchyScopes(validatedLines);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return await GetByIdAsync(
@@ -208,8 +229,17 @@ public sealed class AccountingVoucherService(
             request.Lines,
             cancellationToken);
 
-        dbContext.AccountingVoucherLines.RemoveRange(
-            voucher.Lines);
+        var oldLineIds = voucher.Lines
+            .Select(line => line.Id)
+            .ToArray();
+        var oldScopes = await dbContext.ProjectModuleScopes
+            .Where(scope =>
+                scope.ModuleType == ProjectModuleType.Finance &&
+                oldLineIds.Contains(scope.RecordId))
+            .ToListAsync(cancellationToken);
+
+        dbContext.ProjectModuleScopes.RemoveRange(oldScopes);
+        dbContext.AccountingVoucherLines.RemoveRange(voucher.Lines);
 
         voucher.Lines.Clear();
         voucher.VoucherType =
@@ -227,6 +257,7 @@ public sealed class AccountingVoucherService(
         voucher.UpdatedAtUtc = DateTime.UtcNow;
 
         ApplyLinesAndTotals(voucher, validatedLines);
+        AddHierarchyScopes(validatedLines);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -281,6 +312,7 @@ public sealed class AccountingVoucherService(
 
         voucher.Status = AccountingVoucherStatus.Posted;
         voucher.PostedAtUtc = DateTime.UtcNow;
+        voucher.PostedByUserId = currentUser.UserId;
         voucher.UpdatedAtUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -323,6 +355,7 @@ public sealed class AccountingVoucherService(
         voucher.Status = AccountingVoucherStatus.Cancelled;
         voucher.CancellationReason = reason.Trim();
         voucher.CancelledAtUtc = DateTime.UtcNow;
+        voucher.CancelledByUserId = currentUser.UserId;
         voucher.UpdatedAtUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -334,7 +367,7 @@ public sealed class AccountingVoucherService(
             "Muhasebe fişi iptal edildi.");
     }
 
-    private async Task<List<AccountingVoucherLine>>
+    private async Task<List<PreparedAccountingVoucherLine>>
         ValidateAndPrepareLinesAsync(
             Guid companyId,
             string voucherCurrency,
@@ -413,7 +446,32 @@ public sealed class AccountingVoucherService(
             }
         }
 
-        var result = new List<AccountingVoucherLine>();
+        var hierarchyNodeIds = requests
+            .Where(request =>
+                request.ProjectHierarchyNodeId.HasValue)
+            .Select(request =>
+                request.ProjectHierarchyNodeId!.Value)
+            .Distinct()
+            .ToArray();
+        var hierarchyNodes = hierarchyNodeIds.Length == 0
+            ? new Dictionary<Guid, Guid>()
+            : await dbContext.ProjectHierarchyNodes
+                .Where(node =>
+                    hierarchyNodeIds.Contains(node.Id) &&
+                    node.IsActive &&
+                    !node.IsDeleted)
+                .ToDictionaryAsync(
+                    node => node.Id,
+                    node => node.ProjectId,
+                    cancellationToken);
+
+        if (hierarchyNodes.Count != hierarchyNodeIds.Length)
+        {
+            throw new ArgumentException(
+                "Fiş satırlarındaki hiyerarşi düğümlerinden biri bulunamadı veya pasif.");
+        }
+
+        var result = new List<PreparedAccountingVoucherLine>();
         var lineNumber = 1;
 
         foreach (var request in requests)
@@ -436,6 +494,23 @@ public sealed class AccountingVoucherService(
             {
                 throw new ArgumentException(
                     $"{account.Code} hesabında proje seçimi zorunludur.");
+            }
+
+            if (request.ProjectHierarchyNodeId.HasValue)
+            {
+                if (!request.ProjectId.HasValue)
+                {
+                    throw new ArgumentException(
+                        $"{lineNumber}. satırda hiyerarşi düğümü için proje seçimi zorunludur.");
+                }
+
+                if (hierarchyNodes[
+                        request.ProjectHierarchyNodeId.Value] !=
+                    request.ProjectId.Value)
+                {
+                    throw new ArgumentException(
+                        $"{lineNumber}. satırdaki hiyerarşi düğümü seçilen projeye ait değil.");
+                }
             }
 
             if (account.RequiresCostCenter &&
@@ -461,33 +536,35 @@ public sealed class AccountingVoucherService(
                     $"{lineNumber}. satırda döviz kuru sıfırdan büyük olmalıdır.");
             }
 
-            result.Add(new AccountingVoucherLine
-            {
-                AccountingAccountId =
-                    request.AccountingAccountId,
-                LineNumber = lineNumber,
-                Description = NormalizeNullable(
-                    request.Description),
-                DebitAmount = request.DebitAmount,
-                CreditAmount = request.CreditAmount,
-                CurrencyCode = currency,
-                ExchangeRate = exchangeRate,
-                DebitAmountLocal = decimal.Round(
-                    request.DebitAmount * exchangeRate,
-                    2),
-                CreditAmountLocal = decimal.Round(
-                    request.CreditAmount * exchangeRate,
-                    2),
-                CurrentAccountId =
-                    request.CurrentAccountId,
-                ProjectId = request.ProjectId,
-                CostCenterCode = NormalizeNullable(
-                    request.CostCenterCode),
-                DocumentNumber = NormalizeNullable(
-                    request.DocumentNumber),
-                DocumentDate = UtcDate(request.DocumentDate),
-                DueDate = UtcDate(request.DueDate)
-            });
+            result.Add(new PreparedAccountingVoucherLine(
+                new AccountingVoucherLine
+                {
+                    AccountingAccountId =
+                        request.AccountingAccountId,
+                    LineNumber = lineNumber,
+                    Description = NormalizeNullable(
+                        request.Description),
+                    DebitAmount = request.DebitAmount,
+                    CreditAmount = request.CreditAmount,
+                    CurrencyCode = currency,
+                    ExchangeRate = exchangeRate,
+                    DebitAmountLocal = decimal.Round(
+                        request.DebitAmount * exchangeRate,
+                        2),
+                    CreditAmountLocal = decimal.Round(
+                        request.CreditAmount * exchangeRate,
+                        2),
+                    CurrentAccountId =
+                        request.CurrentAccountId,
+                    ProjectId = request.ProjectId,
+                    CostCenterCode = NormalizeNullable(
+                        request.CostCenterCode),
+                    DocumentNumber = NormalizeNullable(
+                        request.DocumentNumber),
+                    DocumentDate = UtcDate(request.DocumentDate),
+                    DueDate = UtcDate(request.DueDate)
+                },
+                request.ProjectHierarchyNodeId));
 
             lineNumber++;
         }
@@ -497,15 +574,34 @@ public sealed class AccountingVoucherService(
 
     private static void ApplyLinesAndTotals(
         AccountingVoucher voucher,
-        IEnumerable<AccountingVoucherLine> lines)
+        IEnumerable<PreparedAccountingVoucherLine> lines)
     {
-        foreach (var line in lines)
+        foreach (var preparedLine in lines)
         {
-            voucher.Lines.Add(line);
+            voucher.Lines.Add(preparedLine.Line);
         }
 
         RecalculateTotals(voucher);
 
+    }
+
+    private void AddHierarchyScopes(
+        IEnumerable<PreparedAccountingVoucherLine> lines)
+    {
+        var scopes = lines
+            .Where(line =>
+                line.ProjectHierarchyNodeId.HasValue &&
+                line.Line.ProjectId.HasValue)
+            .Select(line => new ProjectModuleScope
+            {
+                ProjectId = line.Line.ProjectId!.Value,
+                ProjectHierarchyNodeId =
+                    line.ProjectHierarchyNodeId!.Value,
+                ModuleType = ProjectModuleType.Finance,
+                RecordId = line.Line.Id
+            });
+
+        dbContext.ProjectModuleScopes.AddRange(scopes);
     }
 
     private static void RecalculateTotals(AccountingVoucher voucher)
@@ -546,8 +642,34 @@ public sealed class AccountingVoucherService(
         return await query.SingleOrDefaultAsync(cancellationToken);
     }
 
+    private async Task<IReadOnlyDictionary<Guid, HierarchyScopeSnapshot>>
+        LoadHierarchyScopesAsync(
+            IEnumerable<Guid> lineIds,
+            CancellationToken cancellationToken)
+    {
+        var ids = lineIds.Distinct().ToArray();
+
+        if (ids.Length == 0)
+            return new Dictionary<Guid, HierarchyScopeSnapshot>();
+
+        return await dbContext.ProjectModuleScopes
+            .AsNoTracking()
+            .Where(scope =>
+                scope.ModuleType == ProjectModuleType.Finance &&
+                ids.Contains(scope.RecordId))
+            .Select(scope => new HierarchyScopeSnapshot(
+                scope.RecordId,
+                scope.ProjectHierarchyNodeId,
+                scope.ProjectHierarchyNode.Code,
+                scope.ProjectHierarchyNode.Name))
+            .ToDictionaryAsync(
+                scope => scope.RecordId,
+                cancellationToken);
+    }
+
     private static AccountingVoucherDetailResponse MapDetail(
-        AccountingVoucher voucher)
+        AccountingVoucher voucher,
+        IReadOnlyDictionary<Guid, HierarchyScopeSnapshot> hierarchyScopes)
     {
         return new AccountingVoucherDetailResponse(
             voucher.Id,
@@ -572,28 +694,38 @@ public sealed class AccountingVoucherService(
             voucher.Lines
                 .Where(x => !x.IsDeleted)
                 .OrderBy(x => x.LineNumber)
-                .Select(x => new AccountingVoucherLineResponse(
-                    x.Id,
-                    x.LineNumber,
-                    x.AccountingAccountId,
-                    x.AccountingAccount.Code,
-                    x.AccountingAccount.Name,
-                    x.Description,
-                    x.DebitAmount,
-                    x.CreditAmount,
-                    x.CurrencyCode,
-                    x.ExchangeRate,
-                    x.DebitAmountLocal,
-                    x.CreditAmountLocal,
-                    x.CurrentAccountId,
-                    x.CurrentAccount?.Title,
-                    x.ProjectId,
-                    x.Project?.Code,
-                    x.Project?.Name,
-                    x.CostCenterCode,
-                    x.DocumentNumber,
-                    x.DocumentDate,
-                    x.DueDate))
+                .Select(x =>
+                {
+                    hierarchyScopes.TryGetValue(
+                        x.Id,
+                        out var hierarchyScope);
+
+                    return new AccountingVoucherLineResponse(
+                        x.Id,
+                        x.LineNumber,
+                        x.AccountingAccountId,
+                        x.AccountingAccount.Code,
+                        x.AccountingAccount.Name,
+                        x.Description,
+                        x.DebitAmount,
+                        x.CreditAmount,
+                        x.CurrencyCode,
+                        x.ExchangeRate,
+                        x.DebitAmountLocal,
+                        x.CreditAmountLocal,
+                        x.CurrentAccountId,
+                        x.CurrentAccount?.Title,
+                        x.ProjectId,
+                        x.Project?.Code,
+                        x.Project?.Name,
+                        hierarchyScope?.ProjectHierarchyNodeId,
+                        hierarchyScope?.Code,
+                        hierarchyScope?.Name,
+                        x.CostCenterCode,
+                        x.DocumentNumber,
+                        x.DocumentDate,
+                        x.DueDate);
+                })
                 .ToList());
     }
 
@@ -710,6 +842,11 @@ public sealed class AccountingVoucherService(
             : value.Trim();
     }
 
+    private static string? NormalizeSourceModule(string? value)
+    {
+        return NormalizeNullable(value)?.ToUpperInvariant();
+    }
+
     private static DateTime UtcDate(DateTime value)
     {
         return DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
@@ -721,4 +858,14 @@ public sealed class AccountingVoucherService(
             ? UtcDate(value.Value)
             : null;
     }
+
+    private sealed record PreparedAccountingVoucherLine(
+        AccountingVoucherLine Line,
+        Guid? ProjectHierarchyNodeId);
+
+    private sealed record HierarchyScopeSnapshot(
+        Guid RecordId,
+        Guid ProjectHierarchyNodeId,
+        string Code,
+        string Name);
 }
