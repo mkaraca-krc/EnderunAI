@@ -6,6 +6,7 @@ using System.Text;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Upload;
 using EnderunAI.Api.Services.Secretariat;
 using EnderunAI.Api.Services.HumanResources;
@@ -50,6 +51,8 @@ builder.Services.AddScoped<IHrApprovalService, HrApprovalService>();
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 builder.Services.AddCors(options =>
 {
