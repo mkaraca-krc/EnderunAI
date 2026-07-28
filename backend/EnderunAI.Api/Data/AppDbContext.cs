@@ -1,11 +1,21 @@
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Models.Secretariat;
 using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Data;
 
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public sealed class AppDbContext : DbContext
 {
+    private readonly ICurrentUserService? currentUser;
+
+    public AppDbContext(
+        DbContextOptions<AppDbContext> options,
+        ICurrentUserService? currentUser = null) : base(options)
+    {
+        this.currentUser = currentUser;
+    }
+
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<AppRole> Roles => Set<AppRole>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
@@ -48,6 +58,79 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<VisitorRecord> VisitorRecords => Set<VisitorRecord>();
     public DbSet<PhoneNote> PhoneNotes => Set<PhoneNote>();
     public DbSet<SecretariatScheduleEntry> SecretariatScheduleEntries => Set<SecretariatScheduleEntry>();
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        ApplyAuditInformation();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        ApplyAuditInformation();
+        return base.SaveChangesAsync(
+            acceptAllChangesOnSuccess,
+            cancellationToken);
+    }
+
+    private void ApplyAuditInformation()
+    {
+        var now = DateTime.UtcNow;
+        var userId = currentUser?.UserId;
+
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            switch (entry.State)
+            {
+                case EntityState.Added:
+                    if (entry.Entity.CreatedAtUtc == default)
+                        entry.Entity.CreatedAtUtc = now;
+
+                    if (userId.HasValue)
+                        entry.Entity.CreatedByUserId ??= userId;
+
+                    break;
+
+                case EntityState.Modified:
+                    entry.Entity.UpdatedAtUtc = now;
+
+                    if (userId.HasValue)
+                        entry.Entity.UpdatedByUserId = userId;
+
+                    var isDeletedProperty =
+                        entry.Property(entity => entity.IsDeleted);
+
+                    if (isDeletedProperty.CurrentValue &&
+                        !isDeletedProperty.OriginalValue)
+                    {
+                        entry.Entity.IsActive = false;
+                        entry.Entity.DeletedAtUtc ??= now;
+
+                        if (userId.HasValue)
+                            entry.Entity.DeletedByUserId ??= userId;
+                    }
+
+                    break;
+
+                case EntityState.Deleted:
+                    entry.State = EntityState.Modified;
+                    entry.Entity.IsDeleted = true;
+                    entry.Entity.IsActive = false;
+                    entry.Entity.UpdatedAtUtc = now;
+                    entry.Entity.DeletedAtUtc ??= now;
+
+                    if (userId.HasValue)
+                    {
+                        entry.Entity.UpdatedByUserId = userId;
+                        entry.Entity.DeletedByUserId ??= userId;
+                    }
+
+                    break;
+            }
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
