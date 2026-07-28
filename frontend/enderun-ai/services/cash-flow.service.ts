@@ -1,4 +1,8 @@
 import { apiClient } from "@/lib/api/api-client";
+import {
+  financeScopeQuery,
+  type FinanceScopeFilter,
+} from "@/services/finance.service";
 
 export interface CashFlowSummary {
   totalIncome: number;
@@ -9,9 +13,9 @@ export interface CashFlowSummary {
 
 export const cashFlowService = {
 
-  getSummary() {
+  getSummary(filter: FinanceScopeFilter = {}) {
     return apiClient<CashFlowSummary>(
-      "finance/cash-flow"
+      `finance/cash-flow${financeScopeQuery(filter)}`
     );
   }
 
