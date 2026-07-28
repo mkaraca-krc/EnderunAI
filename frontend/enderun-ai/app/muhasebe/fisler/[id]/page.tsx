@@ -437,6 +437,7 @@ export default function AccountingVoucherDetailPage() {
                 <th>Açıklama</th>
                 <th>Cari</th>
                 <th>Proje</th>
+                <th>Hiyerarşi</th>
                 <th>Masraf Merkezi</th>
                 <th>Belge No</th>
                 <th>Belge Tarihi</th>
@@ -473,6 +474,12 @@ export default function AccountingVoucherDetailPage() {
                   <td>
                     {line.projectCode
                       ? `${line.projectCode} - ${line.projectName}`
+                      : "—"}
+                  </td>
+
+                  <td>
+                    {line.projectHierarchyNodeCode
+                      ? `${line.projectHierarchyNodeCode} - ${line.projectHierarchyNodeName}`
                       : "—"}
                   </td>
 
