@@ -8,6 +8,9 @@ namespace EnderunAI.Api.Security;
 
 public sealed class TokenService(IConfiguration configuration)
 {
+    public const string SecurityStampClaimType = "security_stamp";
+    public static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(12);
+
     public string Create(
         AppUser user,
         IEnumerable<string> roles,
@@ -27,7 +30,7 @@ public sealed class TokenService(IConfiguration configuration)
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(JwtRegisteredClaimNames.UniqueName, user.Username),
             new("full_name", user.FullName),
-            new("security_stamp", user.SecurityStamp)
+            new(SecurityStampClaimType, user.SecurityStamp)
         };
 
         foreach (var roleName in roleNames)
@@ -49,7 +52,7 @@ public sealed class TokenService(IConfiguration configuration)
             issuer: "EnderunAI",
             audience: "EnderunAI.Web",
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(12),
+            expires: DateTime.UtcNow.Add(SessionLifetime),
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
