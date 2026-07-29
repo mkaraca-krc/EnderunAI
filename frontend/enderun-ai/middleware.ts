@@ -1,41 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  AUTH_COOKIE_NAME,
+  clearSessionCookieOptions,
+} from "./lib/auth";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/yetkisiz"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/yetkisiz",
+];
 
-function values(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.map(String);
-  }
-  return typeof value === "string" ? [value] : [];
-}
+const rawBackendUrl =
+  process.env.BACKEND_API_URL ??
+  process.env.BACKEND_URL ??
+  "http://127.0.0.1:5155";
+const cleanBackendUrl = rawBackendUrl.replace(/\/+$/, "");
+const apiUrl = cleanBackendUrl.endsWith("/api")
+  ? cleanBackendUrl
+  : `${cleanBackendUrl}/api`;
 
-function tokenAccess(token: string) {
-  try {
-    const part = token.split(".")[1];
-    const base64 = part.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
-    const roles = [
-      ...values(payload.roles),
-      ...values(payload.role),
-      ...values(
-        payload[
-          "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
-        ]
-      ),
-    ];
-    const permissions = [
-      ...values(payload.permissions),
-      ...values(payload.permission),
-    ];
-    return { roles: new Set(roles), permissions: new Set(permissions) };
-  } catch {
-    return { roles: new Set<string>(), permissions: new Set<string>() };
-  }
+type CurrentSession = {
+  roles: string[];
+  permissions: string[];
+};
+
+function isPublicPath(pathname: string) {
+  return PUBLIC_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`)
+  );
 }
 
 function requiredPermission(pathname: string): string | null {
-  if (pathname.startsWith("/sistem-yonetimi")) return "system.users.manage";
+  if (pathname.startsWith("/sistem-yonetimi"))
+    return "system.users.manage";
   if (
     /^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|avanslar)/.test(
       pathname
@@ -48,8 +46,10 @@ function requiredPermission(pathname: string): string | null {
     )
   )
     return "attendance.view";
-  if (pathname.startsWith("/insan-kaynaklari")) return "personnel.view";
-  if (pathname.startsWith("/muhasebe")) return "accounting.view";
+  if (pathname.startsWith("/insan-kaynaklari"))
+    return "personnel.view";
+  if (pathname.startsWith("/muhasebe"))
+    return "accounting.view";
   if (pathname.startsWith("/finans")) return "finance.view";
   if (
     pathname.startsWith("/hakedis") ||
@@ -57,7 +57,8 @@ function requiredPermission(pathname: string): string | null {
     pathname.startsWith("/metrajlar")
   )
     return "hakedis.view";
-  if (pathname.startsWith("/satin-alma")) return "purchasing.view";
+  if (pathname.startsWith("/satin-alma"))
+    return "purchasing.view";
   if (pathname.startsWith("/depo")) return "inventory.view";
   if (
     pathname.startsWith("/muhendislik") ||
@@ -86,33 +87,100 @@ function requiredPermission(pathname: string): string | null {
   return null;
 }
 
-export function middleware(request: NextRequest) {
+async function validateSession(
+  token: string
+): Promise<CurrentSession | null> {
+  try {
+    const response = await fetch(`${apiUrl}/auth/me`, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) return null;
+
+    const session = (await response.json()) as Partial<CurrentSession>;
+    if (
+      !Array.isArray(session.roles) ||
+      !Array.isArray(session.permissions)
+    ) {
+      return null;
+    }
+
+    return {
+      roles: session.roles.map(String),
+      permissions: session.permissions.map(String),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function rejectSession(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    const response = NextResponse.json(
+      { message: "Oturum geçersiz veya süresi dolmuş." },
+      { status: 401 }
+    );
+    response.cookies.set(
+      AUTH_COOKIE_NAME,
+      "",
+      clearSessionCookieOptions
+    );
+    return response;
+  }
+
+  const loginUrl = new URL("/login", request.url);
+  loginUrl.searchParams.set(
+    "returnUrl",
+    request.nextUrl.pathname
+  );
+  const response = NextResponse.redirect(loginUrl);
+  response.cookies.set(
+    AUTH_COOKIE_NAME,
+    "",
+    clearSessionCookieOptions
+  );
+  return response;
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (PUBLIC_PATHS.some((path) => pathname.startsWith(path))) {
+  if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
 
-  const token = request.cookies.get("enderun_token")?.value;
+  const token =
+    request.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return rejectSession(request);
+  }
+
+  const session = await validateSession(token);
+  if (!session) {
+    return rejectSession(request);
   }
 
   const permission = requiredPermission(pathname);
-  if (permission) {
-    const access = tokenAccess(token);
-    if (
-      !access.roles.has("Admin") &&
-      !access.roles.has("Genel Müdür") &&
-      !access.permissions.has(permission)
-    ) {
-      return NextResponse.redirect(new URL("/yetkisiz", request.url));
-    }
+  if (
+    permission &&
+    !session.roles.includes("Admin") &&
+    !session.roles.includes("Genel Müdür") &&
+    !session.permissions.includes(permission)
+  ) {
+    return NextResponse.redirect(
+      new URL("/yetkisiz", request.url)
+    );
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!api/backend|_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!api/backend|_next/static|_next/image|favicon.ico).*)",
+  ],
 };
