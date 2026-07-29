@@ -2,6 +2,8 @@ using EnderunAI.Api.Services.Costing;
 using EnderunAI.Api.Services.DocumentNumbers;
 using EnderunAI.Api.Services.AI;
 using EnderunAI.Api.Services.Accounting;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Data.HumanResources;
@@ -51,6 +53,7 @@ builder.Services.AddScoped<IHrApprovalService, HrApprovalService>();
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
+builder.Services.AddScoped<ISecurityStampValidator, SecurityStampValidator>();
 builder.Services.AddScoped<IUserAuthorizationService, UserAuthorizationService>();
 builder.Services.AddScoped<ICurrentDataScopeService, CurrentDataScopeService>();
 builder.Services.AddScoped<ISecurityAuditService, SecurityAuditService>();
@@ -81,6 +84,8 @@ builder.Services
                 ValidateAudience = true,
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
+                RequireExpirationTime = true,
+                RequireSignedTokens = true,
 
                 ValidIssuer = "EnderunAI",
                 ValidAudience = "EnderunAI.Web",
@@ -90,8 +95,29 @@ builder.Services
                         Encoding.UTF8.GetBytes(jwtSecret)
                     ),
 
-                ClockSkew = TimeSpan.FromMinutes(1),
+                NameClaimType = JwtRegisteredClaimNames.UniqueName,
+                RoleClaimType = ClaimTypes.Role,
+                ClockSkew = TimeSpan.Zero,
             };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var validator = context.HttpContext
+                    .RequestServices
+                    .GetRequiredService<ISecurityStampValidator>();
+                var isValid = await validator.ValidateAsync(
+                    context.Principal!,
+                    context.HttpContext.RequestAborted);
+
+                if (!isValid)
+                {
+                    context.Fail(
+                        "Oturum güvenlik damgası geçersiz.");
+                }
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
