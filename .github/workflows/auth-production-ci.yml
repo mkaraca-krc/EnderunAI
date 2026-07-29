@@ -1,0 +1,120 @@
+name: Authentication Production CI
+
+on:
+  push:
+    branches:
+      - agent/auth-production-ready-20260729
+    paths:
+      - "backend/**"
+      - "frontend/enderun-ai/**"
+      - ".github/workflows/auth-production-ci.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/enderun-ai/**"
+      - ".github/workflows/auth-production-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Restore
+        run: dotnet restore backend/EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj
+      - name: Build
+        run: dotnet build backend/EnderunAI.Api/EnderunAI.Api.csproj --configuration Release --no-restore
+      - name: Authentication tests
+        run: dotnet test backend/EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj --configuration Release --no-restore
+
+  frontend-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend/enderun-ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/enderun-ai/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Start mock backend and frontend
+        env:
+          BACKEND_API_URL: http://127.0.0.1:5155
+          NODE_ENV: production
+        run: |
+          node scripts/mock-auth-backend.mjs > /tmp/mock-auth.log 2>&1 &
+          npm start > /tmp/enderun-auth-frontend.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/login > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mock-auth.log
+          cat /tmp/enderun-auth-frontend.log
+          exit 1
+      - name: Verify authentication scenarios
+        run: |
+          set -euo pipefail
+
+          curl --silent --show-error --dump-header /tmp/login.headers \
+            --output /tmp/login.body \
+            --request POST http://127.0.0.1:3000/api/auth/login \
+            --header 'Content-Type: application/json' \
+            --data '{"username":"valid-user","password":"valid-password"}'
+
+          grep -Eqi '^set-cookie: enderun_token=' /tmp/login.headers
+          grep -Eqi 'HttpOnly' /tmp/login.headers
+          grep -Eqi 'Secure' /tmp/login.headers
+          grep -Eqi 'SameSite=Lax' /tmp/login.headers
+          grep -Eqi 'Path=/' /tmp/login.headers
+          grep -Eqi 'Max-Age=43200' /tmp/login.headers
+          grep -Eqi 'Expires=' /tmp/login.headers
+
+          login_cookie=$(grep -Ei '^set-cookie: enderun_token=' /tmp/login.headers \
+            | head -n 1 | sed -E 's/^set-cookie: ([^;]+).*/\1/I' | tr -d '\r')
+
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cookie "$login_cookie" http://127.0.0.1:3000/dashboard)" = "200"
+
+          test "$(curl --silent --output /tmp/bad-login.body --write-out '%{http_code}' \
+            --request POST http://127.0.0.1:3000/api/auth/login \
+            --header 'Content-Type: application/json' \
+            --data '{"username":"valid-user","password":"wrong"}')" = "401"
+
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            http://127.0.0.1:3000/dashboard)" = "307"
+
+          curl --silent --show-error --dump-header /tmp/expired.headers \
+            --output /dev/null --cookie 'enderun_token=expired' \
+            http://127.0.0.1:3000/dashboard
+          grep -Eqi '^location: .*/login\?returnUrl=%2Fdashboard' /tmp/expired.headers
+          grep -Eqi '^set-cookie: enderun_token=;' /tmp/expired.headers
+          grep -Eqi 'Max-Age=0' /tmp/expired.headers
+
+          curl --silent --show-error --dump-header /tmp/unauthorized.headers \
+            --output /dev/null --cookie 'enderun_token=limited' \
+            http://127.0.0.1:3000/sistem-yonetimi/kullanicilar
+          grep -Eqi '^location: .*/yetkisiz' /tmp/unauthorized.headers
+
+          curl --silent --show-error --dump-header /tmp/logout.headers \
+            --output /tmp/logout.body --request POST \
+            --cookie "$login_cookie" \
+            http://127.0.0.1:3000/api/auth/logout
+          grep -Eqi '^set-cookie: enderun_token=;' /tmp/logout.headers
+          grep -Eqi '^set-cookie: enderun_session=;' /tmp/logout.headers
+          grep -Eqi 'Max-Age=0' /tmp/logout.headers
