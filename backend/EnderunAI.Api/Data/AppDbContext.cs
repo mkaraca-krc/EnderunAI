@@ -13,6 +13,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<CurrentAccount> CurrentAccounts => Set<CurrentAccount>();
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectBoq> ProjectBoqs => Set<ProjectBoq>();
+    public DbSet<ProjectBoqItem> ProjectBoqItems => Set<ProjectBoqItem>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<Personnel> Personnel => Set<Personnel>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
@@ -28,6 +30,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigureBranches(modelBuilder);
         ConfigureCurrentAccounts(modelBuilder);
         ConfigureProjects(modelBuilder);
+        ConfigureProjectBoqs(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigurePersonnel(modelBuilder);
         ConfigurePersonnelAssignments(modelBuilder);
@@ -184,6 +187,115 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany(x => x.EmployerProjects)
                 .HasForeignKey(x => x.EmployerCurrentAccountId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureProjectBoqs(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectBoq>(entity =>
+        {
+            entity.ToTable("project_boqs");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.CompanyId,
+                x.BoqNumber,
+                x.RevisionNumber
+            }).IsUnique();
+
+            entity.HasIndex(x => new
+            {
+                x.ProjectId,
+                x.IsCurrentRevision
+            });
+
+            entity.Property(x => x.BoqNumber)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.Name)
+                .HasMaxLength(300)
+                .IsRequired();
+
+            entity.Property(x => x.CurrencyCode)
+                .HasMaxLength(3)
+                .IsRequired();
+
+            entity.Property(x => x.TotalAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Notes)
+                .HasMaxLength(4000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProjectBoqItem>(entity =>
+        {
+            entity.ToTable("project_boq_items");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.ProjectBoqId,
+                x.LineNumber
+            }).IsUnique();
+
+            entity.HasIndex(x => new
+            {
+                x.ProjectBoqId,
+                x.PositionCode
+            });
+
+            entity.HasIndex(x => x.EngineeringPositionId);
+
+            entity.Property(x => x.PositionCode)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000)
+                .IsRequired();
+
+            entity.Property(x => x.Unit)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.ContractQuantity)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.UnitPrice)
+                .HasPrecision(18, 6);
+
+            entity.Property(x => x.TotalAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.Category)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.Notes)
+                .HasMaxLength(2000);
+
+            entity.HasOne(x => x.ProjectBoq)
+                .WithMany(x => x.Items)
+                .HasForeignKey(x => x.ProjectBoqId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
