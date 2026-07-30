@@ -1,3 +1,4 @@
+using EnderunAI.Api.Services.ProjectBoqs;
 using EnderunAI.Api.Services.AI;
 using System.Text;
 using EnderunAI.Api.Data;
@@ -30,6 +31,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
+builder.Services.AddScoped<IProjectBoqService, ProjectBoqService>();
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
