@@ -23,6 +23,40 @@ public sealed class FinanceDashboardController : ControllerBase
         });
     }
 
+    [HttpGet("financial-dashboard")]
+    public IActionResult FinancialDashboard(
+        [FromQuery] Guid? companyId,
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate)
+    {
+        var now = DateTime.UtcNow;
+
+        return Ok(new
+        {
+            companyId = companyId ?? Guid.Empty,
+            startDate = startDate ?? new DateTime(now.Year, 1, 1),
+            endDate = endDate ?? now,
+            generatedAtUtc = now,
+            summary = new
+            {
+                cashBalance = 0m,
+                bankBalance = 0m,
+                totalLiquidAssets = 0m,
+                receivables = 0m,
+                payables = 0m,
+                todayCollections = 0m,
+                todayPayments = 0m,
+                periodRevenue = 0m,
+                periodExpense = 0m,
+                netProfit = 0m,
+                netLoss = 0m,
+                cashInflow = 0m,
+                cashOutflow = 0m,
+                netCashChange = 0m
+            }
+        });
+    }
+
     [HttpGet("cari-summary")]
     public IActionResult CurrentAccountSummary()
     {

@@ -66,6 +66,12 @@ public sealed class AppDbContext(
     public DbSet<VisitorRecord> VisitorRecords => Set<VisitorRecord>();
     public DbSet<PhoneNote> PhoneNotes => Set<PhoneNote>();
     public DbSet<SecretariatScheduleEntry> SecretariatScheduleEntries => Set<SecretariatScheduleEntry>();
+    public DbSet<PriceDifferenceProfile> PriceDifferenceProfiles => Set<PriceDifferenceProfile>();
+    public DbSet<PriceDifferenceCoefficient> PriceDifferenceCoefficients => Set<PriceDifferenceCoefficient>();
+    public DbSet<PriceDifferenceIndexPeriod> PriceDifferenceIndexPeriods => Set<PriceDifferenceIndexPeriod>();
+    public DbSet<ProjectBoq> ProjectBoqs => Set<ProjectBoq>();
+    public DbSet<ProjectBoqItem> ProjectBoqItems => Set<ProjectBoqItem>();
+    public DbSet<StockReservation> StockReservations => Set<StockReservation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -98,6 +104,9 @@ public sealed class AppDbContext(
         ConfigureOffers(modelBuilder);
         ConfigureOfferItems(modelBuilder);
         ConfigureSecretariat(modelBuilder);
+        ConfigurePriceDifference(modelBuilder);
+        ConfigureProjectBoq(modelBuilder);
+        ConfigureStockReservations(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -1373,5 +1382,153 @@ public sealed class AppDbContext(
         });
     }
 
+    private static void ConfigurePriceDifference(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PriceDifferenceProfile>(entity =>
+        {
+            entity.ToTable("price_difference_profiles");
+            entity.HasKey(x => x.Id);
 
+            entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => new { x.ProjectId, x.IsDefault });
+            entity.HasIndex(x => new { x.ProjectId, x.ProfileName }).IsUnique();
+
+            entity.Property(x => x.ProfileName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.CalculationType).HasConversion<int>();
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.FormulaName).HasMaxLength(250);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Coefficient).WithOne(x => x.PriceDifferenceProfile)
+                .HasForeignKey<PriceDifferenceCoefficient>(x => x.PriceDifferenceProfileId);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<PriceDifferenceCoefficient>(entity =>
+        {
+            entity.ToTable("price_difference_coefficients");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.PriceDifferenceProfileId).IsUnique();
+
+            entity.Property(x => x.A).HasPrecision(18, 8);
+            entity.Property(x => x.B1).HasPrecision(18, 8);
+            entity.Property(x => x.B2).HasPrecision(18, 8);
+            entity.Property(x => x.B3).HasPrecision(18, 8);
+            entity.Property(x => x.B4).HasPrecision(18, 8);
+            entity.Property(x => x.B5).HasPrecision(18, 8);
+            entity.Property(x => x.C).HasPrecision(18, 8);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<PriceDifferenceIndexPeriod>(entity =>
+        {
+            entity.ToTable("price_difference_index_periods");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Year, x.Month, x.SourceName }).IsUnique();
+
+            entity.Property(x => x.SourceName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.PeriodLabel).HasMaxLength(100);
+            entity.Property(x => x.LaborIndex).HasPrecision(18, 8);
+            entity.Property(x => x.FuelIndex).HasPrecision(18, 8);
+            entity.Property(x => x.MaterialIndex).HasPrecision(18, 8);
+            entity.Property(x => x.MachineryIndex).HasPrecision(18, 8);
+            entity.Property(x => x.CementIndex).HasPrecision(18, 8);
+            entity.Property(x => x.OtherIndex).HasPrecision(18, 8);
+            entity.Property(x => x.CopperIndex).HasPrecision(18, 8);
+            entity.Property(x => x.SteelIndex).HasPrecision(18, 8);
+            entity.Property(x => x.ElectricityIndex).HasPrecision(18, 8);
+            entity.Property(x => x.UsdRate).HasPrecision(18, 8);
+            entity.Property(x => x.EurRate).HasPrecision(18, 8);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureProjectBoq(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectBoq>(entity =>
+        {
+            entity.ToTable("project_boqs");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.BoqNumber, x.RevisionNumber }).IsUnique();
+            entity.HasIndex(x => new { x.ProjectId, x.IsCurrentRevision });
+
+            entity.Property(x => x.BoqNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Status).HasConversion<int>();
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+
+            entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProjectBoqItem>(entity =>
+        {
+            entity.ToTable("project_boq_items");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ProjectBoqId, x.LineNumber }).IsUnique();
+            entity.HasIndex(x => new { x.ProjectBoqId, x.PositionCode });
+
+            entity.Property(x => x.PositionCode).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ContractQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 6);
+            entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.ItemType).HasConversion<int>();
+            entity.Property(x => x.Category).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.HasOne(x => x.ProjectBoq).WithMany(x => x.Items)
+                .HasForeignKey(x => x.ProjectBoqId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<EngineeringPosition>().WithMany()
+                .HasForeignKey(x => x.EngineeringPositionId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureStockReservations(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<StockReservation>(entity =>
+        {
+            entity.ToTable("stock_reservations");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.ReservationNumber).IsUnique();
+            entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => x.InventoryItemId);
+            entity.HasIndex(x => x.ProjectId);
+            entity.HasIndex(x => new { x.PurchaseRequestId, x.PurchaseRequestItemId });
+            entity.HasIndex(x => x.PurchaseRequestItemId);
+            entity.HasIndex(x => new { x.WarehouseId, x.InventoryItemId, x.Status });
+
+            entity.Property(x => x.ReservationNumber).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.ReservedQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.ConsumedQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.Status).HasConversion<int>();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.InventoryItem).WithMany().HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.PurchaseRequest).WithMany().HasForeignKey(x => x.PurchaseRequestId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.PurchaseRequestItem).WithMany().HasForeignKey(x => x.PurchaseRequestItemId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
 }

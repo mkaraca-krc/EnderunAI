@@ -17,4 +17,14 @@ public sealed class FinanceAiController : ControllerBase
             warnings = Array.Empty<string>()
         });
     }
+
+    [HttpGet("dashboard")]
+    public IActionResult Dashboard()
+    {
+        return Ok(new
+        {
+            generatedAtUtc = DateTime.UtcNow,
+            items = Array.Empty<object>()
+        });
+    }
 }
