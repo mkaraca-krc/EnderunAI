@@ -19,3 +19,8 @@ public sealed record AssignPersonnelToSiteRequest(
     DateTime? EndDate,
     string? Role,
     string? Notes);
+
+public sealed record CreateSiteWarehouseRequest(
+    string Code,
+    string Name,
+    string? Address);

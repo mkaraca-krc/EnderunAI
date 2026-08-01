@@ -236,6 +236,63 @@ public sealed class ProjectSiteController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{id:guid}/warehouses")]
+    public async Task<IActionResult> CreateWarehouse(
+        Guid id,
+        CreateSiteWarehouseRequest request,
+        CancellationToken cancellationToken)
+    {
+        var site = await db.ProjectSites
+            .Include(x => x.Project)
+            .SingleOrDefaultAsync(x => x.Id == id && x.IsActive, cancellationToken);
+
+        if (site is null)
+            return NotFound(new { message = "Aktif şantiye bulunamadı." });
+
+        if (string.IsNullOrWhiteSpace(request.Code) ||
+            string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest(new { message = "Depo kodu ve adı zorunludur." });
+        }
+
+        var code = request.Code.Trim().ToUpperInvariant();
+
+        var duplicate = await db.Warehouses.AnyAsync(
+            x => x.CompanyId == site.Project.CompanyId && x.Code == code,
+            cancellationToken);
+
+        if (duplicate)
+        {
+            return Conflict(new
+            {
+                message = "Bu şirket için aynı kodda bir depo zaten var."
+            });
+        }
+
+        var warehouse = new Warehouse
+        {
+            CompanyId = site.Project.CompanyId,
+            BranchId = site.Project.BranchId,
+            ProjectId = site.ProjectId,
+            ProjectSiteId = site.Id,
+            Code = code,
+            Name = request.Name.Trim(),
+            Type = WarehouseType.Site,
+            Address = request.Address?.Trim()
+        };
+
+        db.Warehouses.Add(warehouse);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Şantiye deposu oluşturuldu.",
+            warehouse.Id,
+            warehouse.Code,
+            warehouse.Name
+        });
+    }
+
     [HttpGet("{id:guid}/assignable-personnel")]
     public async Task<IActionResult> GetAssignablePersonnel(
         Guid id,

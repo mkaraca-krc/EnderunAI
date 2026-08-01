@@ -78,6 +78,12 @@ export type AssignPersonnelToSiteRequest = {
   notes?: string | null;
 };
 
+export type CreateSiteWarehouseRequest = {
+  code: string;
+  name: string;
+  address?: string | null;
+};
+
 export const projectSiteService = {
   getAll(projectId: string) {
     return apiClient<ProjectSiteListItem[]>(
@@ -121,6 +127,16 @@ export const projectSiteService = {
   assignPersonnel(id: string, payload: AssignPersonnelToSiteRequest) {
     return apiClient<{ message: string; id: string }>(
       `project-sites/${id}/assignments`,
+      {
+        method: "POST",
+        body: payload,
+      }
+    );
+  },
+
+  createWarehouse(id: string, payload: CreateSiteWarehouseRequest) {
+    return apiClient<{ message: string; id: string; code: string; name: string }>(
+      `project-sites/${id}/warehouses`,
       {
         method: "POST",
         body: payload,

@@ -23,6 +23,14 @@ export default function ProjectSiteDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [creatingWarehouse, setCreatingWarehouse] = useState(false);
+  const [warehouseError, setWarehouseError] = useState("");
+  const [warehouseForm, setWarehouseForm] = useState({
+    code: "",
+    name: "",
+    address: "",
+  });
+
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState("");
   const [form, setForm] = useState({
@@ -62,6 +70,38 @@ export default function ProjectSiteDetailPage() {
 
   function update(key: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateWarehouseForm(
+    key: keyof typeof warehouseForm,
+    value: string
+  ) {
+    setWarehouseForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createWarehouse(event: React.FormEvent) {
+    event.preventDefault();
+
+    setCreatingWarehouse(true);
+    setWarehouseError("");
+
+    try {
+      await projectSiteService.createWarehouse(params.siteId, {
+        code: warehouseForm.code,
+        name: warehouseForm.name,
+        address: warehouseForm.address || null,
+      });
+
+      setWarehouseForm({ code: "", name: "", address: "" });
+
+      await load();
+    } catch (err) {
+      setWarehouseError(
+        err instanceof Error ? err.message : "Depo oluşturulamadı."
+      );
+    } finally {
+      setCreatingWarehouse(false);
+    }
   }
 
   async function assign(event: React.FormEvent) {
@@ -149,6 +189,74 @@ export default function ProjectSiteDetailPage() {
               <div><span>Oluşturulma</span><strong>{formatDate(site.createdAtUtc)}</strong></div>
               <div><span>Depo Sayısı</span><strong>{site.warehouses.length}</strong></div>
             </div>
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Şantiye Deposu Ekle</h2>
+                <p>Bu şantiyeye özel bir depo tanımlayın</p>
+              </div>
+            </div>
+
+            {warehouseError && <div className="erp-alert error">{warehouseError}</div>}
+
+            <form className="erp-form-card" onSubmit={createWarehouse}>
+              <div className="erp-form-grid">
+                <label>
+                  <span>Depo Kodu *</span>
+                  <input
+                    className="erp-input"
+                    required
+                    value={warehouseForm.code}
+                    onChange={(e) => updateWarehouseForm("code", e.target.value)}
+                  />
+                </label>
+
+                <label>
+                  <span>Depo Adı *</span>
+                  <input
+                    className="erp-input"
+                    required
+                    value={warehouseForm.name}
+                    onChange={(e) => updateWarehouseForm("name", e.target.value)}
+                  />
+                </label>
+
+                <label>
+                  <span>Adres</span>
+                  <input
+                    className="erp-input"
+                    value={warehouseForm.address}
+                    onChange={(e) => updateWarehouseForm("address", e.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="erp-actions">
+                <button type="submit" disabled={creatingWarehouse}>
+                  {creatingWarehouse ? "Kaydediliyor..." : "Depoyu Kaydet"}
+                </button>
+              </div>
+            </form>
+
+            {site.warehouses.length === 0 ? (
+              <div className="erp-empty-state">
+                Bu şantiyeye ait depo bulunmuyor.
+              </div>
+            ) : (
+              <div className="erp-project-list">
+                {site.warehouses.map((warehouse) => (
+                  <div className="erp-project-list-item" key={warehouse.id}>
+                    <div>
+                      <strong>
+                        {warehouse.code} · {warehouse.name}
+                      </strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="erp-panel erp-mt">
