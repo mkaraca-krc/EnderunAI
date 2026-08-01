@@ -85,6 +85,10 @@ public sealed class AppDbContext(
     public DbSet<HrAssetAssignment> HrAssetAssignments => Set<HrAssetAssignment>();
     public DbSet<ProjectMeasurement> ProjectMeasurements => Set<ProjectMeasurement>();
     public DbSet<ProjectMeasurementItem> ProjectMeasurementItems => Set<ProjectMeasurementItem>();
+    public DbSet<JobPosting> JobPostings => Set<JobPosting>();
+    public DbSet<JobCandidate> JobCandidates => Set<JobCandidate>();
+    public DbSet<JobApplication> JobApplications => Set<JobApplication>();
+    public DbSet<CandidateInterview> CandidateInterviews => Set<CandidateInterview>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -130,6 +134,7 @@ public sealed class AppDbContext(
         ConfigureHrShifts(modelBuilder);
         ConfigureHrAssetAssignments(modelBuilder);
         ConfigureProjectMeasurements(modelBuilder);
+        ConfigureHrRecruitment(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -1854,6 +1859,87 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.ProjectBoqItemId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureHrRecruitment(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<JobPosting>(entity =>
+        {
+            entity.ToTable("hr_job_postings");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.PostingNumber }).IsUnique();
+            entity.Property(x => x.PostingNumber).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.LocationName).HasMaxLength(250);
+            entity.Property(x => x.EmploymentType).HasMaxLength(100);
+            entity.Property(x => x.Description).HasMaxLength(6000).IsRequired();
+            entity.Property(x => x.Requirements).HasMaxLength(6000);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<JobCandidate>(entity =>
+        {
+            entity.ToTable("hr_job_candidates");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Email);
+            entity.HasIndex(x => x.IdentityNumber);
+            entity.Property(x => x.FirstName).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.LastName).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.IdentityNumber).HasMaxLength(50);
+            entity.Property(x => x.PhoneNumber).HasMaxLength(50);
+            entity.Property(x => x.Email).HasMaxLength(250);
+            entity.Property(x => x.City).HasMaxLength(150);
+            entity.Property(x => x.Profession).HasMaxLength(250);
+            entity.Property(x => x.CurrentCompany).HasMaxLength(300);
+            entity.Property(x => x.EducationLevel).HasMaxLength(150);
+            entity.Property(x => x.CvFilePath).HasMaxLength(1000);
+            entity.Property(x => x.Source).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<JobApplication>(entity =>
+        {
+            entity.ToTable("hr_job_applications");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.JobPostingId, x.CandidateId }).IsUnique();
+            entity.Property(x => x.ExpectedSalary).HasPrecision(18, 2);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.EvaluationNote).HasMaxLength(4000);
+
+            entity.HasOne(x => x.JobPosting)
+                .WithMany(x => x.Applications)
+                .HasForeignKey(x => x.JobPostingId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Candidate)
+                .WithMany()
+                .HasForeignKey(x => x.CandidateId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<CandidateInterview>(entity =>
+        {
+            entity.ToTable("hr_candidate_interviews");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.JobApplicationId, x.PlannedAtUtc });
+            entity.Property(x => x.InterviewType).HasMaxLength(100);
+            entity.Property(x => x.LocationOrLink).HasMaxLength(1000);
+            entity.Property(x => x.InterviewerName).HasMaxLength(250);
+            entity.Property(x => x.Score).HasPrecision(8, 2);
+            entity.Property(x => x.Strengths).HasMaxLength(4000);
+            entity.Property(x => x.Weaknesses).HasMaxLength(4000);
+            entity.Property(x => x.EvaluationNote).HasMaxLength(4000);
+
+            entity.HasOne(x => x.JobApplication)
+                .WithMany(x => x.Interviews)
+                .HasForeignKey(x => x.JobApplicationId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
