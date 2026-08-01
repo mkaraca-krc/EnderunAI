@@ -166,35 +166,50 @@ export default function EngineeringCenterPage() {
         </div>
 
         <div className="enderun-project-cards">
-          {modules.map((module) => (
-            <Link
-              href={module.href}
-              className="enderun-project-card"
-              key={module.title}
-            >
-              <div className="enderun-project-card-top">
-                <span
-                  className={
-                    module.status === "Aktif"
-                      ? "erp-status green"
-                      : "erp-status"
-                  }
-                >
-                  {module.status}
-                </span>
+          {modules.map((module) => {
+            const isReady = module.status === "Aktif";
 
-                <span>{module.icon}</span>
+            const content = (
+              <>
+                <div className="enderun-project-card-top">
+                  <span
+                    className={
+                      isReady ? "erp-status green" : "erp-status"
+                    }
+                  >
+                    {module.status}
+                  </span>
+
+                  <span>{module.icon}</span>
+                </div>
+
+                <h3>{module.title}</h3>
+                <p>{module.description}</p>
+
+                <div className="enderun-project-card-meta">
+                  <span>{isReady ? "Modülü Aç" : "Yakında"}</span>
+                  {isReady && <span>→</span>}
+                </div>
+              </>
+            );
+
+            return isReady ? (
+              <Link
+                href={module.href}
+                className="enderun-project-card"
+                key={module.title}
+              >
+                {content}
+              </Link>
+            ) : (
+              <div
+                className="enderun-project-card enderun-project-card-disabled"
+                key={module.title}
+              >
+                {content}
               </div>
-
-              <h3>{module.title}</h3>
-              <p>{module.description}</p>
-
-              <div className="enderun-project-card-meta">
-                <span>Modülü Aç</span>
-                <span>→</span>
-              </div>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       </section>
 
