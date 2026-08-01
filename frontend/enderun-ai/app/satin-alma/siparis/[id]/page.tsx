@@ -23,6 +23,10 @@ import {
   purchaseOrderService,
   type PurchaseOrderDetail,
 } from "@/services/purchase-order.service";
+import {
+  procurementApprovalService,
+  type PurchaseOrderApprovalContext,
+} from "@/services/procurement-approval.service";
 
 import {
   reportService,
@@ -76,6 +80,8 @@ export default function PurchaseOrderDetailPage() {
 
   const [order, setOrder] =
     useState<PurchaseOrderDetail | null>(null);
+  const [approvalContext, setApprovalContext] =
+    useState<PurchaseOrderApprovalContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [downloadingPdf, setDownloadingPdf] =
@@ -90,11 +96,13 @@ export default function PurchaseOrderDetailPage() {
     setError("");
 
     try {
-      const result = await purchaseOrderService.getById(
-        params.id
-      );
+      const [result, approval] = await Promise.all([
+        purchaseOrderService.getById(params.id),
+        procurementApprovalService.getOrderContext(params.id),
+      ]);
 
       setOrder(result);
+      setApprovalContext(approval);
     } catch (err) {
       setError(
         err instanceof Error
@@ -107,6 +115,7 @@ export default function PurchaseOrderDetailPage() {
   }, [params.id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -336,7 +345,8 @@ export default function PurchaseOrderDetailPage() {
                     </Button>
                   )}
 
-                  {order.status === 1 && (
+                  {order.status === 1 &&
+                    approvalContext?.canCurrentUserApprove && (
                     <>
                       <Button
                         loading={processing}
@@ -355,6 +365,16 @@ export default function PurchaseOrderDetailPage() {
                     </>
                   )}
 
+                  {order.status === 1 &&
+                    !approvalContext?.canCurrentUserApprove && (
+                      <Link
+                        href="/satin-alma/butce-onay"
+                        className="inline-flex h-10 items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-4 text-sm font-medium text-amber-800 hover:bg-amber-100"
+                      >
+                        Onay Merkezini Aç
+                      </Link>
+                    )}
+
                   {[0, 1, 6].includes(order.status) && (
                     <Button
                       variant="danger"
@@ -365,10 +385,13 @@ export default function PurchaseOrderDetailPage() {
                     </Button>
                   )}
 
-                  {order.status === 2 && (
-                    <span className="inline-flex h-10 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-medium text-emerald-700">
-                      Depo Kabulüne Hazır
-                    </span>
+                  {[2, 3].includes(order.status) && (
+                    <Link
+                      href={`/depo-stok/mal-kabul/yeni?siparis=${order.id}`}
+                      className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-700 px-4 text-sm font-medium text-white hover:bg-emerald-800"
+                    >
+                      Mal Kabul Oluştur
+                    </Link>
                   )}
 
                   <Button
@@ -436,6 +459,138 @@ export default function PurchaseOrderDetailPage() {
               icon="%"
             />
           </div>
+
+          <Card className="mb-6">
+            <CardHeader>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Bütçe ve Onay Akışı
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Siparişin TRY karşılığı, proje bütçesi ve yetki kademeleri
+                </p>
+              </div>
+              {approvalContext?.budgetAllowsOrder ? (
+                <Badge variant="success">Bütçe Uygun</Badge>
+              ) : (
+                <Badge variant="warning">Kontrol Gerekli</Badge>
+              )}
+            </CardHeader>
+            <CardContent>
+              {approvalContext ? (
+                <>
+                  {approvalContext.warnings.map((warning) => (
+                    <div
+                      key={warning}
+                      className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+                    >
+                      {warning}
+                    </div>
+                  ))}
+
+                  <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-lg border border-slate-200 p-4">
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        TRY Karşılığı
+                      </div>
+                      <div className="mt-2 font-semibold text-slate-900">
+                        {formatMoney(approvalContext.orderAmountTry, "TRY")}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 p-4">
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Proje Bütçesi
+                      </div>
+                      <div className="mt-2 font-semibold text-slate-900">
+                        {approvalContext.budget
+                          ? formatMoney(approvalContext.budget.amountTry, "TRY")
+                          : "Tanımlı değil"}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 p-4">
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Sipariş Sonrası Kalan
+                      </div>
+                      <div className="mt-2 font-semibold text-slate-900">
+                        {approvalContext.budgetRemainingAfterOrderTry != null
+                          ? formatMoney(
+                              approvalContext.budgetRemainingAfterOrderTry,
+                              "TRY",
+                            )
+                          : "—"}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 p-4">
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Sıradaki Adım
+                      </div>
+                      <div className="mt-2 font-semibold text-slate-900">
+                        {approvalContext.currentStageName || "—"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {approvalContext.steps.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Sıra</TableHead>
+                          <TableHead>Onay Kademesi</TableHead>
+                          <TableHead>Gerekli Yetki</TableHead>
+                          <TableHead>Durum</TableHead>
+                          <TableHead>Karar Veren</TableHead>
+                          <TableHead>Tarih</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {approvalContext.steps.map((step) => (
+                          <TableRow key={`${step.sequence}-${step.code}`}>
+                            <TableCell>{step.sequence}</TableCell>
+                            <TableCell>
+                              <strong>{step.name}</strong>
+                            </TableCell>
+                            <TableCell>{step.requiredAuthority}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  step.status === "Approved"
+                                    ? "success"
+                                    : step.status === "Rejected"
+                                      ? "danger"
+                                      : "warning"
+                                }
+                              >
+                                {step.status === "Approved"
+                                  ? "Onaylandı"
+                                  : step.status === "Rejected"
+                                    ? "Reddedildi"
+                                    : "Bekliyor"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {step.decidedByUsername || "—"}
+                            </TableCell>
+                            <TableCell>
+                              {formatDateTime(step.decidedAtUtc)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <EmptyState
+                      title="Onay planı henüz oluşmadı"
+                      description="Şirket onay politikası tanımlandıktan sonra sipariş onaya gönderilebilir."
+                    />
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Bütçe ve onay bilgileri yüklenemedi.
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
           <div className="mb-6 grid gap-6 xl:grid-cols-3">
             <Card className="xl:col-span-2">

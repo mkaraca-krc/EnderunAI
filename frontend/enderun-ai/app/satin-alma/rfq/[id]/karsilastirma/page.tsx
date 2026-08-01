@@ -5,7 +5,7 @@ import {
   useParams,
   useRouter,
 } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import {
   Badge,
@@ -25,7 +25,6 @@ import {
 import {
   rfqService,
   type RfqComparison,
-  type RfqComparisonSupplier,
 } from "@/services/rfq.service";
 
 import {
@@ -47,87 +46,10 @@ function formatNumber(value: number) {
   }).format(value);
 }
 
-function calculateAverage(
-  suppliers: RfqComparisonSupplier[]
-) {
-  const quoted = suppliers.filter(
-    (supplier) => supplier.hasQuotation
-  );
-
-  if (quoted.length === 0) return 0;
-
-  return (
-    quoted.reduce(
-      (total, supplier) => total + supplier.grandTotal,
-      0
-    ) / quoted.length
-  );
-}
-
-function calculateSaving(
-  suppliers: RfqComparisonSupplier[]
-) {
-  const quoted = suppliers
-    .filter((supplier) => supplier.hasQuotation)
-    .sort((a, b) => a.grandTotal - b.grandTotal);
-
-  if (quoted.length < 2) return 0;
-
-  return quoted[1].grandTotal - quoted[0].grandTotal;
-}
-
-function calculateSavingRate(
-  suppliers: RfqComparisonSupplier[]
-) {
-  const quoted = suppliers
-    .filter((supplier) => supplier.hasQuotation)
-    .sort((a, b) => a.grandTotal - b.grandTotal);
-
-  if (quoted.length < 2 || quoted[1].grandTotal === 0) {
-    return 0;
-  }
-
-  return (
-    ((quoted[1].grandTotal - quoted[0].grandTotal) /
-      quoted[1].grandTotal) *
-    100
-  );
-}
-
-function getSupplierScore(
-  supplier: RfqComparisonSupplier,
-  comparison: RfqComparison
-) {
-  if (!supplier.hasQuotation || supplier.grandTotal <= 0) {
-    return 0;
-  }
-
-  let score = 50;
-
-  if (
-    comparison.lowestSupplierId === supplier.rfqSupplierId
-  ) {
-    score += 30;
-  } else if (comparison.lowestTotal > 0) {
-    const differenceRate =
-      ((supplier.grandTotal - comparison.lowestTotal) /
-        comparison.lowestTotal) *
-      100;
-
-    score += Math.max(0, 30 - differenceRate * 2);
-  }
-
-  if (
-    supplier.deliveryDays !== null &&
-    supplier.deliveryDays !== undefined
-  ) {
-    if (supplier.deliveryDays <= 3) score += 20;
-    else if (supplier.deliveryDays <= 7) score += 15;
-    else if (supplier.deliveryDays <= 14) score += 10;
-    else score += 5;
-  }
-
-  return Math.round(Math.min(score, 100));
+function formatPercent(value: number) {
+  return `%${value.toLocaleString("tr-TR", {
+    maximumFractionDigits: 1,
+  })}`;
 }
 
 function scoreLabel(score: number) {
@@ -170,63 +92,47 @@ export default function RfqComparisonPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const load = useCallback(async () => {
-    if (!params.id) return;
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const result = await rfqService.getComparison(params.id);
-      setComparison(result);
-
-      setSelectedSupplierId(
-        result.lowestSupplierId ?? null
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "RFQ karşılaştırması yüklenemedi."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [params.id]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    let active = true;
+
+    async function initialize() {
+      if (!params.id) return;
+
+      setLoading(true);
+      setError("");
+
+      try {
+        const result = await rfqService.getComparison(params.id);
+        if (!active) return;
+
+        setComparison(result);
+        setSelectedSupplierId(
+          result.recommendedSupplierId ?? result.lowestSupplierId ?? null
+        );
+      } catch (err) {
+        if (!active) return;
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "RFQ karşılaştırması yüklenemedi."
+        );
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void initialize();
+    return () => {
+      active = false;
+    };
+  }, [params.id]);
 
   const quotedSuppliers = useMemo(
     () =>
       comparison?.suppliers
         .filter((supplier) => supplier.hasQuotation)
-        .sort((a, b) => a.grandTotal - b.grandTotal) ?? [],
-    [comparison]
-  );
-
-  const averageTotal = useMemo(
-    () =>
-      comparison
-        ? calculateAverage(comparison.suppliers)
-        : 0,
-    [comparison]
-  );
-
-  const savingAmount = useMemo(
-    () =>
-      comparison
-        ? calculateSaving(comparison.suppliers)
-        : 0,
-    [comparison]
-  );
-
-  const savingRate = useMemo(
-    () =>
-      comparison
-        ? calculateSavingRate(comparison.suppliers)
-        : 0,
+        .sort((a, b) => a.rank - b.rank) ?? [],
     [comparison]
   );
 
@@ -464,10 +370,10 @@ export default function RfqComparisonPage() {
 
           <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
-              title="En Düşük Teklif"
+              title="En Düşük Teklif (TRY)"
               value={formatMoney(
-                comparison.lowestTotal,
-                quotedSuppliers[0]?.currency ?? "TRY"
+                comparison.lowestNormalizedTotal,
+                comparison.comparisonCurrency
               )}
               icon="↓"
             />
@@ -475,8 +381,8 @@ export default function RfqComparisonPage() {
             <StatCard
               title="Teklif Ortalaması"
               value={formatMoney(
-                averageTotal,
-                quotedSuppliers[0]?.currency ?? "TRY"
+                comparison.averageNormalizedTotal,
+                comparison.comparisonCurrency
               )}
               icon="∑"
             />
@@ -484,29 +390,22 @@ export default function RfqComparisonPage() {
             <StatCard
               title="İkinci Teklife Göre Tasarruf"
               value={formatMoney(
-                savingAmount,
-                quotedSuppliers[0]?.currency ?? "TRY"
+                comparison.savingVsSecondLowest,
+                comparison.comparisonCurrency
               )}
               icon="₺"
             />
 
             <StatCard
               title="Tasarruf Oranı"
-              value={`%${savingRate.toLocaleString("tr-TR", {
-                maximumFractionDigits: 2,
-              })}`}
+              value={formatPercent(comparison.savingRate)}
               icon="%"
             />
           </div>
 
           <div className="mb-6 grid gap-6 xl:grid-cols-3">
             <div className="grid gap-4 md:grid-cols-2 xl:col-span-2">
-              {quotedSuppliers.map((supplier, index) => {
-                const score = getSupplierScore(
-                  supplier,
-                  comparison
-                );
-
+              {quotedSuppliers.map((supplier) => {
                 const isLowest =
                   comparison.lowestSupplierId ===
                   supplier.rfqSupplierId;
@@ -533,7 +432,7 @@ export default function RfqComparisonPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                          {index + 1}. Teklif
+                          {supplier.rank}. Sıra
                         </span>
 
                         <h3 className="mt-1 text-lg font-semibold text-slate-900">
@@ -541,11 +440,14 @@ export default function RfqComparisonPage() {
                         </h3>
                       </div>
 
-                      {isLowest && (
-                        <Badge variant="success">
-                          En Düşük
-                        </Badge>
-                      )}
+                      <div className="flex flex-col items-end gap-2">
+                        {supplier.isRecommended ? (
+                          <Badge variant="success">Önerilen</Badge>
+                        ) : null}
+                        {isLowest ? (
+                          <Badge variant="info">En Düşük</Badge>
+                        ) : null}
+                      </div>
                     </div>
 
                     <p className="mt-5 text-2xl font-bold text-slate-950">
@@ -553,6 +455,13 @@ export default function RfqComparisonPage() {
                         supplier.grandTotal,
                         supplier.currency
                       )}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      TRY karşılığı: {formatMoney(
+                        supplier.normalizedGrandTotal,
+                        comparison.comparisonCurrency
+                      )} · Kur: {formatNumber(supplier.exchangeRate)}
                     </p>
 
                     <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -583,8 +492,8 @@ export default function RfqComparisonPage() {
                         Değerlendirme
                       </span>
 
-                      <Badge variant={scoreVariant(score)}>
-                        {scoreLabel(score)} · {score}/100
+                      <Badge variant={scoreVariant(supplier.decisionScore)}>
+                        {scoreLabel(supplier.decisionScore)} · {supplier.decisionScore}/100
                       </Badge>
                     </div>
                   </button>
@@ -609,14 +518,12 @@ export default function RfqComparisonPage() {
                   <div>
                     <Badge
                       variant={
-                        comparison.lowestSupplierId ===
-                        selectedSupplier.rfqSupplierId
+                        selectedSupplier.isRecommended
                           ? "success"
                           : "warning"
                       }
                     >
-                      {comparison.lowestSupplierId ===
-                      selectedSupplier.rfqSupplierId
+                      {selectedSupplier.isRecommended
                         ? "Önerilen Tedarikçi"
                         : "Alternatif Tedarikçi"}
                     </Badge>
@@ -634,6 +541,18 @@ export default function RfqComparisonPage() {
                           {formatMoney(
                             selectedSupplier.grandTotal,
                             selectedSupplier.currency
+                          )}
+                        </dd>
+                      </div>
+
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                        <dt className="text-sm text-slate-500">
+                          TRY Karşılığı
+                        </dt>
+                        <dd className="font-semibold text-slate-900">
+                          {formatMoney(
+                            selectedSupplier.normalizedGrandTotal,
+                            comparison.comparisonCurrency
                           )}
                         </dd>
                       </div>
@@ -666,21 +585,41 @@ export default function RfqComparisonPage() {
                         <dd>
                           <Badge
                             variant={scoreVariant(
-                              getSupplierScore(
-                                selectedSupplier,
-                                comparison
-                              )
+                              selectedSupplier.decisionScore
                             )}
                           >
-                            {getSupplierScore(
-                              selectedSupplier,
-                              comparison
-                            )}
-                            /100
+                            {selectedSupplier.decisionScore}/100
                           </Badge>
                         </dd>
                       </div>
                     </dl>
+
+                    <div className="mt-5 grid grid-cols-2 gap-3 text-xs">
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <span className="text-slate-500">Fiyat</span>
+                        <strong className="mt-1 block text-slate-900">
+                          {selectedSupplier.priceScore}/100
+                        </strong>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <span className="text-slate-500">Termin</span>
+                        <strong className="mt-1 block text-slate-900">
+                          {selectedSupplier.deliveryTermScore}/100
+                        </strong>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <span className="text-slate-500">Geçmiş</span>
+                        <strong className="mt-1 block text-slate-900">
+                          {selectedSupplier.historicalPerformanceScore}/100
+                        </strong>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <span className="text-slate-500">Veri Güveni</span>
+                        <strong className="mt-1 block text-slate-900">
+                          {selectedSupplier.confidence}
+                        </strong>
+                      </div>
+                    </div>
 
                     {awardedSupplierId ===
                     selectedSupplier.rfqSupplierId ? (
@@ -844,7 +783,7 @@ export default function RfqComparisonPage() {
                                       (line) =>
                                         line.rfqItemId ===
                                         baseItem.rfqItemId
-                                    )?.totalPrice ?? 0
+                                    )?.normalizedTotalPrice ?? 0
                                 )
                                 .filter((value) => value > 0);
 
@@ -855,8 +794,8 @@ export default function RfqComparisonPage() {
 
                             const isLowestLine =
                               supplierItem &&
-                              supplierItem.totalPrice > 0 &&
-                              supplierItem.totalPrice ===
+                              supplierItem.normalizedTotalPrice > 0 &&
+                              supplierItem.normalizedTotalPrice ===
                                 lowestLineTotal;
 
                             return (
@@ -886,6 +825,13 @@ export default function RfqComparisonPage() {
                                       {formatMoney(
                                         supplierItem.netUnitPrice,
                                         supplier.currency
+                                      )}
+                                    </span>
+
+                                    <span className="mt-1 block text-xs text-slate-500">
+                                      TRY: {formatMoney(
+                                        supplierItem.normalizedTotalPrice,
+                                        comparison.comparisonCurrency
                                       )}
                                     </span>
 
@@ -929,6 +875,12 @@ export default function RfqComparisonPage() {
                               supplier.currency
                             )}
                           </strong>
+                          <span className="mt-1 block text-xs text-slate-500">
+                            TRY: {formatMoney(
+                              supplier.normalizedGrandTotal,
+                              comparison.comparisonCurrency
+                            )}
+                          </span>
                         </TableCell>
                       ))}
                     </TableRow>

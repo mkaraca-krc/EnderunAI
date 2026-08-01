@@ -4,6 +4,7 @@ export type SalaryDefinition = {
   id: string;
   companyId: string;
   personnelId: string;
+  employmentStartDate?: string | null;
   effectiveStartDate: string;
   effectiveEndDate?: string | null;
   grossSalary: number;

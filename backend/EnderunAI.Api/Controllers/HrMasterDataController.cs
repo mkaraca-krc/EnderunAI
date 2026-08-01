@@ -42,7 +42,26 @@ public sealed class HrSalaryDefinitionsController(
             .ThenByDescending(x => x.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return Ok(items);
+        var personnelIds = items
+            .Select(x => x.PersonnelId)
+            .Distinct()
+            .ToArray();
+        var personnelEmploymentDates = await appDb.Personnel
+            .AsNoTracking()
+            .Where(x => personnelIds.Contains(x.Id))
+            .Select(x => new
+            {
+                x.Id,
+                x.EmploymentStartDate
+            })
+            .ToDictionaryAsync(
+                x => x.Id,
+                x => x.EmploymentStartDate,
+                cancellationToken);
+
+        return Ok(items.Select(x => ToSalaryDefinitionResponse(
+            x,
+            personnelEmploymentDates.GetValueOrDefault(x.PersonnelId))));
     }
 
     [HttpPost]
@@ -81,7 +100,11 @@ public sealed class HrSalaryDefinitionsController(
         hrDb.SalaryDefinitions.Add(item);
         await hrDb.SaveChangesAsync(cancellationToken);
 
-        return Ok(item);
+        var employmentStartDate = await GetEmploymentStartDateAsync(
+            item.PersonnelId,
+            cancellationToken);
+
+        return Ok(ToSalaryDefinitionResponse(item, employmentStartDate));
     }
 
     [HttpPut("{id:guid}")]
@@ -121,7 +144,12 @@ public sealed class HrSalaryDefinitionsController(
         item.UpdatedAtUtc = DateTime.UtcNow;
 
         await hrDb.SaveChangesAsync(cancellationToken);
-        return Ok(item);
+
+        var employmentStartDate = await GetEmploymentStartDateAsync(
+            item.PersonnelId,
+            cancellationToken);
+
+        return Ok(ToSalaryDefinitionResponse(item, employmentStartDate));
     }
 
     [HttpDelete("{id:guid}")]
@@ -201,6 +229,40 @@ public sealed class HrSalaryDefinitionsController(
 
     private static string? NormalizeText(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private async Task<DateTime?> GetEmploymentStartDateAsync(
+        Guid personnelId,
+        CancellationToken cancellationToken) =>
+        await appDb.Personnel
+            .AsNoTracking()
+            .Where(x => x.Id == personnelId)
+            .Select(x => x.EmploymentStartDate)
+            .SingleOrDefaultAsync(cancellationToken);
+
+    private static object ToSalaryDefinitionResponse(
+        HrSalaryDefinition item,
+        DateTime? employmentStartDate) =>
+        new
+        {
+            item.Id,
+            item.CompanyId,
+            item.PersonnelId,
+            EmploymentStartDate = employmentStartDate,
+            item.EffectiveStartDate,
+            item.EffectiveEndDate,
+            item.GrossSalary,
+            item.NetSalary,
+            item.DailyRate,
+            item.HourlyRate,
+            item.OvertimeMultiplier,
+            item.SundayMultiplier,
+            item.PublicHolidayMultiplier,
+            item.CurrencyCode,
+            item.Description,
+            item.IsActive,
+            item.CreatedAtUtc,
+            item.UpdatedAtUtc
+        };
 
     private static DateTime UtcDate(DateTime value) =>
         DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);

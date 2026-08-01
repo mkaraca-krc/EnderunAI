@@ -134,7 +134,7 @@ export default function GoodsReceiptListPage() {
         </div>
 
         <Link
-          href="/satin-alma/siparisler"
+          href="/satin-alma/siparis"
           className="inline-flex items-center justify-center rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
           Satın Alma Siparişleri

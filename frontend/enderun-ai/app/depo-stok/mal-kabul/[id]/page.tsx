@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   goodsReceiptService,
   type GoodsReceiptDetail,
+  type GoodsReceiptInventoryOption,
   type GoodsReceiptItem,
+  type UpdateGoodsReceiptItemRequest,
 } from "@/services/goods-receipt.service";
 
 const statusLabels: Record<number, string> = {
@@ -61,12 +63,19 @@ function formatMoney(value?: number | null) {
 
 export default function GoodsReceiptDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
 
   const [receipt, setReceipt] =
     useState<GoodsReceiptDetail | null>(null);
+  const [draftItems, setDraftItems] = useState<
+    UpdateGoodsReceiptItemRequest[]
+  >([]);
+  const [inventoryOptions, setInventoryOptions] = useState<
+    GoodsReceiptInventoryOption[]
+  >([]);
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const id = params?.id;
 
@@ -83,6 +92,35 @@ export default function GoodsReceiptDetailPage() {
 
       const data = await goodsReceiptService.getById(id);
       setReceipt(data);
+      setDraftItems(
+        data.items.map((item) => ({
+          id: item.id,
+          inventoryItemId: item.inventoryItemId,
+          deliveredQuantity: item.deliveredQuantity,
+          acceptedQuantity: item.acceptedQuantity,
+          rejectedQuantity: item.rejectedQuantity,
+          damagedQuantity: item.damagedQuantity,
+          lotNumber: item.lotNumber,
+          serialNumber: item.serialNumber,
+          productionDate: item.productionDate,
+          expiryDate: item.expiryDate,
+          warrantyEndDate: item.warrantyEndDate,
+          shelfLocation: item.shelfLocation,
+          notes: item.notes,
+        })),
+      );
+
+      if (data.status === 0) {
+        try {
+          const options =
+            await goodsReceiptService.getInventoryOptions(data.id);
+          setInventoryOptions(options);
+        } catch {
+          setInventoryOptions([]);
+        }
+      } else {
+        setInventoryOptions([]);
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -95,12 +133,14 @@ export default function GoodsReceiptDetailPage() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadReceipt();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const totals = useMemo(() => {
-    const items = receipt?.items ?? [];
+    const items =
+      receipt?.status === 0 ? draftItems : (receipt?.items ?? []);
 
     return {
       delivered: items.reduce(
@@ -121,7 +161,160 @@ export default function GoodsReceiptDetailPage() {
       ),
       lines: items.length,
     };
-  }, [receipt]);
+  }, [draftItems, receipt]);
+
+  function updateDraftItem(
+    itemId: string,
+    patch: Partial<UpdateGoodsReceiptItemRequest>,
+  ) {
+    setDraftItems((items) =>
+      items.map((item) =>
+        item.id === itemId ? { ...item, ...patch } : item,
+      ),
+    );
+  }
+
+  function validateDraft(requireAcceptedStock: boolean) {
+    if (!receipt) return "Mal kabul kaydı bulunamadı.";
+
+    for (const draft of draftItems) {
+      const item = receipt.items.find((value) => value.id === draft.id);
+      if (!item) return "Mal kabul kalemleri kayıtla uyuşmuyor.";
+
+      if (
+        draft.deliveredQuantity < 0 ||
+        draft.acceptedQuantity < 0 ||
+        draft.rejectedQuantity < 0 ||
+        draft.damagedQuantity < 0
+      ) {
+        return `${item.lineNumber}. kalemde miktarlar negatif olamaz.`;
+      }
+
+      const distributed =
+        draft.acceptedQuantity +
+        draft.rejectedQuantity +
+        draft.damagedQuantity;
+      if (Math.abs(distributed - draft.deliveredQuantity) > 0.00001) {
+        return `${item.lineNumber}. kalemde kabul, red ve hasarlı toplamı teslim miktarına eşit olmalıdır.`;
+      }
+
+      if (
+        draft.deliveredQuantity >
+        item.orderedQuantity - item.previouslyReceivedQuantity
+      ) {
+        return `${item.lineNumber}. kalemde teslim miktarı siparişin kalan miktarını aşıyor.`;
+      }
+
+      if (
+        requireAcceptedStock &&
+        draft.acceptedQuantity > 0 &&
+        !draft.inventoryItemId
+      ) {
+        return `${item.lineNumber}. kalemde kabul edilen miktar için stok kartı seçilmelidir.`;
+      }
+    }
+
+    if (
+      requireAcceptedStock &&
+      !draftItems.some((item) => item.acceptedQuantity > 0)
+    ) {
+      return "Stok kaydı için en az bir kalemde kabul edilen miktar olmalıdır.";
+    }
+
+    return "";
+  }
+
+  async function saveDraft() {
+    if (!receipt) return;
+    const validationError = validateDraft(false);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    try {
+      setProcessing(true);
+      setError("");
+      setSuccess("");
+      const result = await goodsReceiptService.updateDraft(
+        receipt.id,
+        draftItems,
+      );
+      setSuccess(result.message);
+      await loadReceipt();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Mal kabul taslağı kaydedilemedi.",
+      );
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  async function postReceipt() {
+    if (!receipt) return;
+    const validationError = validateDraft(true);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    if (
+      !window.confirm(
+        "Kabul edilen miktarlar depo stoklarına işlensin mi? Bu işlem geri alınamaz.",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setProcessing(true);
+      setError("");
+      setSuccess("");
+      await goodsReceiptService.updateDraft(receipt.id, draftItems);
+      const result = await goodsReceiptService.post(receipt.id);
+      setSuccess(result.message);
+      await loadReceipt();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Mal kabul stoklara işlenemedi.",
+      );
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  async function cancelReceipt() {
+    if (!receipt) return;
+    const reason = window.prompt("İptal nedenini yazın:")?.trim() ?? "";
+    if (!reason) {
+      setError("İptal nedeni zorunludur.");
+      return;
+    }
+
+    if (!window.confirm("Mal kabul taslağı iptal edilsin mi?")) return;
+
+    try {
+      setProcessing(true);
+      setError("");
+      setSuccess("");
+      const result = await goodsReceiptService.cancel(receipt.id, reason);
+      setSuccess(result.message);
+      await loadReceipt();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Mal kabul taslağı iptal edilemedi.",
+      );
+    } finally {
+      setProcessing(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -133,7 +326,7 @@ export default function GoodsReceiptDetailPage() {
     );
   }
 
-  if (error || !receipt) {
+  if (!receipt) {
     return (
       <div className="space-y-4 p-6">
         <Link
@@ -191,7 +384,7 @@ export default function GoodsReceiptDetailPage() {
 
         <div className="flex flex-wrap gap-2">
           <Link
-            href={`/satin-alma/siparisler/${receipt.purchaseOrderId}`}
+            href={`/satin-alma/siparis/${receipt.purchaseOrderId}`}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Siparişi Aç
@@ -199,7 +392,8 @@ export default function GoodsReceiptDetailPage() {
 
           <button
             type="button"
-            onClick={() => router.refresh()}
+            onClick={() => void loadReceipt()}
+            disabled={processing}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Yenile
@@ -215,20 +409,53 @@ export default function GoodsReceiptDetailPage() {
           ) : null}
 
           {receipt.status === 0 ? (
-            <span
-              title="Stok kaydı işlemi sonraki aşamada aktif edilecek."
-              className="cursor-not-allowed rounded-lg bg-slate-300 px-4 py-2 text-sm font-medium text-slate-600"
-            >
-              Stok Kaydı Yap
-            </span>
+            <>
+              <button
+                type="button"
+                onClick={() => void saveDraft()}
+                disabled={processing}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Taslağı Kaydet
+              </button>
+              <button
+                type="button"
+                onClick={() => void postReceipt()}
+                disabled={processing}
+                className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {processing ? "İşleniyor..." : "Stok Kaydı Yap"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void cancelReceipt()}
+                disabled={processing}
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                İptal Et
+              </button>
+            </>
           ) : null}
         </div>
       </div>
 
+      {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      {success ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          {success}
+        </div>
+      ) : null}
+
       {receipt.status === 0 ? (
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-          Bu kayıt taslak durumundadır. Kabul, red, hasarlı miktar ve
-          stok giriş işlemleri bir sonraki aşamada aktif edilecektir.
+          Stok kartlarını bağlayın; teslim, kabul, red ve hasarlı miktarları
+          doğrulayın. “Stok Kaydı Yap” işlemi kabul edilen miktarları depoya
+          ekler ve sipariş teslim durumunu günceller.
         </div>
       ) : null}
 
@@ -309,13 +536,9 @@ export default function GoodsReceiptDetailPage() {
               <p className="mt-1 text-sm text-emerald-700">
                 Bu Mal Kabul için otomatik muhasebe fişi oluşturuldu.
               </p>
-            ) : receipt.status === 0 ? (
-              <p className="mt-1 text-sm text-amber-700">
-                Muhasebe fişi Mal Kabul post edildiğinde otomatik oluşacaktır.
-              </p>
             ) : (
-              <p className="mt-1 text-sm text-red-700">
-                Mal Kabul post edilmiş ancak bağlı muhasebe fişi bulunamadı.
+              <p className="mt-1 text-sm text-slate-600">
+                Bu Mal Kabul kaydına bağlı muhasebe fişi bulunmuyor.
               </p>
             )}
           </div>
@@ -324,16 +547,12 @@ export default function GoodsReceiptDetailPage() {
             className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-medium ${
               receipt.accountingVoucherId
                 ? "bg-emerald-100 text-emerald-800"
-                : receipt.status === 0
-                  ? "bg-amber-100 text-amber-800"
-                  : "bg-red-100 text-red-800"
+                : "bg-slate-100 text-slate-700"
             }`}
           >
             {receipt.accountingVoucherId
               ? "Muhasebeleştirildi"
-              : receipt.status === 0
-                ? "Bekliyor"
-                : "Fiş Bulunamadı"}
+              : "Bağlı Fiş Yok"}
           </span>
         </div>
 
@@ -487,6 +706,26 @@ export default function GoodsReceiptDetailPage() {
                     Mal Kabul kalemi bulunamadı.
                   </td>
                 </tr>
+              ) : receipt.status === 0 ? (
+                receipt.items
+                  .slice()
+                  .sort((a, b) => a.lineNumber - b.lineNumber)
+                  .map((item) => {
+                    const draft = draftItems.find(
+                      (value) => value.id === item.id,
+                    );
+                    return draft ? (
+                      <DraftGoodsReceiptItemRow
+                        key={item.id}
+                        item={item}
+                        draft={draft}
+                        inventoryOptions={inventoryOptions}
+                        onChange={(patch) =>
+                          updateDraftItem(item.id, patch)
+                        }
+                      />
+                    ) : null;
+                  })
               ) : (
                 receipt.items
                   .slice()
@@ -506,6 +745,169 @@ export default function GoodsReceiptDetailPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function DraftGoodsReceiptItemRow({
+  item,
+  draft,
+  inventoryOptions,
+  onChange,
+}: {
+  item: GoodsReceiptItem;
+  draft: UpdateGoodsReceiptItemRequest;
+  inventoryOptions: GoodsReceiptInventoryOption[];
+  onChange: (patch: Partial<UpdateGoodsReceiptItemRequest>) => void;
+}) {
+  const difference =
+    draft.deliveredQuantity -
+    draft.acceptedQuantity -
+    draft.rejectedQuantity -
+    draft.damagedQuantity;
+  const matchingOptions = inventoryOptions.filter(
+    (option) =>
+      option.unit.toLocaleLowerCase("tr-TR") ===
+      item.unit.toLocaleLowerCase("tr-TR"),
+  );
+  const selectedIsMissing =
+    Boolean(draft.inventoryItemId) &&
+    !matchingOptions.some(
+      (option) => option.id === draft.inventoryItemId,
+    );
+
+  return (
+    <tr className="align-top bg-amber-50/30 hover:bg-amber-50/60">
+      <td className="whitespace-nowrap px-4 py-4 font-medium text-slate-900">
+        {item.lineNumber}
+      </td>
+
+      <td className="min-w-72 px-4 py-4">
+        <div className="font-medium text-slate-950">
+          {item.materialDescription}
+        </div>
+        <div className="mt-1 text-xs text-slate-500">
+          {[item.brand, item.model].filter(Boolean).join(" · ") ||
+            "Marka/model belirtilmedi"}
+        </div>
+        {Math.abs(difference) > 0.00001 ? (
+          <div className="mt-2 rounded bg-red-50 px-2 py-1 text-xs text-red-700">
+            Kabul, red ve hasarlı toplamı teslim miktarıyla uyuşmuyor.
+          </div>
+        ) : null}
+      </td>
+
+      <td className="min-w-64 px-4 py-4">
+        <select
+          value={draft.inventoryItemId ?? ""}
+          onChange={(event) =>
+            onChange({ inventoryItemId: event.target.value || null })
+          }
+          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs text-slate-900 outline-none ring-slate-300 focus:ring-2"
+        >
+          <option value="">Stok kartı seçin</option>
+          {selectedIsMissing ? (
+            <option value={draft.inventoryItemId ?? ""}>
+              {item.inventoryItemCode || "Mevcut stok kartı"} · {item.unit}
+            </option>
+          ) : null}
+          {matchingOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.code} · {option.name} · {option.unit}
+            </option>
+          ))}
+        </select>
+        {matchingOptions.length === 0 ? (
+          <p className="mt-1 text-xs text-amber-700">
+            {item.unit} biriminde aktif stok kartı bulunamadı.
+          </p>
+        ) : null}
+      </td>
+
+      <NumberCell value={item.orderedQuantity} unit={item.unit} />
+      <NumberCell
+        value={item.previouslyReceivedQuantity}
+        unit={item.unit}
+      />
+      <EditableNumberCell
+        value={draft.deliveredQuantity}
+        unit={item.unit}
+        onChange={(value) => onChange({ deliveredQuantity: value })}
+      />
+      <EditableNumberCell
+        value={draft.acceptedQuantity}
+        unit={item.unit}
+        onChange={(value) => onChange({ acceptedQuantity: value })}
+        emphasized
+      />
+      <EditableNumberCell
+        value={draft.rejectedQuantity}
+        unit={item.unit}
+        onChange={(value) => onChange({ rejectedQuantity: value })}
+      />
+      <EditableNumberCell
+        value={draft.damagedQuantity}
+        unit={item.unit}
+        onChange={(value) => onChange({ damagedQuantity: value })}
+      />
+
+      <td className="min-w-52 space-y-2 px-4 py-4">
+        <input
+          value={draft.lotNumber ?? ""}
+          onChange={(event) => onChange({ lotNumber: event.target.value })}
+          placeholder="Lot numarası"
+          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs outline-none ring-slate-300 focus:ring-2"
+        />
+        <input
+          value={draft.serialNumber ?? ""}
+          onChange={(event) =>
+            onChange({ serialNumber: event.target.value })
+          }
+          placeholder="Seri numarası"
+          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs outline-none ring-slate-300 focus:ring-2"
+        />
+      </td>
+
+      <td className="min-w-40 px-4 py-4">
+        <input
+          value={draft.shelfLocation ?? ""}
+          onChange={(event) =>
+            onChange({ shelfLocation: event.target.value })
+          }
+          placeholder="Raf konumu"
+          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs outline-none ring-slate-300 focus:ring-2"
+        />
+      </td>
+    </tr>
+  );
+}
+
+function EditableNumberCell({
+  value,
+  unit,
+  onChange,
+  emphasized = false,
+}: {
+  value: number;
+  unit: string;
+  onChange: (value: number) => void;
+  emphasized?: boolean;
+}) {
+  return (
+    <td className="min-w-28 px-3 py-4 text-right">
+      <input
+        type="number"
+        min="0"
+        step="0.0001"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value) || 0)}
+        className={`w-24 rounded-lg border bg-white px-2 py-1.5 text-right text-sm outline-none ring-slate-300 focus:ring-2 ${
+          emphasized
+            ? "border-emerald-300 font-semibold text-emerald-800"
+            : "border-slate-300 text-slate-800"
+        }`}
+      />
+      <div className="mt-1 text-xs text-slate-500">{unit}</div>
+    </td>
   );
 }
 

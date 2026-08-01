@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { apiClient } from "@/lib/api/api-client";
+import { LogoutButton } from "@/components/logout-button";
 
 type ErpShellProps = {
   title: string;
@@ -31,7 +32,7 @@ type CurrentSession = {
   permissions: string[];
 };
 
-function requiredPermissionForPath(pathname: string): string | null {
+function requiredPermissionForPath(pathname: string): string | string[] | null {
   if (pathname.startsWith("/sistem-yonetimi")) return "system.users.manage";
   if (/^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|avanslar)/.test(pathname)) {
     return "payroll.view";
@@ -47,6 +48,9 @@ function requiredPermissionForPath(pathname: string): string | null {
     pathname.startsWith("/fiyat-farki") ||
     pathname.startsWith("/metrajlar")
   ) return "hakedis.view";
+  if (pathname.startsWith("/satin-alma/butce-onay")) {
+    return ["purchasing.view", "finance.view"];
+  }
   if (pathname.startsWith("/satin-alma")) return "purchasing.view";
   if (pathname.startsWith("/depo")) return "inventory.view";
   if (
@@ -184,6 +188,21 @@ const groups: MenuGroup[] = [
         label: "Siparişler",
         href: "/satin-alma/siparis",
         icon: "▤",
+      },
+      {
+        label: "Satın Alma Raporları",
+        href: "/satin-alma/raporlar",
+        icon: "▦",
+      },
+      {
+        label: "Karar Destek",
+        href: "/satin-alma/karar-destek",
+        icon: "★",
+      },
+      {
+        label: "Bütçe ve Onay",
+        href: "/satin-alma/butce-onay",
+        icon: "✓",
       },
       {
         label: "Mal Kabul",
@@ -533,7 +552,12 @@ export default function ErpShell({
         ...group,
         items: group.items.filter((item) => {
           const required = requiredPermissionForPath(item.href);
-          return !required || permissions.has(required);
+          return (
+            !required ||
+            (Array.isArray(required)
+              ? required.some((permission) => permissions.has(permission))
+              : permissions.has(required))
+          );
         }),
       }))
       .filter((group) => group.items.length > 0);
@@ -771,6 +795,7 @@ export default function ErpShell({
               <span>{currentUser?.roles[0] || "Kullanıcı"}</span>
             </div>
           )}
+          <LogoutButton variant="erp" />
           <button
             type="button"
             className="erp-collapse-button"

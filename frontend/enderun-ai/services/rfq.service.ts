@@ -100,8 +100,20 @@ export type RfqComparisonSupplier = {
   hasQuotation: boolean;
   currency: string;
   grandTotal: number;
+  exchangeRate: number;
+  normalizedGrandTotal: number;
   deliveryDays?: number | null;
   paymentTerm?: string | null;
+  priceScore: number;
+  deliveryTermScore: number;
+  historicalPerformanceScore: number;
+  decisionScore: number;
+  rank: number;
+  isRecommended: boolean;
+  responseRate: number;
+  onTimeDeliveryRate: number;
+  qualityRate: number;
+  confidence: string;
   items: {
     rfqItemId: string;
     materialDescription: string;
@@ -113,6 +125,7 @@ export type RfqComparisonSupplier = {
     brand?: string | null;
     model?: string | null;
     deliveryDays?: number | null;
+    normalizedTotalPrice: number;
   }[];
 };
 
@@ -130,6 +143,13 @@ export type RfqComparison = {
   lowestTotal: number;
   lowestSupplierId?: string | null;
   lowestSupplierTitle?: string | null;
+  comparisonCurrency: string;
+  lowestNormalizedTotal: number;
+  averageNormalizedTotal: number;
+  savingVsSecondLowest: number;
+  savingRate: number;
+  recommendedSupplierId?: string | null;
+  recommendedSupplierTitle?: string | null;
   suppliers: RfqComparisonSupplier[];
 };
 

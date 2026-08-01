@@ -1,10 +1,16 @@
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Models.GoodsReceipt;
+using EnderunAI.Api.Models.PurchaseOrder;
+using EnderunAI.Api.Models.Rfq;
 using EnderunAI.Api.Models.Secretariat;
 using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Data;
 
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+
+public sealed class AppDbContext(
+    DbContextOptions<AppDbContext> options)
+    : DbContext(options)
 {
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<AppRole> Roles => Set<AppRole>();
@@ -21,6 +27,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AccountingVoucherLine> AccountingVoucherLines =>
         Set<AccountingVoucherLine>();
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProgressPayment> ProgressPayments => Set<ProgressPayment>();
+    public DbSet<ProgressPaymentItem> ProgressPaymentItems => Set<ProgressPaymentItem>();
+    public DbSet<ProgressPaymentDeduction> ProgressPaymentDeductions => Set<ProgressPaymentDeduction>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<EngineeringPosition> EngineeringPositions => Set<EngineeringPosition>();
     public DbSet<EngineeringRecipe> EngineeringRecipes => Set<EngineeringRecipe>();
@@ -31,6 +40,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
+    public DbSet<Rfq> Rfqs => Set<Rfq>();
+    public DbSet<RfqItem> RfqItems => Set<RfqItem>();
+    public DbSet<RfqSupplier> RfqSuppliers => Set<RfqSupplier>();
+    public DbSet<RfqSupplierQuotation> RfqSupplierQuotations => Set<RfqSupplierQuotation>();
+    public DbSet<RfqSupplierQuotationItem> RfqSupplierQuotationItems => Set<RfqSupplierQuotationItem>();
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+    public DbSet<PurchaseOrderItem> PurchaseOrderItems => Set<PurchaseOrderItem>();
+    public DbSet<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
+    public DbSet<GoodsReceiptItem> GoodsReceiptItems => Set<GoodsReceiptItem>();
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<WarehouseStock> WarehouseStocks => Set<WarehouseStock>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
@@ -53,6 +71,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     {
         base.OnModelCreating(modelBuilder);
 
+        EnderunAI.Api.Data.Configurations.ProcurementModelConfiguration.Configure(modelBuilder);
+
         ConfigureSecurity(modelBuilder);
         ConfigureCompanies(modelBuilder);
         ConfigureBranches(modelBuilder);
@@ -61,6 +81,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigureAccountingVouchers(modelBuilder);
         ConfigureAccountingVoucherLines(modelBuilder);
         ConfigureProjects(modelBuilder);
+        ConfigureProgressPayments(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigureEngineeringPositions(modelBuilder);
         ConfigureEngineeringRecipes(modelBuilder);
@@ -1148,5 +1169,209 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
+
+
+    private static void ConfigureProgressPayments(
+        ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProgressPayment>(entity =>
+        {
+            entity.ToTable("progress_payments");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.CompanyId,
+                x.ProgressPaymentNumber
+            }).IsUnique();
+
+            entity.HasIndex(x => new
+            {
+                x.ProjectId,
+                x.PeriodNumber
+            }).IsUnique();
+
+            entity.HasIndex(x => new
+            {
+                x.CompanyId,
+                x.Status,
+                x.ProgressPaymentDate
+            });
+
+            entity.Property(x => x.ProgressPaymentNumber)
+                .HasMaxLength(80)
+                .IsRequired();
+
+            entity.Property(x => x.ProgressPaymentDate)
+                .HasColumnType("date");
+
+            entity.Property(x => x.PeriodStartDate)
+                .HasColumnType("date");
+
+            entity.Property(x => x.PeriodEndDate)
+                .HasColumnType("date");
+
+            entity.Property(x => x.Status)
+                .HasConversion<int>();
+
+            entity.Property(x => x.CurrencyCode)
+                .HasMaxLength(3)
+                .IsRequired();
+
+            entity.Property(x => x.ContractAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.PreviousAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CurrentAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CumulativeAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.PriceDifferenceAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.VatRate)
+                .HasPrecision(8, 4);
+
+            entity.Property(x => x.VatAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.WithholdingAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.TotalDeductionAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.GrossPayableAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.NetPayableAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Notes)
+                .HasMaxLength(4000);
+
+            entity.Property(x => x.CancellationReason)
+                .HasMaxLength(2000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(x => x.Items)
+                .WithOne(x => x.ProgressPayment)
+                .HasForeignKey(x => x.ProgressPaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.Deductions)
+                .WithOne(x => x.ProgressPayment)
+                .HasForeignKey(x => x.ProgressPaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProgressPaymentItem>(entity =>
+        {
+            entity.ToTable("progress_payment_items");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.ProgressPaymentId,
+                x.LineNumber
+            }).IsUnique();
+
+            entity.Property(x => x.PositionCode)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(1000)
+                .IsRequired();
+
+            entity.Property(x => x.Unit)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.ContractQuantity)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.PreviousQuantity)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.CurrentQuantity)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.CumulativeQuantity)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.UnitPrice)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.PreviousAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CurrentAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CumulativeAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CompletionRate)
+                .HasPrecision(10, 4);
+
+            entity.Property(x => x.MeasurementReference)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.Notes)
+                .HasMaxLength(2000);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProgressPaymentDeduction>(entity =>
+        {
+            entity.ToTable("progress_payment_deductions");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.ProgressPaymentId,
+                x.LineNumber
+            }).IsUnique();
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.Rate)
+                .HasPrecision(10, 4);
+
+            entity.Property(x => x.BaseAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.Amount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.Notes)
+                .HasMaxLength(2000);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
 
 }

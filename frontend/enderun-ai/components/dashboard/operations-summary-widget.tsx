@@ -89,8 +89,8 @@ export default function OperationsSummaryWidget({
           <p>Satın alma ve depo süreç özeti</p>
         </div>
 
-        <Link href="/satin-alma">
-          Satın Alma Merkezi
+        <Link href="/satin-alma/raporlar">
+          Detaylı Rapor
         </Link>
       </div>
 

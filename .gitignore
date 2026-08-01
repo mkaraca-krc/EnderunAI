@@ -60,3 +60,14 @@ frontend/**/components_backup_*/
 frontend/**/*.save
 frontend/**/*~
 frontend/**/*.backup-*
+
+# Deploy script yedekleri ve staging kopyaları
+frontend/*-backup-*/
+frontend/*.previous-*/
+frontend/*-stage-*/
+publish-backup-*/
+publish.previous-*/
+staging/
+*.bak
+*.bak-*
+*.backup-*

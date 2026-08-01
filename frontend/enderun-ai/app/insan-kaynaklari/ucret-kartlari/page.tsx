@@ -107,14 +107,33 @@ function dateValue(
 function parseNumber(
   value: string
 ) {
-  if (!value.trim()) {
+  const cleaned = value
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/[^\d,.-]/g, "");
+
+  if (!cleaned) {
     return 0;
   }
 
+  const commaIndex =
+    cleaned.lastIndexOf(",");
+  const dotIndex =
+    cleaned.lastIndexOf(".");
+  const decimalIndex =
+    Math.max(
+      commaIndex,
+      dotIndex
+    );
+
   const normalized =
-    value
-      .replace(/\./g, "")
-      .replace(",", ".");
+    decimalIndex >= 0
+      ? `${cleaned
+          .slice(0, decimalIndex)
+          .replace(/[.,]/g, "")}.${cleaned
+          .slice(decimalIndex + 1)
+          .replace(/[.,]/g, "")}`
+      : cleaned;
 
   const result =
     Number(normalized);
@@ -122,6 +141,14 @@ function parseNumber(
   return Number.isFinite(result)
     ? result
     : 0;
+}
+
+function decimalInput(
+  value: string
+) {
+  return value
+    .replace(/\s/g, "")
+    .replace(/[^\d.,]/g, "");
 }
 
 function errorMessage(
@@ -235,6 +262,18 @@ export default function SalaryCardsPage() {
       [
         form.companyId,
         personnel,
+      ]
+    );
+
+  const selectedPersonnel =
+    useMemo(
+      () =>
+        personnelMap.get(
+          form.personnelId
+        ),
+      [
+        form.personnelId,
+        personnelMap,
       ]
     );
 
@@ -436,6 +475,11 @@ export default function SalaryCardsPage() {
         companyFilter,
       personnelId:
         firstPerson?.id ?? "",
+      effectiveStartDate:
+        dateValue(
+          firstPerson
+            ?.employmentStartDate
+        ) || today,
     });
 
     setShowForm(true);
@@ -966,7 +1010,7 @@ export default function SalaryCardsPage() {
                 width: "100%",
                 borderCollapse:
                   "collapse",
-                minWidth: "1050px",
+                minWidth: "1160px",
               }}
             >
               <thead>
@@ -978,6 +1022,7 @@ export default function SalaryCardsPage() {
                 >
                   {[
                     "Personel",
+                    "İşe Giriş",
                     "Dönem",
                     "Brüt",
                     "Net",
@@ -1014,7 +1059,7 @@ export default function SalaryCardsPage() {
                     0 && (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={10}
                         style={{
                           padding:
                             "32px",
@@ -1096,6 +1141,22 @@ export default function SalaryCardsPage() {
                               ?.employeeNumber ??
                               record.personnelId}
                           </div>
+                        </td>
+
+                        <td
+                          style={{
+                            padding:
+                              "13px 14px",
+                            borderBottom:
+                              "1px solid #eef2f7",
+                          }}
+                        >
+                          {dateValue(
+                            record
+                              .employmentStartDate ??
+                              employee
+                                ?.employmentStartDate
+                          ) || "—"}
                         </td>
 
                         <td
@@ -1455,6 +1516,8 @@ export default function SalaryCardsPage() {
                             .value,
                         personnelId:
                           "",
+                        effectiveStartDate:
+                          today,
                       })
                     )
                   }
@@ -1507,16 +1570,35 @@ export default function SalaryCardsPage() {
                   }
                   onChange={(
                     event
-                  ) =>
+                  ) => {
+                    const personnelId =
+                      event.target
+                        .value;
+
+                    const employee =
+                      formPersonnel.find(
+                        (item) =>
+                          item.id ===
+                          personnelId
+                      );
+
                     setForm(
                       (current) => ({
                         ...current,
-                        personnelId:
-                          event.target
-                            .value,
+                        personnelId,
+                        effectiveStartDate:
+                          editingId
+                            ? current
+                                .effectiveStartDate
+                            : dateValue(
+                                employee
+                                  ?.employmentStartDate
+                              ) ||
+                              current
+                                .effectiveStartDate,
                       })
                     )
-                  }
+                  }}
                   style={inputStyle}
                 >
                   <option value="">
@@ -1557,7 +1639,43 @@ export default function SalaryCardsPage() {
                     fontWeight: 700,
                   }}
                 >
-                  Başlangıç Tarihi
+                  İşe Giriş Tarihi
+                </span>
+
+                <input
+                  type="date"
+                  readOnly
+                  aria-readonly="true"
+                  value={
+                    dateValue(
+                      selectedPersonnel
+                        ?.employmentStartDate
+                    )
+                  }
+                  placeholder="Personel kartından alınır"
+                  title="Bu tarih personel kartından otomatik alınır."
+                  style={{
+                    ...inputStyle,
+                    background:
+                      "#f1f5f9",
+                    color:
+                      "#475569",
+                    cursor:
+                      "not-allowed",
+                  }}
+                />
+              </label>
+
+              <label>
+                <span
+                  style={{
+                    display: "block",
+                    marginBottom:
+                      "7px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Maaş Geçerlilik Başlangıcı
                 </span>
 
                 <input
@@ -1592,7 +1710,7 @@ export default function SalaryCardsPage() {
                     fontWeight: 700,
                   }}
                 >
-                  Bitiş Tarihi
+                  Maaş Geçerlilik Bitişi
                 </span>
 
                 <input
@@ -1663,9 +1781,10 @@ export default function SalaryCardsPage() {
                     </span>
 
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
+                      pattern="[0-9.,]*"
+                      autoComplete="off"
                       value={
                         form[
                           key as keyof SalaryForm
@@ -1678,9 +1797,11 @@ export default function SalaryCardsPage() {
                           (current) => ({
                             ...current,
                             [key]:
-                              event
-                                .target
-                                .value,
+                              decimalInput(
+                                event
+                                  .target
+                                  .value
+                              ),
                           })
                         )
                       }

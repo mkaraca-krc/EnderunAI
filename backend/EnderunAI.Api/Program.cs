@@ -1,3 +1,4 @@
+using EnderunAI.Api.Data.Interceptors;
 using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Costing;
 using EnderunAI.Api.Services.DocumentNumbers;
@@ -30,10 +31,16 @@ var jwtSecret =
         "JWT_SECRET tanımlı değil."
     );
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    options.UseNpgsql(connectionString);
-});
+builder.Services.AddScoped<AuditSaveChangesInterceptor>();
+
+builder.Services.AddDbContext<AppDbContext>(
+    (serviceProvider, options) =>
+    {
+        options.UseNpgsql(connectionString);
+        options.AddInterceptors(
+            serviceProvider.GetRequiredService<
+                AuditSaveChangesInterceptor>());
+    });
 
 builder.Services.AddDbContext<HrDbContext>(options =>
 {
@@ -93,6 +100,11 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddScoped<IDocumentNumberService, DocumentNumberService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Purchasing.Automation.IPurchaseRequestGenerator, EnderunAI.Api.Services.Purchasing.Automation.PurchaseRequestGenerator>();
+builder.Services.AddScoped<EnderunAI.Api.Security.IUserAuthorizationService, EnderunAI.Api.Security.UserAuthorizationService>();
+builder.Services.AddScoped<EnderunAI.Api.Security.ICurrentDataScopeService, EnderunAI.Api.Security.CurrentDataScopeService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Rfq.IRfqService, EnderunAI.Api.Services.Rfq.RfqService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.PurchaseOrders.IPurchaseOrderService, EnderunAI.Api.Services.PurchaseOrders.PurchaseOrderService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.GoodsReceipts.IGoodsReceiptService, EnderunAI.Api.Services.GoodsReceipts.GoodsReceiptService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -107,13 +119,13 @@ using (var scope = app.Services.CreateScope())
         scope.ServiceProvider
             .GetRequiredService<AppDbContext>();
 
-    await db.Database.MigrateAsync();
+    if (string.Equals(app.Configuration["MigrationRecovery:AllowAutomaticDatabaseUpdate"], "true", StringComparison.OrdinalIgnoreCase)) await db.Database.MigrateAsync();
 
     var hrDb =
         scope.ServiceProvider
             .GetRequiredService<HrDbContext>();
 
-    await hrDb.Database.MigrateAsync();
+    if (string.Equals(app.Configuration["MigrationRecovery:AllowAutomaticDatabaseUpdate"], "true", StringComparison.OrdinalIgnoreCase)) await hrDb.Database.MigrateAsync();
 
     var passwordService =
         scope.ServiceProvider

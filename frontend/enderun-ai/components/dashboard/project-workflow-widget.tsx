@@ -168,7 +168,7 @@ export default function ProjectWorkflowWidget() {
             <QuickCard
               label="Geciken Sipariş"
               value={summary.purchaseOrders.overdueDelivery}
-              href="/satin-alma/siparisler"
+              href="/satin-alma/siparis"
             />
 
             <QuickCard
