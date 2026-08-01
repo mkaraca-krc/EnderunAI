@@ -130,7 +130,11 @@ public sealed class ProcurementDashboardController(
             .SingleOrDefaultAsync(cancellationToken)
             ?? new PurchaseOrderDashboardSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
-        var orderValues = await orderQuery
+        var orderCurrencyRows = await orderQuery
+            .Select(x => new { x.Currency, x.GrandTotal, x.Status })
+            .ToListAsync(cancellationToken);
+
+        var orderValues = orderCurrencyRows
             .GroupBy(x => x.Currency)
             .Select(group => new PurchaseOrderCurrencySummary(
                 group.Key,
@@ -141,12 +145,12 @@ public sealed class ProcurementDashboardController(
                         x.Status == PurchaseOrderStatus.PendingApproval ||
                         x.Status == PurchaseOrderStatus.Approved ||
                         x.Status == PurchaseOrderStatus.PartiallyReceived)
-                    .Sum(x => (decimal?)x.GrandTotal) ?? 0m,
+                    .Sum(x => x.GrandTotal),
                 group
                     .Where(x => x.Status == PurchaseOrderStatus.Completed)
-                    .Sum(x => (decimal?)x.GrandTotal) ?? 0m))
+                    .Sum(x => x.GrandTotal)))
             .OrderBy(x => x.Currency)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var receiptStatuses = await receiptQuery
             .GroupBy(_ => 1)
@@ -175,9 +179,19 @@ public sealed class ProcurementDashboardController(
                 receiptStatuses.Cancelled,
                 exceptionLineCount);
 
-        var receiptQuantities = await receiptQuery
+        var receiptItemRows = await receiptQuery
             .Where(x => x.Status == GoodsReceiptStatus.Posted)
             .SelectMany(x => x.Items)
+            .Select(x => new
+            {
+                x.Unit,
+                x.AcceptedQuantity,
+                x.RejectedQuantity,
+                x.DamagedQuantity
+            })
+            .ToListAsync(cancellationToken);
+
+        var receiptQuantities = receiptItemRows
             .GroupBy(x => x.Unit)
             .Select(group => new GoodsReceiptUnitSummary(
                 group.Key,
@@ -187,7 +201,7 @@ public sealed class ProcurementDashboardController(
                 group.Count(x =>
                     x.RejectedQuantity > 0m || x.DamagedQuantity > 0m)))
             .OrderBy(x => x.Unit)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var recentPurchaseOrders = await orderQuery
             .OrderByDescending(x => x.OrderDate)
