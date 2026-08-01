@@ -26,6 +26,13 @@ import {
   type ProjectSiteListItem,
 } from "@/services/project-site.service";
 
+import {
+  projectCostService,
+  ProjectCostType,
+  projectCostTypeLabels,
+  type ProjectCostBreakdown,
+} from "@/services/project-cost.service";
+
 
 
 
@@ -110,6 +117,18 @@ export default function ProjectCenterPage() {
     useState<ProjectSiteAnalysisResponse | null>(null);
 
   const [sites, setSites] = useState<ProjectSiteListItem[]>([]);
+  const [breakdown, setBreakdown] = useState<ProjectCostBreakdown | null>(null);
+
+  const [costSaving, setCostSaving] = useState(false);
+  const [costError, setCostError] = useState("");
+  const [costForm, setCostForm] = useState({
+    projectSiteId: "",
+    costType: ProjectCostType.Material,
+    costDate: new Date().toISOString().slice(0, 10),
+    amount: 0,
+    description: "",
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -137,11 +156,13 @@ export default function ProjectCenterPage() {
         dailyReportResult,
         siteAnalysisResult,
         sitesResult,
+        breakdownResult,
       ] = await Promise.allSettled([
         projectProfitabilityService.getById(params.id),
         projectDailyReportService.getByProject(params.id),
         projectSiteAnalysisService.getById(params.id),
         projectSiteService.getAll(params.id),
+        projectCostService.getBreakdown(params.id),
       ]);
 
       if (profitabilityResult.status === "fulfilled") {
@@ -184,6 +205,16 @@ export default function ProjectCenterPage() {
         );
       }
 
+      if (breakdownResult.status === "fulfilled") {
+        setBreakdown(breakdownResult.value);
+      } else {
+        setBreakdown(null);
+        console.warn(
+          "Maliyet dağılımı yüklenemedi:",
+          breakdownResult.reason
+        );
+      }
+
       setLoading(false);
     }
 
@@ -191,6 +222,55 @@ export default function ProjectCenterPage() {
       load();
     }
   }, [params.id]);
+
+  async function reloadBreakdown() {
+    try {
+      const result = await projectCostService.getBreakdown(params.id);
+      setBreakdown(result);
+    } catch (err) {
+      console.warn("Maliyet dağılımı yenilenemedi:", err);
+    }
+  }
+
+  function updateCostForm<K extends keyof typeof costForm>(
+    key: K,
+    value: (typeof costForm)[K]
+  ) {
+    setCostForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createCostTransaction(event: React.FormEvent) {
+    event.preventDefault();
+
+    setCostSaving(true);
+    setCostError("");
+
+    try {
+      await projectCostService.create(params.id, {
+        projectSiteId: costForm.projectSiteId || null,
+        costType: costForm.costType,
+        costDate: costForm.costDate,
+        amount: costForm.amount,
+        description: costForm.description,
+      });
+
+      setCostForm({
+        projectSiteId: "",
+        costType: ProjectCostType.Material,
+        costDate: new Date().toISOString().slice(0, 10),
+        amount: 0,
+        description: "",
+      });
+
+      await reloadBreakdown();
+    } catch (err) {
+      setCostError(
+        err instanceof Error ? err.message : "Maliyet kaydı oluşturulamadı."
+      );
+    } finally {
+      setCostSaving(false);
+    }
+  }
 
   return (
     <ErpShell
@@ -330,6 +410,136 @@ export default function ProjectCenterPage() {
                     </span>
                   </Link>
                 ))}
+              </div>
+            )}
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Maliyet Dağılımı</h2>
+                <p>Şantiye harcamaları, ortak giderler ve proje toplamı</p>
+              </div>
+            </div>
+
+            {costError && <div className="erp-alert error">{costError}</div>}
+
+            <form className="erp-form-card" onSubmit={createCostTransaction}>
+              <div className="erp-form-grid">
+                <label>
+                  <span>Şantiye</span>
+                  <select
+                    value={costForm.projectSiteId}
+                    onChange={(e) =>
+                      updateCostForm("projectSiteId", e.target.value)
+                    }
+                  >
+                    <option value="">Ortak / Merkez Gider</option>
+                    {sites.map((site) => (
+                      <option key={site.id} value={site.id}>
+                        {site.code} · {site.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Maliyet Tipi</span>
+                  <select
+                    value={costForm.costType}
+                    onChange={(e) =>
+                      updateCostForm(
+                        "costType",
+                        Number(e.target.value) as ProjectCostType
+                      )
+                    }
+                  >
+                    {Object.entries(projectCostTypeLabels).map(
+                      ([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Tarih *</span>
+                  <input
+                    className="erp-input"
+                    type="date"
+                    required
+                    value={costForm.costDate}
+                    onChange={(e) =>
+                      updateCostForm("costDate", e.target.value)
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Tutar *</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    value={costForm.amount}
+                    onChange={(e) =>
+                      updateCostForm("amount", Number(e.target.value))
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Açıklama *</span>
+                  <input
+                    className="erp-input"
+                    required
+                    value={costForm.description}
+                    onChange={(e) =>
+                      updateCostForm("description", e.target.value)
+                    }
+                  />
+                </label>
+              </div>
+
+              <div className="erp-actions">
+                <button type="submit" disabled={costSaving}>
+                  {costSaving ? "Kaydediliyor..." : "Maliyet Kaydını Ekle"}
+                </button>
+              </div>
+            </form>
+
+            {!breakdown ? (
+              <div className="erp-empty-state">
+                Maliyet dağılımı bulunamadı.
+              </div>
+            ) : (
+              <div className="erp-detail-grid">
+                {breakdown.sites.map((site) => (
+                  <div key={site.id}>
+                    <span>{site.code} · {site.name}</span>
+                    <strong>
+                      {formatMoney(site.amount, project.currencyCode)}
+                    </strong>
+                  </div>
+                ))}
+
+                <div>
+                  <span>Ortak Giderler</span>
+                  <strong>
+                    {formatMoney(breakdown.sharedCost, project.currencyCode)}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Proje Toplamı</span>
+                  <strong>
+                    {formatMoney(breakdown.projectTotal, project.currencyCode)}
+                  </strong>
+                </div>
               </div>
             )}
           </section>

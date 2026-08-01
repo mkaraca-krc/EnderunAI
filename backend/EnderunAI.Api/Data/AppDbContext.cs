@@ -74,6 +74,7 @@ public sealed class AppDbContext(
     public DbSet<StockReservation> StockReservations => Set<StockReservation>();
     public DbSet<ProjectSite> ProjectSites => Set<ProjectSite>();
     public DbSet<ProjectSiteAssignment> ProjectSiteAssignments => Set<ProjectSiteAssignment>();
+    public DbSet<ProjectCostTransaction> ProjectCostTransactions => Set<ProjectCostTransaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -110,6 +111,7 @@ public sealed class AppDbContext(
         ConfigureProjectBoq(modelBuilder);
         ConfigureStockReservations(modelBuilder);
         ConfigureProjectSites(modelBuilder);
+        ConfigureProjectCostTransactions(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -1580,6 +1582,34 @@ public sealed class AppDbContext(
 
             entity.HasOne(x => x.ProjectSite)
                 .WithMany(x => x.Assignments)
+                .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureProjectCostTransactions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectCostTransaction>(entity =>
+        {
+            entity.ToTable("ProjectCostTransactions");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.ProjectId);
+            entity.HasIndex(x => x.ProjectSiteId);
+
+            entity.Property(x => x.CostType).HasConversion<int>();
+            entity.Property(x => x.Description).IsRequired();
+            entity.Property(x => x.ReferenceType);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ProjectSite)
+                .WithMany()
                 .HasForeignKey(x => x.ProjectSiteId)
                 .OnDelete(DeleteBehavior.Restrict);
 
