@@ -42,4 +42,7 @@ public sealed class Personnel : BaseEntity
 
     public ICollection<PersonnelAssignment> Assignments { get; set; }
         = new List<PersonnelAssignment>();
+
+    public ICollection<ProjectSiteAssignment> SiteAssignments { get; set; }
+        = new List<ProjectSiteAssignment>();
 }

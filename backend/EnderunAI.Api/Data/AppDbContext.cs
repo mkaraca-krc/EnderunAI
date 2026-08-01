@@ -72,6 +72,8 @@ public sealed class AppDbContext(
     public DbSet<ProjectBoq> ProjectBoqs => Set<ProjectBoq>();
     public DbSet<ProjectBoqItem> ProjectBoqItems => Set<ProjectBoqItem>();
     public DbSet<StockReservation> StockReservations => Set<StockReservation>();
+    public DbSet<ProjectSite> ProjectSites => Set<ProjectSite>();
+    public DbSet<ProjectSiteAssignment> ProjectSiteAssignments => Set<ProjectSiteAssignment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -107,6 +109,7 @@ public sealed class AppDbContext(
         ConfigurePriceDifference(modelBuilder);
         ConfigureProjectBoq(modelBuilder);
         ConfigureStockReservations(modelBuilder);
+        ConfigureProjectSites(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -480,6 +483,11 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.Project)
                 .WithMany(x => x.Warehouses)
                 .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectSite)
+                .WithMany(x => x.Warehouses)
+                .HasForeignKey(x => x.ProjectSiteId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
@@ -1527,6 +1535,53 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PurchaseRequest).WithMany().HasForeignKey(x => x.PurchaseRequestId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PurchaseRequestItem).WithMany().HasForeignKey(x => x.PurchaseRequestItemId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureProjectSites(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectSite>(entity =>
+        {
+            entity.ToTable("project_sites");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ProjectId, x.Code }).IsUnique();
+
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Location).HasMaxLength(500);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProjectSiteAssignment>(entity =>
+        {
+            entity.ToTable("project_site_assignments");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.PersonnelId, x.IsActive });
+            entity.HasIndex(x => x.ProjectSiteId);
+
+            entity.Property(x => x.Role).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.HasOne(x => x.Personnel)
+                .WithMany(x => x.SiteAssignments)
+                .HasForeignKey(x => x.PersonnelId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectSite)
+                .WithMany(x => x.Assignments)
+                .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

@@ -81,7 +81,22 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
                         a.Role,
                         a.StartDate,
                         a.IsPrimaryAssignment
+                    }),
+                ActiveSiteAssignment = x.SiteAssignments
+                    .Where(a => a.IsActive && !a.IsDeleted && a.EndDate == null)
+                    .Select(a => new
+                    {
+                        a.Id,
+                        a.ProjectSiteId,
+                        SiteCode = a.ProjectSite.Code,
+                        SiteName = a.ProjectSite.Name,
+                        ProjectId = a.ProjectSite.ProjectId,
+                        ProjectCode = a.ProjectSite.Project.Code,
+                        ProjectName = a.ProjectSite.Project.Name,
+                        a.Role,
+                        a.StartDate
                     })
+                    .FirstOrDefault()
             })
             .ToListAsync(cancellationToken);
 
@@ -134,7 +149,22 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
                         a.Notes,
                         a.IsPrimaryAssignment,
                         a.IsActive
+                    }),
+                ActiveSiteAssignment = x.SiteAssignments
+                    .Where(a => a.IsActive && !a.IsDeleted && a.EndDate == null)
+                    .Select(a => new
+                    {
+                        a.Id,
+                        a.ProjectSiteId,
+                        SiteCode = a.ProjectSite.Code,
+                        SiteName = a.ProjectSite.Name,
+                        ProjectId = a.ProjectSite.ProjectId,
+                        ProjectCode = a.ProjectSite.Project.Code,
+                        ProjectName = a.ProjectSite.Project.Name,
+                        a.Role,
+                        a.StartDate
                     })
+                    .FirstOrDefault()
             })
             .SingleOrDefaultAsync(cancellationToken);
 

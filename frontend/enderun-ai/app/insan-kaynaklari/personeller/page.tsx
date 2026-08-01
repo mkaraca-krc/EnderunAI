@@ -121,13 +121,6 @@ function uniqueOptions(values: Array<string | null | undefined>) {
     .map((value) => ({ value, label: value }));
 }
 
-function activeAssignment(item: PersonnelListItem) {
-  return (
-    item.activeAssignments?.find((assignment) => assignment.isPrimaryAssignment) ??
-    item.activeAssignments?.[0]
-  );
-}
-
 function PersonnelShortcuts({ personnelId }: { personnelId: string }) {
   const links = [
     { label: "360°", href: `/insan-kaynaklari/personel-360?personnelId=${personnelId}` },
@@ -559,7 +552,6 @@ export default function HrPersonnelPage() {
       ) : viewMode === "cards" ? (
         <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {filteredItems.map((item) => {
-            const assignment = activeAssignment(item);
             return (
               <Card key={item.id} className="overflow-hidden">
                 <CardContent className="p-0">
@@ -599,7 +591,9 @@ export default function HrPersonnelPage() {
                     <div className="grid grid-cols-[92px_1fr] gap-3">
                       <span className="text-slate-500">Şantiye</span>
                       <strong className="font-medium text-slate-800">
-                        {assignment ? `${assignment.projectCode} · ${assignment.projectName}` : "Atama bekliyor"}
+                        {item.activeSiteAssignment
+                          ? `${item.activeSiteAssignment.siteCode} · ${item.activeSiteAssignment.siteName}`
+                          : "Atama bekliyor"}
                       </strong>
                     </div>
                   </div>
@@ -645,7 +639,6 @@ export default function HrPersonnelPage() {
               </TableHeader>
               <TableBody>
                 {filteredItems.map((item) => {
-                  const assignment = activeAssignment(item);
                   return (
                     <TableRow key={item.id}>
                       <TableCell>
@@ -668,10 +661,10 @@ export default function HrPersonnelPage() {
                         <span className="mt-1 block whitespace-nowrap text-xs text-slate-500">{item.jobTitle || "Pozisyon belirtilmedi"}</span>
                       </TableCell>
                       <TableCell>
-                        {assignment ? (
+                        {item.activeSiteAssignment ? (
                           <>
-                            <span className="block max-w-52 truncate text-slate-800">{assignment.projectName}</span>
-                            <span className="mt-1 block text-xs text-slate-500">{assignment.projectCode}</span>
+                            <span className="block max-w-52 truncate text-slate-800">{item.activeSiteAssignment.siteName}</span>
+                            <span className="mt-1 block text-xs text-slate-500">{item.activeSiteAssignment.siteCode}</span>
                           </>
                         ) : (
                           <Badge variant="warning">Atama bekliyor</Badge>

@@ -12,6 +12,18 @@ export type PersonnelAssignmentItem = {
   isActive?: boolean;
 };
 
+export type PersonnelActiveSiteAssignment = {
+  id: string;
+  projectSiteId: string;
+  siteCode: string;
+  siteName: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  role?: string | null;
+  startDate: string;
+};
+
 export type PersonnelListItem = {
   id: string;
   companyId: string;
@@ -33,6 +45,7 @@ export type PersonnelListItem = {
   status: number;
   isActive: boolean;
   activeAssignments: PersonnelAssignmentItem[];
+  activeSiteAssignment?: PersonnelActiveSiteAssignment | null;
 };
 
 export type PersonnelDetail = PersonnelListItem & {

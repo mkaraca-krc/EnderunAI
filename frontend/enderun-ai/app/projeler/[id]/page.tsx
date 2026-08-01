@@ -21,6 +21,11 @@ import {
   type ProjectSiteAnalysisResponse,
 } from "@/services/project-site-analysis.service";
 
+import {
+  projectSiteService,
+  type ProjectSiteListItem,
+} from "@/services/project-site.service";
+
 
 
 
@@ -103,6 +108,8 @@ export default function ProjectCenterPage() {
 
   const [siteAnalysis, setSiteAnalysis] =
     useState<ProjectSiteAnalysisResponse | null>(null);
+
+  const [sites, setSites] = useState<ProjectSiteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -129,10 +136,12 @@ export default function ProjectCenterPage() {
         profitabilityResult,
         dailyReportResult,
         siteAnalysisResult,
+        sitesResult,
       ] = await Promise.allSettled([
         projectProfitabilityService.getById(params.id),
         projectDailyReportService.getByProject(params.id),
         projectSiteAnalysisService.getById(params.id),
+        projectSiteService.getAll(params.id),
       ]);
 
       if (profitabilityResult.status === "fulfilled") {
@@ -162,6 +171,16 @@ export default function ProjectCenterPage() {
         console.warn(
           "AI şantiye analizi yüklenemedi:",
           siteAnalysisResult.reason
+        );
+      }
+
+      if (sitesResult.status === "fulfilled") {
+        setSites(sitesResult.value);
+      } else {
+        setSites([]);
+        console.warn(
+          "Şantiye listesi yüklenemedi:",
+          sitesResult.reason
         );
       }
 
@@ -267,6 +286,52 @@ export default function ProjectCenterPage() {
                 </strong>
               </div>
             </div>
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Şantiyeler</h2>
+                <p>Proje altındaki lokasyon kırılımı ve depo/personel bağlantıları</p>
+              </div>
+
+              <Link
+                href={`/projeler/${project.id}/santiyeler/yeni`}
+                className="erp-button secondary"
+              >
+                + Yeni Şantiye
+              </Link>
+            </div>
+
+            {sites.length === 0 ? (
+              <div className="erp-empty-state">
+                Henüz şantiye tanımlanmamış.
+              </div>
+            ) : (
+              <div className="erp-project-list">
+                {sites.map((site) => (
+                  <Link
+                    className="erp-project-list-item"
+                    href={`/projeler/${project.id}/santiyeler/${site.id}`}
+                    key={site.id}
+                  >
+                    <div>
+                      <strong>
+                        {site.code} · {site.name}
+                      </strong>
+                      <span>{site.location || "Konum belirtilmedi"}</span>
+                      <span>
+                        {site.assignmentCount} personel · {site.warehouseCount} depo
+                      </span>
+                    </div>
+
+                    <span className={`erp-status ${site.isActive ? "green" : "gray"}`}>
+                      {site.isActive ? "Aktif" : "Pasif"}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="erp-panel erp-mt">
