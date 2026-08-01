@@ -76,6 +76,15 @@ public sealed class AppDbContext(
     public DbSet<ProjectSiteAssignment> ProjectSiteAssignments => Set<ProjectSiteAssignment>();
     public DbSet<ProjectCostTransaction> ProjectCostTransactions => Set<ProjectCostTransaction>();
     public DbSet<HrProjectLaborCost> HrProjectLaborCosts => Set<HrProjectLaborCost>();
+    public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
+    public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+    public DbSet<HrCompensationComponent> HrCompensationComponents => Set<HrCompensationComponent>();
+    public DbSet<HrCareerHistory> HrCareerHistories => Set<HrCareerHistory>();
+    public DbSet<HrShiftDefinition> HrShiftDefinitions => Set<HrShiftDefinition>();
+    public DbSet<HrShiftAssignment> HrShiftAssignments => Set<HrShiftAssignment>();
+    public DbSet<HrAssetAssignment> HrAssetAssignments => Set<HrAssetAssignment>();
+    public DbSet<ProjectMeasurement> ProjectMeasurements => Set<ProjectMeasurement>();
+    public DbSet<ProjectMeasurementItem> ProjectMeasurementItems => Set<ProjectMeasurementItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -114,6 +123,13 @@ public sealed class AppDbContext(
         ConfigureProjectSites(modelBuilder);
         ConfigureProjectCostTransactions(modelBuilder);
         ConfigureHrProjectLaborCosts(modelBuilder);
+        ConfigureWorkTasks(modelBuilder);
+        ConfigureAttendanceRecords(modelBuilder);
+        ConfigureHrCompensationComponents(modelBuilder);
+        ConfigureHrCareerHistories(modelBuilder);
+        ConfigureHrShifts(modelBuilder);
+        ConfigureHrAssetAssignments(modelBuilder);
+        ConfigureProjectMeasurements(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -1650,6 +1666,193 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.ProjectSite)
                 .WithMany()
                 .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureWorkTasks(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<WorkTask>(entity =>
+        {
+            entity.ToTable("WorkTasks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TaskNumber).IsRequired();
+            entity.Property(x => x.Title).IsRequired();
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureAttendanceRecords(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AttendanceRecord>(entity =>
+        {
+            entity.ToTable("attendance_records");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.PersonnelId, x.WorkDate }).IsUnique();
+            entity.HasIndex(x => new { x.PersonnelId, x.Status });
+            entity.HasIndex(x => new { x.ProjectId, x.WorkDate });
+            entity.Property(x => x.NormalHours).HasPrecision(8, 2);
+            entity.Property(x => x.OvertimeHours).HasPrecision(8, 2);
+            entity.Property(x => x.NightShiftHours).HasPrecision(8, 2);
+            entity.Property(x => x.SundayHours).HasPrecision(8, 2);
+            entity.Property(x => x.PublicHolidayHours).HasPrecision(8, 2);
+            entity.Property(x => x.TotalHours).HasPrecision(8, 2);
+            entity.Property(x => x.TeamName).HasMaxLength(200);
+            entity.Property(x => x.RoleName).HasMaxLength(150);
+            entity.Property(x => x.WorkItemCode).HasMaxLength(100);
+            entity.Property(x => x.WorkItemName).HasMaxLength(500);
+            entity.Property(x => x.LocationName).HasMaxLength(300);
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureHrCompensationComponents(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<HrCompensationComponent>(entity =>
+        {
+            entity.ToTable("hr_compensation_components");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PersonnelId, x.IsActive, x.EffectiveStartDate, x.EffectiveEndDate });
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureHrCareerHistories(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<HrCareerHistory>(entity =>
+        {
+            entity.ToTable("hr_career_histories");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PersonnelId, x.EffectiveDate });
+            entity.Property(x => x.ActionType).HasConversion<int>();
+            entity.Property(x => x.PreviousSalary).HasPrecision(18, 2);
+            entity.Property(x => x.NewSalary).HasPrecision(18, 2);
+            entity.Property(x => x.Reason).HasMaxLength(2000);
+            entity.Property(x => x.ApprovedByName).HasMaxLength(250);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureHrShifts(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<HrShiftDefinition>(entity =>
+        {
+            entity.ToTable("hr_shift_definitions");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.BreakHours).HasPrecision(8, 2);
+            entity.Property(x => x.DailyWorkingHours).HasPrecision(8, 2);
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<HrShiftAssignment>(entity =>
+        {
+            entity.ToTable("hr_shift_assignments");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PersonnelId, x.StartDate, x.EndDate });
+            entity.Property(x => x.TeamName).HasMaxLength(200);
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureHrAssetAssignments(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<HrAssetAssignment>(entity =>
+        {
+            entity.ToTable("hr_asset_assignments");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PersonnelId, x.Status });
+            entity.Property(x => x.AssetType).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.AssetCode).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.AssetName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.SerialNumber).HasMaxLength(200);
+            entity.Property(x => x.ConditionAtAssignment).HasMaxLength(2000);
+            entity.Property(x => x.ConditionAtReturn).HasMaxLength(2000);
+            entity.Property(x => x.DocumentPath).HasMaxLength(1000);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.Property(x => x.InventoryQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.IssuedUnitCost).HasPrecision(18, 6);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureProjectMeasurements(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectMeasurement>(entity =>
+        {
+            entity.ToTable("project_measurements");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.MeasurementNumber }).IsUnique();
+            entity.HasIndex(x => x.ProjectBoqId);
+            entity.HasIndex(x => new { x.ProjectId, x.MeasurementDate });
+            entity.Property(x => x.MeasurementNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.CancellationReason).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectBoq)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectBoqId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProjectMeasurementItem>(entity =>
+        {
+            entity.ToTable("project_measurement_items");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.EngineeringPositionId);
+            entity.HasIndex(x => x.ProjectBoqItemId);
+            entity.HasIndex(x => new { x.ProjectMeasurementId, x.LineNumber }).IsUnique();
+            entity.HasIndex(x => new { x.ProjectMeasurementId, x.ProjectBoqItemId }).IsUnique();
+            entity.Property(x => x.PositionCode).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ContractQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.PreviousQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.CurrentQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.CumulativeQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.RemainingQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 4);
+            entity.Property(x => x.CurrentAmount).HasPrecision(18, 2);
+            entity.Property(x => x.CumulativeAmount).HasPrecision(18, 2);
+            entity.Property(x => x.CompletionRate).HasPrecision(8, 4);
+            entity.Property(x => x.MeasurementReference).HasMaxLength(250);
+            entity.Property(x => x.Location).HasMaxLength(250);
+            entity.Property(x => x.Block).HasMaxLength(100);
+            entity.Property(x => x.Floor).HasMaxLength(100);
+            entity.Property(x => x.Room).HasMaxLength(100);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.ProjectMeasurement)
+                .WithMany(x => x.Items)
+                .HasForeignKey(x => x.ProjectMeasurementId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ProjectBoqItem)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectBoqItemId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
