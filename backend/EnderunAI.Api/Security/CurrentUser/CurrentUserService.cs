@@ -47,7 +47,7 @@ public sealed class CurrentUserService(
 
     public IReadOnlyCollection<string> Permissions =>
         Principal?
-            .FindAll("permission")
+            .FindAll("permissions")
             .Select(claim => claim.Value)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray()
