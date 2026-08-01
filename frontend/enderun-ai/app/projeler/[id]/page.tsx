@@ -33,6 +33,16 @@ import {
   type ProjectCostBreakdown,
 } from "@/services/project-cost.service";
 
+import {
+  projectLaborCostService,
+  type ProjectLaborCostBreakdown,
+} from "@/services/project-labor-cost.service";
+
+import {
+  personnelService,
+  type PersonnelListItem,
+} from "@/services/personnel.service";
+
 
 
 
@@ -129,6 +139,23 @@ export default function ProjectCenterPage() {
     description: "",
   });
 
+  const [projectPersonnel, setProjectPersonnel] = useState<PersonnelListItem[]>([]);
+  const [laborBreakdown, setLaborBreakdown] =
+    useState<ProjectLaborCostBreakdown | null>(null);
+
+  const [laborSaving, setLaborSaving] = useState(false);
+  const [laborError, setLaborError] = useState("");
+  const [laborForm, setLaborForm] = useState({
+    personnelId: "",
+    projectSiteId: "",
+    workDate: new Date().toISOString().slice(0, 10),
+    normalHours: 8,
+    overtimeHours: 0,
+    normalCost: 0,
+    overtimeCost: 0,
+    otherCost: 0,
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -157,12 +184,16 @@ export default function ProjectCenterPage() {
         siteAnalysisResult,
         sitesResult,
         breakdownResult,
+        laborBreakdownResult,
+        projectPersonnelResult,
       ] = await Promise.allSettled([
         projectProfitabilityService.getById(params.id),
         projectDailyReportService.getByProject(params.id),
         projectSiteAnalysisService.getById(params.id),
         projectSiteService.getAll(params.id),
         projectCostService.getBreakdown(params.id),
+        projectLaborCostService.getBreakdown(params.id),
+        personnelService.getAll({ projectId: params.id }),
       ]);
 
       if (profitabilityResult.status === "fulfilled") {
@@ -215,6 +246,26 @@ export default function ProjectCenterPage() {
         );
       }
 
+      if (laborBreakdownResult.status === "fulfilled") {
+        setLaborBreakdown(laborBreakdownResult.value);
+      } else {
+        setLaborBreakdown(null);
+        console.warn(
+          "Personel maliyeti dağılımı yüklenemedi:",
+          laborBreakdownResult.reason
+        );
+      }
+
+      if (projectPersonnelResult.status === "fulfilled") {
+        setProjectPersonnel(projectPersonnelResult.value);
+      } else {
+        setProjectPersonnel([]);
+        console.warn(
+          "Proje personeli yüklenemedi:",
+          projectPersonnelResult.reason
+        );
+      }
+
       setLoading(false);
     }
 
@@ -229,6 +280,63 @@ export default function ProjectCenterPage() {
       setBreakdown(result);
     } catch (err) {
       console.warn("Maliyet dağılımı yenilenemedi:", err);
+    }
+  }
+
+  async function reloadLaborBreakdown() {
+    try {
+      const result = await projectLaborCostService.getBreakdown(params.id);
+      setLaborBreakdown(result);
+    } catch (err) {
+      console.warn("Personel maliyeti dağılımı yenilenemedi:", err);
+    }
+  }
+
+  function updateLaborForm<K extends keyof typeof laborForm>(
+    key: K,
+    value: (typeof laborForm)[K]
+  ) {
+    setLaborForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createLaborCost(event: React.FormEvent) {
+    event.preventDefault();
+
+    setLaborSaving(true);
+    setLaborError("");
+
+    try {
+      await projectLaborCostService.create(params.id, {
+        personnelId: laborForm.personnelId,
+        projectSiteId: laborForm.projectSiteId || null,
+        workDate: laborForm.workDate,
+        normalHours: laborForm.normalHours,
+        overtimeHours: laborForm.overtimeHours,
+        normalCost: laborForm.normalCost,
+        overtimeCost: laborForm.overtimeCost,
+        otherCost: laborForm.otherCost,
+      });
+
+      setLaborForm({
+        personnelId: "",
+        projectSiteId: "",
+        workDate: new Date().toISOString().slice(0, 10),
+        normalHours: 8,
+        overtimeHours: 0,
+        normalCost: 0,
+        overtimeCost: 0,
+        otherCost: 0,
+      });
+
+      await reloadLaborBreakdown();
+    } catch (err) {
+      setLaborError(
+        err instanceof Error
+          ? err.message
+          : "Personel maliyet kaydı oluşturulamadı."
+      );
+    } finally {
+      setLaborSaving(false);
     }
   }
 
@@ -538,6 +646,177 @@ export default function ProjectCenterPage() {
                   <span>Proje Toplamı</span>
                   <strong>
                     {formatMoney(breakdown.projectTotal, project.currencyCode)}
+                  </strong>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Personel Maliyeti Dağılımı</h2>
+                <p>Şantiye bazlı işçilik maliyeti, ortak giderler ve proje toplamı</p>
+              </div>
+            </div>
+
+            {laborError && <div className="erp-alert error">{laborError}</div>}
+
+            <form className="erp-form-card" onSubmit={createLaborCost}>
+              <div className="erp-form-grid">
+                <label>
+                  <span>Personel *</span>
+                  <select
+                    required
+                    value={laborForm.personnelId}
+                    onChange={(e) =>
+                      updateLaborForm("personnelId", e.target.value)
+                    }
+                  >
+                    <option value="">Seçin</option>
+                    {projectPersonnel.map((person) => (
+                      <option key={person.id} value={person.id}>
+                        {person.employeeNumber} — {person.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Şantiye</span>
+                  <select
+                    value={laborForm.projectSiteId}
+                    onChange={(e) =>
+                      updateLaborForm("projectSiteId", e.target.value)
+                    }
+                  >
+                    <option value="">Ortak / Merkez Gider</option>
+                    {sites.map((site) => (
+                      <option key={site.id} value={site.id}>
+                        {site.code} · {site.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Tarih *</span>
+                  <input
+                    className="erp-input"
+                    type="date"
+                    required
+                    value={laborForm.workDate}
+                    onChange={(e) =>
+                      updateLaborForm("workDate", e.target.value)
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Normal Saat</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={laborForm.normalHours}
+                    onChange={(e) =>
+                      updateLaborForm("normalHours", Number(e.target.value))
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Fazla Mesai Saat</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={laborForm.overtimeHours}
+                    onChange={(e) =>
+                      updateLaborForm("overtimeHours", Number(e.target.value))
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Normal Maliyet *</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    value={laborForm.normalCost}
+                    onChange={(e) =>
+                      updateLaborForm("normalCost", Number(e.target.value))
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Fazla Mesai Maliyeti</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={laborForm.overtimeCost}
+                    onChange={(e) =>
+                      updateLaborForm("overtimeCost", Number(e.target.value))
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Diğer Giderler</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={laborForm.otherCost}
+                    onChange={(e) =>
+                      updateLaborForm("otherCost", Number(e.target.value))
+                    }
+                  />
+                </label>
+              </div>
+
+              <div className="erp-actions">
+                <button type="submit" disabled={laborSaving}>
+                  {laborSaving ? "Kaydediliyor..." : "Personel Maliyet Kaydı Ekle"}
+                </button>
+              </div>
+            </form>
+
+            {!laborBreakdown ? (
+              <div className="erp-empty-state">
+                Personel maliyeti dağılımı bulunamadı.
+              </div>
+            ) : (
+              <div className="erp-detail-grid">
+                {laborBreakdown.sites.map((site) => (
+                  <div key={site.id}>
+                    <span>{site.code} · {site.name}</span>
+                    <strong>
+                      {formatMoney(site.amount, project.currencyCode)}
+                    </strong>
+                  </div>
+                ))}
+
+                <div>
+                  <span>Ortak Giderler</span>
+                  <strong>
+                    {formatMoney(laborBreakdown.sharedCost, project.currencyCode)}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Proje Toplamı</span>
+                  <strong>
+                    {formatMoney(laborBreakdown.projectTotal, project.currencyCode)}
                   </strong>
                 </div>
               </div>

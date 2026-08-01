@@ -75,6 +75,7 @@ public sealed class AppDbContext(
     public DbSet<ProjectSite> ProjectSites => Set<ProjectSite>();
     public DbSet<ProjectSiteAssignment> ProjectSiteAssignments => Set<ProjectSiteAssignment>();
     public DbSet<ProjectCostTransaction> ProjectCostTransactions => Set<ProjectCostTransaction>();
+    public DbSet<HrProjectLaborCost> HrProjectLaborCosts => Set<HrProjectLaborCost>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -112,6 +113,7 @@ public sealed class AppDbContext(
         ConfigureStockReservations(modelBuilder);
         ConfigureProjectSites(modelBuilder);
         ConfigureProjectCostTransactions(modelBuilder);
+        ConfigureHrProjectLaborCosts(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -1607,6 +1609,43 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ProjectSite)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureHrProjectLaborCosts(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<HrProjectLaborCost>(entity =>
+        {
+            entity.ToTable("hr_project_labor_costs");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ProjectId, x.PersonnelId, x.WorkDate });
+            entity.HasIndex(x => x.ProjectSiteId);
+
+            entity.Property(x => x.WorkItemCode).HasMaxLength(100);
+            entity.Property(x => x.WorkItemName).HasMaxLength(500);
+            entity.Property(x => x.NormalHours).HasPrecision(8, 2);
+            entity.Property(x => x.OvertimeHours).HasPrecision(8, 2);
+            entity.Property(x => x.SundayHours).HasPrecision(8, 2);
+            entity.Property(x => x.PublicHolidayHours).HasPrecision(8, 2);
+            entity.Property(x => x.NormalCost).HasPrecision(18, 2);
+            entity.Property(x => x.OvertimeCost).HasPrecision(18, 2);
+            entity.Property(x => x.SundayCost).HasPrecision(18, 2);
+            entity.Property(x => x.PublicHolidayCost).HasPrecision(18, 2);
+            entity.Property(x => x.MealCost).HasPrecision(18, 2);
+            entity.Property(x => x.AccommodationCost).HasPrecision(18, 2);
+            entity.Property(x => x.ShuttleCost).HasPrecision(18, 2);
+            entity.Property(x => x.OtherCost).HasPrecision(18, 2);
+            entity.Property(x => x.CompensationCost).HasPrecision(18, 2);
+            entity.Property(x => x.TotalLaborCost).HasPrecision(18, 2);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(10).IsRequired();
 
             entity.HasOne(x => x.ProjectSite)
                 .WithMany()
