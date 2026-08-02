@@ -197,7 +197,7 @@ public static class DatabaseSeeder
     }
 
     /// <summary>
-    /// Ofis rolleri hafta içi 08:00-19:00, Cumartesi 09:00-14:00, Pazar
+    /// Ofis rolleri hafta içi 09:00-18:00, Cumartesi 09:00-14:00, Pazar
     /// kapalı. Şantiye Şefi/Formen her gün 07:00-22:00. Admin ve Genel
     /// Müdür için hiç satır eklenmez (WorkHourAccessService içinde her
     /// zaman istisnasız izinlidir). Rol bazında en az bir satır varsa o rol
@@ -232,8 +232,8 @@ public static class DatabaseSeeder
                 {
                     RoleId = roleId,
                     DayOfWeek = day,
-                    StartTime = new TimeOnly(8, 0),
-                    EndTime = new TimeOnly(19, 0)
+                    StartTime = new TimeOnly(9, 0),
+                    EndTime = new TimeOnly(18, 0)
                 });
             }
 
