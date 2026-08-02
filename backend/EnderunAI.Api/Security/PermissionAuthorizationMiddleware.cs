@@ -1,13 +1,13 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using EnderunAI.Api.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Security;
 
 public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
 {
-    public async Task InvokeAsync(HttpContext context, AppDbContext db)
+    public async Task InvokeAsync(
+        HttpContext context,
+        IUserAuthorizationService userAuthorizationService)
     {
         if (context.User.Identity?.IsAuthenticated != true)
         {
@@ -28,21 +28,15 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             context.User.FindFirstValue(JwtRegisteredClaimNames.Sub) ??
             context.User.FindFirstValue("sub");
 
+        IReadOnlyCollection<string> permissions = [];
+
         if (Guid.TryParse(userIdValue, out var userId))
         {
-            var currentUser = await db.Users
-                .AsNoTracking()
-                .Where(user => user.Id == userId)
-                .Select(user => new
-                {
-                    user.IsActive,
-                    RoleNames = user.UserRoles
-                        .Select(userRole => userRole.Role.Name)
-                        .ToArray()
-                })
-                .SingleOrDefaultAsync(context.RequestAborted);
+            var authorization = await userAuthorizationService.GetAsync(
+                userId,
+                context.RequestAborted);
 
-            if (currentUser is null || !currentUser.IsActive)
+            if (authorization is null || !authorization.IsActive)
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 await context.Response.WriteAsJsonAsync(new
@@ -52,7 +46,8 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
                 return;
             }
 
-            roleNames = currentUser.RoleNames;
+            roleNames = authorization.RoleNames.ToArray();
+            permissions = authorization.Permissions;
         }
 
         var requiredPermission = ResolveRequiredPermission(context.Request);
@@ -63,7 +58,7 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
         }
 
         if (roleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase) ||
-            PermissionCatalog.Resolve(roleNames).Contains(requiredPermission))
+            permissions.Contains(requiredPermission, StringComparer.OrdinalIgnoreCase))
         {
             await next(context);
             return;

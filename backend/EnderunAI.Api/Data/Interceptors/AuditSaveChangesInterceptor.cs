@@ -23,7 +23,10 @@ public sealed class AuditSaveChangesInterceptor(
         typeof(PurchaseOrderEntity),
         typeof(PurchaseRequest),
         typeof(AccountingVoucher),
-        typeof(EmployerPortalLink)
+        typeof(EmployerPortalLink),
+        typeof(RolePermission),
+        typeof(UserPermissionOverride),
+        typeof(UserDataScope)
     ];
 
     public override InterceptionResult<int> SavingChanges(
@@ -154,6 +157,9 @@ public sealed class AuditSaveChangesInterceptor(
         PurchaseRequest req => (req.Id, req.RequestNumber),
         AccountingVoucher v => (v.Id, v.VoucherNumber),
         EmployerPortalLink link => (link.Id, link.EmployerEmail ?? link.Token),
+        RolePermission rp => ((Guid?)null, $"RoleId={rp.RoleId} PermissionId={rp.PermissionId}"),
+        UserPermissionOverride upo => (upo.Id, $"UserId={upo.UserId} PermissionId={upo.PermissionId} Effect={upo.Effect}"),
+        UserDataScope uds => (uds.Id, $"UserId={uds.UserId} ScopeType={uds.ScopeType}"),
         _ => (null, null)
     };
 }

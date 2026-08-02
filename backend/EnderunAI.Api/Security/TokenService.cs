@@ -11,7 +11,7 @@ public sealed class TokenService(IConfiguration configuration)
     public string Create(
         AppUser user,
         IEnumerable<string> roles,
-        IEnumerable<string>? permissions = null)
+        IEnumerable<string> permissions)
     {
         var secret = configuration["Jwt:Secret"]
             ?? Environment.GetEnvironmentVariable("JWT_SECRET")
@@ -35,7 +35,7 @@ public sealed class TokenService(IConfiguration configuration)
             claims.Add(new Claim("roles", roleName));
         }
 
-        foreach (var permission in permissions ?? PermissionCatalog.Resolve(roleNames))
+        foreach (var permission in permissions)
         {
             claims.Add(new Claim("permissions", permission));
         }

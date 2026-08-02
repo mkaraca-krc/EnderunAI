@@ -9,7 +9,8 @@ public sealed record CurrentDataScopeSnapshot(
     IReadOnlySet<Guid> BranchIds,
     IReadOnlySet<Guid> ProjectIds,
     IReadOnlySet<Guid> VisibleCompanyIds,
-    IReadOnlySet<Guid> VisibleBranchIds)
+    IReadOnlySet<Guid> VisibleBranchIds,
+    IReadOnlySet<Guid> SiteIds)
 {
     public IQueryable<Company> Apply(IQueryable<Company> query) =>
         HasGlobalAccess
@@ -47,6 +48,17 @@ public sealed record CurrentDataScopeSnapshot(
         CompanyIds.Contains(companyId) ||
         BranchIds.Contains(branchId) ||
         ProjectIds.Contains(projectId);
+
+    public bool CanAccessSite(
+        Guid companyId,
+        Guid branchId,
+        Guid projectId,
+        Guid projectSiteId) =>
+        HasGlobalAccess ||
+        CompanyIds.Contains(companyId) ||
+        BranchIds.Contains(branchId) ||
+        ProjectIds.Contains(projectId) ||
+        SiteIds.Contains(projectSiteId);
 }
 
 public interface ICurrentDataScopeService
@@ -64,6 +76,7 @@ public sealed class CurrentDataScopeService(
     private const int CompanyScope = 1;
     private const int BranchScope = 2;
     private const int ProjectScope = 3;
+    private const int SiteScope = 4;
 
     public async Task<CurrentDataScopeSnapshot?> GetAsync(
         CancellationToken cancellationToken = default)
@@ -111,6 +124,12 @@ public sealed class CurrentDataScopeService(
             authorization.DataScopes
                 .Where(item => item.BranchId.HasValue)
                 .Select(item => item.BranchId!.Value)
+                .ToHashSet(),
+            authorization.DataScopes
+                .Where(item =>
+                    item.ScopeType == SiteScope &&
+                    item.ProjectSiteId.HasValue)
+                .Select(item => item.ProjectSiteId!.Value)
                 .ToHashSet());
     }
 }

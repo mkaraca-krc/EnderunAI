@@ -17,18 +17,30 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/user-management")]
 public sealed class UserManagementController(
     AppDbContext db,
-    PasswordService passwordService) : ControllerBase
+    PasswordService passwordService,
+    IUserAuthorizationService userAuthorizationService) : ControllerBase
 {
     private static readonly Regex UsernamePattern =
         new("^[a-zA-Z0-9._-]+$", RegexOptions.Compiled);
 
+    private sealed record OverrideRow(
+        Guid UserId,
+        string PermissionKey,
+        PermissionOverrideEffect Effect);
+
     [HttpGet("catalog")]
-    public IActionResult GetCatalog()
+    public async Task<IActionResult> GetCatalog(CancellationToken cancellationToken)
     {
+        var roles = await db.Roles
+            .AsNoTracking()
+            .OrderBy(role => role.Name)
+            .Select(role => new { role.Name, role.Description })
+            .ToListAsync(cancellationToken);
+
         return Ok(new
         {
             permissions = PermissionCatalog.Permissions,
-            rolePresets = PermissionCatalog.RolePresets
+            roles
         });
     }
 
@@ -43,7 +55,35 @@ public sealed class UserManagementController(
             .ThenBy(user => user.FullName)
             .ToListAsync(cancellationToken);
 
-        return Ok(users.Select(ToUserResponse));
+        var overridesByUser = await db.UserPermissionOverrides
+            .AsNoTracking()
+            .Where(item => users.Select(u => u.Id).Contains(item.UserId))
+            .Select(item => new OverrideRow(
+                item.UserId,
+                item.Permission.Key,
+                item.Effect))
+            .ToListAsync(cancellationToken);
+
+        var overridesLookup = overridesByUser
+            .GroupBy(item => item.UserId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToArray());
+
+        var responses = new List<object>();
+        foreach (var user in users)
+        {
+            var authorization = await userAuthorizationService.GetAsync(
+                user.Id,
+                cancellationToken);
+
+            responses.Add(ToUserResponse(
+                user,
+                authorization?.Permissions ?? [],
+                overridesLookup.GetValueOrDefault(user.Id, [])));
+        }
+
+        return Ok(responses);
     }
 
     [HttpPost("users")]
@@ -51,12 +91,13 @@ public sealed class UserManagementController(
         CreateManagedUserRequest request,
         CancellationToken cancellationToken)
     {
-        var validation = ValidateUserInput(
+        var validation = await ValidateUserInputAsync(
             request.Username,
             request.FullName,
             request.RoleName,
             request.AllowedPermissions,
-            request.DeniedPermissions);
+            request.DeniedPermissions,
+            cancellationToken);
 
         if (validation is not null)
             return BadRequest(new { message = validation });
@@ -90,7 +131,7 @@ public sealed class UserManagementController(
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
 
-        await SyncUserRolesAsync(
+        await SyncUserRoleAsync(
             user.Id,
             request.RoleName,
             request.AllowedPermissions,
@@ -98,11 +139,14 @@ public sealed class UserManagementController(
             cancellationToken);
 
         var createdUser = await LoadUserAsync(user.Id, cancellationToken);
+        var authorization = await userAuthorizationService.GetAsync(user.Id, cancellationToken);
+        var overrides = await LoadOverridesAsync(user.Id, cancellationToken);
+
         return Ok(new
         {
             message = "Kullanıcı oluşturuldu.",
             temporaryPassword,
-            user = ToUserResponse(createdUser!)
+            user = ToUserResponse(createdUser!, authorization?.Permissions ?? [], overrides)
         });
     }
 
@@ -112,12 +156,13 @@ public sealed class UserManagementController(
         UpdateManagedUserRequest request,
         CancellationToken cancellationToken)
     {
-        var validation = ValidateUserInput(
+        var validation = await ValidateUserInputAsync(
             request.Username,
             request.FullName,
             request.RoleName,
             request.AllowedPermissions,
-            request.DeniedPermissions);
+            request.DeniedPermissions,
+            cancellationToken);
 
         if (validation is not null)
             return BadRequest(new { message = validation });
@@ -166,7 +211,7 @@ public sealed class UserManagementController(
         user.IsActive = request.IsActive;
 
         await db.SaveChangesAsync(cancellationToken);
-        await SyncUserRolesAsync(
+        await SyncUserRoleAsync(
             id,
             request.RoleName,
             request.AllowedPermissions,
@@ -174,10 +219,13 @@ public sealed class UserManagementController(
             cancellationToken);
 
         var updatedUser = await LoadUserAsync(id, cancellationToken);
+        var authorization = await userAuthorizationService.GetAsync(id, cancellationToken);
+        var overrides = await LoadOverridesAsync(id, cancellationToken);
+
         return Ok(new
         {
-            message = "Kullanıcı ve yetkileri güncellendi. Yeni yetkiler sonraki girişte etkinleşir.",
-            user = ToUserResponse(updatedUser!)
+            message = "Kullanıcı ve yetkileri güncellendi. Değişiklikler bir sonraki istekte etkindir.",
+            user = ToUserResponse(updatedUser!, authorization?.Permissions ?? [], overrides)
         });
     }
 
@@ -214,7 +262,10 @@ public sealed class UserManagementController(
         });
     }
 
-    private static object ToUserResponse(AppUser user)
+    private static object ToUserResponse(
+        AppUser user,
+        IReadOnlyCollection<string> effectivePermissions,
+        IReadOnlyCollection<OverrideRow> overrides)
     {
         var roleNames = user.UserRoles
             .Select(userRole => userRole.Role.Name)
@@ -229,20 +280,16 @@ public sealed class UserManagementController(
             user.IsActive,
             user.CreatedAtUtc,
             user.LastLoginAtUtc,
-            roleName = PermissionCatalog.GetPrimaryRole(roleNames) ?? "Rol tanımsız",
-            allowedPermissions = roleNames
-                .Where(name => name.StartsWith(
-                    PermissionCatalog.AllowPrefix,
-                    StringComparison.OrdinalIgnoreCase))
-                .Select(name => name[PermissionCatalog.AllowPrefix.Length..])
+            roleName = roleNames.FirstOrDefault() ?? "Rol tanımsız",
+            allowedPermissions = overrides
+                .Where(item => item.Effect == PermissionOverrideEffect.Allow)
+                .Select(item => item.PermissionKey)
                 .OrderBy(name => name),
-            deniedPermissions = roleNames
-                .Where(name => name.StartsWith(
-                    PermissionCatalog.DenyPrefix,
-                    StringComparison.OrdinalIgnoreCase))
-                .Select(name => name[PermissionCatalog.DenyPrefix.Length..])
+            deniedPermissions = overrides
+                .Where(item => item.Effect == PermissionOverrideEffect.Deny)
+                .Select(item => item.PermissionKey)
                 .OrderBy(name => name),
-            effectivePermissions = PermissionCatalog.Resolve(roleNames).OrderBy(name => name)
+            effectivePermissions = effectivePermissions.OrderBy(name => name)
         };
     }
 
@@ -257,70 +304,76 @@ public sealed class UserManagementController(
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
     }
 
-    private async Task SyncUserRolesAsync(
+    private async Task<List<OverrideRow>> LoadOverridesAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        return await db.UserPermissionOverrides
+            .AsNoTracking()
+            .Where(item => item.UserId == userId)
+            .Select(item => new OverrideRow(
+                item.UserId,
+                item.Permission.Key,
+                item.Effect))
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task SyncUserRoleAsync(
         Guid userId,
         string roleName,
         IEnumerable<string> allowedPermissions,
         IEnumerable<string> deniedPermissions,
         CancellationToken cancellationToken)
     {
-        var allowed = PermissionCatalog.SanitizeOverrides(allowedPermissions);
-        var denied = PermissionCatalog.SanitizeOverrides(deniedPermissions)
-            .Except(allowed, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var desiredRoleNames = new[] { roleName.Trim() }
-            .Concat(allowed.Select(permission =>
-                $"{PermissionCatalog.AllowPrefix}{permission}"))
-            .Concat(denied.Select(permission =>
-                $"{PermissionCatalog.DenyPrefix}{permission}"))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var trimmedRoleName = roleName.Trim();
+        var role = await db.Roles.SingleAsync(
+            item => item.Name == trimmedRoleName,
+            cancellationToken);
 
         await db.UserRoles
             .Where(userRole => userRole.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        var roles = await db.Roles
-            .Where(role => desiredRoleNames.Contains(role.Name))
-            .ToListAsync(cancellationToken);
-
-        var knownRoleNames = roles
-            .Select(role => role.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var missingRoleName in desiredRoleNames.Where(
-                     name => !knownRoleNames.Contains(name)))
-        {
-            var role = new AppRole
-            {
-                Name = missingRoleName,
-                Description = missingRoleName.StartsWith(
-                    PermissionCatalog.AllowPrefix,
-                    StringComparison.OrdinalIgnoreCase)
-                    ? "Kullanıcıya özel ek izin"
-                    : missingRoleName.StartsWith(
-                        PermissionCatalog.DenyPrefix,
-                        StringComparison.OrdinalIgnoreCase)
-                        ? "Kullanıcıya özel kısıtlama"
-                        : PermissionCatalog.RolePresets
-                            .First(item => item.Name.Equals(
-                                missingRoleName,
-                                StringComparison.OrdinalIgnoreCase))
-                            .Description
-            };
-
-            db.Roles.Add(role);
-            roles.Add(role);
-        }
-
-        await db.SaveChangesAsync(cancellationToken);
-
-        db.UserRoles.AddRange(roles.Select(role => new UserRole
+        db.UserRoles.Add(new UserRole
         {
             UserId = userId,
             RoleId = role.Id
-        }));
+        });
+
+        await db.UserPermissionOverrides
+            .Where(item => item.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var allowed = PermissionCatalog.SanitizeOverrides(allowedPermissions);
+        var denied = PermissionCatalog.SanitizeOverrides(deniedPermissions)
+            .Except(allowed, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var overrideKeys = allowed
+            .Select(key => (Key: key, Effect: PermissionOverrideEffect.Allow))
+            .Concat(denied.Select(key => (Key: key, Effect: PermissionOverrideEffect.Deny)))
+            .ToArray();
+
+        if (overrideKeys.Length > 0)
+        {
+            var permissionIds = await db.Permissions
+                .Where(item => overrideKeys.Select(x => x.Key).Contains(item.Key))
+                .ToDictionaryAsync(item => item.Key, item => item.Id, cancellationToken);
+
+            foreach (var (key, effect) in overrideKeys)
+            {
+                if (!permissionIds.TryGetValue(key, out var permissionId))
+                    continue;
+
+                db.UserPermissionOverrides.Add(new UserPermissionOverride
+                {
+                    UserId = userId,
+                    PermissionId = permissionId,
+                    Effect = effect,
+                    CreatedByUserId = GetCurrentUserId()
+                });
+            }
+        }
 
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -361,12 +414,13 @@ public sealed class UserManagementController(
         return Guid.TryParse(value, out var id) ? id : null;
     }
 
-    private static string? ValidateUserInput(
+    private async Task<string?> ValidateUserInputAsync(
         string username,
         string fullName,
         string roleName,
         IEnumerable<string> allowedPermissions,
-        IEnumerable<string> deniedPermissions)
+        IEnumerable<string> deniedPermissions,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(username) ||
             username.Trim().Length < 3 ||
@@ -378,8 +432,12 @@ public sealed class UserManagementController(
         if (string.IsNullOrWhiteSpace(fullName))
             return "Ad soyad zorunludur.";
 
-        if (!PermissionCatalog.IsPresetRole(roleName.Trim()))
+        if (!await db.Roles.AnyAsync(
+                role => role.Name == roleName.Trim(),
+                cancellationToken))
+        {
             return "Geçerli bir görev rolü seçilmelidir.";
+        }
 
         var invalidPermissions = allowedPermissions
             .Concat(deniedPermissions)

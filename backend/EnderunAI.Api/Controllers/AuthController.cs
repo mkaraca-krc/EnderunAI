@@ -15,7 +15,8 @@ public sealed class AuthController(
     AppDbContext db,
     PasswordService passwordService,
     TokenService tokenService,
-    ILoginAttemptService loginAttemptService) : ControllerBase
+    ILoginAttemptService loginAttemptService,
+    IUserAuthorizationService userAuthorizationService) : ControllerBase
 {
     [AllowAnonymous]
     [HttpPost("login")]
@@ -61,10 +62,10 @@ public sealed class AuthController(
         var roleNames = user.UserRoles
             .Select(userRole => userRole.Role.Name)
             .ToArray();
-        var visibleRoles = roleNames
-            .Where(PermissionCatalog.IsPresetRole)
-            .ToArray();
-        var permissions = PermissionCatalog.Resolve(roleNames)
+        var authorization = await userAuthorizationService.GetAsync(
+            user.Id,
+            cancellationToken);
+        var permissions = (authorization?.Permissions ?? [])
             .OrderBy(permission => permission)
             .ToArray();
 
@@ -78,7 +79,7 @@ public sealed class AuthController(
                 user.Username,
                 user.FullName,
                 user.Email,
-                roles = visibleRoles,
+                roles = roleNames,
                 permissions
             }
         });
@@ -104,14 +105,14 @@ public sealed class AuthController(
         if (user is null || !user.IsActive)
             return Unauthorized(new { message = "Kullanıcı hesabı pasif veya bulunamadı." });
 
-        var roleNames = user.UserRoles
+        var roles = user.UserRoles
             .Select(userRole => userRole.Role.Name)
-            .ToArray();
-        var roles = roleNames
-            .Where(PermissionCatalog.IsPresetRole)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var permissions = PermissionCatalog.Resolve(roleNames)
+        var authorization = await userAuthorizationService.GetAsync(
+            user.Id,
+            cancellationToken);
+        var permissions = (authorization?.Permissions ?? [])
             .OrderBy(permission => permission)
             .ToArray();
 

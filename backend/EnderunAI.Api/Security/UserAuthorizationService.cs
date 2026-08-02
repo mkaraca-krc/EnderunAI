@@ -16,7 +16,8 @@ public sealed record UserDataScopeGrant(
     int ScopeType,
     Guid? CompanyId,
     Guid? BranchId,
-    Guid? ProjectId);
+    Guid? ProjectId,
+    Guid? ProjectSiteId);
 
 public interface IUserAuthorizationService
 {
@@ -28,7 +29,6 @@ public interface IUserAuthorizationService
 public sealed class UserAuthorizationService(
     AppDbContext db) : IUserAuthorizationService
 {
-    private const int AllScope = 0;
 
     public async Task<UserAuthorizationSnapshot?> GetAsync(
         Guid userId,
@@ -58,42 +58,22 @@ public sealed class UserAuthorizationService(
             db,
             cancellationToken);
 
-        IReadOnlyCollection<string> permissions;
-        IReadOnlyCollection<UserDataScopeGrant> dataScopes;
-
-        if (schema.IsComplete)
-        {
-            permissions = await LoadPermissionKeysAsync(
-                db,
-                userId,
-                cancellationToken);
-            dataScopes = await LoadDataScopesAsync(
-                db,
-                userId,
-                cancellationToken);
-        }
-        else if (schema.IsLegacy)
-        {
-            permissions = PermissionCatalog
-                .Resolve(roleNames)
-                .OrderBy(item => item)
-                .ToArray();
-
-            // Legacy production has no persisted company/project scope grants.
-            // Preserve its previous visibility only for a recognized role that
-            // resolves to at least one permission. Permission middleware still
-            // enforces the resolved module permissions.
-            dataScopes = permissions.Count == 0
-                ? []
-                : [new UserDataScopeGrant(AllScope, null, null, null)];
-        }
-        else
+        if (!schema.IsComplete)
         {
             throw new InvalidOperationException(
-                "Yetkilendirme şeması kısmi durumda. permissions, " +
-                "role_permissions, user_permission_overrides ve " +
-                "user_data_scopes tablolarının tümü birlikte bulunmalıdır.");
+                "Yetkilendirme şeması eksik. permissions, role_permissions, " +
+                "user_permission_overrides ve user_data_scopes tablolarının " +
+                "tümü birlikte bulunmalıdır (migration uygulanmamış olabilir).");
         }
+
+        var permissions = await LoadPermissionKeysAsync(
+            db,
+            userId,
+            cancellationToken);
+        var dataScopes = await LoadDataScopesAsync(
+            db,
+            userId,
+            cancellationToken);
 
         return new UserAuthorizationSnapshot(
             user.Id,
@@ -170,12 +150,13 @@ public sealed class UserAuthorizationService(
                     "ScopeType",
                     "CompanyId",
                     "BranchId",
-                    "ProjectId"
+                    "ProjectId",
+                    "ProjectSiteId"
                 FROM user_data_scopes
                 WHERE "UserId" = @userId
                   AND "IsActive" = TRUE
                   AND "IsDeleted" = FALSE
-                ORDER BY "ScopeType", "CompanyId", "BranchId", "ProjectId";
+                ORDER BY "ScopeType", "CompanyId", "BranchId", "ProjectId", "ProjectSiteId";
                 """;
 
             AddUserIdParameter(command, userId);
@@ -191,7 +172,8 @@ public sealed class UserAuthorizationService(
                     reader.GetInt32(0),
                     reader.IsDBNull(1) ? null : reader.GetGuid(1),
                     reader.IsDBNull(2) ? null : reader.GetGuid(2),
-                    reader.IsDBNull(3) ? null : reader.GetGuid(3)));
+                    reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                    reader.IsDBNull(4) ? null : reader.GetGuid(4)));
             }
 
             return dataScopes;
@@ -286,11 +268,5 @@ public sealed class UserAuthorizationService(
             HasRolePermissions &&
             HasUserPermissionOverrides &&
             HasUserDataScopes;
-
-        public bool IsLegacy =>
-            !HasPermissions &&
-            !HasRolePermissions &&
-            !HasUserPermissionOverrides &&
-            !HasUserDataScopes;
     }
 }
