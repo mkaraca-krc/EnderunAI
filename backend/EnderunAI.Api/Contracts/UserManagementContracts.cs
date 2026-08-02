@@ -13,8 +13,8 @@ public sealed class CreateManagedUserRequest
     [EmailAddress, MaxLength(200)]
     public string? Email { get; set; }
 
-    [Required, MaxLength(80)]
-    public string RoleName { get; set; } = string.Empty;
+    [Required, MinLength(1)]
+    public string[] RoleNames { get; set; } = [];
 
     [MinLength(10)]
     public string? Password { get; set; }
@@ -22,6 +22,12 @@ public sealed class CreateManagedUserRequest
     public bool IsActive { get; set; } = true;
     public string[] AllowedPermissions { get; set; } = [];
     public string[] DeniedPermissions { get; set; } = [];
+
+    /// <summary>
+    /// Seçilen rollerden biri SiteOnly kapsam politikasına sahipse
+    /// (ör. Şantiye Şefi, Formen) bu liste zorunludur.
+    /// </summary>
+    public Guid[] ProjectSiteIds { get; set; } = [];
 }
 
 public sealed class UpdateManagedUserRequest
@@ -35,12 +41,13 @@ public sealed class UpdateManagedUserRequest
     [EmailAddress, MaxLength(200)]
     public string? Email { get; set; }
 
-    [Required, MaxLength(80)]
-    public string RoleName { get; set; } = string.Empty;
+    [Required, MinLength(1)]
+    public string[] RoleNames { get; set; } = [];
 
     public bool IsActive { get; set; } = true;
     public string[] AllowedPermissions { get; set; } = [];
     public string[] DeniedPermissions { get; set; } = [];
+    public Guid[] ProjectSiteIds { get; set; } = [];
 }
 
 public sealed class ResetManagedUserPasswordRequest

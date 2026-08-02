@@ -1,5 +1,6 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Upload;
 using Microsoft.AspNetCore.Authorization;
@@ -14,17 +15,22 @@ namespace EnderunAI.Api.Controllers;
 public sealed class ProjectSiteDailyReportsController(
     AppDbContext db,
     IUploadService uploadService,
-    ICurrentUserService currentUser) : ControllerBase
+    ICurrentUserService currentUser,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
     private const string PhotoCategory = "site-daily-reports";
 
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsView)]
     public async Task<IActionResult> GetAll(
         Guid siteId,
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
         var query = db.ProjectSiteDailyReports.AsNoTracking()
             .Where(x => x.ProjectSiteId == siteId);
 
@@ -50,11 +56,15 @@ public sealed class ProjectSiteDailyReportsController(
     }
 
     [HttpGet("by-date/{date}")]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsView)]
     public async Task<IActionResult> GetByDate(
         Guid siteId,
         DateTime date,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
         var report = await LoadDetail(siteId, ToUtcDate(date), cancellationToken);
         return report is null
             ? NotFound(new { message = "Bu tarih için günlük rapor bulunamadı." })
@@ -62,11 +72,15 @@ public sealed class ProjectSiteDailyReportsController(
     }
 
     [HttpGet("{reportId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsView)]
     public async Task<IActionResult> GetById(
         Guid siteId,
         Guid reportId,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
         var report = await LoadDetail(siteId, reportId, cancellationToken);
         return report is null
             ? NotFound(new { message = "Günlük rapor bulunamadı." })
@@ -74,11 +88,15 @@ public sealed class ProjectSiteDailyReportsController(
     }
 
     [HttpGet("suggested-headcount")]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsView)]
     public async Task<IActionResult> GetSuggestedHeadcount(
         Guid siteId,
         [FromQuery] DateTime date,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
         var day = ToUtcDate(date);
 
         var roles = await db.ProjectSiteAssignments.AsNoTracking()
@@ -118,14 +136,13 @@ public sealed class ProjectSiteDailyReportsController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsCreate)]
     public async Task<IActionResult> Create(
         Guid siteId,
         UpsertDailyReportRequest request,
         CancellationToken cancellationToken)
     {
-        var siteExists = await db.ProjectSites.AsNoTracking()
-            .AnyAsync(x => x.Id == siteId, cancellationToken);
-        if (!siteExists)
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
             return NotFound(new { message = "Şantiye bulunamadı." });
 
         var day = ToUtcDate(request.ReportDate);
@@ -176,12 +193,16 @@ public sealed class ProjectSiteDailyReportsController(
     }
 
     [HttpPut("{reportId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsEdit)]
     public async Task<IActionResult> Update(
         Guid siteId,
         Guid reportId,
         UpsertDailyReportRequest request,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
         var report = await db.ProjectSiteDailyReports
             .Include(x => x.WorkItems)
             .SingleOrDefaultAsync(x => x.Id == reportId && x.ProjectSiteId == siteId, cancellationToken);
@@ -222,6 +243,7 @@ public sealed class ProjectSiteDailyReportsController(
 
     [HttpPost("{reportId:guid}/photos")]
     [RequestSizeLimit(50 * 1024 * 1024)]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsEdit)]
     public async Task<IActionResult> UploadPhoto(
         Guid siteId,
         Guid reportId,
@@ -230,6 +252,9 @@ public sealed class ProjectSiteDailyReportsController(
         [FromForm] string? caption,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
         var report = await db.ProjectSiteDailyReports
             .SingleOrDefaultAsync(x => x.Id == reportId && x.ProjectSiteId == siteId, cancellationToken);
 
@@ -262,6 +287,7 @@ public sealed class ProjectSiteDailyReportsController(
     }
 
     [HttpPatch("{reportId:guid}/photos/{photoId:guid}/visibility")]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsEdit)]
     public async Task<IActionResult> SetPhotoVisibility(
         Guid siteId,
         Guid reportId,
@@ -269,6 +295,9 @@ public sealed class ProjectSiteDailyReportsController(
         [FromQuery] bool isVisibleToEmployer,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
         var photo = await db.ProjectSiteDailyReportPhotos
             .Include(x => x.DailyReport)
             .SingleOrDefaultAsync(x =>
@@ -289,12 +318,16 @@ public sealed class ProjectSiteDailyReportsController(
     }
 
     [HttpGet("{reportId:guid}/photos/{photoId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsView)]
     public async Task<IActionResult> DownloadPhoto(
         Guid siteId,
         Guid reportId,
         Guid photoId,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
         var photo = await db.ProjectSiteDailyReportPhotos.AsNoTracking()
             .Include(x => x.DailyReport)
             .SingleOrDefaultAsync(x =>
@@ -315,12 +348,16 @@ public sealed class ProjectSiteDailyReportsController(
     }
 
     [HttpDelete("{reportId:guid}/photos/{photoId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsDelete)]
     public async Task<IActionResult> DeletePhoto(
         Guid siteId,
         Guid reportId,
         Guid photoId,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
         var photo = await db.ProjectSiteDailyReportPhotos
             .Include(x => x.DailyReport)
             .SingleOrDefaultAsync(x =>
@@ -337,6 +374,29 @@ public sealed class ProjectSiteDailyReportsController(
         await db.SaveChangesAsync(cancellationToken);
 
         return NoContent();
+    }
+
+    private async Task<bool> CanAccessSiteAsync(
+        Guid siteId,
+        CancellationToken cancellationToken)
+    {
+        var site = await db.ProjectSites
+            .AsNoTracking()
+            .Where(x => x.Id == siteId)
+            .Select(x => new
+            {
+                x.Project.CompanyId,
+                x.Project.BranchId,
+                x.ProjectId
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (site is null)
+            return false;
+
+        var scope = await dataScope.GetAsync(cancellationToken);
+        return scope is not null &&
+            scope.CanAccessSite(site.CompanyId, site.BranchId, site.ProjectId, siteId);
     }
 
     private async Task<object?> LoadDetail(Guid siteId, Guid reportId, CancellationToken cancellationToken) =>

@@ -29,22 +29,45 @@ public sealed class UserManagementController(
         PermissionOverrideEffect Effect);
 
     [HttpGet("catalog")]
+    [RequirePermission(PermissionCatalog.Keys.UserManagementView)]
     public async Task<IActionResult> GetCatalog(CancellationToken cancellationToken)
     {
         var roles = await db.Roles
             .AsNoTracking()
             .OrderBy(role => role.Name)
-            .Select(role => new { role.Name, role.Description })
+            .Select(role => new
+            {
+                role.Name,
+                role.Description,
+                DataScopePolicy = (int)role.DataScopePolicy
+            })
+            .ToListAsync(cancellationToken);
+
+        var sites = await db.ProjectSites
+            .AsNoTracking()
+            .Where(site => site.IsActive)
+            .OrderBy(site => site.Project.Code)
+            .ThenBy(site => site.Code)
+            .Select(site => new
+            {
+                site.Id,
+                site.Code,
+                site.Name,
+                ProjectCode = site.Project.Code,
+                ProjectName = site.Project.Name
+            })
             .ToListAsync(cancellationToken);
 
         return Ok(new
         {
             permissions = PermissionCatalog.Permissions,
-            roles
+            roles,
+            sites
         });
     }
 
     [HttpGet("users")]
+    [RequirePermission(PermissionCatalog.Keys.UserManagementView)]
     public async Task<IActionResult> GetUsers(CancellationToken cancellationToken)
     {
         var users = await db.Users
@@ -55,9 +78,11 @@ public sealed class UserManagementController(
             .ThenBy(user => user.FullName)
             .ToListAsync(cancellationToken);
 
+        var userIds = users.Select(u => u.Id).ToArray();
+
         var overridesByUser = await db.UserPermissionOverrides
             .AsNoTracking()
-            .Where(item => users.Select(u => u.Id).Contains(item.UserId))
+            .Where(item => userIds.Contains(item.UserId))
             .Select(item => new OverrideRow(
                 item.UserId,
                 item.Permission.Key,
@@ -70,6 +95,27 @@ public sealed class UserManagementController(
                 group => group.Key,
                 group => group.ToArray());
 
+        var siteAssignments = await db.UserDataScopes
+            .AsNoTracking()
+            .Where(item =>
+                userIds.Contains(item.UserId) &&
+                item.ScopeType == DataScopeType.Site &&
+                item.ProjectSiteId.HasValue)
+            .Select(item => new
+            {
+                item.UserId,
+                item.ProjectSiteId,
+                SiteCode = item.ProjectSite!.Code,
+                SiteName = item.ProjectSite!.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        var sitesLookup = siteAssignments
+            .GroupBy(item => item.UserId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(x => new { x.ProjectSiteId, x.SiteCode, x.SiteName }).ToArray());
+
         var responses = new List<object>();
         foreach (var user in users)
         {
@@ -80,13 +126,15 @@ public sealed class UserManagementController(
             responses.Add(ToUserResponse(
                 user,
                 authorization?.Permissions ?? [],
-                overridesLookup.GetValueOrDefault(user.Id, [])));
+                overridesLookup.GetValueOrDefault(user.Id, []),
+                sitesLookup.GetValueOrDefault(user.Id, [])));
         }
 
         return Ok(responses);
     }
 
     [HttpPost("users")]
+    [RequirePermission(PermissionCatalog.Keys.UserManagementCreate)]
     public async Task<IActionResult> CreateUser(
         CreateManagedUserRequest request,
         CancellationToken cancellationToken)
@@ -94,7 +142,8 @@ public sealed class UserManagementController(
         var validation = await ValidateUserInputAsync(
             request.Username,
             request.FullName,
-            request.RoleName,
+            request.RoleNames,
+            request.ProjectSiteIds,
             request.AllowedPermissions,
             request.DeniedPermissions,
             cancellationToken);
@@ -131,9 +180,10 @@ public sealed class UserManagementController(
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
 
-        await SyncUserRoleAsync(
+        await SyncUserRolesAsync(
             user.Id,
-            request.RoleName,
+            request.RoleNames,
+            request.ProjectSiteIds,
             request.AllowedPermissions,
             request.DeniedPermissions,
             cancellationToken);
@@ -141,16 +191,18 @@ public sealed class UserManagementController(
         var createdUser = await LoadUserAsync(user.Id, cancellationToken);
         var authorization = await userAuthorizationService.GetAsync(user.Id, cancellationToken);
         var overrides = await LoadOverridesAsync(user.Id, cancellationToken);
+        var sites = await LoadSiteAssignmentsAsync(user.Id, cancellationToken);
 
         return Ok(new
         {
             message = "Kullanıcı oluşturuldu.",
             temporaryPassword,
-            user = ToUserResponse(createdUser!, authorization?.Permissions ?? [], overrides)
+            user = ToUserResponse(createdUser!, authorization?.Permissions ?? [], overrides, sites)
         });
     }
 
     [HttpPut("users/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.UserManagementEdit)]
     public async Task<IActionResult> UpdateUser(
         Guid id,
         UpdateManagedUserRequest request,
@@ -159,7 +211,8 @@ public sealed class UserManagementController(
         var validation = await ValidateUserInputAsync(
             request.Username,
             request.FullName,
-            request.RoleName,
+            request.RoleNames,
+            request.ProjectSiteIds,
             request.AllowedPermissions,
             request.DeniedPermissions,
             cancellationToken);
@@ -175,9 +228,8 @@ public sealed class UserManagementController(
             return NotFound(new { message = "Kullanıcı bulunamadı." });
 
         var currentUserId = GetCurrentUserId();
-        if (currentUserId == id &&
-            (!request.IsActive ||
-             !string.Equals(request.RoleName, "Admin", StringComparison.OrdinalIgnoreCase)))
+        var keepsAdmin = request.RoleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase);
+        if (currentUserId == id && (!request.IsActive || !keepsAdmin))
         {
             return BadRequest(new
             {
@@ -187,7 +239,7 @@ public sealed class UserManagementController(
 
         if (await RemovingLastAdminAsync(
                 id,
-                request.RoleName,
+                keepsAdmin,
                 request.IsActive,
                 cancellationToken))
         {
@@ -211,9 +263,10 @@ public sealed class UserManagementController(
         user.IsActive = request.IsActive;
 
         await db.SaveChangesAsync(cancellationToken);
-        await SyncUserRoleAsync(
+        await SyncUserRolesAsync(
             id,
-            request.RoleName,
+            request.RoleNames,
+            request.ProjectSiteIds,
             request.AllowedPermissions,
             request.DeniedPermissions,
             cancellationToken);
@@ -221,15 +274,17 @@ public sealed class UserManagementController(
         var updatedUser = await LoadUserAsync(id, cancellationToken);
         var authorization = await userAuthorizationService.GetAsync(id, cancellationToken);
         var overrides = await LoadOverridesAsync(id, cancellationToken);
+        var sites = await LoadSiteAssignmentsAsync(id, cancellationToken);
 
         return Ok(new
         {
             message = "Kullanıcı ve yetkileri güncellendi. Değişiklikler bir sonraki istekte etkindir.",
-            user = ToUserResponse(updatedUser!, authorization?.Permissions ?? [], overrides)
+            user = ToUserResponse(updatedUser!, authorization?.Permissions ?? [], overrides, sites)
         });
     }
 
     [HttpPost("users/{id:guid}/reset-password")]
+    [RequirePermission(PermissionCatalog.Keys.UserManagementEdit)]
     public async Task<IActionResult> ResetPassword(
         Guid id,
         ResetManagedUserPasswordRequest request,
@@ -265,10 +320,12 @@ public sealed class UserManagementController(
     private static object ToUserResponse(
         AppUser user,
         IReadOnlyCollection<string> effectivePermissions,
-        IReadOnlyCollection<OverrideRow> overrides)
+        IReadOnlyCollection<OverrideRow> overrides,
+        IReadOnlyCollection<dynamic> siteAssignments)
     {
         var roleNames = user.UserRoles
             .Select(userRole => userRole.Role.Name)
+            .OrderBy(name => name)
             .ToArray();
 
         return new
@@ -280,7 +337,15 @@ public sealed class UserManagementController(
             user.IsActive,
             user.CreatedAtUtc,
             user.LastLoginAtUtc,
+            roleNames,
             roleName = roleNames.FirstOrDefault() ?? "Rol tanımsız",
+            projectSiteIds = siteAssignments.Select(x => (Guid)x.ProjectSiteId).ToArray(),
+            projectSites = siteAssignments.Select(x => new
+            {
+                id = (Guid)x.ProjectSiteId,
+                code = (string)x.SiteCode,
+                name = (string)x.SiteName
+            }),
             allowedPermissions = overrides
                 .Where(item => item.Effect == PermissionOverrideEffect.Allow)
                 .Select(item => item.PermissionKey)
@@ -318,27 +383,53 @@ public sealed class UserManagementController(
             .ToListAsync(cancellationToken);
     }
 
-    private async Task SyncUserRoleAsync(
+    private async Task<List<dynamic>> LoadSiteAssignmentsAsync(
         Guid userId,
-        string roleName,
+        CancellationToken cancellationToken)
+    {
+        var items = await db.UserDataScopes
+            .AsNoTracking()
+            .Where(item =>
+                item.UserId == userId &&
+                item.ScopeType == DataScopeType.Site &&
+                item.ProjectSiteId.HasValue)
+            .Select(item => new
+            {
+                ProjectSiteId = item.ProjectSiteId!.Value,
+                SiteCode = item.ProjectSite!.Code,
+                SiteName = item.ProjectSite!.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        return items.Cast<dynamic>().ToList();
+    }
+
+    private async Task SyncUserRolesAsync(
+        Guid userId,
+        IReadOnlyCollection<string> roleNames,
+        IReadOnlyCollection<Guid> projectSiteIds,
         IEnumerable<string> allowedPermissions,
         IEnumerable<string> deniedPermissions,
         CancellationToken cancellationToken)
     {
-        var trimmedRoleName = roleName.Trim();
-        var role = await db.Roles.SingleAsync(
-            item => item.Name == trimmedRoleName,
-            cancellationToken);
+        var trimmedRoleNames = roleNames
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var roles = await db.Roles
+            .Where(role => trimmedRoleNames.Contains(role.Name))
+            .ToListAsync(cancellationToken);
 
         await db.UserRoles
             .Where(userRole => userRole.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        db.UserRoles.Add(new UserRole
+        db.UserRoles.AddRange(roles.Select(role => new UserRole
         {
             UserId = userId,
             RoleId = role.Id
-        });
+        }));
 
         await db.UserPermissionOverrides
             .Where(item => item.UserId == userId)
@@ -375,12 +466,42 @@ public sealed class UserManagementController(
             }
         }
 
+        // Veri kapsamı: seçilen rollerden biri SiteOnly ise kullanıcı
+        // sadece seçilen şantiyeleri görür; aksi halde kısıtsız (AllScope).
+        await db.UserDataScopes
+            .Where(item => item.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var requiresSiteScope = roles.Any(
+            role => role.DataScopePolicy == RoleDataScopePolicy.SiteOnly);
+
+        if (requiresSiteScope && projectSiteIds.Count > 0)
+        {
+            foreach (var siteId in projectSiteIds.Distinct())
+            {
+                db.UserDataScopes.Add(new UserDataScope
+                {
+                    UserId = userId,
+                    ScopeType = DataScopeType.Site,
+                    ProjectSiteId = siteId
+                });
+            }
+        }
+        else
+        {
+            db.UserDataScopes.Add(new UserDataScope
+            {
+                UserId = userId,
+                ScopeType = DataScopeType.All
+            });
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<bool> RemovingLastAdminAsync(
         Guid userId,
-        string requestedRole,
+        bool keepsAdmin,
         bool requestedActive,
         CancellationToken cancellationToken)
     {
@@ -390,12 +511,8 @@ public sealed class UserManagementController(
                 userRole.Role.Name == "Admin",
             cancellationToken);
 
-        if (!currentlyAdmin ||
-            (requestedActive &&
-             string.Equals(requestedRole, "Admin", StringComparison.OrdinalIgnoreCase)))
-        {
+        if (!currentlyAdmin || (requestedActive && keepsAdmin))
             return false;
-        }
 
         return !await db.Users.AnyAsync(
             user =>
@@ -417,7 +534,8 @@ public sealed class UserManagementController(
     private async Task<string?> ValidateUserInputAsync(
         string username,
         string fullName,
-        string roleName,
+        IReadOnlyCollection<string> roleNames,
+        IReadOnlyCollection<Guid> projectSiteIds,
         IEnumerable<string> allowedPermissions,
         IEnumerable<string> deniedPermissions,
         CancellationToken cancellationToken)
@@ -432,11 +550,26 @@ public sealed class UserManagementController(
         if (string.IsNullOrWhiteSpace(fullName))
             return "Ad soyad zorunludur.";
 
-        if (!await db.Roles.AnyAsync(
-                role => role.Name == roleName.Trim(),
-                cancellationToken))
+        if (roleNames.Count == 0)
+            return "En az bir rol seçilmelidir.";
+
+        var trimmedRoleNames = roleNames
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var matchedRoles = await db.Roles
+            .Where(role => trimmedRoleNames.Contains(role.Name))
+            .Select(role => new { role.Name, role.DataScopePolicy })
+            .ToListAsync(cancellationToken);
+
+        if (matchedRoles.Count != trimmedRoleNames.Length)
+            return "Geçerli görev rolleri seçilmelidir.";
+
+        if (matchedRoles.Any(role => role.DataScopePolicy == RoleDataScopePolicy.SiteOnly) &&
+            projectSiteIds.Count == 0)
         {
-            return "Geçerli bir görev rolü seçilmelidir.";
+            return "Bu rol(ler) için en az bir şantiye ataması zorunludur.";
         }
 
         var invalidPermissions = allowedPermissions

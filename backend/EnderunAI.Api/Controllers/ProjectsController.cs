@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class ProjectsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         CancellationToken cancellationToken)
@@ -54,6 +56,7 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -106,6 +109,7 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsCreate)]
     public async Task<IActionResult> Create(
         CreateProjectRequest request,
         CancellationToken cancellationToken)
@@ -240,6 +244,7 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateProjectRequest request,
@@ -343,6 +348,7 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("{id:guid}/summary")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
     public async Task<IActionResult> GetSummary(
         Guid id,
         CancellationToken cancellationToken)
@@ -463,6 +469,7 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("{id:guid}/personnel")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetProjectPersonnel(
         Guid id,
         CancellationToken cancellationToken)

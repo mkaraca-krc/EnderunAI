@@ -13,7 +13,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class GoodsReceiptsController(IGoodsReceiptService service) : ControllerBase
 {
     [HttpGet]
-    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? warehouseId,
@@ -28,14 +28,14 @@ public sealed class GoodsReceiptsController(IGoodsReceiptService service) : Cont
             cancellationToken));
 
     [HttpGet("{id:guid}")]
-    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken) =>
         await ExecuteAsync(() => service.GetByIdAsync(id, cancellationToken));
 
     [HttpPost("create-from-purchase-order/{purchaseOrderId:guid}")]
-    [RequirePermission(PermissionCatalog.Keys.InventoryManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsCreate)]
     public async Task<IActionResult> CreateFromPurchaseOrder(
         Guid purchaseOrderId,
         CreateGoodsReceiptRequest request,
@@ -46,7 +46,7 @@ public sealed class GoodsReceiptsController(IGoodsReceiptService service) : Cont
             cancellationToken));
 
     [HttpGet("{id:guid}/inventory-options")]
-    [RequirePermission(PermissionCatalog.Keys.InventoryManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsView)]
     public async Task<IActionResult> GetInventoryOptions(
         Guid id,
         [FromQuery] string? search,
@@ -57,7 +57,7 @@ public sealed class GoodsReceiptsController(IGoodsReceiptService service) : Cont
             cancellationToken));
 
     [HttpPut("{id:guid}/draft")]
-    [RequirePermission(PermissionCatalog.Keys.InventoryManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsEdit)]
     public async Task<IActionResult> UpdateDraft(
         Guid id,
         UpdateGoodsReceiptDraftRequest request,
@@ -68,14 +68,14 @@ public sealed class GoodsReceiptsController(IGoodsReceiptService service) : Cont
             cancellationToken));
 
     [HttpPost("{id:guid}/post")]
-    [RequirePermission(PermissionCatalog.Keys.InventoryManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsApprove)]
     public async Task<IActionResult> Post(
         Guid id,
         CancellationToken cancellationToken) =>
         await ExecuteAsync(() => service.PostAsync(id, cancellationToken));
 
     [HttpPost("{id:guid}/cancel")]
-    [RequirePermission(PermissionCatalog.Keys.InventoryManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsEdit)]
     public async Task<IActionResult> Cancel(
         Guid id,
         GoodsReceiptReasonRequest request,

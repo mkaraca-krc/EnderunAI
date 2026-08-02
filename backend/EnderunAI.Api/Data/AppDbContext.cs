@@ -281,6 +281,7 @@ public sealed class AppDbContext(
 
             entity.Property(x => x.Name).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(300);
+            entity.Property(x => x.DataScopePolicy).HasConversion<int>().IsRequired();
         });
 
         modelBuilder.Entity<UserRole>(entity =>

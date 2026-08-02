@@ -100,7 +100,8 @@ public static class DatabaseSeeder
             db.Roles.Add(new AppRole
             {
                 Name = definition.Name,
-                Description = definition.Description
+                Description = definition.Description,
+                DataScopePolicy = definition.DataScopePolicy
             });
         }
 

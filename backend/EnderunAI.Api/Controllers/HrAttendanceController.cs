@@ -1,5 +1,6 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -46,6 +48,7 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.AttendanceRecords.AsNoTracking()
@@ -57,6 +60,7 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollCreate)]
     public async Task<IActionResult> Create(
         SaveAttendanceRequest request,
         CancellationToken cancellationToken)
@@ -94,6 +98,7 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         SaveAttendanceRequest request,
@@ -111,6 +116,7 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollApprove)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.AttendanceRecords.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -126,6 +132,7 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollDelete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.AttendanceRecords.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -141,6 +148,7 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("summary")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetSummary(
         [FromQuery] Guid personnelId,
         [FromQuery] DateTime startDate,

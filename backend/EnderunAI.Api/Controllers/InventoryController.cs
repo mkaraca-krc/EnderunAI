@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Inventory;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.AspNetCore.Authorization;
@@ -18,6 +19,7 @@ public sealed class InventoryController(
     ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet("items")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
     public async Task<IActionResult> GetItems([FromQuery] Guid? companyId, [FromQuery] string? search, CancellationToken cancellationToken)
     {
         var query = db.InventoryItems.AsNoTracking();
@@ -44,6 +46,7 @@ public sealed class InventoryController(
     }
 
     [HttpPost("items")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryCreate)]
     public async Task<IActionResult> CreateItem(CreateInventoryItemRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Unit))
@@ -80,6 +83,7 @@ public sealed class InventoryController(
     }
 
     [HttpPut("items/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryEdit)]
     public async Task<IActionResult> UpdateItem(Guid id, UpdateInventoryItemRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Unit))
@@ -109,6 +113,7 @@ public sealed class InventoryController(
     }
 
     [HttpGet("critical-stock-alerts")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
     public async Task<IActionResult> GetCriticalStockAlerts([FromQuery] Guid? companyId, CancellationToken cancellationToken)
     {
         var query = db.WarehouseStocks.AsNoTracking()
@@ -137,6 +142,7 @@ public sealed class InventoryController(
     }
 
     [HttpGet("warehouses/{warehouseId:guid}/stocks")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
     public async Task<IActionResult> GetWarehouseStocks(Guid warehouseId, CancellationToken cancellationToken)
     {
         if (!await db.Warehouses.AsNoTracking().AnyAsync(x => x.Id == warehouseId, cancellationToken))
@@ -160,6 +166,7 @@ public sealed class InventoryController(
     }
 
     [HttpGet("movements")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
     public async Task<IActionResult> GetMovements([FromQuery] Guid? warehouseId, [FromQuery] Guid? projectId,
         [FromQuery] Guid? projectSiteId, [FromQuery] Guid? inventoryItemId, CancellationToken cancellationToken)
     {
@@ -187,6 +194,7 @@ public sealed class InventoryController(
     }
 
     [HttpPost("receipts")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryCreate)]
     public async Task<IActionResult> Receipt(StockReceiptRequest request, CancellationToken cancellationToken)
     {
         if (request.Quantity <= 0) return BadRequest(new { message = "Miktar sıfırdan büyük olmalıdır." });
@@ -233,6 +241,7 @@ public sealed class InventoryController(
     }
 
     [HttpPost("issues")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryCreate)]
     public async Task<IActionResult> Issue(StockIssueRequest request, CancellationToken cancellationToken)
     {
         if (request.Quantity <= 0) return BadRequest(new { message = "Miktar sıfırdan büyük olmalıdır." });
@@ -314,6 +323,7 @@ public sealed class InventoryController(
     }
 
     [HttpPost("transfers")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryCreate)]
     public async Task<IActionResult> Transfer(StockTransferRequest request, CancellationToken cancellationToken)
     {
         if (request.SourceWarehouseId == request.TargetWarehouseId)
@@ -398,6 +408,7 @@ public sealed class InventoryController(
     }
 
     [HttpPost("adjustments")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryEdit)]
     public async Task<IActionResult> Adjustment(StockAdjustmentRequest request, CancellationToken cancellationToken)
     {
         if (request.CountedQuantity < 0) return BadRequest(new { message = "Sayılan miktar negatif olamaz." });

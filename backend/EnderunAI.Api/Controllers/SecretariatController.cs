@@ -3,6 +3,7 @@ using System.Security.Claims;
 using EnderunAI.Api.Contracts.Secretariat;
 using EnderunAI.Api.Models.Secretariat;
 using EnderunAI.Api.Services.Secretariat;
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.Upload;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,12 +19,14 @@ public sealed class SecretariatController(
     IUploadService uploadService) : ControllerBase
 {
     [HttpGet("dashboard")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatView)]
     public async Task<IActionResult> GetDashboard(
         [FromQuery] Guid? companyId,
         CancellationToken cancellationToken) =>
         Ok(await service.GetDashboardAsync(companyId, cancellationToken));
 
     [HttpGet("correspondence")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsView)]
     public async Task<IActionResult> GetCorrespondence(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -37,6 +40,7 @@ public sealed class SecretariatController(
             companyId, projectId, direction, status, search, startDate, endDate, cancellationToken));
 
     [HttpGet("correspondence/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsView)]
     public async Task<IActionResult> GetCorrespondenceById(
         Guid id,
         [FromQuery] SecretariatDocumentDirection direction,
@@ -49,6 +53,7 @@ public sealed class SecretariatController(
     }
 
     [HttpPost("correspondence")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsCreate)]
     public Task<IActionResult> CreateCorrespondence(
         CreateCorrespondenceRequest request,
         CancellationToken cancellationToken) =>
@@ -63,6 +68,7 @@ public sealed class SecretariatController(
         });
 
     [HttpPut("correspondence/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsEdit)]
     public Task<IActionResult> UpdateCorrespondence(
         Guid id,
         [FromQuery] SecretariatDocumentDirection direction,
@@ -78,6 +84,7 @@ public sealed class SecretariatController(
         });
 
     [HttpDelete("correspondence/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsDelete)]
     public async Task<IActionResult> DeleteCorrespondence(
         Guid id,
         [FromQuery] SecretariatDocumentDirection direction,
@@ -91,6 +98,7 @@ public sealed class SecretariatController(
     }
 
     [HttpPost("correspondence/{id:guid}/workflow")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsEdit)]
     public async Task<IActionResult> AddWorkflow(
         Guid id,
         [FromQuery] SecretariatDocumentDirection direction,
@@ -105,6 +113,7 @@ public sealed class SecretariatController(
     }
 
     [HttpPost("correspondence/{id:guid}/archive")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsEdit)]
     public async Task<IActionResult> ArchiveCorrespondence(
         Guid id,
         [FromQuery] SecretariatDocumentDirection direction,
@@ -118,6 +127,7 @@ public sealed class SecretariatController(
     }
 
     [HttpPost("correspondence/{id:guid}/attachments")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsCreate)]
     [RequestSizeLimit(50 * 1024 * 1024)]
     public Task<IActionResult> AddAttachment(
         Guid id,
@@ -149,6 +159,7 @@ public sealed class SecretariatController(
         });
 
     [HttpGet("attachments/{attachmentId:guid}/download")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsView)]
     public async Task<IActionResult> DownloadAttachment(
         Guid attachmentId,
         CancellationToken cancellationToken)
@@ -162,6 +173,7 @@ public sealed class SecretariatController(
     }
 
     [HttpDelete("attachments/{attachmentId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsDelete)]
     public async Task<IActionResult> DeleteAttachment(
         Guid attachmentId,
         CancellationToken cancellationToken)
@@ -175,12 +187,14 @@ public sealed class SecretariatController(
     }
 
     [HttpGet("categories")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsView)]
     public async Task<IActionResult> GetCategories(
         [FromQuery] Guid? companyId,
         CancellationToken cancellationToken) =>
         Ok(await service.GetCategoriesAsync(companyId, cancellationToken));
 
     [HttpPost("categories")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsCreate)]
     public Task<IActionResult> CreateCategory(
         CreateDocumentCategoryRequest request,
         CancellationToken cancellationToken) =>
@@ -188,6 +202,7 @@ public sealed class SecretariatController(
             Ok(await service.CreateCategoryAsync(request, CurrentUserId(), cancellationToken)));
 
     [HttpPut("categories/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.DocumentsEdit)]
     public Task<IActionResult> UpdateCategory(
         Guid id,
         UpdateDocumentCategoryRequest request,
@@ -202,6 +217,7 @@ public sealed class SecretariatController(
         });
 
     [HttpGet("cargo")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatView)]
     public async Task<IActionResult> GetCargo(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -213,6 +229,7 @@ public sealed class SecretariatController(
             companyId, projectId, direction, status, search, cancellationToken));
 
     [HttpGet("cargo/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatView)]
     public async Task<IActionResult> GetCargoById(Guid id, CancellationToken cancellationToken)
     {
         var item = await service.GetCargoAsync(id, cancellationToken);
@@ -222,6 +239,7 @@ public sealed class SecretariatController(
     }
 
     [HttpPost("cargo")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> CreateCargo(
         CreateCargoRequest request,
         CancellationToken cancellationToken) =>
@@ -229,6 +247,7 @@ public sealed class SecretariatController(
             Ok(await service.CreateCargoAsync(request, CurrentUserId(), cancellationToken)));
 
     [HttpPut("cargo/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> UpdateCargo(
         Guid id,
         UpdateCargoRequest request,
@@ -242,6 +261,7 @@ public sealed class SecretariatController(
         });
 
     [HttpDelete("cargo/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public async Task<IActionResult> DeleteCargo(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await service.DeleteCargoAsync(id, CurrentUserId(), cancellationToken);
@@ -251,6 +271,7 @@ public sealed class SecretariatController(
     }
 
     [HttpGet("visitors")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatView)]
     public async Task<IActionResult> GetVisitors(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -263,6 +284,7 @@ public sealed class SecretariatController(
             companyId, projectId, status, startDate, endDate, search, cancellationToken));
 
     [HttpPost("visitors")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> CreateVisitor(
         CreateVisitorRequest request,
         CancellationToken cancellationToken) =>
@@ -270,6 +292,7 @@ public sealed class SecretariatController(
             Ok(await service.CreateVisitorAsync(request, CurrentUserId(), cancellationToken)));
 
     [HttpPost("visitors/{id:guid}/check-in")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> CheckInVisitor(
         Guid id,
         VisitorCheckInRequest request,
@@ -284,6 +307,7 @@ public sealed class SecretariatController(
         });
 
     [HttpPost("visitors/{id:guid}/check-out")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> CheckOutVisitor(Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
         {
@@ -294,6 +318,7 @@ public sealed class SecretariatController(
         });
 
     [HttpDelete("visitors/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public async Task<IActionResult> DeleteVisitor(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await service.DeleteVisitorAsync(id, CurrentUserId(), cancellationToken);
@@ -303,6 +328,7 @@ public sealed class SecretariatController(
     }
 
     [HttpGet("phone-notes")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatView)]
     public async Task<IActionResult> GetPhoneNotes(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -313,6 +339,7 @@ public sealed class SecretariatController(
             companyId, projectId, status, search, cancellationToken));
 
     [HttpPost("phone-notes")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> CreatePhoneNote(
         CreatePhoneNoteRequest request,
         CancellationToken cancellationToken) =>
@@ -320,6 +347,7 @@ public sealed class SecretariatController(
             Ok(await service.CreatePhoneNoteAsync(request, CurrentUserId(), cancellationToken)));
 
     [HttpPut("phone-notes/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> UpdatePhoneNote(
         Guid id,
         UpdatePhoneNoteRequest request,
@@ -334,6 +362,7 @@ public sealed class SecretariatController(
         });
 
     [HttpPost("phone-notes/{id:guid}/status")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> UpdatePhoneNoteStatus(
         Guid id,
         UpdatePhoneNoteStatusRequest request,
@@ -348,6 +377,7 @@ public sealed class SecretariatController(
         });
 
     [HttpDelete("phone-notes/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public async Task<IActionResult> DeletePhoneNote(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await service.DeletePhoneNoteAsync(id, CurrentUserId(), cancellationToken);
@@ -357,6 +387,7 @@ public sealed class SecretariatController(
     }
 
     [HttpGet("meetings")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatView)]
     public Task<IActionResult> GetMeetings(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -368,12 +399,14 @@ public sealed class SecretariatController(
         GetSchedules(SecretariatScheduleType.Meeting, companyId, projectId, status, startDate, endDate, search, cancellationToken);
 
     [HttpPost("meetings")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> CreateMeeting(
         CreateScheduleRequest request,
         CancellationToken cancellationToken) =>
         CreateSchedule(SecretariatScheduleType.Meeting, request, cancellationToken);
 
     [HttpPut("meetings/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> UpdateMeeting(
         Guid id,
         UpdateScheduleRequest request,
@@ -381,6 +414,7 @@ public sealed class SecretariatController(
         UpdateSchedule(SecretariatScheduleType.Meeting, id, request, cancellationToken);
 
     [HttpPost("meetings/{id:guid}/status")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> UpdateMeetingStatus(
         Guid id,
         UpdateScheduleStatusRequest request,
@@ -388,10 +422,12 @@ public sealed class SecretariatController(
         UpdateScheduleStatus(SecretariatScheduleType.Meeting, id, request.Status, cancellationToken);
 
     [HttpDelete("meetings/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> DeleteMeeting(Guid id, CancellationToken cancellationToken) =>
         DeleteSchedule(SecretariatScheduleType.Meeting, id, cancellationToken);
 
     [HttpGet("appointments")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatView)]
     public Task<IActionResult> GetAppointments(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -403,12 +439,14 @@ public sealed class SecretariatController(
         GetSchedules(SecretariatScheduleType.Appointment, companyId, projectId, status, startDate, endDate, search, cancellationToken);
 
     [HttpPost("appointments")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> CreateAppointment(
         CreateScheduleRequest request,
         CancellationToken cancellationToken) =>
         CreateSchedule(SecretariatScheduleType.Appointment, request, cancellationToken);
 
     [HttpPut("appointments/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> UpdateAppointment(
         Guid id,
         UpdateScheduleRequest request,
@@ -416,6 +454,7 @@ public sealed class SecretariatController(
         UpdateSchedule(SecretariatScheduleType.Appointment, id, request, cancellationToken);
 
     [HttpPost("appointments/{id:guid}/status")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> UpdateAppointmentStatus(
         Guid id,
         UpdateScheduleStatusRequest request,
@@ -423,6 +462,7 @@ public sealed class SecretariatController(
         UpdateScheduleStatus(SecretariatScheduleType.Appointment, id, request.Status, cancellationToken);
 
     [HttpDelete("appointments/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SecretariatManage)]
     public Task<IActionResult> DeleteAppointment(Guid id, CancellationToken cancellationToken) =>
         DeleteSchedule(SecretariatScheduleType.Appointment, id, cancellationToken);
 

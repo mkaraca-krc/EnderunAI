@@ -1,4 +1,5 @@
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class SecurityAuditController(AppDbContext db) : ControllerBase
 {
     [HttpGet("events")]
+    [RequirePermission(PermissionCatalog.Keys.AuditLogView)]
     public async Task<IActionResult> GetEvents(
         [FromQuery] string? entityType,
         [FromQuery] Guid? entityId,

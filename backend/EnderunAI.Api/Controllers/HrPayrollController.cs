@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using EnderunAI.Api.Contracts.HumanResources;
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.HumanResources;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class HrPayrollController(IHrApprovalService service) : ControllerBase
 {
     [HttpGet("records")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetPayrolls(
         [FromQuery] Guid? companyId, [FromQuery] Guid? personnelId,
         [FromQuery] int? year, [FromQuery] int? month,
@@ -22,12 +24,14 @@ public sealed class HrPayrollController(IHrApprovalService service) : Controller
             companyId, personnelId, year, month, status, cancellationToken));
 
     [HttpGet("records/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public Task<IActionResult> GetPayroll(
         Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
             Ok(await service.GetPayrollAsync(id, cancellationToken)));
 
     [HttpGet("summary")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public Task<IActionResult> GetSummary(
         [FromQuery] Guid companyId, [FromQuery] int year, [FromQuery] int month,
         CancellationToken cancellationToken) =>
@@ -36,6 +40,7 @@ public sealed class HrPayrollController(IHrApprovalService service) : Controller
                 companyId, year, month, cancellationToken)));
 
     [HttpPost("records/calculate-company")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollCreate)]
     public Task<IActionResult> CalculateCompany(
         CalculateCompanyPayrollRequest request,
         CancellationToken cancellationToken) =>
@@ -44,6 +49,7 @@ public sealed class HrPayrollController(IHrApprovalService service) : Controller
                 request, CurrentUserId(), cancellationToken)));
 
     [HttpPost("records/{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollApprove)]
     public Task<IActionResult> Approve(
         Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -51,6 +57,7 @@ public sealed class HrPayrollController(IHrApprovalService service) : Controller
                 id, CurrentUserId(), cancellationToken)));
 
     [HttpPost("records/{id:guid}/cancel")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public Task<IActionResult> Cancel(
         Guid id, ReasonRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -58,6 +65,7 @@ public sealed class HrPayrollController(IHrApprovalService service) : Controller
                 id, request.Reason, CurrentUserId(), cancellationToken)));
 
     [HttpPost("records/{id:guid}/paid")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public Task<IActionResult> MarkPaid(
         Guid id, MarkPayrollPaidRequest request,
         CancellationToken cancellationToken) =>
@@ -66,6 +74,7 @@ public sealed class HrPayrollController(IHrApprovalService service) : Controller
                 id, request, CurrentUserId(), cancellationToken)));
 
     [HttpDelete("records/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollDelete)]
     public Task<IActionResult> Delete(
         Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>

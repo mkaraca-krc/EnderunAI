@@ -491,6 +491,11 @@ const groups: MenuGroup[] = [
         href: "/sistem-yonetimi/kullanicilar",
         icon: "⚿",
       },
+      {
+        label: "Yetki Matrisi",
+        href: "/sistem-yonetimi/yetki-matrisi",
+        icon: "▦",
+      },
     ],
   },
   {

@@ -1,4 +1,5 @@
 using EnderunAI.Api.Contracts.Accounting;
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.Accounting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +14,7 @@ public sealed class AccountingAccountsController(
     : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.AccountingView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? parentAccountId,
@@ -29,6 +31,7 @@ public sealed class AccountingAccountsController(
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -44,6 +47,7 @@ public sealed class AccountingAccountsController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.AccountingCreate)]
     public async Task<IActionResult> Create(
         [FromBody] CreateAccountingAccountRequest request,
         CancellationToken cancellationToken)
@@ -70,6 +74,7 @@ public sealed class AccountingAccountsController(
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         [FromBody] UpdateAccountingAccountRequest request,
@@ -97,6 +102,7 @@ public sealed class AccountingAccountsController(
     }
 
     [HttpPost("{id:guid}/deactivate")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingDelete)]
     public async Task<IActionResult> Deactivate(
         Guid id,
         CancellationToken cancellationToken)

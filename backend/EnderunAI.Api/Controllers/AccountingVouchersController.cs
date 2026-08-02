@@ -1,4 +1,5 @@
 using EnderunAI.Api.Contracts.Accounting;
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.Accounting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +14,7 @@ public sealed class AccountingVouchersController(
     : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.AccountingView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] int? status,
@@ -43,6 +45,7 @@ public sealed class AccountingVouchersController(
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -63,6 +66,7 @@ public sealed class AccountingVouchersController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.AccountingCreate)]
     public async Task<IActionResult> Create(
         [FromBody] CreateAccountingVoucherRequest request,
         CancellationToken cancellationToken)
@@ -95,6 +99,7 @@ public sealed class AccountingVouchersController(
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         [FromBody] UpdateAccountingVoucherRequest request,
@@ -131,6 +136,7 @@ public sealed class AccountingVouchersController(
     }
 
     [HttpPost("{id:guid}/post")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingApprove)]
     public async Task<IActionResult> Post(
         Guid id,
         CancellationToken cancellationToken)
@@ -158,6 +164,7 @@ public sealed class AccountingVouchersController(
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingDelete)]
     public async Task<IActionResult> Cancel(
         Guid id,
         [FromBody] CancelAccountingVoucherRequest request,

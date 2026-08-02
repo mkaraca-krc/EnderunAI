@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
 import {
   Badge,
@@ -34,14 +35,18 @@ import {
   type UserManagementCatalog,
 } from "@/services/user-management.service";
 
+const SITE_ONLY_POLICY = 1;
+
 type UserForm = {
   username: string;
   fullName: string;
   email: string;
-  roleName: string;
+  roleNames: string[];
+  projectSiteIds: string[];
   password: string;
   isActive: boolean;
-  selectedPermissions: string[];
+  allowedPermissions: string[];
+  deniedPermissions: string[];
 };
 
 type CredentialNotice = {
@@ -54,10 +59,12 @@ const emptyForm: UserForm = {
   username: "",
   fullName: "",
   email: "",
-  roleName: "",
+  roleNames: [],
+  projectSiteIds: [],
   password: "",
   isActive: true,
-  selectedPermissions: [],
+  allowedPermissions: [],
+  deniedPermissions: [],
 };
 
 function normalized(value?: string | null) {
@@ -165,11 +172,8 @@ export default function UserManagementPage() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const presetByName = useMemo(
-    () =>
-      new Map(
-        (catalog?.rolePresets ?? []).map((preset) => [preset.name, preset])
-      ),
+  const roleByName = useMemo(
+    () => new Map((catalog?.roles ?? []).map((role) => [role.name, role])),
     [catalog]
   );
 
@@ -189,7 +193,7 @@ export default function UserManagementPage() {
     const term = normalized(search);
 
     return users.filter((user) => {
-      if (roleFilter !== "all" && user.roleName !== roleFilter) {
+      if (roleFilter !== "all" && !user.roleNames.includes(roleFilter)) {
         return false;
       }
       if (statusFilter === "active" && !user.isActive) {
@@ -203,9 +207,12 @@ export default function UserManagementPage() {
         return true;
       }
 
-      return [user.fullName, user.username, user.email, user.roleName].some(
-        (value) => normalized(value).includes(term)
-      );
+      return [
+        user.fullName,
+        user.username,
+        user.email,
+        ...user.roleNames,
+      ].some((value) => normalized(value ?? "").includes(term));
     });
   }, [roleFilter, search, statusFilter, users]);
 
@@ -214,50 +221,49 @@ export default function UserManagementPage() {
       total: users.length,
       active: users.filter((user) => user.isActive).length,
       admins: users.filter((user) =>
-        ["Admin", "Genel Müdür"].includes(user.roleName)
+        user.roleNames.some((name) =>
+          ["Admin", "Genel Müdür"].includes(name)
+        )
       ).length,
       neverLoggedIn: users.filter((user) => !user.lastLoginAtUtc).length,
     }),
     [users]
   );
 
-  const selectedPreset = presetByName.get(form.roleName);
-  const selectedPermissionSet = useMemo(
-    () => new Set(form.selectedPermissions),
-    [form.selectedPermissions]
-  );
-  const presetPermissionSet = useMemo(
-    () => new Set(selectedPreset?.permissions ?? []),
-    [selectedPreset]
+  const requiresSiteSelection = form.roleNames.some(
+    (name) => roleByName.get(name)?.dataScopePolicy === SITE_ONLY_POLICY
   );
 
-  const customAddedCount = form.selectedPermissions.filter(
-    (permission) => !presetPermissionSet.has(permission)
-  ).length;
-  const customDeniedCount = [...presetPermissionSet].filter(
-    (permission) => !selectedPermissionSet.has(permission)
-  ).length;
+  const allowedSet = useMemo(
+    () => new Set(form.allowedPermissions),
+    [form.allowedPermissions]
+  );
+  const deniedSet = useMemo(
+    () => new Set(form.deniedPermissions),
+    [form.deniedPermissions]
+  );
 
-  function chooseRole(roleName: string) {
-    const preset = presetByName.get(roleName);
+  function toggleRole(roleName: string) {
     setForm((current) => ({
       ...current,
-      roleName,
-      selectedPermissions: [...(preset?.permissions ?? [])],
+      roleNames: current.roleNames.includes(roleName)
+        ? current.roleNames.filter((name) => name !== roleName)
+        : [...current.roleNames, roleName],
+    }));
+  }
+
+  function toggleSite(siteId: string) {
+    setForm((current) => ({
+      ...current,
+      projectSiteIds: current.projectSiteIds.includes(siteId)
+        ? current.projectSiteIds.filter((id) => id !== siteId)
+        : [...current.projectSiteIds, siteId],
     }));
   }
 
   function openCreate() {
-    const defaultRole =
-      catalog?.rolePresets.find((preset) => preset.name === "Tekniker") ??
-      catalog?.rolePresets[0];
-
     setEditingUser(null);
-    setForm({
-      ...emptyForm,
-      roleName: defaultRole?.name ?? "",
-      selectedPermissions: [...(defaultRole?.permissions ?? [])],
-    });
+    setForm(emptyForm);
     setError("");
     setEditorOpen(true);
   }
@@ -268,47 +274,44 @@ export default function UserManagementPage() {
       username: user.username,
       fullName: user.fullName,
       email: user.email ?? "",
-      roleName: user.roleName,
+      roleNames: [...user.roleNames],
+      projectSiteIds: [...user.projectSiteIds],
       password: "",
       isActive: user.isActive,
-      selectedPermissions: [...user.effectivePermissions],
+      allowedPermissions: [...user.allowedPermissions],
+      deniedPermissions: [...user.deniedPermissions],
     });
     setError("");
     setEditorOpen(true);
   }
 
-  function togglePermission(permission: string) {
+  function setPermissionOverride(
+    key: string,
+    mode: "default" | "allow" | "deny"
+  ) {
     setForm((current) => ({
       ...current,
-      selectedPermissions: current.selectedPermissions.includes(permission)
-        ? current.selectedPermissions.filter((item) => item !== permission)
-        : [...current.selectedPermissions, permission],
-    }));
-  }
-
-  function resetToPreset() {
-    setForm((current) => ({
-      ...current,
-      selectedPermissions: [...(selectedPreset?.permissions ?? [])],
+      allowedPermissions:
+        mode === "allow"
+          ? [...new Set([...current.allowedPermissions, key])]
+          : current.allowedPermissions.filter((item) => item !== key),
+      deniedPermissions:
+        mode === "deny"
+          ? [...new Set([...current.deniedPermissions, key])]
+          : current.deniedPermissions.filter((item) => item !== key),
     }));
   }
 
   function buildPayload(): ManagedUserPayload {
-    const basePermissions = new Set(selectedPreset?.permissions ?? []);
-    const selected = new Set(form.selectedPermissions);
-
     return {
       username: form.username.trim(),
       fullName: form.fullName.trim(),
       email: form.email.trim() || null,
-      roleName: form.roleName,
+      roleNames: form.roleNames,
       isActive: form.isActive,
-      allowedPermissions: [...selected].filter(
-        (permission) => !basePermissions.has(permission)
-      ),
-      deniedPermissions: [...basePermissions].filter(
-        (permission) => !selected.has(permission)
-      ),
+      allowedPermissions: form.allowedPermissions,
+      deniedPermissions: form.deniedPermissions,
+      projectSiteIds: requiresSiteSelection ? form.projectSiteIds : [],
       ...(editingUser || !form.password.trim()
         ? {}
         : { password: form.password.trim() }),
@@ -318,8 +321,13 @@ export default function UserManagementPage() {
   async function submitUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!form.roleName) {
-      setError("Görev rolü seçilmelidir.");
+    if (form.roleNames.length === 0) {
+      setError("En az bir görev rolü seçilmelidir.");
+      return;
+    }
+
+    if (requiresSiteSelection && form.projectSiteIds.length === 0) {
+      setError("Seçilen rol için en az bir şantiye ataması zorunludur.");
       return;
     }
 
@@ -371,10 +379,11 @@ export default function UserManagementPage() {
         username: user.username,
         fullName: user.fullName,
         email: user.email,
-        roleName: user.roleName,
+        roleNames: user.roleNames,
         isActive: !user.isActive,
         allowedPermissions: user.allowedPermissions,
         deniedPermissions: user.deniedPermissions,
+        projectSiteIds: user.projectSiteIds,
       });
       setNotice(result.message);
       await loadData();
@@ -421,16 +430,16 @@ export default function UserManagementPage() {
 
   const roleOptions = [
     { value: "all", label: "Tüm görev rolleri" },
-    ...(catalog?.rolePresets ?? []).map((preset) => ({
-      value: preset.name,
-      label: preset.name,
+    ...(catalog?.roles ?? []).map((role) => ({
+      value: role.name,
+      label: role.name,
     })),
   ];
 
   return (
     <ErpShell
       title="Kullanıcılar ve Yetkiler"
-      description="Kullanıcı hesabı, görev rolü, erişim kısıtları ve şifre yönetimi"
+      description="Kullanıcı hesabı, görev rolleri, şantiye ataması ve şifre yönetimi"
     >
       <div className="space-y-6">
         {error && !editorOpen && !resetUser && (
@@ -509,8 +518,15 @@ export default function UserManagementPage() {
         <Card>
           <SectionHeader
             title="Kullanıcı Hesapları"
-            description="Görev rolü seçildiğinde kısıtlamalar otomatik uygulanır"
-            action={<Button onClick={openCreate}>+ Yeni Kullanıcı</Button>}
+            description="Bir kullanıcıya birden fazla rol atanabilir; izinler birleşir"
+            action={
+              <div className="flex gap-2">
+                <Link href="/sistem-yonetimi/yetki-matrisi">
+                  <Button variant="secondary">Yetki Matrisi</Button>
+                </Link>
+                <Button onClick={openCreate}>+ Yeni Kullanıcı</Button>
+              </div>
+            }
           />
           <CardContent className="space-y-4">
             <div className="grid gap-3 lg:grid-cols-[1fr_240px_180px]">
@@ -550,7 +566,8 @@ export default function UserManagementPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Kullanıcı</TableHead>
-                      <TableHead>Görev rolü</TableHead>
+                      <TableHead>Görev rolleri</TableHead>
+                      <TableHead>Şantiye</TableHead>
                       <TableHead>Yetki özeti</TableHead>
                       <TableHead>Son giriş</TableHead>
                       <TableHead>Durum</TableHead>
@@ -577,15 +594,31 @@ export default function UserManagementPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={
-                              ["Admin", "Genel Müdür"].includes(user.roleName)
-                                ? "info"
-                                : "default"
-                            }
-                          >
-                            {user.roleName}
-                          </Badge>
+                          <div className="flex flex-wrap gap-1">
+                            {user.roleNames.map((name) => (
+                              <Badge
+                                key={name}
+                                variant={
+                                  ["Admin", "Genel Müdür"].includes(name)
+                                    ? "info"
+                                    : "default"
+                                }
+                              >
+                                {name}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {user.projectSites.length === 0 ? (
+                            <span className="text-xs text-slate-400">—</span>
+                          ) : (
+                            <span className="text-xs text-slate-600">
+                              {user.projectSites
+                                .map((site) => site.code)
+                                .join(", ")}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -659,23 +692,30 @@ export default function UserManagementPage() {
 
         <Card>
           <SectionHeader
-            title="Otomatik Rol Şablonları"
-            description="Kullanıcı oluştururken görevi seçmeniz yeterlidir"
+            title="Görev Rolleri"
+            description="Rol başına izinler Yetki Matrisi ekranından yönetilir"
+            action={
+              <Link href="/sistem-yonetimi/yetki-matrisi">
+                <Button variant="secondary">Yetki Matrisine Git</Button>
+              </Link>
+            }
           />
           <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {(catalog?.rolePresets ?? []).map((preset) => (
+            {(catalog?.roles ?? []).map((role) => (
               <article
-                key={preset.name}
+                key={role.name}
                 className="rounded-xl border border-slate-200 p-4"
               >
                 <div className="flex items-center justify-between gap-3">
                   <strong className="text-sm text-slate-950">
-                    {preset.name}
+                    {role.name}
                   </strong>
-                  <Badge>{preset.permissions.length} izin</Badge>
+                  {role.dataScopePolicy === SITE_ONLY_POLICY && (
+                    <Badge variant="warning">Sadece şantiye</Badge>
+                  )}
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  {preset.description}
+                  {role.description}
                 </p>
               </article>
             ))}
@@ -701,8 +741,8 @@ export default function UserManagementPage() {
                   {editingUser ? "Kullanıcıyı Düzenle" : "Yeni Kullanıcı"}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Görev rolü varsayılan izinleri otomatik getirir; aşağıdan
-                  kullanıcıya özel değişiklik yapabilirsiniz.
+                  Bir veya daha fazla rol seçin; izinler birleşir. İzinlerin
+                  kendisi Yetki Matrisi'nden yönetilir.
                 </p>
               </div>
               <Button
@@ -784,43 +824,84 @@ export default function UserManagementPage() {
                   </div>
 
                   <div className="rounded-xl border border-slate-200 p-4">
-                    <h3 className="font-semibold text-slate-950">Görev Rolü</h3>
-                    <div className="mt-4">
-                      <Select
-                        label="Otomatik yetki şablonu"
-                        required
-                        value={form.roleName}
-                        options={(catalog?.rolePresets ?? []).map((preset) => ({
-                          value: preset.name,
-                          label: preset.name,
-                        }))}
-                        placeholder="Görev seçin"
-                        onChange={(event) => chooseRole(event.target.value)}
-                      />
+                    <h3 className="font-semibold text-slate-950">
+                      Görev Rolleri
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Birden fazla rol seçilebilir; izinler birleşir.
+                    </p>
+                    <div className="mt-3 grid gap-2">
+                      {(catalog?.roles ?? []).map((role) => (
+                        <label
+                          key={role.name}
+                          className={[
+                            "flex cursor-pointer items-start gap-3 rounded-lg border p-2.5 transition",
+                            form.roleNames.includes(role.name)
+                              ? "border-emerald-200 bg-emerald-50"
+                              : "border-slate-200 bg-white hover:bg-slate-50",
+                          ].join(" ")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={form.roleNames.includes(role.name)}
+                            onChange={() => toggleRole(role.name)}
+                            className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                          />
+                          <span className="min-w-0">
+                            <span className="flex flex-wrap items-center gap-1.5">
+                              <strong className="text-sm text-slate-900">
+                                {role.name}
+                              </strong>
+                              {role.dataScopePolicy === SITE_ONLY_POLICY && (
+                                <Badge variant="warning">Sadece şantiye</Badge>
+                              )}
+                            </span>
+                            <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                              {role.description}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
                     </div>
-                    {selectedPreset && (
-                      <div className="mt-3 rounded-lg bg-slate-50 p-3">
-                        <p className="text-xs leading-5 text-slate-600">
-                          {selectedPreset.description}
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          <Badge variant="success">
-                            {selectedPreset.permissions.length} varsayılan
-                          </Badge>
-                          {customAddedCount > 0 && (
-                            <Badge variant="info">
-                              +{customAddedCount} ek izin
-                            </Badge>
-                          )}
-                          {customDeniedCount > 0 && (
-                            <Badge variant="warning">
-                              -{customDeniedCount} kısıtlama
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </div>
+
+                  {requiresSiteSelection && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <h3 className="font-semibold text-amber-900">
+                        Şantiye Ataması (zorunlu)
+                      </h3>
+                      <p className="mt-1 text-xs text-amber-800">
+                        Seçilen rol sadece atanan şantiyelerin verisini
+                        görebilir.
+                      </p>
+                      <div className="mt-3 max-h-56 space-y-1.5 overflow-y-auto">
+                        {(catalog?.sites ?? []).map((site) => (
+                          <label
+                            key={site.id}
+                            className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-amber-200 bg-white p-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={form.projectSiteIds.includes(site.id)}
+                              onChange={() => toggleSite(site.id)}
+                              className="h-4 w-4 rounded border-slate-300"
+                            />
+                            <span>
+                              <strong>{site.code}</strong> — {site.name}
+                              <span className="ml-1 text-xs text-slate-400">
+                                ({site.projectCode})
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                        {(catalog?.sites ?? []).length === 0 && (
+                          <p className="text-xs text-amber-700">
+                            Tanımlı şantiye bulunamadı.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <label className="flex items-center gap-3 rounded-xl border border-slate-200 p-4">
                     <input
@@ -846,86 +927,100 @@ export default function UserManagementPage() {
                 </div>
 
                 <div className="rounded-xl border border-slate-200">
-                  <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h3 className="font-semibold text-slate-950">
-                        Yetki Matrisi
-                      </h3>
-                      <p className="mt-1 text-xs text-slate-500">
-                        İşaretli alanlar kullanıcının erişebileceği işlemlerdir.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={resetToPreset}
-                    >
-                      Rol varsayılanına dön
-                    </Button>
+                  <div className="border-b border-slate-200 px-4 py-4">
+                    <h3 className="font-semibold text-slate-950">
+                      Kullanıcıya Özel İstisnalar
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Varsayılan olarak izinler yukarıda seçilen rollerden
+                      gelir. Burada yalnızca bu kullanıcıya özel ek izin veya
+                      kısıtlama tanımlayın.
+                    </p>
                   </div>
 
                   <div className="max-h-[62vh] space-y-5 overflow-y-auto p-4">
                     {permissionGroups.map(([module, permissions]) => (
                       <section key={module}>
-                        <div className="mb-2 flex items-center justify-between">
-                          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            {module}
-                          </h4>
-                          <span className="text-xs text-slate-400">
-                            {
-                              permissions.filter((permission) =>
-                                selectedPermissionSet.has(permission.key)
-                              ).length
-                            }
-                            /{permissions.length}
-                          </span>
-                        </div>
+                        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {module}
+                        </h4>
                         <div className="grid gap-2 xl:grid-cols-2">
                           {permissions.map((permission) => {
-                            const checked = selectedPermissionSet.has(
-                              permission.key
-                            );
-                            const isPreset =
-                              presetPermissionSet.has(permission.key);
-                            const customAdded = checked && !isPreset;
-                            const customDenied = !checked && isPreset;
+                            const mode = allowedSet.has(permission.key)
+                              ? "allow"
+                              : deniedSet.has(permission.key)
+                                ? "deny"
+                                : "default";
 
                             return (
-                              <label
+                              <div
                                 key={permission.key}
-                                className={[
-                                  "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition",
-                                  checked
-                                    ? "border-emerald-200 bg-emerald-50"
-                                    : "border-slate-200 bg-white hover:bg-slate-50",
-                                ].join(" ")}
+                                className="rounded-xl border border-slate-200 bg-white p-3"
                               >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() =>
-                                    togglePermission(permission.key)
-                                  }
-                                  className="mt-0.5 h-4 w-4 rounded border-slate-300"
-                                />
-                                <span className="min-w-0">
-                                  <span className="flex flex-wrap items-center gap-1.5">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="min-w-0">
                                     <strong className="text-sm text-slate-900">
                                       {permission.name}
                                     </strong>
-                                    {customAdded && (
-                                      <Badge variant="info">Özel ek</Badge>
-                                    )}
-                                    {customDenied && (
-                                      <Badge variant="warning">Kısıtlandı</Badge>
-                                    )}
+                                    <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                                      {permission.description}
+                                    </span>
                                   </span>
-                                  <span className="mt-1 block text-xs leading-5 text-slate-500">
-                                    {permission.description}
-                                  </span>
-                                </span>
-                              </label>
+                                  <div className="flex shrink-0 gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setPermissionOverride(
+                                          permission.key,
+                                          "default"
+                                        )
+                                      }
+                                      className={[
+                                        "rounded-full px-2.5 py-1 text-xs",
+                                        mode === "default"
+                                          ? "bg-slate-900 text-white"
+                                          : "bg-slate-100 text-slate-600",
+                                      ].join(" ")}
+                                    >
+                                      Rolden
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setPermissionOverride(
+                                          permission.key,
+                                          "allow"
+                                        )
+                                      }
+                                      className={[
+                                        "rounded-full px-2.5 py-1 text-xs",
+                                        mode === "allow"
+                                          ? "bg-emerald-600 text-white"
+                                          : "bg-emerald-50 text-emerald-700",
+                                      ].join(" ")}
+                                    >
+                                      + İzin ver
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setPermissionOverride(
+                                          permission.key,
+                                          "deny"
+                                        )
+                                      }
+                                      className={[
+                                        "rounded-full px-2.5 py-1 text-xs",
+                                        mode === "deny"
+                                          ? "bg-red-600 text-white"
+                                          : "bg-red-50 text-red-700",
+                                      ].join(" ")}
+                                    >
+                                      Kısıtla
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
                             );
                           })}
                         </div>

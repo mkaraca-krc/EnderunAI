@@ -1,9 +1,12 @@
+using EnderunAI.Api.Models;
+
 namespace EnderunAI.Api.Security;
 
 public sealed record RoleSeedDefinition(
     string Name,
     string Description,
-    IReadOnlyCollection<string> PermissionKeys);
+    IReadOnlyCollection<string> PermissionKeys,
+    RoleDataScopePolicy DataScopePolicy = RoleDataScopePolicy.All);
 
 /// <summary>
 /// Seed edilecek roller ve izin setleri. Bu liste yalnızca ilk kurulumda
@@ -35,6 +38,7 @@ public static class RoleCatalog
             PermissionCatalog.Keys.FinanceDelete, PermissionCatalog.Keys.FinanceApprove, PermissionCatalog.Keys.FinanceManage,
             PermissionCatalog.Keys.CurrentAccountsView, PermissionCatalog.Keys.CurrentAccountsCreate,
             PermissionCatalog.Keys.CurrentAccountsEdit, PermissionCatalog.Keys.CurrentAccountsDelete,
+            PermissionCatalog.Keys.CurrentAccountsApprove,
             PermissionCatalog.Keys.AccountingView, PermissionCatalog.Keys.AccountingCreate, PermissionCatalog.Keys.AccountingEdit,
             PermissionCatalog.Keys.AccountingDelete, PermissionCatalog.Keys.AccountingApprove, PermissionCatalog.Keys.AccountingManage,
             PermissionCatalog.Keys.HakedisView,
@@ -129,22 +133,22 @@ public static class RoleCatalog
 
         new("Şantiye Şefi", "Sadece atandığı şantiyeler: günlük rapor girme, şantiye personelini görüntüleme, sarf talebi.",
         [
-            PermissionCatalog.Keys.DashboardView,
+            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.SitesView,
             PermissionCatalog.Keys.SiteReportsView, PermissionCatalog.Keys.SiteReportsCreate,
             PermissionCatalog.Keys.SiteReportsEdit, PermissionCatalog.Keys.SiteReportsDelete,
             PermissionCatalog.Keys.PersonnelView,
             PermissionCatalog.Keys.InventoryView, PermissionCatalog.Keys.InventoryCreate,
             PermissionCatalog.Keys.PurchasingRequestsView, PermissionCatalog.Keys.PurchasingRequestsCreate,
             PermissionCatalog.Keys.InventoryManage, PermissionCatalog.Keys.PurchasingView, PermissionCatalog.Keys.PurchasingManage
-        ]),
+        ], RoleDataScopePolicy.SiteOnly),
 
         new("Formen", "Sadece atandığı şantiyede günlük rapor girme (taslak), kendi ekibini görüntüleme.",
         [
-            PermissionCatalog.Keys.DashboardView,
+            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.SitesView,
             PermissionCatalog.Keys.SiteReportsView, PermissionCatalog.Keys.SiteReportsCreate,
             PermissionCatalog.Keys.SiteReportsEdit,
             PermissionCatalog.Keys.PersonnelView
-        ]),
+        ], RoleDataScopePolicy.SiteOnly),
 
         new("Sekreterya", "Dosyalar tam yetki, cari kart oluşturma/görüntüleme, projeler görüntüleme.",
         [

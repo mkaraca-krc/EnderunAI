@@ -50,6 +50,40 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             permissions = authorization.Permissions;
         }
 
+        if (roleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase))
+        {
+            await next(context);
+            return;
+        }
+
+        // Asıl kaynak: action/controller üzerindeki [RequirePermission]
+        // attribute'ları (birden fazlası varsa herhangi biri yeterli).
+        // Henüz attribute eklenmemiş uçlar için path-heuristiği geçici bir
+        // güvenlik ağı olarak devam ediyor (Faz 2 tamamlandıkça daralacak).
+        var attributePermissions = context.GetEndpoint()?
+            .Metadata
+            .GetOrderedMetadata<RequirePermissionAttribute>()
+            .Select(attribute => attribute.Permission)
+            .ToArray();
+
+        if (attributePermissions is { Length: > 0 })
+        {
+            if (attributePermissions.Any(permission =>
+                    permissions.Contains(permission, StringComparer.OrdinalIgnoreCase)))
+            {
+                await next(context);
+                return;
+            }
+
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                message = "Bu işlem için yetkiniz bulunmuyor.",
+                requiredPermission = attributePermissions[0]
+            });
+            return;
+        }
+
         var requiredPermission = ResolveRequiredPermission(context.Request);
         if (requiredPermission is null)
         {
@@ -57,8 +91,7 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             return;
         }
 
-        if (roleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase) ||
-            permissions.Contains(requiredPermission, StringComparer.OrdinalIgnoreCase))
+        if (permissions.Contains(requiredPermission, StringComparer.OrdinalIgnoreCase))
         {
             await next(context);
             return;

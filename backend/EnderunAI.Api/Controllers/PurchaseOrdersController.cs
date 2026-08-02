@@ -13,7 +13,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class PurchaseOrdersController(IPurchaseOrderService service) : ControllerBase
 {
     [HttpGet]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingView)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingOrdersView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -26,32 +26,35 @@ public sealed class PurchaseOrdersController(IPurchaseOrderService service) : Co
             cancellationToken));
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingOrdersView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken) =>
         await ExecuteAsync(() => service.GetByIdAsync(id, cancellationToken));
 
     [HttpPost("create-from-rfq/{rfqId:guid}")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingOrdersCreate)]
     public async Task<IActionResult> CreateFromRfq(
         Guid rfqId,
         CancellationToken cancellationToken) =>
         await ExecuteAsync(() => service.CreateFromRfqAsync(rfqId, cancellationToken));
 
     [HttpPost("{id:guid}/submit")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingOrdersEdit)]
     public async Task<IActionResult> Submit(
         Guid id,
         CancellationToken cancellationToken) =>
         await ExecuteAsync(() => service.SubmitAsync(id, cancellationToken));
 
     [HttpPost("{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingOrdersApprove)]
     public async Task<IActionResult> Approve(
         Guid id,
         CancellationToken cancellationToken) =>
         await ExecuteAsync(() => service.ApproveAsync(id, cancellationToken));
 
     [HttpPost("{id:guid}/reject")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingOrdersApprove)]
     public async Task<IActionResult> Reject(
         Guid id,
         PurchaseOrderReasonRequest request,
@@ -59,7 +62,7 @@ public sealed class PurchaseOrdersController(IPurchaseOrderService service) : Co
         await ExecuteAsync(() => service.RejectAsync(id, request.Reason, cancellationToken));
 
     [HttpPost("{id:guid}/cancel")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingOrdersEdit)]
     public async Task<IActionResult> Cancel(
         Guid id,
         PurchaseOrderReasonRequest request,

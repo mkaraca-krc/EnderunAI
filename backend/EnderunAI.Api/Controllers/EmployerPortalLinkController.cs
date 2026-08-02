@@ -2,6 +2,7 @@ using System.Net.Mail;
 using System.Security.Cryptography;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Email;
 using Microsoft.AspNetCore.Authorization;
@@ -19,6 +20,7 @@ public sealed class EmployerPortalLinkController(
     IEmailService emailService) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.EmployerPortalView)]
     public async Task<IActionResult> Get(Guid projectId, CancellationToken cancellationToken)
     {
         var link = await db.EmployerPortalLinks.AsNoTracking()
@@ -44,6 +46,7 @@ public sealed class EmployerPortalLinkController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.EmployerPortalCreate)]
     public async Task<IActionResult> Create(Guid projectId, CancellationToken cancellationToken)
     {
         var projectExists = await db.Projects.AsNoTracking()
@@ -80,6 +83,7 @@ public sealed class EmployerPortalLinkController(
     }
 
     [HttpPost("revoke")]
+    [RequirePermission(PermissionCatalog.Keys.EmployerPortalDelete)]
     public async Task<IActionResult> Revoke(Guid projectId, CancellationToken cancellationToken)
     {
         var link = await db.EmployerPortalLinks
@@ -99,6 +103,7 @@ public sealed class EmployerPortalLinkController(
     }
 
     [HttpPost("send-email")]
+    [RequirePermission(PermissionCatalog.Keys.EmployerPortalEdit)]
     public async Task<IActionResult> SendEmail(
         Guid projectId,
         SendPortalEmailRequest request,
@@ -186,6 +191,7 @@ public sealed class EmployerPortalLinkController(
     }
 
     [HttpGet("email-log")]
+    [RequirePermission(PermissionCatalog.Keys.EmployerPortalView)]
     public async Task<IActionResult> GetEmailLog(Guid projectId, CancellationToken cancellationToken)
     {
         var items = await db.EmployerPortalEmailLogs.AsNoTracking()

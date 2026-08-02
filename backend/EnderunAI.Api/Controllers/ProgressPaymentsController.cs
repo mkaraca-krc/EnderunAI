@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.ProgressPayments;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,7 @@ public sealed class ProgressPaymentsController(AppDbContext db)
     : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -64,6 +66,7 @@ public sealed class ProgressPaymentsController(AppDbContext db)
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -76,6 +79,7 @@ public sealed class ProgressPaymentsController(AppDbContext db)
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.HakedisCreate)]
     public async Task<IActionResult> Create(
         CreateProgressPaymentRequest request,
         CancellationToken cancellationToken)
@@ -222,6 +226,7 @@ public sealed class ProgressPaymentsController(AppDbContext db)
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateProgressPaymentRequest request,
@@ -292,6 +297,7 @@ public sealed class ProgressPaymentsController(AppDbContext db)
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisDelete)]
     public async Task<IActionResult> Delete(
         Guid id,
         CancellationToken cancellationToken)
@@ -321,6 +327,7 @@ public sealed class ProgressPaymentsController(AppDbContext db)
     }
 
     [HttpPost("{id:guid}/submit")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     public Task<IActionResult> Submit(
         Guid id,
         CancellationToken cancellationToken) =>
@@ -332,6 +339,7 @@ public sealed class ProgressPaymentsController(AppDbContext db)
             cancellationToken);
 
     [HttpPost("{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisApprove)]
     public Task<IActionResult> Approve(
         Guid id,
         CancellationToken cancellationToken) =>
@@ -343,6 +351,7 @@ public sealed class ProgressPaymentsController(AppDbContext db)
             cancellationToken);
 
     [HttpPost("{id:guid}/post")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisApprove)]
     public Task<IActionResult> Post(
         Guid id,
         CancellationToken cancellationToken) =>
@@ -354,6 +363,7 @@ public sealed class ProgressPaymentsController(AppDbContext db)
             cancellationToken);
 
     [HttpPost("{id:guid}/cancel")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     public async Task<IActionResult> Cancel(
         Guid id,
         CancelProgressPaymentRequest request,

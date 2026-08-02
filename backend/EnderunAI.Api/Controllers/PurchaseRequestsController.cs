@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Purchasing;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +17,7 @@ public sealed class PurchaseRequestsController(
     IDocumentNumberService documentNumbers) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRequestsView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -79,6 +81,7 @@ public sealed class PurchaseRequestsController(
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRequestsView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -129,6 +132,7 @@ public sealed class PurchaseRequestsController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRequestsCreate)]
     public async Task<IActionResult> Create(
         CreatePurchaseRequestRequest request,
         CancellationToken cancellationToken)
@@ -205,6 +209,7 @@ public sealed class PurchaseRequestsController(
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRequestsEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdatePurchaseRequestRequest request,
@@ -264,6 +269,7 @@ public sealed class PurchaseRequestsController(
     }
 
     [HttpPost("{id:guid}/submit")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRequestsEdit)]
     public async Task<IActionResult> Submit(
         Guid id,
         CancellationToken cancellationToken)
@@ -295,6 +301,7 @@ public sealed class PurchaseRequestsController(
     }
 
     [HttpPost("{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRequestsApprove)]
     public async Task<IActionResult> Approve(
         Guid id,
         CancellationToken cancellationToken)
@@ -323,6 +330,7 @@ public sealed class PurchaseRequestsController(
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRequestsEdit)]
     public async Task<IActionResult> Cancel(
         Guid id,
         CancelPurchaseRequestRequest request,

@@ -130,6 +130,7 @@ public static class PermissionCatalog
         public const string CurrentAccountsCreate = "current-accounts.create";
         public const string CurrentAccountsEdit = "current-accounts.edit";
         public const string CurrentAccountsDelete = "current-accounts.delete";
+        public const string CurrentAccountsApprove = "current-accounts.approve";
 
         // Muhasebe
         public const string AccountingView = "accounting.view";
@@ -282,6 +283,7 @@ public static class PermissionCatalog
         new(Keys.CurrentAccountsCreate, "Cari", "Cari kart oluşturma", "Yeni cari hesap kartı oluşturur."),
         new(Keys.CurrentAccountsEdit, "Cari", "Cari kart düzenleme", "Cari hesap kartını günceller."),
         new(Keys.CurrentAccountsDelete, "Cari", "Cari kart silme", "Cari hesap kartını siler."),
+        new(Keys.CurrentAccountsApprove, "Cari", "Cari kart onayı", "Onay bekleyen cari kartı onaylar."),
 
         new(Keys.AccountingView, "Muhasebe", "Muhasebeyi görüntüleme", "Hesap planı, fiş ve defterleri görüntüler."),
         new(Keys.AccountingManage, "Muhasebe", "Muhasebe yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),

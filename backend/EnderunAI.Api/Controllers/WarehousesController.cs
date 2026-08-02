@@ -1,4 +1,5 @@
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class WarehousesController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,

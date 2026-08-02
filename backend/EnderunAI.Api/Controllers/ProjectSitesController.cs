@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.ProjectSites;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class ProjectSitesController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.SitesView)]
     public async Task<IActionResult> GetAll(
         Guid projectId,
         CancellationToken cancellationToken)
@@ -47,6 +49,7 @@ public sealed class ProjectSitesController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.SitesCreate)]
     public async Task<IActionResult> Create(
         Guid projectId,
         CreateProjectSiteRequest request,
@@ -103,13 +106,17 @@ public sealed class ProjectSitesController(AppDbContext db) : ControllerBase
 [ApiController]
 [Authorize]
 [Route("api/project-sites")]
-public sealed class ProjectSiteController(AppDbContext db) : ControllerBase
+public sealed class ProjectSiteController(
+    AppDbContext db,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SitesView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
     {
+        var scope = await dataScope.GetAsync(cancellationToken);
         var site = await db.ProjectSites
             .AsNoTracking()
             .Where(x => x.Id == id)
@@ -117,6 +124,8 @@ public sealed class ProjectSiteController(AppDbContext db) : ControllerBase
             {
                 x.Id,
                 x.ProjectId,
+                x.Project.CompanyId,
+                x.Project.BranchId,
                 ProjectCode = x.Project.Code,
                 ProjectName = x.Project.Name,
                 x.Code,
@@ -152,12 +161,20 @@ public sealed class ProjectSiteController(AppDbContext db) : ControllerBase
             })
             .SingleOrDefaultAsync(cancellationToken);
 
-        return site is null
-            ? NotFound(new { message = "Şantiye bulunamadı." })
-            : Ok(site);
+        if (site is null)
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
+        if (scope is null ||
+            !scope.CanAccessSite(site.CompanyId, site.BranchId, site.ProjectId, site.Id))
+        {
+            return NotFound(new { message = "Şantiye bulunamadı." });
+        }
+
+        return Ok(site);
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SitesEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateProjectSiteRequest request,
@@ -202,6 +219,7 @@ public sealed class ProjectSiteController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.SitesDelete)]
     public async Task<IActionResult> Delete(
         Guid id,
         CancellationToken cancellationToken)
@@ -237,6 +255,7 @@ public sealed class ProjectSiteController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/warehouses")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryCreate)]
     public async Task<IActionResult> CreateWarehouse(
         Guid id,
         CreateSiteWarehouseRequest request,
@@ -294,6 +313,7 @@ public sealed class ProjectSiteController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("{id:guid}/assignable-personnel")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetAssignablePersonnel(
         Guid id,
         CancellationToken cancellationToken)
@@ -328,6 +348,7 @@ public sealed class ProjectSiteController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/assignments")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> AssignPersonnel(
         Guid id,
         AssignPersonnelToSiteRequest request,
@@ -391,6 +412,7 @@ public sealed class ProjectSiteController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("assignments/{assignmentId:guid}/close")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> CloseAssignment(
         Guid assignmentId,
         [FromQuery] DateTime? endDate,

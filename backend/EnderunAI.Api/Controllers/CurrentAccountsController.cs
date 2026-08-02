@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.CurrentAccountsView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] CurrentAccountStatus? status,
@@ -54,6 +56,7 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.CurrentAccountsView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -90,6 +93,7 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.CurrentAccountsEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         CreateCurrentAccountRequest request,
@@ -135,6 +139,7 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.CurrentAccountsCreate)]
     public async Task<IActionResult> Create(
         CreateCurrentAccountRequest request,
         CancellationToken cancellationToken)
@@ -180,6 +185,7 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/submit")]
+    [RequirePermission(PermissionCatalog.Keys.CurrentAccountsEdit)]
     public async Task<IActionResult> Submit(
         Guid id,
         CancellationToken cancellationToken)
@@ -201,6 +207,7 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.CurrentAccountsApprove)]
     public async Task<IActionResult> Approve(
         Guid id,
         CancellationToken cancellationToken)

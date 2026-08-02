@@ -1,3 +1,4 @@
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.AI;
 using EnderunAI.Api.Services.Upload;
 using Microsoft.AspNetCore.Authorization;
@@ -15,6 +16,7 @@ public sealed class HakedisController(
 {
     [HttpPost("upload")]
     [RequestSizeLimit(50 * 1024 * 1024)]
+    [RequirePermission(PermissionCatalog.Keys.HakedisCreate)]
     public async Task<IActionResult> Upload(
         [FromForm] IFormFile file,
         CancellationToken cancellationToken
@@ -83,6 +85,7 @@ public sealed class HakedisController(
     }
 
     [HttpPost("files/{storedName}/analyze")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> Analyze(
         string storedName,
         CancellationToken cancellationToken
@@ -127,6 +130,7 @@ public sealed class HakedisController(
     }
 
     [HttpGet("files")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public IActionResult GetFiles()
     {
         return Ok(
@@ -135,6 +139,7 @@ public sealed class HakedisController(
     }
 
     [HttpGet("files/{storedName}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public IActionResult Download(string storedName)
     {
         var file = uploadService.GetFile(
@@ -166,6 +171,7 @@ public sealed class HakedisController(
     }
 
     [HttpDelete("files/{storedName}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisDelete)]
     public IActionResult Delete(string storedName)
     {
         var deleted = uploadService.DeleteFile(

@@ -13,7 +13,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class RfqController(IRfqService service) : ControllerBase
 {
     [HttpGet]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingView)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRfqView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] int? status,
@@ -21,14 +21,14 @@ public sealed class RfqController(IRfqService service) : ControllerBase
         await ExecuteAsync(() => service.GetAllAsync(companyId, status, cancellationToken));
 
     [HttpGet("{id:guid}")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingView)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRfqView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken) =>
         await ExecuteAsync(() => service.GetByIdAsync(id, cancellationToken));
 
     [HttpPost("create-from-purchase-request/{purchaseRequestId:guid}")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRfqCreate)]
     public async Task<IActionResult> CreateFromPurchaseRequest(
         Guid purchaseRequestId,
         CreateRfqRequest request,
@@ -39,7 +39,7 @@ public sealed class RfqController(IRfqService service) : ControllerBase
             cancellationToken));
 
     [HttpPost("{id:guid}/send")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRfqEdit)]
     public async Task<IActionResult> Send(
         Guid id,
         CancellationToken cancellationToken) =>
@@ -48,7 +48,7 @@ public sealed class RfqController(IRfqService service) : ControllerBase
             "RFQ tedarikçilere gönderildi.");
 
     [HttpPost("{rfqId:guid}/suppliers/{rfqSupplierId:guid}/quotation")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRfqEdit)]
     public async Task<IActionResult> SaveQuotation(
         Guid rfqId,
         Guid rfqSupplierId,
@@ -63,14 +63,14 @@ public sealed class RfqController(IRfqService service) : ControllerBase
             "Tedarikçi teklifi kaydedildi.");
 
     [HttpGet("{id:guid}/comparison")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingView)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRfqView)]
     public async Task<IActionResult> GetComparison(
         Guid id,
         CancellationToken cancellationToken) =>
         await ExecuteAsync(() => service.GetComparisonAsync(id, cancellationToken));
 
     [HttpPost("{id:guid}/award/{rfqSupplierId:guid}")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingApprove)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRfqApprove)]
     public async Task<IActionResult> Award(
         Guid id,
         Guid rfqSupplierId,
@@ -78,7 +78,7 @@ public sealed class RfqController(IRfqService service) : ControllerBase
         await ExecuteAsync(() => service.AwardAsync(id, rfqSupplierId, cancellationToken));
 
     [HttpPost("{id:guid}/close")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingManage)]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRfqEdit)]
     public async Task<IActionResult> Close(
         Guid id,
         CancellationToken cancellationToken) =>

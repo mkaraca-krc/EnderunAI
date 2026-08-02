@@ -7,15 +7,30 @@ export type PermissionDefinition = {
   description: string;
 };
 
-export type RolePreset = {
+export type RoleSummary = {
   name: string;
-  description: string;
-  permissions: string[];
+  description?: string | null;
+  dataScopePolicy: number; // 0 = Tümü, 1 = Sadece atandığı şantiyeler
+};
+
+export type SiteSummary = {
+  id: string;
+  code: string;
+  name: string;
+  projectCode: string;
+  projectName: string;
 };
 
 export type UserManagementCatalog = {
   permissions: PermissionDefinition[];
-  rolePresets: RolePreset[];
+  roles: RoleSummary[];
+  sites: SiteSummary[];
+};
+
+export type ManagedUserProjectSite = {
+  id: string;
+  code: string;
+  name: string;
 };
 
 export type ManagedUser = {
@@ -26,7 +41,10 @@ export type ManagedUser = {
   isActive: boolean;
   createdAtUtc: string;
   lastLoginAtUtc?: string | null;
+  roleNames: string[];
   roleName: string;
+  projectSiteIds: string[];
+  projectSites: ManagedUserProjectSite[];
   allowedPermissions: string[];
   deniedPermissions: string[];
   effectivePermissions: string[];
@@ -36,10 +54,11 @@ export type ManagedUserPayload = {
   username: string;
   fullName: string;
   email?: string | null;
-  roleName: string;
+  roleNames: string[];
   isActive: boolean;
   allowedPermissions: string[];
   deniedPermissions: string[];
+  projectSiteIds: string[];
   password?: string;
 };
 
@@ -52,6 +71,24 @@ export type ManagedUserResult = {
 export type PasswordResetResult = {
   message: string;
   temporaryPassword: string;
+};
+
+export type PermissionMatrixGrant = {
+  roleId: string;
+  permissionKey: string;
+};
+
+export type PermissionMatrixRole = {
+  id: string;
+  name: string;
+  description?: string | null;
+  dataScopePolicy: number;
+};
+
+export type PermissionMatrix = {
+  permissions: PermissionDefinition[];
+  roles: PermissionMatrixRole[];
+  grants: PermissionMatrixGrant[];
 };
 
 const root = "user-management";
@@ -83,6 +120,36 @@ export const userManagementService = {
         body: {
           newPassword: newPassword?.trim() || null,
         },
+      }
+    );
+  },
+};
+
+export const permissionMatrixService = {
+  get() {
+    return apiClient<PermissionMatrix>(`${root}/permission-matrix`);
+  },
+  toggle(roleId: string, permissionKey: string, granted: boolean) {
+    return apiClient<{ message: string }>(`${root}/permission-matrix/toggle`, {
+      method: "POST",
+      body: { roleId, permissionKey, granted },
+    });
+  },
+  updateScopePolicy(roleId: string, dataScopePolicy: number) {
+    return apiClient<{ message: string }>(
+      `${root}/permission-matrix/roles/${roleId}/scope-policy`,
+      {
+        method: "PATCH",
+        body: { dataScopePolicy },
+      }
+    );
+  },
+  createRole(name: string, description?: string, copyFromRoleName?: string) {
+    return apiClient<{ message: string; id: string }>(
+      `${root}/permission-matrix/roles`,
+      {
+        method: "POST",
+        body: { name, description, copyFromRoleName },
       }
     );
   },
