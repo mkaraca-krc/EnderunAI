@@ -107,30 +107,41 @@ export default function ExecutiveAiSummaryWidget({
   }
 
   if (finance) {
-    items.push({
-      text: `Banka bakiyesi ${money.format(
-        finance.bankBalance
-      )}, net nakit ${money.format(finance.netCash)}.`,
-      tone:
-        finance.netCash >= 0
-          ? "positive"
-          : "critical",
-    });
+    const cashDataAvailable = !finance.unavailableFields.includes(
+      "bankBalance"
+    );
 
-    if (finance.pendingPayments > 0) {
+    if (cashDataAvailable) {
       items.push({
-        text: `${money.format(
-          finance.pendingPayments
-        )} tutarında bekleyen ödeme bulunuyor.`,
-        tone: "warning",
+        text: `Banka bakiyesi ${money.format(
+          finance.bankBalance
+        )}, net nakit ${money.format(finance.netCash)}.`,
+        tone:
+          finance.netCash >= 0
+            ? "positive"
+            : "critical",
       });
-    }
 
-    if (finance.supplierDebt > 0) {
+      if (finance.pendingPayments > 0) {
+        items.push({
+          text: `${money.format(
+            finance.pendingPayments
+          )} tutarında bekleyen ödeme bulunuyor.`,
+          tone: "warning",
+        });
+      }
+
+      if (finance.supplierDebt > 0) {
+        items.push({
+          text: `Açık tedarikçi borcu ${money.format(
+            finance.supplierDebt
+          )}.`,
+          tone: "neutral",
+        });
+      }
+    } else {
       items.push({
-        text: `Açık tedarikçi borcu ${money.format(
-          finance.supplierDebt
-        )}.`,
+        text: "Kasa/banka ve tedarikçi bakiye verileri henüz uygulamaya bağlı değil.",
         tone: "neutral",
       });
     }

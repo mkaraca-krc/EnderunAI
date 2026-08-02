@@ -821,8 +821,11 @@ export default function DashboardPage() {
           value={money.format(
             finance?.netCash ?? 0
           )}
-          note="Gelir - gider dengesi"
+          note="Kasa/banka modülü devreye girince dolacak"
           href="/finans"
+          unavailable={
+            finance?.unavailableFields.includes("netCashChange") ?? false
+          }
         />
       </section>
 
