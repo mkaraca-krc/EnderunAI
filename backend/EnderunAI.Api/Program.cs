@@ -161,6 +161,15 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+// GEÇİCİ: safe-deploy.sh rollback testini kanıtlamak için bilerek eklendi,
+// hemen sonra kaldırılacak. Yalnızca gerçek systemd sürecinde (ASPNETCORE_URLS
+// set edilmiş) tetiklenir, test paketini etkilemez (WebApplicationFactory bu
+// değişkeni ayarlamaz).
+if (Environment.GetEnvironmentVariable("ASPNETCORE_URLS") is not null)
+{
+    throw new InvalidOperationException("SIMULATED DEPLOY FAILURE FOR ROLLBACK TEST");
+}
+
 using (var scope = app.Services.CreateScope())
 {
     var db =
