@@ -170,4 +170,37 @@ public sealed class PermissionAndScopeTests(DatabaseFixture fixture)
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    [Fact]
+    public async Task CreateUser_SiteOnlyRole_WithoutSiteAssignment_IsRejected()
+    {
+        // Regresyon testi: SiteOnly kapsamlı bir rol (Şantiye Şefi/Formen)
+        // hiç şantiye atanmadan oluşturulmaya çalışılırsa reddedilmeli.
+        // Daha önce bu kontrol atlanıp kullanıcıya yanlışlıkla kısıtsız
+        // (AllScope) erişim veriliyordu — canlı ortamda tespit edilip
+        // düzeltildi.
+        var adminClient = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+        var username = $"test-siteonly-nosite-{Guid.NewGuid():N}"[..40];
+
+        var response = await adminClient.PostAsJsonAsync("/api/user-management/users", new
+        {
+            username,
+            fullName = "Test Şantiyesiz Şef",
+            email = (string?)null,
+            roleNames = new[] { "Şantiye Şefi" },
+            password = "TestSiteOnlyNoSite!2026",
+            isActive = true,
+            allowedPermissions = Array.Empty<string>(),
+            deniedPermissions = Array.Empty<string>(),
+            projectSiteIds = Array.Empty<Guid>(),
+            workHoursExempt = true
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var role = await db.Roles.SingleAsync(r => r.Name == "Şantiye Şefi");
+        Assert.Equal(RoleDataScopePolicy.SiteOnly, role.DataScopePolicy);
+    }
 }

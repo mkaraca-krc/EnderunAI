@@ -471,6 +471,11 @@ public sealed class UserManagementController(
 
         // Veri kapsamı: seçilen rollerden biri SiteOnly ise kullanıcı
         // sadece seçilen şantiyeleri görür; aksi halde kısıtsız (AllScope).
+        // ÖNEMLİ: SiteOnly bir rol seçilip hiç şantiye atanmazsa fail-closed
+        // davranılır — hiç UserDataScope satırı eklenmez, yani kullanıcı
+        // hiçbir veriyi göremez (CurrentDataScopeSnapshot boş SiteIds/
+        // ProjectIds ile HasGlobalAccess=false döner). Önceden bu durumda
+        // yanlışlıkla AllScope (kısıtsız erişim) veriliyordu.
         await db.UserDataScopes
             .Where(item => item.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
@@ -478,7 +483,7 @@ public sealed class UserManagementController(
         var requiresSiteScope = roles.Any(
             role => role.DataScopePolicy == RoleDataScopePolicy.SiteOnly);
 
-        if (requiresSiteScope && projectSiteIds.Count > 0)
+        if (requiresSiteScope)
         {
             foreach (var siteId in projectSiteIds.Distinct())
             {
