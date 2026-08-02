@@ -53,6 +53,12 @@ export default function EmployerPortalPage() {
   }, [token]);
 
   useEffect(() => {
+    document.title = project?.projectName
+      ? `${project.projectName} - Saha Takip Portalı`
+      : "Enderun ERP - İşveren Portalı";
+  }, [project]);
+
+  useEffect(() => {
     async function loadReports() {
       setLoading(true);
       setError("");
@@ -95,6 +101,9 @@ export default function EmployerPortalPage() {
   }, [reports]);
 
   const maxHeadcount = Math.max(1, ...chartData.map(([, count]) => count));
+  const peakDate = chartData.length > 0
+    ? chartData.reduce((peak, entry) => (entry[1] > peak[1] ? entry : peak))[0]
+    : null;
 
   if (error && !project) {
     return (
@@ -111,8 +120,13 @@ export default function EmployerPortalPage() {
   return (
     <div className="portal-page">
       <div className="portal-header">
-        <h1>{project?.projectName ?? "Yükleniyor..."}</h1>
-        <p>İşveren Portalı · {project?.projectCode}</p>
+        <div className="portal-header-inner">
+          <img src="/logo-full-white.png" alt="Enderun Enerji" className="portal-header-logo" />
+          <div>
+            <h1>{project?.projectName ?? "Yükleniyor..."}</h1>
+            <p>İşveren Portalı · {project?.projectCode}</p>
+          </div>
+        </div>
       </div>
 
       <div className="portal-container">
@@ -148,7 +162,7 @@ export default function EmployerPortalPage() {
               {chartData.map(([date, count]) => (
                 <div className="portal-chart-bar-wrap" key={date}>
                   <div
-                    className="portal-chart-bar"
+                    className={`portal-chart-bar${date === peakDate ? " peak" : ""}`}
                     style={{ height: `${Math.max(4, (count / maxHeadcount) * 100)}px` }}
                     title={`${formatDate(date)}: ${count} personel`}
                   />

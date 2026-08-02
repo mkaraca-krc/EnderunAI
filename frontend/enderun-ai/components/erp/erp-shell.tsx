@@ -516,6 +516,11 @@ export default function ErpShell({
   children,
 }: ErpShellProps) {
   const pathname = usePathname();
+
+  useEffect(() => {
+    document.title = `Enderun ERP - ${title}`;
+  }, [title]);
+
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const navRef = useRef<HTMLElement | null>(null);
@@ -702,15 +707,17 @@ export default function ErpShell({
   return (
     <div className={`erp-layout ${collapsed ? "erp-sidebar-collapsed" : ""}`}>
       <aside className="erp-sidebar">
-        <div className="erp-brand">
-          <div className="erp-brand-mark">E</div>
+        <Link href="/dashboard" className="erp-brand">
+          <span className="erp-brand-mark">
+            <img src="/logo-star-white.png" alt="Enderun Enerji" />
+          </span>
           {!collapsed && (
             <div>
-              <strong>ENDERUN AI</strong>
-              <span>Yönetim Sistemi</span>
+              <strong>ENDERUN ERP</strong>
+              <span>Yönetim Platformu</span>
             </div>
           )}
-        </div>
+        </Link>
 
         <nav
           ref={navRef}

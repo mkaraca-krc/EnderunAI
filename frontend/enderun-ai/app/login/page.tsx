@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type LoginResponse = {
@@ -23,6 +23,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    document.title = "Enderun ERP - Giriş";
+  }, []);
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
@@ -70,12 +74,18 @@ export default function LoginPage() {
       <div className="grid min-h-screen lg:grid-cols-[1.1fr_0.9fr]">
         <section className="hidden border-r border-white/10 bg-slate-950 p-12 lg:flex lg:flex-col lg:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.35em] text-cyan-400">
-              Enderun AI
+            <img
+              src="/logo-full-white.png"
+              alt="Enderun Enerji"
+              className="h-24 w-auto"
+            />
+
+            <p className="mt-8 text-xs font-bold uppercase tracking-[0.35em] text-cyan-400">
+              Yönetim Platformu
             </p>
 
-            <h1 className="mt-5 max-w-xl text-5xl font-bold leading-tight text-white">
-              Enderun Enerji Yönetim Sistemi
+            <h1 className="mt-4 max-w-xl text-5xl font-bold leading-tight text-white">
+              Tüm operasyonu tek çatı altında yönetin.
             </h1>
 
             <p className="mt-5 max-w-xl text-base leading-7 text-slate-400">
@@ -100,8 +110,14 @@ export default function LoginPage() {
 
         <section className="flex min-h-[650px] items-center p-7 md:p-12">
           <div className="mx-auto w-full max-w-md">
-            <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-400 lg:hidden">
-              Enderun AI
+            <img
+              src="/logo-full-white.png"
+              alt="Enderun Enerji"
+              className="h-14 w-auto lg:hidden"
+            />
+
+            <p className="mt-6 text-xs font-bold uppercase tracking-[0.34em] text-cyan-400 lg:mt-0">
+              Yönetim Platformu
             </p>
 
             <h2 className="mt-3 text-3xl font-bold">

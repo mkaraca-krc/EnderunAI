@@ -1,5 +1,7 @@
+"use client";
+
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { LogoutButton } from "./logout-button";
 
 const navigation = [
@@ -21,15 +23,22 @@ export function AppShell({
   active: string;
   children: ReactNode;
 }) {
+  useEffect(() => {
+    document.title = `Enderun ERP - ${active}`;
+  }, [active]);
+
   return (
-    <main className="min-h-screen text-white">
+    <main className="min-h-screen bg-[#f7f5ee] text-slate-900">
       <div className="flex min-h-screen">
-        <aside className="hidden w-72 shrink-0 border-r border-white/10 bg-slate-950/65 p-6 backdrop-blur-xl lg:block">
-          <Link href="/" className="block">
-            <p className="text-xs font-bold tracking-[0.34em] text-cyan-400">
-              ENDERUN AI
-            </p>
-            <h1 className="mt-2 text-2xl font-bold">Yönetim Merkezi</h1>
+        <aside className="hidden w-72 shrink-0 border-r border-white/10 bg-slate-950 p-6 text-white lg:block">
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <img src="/logo-star-white.png" alt="Enderun Enerji" className="h-9 w-9 object-contain" />
+            <span>
+              <p className="text-xs font-bold tracking-[0.28em] text-cyan-400">
+                ENDERUN ERP
+              </p>
+              <h1 className="mt-1 text-lg font-bold">Yönetim Platformu</h1>
+            </span>
           </Link>
 
           <nav className="mt-10 space-y-2 text-sm">
