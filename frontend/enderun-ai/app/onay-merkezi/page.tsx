@@ -26,6 +26,11 @@ import {
   type RfqListItem,
 } from "@/services/rfq.service";
 
+import {
+  dailyReportService,
+  type PendingApprovalReport,
+} from "@/services/daily-report.service";
+
 const money = new Intl.NumberFormat("tr-TR", {
   style: "currency",
   currency: "TRY",
@@ -52,6 +57,9 @@ export default function ApprovalCenterPage() {
 
   const [rfqs, setRfqs] = useState<RfqListItem[]>([]);
 
+  const [siteReports, setSiteReports] =
+    useState<PendingApprovalReport[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] =
     useState<ProcessingState>(null);
@@ -70,6 +78,7 @@ export default function ApprovalCenterPage() {
       purchaseOrderService.getAll({ status: 1 }),
       purchaseRequestService.getAll({ status: 1 }),
       rfqService.getAll(),
+      dailyReportService.getPendingApproval(),
     ]);
 
     const [
@@ -77,6 +86,7 @@ export default function ApprovalCenterPage() {
       orderResult,
       requestResult,
       rfqResult,
+      siteReportResult,
     ] = results;
 
     const errors: string[] = [];
@@ -111,6 +121,14 @@ export default function ApprovalCenterPage() {
       errors.push("RFQ kayıtları alınamadı.");
     }
 
+    // Saha raporu onay yetkisi olmayan kullanıcılar için bu bölüm
+    // sessizce boş kalır — herkesin bu izne sahip olması beklenmez.
+    if (siteReportResult.status === "fulfilled") {
+      setSiteReports(siteReportResult.value);
+    } else {
+      setSiteReports([]);
+    }
+
     if (errors.length > 0) {
       setError(errors.join(" "));
     }
@@ -127,12 +145,14 @@ export default function ApprovalCenterPage() {
       progressPayments.length +
       purchaseOrders.length +
       purchaseRequests.length +
-      rfqs.length,
+      rfqs.length +
+      siteReports.length,
     [
       progressPayments,
       purchaseOrders,
       purchaseRequests,
       rfqs,
+      siteReports,
     ]
   );
 
@@ -212,6 +232,15 @@ export default function ApprovalCenterPage() {
     );
   }
 
+  async function approveSiteReport(item: PendingApprovalReport) {
+    await runAction(
+      "site-report-approve",
+      item.id,
+      () => dailyReportService.approve(item.projectSiteId, item.id),
+      "Günlük saha raporu onaylandı."
+    );
+  }
+
   function isProcessing(type: string, id: string) {
     return (
       processing?.type === type &&
@@ -276,6 +305,10 @@ export default function ApprovalCenterPage() {
         <SummaryCard
           label="Devam Eden RFQ"
           value={rfqs.length}
+        />
+        <SummaryCard
+          label="Onay Bekleyen Saha Raporu"
+          value={siteReports.length}
         />
       </section>
 
@@ -570,6 +603,62 @@ export default function ApprovalCenterPage() {
                   >
                     Karşılaştır
                   </Link>
+                </div>
+              </article>
+            ))}
+          </ApprovalSection>
+
+          <ApprovalSection
+            title="Onay Bekleyen Günlük Saha Raporları"
+            description="Şef/formen tarafından girilen taslak raporlar"
+            emptyText="Onay bekleyen saha raporu bulunmuyor."
+          >
+            {siteReports.map((item) => (
+              <article
+                className="approval-item"
+                key={item.id}
+              >
+                <div className="approval-item-main">
+                  <span className="erp-status yellow">
+                    Saha Raporu
+                  </span>
+
+                  <div>
+                    <strong>
+                      {item.siteCode} — {item.siteName}
+                    </strong>
+                    <p>
+                      {item.projectCode} — {item.projectName}
+                    </p>
+                    <small>
+                      {date.format(new Date(item.reportDate))}
+                    </small>
+                  </div>
+                </div>
+
+                <div className="approval-item-value">
+                  <span>Toplam Personel</span>
+                  <strong>{item.totalHeadcount}</strong>
+                </div>
+
+                <div className="approval-item-actions">
+                  <Link
+                    className="erp-secondary-button"
+                    href={`/projeler/${item.projectId}/santiyeler/${item.projectSiteId}`}
+                  >
+                    Detay
+                  </Link>
+
+                  <button
+                    type="button"
+                    className="erp-primary-button"
+                    disabled={processing !== null}
+                    onClick={() => void approveSiteReport(item)}
+                  >
+                    {isProcessing("site-report-approve", item.id)
+                      ? "İşleniyor..."
+                      : "Onayla"}
+                  </button>
                 </div>
               </article>
             ))}

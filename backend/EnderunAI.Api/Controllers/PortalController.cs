@@ -1,4 +1,5 @@
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.Upload;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -63,7 +64,9 @@ public sealed class PortalController(
             return NotFound();
 
         var query = db.ProjectSiteDailyReports.AsNoTracking()
-            .Where(x => x.ProjectSite.ProjectId == link.ProjectId);
+            .Where(x =>
+                x.ProjectSite.ProjectId == link.ProjectId &&
+                x.Status == ProjectSiteDailyReportStatus.Approved);
 
         if (siteId.HasValue)
             query = query.Where(x => x.ProjectSiteId == siteId.Value);
@@ -122,6 +125,7 @@ public sealed class PortalController(
             .SingleOrDefaultAsync(x =>
                 x.Id == photoId &&
                 x.IsVisibleToEmployer &&
+                x.DailyReport.Status == ProjectSiteDailyReportStatus.Approved &&
                 x.DailyReport.ProjectSite.ProjectId == link.ProjectId,
                 cancellationToken);
 

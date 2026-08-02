@@ -1,5 +1,10 @@
 import { apiClient } from "@/lib/api/api-client";
 
+export const DailyReportStatus = {
+  Draft: 0,
+  Approved: 1,
+} as const;
+
 export type DailyReportListItem = {
   id: string;
   reportDate: string;
@@ -7,6 +12,20 @@ export type DailyReportListItem = {
   totalHeadcount: number;
   workItemCount: number;
   photoCount: number;
+  status: number;
+};
+
+export type PendingApprovalReport = {
+  id: string;
+  projectSiteId: string;
+  projectId: string;
+  siteCode: string;
+  siteName: string;
+  projectCode: string;
+  projectName: string;
+  reportDate: string;
+  totalHeadcount: number;
+  createdAtUtc: string;
 };
 
 export type DailyReportWorkItem = {
@@ -35,6 +54,8 @@ export type DailyReportDetail = {
   workerCount: number;
   otherCount: number;
   notes?: string | null;
+  status: number;
+  approvedAtUtc?: string | null;
   workItems: DailyReportWorkItem[];
   photos: DailyReportPhoto[];
 };
@@ -95,6 +116,17 @@ export const dailyReportService = {
       `project-sites/${siteId}/daily-reports/${reportId}`,
       { method: "PUT", body: payload }
     );
+  },
+
+  approve(siteId: string, reportId: string) {
+    return apiClient<{ message: string; id: string }>(
+      `project-sites/${siteId}/daily-reports/${reportId}/approve`,
+      { method: "POST" }
+    );
+  },
+
+  getPendingApproval() {
+    return apiClient<PendingApprovalReport[]>("site-reports/pending-approval");
   },
 
   async uploadPhoto(

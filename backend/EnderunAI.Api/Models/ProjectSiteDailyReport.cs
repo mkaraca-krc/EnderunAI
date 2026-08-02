@@ -1,5 +1,11 @@
 namespace EnderunAI.Api.Models;
 
+public enum ProjectSiteDailyReportStatus
+{
+    Draft = 0,
+    Approved = 1
+}
+
 public sealed class ProjectSiteDailyReport : BaseEntity
 {
     public Guid ProjectSiteId { get; set; }
@@ -15,6 +21,12 @@ public sealed class ProjectSiteDailyReport : BaseEntity
     public int OtherCount { get; set; }
 
     public string? Notes { get; set; }
+
+    public ProjectSiteDailyReportStatus Status { get; set; } =
+        ProjectSiteDailyReportStatus.Draft;
+
+    public DateTime? ApprovedAtUtc { get; set; }
+    public Guid? ApprovedByUserId { get; set; }
 
     public ICollection<ProjectSiteDailyReportWorkItem> WorkItems { get; set; }
         = new List<ProjectSiteDailyReportWorkItem>();

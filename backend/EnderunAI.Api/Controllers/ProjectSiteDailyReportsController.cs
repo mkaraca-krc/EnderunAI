@@ -48,7 +48,8 @@ public sealed class ProjectSiteDailyReportsController(
                 x.WeatherCondition,
                 TotalHeadcount = x.EngineerCount + x.ForemanCount + x.CraftsmanCount + x.WorkerCount + x.OtherCount,
                 WorkItemCount = x.WorkItems.Count,
-                PhotoCount = x.Photos.Count
+                PhotoCount = x.Photos.Count,
+                Status = (int)x.Status
             })
             .ToListAsync(cancellationToken);
 
@@ -210,6 +211,14 @@ public sealed class ProjectSiteDailyReportsController(
         if (report is null)
             return NotFound(new { message = "Günlük rapor bulunamadı." });
 
+        if (report.Status == ProjectSiteDailyReportStatus.Approved)
+        {
+            return Conflict(new
+            {
+                message = "Onaylanmış rapor artık düzenlenemez."
+            });
+        }
+
         report.WeatherCondition = request.WeatherCondition?.Trim();
         report.EngineerCount = request.EngineerCount;
         report.ForemanCount = request.ForemanCount;
@@ -239,6 +248,40 @@ public sealed class ProjectSiteDailyReportsController(
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new { message = "Günlük rapor güncellendi." });
+    }
+
+    [HttpPost("{reportId:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsApprove)]
+    public async Task<IActionResult> Approve(
+        Guid siteId,
+        Guid reportId,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
+        var report = await db.ProjectSiteDailyReports
+            .SingleOrDefaultAsync(x => x.Id == reportId && x.ProjectSiteId == siteId, cancellationToken);
+
+        if (report is null)
+            return NotFound(new { message = "Günlük rapor bulunamadı." });
+
+        if (report.Status == ProjectSiteDailyReportStatus.Approved)
+            return Conflict(new { message = "Rapor zaten onaylanmış." });
+
+        report.Status = ProjectSiteDailyReportStatus.Approved;
+        report.ApprovedAtUtc = DateTime.UtcNow;
+        report.ApprovedByUserId = currentUser.UserId;
+        report.UpdatedAtUtc = DateTime.UtcNow;
+        report.UpdatedByUserId = currentUser.UserId;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Günlük rapor onaylandı; işveren portalına düşecek.",
+            report.Id
+        });
     }
 
     [HttpPost("{reportId:guid}/photos")]
@@ -424,6 +467,8 @@ public sealed class ProjectSiteDailyReportsController(
             x.WorkerCount,
             x.OtherCount,
             x.Notes,
+            Status = (int)x.Status,
+            x.ApprovedAtUtc,
             WorkItems = x.WorkItems.Select(w => new
             {
                 w.Id,

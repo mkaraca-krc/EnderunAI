@@ -1750,6 +1750,7 @@ public sealed class AppDbContext(
 
             entity.Property(x => x.WeatherCondition).HasMaxLength(100);
             entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.Property(x => x.Status).HasConversion<int>().IsRequired();
 
             entity.HasOne(x => x.ProjectSite)
                 .WithMany()

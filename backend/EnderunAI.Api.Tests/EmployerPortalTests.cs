@@ -70,6 +70,11 @@ public sealed class EmployerPortalTests(DatabaseFixture fixture)
         var hiddenPhoto = await hiddenUpload.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
         var hiddenPhotoId = hiddenPhoto.GetProperty("id").GetGuid();
 
+        // Rapor onaylanmadan işveren portalına düşmez.
+        var approveResponse = await client.PostAsync(
+            $"/api/project-sites/{siteId}/daily-reports/{reportId}/approve", null);
+        Assert.Equal(HttpStatusCode.OK, approveResponse.StatusCode);
+
         var linkResponse = await client.PostAsync($"/api/projects/{project.Id}/employer-portal-link", null);
         Assert.Equal(HttpStatusCode.OK, linkResponse.StatusCode);
         var link = await linkResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
@@ -111,6 +116,82 @@ public sealed class EmployerPortalTests(DatabaseFixture fixture)
 
         var revokedPhotoResponse = await anonymousClient.GetAsync($"/api/portal/{token}/photos/{visiblePhotoId}");
         Assert.Equal(HttpStatusCode.NotFound, revokedPhotoResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task DraftReport_NeverAppearsOnEmployerPortal_OnlyAfterApproval()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var project = await TestDataFactory.CreateProjectAsync(db, suffix);
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var siteResponse = await client.PostAsJsonAsync($"/api/projects/{project.Id}/sites", new
+        {
+            code = $"STE2-{suffix}",
+            name = $"Onay Testi Şantiyesi {suffix}",
+            location = (string?)null,
+            notes = (string?)null
+        });
+        var site = await siteResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var siteId = site.GetProperty("id").GetGuid();
+
+        var reportResponse = await client.PostAsJsonAsync(
+            $"/api/project-sites/{siteId}/daily-reports",
+            new
+            {
+                reportDate = DateTime.UtcNow.Date,
+                weatherCondition = "Kapalı",
+                engineerCount = 1,
+                foremanCount = 1,
+                craftsmanCount = 1,
+                workerCount = 4,
+                otherCount = 0,
+                notes = "Taslak rapor - henüz onaylanmadı",
+                workItems = Array.Empty<object>()
+            });
+        var report = await reportResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var reportId = report.GetProperty("id").GetGuid();
+
+        var linkResponse = await client.PostAsync($"/api/projects/{project.Id}/employer-portal-link", null);
+        var link = await linkResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var token = link.GetProperty("token").GetString()!;
+
+        var anonymousClient = fixture.Factory.CreateClient();
+
+        // Taslak (onaylanmamış) rapor portalda GÖRÜNMEMELİ.
+        var reportsBeforeApproval = await anonymousClient.GetAsync($"/api/portal/{token}/reports");
+        var beforeJson = await reportsBeforeApproval.Content.ReadAsStringAsync();
+        Assert.DoesNotContain(reportId.ToString(), beforeJson);
+
+        var approveResponse = await client.PostAsync(
+            $"/api/project-sites/{siteId}/daily-reports/{reportId}/approve", null);
+        Assert.Equal(HttpStatusCode.OK, approveResponse.StatusCode);
+
+        // Onaylandıktan sonra portalda GÖRÜNMELİ.
+        var reportsAfterApproval = await anonymousClient.GetAsync($"/api/portal/{token}/reports");
+        var afterJson = await reportsAfterApproval.Content.ReadAsStringAsync();
+        Assert.Contains(reportId.ToString(), afterJson);
+
+        // Onaylanan rapor artık düzenlenemez.
+        var editAfterApprovalResponse = await client.PutAsJsonAsync(
+            $"/api/project-sites/{siteId}/daily-reports/{reportId}",
+            new
+            {
+                reportDate = DateTime.UtcNow.Date,
+                weatherCondition = "Değişti",
+                engineerCount = 2,
+                foremanCount = 1,
+                craftsmanCount = 1,
+                workerCount = 4,
+                otherCount = 0,
+                notes = "Onay sonrası düzenleme denemesi",
+                workItems = Array.Empty<object>()
+            });
+        Assert.Equal(HttpStatusCode.Conflict, editAfterApprovalResponse.StatusCode);
     }
 
     private static async Task<HttpResponseMessage> UploadTinyPngAsync(

@@ -202,6 +202,30 @@ function DailyReportTab({ siteId }: { siteId: string }) {
     }
   }
 
+  async function approveReport() {
+    if (!detail) return;
+    if (!window.confirm("Rapor onaylandıktan sonra düzenlenemez ve işveren portalına düşer. Devam edilsin mi?")) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      await dailyReportService.approve(siteId, detail.id);
+      setNotice("Rapor onaylandı; işveren portalına düştü.");
+      await loadDetailForDate(selectedDate);
+      await loadList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Rapor onaylanamadı.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const isApproved = detail?.status === 1;
+
   return (
     <section className="erp-panel erp-mt">
       <div className="erp-panel-header">
@@ -210,12 +234,29 @@ function DailyReportTab({ siteId }: { siteId: string }) {
           <p>Tarih seçerek o güne ait şantiye raporunu girin veya düzenleyin</p>
         </div>
 
-        <input
-          className="erp-input"
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-        />
+        <div className="erp-actions" style={{ alignItems: "center" }}>
+          {detail && (
+            <span className={`erp-status ${isApproved ? "green" : "gray"}`}>
+              {isApproved ? "Onaylandı" : "Taslak"}
+            </span>
+          )}
+          <input
+            className="erp-input"
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+          />
+          {detail && !isApproved && (
+            <button
+              type="button"
+              className="erp-button"
+              disabled={saving}
+              onClick={() => void approveReport()}
+            >
+              Onayla
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div className="erp-alert error">{error}</div>}
@@ -225,6 +266,7 @@ function DailyReportTab({ siteId }: { siteId: string }) {
         <div className="erp-loading">Yükleniyor...</div>
       ) : (
         <form className="erp-form-card" onSubmit={save}>
+          <fieldset disabled={isApproved} style={{ border: "none", padding: 0, margin: 0 }}>
           <div className="erp-form-grid">
             <label>
               <span>Hava Durumu</span>
@@ -367,6 +409,7 @@ function DailyReportTab({ siteId }: { siteId: string }) {
               {saving ? "Kaydediliyor..." : detail ? "Raporu Güncelle" : "Raporu Kaydet"}
             </button>
           </div>
+          </fieldset>
         </form>
       )}
 
