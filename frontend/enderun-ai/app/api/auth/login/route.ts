@@ -19,12 +19,18 @@ export async function POST(
   try {
     const body = await request.json();
 
+    const clientIp =
+      request.headers.get("x-forwarded-for") ??
+      request.headers.get("x-real-ip") ??
+      "";
+
     const backend = await fetch(
       `${backendApiUrl}/auth/login`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(clientIp ? { "X-Forwarded-For": clientIp } : {}),
         },
         body: JSON.stringify(body),
         cache: "no-store",

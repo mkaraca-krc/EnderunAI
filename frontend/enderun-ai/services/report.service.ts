@@ -1,13 +1,12 @@
-const api =
-  process.env.NEXT_PUBLIC_API_URL ?? "";
-
 async function downloadPdf(
   url: string,
   filename: string
 ) {
+  const backendPath = url.replace(/^\/api\//, "");
+
   const response =
     await fetch(
-      `${api}${url}`,
+      `/api/backend/${backendPath}`,
       {
         credentials: "include",
       }

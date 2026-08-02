@@ -14,7 +14,8 @@ namespace EnderunAI.Api.Controllers;
 public sealed class AuthController(
     AppDbContext db,
     PasswordService passwordService,
-    TokenService tokenService) : ControllerBase
+    TokenService tokenService,
+    ILoginAttemptService loginAttemptService) : ControllerBase
 {
     [AllowAnonymous]
     [HttpPost("login")]
@@ -22,6 +23,17 @@ public sealed class AuthController(
         LoginRequest request,
         CancellationToken cancellationToken)
     {
+        var ipAddress = ResolveClientIp();
+
+        if (loginAttemptService.IsLocked(ipAddress, out var remaining))
+        {
+            var minutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+            return StatusCode(429, new
+            {
+                message = $"Çok fazla başarısız giriş denemesi. Lütfen {minutes} dakika sonra tekrar deneyin."
+            });
+        }
+
         var username = request.Username.Trim().ToLowerInvariant();
         var user = await db.Users
             .Include(item => item.UserRoles)
@@ -37,8 +49,11 @@ public sealed class AuthController(
                 user.PasswordHash,
                 user.PasswordSalt))
         {
+            loginAttemptService.RecordFailure(ipAddress);
             return Unauthorized(new { message = "Kullanıcı adı veya şifre hatalı." });
         }
+
+        loginAttemptService.RecordSuccess(ipAddress);
 
         user.LastLoginAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
@@ -108,5 +123,18 @@ public sealed class AuthController(
             roles,
             permissions
         });
+    }
+
+    private string ResolveClientIp()
+    {
+        var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(forwardedFor))
+        {
+            var first = forwardedFor.Split(',')[0].Trim();
+            if (!string.IsNullOrWhiteSpace(first))
+                return first;
+        }
+
+        return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 }

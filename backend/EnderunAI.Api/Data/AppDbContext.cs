@@ -94,6 +94,7 @@ public sealed class AppDbContext(
     public DbSet<ProjectSiteDailyReportPhoto> ProjectSiteDailyReportPhotos => Set<ProjectSiteDailyReportPhoto>();
     public DbSet<EmployerPortalLink> EmployerPortalLinks => Set<EmployerPortalLink>();
     public DbSet<EmployerPortalEmailLog> EmployerPortalEmailLogs => Set<EmployerPortalEmailLog>();
+    public DbSet<SecurityAuditEvent> SecurityAuditEvents => Set<SecurityAuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -141,6 +142,25 @@ public sealed class AppDbContext(
         ConfigureProjectMeasurements(modelBuilder);
         ConfigureHrRecruitment(modelBuilder);
         ConfigureEmployerPortal(modelBuilder);
+        ConfigureSecurityAuditEvents(modelBuilder);
+    }
+
+    private static void ConfigureSecurityAuditEvents(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SecurityAuditEvent>(entity =>
+        {
+            entity.ToTable("security_audit_events");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.EntityType, x.EntityId });
+
+            entity.Property(x => x.ActorUsername).HasMaxLength(100);
+            entity.Property(x => x.Action).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.EntityType).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.DetailsJson).HasColumnType("jsonb");
+            entity.Property(x => x.IpAddress).HasMaxLength(64);
+            entity.Property(x => x.UserAgent).HasMaxLength(500);
+        });
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)

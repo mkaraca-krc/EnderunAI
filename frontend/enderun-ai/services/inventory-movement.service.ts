@@ -5,10 +5,9 @@ export interface InventoryMovement {
   projectName?: string | null; type: number; quantity: number;
   referenceNumber: string; movementDate: string;
 }
-const api = process.env.NEXT_PUBLIC_API_URL ?? "";
-
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${api}${path}`, {
+  const backendPath = path.replace(/^\/api\//, "");
+  const response = await fetch(`/api/backend/${backendPath}`, {
     ...options,
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },

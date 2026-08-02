@@ -51,6 +51,10 @@ builder.Services.AddDbContext<HrDbContext>(options =>
 
 builder.Services.AddSingleton<IUploadService, UploadService>();
 builder.Services.AddSingleton<EnderunAI.Api.Services.Email.IEmailService, EnderunAI.Api.Services.Email.EmailService>();
+builder.Services.AddSingleton<EnderunAI.Api.Security.ILoginAttemptService, EnderunAI.Api.Security.LoginAttemptService>();
+
+builder.Services.AddExceptionHandler<EnderunAI.Api.Security.GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 builder.Services.AddScoped<IAccountingAccountService, AccountingAccountService>();
 builder.Services.AddScoped<IAccountingAccountSeedService, AccountingAccountSeedService>();
 builder.Services.AddScoped<IAccountingVoucherService, AccountingVoucherService>();
@@ -62,12 +66,33 @@ builder.Services.AddScoped<IHrApprovalService, HrApprovalService>();
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
 
+var defaultAllowedOrigins = new[]
+{
+    "https://enderunai.com.tr",
+    "https://www.enderunai.com.tr",
+    "https://enderun-ai.com",
+    "https://www.enderun-ai.com",
+    "https://srv.enderunai.com.tr",
+    "http://enderunai.com.tr",
+    "http://www.enderunai.com.tr",
+    "http://enderun-ai.com",
+    "http://www.enderun-ai.com",
+    "http://srv.enderunai.com.tr"
+};
+
+var configuredOrigins = (Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS") ?? "")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+var allowedOrigins = configuredOrigins.Length > 0
+    ? configuredOrigins
+    : defaultAllowedOrigins;
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -160,6 +185,8 @@ using (var scope = app.Services.CreateScope())
         builder.Configuration
     );
 }
+
+app.UseExceptionHandler();
 
 app.UseRouting();
 
