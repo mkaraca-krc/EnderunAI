@@ -221,31 +221,25 @@ public partial class CompleteSecretariatModule : Migration
             CREATE INDEX IF NOT EXISTS "IX_visitor_records_CompanyId_Status_PlannedVisitAtUtc"
                 ON "visitor_records" ("CompanyId", "Status", "PlannedVisitAtUtc");
 
-            CREATE TABLE IF NOT EXISTS "phone_notes" (
-                "Id" uuid NOT NULL,
-                "CompanyId" uuid NOT NULL,
-                "ProjectId" uuid,
-                "CallerName" character varying(200) NOT NULL,
-                "PhoneNumber" character varying(30),
-                "InstitutionName" character varying(250),
-                "Subject" character varying(300) NOT NULL,
-                "Message" character varying(2000) NOT NULL,
-                "ResponsibleName" character varying(200) NOT NULL,
-                "ReceivedAtUtc" timestamp with time zone NOT NULL,
-                "InformedAtUtc" timestamp with time zone,
-                "ReturnedAtUtc" timestamp with time zone,
-                "Status" integer NOT NULL,
-                "Notes" character varying(1000),
-                "IsActive" boolean NOT NULL,
-                "IsDeleted" boolean NOT NULL,
-                "CreatedAtUtc" timestamp with time zone NOT NULL,
-                "CreatedByUserId" uuid,
-                "UpdatedAtUtc" timestamp with time zone,
-                "UpdatedByUserId" uuid,
-                "DeletedAtUtc" timestamp with time zone,
-                "DeletedByUserId" uuid,
-                CONSTRAINT "PK_phone_notes" PRIMARY KEY ("Id")
-            );
+            -- phone_notes 20260725160949_AddSecretariatPhoneNoteModule tarafından
+            -- zaten oluşturulmuştu (CallerName/Note/RequiresCallback... ile). Bu
+            -- tablo "CREATE TABLE IF NOT EXISTS" ile yeniden oluşturulamaz — tablo
+            -- zaten var olduğu için no-op olurdu ve InstitutionName/Message/
+            -- ResponsibleName/ReceivedAtUtc/InformedAtUtc/ReturnedAtUtc/Notes
+            -- kolonları hiç eklenmezdi (canlıda bu kolonlar migration dışı,
+            -- elle eklenmişti — burada onu migration geçmişine düzgün şekilde
+            -- yansıtıyoruz ki sıfırdan kurulum da aynı şemayı üretsin).
+            ALTER TABLE "phone_notes" ADD COLUMN IF NOT EXISTS "InstitutionName" character varying(250);
+            ALTER TABLE "phone_notes" ADD COLUMN IF NOT EXISTS "Message" character varying(2000) NOT NULL DEFAULT '';
+            ALTER TABLE "phone_notes" ADD COLUMN IF NOT EXISTS "ResponsibleName" character varying(200) NOT NULL DEFAULT '';
+            ALTER TABLE "phone_notes" ADD COLUMN IF NOT EXISTS "ReceivedAtUtc" timestamp with time zone NOT NULL DEFAULT now();
+            ALTER TABLE "phone_notes" ADD COLUMN IF NOT EXISTS "InformedAtUtc" timestamp with time zone;
+            ALTER TABLE "phone_notes" ADD COLUMN IF NOT EXISTS "ReturnedAtUtc" timestamp with time zone;
+            ALTER TABLE "phone_notes" ADD COLUMN IF NOT EXISTS "Notes" character varying(1000);
+            ALTER TABLE "phone_notes" ALTER COLUMN "Message" DROP DEFAULT;
+            ALTER TABLE "phone_notes" ALTER COLUMN "ResponsibleName" DROP DEFAULT;
+            ALTER TABLE "phone_notes" ALTER COLUMN "ReceivedAtUtc" DROP DEFAULT;
+
             CREATE INDEX IF NOT EXISTS "IX_phone_notes_CompanyId_Status_ReceivedAtUtc"
                 ON "phone_notes" ("CompanyId", "Status", "ReceivedAtUtc");
 
