@@ -67,6 +67,8 @@ frontend/*.previous-*/
 frontend/*-stage-*/
 publish-backup-*/
 publish.previous-*/
+publish-rollback/
+frontend-next-rollback/
 staging/
 *.bak
 *.bak-*
