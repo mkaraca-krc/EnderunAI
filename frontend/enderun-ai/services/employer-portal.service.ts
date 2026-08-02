@@ -6,11 +6,27 @@ export type EmployerPortalLink = {
   isActive: boolean;
   createdAtUtc: string;
   revokedAtUtc?: string | null;
+  employerName?: string | null;
+  employerEmail?: string | null;
 } | null;
+
+export type EmployerPortalLinkStatus = {
+  link: EmployerPortalLink;
+  emailConfigured: boolean;
+};
+
+export type EmployerPortalEmailLogItem = {
+  id: string;
+  recipientEmail: string;
+  recipientName?: string | null;
+  sentAtUtc: string;
+  isSuccess: boolean;
+  errorMessage?: string | null;
+};
 
 export const employerPortalService = {
   get(projectId: string) {
-    return apiClient<EmployerPortalLink>(
+    return apiClient<EmployerPortalLinkStatus>(
       `projects/${projectId}/employer-portal-link`
     );
   },
@@ -26,6 +42,22 @@ export const employerPortalService = {
     return apiClient<{ message: string }>(
       `projects/${projectId}/employer-portal-link/revoke`,
       { method: "POST" }
+    );
+  },
+
+  sendEmail(
+    projectId: string,
+    payload: { employerName?: string; employerEmail: string; portalUrl: string }
+  ) {
+    return apiClient<{ message: string }>(
+      `projects/${projectId}/employer-portal-link/send-email`,
+      { method: "POST", body: payload }
+    );
+  },
+
+  getEmailLog(projectId: string) {
+    return apiClient<EmployerPortalEmailLogItem[]>(
+      `projects/${projectId}/employer-portal-link/email-log`
     );
   },
 };

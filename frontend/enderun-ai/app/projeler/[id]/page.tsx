@@ -19,6 +19,7 @@ import {
 import {
   employerPortalService,
   type EmployerPortalLink,
+  type EmployerPortalEmailLogItem,
 } from "@/services/employer-portal.service";
 
 import {
@@ -128,9 +129,15 @@ export default function ProjectCenterPage() {
     useState<ProjectDailyReportRollupItem[]>([]);
 
   const [portalLink, setPortalLink] = useState<EmployerPortalLink>(null);
+  const [emailConfigured, setEmailConfigured] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalError, setPortalError] = useState("");
   const [portalCopied, setPortalCopied] = useState(false);
+
+  const [emailForm, setEmailForm] = useState({ employerName: "", employerEmail: "" });
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailNotice, setEmailNotice] = useState("");
+  const [emailLog, setEmailLog] = useState<EmployerPortalEmailLogItem[]>([]);
 
 
   const [siteAnalysis, setSiteAnalysis] =
@@ -279,13 +286,24 @@ export default function ProjectCenterPage() {
       }
 
       if (portalLinkResult.status === "fulfilled") {
-        setPortalLink(portalLinkResult.value);
+        setPortalLink(portalLinkResult.value.link);
+        setEmailConfigured(portalLinkResult.value.emailConfigured);
+        setEmailForm({
+          employerName: portalLinkResult.value.link?.employerName ?? "",
+          employerEmail: portalLinkResult.value.link?.employerEmail ?? "",
+        });
       } else {
         setPortalLink(null);
         console.warn(
           "İşveren portalı linki yüklenemedi:",
           portalLinkResult.reason
         );
+      }
+
+      try {
+        setEmailLog(await employerPortalService.getEmailLog(params.id));
+      } catch (err) {
+        console.warn("Gönderim logu yüklenemedi:", err);
       }
 
       setLoading(false);
@@ -303,7 +321,9 @@ export default function ProjectCenterPage() {
 
     try {
       await employerPortalService.create(params.id);
-      setPortalLink(await employerPortalService.get(params.id));
+      const status = await employerPortalService.get(params.id);
+      setPortalLink(status.link);
+      setEmailConfigured(status.emailConfigured);
     } catch (err) {
       setPortalError(
         err instanceof Error ? err.message : "İşveren portalı linki oluşturulamadı."
@@ -323,13 +343,43 @@ export default function ProjectCenterPage() {
 
     try {
       await employerPortalService.revoke(params.id);
-      setPortalLink(await employerPortalService.get(params.id));
+      const status = await employerPortalService.get(params.id);
+      setPortalLink(status.link);
+      setEmailConfigured(status.emailConfigured);
     } catch (err) {
       setPortalError(
         err instanceof Error ? err.message : "İşveren portalı linki iptal edilemedi."
       );
     } finally {
       setPortalLoading(false);
+    }
+  }
+
+  async function sendPortalEmail(event: React.FormEvent) {
+    event.preventDefault();
+    if (!portalLink) return;
+
+    setSendingEmail(true);
+    setPortalError("");
+    setEmailNotice("");
+
+    try {
+      const portalUrl = `${window.location.origin}/portal/${portalLink.token}`;
+
+      await employerPortalService.sendEmail(params.id, {
+        employerName: emailForm.employerName || undefined,
+        employerEmail: emailForm.employerEmail,
+        portalUrl,
+      });
+
+      setEmailNotice("E-posta gönderildi.");
+      setEmailLog(await employerPortalService.getEmailLog(params.id));
+    } catch (err) {
+      setPortalError(
+        err instanceof Error ? err.message : "E-posta gönderilemedi."
+      );
+    } finally {
+      setSendingEmail(false);
     }
   }
 
@@ -660,6 +710,77 @@ export default function ProjectCenterPage() {
                     İptal Et
                   </button>
                 </div>
+
+                {!emailConfigured ? (
+                  <div className="erp-alert error erp-mt">
+                    E-posta yapılandırılmamış. Portal linkini şimdilik yalnızca kopyalayıp
+                    manuel olarak paylaşabilirsiniz.
+                  </div>
+                ) : (
+                  <>
+                    {emailNotice && <div className="erp-alert success erp-mt">{emailNotice}</div>}
+
+                    <form className="erp-form-grid erp-mt" onSubmit={sendPortalEmail}>
+                      <label>
+                        <span>İşveren Adı</span>
+                        <input
+                          className="erp-input"
+                          value={emailForm.employerName}
+                          onChange={(e) =>
+                            setEmailForm((current) => ({ ...current, employerName: e.target.value }))
+                          }
+                        />
+                      </label>
+
+                      <label>
+                        <span>İşveren E-postası *</span>
+                        <input
+                          className="erp-input"
+                          type="email"
+                          required
+                          value={emailForm.employerEmail}
+                          onChange={(e) =>
+                            setEmailForm((current) => ({ ...current, employerEmail: e.target.value }))
+                          }
+                        />
+                      </label>
+
+                      <div className="erp-actions">
+                        <button type="submit" disabled={sendingEmail}>
+                          {sendingEmail ? "Gönderiliyor..." : "E-posta ile Gönder"}
+                        </button>
+                      </div>
+                    </form>
+                  </>
+                )}
+
+                {emailLog.length > 0 && (
+                  <div className="erp-mt">
+                    <div className="erp-panel-header">
+                      <h3>Son Gönderimler</h3>
+                    </div>
+
+                    <div className="erp-project-list">
+                      {emailLog.map((entry) => (
+                        <div className="erp-project-list-item" key={entry.id}>
+                          <div>
+                            <strong>
+                              {entry.recipientName || entry.recipientEmail}
+                            </strong>
+                            <span>{entry.recipientEmail}</span>
+                            <span>{new Date(entry.sentAtUtc).toLocaleString("tr-TR")}</span>
+                            {!entry.isSuccess && entry.errorMessage && (
+                              <span>{entry.errorMessage}</span>
+                            )}
+                          </div>
+                          <span className={`erp-status ${entry.isSuccess ? "green" : "gray"}`}>
+                            {entry.isSuccess ? "Gönderildi" : "Başarısız"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </section>

@@ -53,6 +53,24 @@ public sealed class EmployerPortalLink : BaseEntity
 
     public string Token { get; set; } = string.Empty;
 
+    public string? EmployerName { get; set; }
+    public string? EmployerEmail { get; set; }
+
     public DateTime? RevokedAtUtc { get; set; }
     public Guid? RevokedByUserId { get; set; }
+}
+
+public sealed class EmployerPortalEmailLog : BaseEntity
+{
+    public Guid EmployerPortalLinkId { get; set; }
+    public EmployerPortalLink EmployerPortalLink { get; set; } = null!;
+
+    public Guid ProjectId { get; set; }
+
+    public string RecipientEmail { get; set; } = string.Empty;
+    public string? RecipientName { get; set; }
+
+    public DateTime SentAtUtc { get; set; } = DateTime.UtcNow;
+    public bool IsSuccess { get; set; }
+    public string? ErrorMessage { get; set; }
 }

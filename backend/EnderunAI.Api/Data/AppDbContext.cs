@@ -93,6 +93,7 @@ public sealed class AppDbContext(
     public DbSet<ProjectSiteDailyReportWorkItem> ProjectSiteDailyReportWorkItems => Set<ProjectSiteDailyReportWorkItem>();
     public DbSet<ProjectSiteDailyReportPhoto> ProjectSiteDailyReportPhotos => Set<ProjectSiteDailyReportPhoto>();
     public DbSet<EmployerPortalLink> EmployerPortalLinks => Set<EmployerPortalLink>();
+    public DbSet<EmployerPortalEmailLog> EmployerPortalEmailLogs => Set<EmployerPortalEmailLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1685,11 +1686,33 @@ public sealed class AppDbContext(
             entity.HasIndex(x => x.ProjectId);
 
             entity.Property(x => x.Token).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.EmployerName).HasMaxLength(200);
+            entity.Property(x => x.EmployerEmail).HasMaxLength(300);
 
             entity.HasOne(x => x.Project)
                 .WithMany()
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<EmployerPortalEmailLog>(entity =>
+        {
+            entity.ToTable("employer_portal_email_logs");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.EmployerPortalLinkId);
+            entity.HasIndex(x => x.ProjectId);
+
+            entity.Property(x => x.RecipientEmail).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.RecipientName).HasMaxLength(200);
+            entity.Property(x => x.ErrorMessage).HasMaxLength(1000);
+
+            entity.HasOne(x => x.EmployerPortalLink)
+                .WithMany()
+                .HasForeignKey(x => x.EmployerPortalLinkId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
