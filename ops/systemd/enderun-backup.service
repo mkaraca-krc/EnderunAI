@@ -1,0 +1,8 @@
+[Unit]
+Description=EnderunAI günlük veritabanı + uploads yedeği
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/enderun-backup.sh
+User=root

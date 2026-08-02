@@ -1,0 +1,10 @@
+[Unit]
+Description=EnderunAI günlük yedeği her gece 03:00'te çalıştır
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target
