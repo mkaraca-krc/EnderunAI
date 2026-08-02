@@ -137,15 +137,28 @@ public static class DatabaseSeeder
 
     private static async Task SeedRolesAsync(AppDbContext db)
     {
-        var existingNames = (await db.Roles
-                .Select(item => item.Name)
-                .ToListAsync())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingRoles = await db.Roles.ToListAsync();
+        var existingByName = existingRoles
+            .ToDictionary(role => role.Name, StringComparer.OrdinalIgnoreCase);
 
         foreach (var definition in RoleCatalog.Roles)
         {
-            if (existingNames.Contains(definition.Name))
+            if (existingByName.TryGetValue(definition.Name, out var role))
+            {
+                // Description hiçbir ekrandan (Yetki Matrisi/Kullanıcı
+                // Yönetimi) düzenlenemiyor — bu yüzden kod tanımıyla
+                // senkron tutmak güvenli, add-only olduğu için daha önce
+                // 5 rolde (Genel Müdür, Formen, Şantiye Şefi, Teknik
+                // Koordinatör, Sekreterya) eski/tutarsız açıklamalar
+                // kalmıştı. DataScopePolicy'ye kasıtlı dokunulmuyor —
+                // admin Yetki Matrisi'nden bilinçli değiştirebiliyor
+                // (PermissionMatrixController.UpdateScopePolicy), bu
+                // seçimi geri almamak için add-only kalıyor.
+                if (role.Description != definition.Description)
+                    role.Description = definition.Description;
+
                 continue;
+            }
 
             db.Roles.Add(new AppRole
             {
