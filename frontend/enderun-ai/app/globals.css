@@ -2415,3 +2415,49 @@ body {
 .portal-header-logo img {
   display: block;
 }
+
+/* Henüz gerçek veri kaynağı bağlanmamış finans alanları için
+   dürüst "veri yok" gösterimi (sahte sıfır yerine). */
+.enderun-dashboard-stat.is-pending strong {
+  color: var(--erp-muted);
+  font-size: 20px;
+}
+
+.erp-pending-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff6e0;
+  color: #8a5a10;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.dashboard-summary-row.is-pending .dashboard-summary-heading strong {
+  color: var(--erp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-style: italic;
+}
+
+.dashboard-summary-bar.pending {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--erp-border),
+    var(--erp-border) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+.erp-data-pending-panel {
+  padding: 22px 24px;
+  border-radius: 12px;
+  background: #fbf8f0;
+  border: 1px dashed var(--erp-border);
+  color: var(--erp-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}

@@ -6,6 +6,7 @@ type DashboardStatProps = {
   value: string;
   note: string;
   href: string;
+  unavailable?: boolean;
 };
 
 export default function DashboardStat({
@@ -14,11 +15,14 @@ export default function DashboardStat({
   value,
   note,
   href,
+  unavailable = false,
 }: DashboardStatProps) {
   return (
     <Link
       href={href}
-      className="enderun-dashboard-stat"
+      className={`enderun-dashboard-stat${
+        unavailable ? " is-pending" : ""
+      }`}
     >
       <span className="enderun-dashboard-stat-icon">
         {icon}
@@ -26,8 +30,13 @@ export default function DashboardStat({
 
       <div>
         <span>{label}</span>
-        <strong>{value}</strong>
+        <strong>{unavailable ? "—" : value}</strong>
         <small>{note}</small>
+        {unavailable && (
+          <span className="erp-pending-badge">
+            Veri henüz yok
+          </span>
+        )}
       </div>
     </Link>
   );

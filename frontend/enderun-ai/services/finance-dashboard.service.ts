@@ -30,6 +30,8 @@ type FinancialDashboardApiResponse = {
   endDate: string;
   generatedAtUtc: string;
   summary: FinancialDashboardSummary;
+  unavailableFields: string[];
+  unavailableFieldsMessage: string;
 };
 
 export interface FinanceDashboard {
@@ -58,6 +60,12 @@ export interface FinanceDashboard {
   cashInflow: number;
   cashOutflow: number;
   netCashChange: number;
+
+  // Kasa/banka hareket modülü henüz uygulamaya bağlı değil - bu isimlerdeki
+  // alanlar gerçek veriyle doldurulamıyor, arayüz bu listeye bakıp
+  // ilgili kartları "veri yok" olarak göstermeli.
+  unavailableFields: string[];
+  unavailableFieldsMessage: string;
 
   // Eski dashboard alanlarıyla geriye uyumluluk
   supplierDebt: number;
@@ -139,6 +147,9 @@ export const financeDashboardService = {
       cashInflow: summary.cashInflow,
       cashOutflow: summary.cashOutflow,
       netCashChange: summary.netCashChange,
+
+      unavailableFields: result.unavailableFields ?? [],
+      unavailableFieldsMessage: result.unavailableFieldsMessage ?? "",
 
       supplierDebt: summary.payables,
       pendingPayments: summary.todayPayments,

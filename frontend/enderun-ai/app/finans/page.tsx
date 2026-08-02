@@ -44,6 +44,8 @@ const money = new Intl.NumberFormat(
   }
 );
 
+const DATA_PENDING_LABEL = "Veri henüz yok";
+
 
 export default function FinancePage() {
 
@@ -61,6 +63,12 @@ export default function FinancePage() {
 
   const [suppliers,setSuppliers] =
     useState<SupplierBalanceSummary[]>([]);
+
+  const [suppliersAvailable,setSuppliersAvailable] =
+    useState(true);
+
+  const [suppliersMessage,setSuppliersMessage] =
+    useState("");
 
   const [cari,setCari] =
     useState<CurrentAccountSummary | null>(null);
@@ -97,7 +105,9 @@ export default function FinancePage() {
       setProjects(projectResult);
       setCashFlow(cashResult);
       setAiAnalysis(aiResult);
-      setSuppliers(supplierResult);
+      setSuppliers(supplierResult.items);
+      setSuppliersAvailable(supplierResult.available);
+      setSuppliersMessage(supplierResult.message ?? "");
 
     }
     catch(err){
@@ -132,47 +142,54 @@ export default function FinancePage() {
       title:"Toplam Sözleşme",
       value:money.format(
         data.totalContractAmount
-      )
+      ),
+      pending: false
     },
 
     {
       title:"Toplam Hakediş",
       value:money.format(
         data.totalProgressPaymentAmount
-      )
+      ),
+      pending: false
     },
 
     {
       title:"Fiyat Farkı",
       value:money.format(
         data.totalPriceDifferenceAmount
-      )
+      ),
+      pending: false
     },
 
     {
       title:"Toplam Kesinti",
       value:money.format(
         data.totalDeductionAmount
-      )
+      ),
+      pending: false
     },
 
     {
       title:"Net Ödeme",
       value:money.format(
         data.totalNetPayableAmount
-      )
+      ),
+      pending: false
     },
 
     {
       title:"Aktif Proje",
       value:
-        String(data.activeProjectCount)
+        String(data.activeProjectCount),
+      pending: false
     },
 
     {
       title:"Hakediş Sayısı",
       value:
-        String(data.progressPaymentCount)
+        String(data.progressPaymentCount),
+      pending: false
     },
 
 
@@ -181,7 +198,8 @@ export default function FinancePage() {
       value:
         money.format(
           cari?.totalReceivable ?? 0
-        )
+        ),
+      pending: cari ? !cari.balancesAvailable : false
     },
 
 
@@ -190,7 +208,8 @@ export default function FinancePage() {
       value:
         money.format(
           cari?.totalPayable ?? 0
-        )
+        ),
+      pending: cari ? !cari.balancesAvailable : false
     },
 
 
@@ -199,7 +218,8 @@ export default function FinancePage() {
       value:
         money.format(
           cari?.netBalance ?? 0
-        )
+        ),
+      pending: cari ? !cari.balancesAvailable : false
     },
 
 
@@ -208,7 +228,8 @@ export default function FinancePage() {
       value:
         String(
           cari?.accountCount ?? 0
-        )
+        ),
+      pending: false
     },
 
   ] : [];
@@ -247,7 +268,9 @@ export default function FinancePage() {
 
             <div
               key={card.title}
-              className="enderun-dashboard-stat"
+              className={`enderun-dashboard-stat${
+                card.pending ? " is-pending" : ""
+              }`}
             >
 
               <div>
@@ -257,8 +280,14 @@ export default function FinancePage() {
                 </span>
 
                 <strong>
-                  {card.value}
+                  {card.pending ? "—" : card.value}
                 </strong>
+
+                {card.pending && (
+                  <span className="erp-pending-badge">
+                    {DATA_PENDING_LABEL}
+                  </span>
+                )}
 
               </div>
 
@@ -455,6 +484,15 @@ export default function FinancePage() {
           </div>
 
 
+          {cashFlow && !cashFlow.available ? (
+
+            <div className="erp-data-pending-panel">
+              {cashFlow.message ||
+                "Kasa/banka hareket modülü henüz uygulamaya bağlı değil."}
+            </div>
+
+          ) : (
+
           <div className="erp-detail-grid">
 
             <div>
@@ -497,6 +535,8 @@ export default function FinancePage() {
 
           </div>
 
+          )}
+
         </section>
 
 
@@ -518,6 +558,21 @@ export default function FinancePage() {
             </div>
           </div>
 
+
+          {!suppliersAvailable ? (
+
+            <div className="erp-data-pending-panel">
+              {suppliersMessage ||
+                "Tedarikçi bakiyesi için fatura ve ödeme kayıtları henüz uygulamaya bağlı değil."}
+            </div>
+
+          ) : suppliers.length === 0 ? (
+
+            <div className="erp-empty-state">
+              <p>Henüz tedarikçi bakiye kaydı yok.</p>
+            </div>
+
+          ) : (
 
           <div className="erp-project-list">
 
@@ -578,6 +633,8 @@ export default function FinancePage() {
             ))}
 
           </div>
+
+          )}
 
         </section>
 

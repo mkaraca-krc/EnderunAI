@@ -782,8 +782,11 @@ export default function DashboardPage() {
           value={money.format(
             finance?.supplierDebt ?? 0
           )}
-          note="Açık tedarikçi bakiyesi"
+          note="Fatura/cari modülü devreye girince dolacak"
           href="/cariler"
+          unavailable={
+            finance?.unavailableFields.includes("payables") ?? false
+          }
         />
 
         <DashboardStat
@@ -792,8 +795,11 @@ export default function DashboardPage() {
           value={money.format(
             finance?.bankBalance ?? 0
           )}
-          note="Banka hesap toplamı"
+          note="Kasa/banka modülü devreye girince dolacak"
           href="/finans"
+          unavailable={
+            finance?.unavailableFields.includes("bankBalance") ?? false
+          }
         />
 
         <DashboardStat
@@ -802,8 +808,11 @@ export default function DashboardPage() {
           value={money.format(
             finance?.pendingPayments ?? 0
           )}
-          note="Onay bekleyen ödemeler"
+          note="Kasa/banka modülü devreye girince dolacak"
           href="/finans"
+          unavailable={
+            finance?.unavailableFields.includes("todayPayments") ?? false
+          }
         />
 
         <DashboardStat

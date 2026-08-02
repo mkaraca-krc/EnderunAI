@@ -33,6 +33,12 @@ export interface CurrentAccountSummary {
   totalPayable: number;
   netBalance: number;
   accountCount: number;
+  // Cari hareket/bakiye defteri (fatura + tahsilat) henüz uygulamaya
+  // bağlı değil - false ise yukarıdaki tutar alanları gerçek değil,
+  // arayüz bunları "veri yok" olarak göstermeli. accountCount her
+  // zaman gerçektir (kayıtlı cari kart sayısı).
+  balancesAvailable: boolean;
+  message?: string | null;
 }
 
 

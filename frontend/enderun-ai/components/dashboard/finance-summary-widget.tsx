@@ -27,36 +27,44 @@ function barWidth(value: number, maximum: number) {
 export default function FinanceSummaryWidget({
   finance,
 }: FinanceSummaryWidgetProps) {
+  const unavailable = finance?.unavailableFields ?? [];
+
   const rows = [
     {
       label: "Kasa Bakiyesi",
       value: finance?.cashBalance ?? 0,
       tone: "positive",
+      field: "cashBalance",
     },
     {
       label: "Banka Bakiyesi",
       value: finance?.bankBalance ?? 0,
       tone: "positive",
+      field: "bankBalance",
     },
     {
       label: "Cari Alacak",
       value: finance?.receivables ?? 0,
       tone: "positive",
+      field: "receivables",
     },
     {
       label: "Cari Borç",
       value: finance?.payables ?? 0,
       tone: "warning",
+      field: "payables",
     },
     {
       label: "Bugünkü Tahsilat",
       value: finance?.todayCollections ?? 0,
       tone: "positive",
+      field: "todayCollections",
     },
     {
       label: "Bugünkü Ödeme",
       value: finance?.todayPayments ?? 0,
       tone: "warning",
+      field: "todayPayments",
     },
     {
       label: "Net Nakit Değişimi",
@@ -65,12 +73,18 @@ export default function FinanceSummaryWidget({
         (finance?.netCashChange ?? 0) >= 0
           ? "positive"
           : "critical",
+      field: "netCashChange",
     },
-  ];
+  ].map((row) => ({
+    ...row,
+    isPending: unavailable.includes(row.field),
+  }));
 
   const maximum = Math.max(
     1,
-    ...rows.map((row) => Math.abs(row.value))
+    ...rows
+      .filter((row) => !row.isPending)
+      .map((row) => Math.abs(row.value))
   );
 
   return (
@@ -97,22 +111,29 @@ export default function FinanceSummaryWidget({
           <div className="dashboard-summary-list">
             {rows.map((row) => (
               <div
-                className="dashboard-summary-row"
+                className={`dashboard-summary-row${
+                  row.isPending ? " is-pending" : ""
+                }`}
                 key={row.label}
               >
                 <div className="dashboard-summary-heading">
                   <span>{row.label}</span>
-                  <strong>{money.format(row.value)}</strong>
+                  <strong>
+                    {row.isPending
+                      ? "Veri henüz yok"
+                      : money.format(row.value)}
+                  </strong>
                 </div>
 
                 <div className="dashboard-summary-track">
                   <span
-                    className={`dashboard-summary-bar ${row.tone}`}
+                    className={`dashboard-summary-bar ${
+                      row.isPending ? "pending" : row.tone
+                    }`}
                     style={{
-                      width: `${barWidth(
-                        row.value,
-                        maximum
-                      )}%`,
+                      width: row.isPending
+                        ? "100%"
+                        : `${barWidth(row.value, maximum)}%`,
                     }}
                   />
                 </div>
@@ -120,13 +141,21 @@ export default function FinanceSummaryWidget({
             ))}
           </div>
 
+          {finance.unavailableFieldsMessage && (
+            <p className="mt-3 text-xs text-slate-400">
+              {finance.unavailableFieldsMessage}
+            </p>
+          )}
+
           <div className="mt-5 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-3">
             <div>
               <span className="text-xs text-slate-400">
                 Hazır Değerler
               </span>
               <strong className="mt-1 block">
-                {money.format(finance.totalLiquidAssets)}
+                {unavailable.includes("totalLiquidAssets")
+                  ? "Veri henüz yok"
+                  : money.format(finance.totalLiquidAssets)}
               </strong>
             </div>
 
