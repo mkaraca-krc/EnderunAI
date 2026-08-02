@@ -10,9 +10,462 @@ import {
   type AssignablePersonnelItem,
   type ProjectSiteDetail,
 } from "@/services/project-site.service";
+import {
+  dailyReportService,
+  type DailyReportDetail,
+  type DailyReportListItem,
+  type DailyReportWorkItem,
+} from "@/services/daily-report.service";
 
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+const emptyReportForm = {
+  weatherCondition: "",
+  engineerCount: 0,
+  foremanCount: 0,
+  craftsmanCount: 0,
+  workerCount: 0,
+  otherCount: 0,
+  notes: "",
+};
+
+function DailyReportTab({ siteId }: { siteId: string }) {
+  const [list, setList] = useState<DailyReportListItem[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(todayIso());
+  const [detail, setDetail] = useState<DailyReportDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [form, setForm] = useState(emptyReportForm);
+  const [workItems, setWorkItems] = useState<DailyReportWorkItem[]>([]);
+  const [newWorkItem, setNewWorkItem] = useState({ description: "", quantity: "", unit: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoVisible, setPhotoVisible] = useState(false);
+  const [photoCaption, setPhotoCaption] = useState("");
+
+  async function loadList() {
+    setListLoading(true);
+    try {
+      setList(await dailyReportService.getAll(siteId));
+    } catch {
+      setList([]);
+    } finally {
+      setListLoading(false);
+    }
+  }
+
+  async function loadDetailForDate(date: string) {
+    setDetailLoading(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const found = await dailyReportService.getByDate(siteId, date);
+      setDetail(found);
+      setForm({
+        weatherCondition: found.weatherCondition ?? "",
+        engineerCount: found.engineerCount,
+        foremanCount: found.foremanCount,
+        craftsmanCount: found.craftsmanCount,
+        workerCount: found.workerCount,
+        otherCount: found.otherCount,
+        notes: found.notes ?? "",
+      });
+      setWorkItems(found.workItems);
+    } catch {
+      setDetail(null);
+      setWorkItems([]);
+
+      try {
+        const suggested = await dailyReportService.getSuggestedHeadcount(siteId, date);
+        setForm({ ...emptyReportForm, ...suggested });
+      } catch {
+        setForm(emptyReportForm);
+      }
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId]);
+
+  useEffect(() => {
+    void loadDetailForDate(selectedDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId, selectedDate]);
+
+  function updateForm<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function addWorkItem() {
+    if (!newWorkItem.description.trim()) return;
+
+    setWorkItems((current) => [
+      ...current,
+      {
+        description: newWorkItem.description.trim(),
+        quantity: newWorkItem.quantity ? Number(newWorkItem.quantity) : null,
+        unit: newWorkItem.unit || null,
+      },
+    ]);
+    setNewWorkItem({ description: "", quantity: "", unit: "" });
+  }
+
+  function removeWorkItem(index: number) {
+    setWorkItems((current) => current.filter((_, i) => i !== index));
+  }
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    const payload = {
+      reportDate: selectedDate,
+      weatherCondition: form.weatherCondition || null,
+      engineerCount: Number(form.engineerCount) || 0,
+      foremanCount: Number(form.foremanCount) || 0,
+      craftsmanCount: Number(form.craftsmanCount) || 0,
+      workerCount: Number(form.workerCount) || 0,
+      otherCount: Number(form.otherCount) || 0,
+      notes: form.notes || null,
+      workItems,
+    };
+
+    try {
+      if (detail) {
+        await dailyReportService.update(siteId, detail.id, payload);
+      } else {
+        await dailyReportService.create(siteId, payload);
+      }
+
+      setNotice("Günlük rapor kaydedildi.");
+      await loadDetailForDate(selectedDate);
+      await loadList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Günlük rapor kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function uploadPhoto(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !detail) return;
+
+    setUploadingPhoto(true);
+    setError("");
+
+    try {
+      await dailyReportService.uploadPhoto(siteId, detail.id, file, photoVisible, photoCaption || undefined);
+      setPhotoCaption("");
+      setPhotoVisible(false);
+      await loadDetailForDate(selectedDate);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fotoğraf yüklenemedi.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function togglePhotoVisibility(photoId: string, current: boolean) {
+    if (!detail) return;
+    try {
+      await dailyReportService.setPhotoVisibility(siteId, detail.id, photoId, !current);
+      await loadDetailForDate(selectedDate);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Görünürlük güncellenemedi.");
+    }
+  }
+
+  async function deletePhoto(photoId: string) {
+    if (!detail) return;
+    try {
+      await dailyReportService.deletePhoto(siteId, detail.id, photoId);
+      await loadDetailForDate(selectedDate);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fotoğraf silinemedi.");
+    }
+  }
+
+  return (
+    <section className="erp-panel erp-mt">
+      <div className="erp-panel-header">
+        <div>
+          <h2>Günlük Rapor</h2>
+          <p>Tarih seçerek o güne ait şantiye raporunu girin veya düzenleyin</p>
+        </div>
+
+        <input
+          className="erp-input"
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+        />
+      </div>
+
+      {error && <div className="erp-alert error">{error}</div>}
+      {notice && <div className="erp-alert success">{notice}</div>}
+
+      {detailLoading ? (
+        <div className="erp-loading">Yükleniyor...</div>
+      ) : (
+        <form className="erp-form-card" onSubmit={save}>
+          <div className="erp-form-grid">
+            <label>
+              <span>Hava Durumu</span>
+              <input
+                className="erp-input"
+                value={form.weatherCondition}
+                onChange={(e) => updateForm("weatherCondition", e.target.value)}
+              />
+            </label>
+            <label>
+              <span>Mühendis</span>
+              <input
+                className="erp-input"
+                type="number"
+                min={0}
+                value={form.engineerCount}
+                onChange={(e) => updateForm("engineerCount", Number(e.target.value))}
+              />
+            </label>
+            <label>
+              <span>Formen</span>
+              <input
+                className="erp-input"
+                type="number"
+                min={0}
+                value={form.foremanCount}
+                onChange={(e) => updateForm("foremanCount", Number(e.target.value))}
+              />
+            </label>
+            <label>
+              <span>Usta</span>
+              <input
+                className="erp-input"
+                type="number"
+                min={0}
+                value={form.craftsmanCount}
+                onChange={(e) => updateForm("craftsmanCount", Number(e.target.value))}
+              />
+            </label>
+            <label>
+              <span>İşçi</span>
+              <input
+                className="erp-input"
+                type="number"
+                min={0}
+                value={form.workerCount}
+                onChange={(e) => updateForm("workerCount", Number(e.target.value))}
+              />
+            </label>
+            <label>
+              <span>Diğer</span>
+              <input
+                className="erp-input"
+                type="number"
+                min={0}
+                value={form.otherCount}
+                onChange={(e) => updateForm("otherCount", Number(e.target.value))}
+              />
+            </label>
+          </div>
+
+          <label>
+            <span>Notlar</span>
+            <textarea
+              className="erp-input"
+              rows={3}
+              value={form.notes}
+              onChange={(e) => updateForm("notes", e.target.value)}
+            />
+          </label>
+
+          <div className="erp-panel-header">
+            <h3>İmalat Kalemleri</h3>
+          </div>
+
+          {workItems.length > 0 && (
+            <div className="erp-project-list">
+              {workItems.map((item, index) => (
+                <div className="erp-project-list-item" key={index}>
+                  <div>
+                    <strong>{item.description}</strong>
+                    <span>
+                      {item.quantity ?? "—"} {item.unit ?? ""}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="erp-button secondary"
+                    onClick={() => removeWorkItem(index)}
+                  >
+                    Kaldır
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="erp-form-grid">
+            <label>
+              <span>Açıklama</span>
+              <input
+                className="erp-input"
+                value={newWorkItem.description}
+                onChange={(e) =>
+                  setNewWorkItem((current) => ({ ...current, description: e.target.value }))
+                }
+              />
+            </label>
+            <label>
+              <span>Miktar</span>
+              <input
+                className="erp-input"
+                type="number"
+                value={newWorkItem.quantity}
+                onChange={(e) =>
+                  setNewWorkItem((current) => ({ ...current, quantity: e.target.value }))
+                }
+              />
+            </label>
+            <label>
+              <span>Birim</span>
+              <input
+                className="erp-input"
+                value={newWorkItem.unit}
+                onChange={(e) =>
+                  setNewWorkItem((current) => ({ ...current, unit: e.target.value }))
+                }
+              />
+            </label>
+          </div>
+
+          <div className="erp-actions">
+            <button type="button" className="erp-button secondary" onClick={addWorkItem}>
+              + Kalem Ekle
+            </button>
+          </div>
+
+          <div className="erp-actions">
+            <button type="submit" disabled={saving}>
+              {saving ? "Kaydediliyor..." : detail ? "Raporu Güncelle" : "Raporu Kaydet"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {detail && (
+        <div className="erp-mt">
+          <div className="erp-panel-header">
+            <h3>Fotoğraflar</h3>
+          </div>
+
+          <div className="erp-form-grid">
+            <label>
+              <span>Açıklama (opsiyonel)</span>
+              <input
+                className="erp-input"
+                value={photoCaption}
+                onChange={(e) => setPhotoCaption(e.target.value)}
+              />
+            </label>
+            <label className="erp-checkbox-label">
+              <input
+                type="checkbox"
+                checked={photoVisible}
+                onChange={(e) => setPhotoVisible(e.target.checked)}
+              />
+              <span>İşverene görünür</span>
+            </label>
+            <label>
+              <span>Fotoğraf Seç</span>
+              <input type="file" accept="image/*" onChange={uploadPhoto} disabled={uploadingPhoto} />
+            </label>
+          </div>
+
+          {detail.photos.length === 0 ? (
+            <div className="erp-empty-state">Henüz fotoğraf eklenmedi.</div>
+          ) : (
+            <div className="erp-project-list">
+              {detail.photos.map((photo) => (
+                <div className="erp-project-list-item" key={photo.id}>
+                  <div>
+                    <strong>{photo.caption || photo.originalName}</strong>
+                    <span className={`erp-status ${photo.isVisibleToEmployer ? "green" : "gray"}`}>
+                      {photo.isVisibleToEmployer ? "İşverene görünür" : "İşverene kapalı"}
+                    </span>
+                  </div>
+                  <div className="erp-actions">
+                    <button
+                      type="button"
+                      className="erp-button secondary"
+                      onClick={() => togglePhotoVisibility(photo.id, photo.isVisibleToEmployer)}
+                    >
+                      {photo.isVisibleToEmployer ? "Gizle" : "Göster"}
+                    </button>
+                    <button
+                      type="button"
+                      className="erp-button secondary"
+                      onClick={() => deletePhoto(photo.id)}
+                    >
+                      Sil
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="erp-mt">
+        <div className="erp-panel-header">
+          <h3>Son Raporlar</h3>
+        </div>
+
+        {listLoading ? (
+          <div className="erp-loading">Yükleniyor...</div>
+        ) : list.length === 0 ? (
+          <div className="erp-empty-state">Henüz günlük rapor girilmedi.</div>
+        ) : (
+          <div className="erp-project-list">
+            {list.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                className="erp-project-list-item"
+                onClick={() => setSelectedDate(item.reportDate.slice(0, 10))}
+              >
+                <div>
+                  <strong>{formatDate(item.reportDate)}</strong>
+                  <span>
+                    {item.totalHeadcount} personel · {item.workItemCount} imalat kalemi ·{" "}
+                    {item.photoCount} fotoğraf
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export default function ProjectSiteDetailPage() {
@@ -363,6 +816,8 @@ export default function ProjectSiteDetailPage() {
               </div>
             )}
           </section>
+
+          <DailyReportTab siteId={params.siteId} />
         </>
       )}
     </ErpShell>

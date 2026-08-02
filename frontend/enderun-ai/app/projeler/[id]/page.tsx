@@ -12,9 +12,14 @@ import {
 } from "@/services/project-profitability.service";
 
 import {
-  projectDailyReportService,
-  type ProjectDailyReport,
-} from "@/services/project-daily-report.service";
+  projectDailyReportsRollupService,
+  type ProjectDailyReportRollupItem,
+} from "@/services/project-daily-reports-rollup.service";
+
+import {
+  employerPortalService,
+  type EmployerPortalLink,
+} from "@/services/employer-portal.service";
 
 import {
   projectSiteAnalysisService,
@@ -120,7 +125,12 @@ export default function ProjectCenterPage() {
     useState<ProjectProfitability | null>(null);
 
   const [dailyReports, setDailyReports] =
-    useState<ProjectDailyReport[]>([]);
+    useState<ProjectDailyReportRollupItem[]>([]);
+
+  const [portalLink, setPortalLink] = useState<EmployerPortalLink>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState("");
+  const [portalCopied, setPortalCopied] = useState(false);
 
 
   const [siteAnalysis, setSiteAnalysis] =
@@ -186,14 +196,16 @@ export default function ProjectCenterPage() {
         breakdownResult,
         laborBreakdownResult,
         projectPersonnelResult,
+        portalLinkResult,
       ] = await Promise.allSettled([
         projectProfitabilityService.getById(params.id),
-        projectDailyReportService.getByProject(params.id),
+        projectDailyReportsRollupService.getRecent(params.id),
         projectSiteAnalysisService.getById(params.id),
         projectSiteService.getAll(params.id),
         projectCostService.getBreakdown(params.id),
         projectLaborCostService.getBreakdown(params.id),
         personnelService.getAll({ projectId: params.id }),
+        employerPortalService.get(params.id),
       ]);
 
       if (profitabilityResult.status === "fulfilled") {
@@ -266,6 +278,16 @@ export default function ProjectCenterPage() {
         );
       }
 
+      if (portalLinkResult.status === "fulfilled") {
+        setPortalLink(portalLinkResult.value);
+      } else {
+        setPortalLink(null);
+        console.warn(
+          "İşveren portalı linki yüklenemedi:",
+          portalLinkResult.reason
+        );
+      }
+
       setLoading(false);
     }
 
@@ -273,6 +295,56 @@ export default function ProjectCenterPage() {
       load();
     }
   }, [params.id]);
+
+  async function createPortalLink() {
+    setPortalLoading(true);
+    setPortalError("");
+    setPortalCopied(false);
+
+    try {
+      await employerPortalService.create(params.id);
+      setPortalLink(await employerPortalService.get(params.id));
+    } catch (err) {
+      setPortalError(
+        err instanceof Error ? err.message : "İşveren portalı linki oluşturulamadı."
+      );
+    } finally {
+      setPortalLoading(false);
+    }
+  }
+
+  async function revokePortalLink() {
+    if (!window.confirm("Bu linki iptal etmek istediğinize emin misiniz? İşveren artık bu linkle erişemeyecek.")) {
+      return;
+    }
+
+    setPortalLoading(true);
+    setPortalError("");
+
+    try {
+      await employerPortalService.revoke(params.id);
+      setPortalLink(await employerPortalService.get(params.id));
+    } catch (err) {
+      setPortalError(
+        err instanceof Error ? err.message : "İşveren portalı linki iptal edilemedi."
+      );
+    } finally {
+      setPortalLoading(false);
+    }
+  }
+
+  async function copyPortalLink() {
+    if (!portalLink) return;
+    const url = `${window.location.origin}/portal/${portalLink.token}`;
+
+    try {
+      await navigator.clipboard.writeText(url);
+      setPortalCopied(true);
+      setTimeout(() => setPortalCopied(false), 2000);
+    } catch {
+      setPortalError("Link panoya kopyalanamadı.");
+    }
+  }
 
   async function reloadBreakdown() {
     try {
@@ -518,6 +590,76 @@ export default function ProjectCenterPage() {
                     </span>
                   </Link>
                 ))}
+              </div>
+            )}
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>İşveren Portalı</h2>
+                <p>
+                  Giriş gerektirmeyen, sadece günlük rapor ve izinli fotoğrafları gösteren
+                  dış erişim linki
+                </p>
+              </div>
+            </div>
+
+            {portalError && <div className="erp-alert error">{portalError}</div>}
+
+            {!portalLink || !portalLink.isActive ? (
+              <div className="erp-empty-state">
+                <p>Bu proje için aktif bir işveren portalı linki yok.</p>
+                <button
+                  type="button"
+                  className="erp-button"
+                  onClick={() => void createPortalLink()}
+                  disabled={portalLoading}
+                >
+                  {portalLoading ? "Oluşturuluyor..." : "Portal Linki Oluştur"}
+                </button>
+              </div>
+            ) : (
+              <div className="erp-form-card">
+                <label>
+                  <span>Portal Linki</span>
+                  <input
+                    className="erp-input"
+                    readOnly
+                    value={
+                      typeof window !== "undefined"
+                        ? `${window.location.origin}/portal/${portalLink.token}`
+                        : `/portal/${portalLink.token}`
+                    }
+                    onFocus={(e) => e.currentTarget.select()}
+                  />
+                </label>
+
+                <div className="erp-actions">
+                  <button
+                    type="button"
+                    className="erp-button secondary"
+                    onClick={() => void copyPortalLink()}
+                  >
+                    {portalCopied ? "Kopyalandı ✓" : "Linki Kopyala"}
+                  </button>
+                  <button
+                    type="button"
+                    className="erp-button secondary"
+                    onClick={() => void createPortalLink()}
+                    disabled={portalLoading}
+                  >
+                    Yeni Link Üret (Eskisini Geçersiz Kılar)
+                  </button>
+                  <button
+                    type="button"
+                    className="erp-button secondary"
+                    onClick={() => void revokePortalLink()}
+                    disabled={portalLoading}
+                  >
+                    İptal Et
+                  </button>
+                </div>
               </div>
             )}
           </section>
@@ -986,23 +1128,24 @@ export default function ProjectCenterPage() {
 
                 {dailyReports.map(report => (
 
-                  <div
+                  <Link
                     className="erp-project-list-item"
+                    href={`/projeler/${params.id}/santiyeler/${report.projectSiteId}`}
                     key={report.id}
                   >
 
                     <div>
 
                       <strong>
-                        {formatDate(report.reportDate)}
+                        {formatDate(report.reportDate)} · {report.siteName}
                       </strong>
 
                       <span>
-                        {report.summary}
+                        {report.notes || "Not girilmedi"}
                       </span>
 
                       <span>
-                        Personel: {report.workerCount}
+                        Personel: {report.totalHeadcount}
                       </span>
 
                     </div>
@@ -1011,12 +1154,12 @@ export default function ProjectCenterPage() {
                     <div>
 
                       <span>
-                        {report.weather}
+                        {report.weatherCondition || "—"}
                       </span>
 
                     </div>
 
-                  </div>
+                  </Link>
 
                 ))}
 

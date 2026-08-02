@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/yetkisiz"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/yetkisiz", "/portal"];
 
 function values(value: unknown): string[] {
   if (Array.isArray(value)) {

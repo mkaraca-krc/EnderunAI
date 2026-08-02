@@ -83,7 +83,8 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
         if (!path.StartsWith("/api/") ||
             path.StartsWith("/api/auth") ||
             path.StartsWith("/api/health") ||
-            path.StartsWith("/api/swagger"))
+            path.StartsWith("/api/swagger") ||
+            path.StartsWith("/api/portal"))
         {
             return null;
         }

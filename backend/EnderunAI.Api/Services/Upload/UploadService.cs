@@ -17,7 +17,12 @@ public sealed class UploadService : IUploadService
             ".xls",
             ".csv",
             ".doc",
-            ".docx"
+            ".docx",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".heic"
         };
 
     public async Task<UploadedFileResult> SaveAsync(
@@ -233,6 +238,18 @@ public sealed class UploadService : IUploadService
 
             ".docx" =>
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+
+            ".jpg" or ".jpeg" =>
+                "image/jpeg",
+
+            ".png" =>
+                "image/png",
+
+            ".webp" =>
+                "image/webp",
+
+            ".heic" =>
+                "image/heic",
 
             _ =>
                 "application/octet-stream"

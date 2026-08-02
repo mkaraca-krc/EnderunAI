@@ -12,8 +12,10 @@ using EnderunAI.Api.Services.Upload;
 using EnderunAI.Api.Services.Secretariat;
 using EnderunAI.Api.Services.HumanResources;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -111,6 +113,26 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("portal", context =>
+    {
+        var token = context.Request.RouteValues["token"]?.ToString() ?? "unknown";
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            $"{token}:{ip}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 60,
+                QueueLimit = 0
+            });
+    });
+});
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -145,6 +167,7 @@ app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseMiddleware<PermissionAuthorizationMiddleware>();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 

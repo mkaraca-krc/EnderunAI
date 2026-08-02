@@ -89,6 +89,10 @@ public sealed class AppDbContext(
     public DbSet<JobCandidate> JobCandidates => Set<JobCandidate>();
     public DbSet<JobApplication> JobApplications => Set<JobApplication>();
     public DbSet<CandidateInterview> CandidateInterviews => Set<CandidateInterview>();
+    public DbSet<ProjectSiteDailyReport> ProjectSiteDailyReports => Set<ProjectSiteDailyReport>();
+    public DbSet<ProjectSiteDailyReportWorkItem> ProjectSiteDailyReportWorkItems => Set<ProjectSiteDailyReportWorkItem>();
+    public DbSet<ProjectSiteDailyReportPhoto> ProjectSiteDailyReportPhotos => Set<ProjectSiteDailyReportPhoto>();
+    public DbSet<EmployerPortalLink> EmployerPortalLinks => Set<EmployerPortalLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -135,6 +139,7 @@ public sealed class AppDbContext(
         ConfigureHrAssetAssignments(modelBuilder);
         ConfigureProjectMeasurements(modelBuilder);
         ConfigureHrRecruitment(modelBuilder);
+        ConfigureEmployerPortal(modelBuilder);
     }
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
@@ -1606,6 +1611,84 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.ProjectSite)
                 .WithMany(x => x.Assignments)
                 .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureEmployerPortal(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectSiteDailyReport>(entity =>
+        {
+            entity.ToTable("project_site_daily_reports");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ProjectSiteId, x.ReportDate }).IsUnique();
+
+            entity.Property(x => x.WeatherCondition).HasMaxLength(100);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+
+            entity.HasOne(x => x.ProjectSite)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProjectSiteDailyReportWorkItem>(entity =>
+        {
+            entity.ToTable("project_site_daily_report_work_items");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.DailyReportId);
+
+            entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(50);
+            entity.Property(x => x.Quantity).HasPrecision(18, 3);
+
+            entity.HasOne(x => x.DailyReport)
+                .WithMany(x => x.WorkItems)
+                .HasForeignKey(x => x.DailyReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProjectSiteDailyReportPhoto>(entity =>
+        {
+            entity.ToTable("project_site_daily_report_photos");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.DailyReportId);
+
+            entity.Property(x => x.StoredFileName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.OriginalName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Caption).HasMaxLength(500);
+
+            entity.HasOne(x => x.DailyReport)
+                .WithMany(x => x.Photos)
+                .HasForeignKey(x => x.DailyReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<EmployerPortalLink>(entity =>
+        {
+            entity.ToTable("employer_portal_links");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.Token).IsUnique();
+            entity.HasIndex(x => x.ProjectId);
+
+            entity.Property(x => x.Token).HasMaxLength(200).IsRequired();
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
