@@ -775,6 +775,9 @@ export default function InventoryOperationsPage() {
                   <TableHead right>
                     Kullanılabilir
                   </TableHead>
+                  <TableHead right>
+                    Min. Stok
+                  </TableHead>
                   <TableHead>Durum</TableHead>
                 </tr>
               </thead>
@@ -783,7 +786,7 @@ export default function InventoryOperationsPage() {
                 {loadingItems ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-slate-500"
                     >
                       Malzeme kartları yükleniyor...
@@ -792,7 +795,7 @@ export default function InventoryOperationsPage() {
                 ) : items.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-slate-500"
                     >
                       Kayıt bulunamadı.
@@ -846,6 +849,10 @@ export default function InventoryOperationsPage() {
                             item.availableStock,
                           )}{" "}
                           {item.unit}
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <MinimumStockCell item={item} onSaved={loadDashboard} />
                         </td>
 
                         <td className="px-4 py-3">
@@ -993,6 +1000,74 @@ function EmptyRow({
   return (
     <div className="px-5 py-12 text-center text-sm text-slate-500">
       {text}
+    </div>
+  );
+}
+
+function MinimumStockCell({
+  item,
+  onSaved,
+}: {
+  item: InventoryItemListItem;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(item.minimumStock);
+  const [saving, setSaving] = useState(false);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setValue(item.minimumStock);
+          setEditing(true);
+        }}
+        className="text-slate-700 underline decoration-dotted hover:text-slate-950"
+        title="Kritik stok seviyesini düzenle"
+      >
+        {formatNumber(item.minimumStock)} {item.unit}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        value={value}
+        onChange={(event) => setValue(Number(event.target.value))}
+        className="w-20 rounded border border-slate-300 px-2 py-1 text-right text-sm"
+        autoFocus
+      />
+      <button
+        type="button"
+        disabled={saving}
+        onClick={async () => {
+          setSaving(true);
+          try {
+            await inventoryService.updateMinimumStock(item, value);
+            onSaved();
+            setEditing(false);
+          } catch {
+            // sessizce bırak, kullanıcı tekrar deneyebilir
+          } finally {
+            setSaving(false);
+          }
+        }}
+        className="rounded bg-slate-950 px-2 py-1 text-xs text-white disabled:opacity-50"
+      >
+        ✓
+      </button>
+      <button
+        type="button"
+        onClick={() => setEditing(false)}
+        className="rounded border border-slate-300 px-2 py-1 text-xs"
+      >
+        ✕
+      </button>
     </div>
   );
 }

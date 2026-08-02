@@ -24,15 +24,41 @@ public sealed class StockMovement : BaseEntity
     public Guid? ProjectId { get; set; }
     public Project? Project { get; set; }
 
+    public Guid? ProjectSiteId { get; set; }
+    public ProjectSite? ProjectSite { get; set; }
+
     public Guid? RelatedWarehouseId { get; set; }
     public Warehouse? RelatedWarehouse { get; set; }
 
     public Guid? PurchaseRequestId { get; set; }
     public PurchaseRequest? PurchaseRequest { get; set; }
 
+    /// <summary>
+    /// Bu hareket bir mal kabulden geldiyse belge zinciri: hareket -> mal
+    /// kabul -> sipariş -> teklif -> talep (frontend'de mal kabul üzerinden
+    /// tıklanarak izlenir).
+    /// </summary>
+    public Guid? GoodsReceiptId { get; set; }
+    public Models.GoodsReceipt.GoodsReceipt? GoodsReceipt { get; set; }
+
     public StockMovementType Type { get; set; }
+
+    /// <summary>
+    /// Adjustment (sayım düzeltme) hareketlerinde işaretli fark (pozitif =
+    /// fazla çıktı, negatif = eksik çıktı); diğer tüm tiplerde her zaman
+    /// pozitif, taşınan/işlenen miktar.
+    /// </summary>
     public decimal Quantity { get; set; }
+
     public string ReferenceNumber { get; set; } = string.Empty;
     public DateTime MovementDate { get; set; } = DateTime.UtcNow;
     public string? Description { get; set; }
+
+    /// <summary>
+    /// Hareket anındaki TRY birim maliyeti — sonradan InventoryItem.AverageUnitCost
+    /// değişse bile bu alan sabit kalır (geçmiş hareketin maliyeti donmuş halde tutulur).
+    /// </summary>
+    public decimal? UnitCost { get; set; }
+
+    public decimal? TotalCost { get; set; }
 }

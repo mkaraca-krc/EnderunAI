@@ -1,6 +1,8 @@
 using EnderunAI.Api.Contracts.Inventory;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security.CurrentUser;
+using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +12,10 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/inventory")]
-public sealed class InventoryController(AppDbContext db) : ControllerBase
+public sealed class InventoryController(
+    AppDbContext db,
+    IDocumentNumberService documentNumbers,
+    ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet("items")]
     public async Task<IActionResult> GetItems([FromQuery] Guid? companyId, [FromQuery] string? search, CancellationToken cancellationToken)
@@ -29,6 +34,7 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
         {
             x.Id, x.CompanyId, CompanyName = x.Company.Name, x.Code, x.Name, x.Category,
             x.Brand, x.Model, x.Unit, x.Barcode, x.MinimumStock, x.MaximumStock,
+            x.AverageUnitCost,
             x.Type, x.IsActive,
             TotalStock = x.WarehouseStocks.Sum(s => s.Quantity),
             AvailableStock = x.WarehouseStocks.Sum(s => s.Quantity - s.ReservedQuantity)
@@ -73,6 +79,63 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
         return Ok(new { message = "Malzeme kartı oluşturuldu.", entity.Id, entity.Code, entity.Name });
     }
 
+    [HttpPut("items/{id:guid}")]
+    public async Task<IActionResult> UpdateItem(Guid id, UpdateInventoryItemRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Unit))
+            return BadRequest(new { message = "Malzeme adı ve birimi zorunludur." });
+
+        if (!Enum.IsDefined(typeof(InventoryItemType), request.Type))
+            return BadRequest(new { message = "Geçersiz malzeme tipi." });
+
+        var item = await db.InventoryItems.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (item is null) return NotFound(new { message = "Malzeme kartı bulunamadı." });
+
+        item.Name = request.Name.Trim();
+        item.Category = request.Category?.Trim();
+        item.Brand = request.Brand?.Trim();
+        item.Model = request.Model?.Trim();
+        item.Unit = request.Unit.Trim();
+        item.Barcode = request.Barcode?.Trim();
+        item.MinimumStock = request.MinimumStock;
+        item.MaximumStock = request.MaximumStock;
+        item.Type = (InventoryItemType)request.Type;
+        item.IsActive = request.IsActive;
+        item.UpdatedAtUtc = DateTime.UtcNow;
+        item.UpdatedByUserId = currentUser.UserId;
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new { message = "Malzeme kartı güncellendi." });
+    }
+
+    [HttpGet("critical-stock-alerts")]
+    public async Task<IActionResult> GetCriticalStockAlerts([FromQuery] Guid? companyId, CancellationToken cancellationToken)
+    {
+        var query = db.WarehouseStocks.AsNoTracking()
+            .Where(x => x.InventoryItem.MinimumStock > 0 &&
+                        (x.Quantity - x.ReservedQuantity) <= x.InventoryItem.MinimumStock);
+
+        if (companyId.HasValue)
+            query = query.Where(x => x.InventoryItem.CompanyId == companyId.Value);
+
+        var alerts = await query
+            .OrderBy(x => x.InventoryItem.Name)
+            .Select(x => new
+            {
+                x.WarehouseId,
+                WarehouseName = x.Warehouse.Name,
+                x.InventoryItemId,
+                ItemCode = x.InventoryItem.Code,
+                ItemName = x.InventoryItem.Name,
+                x.InventoryItem.Unit,
+                AvailableQuantity = x.Quantity - x.ReservedQuantity,
+                x.InventoryItem.MinimumStock
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(alerts);
+    }
+
     [HttpGet("warehouses/{warehouseId:guid}/stocks")]
     public async Task<IActionResult> GetWarehouseStocks(Guid warehouseId, CancellationToken cancellationToken)
     {
@@ -89,6 +152,7 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
                 x.InventoryItem.Unit, x.Quantity, x.ReservedQuantity,
                 AvailableQuantity = x.Quantity - x.ReservedQuantity,
                 x.InventoryItem.MinimumStock,
+                x.InventoryItem.AverageUnitCost,
                 IsCritical = x.Quantity - x.ReservedQuantity <= x.InventoryItem.MinimumStock
             }).ToListAsync(cancellationToken);
 
@@ -97,11 +161,12 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
 
     [HttpGet("movements")]
     public async Task<IActionResult> GetMovements([FromQuery] Guid? warehouseId, [FromQuery] Guid? projectId,
-        [FromQuery] Guid? inventoryItemId, CancellationToken cancellationToken)
+        [FromQuery] Guid? projectSiteId, [FromQuery] Guid? inventoryItemId, CancellationToken cancellationToken)
     {
         var query = db.StockMovements.AsNoTracking();
         if (warehouseId.HasValue) query = query.Where(x => x.WarehouseId == warehouseId.Value);
         if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId.Value);
+        if (projectSiteId.HasValue) query = query.Where(x => x.ProjectSiteId == projectSiteId.Value);
         if (inventoryItemId.HasValue) query = query.Where(x => x.InventoryItemId == inventoryItemId.Value);
 
         var movements = await query.OrderByDescending(x => x.MovementDate).ThenByDescending(x => x.CreatedAtUtc)
@@ -110,9 +175,12 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
                 x.Id, x.WarehouseId, WarehouseName = x.Warehouse.Name,
                 x.InventoryItemId, ItemCode = x.InventoryItem.Code, ItemName = x.InventoryItem.Name,
                 x.ProjectId, ProjectName = x.Project != null ? x.Project.Name : null,
+                x.ProjectSiteId, ProjectSiteName = x.ProjectSite != null ? x.ProjectSite.Name : null,
                 x.RelatedWarehouseId,
                 RelatedWarehouseName = x.RelatedWarehouse != null ? x.RelatedWarehouse.Name : null,
-                x.PurchaseRequestId, x.Type, x.Quantity, x.ReferenceNumber, x.MovementDate, x.Description
+                x.PurchaseRequestId, x.GoodsReceiptId,
+                x.Type, x.Quantity, x.UnitCost, x.TotalCost,
+                x.ReferenceNumber, x.MovementDate, x.Description
             }).ToListAsync(cancellationToken);
 
         return Ok(movements);
@@ -122,6 +190,8 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
     public async Task<IActionResult> Receipt(StockReceiptRequest request, CancellationToken cancellationToken)
     {
         if (request.Quantity <= 0) return BadRequest(new { message = "Miktar sıfırdan büyük olmalıdır." });
+        if (string.IsNullOrWhiteSpace(request.ReferenceNumber))
+            return BadRequest(new { message = "Referans / irsaliye numarası zorunludur." });
 
         var warehouse = await db.Warehouses.SingleOrDefaultAsync(x => x.Id == request.WarehouseId, cancellationToken);
         if (warehouse is null) return NotFound(new { message = "Depo bulunamadı." });
@@ -153,7 +223,7 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
             Type = StockMovementType.Receipt,
             Quantity = request.Quantity,
             ReferenceNumber = request.ReferenceNumber.Trim(),
-            MovementDate = request.MovementDate,
+            MovementDate = ToUtc(request.MovementDate),
             Description = request.Description?.Trim()
         });
 
@@ -167,31 +237,80 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
     {
         if (request.Quantity <= 0) return BadRequest(new { message = "Miktar sıfırdan büyük olmalıdır." });
 
-        var stock = await db.WarehouseStocks.Include(x => x.Warehouse).SingleOrDefaultAsync(
+        var stock = await db.WarehouseStocks.Include(x => x.Warehouse).Include(x => x.InventoryItem).SingleOrDefaultAsync(
             x => x.WarehouseId == request.WarehouseId && x.InventoryItemId == request.InventoryItemId, cancellationToken);
 
         if (stock is null) return NotFound(new { message = "Depoda bu malzeme bulunmuyor." });
         if (stock.Quantity - stock.ReservedQuantity < request.Quantity)
             return Conflict(new { message = "Kullanılabilir stok yetersiz." });
 
+        if (request.ProjectSiteId.HasValue && !request.ProjectId.HasValue)
+            return BadRequest(new { message = "Şantiye seçildiyse proje de belirtilmelidir." });
+
+        // DocumentNumberService kendi transaction'ını açıp kapattığı için,
+        // aynı bağlantı üzerinde iç içe transaction hatası almamak adına
+        // belge numarası dış transaction başlamadan ÖNCE üretilir.
+        var referenceNumber = await documentNumbers.GenerateAsync(
+            stock.Warehouse.CompanyId, "STOCK_ISSUE", "CIKIS", cancellationToken);
+
+        await using var dbTransaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
         stock.Quantity -= request.Quantity;
         stock.UpdatedAtUtc = DateTime.UtcNow;
 
-        db.StockMovements.Add(new StockMovement
+        // Stok düşerken maliyet, o anki AverageUnitCost'tan hesaplanıp hareket
+        // kaydına dondurulur — ortalama sonradan değişse bile bu hareketin
+        // maliyeti sabit kalır.
+        var unitCost = stock.InventoryItem.AverageUnitCost;
+        var totalCost = unitCost * request.Quantity;
+
+        var description = request.Description?.Trim();
+        if (!string.IsNullOrWhiteSpace(request.ReferenceNumber))
+        {
+            var note = $"Kullanıcı referansı: {request.ReferenceNumber.Trim()}";
+            description = string.IsNullOrWhiteSpace(description) ? note : $"{description} ({note})";
+        }
+
+        var movement = new StockMovement
         {
             CompanyId = stock.Warehouse.CompanyId,
             WarehouseId = stock.WarehouseId,
             InventoryItemId = stock.InventoryItemId,
             ProjectId = request.ProjectId,
+            ProjectSiteId = request.ProjectSiteId,
             Type = StockMovementType.Issue,
             Quantity = request.Quantity,
-            ReferenceNumber = request.ReferenceNumber.Trim(),
-            MovementDate = request.MovementDate,
-            Description = request.Description?.Trim()
-        });
+            UnitCost = unitCost,
+            TotalCost = totalCost,
+            ReferenceNumber = referenceNumber,
+            MovementDate = ToUtc(request.MovementDate),
+            Description = description,
+            CreatedByUserId = currentUser.UserId
+        };
+        db.StockMovements.Add(movement);
+
+        // Proje belirtildiyse (şantiyeli veya şantiyesiz proje geneli) maliyet
+        // otomatik işlenir; hiçbir proje seçilmediyse (genel/merkez sarfiyat)
+        // hiçbir maliyet kaydı oluşturulmaz.
+        if (request.ProjectId.HasValue && totalCost > 0)
+        {
+            db.ProjectCostTransactions.Add(new ProjectCostTransaction
+            {
+                ProjectId = request.ProjectId.Value,
+                ProjectSiteId = request.ProjectSiteId,
+                CostType = ProjectCostType.Material,
+                CostDate = ToUtc(request.MovementDate),
+                Amount = totalCost,
+                Description = $"Depo sarfı: {stock.InventoryItem.Name} ({request.Quantity} {stock.InventoryItem.Unit})",
+                ReferenceType = "StockMovement",
+                ReferenceId = movement.Id,
+                CreatedByUserId = currentUser.UserId
+            });
+        }
 
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(new { message = "Depo çıkışı kaydedildi.", stock.Quantity });
+        await dbTransaction.CommitAsync(cancellationToken);
+        return Ok(new { message = "Depo çıkışı kaydedildi.", stock.Quantity, referenceNumber, unitCost, totalCost });
     }
 
     [HttpPost("transfers")]
@@ -201,7 +320,7 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = "Kaynak ve hedef depo aynı olamaz." });
         if (request.Quantity <= 0) return BadRequest(new { message = "Miktar sıfırdan büyük olmalıdır." });
 
-        var source = await db.WarehouseStocks.Include(x => x.Warehouse).SingleOrDefaultAsync(
+        var source = await db.WarehouseStocks.Include(x => x.Warehouse).Include(x => x.InventoryItem).SingleOrDefaultAsync(
             x => x.WarehouseId == request.SourceWarehouseId && x.InventoryItemId == request.InventoryItemId, cancellationToken);
         if (source is null) return NotFound(new { message = "Kaynak depoda malzeme bulunamadı." });
 
@@ -211,6 +330,9 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = "Depolar aynı şirkete ait olmalıdır." });
         if (source.Quantity - source.ReservedQuantity < request.Quantity)
             return Conflict(new { message = "Kaynak depoda yeterli stok yok." });
+
+        var referenceNumber = await documentNumbers.GenerateAsync(
+            source.Warehouse.CompanyId, "STOCK_TRANSFER", "TRF", cancellationToken);
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var target = await db.WarehouseStocks.SingleOrDefaultAsync(
@@ -226,6 +348,16 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
         source.UpdatedAtUtc = DateTime.UtcNow;
         target.UpdatedAtUtc = DateTime.UtcNow;
 
+        var unitCost = source.InventoryItem.AverageUnitCost;
+        var totalCost = unitCost * request.Quantity;
+
+        var description = request.Description?.Trim();
+        if (!string.IsNullOrWhiteSpace(request.ReferenceNumber))
+        {
+            var note = $"Kullanıcı referansı: {request.ReferenceNumber.Trim()}";
+            description = string.IsNullOrWhiteSpace(description) ? note : $"{description} ({note})";
+        }
+
         db.StockMovements.AddRange(
             new StockMovement
             {
@@ -236,9 +368,12 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
                 ProjectId = request.ProjectId,
                 Type = StockMovementType.TransferOut,
                 Quantity = request.Quantity,
-                ReferenceNumber = request.ReferenceNumber.Trim(),
-                MovementDate = request.MovementDate,
-                Description = request.Description?.Trim()
+                UnitCost = unitCost,
+                TotalCost = totalCost,
+                ReferenceNumber = referenceNumber,
+                MovementDate = ToUtc(request.MovementDate),
+                Description = description,
+                CreatedByUserId = currentUser.UserId
             },
             new StockMovement
             {
@@ -249,13 +384,65 @@ public sealed class InventoryController(AppDbContext db) : ControllerBase
                 ProjectId = request.ProjectId,
                 Type = StockMovementType.TransferIn,
                 Quantity = request.Quantity,
-                ReferenceNumber = request.ReferenceNumber.Trim(),
-                MovementDate = request.MovementDate,
-                Description = request.Description?.Trim()
+                UnitCost = unitCost,
+                TotalCost = totalCost,
+                ReferenceNumber = referenceNumber,
+                MovementDate = ToUtc(request.MovementDate),
+                Description = description,
+                CreatedByUserId = currentUser.UserId
             });
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return Ok(new { message = "Depolar arası transfer tamamlandı." });
+        return Ok(new { message = "Depolar arası transfer tamamlandı.", referenceNumber });
     }
+
+    [HttpPost("adjustments")]
+    public async Task<IActionResult> Adjustment(StockAdjustmentRequest request, CancellationToken cancellationToken)
+    {
+        if (request.CountedQuantity < 0) return BadRequest(new { message = "Sayılan miktar negatif olamaz." });
+
+        var stock = await db.WarehouseStocks.Include(x => x.Warehouse).Include(x => x.InventoryItem).SingleOrDefaultAsync(
+            x => x.WarehouseId == request.WarehouseId && x.InventoryItemId == request.InventoryItemId, cancellationToken);
+        if (stock is null) return NotFound(new { message = "Depoda bu malzeme bulunmuyor." });
+
+        var delta = request.CountedQuantity - stock.Quantity;
+        if (delta == 0) return BadRequest(new { message = "Sayılan miktar mevcut stokla aynı, düzeltme gerekmiyor." });
+
+        var referenceNumber = await documentNumbers.GenerateAsync(
+            stock.Warehouse.CompanyId, "STOCK_ADJUSTMENT", "SAYIM", cancellationToken);
+
+        stock.Quantity = request.CountedQuantity;
+        stock.UpdatedAtUtc = DateTime.UtcNow;
+
+        var unitCost = stock.InventoryItem.AverageUnitCost;
+
+        db.StockMovements.Add(new StockMovement
+        {
+            CompanyId = stock.Warehouse.CompanyId,
+            WarehouseId = stock.WarehouseId,
+            InventoryItemId = stock.InventoryItemId,
+            ProjectId = request.ProjectId,
+            Type = StockMovementType.Adjustment,
+            Quantity = delta,
+            UnitCost = unitCost,
+            TotalCost = unitCost * delta,
+            ReferenceNumber = referenceNumber,
+            MovementDate = ToUtc(request.MovementDate),
+            Description = request.Description?.Trim(),
+            CreatedByUserId = currentUser.UserId
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new
+        {
+            message = delta > 0 ? "Sayım fazlası kaydedildi." : "Sayım eksiği kaydedildi.",
+            referenceNumber,
+            delta,
+            newQuantity = stock.Quantity
+        });
+    }
+
+    private static DateTime ToUtc(DateTime value) =>
+        DateTime.SpecifyKind(value, DateTimeKind.Utc);
 }

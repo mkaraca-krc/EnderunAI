@@ -710,6 +710,7 @@ public sealed class AppDbContext(
             entity.Property(x => x.Barcode).HasMaxLength(100);
             entity.Property(x => x.MinimumStock).HasPrecision(18, 4);
             entity.Property(x => x.MaximumStock).HasPrecision(18, 4);
+            entity.Property(x => x.AverageUnitCost).HasPrecision(18, 4);
             entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
@@ -740,11 +741,15 @@ public sealed class AppDbContext(
             entity.Property(x => x.Quantity).HasPrecision(18, 4);
             entity.Property(x => x.ReferenceNumber).HasMaxLength(100).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 4);
+            entity.Property(x => x.TotalCost).HasPrecision(18, 4);
             entity.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.RelatedWarehouse).WithMany().HasForeignKey(x => x.RelatedWarehouseId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.InventoryItem).WithMany(x => x.StockMovements).HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ProjectSite).WithMany().HasForeignKey(x => x.ProjectSiteId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PurchaseRequest).WithMany().HasForeignKey(x => x.PurchaseRequestId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.GoodsReceipt).WithMany().HasForeignKey(x => x.GoodsReceiptId).OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }

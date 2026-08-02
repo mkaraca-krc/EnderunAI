@@ -454,16 +454,23 @@ public sealed class GoodsReceiptService(
             .ToArray();
 
         var inventoryItems = await db.InventoryItems
-            .AsNoTracking()
             .Where(x =>
                 inventoryItemIds.Contains(x.Id) &&
                 x.CompanyId == receipt.CompanyId &&
                 x.IsActive)
-            .Select(x => new { x.Id, x.Unit })
             .ToDictionaryAsync(x => x.Id, cancellationToken);
 
         if (inventoryItems.Count != inventoryItemIds.Length)
             throw new ProcurementValidationException("Bağlı stok kartlarından biri bulunamadı veya şirket kapsamına uygun değil.");
+
+        // Ağırlıklı ortalama maliyet için mevcut toplam miktar (tüm depolarda,
+        // bu mal kabulden ÖNCEKİ hâliyle) — tek para birimi TRY, döviz cinsi
+        // sipariş kalemleri PurchaseOrder.ExchangeRate ile TRY'ye çevrilir.
+        var priorTotalQuantities = await db.WarehouseStocks
+            .Where(x => inventoryItemIds.Contains(x.InventoryItemId))
+            .GroupBy(x => x.InventoryItemId)
+            .Select(g => new { InventoryItemId = g.Key, Total = g.Sum(x => x.Quantity) })
+            .ToDictionaryAsync(x => x.InventoryItemId, x => x.Total, cancellationToken);
 
         var purchaseOrderItems = purchaseOrder.Items.ToDictionary(x => x.Id);
         foreach (var item in acceptedItems)
@@ -517,6 +524,29 @@ public sealed class GoodsReceiptService(
             purchaseOrderItems[item.PurchaseOrderItemId].ReceivedQuantity +=
                 item.AcceptedQuantity;
 
+            // Sipariş kalemi hangi para biriminde olursa olsun, stok maliyeti
+            // tek tip olarak TRY tutulur: NetUnitPrice zaten siparişin kendi
+            // para biriminde, ExchangeRate ile TRY'ye çevrilir (TRY siparişte
+            // ExchangeRate=1 olduğundan formül tüm para birimlerinde tek tip çalışır).
+            var orderItem = purchaseOrderItems[item.PurchaseOrderItemId];
+            var unitCostTry = orderItem.NetUnitPrice * purchaseOrder.ExchangeRate;
+
+            var inventoryItem = inventoryItems[inventoryItemId];
+            var priorQuantity = priorTotalQuantities.GetValueOrDefault(inventoryItemId, 0m);
+
+            inventoryItem.AverageUnitCost = priorQuantity <= 0m
+                ? unitCostTry
+                : ((priorQuantity * inventoryItem.AverageUnitCost) +
+                   (item.AcceptedQuantity * unitCostTry)) /
+                  (priorQuantity + item.AcceptedQuantity);
+            inventoryItem.UpdatedAtUtc = now;
+            inventoryItem.UpdatedByUserId = currentUser.UserId;
+
+            // Bu ürünün bu kabuldeki payı işlendiği için sonraki kalemlerin
+            // ortalaması da (aynı üründen birden fazla kalem olması ihtimaline
+            // karşı) güncel miktar üzerinden hesaplansın.
+            priorTotalQuantities[inventoryItemId] = priorQuantity + item.AcceptedQuantity;
+
             db.StockMovements.Add(new StockMovement
             {
                 CompanyId = receipt.CompanyId,
@@ -524,8 +554,11 @@ public sealed class GoodsReceiptService(
                 InventoryItemId = inventoryItemId,
                 ProjectId = purchaseOrder.ProjectId,
                 PurchaseRequestId = purchaseOrder.Rfq.PurchaseRequestId,
+                GoodsReceiptId = receipt.Id,
                 Type = StockMovementType.Receipt,
                 Quantity = item.AcceptedQuantity,
+                UnitCost = unitCostTry,
+                TotalCost = unitCostTry * item.AcceptedQuantity,
                 ReferenceNumber = receipt.ReceiptNumber,
                 MovementDate = receipt.ReceiptDate,
                 Description = $"Mal kabul {receipt.ReceiptNumber} - {item.MaterialDescription}",

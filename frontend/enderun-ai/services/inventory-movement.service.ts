@@ -2,8 +2,15 @@
 export interface SelectOption { id: string; name: string; code?: string }
 export interface InventoryMovement {
   id: string; warehouseName: string; itemCode: string; itemName: string;
-  projectName?: string | null; type: number; quantity: number;
+  projectName?: string | null; projectSiteId?: string | null; projectSiteName?: string | null;
+  goodsReceiptId?: string | null;
+  type: number; quantity: number; unitCost?: number | null; totalCost?: number | null;
   referenceNumber: string; movementDate: string;
+}
+export interface CriticalStockAlert {
+  warehouseId: string; warehouseName: string;
+  inventoryItemId: string; itemCode: string; itemName: string; unit: string;
+  availableQuantity: number; minimumStock: number;
 }
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const backendPath = path.replace(/^\/api\//, "");
@@ -35,7 +42,15 @@ export const inventoryMovementService = {
   getWarehouses: async () => normalize(await request<unknown>("/api/warehouses")),
   getProjects: async () => normalize(await request<unknown>("/api/projects")),
   getItems: async () => normalize(await request<unknown>("/api/inventory/items")),
+  getProjectSites: async (projectId: string) =>
+    normalize(await request<unknown>(`/api/projects/${projectId}/sites`)),
+  getCriticalStockAlerts: () => request<CriticalStockAlert[]>("/api/inventory/critical-stock-alerts"),
   receipt: (body: unknown) => request("/api/inventory/receipts", { method: "POST", body: JSON.stringify(body) }),
-  issue: (body: unknown) => request("/api/inventory/issues", { method: "POST", body: JSON.stringify(body) }),
-  transfer: (body: unknown) => request("/api/inventory/transfers", { method: "POST", body: JSON.stringify(body) }),
+  issue: (body: unknown) => request<{ referenceNumber: string; unitCost: number; totalCost: number }>(
+    "/api/inventory/issues", { method: "POST", body: JSON.stringify(body) }),
+  transfer: (body: unknown) => request<{ referenceNumber: string }>(
+    "/api/inventory/transfers", { method: "POST", body: JSON.stringify(body) }),
+  adjustment: (body: unknown) => request<{ referenceNumber: string; delta: number; newQuantity: number }>(
+    "/api/inventory/adjustments", { method: "POST", body: JSON.stringify(body) }),
+  updateItem: (id: string, body: unknown) => request(`/api/inventory/items/${id}`, { method: "PUT", body: JSON.stringify(body) }),
 };

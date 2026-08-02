@@ -71,4 +71,25 @@ export const inventoryService = {
     if (Array.isArray(result)) return result;
     return result.items ?? result.data ?? [];
   },
+
+  async updateMinimumStock(
+    item: InventoryItemListItem,
+    minimumStock: number,
+  ): Promise<void> {
+    await apiClient(`inventory/items/${item.id}`, {
+      method: "PUT",
+      body: {
+        name: item.name,
+        category: item.category ?? null,
+        brand: item.brand ?? null,
+        model: item.model ?? null,
+        unit: item.unit,
+        barcode: item.barcode ?? null,
+        minimumStock,
+        maximumStock: item.maximumStock,
+        type: item.type,
+        isActive: item.isActive,
+      },
+    });
+  },
 };
