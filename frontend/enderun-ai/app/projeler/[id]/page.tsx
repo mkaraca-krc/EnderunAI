@@ -45,10 +45,6 @@ type ProjectDetail = {
   currencyCode: string;
   vatRate: number;
   withholdingRate?: string | null;
-  increaseRate: number;
-  cashRetentionRate: number;
-  withholdingTaxRate: number;
-  materialDeductionRate: number;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   city?: string | null;
@@ -60,6 +56,7 @@ type ProjectDetail = {
 };
 
 const modules = [
+  { label: "Proje Hiyerarşisi", href: "hiyerarsi", icon: "⌘", text: "Şehir, fabrika, blok, kat ve mahal kırılımları" },
   { label: "Hakedişler", href: "/hakedis", icon: "▧", text: "Hakediş kayıtları ve kontrolleri" },
   { label: "Satın Alma", href: "/satin-alma", icon: "⌑", text: "Malzeme talepleri ve teklifler" },
   { label: "Personel", href: "/personel", icon: "♙", text: "Projeye bağlı personel" },
@@ -83,13 +80,6 @@ function formatMoney(value?: number | null, currency = "TRY") {
       }).format(value);
 }
 
-function formatPercentage(value?: number | null) {
-  return `%${new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  }).format(value ?? 0)}`;
-}
-
 export default function ProjectCenterPage() {
   const params = useParams<{ id: string }>();
   const [project, setProject] = useState<ProjectDetail | null>(null);
@@ -108,69 +98,42 @@ export default function ProjectCenterPage() {
 
   useEffect(() => {
     async function load() {
-      setLoading(true);
-      setError("");
-
       try {
-        const result = await projectService.getById(params.id);
+        const result =
+          await projectService.getById(params.id);
+
+        const profitabilityResult =
+          await projectProfitabilityService.getById(
+            params.id
+          );
+
+
+        const dailyReportResult =
+          await projectDailyReportService.getByProject(
+            params.id
+          );
+
+
+        const siteAnalysisResult =
+          await projectSiteAnalysisService.getById(
+            params.id
+          );
+
+
+
         setProject(result as ProjectDetail);
+
+        setProfitability(
+          profitabilityResult
+        );
       } catch (err) {
-        setProject(null);
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Proje yüklenemedi."
-        );
+        setError(err instanceof Error ? err.message : "Proje yüklenemedi.");
+      } finally {
         setLoading(false);
-        return;
       }
-
-      const [
-        profitabilityResult,
-        dailyReportResult,
-        siteAnalysisResult,
-      ] = await Promise.allSettled([
-        projectProfitabilityService.getById(params.id),
-        projectDailyReportService.getByProject(params.id),
-        projectSiteAnalysisService.getById(params.id),
-      ]);
-
-      if (profitabilityResult.status === "fulfilled") {
-        setProfitability(profitabilityResult.value);
-      } else {
-        setProfitability(null);
-        console.warn(
-          "Proje karlılık verisi yüklenemedi:",
-          profitabilityResult.reason
-        );
-      }
-
-      if (dailyReportResult.status === "fulfilled") {
-        setDailyReports(dailyReportResult.value);
-      } else {
-        setDailyReports([]);
-        console.warn(
-          "Proje günlükleri yüklenemedi:",
-          dailyReportResult.reason
-        );
-      }
-
-      if (siteAnalysisResult.status === "fulfilled") {
-        setSiteAnalysis(siteAnalysisResult.value);
-      } else {
-        setSiteAnalysis(null);
-        console.warn(
-          "AI şantiye analizi yüklenemedi:",
-          siteAnalysisResult.reason
-        );
-      }
-
-      setLoading(false);
     }
 
-    if (params.id) {
-      load();
-    }
+    if (params.id) load();
   }, [params.id]);
 
   return (
@@ -229,9 +192,9 @@ export default function ProjectCenterPage() {
               <Link
                 key={module.label}
                 href={
-                  module.href === "kesintiler"
-                    ? `/projeler/${project.id}/kesintiler`
-                    : module.href
+                  module.href.startsWith("/")
+                    ? module.href
+                    : `/projeler/${project.id}/${module.href}`
                 }
               >
                 {module.label}
@@ -264,69 +227,6 @@ export default function ProjectCenterPage() {
                   {[project.address, project.district, project.city]
                     .filter(Boolean)
                     .join(", ") || "—"}
-                </strong>
-              </div>
-            </div>
-          </section>
-
-          <section className="erp-panel erp-mt">
-            <div className="erp-panel-header">
-              <div>
-                <h2>Finansal Sözleşme Oranları</h2>
-                <p>
-                  Hakediş hesaplamalarında varsayılan olarak kullanılacak
-                  proje oranları
-                </p>
-              </div>
-
-              <Link
-                href={`/projeler/${project.id}/kesintiler`}
-                className="erp-button secondary"
-              >
-                Kesinti Politikasını Aç
-              </Link>
-            </div>
-
-            <div className="erp-detail-grid">
-              <div>
-                <span>Sözleşme Artış Oranı</span>
-                <strong>
-                  {formatPercentage(project.increaseRate)}
-                </strong>
-              </div>
-
-              <div>
-                <span>Nakit Teminat Kesintisi</span>
-                <strong>
-                  {formatPercentage(project.cashRetentionRate)}
-                </strong>
-              </div>
-
-              <div>
-                <span>Stopaj Kesintisi</span>
-                <strong>
-                  {formatPercentage(project.withholdingTaxRate)}
-                </strong>
-              </div>
-
-              <div>
-                <span>Malzeme Kesintisi</span>
-                <strong>
-                  {formatPercentage(project.materialDeductionRate)}
-                </strong>
-              </div>
-
-              <div>
-                <span>KDV Oranı</span>
-                <strong>
-                  {formatPercentage(project.vatRate)}
-                </strong>
-              </div>
-
-              <div>
-                <span>Tevkifat Oranı</span>
-                <strong>
-                  {project.withholdingRate || "—"}
                 </strong>
               </div>
             </div>

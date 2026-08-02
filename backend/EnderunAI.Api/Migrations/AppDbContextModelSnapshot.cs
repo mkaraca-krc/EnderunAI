@@ -1380,6 +1380,188 @@ namespace EnderunAI.Api.Migrations
                     b.ToTable("personnel_assignments", (string)null);
                 });
 
+            modelBuilder.Entity("EnderunAI.Api.Models.ProjectHierarchyLevel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId", "Code")
+                        .IsUnique();
+
+                    b.HasIndex("ProjectId", "SortOrder")
+                        .IsUnique();
+
+                    b.ToTable("project_hierarchy_levels", (string)null);
+                });
+
+            modelBuilder.Entity("EnderunAI.Api.Models.ProjectHierarchyNode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("LevelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("ParentNodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LevelId");
+
+                    b.HasIndex("ParentNodeId");
+
+                    b.HasIndex("ProjectId", "Code")
+                        .IsUnique();
+
+                    b.HasIndex("ProjectId", "ParentNodeId", "LevelId", "SortOrder");
+
+                    b.ToTable("project_hierarchy_nodes", (string)null);
+                });
+
+            modelBuilder.Entity("EnderunAI.Api.Models.ProjectModuleScope", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ModuleType")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProjectHierarchyNodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectHierarchyNodeId");
+
+                    b.HasIndex("ProjectId", "ModuleType", "RecordId")
+                        .IsUnique();
+
+                    b.ToTable("project_module_scopes", (string)null);
+                });
+
             modelBuilder.Entity("EnderunAI.Api.Models.Project", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2078,6 +2260,62 @@ namespace EnderunAI.Api.Migrations
                     b.Navigation("Project");
                 });
 
+            modelBuilder.Entity("EnderunAI.Api.Models.ProjectHierarchyLevel", b =>
+                {
+                    b.HasOne("EnderunAI.Api.Models.Project", "Project")
+                        .WithMany("HierarchyLevels")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("EnderunAI.Api.Models.ProjectHierarchyNode", b =>
+                {
+                    b.HasOne("EnderunAI.Api.Models.ProjectHierarchyLevel", "Level")
+                        .WithMany("Nodes")
+                        .HasForeignKey("LevelId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EnderunAI.Api.Models.ProjectHierarchyNode", "ParentNode")
+                        .WithMany("ChildNodes")
+                        .HasForeignKey("ParentNodeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EnderunAI.Api.Models.Project", "Project")
+                        .WithMany("HierarchyNodes")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Level");
+
+                    b.Navigation("ParentNode");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("EnderunAI.Api.Models.ProjectModuleScope", b =>
+                {
+                    b.HasOne("EnderunAI.Api.Models.ProjectHierarchyNode", "ProjectHierarchyNode")
+                        .WithMany("ModuleScopes")
+                        .HasForeignKey("ProjectHierarchyNodeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EnderunAI.Api.Models.Project", "Project")
+                        .WithMany("ModuleScopes")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+
+                    b.Navigation("ProjectHierarchyNode");
+                });
+
             modelBuilder.Entity("EnderunAI.Api.Models.Project", b =>
                 {
                     b.HasOne("EnderunAI.Api.Models.Branch", "Branch")
@@ -2301,8 +2539,26 @@ namespace EnderunAI.Api.Migrations
                     b.Navigation("Assignments");
                 });
 
+            modelBuilder.Entity("EnderunAI.Api.Models.ProjectHierarchyLevel", b =>
+                {
+                    b.Navigation("Nodes");
+                });
+
+            modelBuilder.Entity("EnderunAI.Api.Models.ProjectHierarchyNode", b =>
+                {
+                    b.Navigation("ChildNodes");
+
+                    b.Navigation("ModuleScopes");
+                });
+
             modelBuilder.Entity("EnderunAI.Api.Models.Project", b =>
                 {
+                    b.Navigation("HierarchyLevels");
+
+                    b.Navigation("HierarchyNodes");
+
+                    b.Navigation("ModuleScopes");
+
                     b.Navigation("Warehouses");
                 });
 

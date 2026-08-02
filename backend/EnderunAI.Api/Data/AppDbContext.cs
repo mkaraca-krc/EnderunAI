@@ -1,11 +1,21 @@
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Models.Secretariat;
 using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Data;
 
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public sealed class AppDbContext : DbContext
 {
+    private readonly ICurrentUserService? currentUser;
+
+    public AppDbContext(
+        DbContextOptions<AppDbContext> options,
+        ICurrentUserService? currentUser = null) : base(options)
+    {
+        this.currentUser = currentUser;
+    }
+
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<AppRole> Roles => Set<AppRole>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
@@ -21,6 +31,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AccountingVoucherLine> AccountingVoucherLines =>
         Set<AccountingVoucherLine>();
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectHierarchyLevel> ProjectHierarchyLevels =>
+        Set<ProjectHierarchyLevel>();
+    public DbSet<ProjectHierarchyNode> ProjectHierarchyNodes =>
+        Set<ProjectHierarchyNode>();
+    public DbSet<ProjectModuleScope> ProjectModuleScopes =>
+        Set<ProjectModuleScope>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<EngineeringPosition> EngineeringPositions => Set<EngineeringPosition>();
     public DbSet<EngineeringRecipe> EngineeringRecipes => Set<EngineeringRecipe>();
@@ -49,6 +65,79 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<PhoneNote> PhoneNotes => Set<PhoneNote>();
     public DbSet<SecretariatScheduleEntry> SecretariatScheduleEntries => Set<SecretariatScheduleEntry>();
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        ApplyAuditInformation();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        ApplyAuditInformation();
+        return base.SaveChangesAsync(
+            acceptAllChangesOnSuccess,
+            cancellationToken);
+    }
+
+    private void ApplyAuditInformation()
+    {
+        var now = DateTime.UtcNow;
+        var userId = currentUser?.UserId;
+
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            switch (entry.State)
+            {
+                case EntityState.Added:
+                    if (entry.Entity.CreatedAtUtc == default)
+                        entry.Entity.CreatedAtUtc = now;
+
+                    if (userId.HasValue)
+                        entry.Entity.CreatedByUserId ??= userId;
+
+                    break;
+
+                case EntityState.Modified:
+                    entry.Entity.UpdatedAtUtc = now;
+
+                    if (userId.HasValue)
+                        entry.Entity.UpdatedByUserId = userId;
+
+                    var isDeletedProperty =
+                        entry.Property(entity => entity.IsDeleted);
+
+                    if (isDeletedProperty.CurrentValue &&
+                        !isDeletedProperty.OriginalValue)
+                    {
+                        entry.Entity.IsActive = false;
+                        entry.Entity.DeletedAtUtc ??= now;
+
+                        if (userId.HasValue)
+                            entry.Entity.DeletedByUserId ??= userId;
+                    }
+
+                    break;
+
+                case EntityState.Deleted:
+                    entry.State = EntityState.Modified;
+                    entry.Entity.IsDeleted = true;
+                    entry.Entity.IsActive = false;
+                    entry.Entity.UpdatedAtUtc = now;
+                    entry.Entity.DeletedAtUtc ??= now;
+
+                    if (userId.HasValue)
+                    {
+                        entry.Entity.UpdatedByUserId = userId;
+                        entry.Entity.DeletedByUserId ??= userId;
+                    }
+
+                    break;
+            }
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -61,6 +150,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         ConfigureAccountingVouchers(modelBuilder);
         ConfigureAccountingVoucherLines(modelBuilder);
         ConfigureProjects(modelBuilder);
+        ConfigureProjectHierarchy(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigureEngineeringPositions(modelBuilder);
         ConfigureEngineeringRecipes(modelBuilder);
@@ -420,6 +510,94 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasOne(x => x.EmployerCurrentAccount)
                 .WithMany(x => x.EmployerProjects)
                 .HasForeignKey(x => x.EmployerCurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureProjectHierarchy(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectHierarchyLevel>(entity =>
+        {
+            entity.ToTable("project_hierarchy_levels");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ProjectId, x.Code }).IsUnique();
+            entity.HasIndex(x => new { x.ProjectId, x.SortOrder }).IsUnique();
+
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+
+            entity.HasOne(x => x.Project)
+                .WithMany(x => x.HierarchyLevels)
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProjectHierarchyNode>(entity =>
+        {
+            entity.ToTable("project_hierarchy_nodes");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ProjectId, x.Code }).IsUnique();
+            entity.HasIndex(x => new
+            {
+                x.ProjectId,
+                x.ParentNodeId,
+                x.LevelId,
+                x.SortOrder
+            });
+
+            entity.Property(x => x.Code).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Project)
+                .WithMany(x => x.HierarchyNodes)
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Level)
+                .WithMany(x => x.Nodes)
+                .HasForeignKey(x => x.LevelId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ParentNode)
+                .WithMany(x => x.ChildNodes)
+                .HasForeignKey(x => x.ParentNodeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProjectModuleScope>(entity =>
+        {
+            entity.ToTable("project_module_scopes");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.ProjectId,
+                x.ModuleType,
+                x.RecordId
+            }).IsUnique();
+            entity.HasIndex(x => x.ProjectHierarchyNodeId);
+
+            entity.Property(x => x.ModuleType)
+                .HasConversion<int>()
+                .IsRequired();
+
+            entity.HasOne(x => x.Project)
+                .WithMany(x => x.ModuleScopes)
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectHierarchyNode)
+                .WithMany(x => x.ModuleScopes)
+                .HasForeignKey(x => x.ProjectHierarchyNodeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
