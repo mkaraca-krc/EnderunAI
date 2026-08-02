@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import ProjectDocumentsSection from "@/components/projects/project-documents-section";
 import { projectService } from "@/services/project.service";
 
 import {
@@ -1382,6 +1383,8 @@ export default function ProjectCenterPage() {
               </div>
             )}
           </section>
+
+          <ProjectDocumentsSection projectId={project.id} sites={sites} />
         </>
       )}
     </ErpShell>

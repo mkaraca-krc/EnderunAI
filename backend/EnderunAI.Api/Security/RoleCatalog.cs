@@ -139,7 +139,8 @@ public static class RoleCatalog
             PermissionCatalog.Keys.PersonnelView,
             PermissionCatalog.Keys.InventoryView, PermissionCatalog.Keys.InventoryCreate,
             PermissionCatalog.Keys.PurchasingRequestsView, PermissionCatalog.Keys.PurchasingRequestsCreate,
-            PermissionCatalog.Keys.InventoryManage, PermissionCatalog.Keys.PurchasingView, PermissionCatalog.Keys.PurchasingManage
+            PermissionCatalog.Keys.InventoryManage, PermissionCatalog.Keys.PurchasingView, PermissionCatalog.Keys.PurchasingManage,
+            PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate
         ], RoleDataScopePolicy.SiteOnly),
 
         new("Formen", "Sadece atandığı şantiyede günlük rapor girme (taslak), kendi ekibini görüntüleme.",
@@ -147,7 +148,8 @@ public static class RoleCatalog
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.SitesView,
             PermissionCatalog.Keys.SiteReportsView, PermissionCatalog.Keys.SiteReportsCreate,
             PermissionCatalog.Keys.SiteReportsEdit,
-            PermissionCatalog.Keys.PersonnelView
+            PermissionCatalog.Keys.PersonnelView,
+            PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate
         ], RoleDataScopePolicy.SiteOnly),
 
         new("Sekreterya", "Dosyalar tam yetki, cari kart oluşturma/görüntüleme, projeler görüntüleme.",

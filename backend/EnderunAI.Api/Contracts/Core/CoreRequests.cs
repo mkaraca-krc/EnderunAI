@@ -1,3 +1,5 @@
+using EnderunAI.Api.Models;
+
 namespace EnderunAI.Api.Contracts.Core;
 
 public sealed record CreateCompanyRequest(
@@ -49,7 +51,7 @@ public sealed record CreateCurrentAccountRequest(
 public sealed record CreateProjectRequest(
     Guid CompanyId,
     Guid BranchId,
-    Guid EmployerCurrentAccountId,
+    Guid? EmployerCurrentAccountId,
     string Code,
     string Name,
     string? ContractNumber,
@@ -66,10 +68,12 @@ public sealed record CreateProjectRequest(
     DateTime? PlannedEndDate,
     string? City,
     string? District,
-    string? Address);
+    string? Address,
+    ProjectStatus Status = ProjectStatus.Kesif);
 
 public sealed record UpdateProjectRequest(
     string Name,
+    Guid? EmployerCurrentAccountId,
     string? ContractNumber,
     DateTime? ContractDate,
     decimal? ContractAmount,
@@ -84,4 +88,5 @@ public sealed record UpdateProjectRequest(
     DateTime? PlannedEndDate,
     string? City,
     string? District,
-    string? Address);
+    string? Address,
+    ProjectStatus Status);

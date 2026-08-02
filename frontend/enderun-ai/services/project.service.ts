@@ -1,13 +1,35 @@
 import { apiClient } from "@/lib/api/api-client";
 
+export const ProjectStatus = {
+  Kesif: 0,
+  Active: 2,
+  Completed: 4,
+  Cancelled: 5,
+} as const;
+
+export const PROJECT_STATUS_LABELS: Record<number, string> = {
+  [ProjectStatus.Kesif]: "Keşif/Teklif",
+  [ProjectStatus.Active]: "Aktif",
+  [ProjectStatus.Completed]: "Tamamlandı",
+  [ProjectStatus.Cancelled]: "İptal",
+};
+
+/** erp-status.{renk} sınıfıyla eşleşir — mevcut renkler: green, gray, blue, yellow. */
+export const PROJECT_STATUS_BADGE_COLOR: Record<number, string> = {
+  [ProjectStatus.Kesif]: "yellow",
+  [ProjectStatus.Active]: "blue",
+  [ProjectStatus.Completed]: "green",
+  [ProjectStatus.Cancelled]: "gray",
+};
+
 export type ProjectListItem = {
   id: string;
   companyId: string;
   companyName: string;
   branchId: string;
   branchName: string;
-  employerCurrentAccountId: string;
-  employerName: string;
+  employerCurrentAccountId?: string | null;
+  employerName?: string | null;
   code: string;
   name: string;
   contractNumber?: string | null;
@@ -27,7 +49,7 @@ export type ProjectListItem = {
 export type CreateProjectRequest = {
   companyId: string;
   branchId: string;
-  employerCurrentAccountId: string;
+  employerCurrentAccountId?: string | null;
   code: string;
   name: string;
   contractNumber?: string | null;
@@ -45,10 +67,12 @@ export type CreateProjectRequest = {
   city?: string | null;
   district?: string | null;
   address?: string | null;
+  status: number;
 };
 
 export type UpdateProjectRequest = {
   name: string;
+  employerCurrentAccountId?: string | null;
   contractNumber?: string | null;
   contractDate?: string | null;
   contractAmount?: number | null;
@@ -64,6 +88,7 @@ export type UpdateProjectRequest = {
   city?: string | null;
   district?: string | null;
   address?: string | null;
+  status: number;
 };
 
 export const projectService = {

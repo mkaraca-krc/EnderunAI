@@ -324,6 +324,10 @@ export default function DashboardPage() {
       (x) => x.status === 2
     );
 
+    const kesifProjects = projects.filter(
+      (x) => x.status === 0
+    );
+
     const riskyProjects = projects.filter(
       (x) => x.healthStatus === 2
     );
@@ -402,6 +406,7 @@ export default function DashboardPage() {
 
     return {
       activeProjects,
+      kesifProjects,
       riskyProjects,
       contractTotal,
       currentProgressTotal,
@@ -895,6 +900,7 @@ export default function DashboardPage() {
         criticalStock={metrics.criticalStock.length}
         riskyProjects={metrics.riskyProjects.length}
         pendingAccessRequests={pendingAccessRequests}
+        kesifProjects={metrics.kesifProjects.length}
       />
 
       <RecentActivitiesWidget

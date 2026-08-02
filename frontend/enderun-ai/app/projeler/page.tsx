@@ -12,6 +12,9 @@ import {
 import {
   projectService,
   ProjectListItem,
+  ProjectStatus,
+  PROJECT_STATUS_LABELS,
+  PROJECT_STATUS_BADGE_COLOR,
 } from "@/services/project.service";
 
 const initialForm = {
@@ -35,6 +38,7 @@ const initialForm = {
   city: "",
   district: "",
   address: "",
+  status: String(ProjectStatus.Kesif),
 };
 
 export default function ProjectsPage() {
@@ -49,6 +53,15 @@ export default function ProjectsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+
+  const visibleProjects = useMemo(
+    () =>
+      statusFilter === ""
+        ? projects
+        : projects.filter((project) => String(project.status) === statusFilter),
+    [projects, statusFilter]
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -126,6 +139,8 @@ export default function ProjectsPage() {
     try {
       const financialPayload = {
         name: form.name.trim(),
+        employerCurrentAccountId: form.employerCurrentAccountId || null,
+        status: Number(form.status),
         contractNumber: form.contractNumber || null,
         contractDate: form.contractDate || null,
         contractAmount: form.contractAmount
@@ -150,7 +165,6 @@ export default function ProjectsPage() {
         : await projectService.create({
             companyId: form.companyId,
             branchId: form.branchId,
-            employerCurrentAccountId: form.employerCurrentAccountId,
             code: form.code.trim().toUpperCase(),
             ...financialPayload,
           });
@@ -206,6 +220,7 @@ export default function ProjectsPage() {
         city?: string | null;
         district?: string | null;
         address?: string | null;
+        status?: number;
       };
 
       const listProject = projects.find((x) => x.id === projectId);
@@ -246,6 +261,7 @@ export default function ProjectsPage() {
         city: detail.city || "",
         district: detail.district || "",
         address: detail.address || "",
+        status: String(detail.status ?? listProject?.status ?? ProjectStatus.Kesif),
       });
 
       setShowForm(true);
@@ -332,11 +348,30 @@ export default function ProjectsPage() {
               </select>
             </label>
 
-            <label className="span-2">
-              <span>İşveren Cari Kartı *</span>
+            <label>
+              <span>Proje Statüsü *</span>
               <select
                 required
-                disabled={Boolean(editingProjectId)}
+                value={form.status}
+                onChange={(event) =>
+                  setForm({ ...form, status: event.target.value })
+                }
+              >
+                {Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="span-2">
+              <span>
+                İşveren Cari Kartı
+                {Number(form.status) !== ProjectStatus.Kesif ? " *" : ""}
+              </span>
+              <select
+                required={Number(form.status) !== ProjectStatus.Kesif}
                 value={form.employerCurrentAccountId}
                 onChange={(event) =>
                   setForm({
@@ -345,13 +380,23 @@ export default function ProjectsPage() {
                   })
                 }
               >
-                <option value="">Onaylı müşteri seçin</option>
+                <option value="">
+                  {Number(form.status) === ProjectStatus.Kesif
+                    ? "Henüz belirlenmedi (opsiyonel)"
+                    : "Onaylı müşteri seçin"}
+                </option>
                 {approvedCustomers.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.code} — {account.title}
                   </option>
                 ))}
               </select>
+              {Number(form.status) === ProjectStatus.Kesif && (
+                <small>
+                  Keşif/Teklif aşamasında işveren henüz kesinleşmemiş
+                  olabilir; Aktif&apos;e geçerken zorunlu hale gelir.
+                </small>
+              )}
             </label>
 
             <label>
@@ -608,7 +653,8 @@ export default function ProjectsPage() {
                 saving ||
                 !form.companyId ||
                 !form.branchId ||
-                !form.employerCurrentAccountId
+                (Number(form.status) !== ProjectStatus.Kesif &&
+                  !form.employerCurrentAccountId)
               }
             >
               {saving
@@ -624,6 +670,18 @@ export default function ProjectsPage() {
       <div className="erp-table-card">
         <div className="erp-table-header">
           <h2>Proje Listesi</h2>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            style={{ maxWidth: "220px" }}
+          >
+            <option value="">Tüm statüler</option>
+            {Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {loading ? (
@@ -633,6 +691,11 @@ export default function ProjectsPage() {
             <strong>Henüz proje bulunmuyor</strong>
             <p>Onaylı müşteri cari kartı üzerinden ilk projeyi açın.</p>
           </div>
+        ) : visibleProjects.length === 0 ? (
+          <div className="erp-empty-state">
+            <strong>Bu statüde proje yok</strong>
+            <p>Farklı bir statü filtresi seçin.</p>
+          </div>
         ) : (
           <div className="erp-table-wrap">
             <table className="erp-table">
@@ -640,6 +703,7 @@ export default function ProjectsPage() {
                 <tr>
                   <th>Kod</th>
                   <th>Proje</th>
+                  <th>Statü</th>
                   <th>İşveren</th>
                   <th>Şube</th>
                   <th>Sözleşme</th>
@@ -648,7 +712,7 @@ export default function ProjectsPage() {
                 </tr>
               </thead>
               <tbody>
-                {projects.map((project) => (
+                {visibleProjects.map((project) => (
                   <tr key={project.id}>
                     <td>
                       <strong>{project.code}</strong>
@@ -657,7 +721,16 @@ export default function ProjectsPage() {
                       <strong>{project.name}</strong>
                       <small>{project.companyName}</small>
                     </td>
-                    <td>{project.employerName}</td>
+                    <td>
+                      <span
+                        className={`erp-status ${
+                          PROJECT_STATUS_BADGE_COLOR[project.status] ?? "gray"
+                        }`}
+                      >
+                        {PROJECT_STATUS_LABELS[project.status] ?? "Bilinmiyor"}
+                      </span>
+                    </td>
+                    <td>{project.employerName || "—"}</td>
                     <td>{project.branchName}</td>
                     <td>
                       <span>

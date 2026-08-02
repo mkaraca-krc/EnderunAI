@@ -29,7 +29,8 @@ public sealed class AuditSaveChangesInterceptor(
         typeof(UserDataScope),
         typeof(RoleWorkHourWindow),
         typeof(AccessRequest),
-        typeof(TemporaryAccessGrant)
+        typeof(TemporaryAccessGrant),
+        typeof(ProjectDocument)
     ];
 
     public override InterceptionResult<int> SavingChanges(
@@ -166,6 +167,7 @@ public sealed class AuditSaveChangesInterceptor(
         RoleWorkHourWindow w => ((Guid?)null, $"RoleId={w.RoleId} Day={w.DayOfWeek} {w.StartTime}-{w.EndTime}"),
         AccessRequest ar => (ar.Id, $"UserId={ar.UserId} Status={ar.Status}"),
         TemporaryAccessGrant g => (g.Id, $"UserId={g.UserId} ExpiresAtUtc={g.ExpiresAtUtc:o}"),
+        ProjectDocument pd => (pd.Id, $"ProjectId={pd.ProjectId} {pd.Folder}/{pd.FileName} v{pd.VersionNumber}"),
         _ => (null, null)
     };
 }

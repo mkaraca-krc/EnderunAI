@@ -27,6 +27,7 @@ public sealed class AppDbContext(
     public DbSet<AccountingVoucherLine> AccountingVoucherLines =>
         Set<AccountingVoucherLine>();
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectDocument> ProjectDocuments => Set<ProjectDocument>();
     public DbSet<ProgressPayment> ProgressPayments => Set<ProgressPayment>();
     public DbSet<ProgressPaymentItem> ProgressPaymentItems => Set<ProgressPaymentItem>();
     public DbSet<ProgressPaymentDeduction> ProgressPaymentDeductions => Set<ProgressPaymentDeduction>();
@@ -121,6 +122,7 @@ public sealed class AppDbContext(
         ConfigureAccountingVouchers(modelBuilder);
         ConfigureAccountingVoucherLines(modelBuilder);
         ConfigureProjects(modelBuilder);
+        ConfigureProjectDocuments(modelBuilder);
         ConfigureProgressPayments(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigureEngineeringPositions(modelBuilder);
@@ -626,6 +628,42 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.EmployerCurrentAccount)
                 .WithMany(x => x.EmployerProjects)
                 .HasForeignKey(x => x.EmployerCurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureProjectDocuments(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectDocument>(entity =>
+        {
+            entity.ToTable("project_documents");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ProjectId, x.Folder, x.FileName });
+            entity.HasIndex(x => new { x.ProjectId, x.ProjectSiteId });
+
+            entity.Property(x => x.Folder).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.FileName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.StoredFileName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Extension).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectSite)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.UploadedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.UploadedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

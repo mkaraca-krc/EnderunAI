@@ -1,14 +1,18 @@
 namespace EnderunAI.Api.Models;
 
+/// <summary>
+/// Sadeleştirilmiş 4 durumlu proje akışı: Keşif/Teklif → Aktif →
+/// Tamamlandı/İptal. Ordinal değerler bilinçli olarak eski
+/// (kullanılmayan) 7 durumlu enum'daki karşılıklarıyla aynı tutuldu
+/// (Active=2, Completed=4, Cancelled=5) — canlıda tek kullanılan değer
+/// Active(2) olduğundan veri migrasyonu gerekmedi.
+/// </summary>
 public enum ProjectStatus
 {
-    Draft = 0,
-    PendingApproval = 1,
+    Kesif = 0,
     Active = 2,
-    Suspended = 3,
     Completed = 4,
-    Cancelled = 5,
-    Archived = 6
+    Cancelled = 5
 }
 
 public enum ProjectHealthStatus
@@ -26,8 +30,13 @@ public sealed class Project : BaseEntity
     public Guid BranchId { get; set; }
     public Branch Branch { get; set; } = null!;
 
-    public Guid EmployerCurrentAccountId { get; set; }
-    public CurrentAccount EmployerCurrentAccount { get; set; } = null!;
+    /// <summary>
+    /// Keşif/Teklif statüsünde henüz kesinleşmemiş olabileceği için
+    /// opsiyonel; Aktif'e geçerken zorunlu hale gelir (bkz.
+    /// ProjectsController).
+    /// </summary>
+    public Guid? EmployerCurrentAccountId { get; set; }
+    public CurrentAccount? EmployerCurrentAccount { get; set; }
 
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
@@ -73,7 +82,7 @@ public sealed class Project : BaseEntity
     public string? District { get; set; }
     public string? Address { get; set; }
 
-    public ProjectStatus Status { get; set; } = ProjectStatus.Draft;
+    public ProjectStatus Status { get; set; } = ProjectStatus.Kesif;
     public ProjectHealthStatus HealthStatus { get; set; } = ProjectHealthStatus.Green;
     public string? HealthReason { get; set; }
 

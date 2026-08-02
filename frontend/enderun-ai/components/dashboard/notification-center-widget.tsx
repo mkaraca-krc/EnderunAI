@@ -22,6 +22,7 @@ type NotificationCenterWidgetProps = {
   criticalStock: number;
   riskyProjects: number;
   pendingAccessRequests?: number;
+  kesifProjects?: number;
 };
 
 export default function NotificationCenterWidget({
@@ -32,6 +33,7 @@ export default function NotificationCenterWidget({
   criticalStock,
   riskyProjects,
   pendingAccessRequests = 0,
+  kesifProjects = 0,
 }: NotificationCenterWidgetProps) {
   const items: NotificationItem[] = [
     {
@@ -44,6 +46,14 @@ export default function NotificationCenterWidget({
         pendingAccessRequests > 0
           ? "warning"
           : "positive",
+    },
+    {
+      title: "Keşif Aşamasındaki Projeler",
+      description:
+        "Henüz sözleşme/işveren netleşmemiş projeler",
+      value: kesifProjects,
+      href: "/projeler",
+      tone: kesifProjects > 0 ? "neutral" : "positive",
     },
     {
       title: "Onay Bekleyen Hakediş",

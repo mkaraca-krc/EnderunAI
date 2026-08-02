@@ -12,6 +12,7 @@ BACKUP_DIR="/var/backups/enderun"
 LOG_FILE="/var/log/enderun-backup.log"
 ENV_FILE="/etc/enderunai/backend.env"
 UPLOADS_DIR="/var/www/enderun-ai/uploads"
+PROJECT_FILES_DIR="/var/www/enderun-data/project-files"
 RETENTION_DAYS=30
 
 DB_HOST="127.0.0.1"
@@ -22,6 +23,7 @@ DB_USER="enderun_user"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 DB_BACKUP_FILE="${BACKUP_DIR}/db_${TIMESTAMP}.dump"
 UPLOADS_BACKUP_FILE="${BACKUP_DIR}/uploads_${TIMESTAMP}.tar.gz"
+PROJECT_FILES_BACKUP_FILE="${BACKUP_DIR}/project-files_${TIMESTAMP}.tar.gz"
 
 log() {
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [$1] $2" | tee -a "$LOG_FILE"
@@ -68,7 +70,19 @@ else
     log "WARN" "Uploads klasörü bulunamadı, atlandı: $UPLOADS_DIR"
 fi
 
-DELETED_COUNT="$(find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'db_*.dump' -o -name 'uploads_*.tar.gz' \) -mtime "+${RETENTION_DAYS}" -print -delete | wc -l)"
+if [ -d "$PROJECT_FILES_DIR" ]; then
+    if tar -czf "$PROJECT_FILES_BACKUP_FILE" -C "$(dirname "$PROJECT_FILES_DIR")" "$(basename "$PROJECT_FILES_DIR")"; then
+        PROJECT_FILES_SIZE="$(du -h "$PROJECT_FILES_BACKUP_FILE" | cut -f1)"
+        log "INFO" "Proje dosyaları yedeği alındı: $PROJECT_FILES_BACKUP_FILE ($PROJECT_FILES_SIZE)"
+    else
+        rm -f "$PROJECT_FILES_BACKUP_FILE"
+        fail "project-files klasörü yedeklenemedi."
+    fi
+else
+    log "WARN" "Proje dosyaları klasörü bulunamadı, atlandı: $PROJECT_FILES_DIR"
+fi
+
+DELETED_COUNT="$(find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'db_*.dump' -o -name 'uploads_*.tar.gz' -o -name 'project-files_*.tar.gz' \) -mtime "+${RETENTION_DAYS}" -print -delete | wc -l)"
 log "INFO" "${RETENTION_DAYS} günden eski ${DELETED_COUNT} yedek dosyası silindi."
 
 log "INFO" "Yedekleme tamamlandı."

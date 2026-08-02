@@ -59,6 +59,23 @@ public sealed record CurrentDataScopeSnapshot(
         BranchIds.Contains(branchId) ||
         ProjectIds.Contains(projectId) ||
         SiteIds.Contains(projectSiteId);
+
+    /// <summary>
+    /// Proje Dosya Merkezi için: normal proje-kapsamlı roller
+    /// CanAccessProject ile geçer; Site-kapsamlı roller (Şantiye
+    /// Şefi/Formen) CanAccessProject'te hiç yer almaz (SiteIds orada
+    /// kontrol edilmiyor) — bu yüzden projenin atandıkları herhangi bir
+    /// şantiyesi varsa da erişim veriliyor. Böylece Şantiye Şefi/Formen,
+    /// atandığı şantiyenin bulunduğu projenin genel VE şantiyeye özel
+    /// tüm dosyalarını görebilir.
+    /// </summary>
+    public bool CanAccessProjectDocuments(
+        Guid companyId,
+        Guid branchId,
+        Guid projectId,
+        IReadOnlyCollection<Guid> projectSiteIds) =>
+        CanAccessProject(companyId, branchId, projectId) ||
+        projectSiteIds.Any(SiteIds.Contains);
 }
 
 public interface ICurrentDataScopeService

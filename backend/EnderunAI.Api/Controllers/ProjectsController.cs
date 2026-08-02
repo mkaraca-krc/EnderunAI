@@ -34,7 +34,7 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.BranchId,
                 BranchName = x.Branch.Name,
                 x.EmployerCurrentAccountId,
-                EmployerName = x.EmployerCurrentAccount.Title,
+                EmployerName = x.EmployerCurrentAccount != null ? x.EmployerCurrentAccount.Title : null,
                 x.Code,
                 x.Name,
                 x.ContractNumber,
@@ -72,7 +72,7 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.BranchId,
                 BranchName = x.Branch.Name,
                 x.EmployerCurrentAccountId,
-                EmployerName = x.EmployerCurrentAccount.Title,
+                EmployerName = x.EmployerCurrentAccount != null ? x.EmployerCurrentAccount.Title : null,
                 x.Code,
                 x.Name,
                 x.ContractNumber,
@@ -132,20 +132,14 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
         if (branch is null)
             return BadRequest(new { message = "Seçilen şube bu şirkete ait değil veya pasif." });
 
-        var employer = await db.CurrentAccounts
-            .SingleOrDefaultAsync(
-                x => x.Id == request.EmployerCurrentAccountId &&
-                     x.CompanyId == request.CompanyId,
-                cancellationToken);
+        var (_, employerError) = await ValidateEmployerForStatusAsync(
+            request.Status,
+            request.EmployerCurrentAccountId,
+            request.CompanyId,
+            cancellationToken);
 
-        if (employer is null)
-            return BadRequest(new { message = "İşveren cari kartı bulunamadı." });
-
-        if (employer.Status != CurrentAccountStatus.Approved)
-            return BadRequest(new { message = "Proje yalnızca onaylanmış cari kart ile açılabilir." });
-
-        if (!employer.Roles.HasFlag(CurrentAccountRoles.Customer))
-            return BadRequest(new { message = "Seçilen cari kartın müşteri rolü bulunmuyor." });
+        if (employerError is not null)
+            return BadRequest(new { message = employerError });
 
         var code = request.Code.Trim().ToUpperInvariant();
 
@@ -187,7 +181,7 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 City = request.City?.Trim(),
                 District = request.District?.Trim(),
                 Address = request.Address?.Trim(),
-                Status = ProjectStatus.Active,
+                Status = request.Status,
                 HealthStatus = ProjectHealthStatus.Green
             };
 
@@ -305,6 +299,17 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
             });
         }
 
+        var (_, employerError) = await ValidateEmployerForStatusAsync(
+            request.Status,
+            request.EmployerCurrentAccountId,
+            project.CompanyId,
+            cancellationToken);
+
+        if (employerError is not null)
+            return BadRequest(new { message = employerError });
+
+        project.Status = request.Status;
+        project.EmployerCurrentAccountId = request.EmployerCurrentAccountId;
         project.Name = request.Name.Trim();
         project.ContractNumber = request.ContractNumber?.Trim();
         project.ContractDate = ToUtc(request.ContractDate);
@@ -336,6 +341,8 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
             project.Id,
             project.Code,
             project.Name,
+            project.Status,
+            project.EmployerCurrentAccountId,
             project.ContractAmount,
             project.CurrencyCode,
             project.VatRate,
@@ -345,6 +352,45 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
             project.WithholdingTaxRate,
             project.MaterialDeductionRate
         });
+    }
+
+    /// <summary>
+    /// Keşif statüsünde işveren opsiyoneldir (verilirse sadece şirkete
+    /// ait olduğu kontrol edilir, Onaylı/Müşteri şartı aranmaz). Keşif
+    /// dışındaki statülerde işveren zorunludur ve Onaylı + Müşteri
+    /// rolünde olmalıdır.
+    /// </summary>
+    private async Task<(CurrentAccount? Employer, string? Error)> ValidateEmployerForStatusAsync(
+        ProjectStatus status,
+        Guid? employerCurrentAccountId,
+        Guid companyId,
+        CancellationToken cancellationToken)
+    {
+        if (employerCurrentAccountId is null)
+        {
+            return status == ProjectStatus.Kesif
+                ? (null, null)
+                : (null, "Keşif dışındaki statülerde işveren cari kartı zorunludur.");
+        }
+
+        var employer = await db.CurrentAccounts
+            .SingleOrDefaultAsync(
+                x => x.Id == employerCurrentAccountId.Value && x.CompanyId == companyId,
+                cancellationToken);
+
+        if (employer is null)
+            return (null, "İşveren cari kartı bulunamadı.");
+
+        if (status != ProjectStatus.Kesif)
+        {
+            if (employer.Status != CurrentAccountStatus.Approved)
+                return (null, "Proje yalnızca onaylanmış cari kart ile açılabilir.");
+
+            if (!employer.Roles.HasFlag(CurrentAccountRoles.Customer))
+                return (null, "Seçilen cari kartın müşteri rolü bulunmuyor.");
+        }
+
+        return (employer, null);
     }
 
     [HttpGet("{id:guid}/summary")]
@@ -364,7 +410,7 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.BranchId,
                 BranchName = x.Branch.Name,
                 x.EmployerCurrentAccountId,
-                EmployerName = x.EmployerCurrentAccount.Title,
+                EmployerName = x.EmployerCurrentAccount != null ? x.EmployerCurrentAccount.Title : null,
                 x.Code,
                 x.Name,
                 x.ContractNumber,
