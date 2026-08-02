@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using EnderunAI.Api.Contracts.HumanResources;
 using EnderunAI.Api.Services.HumanResources;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
     : ControllerBase
 {
     [HttpGet("leaves")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetLeaves(
         [FromQuery] Guid? companyId, [FromQuery] Guid? personnelId,
         [FromQuery] Guid? projectId, [FromQuery] int? leaveType,
@@ -25,6 +27,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
             startDate, endDate, cancellationToken));
 
     [HttpPost("leaves")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollCreate)]
     public Task<IActionResult> CreateLeave(
         CreateHrLeaveRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -32,6 +35,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 request, CurrentUserId(), cancellationToken)));
 
     [HttpPut("leaves/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public Task<IActionResult> UpdateLeave(
         Guid id, UpdateHrLeaveRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -39,6 +43,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 id, request, CurrentUserId(), cancellationToken)));
 
     [HttpPost("leaves/{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollApprove)]
     public Task<IActionResult> ApproveLeave(
         Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -46,6 +51,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 id, CurrentUserId(), cancellationToken)));
 
     [HttpPost("leaves/{id:guid}/reject")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public Task<IActionResult> RejectLeave(
         Guid id, ReasonRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -53,6 +59,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 id, request.Reason, CurrentUserId(), cancellationToken)));
 
     [HttpDelete("leaves/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollDelete)]
     public Task<IActionResult> DeleteLeave(
         Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -62,6 +69,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
         });
 
     [HttpGet("overtimes")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetOvertimes(
         [FromQuery] Guid? companyId, [FromQuery] Guid? personnelId,
         [FromQuery] Guid? projectId, [FromQuery] int? status,
@@ -72,6 +80,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
             startDate, endDate, cancellationToken));
 
     [HttpPost("overtimes")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollCreate)]
     public Task<IActionResult> CreateOvertime(
         CreateHrOvertimeRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -79,6 +88,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 request, CurrentUserId(), cancellationToken)));
 
     [HttpPut("overtimes/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public Task<IActionResult> UpdateOvertime(
         Guid id, UpdateHrOvertimeRequest request,
         CancellationToken cancellationToken) =>
@@ -87,6 +97,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 id, request, CurrentUserId(), cancellationToken)));
 
     [HttpPost("overtimes/{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollApprove)]
     public Task<IActionResult> ApproveOvertime(
         Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -94,6 +105,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 id, CurrentUserId(), cancellationToken)));
 
     [HttpPost("overtimes/{id:guid}/reject")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public Task<IActionResult> RejectOvertime(
         Guid id, ReasonRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -101,6 +113,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 id, request.Reason, CurrentUserId(), cancellationToken)));
 
     [HttpDelete("overtimes/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollDelete)]
     public Task<IActionResult> DeleteOvertime(
         Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -110,6 +123,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
         });
 
     [HttpGet("advances")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetAdvances(
         [FromQuery] Guid? companyId, [FromQuery] Guid? personnelId,
         [FromQuery] Guid? projectId, [FromQuery] int? status,
@@ -120,6 +134,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
             startDate, endDate, cancellationToken));
 
     [HttpPost("advances")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollCreate)]
     public Task<IActionResult> CreateAdvance(
         CreateHrAdvanceRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -127,6 +142,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 request, CurrentUserId(), cancellationToken)));
 
     [HttpPut("advances/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public Task<IActionResult> UpdateAdvance(
         Guid id, UpdateHrAdvanceRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -134,6 +150,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 id, request, CurrentUserId(), cancellationToken)));
 
     [HttpPost("advances/{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollApprove)]
     public Task<IActionResult> ApproveAdvance(
         Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -141,6 +158,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 id, CurrentUserId(), cancellationToken)));
 
     [HttpPost("advances/{id:guid}/reject")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public Task<IActionResult> RejectAdvance(
         Guid id, ReasonRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -148,6 +166,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 id, request.Reason, CurrentUserId(), cancellationToken)));
 
     [HttpPost("advances/{id:guid}/paid")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollCreate)]
     public Task<IActionResult> MarkAdvancePaid(
         Guid id, MarkAdvancePaidRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
@@ -155,6 +174,7 @@ public sealed class HrWorkforceController(IHrApprovalService service)
                 id, request.PaymentReference, CurrentUserId(), cancellationToken)));
 
     [HttpDelete("advances/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollDelete)]
     public Task<IActionResult> DeleteAdvance(
         Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>

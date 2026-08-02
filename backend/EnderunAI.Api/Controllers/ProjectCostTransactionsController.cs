@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.ProjectSites;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class ProjectCostTransactionsController(AppDbContext db) : ControllerBase
 {
     [HttpGet("cost-transactions")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
     public async Task<IActionResult> GetAll(
         Guid projectId,
         [FromQuery] Guid? siteId,
@@ -52,6 +54,7 @@ public sealed class ProjectCostTransactionsController(AppDbContext db) : Control
     }
 
     [HttpPost("cost-transactions")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsCreate)]
     public async Task<IActionResult> Create(
         Guid projectId,
         CreateProjectCostTransactionRequest request,
@@ -105,6 +108,7 @@ public sealed class ProjectCostTransactionsController(AppDbContext db) : Control
     }
 
     [HttpGet("cost-breakdown")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
     public async Task<IActionResult> GetBreakdown(
         Guid projectId,
         CancellationToken cancellationToken)

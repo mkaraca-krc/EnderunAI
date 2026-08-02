@@ -1,5 +1,6 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class PriceDifferenceProfilesController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -36,6 +38,7 @@ public sealed class PriceDifferenceProfilesController(AppDbContext db) : Control
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -51,6 +54,7 @@ public sealed class PriceDifferenceProfilesController(AppDbContext db) : Control
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.HakedisCreate)]
     public async Task<IActionResult> Create(
         SavePriceDifferenceProfileRequest request,
         CancellationToken cancellationToken)
@@ -98,6 +102,7 @@ public sealed class PriceDifferenceProfilesController(AppDbContext db) : Control
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         SavePriceDifferenceProfileRequest request,
@@ -219,6 +224,7 @@ public sealed record SavePriceDifferenceProfileRequest(
 public sealed class PriceDifferenceIndexesController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] int? year,
         [FromQuery] string? sourceName,
@@ -241,6 +247,7 @@ public sealed class PriceDifferenceIndexesController(AppDbContext db) : Controll
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -255,6 +262,7 @@ public sealed class PriceDifferenceIndexesController(AppDbContext db) : Controll
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.HakedisCreate)]
     public async Task<IActionResult> Create(
         SavePriceDifferenceIndexRequest request,
         CancellationToken cancellationToken)
@@ -282,6 +290,7 @@ public sealed class PriceDifferenceIndexesController(AppDbContext db) : Controll
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         SavePriceDifferenceIndexRequest request,

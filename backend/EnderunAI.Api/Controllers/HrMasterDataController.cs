@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Models.HumanResources;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ public sealed class HrSalaryDefinitionsController(
     AppDbContext appDb) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? personnelId,
@@ -65,6 +67,7 @@ public sealed class HrSalaryDefinitionsController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> Create(
         SaveSalaryDefinitionRequest request,
         CancellationToken cancellationToken)
@@ -108,6 +111,7 @@ public sealed class HrSalaryDefinitionsController(
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateSalaryDefinitionRequest request,
@@ -153,6 +157,7 @@ public sealed class HrSalaryDefinitionsController(
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelDelete)]
     public async Task<IActionResult> Delete(
         Guid id,
         CancellationToken cancellationToken)
@@ -279,6 +284,7 @@ public sealed class HrDepartmentsController(
     AppDbContext appDb) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         CancellationToken cancellationToken)
@@ -334,6 +340,7 @@ public sealed class HrDepartmentsController(
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -347,6 +354,7 @@ public sealed class HrDepartmentsController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> Create(
         SaveDepartmentRequest request,
         CancellationToken cancellationToken)
@@ -376,6 +384,7 @@ public sealed class HrDepartmentsController(
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateDepartmentRequest request,
@@ -412,6 +421,7 @@ public sealed class HrDepartmentsController(
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelDelete)]
     public async Task<IActionResult> Delete(
         Guid id,
         CancellationToken cancellationToken)
@@ -497,6 +507,7 @@ public sealed class HrDepartmentsController(
 public sealed class HrPositionsController(HrDbContext hrDb) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? departmentId,
@@ -537,6 +548,7 @@ public sealed class HrPositionsController(HrDbContext hrDb) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -549,6 +561,7 @@ public sealed class HrPositionsController(HrDbContext hrDb) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> Create(
         SavePositionRequest request,
         CancellationToken cancellationToken)
@@ -580,6 +593,7 @@ public sealed class HrPositionsController(HrDbContext hrDb) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdatePositionRequest request,
@@ -615,6 +629,7 @@ public sealed class HrPositionsController(HrDbContext hrDb) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelDelete)]
     public async Task<IActionResult> Delete(
         Guid id,
         CancellationToken cancellationToken)

@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Pricing;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,7 @@ public sealed class ManufacturerPriceListsController(AppDbContext db)
     : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] string? manufacturer,
@@ -62,6 +64,7 @@ public sealed class ManufacturerPriceListsController(AppDbContext db)
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -103,6 +106,7 @@ public sealed class ManufacturerPriceListsController(AppDbContext db)
     }
 
     [HttpGet("search-products")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> SearchProducts(
         [FromQuery] Guid companyId,
         [FromQuery] string search,
@@ -153,6 +157,7 @@ public sealed class ManufacturerPriceListsController(AppDbContext db)
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> Create(
         CreateManufacturerPriceListRequest request,
         CancellationToken cancellationToken)
@@ -201,6 +206,7 @@ public sealed class ManufacturerPriceListsController(AppDbContext db)
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateManufacturerPriceListRequest request,
@@ -242,6 +248,7 @@ public sealed class ManufacturerPriceListsController(AppDbContext db)
     }
 
     [HttpPost("{id:guid}/deactivate")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> Deactivate(
         Guid id,
         CancellationToken cancellationToken)

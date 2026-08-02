@@ -1,5 +1,6 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class HrAssetsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? personnelId,
@@ -57,6 +59,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.HrAssetAssignments.AsNoTracking()
@@ -70,6 +73,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> Create(
         SaveAssetAssignmentRequest request,
         CancellationToken cancellationToken)
@@ -106,6 +110,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateAssetAssignmentRequest request,
@@ -138,6 +143,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/return")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> Return(
         Guid id,
         ReturnAssetRequest request,
@@ -161,6 +167,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/lost")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> MarkLost(
         Guid id,
         MarkLostRequest request,
@@ -184,6 +191,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/damaged")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> MarkDamaged(
         Guid id,
         MarkDamagedRequest request,
@@ -205,6 +213,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/change-project")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> ChangeProject(
         Guid id,
         ChangeAssetProjectRequest request,
@@ -225,6 +234,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/transfer-personnel")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> TransferPersonnel(
         Guid id,
         TransferAssetPersonnelRequest request,
@@ -253,6 +263,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> Cancel(
         Guid id,
         CancelAssetRequest request,
@@ -275,6 +286,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelDelete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.HrAssetAssignments.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -290,6 +302,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("dashboard")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetDashboard(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -339,6 +352,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("overdue")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetOverdue(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -359,6 +373,7 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("analysis/{personnelId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> AnalyzePersonnel(
         Guid personnelId,
         CancellationToken cancellationToken)

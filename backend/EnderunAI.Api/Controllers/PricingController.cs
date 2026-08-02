@@ -1,4 +1,5 @@
 using EnderunAI.Api.Contracts.Pricing;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,6 +11,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class PricingController : ControllerBase
 {
     [HttpPost("calculate-offer")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public IActionResult CalculateOffer(CalculateOfferPriceRequest request)
     {
         if (request.ListPrice < 0)

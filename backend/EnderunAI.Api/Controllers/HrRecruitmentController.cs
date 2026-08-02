@@ -1,5 +1,6 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +21,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     // ---- Job postings ----
 
     [HttpGet("postings")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetPostings(
         [FromQuery] Guid? companyId,
         [FromQuery] int? status,
@@ -39,6 +41,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("postings")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> CreatePosting(
         SaveJobPostingRequest request,
         CancellationToken cancellationToken)
@@ -67,6 +70,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("postings/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> UpdatePosting(
         Guid id,
         SaveJobPostingRequest request,
@@ -90,6 +94,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("postings/{id:guid}/publish")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> PublishPosting(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.JobPostings.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -105,6 +110,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("postings/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelDelete)]
     public async Task<IActionResult> DeletePosting(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.JobPostings.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -122,6 +128,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     // ---- Candidates ----
 
     [HttpGet("candidates")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetCandidates(CancellationToken cancellationToken)
     {
         var items = await db.JobCandidates.AsNoTracking()
@@ -132,6 +139,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("candidates")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> CreateCandidate(
         SaveJobCandidateRequest request,
         CancellationToken cancellationToken)
@@ -153,6 +161,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("candidates/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> UpdateCandidate(
         Guid id,
         SaveJobCandidateRequest request,
@@ -173,6 +182,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("candidates/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelDelete)]
     public async Task<IActionResult> DeleteCandidate(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.JobCandidates.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -190,6 +200,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     // ---- Applications ----
 
     [HttpGet("applications")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetApplications(CancellationToken cancellationToken)
     {
         var items = await db.JobApplications.AsNoTracking()
@@ -202,6 +213,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("applications")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> CreateApplication(
         SaveJobApplicationRequest request,
         CancellationToken cancellationToken)
@@ -238,6 +250,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("applications/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> UpdateApplication(
         Guid id,
         SaveJobApplicationRequest request,
@@ -259,6 +272,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("applications/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelDelete)]
     public async Task<IActionResult> DeleteApplication(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.JobApplications.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -276,6 +290,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     // ---- Interviews ----
 
     [HttpGet("interviews")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetInterviews(CancellationToken cancellationToken)
     {
         var items = await db.CandidateInterviews.AsNoTracking()
@@ -288,6 +303,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("interviews")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> CreateInterview(
         SaveCandidateInterviewRequest request,
         CancellationToken cancellationToken)
@@ -315,6 +331,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("interviews/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> UpdateInterview(
         Guid id,
         SaveCandidateInterviewRequest request,
@@ -336,6 +353,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("interviews/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelDelete)]
     public async Task<IActionResult> DeleteInterview(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.CandidateInterviews.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);

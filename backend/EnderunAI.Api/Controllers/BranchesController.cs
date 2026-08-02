@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class BranchesController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.CompaniesView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         CancellationToken cancellationToken)
@@ -43,6 +45,7 @@ public sealed class BranchesController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.CompaniesManage)]
     public async Task<IActionResult> Create(
         CreateBranchRequest request,
         CancellationToken cancellationToken)

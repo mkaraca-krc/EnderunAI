@@ -1,5 +1,6 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -35,6 +36,7 @@ public sealed class FinanceDashboardController(AppDbContext db) : ControllerBase
         "Tedarikçi bakiyesi için fatura ve ödeme kayıtları henüz uygulamaya bağlı değil.";
 
     [HttpGet("dashboard")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public async Task<IActionResult> Dashboard(CancellationToken cancellationToken)
     {
         var activeProjectCount = await db.Projects
@@ -76,6 +78,7 @@ public sealed class FinanceDashboardController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("financial-dashboard")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public async Task<IActionResult> FinancialDashboard(
         [FromQuery] Guid? companyId,
         [FromQuery] DateTime? startDate,
@@ -159,6 +162,7 @@ public sealed class FinanceDashboardController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("cari-summary")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public async Task<IActionResult> CurrentAccountSummary(CancellationToken cancellationToken)
     {
         var accountCount = await db.CurrentAccounts
@@ -178,6 +182,7 @@ public sealed class FinanceDashboardController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("projects-summary")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public async Task<IActionResult> ProjectsSummary(CancellationToken cancellationToken)
     {
         var projects = await db.Projects
@@ -234,6 +239,7 @@ public sealed class FinanceDashboardController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("cash-flow")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public IActionResult CashFlow()
     {
         return Ok(new
@@ -247,6 +253,7 @@ public sealed class FinanceDashboardController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("suppliers-summary")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public IActionResult SuppliersSummary()
     {
         return Ok(new

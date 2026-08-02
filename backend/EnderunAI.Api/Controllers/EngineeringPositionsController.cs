@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Engineering;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class EngineeringPositionsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] int? source,
@@ -56,6 +58,7 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.EngineeringPositions.AsNoTracking()
@@ -78,6 +81,7 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> Create(
         CreateEngineeringPositionRequest request,
         CancellationToken cancellationToken)
@@ -143,6 +147,7 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateEngineeringPositionRequest request,
@@ -180,6 +185,7 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
     }
 
     [HttpPatch("{id:guid}/status")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> ChangeStatus(
         Guid id,
         ChangeEngineeringPositionStatusRequest request,

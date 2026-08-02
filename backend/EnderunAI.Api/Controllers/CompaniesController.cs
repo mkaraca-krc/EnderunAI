@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class CompaniesController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.CompaniesView)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var items = await db.Companies
@@ -39,6 +41,7 @@ public sealed class CompaniesController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.CompaniesView)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.Companies
@@ -68,6 +71,7 @@ public sealed class CompaniesController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.CompaniesManage)]
     public async Task<IActionResult> Create(
         CreateCompanyRequest request,
         CancellationToken cancellationToken)
@@ -100,6 +104,7 @@ public sealed class CompaniesController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.CompaniesManage)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateCompanyRequest request,

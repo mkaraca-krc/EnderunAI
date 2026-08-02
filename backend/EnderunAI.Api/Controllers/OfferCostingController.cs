@@ -1,5 +1,6 @@
 using EnderunAI.Api.Contracts.OfferCosting;
 using EnderunAI.Api.Services.Costing;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,6 +13,7 @@ public sealed class OfferCostingController(
     ICostEngine costEngine) : ControllerBase
 {
     [HttpPost("estimate-position")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> EstimatePosition(
         EstimatePositionCostRequest request,
         CancellationToken cancellationToken)

@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security.CurrentUser;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ public sealed class WorkTasksController(
     ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.TasksView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -55,6 +57,7 @@ public sealed class WorkTasksController(
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.TasksView)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.WorkTasks.AsNoTracking()
@@ -66,6 +69,7 @@ public sealed class WorkTasksController(
     }
 
     [HttpGet("dashboard")]
+    [RequirePermission(PermissionCatalog.Keys.TasksView)]
     public async Task<IActionResult> GetDashboard(
         [FromQuery] Guid? companyId,
         CancellationToken cancellationToken)
@@ -113,6 +117,7 @@ public sealed class WorkTasksController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.TasksManage)]
     public async Task<IActionResult> Create(
         CreateWorkTaskRequest request,
         CancellationToken cancellationToken)
@@ -149,6 +154,7 @@ public sealed class WorkTasksController(
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.TasksManage)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateWorkTaskRequest request,
@@ -175,6 +181,7 @@ public sealed class WorkTasksController(
     }
 
     [HttpPost("{id:guid}/start")]
+    [RequirePermission(PermissionCatalog.Keys.TasksManage)]
     public async Task<IActionResult> Start(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.WorkTasks.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -190,6 +197,7 @@ public sealed class WorkTasksController(
     }
 
     [HttpPost("{id:guid}/complete")]
+    [RequirePermission(PermissionCatalog.Keys.TasksManage)]
     public async Task<IActionResult> Complete(
         Guid id,
         CompleteWorkTaskRequest request,
@@ -210,6 +218,7 @@ public sealed class WorkTasksController(
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [RequirePermission(PermissionCatalog.Keys.TasksManage)]
     public async Task<IActionResult> Cancel(
         Guid id,
         CancelWorkTaskRequest request,

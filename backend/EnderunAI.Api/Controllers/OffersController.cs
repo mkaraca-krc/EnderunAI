@@ -2,6 +2,7 @@ using EnderunAI.Api.Contracts.Offers;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.DocumentNumbers;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,7 @@ public sealed class OffersController(
     IDocumentNumberService documentNumbers) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -79,6 +81,7 @@ public sealed class OffersController(
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -146,6 +149,7 @@ public sealed class OffersController(
     }
 
     [HttpPost("calculate-item")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public IActionResult CalculateItem(CalculateOfferItemRequest request)
     {
         var validation = ValidateRates(
@@ -181,6 +185,7 @@ public sealed class OffersController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> Create(
         CreateOfferRequest request,
         CancellationToken cancellationToken)

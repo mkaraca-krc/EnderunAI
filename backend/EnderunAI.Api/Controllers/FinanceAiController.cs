@@ -1,3 +1,4 @@
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,6 +10,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class FinanceAiController : ControllerBase
 {
     [HttpGet("finance-analysis")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public IActionResult FinanceAnalysis()
     {
         return Ok(new
@@ -19,6 +21,7 @@ public sealed class FinanceAiController : ControllerBase
     }
 
     [HttpGet("dashboard")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public IActionResult Dashboard()
     {
         return Ok(new

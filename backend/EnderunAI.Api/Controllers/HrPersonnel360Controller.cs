@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.HumanResources;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,7 @@ public sealed class HrPersonnel360Controller(
     HrDbContext hrDb) : ControllerBase
 {
     [HttpGet("{personnelId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> Get(
         Guid personnelId,
         [FromQuery] DateTime? startDate,

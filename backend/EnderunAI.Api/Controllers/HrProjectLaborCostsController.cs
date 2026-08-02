@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.ProjectSites;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerBase
 {
     [HttpGet("labor-costs")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetAll(
         Guid projectId,
         [FromQuery] Guid? siteId,
@@ -82,6 +84,7 @@ public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerB
     }
 
     [HttpPost("labor-costs")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> Create(
         Guid projectId,
         CreateHrProjectLaborCostRequest request,
@@ -146,6 +149,7 @@ public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerB
     }
 
     [HttpGet("labor-cost-breakdown")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetBreakdown(
         Guid projectId,
         CancellationToken cancellationToken)

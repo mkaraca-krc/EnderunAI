@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +34,7 @@ public sealed class HrCareerController(
         };
 
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         CancellationToken cancellationToken)
@@ -49,6 +51,7 @@ public sealed class HrCareerController(
     }
 
     [HttpGet("personnel/{personnelId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetPersonnelHistory(
         Guid personnelId,
         CancellationToken cancellationToken)
@@ -62,6 +65,7 @@ public sealed class HrCareerController(
     }
 
     [HttpGet("analysis/{personnelId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetPersonnelAnalysis(
         Guid personnelId,
         CancellationToken cancellationToken)
@@ -115,6 +119,7 @@ public sealed class HrCareerController(
     }
 
     [HttpPost("{kind}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> Create(
         string kind,
         CreateCareerMovementRequest request,

@@ -1,5 +1,6 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +46,7 @@ public sealed class AccountingReportsController(AppDbContext db)
     }
 
     [HttpGet("journal")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingView)]
     public async Task<IActionResult> Journal(
         [FromQuery] Guid companyId,
         [FromQuery] DateTime? startDate,
@@ -133,6 +135,7 @@ public sealed class AccountingReportsController(AppDbContext db)
     }
 
     [HttpGet("general-ledger")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingView)]
     public async Task<IActionResult> GeneralLedger(
         [FromQuery] Guid companyId,
         [FromQuery] DateTime? startDate,

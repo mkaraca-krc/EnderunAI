@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security.CurrentUser;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ public sealed class ProjectBoqController(
     ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -74,6 +76,7 @@ public sealed class ProjectBoqController(
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -128,6 +131,7 @@ public sealed class ProjectBoqController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.HakedisCreate)]
     public async Task<IActionResult> Create(
         CreateProjectBoqRequest request,
         CancellationToken cancellationToken)
@@ -202,6 +206,7 @@ public sealed class ProjectBoqController(
     }
 
     [HttpPost("{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisApprove)]
     public async Task<IActionResult> Approve(
         Guid id,
         CancellationToken cancellationToken)
@@ -236,6 +241,7 @@ public sealed class ProjectBoqController(
     }
 
     [HttpPost("{id:guid}/archive")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     public async Task<IActionResult> Archive(
         Guid id,
         CancellationToken cancellationToken)
@@ -261,6 +267,7 @@ public sealed class ProjectBoqController(
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisDelete)]
     public async Task<IActionResult> Delete(
         Guid id,
         CancellationToken cancellationToken)

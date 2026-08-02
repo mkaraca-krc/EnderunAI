@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Engineering;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,7 @@ public sealed class EngineeringRecipesController(
     AppDbContext db) : ControllerBase
 {
     [HttpGet("position/{positionId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> GetByPosition(
         Guid positionId,
         CancellationToken cancellationToken)
@@ -46,6 +48,7 @@ public sealed class EngineeringRecipesController(
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -114,6 +117,7 @@ public sealed class EngineeringRecipesController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> Create(
         CreateEngineeringRecipeRequest request,
         CancellationToken cancellationToken)
@@ -221,6 +225,7 @@ public sealed class EngineeringRecipesController(
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateEngineeringRecipeRequest request,

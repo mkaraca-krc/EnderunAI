@@ -1,5 +1,6 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class HrCompensationComponentsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? personnelId,
@@ -43,6 +45,7 @@ public sealed class HrCompensationComponentsController(AppDbContext db) : Contro
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.HrCompensationComponents.AsNoTracking()
@@ -54,6 +57,7 @@ public sealed class HrCompensationComponentsController(AppDbContext db) : Contro
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollCreate)]
     public async Task<IActionResult> Create(
         SaveCompensationComponentRequest request,
         CancellationToken cancellationToken)
@@ -77,6 +81,7 @@ public sealed class HrCompensationComponentsController(AppDbContext db) : Contro
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         SaveCompensationComponentRequest request,
@@ -97,6 +102,7 @@ public sealed class HrCompensationComponentsController(AppDbContext db) : Contro
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollDelete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.HrCompensationComponents.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -112,6 +118,7 @@ public sealed class HrCompensationComponentsController(AppDbContext db) : Contro
     }
 
     [HttpGet("summary")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetSummary(
         [FromQuery] Guid personnelId,
         [FromQuery] DateTime effectiveDate,

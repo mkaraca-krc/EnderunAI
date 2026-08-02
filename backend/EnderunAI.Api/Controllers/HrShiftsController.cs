@@ -1,5 +1,6 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class HrShiftsController(AppDbContext db) : ControllerBase
 {
     [HttpGet("shifts")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetShifts(
         [FromQuery] Guid? companyId,
         [FromQuery] string? search,
@@ -34,6 +36,7 @@ public sealed class HrShiftsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("shifts")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollCreate)]
     public async Task<IActionResult> CreateShift(
         SaveShiftRequest request,
         CancellationToken cancellationToken)
@@ -58,6 +61,7 @@ public sealed class HrShiftsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("shifts/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
     public async Task<IActionResult> UpdateShift(
         Guid id,
         SaveShiftRequest request,
@@ -85,6 +89,7 @@ public sealed class HrShiftsController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("shifts/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollDelete)]
     public async Task<IActionResult> DeleteShift(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.HrShiftDefinitions.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -106,6 +111,7 @@ public sealed class HrShiftsController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("shift-assignments")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetAssignments(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? personnelId,
@@ -138,6 +144,7 @@ public sealed class HrShiftsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("shift-assignments")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollCreate)]
     public async Task<IActionResult> CreateAssignment(
         SaveShiftAssignmentRequest request,
         CancellationToken cancellationToken)
@@ -169,6 +176,7 @@ public sealed class HrShiftsController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("shift-assignments/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollDelete)]
     public async Task<IActionResult> DeleteAssignment(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.HrShiftAssignments.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);

@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security.CurrentUser;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ public sealed class ProjectMeasurementsController(
     ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
@@ -70,6 +72,7 @@ public sealed class ProjectMeasurementsController(
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         var item = await db.ProjectMeasurements
@@ -134,6 +137,7 @@ public sealed class ProjectMeasurementsController(
     }
 
     [HttpPost]
+    [RequirePermission(PermissionCatalog.Keys.HakedisCreate)]
     public async Task<IActionResult> Create(
         CreateProjectMeasurementRequest request,
         CancellationToken cancellationToken)
@@ -243,6 +247,7 @@ public sealed class ProjectMeasurementsController(
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateProjectMeasurementRequest request,
@@ -328,6 +333,7 @@ public sealed class ProjectMeasurementsController(
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisDelete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var measurement = await db.ProjectMeasurements.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -346,6 +352,7 @@ public sealed class ProjectMeasurementsController(
     }
 
     [HttpPost("{id:guid}/submit")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisCreate)]
     public async Task<IActionResult> Submit(Guid id, CancellationToken cancellationToken)
     {
         var measurement = await db.ProjectMeasurements.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -372,6 +379,7 @@ public sealed class ProjectMeasurementsController(
     }
 
     [HttpPost("{id:guid}/approve")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisApprove)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken cancellationToken)
     {
         var measurement = await db.ProjectMeasurements.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -398,6 +406,7 @@ public sealed class ProjectMeasurementsController(
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     public async Task<IActionResult> Cancel(
         Guid id,
         CancelProjectMeasurementRequest request,

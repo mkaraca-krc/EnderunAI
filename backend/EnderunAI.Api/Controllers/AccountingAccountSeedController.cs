@@ -1,4 +1,5 @@
 using EnderunAI.Api.Services.Accounting;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,6 +13,7 @@ public sealed class AccountingAccountSeedController(
     : ControllerBase
 {
     [HttpPost("{companyId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingManage)]
     public async Task<IActionResult> Seed(
         Guid companyId,
         CancellationToken cancellationToken)

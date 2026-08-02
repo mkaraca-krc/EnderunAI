@@ -1,5 +1,6 @@
 using EnderunAI.Api.Contracts.Purchasing;
 using EnderunAI.Api.Services.Purchasing.Automation;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,6 +14,7 @@ public sealed class PurchaseAutomationController(
     : ControllerBase
 {
     [HttpPost("generate-from-offer/{offerId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingOrdersCreate)]
     public async Task<IActionResult> GenerateFromOffer(
         Guid offerId,
         GeneratePurchaseRequestFromOfferRequest request,
