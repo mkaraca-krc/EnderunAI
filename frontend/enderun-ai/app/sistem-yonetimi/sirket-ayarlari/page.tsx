@@ -170,6 +170,13 @@ export default function CompanySettingsPage() {
   const [workHourLoading, setWorkHourLoading] = useState(true);
   const [workHourError, setWorkHourError] = useState("");
 
+  const [testEmailAddress, setTestEmailAddress] = useState("");
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -292,6 +299,24 @@ export default function CompanySettingsPage() {
       await load();
     } catch (requestError) {
       setError(getErrorMessage(requestError));
+    }
+  }
+
+  async function sendTestEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!testEmailAddress.trim()) return;
+
+    setSendingTestEmail(true);
+    setTestEmailResult(null);
+    try {
+      const result = await companySettingsService.sendTestEmail(
+        testEmailAddress.trim()
+      );
+      setTestEmailResult({ ok: true, message: result.message });
+    } catch (requestError) {
+      setTestEmailResult({ ok: false, message: getErrorMessage(requestError) });
+    } finally {
+      setSendingTestEmail(false);
     }
   }
 
@@ -514,6 +539,47 @@ export default function CompanySettingsPage() {
                   />
                   <Button type="submit" loading={addingBank}>
                     + Ekle
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardContent className="p-6">
+                <h3 className="mb-1 font-semibold text-slate-950">
+                  E-posta Entegrasyonu Testi
+                </h3>
+                <p className="mb-4 text-sm text-slate-500">
+                  Brevo API üzerinden gönderim gerçekten çalışıyor mu diye
+                  kendinize test e-postası gönderin.
+                </p>
+
+                {testEmailResult && (
+                  <div
+                    className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
+                      testEmailResult.ok
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-red-200 bg-red-50 text-red-700"
+                    }`}
+                  >
+                    {testEmailResult.message}
+                  </div>
+                )}
+
+                <form
+                  onSubmit={sendTestEmail}
+                  className="flex flex-col gap-3 sm:flex-row"
+                >
+                  <Input
+                    type="email"
+                    placeholder="test@enderunenerji.com.tr"
+                    value={testEmailAddress}
+                    onChange={(e) => setTestEmailAddress(e.target.value)}
+                    required
+                    className="flex-1"
+                  />
+                  <Button type="submit" loading={sendingTestEmail}>
+                    Test E-postası Gönder
                   </Button>
                 </form>
               </CardContent>

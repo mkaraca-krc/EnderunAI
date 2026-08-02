@@ -2,6 +2,7 @@ using EnderunAI.Api.Contracts;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Email;
 using EnderunAI.Api.Services.Upload;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,7 +22,8 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/company-settings")]
 public sealed class CompanySettingsController(
     AppDbContext db,
-    IUploadService uploadService) : ControllerBase
+    IUploadService uploadService,
+    IEmailService emailService) : ControllerBase
 {
     private const string LogoCategory = "company-logo";
 
@@ -266,6 +268,51 @@ public sealed class CompanySettingsController(
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new { message = $"{role.Name} rolünün mesai penceresi güncellendi." });
+    }
+
+    /// <summary>
+    /// Brevo API entegrasyonunu doğrulamak için tek seferlik test e-postası
+    /// gönderir. BREVO_API_KEY tanımlı değilse 400 döner.
+    /// </summary>
+    [HttpPost("email-test")]
+    [RequirePermission(PermissionCatalog.Keys.CompanySettingsEdit)]
+    public async Task<IActionResult> SendTestEmail(
+        SendTestEmailRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!emailService.IsConfigured)
+        {
+            return BadRequest(new
+            {
+                message = "E-posta yapılandırılmamış (BREVO_API_KEY veya gönderen adres eksik)."
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ToEmail) ||
+            !System.Net.Mail.MailAddress.TryCreate(request.ToEmail, out _))
+        {
+            return BadRequest(new { message = "Geçerli bir e-posta adresi girin." });
+        }
+
+        try
+        {
+            await emailService.SendAsync(
+                request.ToEmail.Trim(),
+                null,
+                "Enderun ERP - Test E-postası",
+                "<p>Bu, Enderun ERP e-posta entegrasyonunun (Brevo API) doğru " +
+                "çalıştığını doğrulamak için gönderilen bir test e-postasıdır.</p>",
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            return StatusCode(502, new
+            {
+                message = $"Test e-postası gönderilemedi: {exception.Message}"
+            });
+        }
+
+        return Ok(new { message = $"Test e-postası {request.ToEmail.Trim()} adresine gönderildi." });
     }
 
     private async Task<Company?> GetPrimaryCompanyAsync(

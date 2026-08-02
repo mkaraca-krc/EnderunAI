@@ -50,7 +50,7 @@ builder.Services.AddDbContext<HrDbContext>(options =>
 });
 
 builder.Services.AddSingleton<IUploadService, UploadService>();
-builder.Services.AddSingleton<EnderunAI.Api.Services.Email.IEmailService, EnderunAI.Api.Services.Email.EmailService>();
+builder.Services.AddHttpClient<EnderunAI.Api.Services.Email.IEmailService, EnderunAI.Api.Services.Email.EmailService>();
 builder.Services.AddSingleton<EnderunAI.Api.Security.ILoginAttemptService, EnderunAI.Api.Security.LoginAttemptService>();
 
 builder.Services.AddExceptionHandler<EnderunAI.Api.Security.GlobalExceptionHandler>();

@@ -1,35 +1,36 @@
-using MailKit.Net.Smtp;
-using MailKit.Security;
-using MimeKit;
-using MimeKit.Text;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 
 namespace EnderunAI.Api.Services.Email;
 
+/// <summary>
+/// Brevo (eski adıyla Sendinblue) transactional e-posta HTTP API'si
+/// üzerinden gönderim yapar. SMTP yerine tercih edilme sebebi: sunucu
+/// sağlayıcısında SMTP portları (25/465/587) kapalı ve açtırılamıyor;
+/// Brevo API'si HTTPS/443 üzerinden çalıştığı için bu kısıtı bypass eder.
+/// API anahtarı BREVO_API_KEY ortam değişkeninden okunur, koda/git'e
+/// girmez.
+/// </summary>
 public sealed class EmailService : IEmailService
 {
-    private readonly string? _host;
-    private readonly int _port;
-    private readonly string? _user;
-    private readonly string? _pass;
+    private const string SendEndpoint = "https://api.brevo.com/v3/smtp/email";
+
+    private readonly HttpClient _httpClient;
+    private readonly string? _apiKey;
     private readonly string? _fromAddress;
     private readonly string? _fromName;
 
-    public EmailService(IConfiguration configuration)
+    public EmailService(HttpClient httpClient, IConfiguration configuration)
     {
-        _host = Read(configuration, "SMTP_HOST");
-        _user = Read(configuration, "SMTP_USER");
-        _pass = Read(configuration, "SMTP_PASS");
+        _httpClient = httpClient;
+        _apiKey = Read(configuration, "BREVO_API_KEY");
         _fromAddress = Read(configuration, "SMTP_FROM");
         _fromName = Read(configuration, "SMTP_FROM_NAME");
-
-        var portValue = Read(configuration, "SMTP_PORT");
-        _port = int.TryParse(portValue, out var parsed) ? parsed : 465;
     }
 
     public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(_host) &&
-        !string.IsNullOrWhiteSpace(_user) &&
-        !string.IsNullOrWhiteSpace(_pass) &&
+        !string.IsNullOrWhiteSpace(_apiKey) &&
         !string.IsNullOrWhiteSpace(_fromAddress);
 
     public async Task SendAsync(
@@ -44,33 +45,31 @@ public sealed class EmailService : IEmailService
             throw new InvalidOperationException("E-posta yapılandırılmamış.");
         }
 
-        var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(_fromName ?? _fromAddress, _fromAddress!));
-        message.To.Add(new MailboxAddress(toName ?? toEmail, toEmail));
-        message.Subject = subject;
-        message.Body = new TextPart(TextFormat.Html)
+        var payload = new BrevoSendRequest
         {
-            Text = htmlBody
+            Sender = new BrevoContact { Email = _fromAddress!, Name = _fromName ?? _fromAddress },
+            To = [new BrevoContact { Email = toEmail, Name = toName ?? toEmail }],
+            Subject = subject,
+            HtmlContent = htmlBody
         };
 
-        using var client = new SmtpClient
+        using var request = new HttpRequestMessage(HttpMethod.Post, SendEndpoint)
         {
-            Timeout = 15000
+            Content = JsonContent.Create(payload)
         };
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Add("api-key", _apiKey);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(20));
 
-        try
+        using var response = await _httpClient.SendAsync(request, timeoutCts.Token);
+
+        if (!response.IsSuccessStatusCode)
         {
-            await client.ConnectAsync(_host!, _port, SecureSocketOptions.SslOnConnect, timeoutCts.Token);
-            await client.AuthenticateAsync(_user!, _pass!, timeoutCts.Token);
-            await client.SendAsync(message, timeoutCts.Token);
-        }
-        finally
-        {
-            if (client.IsConnected)
-                await client.DisconnectAsync(true, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(timeoutCts.Token);
+            throw new InvalidOperationException(
+                $"Brevo e-posta gönderimi başarısız ({(int)response.StatusCode}): {body}");
         }
     }
 
@@ -78,5 +77,29 @@ public sealed class EmailService : IEmailService
     {
         var value = Environment.GetEnvironmentVariable(key) ?? configuration[key];
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private sealed class BrevoSendRequest
+    {
+        [JsonPropertyName("sender")]
+        public required BrevoContact Sender { get; set; }
+
+        [JsonPropertyName("to")]
+        public required BrevoContact[] To { get; set; }
+
+        [JsonPropertyName("subject")]
+        public required string Subject { get; set; }
+
+        [JsonPropertyName("htmlContent")]
+        public required string HtmlContent { get; set; }
+    }
+
+    private sealed class BrevoContact
+    {
+        [JsonPropertyName("email")]
+        public required string Email { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
     }
 }

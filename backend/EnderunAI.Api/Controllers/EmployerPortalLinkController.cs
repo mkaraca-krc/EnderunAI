@@ -185,7 +185,7 @@ public sealed class EmployerPortalLinkController(
         catch (Exception exception)
         {
             log.IsSuccess = false;
-            log.ErrorMessage = "E-posta gönderilemedi: sunucuya bağlanılamadı veya kimlik doğrulanamadı.";
+            log.ErrorMessage = "E-posta gönderilemedi: e-posta servisine ulaşılamadı veya istek reddedildi.";
 
             db.EmployerPortalEmailLogs.Add(log);
             await db.SaveChangesAsync(cancellationToken);
@@ -194,7 +194,7 @@ public sealed class EmployerPortalLinkController(
 
             return StatusCode(502, new
             {
-                message = "E-posta gönderilemedi: sunucuya bağlanılamadı veya kimlik doğrulanamadı."
+                message = "E-posta gönderilemedi: e-posta servisine ulaşılamadı veya istek reddedildi."
             });
         }
 

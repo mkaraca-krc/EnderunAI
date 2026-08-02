@@ -105,4 +105,10 @@ export const companySettingsService = {
       { method: "PUT", body: { windows } }
     );
   },
+  sendTestEmail(toEmail: string) {
+    return apiClient<{ message: string }>(`${root}/email-test`, {
+      method: "POST",
+      body: { toEmail },
+    });
+  },
 };
