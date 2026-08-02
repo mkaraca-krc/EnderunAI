@@ -1,0 +1,388 @@
+"use client";
+
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import ErpShell from "@/components/erp/erp-shell";
+import { Button, Card, CardContent, Input } from "@/components/ui";
+import { ApiError } from "@/lib/api/api-client";
+import {
+  companySettingsService,
+  type CompanySettings,
+  type UpdateCompanySettingsPayload,
+} from "@/services/company-settings.service";
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof ApiError || error instanceof Error) {
+    return error.message;
+  }
+  return "İşlem tamamlanamadı. Lütfen tekrar deneyin.";
+}
+
+const emptyForm: UpdateCompanySettingsPayload = {
+  name: "",
+  tradeName: "",
+  taxOffice: "",
+  taxNumber: "",
+  mersisNumber: "",
+  tradeRegistryNumber: "",
+  phone: "",
+  email: "",
+  website: "",
+  address: "",
+};
+
+export default function CompanySettingsPage() {
+  const [company, setCompany] = useState<CompanySettings | null>(null);
+  const [form, setForm] = useState<UpdateCompanySettingsPayload>(emptyForm);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const [newBank, setNewBank] = useState({
+    bankName: "",
+    iban: "",
+    accountHolder: "",
+  });
+  const [addingBank, setAddingBank] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await companySettingsService.get();
+      setCompany(result);
+      setForm({
+        name: result.name,
+        tradeName: result.tradeName ?? "",
+        taxOffice: result.taxOffice ?? "",
+        taxNumber: result.taxNumber ?? "",
+        mersisNumber: result.mersisNumber ?? "",
+        tradeRegistryNumber: result.tradeRegistryNumber ?? "",
+        phone: result.phone ?? "",
+        email: result.email ?? "",
+        website: result.website ?? "",
+        address: result.address ?? "",
+      });
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 3500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+
+    try {
+      const result = await companySettingsService.update(form);
+      setCompany(result.company);
+      setNotice(result.message);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setUploadingLogo(true);
+    setError("");
+
+    try {
+      await companySettingsService.uploadLogo(file);
+      setNotice("Logo güncellendi.");
+      await load();
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
+  async function submitBankAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!newBank.bankName.trim() || !newBank.iban.trim()) {
+      setError("Banka adı ve IBAN zorunludur.");
+      return;
+    }
+
+    setAddingBank(true);
+    setError("");
+
+    try {
+      await companySettingsService.addBankAccount({
+        bankName: newBank.bankName.trim(),
+        iban: newBank.iban.trim(),
+        accountHolder: newBank.accountHolder.trim() || undefined,
+      });
+      setNewBank({ bankName: "", iban: "", accountHolder: "" });
+      setNotice("IBAN eklendi.");
+      await load();
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setAddingBank(false);
+    }
+  }
+
+  async function removeBankAccount(id: string) {
+    if (!window.confirm("Bu IBAN kaydını silmek istediğinize emin misiniz?")) {
+      return;
+    }
+
+    setError("");
+    try {
+      await companySettingsService.deleteBankAccount(id);
+      setNotice("IBAN silindi.");
+      await load();
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    }
+  }
+
+  return (
+    <ErpShell
+      title="Şirket Ayarları"
+      description="Kurumsal kimlik: unvan, vergi bilgileri, IBAN listesi ve logo"
+    >
+      <div className="space-y-6">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+        {notice && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {notice}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm text-slate-500">
+            Şirket bilgileri yükleniyor...
+          </div>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+            <Card>
+              <CardContent className="flex flex-col items-center gap-4 p-6">
+                <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                  {company?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={company.logoUrl}
+                      alt="Şirket logosu"
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-xs text-slate-400">Logo yok</span>
+                  )}
+                </div>
+                <label className="w-full">
+                  <span className="sr-only">Logo yükle</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleLogoChange}
+                    disabled={uploadingLogo}
+                    className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
+                  />
+                </label>
+                <p className="text-center text-xs text-slate-400">
+                  PDF, e-posta şablonu ve işveren portalı bu logoyu kullanır.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <form onSubmit={submit} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Input
+                      label="Unvan"
+                      required
+                      value={form.name}
+                      onChange={(e) =>
+                        setForm((c) => ({ ...c, name: e.target.value }))
+                      }
+                    />
+                    <Input
+                      label="Ticari Unvan (kısa)"
+                      value={form.tradeName ?? ""}
+                      onChange={(e) =>
+                        setForm((c) => ({ ...c, tradeName: e.target.value }))
+                      }
+                    />
+                    <Input
+                      label="Vergi Dairesi"
+                      value={form.taxOffice ?? ""}
+                      onChange={(e) =>
+                        setForm((c) => ({ ...c, taxOffice: e.target.value }))
+                      }
+                    />
+                    <Input
+                      label="Vergi Kimlik No (VKN)"
+                      value={form.taxNumber ?? ""}
+                      onChange={(e) =>
+                        setForm((c) => ({ ...c, taxNumber: e.target.value }))
+                      }
+                    />
+                    <Input
+                      label="Mersis No"
+                      value={form.mersisNumber ?? ""}
+                      placeholder="Henüz girilmedi"
+                      onChange={(e) =>
+                        setForm((c) => ({ ...c, mersisNumber: e.target.value }))
+                      }
+                    />
+                    <Input
+                      label="Ticaret Sicil No"
+                      value={form.tradeRegistryNumber ?? ""}
+                      placeholder="Henüz girilmedi"
+                      onChange={(e) =>
+                        setForm((c) => ({
+                          ...c,
+                          tradeRegistryNumber: e.target.value,
+                        }))
+                      }
+                    />
+                    <Input
+                      label="Telefon"
+                      value={form.phone ?? ""}
+                      onChange={(e) =>
+                        setForm((c) => ({ ...c, phone: e.target.value }))
+                      }
+                    />
+                    <Input
+                      label="E-posta"
+                      type="email"
+                      value={form.email ?? ""}
+                      onChange={(e) =>
+                        setForm((c) => ({ ...c, email: e.target.value }))
+                      }
+                    />
+                    <Input
+                      label="Web Sitesi"
+                      value={form.website ?? ""}
+                      onChange={(e) =>
+                        setForm((c) => ({ ...c, website: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Adres
+                    </span>
+                    <textarea
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      rows={2}
+                      value={form.address ?? ""}
+                      onChange={(e) =>
+                        setForm((c) => ({ ...c, address: e.target.value }))
+                      }
+                    />
+                  </label>
+                  <div className="flex justify-end">
+                    <Button type="submit" loading={saving}>
+                      Kaydet
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardContent className="p-6">
+                <h3 className="mb-1 font-semibold text-slate-950">
+                  Banka Hesapları (IBAN)
+                </h3>
+                <p className="mb-4 text-sm text-slate-500">
+                  Sipariş belgeleri ve e-posta şablonlarında gösterilir.
+                </p>
+
+                {(company?.bankAccounts.length ?? 0) > 0 && (
+                  <div className="mb-4 grid gap-2">
+                    {company!.bankAccounts.map((account) => (
+                      <div
+                        key={account.id}
+                        className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
+                      >
+                        <div>
+                          <strong>{account.bankName}</strong>
+                          <span className="ml-2 font-mono text-slate-600">
+                            {account.iban}
+                          </span>
+                          {account.accountHolder && (
+                            <span className="ml-2 text-xs text-slate-400">
+                              ({account.accountHolder})
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="text-xs text-red-600 hover:underline"
+                          onClick={() => void removeBankAccount(account.id)}
+                        >
+                          Sil
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <form
+                  onSubmit={submitBankAccount}
+                  className="grid gap-3 sm:grid-cols-[1fr_1.4fr_1fr_auto]"
+                >
+                  <Input
+                    placeholder="Banka adı"
+                    value={newBank.bankName}
+                    onChange={(e) =>
+                      setNewBank((c) => ({ ...c, bankName: e.target.value }))
+                    }
+                  />
+                  <Input
+                    placeholder="TR.. IBAN"
+                    value={newBank.iban}
+                    onChange={(e) =>
+                      setNewBank((c) => ({ ...c, iban: e.target.value }))
+                    }
+                  />
+                  <Input
+                    placeholder="Hesap sahibi (ops.)"
+                    value={newBank.accountHolder}
+                    onChange={(e) =>
+                      setNewBank((c) => ({
+                        ...c,
+                        accountHolder: e.target.value,
+                      }))
+                    }
+                  />
+                  <Button type="submit" loading={addingBank}>
+                    + Ekle
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+    </ErpShell>
+  );
+}

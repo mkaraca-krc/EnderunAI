@@ -59,6 +59,55 @@ public static class DatabaseSeeder
         await SeedAdminUserAsync(db, passwordService, configuration);
         await RunLegacyRoleCutoverAsync(db);
         await SeedDefaultDataScopesAsync(db);
+        await SeedCompanyDefaultsAsync(db);
+    }
+
+    /// <summary>
+    /// Şirketin gerçek kurumsal bilgileri — sadece hâlâ eski placeholder
+    /// vergi no'suna ("0000000000") sahipse bir kereliğine doldurulur;
+    /// admin Şirket Ayarları ekranından değiştirdikten sonra bu koşul
+    /// artık sağlanmayacağı için tekrar üzerine yazılmaz.
+    /// </summary>
+    private const string PlaceholderTaxNumber = "0000000000";
+
+    private static async Task SeedCompanyDefaultsAsync(AppDbContext db)
+    {
+        var company = await db.Companies
+            .Include(x => x.BankAccounts)
+            .OrderBy(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync();
+
+        if (company is null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(company.TaxNumber) ||
+            company.TaxNumber == PlaceholderTaxNumber)
+        {
+            company.Name = "Enderun Elektrik Üretim Enerji A.Ş.";
+            company.TaxOffice = "İvedik";
+            company.TaxNumber = "3341211200";
+            company.Phone = "0312 241 72 59";
+            company.Email = "bilgi@enderunenerji.com.tr";
+            company.Address =
+                "İvedik OSB, 1122. Cd. Maxivedik Ticaret Merkezi No:20/81, 06810 Yenimahalle/Ankara";
+            company.UpdatedAtUtc = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+        }
+
+        if (!company.BankAccounts.Any())
+        {
+            db.CompanyBankAccounts.Add(new CompanyBankAccount
+            {
+                CompanyId = company.Id,
+                BankName = "Garanti BBVA",
+                Iban = "TR170006200018100006282394",
+                AccountHolder = company.Name,
+                CurrencyCode = "TRY"
+            });
+
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task SeedPermissionsAsync(AppDbContext db)

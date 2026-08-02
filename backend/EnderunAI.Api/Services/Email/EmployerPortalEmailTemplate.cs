@@ -4,7 +4,12 @@ namespace EnderunAI.Api.Services.Email;
 
 public static class EmployerPortalEmailTemplate
 {
-    public static string Build(string projectName, string portalUrl, string? employerName)
+    public static string Build(
+        string projectName,
+        string portalUrl,
+        string? employerName,
+        string? companyName = null,
+        string? companyLogoUrl = null)
     {
         var greetingName = string.IsNullOrWhiteSpace(employerName)
             ? "Merhaba,"
@@ -13,7 +18,12 @@ public static class EmployerPortalEmailTemplate
         var safeProjectName = WebUtility.HtmlEncode(projectName);
         var safeUrl = WebUtility.HtmlEncode(portalUrl);
 
-        const string logoUrl = "https://enderunai.com.tr/logo-full-white.png";
+        var safeCompanyName = WebUtility.HtmlEncode(
+            string.IsNullOrWhiteSpace(companyName) ? "Enderun Enerji" : companyName);
+
+        var logoUrl = string.IsNullOrWhiteSpace(companyLogoUrl)
+            ? "https://enderunai.com.tr/logo-full-white.png"
+            : companyLogoUrl;
 
         return $$"""
         <!doctype html>
@@ -30,7 +40,7 @@ public static class EmployerPortalEmailTemplate
                 <table role="presentation" width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #dcd6c8;">
                   <tr>
                     <td style="background:#0b2c2d;padding:24px 32px;border-bottom:3px solid #f1a522;">
-                      <img src="{{logoUrl}}" alt="Enderun Enerji" height="28" style="height:28px;width:auto;display:block;" />
+                      <img src="{{logoUrl}}" alt="{{safeCompanyName}}" height="28" style="height:28px;width:auto;display:block;" />
                     </td>
                   </tr>
                   <tr>
@@ -58,7 +68,7 @@ public static class EmployerPortalEmailTemplate
                   </tr>
                   <tr>
                     <td style="padding:16px 32px;background:#f7f5ee;border-top:1px solid #dcd6c8;">
-                      <p style="margin:0;font-size:12px;color:#5c6b68;">Enderun Enerji · Saha Takip Portalı</p>
+                      <p style="margin:0;font-size:12px;color:#5c6b68;">{{safeCompanyName}} · Saha Takip Portalı</p>
                     </td>
                   </tr>
                 </table>

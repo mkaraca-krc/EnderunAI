@@ -96,6 +96,8 @@ public sealed class AppDbContext(
     public DbSet<EmployerPortalEmailLog> EmployerPortalEmailLogs => Set<EmployerPortalEmailLog>();
     public DbSet<SecurityAuditEvent> SecurityAuditEvents => Set<SecurityAuditEvent>();
 
+    public DbSet<CompanyBankAccount> CompanyBankAccounts => Set<CompanyBankAccount>();
+
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserPermissionOverride> UserPermissionOverrides => Set<UserPermissionOverride>();
@@ -315,10 +317,29 @@ public sealed class AppDbContext(
             entity.Property(x => x.TaxOffice).HasMaxLength(100);
             entity.Property(x => x.TaxNumber).HasMaxLength(20);
             entity.Property(x => x.MersisNumber).HasMaxLength(30);
+            entity.Property(x => x.TradeRegistryNumber).HasMaxLength(30);
             entity.Property(x => x.Phone).HasMaxLength(30);
             entity.Property(x => x.Email).HasMaxLength(200);
             entity.Property(x => x.Website).HasMaxLength(250);
             entity.Property(x => x.LogoPath).HasMaxLength(500);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<CompanyBankAccount>(entity =>
+        {
+            entity.ToTable("company_bank_accounts");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.BankName).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Iban).HasMaxLength(34).IsRequired();
+            entity.Property(x => x.AccountHolder).HasMaxLength(250);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3);
+
+            entity.HasOne(x => x.Company)
+                .WithMany(x => x.BankAccounts)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

@@ -72,6 +72,7 @@ export type PortalProject = {
   projectName: string;
   projectCode: string;
   sites: PortalSite[];
+  companyLogoUrl?: string | null;
 };
 
 export type PortalWorkItem = {

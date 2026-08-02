@@ -121,7 +121,11 @@ export default function EmployerPortalPage() {
     <div className="portal-page">
       <div className="portal-header">
         <div className="portal-header-inner">
-          <img src="/logo-full-white.png" alt="Enderun Enerji" className="portal-header-logo" />
+          <img
+            src={project?.companyLogoUrl || "/logo-full-white.png"}
+            alt="Şirket logosu"
+            className="portal-header-logo"
+          />
           <div>
             <h1>{project?.projectName ?? "Yükleniyor..."}</h1>
             <p>İşveren Portalı · {project?.projectCode}</p>

@@ -43,11 +43,19 @@ public sealed class PortalController(
             })
             .ToListAsync(cancellationToken);
 
+        var hasCompanyLogo = await db.Companies.AsNoTracking()
+            .OrderBy(x => x.CreatedAtUtc)
+            .Select(x => x.LogoPath != null)
+            .FirstOrDefaultAsync(cancellationToken);
+
         return Ok(new
         {
             projectName = project.Name,
             projectCode = project.Code,
-            sites
+            sites,
+            companyLogoUrl = hasCompanyLogo
+                ? "/api/backend/company-settings/logo"
+                : null
         });
     }
 

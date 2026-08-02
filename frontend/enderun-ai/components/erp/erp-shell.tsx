@@ -33,6 +33,9 @@ type CurrentSession = {
 };
 
 function requiredPermissionForPath(pathname: string): string | string[] | null {
+  if (pathname.startsWith("/sistem-yonetimi/sirket-ayarlari")) {
+    return ["company-settings.view", "system.users.manage"];
+  }
   if (pathname.startsWith("/sistem-yonetimi")) return "system.users.manage";
   if (/^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|avanslar)/.test(pathname)) {
     return "payroll.view";
@@ -495,6 +498,11 @@ const groups: MenuGroup[] = [
         label: "Yetki Matrisi",
         href: "/sistem-yonetimi/yetki-matrisi",
         icon: "▦",
+      },
+      {
+        label: "Şirket Ayarları",
+        href: "/sistem-yonetimi/sirket-ayarlari",
+        icon: "⚙",
       },
     ],
   },

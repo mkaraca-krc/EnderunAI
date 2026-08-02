@@ -128,6 +128,15 @@ public sealed class EmployerPortalLinkController(
         if (project is null)
             return NotFound(new { message = "Proje bulunamadı." });
 
+        var company = await db.Companies.AsNoTracking()
+            .OrderBy(x => x.CreatedAtUtc)
+            .Select(x => new { x.Name, HasLogo = x.LogoPath != null })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var companyLogoUrl = company?.HasLogo == true
+            ? "https://enderunai.com.tr/api/backend/company-settings/logo"
+            : null;
+
         var link = await db.EmployerPortalLinks
             .SingleOrDefaultAsync(x => x.ProjectId == projectId && x.IsActive, cancellationToken);
 
@@ -157,7 +166,12 @@ public sealed class EmployerPortalLinkController(
         try
         {
             var subject = $"{project.Name} - Saha Takip Portalı";
-            var html = EmployerPortalEmailTemplate.Build(project.Name, request.PortalUrl, link.EmployerName);
+            var html = EmployerPortalEmailTemplate.Build(
+                project.Name,
+                request.PortalUrl,
+                link.EmployerName,
+                company?.Name,
+                companyLogoUrl);
 
             await emailService.SendAsync(
                 link.EmployerEmail,

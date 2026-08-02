@@ -7,6 +7,10 @@ import {
   purchaseOrderService,
   type PurchaseOrderDetail,
 } from "@/services/purchase-order.service";
+import {
+  companySettingsService,
+  type CompanySettings,
+} from "@/services/company-settings.service";
 
 function formatDate(value?: string | null) {
   return value
@@ -35,6 +39,8 @@ export default function PurchaseOrderPrintPage() {
 
   const [order, setOrder] =
     useState<PurchaseOrderDetail | null>(null);
+  const [company, setCompany] =
+    useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -45,11 +51,13 @@ export default function PurchaseOrderPrintPage() {
     setError("");
 
     try {
-      const result = await purchaseOrderService.getById(
-        params.id
-      );
+      const [result, companyResult] = await Promise.all([
+        purchaseOrderService.getById(params.id),
+        companySettingsService.get().catch(() => null),
+      ]);
 
       setOrder(result);
+      setCompany(companyResult);
     } catch (err) {
       setError(
         err instanceof Error
@@ -107,23 +115,44 @@ export default function PurchaseOrderPrintPage() {
       <article className="mx-auto min-h-[297mm] w-[210mm] bg-white px-[14mm] py-[12mm] text-[11px] text-slate-900 shadow-xl print:min-h-0 print:w-full print:px-[10mm] print:py-[8mm] print:shadow-none">
         <header className="border-b-2 border-slate-900 pb-5">
           <div className="flex items-start justify-between gap-8">
-            <div>
-              <h1 className="text-2xl font-bold tracking-wide">
-                ENDERUN ENERJİ
-              </h1>
+            <div className="flex items-start gap-3">
+              {company?.logoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={company.logoUrl}
+                  alt=""
+                  className="h-14 w-14 shrink-0 object-contain"
+                />
+              )}
+              <div>
+                <h1 className="text-2xl font-bold tracking-wide">
+                  {(company?.tradeName || company?.name || "ENDERUN ENERJİ").toLocaleUpperCase("tr-TR")}
+                </h1>
 
-              <p className="mt-1 text-[10px] text-slate-600">
-                Elektrik Üretim Enerji A.Ş.
-              </p>
+                {company?.tradeName && company?.name && (
+                  <p className="mt-1 text-[10px] text-slate-600">
+                    {company.name}
+                  </p>
+                )}
 
-              <p className="mt-1 max-w-md text-[9px] leading-4 text-slate-500">
-                1122. Cadde, İvedik OSB, Maxi İvedik
-                Ticaret Merkezi, 5. Kat, No:28, Ankara
-              </p>
+                {company?.address && (
+                  <p className="mt-1 max-w-md text-[9px] leading-4 text-slate-500">
+                    {company.address}
+                  </p>
+                )}
 
-              <p className="mt-1 text-[9px] text-slate-500">
-                Tel: +90 312 241 72 59
-              </p>
+                {company?.phone && (
+                  <p className="mt-1 text-[9px] text-slate-500">
+                    Tel: {company.phone}
+                  </p>
+                )}
+
+                {(company?.taxOffice || company?.taxNumber) && (
+                  <p className="mt-1 text-[9px] text-slate-500">
+                    {company.taxOffice} V.D. — VKN: {company.taxNumber}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="text-right">
