@@ -10,7 +10,6 @@ public sealed record CreatePurchaseRequestItemRequest(
 public sealed record CreatePurchaseRequestRequest(
     Guid CompanyId,
     Guid ProjectId,
-    string RequestNumber,
     DateTime RequestDate,
     DateTime? NeededByDate,
     string RequestedByName,

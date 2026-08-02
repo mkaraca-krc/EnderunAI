@@ -12,6 +12,18 @@ export type PersonnelAssignmentItem = {
   isActive?: boolean;
 };
 
+export type PersonnelActiveSiteAssignment = {
+  id: string;
+  projectSiteId: string;
+  siteCode: string;
+  siteName: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  role?: string | null;
+  startDate: string;
+};
+
 export type PersonnelListItem = {
   id: string;
   companyId: string;
@@ -33,6 +45,7 @@ export type PersonnelListItem = {
   status: number;
   isActive: boolean;
   activeAssignments: PersonnelAssignmentItem[];
+  activeSiteAssignment?: PersonnelActiveSiteAssignment | null;
 };
 
 export type PersonnelDetail = PersonnelListItem & {
@@ -58,6 +71,25 @@ export type CreatePersonnelRequest = {
   sgkRegistrationNumber?: string | null;
   employmentStartDate?: string | null;
   monthlySalary?: number | null;
+};
+
+export type UpdatePersonnelRequest = {
+  branchId?: string | null;
+  firstName: string;
+  lastName: string;
+  identityNumber?: string | null;
+  birthDate?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  jobTitle?: string | null;
+  profession?: string | null;
+  sgkRegistrationNumber?: string | null;
+  employmentStartDate?: string | null;
+  employmentEndDate?: string | null;
+  monthlySalary?: number | null;
+  status: number;
+  isActive: boolean;
 };
 
 export type AssignPersonnelRequest = {
@@ -91,11 +123,11 @@ export const personnelService = {
 
     const suffix = query.toString() ? `?${query.toString()}` : "";
 
-    return apiClient<PersonnelListItem[]>(`personnel${suffix}`);
+    return apiClient<PersonnelListItem[]>(`hr/personnel${suffix}`);
   },
 
   getById(id: string) {
-    return apiClient<PersonnelDetail>(`personnel/${id}`);
+    return apiClient<PersonnelDetail>(`hr/personnel/${id}`);
   },
 
   create(payload: CreatePersonnelRequest) {
@@ -105,15 +137,22 @@ export const personnelService = {
       employeeNumber: string;
       firstName: string;
       lastName: string;
-    }>("personnel", {
+    }>("hr/personnel", {
       method: "POST",
+      body: payload,
+    });
+  },
+
+  update(id: string, payload: UpdatePersonnelRequest) {
+    return apiClient<{ message: string }>(`hr/personnel/${id}`, {
+      method: "PUT",
       body: payload,
     });
   },
 
   assignToProject(id: string, payload: AssignPersonnelRequest) {
     return apiClient<{ message: string; id: string }>(
-      `personnel/${id}/assignments`,
+      `hr/personnel/${id}/assignments`,
       {
         method: "POST",
         body: payload,
@@ -127,7 +166,7 @@ export const personnelService = {
       : "";
 
     return apiClient<{ message: string }>(
-      `personnel/assignments/${assignmentId}/close${query}`,
+      `hr/personnel/assignments/${assignmentId}/close${query}`,
       {
         method: "PUT",
       }

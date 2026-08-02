@@ -1,0 +1,1019 @@
+"use client";
+
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import ErpShell from "@/components/erp/erp-shell";
+
+import {
+  companyService,
+  type CompanyListItem,
+} from "@/services/company.service";
+
+import {
+  projectService,
+  type ProjectListItem,
+} from "@/services/project.service";
+
+import {
+  visitorService,
+  VisitorStatus,
+  type VisitorItem,
+} from "@/services/visitor.service";
+
+const statusLabels: Record<number, string> = {
+  [VisitorStatus.Expected]: "Bekleniyor",
+  [VisitorStatus.CheckedIn]: "Giriş Yaptı",
+  [VisitorStatus.CheckedOut]: "Çıkış Yaptı",
+  [VisitorStatus.Cancelled]: "İptal",
+  [VisitorStatus.Rejected]: "Reddedildi",
+};
+
+function localDateTimeValue() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  const local = new Date(now.getTime() - offset * 60_000);
+
+  return local.toISOString().slice(0, 16);
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  return new Date(value).toLocaleString("tr-TR");
+}
+
+const initialForm = {
+  companyId: "",
+  projectId: "",
+  fullName: "",
+  identityNumber: "",
+  phoneNumber: "",
+  email: "",
+  companyName: "",
+  vehiclePlate: "",
+  visitorCardNumber: "",
+  personToVisit: "",
+  departmentName: "",
+  visitPurpose: "",
+  plannedVisitAtUtc: localDateTimeValue(),
+  approvedByName: "",
+  description: "",
+};
+
+export default function VisitorsPage() {
+  const [companies, setCompanies] =
+    useState<CompanyListItem[]>([]);
+
+  const [projects, setProjects] =
+    useState<ProjectListItem[]>([]);
+
+  const [items, setItems] =
+    useState<VisitorItem[]>([]);
+
+  const [form, setForm] =
+    useState(initialForm);
+
+  const [showForm, setShowForm] =
+    useState(false);
+
+  const [companyFilter, setCompanyFilter] =
+    useState("");
+
+  const [projectFilter, setProjectFilter] =
+    useState("");
+
+  const [statusFilter, setStatusFilter] =
+    useState("");
+
+  const [startDate, setStartDate] =
+    useState(today());
+
+  const [endDate, setEndDate] =
+    useState(today());
+
+  const [search, setSearch] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [processingId, setProcessingId] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
+  const [success, setSuccess] =
+    useState("");
+
+  const formProjects = useMemo(
+    () =>
+      projects.filter(
+        (project) =>
+          !form.companyId ||
+          project.companyId === form.companyId
+      ),
+    [projects, form.companyId]
+  );
+
+  const filterProjects = useMemo(
+    () =>
+      projects.filter(
+        (project) =>
+          !companyFilter ||
+          project.companyId === companyFilter
+      ),
+    [projects, companyFilter]
+  );
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const [
+        companyRows,
+        projectRows,
+        visitorRows,
+      ] = await Promise.all([
+        companyService.getAll(),
+        projectService.getAll(),
+        visitorService.getAll({
+          companyId: companyFilter || undefined,
+          projectId: projectFilter || undefined,
+          status:
+            statusFilter === ""
+              ? undefined
+              : Number(statusFilter),
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+          search: search || undefined,
+        }),
+      ]);
+
+      setCompanies(companyRows);
+      setProjects(projectRows);
+      setItems(visitorRows);
+
+      if (
+        !form.companyId &&
+        companyRows.length === 1
+      ) {
+        setForm((current) => ({
+          ...current,
+          companyId: companyRows[0].id,
+        }));
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ziyaretçi kayıtları yüklenemedi."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    companyFilter,
+    projectFilter,
+    statusFilter,
+    startDate,
+    endDate,
+    search,
+    form.companyId,
+  ]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (
+      projectFilter &&
+      !filterProjects.some(
+        (project) =>
+          project.id === projectFilter
+      )
+    ) {
+      setProjectFilter("");
+    }
+  }, [filterProjects, projectFilter]);
+
+  useEffect(() => {
+    if (
+      form.projectId &&
+      !formProjects.some(
+        (project) =>
+          project.id === form.projectId
+      )
+    ) {
+      setForm((current) => ({
+        ...current,
+        projectId: "",
+      }));
+    }
+  }, [formProjects, form.projectId]);
+
+  async function createVisitor(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      await visitorService.create({
+        companyId: form.companyId,
+        projectId: form.projectId || null,
+        fullName: form.fullName.trim(),
+        identityNumber:
+          form.identityNumber.trim() || null,
+        phoneNumber:
+          form.phoneNumber.trim() || null,
+        email:
+          form.email.trim() || null,
+        companyName:
+          form.companyName.trim() || null,
+        vehiclePlate:
+          form.vehiclePlate.trim() || null,
+        visitorCardNumber:
+          form.visitorCardNumber.trim() || null,
+        personToVisit:
+          form.personToVisit.trim(),
+        departmentName:
+          form.departmentName.trim() || null,
+        visitPurpose:
+          form.visitPurpose.trim(),
+        plannedVisitAtUtc:
+          new Date(
+            form.plannedVisitAtUtc
+          ).toISOString(),
+        approvedByName:
+          form.approvedByName.trim() || null,
+        description:
+          form.description.trim() || null,
+      });
+
+      setSuccess(
+        "Ziyaretçi kaydı başarıyla oluşturuldu."
+      );
+
+      setForm({
+        ...initialForm,
+        companyId: form.companyId,
+        plannedVisitAtUtc:
+          localDateTimeValue(),
+      });
+
+      setShowForm(false);
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ziyaretçi kaydedilemedi."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function checkIn(item: VisitorItem) {
+    const receivedByName = window.prompt(
+      "Ziyaretçiyi karşılayan kişi:",
+      item.receivedByName || ""
+    );
+
+    if (receivedByName === null) {
+      return;
+    }
+
+    setProcessingId(item.id);
+    setError("");
+    setSuccess("");
+
+    try {
+      await visitorService.checkIn(
+        item.id,
+        receivedByName.trim() || null
+      );
+
+      setSuccess(
+        `${item.fullName} için giriş işlemi tamamlandı.`
+      );
+
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ziyaretçi girişi yapılamadı."
+      );
+    } finally {
+      setProcessingId("");
+    }
+  }
+
+  async function checkOut(item: VisitorItem) {
+    const confirmed = window.confirm(
+      `${item.fullName} için çıkış işlemi yapılsın mı?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setProcessingId(item.id);
+    setError("");
+    setSuccess("");
+
+    try {
+      await visitorService.checkOut(item.id);
+
+      setSuccess(
+        `${item.fullName} için çıkış işlemi tamamlandı.`
+      );
+
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ziyaretçi çıkışı yapılamadı."
+      );
+    } finally {
+      setProcessingId("");
+    }
+  }
+
+  async function deleteVisitor(id: string) {
+    const confirmed = window.confirm(
+      "Bu ziyaretçi kaydını silmek istediğinize emin misiniz?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setProcessingId(id);
+    setError("");
+    setSuccess("");
+
+    try {
+      await visitorService.delete(id);
+
+      setSuccess(
+        "Ziyaretçi kaydı silindi."
+      );
+
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ziyaretçi kaydı silinemedi."
+      );
+    } finally {
+      setProcessingId("");
+    }
+  }
+
+  return (
+    <ErpShell
+      title="Sekreterya"
+      description="Ziyaretçi giriş ve çıkış yönetimi"
+    >
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">
+              Ziyaretçiler
+            </h1>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Planlanan ziyaretleri ve giriş çıkışları yönetin
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+            onClick={() =>
+              setShowForm((value) => !value)
+            }
+          >
+            {showForm
+              ? "Formu Kapat"
+              : "Yeni Ziyaretçi"}
+          </button>
+        </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+            {success}
+          </div>
+        )}
+
+        {showForm && (
+          <form
+            onSubmit={createVisitor}
+            className="rounded-2xl border bg-white p-5 shadow-sm"
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <label className="space-y-1 text-sm">
+                <span>Şirket</span>
+
+                <select
+                  required
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.companyId}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      companyId:
+                        event.target.value,
+                      projectId: "",
+                    }))
+                  }
+                >
+                  <option value="">
+                    Şirket seçin
+                  </option>
+
+                  {companies.map((company) => (
+                    <option
+                      key={company.id}
+                      value={company.id}
+                    >
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Proje</span>
+
+                <select
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.projectId}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      projectId:
+                        event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">
+                    Proje bağlantısı yok
+                  </option>
+
+                  {formProjects.map((project) => (
+                    <option
+                      key={project.id}
+                      value={project.id}
+                    >
+                      {project.code} - {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Ziyaret Tarihi ve Saati</span>
+
+                <input
+                  required
+                  type="datetime-local"
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.plannedVisitAtUtc}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      plannedVisitAtUtc:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Ad Soyad</span>
+
+                <input
+                  required
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.fullName}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      fullName:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>TC Kimlik / Pasaport</span>
+
+                <input
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.identityNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      identityNumber:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Telefon</span>
+
+                <input
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.phoneNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      phoneNumber:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>E-posta</span>
+
+                <input
+                  type="email"
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.email}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      email:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Firma</span>
+
+                <input
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.companyName}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      companyName:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Araç Plakası</span>
+
+                <input
+                  className="w-full rounded-lg border px-3 py-2 uppercase"
+                  value={form.vehiclePlate}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      vehiclePlate:
+                        event.target.value.toUpperCase(),
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Ziyaretçi Kart No</span>
+
+                <input
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.visitorCardNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      visitorCardNumber:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Ziyaret Edilecek Kişi</span>
+
+                <input
+                  required
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.personToVisit}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      personToVisit:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Bölüm</span>
+
+                <input
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.departmentName}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      departmentName:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Onaylayan Kişi</span>
+
+                <input
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.approvedByName}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      approvedByName:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm md:col-span-2 xl:col-span-3">
+                <span>Ziyaret Amacı</span>
+
+                <input
+                  required
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={form.visitPurpose}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      visitPurpose:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="space-y-1 text-sm md:col-span-2 xl:col-span-3">
+                <span>Açıklama</span>
+
+                <textarea
+                  className="min-h-24 w-full rounded-lg border px-3 py-2"
+                  value={form.description}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      description:
+                        event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                disabled={saving}
+                className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {saving
+                  ? "Kaydediliyor..."
+                  : "Ziyaretçiyi Kaydet"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <select
+              className="rounded-lg border px-3 py-2 text-sm"
+              value={companyFilter}
+              onChange={(event) => {
+                setCompanyFilter(
+                  event.target.value
+                );
+                setProjectFilter("");
+              }}
+            >
+              <option value="">
+                Tüm şirketler
+              </option>
+
+              {companies.map((company) => (
+                <option
+                  key={company.id}
+                  value={company.id}
+                >
+                  {company.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="rounded-lg border px-3 py-2 text-sm"
+              value={projectFilter}
+              onChange={(event) =>
+                setProjectFilter(
+                  event.target.value
+                )
+              }
+            >
+              <option value="">
+                Tüm projeler
+              </option>
+
+              {filterProjects.map((project) => (
+                <option
+                  key={project.id}
+                  value={project.id}
+                >
+                  {project.code} - {project.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="rounded-lg border px-3 py-2 text-sm"
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(
+                  event.target.value
+                )
+              }
+            >
+              <option value="">
+                Tüm durumlar
+              </option>
+
+              {Object.entries(statusLabels).map(
+                ([value, label]) => (
+                  <option
+                    key={value}
+                    value={value}
+                  >
+                    {label}
+                  </option>
+                )
+              )}
+            </select>
+
+            <input
+              type="date"
+              className="rounded-lg border px-3 py-2 text-sm"
+              value={startDate}
+              onChange={(event) =>
+                setStartDate(event.target.value)
+              }
+            />
+
+            <input
+              type="date"
+              className="rounded-lg border px-3 py-2 text-sm"
+              value={endDate}
+              onChange={(event) =>
+                setEndDate(event.target.value)
+              }
+            />
+
+            <input
+              className="rounded-lg border px-3 py-2 text-sm"
+              placeholder="Ad, firma, plaka, kişi..."
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+            />
+          </div>
+        </section>
+
+        <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1300px] text-left text-sm">
+              <thead className="border-b bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3">
+                    Ziyaretçi
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Firma
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Ziyaret Edilecek
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Amaç
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Planlanan Tarih
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Giriş
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Çıkış
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Durum
+                  </th>
+
+                  <th className="px-4 py-3 text-right">
+                    İşlemler
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td
+                      className="px-4 py-8 text-center"
+                      colSpan={9}
+                    >
+                      Yükleniyor...
+                    </td>
+                  </tr>
+                ) : items.length === 0 ? (
+                  <tr>
+                    <td
+                      className="px-4 py-8 text-center"
+                      colSpan={9}
+                    >
+                      Ziyaretçi kaydı bulunamadı.
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="border-b last:border-0"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="font-medium">
+                          {item.fullName}
+                        </div>
+
+                        <div className="text-xs text-slate-500">
+                          {item.phoneNumber || "Telefon yok"}
+                          {item.vehiclePlate
+                            ? ` · ${item.vehiclePlate}`
+                            : ""}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {item.companyName || "—"}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div>
+                          {item.personToVisit}
+                        </div>
+
+                        <div className="text-xs text-slate-500">
+                          {item.departmentName || ""}
+                        </div>
+                      </td>
+
+                      <td className="max-w-xs px-4 py-3">
+                        {item.visitPurpose}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {formatDateTime(
+                          item.plannedVisitAtUtc
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {formatDateTime(
+                          item.checkInAtUtc
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {formatDateTime(
+                          item.checkOutAtUtc
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {statusLabels[item.status] ??
+                          item.statusName}
+                      </td>
+
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-3">
+                          {item.status ===
+                            VisitorStatus.Expected && (
+                            <button
+                              type="button"
+                              disabled={
+                                processingId === item.id
+                              }
+                              onClick={() =>
+                                void checkIn(item)
+                              }
+                              className="font-medium text-green-700 disabled:opacity-50"
+                            >
+                              Giriş
+                            </button>
+                          )}
+
+                          {item.status ===
+                            VisitorStatus.CheckedIn && (
+                            <button
+                              type="button"
+                              disabled={
+                                processingId === item.id
+                              }
+                              onClick={() =>
+                                void checkOut(item)
+                              }
+                              className="font-medium text-blue-700 disabled:opacity-50"
+                            >
+                              Çıkış
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            disabled={
+                              processingId === item.id
+                            }
+                            onClick={() =>
+                              void deleteVisitor(item.id)
+                            }
+                            className="font-medium text-red-600 disabled:opacity-50"
+                          >
+                            {processingId === item.id
+                              ? "İşleniyor..."
+                              : "Sil"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </ErpShell>
+  );
+}

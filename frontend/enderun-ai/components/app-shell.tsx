@@ -8,7 +8,7 @@ const navigation = [
   { name: "Projeler", href: "/projeler" },
   { name: "Hakediş", href: "/hakedis" },
   { name: "Satın Alma", href: "/satin-alma" },
-  { name: "Depo ve Stok", href: "/depo" },
+  { name: "Depo & Stok", href: "/depo-stok" },
   { name: "Personel", href: "/personel" },
   { name: "Dokümanlar", href: "/dokumanlar" },
   { name: "AI Asistan", href: "/ai-asistan" },
