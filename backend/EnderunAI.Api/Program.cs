@@ -133,6 +133,7 @@ builder.Services.AddScoped<EnderunAI.Api.Security.ICurrentDataScopeService, Ende
 builder.Services.AddScoped<EnderunAI.Api.Services.Rfq.IRfqService, EnderunAI.Api.Services.Rfq.RfqService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.PurchaseOrders.IPurchaseOrderService, EnderunAI.Api.Services.PurchaseOrders.PurchaseOrderService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.GoodsReceipts.IGoodsReceiptService, EnderunAI.Api.Services.GoodsReceipts.GoodsReceiptService>();
+builder.Services.AddScoped<EnderunAI.Api.Security.IWorkHourAccessService, EnderunAI.Api.Security.WorkHourAccessService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -193,6 +194,7 @@ app.UseRouting();
 app.UseCors("Frontend");
 
 app.UseAuthentication();
+app.UseMiddleware<EnderunAI.Api.Security.WorkHourAccessMiddleware>();
 app.UseMiddleware<PermissionAuthorizationMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();

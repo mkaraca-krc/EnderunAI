@@ -28,6 +28,9 @@ public sealed class CreateManagedUserRequest
     /// (ör. Şantiye Şefi, Formen) bu liste zorunludur.
     /// </summary>
     public Guid[] ProjectSiteIds { get; set; } = [];
+
+    /// <summary>true ise rol bazlı mesai penceresi bu kullanıcı için hiç uygulanmaz.</summary>
+    public bool WorkHoursExempt { get; set; } = false;
 }
 
 public sealed class UpdateManagedUserRequest
@@ -48,6 +51,7 @@ public sealed class UpdateManagedUserRequest
     public string[] AllowedPermissions { get; set; } = [];
     public string[] DeniedPermissions { get; set; } = [];
     public Guid[] ProjectSiteIds { get; set; } = [];
+    public bool WorkHoursExempt { get; set; } = false;
 }
 
 public sealed class ResetManagedUserPasswordRequest

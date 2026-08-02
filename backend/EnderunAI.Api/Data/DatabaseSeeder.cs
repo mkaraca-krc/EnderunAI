@@ -60,6 +60,7 @@ public static class DatabaseSeeder
         await RunLegacyRoleCutoverAsync(db);
         await SeedDefaultDataScopesAsync(db);
         await SeedCompanyDefaultsAsync(db);
+        await SeedRoleWorkHourWindowsAsync(db);
     }
 
     /// <summary>
@@ -189,6 +190,76 @@ public static class DatabaseSeeder
                     PermissionId = permissionId
                 });
                 existingGrants.Add((roleId, permissionId));
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Ofis rolleri hafta içi 08:00-19:00, Cumartesi 09:00-14:00, Pazar
+    /// kapalı. Şantiye Şefi/Formen her gün 07:00-22:00. Admin ve Genel
+    /// Müdür için hiç satır eklenmez (WorkHourAccessService içinde her
+    /// zaman istisnasız izinlidir). Rol bazında en az bir satır varsa o rol
+    /// atlanır — admin daha sonra Şirket Ayarları'ndan pencereyi
+    /// değiştirdiyse bu adım üzerine yazmaz.
+    /// </summary>
+    private static readonly string[] OfficeWorkHourRoles =
+    [
+        "Finans Sorumlusu", "Satın Alma Sorumlusu", "İK Sorumlusu", "Ön Muhasebe",
+        "Teknik Ofis", "Teknik Koordinatör", "Sekreterya", "Araç Sorumlusu", "Depo Sorumlusu"
+    ];
+
+    private static readonly string[] SiteWorkHourRoles = ["Şantiye Şefi", "Formen"];
+
+    private static async Task SeedRoleWorkHourWindowsAsync(AppDbContext db)
+    {
+        var roleIdsByName = await db.Roles
+            .ToDictionaryAsync(role => role.Name, role => role.Id, StringComparer.OrdinalIgnoreCase);
+        var rolesWithWindows = (await db.RoleWorkHourWindows
+                .Select(item => item.RoleId)
+                .ToListAsync())
+            .ToHashSet();
+
+        foreach (var roleName in OfficeWorkHourRoles)
+        {
+            if (!roleIdsByName.TryGetValue(roleName, out var roleId) || rolesWithWindows.Contains(roleId))
+                continue;
+
+            for (var day = 1; day <= 5; day++)
+            {
+                db.RoleWorkHourWindows.Add(new RoleWorkHourWindow
+                {
+                    RoleId = roleId,
+                    DayOfWeek = day,
+                    StartTime = new TimeOnly(8, 0),
+                    EndTime = new TimeOnly(19, 0)
+                });
+            }
+
+            db.RoleWorkHourWindows.Add(new RoleWorkHourWindow
+            {
+                RoleId = roleId,
+                DayOfWeek = 6,
+                StartTime = new TimeOnly(9, 0),
+                EndTime = new TimeOnly(14, 0)
+            });
+        }
+
+        foreach (var roleName in SiteWorkHourRoles)
+        {
+            if (!roleIdsByName.TryGetValue(roleName, out var roleId) || rolesWithWindows.Contains(roleId))
+                continue;
+
+            for (var day = 0; day <= 6; day++)
+            {
+                db.RoleWorkHourWindows.Add(new RoleWorkHourWindow
+                {
+                    RoleId = roleId,
+                    DayOfWeek = day,
+                    StartTime = new TimeOnly(7, 0),
+                    EndTime = new TimeOnly(22, 0)
+                });
             }
         }
 

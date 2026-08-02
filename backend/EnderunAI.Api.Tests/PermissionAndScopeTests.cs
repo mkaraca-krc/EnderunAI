@@ -33,7 +33,11 @@ public sealed class PermissionAndScopeTests(DatabaseFixture fixture)
             FullName = $"Test {usernameSuffix}",
             PasswordHash = hash.Hash,
             PasswordSalt = hash.Salt,
-            IsActive = true
+            IsActive = true,
+            // Bu testler izin/kapsam mantığını doğruluyor, mesai saati
+            // mantığını değil — testin çalıştığı saatten bağımsız
+            // deterministik olması için kullanıcı mesai istisnalı yapılır.
+            WorkHoursExempt = true
         };
         db.Users.Add(user);
         await db.SaveChangesAsync();

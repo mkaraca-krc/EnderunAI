@@ -174,7 +174,8 @@ public sealed class UserManagementController(
             Email = NormalizeOptional(request.Email),
             PasswordHash = password.Hash,
             PasswordSalt = password.Salt,
-            IsActive = request.IsActive
+            IsActive = request.IsActive,
+            WorkHoursExempt = request.WorkHoursExempt
         };
 
         db.Users.Add(user);
@@ -261,6 +262,7 @@ public sealed class UserManagementController(
         user.FullName = request.FullName.Trim();
         user.Email = NormalizeOptional(request.Email);
         user.IsActive = request.IsActive;
+        user.WorkHoursExempt = request.WorkHoursExempt;
 
         await db.SaveChangesAsync(cancellationToken);
         await SyncUserRolesAsync(
@@ -337,6 +339,7 @@ public sealed class UserManagementController(
             user.IsActive,
             user.CreatedAtUtc,
             user.LastLoginAtUtc,
+            user.WorkHoursExempt,
             roleNames,
             roleName = roleNames.FirstOrDefault() ?? "Rol tanımsız",
             projectSiteIds = siteAssignments.Select(x => (Guid)x.ProjectSiteId).ToArray(),

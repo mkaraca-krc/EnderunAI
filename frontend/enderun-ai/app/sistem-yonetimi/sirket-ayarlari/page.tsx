@@ -7,6 +7,8 @@ import { ApiError } from "@/lib/api/api-client";
 import {
   companySettingsService,
   type CompanySettings,
+  type RoleWorkHourWindowItem,
+  type RoleWorkHourWindows,
   type UpdateCompanySettingsPayload,
 } from "@/services/company-settings.service";
 
@@ -15,6 +17,124 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
   return "İşlem tamamlanamadı. Lütfen tekrar deneyin.";
+}
+
+const DAY_LABELS = [
+  "Pazar",
+  "Pazartesi",
+  "Salı",
+  "Çarşamba",
+  "Perşembe",
+  "Cuma",
+  "Cumartesi",
+];
+
+type DayDraft = { enabled: boolean; startTime: string; endTime: string };
+
+function toDrafts(windows: RoleWorkHourWindowItem[]): DayDraft[] {
+  return Array.from({ length: 7 }, (_, day) => {
+    const match = windows.find((w) => w.dayOfWeek === day);
+    return match
+      ? {
+          enabled: true,
+          startTime: match.startTime.slice(0, 5),
+          endTime: match.endTime.slice(0, 5),
+        }
+      : { enabled: false, startTime: "08:00", endTime: "19:00" };
+  });
+}
+
+function RoleWorkHourEditor({
+  role,
+  onSaved,
+}: {
+  role: RoleWorkHourWindows;
+  onSaved: (message: string) => void;
+}) {
+  const [drafts, setDrafts] = useState<DayDraft[]>(() => toDrafts(role.windows));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setDrafts(toDrafts(role.windows));
+  }, [role.windows]);
+
+  function updateDay(day: number, patch: Partial<DayDraft>) {
+    setDrafts((current) =>
+      current.map((item, index) => (index === day ? { ...item, ...patch } : item))
+    );
+  }
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      const windows: RoleWorkHourWindowItem[] = drafts
+        .map((draft, day) => ({ draft, day }))
+        .filter(({ draft }) => draft.enabled)
+        .map(({ draft, day }) => ({
+          dayOfWeek: day,
+          startTime: `${draft.startTime}:00`,
+          endTime: `${draft.endTime}:00`,
+        }));
+
+      const result = await companySettingsService.updateWorkHourWindows(
+        role.id,
+        windows
+      );
+      onSaved(result.message);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h4 className="font-semibold text-slate-950">{role.name}</h4>
+        <Button type="button" onClick={() => void save()} loading={saving} className="text-xs">
+          Kaydet
+        </Button>
+      </div>
+      {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+      <div className="grid gap-2">
+        {DAY_LABELS.map((label, day) => {
+          const draft = drafts[day];
+          return (
+            <div key={label} className="flex items-center gap-3 text-sm">
+              <label className="flex w-32 items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={draft.enabled}
+                  onChange={(e) => updateDay(day, { enabled: e.target.checked })}
+                />
+                <span className={draft.enabled ? "text-slate-800" : "text-slate-400"}>
+                  {label}
+                </span>
+              </label>
+              <input
+                type="time"
+                disabled={!draft.enabled}
+                value={draft.startTime}
+                onChange={(e) => updateDay(day, { startTime: e.target.value })}
+                className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs disabled:bg-slate-100 disabled:text-slate-400"
+              />
+              <span className="text-slate-400">–</span>
+              <input
+                type="time"
+                disabled={!draft.enabled}
+                value={draft.endTime}
+                onChange={(e) => updateDay(day, { endTime: e.target.value })}
+                className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs disabled:bg-slate-100 disabled:text-slate-400"
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 const emptyForm: UpdateCompanySettingsPayload = {
@@ -46,6 +166,10 @@ export default function CompanySettingsPage() {
   });
   const [addingBank, setAddingBank] = useState(false);
 
+  const [workHourRoles, setWorkHourRoles] = useState<RoleWorkHourWindows[]>([]);
+  const [workHourLoading, setWorkHourLoading] = useState(true);
+  const [workHourError, setWorkHourError] = useState("");
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -71,9 +195,23 @@ export default function CompanySettingsPage() {
     }
   }, []);
 
+  const loadWorkHourWindows = useCallback(async () => {
+    setWorkHourLoading(true);
+    setWorkHourError("");
+    try {
+      const roles = await companySettingsService.getWorkHourWindows();
+      setWorkHourRoles(roles);
+    } catch (requestError) {
+      setWorkHourError(getErrorMessage(requestError));
+    } finally {
+      setWorkHourLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadWorkHourWindows();
+  }, [load, loadWorkHourWindows]);
 
   useEffect(() => {
     if (!notice) return;
@@ -378,6 +516,44 @@ export default function CompanySettingsPage() {
                     + Ekle
                   </Button>
                 </form>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardContent className="p-6">
+                <h3 className="mb-1 font-semibold text-slate-950">
+                  Mesai Saati Pencereleri
+                </h3>
+                <p className="mb-4 text-sm text-slate-500">
+                  Rol bazlı erişim penceresi — Admin ve Genel Müdür rolleri her
+                  zaman açıktır ve burada listelenmez. Bir günün onayı kapalıysa
+                  o rol o gün sisteme giremez.
+                </p>
+
+                {workHourError && (
+                  <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {workHourError}
+                  </div>
+                )}
+
+                {workHourLoading ? (
+                  <div className="py-10 text-center text-sm text-slate-500">
+                    Mesai pencereleri yükleniyor...
+                  </div>
+                ) : (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {workHourRoles.map((role) => (
+                      <RoleWorkHourEditor
+                        key={role.id}
+                        role={role}
+                        onSaved={(message) => {
+                          setNotice(message);
+                          void loadWorkHourWindows();
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

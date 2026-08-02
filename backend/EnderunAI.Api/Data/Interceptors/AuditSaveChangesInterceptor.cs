@@ -26,7 +26,10 @@ public sealed class AuditSaveChangesInterceptor(
         typeof(EmployerPortalLink),
         typeof(RolePermission),
         typeof(UserPermissionOverride),
-        typeof(UserDataScope)
+        typeof(UserDataScope),
+        typeof(RoleWorkHourWindow),
+        typeof(AccessRequest),
+        typeof(TemporaryAccessGrant)
     ];
 
     public override InterceptionResult<int> SavingChanges(
@@ -160,6 +163,9 @@ public sealed class AuditSaveChangesInterceptor(
         RolePermission rp => ((Guid?)null, $"RoleId={rp.RoleId} PermissionId={rp.PermissionId}"),
         UserPermissionOverride upo => (upo.Id, $"UserId={upo.UserId} PermissionId={upo.PermissionId} Effect={upo.Effect}"),
         UserDataScope uds => (uds.Id, $"UserId={uds.UserId} ScopeType={uds.ScopeType}"),
+        RoleWorkHourWindow w => ((Guid?)null, $"RoleId={w.RoleId} Day={w.DayOfWeek} {w.StartTime}-{w.EndTime}"),
+        AccessRequest ar => (ar.Id, $"UserId={ar.UserId} Status={ar.Status}"),
+        TemporaryAccessGrant g => (g.Id, $"UserId={g.UserId} ExpiresAtUtc={g.ExpiresAtUtc:o}"),
         _ => (null, null)
     };
 }

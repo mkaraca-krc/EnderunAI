@@ -38,6 +38,18 @@ export type UpdateCompanySettingsPayload = {
   address?: string | null;
 };
 
+export type RoleWorkHourWindowItem = {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+};
+
+export type RoleWorkHourWindows = {
+  id: string;
+  name: string;
+  windows: RoleWorkHourWindowItem[];
+};
+
 const root = "company-settings";
 
 export const companySettingsService = {
@@ -83,5 +95,14 @@ export const companySettingsService = {
     return apiClient<void>(`${root}/bank-accounts/${id}`, {
       method: "DELETE",
     });
+  },
+  getWorkHourWindows() {
+    return apiClient<RoleWorkHourWindows[]>(`${root}/work-hour-windows`);
+  },
+  updateWorkHourWindows(roleId: string, windows: RoleWorkHourWindowItem[]) {
+    return apiClient<{ message: string }>(
+      `${root}/work-hour-windows/${roleId}`,
+      { method: "PUT", body: { windows } }
+    );
   },
 };

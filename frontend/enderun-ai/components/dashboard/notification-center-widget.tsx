@@ -21,6 +21,7 @@ type NotificationCenterWidgetProps = {
   openOrders: number;
   criticalStock: number;
   riskyProjects: number;
+  pendingAccessRequests?: number;
 };
 
 export default function NotificationCenterWidget({
@@ -30,8 +31,20 @@ export default function NotificationCenterWidget({
   openOrders,
   criticalStock,
   riskyProjects,
+  pendingAccessRequests = 0,
 }: NotificationCenterWidgetProps) {
   const items: NotificationItem[] = [
+    {
+      title: "Bekleyen Erişim Talebi",
+      description:
+        "Mesai saati dışı erişim isteyen kullanıcılar",
+      value: pendingAccessRequests,
+      href: "/sistem-yonetimi/erisim-talepleri",
+      tone:
+        pendingAccessRequests > 0
+          ? "warning"
+          : "positive",
+    },
     {
       title: "Onay Bekleyen Hakediş",
       description:

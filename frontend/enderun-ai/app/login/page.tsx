@@ -14,6 +14,7 @@ type LoginResponse = {
     roles: string[];
   };
   message?: string;
+  outsideWorkHours?: boolean;
 };
 
 export default function LoginPage() {
@@ -23,16 +24,75 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [outsideWorkHours, setOutsideWorkHours] = useState(false);
+  const [accessReason, setAccessReason] = useState("");
+  const [accessRequestState, setAccessRequestState] = useState<
+    "idle" | "submitting" | "submitted" | "error"
+  >("idle");
+  const [accessRequestMessage, setAccessRequestMessage] = useState("");
 
   useEffect(() => {
     document.title = "Enderun ERP - Giriş";
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reason") === "work-hours") {
+      setMessage(
+        "Mesai saatiniz sona erdiği için oturumunuz otomatik olarak kapatıldı."
+      );
+    }
+  }, []);
+
+  async function handleSubmitAccessRequest() {
+    if (!accessReason.trim()) {
+      setAccessRequestMessage("Gerekçe zorunludur.");
+      setAccessRequestState("error");
+      return;
+    }
+
+    setAccessRequestState("submitting");
+    setAccessRequestMessage("");
+
+    try {
+      const response = await fetch("/api/auth/access-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          password,
+          reason: accessReason.trim(),
+        }),
+      });
+
+      const data = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        setAccessRequestState("error");
+        setAccessRequestMessage(
+          data.message ?? "Erişim talebi gönderilemedi."
+        );
+        return;
+      }
+
+      setAccessRequestState("submitted");
+      setAccessRequestMessage(
+        data.message ?? "Erişim talebiniz gönderildi, onay bekleniyor."
+      );
+    } catch {
+      setAccessRequestState("error");
+      setAccessRequestMessage("Sunucuya ulaşılamadı. Lütfen tekrar deneyin.");
+    }
+  }
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
     setMessage("");
+    setOutsideWorkHours(false);
+    setAccessRequestState("idle");
+    setAccessRequestMessage("");
     setLoading(true);
 
     try {
@@ -55,6 +115,9 @@ export default function LoginPage() {
           data.message ??
             "Kullanıcı adı veya şifre hatalı."
         );
+        if (data.outsideWorkHours) {
+          setOutsideWorkHours(true);
+        }
         return;
       }
 
@@ -173,6 +236,52 @@ export default function LoginPage() {
               {message && (
                 <p className="rounded-xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-300">
                   {message}
+                </p>
+              )}
+
+              {outsideWorkHours && accessRequestState !== "submitted" && (
+                <div className="space-y-3 rounded-xl border border-amber-400/20 bg-amber-400/5 p-4">
+                  <p className="text-sm font-semibold text-amber-300">
+                    Mesai dışı erişim talebi gönder
+                  </p>
+                  <p className="text-xs leading-5 text-slate-400">
+                    Gerekçenizi yazın; Genel Müdür onayından sonra süreli
+                    erişiminiz açılacaktır.
+                  </p>
+                  <textarea
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none transition focus:border-amber-400/60 focus:ring-2 focus:ring-amber-400/10"
+                    rows={3}
+                    placeholder="Erişim talebinizin gerekçesi..."
+                    value={accessReason}
+                    onChange={(event) => setAccessReason(event.target.value)}
+                  />
+                  {accessRequestMessage && (
+                    <p
+                      className={`text-xs ${
+                        accessRequestState === "error"
+                          ? "text-rose-300"
+                          : "text-amber-300"
+                      }`}
+                    >
+                      {accessRequestMessage}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={accessRequestState === "submitting"}
+                    onClick={handleSubmitAccessRequest}
+                    className="w-full rounded-xl bg-amber-400 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {accessRequestState === "submitting"
+                      ? "Gönderiliyor..."
+                      : "Erişim Talebi Gönder"}
+                  </button>
+                </div>
+              )}
+
+              {accessRequestState === "submitted" && (
+                <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-300">
+                  {accessRequestMessage}
                 </p>
               )}
 

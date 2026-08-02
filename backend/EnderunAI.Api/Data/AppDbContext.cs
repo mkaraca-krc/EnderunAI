@@ -98,6 +98,10 @@ public sealed class AppDbContext(
 
     public DbSet<CompanyBankAccount> CompanyBankAccounts => Set<CompanyBankAccount>();
 
+    public DbSet<RoleWorkHourWindow> RoleWorkHourWindows => Set<RoleWorkHourWindow>();
+    public DbSet<AccessRequest> AccessRequests => Set<AccessRequest>();
+    public DbSet<TemporaryAccessGrant> TemporaryAccessGrants => Set<TemporaryAccessGrant>();
+
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserPermissionOverride> UserPermissionOverrides => Set<UserPermissionOverride>();
@@ -151,6 +155,7 @@ public sealed class AppDbContext(
         ConfigureEmployerPortal(modelBuilder);
         ConfigureSecurityAuditEvents(modelBuilder);
         ConfigureRbac(modelBuilder);
+        ConfigureWorkHourAccess(modelBuilder);
     }
 
     private static void ConfigureRbac(ModelBuilder modelBuilder)
@@ -2189,6 +2194,61 @@ public sealed class AppDbContext(
                 .WithMany(x => x.Interviews)
                 .HasForeignKey(x => x.JobApplicationId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureWorkHourAccess(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RoleWorkHourWindow>(entity =>
+        {
+            entity.ToTable("role_work_hour_windows");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.RoleId, x.DayOfWeek });
+
+            entity.HasOne(x => x.Role)
+                .WithMany()
+                .HasForeignKey(x => x.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AccessRequest>(entity =>
+        {
+            entity.ToTable("access_requests");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.UserId, x.Status });
+
+            entity.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            entity.Property(x => x.RejectionReason).HasMaxLength(1000);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<TemporaryAccessGrant>(entity =>
+        {
+            entity.ToTable("temporary_access_grants");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.UserId, x.ExpiresAtUtc });
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.SourceAccessRequest)
+                .WithMany()
+                .HasForeignKey(x => x.SourceAccessRequestId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

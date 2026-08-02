@@ -18,6 +18,9 @@ import RecentActivitiesWidget, { type DashboardActivity } from "@/components/das
 import ExecutiveAiSummaryWidget from "@/components/dashboard/executive-ai-summary-widget";
 import WorkTaskDashboardWidget from "@/components/tasks/work-task-dashboard-widget";
 
+import { apiClient } from "@/lib/api/api-client";
+import { accessRequestService } from "@/services/access-request.service";
+
 import {
   aiAnalysisService,
   type AIAnalysisItem,
@@ -157,6 +160,8 @@ export default function DashboardPage() {
   const [profitability,setProfitability] =
     useState<ProjectProfitability[]>([]);
 
+  const [pendingAccessRequests, setPendingAccessRequests] = useState(0);
+
   async function loadDashboard() {
     setLoading(true);
     setWarnings([]);
@@ -274,6 +279,34 @@ export default function DashboardPage() {
 
   useEffect(() => {
     void loadDashboard();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void apiClient<{ roles: string[] }>("auth/me")
+      .then((session) => {
+        if (!active) return;
+        if (
+          !session.roles.includes("Admin") &&
+          !session.roles.includes("Genel Müdür")
+        ) {
+          return;
+        }
+        return accessRequestService.getAll(false);
+      })
+      .then((requests) => {
+        if (active && requests) {
+          setPendingAccessRequests(requests.length);
+        }
+      })
+      .catch(() => {
+        if (active) setPendingAccessRequests(0);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const bestProfitProject =
@@ -861,6 +894,7 @@ export default function DashboardPage() {
         openOrders={metrics.openOrders.length}
         criticalStock={metrics.criticalStock.length}
         riskyProjects={metrics.riskyProjects.length}
+        pendingAccessRequests={pendingAccessRequests}
       />
 
       <RecentActivitiesWidget

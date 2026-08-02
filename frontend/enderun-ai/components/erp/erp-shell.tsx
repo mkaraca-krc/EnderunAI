@@ -5,6 +5,7 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { apiClient } from "@/lib/api/api-client";
 import { LogoutButton } from "@/components/logout-button";
+import WorkHourSessionWatcher from "@/components/work-hour-session-watcher";
 
 type ErpShellProps = {
   title: string;
@@ -504,6 +505,11 @@ const groups: MenuGroup[] = [
         href: "/sistem-yonetimi/sirket-ayarlari",
         icon: "⚙",
       },
+      {
+        label: "Erişim Talepleri",
+        href: "/sistem-yonetimi/erisim-talepleri",
+        icon: "⏱",
+      },
     ],
   },
   {
@@ -719,6 +725,7 @@ export default function ErpShell({
 
   return (
     <div className={`erp-layout ${collapsed ? "erp-sidebar-collapsed" : ""}`}>
+      <WorkHourSessionWatcher />
       <aside className="erp-sidebar">
         <Link href="/dashboard" className="erp-brand">
           <span className="erp-brand-mark">

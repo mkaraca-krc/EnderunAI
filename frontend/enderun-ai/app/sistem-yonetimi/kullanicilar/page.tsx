@@ -47,6 +47,7 @@ type UserForm = {
   isActive: boolean;
   allowedPermissions: string[];
   deniedPermissions: string[];
+  workHoursExempt: boolean;
 };
 
 type CredentialNotice = {
@@ -65,6 +66,7 @@ const emptyForm: UserForm = {
   isActive: true,
   allowedPermissions: [],
   deniedPermissions: [],
+  workHoursExempt: false,
 };
 
 function normalized(value?: string | null) {
@@ -280,6 +282,7 @@ export default function UserManagementPage() {
       isActive: user.isActive,
       allowedPermissions: [...user.allowedPermissions],
       deniedPermissions: [...user.deniedPermissions],
+      workHoursExempt: user.workHoursExempt,
     });
     setError("");
     setEditorOpen(true);
@@ -312,6 +315,7 @@ export default function UserManagementPage() {
       allowedPermissions: form.allowedPermissions,
       deniedPermissions: form.deniedPermissions,
       projectSiteIds: requiresSiteSelection ? form.projectSiteIds : [],
+      workHoursExempt: form.workHoursExempt,
       ...(editingUser || !form.password.trim()
         ? {}
         : { password: form.password.trim() }),
@@ -384,6 +388,7 @@ export default function UserManagementPage() {
         allowedPermissions: user.allowedPermissions,
         deniedPermissions: user.deniedPermissions,
         projectSiteIds: user.projectSiteIds,
+        workHoursExempt: user.workHoursExempt,
       });
       setNotice(result.message);
       await loadData();
@@ -643,9 +648,14 @@ export default function UserManagementPage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={user.isActive ? "success" : "danger"}>
-                            {user.isActive ? "Aktif" : "Pasif"}
-                          </Badge>
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant={user.isActive ? "success" : "danger"}>
+                              {user.isActive ? "Aktif" : "Pasif"}
+                            </Badge>
+                            {user.workHoursExempt && (
+                              <Badge variant="info">Mesai istisnası</Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
@@ -921,6 +931,29 @@ export default function UserManagementPage() {
                       </strong>
                       <span className="text-xs text-slate-500">
                         Pasif kullanıcı sisteme giriş yapamaz.
+                      </span>
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-3 rounded-xl border border-slate-200 p-4">
+                    <input
+                      type="checkbox"
+                      checked={form.workHoursExempt}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          workHoursExempt: event.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <span>
+                      <strong className="block text-sm text-slate-950">
+                        Mesai saati istisnası
+                      </strong>
+                      <span className="text-xs text-slate-500">
+                        İşaretlenirse rol bazlı mesai penceresi bu kullanıcı
+                        için uygulanmaz, her zaman giriş yapabilir.
                       </span>
                     </span>
                   </label>

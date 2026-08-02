@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using EnderunAI.Api.Contracts;
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,7 +17,8 @@ public sealed class AuthController(
     PasswordService passwordService,
     TokenService tokenService,
     ILoginAttemptService loginAttemptService,
-    IUserAuthorizationService userAuthorizationService) : ControllerBase
+    IUserAuthorizationService userAuthorizationService,
+    IWorkHourAccessService workHourAccessService) : ControllerBase
 {
     [AllowAnonymous]
     [HttpPost("login")]
@@ -54,6 +56,32 @@ public sealed class AuthController(
             return Unauthorized(new { message = "Kullanıcı adı veya şifre hatalı." });
         }
 
+        var workHourEvaluation = await workHourAccessService.EvaluateAsync(user.Id, cancellationToken);
+        if (!workHourEvaluation.IsAllowed)
+        {
+            db.SecurityAuditEvents.Add(new SecurityAuditEvent
+            {
+                ActorUserId = user.Id,
+                ActorUsername = user.Username,
+                Action = "LoginRejectedOutsideWorkHours",
+                EntityType = "WorkHourAccess",
+                DetailsJson = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    summary = $"{user.Username} mesai saatleri dışında giriş denedi."
+                }),
+                IpAddress = ipAddress,
+                UserAgent = Request.Headers.UserAgent.ToString(),
+                OccurredAtUtc = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync(cancellationToken);
+
+            return StatusCode(403, new
+            {
+                message = workHourEvaluation.Reason,
+                outsideWorkHours = true
+            });
+        }
+
         loginAttemptService.RecordSuccess(ipAddress);
 
         user.LastLoginAtUtc = DateTime.UtcNow;
@@ -82,6 +110,95 @@ public sealed class AuthController(
                 roles = roleNames,
                 permissions
             }
+        });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("access-requests")]
+    public async Task<IActionResult> SubmitAccessRequest(
+        SubmitAccessRequestRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ipAddress = ResolveClientIp();
+
+        if (loginAttemptService.IsLocked(ipAddress, out var remaining))
+        {
+            var minutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+            return StatusCode(429, new
+            {
+                message = $"Çok fazla başarısız giriş denemesi. Lütfen {minutes} dakika sonra tekrar deneyin."
+            });
+        }
+
+        var username = request.Username.Trim().ToLowerInvariant();
+        var user = await db.Users
+            .SingleOrDefaultAsync(item => item.Username.ToLower() == username, cancellationToken);
+
+        if (user is null ||
+            !user.IsActive ||
+            !passwordService.Verify(request.Password, user.PasswordHash, user.PasswordSalt))
+        {
+            loginAttemptService.RecordFailure(ipAddress);
+            return Unauthorized(new { message = "Kullanıcı adı veya şifre hatalı." });
+        }
+
+        loginAttemptService.RecordSuccess(ipAddress);
+
+        var reason = request.Reason.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+            return BadRequest(new { message = "Gerekçe zorunludur." });
+
+        var existingPending = await db.AccessRequests
+            .Where(item => item.UserId == user.Id && item.Status == AccessRequestStatus.Pending)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (existingPending is not null)
+        {
+            return Ok(new
+            {
+                message = "Zaten bekleyen bir erişim talebiniz var, onay bekleniyor.",
+                existingPending.Id
+            });
+        }
+
+        var accessRequest = new AccessRequest
+        {
+            UserId = user.Id,
+            Reason = reason,
+            Status = AccessRequestStatus.Pending
+        };
+        db.AccessRequests.Add(accessRequest);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Erişim talebiniz gönderildi, onay bekleniyor.",
+            accessRequest.Id
+        });
+    }
+
+    [Authorize]
+    [HttpGet("work-hours-status")]
+    public async Task<IActionResult> WorkHoursStatus(CancellationToken cancellationToken)
+    {
+        var idValue =
+            User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+            User.FindFirstValue(JwtRegisteredClaimNames.Sub) ??
+            User.FindFirstValue("sub");
+        if (!Guid.TryParse(idValue, out var userId))
+            return Unauthorized(new { message = "Oturum kullanıcısı doğrulanamadı." });
+
+        var evaluation = await workHourAccessService.EvaluateAsync(userId, cancellationToken);
+        var minutesRemaining = evaluation.WindowEndsAtUtc is null
+            ? (int?)null
+            : Math.Max(0, (int)Math.Ceiling((evaluation.WindowEndsAtUtc.Value - DateTime.UtcNow).TotalMinutes));
+
+        return Ok(new
+        {
+            isAllowed = evaluation.IsAllowed,
+            isExempt = evaluation.IsExempt,
+            windowEndsAtUtc = evaluation.WindowEndsAtUtc,
+            minutesRemaining
         });
     }
 

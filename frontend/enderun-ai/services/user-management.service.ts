@@ -41,6 +41,7 @@ export type ManagedUser = {
   isActive: boolean;
   createdAtUtc: string;
   lastLoginAtUtc?: string | null;
+  workHoursExempt: boolean;
   roleNames: string[];
   roleName: string;
   projectSiteIds: string[];
@@ -60,6 +61,7 @@ export type ManagedUserPayload = {
   deniedPermissions: string[];
   projectSiteIds: string[];
   password?: string;
+  workHoursExempt: boolean;
 };
 
 export type ManagedUserResult = {

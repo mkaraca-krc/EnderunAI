@@ -176,6 +176,98 @@ public sealed class CompanySettingsController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Rol bazlı mesai penceresi yönetimi — Admin ve Genel Müdür rolleri
+    /// hiç satır taşımaz (WorkHourAccessService içinde her zaman
+    /// istisnasız izinli), bu yüzden burada listelenmezler.
+    /// </summary>
+    [HttpGet("work-hour-windows")]
+    [RequirePermission(PermissionCatalog.Keys.CompanySettingsView)]
+    public async Task<IActionResult> GetWorkHourWindows(CancellationToken cancellationToken)
+    {
+        var roles = await db.Roles
+            .AsNoTracking()
+            .Where(role => role.Name != "Admin" && role.Name != "Genel Müdür")
+            .OrderBy(role => role.Name)
+            .Select(role => new { role.Id, role.Name })
+            .ToListAsync(cancellationToken);
+
+        var windowsByRoleId = (await db.RoleWorkHourWindows
+                .AsNoTracking()
+                .OrderBy(w => w.DayOfWeek)
+                .Select(w => new WorkHourWindowDto(w.RoleId, w.DayOfWeek, w.StartTime, w.EndTime))
+                .ToListAsync(cancellationToken))
+            .GroupBy(w => w.RoleId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(w => new WorkHourWindowResponseItem(w.DayOfWeek, w.StartTime, w.EndTime)).ToList());
+
+        var result = roles.Select(role => new
+        {
+            role.Id,
+            role.Name,
+            Windows = windowsByRoleId.TryGetValue(role.Id, out var windows)
+                ? windows
+                : new List<WorkHourWindowResponseItem>()
+        });
+
+        return Ok(result);
+    }
+
+    private sealed record WorkHourWindowDto(Guid RoleId, int DayOfWeek, TimeOnly StartTime, TimeOnly EndTime);
+
+    private sealed record WorkHourWindowResponseItem(int DayOfWeek, TimeOnly StartTime, TimeOnly EndTime);
+
+    [HttpPut("work-hour-windows/{roleId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.CompanySettingsEdit)]
+    public async Task<IActionResult> UpdateWorkHourWindows(
+        Guid roleId,
+        UpdateRoleWorkHourWindowsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var role = await db.Roles.SingleOrDefaultAsync(item => item.Id == roleId, cancellationToken);
+        if (role is null)
+            return NotFound(new { message = "Rol bulunamadı." });
+
+        if (string.Equals(role.Name, "Admin", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(role.Name, "Genel Müdür", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                message = "Admin ve Genel Müdür rolleri için mesai penceresi tanımlanamaz, her zaman açıktır."
+            });
+        }
+
+        foreach (var window in request.Windows)
+        {
+            if (window.DayOfWeek is < 0 or > 6)
+                return BadRequest(new { message = "Geçersiz gün değeri." });
+
+            if (window.EndTime <= window.StartTime)
+                return BadRequest(new { message = "Bitiş saati başlangıç saatinden sonra olmalıdır." });
+        }
+
+        var existing = await db.RoleWorkHourWindows
+            .Where(item => item.RoleId == roleId)
+            .ToListAsync(cancellationToken);
+        db.RoleWorkHourWindows.RemoveRange(existing);
+
+        foreach (var window in request.Windows)
+        {
+            db.RoleWorkHourWindows.Add(new RoleWorkHourWindow
+            {
+                RoleId = roleId,
+                DayOfWeek = window.DayOfWeek,
+                StartTime = window.StartTime,
+                EndTime = window.EndTime
+            });
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { message = $"{role.Name} rolünün mesai penceresi güncellendi." });
+    }
+
     private async Task<Company?> GetPrimaryCompanyAsync(
         CancellationToken cancellationToken,
         bool tracking = false)

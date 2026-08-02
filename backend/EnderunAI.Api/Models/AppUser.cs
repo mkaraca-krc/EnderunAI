@@ -11,5 +11,13 @@ public sealed class AppUser
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAtUtc { get; set; }
+
+    /// <summary>
+    /// Kullanıcı bazlı kalıcı istisna: true ise rol bazlı mesai penceresi
+    /// bu kullanıcı için hiç uygulanmaz (Admin/Genel Müdür zaten kod
+    /// içinde her zaman istisnadır, bu alan DİĞER roller için).
+    /// </summary>
+    public bool WorkHoursExempt { get; set; } = false;
+
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 }
