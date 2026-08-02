@@ -37,7 +37,31 @@ public sealed class Project : BaseEntity
     public decimal? ContractAmount { get; set; }
 
     public string CurrencyCode { get; set; } = "TRY";
-    public decimal VatRate { get; set; } = 20;
+    public decimal VatRate { get; set; }
+
+    /// <summary>
+    /// Sözleşme/proje artış yüzdesi.
+    /// Örnek: yüzde 10 için 10.00.
+    /// </summary>
+    public decimal IncreaseRate { get; set; }
+
+    /// <summary>
+    /// Nakit teminat kesintisi yüzdesi.
+    /// Örnek: yüzde 5 için 5.00.
+    /// </summary>
+    public decimal CashRetentionRate { get; set; }
+
+    /// <summary>
+    /// Stopaj kesintisi yüzdesi.
+    /// Örnek: yüzde 3 için 3.00.
+    /// </summary>
+    public decimal WithholdingTaxRate { get; set; }
+
+    /// <summary>
+    /// Malzeme kesintisi yüzdesi.
+    /// Örnek: yüzde 10 için 10.00.
+    /// </summary>
+    public decimal MaterialDeductionRate { get; set; }
     public string? WithholdingRate { get; set; }
 
     public DateTime? PlannedStartDate { get; set; }

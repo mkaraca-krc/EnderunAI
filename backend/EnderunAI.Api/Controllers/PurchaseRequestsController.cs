@@ -1,6 +1,7 @@
 using EnderunAI.Api.Contracts.Purchasing;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +11,9 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/purchase-requests")]
-public sealed class PurchaseRequestsController(AppDbContext db) : ControllerBase
+public sealed class PurchaseRequestsController(
+    AppDbContext db,
+    IDocumentNumberService documentNumbers) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetAll(
@@ -131,7 +134,7 @@ public sealed class PurchaseRequestsController(AppDbContext db) : ControllerBase
         CancellationToken cancellationToken)
     {
         var validation = ValidateRequest(
-            request.RequestNumber,
+            "AUTO",
             request.RequestedByName,
             request.Priority,
             request.Items);
@@ -155,20 +158,11 @@ public sealed class PurchaseRequestsController(AppDbContext db) : ControllerBase
             });
         }
 
-        var requestNumber = request.RequestNumber.Trim().ToUpperInvariant();
-
-        var numberExists = await db.PurchaseRequests.AnyAsync(
-            x => x.CompanyId == request.CompanyId &&
-                 x.RequestNumber == requestNumber,
+        var requestNumber = await documentNumbers.GenerateAsync(
+            request.CompanyId,
+            "PURCHASE_REQUEST",
+            "PR",
             cancellationToken);
-
-        if (numberExists)
-        {
-            return Conflict(new
-            {
-                message = "Bu satın alma talep numarası zaten kullanılıyor."
-            });
-        }
 
         var entity = new PurchaseRequest
         {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import {
@@ -11,6 +11,7 @@ import {
   CardContent,
   CardHeader,
   EmptyState,
+  Input,
   Table,
   TableBody,
   TableCell,
@@ -22,6 +23,11 @@ import {
   PurchaseRequestDetail,
   purchaseRequestService,
 } from "@/services/purchase-request.service";
+import {
+  currentAccountService,
+  type CurrentAccountListItem,
+} from "@/services/current-account.service";
+import { rfqService } from "@/services/rfq.service";
 
 const statusLabels: Record<number, string> = {
   0: "Taslak",
@@ -61,7 +67,15 @@ function formatDate(value?: string | null) {
 
 export default function PurchaseRequestDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
+
   const [item, setItem] = useState<PurchaseRequestDetail | null>(null);
+  const [suppliers, setSuppliers] = useState<CurrentAccountListItem[]>([]);
+  const [showRfqForm, setShowRfqForm] = useState(false);
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>([]);
+  const [rfqTitle, setRfqTitle] = useState("");
+  const [rfqDeadline, setRfqDeadline] = useState("");
+  const [creatingRfq, setCreatingRfq] = useState(false);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
@@ -74,7 +88,22 @@ export default function PurchaseRequestDetailPage() {
     setError("");
 
     try {
-      setItem(await purchaseRequestService.getById(params.id));
+      const detail = await purchaseRequestService.getById(params.id);
+      setItem(detail);
+
+      const accountRows = await currentAccountService.getAll(detail.companyId);
+
+      setSuppliers(
+        accountRows.filter(
+          (account) =>
+            account.status === 2 &&
+            (account.roles & 2) === 2
+        )
+      );
+
+      setRfqTitle(
+        `${detail.requestNumber} Satın Alma Teklif Talebi`
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -122,6 +151,52 @@ export default function PurchaseRequestDetailPage() {
       );
     } finally {
       setProcessing(false);
+    }
+  }
+
+  function toggleSupplier(supplierId: string) {
+    setSelectedSupplierIds((current) =>
+      current.includes(supplierId)
+        ? current.filter((id) => id !== supplierId)
+        : [...current, supplierId]
+    );
+  }
+
+  async function createRfq() {
+    if (!item) return;
+
+    if (selectedSupplierIds.length === 0) {
+      setError("En az bir tedarikçi seçmelisiniz.");
+      return;
+    }
+
+    setCreatingRfq(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const result = await rfqService.createFromPurchaseRequest(
+        item.id,
+        {
+          title: rfqTitle.trim(),
+          responseDeadline: rfqDeadline || null,
+          currency: "TRY",
+          description:
+            `${item.requestNumber} numaralı satın alma talebinden oluşturuldu.`,
+          notes: null,
+          supplierCurrentAccountIds: selectedSupplierIds,
+        }
+      );
+
+      router.push(`/satin-alma/rfq/${result.id}`);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "RFQ oluşturulamadı."
+      );
+    } finally {
+      setCreatingRfq(false);
     }
   }
 
@@ -209,6 +284,28 @@ export default function PurchaseRequestDetailPage() {
                     </Button>
                   )}
 
+                  {item.status === 2 && (
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        setShowRfqForm((value) => !value)
+                      }
+                    >
+                      {showRfqForm
+                        ? "RFQ Formunu Kapat"
+                        : "RFQ Oluştur"}
+                    </Button>
+                  )}
+
+                  {item.status === 3 && (
+                    <Link
+                      href="/satin-alma/rfq"
+                      className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      RFQ Listesini Aç
+                    </Link>
+                  )}
+
                   {![5, 6, 7].includes(item.status) && (
                     <Button
                       variant="danger"
@@ -222,6 +319,118 @@ export default function PurchaseRequestDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {showRfqForm && item.status === 2 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    RFQ Oluştur
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Teklif talebi gönderilecek tedarikçileri seçin
+                  </p>
+                </div>
+              </CardHeader>
+
+              <CardContent>
+                <div className="grid gap-5 md:grid-cols-2">
+                  <Input
+                    label="RFQ Başlığı"
+                    required
+                    value={rfqTitle}
+                    onChange={(event) =>
+                      setRfqTitle(event.target.value)
+                    }
+                  />
+
+                  <Input
+                    label="Cevap Son Tarihi"
+                    type="date"
+                    value={rfqDeadline}
+                    onChange={(event) =>
+                      setRfqDeadline(event.target.value)
+                    }
+                  />
+                </div>
+
+                <div className="mt-6">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="font-semibold text-slate-900">
+                      Tedarikçiler
+                    </h3>
+                    <span className="text-sm text-slate-500">
+                      {selectedSupplierIds.length} seçili
+                    </span>
+                  </div>
+
+                  {suppliers.length === 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+                      Onaylı ve tedarikçi rolüne sahip cari kart bulunamadı.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {suppliers.map((supplier) => {
+                        const selected =
+                          selectedSupplierIds.includes(supplier.id);
+
+                        return (
+                          <button
+                            key={supplier.id}
+                            type="button"
+                            onClick={() =>
+                              toggleSupplier(supplier.id)
+                            }
+                            className={`rounded-xl border p-4 text-left transition ${
+                              selected
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-200 bg-white hover:border-slate-400"
+                            }`}
+                          >
+                            <strong className="block">
+                              {supplier.title}
+                            </strong>
+                            <span
+                              className={`mt-1 block text-sm ${
+                                selected
+                                  ? "text-slate-300"
+                                  : "text-slate-500"
+                              }`}
+                            >
+                              {supplier.code}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex justify-end gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setShowRfqForm(false)}
+                    >
+                      Vazgeç
+                    </Button>
+
+                    <Button
+                      type="button"
+                      loading={creatingRfq}
+                      disabled={
+                        suppliers.length === 0 ||
+                        selectedSupplierIds.length === 0 ||
+                        !rfqTitle.trim()
+                      }
+                      onClick={createRfq}
+                    >
+                      RFQ Oluştur
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="mb-6 grid gap-6 xl:grid-cols-3">
             <Card className="xl:col-span-2">

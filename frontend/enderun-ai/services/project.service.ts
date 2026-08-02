@@ -13,6 +13,12 @@ export type ProjectListItem = {
   contractNumber?: string | null;
   contractAmount?: number | null;
   currencyCode: string;
+  vatRate: number;
+  withholdingRate?: string | null;
+  increaseRate: number;
+  cashRetentionRate: number;
+  withholdingTaxRate: number;
+  materialDeductionRate: number;
   status: number;
   healthStatus: number;
   warehouseCount: number;
@@ -30,6 +36,29 @@ export type CreateProjectRequest = {
   currencyCode: string;
   vatRate: number;
   withholdingRate?: string | null;
+  increaseRate: number;
+  cashRetentionRate: number;
+  withholdingTaxRate: number;
+  materialDeductionRate: number;
+  plannedStartDate?: string | null;
+  plannedEndDate?: string | null;
+  city?: string | null;
+  district?: string | null;
+  address?: string | null;
+};
+
+export type UpdateProjectRequest = {
+  name: string;
+  contractNumber?: string | null;
+  contractDate?: string | null;
+  contractAmount?: number | null;
+  currencyCode: string;
+  vatRate: number;
+  withholdingRate?: string | null;
+  increaseRate: number;
+  cashRetentionRate: number;
+  withholdingTaxRate: number;
+  materialDeductionRate: number;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   city?: string | null;
@@ -53,6 +82,13 @@ export const projectService = {
   create(payload: CreateProjectRequest) {
     return apiClient("projects", {
       method: "POST",
+      body: payload,
+    });
+  },
+
+  update(id: string, payload: UpdateProjectRequest) {
+    return apiClient(`projects/${id}`, {
+      method: "PUT",
       body: payload,
     });
   },

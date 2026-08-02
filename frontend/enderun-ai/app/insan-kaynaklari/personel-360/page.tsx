@@ -1,0 +1,480 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import ErpShell from "@/components/erp/erp-shell";
+import { personnelService } from "@/services/personnel.service";
+import {
+  personnel360Service,
+  type Personnel360Response,
+} from "@/services/personnel-360.service";
+
+type PersonnelOption = {
+  id: string;
+  employeeNumber: string;
+  fullName: string;
+  companyId: string;
+  isActive: boolean;
+};
+
+type TabKey =
+  | "genel"
+  | "puantaj"
+  | "zimmet"
+  | "egitim"
+  | "belgeler"
+  | "kariyer"
+  | "performans"
+  | "disiplin";
+
+const tabs: Array<{ key: TabKey; label: string }> = [
+  { key: "genel", label: "Genel" },
+  { key: "puantaj", label: "Puantaj" },
+  { key: "zimmet", label: "Zimmet" },
+  { key: "egitim", label: "Eğitim" },
+  { key: "belgeler", label: "Sertifikalar" },
+  { key: "kariyer", label: "Kariyer" },
+  { key: "performans", label: "Performans" },
+  { key: "disiplin", label: "Disiplin" },
+];
+
+function date(value?: string | null) {
+  return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
+}
+
+function money(value?: number | null, currency = "TRY") {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(Number(value ?? 0));
+}
+
+function riskTone(level: string) {
+  if (level === "High") return { bg: "#fef2f2", border: "#fecaca", text: "#b91c1c", label: "Yüksek" };
+  if (level === "Medium") return { bg: "#fffbeb", border: "#fde68a", text: "#b45309", label: "Orta" };
+  return { bg: "#ecfdf5", border: "#a7f3d0", text: "#047857", label: "Düşük" };
+}
+
+function alertTone(severity: string) {
+  if (severity === "High") return { bg: "#fef2f2", border: "#fecaca", text: "#b91c1c" };
+  if (severity === "Medium") return { bg: "#fffbeb", border: "#fde68a", text: "#b45309" };
+  return { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8" };
+}
+
+export default function Personnel360Page() {
+  const [personnel, setPersonnel] = useState<PersonnelOption[]>([]);
+  const [personnelId, setPersonnelId] = useState("");
+  const [search, setSearch] = useState("");
+  const [data, setData] = useState<Personnel360Response | null>(null);
+  const [tab, setTab] = useState<TabKey>("genel");
+  const [loading, setLoading] = useState(true);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [error, setError] = useState("");
+
+  const filteredPersonnel = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase("tr-TR");
+    return personnel.filter((x) => {
+      if (!term) return true;
+      return `${x.employeeNumber} ${x.fullName}`
+        .toLocaleLowerCase("tr-TR")
+        .includes(term);
+    });
+  }, [personnel, search]);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const result = await personnelService.getAll();
+        const options = (result as PersonnelOption[]).filter((x) => x.isActive !== false);
+        setPersonnel(options);
+        if (options.length) setPersonnelId(options[0].id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Personeller yüklenemedi.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void load();
+  }, []);
+
+  useEffect(() => {
+    if (!personnelId) return;
+
+    async function loadDetail() {
+      setLoadingDetail(true);
+      setError("");
+
+      try {
+        const result = await personnel360Service.get(personnelId);
+        setData(result);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Personel 360 verileri yüklenemedi.");
+      } finally {
+        setLoadingDetail(false);
+      }
+    }
+
+    void loadDetail();
+  }, [personnelId]);
+
+  const activeAssignment = data?.assignments.find((x) => x.isActive && x.isPrimaryAssignment)
+    ?? data?.assignments.find((x) => x.isActive);
+
+  const timeline = useMemo(() => {
+    if (!data) return [];
+
+    const rows = [
+      ...data.careerHistory.map((x) => ({
+        date: x.effectiveDate,
+        title: x.actionTypeName,
+        detail: x.reason || x.notes || "Kariyer işlemi",
+        type: "Kariyer",
+      })),
+      ...data.assets.map((x) => ({
+        date: x.assignmentDate,
+        title: `${x.assetCode} · ${x.assetName}`,
+        detail: x.serialNumber ? `Seri No: ${x.serialNumber}` : x.statusName,
+        type: "Zimmet",
+      })),
+      ...data.trainings.map((x) => ({
+        date: x.completedAtUtc || x.plannedStartDate,
+        title: "Eğitim kaydı",
+        detail: x.trainerName || x.locationName || x.statusName,
+        type: "Eğitim",
+      })),
+      ...data.performanceReviews.map((x) => ({
+        date: `${x.year}-${String(Math.min(12, Math.max(1, x.periodNumber))).padStart(2, "0")}-01`,
+        title: `${x.periodName} performans`,
+        detail: `Puan: ${x.overallScore}`,
+        type: "Performans",
+      })),
+      ...data.disciplinaryRecords.map((x) => ({
+        date: x.incidentDate,
+        title: x.subject,
+        detail: x.statusName,
+        type: "Disiplin",
+      })),
+    ];
+
+    return rows
+      .filter((x) => x.date)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 18);
+  }, [data]);
+
+  return (
+    <ErpShell title="Personel 360°">
+      <main style={{ padding: 24, display: "grid", gap: 18 }}>
+        <section style={topBar}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 28 }}>Personel 360°</h1>
+            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+              Personelin tüm İK, performans, zimmet ve risk bilgileri tek ekranda.
+            </p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "220px 320px", gap: 10 }}>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Sicil veya personel ara..."
+              style={input}
+            />
+            <select
+              value={personnelId}
+              onChange={(e) => setPersonnelId(e.target.value)}
+              style={input}
+              disabled={loading}
+            >
+              <option value="">Personel seçiniz</option>
+              {filteredPersonnel.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.employeeNumber} · {x.fullName}
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
+
+        {error && <div style={errorBox}>{error}</div>}
+
+        {loadingDetail && <div style={loadingBox}>Personel 360 verileri hazırlanıyor...</div>}
+
+        {!loadingDetail && data && (
+          <>
+            <section style={{ display: "grid", gridTemplateColumns: "300px minmax(0,1fr)", gap: 18 }}>
+              <aside style={card}>
+                <div style={avatar}>
+                  {data.profile.firstName?.[0] ?? ""}
+                  {data.profile.lastName?.[0] ?? ""}
+                </div>
+                <h2 style={{ margin: "14px 0 4px", textAlign: "center" }}>
+                  {data.profile.fullName}
+                </h2>
+                <div style={{ textAlign: "center", color: "#64748b" }}>
+                  {data.profile.jobTitle || data.profile.profession || "Görev belirtilmemiş"}
+                </div>
+
+                <div style={{ marginTop: 18, display: "grid", gap: 10 }}>
+                  <Info label="Sicil No" value={data.profile.employeeNumber} />
+                  <Info label="Durum" value={data.profile.statusName} />
+                  <Info label="Telefon" value={data.profile.phone || "—"} />
+                  <Info label="E-posta" value={data.profile.email || "—"} />
+                  <Info label="İşe Giriş" value={date(data.profile.employmentStartDate)} />
+                  <Info label="Aktif Rol" value={activeAssignment?.role || "—"} />
+                </div>
+              </aside>
+
+              <div style={{ display: "grid", gap: 18 }}>
+                <section style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12 }}>
+                  <Kpi label="Toplam Saat" value={`${data.attendance.totalHours}`} sub="Seçilen dönem" />
+                  <Kpi label="Fazla Mesai" value={`${data.attendance.overtimeHours}`} sub="Saat" />
+                  <Kpi label="Aktif Zimmet" value={`${data.humanResources.activeAssetCount}`} sub="Ekipman" />
+                  <Kpi label="İzin" value={`${data.humanResources.approvedLeaveDays}`} sub="Onaylı gün" />
+                  <Kpi label="Eğitim" value={`${data.humanResources.completedTrainingCount}`} sub="Tamamlanan" />
+                  <Kpi label="Sertifika" value={`${data.humanResources.validCertificateCount}`} sub="Geçerli" />
+                  <Kpi label="Performans" value={`${data.humanResources.latestPerformanceScore ?? "—"}`} sub="Son puan" />
+                  <Kpi label="AI Risk" value={`${data.analysis.riskScore}/100`} sub={riskTone(data.analysis.riskLevel).label} />
+                </section>
+
+                <section style={{ ...card, padding: 0, overflow: "hidden" }}>
+                  <div style={tabBar}>
+                    {tabs.map((x) => (
+                      <button
+                        key={x.key}
+                        type="button"
+                        onClick={() => setTab(x.key)}
+                        style={{
+                          ...tabButton,
+                          ...(tab === x.key ? activeTabButton : {}),
+                        }}
+                      >
+                        {x.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ padding: 18 }}>
+                    <TabContent tab={tab} data={data} />
+                  </div>
+                </section>
+              </div>
+            </section>
+
+            <section style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 380px", gap: 18 }}>
+              <div style={card}>
+                <h3 style={{ marginTop: 0 }}>Zaman Çizelgesi</h3>
+                {timeline.length === 0 ? (
+                  <Empty text="Zaman çizelgesi verisi bulunmuyor." />
+                ) : (
+                  <div style={{ display: "grid", gap: 12 }}>
+                    {timeline.map((x, index) => (
+                      <div key={`${x.type}-${x.date}-${index}`} style={timelineRow}>
+                        <div style={timelineDot} />
+                        <div>
+                          <div style={{ fontSize: 12, color: "#64748b" }}>
+                            {date(x.date)} · {x.type}
+                          </div>
+                          <strong>{x.title}</strong>
+                          <div style={{ marginTop: 3, color: "#475569" }}>{x.detail}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <aside style={{ display: "grid", gap: 14, alignContent: "start" }}>
+                <div
+                  style={{
+                    ...card,
+                    background: riskTone(data.analysis.riskLevel).bg,
+                    borderColor: riskTone(data.analysis.riskLevel).border,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <h3 style={{ margin: 0 }}>AI Yönetici Özeti</h3>
+                    <strong style={{ color: riskTone(data.analysis.riskLevel).text }}>
+                      {riskTone(data.analysis.riskLevel).label} Risk
+                    </strong>
+                  </div>
+                  <p style={{ color: "#334155", lineHeight: 1.55 }}>
+                    {data.analysis.summary}
+                  </p>
+
+                  <h4 style={{ marginBottom: 8 }}>Olumlu Bulgular</h4>
+                  {data.analysis.positiveFindings.map((x, i) => (
+                    <div key={i} style={finding}>✓ {x}</div>
+                  ))}
+
+                  <h4 style={{ marginBottom: 8 }}>Dikkat Edilecekler</h4>
+                  {data.analysis.attentionPoints.map((x, i) => (
+                    <div key={i} style={attention}>! {x}</div>
+                  ))}
+                </div>
+
+                <div style={card}>
+                  <h3 style={{ marginTop: 0 }}>Aktif Uyarılar</h3>
+                  {data.alerts.length === 0 ? (
+                    <Empty text="Aktif uyarı bulunmuyor." />
+                  ) : (
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {data.alerts.slice(0, 8).map((x, i) => {
+                        const tone = alertTone(x.severity);
+                        return (
+                          <div key={`${x.code}-${i}`} style={{ padding: 11, borderRadius: 10, background: tone.bg, border: `1px solid ${tone.border}`, color: tone.text }}>
+                            <strong>{x.title}</strong>
+                            <div style={{ marginTop: 4, fontSize: 13 }}>{x.description}</div>
+                            {x.dueDate && <div style={{ marginTop: 5, fontSize: 12 }}>Tarih: {date(x.dueDate)}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </aside>
+            </section>
+          </>
+        )}
+      </main>
+    </ErpShell>
+  );
+}
+
+function TabContent({ tab, data }: { tab: TabKey; data: Personnel360Response }) {
+  if (tab === "genel") {
+    return (
+      <div style={grid2}>
+        <Info label="Meslek" value={data.profile.profession || "—"} />
+        <Info label="SGK Sicil" value={data.profile.sgkRegistrationNumber || "—"} />
+        <Info label="Doğum Tarihi" value={date(data.profile.birthDate)} />
+        <Info label="Adres" value={data.profile.address || "—"} />
+        <Info label="Güncel Net Ücret" value={money(data.financial.currentNetSalary, data.financial.currencyCode)} />
+        <Info label="Son Bordro" value={money(data.financial.lastPayrollNetAmount, data.financial.currencyCode)} />
+      </div>
+    );
+  }
+
+  if (tab === "puantaj") {
+    return (
+      <div style={grid2}>
+        <Info label="Kayıt Sayısı" value={String(data.attendance.recordCount)} />
+        <Info label="Onaylı Kayıt" value={String(data.attendance.approvedRecordCount)} />
+        <Info label="Normal Saat" value={String(data.attendance.normalHours)} />
+        <Info label="Gece Mesaisi" value={String(data.attendance.nightShiftHours)} />
+        <Info label="Pazar Mesaisi" value={String(data.attendance.sundayHours)} />
+        <Info label="Resmî Tatil" value={String(data.attendance.publicHolidayHours)} />
+      </div>
+    );
+  }
+
+  if (tab === "zimmet") {
+    return <SimpleRows rows={data.assets.map((x) => ({
+      title: `${x.assetCode} · ${x.assetName}`,
+      detail: `${x.assetType} · Seri: ${x.serialNumber || "—"} · ${x.statusName}`,
+      date: x.assignmentDate,
+    }))} empty="Zimmet kaydı bulunmuyor." />;
+  }
+
+  if (tab === "egitim") {
+    return <SimpleRows rows={data.trainings.map((x) => ({
+      title: x.trainerName || "Eğitim",
+      detail: `${x.locationName || "Konum yok"} · ${x.statusName}${x.examScore != null ? ` · Puan: ${x.examScore}` : ""}`,
+      date: x.completedAtUtc || x.plannedStartDate,
+    }))} empty="Eğitim kaydı bulunmuyor." />;
+  }
+
+  if (tab === "belgeler") {
+    return <SimpleRows rows={data.certificates.map((x) => ({
+      title: x.certificateNumber || "Sertifika",
+      detail: `${x.issuingAuthority || "Kurum belirtilmemiş"} · ${x.statusName} · ${x.isVerified ? "Doğrulanmış" : "Doğrulanmamış"}`,
+      date: x.expiryDate || x.issueDate,
+    }))} empty="Sertifika kaydı bulunmuyor." />;
+  }
+
+  if (tab === "kariyer") {
+    return <SimpleRows rows={data.careerHistory.map((x) => ({
+      title: x.actionTypeName,
+      detail: x.reason || x.notes || "Kariyer işlemi",
+      date: x.effectiveDate,
+    }))} empty="Kariyer geçmişi bulunmuyor." />;
+  }
+
+  if (tab === "performans") {
+    return <SimpleRows rows={data.performanceReviews.map((x) => ({
+      title: `${x.year} · ${x.periodName}`,
+      detail: `Genel puan: ${x.overallScore} · Yönetici: ${x.managerName || "—"} · ${x.statusName}`,
+      date: `${x.year}-${String(Math.min(12, Math.max(1, x.periodNumber))).padStart(2, "0")}-01`,
+    }))} empty="Performans değerlendirmesi bulunmuyor." />;
+  }
+
+  return <SimpleRows rows={data.disciplinaryRecords.map((x) => ({
+    title: x.subject,
+    detail: `${x.statusName} · ${x.decisionText || x.incidentDescription}`,
+    date: x.incidentDate,
+  }))} empty="Disiplin kaydı bulunmuyor." />;
+}
+
+function SimpleRows({
+  rows,
+  empty,
+}: {
+  rows: Array<{ title: string; detail: string; date: string }>;
+  empty: string;
+}) {
+  if (!rows.length) return <Empty text={empty} />;
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {rows.map((x, i) => (
+        <div key={`${x.title}-${i}`} style={listRow}>
+          <div>
+            <strong>{x.title}</strong>
+            <div style={{ marginTop: 4, color: "#64748b" }}>{x.detail}</div>
+          </div>
+          <span style={{ color: "#64748b", whiteSpace: "nowrap" }}>{date(x.date)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Kpi({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div style={kpi}>
+      <div style={{ color: "#64748b", fontSize: 13, fontWeight: 800 }}>{label}</div>
+      <div style={{ marginTop: 7, fontSize: 25, fontWeight: 900, color: "#0f172a" }}>{value}</div>
+      <div style={{ marginTop: 4, color: "#64748b", fontSize: 12 }}>{sub}</div>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: "grid", gap: 3 }}>
+      <span style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{label}</span>
+      <strong style={{ color: "#0f172a" }}>{value}</strong>
+    </div>
+  );
+}
+
+function Empty({ text }: { text: string }) {
+  return <div style={{ padding: 22, textAlign: "center", color: "#64748b" }}>{text}</div>;
+}
+
+const input = { minHeight: 42, border: "1px solid #cbd5e1", borderRadius: 10, padding: "8px 11px", background: "#fff", color: "#0f172a" } as const;
+const card = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 18, boxShadow: "0 8px 24px rgba(15,23,42,.05)" } as const;
+const topBar = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18, flexWrap: "wrap", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 18 } as const;
+const avatar = { width: 92, height: 92, margin: "0 auto", borderRadius: "50%", display: "grid", placeItems: "center", background: "#0f766e", color: "#fff", fontSize: 30, fontWeight: 900 } as const;
+const kpi = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 15, boxShadow: "0 5px 18px rgba(15,23,42,.04)" } as const;
+const tabBar = { display: "flex", gap: 2, padding: 8, overflowX: "auto", borderBottom: "1px solid #e2e8f0", background: "#f8fafc" } as const;
+const tabButton = { minHeight: 38, border: 0, borderRadius: 9, padding: "0 13px", background: "transparent", color: "#475569", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" } as const;
+const activeTabButton = { background: "#0f766e", color: "#fff" } as const;
+const grid2 = { display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 16 } as const;
+const listRow = { display: "flex", justifyContent: "space-between", gap: 16, padding: 13, border: "1px solid #e2e8f0", borderRadius: 11, background: "#f8fafc" } as const;
+const timelineRow = { position: "relative", display: "grid", gridTemplateColumns: "14px minmax(0,1fr)", gap: 12, paddingBottom: 12 } as const;
+const timelineDot = { width: 12, height: 12, marginTop: 5, borderRadius: "50%", background: "#0f766e", boxShadow: "0 0 0 4px #ccfbf1" } as const;
+const finding = { marginTop: 7, padding: 9, borderRadius: 9, background: "rgba(255,255,255,.7)", color: "#166534" } as const;
+const attention = { marginTop: 7, padding: 9, borderRadius: 9, background: "rgba(255,255,255,.7)", color: "#9a3412" } as const;
+const errorBox = { padding: 14, borderRadius: 12, background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", fontWeight: 800 } as const;
+const loadingBox = { padding: 28, textAlign: "center", borderRadius: 14, background: "#fff", border: "1px solid #e2e8f0", color: "#64748b" } as const;

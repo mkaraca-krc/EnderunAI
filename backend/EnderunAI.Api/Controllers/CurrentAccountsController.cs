@@ -43,6 +43,7 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
                 x.AuthorizedPerson,
                 x.Phone,
                 x.Email,
+                x.Address,
                 x.PaymentTerm,
                 x.CreditLimit,
                 x.IsActive
@@ -50,6 +51,87 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
             .ToListAsync(cancellationToken);
 
         return Ok(items);
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetById(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var item = await db.CurrentAccounts
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new
+            {
+                x.Id,
+                x.CompanyId,
+                CompanyName = x.Company.Name,
+                x.Code,
+                x.Title,
+                x.ShortName,
+                x.Roles,
+                x.Status,
+                x.TaxOffice,
+                x.TaxNumber,
+                x.AuthorizedPerson,
+                x.Phone,
+                x.Email,
+                x.Address,
+                x.PaymentTerm,
+                x.CreditLimit,
+                x.IsActive
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (item is null)
+            return NotFound(new { message = "Cari kart bulunamadı." });
+
+        return Ok(item);
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Update(
+        Guid id,
+        CreateCurrentAccountRequest request,
+        CancellationToken cancellationToken)
+    {
+        var entity = await db.CurrentAccounts
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (entity is null)
+            return NotFound(new { message = "Cari kart bulunamadı." });
+
+        if (string.IsNullOrWhiteSpace(request.Title))
+            return BadRequest(new { message = "Cari ünvanı zorunludur." });
+
+        if (request.Roles <= 0)
+            return BadRequest(new { message = "En az bir cari rolü seçilmelidir." });
+
+        /*
+         * Cari kodu ve şirket alanı düzenleme sırasında bilinçli olarak
+         * değiştirilmez. Muhasebe ve hareket bütünlüğü korunur.
+         */
+        entity.Title = request.Title.Trim();
+        entity.ShortName = request.ShortName?.Trim();
+        entity.Roles = (CurrentAccountRoles)request.Roles;
+        entity.TaxOffice = request.TaxOffice?.Trim();
+        entity.TaxNumber = request.TaxNumber?.Trim();
+        entity.AuthorizedPerson = request.AuthorizedPerson?.Trim();
+        entity.Phone = request.Phone?.Trim();
+        entity.Email = request.Email?.Trim();
+        entity.Address = request.Address?.Trim();
+        entity.PaymentTerm = request.PaymentTerm?.Trim();
+        entity.CreditLimit = request.CreditLimit;
+        entity.UpdatedAtUtc = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Cari kart güncellendi.",
+            entity.Id,
+            entity.Status
+        });
     }
 
     [HttpPost]

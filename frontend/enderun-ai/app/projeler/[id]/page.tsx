@@ -6,6 +6,46 @@ import { useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { projectService } from "@/services/project.service";
 
+import {
+  projectProfitabilityService,
+  type ProjectProfitability,
+} from "@/services/project-profitability.service";
+
+import {
+  projectDailyReportService,
+  type ProjectDailyReport,
+} from "@/services/project-daily-report.service";
+
+import {
+  projectSiteAnalysisService,
+  type ProjectSiteAnalysisResponse,
+} from "@/services/project-site-analysis.service";
+
+import {
+  projectSiteService,
+  type ProjectSiteListItem,
+} from "@/services/project-site.service";
+
+import {
+  projectCostService,
+  ProjectCostType,
+  projectCostTypeLabels,
+  type ProjectCostBreakdown,
+} from "@/services/project-cost.service";
+
+import {
+  projectLaborCostService,
+  type ProjectLaborCostBreakdown,
+} from "@/services/project-labor-cost.service";
+
+import {
+  personnelService,
+  type PersonnelListItem,
+} from "@/services/personnel.service";
+
+
+
+
 type Warehouse = {
   id: string;
   code: string;
@@ -27,6 +67,10 @@ type ProjectDetail = {
   currencyCode: string;
   vatRate: number;
   withholdingRate?: string | null;
+  increaseRate: number;
+  cashRetentionRate: number;
+  withholdingTaxRate: number;
+  materialDeductionRate: number;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   city?: string | null;
@@ -41,8 +85,9 @@ const modules = [
   { label: "Hakedişler", href: "/hakedis", icon: "▧", text: "Hakediş kayıtları ve kontrolleri" },
   { label: "Satın Alma", href: "/satin-alma", icon: "⌑", text: "Malzeme talepleri ve teklifler" },
   { label: "Personel", href: "/personel", icon: "♙", text: "Projeye bağlı personel" },
-  { label: "Depolar", href: "/depo", icon: "⌂", text: "Şantiye deposu ve stoklar" },
+  { label: "Depo & Stok", href: "/depo-stok", icon: "⌂", text: "Şantiye deposu ve stoklar" },
   { label: "Finans", href: "/finans", icon: "₺", text: "Proje finansal görünümü" },
+  { label: "Kesinti Politikası", href: "kesintiler", icon: "%", text: "Hakediş otomatik kesinti kuralları" },
   { label: "Dokümanlar", href: "/dokumanlar", icon: "□", text: "Sözleşme ve proje evrakları" },
   { label: "AI Analizleri", href: "/ai-asistan", icon: "⌘", text: "Risk, eksik ve öneriler" },
 ];
@@ -60,26 +105,280 @@ function formatMoney(value?: number | null, currency = "TRY") {
       }).format(value);
 }
 
+function formatPercentage(value?: number | null) {
+  return `%${new Intl.NumberFormat("tr-TR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  }).format(value ?? 0)}`;
+}
+
 export default function ProjectCenterPage() {
   const params = useParams<{ id: string }>();
   const [project, setProject] = useState<ProjectDetail | null>(null);
+
+  const [profitability, setProfitability] =
+    useState<ProjectProfitability | null>(null);
+
+  const [dailyReports, setDailyReports] =
+    useState<ProjectDailyReport[]>([]);
+
+
+  const [siteAnalysis, setSiteAnalysis] =
+    useState<ProjectSiteAnalysisResponse | null>(null);
+
+  const [sites, setSites] = useState<ProjectSiteListItem[]>([]);
+  const [breakdown, setBreakdown] = useState<ProjectCostBreakdown | null>(null);
+
+  const [costSaving, setCostSaving] = useState(false);
+  const [costError, setCostError] = useState("");
+  const [costForm, setCostForm] = useState({
+    projectSiteId: "",
+    costType: ProjectCostType.Material,
+    costDate: new Date().toISOString().slice(0, 10),
+    amount: 0,
+    description: "",
+  });
+
+  const [projectPersonnel, setProjectPersonnel] = useState<PersonnelListItem[]>([]);
+  const [laborBreakdown, setLaborBreakdown] =
+    useState<ProjectLaborCostBreakdown | null>(null);
+
+  const [laborSaving, setLaborSaving] = useState(false);
+  const [laborError, setLaborError] = useState("");
+  const [laborForm, setLaborForm] = useState({
+    personnelId: "",
+    projectSiteId: "",
+    workDate: new Date().toISOString().slice(0, 10),
+    normalHours: 8,
+    overtimeHours: 0,
+    normalCost: 0,
+    overtimeCost: 0,
+    otherCost: 0,
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError("");
+
       try {
         const result = await projectService.getById(params.id);
         setProject(result as ProjectDetail);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Proje yüklenemedi.");
-      } finally {
+        setProject(null);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Proje yüklenemedi."
+        );
         setLoading(false);
+        return;
       }
+
+      const [
+        profitabilityResult,
+        dailyReportResult,
+        siteAnalysisResult,
+        sitesResult,
+        breakdownResult,
+        laborBreakdownResult,
+        projectPersonnelResult,
+      ] = await Promise.allSettled([
+        projectProfitabilityService.getById(params.id),
+        projectDailyReportService.getByProject(params.id),
+        projectSiteAnalysisService.getById(params.id),
+        projectSiteService.getAll(params.id),
+        projectCostService.getBreakdown(params.id),
+        projectLaborCostService.getBreakdown(params.id),
+        personnelService.getAll({ projectId: params.id }),
+      ]);
+
+      if (profitabilityResult.status === "fulfilled") {
+        setProfitability(profitabilityResult.value);
+      } else {
+        setProfitability(null);
+        console.warn(
+          "Proje karlılık verisi yüklenemedi:",
+          profitabilityResult.reason
+        );
+      }
+
+      if (dailyReportResult.status === "fulfilled") {
+        setDailyReports(dailyReportResult.value);
+      } else {
+        setDailyReports([]);
+        console.warn(
+          "Proje günlükleri yüklenemedi:",
+          dailyReportResult.reason
+        );
+      }
+
+      if (siteAnalysisResult.status === "fulfilled") {
+        setSiteAnalysis(siteAnalysisResult.value);
+      } else {
+        setSiteAnalysis(null);
+        console.warn(
+          "AI şantiye analizi yüklenemedi:",
+          siteAnalysisResult.reason
+        );
+      }
+
+      if (sitesResult.status === "fulfilled") {
+        setSites(sitesResult.value);
+      } else {
+        setSites([]);
+        console.warn(
+          "Şantiye listesi yüklenemedi:",
+          sitesResult.reason
+        );
+      }
+
+      if (breakdownResult.status === "fulfilled") {
+        setBreakdown(breakdownResult.value);
+      } else {
+        setBreakdown(null);
+        console.warn(
+          "Maliyet dağılımı yüklenemedi:",
+          breakdownResult.reason
+        );
+      }
+
+      if (laborBreakdownResult.status === "fulfilled") {
+        setLaborBreakdown(laborBreakdownResult.value);
+      } else {
+        setLaborBreakdown(null);
+        console.warn(
+          "Personel maliyeti dağılımı yüklenemedi:",
+          laborBreakdownResult.reason
+        );
+      }
+
+      if (projectPersonnelResult.status === "fulfilled") {
+        setProjectPersonnel(projectPersonnelResult.value);
+      } else {
+        setProjectPersonnel([]);
+        console.warn(
+          "Proje personeli yüklenemedi:",
+          projectPersonnelResult.reason
+        );
+      }
+
+      setLoading(false);
     }
 
-    if (params.id) load();
+    if (params.id) {
+      load();
+    }
   }, [params.id]);
+
+  async function reloadBreakdown() {
+    try {
+      const result = await projectCostService.getBreakdown(params.id);
+      setBreakdown(result);
+    } catch (err) {
+      console.warn("Maliyet dağılımı yenilenemedi:", err);
+    }
+  }
+
+  async function reloadLaborBreakdown() {
+    try {
+      const result = await projectLaborCostService.getBreakdown(params.id);
+      setLaborBreakdown(result);
+    } catch (err) {
+      console.warn("Personel maliyeti dağılımı yenilenemedi:", err);
+    }
+  }
+
+  function updateLaborForm<K extends keyof typeof laborForm>(
+    key: K,
+    value: (typeof laborForm)[K]
+  ) {
+    setLaborForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createLaborCost(event: React.FormEvent) {
+    event.preventDefault();
+
+    setLaborSaving(true);
+    setLaborError("");
+
+    try {
+      await projectLaborCostService.create(params.id, {
+        personnelId: laborForm.personnelId,
+        projectSiteId: laborForm.projectSiteId || null,
+        workDate: laborForm.workDate,
+        normalHours: laborForm.normalHours,
+        overtimeHours: laborForm.overtimeHours,
+        normalCost: laborForm.normalCost,
+        overtimeCost: laborForm.overtimeCost,
+        otherCost: laborForm.otherCost,
+      });
+
+      setLaborForm({
+        personnelId: "",
+        projectSiteId: "",
+        workDate: new Date().toISOString().slice(0, 10),
+        normalHours: 8,
+        overtimeHours: 0,
+        normalCost: 0,
+        overtimeCost: 0,
+        otherCost: 0,
+      });
+
+      await reloadLaborBreakdown();
+    } catch (err) {
+      setLaborError(
+        err instanceof Error
+          ? err.message
+          : "Personel maliyet kaydı oluşturulamadı."
+      );
+    } finally {
+      setLaborSaving(false);
+    }
+  }
+
+  function updateCostForm<K extends keyof typeof costForm>(
+    key: K,
+    value: (typeof costForm)[K]
+  ) {
+    setCostForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createCostTransaction(event: React.FormEvent) {
+    event.preventDefault();
+
+    setCostSaving(true);
+    setCostError("");
+
+    try {
+      await projectCostService.create(params.id, {
+        projectSiteId: costForm.projectSiteId || null,
+        costType: costForm.costType,
+        costDate: costForm.costDate,
+        amount: costForm.amount,
+        description: costForm.description,
+      });
+
+      setCostForm({
+        projectSiteId: "",
+        costType: ProjectCostType.Material,
+        costDate: new Date().toISOString().slice(0, 10),
+        amount: 0,
+        description: "",
+      });
+
+      await reloadBreakdown();
+    } catch (err) {
+      setCostError(
+        err instanceof Error ? err.message : "Maliyet kaydı oluşturulamadı."
+      );
+    } finally {
+      setCostSaving(false);
+    }
+  }
 
   return (
     <ErpShell
@@ -134,7 +433,14 @@ export default function ProjectCenterPage() {
           <div className="enderun-project-center-tabs">
             <a className="active" href="#genel">Genel</a>
             {modules.map((module) => (
-              <Link key={module.label} href={module.href}>
+              <Link
+                key={module.label}
+                href={
+                  module.href === "kesintiler"
+                    ? `/projeler/${project.id}/kesintiler`
+                    : module.href
+                }
+              >
                 {module.label}
               </Link>
             ))}
@@ -169,6 +475,610 @@ export default function ProjectCenterPage() {
               </div>
             </div>
           </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Şantiyeler</h2>
+                <p>Proje altındaki lokasyon kırılımı ve depo/personel bağlantıları</p>
+              </div>
+
+              <Link
+                href={`/projeler/${project.id}/santiyeler/yeni`}
+                className="erp-button secondary"
+              >
+                + Yeni Şantiye
+              </Link>
+            </div>
+
+            {sites.length === 0 ? (
+              <div className="erp-empty-state">
+                Henüz şantiye tanımlanmamış.
+              </div>
+            ) : (
+              <div className="erp-project-list">
+                {sites.map((site) => (
+                  <Link
+                    className="erp-project-list-item"
+                    href={`/projeler/${project.id}/santiyeler/${site.id}`}
+                    key={site.id}
+                  >
+                    <div>
+                      <strong>
+                        {site.code} · {site.name}
+                      </strong>
+                      <span>{site.location || "Konum belirtilmedi"}</span>
+                      <span>
+                        {site.assignmentCount} personel · {site.warehouseCount} depo
+                      </span>
+                    </div>
+
+                    <span className={`erp-status ${site.isActive ? "green" : "gray"}`}>
+                      {site.isActive ? "Aktif" : "Pasif"}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Maliyet Dağılımı</h2>
+                <p>Şantiye harcamaları, ortak giderler ve proje toplamı</p>
+              </div>
+            </div>
+
+            {costError && <div className="erp-alert error">{costError}</div>}
+
+            <form className="erp-form-card" onSubmit={createCostTransaction}>
+              <div className="erp-form-grid">
+                <label>
+                  <span>Şantiye</span>
+                  <select
+                    value={costForm.projectSiteId}
+                    onChange={(e) =>
+                      updateCostForm("projectSiteId", e.target.value)
+                    }
+                  >
+                    <option value="">Ortak / Merkez Gider</option>
+                    {sites.map((site) => (
+                      <option key={site.id} value={site.id}>
+                        {site.code} · {site.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Maliyet Tipi</span>
+                  <select
+                    value={costForm.costType}
+                    onChange={(e) =>
+                      updateCostForm(
+                        "costType",
+                        Number(e.target.value) as ProjectCostType
+                      )
+                    }
+                  >
+                    {Object.entries(projectCostTypeLabels).map(
+                      ([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Tarih *</span>
+                  <input
+                    className="erp-input"
+                    type="date"
+                    required
+                    value={costForm.costDate}
+                    onChange={(e) =>
+                      updateCostForm("costDate", e.target.value)
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Tutar *</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    value={costForm.amount}
+                    onChange={(e) =>
+                      updateCostForm("amount", Number(e.target.value))
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Açıklama *</span>
+                  <input
+                    className="erp-input"
+                    required
+                    value={costForm.description}
+                    onChange={(e) =>
+                      updateCostForm("description", e.target.value)
+                    }
+                  />
+                </label>
+              </div>
+
+              <div className="erp-actions">
+                <button type="submit" disabled={costSaving}>
+                  {costSaving ? "Kaydediliyor..." : "Maliyet Kaydını Ekle"}
+                </button>
+              </div>
+            </form>
+
+            {!breakdown ? (
+              <div className="erp-empty-state">
+                Maliyet dağılımı bulunamadı.
+              </div>
+            ) : (
+              <div className="erp-detail-grid">
+                {breakdown.sites.map((site) => (
+                  <div key={site.id}>
+                    <span>{site.code} · {site.name}</span>
+                    <strong>
+                      {formatMoney(site.amount, project.currencyCode)}
+                    </strong>
+                  </div>
+                ))}
+
+                <div>
+                  <span>Ortak Giderler</span>
+                  <strong>
+                    {formatMoney(breakdown.sharedCost, project.currencyCode)}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Proje Toplamı</span>
+                  <strong>
+                    {formatMoney(breakdown.projectTotal, project.currencyCode)}
+                  </strong>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Personel Maliyeti Dağılımı</h2>
+                <p>Şantiye bazlı işçilik maliyeti, ortak giderler ve proje toplamı</p>
+              </div>
+            </div>
+
+            {laborError && <div className="erp-alert error">{laborError}</div>}
+
+            <form className="erp-form-card" onSubmit={createLaborCost}>
+              <div className="erp-form-grid">
+                <label>
+                  <span>Personel *</span>
+                  <select
+                    required
+                    value={laborForm.personnelId}
+                    onChange={(e) =>
+                      updateLaborForm("personnelId", e.target.value)
+                    }
+                  >
+                    <option value="">Seçin</option>
+                    {projectPersonnel.map((person) => (
+                      <option key={person.id} value={person.id}>
+                        {person.employeeNumber} — {person.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Şantiye</span>
+                  <select
+                    value={laborForm.projectSiteId}
+                    onChange={(e) =>
+                      updateLaborForm("projectSiteId", e.target.value)
+                    }
+                  >
+                    <option value="">Ortak / Merkez Gider</option>
+                    {sites.map((site) => (
+                      <option key={site.id} value={site.id}>
+                        {site.code} · {site.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Tarih *</span>
+                  <input
+                    className="erp-input"
+                    type="date"
+                    required
+                    value={laborForm.workDate}
+                    onChange={(e) =>
+                      updateLaborForm("workDate", e.target.value)
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Normal Saat</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={laborForm.normalHours}
+                    onChange={(e) =>
+                      updateLaborForm("normalHours", Number(e.target.value))
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Fazla Mesai Saat</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={laborForm.overtimeHours}
+                    onChange={(e) =>
+                      updateLaborForm("overtimeHours", Number(e.target.value))
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Normal Maliyet *</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    value={laborForm.normalCost}
+                    onChange={(e) =>
+                      updateLaborForm("normalCost", Number(e.target.value))
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Fazla Mesai Maliyeti</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={laborForm.overtimeCost}
+                    onChange={(e) =>
+                      updateLaborForm("overtimeCost", Number(e.target.value))
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Diğer Giderler</span>
+                  <input
+                    className="erp-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={laborForm.otherCost}
+                    onChange={(e) =>
+                      updateLaborForm("otherCost", Number(e.target.value))
+                    }
+                  />
+                </label>
+              </div>
+
+              <div className="erp-actions">
+                <button type="submit" disabled={laborSaving}>
+                  {laborSaving ? "Kaydediliyor..." : "Personel Maliyet Kaydı Ekle"}
+                </button>
+              </div>
+            </form>
+
+            {!laborBreakdown ? (
+              <div className="erp-empty-state">
+                Personel maliyeti dağılımı bulunamadı.
+              </div>
+            ) : (
+              <div className="erp-detail-grid">
+                {laborBreakdown.sites.map((site) => (
+                  <div key={site.id}>
+                    <span>{site.code} · {site.name}</span>
+                    <strong>
+                      {formatMoney(site.amount, project.currencyCode)}
+                    </strong>
+                  </div>
+                ))}
+
+                <div>
+                  <span>Ortak Giderler</span>
+                  <strong>
+                    {formatMoney(laborBreakdown.sharedCost, project.currencyCode)}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Proje Toplamı</span>
+                  <strong>
+                    {formatMoney(laborBreakdown.projectTotal, project.currencyCode)}
+                  </strong>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Finansal Sözleşme Oranları</h2>
+                <p>
+                  Hakediş hesaplamalarında varsayılan olarak kullanılacak
+                  proje oranları
+                </p>
+              </div>
+
+              <Link
+                href={`/projeler/${project.id}/kesintiler`}
+                className="erp-button secondary"
+              >
+                Kesinti Politikasını Aç
+              </Link>
+            </div>
+
+            <div className="erp-detail-grid">
+              <div>
+                <span>Sözleşme Artış Oranı</span>
+                <strong>
+                  {formatPercentage(project.increaseRate)}
+                </strong>
+              </div>
+
+              <div>
+                <span>Nakit Teminat Kesintisi</span>
+                <strong>
+                  {formatPercentage(project.cashRetentionRate)}
+                </strong>
+              </div>
+
+              <div>
+                <span>Stopaj Kesintisi</span>
+                <strong>
+                  {formatPercentage(project.withholdingTaxRate)}
+                </strong>
+              </div>
+
+              <div>
+                <span>Malzeme Kesintisi</span>
+                <strong>
+                  {formatPercentage(project.materialDeductionRate)}
+                </strong>
+              </div>
+
+              <div>
+                <span>KDV Oranı</span>
+                <strong>
+                  {formatPercentage(project.vatRate)}
+                </strong>
+              </div>
+
+              <div>
+                <span>Tevkifat Oranı</span>
+                <strong>
+                  {project.withholdingRate || "—"}
+                </strong>
+              </div>
+            </div>
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
+                <h2>Proje Karlılık Analizi</h2>
+                <p>Gelir, maliyet ve kârlılık durumu</p>
+              </div>
+            </div>
+
+            {!profitability ? (
+              <div className="erp-empty-state">
+                <strong>Karlılık verisi bulunamadı</strong>
+              </div>
+            ) : (
+              <div className="erp-detail-grid">
+
+                <div>
+                  <span>Gelir</span>
+                  <strong>
+                    {formatMoney(
+                      profitability.revenue,
+                      project.currencyCode
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Toplam Maliyet</span>
+                  <strong>
+                    {formatMoney(
+                      profitability.totalCost,
+                      project.currencyCode
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Kar</span>
+                  <strong>
+                    {formatMoney(
+                      profitability.profit,
+                      project.currencyCode
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Kar Marjı</span>
+                  <strong>
+                    %{profitability.profitMargin}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Malzeme</span>
+                  <strong>
+                    {formatMoney(
+                      profitability.materialCost,
+                      project.currencyCode
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>İşçilik</span>
+                  <strong>
+                    {formatMoney(
+                      profitability.laborCost,
+                      project.currencyCode
+                    )}
+                  </strong>
+                </div>
+
+              </div>
+            )}
+          </section>
+
+
+
+          <section className="erp-panel erp-mt">
+
+            <div className="erp-panel-header">
+              <div>
+                <h2>Proje Şantiye Günlükleri</h2>
+                <p>Saha ilerleme ve günlük operasyon kayıtları</p>
+              </div>
+            </div>
+
+
+            {dailyReports.length === 0 ? (
+
+              <div className="erp-empty-state">
+                Günlük rapor bulunmuyor.
+              </div>
+
+            ) : (
+
+              <div className="erp-project-list">
+
+                {dailyReports.map(report => (
+
+                  <div
+                    className="erp-project-list-item"
+                    key={report.id}
+                  >
+
+                    <div>
+
+                      <strong>
+                        {formatDate(report.reportDate)}
+                      </strong>
+
+                      <span>
+                        {report.summary}
+                      </span>
+
+                      <span>
+                        Personel: {report.workerCount}
+                      </span>
+
+                    </div>
+
+
+                    <div>
+
+                      <span>
+                        {report.weather}
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                ))}
+
+              </div>
+
+            )}
+
+          </section>
+
+
+
+          <section className="erp-panel erp-mt">
+
+            <div className="erp-panel-header">
+              <div>
+                <h2>AI Şantiye Analizi</h2>
+                <p>Günlük saha verilerine göre yapay zeka değerlendirmesi</p>
+              </div>
+            </div>
+
+
+            {!siteAnalysis ? (
+
+              <div className="erp-empty-state">
+                AI analizi bulunamadı.
+              </div>
+
+            ) : (
+
+              <div className="erp-project-list">
+
+                {siteAnalysis.items.map((item,index)=>(
+
+                  <div
+                    className="erp-project-list-item"
+                    key={index}
+                  >
+
+                    <div>
+                      <strong>
+                        {item.title}
+                      </strong>
+
+                      <span>
+                        {item.message}
+                      </span>
+                    </div>
+
+                    <span>
+                      {item.module}
+                    </span>
+
+                  </div>
+
+                ))}
+
+              </div>
+
+            )}
+
+          </section>
+
 
           <div className="enderun-project-module-grid">
             {modules.map((module) => (

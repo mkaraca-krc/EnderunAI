@@ -7,7 +7,7 @@ const modules = [
   { title: "Projeler", href: "/projeler", description: "Şantiyeler, hakedişler, fiyat farkları ve iş programları", value: "9", label: "Aktif proje" },
   { title: "Satın Alma", href: "/satin-alma", description: "Malzeme talebi, teklif, sipariş ve onay süreçleri", value: "14", label: "Bekleyen talep" },
   { title: "Personel", href: "/personel", description: "Puantaj, avans, ekip dağılımı ve özlük işlemleri", value: "48", label: "Saha personeli" },
-  { title: "Depo ve Stok", href: "/depo", description: "Depolar, malzeme giriş-çıkışları ve kritik stoklar", value: "7", label: "Kritik stok" },
+  { title: "Depo ve Stok", href: "/depo-stok", description: "Depolar, malzeme giriş-çıkışları ve kritik stoklar", value: "7", label: "Kritik stok" },
   { title: "AI Asistan", href: "/ai-asistan", description: "Belge analizi, raporlama ve yönetici karar desteği", value: "Aktif", label: "Yapay zekâ servisi" },
 ];
 

@@ -1,9 +1,16 @@
-using EnderunAI.Api.Services.ProjectBoqs;
+using EnderunAI.Api.Data.Interceptors;
+using EnderunAI.Api.Security.CurrentUser;
+using EnderunAI.Api.Services.Costing;
+using EnderunAI.Api.Services.DocumentNumbers;
 using EnderunAI.Api.Services.AI;
+using EnderunAI.Api.Services.Accounting;
 using System.Text;
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.Upload;
+using EnderunAI.Api.Services.Secretariat;
+using EnderunAI.Api.Services.HumanResources;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -24,14 +31,30 @@ var jwtSecret =
         "JWT_SECRET tanımlı değil."
     );
 
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddScoped<AuditSaveChangesInterceptor>();
+
+builder.Services.AddDbContext<AppDbContext>(
+    (serviceProvider, options) =>
+    {
+        options.UseNpgsql(connectionString);
+        options.AddInterceptors(
+            serviceProvider.GetRequiredService<
+                AuditSaveChangesInterceptor>());
+    });
+
+builder.Services.AddDbContext<HrDbContext>(options =>
 {
     options.UseNpgsql(connectionString);
 });
 
 builder.Services.AddSingleton<IUploadService, UploadService>();
+builder.Services.AddScoped<IAccountingAccountService, AccountingAccountService>();
+builder.Services.AddScoped<IAccountingAccountSeedService, AccountingAccountSeedService>();
+builder.Services.AddScoped<IAccountingVoucherService, AccountingVoucherService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
-builder.Services.AddScoped<IProjectBoqService, ProjectBoqService>();
+builder.Services.AddScoped<ICostEngine, CostEngine>();
+builder.Services.AddScoped<ISecretariatService, SecretariatService>();
+builder.Services.AddScoped<IHrApprovalService, HrApprovalService>();
 
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
@@ -75,8 +98,18 @@ builder.Services
 
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
+builder.Services.AddScoped<IDocumentNumberService, DocumentNumberService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Purchasing.Automation.IPurchaseRequestGenerator, EnderunAI.Api.Services.Purchasing.Automation.PurchaseRequestGenerator>();
+builder.Services.AddScoped<EnderunAI.Api.Security.IUserAuthorizationService, EnderunAI.Api.Security.UserAuthorizationService>();
+builder.Services.AddScoped<EnderunAI.Api.Security.ICurrentDataScopeService, EnderunAI.Api.Security.CurrentDataScopeService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Rfq.IRfqService, EnderunAI.Api.Services.Rfq.RfqService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.PurchaseOrders.IPurchaseOrderService, EnderunAI.Api.Services.PurchaseOrders.PurchaseOrderService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.GoodsReceipts.IGoodsReceiptService, EnderunAI.Api.Services.GoodsReceipts.GoodsReceiptService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 var app = builder.Build();
 
@@ -86,7 +119,13 @@ using (var scope = app.Services.CreateScope())
         scope.ServiceProvider
             .GetRequiredService<AppDbContext>();
 
-    await db.Database.MigrateAsync();
+    if (string.Equals(app.Configuration["MigrationRecovery:AllowAutomaticDatabaseUpdate"], "true", StringComparison.OrdinalIgnoreCase)) await db.Database.MigrateAsync();
+
+    var hrDb =
+        scope.ServiceProvider
+            .GetRequiredService<HrDbContext>();
+
+    if (string.Equals(app.Configuration["MigrationRecovery:AllowAutomaticDatabaseUpdate"], "true", StringComparison.OrdinalIgnoreCase)) await hrDb.Database.MigrateAsync();
 
     var passwordService =
         scope.ServiceProvider
@@ -104,6 +143,7 @@ app.UseRouting();
 app.UseCors("Frontend");
 
 app.UseAuthentication();
+app.UseMiddleware<PermissionAuthorizationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

@@ -19,6 +19,9 @@ public sealed class Warehouse : BaseEntity
     public Guid? ProjectId { get; set; }
     public Project? Project { get; set; }
 
+    public Guid? ProjectSiteId { get; set; }
+    public ProjectSite? ProjectSite { get; set; }
+
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
 
