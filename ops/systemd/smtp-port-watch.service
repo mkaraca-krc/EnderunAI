@@ -1,0 +1,7 @@
+[Unit]
+Description=SMTP portu (srvc141.trwww.com:465) açıldı mı kontrol et
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/smtp-port-watch.sh
+User=root
