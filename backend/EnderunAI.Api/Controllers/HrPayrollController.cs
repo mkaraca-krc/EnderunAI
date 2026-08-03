@@ -15,7 +15,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class HrPayrollController(IHrApprovalService service) : ControllerBase
 {
     [HttpGet("records")]
-    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
+    [RequirePermission(PermissionCatalog.Keys.SalaryView)]
     public async Task<IActionResult> GetPayrolls(
         [FromQuery] Guid? companyId, [FromQuery] Guid? personnelId,
         [FromQuery] int? year, [FromQuery] int? month,
@@ -24,14 +24,14 @@ public sealed class HrPayrollController(IHrApprovalService service) : Controller
             companyId, personnelId, year, month, status, cancellationToken));
 
     [HttpGet("records/{id:guid}")]
-    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
+    [RequirePermission(PermissionCatalog.Keys.SalaryView)]
     public Task<IActionResult> GetPayroll(
         Guid id, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>
             Ok(await service.GetPayrollAsync(id, cancellationToken)));
 
     [HttpGet("summary")]
-    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
+    [RequirePermission(PermissionCatalog.Keys.SalaryView)]
     public Task<IActionResult> GetSummary(
         [FromQuery] Guid companyId, [FromQuery] int year, [FromQuery] int month,
         CancellationToken cancellationToken) =>

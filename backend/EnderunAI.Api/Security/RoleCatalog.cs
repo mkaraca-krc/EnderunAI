@@ -42,7 +42,10 @@ public static class RoleCatalog
             PermissionCatalog.Keys.AccountingView, PermissionCatalog.Keys.AccountingCreate, PermissionCatalog.Keys.AccountingEdit,
             PermissionCatalog.Keys.AccountingDelete, PermissionCatalog.Keys.AccountingApprove, PermissionCatalog.Keys.AccountingManage,
             PermissionCatalog.Keys.HakedisView,
-            PermissionCatalog.Keys.CompaniesManage
+            PermissionCatalog.Keys.CompaniesManage,
+            // Bordro ödemesini kasadan/bankadan yapan ve aylık maliyet
+            // raporunu okuyan rol; ücret rakamlarını görmesi gerekir.
+            PermissionCatalog.Keys.SalaryView
         ]),
 
         new("Satın Alma Sorumlusu", "Talep, RFQ, sipariş, mal kabul ve stok süreçleri tam yetki; cari görüntüleme.",
@@ -68,7 +71,7 @@ public static class RoleCatalog
             PermissionCatalog.Keys.PurchasingApprove, PermissionCatalog.Keys.InventoryManage
         ]),
 
-        new("İK Sorumlusu", "Personel ve puantaj-maaş tam yetki (Ek Ödeme hariç).",
+        new("İK Sorumlusu", "Personel, puantaj ve bordro tam yetki; ücret rakamlarını görür.",
         [
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
@@ -78,7 +81,8 @@ public static class RoleCatalog
             PermissionCatalog.Keys.AttendancePayrollEdit, PermissionCatalog.Keys.AttendancePayrollDelete,
             PermissionCatalog.Keys.AttendancePayrollApprove,
             PermissionCatalog.Keys.PersonnelManage, PermissionCatalog.Keys.AttendanceView,
-            PermissionCatalog.Keys.AttendanceManage, PermissionCatalog.Keys.PayrollView, PermissionCatalog.Keys.PayrollManage
+            PermissionCatalog.Keys.AttendanceManage, PermissionCatalog.Keys.PayrollView, PermissionCatalog.Keys.PayrollManage,
+            PermissionCatalog.Keys.SalaryView, PermissionCatalog.Keys.SalaryManage
         ]),
 
         new("Ön Muhasebe", "Fatura/cari tam yetki, muhasebe fiş girişi, satın alma görüntüleme.",
@@ -90,7 +94,8 @@ public static class RoleCatalog
             PermissionCatalog.Keys.AccountingView, PermissionCatalog.Keys.AccountingCreate, PermissionCatalog.Keys.AccountingEdit,
             PermissionCatalog.Keys.PurchasingRequestsView, PermissionCatalog.Keys.PurchasingRfqView,
             PermissionCatalog.Keys.PurchasingOrdersView, PermissionCatalog.Keys.PurchasingReceiptsView,
-            PermissionCatalog.Keys.CompaniesManage, PermissionCatalog.Keys.AccountingManage, PermissionCatalog.Keys.PurchasingView
+            PermissionCatalog.Keys.CompaniesManage, PermissionCatalog.Keys.AccountingManage, PermissionCatalog.Keys.PurchasingView,
+            PermissionCatalog.Keys.SalaryView
         ]),
 
         new("Teknik Ofis", "Projeler; keşif/metraj/hakediş tam yetki; dosyalar tam yetki; maliyet ve kâr görünür.",

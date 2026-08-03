@@ -25,7 +25,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
-    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
+    [RequirePermission(PermissionCatalog.Keys.SalaryView)]
     public async Task<IActionResult> Get(
         [FromQuery] Guid companyId,
         [FromQuery] int? year,
@@ -46,7 +46,7 @@ public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut]
-    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
+    [RequirePermission(PermissionCatalog.Keys.SalaryManage)]
     public async Task<IActionResult> Update(
         [FromQuery] Guid companyId,
         [FromQuery] int? year,

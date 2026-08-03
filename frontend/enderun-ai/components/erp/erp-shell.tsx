@@ -372,6 +372,11 @@ const groups: MenuGroup[] = [
         icon: "▧",
       },
       {
+        label: "Bordro Maliyet Raporu",
+        href: "/insan-kaynaklari/maliyet-raporu",
+        icon: "₼",
+      },
+      {
         label: "İK Raporları",
         href: "/insan-kaynaklari/raporlar",
         icon: "▤",

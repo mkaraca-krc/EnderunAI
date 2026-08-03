@@ -8,6 +8,10 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  cashAccountService,
+  type CashAccount,
+} from "@/services/cash-account.service";
 
 import {
   CompanyListItem,
@@ -195,6 +199,14 @@ export default function PayrollManagementPage() {
   const [calculating, setCalculating] =
     useState(false);
 
+  // Dönem muhasebeleştirme ve ödeme (kayıt bazlı ödemeden ayrı tutulur)
+  const [periodBusy, setPeriodBusy] = useState(false);
+  const [periodCashAccounts, setPeriodCashAccounts] = useState<CashAccount[]>([]);
+  const [periodCashAccountId, setPeriodCashAccountId] = useState("");
+  const [periodPaymentDate, setPeriodPaymentDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+
   const [message, setMessage] =
     useState("");
 
@@ -263,6 +275,36 @@ export default function PayrollManagementPage() {
     paymentSubmitting,
     setPaymentSubmitting,
   ] = useState(false);
+
+  // Dönem ödemesi için kasa/banka hesapları
+  useEffect(() => {
+    if (!companyId) {
+      setPeriodCashAccounts([]);
+      setPeriodCashAccountId("");
+      return;
+    }
+
+    let cancelled = false;
+
+    cashAccountService
+      .getAll({ companyId })
+      .then((result) => {
+        if (cancelled) return;
+        setPeriodCashAccounts(result);
+        setPeriodCashAccountId((current) =>
+          current && result.some((x) => x.id === current)
+            ? current
+            : result[0]?.id ?? ""
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setPeriodCashAccounts([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId]);
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
@@ -413,6 +455,88 @@ export default function PayrollManagementPage() {
     MONTHS.find(
       (item) => item.value === month
     )?.label ?? "";
+
+  async function postPeriod() {
+    if (!companyId) {
+      setError("Önce şirket seçmelisiniz.");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `${selectedMonthName} ${year} dönemi bordrosu muhasebeleştirilecek. ` +
+          "Tek bir tahakkuk fişi üretilir ve bu işlem geri alınamaz. Devam edilsin mi?"
+      )
+    ) {
+      return;
+    }
+
+    setPeriodBusy(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await hrPayrollService.postPeriod({
+        companyId,
+        year,
+        month,
+      });
+
+      setMessage(
+        `${result.personnelCount} bordro muhasebeleştirildi. ` +
+          `Fiş: ${result.accountingVoucherNumber} — ` +
+          `işverene toplam maliyet ${formatMoney(result.totalEmployerCost)}.`
+      );
+
+      await loadPayrollData();
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setPeriodBusy(false);
+    }
+  }
+
+  async function payPeriod() {
+    if (!companyId || !periodCashAccountId) {
+      setError("Ödeme için kasa/banka hesabı seçmelisiniz.");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `${selectedMonthName} ${year} dönemi net ücretleri seçilen hesaptan ödenecek. ` +
+          "Devam edilsin mi?"
+      )
+    ) {
+      return;
+    }
+
+    setPeriodBusy(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await hrPayrollService.payPeriod({
+        companyId,
+        year,
+        month,
+        cashAccountId: periodCashAccountId,
+        paymentDate: periodPaymentDate,
+        paymentReference: null,
+      });
+
+      setMessage(
+        `${result.personnelCount} bordro ödendi (${formatMoney(result.paidAmount)}). ` +
+          `Fiş: ${result.accountingVoucherNumber}.`
+      );
+
+      await loadPayrollData();
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setPeriodBusy(false);
+    }
+  }
 
   async function calculateCompanyPayroll() {
     if (!companyId) {
@@ -1326,6 +1450,77 @@ export default function PayrollManagementPage() {
             {calculating
               ? "Hesaplanıyor..."
               : "Toplu Bordro Hesapla"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void postPeriod()}
+            disabled={periodBusy || !companyId}
+            style={{
+              minHeight: "42px",
+              border: "1px solid #0f172a",
+              borderRadius: "10px",
+              padding: "0 18px",
+              background: "#ffffff",
+              color: "#0f172a",
+              fontWeight: 800,
+              cursor: periodBusy ? "wait" : "pointer",
+              opacity: periodBusy || !companyId ? 0.65 : 1,
+            }}
+          >
+            Dönemi Muhasebeleştir
+          </button>
+
+          <select
+            value={periodCashAccountId}
+            onChange={(event) =>
+              setPeriodCashAccountId(event.target.value)
+            }
+            style={{
+              minHeight: "42px",
+              borderRadius: "10px",
+              border: "1px solid #cbd5f5",
+              padding: "0 12px",
+            }}
+          >
+            <option value="">Ödeme hesabı seçin</option>
+            {periodCashAccounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.code} - {account.name}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="date"
+            value={periodPaymentDate}
+            onChange={(event) => setPeriodPaymentDate(event.target.value)}
+            style={{
+              minHeight: "42px",
+              borderRadius: "10px",
+              border: "1px solid #cbd5f5",
+              padding: "0 12px",
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={() => void payPeriod()}
+            disabled={periodBusy || !companyId || !periodCashAccountId}
+            style={{
+              minHeight: "42px",
+              border: "none",
+              borderRadius: "10px",
+              padding: "0 18px",
+              background: "#065f46",
+              color: "#ffffff",
+              fontWeight: 800,
+              cursor: periodBusy ? "wait" : "pointer",
+              opacity:
+                periodBusy || !companyId || !periodCashAccountId ? 0.65 : 1,
+            }}
+          >
+            Dönemi Öde
           </button>
         </div>
 

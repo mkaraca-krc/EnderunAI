@@ -103,11 +103,11 @@ public static class PermissionCatalog
         public const string AttendancePayrollDelete = "attendance-payroll.delete";
         public const string AttendancePayrollApprove = "attendance-payroll.approve";
 
-        // Ek Ödeme (özel — hiçbir rolde varsayılan açık değil)
-        public const string PayrollBonusView = "payroll-bonus.view";
-        public const string PayrollBonusCreate = "payroll-bonus.create";
-        public const string PayrollBonusEdit = "payroll-bonus.edit";
-        public const string PayrollBonusDelete = "payroll-bonus.delete";
+        // Ücret gizliliği — maaş, bordro ve işçilik maliyeti rakamlarını
+        // görme yetkisi. Bu izin olmadan personel listesinde ve bordro
+        // ekranlarında tutar alanları hiç dönmez (yalnızca gizlenmez).
+        public const string SalaryView = "salary.view";
+        public const string SalaryManage = "salary.manage";
 
         // Hakediş
         public const string HakedisView = "hakedis.view";
@@ -260,10 +260,8 @@ public static class PermissionCatalog
         new(Keys.AttendancePayrollDelete, "Puantaj-Maaş", "Silme", "Puantaj, izin, fazla mesai, maaş ve bordro kaydını siler."),
         new(Keys.AttendancePayrollApprove, "Puantaj-Maaş", "Onaylama", "Puantaj, izin, fazla mesai ve bordro kaydını onaylar."),
 
-        new(Keys.PayrollBonusView, "Ek Ödeme", "Görüntüleme", "Ek ödeme (prim, ikramiye vb.) kayıtlarını görüntüler."),
-        new(Keys.PayrollBonusCreate, "Ek Ödeme", "Oluşturma", "Yeni ek ödeme kaydı oluşturur."),
-        new(Keys.PayrollBonusEdit, "Ek Ödeme", "Düzenleme", "Ek ödeme kaydını günceller."),
-        new(Keys.PayrollBonusDelete, "Ek Ödeme", "Silme", "Ek ödeme kaydını siler."),
+        new(Keys.SalaryView, "Ücret Gizliliği", "Ücret görüntüleme", "Maaş, bordro ve işçilik maliyeti tutarlarını görür."),
+        new(Keys.SalaryManage, "Ücret Gizliliği", "Ücret yönetimi", "Ücret kartı ve bordro tutarlarını değiştirir."),
 
         new(Keys.HakedisView, "Hakediş", "Hakedişi görüntüleme", "Hakediş, metraj ve fiyat farkı kayıtlarını görüntüler."),
         new(Keys.HakedisManage, "Hakediş", "Hakediş yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),

@@ -10,13 +10,16 @@ namespace EnderunAI.Api.Controllers;
 
 [ApiController]
 [Authorize]
+// Ücret kartları maaş rakamı taşıdığı için personnel.view değil,
+// salary.view iznine bağlı: Şantiye Şefi, Formen ve Teknik Koordinatör
+// personel listesini görebilir ama kimsenin ücretini göremez.
 [Route("api/hr/payroll/salary-definitions")]
 public sealed class HrSalaryDefinitionsController(
     HrDbContext hrDb,
     AppDbContext appDb) : ControllerBase
 {
     [HttpGet]
-    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
+    [RequirePermission(PermissionCatalog.Keys.SalaryView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? personnelId,
@@ -67,7 +70,7 @@ public sealed class HrSalaryDefinitionsController(
     }
 
     [HttpPost]
-    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
+    [RequirePermission(PermissionCatalog.Keys.SalaryManage)]
     public async Task<IActionResult> Create(
         SaveSalaryDefinitionRequest request,
         CancellationToken cancellationToken)
@@ -111,7 +114,7 @@ public sealed class HrSalaryDefinitionsController(
     }
 
     [HttpPut("{id:guid}")]
-    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
+    [RequirePermission(PermissionCatalog.Keys.SalaryManage)]
     public async Task<IActionResult> Update(
         Guid id,
         UpdateSalaryDefinitionRequest request,
@@ -157,7 +160,7 @@ public sealed class HrSalaryDefinitionsController(
     }
 
     [HttpDelete("{id:guid}")]
-    [RequirePermission(PermissionCatalog.Keys.PersonnelDelete)]
+    [RequirePermission(PermissionCatalog.Keys.SalaryManage)]
     public async Task<IActionResult> Delete(
         Guid id,
         CancellationToken cancellationToken)

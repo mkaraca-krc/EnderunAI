@@ -113,7 +113,116 @@ function buildQuery(
   return result ? `?${result}` : "";
 }
 
+export type PayrollPeriodPostingResult = {
+  companyId: string;
+  year: number;
+  month: number;
+  personnelCount: number;
+  totalEarnings: number;
+  netPayable: number;
+  employerBurden: number;
+  totalEmployerCost: number;
+  accountingVoucherId: string;
+  accountingVoucherNumber: string;
+};
+
+export type PayrollPeriodPaymentResult = {
+  companyId: string;
+  year: number;
+  month: number;
+  personnelCount: number;
+  paidAmount: number;
+  accountingVoucherId: string;
+  accountingVoucherNumber: string;
+  cashTransactionId: string;
+};
+
+export type PayrollCostReport = {
+  companyId: string;
+  year: number;
+  month: number;
+  personnelCount: number;
+  paidCount: number;
+  totals: {
+    grossSalary: number;
+    normalWorkAmount: number;
+    overtimeAmount: number;
+    holidayAmount: number;
+    totalEarnings: number;
+    sgkEmployee: number;
+    unemploymentEmployee: number;
+    incomeTax: number;
+    stampTax: number;
+    advanceAndOther: number;
+    totalDeductions: number;
+    netPayable: number;
+    sgkEmployer: number;
+    unemploymentEmployer: number;
+    employerBurden: number;
+    totalEmployerCost: number;
+    incomeTaxExemption: number;
+    stampTaxExemption: number;
+  };
+  personnel: Array<{
+    personnelId: string;
+    employeeNumber: string | null;
+    fullName: string | null;
+    jobTitle: string | null;
+    grossSalary: number;
+    overtimeAmount: number;
+    totalEarnings: number;
+    totalDeductions: number;
+    officialNetPayableAmount: number;
+    sgkEmployerAmount: number;
+    unemploymentEmployerAmount: number;
+    totalEmployerCost: number;
+    status: number;
+  }>;
+  projectBreakdown: Array<{
+    projectId: string;
+    projectCode: string | null;
+    projectName: string | null;
+    projectSiteId: string | null;
+    siteCode: string | null;
+    siteName: string | null;
+    normalCost: number;
+    overtimeCost: number;
+    holidayCost: number;
+    totalCost: number;
+    dayCount: number;
+  }>;
+};
+
 export const hrPayrollService = {
+  /** Dönemin onaylı bordrolarını tek tahakkuk fişiyle muhasebeleştirir. */
+  postPeriod(payload: { companyId: string; year: number; month: number }) {
+    return apiClient<PayrollPeriodPostingResult>("hr/payroll/periods/post", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  /** Tahakkuk etmiş dönemin net ücretini kasa/bankadan öder. */
+  payPeriod(payload: {
+    companyId: string;
+    year: number;
+    month: number;
+    cashAccountId: string;
+    paymentDate: string;
+    paymentReference?: string | null;
+  }) {
+    return apiClient<PayrollPeriodPaymentResult>("hr/payroll/periods/pay", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  getCostReport(companyId: string, year: number, month: number) {
+    return apiClient<PayrollCostReport>(
+      `hr/payroll/cost-report${buildQuery({ companyId, year, month })}`
+    );
+  },
+
   getAll(filters: PayrollFilters) {
     return apiClient<PayrollRecord[]>(
       `hr/payroll/records${buildQuery(filters)}`

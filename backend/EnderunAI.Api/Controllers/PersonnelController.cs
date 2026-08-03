@@ -12,7 +12,9 @@ namespace EnderunAI.Api.Controllers;
 [Authorize]
 [Route("api/personnel")]
 [Route("api/hr/personnel")]
-public sealed class PersonnelController(AppDbContext db) : ControllerBase
+public sealed class PersonnelController(
+    AppDbContext db,
+    ISalaryVisibilityService salaryVisibility) : ControllerBase
 {
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
@@ -48,6 +50,8 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
                  x.IdentityNumber.Contains(term)));
         }
 
+        var canViewSalary = await salaryVisibility.CanViewSalaryAsync(cancellationToken);
+
         var items = await query
             .OrderBy(x => x.FirstName)
             .ThenBy(x => x.LastName)
@@ -69,7 +73,8 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
                 x.Profession,
                 x.EmploymentStartDate,
                 x.EmploymentEndDate,
-                x.MonthlySalary,
+                // Ücret gizliliği: yetkisiz kullanıcıya tutar hiç dönmez.
+                MonthlySalary = canViewSalary ? x.MonthlySalary : null,
                 x.Status,
                 x.IsActive,
                 ActiveAssignments = x.Assignments
@@ -111,6 +116,8 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
         Guid id,
         CancellationToken cancellationToken)
     {
+        var canViewSalary = await salaryVisibility.CanViewSalaryAsync(cancellationToken);
+
         var item = await db.Personnel
             .AsNoTracking()
             .Where(x => x.Id == id)
@@ -135,7 +142,8 @@ public sealed class PersonnelController(AppDbContext db) : ControllerBase
                 x.SgkRegistrationNumber,
                 x.EmploymentStartDate,
                 x.EmploymentEndDate,
-                x.MonthlySalary,
+                // Ücret gizliliği: yetkisiz kullanıcıya tutar hiç dönmez.
+                MonthlySalary = canViewSalary ? x.MonthlySalary : null,
                 x.Status,
                 x.IsActive,
                 Assignments = x.Assignments
