@@ -353,6 +353,7 @@ export default function CompanySettingsPage() {
         payablesAccountId: financeSettings.payablesAccountId ?? null,
         receivablesAccountId: financeSettings.receivablesAccountId ?? null,
         factoringExpenseAccountId: financeSettings.factoringExpenseAccountId ?? null,
+        deductionAccountId: financeSettings.deductionAccountId ?? null,
       });
       setFinanceSettings(result.settings);
       setNotice(result.message);
@@ -689,6 +690,7 @@ export default function CompanySettingsPage() {
                           ["salesAccountId", "Yurtiçi Satışlar (600)"],
                           ["vatOutAccountId", "Hesaplanan KDV (391)"],
                           ["factoringExpenseAccountId", "Finansman Gideri (780)"],
+                          ["deductionAccountId", "Hakediş Kesintileri (126)"],
                         ] as const
                       ).map(([field, label]) => (
                         <label key={field} className="block">

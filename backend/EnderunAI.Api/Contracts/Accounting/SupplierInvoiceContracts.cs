@@ -118,7 +118,8 @@ public sealed record CompanyFinanceSettingsResponse(
     Guid? ExpenseAccountId,
     Guid? PayablesAccountId,
     Guid? ReceivablesAccountId,
-    Guid? FactoringExpenseAccountId);
+    Guid? FactoringExpenseAccountId,
+    Guid? DeductionAccountId);
 
 public sealed record UpdateCompanyFinanceSettingsRequest(
     decimal GmApprovalThresholdTry,
@@ -130,4 +131,5 @@ public sealed record UpdateCompanyFinanceSettingsRequest(
     Guid? ExpenseAccountId,
     Guid? PayablesAccountId,
     Guid? ReceivablesAccountId,
-    Guid? FactoringExpenseAccountId);
+    Guid? FactoringExpenseAccountId,
+    Guid? DeductionAccountId);

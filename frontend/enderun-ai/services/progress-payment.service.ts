@@ -147,6 +147,9 @@ export interface ProgressPaymentDetail {
   submittedAtUtc?: string | null;
   approvedAtUtc?: string | null;
   postedAtUtc?: string | null;
+  /** Kesinleştirmede otomatik üretilen gelir fişi. */
+  accountingVoucherId?: string | null;
+  accountingVoucherNumber?: string | null;
   items: ProgressPaymentItem[];
   deductions: ProgressPaymentDeduction[];
 }

@@ -55,4 +55,12 @@ public sealed class CompanyFinanceSettings : BaseEntity
     /// <summary>Faktoring komisyon/masraf kesintileri için finansman gideri hesabı (ör. 780).</summary>
     public Guid? FactoringExpenseAccountId { get; set; }
     public AccountingAccount? FactoringExpenseAccount { get; set; }
+
+    /// <summary>
+    /// Hakediş kesintileri (teminat, stopaj, malzeme) için varsayılan
+    /// hesap — ör. 126 Verilen Depozito ve Teminatlar. Kesinti satırında
+    /// kendi hesabı seçilmişse o önceliklidir.
+    /// </summary>
+    public Guid? DeductionAccountId { get; set; }
+    public AccountingAccount? DeductionAccount { get; set; }
 }

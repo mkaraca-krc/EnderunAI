@@ -24,6 +24,15 @@ public interface IAccountingIntegrationService
     Task<Guid> CreateSupplierInvoiceVoucherAsync(
         SupplierInvoice invoice,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kesinleştirilen hakediş için dengeli ve doğrudan Posted bir gelir
+    /// fişi üretir: 120 Alıcılar + kesinti hesapları (borç),
+    /// 600 Yurtiçi Satışlar + 391 Hesaplanan KDV (alacak).
+    /// </summary>
+    Task<Guid> CreateProgressPaymentVoucherAsync(
+        ProgressPayment progressPayment,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class AccountingIntegrationService(
@@ -49,7 +58,8 @@ public sealed class AccountingIntegrationService(
             ExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "740"),
             PayablesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "320"),
             ReceivablesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "120"),
-            FactoringExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "780.01.01", "780")
+            FactoringExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "780.01.01", "780"),
+            DeductionAccountId = await FindAccountIdAsync(companyId, cancellationToken, "126")
         };
 
         db.CompanyFinanceSettings.Add(settings);
@@ -150,6 +160,160 @@ public sealed class AccountingIntegrationService(
                 ReferenceNumber: invoice.InvoiceNumber,
                 SourceModule: "SupplierInvoice",
                 SourceEntityId: invoice.Id,
+                Lines: lines),
+            cancellationToken);
+
+        await voucherService.PostAsync(created.Id, cancellationToken);
+
+        return created.Id;
+    }
+
+    public async Task<Guid> CreateProgressPaymentVoucherAsync(
+        ProgressPayment progressPayment,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = await GetOrCreateFinanceSettingsAsync(
+            progressPayment.CompanyId, cancellationToken);
+
+        if (settings.SalesAccountId is null)
+            throw new InvalidOperationException(
+                "Yurtiçi satışlar hesabı yapılandırılmamış. Şirket Ayarları → Finans Ayarları'ndan seçin.");
+
+        var project = await db.Projects
+            .SingleAsync(x => x.Id == progressPayment.ProjectId, cancellationToken);
+
+        if (project.EmployerCurrentAccountId is null)
+            throw new InvalidOperationException(
+                "Projede işveren cari kartı tanımlı değil; hakediş muhasebeleştirilemez. " +
+                "Proje kartından işvereni seçin.");
+
+        var employer = await db.CurrentAccounts
+            .SingleAsync(x => x.Id == project.EmployerCurrentAccountId.Value, cancellationToken);
+
+        var deductions = await db.ProgressPaymentDeductions
+            .Where(x => x.ProgressPaymentId == progressPayment.Id && x.Amount != 0m)
+            .OrderBy(x => x.LineNumber)
+            .ToListAsync(cancellationToken);
+
+        // Tevkifatlı KDV'de satıcının beyan ettiği kısım yalnızca
+        // tevkifat dışında kalan tutardır; kesilen kısmı alıcı beyan eder.
+        var taxableAmount = decimal.Round(
+            progressPayment.CurrentAmount + progressPayment.PriceDifferenceAmount, 2);
+        var declaredVat = decimal.Round(
+            progressPayment.VatAmount - progressPayment.WithholdingAmount, 2);
+        var totalDeduction = decimal.Round(
+            deductions.Sum(x => x.Amount), 2);
+        var receivable = decimal.Round(
+            progressPayment.NetPayableAmount, 2);
+
+        if (taxableAmount <= 0m)
+            throw new InvalidOperationException(
+                "Hakediş tutarı sıfır; muhasebe fişi oluşturulamaz.");
+
+        if (decimal.Round(receivable + totalDeduction, 2) !=
+            decimal.Round(taxableAmount + declaredVat, 2))
+        {
+            throw new InvalidOperationException(
+                $"Hakediş tutarları tutarsız: net ödenecek ({receivable:N2}) + kesintiler ({totalDeduction:N2}) " +
+                $"≠ hakediş ({taxableAmount:N2}) + beyan edilen KDV ({declaredVat:N2}).");
+        }
+
+        var receivableAccountId = employer.ReceivableAccountingAccountId
+            ?? settings.ReceivablesAccountId
+            ?? throw new InvalidOperationException(
+                $"'{employer.Title}' carisi için 120 Alıcılar hesabı bulunamadı. " +
+                "Cari kartında hesap eşleyin veya Şirket Ayarları → Finans Ayarları'ndan varsayılan hesabı seçin.");
+
+        var lines = new List<AccountingVoucherLineRequest>
+        {
+            new(
+                AccountingAccountId: receivableAccountId,
+                Description: $"Hakediş alacağı — {employer.Title}",
+                DebitAmount: receivable,
+                CreditAmount: 0m,
+                CurrencyCode: progressPayment.CurrencyCode,
+                ExchangeRate: 1m,
+                CurrentAccountId: employer.Id,
+                ProjectId: progressPayment.ProjectId,
+                CostCenterCode: project.Code,
+                DocumentNumber: progressPayment.ProgressPaymentNumber,
+                DocumentDate: progressPayment.ProgressPaymentDate,
+                DueDate: null)
+        };
+
+        foreach (var deduction in deductions)
+        {
+            var deductionAccountId = deduction.AccountingAccountId
+                ?? settings.DeductionAccountId
+                ?? throw new InvalidOperationException(
+                    $"'{deduction.Description}' kesintisi için muhasebe hesabı belirlenmemiş. " +
+                    "Kesinti satırında hesap seçin veya Şirket Ayarları → Finans Ayarları'ndan varsayılan kesinti hesabını tanımlayın.");
+
+            lines.Add(new AccountingVoucherLineRequest(
+                AccountingAccountId: deductionAccountId,
+                Description: $"Hakediş kesintisi — {deduction.Description}",
+                DebitAmount: decimal.Round(deduction.Amount, 2),
+                CreditAmount: 0m,
+                CurrencyCode: progressPayment.CurrencyCode,
+                ExchangeRate: 1m,
+                CurrentAccountId: employer.Id,
+                ProjectId: progressPayment.ProjectId,
+                CostCenterCode: project.Code,
+                DocumentNumber: progressPayment.ProgressPaymentNumber,
+                DocumentDate: progressPayment.ProgressPaymentDate,
+                DueDate: null));
+        }
+
+        lines.Add(new AccountingVoucherLineRequest(
+            AccountingAccountId: settings.SalesAccountId.Value,
+            Description: $"Hakediş geliri — {project.Code}",
+            DebitAmount: 0m,
+            CreditAmount: taxableAmount,
+            CurrencyCode: progressPayment.CurrencyCode,
+            ExchangeRate: 1m,
+            CurrentAccountId: employer.Id,
+            ProjectId: progressPayment.ProjectId,
+            CostCenterCode: project.Code,
+            DocumentNumber: progressPayment.ProgressPaymentNumber,
+            DocumentDate: progressPayment.ProgressPaymentDate,
+            DueDate: null));
+
+        if (declaredVat > 0m)
+        {
+            if (settings.VatOutAccountId is null)
+                throw new InvalidOperationException(
+                    "Hesaplanan KDV hesabı yapılandırılmamış. Şirket Ayarları → Finans Ayarları'ndan seçin.");
+
+            lines.Add(new AccountingVoucherLineRequest(
+                AccountingAccountId: settings.VatOutAccountId.Value,
+                Description: progressPayment.WithholdingAmount > 0m
+                    ? $"Hesaplanan KDV (tevkifat sonrası {progressPayment.WithholdingNumerator}/{progressPayment.WithholdingDenominator})"
+                    : "Hesaplanan KDV",
+                DebitAmount: 0m,
+                CreditAmount: declaredVat,
+                CurrencyCode: progressPayment.CurrencyCode,
+                ExchangeRate: 1m,
+                CurrentAccountId: employer.Id,
+                ProjectId: progressPayment.ProjectId,
+                CostCenterCode: project.Code,
+                DocumentNumber: progressPayment.ProgressPaymentNumber,
+                DocumentDate: progressPayment.ProgressPaymentDate,
+                DueDate: null));
+        }
+
+        var created = await voucherService.CreateAsync(
+            new CreateAccountingVoucherRequest(
+                CompanyId: progressPayment.CompanyId,
+                VoucherType: (int)AccountingVoucherType.Journal,
+                VoucherDate: progressPayment.ProgressPaymentDate,
+                CurrencyCode: progressPayment.CurrencyCode,
+                ExchangeRate: 1m,
+                Description:
+                    $"Hakediş {progressPayment.ProgressPaymentNumber} " +
+                    $"({progressPayment.PeriodNumber}. dönem) — {project.Code} {project.Name}",
+                ReferenceNumber: progressPayment.ProgressPaymentNumber,
+                SourceModule: "ProgressPayment",
+                SourceEntityId: progressPayment.Id,
                 Lines: lines),
             cancellationToken);
 

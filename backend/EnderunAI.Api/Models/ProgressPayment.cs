@@ -59,6 +59,14 @@ public sealed class ProgressPayment : BaseEntity
     public DateTime? CancelledAtUtc { get; set; }
     public string? CancellationReason { get; set; }
 
+    /// <summary>
+    /// Kesinleştirmede (Post) otomatik üretilen gelir fişi:
+    /// 120 Alıcılar (borç) / 600 Yurtiçi Satışlar + 391 Hesaplanan KDV
+    /// (alacak), kesintiler kendi hesaplarına borç.
+    /// </summary>
+    public Guid? AccountingVoucherId { get; set; }
+    public AccountingVoucher? AccountingVoucher { get; set; }
+
     public ICollection<ProgressPaymentItem> Items { get; set; }
         = new List<ProgressPaymentItem>();
 
@@ -111,6 +119,14 @@ public sealed class ProgressPaymentDeduction : BaseEntity
     public decimal Amount { get; set; }
 
     public bool IsManualAmount { get; set; }
+
+    /// <summary>
+    /// Bu kesintinin borç yazılacağı muhasebe hesabı (ör. teminat için
+    /// 126, stopaj için 193). Boşsa şirket finans ayarındaki varsayılan
+    /// kesinti hesabı kullanılır.
+    /// </summary>
+    public Guid? AccountingAccountId { get; set; }
+    public AccountingAccount? AccountingAccount { get; set; }
 
     public string? Notes { get; set; }
 }

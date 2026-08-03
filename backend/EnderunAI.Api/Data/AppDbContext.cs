@@ -453,6 +453,8 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.ReceivablesAccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.FactoringExpenseAccount).WithMany()
                 .HasForeignKey(x => x.FactoringExpenseAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.DeductionAccount).WithMany()
+                .HasForeignKey(x => x.DeductionAccountId).OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
@@ -1638,6 +1640,11 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.ProgressPaymentId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(x => x.AccountingVoucher)
+                .WithMany()
+                .HasForeignKey(x => x.AccountingVoucherId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
 
@@ -1726,6 +1733,11 @@ public sealed class AppDbContext(
 
             entity.Property(x => x.Notes)
                 .HasMaxLength(2000);
+
+            entity.HasOne(x => x.AccountingAccount)
+                .WithMany()
+                .HasForeignKey(x => x.AccountingAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

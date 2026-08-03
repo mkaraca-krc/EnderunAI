@@ -200,6 +200,7 @@ export type CompanyFinanceSettings = {
   payablesAccountId?: string | null;
   receivablesAccountId?: string | null;
   factoringExpenseAccountId?: string | null;
+  deductionAccountId?: string | null;
 };
 
 export const financeSettingsService = {

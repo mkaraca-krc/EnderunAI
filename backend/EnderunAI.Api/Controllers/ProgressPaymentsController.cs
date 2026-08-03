@@ -2,6 +2,7 @@ using EnderunAI.Api.Contracts.ProgressPayments;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Accounting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,9 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/progress-payments")]
-public sealed class ProgressPaymentsController(AppDbContext db)
+public sealed class ProgressPaymentsController(
+    AppDbContext db,
+    IAccountingIntegrationService accountingIntegration)
     : ControllerBase
 {
     [HttpGet]
@@ -350,17 +353,57 @@ public sealed class ProgressPaymentsController(AppDbContext db)
             "Hakediş onaylandı.",
             cancellationToken);
 
+    /// <summary>
+    /// Hakedişi kesinleştirir ve otomatik gelir fişini üretir:
+    /// 120 Alıcılar + kesinti hesapları (borç), 600 Yurtiçi Satışlar +
+    /// 391 Hesaplanan KDV (alacak). Fiş doğrudan Posted olarak düşer.
+    /// </summary>
     [HttpPost("{id:guid}/post")]
     [RequirePermission(PermissionCatalog.Keys.HakedisApprove)]
-    public Task<IActionResult> Post(
+    public async Task<IActionResult> Post(
         Guid id,
-        CancellationToken cancellationToken) =>
-        ChangeStatus(
-            id,
-            ProgressPaymentStatus.Approved,
-            ProgressPaymentStatus.Posted,
-            "Hakediş kesinleştirildi.",
-            cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        var entity = await db.ProgressPayments
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (entity is null)
+            return NotFound(new { message = "Hakediş bulunamadı." });
+
+        if (entity.Status != ProgressPaymentStatus.Approved)
+        {
+            return Conflict(new
+            {
+                message = $"Bu işlem mevcut durumda yapılamaz. Durum: {entity.Status}"
+            });
+        }
+
+        await using var transaction = await db.Database
+            .BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            var voucherId = await accountingIntegration
+                .CreateProgressPaymentVoucherAsync(entity, cancellationToken);
+
+            entity.Status = ProgressPaymentStatus.Posted;
+            entity.PostedAtUtc = DateTime.UtcNow;
+            entity.UpdatedAtUtc = DateTime.UtcNow;
+            entity.AccountingVoucherId = voucherId;
+
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (InvalidOperationException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Conflict(new { message = exception.Message });
+        }
+
+        return Ok(ActionResponse(
+            entity,
+            "Hakediş kesinleştirildi; gelir fişi otomatik oluşturuldu."));
+    }
 
     [HttpPost("{id:guid}/cancel")]
     [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
@@ -382,6 +425,16 @@ public sealed class ProgressPaymentsController(AppDbContext db)
             return Conflict(new
             {
                 message = "Hakediş zaten iptal edilmiş."
+            });
+        }
+
+        if (entity.AccountingVoucherId is not null)
+        {
+            return Conflict(new
+            {
+                message =
+                    "Kesinleşmiş ve muhasebeleştirilmiş hakediş iptal edilemez. " +
+                    "Önce muhasebe fişini iptal edip düzeltme kaydı oluşturun."
             });
         }
 
@@ -555,6 +608,7 @@ public sealed class ProgressPaymentsController(AppDbContext db)
                     BaseAmount = request.BaseAmount,
                     Amount = Math.Max(0m, amount),
                     IsManualAmount = isManual,
+                    AccountingAccountId = request.AccountingAccountId,
                     Notes = request.Notes?.Trim()
                 });
         }
@@ -641,6 +695,10 @@ public sealed class ProgressPaymentsController(AppDbContext db)
                 x.SubmittedAtUtc,
                 x.ApprovedAtUtc,
                 x.PostedAtUtc,
+                x.AccountingVoucherId,
+                AccountingVoucherNumber = x.AccountingVoucher != null
+                    ? x.AccountingVoucher.VoucherNumber
+                    : null,
                 Items = x.Items
                     .OrderBy(i => i.LineNumber)
                     .Select(i => new

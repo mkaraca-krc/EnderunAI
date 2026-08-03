@@ -310,7 +310,8 @@ public static class DatabaseSeeder
                 ExpenseAccountId = await ResolveAccountAsync(db, companyId, "740"),
                 PayablesAccountId = await ResolveAccountAsync(db, companyId, "320"),
                 ReceivablesAccountId = await ResolveAccountAsync(db, companyId, "120"),
-                FactoringExpenseAccountId = await ResolveAccountAsync(db, companyId, "780.01.01", "780")
+                FactoringExpenseAccountId = await ResolveAccountAsync(db, companyId, "780.01.01", "780"),
+                DeductionAccountId = await ResolveAccountAsync(db, companyId, "126")
             });
         }
 

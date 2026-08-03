@@ -502,8 +502,9 @@ export default function ProgressPaymentDetailPage() {
               onClick={() =>
                 void runAction("post")
               }
+              title="Kesinleştirir ve gelir fişini otomatik oluşturur (120 Alıcılar borç / 600 Satışlar + 391 Hesaplanan KDV alacak)"
             >
-              Kesinleştir
+              Kesinleştir ve Fişleştir
             </button>
           )}
 
@@ -690,6 +691,17 @@ export default function ProgressPaymentDetailPage() {
             strong
           />
         </div>
+
+        {item.accountingVoucherNumber && (
+          <div
+            className="erp-alert success"
+            style={{ marginTop: 12 }}
+          >
+            Gelir fişi otomatik oluşturuldu ve kesinleştirildi:{" "}
+            <strong>{item.accountingVoucherNumber}</strong> — 120 Alıcılar
+            (borç) / 600 Yurtiçi Satışlar + 391 Hesaplanan KDV (alacak).
+          </div>
+        )}
       </div>
 
       <div

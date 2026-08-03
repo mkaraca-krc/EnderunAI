@@ -18,7 +18,12 @@ public sealed record ProgressPaymentDeductionRequest(
     decimal Rate,
     decimal BaseAmount,
     decimal? ManualAmount,
-    string? Notes
+    string? Notes,
+    /// <summary>
+    /// Kesintinin borç yazılacağı hesap. Boşsa şirket finans ayarındaki
+    /// varsayılan kesinti hesabı kullanılır.
+    /// </summary>
+    Guid? AccountingAccountId = null
 );
 
 public sealed record CreateProgressPaymentRequest(

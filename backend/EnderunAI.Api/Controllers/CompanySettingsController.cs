@@ -316,7 +316,7 @@ public sealed class CompanySettingsController(
         {
             request.VatInAccountId, request.VatOutAccountId, request.SalesAccountId,
             request.ExpenseAccountId, request.PayablesAccountId, request.ReceivablesAccountId,
-            request.FactoringExpenseAccountId
+            request.FactoringExpenseAccountId, request.DeductionAccountId
         }.Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToArray();
 
         if (accountIds.Length > 0)
@@ -353,6 +353,7 @@ public sealed class CompanySettingsController(
         tracked.PayablesAccountId = request.PayablesAccountId;
         tracked.ReceivablesAccountId = request.ReceivablesAccountId;
         tracked.FactoringExpenseAccountId = request.FactoringExpenseAccountId;
+        tracked.DeductionAccountId = request.DeductionAccountId;
         tracked.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
@@ -376,7 +377,8 @@ public sealed class CompanySettingsController(
             settings.ExpenseAccountId,
             settings.PayablesAccountId,
             settings.ReceivablesAccountId,
-            settings.FactoringExpenseAccountId);
+            settings.FactoringExpenseAccountId,
+            settings.DeductionAccountId);
 
     /// <summary>
     /// Brevo API entegrasyonunu doğrulamak için tek seferlik test e-postası
