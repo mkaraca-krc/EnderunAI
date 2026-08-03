@@ -411,8 +411,20 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
         var created = 0;
         var updated = 0;
         var skipped = 0;
+        var missingSalaryDefinition = 0;
         foreach (var person in personnel)
         {
+            // Dönemde yürürlükte ücret kartı yoksa bordro üretilmez.
+            // Personel kartındaki maaşa düşmek, o alanın net tutması ve
+            // tarih bilgisi taşımaması nedeniyle asgari ücret altı ya da
+            // kişi henüz işe girmemişken bordro üretmek demekti.
+            if (!salaryByPersonnel.TryGetValue(person.Id, out var salaryCard) ||
+                salaryCard.GrossSalary <= 0m)
+            {
+                missingSalaryDefinition++;
+                continue;
+            }
+
             if (existing.TryGetValue(person.Id, out var record))
             {
                 if (!request.RecalculateExisting ||
@@ -437,11 +449,7 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
                 created++;
             }
 
-            // Ücret kartı yoksa personel kartındaki maaşa düşülür; ikisi
-            // de yoksa brüt 0 kalır ve kişi bordroda sıfır tutarla görünür.
-            var gross = salaryByPersonnel.TryGetValue(person.Id, out var salaryCard)
-                ? (salaryCard.GrossSalary > 0m ? salaryCard.GrossSalary : person.Salary)
-                : person.Salary;
+            var gross = salaryCard.GrossSalary;
 
             record.GrossSalary = gross;
             record.NormalWorkAmount = gross;
@@ -492,7 +500,7 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
             .SumAsync(x => x.NetPayableAmount, cancellationToken);
         return new CompanyPayrollCalculationResult(
             request.CompanyId, request.Year, request.Month, personnel.Count,
-            created, updated, skipped, total);
+            created, updated, skipped, total, missingSalaryDefinition);
     }
 
     public async Task<PayrollResponse> ApprovePayrollAsync(

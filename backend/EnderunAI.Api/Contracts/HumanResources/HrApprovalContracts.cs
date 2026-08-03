@@ -116,10 +116,13 @@ public sealed record CalculateCompanyPayrollRequest(
     int Month,
     bool RecalculateExisting = false);
 
+/// <param name="MissingSalaryDefinitionCount">Dönemde yürürlükte ücret
+/// kartı bulunmadığı için bordrosu üretilemeyen personel sayısı.</param>
 public sealed record CompanyPayrollCalculationResult(
     Guid CompanyId, int Year, int Month, int PersonnelCount,
     int CreatedCount, int UpdatedCount, int SkippedCount,
-    decimal TotalNetPayableAmount);
+    decimal TotalNetPayableAmount,
+    int MissingSalaryDefinitionCount = 0);
 
 public sealed record PayrollSummary(
     Guid CompanyId, int Year, int Month, int PayrollCount,
