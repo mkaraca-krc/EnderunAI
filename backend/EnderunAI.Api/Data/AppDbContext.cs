@@ -68,6 +68,12 @@ public sealed class AppDbContext(
 
     public DbSet<ProgressPaymentSection> ProgressPaymentSections =>
         Set<ProgressPaymentSection>();
+
+    public DbSet<ProgressPaymentAdvanceMaterial> ProgressPaymentAdvanceMaterials =>
+        Set<ProgressPaymentAdvanceMaterial>();
+
+    public DbSet<ProgressPaymentAdvanceMaterialOffset> ProgressPaymentAdvanceMaterialOffsets =>
+        Set<ProgressPaymentAdvanceMaterialOffset>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
@@ -2041,6 +2047,57 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.AccountingVoucher)
                 .WithMany()
                 .HasForeignKey(x => x.AccountingVoucherId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProgressPaymentAdvanceMaterial>(entity =>
+        {
+            entity.ToTable("progress_payment_advance_materials");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.PositionCode).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 4);
+            entity.Property(x => x.ValuationRate).HasPrecision(8, 4);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.OffsetAmount).HasPrecision(18, 2);
+
+            // OpenAmount hesaplanmış bir özellik; kolona yazılmaz.
+            entity.Ignore(x => x.OpenAmount);
+
+            entity.HasIndex(x => new { x.ProgressPaymentId, x.LineNumber }).IsUnique();
+
+            entity.HasOne(x => x.ProgressPayment).WithMany(x => x.AdvanceMaterials)
+                .HasForeignKey(x => x.ProgressPaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProgressPaymentAdvanceMaterialOffset>(entity =>
+        {
+            entity.ToTable("progress_payment_advance_material_offsets");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasIndex(x => new { x.ProgressPaymentId, x.AdvanceMaterialId });
+
+            entity.HasOne(x => x.AdvanceMaterial).WithMany(x => x.Offsets)
+                .HasForeignKey(x => x.AdvanceMaterialId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Mahsubun yapıldığı hakediş silinirse mahsup de silinmeli;
+            // iki yoldan cascade çakışmasın diye bu taraf Restrict.
+            entity.HasOne(x => x.ProgressPayment).WithMany(x => x.AdvanceMaterialOffsets)
+                .HasForeignKey(x => x.ProgressPaymentId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

@@ -91,6 +91,14 @@ public sealed class ProgressPayment : BaseEntity
 
     public ICollection<ProgressPaymentDeduction> Deductions { get; set; }
         = new List<ProgressPaymentDeduction>();
+
+    /// <summary>Bu hakedişte açılan ihzarat kalemleri.</summary>
+    public ICollection<ProgressPaymentAdvanceMaterial> AdvanceMaterials { get; set; }
+        = new List<ProgressPaymentAdvanceMaterial>();
+
+    /// <summary>Bu hakedişte yapılan ihzarat mahsupları.</summary>
+    public ICollection<ProgressPaymentAdvanceMaterialOffset> AdvanceMaterialOffsets { get; set; }
+        = new List<ProgressPaymentAdvanceMaterialOffset>();
 }
 
 public sealed class ProgressPaymentItem : BaseEntity

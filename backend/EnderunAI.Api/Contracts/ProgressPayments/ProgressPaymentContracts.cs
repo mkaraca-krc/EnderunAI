@@ -20,6 +20,27 @@ public sealed record ProgressPaymentItemRequest(
     Guid? SectionId = null
 );
 
+/// <summary>Bu hakedişte açılan ihzarat kalemi.</summary>
+public sealed record ProgressPaymentAdvanceMaterialRequest(
+    string PositionCode,
+    string Description,
+    string Unit,
+    decimal Quantity,
+    decimal UnitPrice,
+    decimal ValuationRate,
+    string? Notes
+);
+
+/// <summary>
+/// Önceki hakedişlerde açılmış bir ihzarat kaleminden bu hakedişte
+/// yapılan mahsup. Açık bakiyeyi aşamaz.
+/// </summary>
+public sealed record ProgressPaymentAdvanceOffsetRequest(
+    Guid AdvanceMaterialId,
+    decimal Amount,
+    string? Notes
+);
+
 public sealed record ProgressPaymentDeductionRequest(
     int DeductionType,
     string Description,
@@ -50,7 +71,10 @@ public sealed record CreateProgressPaymentRequest(
     string? Description,
     string? Notes,
     IReadOnlyCollection<ProgressPaymentItemRequest> Items,
-    IReadOnlyCollection<ProgressPaymentDeductionRequest> Deductions
+    IReadOnlyCollection<ProgressPaymentDeductionRequest> Deductions,
+    IReadOnlyCollection<ProgressPaymentAdvanceMaterialRequest>? AdvanceMaterials = null,
+    IReadOnlyCollection<ProgressPaymentAdvanceOffsetRequest>? AdvanceOffsets = null,
+    decimal IncomeTaxWithholdingRate = 0m
 );
 
 public sealed record UpdateProgressPaymentRequest(
@@ -64,7 +88,10 @@ public sealed record UpdateProgressPaymentRequest(
     string? Description,
     string? Notes,
     IReadOnlyCollection<ProgressPaymentItemRequest> Items,
-    IReadOnlyCollection<ProgressPaymentDeductionRequest> Deductions
+    IReadOnlyCollection<ProgressPaymentDeductionRequest> Deductions,
+    IReadOnlyCollection<ProgressPaymentAdvanceMaterialRequest>? AdvanceMaterials = null,
+    IReadOnlyCollection<ProgressPaymentAdvanceOffsetRequest>? AdvanceOffsets = null,
+    decimal IncomeTaxWithholdingRate = 0m
 );
 
 public sealed record CancelProgressPaymentRequest(string? Reason);

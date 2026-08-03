@@ -82,6 +82,47 @@ public sealed class ProgressPaymentsController(
             : Ok(result);
     }
 
+    /// <summary>
+    /// Projenin açık ihzarat kalemleri — sonraki hakedişte mahsup
+    /// edilebilecek olanlar. Her kalem için imalata dönen tutara göre
+    /// önerilen mahsup da hesaplanır.
+    /// </summary>
+    [HttpGet("open-advance-materials")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
+    public async Task<IActionResult> OpenAdvanceMaterials(
+        [FromQuery] Guid projectId,
+        [FromQuery] Guid? excludeProgressPaymentId,
+        CancellationToken cancellationToken)
+    {
+        var query = db.ProgressPaymentAdvanceMaterials
+            .AsNoTracking()
+            .Where(x => x.ProgressPayment.ProjectId == projectId &&
+                        x.ProgressPayment.Status != ProgressPaymentStatus.Cancelled &&
+                        x.Amount > x.OffsetAmount);
+
+        if (excludeProgressPaymentId is Guid excluded)
+            query = query.Where(x => x.ProgressPaymentId != excluded);
+
+        return Ok(await query
+            .OrderBy(x => x.PositionCode)
+            .Select(x => new
+            {
+                x.Id,
+                x.PositionCode,
+                x.Description,
+                x.Unit,
+                x.Quantity,
+                x.UnitPrice,
+                x.ValuationRate,
+                x.Amount,
+                x.OffsetAmount,
+                OpenAmount = x.Amount - x.OffsetAmount,
+                SourceProgressPaymentNumber = x.ProgressPayment.ProgressPaymentNumber,
+                SourcePeriodNumber = x.ProgressPayment.PeriodNumber
+            })
+            .ToListAsync(cancellationToken));
+    }
+
     [HttpPost]
     [RequirePermission(PermissionCatalog.Keys.HakedisCreate)]
     public async Task<IActionResult> Create(
@@ -203,6 +244,7 @@ public sealed class ProgressPaymentsController(
                 request.WithholdingNumerator,
             WithholdingDenominator =
                 request.WithholdingDenominator,
+            IncomeTaxWithholdingRate = request.IncomeTaxWithholdingRate,
             Description = request.Description?.Trim(),
             Notes = request.Notes?.Trim()
         };
@@ -215,6 +257,17 @@ public sealed class ProgressPaymentsController(
             request.Items,
             previousPayments.SelectMany(x => x.Items),
             sectionMap);
+
+        ApplyAdvanceMaterials(entity, request.AdvanceMaterials);
+
+        var offsetError = await ApplyAdvanceOffsetsAsync(
+            entity, request.AdvanceOffsets, cancellationToken);
+
+        if (offsetError is not null)
+            return Conflict(new { message = offsetError });
+
+        entity.CumulativeAdvanceMaterialAmount =
+            await CalculateOpenAdvanceAmountAsync(entity, cancellationToken);
 
         ApplyDeductions(entity, request.Deductions);
         CalculateHeader(entity, previousPayments);
@@ -270,6 +323,43 @@ public sealed class ProgressPaymentsController(
                 .Include(x => x.Items)
                 .ToListAsync(cancellationToken);
 
+        // Bu hakedişin açtığı ihzarat kalemine başka bir hakediş mahsup
+        // yapmışsa satırlar silinemez; silinseydi o mahsubun dayanağı
+        // ortadan kalkar ve bakiye takibi kopardı.
+        var lockedByOthers = await db.ProgressPaymentAdvanceMaterialOffsets
+            .AnyAsync(x => x.AdvanceMaterial.ProgressPaymentId == entity.Id &&
+                           x.ProgressPaymentId != entity.Id,
+                cancellationToken);
+
+        if (lockedByOthers)
+        {
+            return Conflict(new
+            {
+                message = "Bu hakedişin ihzarat kalemlerine sonraki bir hakedişte " +
+                          "mahsup yapılmış; düzenlenemez. Önce o mahsubu kaldırın."
+            });
+        }
+
+        var ownAdvanceMaterials = await db.ProgressPaymentAdvanceMaterials
+            .Where(x => x.ProgressPaymentId == entity.Id)
+            .ToListAsync(cancellationToken);
+
+        var ownOffsets = await db.ProgressPaymentAdvanceMaterialOffsets
+            .Include(x => x.AdvanceMaterial)
+            .Where(x => x.ProgressPaymentId == entity.Id)
+            .ToListAsync(cancellationToken);
+
+        // Kaldırılan mahsuplar, mahsup edildikleri kalemin bakiyesine
+        // geri döner.
+        foreach (var offset in ownOffsets)
+        {
+            offset.AdvanceMaterial.OffsetAmount -= offset.Amount;
+            offset.AdvanceMaterial.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        db.ProgressPaymentAdvanceMaterialOffsets.RemoveRange(ownOffsets);
+        db.ProgressPaymentAdvanceMaterials.RemoveRange(ownAdvanceMaterials);
+
         db.ProgressPaymentItems.RemoveRange(entity.Items);
         db.ProgressPaymentDeductions.RemoveRange(entity.Deductions);
         db.ProgressPaymentSections.RemoveRange(entity.Sections);
@@ -277,6 +367,8 @@ public sealed class ProgressPaymentsController(
         entity.Items.Clear();
         entity.Deductions.Clear();
         entity.Sections.Clear();
+        entity.AdvanceMaterials.Clear();
+        entity.AdvanceMaterialOffsets.Clear();
 
         entity.PeriodStartDate = request.PeriodStartDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         entity.PeriodEndDate = request.PeriodEndDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
@@ -289,6 +381,7 @@ public sealed class ProgressPaymentsController(
             request.WithholdingNumerator;
         entity.WithholdingDenominator =
             request.WithholdingDenominator;
+        entity.IncomeTaxWithholdingRate = request.IncomeTaxWithholdingRate;
         entity.Description = request.Description?.Trim();
         entity.Notes = request.Notes?.Trim();
         entity.UpdatedAtUtc = DateTime.UtcNow;
@@ -301,6 +394,17 @@ public sealed class ProgressPaymentsController(
             request.Items,
             previousPayments.SelectMany(x => x.Items),
             sectionMap);
+
+        ApplyAdvanceMaterials(entity, request.AdvanceMaterials);
+
+        var offsetError = await ApplyAdvanceOffsetsAsync(
+            entity, request.AdvanceOffsets, cancellationToken);
+
+        if (offsetError is not null)
+            return Conflict(new { message = offsetError });
+
+        entity.CumulativeAdvanceMaterialAmount =
+            await CalculateOpenAdvanceAmountAsync(entity, cancellationToken);
 
         ApplyDeductions(entity, request.Deductions);
         CalculateHeader(entity, previousPayments);
@@ -522,6 +626,125 @@ public sealed class ProgressPaymentsController(
             entity.Status,
             message
         };
+
+    /// <summary>
+    /// Bu hakedişte açılan ihzarat kalemlerini kurar.
+    /// </summary>
+    private static void ApplyAdvanceMaterials(
+        ProgressPayment entity,
+        IEnumerable<ProgressPaymentAdvanceMaterialRequest>? requests)
+    {
+        if (requests is null)
+            return;
+
+        var lineNumber = 1;
+
+        foreach (var request in requests)
+        {
+            var calculated = HakedisCalculationService.CalculateAdvanceMaterial(
+                new HakedisCalculationService.AdvanceMaterialInput(
+                    Id: Guid.Empty,
+                    PositionCode: request.PositionCode?.Trim() ?? string.Empty,
+                    Quantity: request.Quantity,
+                    UnitPrice: request.UnitPrice,
+                    ValuationRate: request.ValuationRate,
+                    PreviouslyOffsetAmount: 0m));
+
+            entity.AdvanceMaterials.Add(new ProgressPaymentAdvanceMaterial
+            {
+                LineNumber = lineNumber++,
+                PositionCode = calculated.PositionCode,
+                Description = request.Description?.Trim() ?? string.Empty,
+                Unit = request.Unit?.Trim() ?? string.Empty,
+                Quantity = Math.Max(0m, request.Quantity),
+                UnitPrice = Math.Max(0m, request.UnitPrice),
+                ValuationRate = Math.Clamp(request.ValuationRate, 0m, 100m),
+                Amount = calculated.Amount,
+                OffsetAmount = 0m,
+                Notes = request.Notes?.Trim()
+            });
+        }
+    }
+
+    /// <summary>
+    /// Önceki hakedişlerde açılmış ihzarat kalemlerinden bu hakedişte
+    /// yapılan mahsupları uygular.
+    ///
+    /// Açık bakiyeyi aşan mahsup burada reddedilir — çift tahsilatın
+    /// engeli arayüzde değil serviste.
+    /// </summary>
+    /// <returns>Hata mesajı; geçerliyse null.</returns>
+    private async Task<string?> ApplyAdvanceOffsetsAsync(
+        ProgressPayment entity,
+        IEnumerable<ProgressPaymentAdvanceOffsetRequest>? requests,
+        CancellationToken cancellationToken)
+    {
+        if (requests is null)
+            return null;
+
+        var requestList = requests.Where(x => x.Amount != 0m).ToList();
+        if (requestList.Count == 0)
+            return null;
+
+        var ids = requestList.Select(x => x.AdvanceMaterialId).Distinct().ToList();
+
+        var materials = await db.ProgressPaymentAdvanceMaterials
+            .Where(x => ids.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (var request in requestList)
+        {
+            var material = materials.SingleOrDefault(x => x.Id == request.AdvanceMaterialId);
+
+            if (material is null)
+                return "Mahsup edilmek istenen ihzarat kalemi bulunamadı.";
+
+            // Düzenleme akışında bu hakedişin eski mahsupları çağrıdan
+            // önce geri alındığı için bakiye burada doğrudan okunabilir.
+            var openAmount = material.Amount - material.OffsetAmount;
+
+            var error = HakedisCalculationService.ValidateOffset(
+                material.PositionCode, openAmount, request.Amount);
+
+            if (error is not null)
+                return error;
+
+            material.OffsetAmount += request.Amount;
+            material.UpdatedAtUtc = DateTime.UtcNow;
+
+            entity.AdvanceMaterialOffsets.Add(
+                new ProgressPaymentAdvanceMaterialOffset
+                {
+                    AdvanceMaterialId = material.Id,
+                    Amount = request.Amount,
+                    Notes = request.Notes?.Trim()
+                });
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Projenin açık ihzarat bakiyesi: bu hakedişte açılanlar + önceki
+    /// hakedişlerden kalan açık bakiye. Üst hesapta kümülatif toplama
+    /// girer.
+    /// </summary>
+    private async Task<decimal> CalculateOpenAdvanceAmountAsync(
+        ProgressPayment entity, CancellationToken cancellationToken)
+    {
+        var fromPreviousPeriods = await db.ProgressPaymentAdvanceMaterials
+            .Where(x => x.ProgressPayment.ProjectId == entity.ProjectId &&
+                        x.ProgressPaymentId != entity.Id &&
+                        x.ProgressPayment.Status != ProgressPaymentStatus.Cancelled)
+            .SumAsync(x => (decimal?)(x.Amount - x.OffsetAmount), cancellationToken) ?? 0m;
+
+        var openedNow = entity.AdvanceMaterials.Sum(x => x.Amount - x.OffsetAmount);
+
+        // Bu hakedişte yapılan mahsuplar önceki dönem bakiyesinden düşer.
+        var offsetNow = entity.AdvanceMaterialOffsets.Sum(x => x.Amount);
+
+        return Math.Max(0m, fromPreviousPeriods + openedNow - offsetNow);
+    }
 
     /// <summary>
     /// Hakedişin kendi bölüm satırlarını proje şablonundan kopyalar.
@@ -845,6 +1068,33 @@ public sealed class ProgressPaymentsController(
                         i.CompletionRate,
                         i.MeasurementReference,
                         i.Notes
+                    }),
+                AdvanceMaterials = x.AdvanceMaterials
+                    .OrderBy(a => a.LineNumber)
+                    .Select(a => new
+                    {
+                        a.Id,
+                        a.LineNumber,
+                        a.PositionCode,
+                        a.Description,
+                        a.Unit,
+                        a.Quantity,
+                        a.UnitPrice,
+                        a.ValuationRate,
+                        a.Amount,
+                        a.OffsetAmount,
+                        OpenAmount = a.Amount - a.OffsetAmount,
+                        a.Notes
+                    }),
+                AdvanceOffsets = x.AdvanceMaterialOffsets
+                    .Select(o => new
+                    {
+                        o.Id,
+                        o.AdvanceMaterialId,
+                        PositionCode = o.AdvanceMaterial.PositionCode,
+                        AdvanceDescription = o.AdvanceMaterial.Description,
+                        o.Amount,
+                        o.Notes
                     }),
                 Deductions = x.Deductions
                     .OrderBy(d => d.LineNumber)

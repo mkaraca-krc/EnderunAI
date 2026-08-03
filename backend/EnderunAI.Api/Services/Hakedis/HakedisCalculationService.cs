@@ -261,6 +261,85 @@ public static class HakedisCalculationService
             NetPayableAmount: net);
     }
 
+    // ---------- İhzarat ----------
+
+    /// <summary>
+    /// Bir ihzarat kaleminin hesaba giren hali.
+    /// </summary>
+    /// <param name="PreviouslyOffsetAmount">Önceki hakedişlerde mahsup
+    /// edilmiş toplam.</param>
+    public sealed record AdvanceMaterialInput(
+        Guid Id,
+        string PositionCode,
+        decimal Quantity,
+        decimal UnitPrice,
+        decimal ValuationRate,
+        decimal PreviouslyOffsetAmount);
+
+    public sealed record AdvanceMaterialResult(
+        Guid Id,
+        string PositionCode,
+        decimal Amount,
+        decimal PreviouslyOffsetAmount,
+        decimal OpenAmount);
+
+    /// <summary>
+    /// İhzarat tutarı: miktar × birim fiyat × bedellendirme oranı.
+    /// Açık bakiye, önceki mahsuplar düşülerek bulunur ve negatife
+    /// düşemez.
+    /// </summary>
+    public static AdvanceMaterialResult CalculateAdvanceMaterial(
+        AdvanceMaterialInput input)
+    {
+        var quantity = Math.Max(0m, input.Quantity);
+        var unitPrice = Math.Max(0m, input.UnitPrice);
+        var rate = Math.Clamp(input.ValuationRate, 0m, 100m);
+
+        var amount = Round(quantity * unitPrice * rate / 100m);
+        var offset = Math.Max(0m, Round(input.PreviouslyOffsetAmount));
+
+        return new AdvanceMaterialResult(
+            Id: input.Id,
+            PositionCode: input.PositionCode,
+            Amount: amount,
+            PreviouslyOffsetAmount: offset,
+            OpenAmount: Math.Max(0m, Round(amount - offset)));
+    }
+
+    /// <summary>
+    /// Bir ihzarat kalemi için önerilen mahsup tutarı.
+    ///
+    /// Öneri, pozun bu dönem imalata dönen tutarıyla açık ihzarat
+    /// bakiyesinin küçüğüdür: imalatı aşan mahsup anlamsız, bakiyeyi
+    /// aşan mahsup ise çift tahsilat olurdu.
+    /// </summary>
+    public static decimal SuggestOffset(
+        decimal openAdvanceAmount, decimal currentWorkAmountForPosition) =>
+        Math.Max(0m, Math.Min(
+            Round(openAdvanceAmount),
+            Round(currentWorkAmountForPosition)));
+
+    /// <summary>
+    /// Mahsup tutarının geçerliliği. Açık bakiyeyi aşan mahsup hiçbir
+    /// koşulda kabul edilmez — çift tahsilatın engeli burasıdır.
+    /// </summary>
+    /// <returns>Hata mesajı; geçerliyse null.</returns>
+    public static string? ValidateOffset(
+        string positionCode, decimal openAdvanceAmount, decimal requestedOffset)
+    {
+        if (requestedOffset < 0m)
+            return $"'{positionCode}' ihzarat mahsubu negatif olamaz.";
+
+        if (Round(requestedOffset) > Round(openAdvanceAmount))
+        {
+            return $"'{positionCode}' için mahsup ({requestedOffset:N2}) açık " +
+                   $"ihzarat bakiyesini ({openAdvanceAmount:N2}) aşamaz. " +
+                   "Aşan mahsup aynı işin iki kez tahsil edilmesi demek olurdu.";
+        }
+
+        return null;
+    }
+
     internal static decimal Round(decimal value) =>
         decimal.Round(value, 2, MidpointRounding.AwayFromZero);
 }

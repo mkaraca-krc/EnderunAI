@@ -281,6 +281,93 @@ public sealed class HakedisCalculationTests
         Assert.Equal(16_000.00m, result.CurrentAmount);
     }
 
+    // ---------- İhzarat ----------
+
+    /// <summary>
+    /// İhzarat tutarı: miktar × birim fiyat × bedellendirme oranı.
+    /// 100 × 500 × %80 = 40.000
+    /// </summary>
+    [Fact]
+    public void AdvanceMaterial_IsValuedAtContractRate()
+    {
+        var result = HakedisCalculationService.CalculateAdvanceMaterial(
+            new HakedisCalculationService.AdvanceMaterialInput(
+                Guid.NewGuid(), "1.01", Quantity: 100m, UnitPrice: 500m,
+                ValuationRate: 80m, PreviouslyOffsetAmount: 0m));
+
+        Assert.Equal(40_000.00m, result.Amount);
+        Assert.Equal(40_000.00m, result.OpenAmount);
+    }
+
+    /// <summary>Mahsup edilen kısım açık bakiyeden düşer.</summary>
+    [Fact]
+    public void AdvanceMaterial_OpenAmountExcludesPreviousOffsets()
+    {
+        var result = HakedisCalculationService.CalculateAdvanceMaterial(
+            new HakedisCalculationService.AdvanceMaterialInput(
+                Guid.NewGuid(), "1.01", 100m, 500m, 80m,
+                PreviouslyOffsetAmount: 15_000m));
+
+        Assert.Equal(40_000.00m, result.Amount);
+        Assert.Equal(25_000.00m, result.OpenAmount);
+    }
+
+    /// <summary>Tamamı mahsup edilmiş kalemin bakiyesi negatife düşmez.</summary>
+    [Fact]
+    public void AdvanceMaterial_OpenAmountNeverGoesNegative()
+    {
+        var result = HakedisCalculationService.CalculateAdvanceMaterial(
+            new HakedisCalculationService.AdvanceMaterialInput(
+                Guid.NewGuid(), "1.01", 100m, 500m, 80m,
+                PreviouslyOffsetAmount: 60_000m));
+
+        Assert.Equal(0m, result.OpenAmount);
+    }
+
+    /// <summary>
+    /// ÇİFT TAHSİLAT ENGELİ: açık bakiyeyi aşan mahsup reddedilir.
+    /// Bu kural arayüzde değil hesapta durur.
+    /// </summary>
+    [Fact]
+    public void Offset_ExceedingOpenBalance_IsRejected()
+    {
+        var error = HakedisCalculationService.ValidateOffset(
+            "1.01", openAdvanceAmount: 25_000m, requestedOffset: 25_000.01m);
+
+        Assert.NotNull(error);
+        Assert.Contains("aşamaz", error);
+    }
+
+    [Fact]
+    public void Offset_UpToOpenBalance_IsAccepted()
+    {
+        Assert.Null(HakedisCalculationService.ValidateOffset(
+            "1.01", openAdvanceAmount: 25_000m, requestedOffset: 25_000m));
+    }
+
+    [Fact]
+    public void Offset_NegativeAmount_IsRejected()
+    {
+        Assert.NotNull(HakedisCalculationService.ValidateOffset(
+            "1.01", openAdvanceAmount: 25_000m, requestedOffset: -1m));
+    }
+
+    /// <summary>
+    /// Mahsup önerisi, imalata dönen tutar ile açık bakiyenin küçüğüdür:
+    /// imalatı aşan öneri anlamsız, bakiyeyi aşan öneri çift tahsilat
+    /// olurdu.
+    /// </summary>
+    [Theory]
+    [InlineData(25_000, 30_000, 25_000)]  // bakiye sınırlıyor
+    [InlineData(25_000, 18_000, 18_000)]  // imalat sınırlıyor
+    [InlineData(0, 30_000, 0)]            // açık ihzarat yok
+    public void SuggestedOffset_IsMinimumOfBalanceAndWorkDone(
+        decimal openAdvance, decimal currentWork, decimal expected)
+    {
+        Assert.Equal(expected,
+            HakedisCalculationService.SuggestOffset(openAdvance, currentWork));
+    }
+
     /// <summary>
     /// Bütünlük: brüt = matrah + KDV ve net = brüt − tevkifat − stopaj −
     /// kesinti. Eşitlik bozulursa hakediş kendi içinde tutarsızdır.
