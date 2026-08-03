@@ -40,11 +40,16 @@ public sealed class HizirToolRegistry : IHizirToolRegistry
     private readonly IHizirKnowledgeBase _knowledgeBase;
     private readonly List<HizirTool> _tools;
 
-    public HizirToolRegistry(AppDbContext db, IHizirKnowledgeBase knowledgeBase)
+    public HizirToolRegistry(
+        AppDbContext db,
+        IHizirKnowledgeBase knowledgeBase,
+        HizirActionTools actionTools)
     {
         _db = db;
         _knowledgeBase = knowledgeBase;
-        _tools = BuildTools();
+
+        // Katman 1 okuma araçları + Katman 2 eylem araçları.
+        _tools = [.. BuildTools(), .. actionTools.Build()];
     }
 
     public IReadOnlyList<HizirTool> All => _tools;

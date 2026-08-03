@@ -12,8 +12,59 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/hizir")]
-public sealed class HizirController(IHizirChatService service) : ControllerBase
+public sealed class HizirController(
+    IHizirChatService service,
+    IHizirPendingActionStore pendingActions) : ControllerBase
 {
+    /// <summary>Kullanıcının onay bekleyen eylemleri.</summary>
+    [HttpGet("actions/pending")]
+    [RequirePermission(PermissionCatalog.Keys.AiUse)]
+    public async Task<IActionResult> PendingActions(CancellationToken cancellationToken) =>
+        Ok(await pendingActions.GetPendingAsync(cancellationToken));
+
+    /// <summary>
+    /// Bekleyen eylemi onaylar ve YÜRÜTÜR. Eylemin gerçekten çalıştığı
+    /// tek yer burasıdır ve yalnızca kullanıcının kendi oturumuyla
+    /// çağrılabilir — dil modeline bu uca giden bir araç tanıtılmaz.
+    /// </summary>
+    [HttpPost("actions/{id:guid}/confirm")]
+    [RequirePermission(PermissionCatalog.Keys.AiUse)]
+    public async Task<IActionResult> ConfirmAction(
+        Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await pendingActions.ConfirmAsync(id, cancellationToken));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
+    [HttpPost("actions/{id:guid}/cancel")]
+    [RequirePermission(PermissionCatalog.Keys.AiUse)]
+    public async Task<IActionResult> CancelAction(
+        Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await pendingActions.CancelAsync(id, cancellationToken));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
     /// <summary>Asistanın yapılandırılıp yapılandırılmadığı — arayüz buna göre uyarır.</summary>
     [HttpGet("status")]
     [RequirePermission(PermissionCatalog.Keys.AiUse)]

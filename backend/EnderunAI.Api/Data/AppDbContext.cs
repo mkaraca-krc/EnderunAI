@@ -27,6 +27,7 @@ public sealed class AppDbContext(
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
     public DbSet<HizirConversation> HizirConversations => Set<HizirConversation>();
     public DbSet<HizirMessage> HizirMessages => Set<HizirMessage>();
+    public DbSet<HizirPendingAction> HizirPendingActions => Set<HizirPendingAction>();
     public DbSet<CompanyPayrollSettings> CompanyPayrollSettings =>
         Set<CompanyPayrollSettings>();
     public DbSet<PayrollTaxBracket> PayrollTaxBrackets => Set<PayrollTaxBracket>();
@@ -557,6 +558,29 @@ public sealed class AppDbContext(
 
             entity.HasOne(x => x.User).WithMany()
                 .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<HizirPendingAction>(entity =>
+        {
+            entity.ToTable("hizir_pending_actions");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.UserId, x.Status });
+            entity.HasIndex(x => x.ExpiresAtUtc);
+
+            entity.Property(x => x.ActionName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.ArgumentsJson).HasMaxLength(8000).IsRequired();
+            entity.Property(x => x.Summary).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.RequiredPermission).HasMaxLength(100);
+            entity.Property(x => x.ResultMessage).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+
+            entity.HasOne(x => x.User).WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Conversation).WithMany()
+                .HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.SetNull);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

@@ -93,8 +93,15 @@ builder.Services.AddSingleton<
     EnderunAI.Api.Services.Hizir.IHizirKnowledgeBase,
     EnderunAI.Api.Services.Hizir.HizirKnowledgeBase>();
 builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.IHizirPendingActionStore,
+    EnderunAI.Api.Services.Hizir.HizirPendingActionStore>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Hizir.HizirActionTools>();
+builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.IHizirToolRegistry,
     EnderunAI.Api.Services.Hizir.HizirToolRegistry>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.IHizirActionAuditor,
+    EnderunAI.Api.Services.Hizir.HizirActionAuditor>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.IHizirChatService,
     EnderunAI.Api.Services.Hizir.HizirChatService>();

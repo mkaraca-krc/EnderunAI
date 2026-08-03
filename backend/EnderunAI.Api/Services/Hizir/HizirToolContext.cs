@@ -31,8 +31,30 @@ public sealed record HizirToolOutcome(
     bool IsError = false);
 
 /// <summary>
-/// Salt-okunur bir Hızır aracı. RequiredPermission null ise araç
-/// herkese açıktır (ör. kullanım kılavuzu araması).
+/// Aracın güvenlik kademesi.
+///
+/// Tehlikeli işlemler (para/ödeme, çek durumu, kasa hareketi, silme,
+/// bordro-muhasebe kesinleştirme, yetki/rol/kullanıcı yönetimi) için
+/// üçüncü bir kademe YOKTUR: bu işlemler araç olarak hiç tanımlanmaz,
+/// dolayısıyla modelin onlara giden bir kod yolu bulunmaz.
+/// Bkz. HizirForbiddenActionTests — yanlışlıkla eklenmelerini engelleyen
+/// koruma testi.
+/// </summary>
+public enum HizirToolTier
+{
+    /// <summary>Doğrudan çalışır: okuma, taslak, kendine hatırlatma.</summary>
+    Safe = 0,
+
+    /// <summary>
+    /// Kullanıcı onayı olmadan yürütülmez. Aracın çalıştırıcısı iş
+    /// servisini çağırmaz; yalnızca bekleyen eylem kaydı üretir.
+    /// </summary>
+    RequiresApproval = 1
+}
+
+/// <summary>
+/// Bir Hızır aracı. RequiredPermission null ise araç herkese açıktır
+/// (ör. kullanım kılavuzu araması).
 /// </summary>
 public sealed record HizirTool(
     string Name,
@@ -40,4 +62,5 @@ public sealed record HizirTool(
     object InputSchema,
     string? RequiredPermission,
     Func<HizirToolContext, IReadOnlyDictionary<string, object?>, CancellationToken,
-        Task<HizirToolOutcome>> ExecuteAsync);
+        Task<HizirToolOutcome>> ExecuteAsync,
+    HizirToolTier Tier = HizirToolTier.Safe);
