@@ -182,9 +182,10 @@ public sealed class PayrollAccountingTests(DatabaseFixture fixture)
         Assert.Equal(AccountingVoucherStatus.Posted, voucher.Status);
         Assert.Equal(voucher.TotalDebit, voucher.TotalCredit);
 
-        // 60.000 brüt + işveren payı (20,75% + 2% = 13.650) = 73.650
+        // 60.000 brüt + işveren payı (%18,75 + %2 = 12.450) = 72.450
+        // İşveren SGK'sı 2 puanlık imalat dışı indirimle %18,75.
         var expense = voucher.Lines.Single(x => x.AccountingAccount.Code == "770");
-        Assert.Equal(73_650m, expense.DebitAmount);
+        Assert.Equal(72_450m, expense.DebitAmount);
 
         var payable = voucher.Lines.Single(x => x.AccountingAccount.Code == "335");
         Assert.Equal(47_356.63m, payable.CreditAmount);
@@ -193,11 +194,11 @@ public sealed class PayrollAccountingTests(DatabaseFixture fixture)
         var tax = voucher.Lines.Single(x => x.AccountingAccount.Code == "360");
         Assert.Equal(3_643.37m, tax.CreditAmount);
 
-        // İşçi 8.400 + 600 + işveren 12.450 + 1.200
+        // İşçi 8.400 + 600 + işveren 11.250 + 1.200
         var sgk = voucher.Lines.Single(x => x.AccountingAccount.Code == "361");
-        Assert.Equal(22_650m, sgk.CreditAmount);
+        Assert.Equal(21_450m, sgk.CreditAmount);
 
-        Assert.Equal(73_650m, voucher.TotalDebit);
+        Assert.Equal(72_450m, voucher.TotalDebit);
     }
 
     [Fact]

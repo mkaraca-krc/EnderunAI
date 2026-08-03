@@ -25,6 +25,9 @@ export type PayrollSettings = {
   stampTaxPerMille: number;
   minimumWageIncomeTaxExemptionEnabled: boolean;
   minimumWageStampTaxExemptionEnabled: boolean;
+  /** Kıdem tazminatı tavanı: bir hizmet yılı için ödenecek üst sınır. */
+  severanceCeiling: number;
+  severanceCeilingPeriodNote: string | null;
   verifiedAtUtc: string | null;
   verificationNote: string | null;
   isVerified: boolean;

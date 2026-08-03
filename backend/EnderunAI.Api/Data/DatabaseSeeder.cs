@@ -108,15 +108,19 @@ public static class DatabaseSeeder
                 MinimumWageGross = minimumWageGross,
                 MinimumWageNet = minimumWageNet,
                 SgkBaseFloor = minimumWageGross,
-                // SGK tavanı tabanın 7,5 katıdır.
-                SgkBaseCeiling = minimumWageGross * 7.5m,
+                // SGK tavanı 2026'da tabanın 9 katı (günlük 9.909,00).
+                SgkBaseCeiling = minimumWageGross * 9m,
                 SgkEmployeeRate = 14m,
                 UnemploymentEmployeeRate = 1m,
                 SgkEmployerRate = 20.75m,
                 UnemploymentEmployerRate = 2m,
-                SgkEmployerDiscountEnabled = false,
-                SgkEmployerDiscountPoints = 5m,
+                // Elektrik taahhüt imalat dışı sayıldığı için 2 puanlık
+                // indirim uygulanır: işveren SGK %18,75.
+                SgkEmployerDiscountEnabled = true,
+                SgkEmployerDiscountPoints = 2m,
                 StampTaxPerMille = 7.59m,
+                SeveranceCeiling = 53_919.68m,
+                SeveranceCeilingPeriodNote = "01.01.2026-30.06.2026",
                 MinimumWageIncomeTaxExemptionEnabled = true,
                 MinimumWageStampTaxExemptionEnabled = true,
                 VerifiedAtUtc = null
@@ -124,11 +128,11 @@ public static class DatabaseSeeder
 
             settings.TaxBrackets = new List<PayrollTaxBracket>
             {
-                new() { Order = 1, LowerBound = 0m, UpperBound = 200_000m, Rate = 15m },
-                new() { Order = 2, LowerBound = 200_000m, UpperBound = 420_000m, Rate = 20m },
-                new() { Order = 3, LowerBound = 420_000m, UpperBound = 1_000_000m, Rate = 27m },
-                new() { Order = 4, LowerBound = 1_000_000m, UpperBound = 5_400_000m, Rate = 35m },
-                new() { Order = 5, LowerBound = 5_400_000m, UpperBound = null, Rate = 40m }
+                new() { Order = 1, LowerBound = 0m, UpperBound = 190_000m, Rate = 15m },
+                new() { Order = 2, LowerBound = 190_000m, UpperBound = 400_000m, Rate = 20m },
+                new() { Order = 3, LowerBound = 400_000m, UpperBound = 1_500_000m, Rate = 27m },
+                new() { Order = 4, LowerBound = 1_500_000m, UpperBound = 5_300_000m, Rate = 35m },
+                new() { Order = 5, LowerBound = 5_300_000m, UpperBound = null, Rate = 40m }
             };
 
             db.CompanyPayrollSettings.Add(settings);

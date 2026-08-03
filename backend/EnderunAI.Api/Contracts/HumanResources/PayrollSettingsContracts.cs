@@ -20,6 +20,8 @@ public sealed record UpdatePayrollSettingsRequest(
     decimal StampTaxPerMille,
     bool MinimumWageIncomeTaxExemptionEnabled,
     bool MinimumWageStampTaxExemptionEnabled,
+    decimal SeveranceCeiling,
+    string? SeveranceCeilingPeriodNote,
     IReadOnlyCollection<PayrollTaxBracketRequest> TaxBrackets);
 
 /// <summary>
@@ -52,6 +54,8 @@ public sealed record PayrollSettingsResponse(
     decimal StampTaxPerMille,
     bool MinimumWageIncomeTaxExemptionEnabled,
     bool MinimumWageStampTaxExemptionEnabled,
+    decimal SeveranceCeiling,
+    string? SeveranceCeilingPeriodNote,
     DateTime? VerifiedAtUtc,
     string? VerificationNote,
     bool IsVerified,

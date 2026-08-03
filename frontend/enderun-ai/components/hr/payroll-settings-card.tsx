@@ -147,6 +147,8 @@ export default function PayrollSettingsCard({ companyId }: Props) {
           settings.minimumWageIncomeTaxExemptionEnabled,
         minimumWageStampTaxExemptionEnabled:
           settings.minimumWageStampTaxExemptionEnabled,
+        severanceCeiling: settings.severanceCeiling,
+        severanceCeilingPeriodNote: settings.severanceCeilingPeriodNote,
         taxBrackets: settings.taxBrackets.map((bracket) => ({
           order: bracket.order,
           lowerBound: bracket.lowerBound,
@@ -332,7 +334,42 @@ export default function PayrollSettingsCard({ companyId }: Props) {
                   patch({ stampTaxPerMille: numeric(e.target.value) })
                 }
               />
+              <Input
+                label="İşveren Prim İndirimi (puan)"
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                value={String(settings.sgkEmployerDiscountPoints)}
+                onChange={(e) =>
+                  patch({ sgkEmployerDiscountPoints: numeric(e.target.value) })
+                }
+              />
+              <Input
+                label="Kıdem Tazminatı Tavanı (TL)"
+                type="number"
+                min={0}
+                step={0.01}
+                value={String(settings.severanceCeiling)}
+                onChange={(e) =>
+                  patch({ severanceCeiling: numeric(e.target.value) })
+                }
+              />
+              <Input
+                label="Kıdem Tavanı Dönemi"
+                value={settings.severanceCeilingPeriodNote ?? ""}
+                placeholder="01.01.2026-30.06.2026"
+                onChange={(e) =>
+                  patch({ severanceCeilingPeriodNote: e.target.value })
+                }
+              />
             </div>
+
+            <p className="text-xs text-slate-500">
+              Kıdem tazminatı tavanı memur maaş katsayısına bağlı olduğu için
+              yılda iki kez (Ocak ve Temmuz) değişir; dönem alanı hangi
+              döneme ait olduğunu kayda geçirir.
+            </p>
 
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -343,7 +380,7 @@ export default function PayrollSettingsCard({ companyId }: Props) {
                     patch({ sgkEmployerDiscountEnabled: e.target.checked })
                   }
                 />
-                İşveren 5 puanlık prim indirimi
+                İşveren prim indirimi uygulansın
               </label>
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input

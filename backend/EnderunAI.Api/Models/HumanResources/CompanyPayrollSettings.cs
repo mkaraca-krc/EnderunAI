@@ -48,14 +48,17 @@ public sealed class CompanyPayrollSettings : BaseEntity
     public decimal UnemploymentEmployerRate { get; set; } = 2m;
 
     /// <summary>
-    /// 5510 sayılı kanunun 5 puanlık işveren indiriminden yararlanılıyor mu.
-    /// Açıksa işveren SGK oranından <see cref="SgkEmployerDiscountPoints"/>
-    /// düşülür.
+    /// İşveren SGK prim indiriminden yararlanılıyor mu. Açıksa işveren
+    /// SGK oranından <see cref="SgkEmployerDiscountPoints"/> düşülür.
     /// </summary>
-    public bool SgkEmployerDiscountEnabled { get; set; }
+    public bool SgkEmployerDiscountEnabled { get; set; } = true;
 
-    /// <summary>İşveren prim indirimi puanı. Yasal: 5.</summary>
-    public decimal SgkEmployerDiscountPoints { get; set; } = 5m;
+    /// <summary>
+    /// İşveren prim indirimi puanı. İmalat dışı sektörlerde (elektrik
+    /// taahhüt dahil) 2 puan: %20,75 − 2 = %18,75. İmalat sektöründe 3
+    /// puana çıkabildiği için sabit değil, ayarlanabilir.
+    /// </summary>
+    public decimal SgkEmployerDiscountPoints { get; set; } = 2m;
 
     // --- Vergiler ---
 
@@ -74,6 +77,19 @@ public sealed class CompanyPayrollSettings : BaseEntity
     /// vergisi matrahından brüt asgari ücret düşülür.
     /// </summary>
     public bool MinimumWageStampTaxExemptionEnabled { get; set; } = true;
+
+    // --- Kıdem tazminatı ---
+
+    /// <summary>
+    /// Kıdem tazminatı tavanı: bir hizmet yılı için ödenecek tazminat bu
+    /// tutarı aşamaz. Memur maaş katsayısına bağlı olduğu için yılda iki
+    /// kez (Ocak ve Temmuz) değişir — bu yüzden hangi döneme ait olduğu
+    /// <see cref="SeveranceCeilingPeriodNote"/> alanında tutulur.
+    /// </summary>
+    public decimal SeveranceCeiling { get; set; }
+
+    /// <summary>Tavanın geçerli olduğu dönem (ör. "01.01.2026-30.06.2026").</summary>
+    public string? SeveranceCeilingPeriodNote { get; set; }
 
     // --- Doğrulama ---
 

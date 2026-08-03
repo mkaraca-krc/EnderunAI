@@ -85,6 +85,11 @@ public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
             request.MinimumWageIncomeTaxExemptionEnabled;
         settings.MinimumWageStampTaxExemptionEnabled =
             request.MinimumWageStampTaxExemptionEnabled;
+        settings.SeveranceCeiling = request.SeveranceCeiling;
+        settings.SeveranceCeilingPeriodNote =
+            string.IsNullOrWhiteSpace(request.SeveranceCeilingPeriodNote)
+                ? null
+                : request.SeveranceCeilingPeriodNote.Trim();
         settings.UpdatedAtUtc = DateTime.UtcNow;
         settings.UpdatedByUserId = CurrentUserId();
 
@@ -259,6 +264,8 @@ public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
             settings.StampTaxPerMille,
             settings.MinimumWageIncomeTaxExemptionEnabled,
             settings.MinimumWageStampTaxExemptionEnabled,
+            settings.SeveranceCeiling,
+            settings.SeveranceCeilingPeriodNote,
             settings.VerifiedAtUtc,
             settings.VerificationNote,
             settings.VerifiedAtUtc is not null,

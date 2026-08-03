@@ -10,30 +10,34 @@ namespace EnderunAI.Api.Tests;
 /// </summary>
 public sealed class PayrollCalculationTests
 {
-    /// <summary>2026 için seed edilen parametrelerin aynısı.</summary>
+    /// <summary>
+    /// 2026 resmi parametreleri. SGK tavanı tabanın 9 katı (297.270),
+    /// gelir vergisi dilimleri 190.000/400.000/1.500.000/5.300.000,
+    /// işveren prim indirimi imalat dışı 2 puan.
+    /// </summary>
     private static PayrollParameters Parameters(
         bool employerDiscount = false,
         bool incomeTaxExemption = true,
         bool stampTaxExemption = true) => new(
             MinimumWageGross: 33_030m,
             SgkBaseFloor: 33_030m,
-            SgkBaseCeiling: 247_725m,
+            SgkBaseCeiling: 297_270m,
             SgkEmployeeRate: 14m,
             UnemploymentEmployeeRate: 1m,
             SgkEmployerRate: 20.75m,
             UnemploymentEmployerRate: 2m,
             SgkEmployerDiscountEnabled: employerDiscount,
-            SgkEmployerDiscountPoints: 5m,
+            SgkEmployerDiscountPoints: 2m,
             StampTaxPerMille: 7.59m,
             MinimumWageIncomeTaxExemptionEnabled: incomeTaxExemption,
             MinimumWageStampTaxExemptionEnabled: stampTaxExemption,
             TaxBrackets: new List<PayrollTaxBracketInput>
             {
-                new(0m, 200_000m, 15m),
-                new(200_000m, 420_000m, 20m),
-                new(420_000m, 1_000_000m, 27m),
-                new(1_000_000m, 5_400_000m, 35m),
-                new(5_400_000m, null, 40m)
+                new(0m, 190_000m, 15m),
+                new(190_000m, 400_000m, 20m),
+                new(400_000m, 1_500_000m, 27m),
+                new(1_500_000m, 5_300_000m, 35m),
+                new(5_300_000m, null, 40m)
             });
 
     /// <summary>
@@ -65,6 +69,46 @@ public sealed class PayrollCalculationTests
     }
 
     /// <summary>
+    /// 2026 parametrelerinin referans bordrosu: resmi brüt 40.000 TL,
+    /// Ocak ayı, istisnalar açık, işveren indirimi (2 puan) uygulanmış.
+    /// Bu test parametrelerin bekçisi — SGK tavanı, dilim sınırları,
+    /// istisna tutarları veya indirim puanı bozulursa kırılır.
+    /// </summary>
+    [Fact]
+    public void ReferencePayroll_FortyThousandGross_MatchesOfficial2026Parameters()
+    {
+        var result = PayrollCalculationService.Calculate(
+            Parameters(employerDiscount: true),
+            new PayrollInput(Month: 1, GrossEarnings: 40_000m));
+
+        // Kazanç taban ile tavan arasında; kırpma yok.
+        Assert.Equal(40_000m, result.SgkBase);
+        Assert.Equal(5_600.00m, result.SgkEmployeeAmount);
+        Assert.Equal(400.00m, result.UnemploymentEmployeeAmount);
+
+        // 40.000 − 5.600 − 400
+        Assert.Equal(34_000.00m, result.IncomeTaxBase);
+
+        // Tamamı %15 diliminde (190.000 sınırının altında).
+        Assert.Equal(5_100.00m, result.IncomeTaxBeforeExemption);
+        Assert.Equal(4_211.33m, result.IncomeTaxExemption);
+        Assert.Equal(888.67m, result.IncomeTaxAmount);
+
+        // 40.000 × ‰7,59 = 303,60; istisna 33.030 × ‰7,59 = 250,70
+        Assert.Equal(303.60m, result.StampTaxBeforeExemption);
+        Assert.Equal(250.70m, result.StampTaxExemption);
+        Assert.Equal(52.90m, result.StampTaxAmount);
+
+        Assert.Equal(6_941.57m, result.TotalDeductions);
+        Assert.Equal(33_058.43m, result.NetPay);
+
+        // İşveren: SGK %18,75 (20,75 − 2) + işsizlik %2
+        Assert.Equal(7_500.00m, result.SgkEmployerAmount);
+        Assert.Equal(800.00m, result.UnemploymentEmployerAmount);
+        Assert.Equal(48_300.00m, result.TotalEmployerCost);
+    }
+
+    /// <summary>
     /// SGK tavanını aşan maaşta prim yalnızca tavan üzerinden kesilir,
     /// gelir vergisi ise brütün tamamı üzerinden yürür.
     /// </summary>
@@ -74,34 +118,34 @@ public sealed class PayrollCalculationTests
         var result = PayrollCalculationService.Calculate(
             Parameters(), new PayrollInput(Month: 1, GrossEarnings: 300_000m));
 
-        Assert.Equal(247_725m, result.SgkBase);
-        Assert.Equal(34_681.50m, result.SgkEmployeeAmount);
-        Assert.Equal(2_477.25m, result.UnemploymentEmployeeAmount);
+        Assert.Equal(297_270m, result.SgkBase);
+        Assert.Equal(41_617.80m, result.SgkEmployeeAmount);
+        Assert.Equal(2_972.70m, result.UnemploymentEmployeeAmount);
 
-        // 300.000 − 34.681,50 − 2.477,25
-        Assert.Equal(262_841.25m, result.IncomeTaxBase);
+        // 300.000 − 41.617,80 − 2.972,70
+        Assert.Equal(255_409.50m, result.IncomeTaxBase);
 
-        // 200.000 × %15 + 62.841,25 × %20
-        Assert.Equal(42_568.25m, result.IncomeTaxBeforeExemption);
+        // 190.000 × %15 + 65.409,50 × %20
+        Assert.Equal(41_581.90m, result.IncomeTaxBeforeExemption);
         Assert.Equal(4_211.33m, result.IncomeTaxExemption);
-        Assert.Equal(38_356.92m, result.IncomeTaxAmount);
+        Assert.Equal(37_370.57m, result.IncomeTaxAmount);
 
         Assert.Equal(2_277.00m, result.StampTaxBeforeExemption);
         Assert.Equal(2_026.30m, result.StampTaxAmount);
 
-        Assert.Equal(77_541.97m, result.TotalDeductions);
-        Assert.Equal(222_458.03m, result.NetPay);
+        Assert.Equal(83_987.37m, result.TotalDeductions);
+        Assert.Equal(216_012.63m, result.NetPay);
 
         // İşveren maliyeti de tavandan hesaplanır.
-        Assert.Equal(51_402.94m, result.SgkEmployerAmount);
-        Assert.Equal(4_954.50m, result.UnemploymentEmployerAmount);
-        Assert.Equal(356_357.44m, result.TotalEmployerCost);
+        Assert.Equal(61_683.53m, result.SgkEmployerAmount);
+        Assert.Equal(5_945.40m, result.UnemploymentEmployerAmount);
+        Assert.Equal(367_628.93m, result.TotalEmployerCost);
     }
 
     /// <summary>
     /// Yıl içinde kümülatif matrah üst dilime taşarsa, taşan kısım üst
-    /// dilim oranıyla vergilendirilir. 190.000 devir + 51.000 matrah →
-    /// 10.000'i %15, 41.000'i %20 dilimine düşer.
+    /// dilim oranıyla vergilendirilir. İlk dilim 190.000'de bittiği için
+    /// 190.000 devirden sonraki 51.000 matrahın tamamı %20'ye düşer.
     /// </summary>
     [Fact]
     public void CumulativeBase_CrossesIntoHigherBracket()
@@ -116,12 +160,12 @@ public sealed class PayrollCalculationTests
         Assert.Equal(51_000m, result.IncomeTaxBase);
         Assert.Equal(241_000m, result.CumulativeIncomeTaxBaseAfter);
 
-        // Tax(241.000) − Tax(190.000) = 38.200 − 28.500
-        Assert.Equal(9_700m, result.IncomeTaxBeforeExemption);
+        // Tax(241.000) − Tax(190.000) = 38.700 − 28.500
+        Assert.Equal(10_200m, result.IncomeTaxBeforeExemption);
         Assert.Equal(4_211.33m, result.IncomeTaxExemption);
-        Assert.Equal(5_488.67m, result.IncomeTaxAmount);
+        Assert.Equal(5_988.67m, result.IncomeTaxAmount);
 
-        Assert.Equal(45_306.63m, result.NetPay);
+        Assert.Equal(44_806.63m, result.NetPay);
     }
 
     /// <summary>
@@ -147,8 +191,8 @@ public sealed class PayrollCalculationTests
     }
 
     /// <summary>
-    /// 5 puanlık işveren prim indirimi yalnızca işveren payını düşürür;
-    /// işçinin eline geçen tutar değişmez.
+    /// İşveren prim indirimi (imalat dışı 2 puan) yalnızca işveren
+    /// payını düşürür; işçinin eline geçen tutar değişmez.
     /// </summary>
     [Fact]
     public void EmployerDiscount_ReducesEmployerCostOnly()
@@ -159,9 +203,9 @@ public sealed class PayrollCalculationTests
         var discounted = PayrollCalculationService.Calculate(
             Parameters(employerDiscount: true), input);
 
-        // %20,75 → %15,75
+        // %20,75 → %18,75
         Assert.Equal(6_853.73m, standard.SgkEmployerAmount);
-        Assert.Equal(5_202.23m, discounted.SgkEmployerAmount);
+        Assert.Equal(6_193.13m, discounted.SgkEmployerAmount);
 
         Assert.Equal(standard.NetPay, discounted.NetPay);
         Assert.True(discounted.TotalEmployerCost < standard.TotalEmployerCost);
