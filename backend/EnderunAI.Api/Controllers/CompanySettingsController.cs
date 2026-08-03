@@ -381,8 +381,9 @@ public sealed class CompanySettingsController(
             settings.DeductionAccountId);
 
     /// <summary>
-    /// Brevo API entegrasyonunu doğrulamak için tek seferlik test e-postası
-    /// gönderir. BREVO_API_KEY tanımlı değilse 400 döner.
+    /// E-posta gönderim kanalını doğrulamak için tek seferlik test
+    /// e-postası gönderir. Aktif kanal (SMTP veya Brevo) yapılandırılmamışsa
+    /// 400 döner.
     /// </summary>
     [HttpPost("email-test")]
     [RequirePermission(PermissionCatalog.Keys.CompanySettingsEdit)]
@@ -394,7 +395,9 @@ public sealed class CompanySettingsController(
         {
             return BadRequest(new
             {
-                message = "E-posta yapılandırılmamış (BREVO_API_KEY veya gönderen adres eksik)."
+                message = "E-posta yapılandırılmamış. Sunucu ayarlarında " +
+                    "gönderim bilgilerinin (SMTP sunucusu, kullanıcı, parola ve " +
+                    "gönderen adres) tanımlı olması gerekiyor."
             });
         }
 
@@ -410,8 +413,8 @@ public sealed class CompanySettingsController(
                 request.ToEmail.Trim(),
                 null,
                 "Enderun ERP - Test E-postası",
-                "<p>Bu, Enderun ERP e-posta entegrasyonunun (Brevo API) doğru " +
-                "çalıştığını doğrulamak için gönderilen bir test e-postasıdır.</p>",
+                "<p>Bu, Enderun ERP e-posta gönderiminin doğru çalıştığını " +
+                "doğrulamak için gönderilen bir test e-postasıdır.</p>",
                 cancellationToken);
         }
         catch (Exception exception)
