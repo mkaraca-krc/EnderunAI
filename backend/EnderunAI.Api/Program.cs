@@ -50,7 +50,24 @@ builder.Services.AddDbContext<HrDbContext>(options =>
 });
 
 builder.Services.AddSingleton<IUploadService, UploadService>();
-builder.Services.AddHttpClient<EnderunAI.Api.Services.Email.IEmailService, EnderunAI.Api.Services.Email.EmailService>();
+// Aktif e-posta kanalı. Sunucu sağlayıcısı 465'i açtığı için varsayılan
+// SMTP; Brevo kodu yerinde duruyor ve EMAIL_PROVIDER=brevo ile tek satır
+// değişiklikle geri alınabiliyor.
+var emailProvider =
+    (Environment.GetEnvironmentVariable("EMAIL_PROVIDER") ?? "smtp").Trim();
+
+if (string.Equals(emailProvider, "brevo", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient<
+        EnderunAI.Api.Services.Email.IEmailService,
+        EnderunAI.Api.Services.Email.EmailService>();
+}
+else
+{
+    builder.Services.AddScoped<
+        EnderunAI.Api.Services.Email.IEmailService,
+        EnderunAI.Api.Services.Email.SmtpEmailService>();
+}
 builder.Services.AddSingleton<EnderunAI.Api.Security.ILoginAttemptService, EnderunAI.Api.Security.LoginAttemptService>();
 
 builder.Services.AddExceptionHandler<EnderunAI.Api.Security.GlobalExceptionHandler>();
