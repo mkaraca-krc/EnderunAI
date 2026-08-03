@@ -182,6 +182,11 @@ public sealed class PurchaseOrderService(
             "PO",
             cancellationToken);
 
+        var defaultVatRate = await db.CompanyFinanceSettings
+            .Where(x => x.CompanyId == rfq.CompanyId)
+            .Select(x => (decimal?)x.DefaultVatRate)
+            .SingleOrDefaultAsync(cancellationToken) ?? 20m;
+
         var expectedDeliveryDate = quotation.DeliveryDays.HasValue
             ? DateTime.UtcNow.Date.AddDays(quotation.DeliveryDays.Value)
             : (DateTime?)null;
@@ -205,6 +210,10 @@ public sealed class PurchaseOrderService(
             Subtotal = quotation.Subtotal,
             DiscountTotal = quotation.DiscountTotal,
             GrandTotal = quotation.GrandTotal,
+            // RFQ zinciri KDV taşımıyor; sipariş, şirket finans
+            // ayarlarındaki varsayılan oranla KDV hesaplar.
+            VatRate = defaultVatRate,
+            VatAmount = decimal.Round(quotation.GrandTotal * defaultVatRate / 100m, 2),
             Items = quotation.Items
                 .OrderBy(x => x.RfqItem.LineNumber)
                 .Select(x => new PurchaseOrderItem

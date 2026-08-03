@@ -155,6 +155,8 @@ public sealed class PurchaseOrderConfiguration :
         entity.Property(x => x.Subtotal).HasPrecision(18, 2);
         entity.Property(x => x.DiscountTotal).HasPrecision(18, 2);
         entity.Property(x => x.GrandTotal).HasPrecision(18, 2);
+        entity.Property(x => x.VatRate).HasPrecision(5, 2);
+        entity.Property(x => x.VatAmount).HasPrecision(18, 2);
         entity.Property(x => x.CancellationReason).HasMaxLength(1000);
         entity.Property(x => x.RejectionReason).HasMaxLength(1000);
         entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId)

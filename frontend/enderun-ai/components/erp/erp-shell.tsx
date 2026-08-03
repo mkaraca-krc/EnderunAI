@@ -117,6 +117,11 @@ const groups: MenuGroup[] = [
         icon: "○",
       },
       {
+        label: "Tedarikçi Faturaları",
+        href: "/muhasebe/faturalar",
+        icon: "○",
+      },
+      {
         label: "Muhasebe Fişleri",
         href: "/muhasebe/fisler",
         icon: "○",

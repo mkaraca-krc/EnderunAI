@@ -37,7 +37,13 @@ public sealed class PurchaseOrder : BaseEntity
     public string? Notes { get; set; }
     public decimal Subtotal { get; set; }
     public decimal DiscountTotal { get; set; }
+    /// <summary>KDV hariç tutar (Subtotal - DiscountTotal). Tarihsel alan adı korunuyor.</summary>
     public decimal GrandTotal { get; set; }
+
+    /// <summary>Sipariş KDV oranı (%). RFQ zinciri KDV taşımadığı için sipariş seviyesinde tutulur.</summary>
+    public decimal VatRate { get; set; }
+    /// <summary>GrandTotal × VatRate / 100.</summary>
+    public decimal VatAmount { get; set; }
     public Guid? ApprovedByUserId { get; set; }
     public DateTime? ApprovedAtUtc { get; set; }
     public Guid? CancelledByUserId { get; set; }

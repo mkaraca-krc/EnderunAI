@@ -61,6 +61,7 @@ public static class DatabaseSeeder
         await SeedDefaultDataScopesAsync(db);
         await SeedCompanyDefaultsAsync(db);
         await SeedRoleWorkHourWindowsAsync(db);
+        await SeedCompanyFinanceSettingsAsync(db);
     }
 
     /// <summary>
@@ -277,6 +278,66 @@ public static class DatabaseSeeder
         }
 
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Her şirket için tek satırlık finans/muhasebe entegrasyon ayarı
+    /// oluşturur ve varsayılan hesapları hesap planındaki kodlardan
+    /// (191/391/600/740/320/120/780) eşler. Satır zaten varsa hiç
+    /// dokunulmaz — admin Şirket Ayarları'ndan seçtiği hesapları
+    /// kaybetmez. Hesap planı henüz yüklenmemişse eşleşmeyen alanlar
+    /// null kalır, sonraki boot'ta tekrar denenmez (kayıt var sayılır);
+    /// admin ekrandan seçebilir.
+    /// </summary>
+    private static async Task SeedCompanyFinanceSettingsAsync(AppDbContext db)
+    {
+        var companyIdsWithoutSettings = await db.Companies
+            .Where(company => !db.CompanyFinanceSettings.Any(x => x.CompanyId == company.Id))
+            .Select(company => company.Id)
+            .ToListAsync();
+
+        if (companyIdsWithoutSettings.Count == 0)
+            return;
+
+        foreach (var companyId in companyIdsWithoutSettings)
+        {
+            db.CompanyFinanceSettings.Add(new CompanyFinanceSettings
+            {
+                CompanyId = companyId,
+                VatInAccountId = await ResolveAccountAsync(db, companyId, "191.01.03", "191"),
+                VatOutAccountId = await ResolveAccountAsync(db, companyId, "391.09", "391"),
+                SalesAccountId = await ResolveAccountAsync(db, companyId, "600.03", "600"),
+                ExpenseAccountId = await ResolveAccountAsync(db, companyId, "740"),
+                PayablesAccountId = await ResolveAccountAsync(db, companyId, "320"),
+                ReceivablesAccountId = await ResolveAccountAsync(db, companyId, "120"),
+                FactoringExpenseAccountId = await ResolveAccountAsync(db, companyId, "780.01.01", "780")
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<Guid?> ResolveAccountAsync(
+        AppDbContext db,
+        Guid companyId,
+        params string[] codeCandidates)
+    {
+        foreach (var code in codeCandidates)
+        {
+            var id = await db.AccountingAccounts
+                .Where(x =>
+                    x.CompanyId == companyId &&
+                    x.Code == code &&
+                    x.IsActive &&
+                    x.IsPostingAllowed)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync();
+
+            if (id is not null)
+                return id;
+        }
+
+        return null;
     }
 
     private static async Task SeedAdminUserAsync(

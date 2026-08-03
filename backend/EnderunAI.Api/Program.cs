@@ -58,6 +58,8 @@ builder.Services.AddProblemDetails();
 builder.Services.AddScoped<IAccountingAccountService, AccountingAccountService>();
 builder.Services.AddScoped<IAccountingAccountSeedService, AccountingAccountSeedService>();
 builder.Services.AddScoped<IAccountingVoucherService, AccountingVoucherService>();
+builder.Services.AddScoped<IAccountingIntegrationService, AccountingIntegrationService>();
+builder.Services.AddScoped<ISupplierInvoiceService, SupplierInvoiceService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 builder.Services.AddScoped<ISecretariatService, SecretariatService>();

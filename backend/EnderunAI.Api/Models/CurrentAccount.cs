@@ -50,5 +50,21 @@ public sealed class CurrentAccount : BaseEntity
     public Guid? ApprovedByUserId { get; set; }
     public DateTime? ApprovedAtUtc { get; set; }
 
+    /// <summary>
+    /// Bu carinin muhasebedeki 320 Satıcılar alt hesabı (tedarikçi
+    /// faturası fişleri buraya alacak yazar). Boşsa otomatik fişler 320
+    /// grup hesabına CurrentAccountId boyutuyla yazılır; ilk fişte isim
+    /// eşleşmesi bulunursa buraya kaydedilir.
+    /// </summary>
+    public Guid? PayableAccountingAccountId { get; set; }
+    public AccountingAccount? PayableAccountingAccount { get; set; }
+
+    /// <summary>
+    /// Bu carinin muhasebedeki 120 Alıcılar alt hesabı (hakediş fişleri
+    /// buraya borç yazar). Boşsa 120 grup hesabı kullanılır.
+    /// </summary>
+    public Guid? ReceivableAccountingAccountId { get; set; }
+    public AccountingAccount? ReceivableAccountingAccount { get; set; }
+
     public ICollection<Project> EmployerProjects { get; set; } = new List<Project>();
 }

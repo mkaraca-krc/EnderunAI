@@ -22,6 +22,9 @@ public sealed class AppDbContext(
 
     public DbSet<AccountingAccount> AccountingAccounts =>
         Set<AccountingAccount>();
+    public DbSet<CompanyFinanceSettings> CompanyFinanceSettings => Set<CompanyFinanceSettings>();
+    public DbSet<SupplierInvoice> SupplierInvoices => Set<SupplierInvoice>();
+    public DbSet<SupplierInvoiceItem> SupplierInvoiceItems => Set<SupplierInvoiceItem>();
     public DbSet<AccountingVoucher> AccountingVouchers =>
         Set<AccountingVoucher>();
     public DbSet<AccountingVoucherLine> AccountingVoucherLines =>
@@ -120,6 +123,8 @@ public sealed class AppDbContext(
         ConfigureCurrentAccounts(modelBuilder);
         ConfigureAccountingAccounts(modelBuilder);
         ConfigureAccountingVouchers(modelBuilder);
+        ConfigureCompanyFinanceSettings(modelBuilder);
+        ConfigureSupplierInvoices(modelBuilder);
         ConfigureAccountingVoucherLines(modelBuilder);
         ConfigureProjects(modelBuilder);
         ConfigureProjectDocuments(modelBuilder);
@@ -398,6 +403,126 @@ public sealed class AppDbContext(
                 .WithMany(x => x.CurrentAccounts)
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Kolonlar/FK'ler 20260724083553 migration'ından beri DB'de
+            // mevcut — model bu sefer geriye dönük olarak şemayı
+            // sahipleniyor (yeni migration'da duplicate op üretilmez).
+            entity.HasOne(x => x.PayableAccountingAccount)
+                .WithMany()
+                .HasForeignKey(x => x.PayableAccountingAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ReceivableAccountingAccount)
+                .WithMany()
+                .HasForeignKey(x => x.ReceivableAccountingAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureCompanyFinanceSettings(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyFinanceSettings>(entity =>
+        {
+            entity.ToTable("company_finance_settings");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.CompanyId).IsUnique();
+
+            entity.Property(x => x.GmApprovalThresholdTry).HasPrecision(18, 2);
+            entity.Property(x => x.ThreeWayTolerancePercent).HasPrecision(5, 2);
+            entity.Property(x => x.DefaultVatRate).HasPrecision(5, 2);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.VatInAccount).WithMany()
+                .HasForeignKey(x => x.VatInAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.VatOutAccount).WithMany()
+                .HasForeignKey(x => x.VatOutAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SalesAccount).WithMany()
+                .HasForeignKey(x => x.SalesAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ExpenseAccount).WithMany()
+                .HasForeignKey(x => x.ExpenseAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.PayablesAccount).WithMany()
+                .HasForeignKey(x => x.PayablesAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReceivablesAccount).WithMany()
+                .HasForeignKey(x => x.ReceivablesAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.FactoringExpenseAccount).WithMany()
+                .HasForeignKey(x => x.FactoringExpenseAccountId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureSupplierInvoices(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SupplierInvoice>(entity =>
+        {
+            entity.ToTable("supplier_invoices");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.InternalNumber }).IsUnique();
+            entity.HasIndex(x => new { x.SupplierCurrentAccountId, x.InvoiceNumber });
+            entity.HasIndex(x => new { x.CompanyId, x.Status });
+            entity.HasIndex(x => x.ProjectId);
+
+            entity.Property(x => x.InternalNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.InvoiceNumber).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.ExchangeRate).HasPrecision(18, 6);
+            entity.Property(x => x.Subtotal).HasPrecision(18, 2);
+            entity.Property(x => x.VatTotal).HasPrecision(18, 2);
+            entity.Property(x => x.GrandTotal).HasPrecision(18, 2);
+            entity.Property(x => x.MatchDifferenceAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.MatchNote).HasMaxLength(1000);
+            entity.Property(x => x.RejectionReason).HasMaxLength(1000);
+            entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            entity.Property(x => x.MatchStatus).HasConversion<int>().IsRequired();
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SupplierCurrentAccount).WithMany()
+                .HasForeignKey(x => x.SupplierCurrentAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.PurchaseOrder).WithMany()
+                .HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.GoodsReceipt).WithMany()
+                .HasForeignKey(x => x.GoodsReceiptId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AccountingVoucher).WithMany()
+                .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(x => x.Items)
+                .WithOne(x => x.SupplierInvoice)
+                .HasForeignKey(x => x.SupplierInvoiceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<SupplierInvoiceItem>(entity =>
+        {
+            entity.ToTable("supplier_invoice_items");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.SupplierInvoiceId, x.LineNumber }).IsUnique();
+
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 4);
+            entity.Property(x => x.VatRate).HasPrecision(5, 2);
+            entity.Property(x => x.LineSubtotal).HasPrecision(18, 2);
+            entity.Property(x => x.VatAmount).HasPrecision(18, 2);
+            entity.Property(x => x.LineTotal).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.PurchaseOrderItem).WithMany()
+                .HasForeignKey(x => x.PurchaseOrderItemId).OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

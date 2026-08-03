@@ -11,6 +11,14 @@ import {
   type RoleWorkHourWindows,
   type UpdateCompanySettingsPayload,
 } from "@/services/company-settings.service";
+import {
+  accountingAccountService,
+  type AccountingAccountListItem,
+} from "@/services/accounting-account.service";
+import {
+  financeSettingsService,
+  type CompanyFinanceSettings,
+} from "@/services/supplier-invoice.service";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError || error instanceof Error) {
@@ -170,6 +178,12 @@ export default function CompanySettingsPage() {
   const [workHourLoading, setWorkHourLoading] = useState(true);
   const [workHourError, setWorkHourError] = useState("");
 
+  const [financeSettings, setFinanceSettings] = useState<CompanyFinanceSettings | null>(null);
+  const [financeAccounts, setFinanceAccounts] = useState<AccountingAccountListItem[]>([]);
+  const [financeLoading, setFinanceLoading] = useState(true);
+  const [financeSaving, setFinanceSaving] = useState(false);
+  const [financeError, setFinanceError] = useState("");
+
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{
@@ -215,10 +229,29 @@ export default function CompanySettingsPage() {
     }
   }, []);
 
+  const loadFinanceSettings = useCallback(async () => {
+    setFinanceLoading(true);
+    setFinanceError("");
+    try {
+      const [settings, accounts] = await Promise.all([
+        financeSettingsService.get(),
+        accountingAccountService.getAll({ isActive: true }),
+      ]);
+      setFinanceSettings(settings);
+      // Yalnız fiş kesilebilen (grup olmayan) hesaplar seçilebilir.
+      setFinanceAccounts(accounts.filter((account) => account.isPostingAllowed));
+    } catch (requestError) {
+      setFinanceError(getErrorMessage(requestError));
+    } finally {
+      setFinanceLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
     void loadWorkHourWindows();
-  }, [load, loadWorkHourWindows]);
+    void loadFinanceSettings();
+  }, [load, loadWorkHourWindows, loadFinanceSettings]);
 
   useEffect(() => {
     if (!notice) return;
@@ -299,6 +332,34 @@ export default function CompanySettingsPage() {
       await load();
     } catch (requestError) {
       setError(getErrorMessage(requestError));
+    }
+  }
+
+  async function saveFinanceSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!financeSettings) return;
+
+    setFinanceSaving(true);
+    setFinanceError("");
+    try {
+      const result = await financeSettingsService.update({
+        gmApprovalThresholdTry: financeSettings.gmApprovalThresholdTry,
+        threeWayTolerancePercent: financeSettings.threeWayTolerancePercent,
+        defaultVatRate: financeSettings.defaultVatRate,
+        vatInAccountId: financeSettings.vatInAccountId ?? null,
+        vatOutAccountId: financeSettings.vatOutAccountId ?? null,
+        salesAccountId: financeSettings.salesAccountId ?? null,
+        expenseAccountId: financeSettings.expenseAccountId ?? null,
+        payablesAccountId: financeSettings.payablesAccountId ?? null,
+        receivablesAccountId: financeSettings.receivablesAccountId ?? null,
+        factoringExpenseAccountId: financeSettings.factoringExpenseAccountId ?? null,
+      });
+      setFinanceSettings(result.settings);
+      setNotice(result.message);
+    } catch (requestError) {
+      setFinanceError(getErrorMessage(requestError));
+    } finally {
+      setFinanceSaving(false);
     }
   }
 
@@ -541,6 +602,128 @@ export default function CompanySettingsPage() {
                     + Ekle
                   </Button>
                 </form>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardContent className="p-6">
+                <h3 className="mb-1 font-semibold text-slate-950">
+                  Finans / Muhasebe Ayarları
+                </h3>
+                <p className="mb-4 text-sm text-slate-500">
+                  Otomatik muhasebe fişlerinde kullanılacak varsayılan hesaplar,
+                  Genel Müdür onay tutar eşiği ve 3 yönlü kontrol toleransı.
+                  Listede yalnızca fiş kesilebilen (grup olmayan) hesaplar yer alır.
+                </p>
+
+                {financeError && (
+                  <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {financeError}
+                  </div>
+                )}
+
+                {financeLoading ? (
+                  <div className="py-10 text-center text-sm text-slate-500">
+                    Finans ayarları yükleniyor...
+                  </div>
+                ) : !financeSettings ? (
+                  <div className="py-10 text-center text-sm text-slate-500">
+                    Finans ayarları okunamadı.
+                  </div>
+                ) : (
+                  <form onSubmit={saveFinanceSettings} className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <Input
+                        label="GM Onay Eşiği (TL)"
+                        type="number"
+                        min={0}
+                        step={1000}
+                        value={String(financeSettings.gmApprovalThresholdTry)}
+                        onChange={(e) =>
+                          setFinanceSettings((current) =>
+                            current
+                              ? { ...current, gmApprovalThresholdTry: Number(e.target.value) }
+                              : current
+                          )
+                        }
+                      />
+                      <Input
+                        label="3 Yönlü Tolerans (%)"
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.1}
+                        value={String(financeSettings.threeWayTolerancePercent)}
+                        onChange={(e) =>
+                          setFinanceSettings((current) =>
+                            current
+                              ? { ...current, threeWayTolerancePercent: Number(e.target.value) }
+                              : current
+                          )
+                        }
+                      />
+                      <Input
+                        label="Varsayılan KDV (%)"
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={String(financeSettings.defaultVatRate)}
+                        onChange={(e) =>
+                          setFinanceSettings((current) =>
+                            current
+                              ? { ...current, defaultVatRate: Number(e.target.value) }
+                              : current
+                          )
+                        }
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {(
+                        [
+                          ["expenseAccountId", "Maliyet Hesabı (740)"],
+                          ["vatInAccountId", "İndirilecek KDV (191)"],
+                          ["payablesAccountId", "Satıcılar (320)"],
+                          ["receivablesAccountId", "Alıcılar (120)"],
+                          ["salesAccountId", "Yurtiçi Satışlar (600)"],
+                          ["vatOutAccountId", "Hesaplanan KDV (391)"],
+                          ["factoringExpenseAccountId", "Finansman Gideri (780)"],
+                        ] as const
+                      ).map(([field, label]) => (
+                        <label key={field} className="block">
+                          <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                            {label}
+                          </span>
+                          <select
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            value={financeSettings[field] ?? ""}
+                            onChange={(e) =>
+                              setFinanceSettings((current) =>
+                                current
+                                  ? { ...current, [field]: e.target.value || null }
+                                  : current
+                              )
+                            }
+                          >
+                            <option value="">Seçilmedi</option>
+                            {financeAccounts.map((account) => (
+                              <option key={account.id} value={account.id}>
+                                {account.code} — {account.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button type="submit" loading={financeSaving}>
+                        Finans Ayarlarını Kaydet
+                      </Button>
+                    </div>
+                  </form>
+                )}
               </CardContent>
             </Card>
 

@@ -1,7 +1,9 @@
 using EnderunAI.Api.Contracts;
+using EnderunAI.Api.Contracts.Accounting;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Accounting;
 using EnderunAI.Api.Services.Email;
 using EnderunAI.Api.Services.Upload;
 using Microsoft.AspNetCore.Authorization;
@@ -23,7 +25,8 @@ namespace EnderunAI.Api.Controllers;
 public sealed class CompanySettingsController(
     AppDbContext db,
     IUploadService uploadService,
-    IEmailService emailService) : ControllerBase
+    IEmailService emailService,
+    IAccountingIntegrationService accountingIntegration) : ControllerBase
 {
     private const string LogoCategory = "company-logo";
 
@@ -269,6 +272,111 @@ public sealed class CompanySettingsController(
 
         return Ok(new { message = $"{role.Name} rolünün mesai penceresi güncellendi." });
     }
+
+    /// <summary>
+    /// Muhasebe entegrasyon ayarları: otomatik fişlerde kullanılacak
+    /// varsayılan hesaplar, GM onay tutar eşiği ve 3 yönlü kontrol
+    /// toleransı. Kayıt yoksa hesap planından kod eşleştirmesiyle
+    /// (191/391/600/740/320/120/780) otomatik oluşturulur.
+    /// </summary>
+    [HttpGet("finance-settings")]
+    [RequirePermission(PermissionCatalog.Keys.CompanySettingsView)]
+    public async Task<IActionResult> GetFinanceSettings(CancellationToken cancellationToken)
+    {
+        var company = await GetPrimaryCompanyAsync(cancellationToken);
+        if (company is null)
+            return NotFound(new { message = "Şirket kaydı bulunamadı." });
+
+        var settings = await accountingIntegration.GetOrCreateFinanceSettingsAsync(
+            company.Id, cancellationToken);
+
+        return Ok(ToFinanceResponse(settings));
+    }
+
+    [HttpPut("finance-settings")]
+    [RequirePermission(PermissionCatalog.Keys.CompanySettingsEdit)]
+    public async Task<IActionResult> UpdateFinanceSettings(
+        UpdateCompanyFinanceSettingsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var company = await GetPrimaryCompanyAsync(cancellationToken);
+        if (company is null)
+            return NotFound(new { message = "Şirket kaydı bulunamadı." });
+
+        if (request.GmApprovalThresholdTry < 0)
+            return BadRequest(new { message = "GM onay eşiği negatif olamaz." });
+
+        if (request.ThreeWayTolerancePercent is < 0 or > 100)
+            return BadRequest(new { message = "Tolerans yüzdesi 0 ile 100 arasında olmalıdır." });
+
+        if (request.DefaultVatRate is < 0 or > 100)
+            return BadRequest(new { message = "Varsayılan KDV oranı 0 ile 100 arasında olmalıdır." });
+
+        var accountIds = new[]
+        {
+            request.VatInAccountId, request.VatOutAccountId, request.SalesAccountId,
+            request.ExpenseAccountId, request.PayablesAccountId, request.ReceivablesAccountId,
+            request.FactoringExpenseAccountId
+        }.Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToArray();
+
+        if (accountIds.Length > 0)
+        {
+            var validCount = await db.AccountingAccounts.CountAsync(
+                x => accountIds.Contains(x.Id) &&
+                     x.CompanyId == company.Id &&
+                     x.IsActive &&
+                     x.IsPostingAllowed,
+                cancellationToken);
+
+            if (validCount != accountIds.Length)
+            {
+                return BadRequest(new
+                {
+                    message = "Seçilen hesaplardan biri bu şirkete ait değil, pasif ya da grup hesabı (fiş kesilemez)."
+                });
+            }
+        }
+
+        var settings = await accountingIntegration.GetOrCreateFinanceSettingsAsync(
+            company.Id, cancellationToken);
+
+        var tracked = await db.CompanyFinanceSettings.SingleAsync(
+            x => x.Id == settings.Id, cancellationToken);
+
+        tracked.GmApprovalThresholdTry = request.GmApprovalThresholdTry;
+        tracked.ThreeWayTolerancePercent = request.ThreeWayTolerancePercent;
+        tracked.DefaultVatRate = request.DefaultVatRate;
+        tracked.VatInAccountId = request.VatInAccountId;
+        tracked.VatOutAccountId = request.VatOutAccountId;
+        tracked.SalesAccountId = request.SalesAccountId;
+        tracked.ExpenseAccountId = request.ExpenseAccountId;
+        tracked.PayablesAccountId = request.PayablesAccountId;
+        tracked.ReceivablesAccountId = request.ReceivablesAccountId;
+        tracked.FactoringExpenseAccountId = request.FactoringExpenseAccountId;
+        tracked.UpdatedAtUtc = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Finans ayarları güncellendi.",
+            settings = ToFinanceResponse(tracked)
+        });
+    }
+
+    private static CompanyFinanceSettingsResponse ToFinanceResponse(CompanyFinanceSettings settings) =>
+        new(
+            settings.CompanyId,
+            settings.GmApprovalThresholdTry,
+            settings.ThreeWayTolerancePercent,
+            settings.DefaultVatRate,
+            settings.VatInAccountId,
+            settings.VatOutAccountId,
+            settings.SalesAccountId,
+            settings.ExpenseAccountId,
+            settings.PayablesAccountId,
+            settings.ReceivablesAccountId,
+            settings.FactoringExpenseAccountId);
 
     /// <summary>
     /// Brevo API entegrasyonunu doğrulamak için tek seferlik test e-postası

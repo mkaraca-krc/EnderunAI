@@ -26,8 +26,15 @@ public sealed class DocumentNumberService(AppDbContext db)
         var normalizedPrefix = prefix.Trim().ToUpperInvariant();
         var year = DateTime.UtcNow.Year;
 
-        await using var transaction =
-            await db.Database.BeginTransactionAsync(cancellationToken);
+        // Çağıran zaten bir transaction açtıysa (ör. fatura onayı: fiş
+        // üretimi + maliyet kaydı tek atomik blokta) yenisini açmak
+        // "connection is already in a transaction" hatası verir. Böyle
+        // durumlarda mevcut transaction'a katılıp commit'i çağırana
+        // bırakıyoruz.
+        var ownsTransaction = db.Database.CurrentTransaction is null;
+        var transaction = ownsTransaction
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
 
         var sequence = await db.DocumentNumberSequences
             .SingleOrDefaultAsync(
@@ -58,7 +65,12 @@ public sealed class DocumentNumberService(AppDbContext db)
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            await transaction.DisposeAsync();
+        }
 
         return $"{sequence.Prefix}-{sequence.Year}-{sequence.LastNumber.ToString().PadLeft(sequence.NumberLength, '0')}";
     }
