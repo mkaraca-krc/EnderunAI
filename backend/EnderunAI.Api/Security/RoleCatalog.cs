@@ -95,7 +95,8 @@ public static class RoleCatalog
             PermissionCatalog.Keys.PurchasingRequestsView, PermissionCatalog.Keys.PurchasingRfqView,
             PermissionCatalog.Keys.PurchasingOrdersView, PermissionCatalog.Keys.PurchasingReceiptsView,
             PermissionCatalog.Keys.CompaniesManage, PermissionCatalog.Keys.AccountingManage, PermissionCatalog.Keys.PurchasingView,
-            PermissionCatalog.Keys.SalaryView
+            PermissionCatalog.Keys.SalaryView,
+            PermissionCatalog.Keys.AiUse
         ]),
 
         new("Teknik Ofis", "Projeler; keşif/metraj/hakediş tam yetki; dosyalar tam yetki; maliyet ve kâr görünür.",
@@ -145,7 +146,8 @@ public static class RoleCatalog
             PermissionCatalog.Keys.InventoryView, PermissionCatalog.Keys.InventoryCreate,
             PermissionCatalog.Keys.PurchasingRequestsView, PermissionCatalog.Keys.PurchasingRequestsCreate,
             PermissionCatalog.Keys.InventoryManage, PermissionCatalog.Keys.PurchasingView, PermissionCatalog.Keys.PurchasingManage,
-            PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate
+            PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate,
+            PermissionCatalog.Keys.AiUse
         ], RoleDataScopePolicy.SiteOnly),
 
         new("Formen", "Sadece atandığı şantiyede günlük rapor girme (taslak), kendi ekibini görüntüleme.",
@@ -154,7 +156,8 @@ public static class RoleCatalog
             PermissionCatalog.Keys.SiteReportsView, PermissionCatalog.Keys.SiteReportsCreate,
             PermissionCatalog.Keys.SiteReportsEdit,
             PermissionCatalog.Keys.PersonnelView,
-            PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate
+            PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate,
+            PermissionCatalog.Keys.AiUse
         ], RoleDataScopePolicy.SiteOnly),
 
         new("Sekreterya", "Dosyalar tam yetki, cari kart oluşturma/görüntüleme, projeler görüntüleme.",
@@ -164,12 +167,14 @@ public static class RoleCatalog
             PermissionCatalog.Keys.DocumentsEdit, PermissionCatalog.Keys.DocumentsDelete,
             PermissionCatalog.Keys.CurrentAccountsView, PermissionCatalog.Keys.CurrentAccountsCreate,
             PermissionCatalog.Keys.SecretariatView, PermissionCatalog.Keys.SecretariatManage,
-            PermissionCatalog.Keys.CompaniesView
+            PermissionCatalog.Keys.CompaniesView,
+            PermissionCatalog.Keys.AiUse
         ]),
 
         new("Araç Sorumlusu", "Filo modülü devreye girene kadar görüntüleme ağırlıklı dar kapsamlı rol.",
         [
-            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView
+            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView,
+            PermissionCatalog.Keys.AiUse
         ]),
 
         new("Depo Sorumlusu", "Stok giriş-çıkış, transfer, rezervasyon ve mal kabul.",
@@ -180,7 +185,8 @@ public static class RoleCatalog
             PermissionCatalog.Keys.PurchasingReceiptsView, PermissionCatalog.Keys.PurchasingReceiptsCreate,
             PermissionCatalog.Keys.PurchasingReceiptsEdit, PermissionCatalog.Keys.PurchasingReceiptsApprove,
             PermissionCatalog.Keys.InventoryManage, PermissionCatalog.Keys.PurchasingView,
-            PermissionCatalog.Keys.PurchasingManage, PermissionCatalog.Keys.PurchasingApprove
+            PermissionCatalog.Keys.PurchasingManage, PermissionCatalog.Keys.PurchasingApprove,
+            PermissionCatalog.Keys.AiUse
         ])
     ];
 

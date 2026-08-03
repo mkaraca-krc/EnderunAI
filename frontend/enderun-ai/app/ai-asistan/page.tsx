@@ -1,42 +1,84 @@
-import { AppShell } from "../../components/app-shell";
-import { PageHeader } from "../../components/page-header";
+"use client";
 
-export default function AiPage() {
+import { useCallback, useEffect, useState } from "react";
+
+import ErpShell from "@/components/erp/erp-shell";
+import HizirChat from "@/components/hizir/hizir-chat";
+import {
+  hizirService,
+  type HizirConversationSummary,
+} from "@/services/hizir.service";
+
+const dateFormat = new Intl.DateTimeFormat("tr-TR", {
+  dateStyle: "short",
+  timeStyle: "short",
+});
+
+export default function AiAssistantPage() {
+  const [conversations, setConversations] = useState<HizirConversationSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      setConversations(await hizirService.getConversations());
+    } catch {
+      setConversations([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   return (
-    <AppShell active="AI Asistan">
-      <PageHeader title="AI Asistan" description="Yönetici karar desteği ve belge analizi" eyebrow="Enderun AI" />
-      <section className="mt-8 grid gap-6 xl:grid-cols-[1fr_320px]">
+    <ErpShell
+      title="Hızır"
+      description="Şirket verilerinize göre cevap veren, yetkilerinize saygı gösteren asistan"
+    >
+      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="min-h-[420px] rounded-2xl border border-slate-100 bg-slate-50 p-5">
-            <p className="text-sm leading-7 text-slate-600">
-              Merhaba Mehmet Bey. Hakediş, finans, proje ve satın alma verileri
-              sisteme bağlandığında sorularınızı şirket verilerine göre yanıtlayacağım.
+          <HizirChat pagePath="/ai-asistan" variant="page" />
+        </div>
+
+        <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="font-bold text-slate-900">Geçmiş Sohbetler</h3>
+
+          {loading ? (
+            <p className="mt-4 text-sm text-slate-500">Yükleniyor...</p>
+          ) : conversations.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">
+              Henüz sohbet yok. Soldaki alandan ilk sorunuzu sorabilirsiniz.
+            </p>
+          ) : (
+            <ul className="mt-4 space-y-3 text-sm">
+              {conversations.map((conversation) => (
+                <li
+                  key={conversation.id}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                >
+                  <p className="font-medium text-slate-800">{conversation.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {dateFormat.format(new Date(conversation.lastMessageAtUtc))} ·{" "}
+                    {conversation.messageCount} mesaj
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <h4 className="text-sm font-semibold text-slate-800">Nasıl çalışır?</h4>
+            <p className="mt-2 text-xs leading-5 text-slate-600">
+              Hızır yalnızca sizin yetkiniz dahilindeki verileri görebilir.
+              Yetkiniz olmayan bir bilgiyi sorduğunuzda veriyi tahmin etmez,
+              göremeyeceğinizi söyler. Verinin bulunmadığı durumlarda da
+              rakam uydurmaz.
             </p>
           </div>
-          <div className="mt-4 flex gap-3">
-            <input
-              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-cyan-500"
-              placeholder="Örn. KKB projesinin bu ayki tahmini kârı nedir?"
-            />
-            <button className="rounded-xl bg-cyan-700 px-5 py-3 text-sm font-bold text-white hover:bg-cyan-800">Gönder</button>
-          </div>
-        </div>
-        <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="font-bold text-slate-900">Hızlı Sorular</h3>
-          <div className="mt-5 space-y-3 text-sm">
-            {[
-              "Bekleyen tahsilatları özetle",
-              "Kritik stokları göster",
-              "KKB hakedişini kontrol et",
-              "Bu haftanın ödeme riskini analiz et",
-            ].map((item) => (
-              <button key={item} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-slate-600 hover:border-cyan-300 hover:bg-cyan-50">
-                {item}
-              </button>
-            ))}
-          </div>
         </aside>
-      </section>
-    </AppShell>
+      </div>
+    </ErpShell>
   );
 }

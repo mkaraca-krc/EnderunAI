@@ -1,5 +1,6 @@
 "use client";
 
+import HizirBubble from "@/components/hizir/hizir-bubble";
 import Link from "next/link";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -889,6 +890,9 @@ export default function ErpShell({
 
         <div className="erp-content">{children}</div>
       </main>
+
+      {/* Kullanıcı hangi sayfada olursa olsun Hızır'a ulaşabilsin. */}
+      <HizirBubble />
     </div>
   );
 }

@@ -68,6 +68,20 @@ builder.Services.AddScoped<ICostEngine, CostEngine>();
 builder.Services.AddScoped<ISecretariatService, SecretariatService>();
 builder.Services.AddScoped<IHrApprovalService, HrApprovalService>();
 
+// Hızır asistanı
+builder.Services.AddHttpClient<
+    EnderunAI.Api.Services.Hizir.IHizirLlmClient,
+    EnderunAI.Api.Services.Hizir.ClaudeLlmClient>();
+builder.Services.AddSingleton<
+    EnderunAI.Api.Services.Hizir.IHizirKnowledgeBase,
+    EnderunAI.Api.Services.Hizir.HizirKnowledgeBase>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.IHizirToolRegistry,
+    EnderunAI.Api.Services.Hizir.HizirToolRegistry>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.IHizirChatService,
+    EnderunAI.Api.Services.Hizir.HizirChatService>();
+
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
 

@@ -25,6 +25,8 @@ public sealed class AppDbContext(
     public DbSet<CompanyFinanceSettings> CompanyFinanceSettings => Set<CompanyFinanceSettings>();
     public DbSet<CashAccount> CashAccounts => Set<CashAccount>();
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
+    public DbSet<HizirConversation> HizirConversations => Set<HizirConversation>();
+    public DbSet<HizirMessage> HizirMessages => Set<HizirMessage>();
     public DbSet<CompanyPayrollSettings> CompanyPayrollSettings =>
         Set<CompanyPayrollSettings>();
     public DbSet<PayrollTaxBracket> PayrollTaxBrackets => Set<PayrollTaxBracket>();
@@ -134,6 +136,7 @@ public sealed class AppDbContext(
         ConfigureCompanyFinanceSettings(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
+        ConfigureHizir(modelBuilder);
         ConfigureCheques(modelBuilder);
         ConfigureFactoringTransactions(modelBuilder);
         ConfigureSupplierInvoices(modelBuilder);
@@ -534,6 +537,44 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.AccountingVoucher).WithMany()
                 .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureHizir(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<HizirConversation>(entity =>
+        {
+            entity.ToTable("hizir_conversations");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.UserId, x.LastMessageAtUtc });
+
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.StartedOnPath).HasMaxLength(300);
+
+            entity.HasOne(x => x.User).WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<HizirMessage>(entity =>
+        {
+            entity.ToTable("hizir_messages");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc });
+
+            entity.Property(x => x.Role).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Content).HasMaxLength(20000).IsRequired();
+            entity.Property(x => x.PagePath).HasMaxLength(300);
+            entity.Property(x => x.UsedTools).HasMaxLength(500);
+            entity.Property(x => x.DeniedTools).HasMaxLength(500);
+
+            entity.HasOne(x => x.Conversation).WithMany(x => x.Messages)
+                .HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

@@ -1,0 +1,322 @@
+[
+  {
+    "_comment": "BAKIM NOTU: Bu dosya Hızır'ın kullanım kılavuzu bilgi bankasıdır ve components/erp/erp-shell.tsx menü ağacıyla eşleşmelidir. YENİ BİR MODÜL VEYA PAKET TAMAMLANDIĞINDA o modülün sayfaları buraya eklenmelidir; eklenmezse Hızır yeni ekranları tarif edemez ve kullanıcıya 'bulamadım' der. Her sayfada permission alanı, o sayfayı açabilmek için gereken izin anahtarıdır; Hızır izni olmayan kullanıcıya sayfayı hiç göstermez.",
+    "module": "Projeler",
+    "pages": [
+      {
+        "title": "Projeler",
+        "path": "/projeler",
+        "permission": "projects.view",
+        "purpose": "Tüm projelerin listesi, statü rozetleri ve statü filtresi.",
+        "steps": [
+          "Sol menüden Projeler'e girin",
+          "Üstteki statü filtresinden Keşif / Aktif / Tamamlandı / İptal seçin",
+          "Proje satırına tıklayarak detayına girin"
+        ]
+      },
+      {
+        "title": "Proje Detayı ve Dosyalar",
+        "path": "/projeler/{id}",
+        "permission": "projects.view",
+        "purpose": "Projenin künyesi, şantiyeleri, maliyeti ve dosya merkezi.",
+        "steps": [
+          "Projeler listesinden projeye tıklayın",
+          "Dosyalar bölümüne inin",
+          "Dosyaları sürükleyip bırakarak veya Dosya Seç ile yükleyin",
+          "Aynı adla tekrar yüklerseniz yeni sürüm oluşur, eski sürüm silinmez"
+        ]
+      },
+      {
+        "title": "Şantiyeler",
+        "path": "/projeler",
+        "permission": "site-reports.view",
+        "purpose": "Projeye bağlı şantiyeler ve şantiye bazlı takip.",
+        "steps": [
+          "Proje detayına girin",
+          "Şantiyeler bölümünden ilgili şantiyeyi seçin"
+        ]
+      }
+    ]
+  },
+  {
+    "module": "Günlük Saha Raporu",
+    "pages": [
+      {
+        "title": "Günlük Saha Raporu",
+        "path": "/projeler",
+        "permission": "site-reports.view",
+        "purpose": "Şantiyede o günün personel sayısı, yapılan işler, hava durumu ve fotoğrafların kaydı.",
+        "steps": [
+          "Sol menüden Projeler → projenize girin",
+          "Şantiyeler bölümünden şantiyenizi seçin",
+          "Günlük Rapor sekmesine geçin",
+          "Yeni Rapor'a basın, tarih ve personel sayılarını girin",
+          "Yapılan işleri ve varsa fotoğrafları ekleyip Gönder'e basın",
+          "Gönderilen rapor şantiye şefi/koordinatör onayına düşer"
+        ]
+      }
+    ]
+  },
+  {
+    "module": "Puantaj ve Bordro",
+    "pages": [
+      {
+        "title": "Günlük Puantaj",
+        "path": "/insan-kaynaklari/gunluk-puantaj",
+        "permission": "attendance-payroll.view",
+        "purpose": "Personelin gün bazlı çalışma durumu, fazla mesai ve tatil çalışması girişi.",
+        "steps": [
+          "Sol menüden İnsan Kaynakları → Günlük Puantaj",
+          "Şirket, proje ve şantiyeyi seçin",
+          "Tekil giriş veya Toplu Giriş ile günü kaydedin",
+          "Durum alanında Çalıştı / Yarım Gün / İzinli / Devamsız seçin",
+          "Fazla mesai ve tatil saatlerini ilgili alanlara yazın",
+          "Kaydı onaylayın; yalnızca onaylı puantaj bordroya girer"
+        ]
+      },
+      {
+        "title": "Ücret Kartları",
+        "path": "/insan-kaynaklari/ucret-kartlari",
+        "permission": "salary.view",
+        "purpose": "Personelin resmi brüt maaşı, günlük/saatlik ücreti ve fazla mesai çarpanları.",
+        "steps": [
+          "İnsan Kaynakları → Ücret Kartları",
+          "Personeli seçip Yeni Kart ile tarih aralıklı ücret tanımlayın",
+          "Çarpan alanına 1,5 girin (yüzde değil): 1,5 = %50 zamlı"
+        ]
+      },
+      {
+        "title": "Bordro",
+        "path": "/insan-kaynaklari/bordro",
+        "permission": "salary.view",
+        "purpose": "Aylık bordro hesabı, onay, muhasebeleştirme ve ödeme.",
+        "steps": [
+          "İnsan Kaynakları → Bordro",
+          "Şirket, yıl ve ay seçin",
+          "Toplu Bordro Hesapla'ya basın",
+          "Bordroları onaylayın",
+          "Dönemi Muhasebeleştir ile tahakkuk fişini üretin",
+          "Ödeme hesabını seçip Dönemi Öde ile net ücretleri ödeyin"
+        ]
+      },
+      {
+        "title": "Bordro Maliyet Raporu",
+        "path": "/insan-kaynaklari/maliyet-raporu",
+        "permission": "salary.view",
+        "purpose": "Aylık brütten işverene toplam maliyete kadar kırılım ve proje/şantiye işçilik dağılımı.",
+        "steps": [
+          "İnsan Kaynakları → Bordro Maliyet Raporu",
+          "Şirket, ay ve yıl seçin"
+        ]
+      },
+      {
+        "title": "Bordro Parametreleri",
+        "path": "/sistem-yonetimi/sirket-ayarlari",
+        "permission": "salary.view",
+        "purpose": "Asgari ücret, SGK taban/tavan, prim oranları, gelir vergisi dilimleri ve damga vergisi.",
+        "steps": [
+          "Sistem Yönetimi → Şirket Ayarları",
+          "Bordro Parametreleri kartına inin",
+          "Değerleri yürürlükteki SGK/GİB tebliğiyle karşılaştırın",
+          "Doğrulandı Olarak İşaretle'ye basın; doğrulanmadan bordro kesinleştirilemez"
+        ]
+      }
+    ]
+  },
+  {
+    "module": "Personel",
+    "pages": [
+      {
+        "title": "Personeller",
+        "path": "/insan-kaynaklari/personeller",
+        "permission": "personnel.view",
+        "purpose": "Personel kartları, atamaları ve özlük bilgileri.",
+        "steps": [
+          "İnsan Kaynakları → Personeller",
+          "Yeni Personel ile kart açın veya satıra tıklayıp düzenleyin"
+        ]
+      }
+    ]
+  },
+  {
+    "module": "Muhasebe",
+    "pages": [
+      {
+        "title": "Tedarikçi Faturaları",
+        "path": "/muhasebe/faturalar",
+        "permission": "accounting.view",
+        "purpose": "Alış faturası girişi, 3 yönlü kontrol ve onayda otomatik muhasebe fişi.",
+        "steps": [
+          "Sol menüden Muhasebe → Tedarikçi Faturaları",
+          "Yeni Fatura ile tedarikçi, proje ve kalemleri girin",
+          "Onaya gönderin; onaylandığında fiş otomatik üretilir"
+        ]
+      },
+      {
+        "title": "Muhasebe Fişleri",
+        "path": "/muhasebe/fisler",
+        "permission": "accounting.view",
+        "purpose": "Tüm muhasebe fişleri, kesinleştirme ve iptal.",
+        "steps": [
+          "Muhasebe → Muhasebe Fişleri",
+          "Yeni fiş için Yeni Muhasebe Fişi sayfasını kullanın",
+          "Fiş borç=alacak dengesi sağlanmadan kesinleştirilemez"
+        ]
+      },
+      {
+        "title": "Hesap Planı",
+        "path": "/muhasebe/hesap-plani",
+        "permission": "accounting.view",
+        "purpose": "Tekdüzen hesap planı ve hesap tanımları.",
+        "steps": ["Muhasebe → Hesap Planı"]
+      },
+      {
+        "title": "Yevmiye ve Büyük Defter",
+        "path": "/muhasebe/yevmiye",
+        "permission": "accounting.view",
+        "purpose": "Yevmiye kayıtları ve hesap bazlı büyük defter dökümü.",
+        "steps": ["Muhasebe → Yevmiye Defteri veya Büyük Defter"]
+      }
+    ]
+  },
+  {
+    "module": "Finans",
+    "pages": [
+      {
+        "title": "Kasa / Banka",
+        "path": "/finans/kasa-banka",
+        "permission": "finance.view",
+        "purpose": "Kasa ve banka hesapları, bakiyeler, tahsilat ve ödeme girişi.",
+        "steps": [
+          "Sol menüden Finans → Kasa / Banka",
+          "Hesaba tıklayın, alt kısımda hareketleri görün",
+          "Tahsilat / Ödeme butonuyla hareket girin; muhasebe fişi otomatik üretilir"
+        ]
+      },
+      {
+        "title": "Çek Defteri",
+        "path": "/finans/cekler",
+        "permission": "finance.view",
+        "purpose": "Alınan ve verilen çekler, durum geçişleri ve çek kırdırma (faktoring).",
+        "steps": [
+          "Finans → Çek Defteri",
+          "Alınan/Verilen sekmesini seçin",
+          "Yeni Çek ile kaydı açın",
+          "Çeke tıklayıp Durumu Güncelle ile portföy/banka/tahsil geçişini yapın",
+          "Portföydeki alınan çek için Çeki Kırdır ile faktoring işlemi açılır"
+        ]
+      },
+      {
+        "title": "Nakit Akışı",
+        "path": "/finans/nakit-akis",
+        "permission": "finance.view",
+        "purpose": "Önümüzdeki 30/60/90 günde beklenen tahsilat ve ödemeler.",
+        "steps": ["Finans → Nakit Akışı", "Şirket ve isterseniz proje seçin"]
+      },
+      {
+        "title": "Cari Kartlar",
+        "path": "/cariler",
+        "permission": "current-accounts.view",
+        "purpose": "Müşteri ve tedarikçi kartları, canlı bakiye ve ekstre.",
+        "steps": [
+          "Sol menüden Cari Kartlar",
+          "Cariye tıklayın; bakiye ve ekstre muhasebe defterinden gelir"
+        ]
+      },
+      {
+        "title": "Hakedişler",
+        "path": "/hakedis",
+        "permission": "hakedis.view",
+        "purpose": "Hakediş hazırlama, kesinleştirme ve otomatik gelir fişi.",
+        "steps": [
+          "Sol menüden Hakedişler",
+          "Yeni Hakediş ile proje ve dönem seçin",
+          "Kesinleştirdiğinizde gelir fişi otomatik üretilir"
+        ]
+      }
+    ]
+  },
+  {
+    "module": "Satın Alma",
+    "pages": [
+      {
+        "title": "Satın Alma Talepleri",
+        "path": "/satin-alma",
+        "permission": "purchasing.requests.view",
+        "purpose": "Malzeme/hizmet talebi açma ve takibi.",
+        "steps": ["Sol menüden Satın Alma", "Yeni Talep ile kalemleri girin"]
+      },
+      {
+        "title": "Siparişler",
+        "path": "/satin-alma/siparis",
+        "permission": "purchasing.orders.view",
+        "purpose": "Onaylı tekliflerden sipariş oluşturma ve takip.",
+        "steps": ["Satın Alma → Siparişler"]
+      }
+    ]
+  },
+  {
+    "module": "Depo ve Stok",
+    "pages": [
+      {
+        "title": "Depo Stokları",
+        "path": "/depo-stok",
+        "permission": "inventory.view",
+        "purpose": "Depo bazlı stok miktarları ve rezervasyonlar.",
+        "steps": ["Sol menüden Depo Stok"]
+      },
+      {
+        "title": "Stok Hareketleri",
+        "path": "/depo",
+        "permission": "inventory.view",
+        "purpose": "Giriş, çıkış ve transfer hareketleri.",
+        "steps": ["Sol menüden Depo"]
+      }
+    ]
+  },
+  {
+    "module": "Sekreterya ve Dokümanlar",
+    "pages": [
+      {
+        "title": "Evrak Yönetimi",
+        "path": "/sekreterya/evrak",
+        "permission": "secretariat.view",
+        "purpose": "Gelen/giden evrak kaydı ve takibi.",
+        "steps": ["Sol menüden Sekreterya → Evrak"]
+      },
+      {
+        "title": "Dokümanlar",
+        "path": "/dokumanlar",
+        "permission": "documents.view",
+        "purpose": "Şirket geneli doküman arşivi.",
+        "steps": ["Sol menüden Dokümanlar"]
+      }
+    ]
+  },
+  {
+    "module": "Sistem Yönetimi",
+    "pages": [
+      {
+        "title": "Kullanıcılar",
+        "path": "/sistem-yonetimi/kullanicilar",
+        "permission": "system.users.manage",
+        "purpose": "Kullanıcı açma, rol atama ve veri kapsamı verme.",
+        "steps": ["Sistem Yönetimi → Kullanıcılar"]
+      },
+      {
+        "title": "Yetki Matrisi",
+        "path": "/sistem-yonetimi/yetki-matrisi",
+        "permission": "system.users.manage",
+        "purpose": "Rol bazlı izinlerin görüntülenmesi ve değiştirilmesi.",
+        "steps": ["Sistem Yönetimi → Yetki Matrisi"]
+      },
+      {
+        "title": "Şirket Ayarları",
+        "path": "/sistem-yonetimi/sirket-ayarlari",
+        "permission": "company-settings.view",
+        "purpose": "Şirket künyesi, banka hesapları, finans/muhasebe ayarları, mesai pencereleri ve bordro parametreleri.",
+        "steps": ["Sistem Yönetimi → Şirket Ayarları"]
+      }
+    ]
+  }
+]
