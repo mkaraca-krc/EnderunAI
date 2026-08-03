@@ -5,6 +5,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Services.Accounting;
 
+/// <summary>
+/// Tedarikçi faturası fişleştirme sonucu. ExpenseLineId, proje maliyet
+/// kaydını muhasebedeki maliyet satırına bağlamak için kullanılır.
+/// </summary>
+public sealed record SupplierInvoicePostingResult(Guid VoucherId, Guid ExpenseLineId);
+
 public interface IAccountingIntegrationService
 {
     /// <summary>
@@ -19,9 +25,10 @@ public interface IAccountingIntegrationService
     /// <summary>
     /// Onaylanan tedarikçi faturası için dengeli ve doğrudan Posted bir
     /// mahsup fişi üretir: maliyet hesabı + 191 İndirilecek KDV (borç),
-    /// 320 Satıcılar (alacak). Fiş Id'sini döndürür.
+    /// 320 Satıcılar (alacak). Fiş Id'si ile birlikte maliyet satırının
+    /// Id'sini de döndürür (proje maliyeti ↔ muhasebe köprüsü için).
     /// </summary>
-    Task<Guid> CreateSupplierInvoiceVoucherAsync(
+    Task<SupplierInvoicePostingResult> CreateSupplierInvoiceVoucherAsync(
         SupplierInvoice invoice,
         CancellationToken cancellationToken = default);
 
@@ -68,7 +75,7 @@ public sealed class AccountingIntegrationService(
         return settings;
     }
 
-    public async Task<Guid> CreateSupplierInvoiceVoucherAsync(
+    public async Task<SupplierInvoicePostingResult> CreateSupplierInvoiceVoucherAsync(
         SupplierInvoice invoice,
         CancellationToken cancellationToken = default)
     {
@@ -165,7 +172,17 @@ public sealed class AccountingIntegrationService(
 
         await voucherService.PostAsync(created.Id, cancellationToken);
 
-        return created.Id;
+        // Maliyet satırı ilk sırada üretiliyor; proje maliyet kaydı buna
+        // bağlanacağı için Id'si geri veriliyor.
+        var expenseLineId = await db.AccountingVoucherLines
+            .Where(x => x.AccountingVoucherId == created.Id &&
+                        x.AccountingAccountId == settings.ExpenseAccountId!.Value &&
+                        x.DebitAmount > 0m)
+            .OrderBy(x => x.LineNumber)
+            .Select(x => x.Id)
+            .FirstAsync(cancellationToken);
+
+        return new SupplierInvoicePostingResult(created.Id, expenseLineId);
     }
 
     public async Task<Guid> CreateProgressPaymentVoucherAsync(

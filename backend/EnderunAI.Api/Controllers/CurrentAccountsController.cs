@@ -48,7 +48,18 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
                 x.Address,
                 x.PaymentTerm,
                 x.CreditLimit,
-                x.IsActive
+                x.IsActive,
+                // Muhasebe hesap eşlemeleri: cariler ekranı bu alanları
+                // gösteriyordu ama projeksiyonda yoktu, bu yüzden her kart
+                // "Bağlı Değil" görünüyordu.
+                x.PayableAccountingAccountId,
+                PayableAccountCode = x.PayableAccountingAccount != null
+                    ? x.PayableAccountingAccount.Code
+                    : null,
+                x.ReceivableAccountingAccountId,
+                ReceivableAccountCode = x.ReceivableAccountingAccount != null
+                    ? x.ReceivableAccountingAccount.Code
+                    : null
             })
             .ToListAsync(cancellationToken);
 
@@ -228,4 +239,174 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
         await db.SaveChangesAsync(cancellationToken);
         return Ok(new { message = "Cari kart onaylandı.", entity.Id, entity.Status });
     }
+
+    /// <summary>
+    /// Cari bakiyeleri — ayrı bir hareket defteri tutulmaz, tek gerçek
+    /// kaynak muhasebe defteridir: kesinleşmiş (Posted) fiş satırlarının
+    /// cari boyutu üzerinden hesaplanır. Bakiye = Borç − Alacak
+    /// (pozitif: bizden alacaklı değil, bize borçlu → müşteri;
+    /// negatif: biz borçluyuz → satıcı).
+    /// </summary>
+    [HttpGet("balances")]
+    [RequirePermission(PermissionCatalog.Keys.CurrentAccountsView)]
+    public async Task<IActionResult> GetBalances(
+        [FromQuery] Guid? companyId,
+        CancellationToken cancellationToken)
+    {
+        var query = PostedLines();
+
+        if (companyId.HasValue)
+            query = query.Where(x => x.AccountingVoucher.CompanyId == companyId.Value);
+
+        var balances = await query
+            .Where(x => x.CurrentAccountId != null)
+            .GroupBy(x => x.CurrentAccountId!.Value)
+            .Select(g => new
+            {
+                CurrentAccountId = g.Key,
+                TotalDebit = g.Sum(x => x.DebitAmountLocal),
+                TotalCredit = g.Sum(x => x.CreditAmountLocal),
+                MovementCount = g.Count(),
+                LastMovementDate = g.Max(x => x.AccountingVoucher.VoucherDate)
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(balances.Select(x => new
+        {
+            x.CurrentAccountId,
+            x.TotalDebit,
+            x.TotalCredit,
+            Balance = decimal.Round(x.TotalDebit - x.TotalCredit, 2),
+            x.MovementCount,
+            x.LastMovementDate
+        }));
+    }
+
+    /// <summary>
+    /// Cari ekstresi: dönem başı bakiyesi + hareketler + her satırda
+    /// yürüyen bakiye. Kaynak muhasebe defteri (yalnızca kesinleşmiş
+    /// fişler).
+    /// </summary>
+    [HttpGet("{id:guid}/statement")]
+    [RequirePermission(PermissionCatalog.Keys.CurrentAccountsView)]
+    public async Task<IActionResult> GetStatement(
+        Guid id,
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        CancellationToken cancellationToken)
+    {
+        var account = await db.CurrentAccounts
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new { x.Id, x.Code, x.Title, x.CompanyId, x.CreditLimit })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (account is null)
+            return NotFound(new { message = "Cari kart bulunamadı." });
+
+        var baseQuery = PostedLines().Where(x => x.CurrentAccountId == id);
+
+        var openingBalance = 0m;
+        if (startDate.HasValue)
+        {
+            var start = AsUtcDate(startDate.Value);
+            openingBalance = await baseQuery
+                .Where(x => x.AccountingVoucher.VoucherDate < start)
+                .SumAsync(x => x.DebitAmountLocal - x.CreditAmountLocal, cancellationToken);
+        }
+
+        var periodQuery = baseQuery;
+        if (startDate.HasValue)
+        {
+            var start = AsUtcDate(startDate.Value);
+            periodQuery = periodQuery.Where(x => x.AccountingVoucher.VoucherDate >= start);
+        }
+        if (endDate.HasValue)
+        {
+            var exclusiveEnd = AsUtcDate(endDate.Value).AddDays(1);
+            periodQuery = periodQuery.Where(x => x.AccountingVoucher.VoucherDate < exclusiveEnd);
+        }
+
+        var rows = await periodQuery
+            .OrderBy(x => x.AccountingVoucher.VoucherDate)
+            .ThenBy(x => x.AccountingVoucher.VoucherNumber)
+            .ThenBy(x => x.LineNumber)
+            .Select(x => new
+            {
+                x.Id,
+                VoucherId = x.AccountingVoucherId,
+                x.AccountingVoucher.VoucherNumber,
+                x.AccountingVoucher.VoucherDate,
+                x.AccountingVoucher.SourceModule,
+                AccountCode = x.AccountingAccount.Code,
+                AccountName = x.AccountingAccount.Name,
+                x.Description,
+                x.DocumentNumber,
+                x.DueDate,
+                ProjectCode = x.Project != null ? x.Project.Code : null,
+                Debit = x.DebitAmountLocal,
+                Credit = x.CreditAmountLocal
+            })
+            .ToListAsync(cancellationToken);
+
+        var running = decimal.Round(openingBalance, 2);
+        var lines = new List<object>(rows.Count);
+
+        foreach (var row in rows)
+        {
+            running = decimal.Round(running + row.Debit - row.Credit, 2);
+            lines.Add(new
+            {
+                row.Id,
+                row.VoucherId,
+                row.VoucherNumber,
+                row.VoucherDate,
+                row.SourceModule,
+                row.AccountCode,
+                row.AccountName,
+                row.Description,
+                row.DocumentNumber,
+                row.DueDate,
+                row.ProjectCode,
+                row.Debit,
+                row.Credit,
+                RunningBalance = running
+            });
+        }
+
+        var periodDebit = decimal.Round(rows.Sum(x => x.Debit), 2);
+        var periodCredit = decimal.Round(rows.Sum(x => x.Credit), 2);
+
+        return Ok(new
+        {
+            currentAccount = new
+            {
+                account.Id,
+                account.Code,
+                account.Title,
+                account.CreditLimit
+            },
+            openingBalance = decimal.Round(openingBalance, 2),
+            periodDebit,
+            periodCredit,
+            closingBalance = running,
+            lineCount = lines.Count,
+            lines
+        });
+    }
+
+    /// <summary>
+    /// Ekstre/bakiye hesaplamalarının ortak temeli: yalnızca
+    /// kesinleşmiş (Posted) ve silinmemiş fiş satırları.
+    /// </summary>
+    private IQueryable<AccountingVoucherLine> PostedLines() =>
+        db.AccountingVoucherLines
+            .AsNoTracking()
+            .Where(x =>
+                !x.IsDeleted &&
+                !x.AccountingVoucher.IsDeleted &&
+                x.AccountingVoucher.Status == AccountingVoucherStatus.Posted);
+
+    private static DateTime AsUtcDate(DateTime value) =>
+        DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
 }

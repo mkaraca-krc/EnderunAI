@@ -156,4 +156,100 @@ public sealed class ProjectCostTransactionsController(AppDbContext db) : Control
             projectTotal
         });
     }
+
+    /// <summary>
+    /// Proje maliyeti ↔ muhasebe mutabakatı. Proje maliyet defterindeki
+    /// tutarlar ile bu projeye yazılmış muhasebe maliyet/gider hesabı
+    /// (7'li grup) tutarlarını karşılaştırır; iki tarafın da aynı rakamı
+    /// göstermesi gerekir. Muhasebeye bağlanmamış maliyet kayıtları ve
+    /// proje maliyetine yansımamış muhasebe satırları ayrı ayrı listelenir.
+    /// </summary>
+    [HttpGet("cost-reconciliation")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
+    public async Task<IActionResult> GetCostReconciliation(
+        Guid projectId,
+        CancellationToken cancellationToken)
+    {
+        var projectExists = await db.Projects.AsNoTracking()
+            .AnyAsync(x => x.Id == projectId, cancellationToken);
+
+        if (!projectExists)
+            return NotFound(new { message = "Proje bulunamadı." });
+
+        var costRows = await db.ProjectCostTransactions
+            .AsNoTracking()
+            .Where(x => x.ProjectId == projectId)
+            .Select(x => new
+            {
+                x.Id,
+                x.CostDate,
+                x.Amount,
+                x.Description,
+                x.ReferenceType,
+                x.AccountingVoucherLineId
+            })
+            .ToListAsync(cancellationToken);
+
+        // Muhasebe tarafı: bu projeye yazılmış, kesinleşmiş fişlerin
+        // 7'li (maliyet/gider) hesap satırları — net borç.
+        var accountingRows = await db.AccountingVoucherLines
+            .AsNoTracking()
+            .Where(x =>
+                !x.IsDeleted &&
+                !x.AccountingVoucher.IsDeleted &&
+                x.AccountingVoucher.Status == AccountingVoucherStatus.Posted &&
+                x.ProjectId == projectId &&
+                x.AccountingAccount.Code.StartsWith("7"))
+            .Select(x => new
+            {
+                x.Id,
+                x.AccountingVoucher.VoucherNumber,
+                x.AccountingVoucher.VoucherDate,
+                AccountCode = x.AccountingAccount.Code,
+                AccountName = x.AccountingAccount.Name,
+                x.Description,
+                Amount = x.DebitAmountLocal - x.CreditAmountLocal
+            })
+            .ToListAsync(cancellationToken);
+
+        var linkedLineIds = costRows
+            .Where(x => x.AccountingVoucherLineId.HasValue)
+            .Select(x => x.AccountingVoucherLineId!.Value)
+            .ToHashSet();
+
+        var projectCostTotal = decimal.Round(costRows.Sum(x => x.Amount), 2);
+        var accountingTotal = decimal.Round(accountingRows.Sum(x => x.Amount), 2);
+
+        var unlinkedCosts = costRows
+            .Where(x => x.AccountingVoucherLineId is null)
+            .OrderByDescending(x => x.CostDate)
+            .Select(x => new
+            {
+                x.Id,
+                x.CostDate,
+                x.Amount,
+                x.Description,
+                x.ReferenceType
+            })
+            .ToList();
+
+        var unlinkedAccountingLines = accountingRows
+            .Where(x => !linkedLineIds.Contains(x.Id))
+            .OrderByDescending(x => x.VoucherDate)
+            .ToList();
+
+        return Ok(new
+        {
+            projectId,
+            projectCostTotal,
+            accountingTotal,
+            difference = decimal.Round(projectCostTotal - accountingTotal, 2),
+            isReconciled = decimal.Round(projectCostTotal - accountingTotal, 2) == 0m,
+            linkedCostCount = costRows.Count - unlinkedCosts.Count,
+            unlinkedCostTotal = decimal.Round(unlinkedCosts.Sum(x => x.Amount), 2),
+            unlinkedAccountingTotal = decimal.Round(unlinkedAccountingLines.Sum(x => x.Amount), 2),
+            unlinkedCosts,
+            unlinkedAccountingLines
+        });
+    }
 }

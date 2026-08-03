@@ -2065,6 +2065,11 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.ProjectSiteId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(x => x.AccountingVoucherLine)
+                .WithMany()
+                .HasForeignKey(x => x.AccountingVoucherLineId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }

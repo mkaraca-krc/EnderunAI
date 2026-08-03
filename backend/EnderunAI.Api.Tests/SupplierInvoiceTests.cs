@@ -188,6 +188,90 @@ public sealed class SupplierInvoiceTests(DatabaseFixture fixture)
         Assert.Equal(1500m, cost.Amount); // KDV hariç ara toplam
     }
 
+    /// <summary>
+    /// Faz C: proje maliyet kaydı, muhasebedeki maliyet satırına
+    /// bağlanmalı ki iki tarafta iki ayrı "doğru" rakam oluşmasın.
+    /// </summary>
+    [Fact]
+    public async Task Approve_LinksProjectCostToAccountingLine_AndReconciles()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, supplierId, projectId) = await CreateInvoiceContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var createResponse = await client.PostAsJsonAsync("/api/supplier-invoices",
+            BuildInvoicePayload(companyId, supplierId, projectId, quantity: 4m, unitPrice: 250m));
+        var invoiceId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        await client.PostAsync($"/api/supplier-invoices/{invoiceId}/submit", null);
+        await client.PostAsync($"/api/supplier-invoices/{invoiceId}/approve", null);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var cost = await db.ProjectCostTransactions
+                .AsNoTracking()
+                .SingleAsync(x => x.ReferenceType == "SupplierInvoice" && x.ReferenceId == invoiceId);
+
+            Assert.NotNull(cost.AccountingVoucherLineId);
+
+            // Bağlanan satır gerçekten maliyet hesabının borç satırı olmalı
+            // ve tutarı proje maliyetiyle birebir aynı olmalı.
+            var line = await db.AccountingVoucherLines
+                .AsNoTracking()
+                .Include(x => x.AccountingAccount)
+                .SingleAsync(x => x.Id == cost.AccountingVoucherLineId!.Value);
+
+            Assert.Equal("740", line.AccountingAccount.Code);
+            Assert.Equal(cost.Amount, line.DebitAmountLocal);
+        }
+
+        var reconciliation = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/projects/{projectId}/cost-reconciliation");
+
+        Assert.True(reconciliation.GetProperty("isReconciled").GetBoolean());
+        Assert.Equal(1_000m, reconciliation.GetProperty("projectCostTotal").GetDecimal());
+        Assert.Equal(1_000m, reconciliation.GetProperty("accountingTotal").GetDecimal());
+        Assert.Equal(0, reconciliation.GetProperty("unlinkedCosts").GetArrayLength());
+        Assert.Equal(0, reconciliation.GetProperty("unlinkedAccountingLines").GetArrayLength());
+    }
+
+    /// <summary>
+    /// Elle girilen (muhasebeleşmemiş) proje maliyeti mutabakatsızlık
+    /// olarak raporlanmalı — sessizce eşit sayılmamalı.
+    /// </summary>
+    [Fact]
+    public async Task CostReconciliation_FlagsManualCostNotInAccounting()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (_, _, projectId) = await CreateInvoiceContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.ProjectCostTransactions.Add(new ProjectCostTransaction
+            {
+                ProjectId = projectId,
+                CostType = ProjectCostType.Other,
+                CostDate = DateTime.UtcNow,
+                Amount = 3_000m,
+                Description = "Elle girilen maliyet"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var reconciliation = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/projects/{projectId}/cost-reconciliation");
+
+        Assert.False(reconciliation.GetProperty("isReconciled").GetBoolean());
+        Assert.Equal(3_000m, reconciliation.GetProperty("difference").GetDecimal());
+        Assert.Equal(3_000m, reconciliation.GetProperty("unlinkedCostTotal").GetDecimal());
+        Assert.Equal(1, reconciliation.GetProperty("unlinkedCosts").GetArrayLength());
+    }
+
     [Fact]
     public async Task Submit_WithoutPurchaseOrder_MarksMatchNotApplicable()
     {

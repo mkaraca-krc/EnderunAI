@@ -208,11 +208,11 @@ public sealed class SupplierInvoiceService(
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        var voucherId = await accountingIntegration.CreateSupplierInvoiceVoucherAsync(
+        var posting = await accountingIntegration.CreateSupplierInvoiceVoucherAsync(
             invoice, cancellationToken);
 
         invoice.Status = SupplierInvoiceStatus.Approved;
-        invoice.AccountingVoucherId = voucherId;
+        invoice.AccountingVoucherId = posting.VoucherId;
         invoice.ApprovedByUserId = currentUser.UserId;
         invoice.ApprovedAtUtc = DateTime.UtcNow;
         invoice.UpdatedAtUtc = DateTime.UtcNow;
@@ -238,7 +238,10 @@ public sealed class SupplierInvoiceService(
                 Amount = decimal.Round(invoice.Subtotal * invoice.ExchangeRate, 2),
                 Description = $"Tedarikçi faturası {invoice.InternalNumber} — {supplierTitle}",
                 ReferenceType = "SupplierInvoice",
-                ReferenceId = invoice.Id
+                ReferenceId = invoice.Id,
+                // Muhasebedeki maliyet satırına bağla — proje maliyeti ile
+                // gider hesapları arasında iki ayrı "doğru" rakam oluşmasın.
+                AccountingVoucherLineId = posting.ExpenseLineId
             });
         }
 

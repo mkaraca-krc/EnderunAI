@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
 
 type Company = {
@@ -124,6 +125,7 @@ function toForm(account: Account): FormState {
 export default function Page() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [items, setItems] = useState<Account[]>([]);
+  const [balances, setBalances] = useState<Record<string, number>>({});
   const [form, setForm] = useState<FormState>(blank);
   const [show, setShow] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -134,13 +136,22 @@ export default function Page() {
 
   const load = useCallback(async () => {
     try {
-      const [companyList, accountList] = await Promise.all([
+      const [companyList, accountList, balanceList] = await Promise.all([
         api("companies"),
         api("current-accounts"),
+        // Bakiye muhasebe defterinden gelir; ayrı bir hareket defteri yok.
+        api("current-accounts/balances").catch(() => []),
       ]);
 
       setCompanies(companyList);
       setItems(accountList);
+      setBalances(
+        Object.fromEntries(
+          (balanceList as { currentAccountId: string; balance: number }[]).map(
+            (row) => [row.currentAccountId, row.balance]
+          )
+        )
+      );
       setForm((current) => ({
         ...current,
         companyId:
@@ -589,6 +600,7 @@ export default function Page() {
               <th>Şirket</th>
               <th>120 Alıcı</th>
               <th>320 Satıcı</th>
+              <th>Bakiye</th>
               <th>Durum</th>
               <th>İşlemler</th>
             </tr>
@@ -627,6 +639,28 @@ export default function Page() {
                       ? "Bağlı"
                       : "Bağlı Değil"}
                   </span>
+                </td>
+
+                <td>
+                  {balances[account.id] === undefined ? (
+                    <span className="erp-status gray">Hareket yok</span>
+                  ) : (
+                    <>
+                      <strong>
+                        {new Intl.NumberFormat("tr-TR", {
+                          style: "currency",
+                          currency: "TRY",
+                        }).format(Math.abs(balances[account.id]))}
+                      </strong>
+                      <small>
+                        {balances[account.id] === 0
+                          ? "Kapalı"
+                          : balances[account.id] > 0
+                            ? "Borç"
+                            : "Alacak"}
+                      </small>
+                    </>
+                  )}
                 </td>
 
                 <td>
@@ -685,6 +719,13 @@ export default function Page() {
                         Kullanılabilir
                       </span>
                     )}
+
+                    <Link
+                      className="erp-secondary-button"
+                      href={`/cariler/${account.id}/ekstre`}
+                    >
+                      Ekstre
+                    </Link>
                   </div>
                 </td>
               </tr>
