@@ -39,7 +39,12 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
     return ["company-settings.view", "system.users.manage"];
   }
   if (pathname.startsWith("/sistem-yonetimi")) return "system.users.manage";
-  if (/^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|avanslar)/.test(pathname)) {
+  // Elden ödemeler kendi dar izniyle korunur; bordroyu yöneten herkese
+  // görünmez (menüde de çıkmaz).
+  if (pathname.startsWith("/insan-kaynaklari/ek-odemeler")) {
+    return "extra_payment.view";
+  }
+  if (/^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|cikis-tazminat|avanslar)/.test(pathname)) {
     return "payroll.view";
   }
   if (/^\/insan-kaynaklari\/(puantaj|gunluk-puantaj|izinler|fazla-mesai)/.test(pathname)) {
@@ -336,6 +341,16 @@ const groups: MenuGroup[] = [
         label: "Ek Ücretler",
         href: "/insan-kaynaklari/ek-ucretler",
         icon: "+",
+      },
+      {
+        label: "Ek Ödemeler",
+        href: "/insan-kaynaklari/ek-odemeler",
+        icon: "◆",
+      },
+      {
+        label: "Çıkış ve Tazminat",
+        href: "/insan-kaynaklari/cikis-tazminat",
+        icon: "⇥",
       },
       {
         label: "Organizasyon",

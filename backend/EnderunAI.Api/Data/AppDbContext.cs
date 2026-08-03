@@ -52,6 +52,16 @@ public sealed class AppDbContext(
     public DbSet<EngineeringRecipeLabor> EngineeringRecipeLabors => Set<EngineeringRecipeLabor>();
     public DbSet<EngineeringRecipeMachine> EngineeringRecipeMachines => Set<EngineeringRecipeMachine>();
     public DbSet<Personnel> Personnel => Set<Personnel>();
+
+    /// <summary>
+    /// Elden ödeme tutarları. Ayrı tablo tutulmasının sebebi izolasyon:
+    /// extra_payment.view olmayan kullanıcının sorgusu buraya uğramaz.
+    /// </summary>
+    public DbSet<PersonnelExtraPayment> PersonnelExtraPayments =>
+        Set<PersonnelExtraPayment>();
+
+    public DbSet<PersonnelTermination> PersonnelTerminations =>
+        Set<PersonnelTermination>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
@@ -607,6 +617,70 @@ public sealed class AppDbContext(
 
     private static void ConfigurePayrollSettings(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<PersonnelExtraPayment>(entity =>
+        {
+            entity.ToTable("personnel_extra_payments");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.MonthlyAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Note).HasMaxLength(500);
+
+            entity.HasIndex(x => new { x.PersonnelId, x.EffectiveStartDate });
+
+            entity.HasOne(x => x.Personnel).WithMany()
+                .HasForeignKey(x => x.PersonnelId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<PersonnelTermination>(entity =>
+        {
+            entity.ToTable("personnel_terminations");
+            entity.HasKey(x => x.Id);
+
+            foreach (var property in new[]
+            {
+                nameof(PersonnelTermination.UnusedLeaveDays),
+                nameof(PersonnelTermination.OfficialMonthlyGross),
+                nameof(PersonnelTermination.ExtraMonthlyAmount),
+                nameof(PersonnelTermination.OfficialSeveranceGross),
+                nameof(PersonnelTermination.OfficialSeveranceStampTax),
+                nameof(PersonnelTermination.OfficialNoticeGross),
+                nameof(PersonnelTermination.OfficialNoticeIncomeTax),
+                nameof(PersonnelTermination.OfficialNoticeStampTax),
+                nameof(PersonnelTermination.OfficialLeaveGross),
+                nameof(PersonnelTermination.OfficialLeaveSgk),
+                nameof(PersonnelTermination.OfficialLeaveIncomeTax),
+                nameof(PersonnelTermination.OfficialLeaveStampTax),
+                nameof(PersonnelTermination.OfficialNetTotal),
+                nameof(PersonnelTermination.ActualSeveranceGross),
+                nameof(PersonnelTermination.ActualNoticeGross),
+                nameof(PersonnelTermination.ActualLeaveGross),
+                nameof(PersonnelTermination.ActualNetTotal),
+                nameof(PersonnelTermination.ExtraPaymentDifference)
+            })
+            {
+                entity.Property(property).HasPrecision(18, 2);
+            }
+
+            entity.Property(x => x.Note).HasMaxLength(1000);
+
+            // Bir personelin kesinleşmiş tek bir çıkışı olur; taslaklar
+            // serbest. Soft-delete nedeniyle indeks silinmemişlerle sınırlı.
+            entity.HasIndex(x => x.PersonnelId)
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false AND \"Status\" = 1");
+
+            entity.HasOne(x => x.Personnel).WithMany()
+                .HasForeignKey(x => x.PersonnelId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
         modelBuilder.Entity<CompanyPayrollSettings>(entity =>
         {
             entity.ToTable("company_payroll_settings");

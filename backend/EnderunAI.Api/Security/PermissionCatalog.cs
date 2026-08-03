@@ -109,6 +109,13 @@ public static class PermissionCatalog
         public const string SalaryView = "salary.view";
         public const string SalaryManage = "salary.manage";
 
+        // Ek ödeme (elden) — resmi bordroda görünmeyen tutarlar.
+        // salary.view'dan AYRI ve daha dar bir izindir: bordroyu yöneten
+        // herkes elden ödemeleri görmez. Bu izin olmadan ilgili alanlar
+        // hiç dönmez ve uçlar 403 verir.
+        public const string ExtraPaymentView = "extra_payment.view";
+        public const string ExtraPaymentManage = "extra_payment.manage";
+
         // Hakediş
         public const string HakedisView = "hakedis.view";
         public const string HakedisManage = "hakedis.manage";
@@ -262,6 +269,9 @@ public static class PermissionCatalog
 
         new(Keys.SalaryView, "Ücret Gizliliği", "Ücret görüntüleme", "Maaş, bordro ve işçilik maliyeti tutarlarını görür."),
         new(Keys.SalaryManage, "Ücret Gizliliği", "Ücret yönetimi", "Ücret kartı ve bordro tutarlarını değiştirir."),
+
+        new(Keys.ExtraPaymentView, "Ek Ödeme", "Ek ödeme görüntüleme", "Resmi bordroda görünmeyen elden ödeme tutarlarını ve elden tazminat farkını görür."),
+        new(Keys.ExtraPaymentManage, "Ek Ödeme", "Ek ödeme yönetimi", "Personelin elden ödeme tutarlarını tanımlar ve değiştirir."),
 
         new(Keys.HakedisView, "Hakediş", "Hakedişi görüntüleme", "Hakediş, metraj ve fiyat farkı kayıtlarını görüntüler."),
         new(Keys.HakedisManage, "Hakediş", "Hakediş yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),

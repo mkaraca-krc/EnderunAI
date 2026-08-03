@@ -212,8 +212,10 @@ public static class PayrollCalculationService
     /// <summary>
     /// Verilen kümülatif matrahın tamamı üzerinden toplam gelir vergisi.
     /// Aylık vergi, iki kümülatif değerin farkı olarak bulunur.
+    ///
+    /// Tazminat hesabı da aynı dilim mantığını kullandığı için public.
     /// </summary>
-    private static decimal TaxOnCumulative(
+    public static decimal TaxOnCumulative(
         IReadOnlyList<PayrollTaxBracketInput> brackets, decimal cumulativeBase)
     {
         if (cumulativeBase <= 0m)

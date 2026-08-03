@@ -45,7 +45,9 @@ public static class RoleCatalog
             PermissionCatalog.Keys.CompaniesManage,
             // Bordro ödemesini kasadan/bankadan yapan ve aylık maliyet
             // raporunu okuyan rol; ücret rakamlarını görmesi gerekir.
-            PermissionCatalog.Keys.SalaryView
+            PermissionCatalog.Keys.SalaryView,
+            // Elden ödemeler ve elden tazminat farkı finansın yükümlülüğü.
+            PermissionCatalog.Keys.ExtraPaymentView, PermissionCatalog.Keys.ExtraPaymentManage
         ]),
 
         new("Satın Alma Sorumlusu", "Talep, RFQ, sipariş, mal kabul ve stok süreçleri tam yetki; cari görüntüleme.",
@@ -96,6 +98,7 @@ public static class RoleCatalog
             PermissionCatalog.Keys.PurchasingOrdersView, PermissionCatalog.Keys.PurchasingReceiptsView,
             PermissionCatalog.Keys.CompaniesManage, PermissionCatalog.Keys.AccountingManage, PermissionCatalog.Keys.PurchasingView,
             PermissionCatalog.Keys.SalaryView,
+            PermissionCatalog.Keys.ExtraPaymentView, PermissionCatalog.Keys.ExtraPaymentManage,
             PermissionCatalog.Keys.AiUse
         ]),
 
