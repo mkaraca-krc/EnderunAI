@@ -168,14 +168,18 @@
         "path": "/muhasebe/hesap-plani",
         "permission": "accounting.view",
         "purpose": "Tekdüzen hesap planı ve hesap tanımları.",
-        "steps": ["Muhasebe → Hesap Planı"]
+        "steps": [
+          "Muhasebe → Hesap Planı"
+        ]
       },
       {
         "title": "Yevmiye ve Büyük Defter",
         "path": "/muhasebe/yevmiye",
         "permission": "accounting.view",
         "purpose": "Yevmiye kayıtları ve hesap bazlı büyük defter dökümü.",
-        "steps": ["Muhasebe → Yevmiye Defteri veya Büyük Defter"]
+        "steps": [
+          "Muhasebe → Yevmiye Defteri veya Büyük Defter"
+        ]
       }
     ]
   },
@@ -211,7 +215,10 @@
         "path": "/finans/nakit-akis",
         "permission": "finance.view",
         "purpose": "Önümüzdeki 30/60/90 günde beklenen tahsilat ve ödemeler.",
-        "steps": ["Finans → Nakit Akışı", "Şirket ve isterseniz proje seçin"]
+        "steps": [
+          "Finans → Nakit Akışı",
+          "Şirket ve isterseniz proje seçin"
+        ]
       },
       {
         "title": "Cari Kartlar",
@@ -244,14 +251,19 @@
         "path": "/satin-alma",
         "permission": "purchasing.requests.view",
         "purpose": "Malzeme/hizmet talebi açma ve takibi.",
-        "steps": ["Sol menüden Satın Alma", "Yeni Talep ile kalemleri girin"]
+        "steps": [
+          "Sol menüden Satın Alma",
+          "Yeni Talep ile kalemleri girin"
+        ]
       },
       {
         "title": "Siparişler",
         "path": "/satin-alma/siparis",
         "permission": "purchasing.orders.view",
         "purpose": "Onaylı tekliflerden sipariş oluşturma ve takip.",
-        "steps": ["Satın Alma → Siparişler"]
+        "steps": [
+          "Satın Alma → Siparişler"
+        ]
       }
     ]
   },
@@ -263,14 +275,18 @@
         "path": "/depo-stok",
         "permission": "inventory.view",
         "purpose": "Depo bazlı stok miktarları ve rezervasyonlar.",
-        "steps": ["Sol menüden Depo Stok"]
+        "steps": [
+          "Sol menüden Depo Stok"
+        ]
       },
       {
         "title": "Stok Hareketleri",
         "path": "/depo",
         "permission": "inventory.view",
         "purpose": "Giriş, çıkış ve transfer hareketleri.",
-        "steps": ["Sol menüden Depo"]
+        "steps": [
+          "Sol menüden Depo"
+        ]
       }
     ]
   },
@@ -282,14 +298,18 @@
         "path": "/sekreterya/evrak",
         "permission": "secretariat.view",
         "purpose": "Gelen/giden evrak kaydı ve takibi.",
-        "steps": ["Sol menüden Sekreterya → Evrak"]
+        "steps": [
+          "Sol menüden Sekreterya → Evrak"
+        ]
       },
       {
         "title": "Dokümanlar",
         "path": "/dokumanlar",
         "permission": "documents.view",
         "purpose": "Şirket geneli doküman arşivi.",
-        "steps": ["Sol menüden Dokümanlar"]
+        "steps": [
+          "Sol menüden Dokümanlar"
+        ]
       }
     ]
   },
@@ -301,21 +321,70 @@
         "path": "/sistem-yonetimi/kullanicilar",
         "permission": "system.users.manage",
         "purpose": "Kullanıcı açma, rol atama ve veri kapsamı verme.",
-        "steps": ["Sistem Yönetimi → Kullanıcılar"]
+        "steps": [
+          "Sistem Yönetimi → Kullanıcılar"
+        ]
       },
       {
         "title": "Yetki Matrisi",
         "path": "/sistem-yonetimi/yetki-matrisi",
         "permission": "system.users.manage",
         "purpose": "Rol bazlı izinlerin görüntülenmesi ve değiştirilmesi.",
-        "steps": ["Sistem Yönetimi → Yetki Matrisi"]
+        "steps": [
+          "Sistem Yönetimi → Yetki Matrisi"
+        ]
       },
       {
         "title": "Şirket Ayarları",
         "path": "/sistem-yonetimi/sirket-ayarlari",
         "permission": "company-settings.view",
         "purpose": "Şirket künyesi, banka hesapları, finans/muhasebe ayarları, mesai pencereleri ve bordro parametreleri.",
-        "steps": ["Sistem Yönetimi → Şirket Ayarları"]
+        "steps": [
+          "Sistem Yönetimi → Şirket Ayarları"
+        ]
+      }
+    ]
+  },
+  {
+    "module": "Hızır Asistanı",
+    "pages": [
+      {
+        "title": "Hızır ne yapabilir",
+        "path": "/ai-asistan",
+        "permission": "ai.use",
+        "purpose": "Hızır'ın yetenekleri üç güvenlik kademesine ayrılır: doğrudan yaptıkları, onayınızı bekleyenler ve hiçbir koşulda yapmadıkları.",
+        "steps": [
+          "DOĞRUDAN YAPAR (onay istemez): yetkiniz dahilindeki verileri getirir, taslak metin hazırlar, size hatırlatma oluşturur, personel atama önerisi yazar, liste ve rapor çıkarır.",
+          "ONAYINIZI İSTER: RFQ (teklif isteği) açma, faturayı onaya gönderme, e-posta gönderme. Bu işlerde Hızır eylemi hazırlar, size 'şunu yapacağım' diye özetler ve Onayla düğmesine basana kadar HİÇBİR ŞEY yapmaz.",
+          "ASLA YAPMAZ: para transferi ve ödeme, çek durumu değiştirme, kasa veya banka hareketi, herhangi bir kaydı silme, bordro ve muhasebe fişi kesinleştirme, yetki veya rol değiştirme, kullanıcı yönetimi. Bunlar Hızır'a araç olarak hiç tanıtılmadı; teknik olarak yapamaz. Bu işlemler yalnızca ilgili ekrandan elle yapılır.",
+          "Hızır sizin yetkinizle çalışır: sizin göremediğiniz veriyi göremez, sizin yapamadığınız işlemi Hızır üzerinden de yapamazsınız.",
+          "Hızır üzerinden yapılan her eylem denetim kaydına düşer: kim, hangi eylemi, ne zaman, onaylı mı."
+        ]
+      },
+      {
+        "title": "Onay akışı",
+        "path": "/ai-asistan",
+        "permission": "ai.use",
+        "purpose": "Onay gerektiren bir eylemin nasıl yürüdüğü.",
+        "steps": [
+          "Hızır'a işi söyleyin; sohbetin altında sarı bir onay kartı çıkar.",
+          "Karttaki özeti okuyun. Bu özeti Hızır değil sistem yazar, dolayısıyla onayladığınız iş ile yapılan iş aynıdır.",
+          "Onayla düğmesine basınca eylem yürütülür ve sonucu sohbete yazılır. Vazgeç derseniz hiçbir şey yapılmaz.",
+          "Onaylamadığınız eylem 15 dakika sonra kendiliğinden düşer. Onaylanan bir eylem ikinci kez çalıştırılamaz.",
+          "E-posta yalnızca sistemde kayıtlı adreslere (cari, personel, kullanıcı) gönderilebilir; serbest adres kabul edilmez."
+        ]
+      },
+      {
+        "title": "Hızır'ın Günlük Özeti",
+        "path": "/dashboard",
+        "permission": "ai.use",
+        "purpose": "Dashboard'un üstünde, size ve rolünüze özel günlük brifing kartı.",
+        "steps": [
+          "Kart her açılışta güncellenir; onay bekleyen işler, çek vadeleri, girilmemiş saha raporları, kritik stok ve süresi dolan teklifler gibi başlıkları toplar.",
+          "Yalnızca sizin yetkinizdeki başlıklar görünür; yetkiniz olmayan bir konu brifingde hiç yer almaz.",
+          "Öne çıkan bir şey yoksa kart bunu açıkça söyler, dolgu cümle yazmaz.",
+          "'Bana e-postala' düğmesi özeti sizin kayıtlı e-posta adresinize gönderir. Başkasına gönderilemez."
+        ]
       }
     ]
   }

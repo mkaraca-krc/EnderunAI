@@ -54,6 +54,26 @@ export type HizirPendingAction = {
   resultMessage: string | null;
 };
 
+export const BriefingSeverity = {
+  Info: 0,
+  Warning: 1,
+  Critical: 2,
+} as const;
+
+export type HizirBriefingItem = {
+  title: string;
+  detail: string | null;
+  severity: number;
+  targetPath: string | null;
+};
+
+export type HizirBriefing = {
+  greeting: string;
+  headline: string;
+  generatedAtUtc: string;
+  items: HizirBriefingItem[];
+};
+
 export const hizirService = {
   getStatus() {
     return apiClient<HizirStatus>("hizir/status");
@@ -76,6 +96,17 @@ export const hizirService = {
 
   getMessages(conversationId: string) {
     return apiClient<HizirMessage[]>(`hizir/conversations/${conversationId}`);
+  },
+
+  getBriefing() {
+    return apiClient<HizirBriefing>("hizir/briefing");
+  },
+
+  /** Özeti kullanıcının kendi kayıtlı adresine gönderir. */
+  emailBriefing() {
+    return apiClient<{ message: string }>("hizir/briefing/email", {
+      method: "POST",
+    });
   },
 
   getPendingActions() {

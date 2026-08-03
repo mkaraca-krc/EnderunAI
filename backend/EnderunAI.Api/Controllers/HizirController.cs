@@ -14,8 +14,33 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/hizir")]
 public sealed class HizirController(
     IHizirChatService service,
-    IHizirPendingActionStore pendingActions) : ControllerBase
+    IHizirPendingActionStore pendingActions,
+    Services.Hizir.Briefing.IHizirBriefingService briefing) : ControllerBase
 {
+    /// <summary>Kullanıcıya ve rolüne özel günlük özet.</summary>
+    [HttpGet("briefing")]
+    [RequirePermission(PermissionCatalog.Keys.AiUse)]
+    public async Task<IActionResult> Briefing(CancellationToken cancellationToken) =>
+        Ok(await briefing.BuildAsync(cancellationToken));
+
+    /// <summary>
+    /// Günlük özeti kullanıcının KENDİ kayıtlı adresine gönderir.
+    /// Alıcı seçilemez; brifing başkasına gönderilemez.
+    /// </summary>
+    [HttpPost("briefing/email")]
+    [RequirePermission(PermissionCatalog.Keys.AiUse)]
+    public async Task<IActionResult> EmailBriefing(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(new { message = await briefing.EmailToSelfAsync(cancellationToken) });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
     /// <summary>Kullanıcının onay bekleyen eylemleri.</summary>
     [HttpGet("actions/pending")]
     [RequirePermission(PermissionCatalog.Keys.AiUse)]

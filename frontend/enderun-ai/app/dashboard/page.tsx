@@ -16,6 +16,7 @@ import ProfitabilityWidget from "@/components/dashboard/profitability-widget";
 import NotificationCenterWidget from "@/components/dashboard/notification-center-widget";
 import RecentActivitiesWidget, { type DashboardActivity } from "@/components/dashboard/recent-activities-widget";
 import ExecutiveAiSummaryWidget from "@/components/dashboard/executive-ai-summary-widget";
+import HizirBriefingWidget from "@/components/dashboard/hizir-briefing-widget";
 import { greetingFor } from "@/lib/greeting";
 import { useCurrentUser } from "@/lib/use-current-user";
 import WorkTaskDashboardWidget from "@/components/tasks/work-task-dashboard-widget";
@@ -648,6 +649,8 @@ export default function DashboardPage() {
       title="Yönetici Dashboard"
       description="Enderun AI operasyon ve finans yönetim merkezi"
     >
+      <HizirBriefingWidget />
+
       <ExecutiveAiSummaryWidget
         greeting={greeting}
         activeProjects={metrics.activeProjects.length}

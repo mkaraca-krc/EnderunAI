@@ -106,6 +106,32 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.IHizirChatService,
     EnderunAI.Api.Services.Hizir.HizirChatService>();
 
+// Günlük brifing. Yeni bir modül geldiğinde yapılacak tek şey
+// IHizirBriefingSource uygulayan bir sınıf yazıp buraya eklemektir;
+// brifing servisi değişmez.
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Hizir.Briefing.PendingApprovalsBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Hizir.Briefing.ChequeDueBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Hizir.Briefing.MissingSiteReportBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Hizir.Briefing.CriticalStockBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Hizir.Briefing.OfferValidityBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Hizir.Briefing.HizirPendingActionBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingService,
+    EnderunAI.Api.Services.Hizir.Briefing.HizirBriefingService>();
+
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
 
