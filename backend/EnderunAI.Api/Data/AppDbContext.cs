@@ -25,6 +25,9 @@ public sealed class AppDbContext(
     public DbSet<CompanyFinanceSettings> CompanyFinanceSettings => Set<CompanyFinanceSettings>();
     public DbSet<CashAccount> CashAccounts => Set<CashAccount>();
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
+    public DbSet<CompanyPayrollSettings> CompanyPayrollSettings =>
+        Set<CompanyPayrollSettings>();
+    public DbSet<PayrollTaxBracket> PayrollTaxBrackets => Set<PayrollTaxBracket>();
     public DbSet<Cheque> Cheques => Set<Cheque>();
     public DbSet<ChequeMovement> ChequeMovements => Set<ChequeMovement>();
     public DbSet<FactoringTransaction> FactoringTransactions => Set<FactoringTransaction>();
@@ -130,6 +133,7 @@ public sealed class AppDbContext(
         ConfigureAccountingVouchers(modelBuilder);
         ConfigureCompanyFinanceSettings(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
+        ConfigurePayrollSettings(modelBuilder);
         ConfigureCheques(modelBuilder);
         ConfigureFactoringTransactions(modelBuilder);
         ConfigureSupplierInvoices(modelBuilder);
@@ -519,6 +523,60 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.AccountingVoucher).WithMany()
                 .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigurePayrollSettings(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyPayrollSettings>(entity =>
+        {
+            entity.ToTable("company_payroll_settings");
+            entity.HasKey(x => x.Id);
+
+            // Silme, AuditSaveChangesInterceptor tarafından soft-delete'e
+            // çevrildiği için benzersizlik yalnızca silinmemiş satırlarda
+            // aranmalı; aksi halde silinen bir kayıt aynı anahtarın tekrar
+            // kullanılmasını kalıcı olarak engeller.
+            entity.HasIndex(x => new { x.CompanyId, x.Year })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.MinimumWageGross).HasPrecision(18, 2);
+            entity.Property(x => x.MinimumWageNet).HasPrecision(18, 2);
+            entity.Property(x => x.SgkBaseFloor).HasPrecision(18, 2);
+            entity.Property(x => x.SgkBaseCeiling).HasPrecision(18, 2);
+            entity.Property(x => x.SgkEmployeeRate).HasPrecision(9, 4);
+            entity.Property(x => x.UnemploymentEmployeeRate).HasPrecision(9, 4);
+            entity.Property(x => x.SgkEmployerRate).HasPrecision(9, 4);
+            entity.Property(x => x.UnemploymentEmployerRate).HasPrecision(9, 4);
+            entity.Property(x => x.SgkEmployerDiscountPoints).HasPrecision(9, 4);
+            entity.Property(x => x.StampTaxPerMille).HasPrecision(9, 4);
+            entity.Property(x => x.VerificationNote).HasMaxLength(500);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<PayrollTaxBracket>(entity =>
+        {
+            entity.ToTable("payroll_tax_brackets");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyPayrollSettingsId, x.Order })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.LowerBound).HasPrecision(18, 2);
+            entity.Property(x => x.UpperBound).HasPrecision(18, 2);
+            entity.Property(x => x.Rate).HasPrecision(9, 4);
+
+            entity.HasOne(x => x.CompanyPayrollSettings).WithMany(x => x.TaxBrackets)
+                .HasForeignKey(x => x.CompanyPayrollSettingsId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

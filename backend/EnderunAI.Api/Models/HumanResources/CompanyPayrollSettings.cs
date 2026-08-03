@@ -1,0 +1,114 @@
+namespace EnderunAI.Api.Models;
+
+/// <summary>
+/// Şirket bazlı bordro parametreleri (tek satır/şirket). Asgari ücret,
+/// SGK taban/tavan, prim oranları ve vergi oranları her yıl mevzuatla
+/// değiştiği için hiçbiri koda gömülmedi; hepsi Şirket Ayarları →
+/// Bordro Parametreleri ekranından yönetilir.
+///
+/// Fail-closed: <see cref="VerifiedAtUtc"/> boşken bordro
+/// kesinleştirilemez. Sistemle gelen varsayılanlar yalnızca başlangıç
+/// değeridir; yürürlükteki SGK/GİB tebliğiyle karşılaştırılıp
+/// onaylanmadan resmi bordro üretilmesi engellenir.
+/// </summary>
+public sealed class CompanyPayrollSettings : BaseEntity
+{
+    public Guid CompanyId { get; set; }
+    public Company Company { get; set; } = null!;
+
+    /// <summary>Parametrelerin geçerli olduğu yıl.</summary>
+    public int Year { get; set; } = DateTime.UtcNow.Year;
+
+    // --- Asgari ücret ---
+
+    /// <summary>Aylık brüt asgari ücret.</summary>
+    public decimal MinimumWageGross { get; set; }
+
+    /// <summary>Aylık net asgari ücret (bilgi amaçlı; hesaplama brütten yürür).</summary>
+    public decimal MinimumWageNet { get; set; }
+
+    // --- SGK ---
+
+    /// <summary>SGK primine esas kazanç alt sınırı (genelde brüt asgari ücret).</summary>
+    public decimal SgkBaseFloor { get; set; }
+
+    /// <summary>SGK primine esas kazanç üst sınırı (tavan). Aşan kısımdan prim kesilmez.</summary>
+    public decimal SgkBaseCeiling { get; set; }
+
+    /// <summary>İşçi SGK primi oranı (%). Yasal: 14.</summary>
+    public decimal SgkEmployeeRate { get; set; } = 14m;
+
+    /// <summary>İşçi işsizlik sigortası primi oranı (%). Yasal: 1.</summary>
+    public decimal UnemploymentEmployeeRate { get; set; } = 1m;
+
+    /// <summary>İşveren SGK primi oranı (%). Yasal: 20,75.</summary>
+    public decimal SgkEmployerRate { get; set; } = 20.75m;
+
+    /// <summary>İşveren işsizlik sigortası primi oranı (%). Yasal: 2.</summary>
+    public decimal UnemploymentEmployerRate { get; set; } = 2m;
+
+    /// <summary>
+    /// 5510 sayılı kanunun 5 puanlık işveren indiriminden yararlanılıyor mu.
+    /// Açıksa işveren SGK oranından <see cref="SgkEmployerDiscountPoints"/>
+    /// düşülür.
+    /// </summary>
+    public bool SgkEmployerDiscountEnabled { get; set; }
+
+    /// <summary>İşveren prim indirimi puanı. Yasal: 5.</summary>
+    public decimal SgkEmployerDiscountPoints { get; set; } = 5m;
+
+    // --- Vergiler ---
+
+    /// <summary>Damga vergisi oranı (binde). Yasal: 7,59.</summary>
+    public decimal StampTaxPerMille { get; set; } = 7.59m;
+
+    /// <summary>
+    /// Asgari ücret gelir vergisi istisnası uygulanıyor mu. Açıksa her
+    /// çalışanın gelir vergisinden, brüt asgari ücrete karşılık gelen
+    /// vergi tutarı düşülür (7349 sayılı kanun).
+    /// </summary>
+    public bool MinimumWageIncomeTaxExemptionEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Asgari ücret damga vergisi istisnası uygulanıyor mu. Açıksa damga
+    /// vergisi matrahından brüt asgari ücret düşülür.
+    /// </summary>
+    public bool MinimumWageStampTaxExemptionEnabled { get; set; } = true;
+
+    // --- Doğrulama ---
+
+    /// <summary>
+    /// Parametrelerin yürürlükteki mevzuatla karşılaştırılıp onaylandığı an.
+    /// Boşken bordro kesinleştirilemez.
+    /// </summary>
+    public DateTime? VerifiedAtUtc { get; set; }
+    public Guid? VerifiedByUserId { get; set; }
+
+    /// <summary>Doğrulamada kullanılan kaynak (tebliğ no, tarih vb.).</summary>
+    public string? VerificationNote { get; set; }
+
+    public ICollection<PayrollTaxBracket> TaxBrackets { get; set; }
+        = new List<PayrollTaxBracket>();
+}
+
+/// <summary>
+/// Gelir vergisi dilimi. Kümülatif vergi matrahı bu dilimlere göre
+/// vergilendirilir; matrah yıl içinde büyüdükçe üst dilimlere geçer.
+/// </summary>
+public sealed class PayrollTaxBracket : BaseEntity
+{
+    public Guid CompanyPayrollSettingsId { get; set; }
+    public CompanyPayrollSettings CompanyPayrollSettings { get; set; } = null!;
+
+    /// <summary>Dilim sırası (1'den başlar).</summary>
+    public int Order { get; set; }
+
+    /// <summary>Dilimin başladığı kümülatif matrah (ilk dilimde 0).</summary>
+    public decimal LowerBound { get; set; }
+
+    /// <summary>Dilimin bittiği kümülatif matrah; son dilimde null (sınırsız).</summary>
+    public decimal? UpperBound { get; set; }
+
+    /// <summary>Bu dilime uygulanan vergi oranı (%).</summary>
+    public decimal Rate { get; set; }
+}

@@ -448,12 +448,47 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
         if (entity.Status != PayrollStatus.Calculated)
             throw new InvalidOperationException(
                 "Yalnızca hesaplanmış bordro onaylanabilir.");
+
+        await EnsurePayrollSettingsVerifiedAsync(
+            entity.CompanyId, entity.Year, cancellationToken);
+
         entity.Status = PayrollStatus.Approved;
         entity.ApprovedAtUtc = DateTime.UtcNow;
         entity.ApprovedByUserId = userId;
         Touch(entity, userId);
         await hrDb.SaveChangesAsync(cancellationToken);
         return ToPayrollResponse(entity);
+    }
+
+    /// <summary>
+    /// Bordronun onaylanabilmesi için o yıla ait bordro parametrelerinin
+    /// tanımlı VE doğrulanmış olması şart. Doğrulanmamış (varsayılan)
+    /// parametreyle üretilen resmi bordro, eksik prim/vergi beyanı
+    /// anlamına geldiği için akış bilinçli olarak fail-closed.
+    /// </summary>
+    private async Task EnsurePayrollSettingsVerifiedAsync(
+        Guid companyId, int year, CancellationToken cancellationToken)
+    {
+        var settings = await appDb.CompanyPayrollSettings
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.CompanyId == companyId && x.Year == year, cancellationToken);
+
+        if (settings is null)
+        {
+            throw new InvalidOperationException(
+                $"{year} yılı için bordro parametreleri tanımlı değil. " +
+                "Şirket Ayarları → Bordro Parametreleri ekranından tanımlayın.");
+        }
+
+        if (settings.VerifiedAtUtc is null)
+        {
+            throw new InvalidOperationException(
+                $"{year} yılı bordro parametreleri henüz doğrulanmadı. " +
+                "Asgari ücret, SGK taban/tavan ve vergi dilimlerini yürürlükteki " +
+                "mevzuatla karşılaştırıp Şirket Ayarları → Bordro Parametreleri " +
+                "ekranından onaylayın.");
+        }
     }
 
     public async Task<PayrollResponse> CancelPayrollAsync(

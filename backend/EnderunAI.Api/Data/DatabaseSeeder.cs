@@ -62,6 +62,79 @@ public static class DatabaseSeeder
         await SeedCompanyDefaultsAsync(db);
         await SeedRoleWorkHourWindowsAsync(db);
         await SeedCompanyFinanceSettingsAsync(db);
+        await SeedCompanyPayrollSettingsAsync(db);
+    }
+
+    /// <summary>
+    /// Bordro parametrelerinin başlangıç değerleri. DİKKAT: bu değerler
+    /// yalnızca ilk kurulum kolaylığı içindir, resmi kaynak değildir.
+    /// Kayıt <c>VerifiedAtUtc = null</c> olarak oluşur ve bu haliyle
+    /// bordronun kesinleştirilmesini engeller; yetkili kullanıcı Şirket
+    /// Ayarları → Bordro Parametreleri ekranında yürürlükteki SGK/GİB
+    /// tebliğiyle karşılaştırıp onaylamak zorundadır.
+    ///
+    /// Oranlar (SGK %14/%1/%20,75/%2, damga ‰7,59, dilim oranları
+    /// %15/%20/%27/%35/%40) yıllar içinde değişmeyen yasal oranlardır.
+    /// Tutarlar (asgari ücret, SGK tavanı, dilim sınırları) her yıl
+    /// değişir — doğrulanması gereken asıl alanlar bunlardır.
+    /// </summary>
+    private static async Task SeedCompanyPayrollSettingsAsync(AppDbContext db)
+    {
+        const int year = 2026;
+
+        // Brüt asgari ücret; net = brüt × 0,85 (asgari ücrette gelir ve
+        // damga vergisi istisnası tam uygulandığı için yalnızca %14 SGK
+        // ve %1 işsizlik primi kesilir).
+        const decimal minimumWageGross = 33_030.00m;
+        const decimal minimumWageNet = 28_075.50m;
+
+        var companyIds = await db.Companies.Select(company => company.Id).ToListAsync();
+
+        var existing = await db.CompanyPayrollSettings
+            .Where(x => x.Year == year)
+            .Select(x => x.CompanyId)
+            .ToListAsync();
+
+        var missing = companyIds.Except(existing).ToList();
+        if (missing.Count == 0)
+            return;
+
+        foreach (var companyId in missing)
+        {
+            var settings = new CompanyPayrollSettings
+            {
+                CompanyId = companyId,
+                Year = year,
+                MinimumWageGross = minimumWageGross,
+                MinimumWageNet = minimumWageNet,
+                SgkBaseFloor = minimumWageGross,
+                // SGK tavanı tabanın 7,5 katıdır.
+                SgkBaseCeiling = minimumWageGross * 7.5m,
+                SgkEmployeeRate = 14m,
+                UnemploymentEmployeeRate = 1m,
+                SgkEmployerRate = 20.75m,
+                UnemploymentEmployerRate = 2m,
+                SgkEmployerDiscountEnabled = false,
+                SgkEmployerDiscountPoints = 5m,
+                StampTaxPerMille = 7.59m,
+                MinimumWageIncomeTaxExemptionEnabled = true,
+                MinimumWageStampTaxExemptionEnabled = true,
+                VerifiedAtUtc = null
+            };
+
+            settings.TaxBrackets = new List<PayrollTaxBracket>
+            {
+                new() { Order = 1, LowerBound = 0m, UpperBound = 200_000m, Rate = 15m },
+                new() { Order = 2, LowerBound = 200_000m, UpperBound = 420_000m, Rate = 20m },
+                new() { Order = 3, LowerBound = 420_000m, UpperBound = 1_000_000m, Rate = 27m },
+                new() { Order = 4, LowerBound = 1_000_000m, UpperBound = 5_400_000m, Rate = 35m },
+                new() { Order = 5, LowerBound = 5_400_000m, UpperBound = null, Rate = 40m }
+            };
+
+            db.CompanyPayrollSettings.Add(settings);
+        }
+
+        await db.SaveChangesAsync();
     }
 
     /// <summary>

@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import PayrollSettingsCard from "@/components/hr/payroll-settings-card";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
 import {
@@ -769,6 +770,8 @@ export default function CompanySettingsPage() {
                 </form>
               </CardContent>
             </Card>
+
+            <PayrollSettingsCard companyId={company?.id ?? null} />
 
             <Card className="lg:col-span-2">
               <CardContent className="p-6">
