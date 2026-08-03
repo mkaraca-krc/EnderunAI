@@ -285,37 +285,71 @@ public static class DatabaseSeeder
     /// oluşturur ve varsayılan hesapları hesap planındaki kodlardan
     /// (191/391/600/740/320/120/780) eşler. Satır zaten varsa hiç
     /// dokunulmaz — admin Şirket Ayarları'ndan seçtiği hesapları
-    /// kaybetmez. Hesap planı henüz yüklenmemişse eşleşmeyen alanlar
-    /// null kalır, sonraki boot'ta tekrar denenmez (kayıt var sayılır);
-    /// admin ekrandan seçebilir.
+    /// kaybetmez: yalnızca null (hiç seçilmemiş) alanlar doldurulur.
+    /// Hesap planı henüz yüklenmemişse eşleşmeyen alanlar null kalır ve
+    /// sonraki boot'ta yeniden denenir; admin ekrandan da seçebilir.
     /// </summary>
     private static async Task SeedCompanyFinanceSettingsAsync(AppDbContext db)
     {
-        var companyIdsWithoutSettings = await db.Companies
-            .Where(company => !db.CompanyFinanceSettings.Any(x => x.CompanyId == company.Id))
-            .Select(company => company.Id)
-            .ToListAsync();
+        var companyIds = await db.Companies.Select(company => company.Id).ToListAsync();
+        var existingByCompany = await db.CompanyFinanceSettings
+            .ToDictionaryAsync(settings => settings.CompanyId);
 
-        if (companyIdsWithoutSettings.Count == 0)
-            return;
+        var changed = false;
 
-        foreach (var companyId in companyIdsWithoutSettings)
+        foreach (var companyId in companyIds)
         {
-            db.CompanyFinanceSettings.Add(new CompanyFinanceSettings
+            if (!existingByCompany.TryGetValue(companyId, out var settings))
             {
-                CompanyId = companyId,
-                VatInAccountId = await ResolveAccountAsync(db, companyId, "191.01.03", "191"),
-                VatOutAccountId = await ResolveAccountAsync(db, companyId, "391.09", "391"),
-                SalesAccountId = await ResolveAccountAsync(db, companyId, "600.03", "600"),
-                ExpenseAccountId = await ResolveAccountAsync(db, companyId, "740"),
-                PayablesAccountId = await ResolveAccountAsync(db, companyId, "320"),
-                ReceivablesAccountId = await ResolveAccountAsync(db, companyId, "120"),
-                FactoringExpenseAccountId = await ResolveAccountAsync(db, companyId, "780.01.01", "780"),
-                DeductionAccountId = await ResolveAccountAsync(db, companyId, "126")
-            });
+                settings = new CompanyFinanceSettings { CompanyId = companyId };
+                db.CompanyFinanceSettings.Add(settings);
+                changed = true;
+            }
+
+            // Yalnızca HİÇ doldurulmamış (null) alanlar tamamlanır —
+            // admin'in Şirket Ayarları'ndan seçtiği hesap asla ezilmez.
+            // Bu sayede sonradan eklenen yeni bir ayar alanı (ör. Faz B'de
+            // gelen kesinti hesabı) mevcut şirketlerde de otomatik dolar;
+            // saf add-only olsaydı boş kalır ve akış hata verirdi.
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.VatInAccountId, (s, v) => s.VatInAccountId = v, "191.01.03", "191");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.VatOutAccountId, (s, v) => s.VatOutAccountId = v, "391.09", "391");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.SalesAccountId, (s, v) => s.SalesAccountId = v, "600.03", "600");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.ExpenseAccountId, (s, v) => s.ExpenseAccountId = v, "740");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.PayablesAccountId, (s, v) => s.PayablesAccountId = v, "320");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.ReceivablesAccountId, (s, v) => s.ReceivablesAccountId = v, "120");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.FactoringExpenseAccountId, (s, v) => s.FactoringExpenseAccountId = v, "780.01.01", "780");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.DeductionAccountId, (s, v) => s.DeductionAccountId = v, "126");
         }
 
-        await db.SaveChangesAsync();
+        if (changed)
+            await db.SaveChangesAsync();
+    }
+
+    private static async Task<bool> FillIfMissingAsync(
+        AppDbContext db,
+        Guid companyId,
+        CompanyFinanceSettings settings,
+        Func<CompanyFinanceSettings, Guid?> read,
+        Action<CompanyFinanceSettings, Guid?> write,
+        params string[] codeCandidates)
+    {
+        if (read(settings) is not null)
+            return false;
+
+        var resolved = await ResolveAccountAsync(db, companyId, codeCandidates);
+        if (resolved is null)
+            return false;
+
+        write(settings, resolved);
+        return true;
     }
 
     private static async Task<Guid?> ResolveAccountAsync(

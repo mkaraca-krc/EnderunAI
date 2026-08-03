@@ -40,6 +40,57 @@ public sealed class DatabaseSeederTests(DatabaseFixture fixture)
         Assert.Equal(expectedDescription, reloaded.Description);
     }
 
+    /// <summary>
+    /// Regresyon testi: finans ayarları satırı bir kez oluştuktan sonra
+    /// seed saf add-only olsaydı, sonradan eklenen yeni bir ayar alanı
+    /// (Faz B'de gelen kesinti hesabı gibi) mevcut şirketlerde boş kalır
+    /// ve akış çalışma anında hata verirdi. Seed artık yalnızca null
+    /// alanları tamamlıyor.
+    /// </summary>
+    [Fact]
+    public async Task SeedAsync_BackfillsNullFinanceAccountsButKeepsAdminChoice()
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var passwordService = scope.ServiceProvider.GetRequiredService<PasswordService>();
+        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        var seedService = scope.ServiceProvider
+            .GetRequiredService<Api.Services.Accounting.IAccountingAccountSeedService>();
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var company = new Company { Code = $"FIN-{suffix}", Name = $"Finans Backfill {suffix}" };
+        db.Companies.Add(company);
+        await db.SaveChangesAsync();
+
+        await seedService.SeedAsync(company.Id, CancellationToken.None);
+
+        // Admin bir hesabı bilinçli seçmiş, diğerleri hiç doldurulmamış.
+        var adminChosenAccountId = await db.AccountingAccounts
+            .Where(x => x.CompanyId == company.Id && x.Code == "770")
+            .Select(x => x.Id)
+            .SingleAsync();
+
+        db.CompanyFinanceSettings.Add(new CompanyFinanceSettings
+        {
+            CompanyId = company.Id,
+            ExpenseAccountId = adminChosenAccountId
+        });
+        await db.SaveChangesAsync();
+
+        await DatabaseSeeder.SeedAsync(db, passwordService, configuration);
+
+        var settings = await db.CompanyFinanceSettings
+            .AsNoTracking()
+            .SingleAsync(x => x.CompanyId == company.Id);
+
+        // Admin seçimi korunmalı (740'a geri dönmemeli)
+        Assert.Equal(adminChosenAccountId, settings.ExpenseAccountId);
+        // Boş olanlar tamamlanmalı
+        Assert.NotNull(settings.DeductionAccountId);
+        Assert.NotNull(settings.SalesAccountId);
+        Assert.NotNull(settings.VatOutAccountId);
+    }
+
     [Fact]
     public async Task SeedAsync_ExistingRoleWithCustomDataScopePolicy_IsNotReverted()
     {
