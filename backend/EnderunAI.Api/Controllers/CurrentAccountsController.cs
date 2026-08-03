@@ -241,6 +241,125 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
     }
 
     /// <summary>
+    /// Cari kartları muhasebe alt hesaplarıyla eşleştirir: tedarikçiler
+    /// 320.x, müşteriler 120.x altında UNVAN birebir aynı olan hesaba
+    /// bağlanır. Kod eşleştirmesi bilinçli olarak kullanılmıyor — canlıda
+    /// cari kodu ile hesap kodu çakışıyor ama farklı firmaları gösteriyor
+    /// (cari 120.001 ≠ hesap 120.001), kod bazlı eşleme yanlış firmanın
+    /// hesabına yazardı. Aynı unvanda birden fazla hesap varsa o cari
+    /// atlanır (belirsiz eşleşme yapılmaz). Mevcut eşleşmeler asla
+    /// ezilmez; eşleşmeyenler 320/120 ana hesabına cari boyutuyla
+    /// yazılmaya devam eder.
+    /// </summary>
+    [HttpPost("synchronize-accounting")]
+    [RequirePermission(PermissionCatalog.Keys.CurrentAccountsEdit)]
+    public async Task<IActionResult> SynchronizeAccounting(
+        [FromQuery] Guid companyId,
+        CancellationToken cancellationToken)
+    {
+        if (companyId == Guid.Empty)
+            return BadRequest(new { message = "Şirket seçilmelidir." });
+
+        var accounts = await db.CurrentAccounts
+            .Where(x => x.CompanyId == companyId)
+            .ToListAsync(cancellationToken);
+
+        if (accounts.Count == 0)
+            return NotFound(new { message = "Bu şirkette cari kart bulunamadı." });
+
+        var candidates = await db.AccountingAccounts
+            .AsNoTracking()
+            .Where(x =>
+                x.CompanyId == companyId &&
+                x.IsActive &&
+                x.IsPostingAllowed &&
+                (x.Code.StartsWith("320.") || x.Code.StartsWith("120.")))
+            .Select(x => new { x.Id, x.Code, x.Name })
+            .ToListAsync(cancellationToken);
+
+        // Aynı unvandan birden fazla hesap varsa hangisine yazılacağı
+        // belirsiz — o unvan tamamen dışarıda bırakılır.
+        static Dictionary<string, Guid> UniqueByName(
+            IEnumerable<(string Name, Guid Id)> source) =>
+            source
+                .GroupBy(x => x.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Select(x => x.Id).Distinct().Count() == 1)
+                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+
+        var payableByName = UniqueByName(candidates
+            .Where(x => x.Code.StartsWith("320.", StringComparison.Ordinal))
+            .Select(x => (x.Name, x.Id)));
+
+        var receivableByName = UniqueByName(candidates
+            .Where(x => x.Code.StartsWith("120.", StringComparison.Ordinal))
+            .Select(x => (x.Name, x.Id)));
+
+        var matchedPayable = 0;
+        var matchedReceivable = 0;
+        var alreadyMapped = 0;
+        var unmatched = 0;
+
+        foreach (var account in accounts)
+        {
+            var title = account.Title.Trim();
+            var isSupplier = account.Roles.HasFlag(CurrentAccountRoles.Supplier) ||
+                             account.Roles.HasFlag(CurrentAccountRoles.Subcontractor);
+            var isCustomer = account.Roles.HasFlag(CurrentAccountRoles.Customer);
+            var touched = false;
+
+            if (isSupplier)
+            {
+                if (account.PayableAccountingAccountId is not null)
+                {
+                    alreadyMapped++;
+                    touched = true;
+                }
+                else if (payableByName.TryGetValue(title, out var payableId))
+                {
+                    account.PayableAccountingAccountId = payableId;
+                    matchedPayable++;
+                    touched = true;
+                }
+            }
+
+            if (isCustomer)
+            {
+                if (account.ReceivableAccountingAccountId is not null)
+                {
+                    alreadyMapped++;
+                    touched = true;
+                }
+                else if (receivableByName.TryGetValue(title, out var receivableId))
+                {
+                    account.ReceivableAccountingAccountId = receivableId;
+                    matchedReceivable++;
+                    touched = true;
+                }
+            }
+
+            if (!touched)
+                unmatched++;
+        }
+
+        var newlyMatched = matchedPayable + matchedReceivable;
+        if (newlyMatched > 0)
+            await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message =
+                $"{newlyMatched} cari muhasebe hesabıyla eşleştirildi " +
+                $"({matchedPayable} satıcı, {matchedReceivable} alıcı). " +
+                $"{alreadyMapped} kart zaten eşliydi, {unmatched} kart için birebir unvan eşleşmesi bulunamadı " +
+                "— bunlar 320/120 ana hesabına cari boyutuyla yazılmaya devam eder, cari kartından elle de eşlenebilir.",
+            matchedPayable,
+            matchedReceivable,
+            alreadyMapped,
+            unmatched
+        });
+    }
+
+    /// <summary>
     /// Cari bakiyeleri — ayrı bir hareket defteri tutulmaz, tek gerçek
     /// kaynak muhasebe defteridir: kesinleşmiş (Posted) fiş satırlarının
     /// cari boyutu üzerinden hesaplanır. Bakiye = Borç − Alacak

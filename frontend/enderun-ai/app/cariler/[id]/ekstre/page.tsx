@@ -117,19 +117,19 @@ export default function CurrentAccountStatementPage() {
         <>
           <div className="erp-quick-grid">
             <div className="erp-panel">
-              <small>Devir Bakiyesi</small>
+              <small style={{ display: "block", marginBottom: 4 }}>Devir Bakiyesi</small>
               <strong>{money.format(statement.openingBalance)}</strong>
             </div>
             <div className="erp-panel">
-              <small>Dönem Borç</small>
+              <small style={{ display: "block", marginBottom: 4 }}>Dönem Borç</small>
               <strong>{money.format(statement.periodDebit)}</strong>
             </div>
             <div className="erp-panel">
-              <small>Dönem Alacak</small>
+              <small style={{ display: "block", marginBottom: 4 }}>Dönem Alacak</small>
               <strong>{money.format(statement.periodCredit)}</strong>
             </div>
             <div className="erp-panel">
-              <small>Kapanış Bakiyesi</small>
+              <small style={{ display: "block", marginBottom: 4 }}>Kapanış Bakiyesi</small>
               <strong>
                 {money.format(Math.abs(statement.closingBalance))}{" "}
                 <span className="erp-status blue">

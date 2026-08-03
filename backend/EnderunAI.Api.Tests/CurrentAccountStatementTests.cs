@@ -184,6 +184,144 @@ public sealed class CurrentAccountStatementTests(DatabaseFixture fixture)
         Assert.Equal(1, row.GetProperty("movementCount").GetInt32());
     }
 
+    /// <summary>
+    /// Eşleştirme YALNIZCA birebir unvan eşleşmesiyle yapılmalı: canlıda
+    /// cari kodu ile hesap kodu çakışıyor ama farklı firmaları gösteriyor,
+    /// kod bazlı eşleme yanlış firmanın hesabına yazardı.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAccounting_MatchesByTitleOnly_AndSkipsAmbiguous()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        Guid companyId, exactId, ambiguousId, codeOnlyId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var (company, _, _) = await TestDataFactory.CreateCompanyStackAsync(db, suffix);
+            companyId = company.Id;
+
+            db.AccountingAccounts.AddRange(
+                new AccountingAccount
+                {
+                    CompanyId = companyId, Code = "320.900", Name = $"BIREBIR AS {suffix}",
+                    Nature = AccountingAccountNature.Credit, Level = 4, IsPostingAllowed = true
+                },
+                // Aynı unvandan iki hesap → belirsiz, eşleşmemeli
+                new AccountingAccount
+                {
+                    CompanyId = companyId, Code = "320.901", Name = $"MUKERRER AS {suffix}",
+                    Nature = AccountingAccountNature.Credit, Level = 4, IsPostingAllowed = true
+                },
+                new AccountingAccount
+                {
+                    CompanyId = companyId, Code = "320.902", Name = $"MUKERRER AS {suffix}",
+                    Nature = AccountingAccountNature.Credit, Level = 4, IsPostingAllowed = true
+                },
+                // Kodu cariyle aynı ama unvanı BAŞKA firma → eşleşmemeli
+                new AccountingAccount
+                {
+                    CompanyId = companyId, Code = "320.903", Name = $"BASKA FIRMA {suffix}",
+                    Nature = AccountingAccountNature.Credit, Level = 4, IsPostingAllowed = true
+                });
+
+            var exact = new CurrentAccount
+            {
+                CompanyId = companyId, Code = $"C1-{suffix}", Title = $"BIREBIR AS {suffix}",
+                Roles = CurrentAccountRoles.Supplier, Status = CurrentAccountStatus.Approved
+            };
+            var ambiguous = new CurrentAccount
+            {
+                CompanyId = companyId, Code = $"C2-{suffix}", Title = $"MUKERRER AS {suffix}",
+                Roles = CurrentAccountRoles.Supplier, Status = CurrentAccountStatus.Approved
+            };
+            var codeOnly = new CurrentAccount
+            {
+                CompanyId = companyId, Code = "320.903", Title = $"KOD AYNI UNVAN FARKLI {suffix}",
+                Roles = CurrentAccountRoles.Supplier, Status = CurrentAccountStatus.Approved
+            };
+
+            db.CurrentAccounts.AddRange(exact, ambiguous, codeOnly);
+            await db.SaveChangesAsync();
+
+            exactId = exact.Id;
+            ambiguousId = ambiguous.Id;
+            codeOnlyId = codeOnly.Id;
+        }
+
+        var response = await client.PostAsync(
+            $"/api/current-accounts/synchronize-accounting?companyId={companyId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(1, payload.GetProperty("matchedPayable").GetInt32());
+
+        using var verify = fixture.Factory.Services.CreateScope();
+        var verifyDb = verify.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var accounts = await verifyDb.CurrentAccounts
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId)
+            .ToDictionaryAsync(x => x.Id);
+
+        Assert.NotNull(accounts[exactId].PayableAccountingAccountId);
+        Assert.Null(accounts[ambiguousId].PayableAccountingAccountId);
+        Assert.Null(accounts[codeOnlyId].PayableAccountingAccountId);
+    }
+
+    [Fact]
+    public async Task SynchronizeAccounting_DoesNotOverwriteExistingMapping()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        Guid companyId, accountId, manualAccountId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var (company, _, _) = await TestDataFactory.CreateCompanyStackAsync(db, suffix);
+            companyId = company.Id;
+
+            var manual = new AccountingAccount
+            {
+                CompanyId = companyId, Code = "320.800", Name = $"ELLE SECILEN {suffix}",
+                Nature = AccountingAccountNature.Credit, Level = 4, IsPostingAllowed = true
+            };
+            var byName = new AccountingAccount
+            {
+                CompanyId = companyId, Code = "320.801", Name = $"OTOMATIK AS {suffix}",
+                Nature = AccountingAccountNature.Credit, Level = 4, IsPostingAllowed = true
+            };
+            db.AccountingAccounts.AddRange(manual, byName);
+            await db.SaveChangesAsync();
+            manualAccountId = manual.Id;
+
+            var account = new CurrentAccount
+            {
+                CompanyId = companyId, Code = $"C-{suffix}", Title = $"OTOMATIK AS {suffix}",
+                Roles = CurrentAccountRoles.Supplier, Status = CurrentAccountStatus.Approved,
+                // Admin bilinçli olarak başka bir hesap seçmiş
+                PayableAccountingAccountId = manualAccountId
+            };
+            db.CurrentAccounts.Add(account);
+            await db.SaveChangesAsync();
+            accountId = account.Id;
+        }
+
+        await client.PostAsync(
+            $"/api/current-accounts/synchronize-accounting?companyId={companyId}", null);
+
+        using var verify = fixture.Factory.Services.CreateScope();
+        var verifyDb = verify.ServiceProvider.GetRequiredService<AppDbContext>();
+        var reloaded = await verifyDb.CurrentAccounts.AsNoTracking()
+            .SingleAsync(x => x.Id == accountId);
+
+        Assert.Equal(manualAccountId, reloaded.PayableAccountingAccountId);
+    }
+
     [Fact]
     public async Task Statement_UnknownAccount_Returns404()
     {
