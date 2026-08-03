@@ -366,11 +366,43 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
                 x => x.Id == request.CompanyId && x.IsActive, cancellationToken))
             throw new InvalidOperationException("Şirket bulunamadı veya pasif.");
 
+        var parameters = await LoadPayrollParametersAsync(
+            request.CompanyId, request.Year, cancellationToken);
+
         var personnel = await appDb.Personnel.AsNoTracking()
             .Where(x => x.CompanyId == request.CompanyId && x.IsActive &&
                         x.Status != EnderunAI.Api.Models.PersonnelStatus.Terminated)
             .Select(x => new { x.Id, Salary = x.MonthlySalary ?? 0m })
             .ToListAsync(cancellationToken);
+
+        var personnelIds = personnel.Select(x => x.Id).ToList();
+
+        // Resmi maaşın tek doğru kaynağı ücret kartı; dönem sonuna kadar
+        // yürürlükte olan en güncel kart geçerlidir.
+        var periodEnd = new DateTime(
+            request.Year, request.Month,
+            DateTime.DaysInMonth(request.Year, request.Month),
+            0, 0, 0, DateTimeKind.Utc);
+
+        var salaryByPersonnel = await hrDb.SalaryDefinitions.AsNoTracking()
+            .Where(x => personnelIds.Contains(x.PersonnelId) &&
+                        x.EffectiveStartDate <= periodEnd &&
+                        (x.EffectiveEndDate == null || x.EffectiveEndDate >= periodEnd))
+            .GroupBy(x => x.PersonnelId)
+            .Select(g => g.OrderByDescending(x => x.EffectiveStartDate).First())
+            .ToDictionaryAsync(x => x.PersonnelId, cancellationToken);
+
+        // Kümülatif gelir vergisi matrahı, aynı yıl içindeki önceki
+        // ayların bordrolarından devreder — dilim atlamaları buradan
+        // doğru yakalanır.
+        var cumulativeByPersonnel = await hrDb.PayrollRecords.AsNoTracking()
+            .Where(x => x.CompanyId == request.CompanyId &&
+                        x.Year == request.Year && x.Month < request.Month &&
+                        x.Status != PayrollStatus.Draft)
+            .GroupBy(x => x.PersonnelId)
+            .Select(g => new { PersonnelId = g.Key, Total = g.Sum(x => x.IncomeTaxBase) })
+            .ToDictionaryAsync(x => x.PersonnelId, x => x.Total, cancellationToken);
+
         var existing = await hrDb.PayrollRecords
             .Where(x => x.CompanyId == request.CompanyId &&
                         x.Year == request.Year && x.Month == request.Month)
@@ -405,25 +437,47 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
                 created++;
             }
 
-            record.GrossSalary = person.Salary;
-            record.NormalWorkAmount = person.Salary;
+            // Ücret kartı yoksa personel kartındaki maaşa düşülür; ikisi
+            // de yoksa brüt 0 kalır ve kişi bordroda sıfır tutarla görünür.
+            var gross = salaryByPersonnel.TryGetValue(person.Id, out var salaryCard)
+                ? (salaryCard.GrossSalary > 0m ? salaryCard.GrossSalary : person.Salary)
+                : person.Salary;
+
+            record.GrossSalary = gross;
+            record.NormalWorkAmount = gross;
             record.TotalEarnings =
                 record.NormalWorkAmount + record.OvertimeAmount +
                 record.SundayWorkAmount + record.PublicHolidayAmount +
                 record.BonusAmount + record.MealAmount + record.TravelAmount +
                 record.OtherEarningAmount + record.CompensationAmount;
-            record.SgkEmployeeDeduction =
-                request.DefaultSgkEmployeeDeduction ?? record.SgkEmployeeDeduction;
-            record.IncomeTaxDeduction =
-                request.DefaultIncomeTaxDeduction ?? record.IncomeTaxDeduction;
-            record.StampTaxDeduction =
-                request.DefaultStampTaxDeduction ?? record.StampTaxDeduction;
-            record.TotalDeductions =
-                record.SgkEmployeeDeduction + record.IncomeTaxDeduction +
-                record.StampTaxDeduction + record.AdvanceDeduction +
-                record.OtherDeductionAmount;
-            record.OfficialNetPayableAmount =
-                Math.Max(0, record.TotalEarnings - record.TotalDeductions);
+
+            cumulativeByPersonnel.TryGetValue(person.Id, out var cumulativeBefore);
+
+            var result = PayrollCalculationService.Calculate(parameters, new PayrollInput(
+                Month: request.Month,
+                GrossEarnings: record.TotalEarnings,
+                // Yemek/yol istisnaları kişiye özel kalemlerle birlikte
+                // Faz E3'te devreye girecek; şu an tüm kazanç primlidir.
+                SgkExemptEarnings: 0m,
+                IncomeTaxExemptEarnings: 0m,
+                CumulativeIncomeTaxBaseBefore: cumulativeBefore,
+                OtherDeductions: record.AdvanceDeduction + record.OtherDeductionAmount));
+
+            record.SgkBase = result.SgkBase;
+            record.SgkEmployeeDeduction = result.SgkEmployeeAmount;
+            record.UnemploymentEmployeeDeduction = result.UnemploymentEmployeeAmount;
+            record.IncomeTaxBase = result.IncomeTaxBase;
+            record.CumulativeIncomeTaxBase = result.CumulativeIncomeTaxBaseAfter;
+            record.IncomeTaxExemption = result.IncomeTaxExemption;
+            record.IncomeTaxDeduction = result.IncomeTaxAmount;
+            record.StampTaxExemption = result.StampTaxExemption;
+            record.StampTaxDeduction = result.StampTaxAmount;
+            record.SgkEmployerAmount = result.SgkEmployerAmount;
+            record.UnemploymentEmployerAmount = result.UnemploymentEmployerAmount;
+            record.TotalEmployerCost = result.TotalEmployerCost;
+
+            record.TotalDeductions = result.TotalDeductions;
+            record.OfficialNetPayableAmount = Math.Max(0m, result.NetPay);
             record.ActualPayableAmount = record.OfficialNetPayableAmount;
             record.NetPayableAmount = record.ActualPayableAmount;
             record.CurrencyCode = "TRY";
@@ -458,6 +512,53 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
         Touch(entity, userId);
         await hrDb.SaveChangesAsync(cancellationToken);
         return ToPayrollResponse(entity);
+    }
+
+    /// <summary>
+    /// Hesaplama motorunun ihtiyaç duyduğu parametreleri şirketin bordro
+    /// ayarlarından okur. Parametre yoksa hesap yapılmaz — sessizce
+    /// varsayılan oranla hesaplamak, yanlış bordro üretmek demek.
+    /// </summary>
+    private async Task<PayrollParameters> LoadPayrollParametersAsync(
+        Guid companyId, int year, CancellationToken cancellationToken)
+    {
+        var settings = await appDb.CompanyPayrollSettings
+            .AsNoTracking()
+            .Include(x => x.TaxBrackets)
+            .SingleOrDefaultAsync(
+                x => x.CompanyId == companyId && x.Year == year, cancellationToken);
+
+        if (settings is null)
+        {
+            throw new InvalidOperationException(
+                $"{year} yılı için bordro parametreleri tanımlı değil. " +
+                "Şirket Ayarları → Bordro Parametreleri ekranından tanımlayın.");
+        }
+
+        if (settings.TaxBrackets.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"{year} yılı için gelir vergisi dilimleri tanımlı değil.");
+        }
+
+        return new PayrollParameters(
+            settings.MinimumWageGross,
+            settings.SgkBaseFloor,
+            settings.SgkBaseCeiling,
+            settings.SgkEmployeeRate,
+            settings.UnemploymentEmployeeRate,
+            settings.SgkEmployerRate,
+            settings.UnemploymentEmployerRate,
+            settings.SgkEmployerDiscountEnabled,
+            settings.SgkEmployerDiscountPoints,
+            settings.StampTaxPerMille,
+            settings.MinimumWageIncomeTaxExemptionEnabled,
+            settings.MinimumWageStampTaxExemptionEnabled,
+            settings.TaxBrackets
+                .OrderBy(x => x.Order)
+                .Select(x => new PayrollTaxBracketInput(
+                    x.LowerBound, x.UpperBound, x.Rate))
+                .ToList());
     }
 
     /// <summary>

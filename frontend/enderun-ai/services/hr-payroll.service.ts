@@ -89,13 +89,14 @@ export type PayrollFilters = {
   status?: number;
 };
 
+/**
+ * Kesinti tutarları artık istemciden gönderilmiyor: SGK, gelir ve damga
+ * vergisi şirketin bordro parametrelerinden hesaplanıyor.
+ */
 export type CalculateCompanyPayrollRequest = {
   companyId: string;
   year: number;
   month: number;
-  defaultSgkEmployeeDeduction?: number;
-  defaultIncomeTaxDeduction?: number;
-  defaultStampTaxDeduction?: number;
   recalculateExisting?: boolean;
 };
 

@@ -87,7 +87,16 @@ public sealed class HrDbContext(DbContextOptions<HrDbContext> options)
                          nameof(HrPayrollRecord.TotalDeductions),
                          nameof(HrPayrollRecord.OfficialNetPayableAmount),
                          nameof(HrPayrollRecord.ActualPayableAmount),
-                         nameof(HrPayrollRecord.NetPayableAmount)
+                         nameof(HrPayrollRecord.NetPayableAmount),
+                         nameof(HrPayrollRecord.UnemploymentEmployeeDeduction),
+                         nameof(HrPayrollRecord.SgkBase),
+                         nameof(HrPayrollRecord.IncomeTaxBase),
+                         nameof(HrPayrollRecord.CumulativeIncomeTaxBase),
+                         nameof(HrPayrollRecord.IncomeTaxExemption),
+                         nameof(HrPayrollRecord.StampTaxExemption),
+                         nameof(HrPayrollRecord.SgkEmployerAmount),
+                         nameof(HrPayrollRecord.UnemploymentEmployerAmount),
+                         nameof(HrPayrollRecord.TotalEmployerCost)
                      })
             {
                 entity.Property<decimal>(property).HasPrecision(18, 2);

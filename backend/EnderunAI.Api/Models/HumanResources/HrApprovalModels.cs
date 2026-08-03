@@ -108,6 +108,36 @@ public sealed class HrPayrollRecord : BaseEntity
     public decimal SgkEmployeeDeduction { get; set; }
     public decimal IncomeTaxDeduction { get; set; }
     public decimal StampTaxDeduction { get; set; }
+
+    /// <summary>İşçi payı işsizlik sigortası primi.</summary>
+    public decimal UnemploymentEmployeeDeduction { get; set; }
+
+    /// <summary>Prime esas kazanç (taban/tavan uygulanmış hali).</summary>
+    public decimal SgkBase { get; set; }
+
+    /// <summary>Bu ayın gelir vergisi matrahı.</summary>
+    public decimal IncomeTaxBase { get; set; }
+
+    /// <summary>
+    /// Yıl başından bu ay dahil kümülatif gelir vergisi matrahı. Bir
+    /// sonraki ayın dilim hesabı buradan devam eder.
+    /// </summary>
+    public decimal CumulativeIncomeTaxBase { get; set; }
+
+    /// <summary>Asgari ücret gelir vergisi istisnası tutarı.</summary>
+    public decimal IncomeTaxExemption { get; set; }
+
+    /// <summary>Asgari ücret damga vergisi istisnası tutarı.</summary>
+    public decimal StampTaxExemption { get; set; }
+
+    /// <summary>İşveren payı SGK primi (indirim uygulanmış hali).</summary>
+    public decimal SgkEmployerAmount { get; set; }
+
+    /// <summary>İşveren payı işsizlik sigortası primi.</summary>
+    public decimal UnemploymentEmployerAmount { get; set; }
+
+    /// <summary>Brüt + işveren payı primler — şirkete toplam maliyet.</summary>
+    public decimal TotalEmployerCost { get; set; }
     public decimal AdvanceDeduction { get; set; }
     public decimal OtherDeductionAmount { get; set; }
     public decimal TotalDeductions { get; set; }

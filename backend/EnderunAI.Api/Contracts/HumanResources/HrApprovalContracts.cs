@@ -105,13 +105,15 @@ public sealed record PayrollResponse(
     DateTime? PaidAtUtc, string? PaymentReference, string? Description,
     DateTime CreatedAtUtc);
 
+/// <summary>
+/// Aylık toplu bordro hesabı. Kesinti tutarları artık istekle
+/// gönderilmiyor; SGK, gelir ve damga vergisi şirketin bordro
+/// parametrelerinden hesaplanıyor.
+/// </summary>
 public sealed record CalculateCompanyPayrollRequest(
     Guid CompanyId,
     int Year,
     int Month,
-    decimal? DefaultSgkEmployeeDeduction,
-    decimal? DefaultIncomeTaxDeduction,
-    decimal? DefaultStampTaxDeduction,
     bool RecalculateExisting = false);
 
 public sealed record CompanyPayrollCalculationResult(

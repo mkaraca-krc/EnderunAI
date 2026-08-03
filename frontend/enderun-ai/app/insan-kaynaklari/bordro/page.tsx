@@ -443,9 +443,6 @@ export default function PayrollManagementPage() {
           companyId,
           year,
           month,
-          defaultSgkEmployeeDeduction: 0,
-          defaultIncomeTaxDeduction: 0,
-          defaultStampTaxDeduction: 0,
           recalculateExisting: true,
         });
 
