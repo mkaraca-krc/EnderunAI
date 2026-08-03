@@ -410,7 +410,7 @@ public static class DatabaseSeeder
                 s => s.SocialSecurityPayableAccountId,
                 (s, v) => s.SocialSecurityPayableAccountId = v, "361");
             changed |= await FillIfMissingAsync(db, companyId, settings,
-                s => s.EmployeeAdvanceAccountId, (s, v) => s.EmployeeAdvanceAccountId = v, "195");
+                s => s.EmployeeAdvanceAccountId, (s, v) => s.EmployeeAdvanceAccountId = v, "196.01.01", "196", "195");
         }
 
         if (changed)

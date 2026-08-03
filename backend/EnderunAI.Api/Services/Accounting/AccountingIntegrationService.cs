@@ -149,7 +149,7 @@ public sealed class AccountingIntegrationService(
             PayrollPayableAccountId = await FindAccountIdAsync(companyId, cancellationToken, "335"),
             TaxPayableAccountId = await FindAccountIdAsync(companyId, cancellationToken, "360"),
             SocialSecurityPayableAccountId = await FindAccountIdAsync(companyId, cancellationToken, "361"),
-            EmployeeAdvanceAccountId = await FindAccountIdAsync(companyId, cancellationToken, "195")
+            EmployeeAdvanceAccountId = await FindAccountIdAsync(companyId, cancellationToken, "196.01.01", "196", "195")
         };
 
         db.CompanyFinanceSettings.Add(settings);
