@@ -7,6 +7,7 @@ import {
   hizirService,
   HizirMessageRole,
   type HizirMessage,
+  type HizirPendingAction,
 } from "@/services/hizir.service";
 
 function getErrorMessage(error: unknown) {
@@ -37,8 +38,18 @@ export default function HizirChat({ pagePath, variant = "panel" }: Props) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [pendingActions, setPendingActions] = useState<HizirPendingAction[]>([]);
+  const [resolvingActionId, setResolvingActionId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const refreshPendingActions = useCallback(async () => {
+    try {
+      setPendingActions(await hizirService.getPendingActions());
+    } catch {
+      // Bekleyen eylem listesi okunamazsa sohbet çalışmaya devam etsin.
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,10 +65,13 @@ export default function HizirChat({ pagePath, variant = "panel" }: Props) {
         // Durum okunamazsa sohbet yine denenebilir; hata gönderimde çıkar.
       });
 
+    // Önceki oturumdan kalan onay bekleyen eylem varsa hemen görünsün.
+    void refreshPendingActions();
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshPendingActions]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -105,6 +119,9 @@ export default function HizirChat({ pagePath, variant = "panel" }: Props) {
             createdAtUtc: new Date().toISOString(),
           },
         ]);
+
+        // Cevapta onay gerektiren bir eylem hazırlanmış olabilir.
+        await refreshPendingActions();
       } catch (requestError) {
         setError(getErrorMessage(requestError));
         // Cevap alınamadıysa iyimser mesaj listede kalmasın.
@@ -114,7 +131,43 @@ export default function HizirChat({ pagePath, variant = "panel" }: Props) {
         setSending(false);
       }
     },
-    [conversationId, pagePath, sending]
+    [conversationId, pagePath, refreshPendingActions, sending]
+  );
+
+  /**
+   * Onay ve vazgeçme. Eylem yalnızca burada, kullanıcının kendi
+   * oturumuyla yürütülür; sonuç sohbete yazılır.
+   */
+  const resolveAction = useCallback(
+    async (action: HizirPendingAction, approve: boolean) => {
+      if (resolvingActionId) return;
+
+      setError("");
+      setResolvingActionId(action.id);
+
+      try {
+        const result = approve
+          ? await hizirService.confirmAction(action.id)
+          : await hizirService.cancelAction(action.id);
+
+        setMessages((current) => [
+          ...current,
+          {
+            id: `action-${action.id}`,
+            role: HizirMessageRole.Assistant,
+            content: result.resultMessage ?? (approve ? "Eylem tamamlandı." : "Vazgeçildi."),
+            pagePath,
+            createdAtUtc: new Date().toISOString(),
+          },
+        ]);
+      } catch (actionError) {
+        setError(getErrorMessage(actionError));
+      } finally {
+        setResolvingActionId(null);
+        await refreshPendingActions();
+      }
+    },
+    [pagePath, refreshPendingActions, resolvingActionId]
   );
 
   function submit(event: FormEvent) {
@@ -196,6 +249,48 @@ export default function HizirChat({ pagePath, variant = "panel" }: Props) {
           </div>
         )}
       </div>
+
+      {pendingActions.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {pendingActions.map((action) => (
+            <div
+              key={action.id}
+              className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5"
+            >
+              <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                Onayınızı bekliyor
+              </p>
+
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                {action.summary}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Onaylamazsanız bu işlem yapılmaz.
+              </p>
+
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  disabled={resolvingActionId !== null}
+                  onClick={() => void resolveAction(action, true)}
+                  className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-60"
+                >
+                  {resolvingActionId === action.id ? "Yapılıyor..." : "Onayla"}
+                </button>
+                <button
+                  type="button"
+                  disabled={resolvingActionId !== null}
+                  onClick={() => void resolveAction(action, false)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Vazgeç
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">

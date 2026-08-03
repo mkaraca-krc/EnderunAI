@@ -1,6 +1,8 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Security.CurrentUser;
+using EnderunAI.Api.Services.Email;
 using EnderunAI.Api.Services.Hizir;
 using EnderunAI.Api.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -328,5 +330,231 @@ public sealed class HizirActionSecurityTests(DatabaseFixture fixture)
             CancellationToken.None);
 
         Assert.Equal(before, await db.ProjectSiteAssignments.CountAsync());
+    }
+
+    // ---------- 4. Onay akışı ----------
+
+    /// <summary>
+    /// Onay ucunun gerçekten çalıştığı yer burası olduğu için akışın
+    /// dört kırılma noktası ayrı ayrı sınanır: sahiplik, tek kullanım,
+    /// süre ve onay anındaki izin.
+    /// </summary>
+    private sealed class FakeCurrentUser(Guid? userId) : ICurrentUserService
+    {
+        public bool IsAuthenticated => userId is not null;
+        public Guid? UserId => userId;
+        public string? Username => "test-onay";
+        public string? FullName => "Onay Testi";
+        public IReadOnlyCollection<string> Roles => [];
+        public IReadOnlyCollection<string> Permissions => [];
+        public bool IsInRole(string role) => false;
+        public bool HasPermission(string permission) => false;
+    }
+
+    /// <summary>Gerçek SMTP'ye çıkmadan gönderim olup olmadığını sayar.</summary>
+    private sealed class RecordingEmailService : IEmailService
+    {
+        public int SentCount { get; private set; }
+        public string? LastRecipient { get; private set; }
+        public bool IsConfigured => true;
+
+        public Task SendAsync(
+            string toEmail, string? toName, string subject,
+            string htmlBody, CancellationToken cancellationToken = default)
+        {
+            SentCount++;
+            LastRecipient = toEmail;
+            return Task.CompletedTask;
+        }
+    }
+
+    private static HizirPendingActionStore StoreFor(
+        IServiceScope scope, Guid? actingUserId, IEmailService email) =>
+        new(scope.ServiceProvider.GetRequiredService<AppDbContext>(),
+            new FakeCurrentUser(actingUserId),
+            scope.ServiceProvider.GetRequiredService<IUserAuthorizationService>(),
+            scope.ServiceProvider.GetRequiredService<IHizirActionAuditor>(),
+            scope.ServiceProvider.GetRequiredService<Services.Rfq.IRfqService>(),
+            scope.ServiceProvider.GetRequiredService<
+                Services.Accounting.ISupplierInvoiceService>(),
+            email);
+
+    /// <summary>
+    /// Hazırlanmış ama onaylanmamış e-posta eylemi hiçbir şey göndermez.
+    /// Onay olmadan yürütme yolunun kapalı olduğunun doğrudan kanıtı.
+    /// </summary>
+    [Fact]
+    public async Task PendingEmailAction_SendsNothingUntilConfirmed()
+    {
+        var context = await ContextWithRealUserAsync("Genel Müdür");
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var email = new RecordingEmailService();
+        var store = StoreFor(scope, context.UserId, email);
+
+        var tool = Registry(scope).Find("eposta_gonder")!;
+
+        await tool.ExecuteAsync(
+            context,
+            new Dictionary<string, object?>
+            {
+                ["alici"] = "hicbir-yerde-yok@ornek.test",
+                ["konu"] = "Test",
+                ["mesaj"] = "Test"
+            },
+            CancellationToken.None);
+
+        Assert.Equal(0, email.SentCount);
+    }
+
+    /// <summary>Başkasının bekleyen eylemi onaylanamaz.</summary>
+    [Fact]
+    public async Task Confirm_RejectsAnotherUsersAction()
+    {
+        var owner = await ContextWithRealUserAsync("Genel Müdür");
+        var intruder = await ContextWithRealUserAsync("Genel Müdür");
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var email = new RecordingEmailService();
+
+        var pending = await StoreFor(scope, owner.UserId, email).CreateAsync(
+            owner.UserId, "eposta_gonder",
+            new Dictionary<string, object?> { ["alici"] = "x" },
+            "özet", PermissionCatalog.Keys.SecretariatView, CancellationToken.None);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            StoreFor(scope, intruder.UserId, email)
+                .ConfirmAsync(pending.Id, CancellationToken.None));
+
+        Assert.Equal(0, email.SentCount);
+    }
+
+    /// <summary>Süresi dolan eylem yürütülmez ve "süresi doldu"ya düşer.</summary>
+    [Fact]
+    public async Task Confirm_RejectsExpiredAction()
+    {
+        var context = await ContextWithRealUserAsync("Genel Müdür");
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var email = new RecordingEmailService();
+        var store = StoreFor(scope, context.UserId, email);
+
+        var pending = await store.CreateAsync(
+            context.UserId, "eposta_gonder",
+            new Dictionary<string, object?> { ["alici"] = "x" },
+            "özet", PermissionCatalog.Keys.SecretariatView, CancellationToken.None);
+
+        pending.ExpiresAtUtc = DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.ConfirmAsync(pending.Id, CancellationToken.None));
+
+        Assert.Equal(0, email.SentCount);
+        Assert.Equal(HizirPendingActionStatus.Expired, pending.Status);
+    }
+
+    /// <summary>
+    /// Onaylanan eylem tam olarak bir kez çalışır; ikinci onay reddedilir.
+    /// </summary>
+    [Fact]
+    public async Task Confirm_ExecutesExactlyOnce()
+    {
+        var context = await ContextWithRealUserAsync("Genel Müdür");
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var email = new RecordingEmailService();
+        var store = StoreFor(scope, context.UserId, email);
+
+        // Alıcı sistemde kayıtlı olmalı; testin kendi kullanıcısına adres verilir.
+        var user = await db.Users.SingleAsync(x => x.Id == context.UserId);
+        user.Email = $"onay-{context.UserId:N}@ornek.test";
+
+        // Onay anındaki izin kontrolü veritabanından okuduğu için rolün
+        // gerçekten atanmış olması gerekir.
+        var roleId = await db.Roles
+            .Where(x => x.Name == "Genel Müdür")
+            .Select(x => x.Id)
+            .SingleAsync();
+
+        db.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = roleId });
+        await db.SaveChangesAsync();
+
+        var pending = await store.CreateAsync(
+            context.UserId, "eposta_gonder",
+            new Dictionary<string, object?>
+            {
+                ["alici"] = user.Email,
+                ["konu"] = "Onay testi",
+                ["mesaj"] = "Tek kullanım kontrolü"
+            },
+            "özet", PermissionCatalog.Keys.SecretariatView, CancellationToken.None);
+
+        var result = await store.ConfirmAsync(pending.Id, CancellationToken.None);
+
+        Assert.Equal((int)HizirPendingActionStatus.Executed, result.Status);
+        Assert.Equal(1, email.SentCount);
+        Assert.Equal(user.Email, email.LastRecipient);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.ConfirmAsync(pending.Id, CancellationToken.None));
+
+        Assert.Equal(1, email.SentCount);
+    }
+
+    /// <summary>
+    /// Hazırlıktan sonra yetkisi alınan kullanıcı onaylayamaz. İzin
+    /// yalnızca hazırlıkta değil, yürütme anında da kontrol edilir.
+    /// </summary>
+    [Fact]
+    public async Task Confirm_RejectsWhenPermissionRevokedAfterPreparation()
+    {
+        var context = await ContextWithRealUserAsync("Genel Müdür");
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var email = new RecordingEmailService();
+        var store = StoreFor(scope, context.UserId, email);
+
+        // Kullanıcıya hiçbir rol atanmadığı için onay anındaki izin
+        // kontrolü başarısız olmalı.
+        var pending = await store.CreateAsync(
+            context.UserId, "eposta_gonder",
+            new Dictionary<string, object?> { ["alici"] = "x" },
+            "özet", PermissionCatalog.Keys.SecretariatView, CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.ConfirmAsync(pending.Id, CancellationToken.None));
+
+        Assert.Equal(0, email.SentCount);
+        Assert.Equal(HizirPendingActionStatus.Cancelled, pending.Status);
+    }
+
+    /// <summary>Her adım denetim kaydına düşmeli (istek #3).</summary>
+    [Fact]
+    public async Task EveryStep_IsWrittenToAuditLog()
+    {
+        var context = await ContextWithRealUserAsync("Genel Müdür");
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var store = StoreFor(scope, context.UserId, new RecordingEmailService());
+
+        var pending = await store.CreateAsync(
+            context.UserId, "eposta_gonder",
+            new Dictionary<string, object?> { ["alici"] = "x" },
+            "özet", null, CancellationToken.None);
+
+        await store.CancelAsync(pending.Id, CancellationToken.None);
+
+        var actions = await db.SecurityAuditEvents
+            .Where(x => x.ActorUserId == context.UserId &&
+                        x.EntityId == pending.Id)
+            .Select(x => x.Action)
+            .ToListAsync();
+
+        Assert.Contains("Hizir.eposta_gonder.hazirlandi", actions);
+        Assert.Contains("Hizir.eposta_gonder.vazgecildi", actions);
     }
 }

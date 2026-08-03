@@ -33,6 +33,27 @@ export type HizirMessage = {
   createdAtUtc: string;
 };
 
+export const HizirPendingActionStatus = {
+  Pending: 0,
+  Executed: 1,
+  Cancelled: 2,
+  Expired: 3,
+  Failed: 4,
+} as const;
+
+/**
+ * Hızır'ın hazırladığı ama henüz YAPMADIĞI eylem. Özet sunucuda
+ * üretilir; kullanıcı onaylayana kadar hiçbir şey değişmez.
+ */
+export type HizirPendingAction = {
+  id: string;
+  actionName: string;
+  summary: string;
+  status: number;
+  expiresAtUtc: string;
+  resultMessage: string | null;
+};
+
 export const hizirService = {
   getStatus() {
     return apiClient<HizirStatus>("hizir/status");
@@ -55,5 +76,22 @@ export const hizirService = {
 
   getMessages(conversationId: string) {
     return apiClient<HizirMessage[]>(`hizir/conversations/${conversationId}`);
+  },
+
+  getPendingActions() {
+    return apiClient<HizirPendingAction[]>("hizir/actions/pending");
+  },
+
+  /** Eylemin gerçekten yürütüldüğü tek uç. */
+  confirmAction(id: string) {
+    return apiClient<HizirPendingAction>(`hizir/actions/${id}/confirm`, {
+      method: "POST",
+    });
+  },
+
+  cancelAction(id: string) {
+    return apiClient<HizirPendingAction>(`hizir/actions/${id}/cancel`, {
+      method: "POST",
+    });
   },
 };
