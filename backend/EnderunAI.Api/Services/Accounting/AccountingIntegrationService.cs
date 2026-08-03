@@ -966,6 +966,15 @@ public sealed class AccountingIntegrationService(
 
         var period = $"{month:00}/{year}";
 
+        // Bordro şirket geneli bir giderdir; hesap planında gider hesabı
+        // masraf merkezi zorunlu tutuyorsa şirket kodu kullanılır. Proje
+        // ve şantiye bazlı işçilik dağılımı ayrıca HrProjectLaborCost
+        // üzerinden izlenir.
+        var costCenterCode = await db.Companies
+            .Where(x => x.Id == companyId)
+            .Select(x => x.Code)
+            .SingleAsync(cancellationToken);
+
         var lines = new List<AccountingVoucherLineRequest>
         {
             new(
@@ -977,7 +986,7 @@ public sealed class AccountingIntegrationService(
                 ExchangeRate: 1m,
                 CurrentAccountId: null,
                 ProjectId: null,
-                CostCenterCode: null,
+                CostCenterCode: costCenterCode,
                 DocumentNumber: null,
                 DocumentDate: voucherDate,
                 DueDate: null),
@@ -990,7 +999,7 @@ public sealed class AccountingIntegrationService(
                 ExchangeRate: 1m,
                 CurrentAccountId: null,
                 ProjectId: null,
-                CostCenterCode: null,
+                CostCenterCode: costCenterCode,
                 DocumentNumber: null,
                 DocumentDate: voucherDate,
                 DueDate: null)
@@ -1010,7 +1019,7 @@ public sealed class AccountingIntegrationService(
                 ExchangeRate: 1m,
                 CurrentAccountId: null,
                 ProjectId: null,
-                CostCenterCode: null,
+                CostCenterCode: costCenterCode,
                 DocumentNumber: null,
                 DocumentDate: voucherDate,
                 DueDate: null));

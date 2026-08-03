@@ -124,6 +124,13 @@ public sealed class HrPayrollController(IHrApprovalService service) : Controller
         {
             return new BadRequestObjectResult(new { message = exception.Message });
         }
+        // Muhasebe fişi doğrulamaları (ör. hesap planında zorunlu masraf
+        // merkezi) ArgumentException fırlatıyor; yakalanmazsa kullanıcı
+        // sebebi anlaşılmayan 500 alıyordu.
+        catch (ArgumentException exception)
+        {
+            return new BadRequestObjectResult(new { message = exception.Message });
+        }
         catch (DbUpdateException)
         {
             return new ConflictObjectResult(new
