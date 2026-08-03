@@ -96,10 +96,16 @@ public sealed class HizirChatService(
             snapshot.Permissions,
             scope);
 
-        var conversation = await LoadOrCreateConversationAsync(
-            userId, request, cancellationToken);
+        // Sohbet kaydı cevap alındıktan sonra oluşturulur; başarısız bir
+        // istek boş sohbet kaydı bırakmasın.
+        var conversation = request.ConversationId is Guid existingId
+            ? await db.HizirConversations.SingleOrDefaultAsync(
+                x => x.Id == existingId && x.UserId == userId, cancellationToken)
+            : null;
 
-        var history = await LoadHistoryAsync(conversation.Id, cancellationToken);
+        var history = conversation is null
+            ? []
+            : await LoadHistoryAsync(conversation.Id, cancellationToken);
 
         var availableTools = tools.AvailableFor(context);
 
@@ -155,6 +161,8 @@ public sealed class HizirChatService(
 
         answer ??= "Şu anda bu soruya cevap üretemedim. Sorunuzu biraz " +
                    "daha somut yazarsanız yardımcı olabilirim.";
+
+        conversation ??= await CreateConversationAsync(userId, request, cancellationToken);
 
         await PersistAsync(
             conversation, request, answer, usedTools, deniedTools,
@@ -264,20 +272,14 @@ public sealed class HizirChatService(
         return builder.ToString();
     }
 
-    private async Task<HizirConversation> LoadOrCreateConversationAsync(
+    /// <summary>
+    /// Yeni sohbet kaydı. Yalnızca cevap üretildikten sonra çağrılır;
+    /// başarısız istek boş sohbet bırakmaz. Var olan sohbetler
+    /// kullanıcıya özeldir, başkasınınki açılamaz.
+    /// </summary>
+    private async Task<HizirConversation> CreateConversationAsync(
         Guid userId, HizirChatRequest request, CancellationToken cancellationToken)
     {
-        if (request.ConversationId is Guid id)
-        {
-            // Sohbetler kullanıcıya özel: başkasının sohbeti açılamaz.
-            var existing = await db.HizirConversations
-                .SingleOrDefaultAsync(
-                    x => x.Id == id && x.UserId == userId, cancellationToken);
-
-            if (existing is not null)
-                return existing;
-        }
-
         var title = request.Message.Trim();
         if (title.Length > 80)
             title = title[..80] + "...";
