@@ -23,6 +23,11 @@ public sealed class AppDbContext(
     public DbSet<AccountingAccount> AccountingAccounts =>
         Set<AccountingAccount>();
     public DbSet<CompanyFinanceSettings> CompanyFinanceSettings => Set<CompanyFinanceSettings>();
+    public DbSet<CashAccount> CashAccounts => Set<CashAccount>();
+    public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
+    public DbSet<Cheque> Cheques => Set<Cheque>();
+    public DbSet<ChequeMovement> ChequeMovements => Set<ChequeMovement>();
+    public DbSet<FactoringTransaction> FactoringTransactions => Set<FactoringTransaction>();
     public DbSet<SupplierInvoice> SupplierInvoices => Set<SupplierInvoice>();
     public DbSet<SupplierInvoiceItem> SupplierInvoiceItems => Set<SupplierInvoiceItem>();
     public DbSet<AccountingVoucher> AccountingVouchers =>
@@ -124,6 +129,9 @@ public sealed class AppDbContext(
         ConfigureAccountingAccounts(modelBuilder);
         ConfigureAccountingVouchers(modelBuilder);
         ConfigureCompanyFinanceSettings(modelBuilder);
+        ConfigureCashAccounts(modelBuilder);
+        ConfigureCheques(modelBuilder);
+        ConfigureFactoringTransactions(modelBuilder);
         ConfigureSupplierInvoices(modelBuilder);
         ConfigureAccountingVoucherLines(modelBuilder);
         ConfigureProjects(modelBuilder);
@@ -455,6 +463,167 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.FactoringExpenseAccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.DeductionAccount).WithMany()
                 .HasForeignKey(x => x.DeductionAccountId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureCashAccounts(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CashAccount>(entity =>
+        {
+            entity.ToTable("cash_accounts");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.Type });
+
+            entity.Property(x => x.Type).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.BankName).HasMaxLength(150);
+            entity.Property(x => x.Iban).HasMaxLength(40);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.OpeningBalance).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AccountingAccount).WithMany()
+                .HasForeignKey(x => x.AccountingAccountId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<CashTransaction>(entity =>
+        {
+            entity.ToTable("cash_transactions");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CashAccountId, x.TransactionDate });
+            entity.HasIndex(x => new { x.SourceModule, x.SourceEntityId });
+            entity.HasIndex(x => x.CurrentAccountId);
+
+            entity.Property(x => x.TransactionType).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Direction).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.DocumentNumber).HasMaxLength(100);
+            entity.Property(x => x.SourceModule).HasMaxLength(100);
+
+            entity.HasOne(x => x.CashAccount).WithMany()
+                .HasForeignKey(x => x.CashAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CurrentAccount).WithMany()
+                .HasForeignKey(x => x.CurrentAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AccountingVoucher).WithMany()
+                .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureCheques(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Cheque>(entity =>
+        {
+            entity.ToTable("cheques");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.InternalNumber }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.Direction, x.Status });
+            entity.HasIndex(x => x.DueDate);
+            entity.HasIndex(x => x.CurrentAccountId);
+            entity.HasIndex(x => x.ProgressPaymentId);
+            entity.HasIndex(x => x.SupplierInvoiceId);
+
+            entity.Property(x => x.Direction).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            entity.Property(x => x.InternalNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.ChequeNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.BankName).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.BankBranch).HasMaxLength(150);
+            entity.Property(x => x.Drawer).HasMaxLength(200);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CurrentAccount).WithMany()
+                .HasForeignKey(x => x.CurrentAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ProgressPayment).WithMany()
+                .HasForeignKey(x => x.ProgressPaymentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SupplierInvoice).WithMany()
+                .HasForeignKey(x => x.SupplierInvoiceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CashAccount).WithMany()
+                .HasForeignKey(x => x.CashAccountId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ChequeMovement>(entity =>
+        {
+            entity.ToTable("cheque_movements");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ChequeId, x.MovementDate });
+
+            entity.Property(x => x.FromStatus).HasConversion<int?>();
+            entity.Property(x => x.ToStatus).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+
+            entity.HasOne(x => x.Cheque).WithMany(x => x.Movements)
+                .HasForeignKey(x => x.ChequeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.CashAccount).WithMany()
+                .HasForeignKey(x => x.CashAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AccountingVoucher).WithMany()
+                .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureFactoringTransactions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<FactoringTransaction>(entity =>
+        {
+            entity.ToTable("factoring_transactions");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.InternalNumber }).IsUnique();
+            entity.HasIndex(x => x.ChequeId).IsUnique();
+            entity.HasIndex(x => x.TransactionDate);
+
+            entity.Property(x => x.InternalNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.ChequeAmount).HasPrecision(18, 2);
+            entity.Property(x => x.CommissionRate).HasPrecision(9, 4);
+            entity.Property(x => x.CommissionAmount).HasPrecision(18, 2);
+            entity.Property(x => x.BsmvRate).HasPrecision(9, 4);
+            entity.Property(x => x.BsmvAmount).HasPrecision(18, 2);
+            entity.Property(x => x.ExpenseAmount).HasPrecision(18, 2);
+            entity.Property(x => x.TotalDeductionAmount).HasPrecision(18, 2);
+            entity.Property(x => x.NetAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Description).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Cheque).WithMany()
+                .HasForeignKey(x => x.ChequeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.FactoringCurrentAccount).WithMany()
+                .HasForeignKey(x => x.FactoringCurrentAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CashAccount).WithMany()
+                .HasForeignKey(x => x.CashAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AccountingVoucher).WithMany()
+                .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CashTransaction).WithMany()
+                .HasForeignKey(x => x.CashTransactionId).OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

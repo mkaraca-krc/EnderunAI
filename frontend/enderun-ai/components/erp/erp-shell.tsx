@@ -163,6 +163,21 @@ const groups: MenuGroup[] = [
         icon: "○",
       },
       {
+        label: "Kasa / Banka",
+        href: "/finans/kasa-banka",
+        icon: "▣",
+      },
+      {
+        label: "Çek Defteri",
+        href: "/finans/cekler",
+        icon: "▩",
+      },
+      {
+        label: "Nakit Akışı",
+        href: "/finans/nakit-akis",
+        icon: "≈",
+      },
+      {
         label: "Hakedişler",
         href: "/hakedis",
         icon: "▧",

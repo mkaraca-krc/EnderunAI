@@ -3,6 +3,7 @@ using System;
 using EnderunAI.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EnderunAI.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260803054259_AddCashAccountsUnified")]
+    partial class AddCashAccountsUnified
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -886,188 +889,6 @@ namespace EnderunAI.Api.Migrations
                     b.HasIndex("SourceModule", "SourceEntityId");
 
                     b.ToTable("cash_transactions", (string)null);
-                });
-
-            modelBuilder.Entity("EnderunAI.Api.Models.Cheque", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("BankBranch")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<string>("BankName")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<Guid?>("CashAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ChequeNumber")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CurrencyCode")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)");
-
-                    b.Property<Guid?>("CurrentAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DeletedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<int>("Direction")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Drawer")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime>("DueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("InternalNumber")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("IssueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ProgressPaymentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ProjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("SupplierInvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CashAccountId");
-
-                    b.HasIndex("CurrentAccountId");
-
-                    b.HasIndex("DueDate");
-
-                    b.HasIndex("ProgressPaymentId");
-
-                    b.HasIndex("ProjectId");
-
-                    b.HasIndex("SupplierInvoiceId");
-
-                    b.HasIndex("CompanyId", "InternalNumber")
-                        .IsUnique();
-
-                    b.HasIndex("CompanyId", "Direction", "Status");
-
-                    b.ToTable("cheques", (string)null);
-                });
-
-            modelBuilder.Entity("EnderunAI.Api.Models.ChequeMovement", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("AccountingVoucherId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CashAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ChequeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DeletedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<int?>("FromStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("MovementDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("ToStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AccountingVoucherId");
-
-                    b.HasIndex("CashAccountId");
-
-                    b.HasIndex("ChequeId", "MovementDate");
-
-                    b.ToTable("cheque_movements", (string)null);
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.Company", b =>
@@ -1949,129 +1770,6 @@ namespace EnderunAI.Api.Migrations
                     b.HasIndex("EngineeringRecipeId");
 
                     b.ToTable("engineering_recipe_materials", (string)null);
-                });
-
-            modelBuilder.Entity("EnderunAI.Api.Models.FactoringTransaction", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("AccountingVoucherId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("BsmvAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("BsmvRate")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("numeric(9,4)");
-
-                    b.Property<Guid>("CashAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CashTransactionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("ChequeAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("ChequeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("CommissionAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("CommissionRate")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("numeric(9,4)");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CurrencyCode")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)");
-
-                    b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DeletedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<decimal>("ExpenseAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid?>("FactoringCurrentAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("InternalNumber")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<decimal>("NetAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid?>("ProjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TotalDeductionAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime>("TransactionDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AccountingVoucherId");
-
-                    b.HasIndex("CashAccountId");
-
-                    b.HasIndex("CashTransactionId");
-
-                    b.HasIndex("ChequeId")
-                        .IsUnique();
-
-                    b.HasIndex("FactoringCurrentAccountId");
-
-                    b.HasIndex("ProjectId");
-
-                    b.HasIndex("TransactionDate");
-
-                    b.HasIndex("CompanyId", "InternalNumber")
-                        .IsUnique();
-
-                    b.ToTable("factoring_transactions", (string)null);
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.GoodsReceipt.GoodsReceipt", b =>
@@ -8061,77 +7759,6 @@ namespace EnderunAI.Api.Migrations
                     b.Navigation("Project");
                 });
 
-            modelBuilder.Entity("EnderunAI.Api.Models.Cheque", b =>
-                {
-                    b.HasOne("EnderunAI.Api.Models.CashAccount", "CashAccount")
-                        .WithMany()
-                        .HasForeignKey("CashAccountId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EnderunAI.Api.Models.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EnderunAI.Api.Models.CurrentAccount", "CurrentAccount")
-                        .WithMany()
-                        .HasForeignKey("CurrentAccountId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EnderunAI.Api.Models.ProgressPayment", "ProgressPayment")
-                        .WithMany()
-                        .HasForeignKey("ProgressPaymentId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EnderunAI.Api.Models.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EnderunAI.Api.Models.SupplierInvoice", "SupplierInvoice")
-                        .WithMany()
-                        .HasForeignKey("SupplierInvoiceId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("CashAccount");
-
-                    b.Navigation("Company");
-
-                    b.Navigation("CurrentAccount");
-
-                    b.Navigation("ProgressPayment");
-
-                    b.Navigation("Project");
-
-                    b.Navigation("SupplierInvoice");
-                });
-
-            modelBuilder.Entity("EnderunAI.Api.Models.ChequeMovement", b =>
-                {
-                    b.HasOne("EnderunAI.Api.Models.AccountingVoucher", "AccountingVoucher")
-                        .WithMany()
-                        .HasForeignKey("AccountingVoucherId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EnderunAI.Api.Models.CashAccount", "CashAccount")
-                        .WithMany()
-                        .HasForeignKey("CashAccountId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EnderunAI.Api.Models.Cheque", "Cheque")
-                        .WithMany("Movements")
-                        .HasForeignKey("ChequeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("AccountingVoucher");
-
-                    b.Navigation("CashAccount");
-
-                    b.Navigation("Cheque");
-                });
-
             modelBuilder.Entity("EnderunAI.Api.Models.CompanyBankAccount", b =>
                 {
                     b.HasOne("EnderunAI.Api.Models.Company", "Company")
@@ -8321,61 +7948,6 @@ namespace EnderunAI.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("EngineeringRecipe");
-                });
-
-            modelBuilder.Entity("EnderunAI.Api.Models.FactoringTransaction", b =>
-                {
-                    b.HasOne("EnderunAI.Api.Models.AccountingVoucher", "AccountingVoucher")
-                        .WithMany()
-                        .HasForeignKey("AccountingVoucherId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EnderunAI.Api.Models.CashAccount", "CashAccount")
-                        .WithMany()
-                        .HasForeignKey("CashAccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EnderunAI.Api.Models.CashTransaction", "CashTransaction")
-                        .WithMany()
-                        .HasForeignKey("CashTransactionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EnderunAI.Api.Models.Cheque", "Cheque")
-                        .WithMany()
-                        .HasForeignKey("ChequeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EnderunAI.Api.Models.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EnderunAI.Api.Models.CurrentAccount", "FactoringCurrentAccount")
-                        .WithMany()
-                        .HasForeignKey("FactoringCurrentAccountId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EnderunAI.Api.Models.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("AccountingVoucher");
-
-                    b.Navigation("CashAccount");
-
-                    b.Navigation("CashTransaction");
-
-                    b.Navigation("Cheque");
-
-                    b.Navigation("Company");
-
-                    b.Navigation("FactoringCurrentAccount");
-
-                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.GoodsReceipt.GoodsReceipt", b =>
@@ -9540,11 +9112,6 @@ namespace EnderunAI.Api.Migrations
                     b.Navigation("Projects");
 
                     b.Navigation("Warehouses");
-                });
-
-            modelBuilder.Entity("EnderunAI.Api.Models.Cheque", b =>
-                {
-                    b.Navigation("Movements");
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.Company", b =>

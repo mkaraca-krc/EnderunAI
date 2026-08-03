@@ -40,6 +40,38 @@ public interface IAccountingIntegrationService
     Task<Guid> CreateProgressPaymentVoucherAsync(
         ProgressPayment progressPayment,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kasa/banka hareketi için dengeli, doğrudan Posted fiş üretir.
+    /// Para girişinde kasa/banka hesabı borçlanır, karşı hesap alacaklanır;
+    /// çıkışta tersi. Karşı hesap işlem tipine göre belirlenir
+    /// (tahsilat→120, ödeme→320, çek tahsili→101, çek ödemesi→103).
+    /// </summary>
+    Task<Guid> CreateCashTransactionVoucherAsync(
+        CashTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Çekin bir durum geçişi için dengeli, doğrudan Posted fiş üretir.
+    /// Muhasebe etkisi olmayan geçişlerde (ör. faktoringdeki çekin
+    /// tahsil bildirimi) null döner.
+    /// </summary>
+    Task<Guid?> CreateChequeVoucherAsync(
+        Cheque cheque,
+        ChequeStatus? fromStatus,
+        ChequeStatus toStatus,
+        DateTime voucherDate,
+        CashAccount? cashAccount,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Çek kırdırma fişi: 102 Bankalar (net) + 780 Finansman Giderleri
+    /// (komisyon + BSMV + masraf) borç / 101 Alınan Çekler (nominal)
+    /// alacak.
+    /// </summary>
+    Task<Guid> CreateFactoringVoucherAsync(
+        FactoringTransaction transaction,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class AccountingIntegrationService(
@@ -339,6 +371,112 @@ public sealed class AccountingIntegrationService(
         return created.Id;
     }
 
+    public async Task<Guid> CreateCashTransactionVoucherAsync(
+        CashTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        var cashAccount = await db.CashAccounts
+            .Include(x => x.AccountingAccount)
+            .SingleAsync(x => x.Id == transaction.CashAccountId, cancellationToken);
+
+        var settings = await GetOrCreateFinanceSettingsAsync(
+            cashAccount.CompanyId, cancellationToken);
+
+        if (transaction.Amount <= 0m)
+            throw new InvalidOperationException("Hareket tutarı sıfırdan büyük olmalıdır.");
+
+        CurrentAccount? counterparty = null;
+        if (transaction.CurrentAccountId is not null)
+        {
+            counterparty = await db.CurrentAccounts
+                .SingleAsync(x => x.Id == transaction.CurrentAccountId.Value, cancellationToken);
+        }
+
+        // Karşı hesap: paranın nereden geldiği / nereye gittiği.
+        var (counterAccountId, counterDescription) = transaction.TransactionType switch
+        {
+            CashTransactionType.Collection =>
+                (counterparty?.ReceivableAccountingAccountId ?? settings.ReceivablesAccountId,
+                 $"Tahsilat — {counterparty?.Title ?? "cari"}"),
+
+            CashTransactionType.Payment =>
+                (counterparty?.PayableAccountingAccountId ?? settings.PayablesAccountId,
+                 $"Ödeme — {counterparty?.Title ?? "cari"}"),
+
+            CashTransactionType.ChequeCollection =>
+                (await FindAccountIdAsync(cashAccount.CompanyId, cancellationToken, "101.01.01", "101"),
+                 "Alınan çek tahsili"),
+
+            CashTransactionType.ChequePayment =>
+                (await FindAccountIdAsync(cashAccount.CompanyId, cancellationToken, "103.01", "103"),
+                 "Verilen çek ödemesi"),
+
+            _ => (null, transaction.Description)
+        };
+
+        if (counterAccountId is null)
+        {
+            throw new InvalidOperationException(
+                "Bu hareket için karşı muhasebe hesabı belirlenemedi. " +
+                "Şirket Ayarları → Finans Ayarları'ndan ilgili hesabı seçin.");
+        }
+
+        var isInflow = transaction.Direction == CashTransactionDirection.In;
+        var amount = decimal.Round(transaction.Amount, 2);
+
+        var lines = new List<AccountingVoucherLineRequest>
+        {
+            new(
+                AccountingAccountId: cashAccount.AccountingAccountId,
+                Description: $"{cashAccount.Name} — {(isInflow ? "giriş" : "çıkış")}",
+                DebitAmount: isInflow ? amount : 0m,
+                CreditAmount: isInflow ? 0m : amount,
+                CurrencyCode: transaction.CurrencyCode,
+                ExchangeRate: 1m,
+                CurrentAccountId: transaction.CurrentAccountId,
+                ProjectId: transaction.ProjectId,
+                CostCenterCode: null,
+                DocumentNumber: transaction.DocumentNumber,
+                DocumentDate: transaction.TransactionDate,
+                DueDate: null),
+            new(
+                AccountingAccountId: counterAccountId.Value,
+                Description: counterDescription,
+                DebitAmount: isInflow ? 0m : amount,
+                CreditAmount: isInflow ? amount : 0m,
+                CurrencyCode: transaction.CurrencyCode,
+                ExchangeRate: 1m,
+                CurrentAccountId: transaction.CurrentAccountId,
+                ProjectId: transaction.ProjectId,
+                CostCenterCode: null,
+                DocumentNumber: transaction.DocumentNumber,
+                DocumentDate: transaction.TransactionDate,
+                DueDate: null)
+        };
+
+        var voucherType = isInflow
+            ? AccountingVoucherType.Collection
+            : AccountingVoucherType.Payment;
+
+        var created = await voucherService.CreateAsync(
+            new CreateAccountingVoucherRequest(
+                CompanyId: cashAccount.CompanyId,
+                VoucherType: (int)voucherType,
+                VoucherDate: transaction.TransactionDate,
+                CurrencyCode: transaction.CurrencyCode,
+                ExchangeRate: 1m,
+                Description: transaction.Description,
+                ReferenceNumber: transaction.DocumentNumber,
+                SourceModule: transaction.SourceModule ?? "CashTransaction",
+                SourceEntityId: transaction.Id,
+                Lines: lines),
+            cancellationToken);
+
+        await voucherService.PostAsync(created.Id, cancellationToken);
+
+        return created.Id;
+    }
+
     /// <summary>
     /// Tedarikçinin 320 alt hesabını çözer: cari kartındaki eşleme →
     /// 320 altında isim eşleşmesi (bulunursa kalıcı eşlenir) → şirket
@@ -384,6 +522,340 @@ public sealed class AccountingIntegrationService(
     /// Kod adaylarını sırayla dener; hesap aktif ve kayıt yapılabilir
     /// (IsPostingAllowed) olmalıdır. Bulunamazsa null (admin UI'dan seçer).
     /// </summary>
+    public async Task<Guid?> CreateChequeVoucherAsync(
+        Cheque cheque,
+        ChequeStatus? fromStatus,
+        ChequeStatus toStatus,
+        DateTime voucherDate,
+        CashAccount? cashAccount,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = await GetOrCreateFinanceSettingsAsync(
+            cheque.CompanyId, cancellationToken);
+
+        CurrentAccount? counterparty = null;
+        if (cheque.CurrentAccountId is not null)
+        {
+            counterparty = await db.CurrentAccounts
+                .SingleOrDefaultAsync(
+                    x => x.Id == cheque.CurrentAccountId.Value, cancellationToken);
+        }
+
+        var amount = decimal.Round(cheque.Amount, 2);
+        if (amount <= 0m)
+            throw new InvalidOperationException("Çek tutarı sıfırdan büyük olmalıdır.");
+
+        // Çekin durumuna karşılık gelen muhasebe hesabı.
+        async Task<Guid> ChequeAccountAsync(ChequeStatus status)
+        {
+            var codes = status switch
+            {
+                ChequeStatus.Portfolio => new[] { "101.01", "101" },
+                ChequeStatus.AtBank => new[] { "101.02", "101" },
+                ChequeStatus.AtFactoring => new[] { "101.03", "101" },
+                ChequeStatus.Issued => new[] { "103.01", "103" },
+                _ => new[] { "101" }
+            };
+
+            var id = await FindAccountIdAsync(cheque.CompanyId, cancellationToken, codes);
+            if (id is null)
+            {
+                throw new InvalidOperationException(
+                    $"Çek hesabı bulunamadı ({string.Join(" / ", codes)}). " +
+                    "Hesap planında ilgili hesabı tanımlayın.");
+            }
+
+            return id.Value;
+        }
+
+        Guid CounterpartyAccount(bool receivable)
+        {
+            var id = receivable
+                ? counterparty?.ReceivableAccountingAccountId ?? settings.ReceivablesAccountId
+                : counterparty?.PayableAccountingAccountId ?? settings.PayablesAccountId;
+
+            if (id is null)
+            {
+                throw new InvalidOperationException(
+                    receivable
+                        ? "Alıcılar (120) hesabı belirlenemedi. Şirket Ayarları → Finans Ayarları'ndan seçin."
+                        : "Satıcılar (320) hesabı belirlenemedi. Şirket Ayarları → Finans Ayarları'ndan seçin.");
+            }
+
+            return id.Value;
+        }
+
+        Guid CashAccountOrThrow()
+        {
+            if (cashAccount is null)
+            {
+                throw new InvalidOperationException(
+                    "Bu geçiş için kasa/banka hesabı seçilmelidir.");
+            }
+
+            return cashAccount.AccountingAccountId;
+        }
+
+        // (borç hesabı, alacak hesabı, açıklama) — geçişin muhasebe karşılığı.
+        (Guid Debit, Guid Credit, string Description)? entry = (fromStatus, toStatus) switch
+        {
+            // Alınan çek girişi: portföye alındı, cari alacağı kapanır.
+            (null, ChequeStatus.Portfolio) =>
+                (await ChequeAccountAsync(ChequeStatus.Portfolio),
+                 CounterpartyAccount(receivable: true),
+                 $"Alınan çek — {counterparty?.Title ?? "cari"}"),
+
+            // Verilen çek girişi: satıcı borcu çek borcuna dönüşür.
+            (null, ChequeStatus.Issued) =>
+                (CounterpartyAccount(receivable: false),
+                 await ChequeAccountAsync(ChequeStatus.Issued),
+                 $"Verilen çek — {counterparty?.Title ?? "cari"}"),
+
+            // Portföyden bankaya tahsile/teminata verildi ve geri alınması.
+            (ChequeStatus.Portfolio, ChequeStatus.AtBank) =>
+                (await ChequeAccountAsync(ChequeStatus.AtBank),
+                 await ChequeAccountAsync(ChequeStatus.Portfolio),
+                 "Çek bankaya tahsile verildi"),
+
+            (ChequeStatus.AtBank, ChequeStatus.Portfolio) =>
+                (await ChequeAccountAsync(ChequeStatus.Portfolio),
+                 await ChequeAccountAsync(ChequeStatus.AtBank),
+                 "Çek bankadan geri alındı"),
+
+            // Tahsil: para kasaya/bankaya girer, çek hesabı kapanır.
+            (ChequeStatus.Portfolio, ChequeStatus.Collected) =>
+                (CashAccountOrThrow(),
+                 await ChequeAccountAsync(ChequeStatus.Portfolio),
+                 "Çek tahsil edildi"),
+
+            (ChequeStatus.AtBank, ChequeStatus.Collected) =>
+                (CashAccountOrThrow(),
+                 await ChequeAccountAsync(ChequeStatus.AtBank),
+                 "Çek tahsil edildi"),
+
+            // Faktoringdeki çekin tahsil bildirimi: para zaten kırdırma
+            // anında alındığı için muhasebe etkisi yok.
+            (ChequeStatus.AtFactoring, ChequeStatus.Collected) => null,
+
+            // Karşılıksız: alacak cariye geri döner.
+            (ChequeStatus.Portfolio, ChequeStatus.Bounced) =>
+                (CounterpartyAccount(receivable: true),
+                 await ChequeAccountAsync(ChequeStatus.Portfolio),
+                 "Karşılıksız çek — alacak cariye döndü"),
+
+            (ChequeStatus.AtBank, ChequeStatus.Bounced) =>
+                (CounterpartyAccount(receivable: true),
+                 await ChequeAccountAsync(ChequeStatus.AtBank),
+                 "Karşılıksız çek — alacak cariye döndü"),
+
+            // Faktoringdeki çek karşılıksız çıkarsa rücu: parayı faktoring
+            // şirketine iade ederiz, alacak cariye geri döner.
+            (ChequeStatus.AtFactoring, ChequeStatus.Bounced) =>
+                (CounterpartyAccount(receivable: true),
+                 CashAccountOrThrow(),
+                 "Karşılıksız çek — faktoring rücu iadesi"),
+
+            // Verilen çek vadesinde ödendi.
+            (ChequeStatus.Issued, ChequeStatus.Paid) =>
+                (await ChequeAccountAsync(ChequeStatus.Issued),
+                 CashAccountOrThrow(),
+                 "Verilen çek ödendi"),
+
+            // Verilen çek iade alındı: borç yeniden satıcıda.
+            (ChequeStatus.Issued, ChequeStatus.Returned) =>
+                (await ChequeAccountAsync(ChequeStatus.Issued),
+                 CounterpartyAccount(receivable: false),
+                 "Verilen çek iade alındı"),
+
+            _ => throw new InvalidOperationException(
+                $"'{fromStatus}' → '{toStatus}' geçişi için muhasebe kaydı tanımlı değil.")
+        };
+
+        if (entry is null)
+            return null;
+
+        // Aynı hesaba borç ve alacak yazan geçiş (hesap planında 101 alt
+        // kırılımı yoksa) muhasebede anlamsız — fiş üretilmez.
+        if (entry.Value.Debit == entry.Value.Credit)
+            return null;
+
+        var voucherType = toStatus switch
+        {
+            ChequeStatus.Collected => AccountingVoucherType.Collection,
+            ChequeStatus.Paid => AccountingVoucherType.Payment,
+            _ => AccountingVoucherType.Journal
+        };
+
+        var lines = new List<AccountingVoucherLineRequest>
+        {
+            new(
+                AccountingAccountId: entry.Value.Debit,
+                Description: entry.Value.Description,
+                DebitAmount: amount,
+                CreditAmount: 0m,
+                CurrencyCode: cheque.CurrencyCode,
+                ExchangeRate: 1m,
+                CurrentAccountId: cheque.CurrentAccountId,
+                ProjectId: cheque.ProjectId,
+                CostCenterCode: null,
+                DocumentNumber: cheque.ChequeNumber,
+                DocumentDate: cheque.IssueDate,
+                DueDate: cheque.DueDate),
+            new(
+                AccountingAccountId: entry.Value.Credit,
+                Description: entry.Value.Description,
+                DebitAmount: 0m,
+                CreditAmount: amount,
+                CurrencyCode: cheque.CurrencyCode,
+                ExchangeRate: 1m,
+                CurrentAccountId: cheque.CurrentAccountId,
+                ProjectId: cheque.ProjectId,
+                CostCenterCode: null,
+                DocumentNumber: cheque.ChequeNumber,
+                DocumentDate: cheque.IssueDate,
+                DueDate: cheque.DueDate)
+        };
+
+        var created = await voucherService.CreateAsync(
+            new CreateAccountingVoucherRequest(
+                CompanyId: cheque.CompanyId,
+                VoucherType: (int)voucherType,
+                VoucherDate: voucherDate,
+                CurrencyCode: cheque.CurrencyCode,
+                ExchangeRate: 1m,
+                Description: $"{cheque.InternalNumber} — {entry.Value.Description}",
+                ReferenceNumber: cheque.ChequeNumber,
+                SourceModule: "Cheque",
+                SourceEntityId: cheque.Id,
+                Lines: lines),
+            cancellationToken);
+
+        await voucherService.PostAsync(created.Id, cancellationToken);
+
+        return created.Id;
+    }
+
+    public async Task<Guid> CreateFactoringVoucherAsync(
+        FactoringTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = await GetOrCreateFinanceSettingsAsync(
+            transaction.CompanyId, cancellationToken);
+
+        if (settings.FactoringExpenseAccountId is null)
+        {
+            throw new InvalidOperationException(
+                "Finansman gideri hesabı (780) yapılandırılmamış. " +
+                "Şirket Ayarları → Finans Ayarları'ndan seçin.");
+        }
+
+        var cheque = await db.Cheques
+            .SingleAsync(x => x.Id == transaction.ChequeId, cancellationToken);
+
+        var cashAccount = await db.CashAccounts
+            .SingleAsync(x => x.Id == transaction.CashAccountId, cancellationToken);
+
+        var chequeAccountId = await FindAccountIdAsync(
+            transaction.CompanyId, cancellationToken, "101.01", "101");
+
+        if (chequeAccountId is null)
+        {
+            throw new InvalidOperationException(
+                "Alınan çekler hesabı (101) bulunamadı. Hesap planını kontrol edin.");
+        }
+
+        var nominal = decimal.Round(transaction.ChequeAmount, 2);
+        var net = decimal.Round(transaction.NetAmount, 2);
+        var deduction = decimal.Round(transaction.TotalDeductionAmount, 2);
+
+        if (net + deduction != nominal)
+        {
+            throw new InvalidOperationException(
+                $"Faktoring tutarları tutarsız: net ({net:N2}) + kesinti ({deduction:N2}) " +
+                $"≠ çek tutarı ({nominal:N2}).");
+        }
+
+        var project = transaction.ProjectId is null
+            ? null
+            : await db.Projects
+                .SingleOrDefaultAsync(x => x.Id == transaction.ProjectId.Value, cancellationToken);
+
+        var lines = new List<AccountingVoucherLineRequest>
+        {
+            new(
+                AccountingAccountId: cashAccount.AccountingAccountId,
+                Description: $"Faktoring net tahsilat — {cashAccount.Name}",
+                DebitAmount: net,
+                CreditAmount: 0m,
+                CurrencyCode: transaction.CurrencyCode,
+                ExchangeRate: 1m,
+                CurrentAccountId: transaction.FactoringCurrentAccountId,
+                ProjectId: transaction.ProjectId,
+                CostCenterCode: project?.Code,
+                DocumentNumber: transaction.InternalNumber,
+                DocumentDate: transaction.TransactionDate,
+                DueDate: null)
+        };
+
+        // Kesintiler ayrı satırlarda: komisyon, BSMV ve masraf tek tek
+        // izlenebilsin (hepsi 780 Finansman Giderleri altında).
+        void AddDeductionLine(decimal value, string description)
+        {
+            if (value <= 0m)
+                return;
+
+            lines.Add(new AccountingVoucherLineRequest(
+                AccountingAccountId: settings.FactoringExpenseAccountId!.Value,
+                Description: description,
+                DebitAmount: decimal.Round(value, 2),
+                CreditAmount: 0m,
+                CurrencyCode: transaction.CurrencyCode,
+                ExchangeRate: 1m,
+                CurrentAccountId: transaction.FactoringCurrentAccountId,
+                ProjectId: transaction.ProjectId,
+                CostCenterCode: project?.Code,
+                DocumentNumber: transaction.InternalNumber,
+                DocumentDate: transaction.TransactionDate,
+                DueDate: null));
+        }
+
+        AddDeductionLine(transaction.CommissionAmount, "Faktoring komisyonu");
+        AddDeductionLine(transaction.BsmvAmount, "Faktoring BSMV");
+        AddDeductionLine(transaction.ExpenseAmount, "Faktoring masrafı");
+
+        lines.Add(new AccountingVoucherLineRequest(
+            AccountingAccountId: chequeAccountId.Value,
+            Description: $"Kırdırılan çek — {cheque.ChequeNumber}",
+            DebitAmount: 0m,
+            CreditAmount: nominal,
+            CurrencyCode: transaction.CurrencyCode,
+            ExchangeRate: 1m,
+            CurrentAccountId: cheque.CurrentAccountId,
+            ProjectId: transaction.ProjectId,
+            CostCenterCode: project?.Code,
+            DocumentNumber: cheque.ChequeNumber,
+            DocumentDate: cheque.IssueDate,
+            DueDate: cheque.DueDate));
+
+        var created = await voucherService.CreateAsync(
+            new CreateAccountingVoucherRequest(
+                CompanyId: transaction.CompanyId,
+                VoucherType: (int)AccountingVoucherType.Collection,
+                VoucherDate: transaction.TransactionDate,
+                CurrencyCode: transaction.CurrencyCode,
+                ExchangeRate: 1m,
+                Description: $"Çek kırdırma {transaction.InternalNumber} — {cheque.ChequeNumber}",
+                ReferenceNumber: cheque.ChequeNumber,
+                SourceModule: "Factoring",
+                SourceEntityId: transaction.Id,
+                Lines: lines),
+            cancellationToken);
+
+        await voucherService.PostAsync(created.Id, cancellationToken);
+
+        return created.Id;
+    }
+
     private async Task<Guid?> FindAccountIdAsync(
         Guid companyId,
         CancellationToken cancellationToken,

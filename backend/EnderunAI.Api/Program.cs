@@ -60,6 +60,9 @@ builder.Services.AddScoped<IAccountingAccountSeedService, AccountingAccountSeedS
 builder.Services.AddScoped<IAccountingVoucherService, AccountingVoucherService>();
 builder.Services.AddScoped<IAccountingIntegrationService, AccountingIntegrationService>();
 builder.Services.AddScoped<ISupplierInvoiceService, SupplierInvoiceService>();
+builder.Services.AddScoped<IChequeService, ChequeService>();
+builder.Services.AddScoped<IFactoringService, FactoringService>();
+builder.Services.AddScoped<ICashFlowService, CashFlowService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 builder.Services.AddScoped<ISecretariatService, SecretariatService>();
