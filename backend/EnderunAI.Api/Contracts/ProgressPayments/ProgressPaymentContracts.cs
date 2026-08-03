@@ -1,5 +1,9 @@
 namespace EnderunAI.Api.Contracts.ProgressPayments;
 
+/// <param name="UnitPrice">Toplam birim fiyat. Bileşenler verilmişse
+/// onların toplamı esas alınır; verilmemişse bu değer malzeme kabul
+/// edilir (eski istemciler bozulmasın).</param>
+/// <param name="SectionId">Pozun ait olduğu imalat bölümü.</param>
 public sealed record ProgressPaymentItemRequest(
     Guid? EngineeringPositionId,
     string PositionCode,
@@ -9,7 +13,11 @@ public sealed record ProgressPaymentItemRequest(
     decimal CurrentQuantity,
     decimal UnitPrice,
     string? MeasurementReference,
-    string? Notes
+    string? Notes,
+    decimal? MaterialUnitPrice = null,
+    decimal? LaborUnitPrice = null,
+    decimal? OverheadUnitPrice = null,
+    Guid? SectionId = null
 );
 
 public sealed record ProgressPaymentDeductionRequest(

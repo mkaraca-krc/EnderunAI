@@ -36,6 +36,16 @@ public sealed class ProgressPayment : BaseEntity
     public decimal CurrentAmount { get; set; }
     public decimal CumulativeAmount { get; set; }
 
+    /// <summary>Kümülatif imalat tutarı (ihzarat hariç).</summary>
+    public decimal CumulativeWorkAmount { get; set; }
+
+    /// <summary>
+    /// Kümülatif AÇIK ihzarat tutarı — mahsup edilenler düşülmüş hali.
+    /// İhzarat imalata dönüştükçe bu düşer, imalat artar; toplam sabit
+    /// kalır ve aynı iş iki kez tahsil edilemez.
+    /// </summary>
+    public decimal CumulativeAdvanceMaterialAmount { get; set; }
+
     public decimal PriceDifferenceAmount { get; set; }
 
     public decimal VatRate { get; set; }
@@ -44,6 +54,12 @@ public sealed class ProgressPayment : BaseEntity
     public int WithholdingNumerator { get; set; }
     public int WithholdingDenominator { get; set; }
     public decimal WithholdingAmount { get; set; }
+
+    /// <summary>Gelir/kurumlar stopajı oranı (%). Opsiyonel; 0 ise uygulanmaz.</summary>
+    public decimal IncomeTaxWithholdingRate { get; set; }
+
+    /// <summary>Stopaj tutarı — matrahı KDV hariç hakediş tutarıdır.</summary>
+    public decimal IncomeTaxWithholdingAmount { get; set; }
 
     public decimal TotalDeductionAmount { get; set; }
     public decimal GrossPayableAmount { get; set; }
@@ -67,6 +83,9 @@ public sealed class ProgressPayment : BaseEntity
     public Guid? AccountingVoucherId { get; set; }
     public AccountingVoucher? AccountingVoucher { get; set; }
 
+    public ICollection<ProgressPaymentSection> Sections { get; set; }
+        = new List<ProgressPaymentSection>();
+
     public ICollection<ProgressPaymentItem> Items { get; set; }
         = new List<ProgressPaymentItem>();
 
@@ -81,6 +100,10 @@ public sealed class ProgressPaymentItem : BaseEntity
 
     public Guid? EngineeringPositionId { get; set; }
 
+    /// <summary>Pozun ait olduğu imalat bölümü; boşsa bölümsüz.</summary>
+    public Guid? ProgressPaymentSectionId { get; set; }
+    public ProgressPaymentSection? Section { get; set; }
+
     public int LineNumber { get; set; }
 
     public string PositionCode { get; set; } = string.Empty;
@@ -92,7 +115,25 @@ public sealed class ProgressPaymentItem : BaseEntity
     public decimal CurrentQuantity { get; set; }
     public decimal CumulativeQuantity { get; set; }
 
+    // --- Birim fiyat bileşenleri ---
+    // NATURA icmalindeki malzeme / montaj / GG&K kolonları bu ayrımdan
+    // çıkar. UnitPrice üçünün toplamıdır ve türetilmiş değerdir; mevcut
+    // muhasebe ve raporlama kodu onun üzerinden çalışmaya devam eder.
+
+    public decimal MaterialUnitPrice { get; set; }
+    public decimal LaborUnitPrice { get; set; }
+    public decimal OverheadUnitPrice { get; set; }
+
     public decimal UnitPrice { get; set; }
+
+    /// <summary>Bu dönem malzeme tutarı (miktar × malzeme birim fiyatı).</summary>
+    public decimal MaterialAmount { get; set; }
+
+    /// <summary>Bu dönem montaj/işçilik tutarı.</summary>
+    public decimal LaborAmount { get; set; }
+
+    /// <summary>Bu dönem genel gider ve kâr tutarı.</summary>
+    public decimal OverheadAmount { get; set; }
 
     public decimal PreviousAmount { get; set; }
     public decimal CurrentAmount { get; set; }

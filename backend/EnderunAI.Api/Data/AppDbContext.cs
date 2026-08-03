@@ -62,6 +62,12 @@ public sealed class AppDbContext(
 
     public DbSet<PersonnelTermination> PersonnelTerminations =>
         Set<PersonnelTermination>();
+
+    public DbSet<ProjectHakedisSection> ProjectHakedisSections =>
+        Set<ProjectHakedisSection>();
+
+    public DbSet<ProgressPaymentSection> ProgressPaymentSections =>
+        Set<ProgressPaymentSection>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
@@ -1970,6 +1976,18 @@ public sealed class AppDbContext(
             entity.Property(x => x.CumulativeAmount)
                 .HasPrecision(18, 2);
 
+            entity.Property(x => x.CumulativeWorkAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.CumulativeAdvanceMaterialAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.IncomeTaxWithholdingRate)
+                .HasPrecision(8, 4);
+
+            entity.Property(x => x.IncomeTaxWithholdingAmount)
+                .HasPrecision(18, 2);
+
             entity.Property(x => x.PriceDifferenceAmount)
                 .HasPrecision(18, 2);
 
@@ -2028,6 +2046,53 @@ public sealed class AppDbContext(
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
 
+        modelBuilder.Entity<ProjectHakedisSection>(entity =>
+        {
+            entity.ToTable("project_hakedis_sections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Code).HasMaxLength(50);
+
+            entity.HasIndex(x => new { x.ProjectId, x.Order });
+
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProgressPaymentSection>(entity =>
+        {
+            entity.ToTable("progress_payment_sections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Code).HasMaxLength(50);
+
+            foreach (var property in new[]
+            {
+                nameof(ProgressPaymentSection.MaterialAmount),
+                nameof(ProgressPaymentSection.LaborAmount),
+                nameof(ProgressPaymentSection.OverheadAmount),
+                nameof(ProgressPaymentSection.CurrentAmount),
+                nameof(ProgressPaymentSection.PreviousAmount),
+                nameof(ProgressPaymentSection.CumulativeAmount)
+            })
+            {
+                entity.Property(property).HasPrecision(18, 2);
+            }
+
+            entity.HasIndex(x => new { x.ProgressPaymentId, x.Order });
+
+            entity.HasOne(x => x.ProgressPayment).WithMany(x => x.Sections)
+                .HasForeignKey(x => x.ProgressPaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
         modelBuilder.Entity<ProgressPaymentItem>(entity =>
         {
             entity.ToTable("progress_payment_items");
@@ -2066,6 +2131,24 @@ public sealed class AppDbContext(
             entity.Property(x => x.UnitPrice)
                 .HasPrecision(18, 4);
 
+            entity.Property(x => x.MaterialUnitPrice)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.LaborUnitPrice)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.OverheadUnitPrice)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.MaterialAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.LaborAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.OverheadAmount)
+                .HasPrecision(18, 2);
+
             entity.Property(x => x.PreviousAmount)
                 .HasPrecision(18, 2);
 
@@ -2077,6 +2160,10 @@ public sealed class AppDbContext(
 
             entity.Property(x => x.CompletionRate)
                 .HasPrecision(10, 4);
+
+            entity.HasOne(x => x.Section).WithMany()
+                .HasForeignKey(x => x.ProgressPaymentSectionId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.Property(x => x.MeasurementReference)
                 .HasMaxLength(500);

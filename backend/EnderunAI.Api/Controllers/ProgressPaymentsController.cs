@@ -3,6 +3,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.Accounting;
+using EnderunAI.Api.Services.Hakedis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -206,10 +207,14 @@ public sealed class ProgressPaymentsController(
             Notes = request.Notes?.Trim()
         };
 
+        var sectionMap = await BuildSectionsAsync(
+            entity, request.ProjectId, request.Items, cancellationToken);
+
         ApplyLines(
             entity,
             request.Items,
-            previousPayments.SelectMany(x => x.Items));
+            previousPayments.SelectMany(x => x.Items),
+            sectionMap);
 
         ApplyDeductions(entity, request.Deductions);
         CalculateHeader(entity, previousPayments);
@@ -238,6 +243,7 @@ public sealed class ProgressPaymentsController(
         var entity = await db.ProgressPayments
             .Include(x => x.Items)
             .Include(x => x.Deductions)
+            .Include(x => x.Sections)
             .SingleOrDefaultAsync(
                 x => x.Id == id,
                 cancellationToken);
@@ -266,9 +272,11 @@ public sealed class ProgressPaymentsController(
 
         db.ProgressPaymentItems.RemoveRange(entity.Items);
         db.ProgressPaymentDeductions.RemoveRange(entity.Deductions);
+        db.ProgressPaymentSections.RemoveRange(entity.Sections);
 
         entity.Items.Clear();
         entity.Deductions.Clear();
+        entity.Sections.Clear();
 
         entity.PeriodStartDate = request.PeriodStartDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         entity.PeriodEndDate = request.PeriodEndDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
@@ -285,10 +293,14 @@ public sealed class ProgressPaymentsController(
         entity.Notes = request.Notes?.Trim();
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
+        var sectionMap = await BuildSectionsAsync(
+            entity, entity.ProjectId, request.Items, cancellationToken);
+
         ApplyLines(
             entity,
             request.Items,
-            previousPayments.SelectMany(x => x.Items));
+            previousPayments.SelectMany(x => x.Items),
+            sectionMap);
 
         ApplyDeductions(entity, request.Deductions);
         CalculateHeader(entity, previousPayments);
@@ -308,6 +320,7 @@ public sealed class ProgressPaymentsController(
         var entity = await db.ProgressPayments
             .Include(x => x.Items)
             .Include(x => x.Deductions)
+            .Include(x => x.Sections)
             .SingleOrDefaultAsync(
                 x => x.Id == id,
                 cancellationToken);
@@ -510,10 +523,63 @@ public sealed class ProgressPaymentsController(
             message
         };
 
+    /// <summary>
+    /// Hakedişin kendi bölüm satırlarını proje şablonundan kopyalar.
+    /// Kopyalanmasının sebebi: proje şablonu sonradan değişse bile
+    /// kesinleşmiş hakedişin icmali oynamamalı.
+    /// </summary>
+    /// <returns>Proje bölümü → hakediş bölümü eşlemesi.</returns>
+    private async Task<Dictionary<Guid, ProgressPaymentSection>> BuildSectionsAsync(
+        ProgressPayment entity,
+        Guid projectId,
+        IEnumerable<ProgressPaymentItemRequest> items,
+        CancellationToken cancellationToken)
+    {
+        var referenced = items
+            .Select(x => x.SectionId)
+            .Where(x => x is not null)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+
+        var map = new Dictionary<Guid, ProgressPaymentSection>();
+
+        if (referenced.Count == 0)
+            return map;
+
+        var projectSections = await db.ProjectHakedisSections
+            .AsNoTracking()
+            .Where(x => x.ProjectId == projectId && referenced.Contains(x.Id))
+            .OrderBy(x => x.Order)
+            .ToListAsync(cancellationToken);
+
+        foreach (var source in projectSections)
+        {
+            var section = new ProgressPaymentSection
+            {
+                ProjectHakedisSectionId = source.Id,
+                Order = source.Order,
+                Name = source.Name,
+                Code = source.Code
+            };
+
+            entity.Sections.Add(section);
+            map[source.Id] = section;
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// Poz satırlarını kurar. Hesabın kendisi
+    /// <see cref="HakedisCalculationService"/> içinde; burada yalnızca
+    /// önceki dönem miktarları toplanıp sonuç entity'ye yazılır.
+    /// </summary>
     private static void ApplyLines(
         ProgressPayment entity,
         IEnumerable<ProgressPaymentItemRequest> requests,
-        IEnumerable<ProgressPaymentItem> previousItems)
+        IEnumerable<ProgressPaymentItem> previousItems,
+        IReadOnlyDictionary<Guid, ProgressPaymentSection>? sectionMap = null)
     {
         var previousByCode = previousItems
             .GroupBy(x => x.PositionCode)
@@ -522,59 +588,70 @@ public sealed class ProgressPaymentsController(
                 x => x.Sum(y => y.CurrentQuantity),
                 StringComparer.OrdinalIgnoreCase);
 
-        var lineNumber = 1;
+        var requestList = requests.ToList();
 
-        foreach (var request in requests)
+        var inputs = requestList.Select(request =>
         {
             var code = request.PositionCode?.Trim() ?? string.Empty;
+            previousByCode.TryGetValue(code, out var previousQuantity);
 
-            previousByCode.TryGetValue(
-                code,
-                out var previousQuantity);
+            // Bileşenler verilmemişse (eski istemci) tek birim fiyat
+            // malzemeye yazılır; toplam değişmez.
+            var hasComponents =
+                request.MaterialUnitPrice.HasValue ||
+                request.LaborUnitPrice.HasValue ||
+                request.OverheadUnitPrice.HasValue;
 
-            var currentQuantity =
-                Math.Max(0m, request.CurrentQuantity);
+            return new HakedisItemInput(
+                PositionCode: code,
+                ContractQuantity: request.ContractQuantity,
+                PreviousQuantity: previousQuantity,
+                CurrentQuantity: request.CurrentQuantity,
+                MaterialUnitPrice: hasComponents
+                    ? request.MaterialUnitPrice ?? 0m
+                    : request.UnitPrice,
+                LaborUnitPrice: request.LaborUnitPrice ?? 0m,
+                OverheadUnitPrice: request.OverheadUnitPrice ?? 0m,
+                SectionId: request.SectionId);
+        }).ToList();
 
-            var contractQuantity =
-                Math.Max(0m, request.ContractQuantity);
+        var calculation = HakedisCalculationService.CalculateItems(inputs);
 
-            var unitPrice =
-                Math.Max(0m, request.UnitPrice);
+        var lineNumber = 1;
 
-            var cumulativeQuantity =
-                previousQuantity + currentQuantity;
+        foreach (var (request, result) in requestList.Zip(calculation.Items))
+        {
+            ProgressPaymentSection? section = null;
 
-            var item = new ProgressPaymentItem
+            if (request.SectionId is Guid sectionId)
+                sectionMap?.TryGetValue(sectionId, out section);
+
+            entity.Items.Add(new ProgressPaymentItem
             {
                 LineNumber = lineNumber++,
-                EngineeringPositionId =
-                    request.EngineeringPositionId,
-                PositionCode = code,
-                Description =
-                    request.Description?.Trim() ?? string.Empty,
+                EngineeringPositionId = request.EngineeringPositionId,
+                Section = section,
+                PositionCode = result.PositionCode,
+                Description = request.Description?.Trim() ?? string.Empty,
                 Unit = request.Unit?.Trim() ?? string.Empty,
-                ContractQuantity = contractQuantity,
-                PreviousQuantity = previousQuantity,
-                CurrentQuantity = currentQuantity,
-                CumulativeQuantity = cumulativeQuantity,
-                UnitPrice = unitPrice,
-                PreviousAmount =
-                    previousQuantity * unitPrice,
-                CurrentAmount =
-                    currentQuantity * unitPrice,
-                CumulativeAmount =
-                    cumulativeQuantity * unitPrice,
-                CompletionRate =
-                    contractQuantity > 0m
-                        ? cumulativeQuantity /
-                          contractQuantity * 100m
-                        : 0m,
-                MeasurementReference =
-                    request.MeasurementReference?.Trim(),
+                ContractQuantity = result.ContractQuantity,
+                PreviousQuantity = result.PreviousQuantity,
+                CurrentQuantity = result.CurrentQuantity,
+                CumulativeQuantity = result.CumulativeQuantity,
+                MaterialUnitPrice = result.MaterialUnitPrice,
+                LaborUnitPrice = result.LaborUnitPrice,
+                OverheadUnitPrice = result.OverheadUnitPrice,
+                UnitPrice = result.UnitPrice,
+                MaterialAmount = result.MaterialAmount,
+                LaborAmount = result.LaborAmount,
+                OverheadAmount = result.OverheadAmount,
+                PreviousAmount = result.PreviousAmount,
+                CurrentAmount = result.CurrentAmount,
+                CumulativeAmount = result.CumulativeAmount,
+                CompletionRate = result.CompletionRate,
+                MeasurementReference = request.MeasurementReference?.Trim(),
                 Notes = request.Notes?.Trim()
-            };
-
-            entity.Items.Add(item);
+            });
         }
     }
 
@@ -614,46 +691,67 @@ public sealed class ProgressPaymentsController(
         }
     }
 
+    /// <summary>
+    /// Üst hesap. Hesap <see cref="HakedisCalculationService"/> içinde;
+    /// burada girdiler toplanıp sonuç entity'ye yazılır.
+    ///
+    /// Bu dönem tutarı artık "satırların toplamı" değil, "kümülatif
+    /// toplam − önceki hakedişler" olarak bulunuyor (minha mantığı).
+    /// İkisi birim fiyat sabitken aynı sonucu verir; birim fiyat dönemler
+    /// arasında değiştiğinde yalnızca minha doğru sonucu verir.
+    /// </summary>
     private static void CalculateHeader(
         ProgressPayment entity,
         IEnumerable<ProgressPayment> previousPayments)
     {
-        entity.PreviousAmount =
-            previousPayments.Sum(x => x.CurrentAmount);
+        var cumulativeWork = entity.Items.Sum(x => x.CumulativeAmount);
 
-        entity.CurrentAmount =
-            entity.Items.Sum(x => x.CurrentAmount);
+        var result = HakedisCalculationService.CalculateHeader(
+            new HakedisCalculationService.HakedisHeaderInput(
+                CumulativeWorkAmount: cumulativeWork,
+                CumulativeAdvanceMaterialAmount:
+                    entity.CumulativeAdvanceMaterialAmount,
+                PreviousTotalAmount: previousPayments.Sum(x => x.CurrentAmount),
+                PriceDifferenceAmount: entity.PriceDifferenceAmount,
+                VatRate: entity.VatRate,
+                WithholdingNumerator: entity.WithholdingNumerator,
+                WithholdingDenominator: entity.WithholdingDenominator,
+                IncomeTaxWithholdingRate: entity.IncomeTaxWithholdingRate,
+                TotalDeductionAmount: entity.Deductions.Sum(x => x.Amount)));
 
-        entity.CumulativeAmount =
-            entity.PreviousAmount +
-            entity.CurrentAmount;
+        entity.CumulativeWorkAmount = result.CumulativeWorkAmount;
+        entity.PreviousAmount = result.PreviousTotalAmount;
+        entity.CurrentAmount = result.CurrentAmount;
+        entity.CumulativeAmount = result.CumulativeTotalAmount;
+        entity.VatAmount = result.VatAmount;
+        entity.WithholdingAmount = result.WithholdingAmount;
+        entity.IncomeTaxWithholdingAmount = result.IncomeTaxWithholdingAmount;
+        entity.TotalDeductionAmount = result.TotalDeductionAmount;
+        entity.GrossPayableAmount = result.GrossPayableAmount;
+        entity.NetPayableAmount = result.NetPayableAmount;
 
-        var taxableAmount =
-            entity.CurrentAmount +
-            entity.PriceDifferenceAmount;
+        ApplySectionSummaries(entity);
+    }
 
-        entity.VatAmount =
-            taxableAmount *
-            entity.VatRate / 100m;
+    /// <summary>Bölüm icmalini poz satırlarından yeniden kurar.</summary>
+    private static void ApplySectionSummaries(ProgressPayment entity)
+    {
+        foreach (var section in entity.Sections)
+        {
+            // Kayıt henüz veritabanına yazılmadığı için yabancı anahtar
+            // dolu olmayabilir; eşleşme navigasyon üzerinden yapılır.
+            var items = entity.Items
+                .Where(x => ReferenceEquals(x.Section, section) ||
+                            x.ProgressPaymentSectionId == section.Id)
+                .ToList();
 
-        entity.WithholdingAmount =
-            entity.WithholdingDenominator > 0
-                ? entity.VatAmount *
-                  entity.WithholdingNumerator /
-                  entity.WithholdingDenominator
-                : 0m;
-
-        entity.TotalDeductionAmount =
-            entity.Deductions.Sum(x => x.Amount);
-
-        entity.GrossPayableAmount =
-            taxableAmount +
-            entity.VatAmount;
-
-        entity.NetPayableAmount =
-            entity.GrossPayableAmount -
-            entity.WithholdingAmount -
-            entity.TotalDeductionAmount;
+            section.MaterialAmount = items.Sum(x => x.MaterialAmount);
+            section.LaborAmount = items.Sum(x => x.LaborAmount);
+            section.OverheadAmount = items.Sum(x => x.OverheadAmount);
+            section.CurrentAmount = items.Sum(x => x.CurrentAmount);
+            section.PreviousAmount = items.Sum(x => x.PreviousAmount);
+            section.CumulativeAmount = items.Sum(x => x.CumulativeAmount);
+        }
     }
 
     private async Task<object?> BuildDetail(
@@ -681,12 +779,16 @@ public sealed class ProgressPaymentsController(
                 x.PreviousAmount,
                 x.CurrentAmount,
                 x.CumulativeAmount,
+                x.CumulativeWorkAmount,
+                x.CumulativeAdvanceMaterialAmount,
                 x.PriceDifferenceAmount,
                 x.VatRate,
                 x.VatAmount,
                 x.WithholdingNumerator,
                 x.WithholdingDenominator,
                 x.WithholdingAmount,
+                x.IncomeTaxWithholdingRate,
+                x.IncomeTaxWithholdingAmount,
                 x.TotalDeductionAmount,
                 x.GrossPayableAmount,
                 x.NetPayableAmount,
@@ -699,12 +801,29 @@ public sealed class ProgressPaymentsController(
                 AccountingVoucherNumber = x.AccountingVoucher != null
                     ? x.AccountingVoucher.VoucherNumber
                     : null,
+                Sections = x.Sections
+                    .OrderBy(s => s.Order)
+                    .Select(s => new
+                    {
+                        s.Id,
+                        s.ProjectHakedisSectionId,
+                        s.Order,
+                        s.Name,
+                        s.Code,
+                        s.MaterialAmount,
+                        s.LaborAmount,
+                        s.OverheadAmount,
+                        s.PreviousAmount,
+                        s.CurrentAmount,
+                        s.CumulativeAmount
+                    }),
                 Items = x.Items
                     .OrderBy(i => i.LineNumber)
                     .Select(i => new
                     {
                         i.Id,
                         i.EngineeringPositionId,
+                        i.ProgressPaymentSectionId,
                         i.LineNumber,
                         i.PositionCode,
                         i.Description,
@@ -713,7 +832,13 @@ public sealed class ProgressPaymentsController(
                         i.PreviousQuantity,
                         i.CurrentQuantity,
                         i.CumulativeQuantity,
+                        i.MaterialUnitPrice,
+                        i.LaborUnitPrice,
+                        i.OverheadUnitPrice,
                         i.UnitPrice,
+                        i.MaterialAmount,
+                        i.LaborAmount,
+                        i.OverheadAmount,
                         i.PreviousAmount,
                         i.CurrentAmount,
                         i.CumulativeAmount,
