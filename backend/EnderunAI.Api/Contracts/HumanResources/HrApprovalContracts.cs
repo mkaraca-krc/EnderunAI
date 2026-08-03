@@ -116,6 +116,43 @@ public sealed record CalculateCompanyPayrollRequest(
     int Month,
     bool RecalculateExisting = false);
 
+/// <summary>Dönem bordrosunu muhasebeleştirme isteği.</summary>
+public sealed record PostPayrollPeriodRequest(
+    Guid CompanyId,
+    int Year,
+    int Month);
+
+/// <summary>Dönem bordrosunun net ücret ödemesi.</summary>
+public sealed record PayPayrollPeriodRequest(
+    Guid CompanyId,
+    int Year,
+    int Month,
+    Guid CashAccountId,
+    DateTime PaymentDate,
+    string? PaymentReference);
+
+public sealed record PayrollPeriodPostingResult(
+    Guid CompanyId,
+    int Year,
+    int Month,
+    int PersonnelCount,
+    decimal TotalEarnings,
+    decimal NetPayable,
+    decimal EmployerBurden,
+    decimal TotalEmployerCost,
+    Guid AccountingVoucherId,
+    string AccountingVoucherNumber);
+
+public sealed record PayrollPeriodPaymentResult(
+    Guid CompanyId,
+    int Year,
+    int Month,
+    int PersonnelCount,
+    decimal PaidAmount,
+    Guid AccountingVoucherId,
+    string AccountingVoucherNumber,
+    Guid CashTransactionId);
+
 /// <param name="MissingSalaryDefinitionCount">Dönemde yürürlükte ücret
 /// kartı bulunmadığı için bordrosu üretilemeyen personel sayısı.</param>
 public sealed record CompanyPayrollCalculationResult(

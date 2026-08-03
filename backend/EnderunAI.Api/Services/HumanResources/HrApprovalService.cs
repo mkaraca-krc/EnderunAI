@@ -6,9 +6,165 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Services.HumanResources;
 
-public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
+public sealed class HrApprovalService(
+    HrDbContext hrDb,
+    AppDbContext appDb,
+    EnderunAI.Api.Services.Accounting.IAccountingIntegrationService accountingIntegration)
     : IHrApprovalService
 {
+    /// <summary>
+    /// Dönemin bordrosunu tek bir tahakkuk fişiyle muhasebeleştirir.
+    /// Dönemde onaylı bordro yoksa ya da fiş zaten kesilmişse işlem
+    /// açık bir mesajla durur — mükerrer tahakkuk defteri bozar.
+    /// </summary>
+    public async Task<PayrollPeriodPostingResult> PostPayrollPeriodAsync(
+        PostPayrollPeriodRequest request, Guid? userId,
+        CancellationToken cancellationToken)
+    {
+        ValidatePeriod(request.Year, request.Month);
+
+        var reference = PayrollPeriodReference(request.Year, request.Month);
+
+        if (await PeriodVoucherExistsAsync(
+                request.CompanyId, "PayrollAccrual", reference, cancellationToken))
+        {
+            throw new InvalidOperationException(
+                $"{request.Month:00}/{request.Year} dönemi bordrosu zaten " +
+                "muhasebeleştirilmiş.");
+        }
+
+        var records = await hrDb.PayrollRecords
+            .Where(x => x.CompanyId == request.CompanyId &&
+                        x.Year == request.Year && x.Month == request.Month &&
+                        x.Status == PayrollStatus.Approved)
+            .ToListAsync(cancellationToken);
+
+        if (records.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"{request.Month:00}/{request.Year} döneminde onaylanmış bordro yok.");
+        }
+
+        var totals = new EnderunAI.Api.Services.Accounting.PayrollAccrualTotals(
+            TotalEarnings: records.Sum(x => x.TotalEarnings),
+            NetPayable: records.Sum(x => x.OfficialNetPayableAmount),
+            IncomeTax: records.Sum(x => x.IncomeTaxDeduction),
+            StampTax: records.Sum(x => x.StampTaxDeduction),
+            SgkEmployee: records.Sum(x => x.SgkEmployeeDeduction),
+            UnemploymentEmployee: records.Sum(x => x.UnemploymentEmployeeDeduction),
+            SgkEmployer: records.Sum(x => x.SgkEmployerAmount),
+            UnemploymentEmployer: records.Sum(x => x.UnemploymentEmployerAmount),
+            AdvanceAndOtherDeductions: records.Sum(
+                x => x.AdvanceDeduction + x.OtherDeductionAmount),
+            PersonnelCount: records.Count);
+
+        var voucherId = await accountingIntegration.CreatePayrollAccrualVoucherAsync(
+            request.CompanyId, request.Year, request.Month, totals, cancellationToken);
+
+        var voucherNumber = await appDb.AccountingVouchers
+            .Where(x => x.Id == voucherId)
+            .Select(x => x.VoucherNumber)
+            .SingleAsync(cancellationToken);
+
+        var employerBurden = totals.SgkEmployer + totals.UnemploymentEmployer;
+
+        return new PayrollPeriodPostingResult(
+            request.CompanyId,
+            request.Year,
+            request.Month,
+            records.Count,
+            totals.TotalEarnings,
+            totals.NetPayable,
+            employerBurden,
+            totals.TotalEarnings + employerBurden,
+            voucherId,
+            voucherNumber);
+    }
+
+    public async Task<PayrollPeriodPaymentResult> PayPayrollPeriodAsync(
+        PayPayrollPeriodRequest request, Guid? userId,
+        CancellationToken cancellationToken)
+    {
+        ValidatePeriod(request.Year, request.Month);
+
+        var accrualReference = PayrollPeriodReference(request.Year, request.Month);
+        var paymentReference = $"BORDRO-ODEME-{request.Year}-{request.Month:00}";
+
+        if (!await PeriodVoucherExistsAsync(
+                request.CompanyId, "PayrollAccrual", accrualReference, cancellationToken))
+        {
+            throw new InvalidOperationException(
+                $"{request.Month:00}/{request.Year} dönemi önce muhasebeleştirilmelidir.");
+        }
+
+        if (await PeriodVoucherExistsAsync(
+                request.CompanyId, "PayrollPayment", paymentReference, cancellationToken))
+        {
+            throw new InvalidOperationException(
+                $"{request.Month:00}/{request.Year} dönemi bordrosu zaten ödenmiş.");
+        }
+
+        var records = await hrDb.PayrollRecords
+            .Where(x => x.CompanyId == request.CompanyId &&
+                        x.Year == request.Year && x.Month == request.Month &&
+                        x.Status == PayrollStatus.Approved)
+            .ToListAsync(cancellationToken);
+
+        if (records.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"{request.Month:00}/{request.Year} döneminde ödenecek bordro yok.");
+        }
+
+        var amount = records.Sum(x => x.OfficialNetPayableAmount);
+
+        var posting = await accountingIntegration.CreatePayrollPaymentVoucherAsync(
+            request.CompanyId, request.Year, request.Month,
+            request.CashAccountId, amount, request.PaymentDate, cancellationToken);
+
+        var paidAt = request.PaymentDate == default
+            ? DateTime.UtcNow
+            : DateTime.SpecifyKind(request.PaymentDate.Date, DateTimeKind.Utc);
+
+        foreach (var record in records)
+        {
+            record.Status = PayrollStatus.Paid;
+            record.PaidAtUtc = paidAt;
+            record.PaymentReference = Clean(request.PaymentReference) ?? paymentReference;
+            Touch(record, userId);
+        }
+
+        await hrDb.SaveChangesAsync(cancellationToken);
+
+        var voucherNumber = await appDb.AccountingVouchers
+            .Where(x => x.Id == posting.VoucherId)
+            .Select(x => x.VoucherNumber)
+            .SingleAsync(cancellationToken);
+
+        return new PayrollPeriodPaymentResult(
+            request.CompanyId,
+            request.Year,
+            request.Month,
+            records.Count,
+            amount,
+            posting.VoucherId,
+            voucherNumber,
+            posting.CashTransactionId);
+    }
+
+    private static string PayrollPeriodReference(int year, int month) =>
+        $"BORDRO-{year}-{month:00}";
+
+    private async Task<bool> PeriodVoucherExistsAsync(
+        Guid companyId, string sourceModule, string reference,
+        CancellationToken cancellationToken) =>
+        await appDb.AccountingVouchers.AnyAsync(
+            x => x.CompanyId == companyId &&
+                 x.SourceModule == sourceModule &&
+                 x.ReferenceNumber == reference &&
+                 x.Status != EnderunAI.Api.Models.AccountingVoucherStatus.Cancelled,
+            cancellationToken);
+
     public async Task<IReadOnlyList<HrLeaveResponse>> GetLeavesAsync(
         Guid? companyId, Guid? personnelId, Guid? projectId, int? leaveType,
         int? status, DateTime? startDate, DateTime? endDate,

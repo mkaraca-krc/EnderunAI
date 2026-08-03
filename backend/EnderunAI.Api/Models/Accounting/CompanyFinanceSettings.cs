@@ -63,4 +63,27 @@ public sealed class CompanyFinanceSettings : BaseEntity
     /// </summary>
     public Guid? DeductionAccountId { get; set; }
     public AccountingAccount? DeductionAccount { get; set; }
+
+    /// <summary>Bordro gider hesabı — ör. 770 Genel Yönetim Giderleri.</summary>
+    public Guid? PayrollExpenseAccountId { get; set; }
+    public AccountingAccount? PayrollExpenseAccount { get; set; }
+
+    /// <summary>335 Personele Borçlar — tahakkuk eden net ücret.</summary>
+    public Guid? PayrollPayableAccountId { get; set; }
+    public AccountingAccount? PayrollPayableAccount { get; set; }
+
+    /// <summary>360 Ödenecek Vergi ve Fonlar — gelir ve damga vergisi.</summary>
+    public Guid? TaxPayableAccountId { get; set; }
+    public AccountingAccount? TaxPayableAccount { get; set; }
+
+    /// <summary>361 Ödenecek Sosyal Güvenlik Kesintileri — işçi ve işveren payı.</summary>
+    public Guid? SocialSecurityPayableAccountId { get; set; }
+    public AccountingAccount? SocialSecurityPayableAccount { get; set; }
+
+    /// <summary>
+    /// 195 İş Avansları — bordroda avans kesintisi varsa bu hesap kapanır.
+    /// Yalnızca kesinti bulunan dönemlerde gerekir.
+    /// </summary>
+    public Guid? EmployeeAdvanceAccountId { get; set; }
+    public AccountingAccount? EmployeeAdvanceAccount { get; set; }
 }

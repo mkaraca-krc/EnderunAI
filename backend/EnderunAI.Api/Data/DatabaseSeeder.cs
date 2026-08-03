@@ -400,6 +400,17 @@ public static class DatabaseSeeder
                 s => s.FactoringExpenseAccountId, (s, v) => s.FactoringExpenseAccountId = v, "780.01.01", "780");
             changed |= await FillIfMissingAsync(db, companyId, settings,
                 s => s.DeductionAccountId, (s, v) => s.DeductionAccountId = v, "126");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.PayrollExpenseAccountId, (s, v) => s.PayrollExpenseAccountId = v, "770", "720");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.PayrollPayableAccountId, (s, v) => s.PayrollPayableAccountId = v, "335");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.TaxPayableAccountId, (s, v) => s.TaxPayableAccountId = v, "360");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.SocialSecurityPayableAccountId,
+                (s, v) => s.SocialSecurityPayableAccountId = v, "361");
+            changed |= await FillIfMissingAsync(db, companyId, settings,
+                s => s.EmployeeAdvanceAccountId, (s, v) => s.EmployeeAdvanceAccountId = v, "195");
         }
 
         if (changed)

@@ -48,6 +48,24 @@ public sealed class HrPayrollController(IHrApprovalService service) : Controller
             Ok(await service.CalculateCompanyPayrollAsync(
                 request, CurrentUserId(), cancellationToken)));
 
+    [HttpPost("periods/post")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollApprove)]
+    public Task<IActionResult> PostPeriod(
+        PostPayrollPeriodRequest request,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(async () =>
+            Ok(await service.PostPayrollPeriodAsync(
+                request, CurrentUserId(), cancellationToken)));
+
+    [HttpPost("periods/pay")]
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollApprove)]
+    public Task<IActionResult> PayPeriod(
+        PayPayrollPeriodRequest request,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(async () =>
+            Ok(await service.PayPayrollPeriodAsync(
+                request, CurrentUserId(), cancellationToken)));
+
     [HttpPost("records/{id:guid}/approve")]
     [RequirePermission(PermissionCatalog.Keys.AttendancePayrollApprove)]
     public Task<IActionResult> Approve(

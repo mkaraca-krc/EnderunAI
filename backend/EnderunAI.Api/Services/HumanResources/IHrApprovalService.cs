@@ -57,6 +57,22 @@ public interface IHrApprovalService
     Task<PayrollResponse> GetPayrollAsync(Guid id, CancellationToken cancellationToken);
     Task<PayrollSummary> GetPayrollSummaryAsync(
         Guid companyId, int year, int month, CancellationToken cancellationToken);
+    /// <summary>
+    /// Dönemin onaylı bordrolarını tek bir tahakkuk fişiyle
+    /// muhasebeleştirir (770 borç / 335 + 360 + 361 alacak).
+    /// </summary>
+    Task<PayrollPeriodPostingResult> PostPayrollPeriodAsync(
+        PostPayrollPeriodRequest request, Guid? userId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Tahakkuk etmiş dönemin net ücretini kasa/bankadan öder
+    /// (335 borç / 100-102 alacak) ve bordroları ödendi işaretler.
+    /// </summary>
+    Task<PayrollPeriodPaymentResult> PayPayrollPeriodAsync(
+        PayPayrollPeriodRequest request, Guid? userId,
+        CancellationToken cancellationToken);
+
     Task<CompanyPayrollCalculationResult> CalculateCompanyPayrollAsync(
         CalculateCompanyPayrollRequest request, Guid? userId,
         CancellationToken cancellationToken);

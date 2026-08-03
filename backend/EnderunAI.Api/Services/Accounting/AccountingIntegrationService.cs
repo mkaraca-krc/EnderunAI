@@ -72,7 +72,53 @@ public interface IAccountingIntegrationService
     Task<Guid> CreateFactoringVoucherAsync(
         FactoringTransaction transaction,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Aylık bordro tahakkuk fişi: 770 Personel Giderleri (brüt + işveren
+    /// payı primler) borç / 335 Personele Borçlar + 360 Ödenecek Vergi +
+    /// 361 Ödenecek SGK + 195 İş Avansları alacak.
+    /// </summary>
+    Task<Guid> CreatePayrollAccrualVoucherAsync(
+        Guid companyId,
+        int year,
+        int month,
+        PayrollAccrualTotals totals,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Bordro ödeme fişi: 335 Personele Borçlar (borç) / kasa veya banka
+    /// (alacak). Kasa/banka hareketi de aynı fişe bağlanır.
+    /// </summary>
+    Task<PayrollPaymentPostingResult> CreatePayrollPaymentVoucherAsync(
+        Guid companyId,
+        int year,
+        int month,
+        Guid cashAccountId,
+        decimal amount,
+        DateTime paymentDate,
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Bir dönemin bordro toplamları. Tahakkuk fişi bunlardan üretilir;
+/// borç ve alacak tarafının eşitliği bu toplamların iç tutarlılığına
+/// dayanır (brüt + işveren payı = net + vergi + SGK + avans).
+/// </summary>
+public sealed record PayrollAccrualTotals(
+    decimal TotalEarnings,
+    decimal NetPayable,
+    decimal IncomeTax,
+    decimal StampTax,
+    decimal SgkEmployee,
+    decimal UnemploymentEmployee,
+    decimal SgkEmployer,
+    decimal UnemploymentEmployer,
+    decimal AdvanceAndOtherDeductions,
+    int PersonnelCount);
+
+public sealed record PayrollPaymentPostingResult(
+    Guid VoucherId,
+    Guid CashTransactionId);
 
 public sealed class AccountingIntegrationService(
     AppDbContext db,
@@ -98,7 +144,12 @@ public sealed class AccountingIntegrationService(
             PayablesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "320"),
             ReceivablesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "120"),
             FactoringExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "780.01.01", "780"),
-            DeductionAccountId = await FindAccountIdAsync(companyId, cancellationToken, "126")
+            DeductionAccountId = await FindAccountIdAsync(companyId, cancellationToken, "126"),
+            PayrollExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "770", "720"),
+            PayrollPayableAccountId = await FindAccountIdAsync(companyId, cancellationToken, "335"),
+            TaxPayableAccountId = await FindAccountIdAsync(companyId, cancellationToken, "360"),
+            SocialSecurityPayableAccountId = await FindAccountIdAsync(companyId, cancellationToken, "361"),
+            EmployeeAdvanceAccountId = await FindAccountIdAsync(companyId, cancellationToken, "195")
         };
 
         db.CompanyFinanceSettings.Add(settings);
@@ -855,6 +906,247 @@ public sealed class AccountingIntegrationService(
 
         return created.Id;
     }
+
+    public async Task<Guid> CreatePayrollAccrualVoucherAsync(
+        Guid companyId,
+        int year,
+        int month,
+        PayrollAccrualTotals totals,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = await GetOrCreateFinanceSettingsAsync(companyId, cancellationToken);
+
+        Guid Required(Guid? accountId, string label)
+        {
+            if (accountId is null)
+            {
+                throw new InvalidOperationException(
+                    $"{label} hesabı yapılandırılmamış. " +
+                    "Şirket Ayarları → Finans Ayarları'ndan seçin.");
+            }
+
+            return accountId.Value;
+        }
+
+        var expenseAccountId = Required(
+            settings.PayrollExpenseAccountId, "Bordro gideri (770)");
+        var payableAccountId = Required(
+            settings.PayrollPayableAccountId, "Personele borçlar (335)");
+        var taxAccountId = Required(
+            settings.TaxPayableAccountId, "Ödenecek vergi ve fonlar (360)");
+        var sgkAccountId = Required(
+            settings.SocialSecurityPayableAccountId, "Ödenecek SGK kesintileri (361)");
+
+        var employerBurden = Round(totals.SgkEmployer + totals.UnemploymentEmployer);
+        var expense = Round(totals.TotalEarnings + employerBurden);
+
+        var netPayable = Round(totals.NetPayable);
+        var taxTotal = Round(totals.IncomeTax + totals.StampTax);
+        var sgkTotal = Round(
+            totals.SgkEmployee + totals.UnemploymentEmployee + employerBurden);
+        var advances = Round(totals.AdvanceAndOtherDeductions);
+
+        if (expense <= 0m)
+            throw new InvalidOperationException("Dönemde tahakkuk edecek bordro tutarı yok.");
+
+        // Denge ön kontrolü: brüt + işveren payı, net + vergi + SGK +
+        // avans toplamına eşit olmalı. Tutmuyorsa bordro toplamları
+        // kendi içinde tutarsızdır; asıl doğrulama PostAsync'te tekrar
+        // yapılır ama hatayı burada anlaşılır biçimde veriyoruz.
+        var creditTotal = Round(netPayable + taxTotal + sgkTotal + advances);
+        if (creditTotal != expense)
+        {
+            throw new InvalidOperationException(
+                $"Bordro toplamları tutarsız: gider ({expense:N2}) ≠ " +
+                $"net + vergi + SGK + avans ({creditTotal:N2}).");
+        }
+
+        var voucherDate = new DateTime(
+            year, month, DateTime.DaysInMonth(year, month), 0, 0, 0, DateTimeKind.Utc);
+
+        var period = $"{month:00}/{year}";
+
+        var lines = new List<AccountingVoucherLineRequest>
+        {
+            new(
+                AccountingAccountId: expenseAccountId,
+                Description: $"{period} dönemi personel gideri ({totals.PersonnelCount} kişi)",
+                DebitAmount: expense,
+                CreditAmount: 0m,
+                CurrencyCode: "TRY",
+                ExchangeRate: 1m,
+                CurrentAccountId: null,
+                ProjectId: null,
+                CostCenterCode: null,
+                DocumentNumber: null,
+                DocumentDate: voucherDate,
+                DueDate: null),
+            new(
+                AccountingAccountId: payableAccountId,
+                Description: $"{period} dönemi net ücret tahakkuku",
+                DebitAmount: 0m,
+                CreditAmount: netPayable,
+                CurrencyCode: "TRY",
+                ExchangeRate: 1m,
+                CurrentAccountId: null,
+                ProjectId: null,
+                CostCenterCode: null,
+                DocumentNumber: null,
+                DocumentDate: voucherDate,
+                DueDate: null)
+        };
+
+        void AddCreditLine(Guid accountId, decimal amount, string description)
+        {
+            if (amount <= 0m)
+                return;
+
+            lines.Add(new AccountingVoucherLineRequest(
+                AccountingAccountId: accountId,
+                Description: description,
+                DebitAmount: 0m,
+                CreditAmount: amount,
+                CurrencyCode: "TRY",
+                ExchangeRate: 1m,
+                CurrentAccountId: null,
+                ProjectId: null,
+                CostCenterCode: null,
+                DocumentNumber: null,
+                DocumentDate: voucherDate,
+                DueDate: null));
+        }
+
+        AddCreditLine(taxAccountId, taxTotal, $"{period} gelir ve damga vergisi");
+        AddCreditLine(sgkAccountId, sgkTotal, $"{period} SGK kesintileri (işçi + işveren)");
+
+        if (advances > 0m)
+        {
+            var advanceAccountId = Required(
+                settings.EmployeeAdvanceAccountId, "İş avansları (195)");
+            AddCreditLine(advanceAccountId, advances, $"{period} avans ve diğer kesintiler");
+        }
+
+        var created = await voucherService.CreateAsync(
+            new CreateAccountingVoucherRequest(
+                CompanyId: companyId,
+                VoucherType: (int)AccountingVoucherType.Journal,
+                VoucherDate: voucherDate,
+                CurrencyCode: "TRY",
+                ExchangeRate: 1m,
+                Description: $"{period} dönemi bordro tahakkuku",
+                ReferenceNumber: $"BORDRO-{year}-{month:00}",
+                SourceModule: "PayrollAccrual",
+                SourceEntityId: null,
+                Lines: lines),
+            cancellationToken);
+
+        await voucherService.PostAsync(created.Id, cancellationToken);
+
+        return created.Id;
+    }
+
+    public async Task<PayrollPaymentPostingResult> CreatePayrollPaymentVoucherAsync(
+        Guid companyId,
+        int year,
+        int month,
+        Guid cashAccountId,
+        decimal amount,
+        DateTime paymentDate,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = await GetOrCreateFinanceSettingsAsync(companyId, cancellationToken);
+
+        if (settings.PayrollPayableAccountId is null)
+        {
+            throw new InvalidOperationException(
+                "Personele borçlar (335) hesabı yapılandırılmamış. " +
+                "Şirket Ayarları → Finans Ayarları'ndan seçin.");
+        }
+
+        var cashAccount = await db.CashAccounts
+            .SingleOrDefaultAsync(
+                x => x.Id == cashAccountId && x.CompanyId == companyId, cancellationToken);
+
+        if (cashAccount is null)
+            throw new InvalidOperationException("Kasa/banka hesabı bulunamadı.");
+
+        var payment = Round(amount);
+        if (payment <= 0m)
+            throw new InvalidOperationException("Ödeme tutarı sıfırdan büyük olmalıdır.");
+
+        var date = DateTime.SpecifyKind(paymentDate.Date, DateTimeKind.Utc);
+        var period = $"{month:00}/{year}";
+        var description = $"{period} dönemi net ücret ödemesi";
+
+        var lines = new List<AccountingVoucherLineRequest>
+        {
+            new(
+                AccountingAccountId: settings.PayrollPayableAccountId.Value,
+                Description: description,
+                DebitAmount: payment,
+                CreditAmount: 0m,
+                CurrencyCode: "TRY",
+                ExchangeRate: 1m,
+                CurrentAccountId: null,
+                ProjectId: null,
+                CostCenterCode: null,
+                DocumentNumber: null,
+                DocumentDate: date,
+                DueDate: null),
+            new(
+                AccountingAccountId: cashAccount.AccountingAccountId,
+                Description: $"{cashAccount.Name} — {description}",
+                DebitAmount: 0m,
+                CreditAmount: payment,
+                CurrencyCode: "TRY",
+                ExchangeRate: 1m,
+                CurrentAccountId: null,
+                ProjectId: null,
+                CostCenterCode: null,
+                DocumentNumber: null,
+                DocumentDate: date,
+                DueDate: null)
+        };
+
+        var created = await voucherService.CreateAsync(
+            new CreateAccountingVoucherRequest(
+                CompanyId: companyId,
+                VoucherType: (int)AccountingVoucherType.Payment,
+                VoucherDate: date,
+                CurrencyCode: "TRY",
+                ExchangeRate: 1m,
+                Description: description,
+                ReferenceNumber: $"BORDRO-ODEME-{year}-{month:00}",
+                SourceModule: "PayrollPayment",
+                SourceEntityId: null,
+                Lines: lines),
+            cancellationToken);
+
+        await voucherService.PostAsync(created.Id, cancellationToken);
+
+        // Kasa hareketi aynı fişe bağlanır; ikinci bir fiş üretilmez.
+        var cashTransaction = new CashTransaction
+        {
+            CashAccountId = cashAccount.Id,
+            TransactionDate = date,
+            TransactionType = CashTransactionType.Payment,
+            Direction = CashTransactionDirection.Out,
+            Amount = payment,
+            CurrencyCode = "TRY",
+            Description = description,
+            DocumentNumber = $"BORDRO-{year}-{month:00}",
+            SourceModule = "PayrollPayment",
+            AccountingVoucherId = created.Id
+        };
+
+        db.CashTransactions.Add(cashTransaction);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new PayrollPaymentPostingResult(created.Id, cashTransaction.Id);
+    }
+
+    private static decimal Round(decimal value) =>
+        decimal.Round(value, 2, MidpointRounding.AwayFromZero);
 
     private async Task<Guid?> FindAccountIdAsync(
         Guid companyId,
