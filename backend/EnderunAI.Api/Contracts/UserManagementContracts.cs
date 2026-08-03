@@ -10,6 +10,10 @@ public sealed class CreateManagedUserRequest
     [Required, MaxLength(200)]
     public string FullName { get; set; } = string.Empty;
 
+    /// <summary>Hitap: "Bey" veya "Hanım". Boş bırakılırsa nötr hitap kullanılır.</summary>
+    [MaxLength(10)]
+    public string? Honorific { get; set; }
+
     [EmailAddress, MaxLength(200)]
     public string? Email { get; set; }
 
@@ -40,6 +44,10 @@ public sealed class UpdateManagedUserRequest
 
     [Required, MaxLength(200)]
     public string FullName { get; set; } = string.Empty;
+
+    /// <summary>Hitap: "Bey" veya "Hanım". Boş bırakılırsa nötr hitap kullanılır.</summary>
+    [MaxLength(10)]
+    public string? Honorific { get; set; }
 
     [EmailAddress, MaxLength(200)]
     public string? Email { get; set; }

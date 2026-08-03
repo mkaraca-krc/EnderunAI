@@ -37,6 +37,8 @@ export type ManagedUser = {
   id: string;
   username: string;
   fullName: string;
+  /** Kullanıcının seçtiği hitap: "Bey" | "Hanım" | null. */
+  honorific?: string | null;
   email?: string | null;
   isActive: boolean;
   createdAtUtc: string;
@@ -54,6 +56,7 @@ export type ManagedUser = {
 export type ManagedUserPayload = {
   username: string;
   fullName: string;
+  honorific?: string | null;
   email?: string | null;
   roleNames: string[];
   isActive: boolean;

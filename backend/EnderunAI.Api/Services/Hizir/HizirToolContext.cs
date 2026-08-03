@@ -10,6 +10,8 @@ namespace EnderunAI.Api.Services.Hizir;
 public sealed record HizirToolContext(
     Guid UserId,
     string FullName,
+    /// <summary>Kullanıcının seçtiği hitap ("Bey"/"Hanım") — yoksa null.</summary>
+    string? Honorific,
     IReadOnlyCollection<string> RoleNames,
     IReadOnlyCollection<string> Permissions,
     CurrentDataScopeSnapshot Scope)

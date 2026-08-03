@@ -133,6 +133,23 @@ public sealed class UserManagementController(
         return Ok(responses);
     }
 
+    /// <summary>
+    /// Hitap yalnızca "Bey" veya "Hanım" olabilir; başka bir değer
+    /// gelirse boş bırakılır ve nötr hitap kullanılır. Cinsiyet
+    /// isimden tahmin edilmez.
+    /// </summary>
+    private static string? NormalizeHonorific(string? value)
+    {
+        var trimmed = value?.Trim();
+
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return null;
+
+        return trimmed.Equals("Bey", StringComparison.OrdinalIgnoreCase) ? "Bey"
+            : trimmed.Equals("Hanım", StringComparison.OrdinalIgnoreCase) ? "Hanım"
+            : null;
+    }
+
     [HttpPost("users")]
     [RequirePermission(PermissionCatalog.Keys.UserManagementCreate)]
     public async Task<IActionResult> CreateUser(
@@ -171,6 +188,7 @@ public sealed class UserManagementController(
         {
             Username = username,
             FullName = request.FullName.Trim(),
+            Honorific = NormalizeHonorific(request.Honorific),
             Email = NormalizeOptional(request.Email),
             PasswordHash = password.Hash,
             PasswordSalt = password.Salt,
@@ -260,6 +278,7 @@ public sealed class UserManagementController(
 
         user.Username = username;
         user.FullName = request.FullName.Trim();
+        user.Honorific = NormalizeHonorific(request.Honorific);
         user.Email = NormalizeOptional(request.Email);
         user.IsActive = request.IsActive;
         user.WorkHoursExempt = request.WorkHoursExempt;
@@ -335,6 +354,7 @@ public sealed class UserManagementController(
             user.Id,
             user.Username,
             user.FullName,
+            user.Honorific,
             user.Email,
             user.IsActive,
             user.CreatedAtUtc,

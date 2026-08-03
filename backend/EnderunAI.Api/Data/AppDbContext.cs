@@ -297,6 +297,7 @@ public sealed class AppDbContext(
 
             entity.Property(x => x.Username).HasMaxLength(100).IsRequired();
             entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Honorific).HasMaxLength(10);
             entity.Property(x => x.Email).HasMaxLength(200);
             entity.Property(x => x.PasswordHash).IsRequired();
             entity.Property(x => x.PasswordSalt).IsRequired();

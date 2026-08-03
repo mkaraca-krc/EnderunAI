@@ -60,6 +60,7 @@ public sealed class HizirPermissionTests(DatabaseFixture fixture)
         return new HizirToolContext(
             Guid.NewGuid(),
             $"Test {roleName}",
+            null,
             new[] { roleName },
             permissions,
             GlobalScope);
@@ -280,7 +281,8 @@ public sealed class HizirPermissionTests(DatabaseFixture fixture)
         var permissions = new[] { PermissionCatalog.Keys.SiteReportsView };
 
         var context = new HizirToolContext(
-            Guid.NewGuid(), "Test Şef", new[] { "Şantiye Şefi" }, permissions, siteScope);
+            Guid.NewGuid(), "Test Şef", null,
+            new[] { "Şantiye Şefi" }, permissions, siteScope);
 
         using var scope = fixture.Factory.Services.CreateScope();
         var tool = Registry(scope).Find("santiye_gunluk_raporlari");

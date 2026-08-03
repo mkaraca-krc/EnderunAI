@@ -40,6 +40,7 @@ const SITE_ONLY_POLICY = 1;
 type UserForm = {
   username: string;
   fullName: string;
+  honorific: string;
   email: string;
   roleNames: string[];
   projectSiteIds: string[];
@@ -59,6 +60,7 @@ type CredentialNotice = {
 const emptyForm: UserForm = {
   username: "",
   fullName: "",
+  honorific: "",
   email: "",
   roleNames: [],
   projectSiteIds: [],
@@ -275,6 +277,7 @@ export default function UserManagementPage() {
     setForm({
       username: user.username,
       fullName: user.fullName,
+      honorific: user.honorific ?? "",
       email: user.email ?? "",
       roleNames: [...user.roleNames],
       projectSiteIds: [...user.projectSiteIds],
@@ -309,6 +312,7 @@ export default function UserManagementPage() {
     return {
       username: form.username.trim(),
       fullName: form.fullName.trim(),
+      honorific: form.honorific || null,
       email: form.email.trim() || null,
       roleNames: form.roleNames,
       isActive: form.isActive,
@@ -791,6 +795,29 @@ export default function UserManagementPage() {
                           }))
                         }
                       />
+                      <label className="block">
+                        <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                          Hitap
+                        </span>
+                        <select
+                          value={form.honorific}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              honorific: event.target.value,
+                            }))
+                          }
+                          className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+                        >
+                          <option value="">Belirtilmedi (Sayın ...)</option>
+                          <option value="Bey">Bey</option>
+                          <option value="Hanım">Hanım</option>
+                        </select>
+                        <span className="mt-1 block text-xs text-slate-500">
+                          Karşılamada kullanılır. Belirtilmezse cinsiyet tahmin
+                          edilmez, nötr &quot;Sayın&quot; hitabı kullanılır.
+                        </span>
+                      </label>
                       <Input
                         label="Kullanıcı adı"
                         required

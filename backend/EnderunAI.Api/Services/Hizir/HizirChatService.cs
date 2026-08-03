@@ -89,9 +89,15 @@ public sealed class HizirChatService(
         var scope = await dataScope.GetAsync(cancellationToken)
             ?? throw new InvalidOperationException("Veri kapsamı okunamadı.");
 
+        var honorific = await db.Users
+            .Where(x => x.Id == userId)
+            .Select(x => x.Honorific)
+            .SingleOrDefaultAsync(cancellationToken);
+
         var context = new HizirToolContext(
             userId,
             currentUser.FullName ?? currentUser.Username ?? "Kullanıcı",
+            honorific,
             snapshot.RoleNames,
             snapshot.Permissions,
             scope);
@@ -223,6 +229,9 @@ public sealed class HizirChatService(
 
         builder.AppendLine("KULLANICI:");
         builder.AppendLine($"- Ad: {context.FullName}");
+
+        if (!string.IsNullOrWhiteSpace(context.Honorific))
+            builder.AppendLine($"- Hitap: {context.Honorific}");
         builder.AppendLine(
             $"- Rol: {(context.RoleNames.Count > 0 ? string.Join(", ", context.RoleNames) : "tanımsız")}");
 
@@ -232,8 +241,14 @@ public sealed class HizirChatService(
         builder.AppendLine();
         builder.AppendLine("HİTAP:");
         builder.AppendLine(
-            "- Kullanıcıya adıyla ve saygılı hitap et (ör. \"Merhaba Mehmet Bey\"). " +
-            "Adı biliyorsan kullan, uydurma.");
+            "- Kullanıcıya YUKARIDA VERİLEN adıyla hitap et. Başka bir ad " +
+            "kullanma, ad uydurma.");
+        builder.AppendLine(
+            "- Hitap alanı verilmişse adın ardından onu kullan " +
+            "(ör. ad \"Ahmet Yılmaz\" ve hitap \"Bey\" ise \"Ahmet Bey\").");
+        builder.AppendLine(
+            "- Hitap alanı verilmemişse cinsiyet tahmin etme; " +
+            "\"Sayın {ad soyad}\" biçimini kullan.");
         builder.AppendLine(
             "- Cevabı kullanıcının rolüne göre uyarla: sahadaki bir kullanıcıya " +
             "muhasebe jargonu kullanma, yöneticiye gereksiz ayrıntı verme.");

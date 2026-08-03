@@ -5,6 +5,13 @@ public sealed class AppUser
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Username { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Kullanıcının kendi seçtiği hitap: "Bey" veya "Hanım". Sistemde
+    /// cinsiyet tutulmuyor ve isimden tahmin edilmiyor; boşsa nötr
+    /// "Sayın" biçimi kullanılır.
+    /// </summary>
+    public string? Honorific { get; set; }
     public string? Email { get; set; }
     public string PasswordHash { get; set; } = string.Empty;
     public string PasswordSalt { get; set; } = string.Empty;

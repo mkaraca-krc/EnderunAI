@@ -5,6 +5,8 @@ import type { FinanceDashboard } from "@/services/finance-dashboard.service";
 import type { ProjectProfitability } from "@/services/project-profitability.service";
 
 type ExecutiveAiSummaryWidgetProps = {
+  /** Oturumdaki gerçek kullanıcıya göre üretilen karşılama. */
+  greeting: string;
   activeProjects: number;
   riskyProjects: number;
   pendingProgressPayments: number;
@@ -30,6 +32,7 @@ const money = new Intl.NumberFormat("tr-TR", {
 });
 
 export default function ExecutiveAiSummaryWidget({
+  greeting,
   activeProjects,
   riskyProjects,
   pendingProgressPayments,
@@ -172,7 +175,7 @@ export default function ExecutiveAiSummaryWidget({
             ENDERUN AI YÖNETİCİ ÖZETİ
           </span>
 
-          <h2>Merhaba Mehmet</h2>
+          <h2>{greeting}</h2>
 
           <p>
             Güncel finans, proje, satın alma ve depo

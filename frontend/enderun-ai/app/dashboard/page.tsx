@@ -16,6 +16,8 @@ import ProfitabilityWidget from "@/components/dashboard/profitability-widget";
 import NotificationCenterWidget from "@/components/dashboard/notification-center-widget";
 import RecentActivitiesWidget, { type DashboardActivity } from "@/components/dashboard/recent-activities-widget";
 import ExecutiveAiSummaryWidget from "@/components/dashboard/executive-ai-summary-widget";
+import { greetingFor } from "@/lib/greeting";
+import { useCurrentUser } from "@/lib/use-current-user";
 import WorkTaskDashboardWidget from "@/components/tasks/work-task-dashboard-widget";
 
 import { apiClient } from "@/lib/api/api-client";
@@ -119,6 +121,11 @@ const progressStatusClasses: Record<
 };
 
 export default function DashboardPage() {
+  // Karşılama, oturumdaki gerçek kullanıcıdan üretilir; hiçbir ad
+  // sabit yazılmaz.
+  const { user: currentUser } = useCurrentUser();
+  const greeting = greetingFor(currentUser);
+
   const [projects, setProjects] = useState<
     ProjectListItem[]
   >([]);
@@ -642,6 +649,7 @@ export default function DashboardPage() {
       description="Enderun AI operasyon ve finans yönetim merkezi"
     >
       <ExecutiveAiSummaryWidget
+        greeting={greeting}
         activeProjects={metrics.activeProjects.length}
         riskyProjects={metrics.riskyProjects.length}
         pendingProgressPayments={

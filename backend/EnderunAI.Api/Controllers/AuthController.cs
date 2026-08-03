@@ -238,6 +238,7 @@ public sealed class AuthController(
             id = user.Id,
             user.Username,
             user.FullName,
+            user.Honorific,
             roles,
             permissions
         });
