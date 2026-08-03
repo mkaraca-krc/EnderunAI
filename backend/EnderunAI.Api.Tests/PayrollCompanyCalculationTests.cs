@@ -150,6 +150,189 @@ public sealed class PayrollCompanyCalculationTests(DatabaseFixture fixture)
         Assert.Equal(56_151m, february.CumulativeIncomeTaxBase);
     }
 
+    /// <summary>
+    /// Onaylı puantajdaki fazla mesai ve tatil çalışması bordroya
+    /// çarpanlarıyla yansımalı; devamsız gün ücretten düşmeli.
+    /// </summary>
+    [Fact]
+    public async Task Calculate_AppliesApprovedAttendanceToEarnings()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // 29 tam gün + 1 devamsız gün, toplam 10 saat fazla mesai.
+            for (var day = 1; day <= 30; day++)
+            {
+                db.AttendanceRecords.Add(new AttendanceRecord
+                {
+                    CompanyId = context.CompanyId,
+                    PersonnelId = context.WithCardId,
+                    WorkDate = new DateTime(Year, 4, day, 0, 0, 0, DateTimeKind.Utc),
+                    Status = day == 30
+                        ? (int)AttendanceStatus.Absent
+                        : (int)AttendanceStatus.Worked,
+                    NormalHours = day == 30 ? 0m : 7.5m,
+                    OvertimeHours = day <= 2 ? 5m : 0m,
+                    IsApproved = true
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/hr/payroll/records/calculate-company",
+            new { companyId = context.CompanyId, year = Year, month = 4, recalculateExisting = true });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var verifyScope = fixture.Factory.Services.CreateScope();
+        var hrDb = verifyScope.ServiceProvider.GetRequiredService<HrDbContext>();
+
+        var record = await hrDb.PayrollRecords.SingleAsync(
+            x => x.CompanyId == context.CompanyId && x.Month == 4);
+
+        // 29 ücrete esas gün × 1.101 günlük ücret
+        Assert.Equal(31_929m, record.NormalWorkAmount);
+
+        // 10 saat × 146,80 × 1,5
+        Assert.Equal(2_202m, record.OvertimeAmount);
+
+        Assert.Equal(34_131m, record.TotalEarnings);
+
+        // Devamsızlık nedeniyle brüt aylık ücretin altında kalmasına
+        // rağmen fazla mesai toplam kazancı yukarı çekiyor.
+        Assert.True(record.TotalEarnings > record.GrossSalary);
+    }
+
+    /// <summary>
+    /// Onaylanmamış puantaj bordroya girmemeli.
+    /// </summary>
+    [Fact]
+    public async Task Calculate_IgnoresUnapprovedAttendance()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            db.AttendanceRecords.Add(new AttendanceRecord
+            {
+                CompanyId = context.CompanyId,
+                PersonnelId = context.WithCardId,
+                WorkDate = new DateTime(Year, 5, 1, 0, 0, 0, DateTimeKind.Utc),
+                Status = (int)AttendanceStatus.Worked,
+                OvertimeHours = 20m,
+                IsApproved = false
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        await client.PostAsJsonAsync(
+            "/api/hr/payroll/records/calculate-company",
+            new { companyId = context.CompanyId, year = Year, month = 5, recalculateExisting = true });
+
+        using var verifyScope = fixture.Factory.Services.CreateScope();
+        var hrDb = verifyScope.ServiceProvider.GetRequiredService<HrDbContext>();
+
+        var record = await hrDb.PayrollRecords.SingleAsync(
+            x => x.CompanyId == context.CompanyId && x.Month == 5);
+
+        Assert.Equal(0m, record.OvertimeAmount);
+        // Puantaj sayılmadığı için tam aylık ücret geçerli.
+        Assert.Equal(33_030m, record.NormalWorkAmount);
+    }
+
+    /// <summary>
+    /// Projeli puantaj günleri şantiye kırılımıyla işçilik maliyetine
+    /// dönüşmeli.
+    /// </summary>
+    [Fact]
+    public async Task Calculate_GeneratesProjectLaborCostsWithSiteBreakdown()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        Guid projectId;
+        Guid siteId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var branch = await db.Branches.FirstAsync(x => x.CompanyId == context.CompanyId);
+            var employer = await db.CurrentAccounts
+                .FirstAsync(x => x.CompanyId == context.CompanyId);
+
+            var project = new Project
+            {
+                CompanyId = context.CompanyId,
+                BranchId = branch.Id,
+                EmployerCurrentAccountId = employer.Id,
+                Code = $"PRJ-{suffix}",
+                Name = $"Test Proje {suffix}",
+                CurrencyCode = "TRY",
+                Status = ProjectStatus.Active
+            };
+            db.Projects.Add(project);
+            await db.SaveChangesAsync();
+            projectId = project.Id;
+
+            var site = new ProjectSite
+            {
+                ProjectId = projectId,
+                Code = $"SNT-{suffix}",
+                Name = $"Test Şantiye {suffix}"
+            };
+            db.ProjectSites.Add(site);
+            await db.SaveChangesAsync();
+            siteId = site.Id;
+
+            db.AttendanceRecords.Add(new AttendanceRecord
+            {
+                CompanyId = context.CompanyId,
+                PersonnelId = context.WithCardId,
+                ProjectId = projectId,
+                ProjectSiteId = siteId,
+                WorkDate = new DateTime(Year, 6, 2, 0, 0, 0, DateTimeKind.Utc),
+                Status = (int)AttendanceStatus.Worked,
+                NormalHours = 7.5m,
+                OvertimeHours = 2m,
+                IsApproved = true
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        await client.PostAsJsonAsync(
+            "/api/hr/payroll/records/calculate-company",
+            new { companyId = context.CompanyId, year = Year, month = 6, recalculateExisting = true });
+
+        using var verifyScope = fixture.Factory.Services.CreateScope();
+        var db2 = verifyScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var cost = await db2.HrProjectLaborCosts.SingleAsync(
+            x => x.CompanyId == context.CompanyId && x.ProjectId == projectId);
+
+        Assert.Equal(siteId, cost.ProjectSiteId);
+        Assert.Equal(1_101m, cost.NormalCost);
+        Assert.Equal(440.40m, cost.OvertimeCost); // 146,80 × 1,5 × 2
+        Assert.Equal(1_541.40m, cost.TotalLaborCost);
+    }
+
     [Fact]
     public async Task Calculate_FailsWhenPayrollParametersAreMissing()
     {

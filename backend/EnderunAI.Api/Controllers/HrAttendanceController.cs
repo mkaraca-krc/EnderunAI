@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.HumanResources;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -85,6 +86,7 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
         {
             CompanyId = request.CompanyId,
             ProjectId = request.ProjectId,
+            ProjectSiteId = request.ProjectSiteId,
             PersonnelId = request.PersonnelId,
             WorkDate = workDate
         };
@@ -170,9 +172,20 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
             personnelId,
             startDate = start,
             endDate = end,
-            presentDays = rows.Count(x => x.Status == 1),
-            leaveDays = rows.Count(x => x.Status == 2),
-            absenceDays = rows.Count(x => x.Status == 0),
+            // Ücrete esas gün sayısı bordroyla aynı kuraldan yürür.
+            paidDays = rows.Sum(x =>
+                AttendanceEarningsCalculator.PaidDayFactor((AttendanceStatus)x.Status)),
+            presentDays = rows.Count(x =>
+                x.Status is (int)AttendanceStatus.Worked
+                    or (int)AttendanceStatus.RemoteWork
+                    or (int)AttendanceStatus.HalfDay),
+            leaveDays = rows.Count(x =>
+                x.Status is (int)AttendanceStatus.PaidLeave
+                    or (int)AttendanceStatus.UnpaidLeave
+                    or (int)AttendanceStatus.SickReport),
+            absenceDays = rows.Count(x =>
+                x.Status is (int)AttendanceStatus.Absent
+                    or (int)AttendanceStatus.ExcusedAbsence),
             normalHours = rows.Sum(x => x.NormalHours),
             overtimeHours = rows.Sum(x => x.OvertimeHours),
             nightShiftHours = rows.Sum(x => x.NightShiftHours),
@@ -184,6 +197,8 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
 
     private static void Apply(AttendanceRecord item, SaveAttendanceRequest request)
     {
+        item.ProjectId = request.ProjectId;
+        item.ProjectSiteId = request.ProjectSiteId;
         item.Status = request.Status;
         item.CheckInTime = request.CheckInTime;
         item.CheckOutTime = request.CheckOutTime;
@@ -208,6 +223,7 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
         x.Id,
         x.CompanyId,
         x.ProjectId,
+        x.ProjectSiteId,
         x.PersonnelId,
         x.WorkDate,
         x.Status,
@@ -232,25 +248,27 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
         x.CreatedAtUtc
     };
 
-    private static string AttendanceStatusName(int status) => status switch
-    {
-        0 => "Devamsız",
-        1 => "Çalıştı",
-        2 => "İzinli",
-        3 => "Raporlu",
-        4 => "Resmi Tatil",
-        5 => "Hafta Tatili",
-        6 => "Ücretsiz İzin",
-        7 => "Devamsız (Mazeretli)",
-        8 => "Yarım Gün",
-        9 => "Diğer",
-        _ => "Bilinmiyor"
-    };
+    internal static string AttendanceStatusName(int status) =>
+        (AttendanceStatus)status switch
+        {
+            AttendanceStatus.Absent => "Devamsız",
+            AttendanceStatus.Worked => "Çalıştı",
+            AttendanceStatus.PaidLeave => "Ücretli İzin",
+            AttendanceStatus.SickReport => "Raporlu",
+            AttendanceStatus.PublicHoliday => "Resmi Tatil",
+            AttendanceStatus.WeeklyHoliday => "Hafta Tatili",
+            AttendanceStatus.UnpaidLeave => "Ücretsiz İzin",
+            AttendanceStatus.ExcusedAbsence => "Mazeretli Devamsız",
+            AttendanceStatus.HalfDay => "Yarım Gün",
+            AttendanceStatus.RemoteWork => "Uzaktan Çalışma",
+            _ => "Bilinmiyor"
+        };
 }
 
 public sealed record SaveAttendanceRequest(
     Guid CompanyId,
     Guid? ProjectId,
+    Guid? ProjectSiteId,
     Guid PersonnelId,
     DateTime WorkDate,
     int Status,

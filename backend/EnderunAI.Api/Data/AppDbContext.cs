@@ -2356,9 +2356,20 @@ public sealed class AppDbContext(
         {
             entity.ToTable("attendance_records");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.CompanyId, x.PersonnelId, x.WorkDate }).IsUnique();
+            // Silme soft-delete'e çevrildiği için benzersizlik yalnızca
+            // silinmemiş satırlarda aranmalı: aksi halde silinen bir
+            // puantaj kaydı, aynı personel/gün için yeniden giriş
+            // yapılmasını kalıcı olarak engelliyordu (kayıt eklenirken
+            // veritabanı kısıt hatası).
+            entity.HasIndex(x => new { x.CompanyId, x.PersonnelId, x.WorkDate })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.HasIndex(x => new { x.PersonnelId, x.Status });
             entity.HasIndex(x => new { x.ProjectId, x.WorkDate });
+            entity.HasIndex(x => new { x.ProjectSiteId, x.WorkDate });
+
+            entity.HasOne(x => x.ProjectSite).WithMany()
+                .HasForeignKey(x => x.ProjectSiteId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.NormalHours).HasPrecision(8, 2);
             entity.Property(x => x.OvertimeHours).HasPrecision(8, 2);
             entity.Property(x => x.NightShiftHours).HasPrecision(8, 2);

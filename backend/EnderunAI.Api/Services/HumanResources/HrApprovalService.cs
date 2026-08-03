@@ -392,6 +392,36 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
             .Select(g => g.OrderByDescending(x => x.EffectiveStartDate).First())
             .ToDictionaryAsync(x => x.PersonnelId, cancellationToken);
 
+        var periodStart = new DateTime(
+            request.Year, request.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        // Onaylanmış puantaj günleri: fazla mesai ve tatil çalışması
+        // ücrete buradan dönüşür.
+        var attendanceByPersonnel = (await appDb.AttendanceRecords.AsNoTracking()
+            .Where(x => x.CompanyId == request.CompanyId &&
+                        x.IsApproved &&
+                        x.WorkDate >= periodStart && x.WorkDate <= periodEnd &&
+                        personnelIds.Contains(x.PersonnelId))
+            .Select(x => new
+            {
+                x.PersonnelId,
+                x.Status,
+                x.OvertimeHours,
+                x.SundayHours,
+                x.PublicHolidayHours
+            })
+            .ToListAsync(cancellationToken))
+            .GroupBy(x => x.PersonnelId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyCollection<AttendanceDay>)g
+                    .Select(x => new AttendanceDay(
+                        (EnderunAI.Api.Models.AttendanceStatus)x.Status,
+                        x.OvertimeHours,
+                        x.SundayHours,
+                        x.PublicHolidayHours))
+                    .ToList());
+
         // Kümülatif gelir vergisi matrahı, aynı yıl içindeki önceki
         // ayların bordrolarından devreder — dilim atlamaları buradan
         // doğru yakalanır.
@@ -451,8 +481,31 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
 
             var gross = salaryCard.GrossSalary;
 
+            // Günlük/saatlik ücret kartta boşsa aylık brütten türetilir
+            // (30 gün / 225 saat — 7,5 saatlik 30 günlük ay esası).
+            var rates = new SalaryRates(
+                MonthlyGross: gross,
+                DailyRate: salaryCard.DailyRate > 0m
+                    ? salaryCard.DailyRate
+                    : decimal.Round(gross / 30m, 2),
+                HourlyRate: salaryCard.HourlyRate > 0m
+                    ? salaryCard.HourlyRate
+                    : decimal.Round(gross / 225m, 2),
+                OvertimeMultiplier: salaryCard.OvertimeMultiplier,
+                SundayMultiplier: salaryCard.SundayMultiplier,
+                PublicHolidayMultiplier: salaryCard.PublicHolidayMultiplier);
+
+            attendanceByPersonnel.TryGetValue(person.Id, out var attendanceDays);
+
+            var earnings = AttendanceEarningsCalculator.Calculate(
+                rates, attendanceDays ?? Array.Empty<AttendanceDay>());
+
             record.GrossSalary = gross;
-            record.NormalWorkAmount = gross;
+            record.NormalWorkAmount = earnings.NormalWorkAmount;
+            record.OvertimeAmount = earnings.OvertimeAmount;
+            record.SundayWorkAmount = earnings.SundayWorkAmount;
+            record.PublicHolidayAmount = earnings.PublicHolidayAmount;
+
             record.TotalEarnings =
                 record.NormalWorkAmount + record.OvertimeAmount +
                 record.SundayWorkAmount + record.PublicHolidayAmount +
@@ -494,6 +547,11 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
         }
 
         await hrDb.SaveChangesAsync(cancellationToken);
+
+        await RegenerateLaborCostsAsync(
+            request.CompanyId, periodStart, periodEnd,
+            salaryByPersonnel, userId, cancellationToken);
+
         var total = await hrDb.PayrollRecords.AsNoTracking()
             .Where(x => x.CompanyId == request.CompanyId &&
                         x.Year == request.Year && x.Month == request.Month)
@@ -520,6 +578,103 @@ public sealed class HrApprovalService(HrDbContext hrDb, AppDbContext appDb)
         Touch(entity, userId);
         await hrDb.SaveChangesAsync(cancellationToken);
         return ToPayrollResponse(entity);
+    }
+
+    /// <summary>
+    /// Puantajdaki her günü proje/şantiye işçilik maliyetine çevirir.
+    /// Bordro yeniden hesaplandığında maliyetler de yeniden üretilir;
+    /// kayıtlar puantaj kaydına bağlı olduğu için tekrar oluşmaz.
+    /// </summary>
+    private async Task RegenerateLaborCostsAsync(
+        Guid companyId,
+        DateTime periodStart,
+        DateTime periodEnd,
+        IReadOnlyDictionary<Guid, HrSalaryDefinition> salaryByPersonnel,
+        Guid? userId,
+        CancellationToken cancellationToken)
+    {
+        var attendance = await appDb.AttendanceRecords.AsNoTracking()
+            .Where(x => x.CompanyId == companyId &&
+                        x.IsApproved &&
+                        x.ProjectId != null &&
+                        x.WorkDate >= periodStart && x.WorkDate <= periodEnd)
+            .ToListAsync(cancellationToken);
+
+        if (attendance.Count == 0)
+            return;
+
+        var attendanceIds = attendance.Select(x => x.Id).ToList();
+
+        var existingCosts = await appDb.HrProjectLaborCosts
+            .Where(x => x.AttendanceRecordId != null &&
+                        attendanceIds.Contains(x.AttendanceRecordId!.Value))
+            .ToDictionaryAsync(x => x.AttendanceRecordId!.Value, cancellationToken);
+
+        foreach (var day in attendance)
+        {
+            if (!salaryByPersonnel.TryGetValue(day.PersonnelId, out var salaryCard) ||
+                salaryCard.GrossSalary <= 0m)
+            {
+                continue;
+            }
+
+            var rates = new SalaryRates(
+                MonthlyGross: salaryCard.GrossSalary,
+                DailyRate: salaryCard.DailyRate > 0m
+                    ? salaryCard.DailyRate
+                    : decimal.Round(salaryCard.GrossSalary / 30m, 2),
+                HourlyRate: salaryCard.HourlyRate > 0m
+                    ? salaryCard.HourlyRate
+                    : decimal.Round(salaryCard.GrossSalary / 225m, 2),
+                OvertimeMultiplier: salaryCard.OvertimeMultiplier,
+                SundayMultiplier: salaryCard.SundayMultiplier,
+                PublicHolidayMultiplier: salaryCard.PublicHolidayMultiplier);
+
+            var dayEarnings = AttendanceEarningsCalculator.CalculateDay(
+                rates,
+                new AttendanceDay(
+                    (EnderunAI.Api.Models.AttendanceStatus)day.Status,
+                    day.OvertimeHours,
+                    day.SundayHours,
+                    day.PublicHolidayHours));
+
+            if (!existingCosts.TryGetValue(day.Id, out var cost))
+            {
+                cost = new EnderunAI.Api.Models.HrProjectLaborCost
+                {
+                    CompanyId = companyId,
+                    AttendanceRecordId = day.Id,
+                    CreatedByUserId = userId
+                };
+                appDb.HrProjectLaborCosts.Add(cost);
+            }
+
+            cost.ProjectId = day.ProjectId!.Value;
+            cost.ProjectSiteId = day.ProjectSiteId;
+            cost.PersonnelId = day.PersonnelId;
+            cost.WorkDate = day.WorkDate;
+            cost.WorkItemCode = day.WorkItemCode;
+            cost.WorkItemName = day.WorkItemName;
+
+            cost.NormalHours = day.NormalHours;
+            cost.OvertimeHours = day.OvertimeHours;
+            cost.SundayHours = day.SundayHours;
+            cost.PublicHolidayHours = day.PublicHolidayHours;
+
+            cost.NormalCost = dayEarnings.NormalWorkAmount;
+            cost.OvertimeCost = dayEarnings.OvertimeAmount;
+            cost.SundayCost = dayEarnings.SundayWorkAmount;
+            cost.PublicHolidayCost = dayEarnings.PublicHolidayAmount;
+            cost.TotalLaborCost = dayEarnings.TotalEarnings
+                + cost.MealCost + cost.AccommodationCost
+                + cost.ShuttleCost + cost.OtherCost + cost.CompensationCost;
+
+            cost.CurrencyCode = "TRY";
+            cost.UpdatedAtUtc = DateTime.UtcNow;
+            cost.UpdatedByUserId = userId;
+        }
+
+        await appDb.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>

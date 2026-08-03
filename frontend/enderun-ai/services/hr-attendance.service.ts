@@ -16,6 +16,7 @@ export type AttendanceItem = {
   id: string;
   companyId: string;
   projectId?: string | null;
+  projectSiteId?: string | null;
   personnelId: string;
   workDate: string;
   status: AttendanceStatus;
@@ -43,6 +44,7 @@ export type AttendanceItem = {
 export type AttendanceFilters = {
   companyId?: string;
   projectId?: string;
+  projectSiteId?: string;
   personnelId?: string;
   status?: number;
   startDate?: string;
@@ -53,6 +55,7 @@ export type AttendanceFilters = {
 export type CreateAttendanceRequest = {
   companyId: string;
   projectId?: string | null;
+  projectSiteId?: string | null;
   personnelId: string;
   workDate: string;
   status: number;

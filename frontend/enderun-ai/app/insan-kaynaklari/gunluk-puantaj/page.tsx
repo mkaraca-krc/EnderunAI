@@ -30,9 +30,15 @@ import {
   ProjectListItem,
 } from "@/services/project.service";
 
+import {
+  projectSiteService,
+  ProjectSiteListItem,
+} from "@/services/project-site.service";
+
 type AttendanceForm = {
   companyId: string;
   projectId: string;
+  projectSiteId: string;
   personnelId: string;
   workDate: string;
   status: string;
@@ -54,6 +60,7 @@ type AttendanceForm = {
 type BulkForm = {
   companyId: string;
   projectId: string;
+  projectSiteId: string;
   workDate: string;
   status: string;
   checkInTime: string;
@@ -73,27 +80,34 @@ type BulkForm = {
 
 const today = new Date().toISOString().slice(0, 10);
 
+/**
+ * Backend'deki AttendanceStatus ile birebir aynı olmak zorunda.
+ * Daha önce bu liste kaymıştı: arayüz 0'ı "Çalıştı" gönderiyor, backend
+ * 0'ı "Devamsız" okuyordu; çalışılan gün özette devamsızlık sayılıyordu.
+ */
 const statusOptions = [
-  { value: 0, label: "Çalıştı" },
-  { value: 1, label: "Yıllık İzin" },
-  { value: 2, label: "Hastalık İzni" },
+  { value: 0, label: "Devamsız" },
+  { value: 1, label: "Çalıştı" },
+  { value: 2, label: "Ücretli İzin" },
   { value: 3, label: "Raporlu" },
-  { value: 4, label: "Ücretsiz İzin" },
-  { value: 5, label: "Mazeretli Devamsız" },
-  { value: 6, label: "Mazeretsiz Devamsız" },
-  { value: 7, label: "Hafta Tatili" },
-  { value: 8, label: "Resmî Tatil" },
+  { value: 4, label: "Resmî Tatil" },
+  { value: 5, label: "Hafta Tatili" },
+  { value: 6, label: "Ücretsiz İzin" },
+  { value: 7, label: "Mazeretli Devamsız" },
+  { value: 8, label: "Yarım Gün" },
   { value: 9, label: "Uzaktan Çalışma" },
 ];
 
-const nonWorkingStatuses = [1, 2, 3, 4, 5, 6, 7];
+/** Saat girişi beklenmeyen durumlar (çalışma yok). */
+const nonWorkingStatuses = [0, 2, 3, 4, 5, 6, 7];
 
 const initialForm: AttendanceForm = {
   companyId: "",
   projectId: "",
+  projectSiteId: "",
   personnelId: "",
   workDate: today,
-  status: "0",
+  status: "1",
   checkInTime: "08:00",
   checkOutTime: "17:00",
   normalHours: "8",
@@ -112,8 +126,9 @@ const initialForm: AttendanceForm = {
 const initialBulkForm: BulkForm = {
   companyId: "",
   projectId: "",
+  projectSiteId: "",
   workDate: today,
-  status: "0",
+  status: "1",
   checkInTime: "08:00",
   checkOutTime: "17:00",
   normalHours: "8",
@@ -137,15 +152,18 @@ function statusLabel(status: number) {
 }
 
 function statusClass(status: number) {
-  if (status === 0 || status === 9) {
+  // Çalışılan günler
+  if ([1, 8, 9].includes(status)) {
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
 
-  if ([1, 2, 3, 4, 5].includes(status)) {
+  // Çalışılmayan ama ücrete esas günler (izin/tatil)
+  if ([2, 4, 5].includes(status)) {
     return "border-amber-200 bg-amber-50 text-amber-700";
   }
 
-  if (status === 6) {
+  // Devamsızlık — ücrete esas değil
+  if ([0, 7].includes(status)) {
     return "border-red-200 bg-red-50 text-red-700";
   }
 
@@ -181,6 +199,11 @@ export default function DailyAttendancePage() {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
   const [items, setItems] = useState<AttendanceItem[]>([]);
+
+  // İşçilik maliyetinin şantiyeye dağıtılabilmesi için seçilen projenin
+  // şantiyeleri; proje değişince yeniden yüklenir.
+  const [singleFormSites, setSingleFormSites] = useState<ProjectSiteListItem[]>([]);
+  const [bulkFormSites, setBulkFormSites] = useState<ProjectSiteListItem[]>([]);
 
   const [form, setForm] = useState<AttendanceForm>(initialForm);
   const [bulkForm, setBulkForm] =
@@ -220,6 +243,50 @@ export default function DailyAttendancePage() {
     () => new Map(projects.map((item) => [item.id, item])),
     [projects]
   );
+
+  useEffect(() => {
+    if (!form.projectId) {
+      setSingleFormSites([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    projectSiteService
+      .getAll(form.projectId)
+      .then((result) => {
+        if (!cancelled) setSingleFormSites(result);
+      })
+      .catch(() => {
+        if (!cancelled) setSingleFormSites([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.projectId]);
+
+  useEffect(() => {
+    if (!bulkForm.projectId) {
+      setBulkFormSites([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    projectSiteService
+      .getAll(bulkForm.projectId)
+      .then((result) => {
+        if (!cancelled) setBulkFormSites(result);
+      })
+      .catch(() => {
+        if (!cancelled) setBulkFormSites([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bulkForm.projectId]);
 
   const singleFormProjects = useMemo(() => {
     if (!form.companyId) return projects;
@@ -440,6 +507,7 @@ export default function DailyAttendancePage() {
         companyFilter ||
         (companies.length === 1 ? companies[0].id : ""),
       projectId: projectFilter,
+      projectSiteId: "",
       workDate: startDateFilter || today,
     });
 
@@ -458,6 +526,7 @@ export default function DailyAttendancePage() {
     setForm({
       companyId: item.companyId,
       projectId: item.projectId ?? "",
+      projectSiteId: item.projectSiteId ?? "",
       personnelId: item.personnelId,
       workDate: item.workDate.slice(0, 10),
       status: String(item.status),
@@ -492,6 +561,7 @@ export default function DailyAttendancePage() {
         companyFilter ||
         (companies.length === 1 ? companies[0].id : ""),
       projectId: projectFilter,
+      projectSiteId: "",
       workDate: startDateFilter || today,
     });
 
@@ -577,6 +647,7 @@ export default function DailyAttendancePage() {
     return {
       companyId: values.companyId,
       projectId: values.projectId || null,
+      projectSiteId: values.projectSiteId || null,
       personnelId,
       workDate: values.workDate,
       status: Number(values.status),
@@ -626,6 +697,7 @@ export default function DailyAttendancePage() {
       if (editingId) {
         await hrAttendanceService.update(editingId, {
           projectId: payload.projectId,
+          projectSiteId: payload.projectSiteId,
           status: payload.status,
           checkInTime: payload.checkInTime,
           checkOutTime: payload.checkOutTime,
@@ -1076,6 +1148,7 @@ export default function DailyAttendancePage() {
                   setForm((current) => ({
                     ...current,
                     projectId: event.target.value,
+                    projectSiteId: "",
                   }))
                 }
                 className="rounded-lg border border-slate-300 p-3"
@@ -1085,6 +1158,26 @@ export default function DailyAttendancePage() {
                 {singleFormProjects.map((project) => (
                   <option value={project.id} key={project.id}>
                     {project.code} - {project.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={form.projectSiteId}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    projectSiteId: event.target.value,
+                  }))
+                }
+                disabled={!form.projectId || singleFormSites.length === 0}
+                className="rounded-lg border border-slate-300 p-3 disabled:bg-slate-50"
+              >
+                <option value="">Şantiye seçilmedi</option>
+
+                {singleFormSites.map((site) => (
+                  <option value={site.id} key={site.id}>
+                    {site.code} - {site.name}
                   </option>
                 ))}
               </select>
@@ -1326,6 +1419,7 @@ export default function DailyAttendancePage() {
                   setBulkForm((current) => ({
                     ...current,
                     projectId: event.target.value,
+                    projectSiteId: "",
                   }))
                 }
                 className="rounded-lg border border-slate-300 p-3"
@@ -1335,6 +1429,26 @@ export default function DailyAttendancePage() {
                 {bulkFormProjects.map((project) => (
                   <option value={project.id} key={project.id}>
                     {project.code} - {project.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={bulkForm.projectSiteId}
+                onChange={(event) =>
+                  setBulkForm((current) => ({
+                    ...current,
+                    projectSiteId: event.target.value,
+                  }))
+                }
+                disabled={!bulkForm.projectId || bulkFormSites.length === 0}
+                className="rounded-lg border border-slate-300 p-3 disabled:bg-slate-50"
+              >
+                <option value="">Şantiye seçilmedi</option>
+
+                {bulkFormSites.map((site) => (
+                  <option value={site.id} key={site.id}>
+                    {site.code} - {site.name}
                   </option>
                 ))}
               </select>
