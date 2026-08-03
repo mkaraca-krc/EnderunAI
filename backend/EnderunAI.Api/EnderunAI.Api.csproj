@@ -23,4 +23,13 @@
     <Compile Remove="backups/**/*.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      Hesap planı seed dosyası publish çıktısına kopyalanmalı;
+      AccountingAccountSeedService dosyayı çalışma dizininden okuyor.
+      Bu kural olmadan seed ucu canlıda FileNotFoundException veriyordu.
+    -->
+    <Content Update="Data\Seeds\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
