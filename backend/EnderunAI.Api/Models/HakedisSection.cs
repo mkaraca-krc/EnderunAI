@@ -61,14 +61,14 @@ public static class HakedisSectionTemplate
 {
     public static readonly IReadOnlyList<string> Natura =
     [
-        "Panolar",
+        "Panolar / Tablolar",
         "Kuvvetli Akım Daire İçi",
         "Ortak Mahaller",
         "TV Tesisatı",
         "Telefon Tesisatı",
-        "Yangın Algılama",
+        "Yangın İhbar",
         "Görüntülü Konuşma",
-        "Topraklama",
+        "Topraklama / Paratoner",
         "Kolon Kablo",
         "Kablo Tava",
         "Busbar",
