@@ -2,10 +2,18 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { ApiError } from "@/lib/api/api-client";
+import {
+  progressPaymentService,
+  type ProjectHakedisSection,
+} from "@/services/progress-payment.service";
+import {
+  projectDocumentService,
+  type ProjectDocumentListItem,
+} from "@/services/project-document.service";
 import {
   DeviationImpact,
   ExtraWorkApprovalStatus,
@@ -78,8 +86,24 @@ export default function MetrajTakipPage() {
 
   const [data, setData] = useState<ProgressTracking | null>(null);
   const [extraWorks, setExtraWorks] = useState<ProjectExtraWork[]>([]);
+  const [sections, setSections] = useState<ProjectHakedisSection[]>([]);
+  const [documents, setDocuments] = useState<ProjectDocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  // İlave iş giriş formu
+  const [form, setForm] = useState({
+    sectionId: "",
+    positionCode: "",
+    description: "",
+    unit: "",
+    quantity: "",
+    unitPrice: "",
+    workDate: new Date().toISOString().slice(0, 10),
+    notes: "",
+  });
 
   const load = useCallback(async () => {
     if (!params.id) return;
@@ -88,13 +112,17 @@ export default function MetrajTakipPage() {
     setError("");
 
     try {
-      const [tracking, works] = await Promise.all([
+      const [tracking, works, sectionRows, documentRows] = await Promise.all([
         progressTrackingService.get(params.id),
         extraWorkService.list(params.id).catch(() => []),
+        progressPaymentService.getProjectSections(params.id).catch(() => []),
+        projectDocumentService.getAll(params.id).catch(() => []),
       ]);
 
       setData(tracking);
       setExtraWorks(works);
+      setSections(sectionRows.filter((x) => x.isActive));
+      setDocuments(documentRows);
     } catch (loadError) {
       setError(getErrorMessage(loadError));
     } finally {
@@ -105,6 +133,89 @@ export default function MetrajTakipPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function submitExtraWork(event: FormEvent) {
+    event.preventDefault();
+    if (!params.id || busy) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const result = await extraWorkService.create({
+        projectId: params.id,
+        projectHakedisSectionId: form.sectionId || null,
+        positionCode: form.positionCode.trim(),
+        description: form.description.trim(),
+        unit: form.unit.trim(),
+        quantity: Number(form.quantity || 0),
+        unitPrice: Number(form.unitPrice || 0),
+        workDate: form.workDate,
+        notes: form.notes.trim() || null,
+      });
+
+      setNotice(result.message);
+      setForm((current) => ({
+        ...current,
+        positionCode: "",
+        description: "",
+        unit: "",
+        quantity: "",
+        unitPrice: "",
+        notes: "",
+      }));
+
+      await load();
+    } catch (submitError) {
+      setError(getErrorMessage(submitError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Onay. Anahtar teslimde belge zorunlu — sunucu da belgesiz onayı
+   * reddediyor, buradaki kontrol yalnızca kullanıcıyı erken uyarmak için.
+   */
+  async function approve(work: ProjectExtraWork, documentId: string) {
+    if (busy) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const result = await extraWorkService.approve(
+        work.id,
+        documentId || null
+      );
+      setNotice(result.message);
+      await load();
+    } catch (approveError) {
+      setError(getErrorMessage(approveError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reject(work: ProjectExtraWork) {
+    if (busy) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const result = await extraWorkService.reject(work.id);
+      setNotice(result.message);
+      await load();
+    } catch (rejectError) {
+      setError(getErrorMessage(rejectError));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -219,7 +330,146 @@ export default function MetrajTakipPage() {
         )}
       </div>
 
-      {/* --- İLAVE İŞ --- */}
+      {/* --- İLAVE İŞ GİRİŞİ --- */}
+      <div className="erp-form-card" style={{ marginTop: 18, padding: 22 }}>
+        <h2 style={{ marginBottom: 6 }}>İlave İş Ekle</h2>
+        <p style={{ marginBottom: 14, fontSize: 13, color: "#5f6874" }}>
+          {data.contractType === ProjectContractType.LumpSum
+            ? "Anahtar teslim: kayıt onay bekleyerek açılır ve işveren onay belgesi iliştirilmeden tahsil edilebilir sayılmaz."
+            : data.contractType === ProjectContractType.UnitPrice
+              ? "Birim fiyatlı: sözleşmedeki birim fiyat geçerli olduğu için kayıt doğrudan onaylı açılır ve hakedişe eklenebilir."
+              : "Sözleşme tipi belirlenmeden ilave iş kaydedilemez — ilave işin anlamı tipe bağlıdır."}
+        </p>
+
+        <form onSubmit={submitExtraWork}>
+          <div className="erp-form-grid">
+            <label>
+              <span>Bölüm</span>
+              <select
+                value={form.sectionId}
+                onChange={(event) =>
+                  setForm({ ...form, sectionId: event.target.value })
+                }
+              >
+                <option value="">Bölümsüz</option>
+                {sections.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Poz Kodu *</span>
+              <input
+                required
+                value={form.positionCode}
+                onChange={(event) =>
+                  setForm({ ...form, positionCode: event.target.value })
+                }
+                placeholder="Örn. EK-01"
+              />
+            </label>
+
+            <label className="span-2">
+              <span>Açıklama *</span>
+              <input
+                required
+                value={form.description}
+                onChange={(event) =>
+                  setForm({ ...form, description: event.target.value })
+                }
+              />
+            </label>
+
+            <label>
+              <span>Birim *</span>
+              <input
+                required
+                value={form.unit}
+                onChange={(event) => setForm({ ...form, unit: event.target.value })}
+                placeholder="ad / m / m²"
+              />
+            </label>
+
+            <label>
+              <span>Miktar *</span>
+              <input
+                required
+                type="number"
+                step="0.01"
+                min={0}
+                value={form.quantity}
+                onChange={(event) =>
+                  setForm({ ...form, quantity: event.target.value })
+                }
+              />
+            </label>
+
+            <label>
+              <span>Birim Fiyat *</span>
+              <input
+                required
+                type="number"
+                step="0.01"
+                min={0}
+                value={form.unitPrice}
+                onChange={(event) =>
+                  setForm({ ...form, unitPrice: event.target.value })
+                }
+              />
+            </label>
+
+            <label>
+              <span>İş Tarihi</span>
+              <input
+                type="date"
+                value={form.workDate}
+                onChange={(event) =>
+                  setForm({ ...form, workDate: event.target.value })
+                }
+              />
+            </label>
+
+            <label className="span-2">
+              <span>Not</span>
+              <input
+                value={form.notes}
+                onChange={(event) => setForm({ ...form, notes: event.target.value })}
+              />
+            </label>
+          </div>
+
+          <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              type="submit"
+              disabled={
+                busy || data.contractType === ProjectContractType.Undetermined
+              }
+            >
+              {busy ? "Kaydediliyor..." : "İlave İşi Kaydet"}
+            </button>
+
+            {Number(form.quantity) > 0 && Number(form.unitPrice) > 0 && (
+              <span style={{ fontSize: 13, color: "#5f6874" }}>
+                Tutar:{" "}
+                <strong>
+                  {money.format(Number(form.quantity) * Number(form.unitPrice))}
+                </strong>
+              </span>
+            )}
+          </div>
+        </form>
+
+        {notice && (
+          <div className="erp-alert success" style={{ marginTop: 12 }}>
+            {notice}
+          </div>
+        )}
+      </div>
+
+      {/* --- İLAVE İŞ LİSTESİ --- */}
       {(extraWorks.length > 0 || data.pendingExtraWorkAmount > 0) && (
         <div className="erp-table-card" style={{ marginTop: 18 }}>
           <div className="erp-table-header">
@@ -243,38 +493,22 @@ export default function MetrajTakipPage() {
                   <th>Onay</th>
                   <th>Belge</th>
                   <th>Hakediş</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {extraWorks.map((work) => (
-                  <tr key={work.id}>
-                    <td>{work.positionCode}</td>
-                    <td>{work.description}</td>
-                    <td className="tabular">{quantity.format(work.quantity)}</td>
-                    <td className="tabular">{money.format(work.unitPrice)}</td>
-                    <td className="tabular">
-                      <strong>{money.format(work.amount)}</strong>
-                    </td>
-                    <td>
-                      <span
-                        className={`erp-status ${
-                          work.approvalStatus === ExtraWorkApprovalStatus.Approved
-                            ? "green"
-                            : work.approvalStatus === ExtraWorkApprovalStatus.Rejected
-                              ? "red"
-                              : "yellow"
-                        }`}
-                      >
-                        {work.approvalStatus === ExtraWorkApprovalStatus.Approved
-                          ? "Onaylı"
-                          : work.approvalStatus === ExtraWorkApprovalStatus.Rejected
-                            ? "Reddedildi"
-                            : "Onay bekliyor"}
-                      </span>
-                    </td>
-                    <td>{work.approvalDocumentName ?? "-"}</td>
-                    <td>{work.progressPaymentNumber ?? "-"}</td>
-                  </tr>
+                  <ExtraWorkRow
+                    key={work.id}
+                    work={work}
+                    documents={documents}
+                    requiresDocument={
+                      data.contractType === ProjectContractType.LumpSum
+                    }
+                    busy={busy}
+                    onApprove={approve}
+                    onReject={reject}
+                  />
                 ))}
               </tbody>
               <tfoot>
@@ -285,7 +519,7 @@ export default function MetrajTakipPage() {
                   <td className="tabular">
                     <strong>{money.format(data.collectibleExtraWorkAmount)}</strong>
                   </td>
-                  <td colSpan={3}></td>
+                  <td colSpan={4}></td>
                 </tr>
                 {data.pendingExtraWorkAmount > 0 && (
                   <tr>
@@ -293,7 +527,7 @@ export default function MetrajTakipPage() {
                     <td className="tabular">
                       {money.format(data.pendingExtraWorkAmount)}
                     </td>
-                    <td colSpan={3}></td>
+                    <td colSpan={4}></td>
                   </tr>
                 )}
               </tfoot>
@@ -342,6 +576,108 @@ export default function MetrajTakipPage() {
         </div>
       </div>
     </ErpShell>
+  );
+}
+
+/**
+ * İlave iş satırı. Onay bekleyen kayıtta belge seçimi ve onay/ret
+ * düğmeleri satırın içinde durur — ayrı ekrana gitmeye gerek yok.
+ *
+ * Anahtar teslimde belge seçilmeden onay düğmesi açılmaz; sunucu da
+ * belgesiz onayı reddediyor, buradaki kilit yalnızca kullanıcıyı erken
+ * uyarmak için.
+ */
+function ExtraWorkRow({
+  work,
+  documents,
+  requiresDocument,
+  busy,
+  onApprove,
+  onReject,
+}: {
+  work: ProjectExtraWork;
+  documents: ProjectDocumentListItem[];
+  requiresDocument: boolean;
+  busy: boolean;
+  onApprove: (work: ProjectExtraWork, documentId: string) => void;
+  onReject: (work: ProjectExtraWork) => void;
+}) {
+  const [documentId, setDocumentId] = useState("");
+
+  const isPending = work.approvalStatus === ExtraWorkApprovalStatus.Pending;
+
+  const statusClass =
+    work.approvalStatus === ExtraWorkApprovalStatus.Approved
+      ? "green"
+      : work.approvalStatus === ExtraWorkApprovalStatus.Rejected
+        ? "red"
+        : "yellow";
+
+  const statusLabel =
+    work.approvalStatus === ExtraWorkApprovalStatus.Approved
+      ? "Onaylı"
+      : work.approvalStatus === ExtraWorkApprovalStatus.Rejected
+        ? "Reddedildi"
+        : "Onay bekliyor";
+
+  return (
+    <tr>
+      <td>{work.positionCode}</td>
+      <td>
+        {work.description}
+        {work.sectionName && <small>{work.sectionName}</small>}
+      </td>
+      <td className="tabular">{quantity.format(work.quantity)}</td>
+      <td className="tabular">{money.format(work.unitPrice)}</td>
+      <td className="tabular">
+        <strong>{money.format(work.amount)}</strong>
+      </td>
+      <td>
+        <span className={`erp-status ${statusClass}`}>{statusLabel}</span>
+      </td>
+      <td>
+        {work.approvalDocumentName ? (
+          work.approvalDocumentName
+        ) : isPending && requiresDocument ? (
+          <select
+            value={documentId}
+            onChange={(event) => setDocumentId(event.target.value)}
+          >
+            <option value="">Onay belgesi seçin</option>
+            {documents.map((document) => (
+              <option key={document.id} value={document.id}>
+                {document.fileName}
+              </option>
+            ))}
+          </select>
+        ) : (
+          "-"
+        )}
+      </td>
+      <td>{work.progressPaymentNumber ?? "-"}</td>
+      <td>
+        {isPending && (
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              type="button"
+              disabled={busy || (requiresDocument && !documentId)}
+              title={
+                requiresDocument && !documentId
+                  ? "Anahtar teslimde işveren onay belgesi zorunlu"
+                  : undefined
+              }
+              onClick={() => onApprove(work, documentId)}
+            >
+              Onayla
+            </button>
+
+            <button type="button" disabled={busy} onClick={() => onReject(work)}>
+              Reddet
+            </button>
+          </div>
+        )}
+      </td>
+    </tr>
   );
 }
 
