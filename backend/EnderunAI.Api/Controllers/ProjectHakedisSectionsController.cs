@@ -7,12 +7,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Controllers;
 
+/// <param name="ContractType">Yalnızca KARMA projede anlamlı; boşsa
+/// projenin sözleşme tipi geçerlidir.</param>
 public sealed record HakedisSectionRequest(
     Guid? Id,
     int Order,
     string Name,
     string? Code,
-    bool IsActive);
+    bool IsActive,
+    ProjectContractType? ContractType = null);
 
 public sealed record ReplaceHakedisSectionsRequest(
     IReadOnlyCollection<HakedisSectionRequest> Sections);
@@ -35,7 +38,15 @@ public sealed class ProjectHakedisSectionsController(AppDbContext db) : Controll
             .AsNoTracking()
             .Where(x => x.ProjectId == projectId)
             .OrderBy(x => x.Order)
-            .Select(x => new { x.Id, x.Order, x.Name, x.Code, x.IsActive })
+            .Select(x => new
+            {
+                x.Id,
+                x.Order,
+                x.Name,
+                x.Code,
+                x.IsActive,
+                ContractType = x.ContractType == null ? (int?)null : (int)x.ContractType
+            })
             .ToListAsync(cancellationToken));
 
     /// <summary>NATURA'nın 12 bölümü — yeni proje kurarken başlangıç listesi.</summary>
@@ -87,7 +98,8 @@ public sealed class ProjectHakedisSectionsController(AppDbContext db) : Controll
                     Order = item.Order,
                     Name = item.Name.Trim(),
                     Code = string.IsNullOrWhiteSpace(item.Code) ? null : item.Code.Trim(),
-                    IsActive = item.IsActive
+                    IsActive = item.IsActive,
+                    ContractType = item.ContractType
                 });
                 continue;
             }
@@ -96,6 +108,7 @@ public sealed class ProjectHakedisSectionsController(AppDbContext db) : Controll
             current.Name = item.Name.Trim();
             current.Code = string.IsNullOrWhiteSpace(item.Code) ? null : item.Code.Trim();
             current.IsActive = item.IsActive;
+            current.ContractType = item.ContractType;
             current.UpdatedAtUtc = DateTime.UtcNow;
 
             keptIds.Add(current.Id);

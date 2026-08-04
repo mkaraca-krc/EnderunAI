@@ -81,6 +81,9 @@ builder.Services.AddScoped<IChequeService, ChequeService>();
 builder.Services.AddScoped<IFactoringService, FactoringService>();
 builder.Services.AddScoped<ICashFlowService, CashFlowService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hakedis.IProgressTrackingService,
+    EnderunAI.Api.Services.Hakedis.ProgressTrackingService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 builder.Services.AddScoped<ISecretariatService, SecretariatService>();
 builder.Services.AddScoped<IHrApprovalService, HrApprovalService>();
@@ -128,6 +131,9 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Hizir.Briefing.HizirPendingActionBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Hizir.Briefing.ProgressDeviationBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingService,
     EnderunAI.Api.Services.Hizir.Briefing.HizirBriefingService>();

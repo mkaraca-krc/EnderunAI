@@ -23,6 +23,10 @@ type NotificationCenterWidgetProps = {
   riskyProjects: number;
   pendingAccessRequests?: number;
   kesifProjects?: number;
+  /** Keşfin %110'unu aşan kalemi olan proje sayısı. */
+  deviationProjects?: number;
+  /** Anahtar teslimde kâr erozyon eşiğini aşan proje sayısı. */
+  erosionProjects?: number;
 };
 
 export default function NotificationCenterWidget({
@@ -34,8 +38,26 @@ export default function NotificationCenterWidget({
   riskyProjects,
   pendingAccessRequests = 0,
   kesifProjects = 0,
+  deviationProjects = 0,
+  erosionProjects = 0,
 }: NotificationCenterWidgetProps) {
   const items: NotificationItem[] = [
+    {
+      title: "Kâr Erozyonu Alarmı",
+      description:
+        "Anahtar teslim projede keşif üstü gerçekleşme eşiği aştı",
+      value: erosionProjects,
+      href: "/projeler",
+      tone: erosionProjects > 0 ? "critical" : "positive",
+    },
+    {
+      title: "Keşif Aşımı Olan Proje",
+      description:
+        "Bir veya daha fazla kalemde gerçekleşen keşfin %110'unu aştı",
+      value: deviationProjects,
+      href: "/projeler",
+      tone: deviationProjects > 0 ? "warning" : "positive",
+    },
     {
       title: "Bekleyen Erişim Talebi",
       description:

@@ -69,7 +69,9 @@ public sealed record CreateProjectRequest(
     string? City,
     string? District,
     string? Address,
-    ProjectStatus Status = ProjectStatus.Kesif);
+    ProjectStatus Status = ProjectStatus.Kesif,
+    ProjectContractType ContractType = ProjectContractType.Undetermined,
+    decimal DeviationAlertThresholdRate = 5m);
 
 public sealed record UpdateProjectRequest(
     string Name,
@@ -89,4 +91,6 @@ public sealed record UpdateProjectRequest(
     string? City,
     string? District,
     string? Address,
-    ProjectStatus Status);
+    ProjectStatus Status,
+    ProjectContractType ContractType = ProjectContractType.Undetermined,
+    decimal DeviationAlertThresholdRate = 5m);

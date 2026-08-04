@@ -17,6 +17,7 @@ import NotificationCenterWidget from "@/components/dashboard/notification-center
 import RecentActivitiesWidget, { type DashboardActivity } from "@/components/dashboard/recent-activities-widget";
 import ExecutiveAiSummaryWidget from "@/components/dashboard/executive-ai-summary-widget";
 import HizirBriefingWidget from "@/components/dashboard/hizir-briefing-widget";
+import { progressTrackingService } from "@/services/progress-tracking.service";
 import { greetingFor } from "@/lib/greeting";
 import { useCurrentUser } from "@/lib/use-current-user";
 import WorkTaskDashboardWidget from "@/components/tasks/work-task-dashboard-widget";
@@ -169,6 +170,8 @@ export default function DashboardPage() {
     useState<ProjectProfitability[]>([]);
 
   const [pendingAccessRequests, setPendingAccessRequests] = useState(0);
+  const [deviationProjects, setDeviationProjects] = useState(0);
+  const [erosionProjects, setErosionProjects] = useState(0);
 
   async function loadDashboard() {
     setLoading(true);
@@ -310,6 +313,25 @@ export default function DashboardPage() {
       })
       .catch(() => {
         if (active) setPendingAccessRequests(0);
+      });
+
+    // Keşif–gerçekleşen sapma uyarıları. Yetkisi olmayan kullanıcıda uç
+    // 403 döner; bildirim satırı sıfır kalır.
+    progressTrackingService
+      .getAlerts()
+      .then((alerts) => {
+        if (!active) return;
+
+        setDeviationProjects(
+          alerts.filter((x) => !x.erosionAlarm && x.exceedingItemCount > 0).length
+        );
+        setErosionProjects(alerts.filter((x) => x.erosionAlarm).length);
+      })
+      .catch(() => {
+        if (active) {
+          setDeviationProjects(0);
+          setErosionProjects(0);
+        }
       });
 
     return () => {
@@ -912,6 +934,8 @@ export default function DashboardPage() {
         riskyProjects={metrics.riskyProjects.length}
         pendingAccessRequests={pendingAccessRequests}
         kesifProjects={metrics.kesifProjects.length}
+        deviationProjects={deviationProjects}
+        erosionProjects={erosionProjects}
       />
 
       <RecentActivitiesWidget

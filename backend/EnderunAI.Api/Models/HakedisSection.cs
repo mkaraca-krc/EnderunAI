@@ -23,6 +23,13 @@ public sealed class ProjectHakedisSection : BaseEntity
     /// <summary>Bölüm kodu (ör. "1", "A"). Zorunlu değil.</summary>
     public string? Code { get; set; }
 
+    /// <summary>
+    /// Bölümün sözleşme tipi. Yalnızca KARMA projede anlamlıdır; boşsa
+    /// projenin tipi geçerlidir. Karma olmayan projede bu alanın
+    /// doldurulması sapma yorumunu değiştirmez.
+    /// </summary>
+    public ProjectContractType? ContractType { get; set; }
+
     public bool IsActive { get; set; } = true;
 }
 

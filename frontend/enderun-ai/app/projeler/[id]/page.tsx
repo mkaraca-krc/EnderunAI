@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import ProjectDocumentsSection from "@/components/projects/project-documents-section";
 import { projectService } from "@/services/project.service";
+import { CONTRACT_TYPE_LABELS } from "@/services/progress-tracking.service";
 
 import {
   projectProfitabilityService,
@@ -78,6 +79,9 @@ type ProjectDetail = {
   cashRetentionRate: number;
   withholdingTaxRate: number;
   materialDeductionRate: number;
+  /** Keşif–gerçekleşen sapmasının nasıl yorumlanacağını belirler. */
+  contractType: number;
+  deviationAlertThresholdRate: number;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   city?: string | null;
@@ -531,8 +535,33 @@ export default function ProjectCenterPage() {
           <section className="enderun-project-center-hero">
             <div className="enderun-project-center-title">
               <span className="erp-status green">Aktif Proje</span>
+
+              {/* Sözleşme tipi rozeti — sapmanın nasıl yorumlanacağını
+                  belirlediği için proje kartında görünür olmalı. */}
+              <span
+                className={`erp-status ${
+                  project.contractType === 0 ? "yellow" : "blue"
+                }`}
+                style={{ marginLeft: 6 }}
+              >
+                {CONTRACT_TYPE_LABELS[project.contractType] ?? "Belirlenmedi"}
+              </span>
+
               <h2>{project.name}</h2>
               <p>{project.employerName}</p>
+
+              {project.contractType === 0 && (
+                <p style={{ fontSize: 12, color: "#896500" }}>
+                  Sözleşme tipi belirlenmedi — keşif–gerçekleşen sapması
+                  yorumlanamaz. Proje düzenleme ekranından seçin.
+                </p>
+              )}
+
+              <p style={{ marginTop: 6 }}>
+                <Link href={`/projeler/${project.id}/metraj-takip`}>
+                  Metraj Takip (Keşif vs Gerçekleşen)
+                </Link>
+              </p>
             </div>
 
             <div className="enderun-project-center-metrics">

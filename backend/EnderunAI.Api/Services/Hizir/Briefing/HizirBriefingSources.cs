@@ -65,6 +65,72 @@ public sealed class PendingApprovalsBriefingSource(AppDbContext db)
     }
 }
 
+/// <summary>
+/// Keşif–gerçekleşen sapması: keşfin %110'unu aşan kalemler ve anahtar
+/// teslim projelerde kâr erozyon alarmı.
+///
+/// Sözleşme tipine göre farklı konuşur: birim fiyatlıda aşım bir
+/// fırsattır (ilave hakediş), anahtar teslimde kayıptır. Aynı sayıyı
+/// aynı tonda söylemek yanlış olurdu.
+/// </summary>
+public sealed class ProgressDeviationBriefingSource(
+    Services.Hakedis.IProgressTrackingService tracking) : IHizirBriefingSource
+{
+    public string Key => "metraj_sapmasi";
+    public string? RequiredPermission => PermissionCatalog.Keys.HakedisView;
+
+    public async Task<IReadOnlyList<BriefingItem>> BuildAsync(
+        HizirToolContext context, CancellationToken cancellationToken)
+    {
+        // Kapsam dışı projelerin sapması kullanıcıyı ilgilendirmez.
+        var projectIds = context.Scope.HasGlobalAccess
+            ? null
+            : context.Scope.ProjectIds.ToList();
+
+        if (projectIds is { Count: 0 })
+            return [];
+
+        var alerts = await tracking.GetAlertsAsync(projectIds, cancellationToken);
+
+        if (alerts.Count == 0)
+            return [];
+
+        var items = new List<BriefingItem>();
+
+        foreach (var alert in alerts.Where(x => x.ErosionAlarm))
+        {
+            items.Add(new BriefingItem(
+                $"{alert.ProjectCode}: kâr erozyonu eşiği aşıldı",
+                $"Keşif üstü gerçekleşmelerin net etkisi " +
+                $"{BriefingFormat.Money(alert.NetDeviationAmount)}. " +
+                "Anahtar teslim projede bu doğrudan kâr kaybıdır.",
+                BriefingSeverity.Critical,
+                $"/projeler/{alert.ProjectId}/metraj-takip"));
+        }
+
+        var exceedingOnly = alerts
+            .Where(x => !x.ErosionAlarm && x.ExceedingItemCount > 0)
+            .ToList();
+
+        foreach (var alert in exceedingOnly)
+        {
+            var isUnitPrice =
+                alert.ContractType == (int)ProjectContractType.UnitPrice;
+
+            items.Add(new BriefingItem(
+                $"{alert.ProjectCode}: {alert.ExceedingItemCount} kalem keşfin " +
+                "%110'unu aştı",
+                isUnitPrice
+                    ? "Birim fiyatlı proje — ilave hakedişe eklenebilir."
+                    : "Keşif üstü gerçekleşme kârı aşındırıyor.",
+                isUnitPrice ? BriefingSeverity.Info : BriefingSeverity.Warning,
+                $"/projeler/{alert.ProjectId}/metraj-takip"));
+        }
+
+        return items;
+    }
+}
+
 /// <summary>Yaklaşan ve geçmiş çek vadeleri.</summary>
 public sealed class ChequeDueBriefingSource(AppDbContext db) : IHizirBriefingSource
 {

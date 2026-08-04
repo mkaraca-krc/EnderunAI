@@ -46,6 +46,8 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.CashRetentionRate,
                 x.WithholdingTaxRate,
                 x.MaterialDeductionRate,
+                ContractType = (int)x.ContractType,
+                x.DeviationAlertThresholdRate,
                 x.Status,
                 x.HealthStatus,
                 WarehouseCount = x.Warehouses.Count
@@ -85,6 +87,8 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.CashRetentionRate,
                 x.WithholdingTaxRate,
                 x.MaterialDeductionRate,
+                ContractType = (int)x.ContractType,
+                x.DeviationAlertThresholdRate,
                 x.PlannedStartDate,
                 x.PlannedEndDate,
                 x.City,
@@ -182,6 +186,8 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 District = request.District?.Trim(),
                 Address = request.Address?.Trim(),
                 Status = request.Status,
+                ContractType = request.ContractType,
+                DeviationAlertThresholdRate = request.DeviationAlertThresholdRate,
                 HealthStatus = ProjectHealthStatus.Green
             };
 
@@ -325,6 +331,8 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
         project.CashRetentionRate = request.CashRetentionRate;
         project.WithholdingTaxRate = request.WithholdingTaxRate;
         project.MaterialDeductionRate = request.MaterialDeductionRate;
+        project.ContractType = request.ContractType;
+        project.DeviationAlertThresholdRate = request.DeviationAlertThresholdRate;
 
         project.PlannedStartDate = plannedStartDate;
         project.PlannedEndDate = plannedEndDate;
@@ -423,6 +431,8 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.CashRetentionRate,
                 x.WithholdingTaxRate,
                 x.MaterialDeductionRate,
+                ContractType = (int)x.ContractType,
+                x.DeviationAlertThresholdRate,
                 x.PlannedStartDate,
                 x.PlannedEndDate,
                 x.ActualStartDate,

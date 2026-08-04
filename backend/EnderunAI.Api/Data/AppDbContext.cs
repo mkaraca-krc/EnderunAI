@@ -1144,6 +1144,8 @@ public sealed class AppDbContext(
             entity.Property(x => x.WithholdingRate).HasMaxLength(20);
             entity.Property(x => x.AllRiskInsuranceRate).HasPrecision(8, 4);
             entity.Property(x => x.BarterRate).HasPrecision(8, 4);
+            entity.Property(x => x.ContractType).HasConversion<int>();
+            entity.Property(x => x.DeviationAlertThresholdRate).HasPrecision(8, 4);
             entity.Property(x => x.City).HasMaxLength(100);
             entity.Property(x => x.District).HasMaxLength(100);
             entity.Property(x => x.HealthReason).HasMaxLength(500);
@@ -2227,6 +2229,7 @@ public sealed class AppDbContext(
 
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Code).HasMaxLength(50);
+            entity.Property(x => x.ContractType).HasConversion<int>();
 
             entity.HasIndex(x => new { x.ProjectId, x.Order });
 
@@ -2470,6 +2473,13 @@ public sealed class AppDbContext(
             entity.HasIndex(x => new { x.CompanyId, x.BoqNumber, x.RevisionNumber }).IsUnique();
             entity.HasIndex(x => new { x.ProjectId, x.IsCurrentRevision });
 
+            // Proje başına tek sözleşme metrajı. Soft-delete nedeniyle
+            // filtre silinmemişlerle sınırlı; silinen bir baseline
+            // yenisinin kurulmasını engellememeli.
+            entity.HasIndex(x => x.ProjectId)
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false AND \"IsContractBaseline\" = true");
+
             entity.Property(x => x.BoqNumber).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(300).IsRequired();
             entity.Property(x => x.Status).HasConversion<int>();
@@ -2506,6 +2516,15 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.ProjectBoqId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<EngineeringPosition>().WithMany()
                 .HasForeignKey(x => x.EngineeringPositionId).OnDelete(DeleteBehavior.Restrict);
+
+            // Bölüm silinse de keşif kalemi kalır, bağı kopar.
+            entity.HasOne(x => x.ProjectHakedisSection).WithMany()
+                .HasForeignKey(x => x.ProjectHakedisSectionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.InventoryItem).WithMany()
+                .HasForeignKey(x => x.InventoryItemId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

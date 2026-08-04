@@ -7,6 +7,34 @@ namespace EnderunAI.Api.Models;
 /// (Active=2, Completed=4, Cancelled=5) — canlıda tek kullanılan değer
 /// Active(2) olduğundan veri migrasyonu gerekmedi.
 /// </summary>
+/// <summary>
+/// Sözleşme tipi. Keşif ile gerçekleşen arasındaki sapmanın anlamı
+/// tamamen buna bağlıdır.
+/// </summary>
+public enum ProjectContractType
+{
+    /// <summary>Henüz seçilmedi — sapma yorumlanmaz.</summary>
+    Undetermined = 0,
+
+    /// <summary>
+    /// Anahtar teslim (götürü): bedel sabittir. Keşif üstü gerçekleşme
+    /// ek gelir getirmez, doğrudan kâr erozyonudur.
+    /// </summary>
+    LumpSum = 1,
+
+    /// <summary>
+    /// Birim fiyatlı: yapılan iş kadar ödenir. Keşif üstü gerçekleşme
+    /// ilave hakediş fırsatıdır.
+    /// </summary>
+    UnitPrice = 2,
+
+    /// <summary>
+    /// Karma: bölümlerin bir kısmı götürü, bir kısmı birim fiyatlı.
+    /// Tip bölüm bazında belirlenir.
+    /// </summary>
+    Mixed = 3
+}
+
 public enum ProjectStatus
 {
     Kesif = 0,
@@ -71,6 +99,24 @@ public sealed class Project : BaseEntity
     /// Örnek: yüzde 10 için 10.00.
     /// </summary>
     public decimal MaterialDeductionRate { get; set; }
+
+    /// <summary>
+    /// Sözleşme tipi. Keşif–gerçekleşen sapmasının nasıl yorumlanacağını
+    /// belirler: birim fiyatlı işte keşif üstü gerçekleşme ilave hakediş
+    /// fırsatıdır, anahtar teslimde aynı sapma doğrudan kâr erozyonudur.
+    ///
+    /// Mevcut projeler <see cref="ProjectContractType.Undetermined"/>
+    /// olarak açılır; tip seçilene kadar sapma yorumlanmaz — yanlış
+    /// varsayım yanlış renk ve yanlış alarm üretirdi.
+    /// </summary>
+    public ProjectContractType ContractType { get; set; }
+        = ProjectContractType.Undetermined;
+
+    /// <summary>
+    /// Anahtar teslimde toplam sapmanın kâr erozyon alarmı üreteceği
+    /// eşik (%). Birim fiyatlı projede kullanılmaz.
+    /// </summary>
+    public decimal DeviationAlertThresholdRate { get; set; } = 5m;
 
     /// <summary>All-risk inşaat sigortası kesinti oranı (%). Yaygın: 0,5.</summary>
     public decimal AllRiskInsuranceRate { get; set; }

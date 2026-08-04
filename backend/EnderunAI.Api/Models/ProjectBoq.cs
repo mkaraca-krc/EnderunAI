@@ -34,6 +34,14 @@ public sealed class ProjectBoq : BaseEntity
     public DateTime? ApprovedAtUtc { get; set; }
     public Guid? ApprovedByUserId { get; set; }
 
+    /// <summary>
+    /// Bu keşif projenin SÖZLEŞME METRAJI mı — keşif–gerçekleşen
+    /// karşılaştırmasının referansı. Proje başına yalnızca bir keşif
+    /// baseline olabilir; revizyonlar keşif kaydının kendi
+    /// versiyonlamasıyla yürür.
+    /// </summary>
+    public bool IsContractBaseline { get; set; }
+
     public string? Description { get; set; }
     public string? Notes { get; set; }
 
@@ -46,6 +54,22 @@ public sealed class ProjectBoqItem : BaseEntity
     public ProjectBoq ProjectBoq { get; set; } = null!;
 
     public Guid? EngineeringPositionId { get; set; }
+
+    /// <summary>
+    /// Kalemin ait olduğu imalat bölümü (hakedişteki 12 bölümün
+    /// aynısı). Karma sözleşmede sapmanın hangi tiple yorumlanacağı
+    /// buradan belirlenir.
+    /// </summary>
+    public Guid? ProjectHakedisSectionId { get; set; }
+    public ProjectHakedisSection? ProjectHakedisSection { get; set; }
+
+    /// <summary>
+    /// Kalemin karşılığı olan stok kalemi. Eşlenmişse fiili sarf
+    /// (StockMovement, Issue) ayrı bir gösterge olarak takip ekranında
+    /// çıkar — hakedişe girmemiş sarf buradan görünür.
+    /// </summary>
+    public Guid? InventoryItemId { get; set; }
+    public InventoryItem? InventoryItem { get; set; }
 
     public int LineNumber { get; set; }
     public string PositionCode { get; set; } = string.Empty;
