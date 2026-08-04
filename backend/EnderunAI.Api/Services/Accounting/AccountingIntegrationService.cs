@@ -316,6 +316,18 @@ public sealed class AccountingIntegrationService(
             throw new InvalidOperationException(
                 "Hakediş tutarı sıfır; muhasebe fişi oluşturulamaz.");
 
+        // Kesintiler hakedişi aşarsa alacak negatife düşer. Negatif borç
+        // satırı fişi bozar; kullanıcı sebebi anlamadan 500 alırdı.
+        if (receivable < 0m)
+        {
+            throw new InvalidOperationException(
+                $"Kesintiler ve stopaj toplamı ({totalDeduction + incomeTaxWithholding:N2}) " +
+                $"hakediş tutarını ({taxableAmount + progressPayment.VatAmount:N2}) aşıyor; " +
+                $"tahsil edilecek tutar negatif ({receivable:N2}). Bu hakediş " +
+                "kesinleştirilemez — kesintileri gözden geçirin veya fazlasını " +
+                "sonraki hakedişe bırakın.");
+        }
+
         // Stopaj da alacaktan düşen bir kalemdir; denge kontrolüne
         // girmezse fiş tutarsız görünürdü.
         if (decimal.Round(receivable + totalDeduction + incomeTaxWithholding, 2) !=

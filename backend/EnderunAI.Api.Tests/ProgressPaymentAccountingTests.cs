@@ -396,6 +396,43 @@ public sealed class ProgressPaymentAccountingTests(DatabaseFixture fixture)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    /// <summary>
+    /// Kesintiler hakedişi aşarsa alacak negatife düşer ve fiş bozulur.
+    /// Kullanıcı anlaşılmaz bir hata yerine sebebi görmeli.
+    /// </summary>
+    [Fact]
+    public async Task Post_WhenDeductionsExceedAmount_IsRejectedWithClearMessage()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, projectId) = await CreateRevenueContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        // 100.000 + 20.000 KDV = 120.000; kesinti 150.000 → negatif net
+        var id = await CreateApprovedAsync(client,
+            BuildPayload(companyId, projectId, quantity: 100m, unitPrice: 1_000m,
+                deductions: [
+                    new
+                    {
+                        deductionType = 0,
+                        description = "Aşırı kesinti",
+                        rate = 0m,
+                        baseAmount = 0m,
+                        manualAmount = (decimal?)150_000m,
+                        notes = (string?)null,
+                        accountingAccountId = (Guid?)null
+                    }
+                ]));
+
+        var response = await client.PostAsync($"/api/progress-payments/{id}/post", null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var message = payload.GetProperty("message").GetString();
+
+        Assert.Contains("negatif", message);
+    }
+
     [Fact]
     public async Task Post_WithoutEmployerOnProject_IsRejectedWithClearMessage()
     {
