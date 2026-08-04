@@ -15,7 +15,8 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/progress-payments")]
 public sealed class ProgressPaymentsController(
     AppDbContext db,
-    IAccountingIntegrationService accountingIntegration)
+    IAccountingIntegrationService accountingIntegration,
+    IChequeService chequeService)
     : ControllerBase
 {
     [HttpGet]
@@ -275,6 +276,11 @@ public sealed class ProgressPaymentsController(
         ApplyDeductions(entity, request.Deductions, previousDeductions);
         CalculateHeader(entity, previousPayments);
 
+        // Ödeme dağılımı net tutar hesaplandıktan SONRA kurulur.
+        var planError = ApplyPaymentPlans(entity, request.PaymentPlans);
+        if (planError is not null)
+            return BadRequest(new { message = planError });
+
         db.ProgressPayments.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -417,6 +423,10 @@ public sealed class ProgressPaymentsController(
         ApplyDeductions(entity, request.Deductions, previousDeductions);
         CalculateHeader(entity, previousPayments);
 
+        var planError = ApplyPaymentPlans(entity, request.PaymentPlans);
+        if (planError is not null)
+            return BadRequest(new { message = planError });
+
         await db.SaveChangesAsync(cancellationToken);
 
         await SyncBarterLedgerAsync(entity, cancellationToken);
@@ -492,6 +502,7 @@ public sealed class ProgressPaymentsController(
         CancellationToken cancellationToken)
     {
         var entity = await db.ProgressPayments
+            .Include(x => x.PaymentPlans)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (entity is null)
@@ -503,6 +514,23 @@ public sealed class ProgressPaymentsController(
             {
                 message = $"Bu işlem mevcut durumda yapılamaz. Durum: {entity.Status}"
             });
+        }
+
+        // Ödeme dağılımı tanımlıysa toplamı net tutarı tutmalı; aksi
+        // halde tahsilat takibi eksik kurulur.
+        if (entity.PaymentPlans.Count > 0)
+        {
+            var planTotal = decimal.Round(entity.PaymentPlans.Sum(x => x.Amount), 2);
+
+            if (planTotal != decimal.Round(entity.NetPayableAmount, 2))
+            {
+                return Conflict(new
+                {
+                    message = $"Ödeme dağılımı toplamı ({planTotal:N2}) tahsil " +
+                              $"edilecek tutarı ({entity.NetPayableAmount:N2}) tutmuyor. " +
+                              "Hakedişi düzenleyip dağılımı yenileyin."
+                });
+            }
         }
 
         await using var transaction = await db.Database
@@ -519,6 +547,11 @@ public sealed class ProgressPaymentsController(
             entity.AccountingVoucherId = voucherId;
 
             await db.SaveChangesAsync(cancellationToken);
+
+            // Vadeli çekler kesinleştirmede açılır; taslak hakediş çek
+            // defterini kirletmemeli.
+            await CreateChequesForPaymentPlanAsync(entity, cancellationToken);
+
             await transaction.CommitAsync(cancellationToken);
         }
         catch (InvalidOperationException exception)
@@ -974,6 +1007,107 @@ public sealed class ProgressPaymentsController(
     }
 
     /// <summary>
+    /// Ödeme dağılımını kurar. Tutarlar tahsil edilecek net üzerinden
+    /// bölünür; yuvarlama farkı son parçaya yazılır ki parçaların
+    /// toplamı hakedişten kuruş kadar bile sapmasın.
+    /// </summary>
+    /// <returns>Hata mesajı; geçerliyse null.</returns>
+    private static string? ApplyPaymentPlans(
+        ProgressPayment entity,
+        IEnumerable<ProgressPaymentPaymentPlanRequest>? requests)
+    {
+        var parts = (requests ?? [])
+            .Select(x => new HakedisCalculationService.PaymentPlanInput(
+                x.PaymentType, x.Rate, x.MaturityDays, x.Description?.Trim()))
+            .ToList();
+
+        var error = HakedisCalculationService.ValidatePaymentPlan(parts);
+        if (error is not null)
+            return error;
+
+        var results = HakedisCalculationService.CalculatePaymentPlan(
+            entity.NetPayableAmount, entity.ProgressPaymentDate, parts);
+
+        var lineNumber = 1;
+
+        foreach (var result in results)
+        {
+            entity.PaymentPlans.Add(new ProgressPaymentPaymentPlan
+            {
+                LineNumber = lineNumber++,
+                PaymentType = (ProgressPaymentPaymentType)result.PaymentType,
+                Rate = result.Rate,
+                Amount = result.Amount,
+                MaturityDays = result.MaturityDays,
+                DueDate = result.DueDate is DateTime due
+                    ? DateTime.SpecifyKind(due, DateTimeKind.Utc)
+                    : null,
+                Description = result.Description
+            });
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Kesinleştirmede vadeli çek parçaları için çek defterine alınan
+    /// çek kaydı açar. Çekler ProgressPaymentId ile hakedişe bağlanır ve
+    /// vadeleri nakit akışına kendiliğinden düşer.
+    /// </summary>
+    private async Task CreateChequesForPaymentPlanAsync(
+        ProgressPayment entity, CancellationToken cancellationToken)
+    {
+        var chequeParts = entity.PaymentPlans
+            .Where(x => x.PaymentType == ProgressPaymentPaymentType.Cheque &&
+                        x.ChequeId is null &&
+                        x.Amount > 0m)
+            .OrderBy(x => x.LineNumber)
+            .ToList();
+
+        if (chequeParts.Count == 0)
+            return;
+
+        var project = await db.Projects
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == entity.ProjectId, cancellationToken);
+
+        foreach (var part in chequeParts)
+        {
+            var dueDate = part.DueDate
+                ?? entity.ProgressPaymentDate.AddDays(part.MaturityDays ?? 0);
+
+            var cheque = await chequeService.CreateAsync(
+                new Contracts.Accounting.CreateChequeRequest(
+                    CompanyId: entity.CompanyId,
+                    Direction: (int)ChequeDirection.Received,
+                    // Çek numarası fiziksel çek elde edilince güncellenir;
+                    // şimdilik hakediş numarasından türetilir.
+                    ChequeNumber:
+                        $"{entity.ProgressPaymentNumber}-{part.LineNumber}",
+                    BankName: "Belirlenecek",
+                    BankBranch: null,
+                    Drawer: null,
+                    CurrentAccountId: project.EmployerCurrentAccountId,
+                    ProjectId: entity.ProjectId,
+                    Amount: part.Amount,
+                    CurrencyCode: entity.CurrencyCode,
+                    IssueDate: entity.ProgressPaymentDate,
+                    DueDate: DateTime.SpecifyKind(dueDate.Date, DateTimeKind.Utc),
+                    ProgressPaymentId: entity.Id,
+                    SupplierInvoiceId: null,
+                    Description:
+                        $"{entity.ProgressPaymentNumber} hakediş tahsilatı " +
+                        $"({part.MaturityDays} gün vadeli)"),
+                cancellationToken);
+
+            part.ChequeId = cheque.Id;
+            part.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Hakedişteki barter kesintisini barter defterine yansıtır.
     ///
     /// Barter, hakedişin mal/hizmet olarak ödenecek kısmıdır: kesinti
@@ -1203,6 +1337,21 @@ public sealed class ProgressPaymentsController(
                         i.CompletionRate,
                         i.MeasurementReference,
                         i.Notes
+                    }),
+                PaymentPlans = x.PaymentPlans
+                    .OrderBy(p => p.LineNumber)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.LineNumber,
+                        PaymentType = (int)p.PaymentType,
+                        p.Rate,
+                        p.Amount,
+                        p.MaturityDays,
+                        p.DueDate,
+                        p.ChequeId,
+                        ChequeNumber = p.Cheque != null ? p.Cheque.InternalNumber : null,
+                        p.Description
                     }),
                 AdvanceMaterials = x.AdvanceMaterials
                     .OrderBy(a => a.LineNumber)

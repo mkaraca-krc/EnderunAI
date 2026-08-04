@@ -20,6 +20,17 @@ public sealed record ProgressPaymentItemRequest(
     Guid? SectionId = null
 );
 
+/// <summary>
+/// Ödeme dağılım parçası. NATURA'da üç parça: nakit, 90 gün çek,
+/// 120 gün çek. Oranlar toplamı %100 olmalıdır.
+/// </summary>
+public sealed record ProgressPaymentPaymentPlanRequest(
+    int PaymentType,
+    decimal Rate,
+    int? MaturityDays,
+    string? Description
+);
+
 /// <summary>Bu hakedişte açılan ihzarat kalemi.</summary>
 public sealed record ProgressPaymentAdvanceMaterialRequest(
     string PositionCode,
@@ -91,7 +102,8 @@ public sealed record CreateProgressPaymentRequest(
     IReadOnlyCollection<ProgressPaymentDeductionRequest> Deductions,
     IReadOnlyCollection<ProgressPaymentAdvanceMaterialRequest>? AdvanceMaterials = null,
     IReadOnlyCollection<ProgressPaymentAdvanceOffsetRequest>? AdvanceOffsets = null,
-    decimal IncomeTaxWithholdingRate = 0m
+    decimal IncomeTaxWithholdingRate = 0m,
+    IReadOnlyCollection<ProgressPaymentPaymentPlanRequest>? PaymentPlans = null
 );
 
 public sealed record UpdateProgressPaymentRequest(
@@ -108,7 +120,8 @@ public sealed record UpdateProgressPaymentRequest(
     IReadOnlyCollection<ProgressPaymentDeductionRequest> Deductions,
     IReadOnlyCollection<ProgressPaymentAdvanceMaterialRequest>? AdvanceMaterials = null,
     IReadOnlyCollection<ProgressPaymentAdvanceOffsetRequest>? AdvanceOffsets = null,
-    decimal IncomeTaxWithholdingRate = 0m
+    decimal IncomeTaxWithholdingRate = 0m,
+    IReadOnlyCollection<ProgressPaymentPaymentPlanRequest>? PaymentPlans = null
 );
 
 public sealed record CancelProgressPaymentRequest(string? Reason);

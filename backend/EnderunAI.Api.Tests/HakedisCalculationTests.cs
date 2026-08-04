@@ -1,3 +1,4 @@
+using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.Hakedis;
 using Xunit;
 
@@ -531,6 +532,110 @@ public sealed class HakedisCalculationTests
                 PreviousAmount: 0m));
 
         Assert.Equal(400_000.00m, result.Amount);
+    }
+
+    // ---------- Ödeme dağılımı ----------
+
+    private static readonly DateTime PaymentDate =
+        new(2026, 3, 31, 0, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>
+    /// NATURA dağılımı: %40 nakit, %30 doksan gün çek, %30 yüz yirmi gün
+    /// çek. Vadeler hakediş tarihinden sayılır.
+    /// </summary>
+    [Fact]
+    public void PaymentPlan_SplitsNetAndComputesDueDates()
+    {
+        var result = HakedisCalculationService.CalculatePaymentPlan(
+            netPayableAmount: 500_000m,
+            progressPaymentDate: PaymentDate,
+            parts:
+            [
+                new((int)ProgressPaymentPaymentType.Cash, 40m, null, "Nakit"),
+                new((int)ProgressPaymentPaymentType.Cheque, 30m, 90, "90 gün"),
+                new((int)ProgressPaymentPaymentType.Cheque, 30m, 120, "120 gün")
+            ]);
+
+        Assert.Equal(200_000.00m, result[0].Amount);
+        Assert.Null(result[0].DueDate);
+
+        Assert.Equal(150_000.00m, result[1].Amount);
+        Assert.Equal(new DateTime(2026, 6, 29), result[1].DueDate);
+
+        Assert.Equal(150_000.00m, result[2].Amount);
+        Assert.Equal(new DateTime(2026, 7, 29), result[2].DueDate);
+    }
+
+    /// <summary>
+    /// Yuvarlama farkı son parçaya yazılır; parçaların toplamı tahsil
+    /// edilecek tutardan kuruş bile sapmamalı, yoksa çeklerin toplamı
+    /// hakedişi tutmazdı.
+    /// </summary>
+    [Theory]
+    [InlineData(100_000.01)]
+    [InlineData(333_333.33)]
+    [InlineData(7.77)]
+    public void PaymentPlan_RoundingDifferenceGoesToLastPart(decimal net)
+    {
+        var result = HakedisCalculationService.CalculatePaymentPlan(
+            net, PaymentDate,
+            [
+                new((int)ProgressPaymentPaymentType.Cash, 33.33m, null, null),
+                new((int)ProgressPaymentPaymentType.Cheque, 33.33m, 90, null),
+                new((int)ProgressPaymentPaymentType.Cheque, 33.34m, 120, null)
+            ]);
+
+        Assert.Equal(net, result.Sum(x => x.Amount));
+    }
+
+    /// <summary>Oranlar %100 etmiyorsa dağılım reddedilir.</summary>
+    [Theory]
+    [InlineData(40, 30, 20)]
+    [InlineData(50, 30, 30)]
+    public void PaymentPlan_RejectsRatesNotSummingToHundred(
+        decimal first, decimal second, decimal third)
+    {
+        var error = HakedisCalculationService.ValidatePaymentPlan(
+        [
+            new((int)ProgressPaymentPaymentType.Cash, first, null, null),
+            new((int)ProgressPaymentPaymentType.Cheque, second, 90, null),
+            new((int)ProgressPaymentPaymentType.Cheque, third, 120, null)
+        ]);
+
+        Assert.NotNull(error);
+        Assert.Contains("%100", error);
+    }
+
+    [Fact]
+    public void PaymentPlan_AcceptsRatesSummingToHundred()
+    {
+        Assert.Null(HakedisCalculationService.ValidatePaymentPlan(
+        [
+            new((int)ProgressPaymentPaymentType.Cash, 40m, null, null),
+            new((int)ProgressPaymentPaymentType.Cheque, 30m, 90, null),
+            new((int)ProgressPaymentPaymentType.Cheque, 30m, 120, null)
+        ]));
+    }
+
+    /// <summary>Vadesiz çek parçası kabul edilmez.</summary>
+    [Fact]
+    public void PaymentPlan_RejectsChequeWithoutMaturity()
+    {
+        var error = HakedisCalculationService.ValidatePaymentPlan(
+        [
+            new((int)ProgressPaymentPaymentType.Cash, 50m, null, null),
+            new((int)ProgressPaymentPaymentType.Cheque, 50m, null, null)
+        ]);
+
+        Assert.NotNull(error);
+        Assert.Contains("vade", error);
+    }
+
+    /// <summary>Dağılım tanımlanmamışsa kural işletilmez.</summary>
+    [Fact]
+    public void PaymentPlan_EmptyIsAllowed()
+    {
+        Assert.Null(HakedisCalculationService.ValidatePaymentPlan([]));
     }
 
     /// <summary>

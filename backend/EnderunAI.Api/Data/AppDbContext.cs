@@ -80,6 +80,9 @@ public sealed class AppDbContext(
 
     public DbSet<BarterLedgerEntry> BarterLedgerEntries =>
         Set<BarterLedgerEntry>();
+
+    public DbSet<ProgressPaymentPaymentPlan> ProgressPaymentPaymentPlans =>
+        Set<ProgressPaymentPaymentPlan>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
@@ -2056,6 +2059,30 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.AccountingVoucherId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProgressPaymentPaymentPlan>(entity =>
+        {
+            entity.ToTable("progress_payment_payment_plans");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.PaymentType).HasConversion<int>();
+            entity.Property(x => x.Rate).HasPrecision(8, 4);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Description).HasMaxLength(500);
+
+            entity.HasIndex(x => new { x.ProgressPaymentId, x.LineNumber }).IsUnique();
+
+            entity.HasOne(x => x.ProgressPayment).WithMany(x => x.PaymentPlans)
+                .HasForeignKey(x => x.ProgressPaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Çek silinirse plan satırı kalsın, bağı kopsun.
+            entity.HasOne(x => x.Cheque).WithMany()
+                .HasForeignKey(x => x.ChequeId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

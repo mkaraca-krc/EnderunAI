@@ -1,3 +1,5 @@
+using EnderunAI.Api.Models;
+
 namespace EnderunAI.Api.Services.Hakedis;
 
 /// <summary>
@@ -489,6 +491,101 @@ public static class HakedisCalculationService
     public static decimal CalculateBarterBalance(
         decimal cumulativeDeducted, decimal totalReceived) =>
         Math.Max(0m, Round(cumulativeDeducted) - Round(totalReceived));
+
+    // ---------- Ödeme dağılımı ----------
+
+    public sealed record PaymentPlanInput(
+        int PaymentType,
+        decimal Rate,
+        int? MaturityDays,
+        string? Description);
+
+    public sealed record PaymentPlanResult(
+        int PaymentType,
+        decimal Rate,
+        decimal Amount,
+        int? MaturityDays,
+        DateTime? DueDate,
+        string? Description);
+
+    /// <summary>
+    /// Tahsil edilecek tutarı ödeme parçalarına böler.
+    ///
+    /// Yuvarlama farkı SON parçaya yazılır; aksi halde parçaların
+    /// toplamı tahsil edilecek tutarı kuruş kadar tutmayabilir ve
+    /// çeklerin toplamı hakedişten sapardı.
+    /// </summary>
+    public static IReadOnlyList<PaymentPlanResult> CalculatePaymentPlan(
+        decimal netPayableAmount,
+        DateTime progressPaymentDate,
+        IReadOnlyList<PaymentPlanInput> parts)
+    {
+        var results = new List<PaymentPlanResult>();
+
+        if (parts.Count == 0)
+            return results;
+
+        var net = Round(netPayableAmount);
+        var allocated = 0m;
+
+        for (var index = 0; index < parts.Count; index++)
+        {
+            var part = parts[index];
+            var isLast = index == parts.Count - 1;
+
+            var amount = isLast
+                ? Round(net - allocated)
+                : Round(net * part.Rate / 100m);
+
+            allocated += amount;
+
+            DateTime? dueDate = part.MaturityDays is int days && days > 0
+                ? progressPaymentDate.Date.AddDays(days)
+                : null;
+
+            results.Add(new PaymentPlanResult(
+                PaymentType: part.PaymentType,
+                Rate: part.Rate,
+                Amount: amount,
+                MaturityDays: part.MaturityDays,
+                DueDate: dueDate,
+                Description: part.Description));
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Ödeme dağılımının geçerliliği. Oranlar toplamı %100 olmalı;
+    /// aksi halde hakedişin bir kısmı hiçbir ödeme aracına bağlanmamış
+    /// olur ve tahsilat takibi kopar.
+    /// </summary>
+    /// <returns>Hata mesajı; geçerliyse null.</returns>
+    public static string? ValidatePaymentPlan(IReadOnlyList<PaymentPlanInput> parts)
+    {
+        if (parts.Count == 0)
+            return null;
+
+        if (parts.Any(x => x.Rate < 0m))
+            return "Ödeme dağılım oranı negatif olamaz.";
+
+        var total = Round(parts.Sum(x => x.Rate));
+
+        if (total != 100m)
+        {
+            return $"Ödeme dağılım oranlarının toplamı %100 olmalıdır " +
+                   $"(şu an %{total:N2}).";
+        }
+
+        var chequeWithoutMaturity = parts.Any(x =>
+            x.PaymentType == (int)ProgressPaymentPaymentType.Cheque &&
+            (x.MaturityDays is null || x.MaturityDays <= 0));
+
+        if (chequeWithoutMaturity)
+            return "Vadeli çek parçasında vade gün sayısı zorunludur.";
+
+        return null;
+    }
 
     internal static decimal Round(decimal value) =>
         decimal.Round(value, 2, MidpointRounding.AwayFromZero);
