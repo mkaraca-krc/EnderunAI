@@ -160,6 +160,53 @@ export default function ProgressPaymentDetailPage() {
     void load();
   }, [id]);
 
+  /**
+   * NATURA formatındaki Excel çıktısı — üzerinde çalışılabilir hâli.
+   * Yazdırma sayfası PDF'i verir, bu dosya hesabı verir.
+   */
+  async function downloadExcel() {
+
+    if (!item) {
+      return;
+    }
+
+    try {
+
+      const response = await fetch(
+        `/api/backend/hakedis-export/${item.id}/excel`,
+        { credentials: "include" }
+      );
+
+      if (!response.ok) {
+        throw new Error("Excel oluşturulamadı.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `Hakedis-${item.progressPaymentNumber}.xlsx`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(objectUrl);
+
+    } catch (err) {
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Excel indirilemedi."
+      );
+
+    }
+
+  }
+
+
   async function downloadPdf() {
 
     if (!item) {
@@ -431,6 +478,19 @@ export default function ProgressPaymentDetailPage() {
     >
       <div className="erp-toolbar">
         <div className="erp-actions">
+          {/* NATURA formatında, logo antetli çıktı; PDF tarayıcının
+              yazdırma penceresinden alınır. */}
+          <Link href={`/hakedis/${item.id}/yazdir`}>
+            NATURA Çıktısı
+          </Link>
+
+          <button
+            type="button"
+            onClick={() => void downloadExcel()}
+          >
+            Excel İndir
+          </button>
+
           <button
             type="button"
             onClick={() => void downloadPdf()}

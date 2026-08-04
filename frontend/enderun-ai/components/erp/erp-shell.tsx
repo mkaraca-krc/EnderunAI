@@ -194,6 +194,11 @@ const groups: MenuGroup[] = [
         icon: "○",
       },
       {
+        label: "Hakediş Takip",
+        href: "/hakedis/takip",
+        icon: "≡",
+      },
+      {
         label: "Fiyat Farkı",
         href: "/fiyat-farki",
         icon: "∆",
