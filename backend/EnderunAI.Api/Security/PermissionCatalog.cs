@@ -186,6 +186,28 @@ public static class PermissionCatalog
 
         // Audit Log
         public const string AuditLogView = "audit-log.view";
+
+        // İş Sağlığı ve Güvenliği
+        public const string IsgView = "isg.view";
+        public const string IsgCreate = "isg.create";
+        public const string IsgEdit = "isg.edit";
+        public const string IsgDelete = "isg.delete";
+
+        /// <summary>
+        /// Sağlık raporunun TIBBİ DETAYI (teşhis, kısıtlama notu, rapor
+        /// dosyası). Rapor tarihi ve geçerlilik bitişi bu izin olmadan da
+        /// görünür — süre takibi bunsuz çalışmaz. Dar kapı: İSG
+        /// sorumlusu ve Genel Müdür dışında verilmemeli.
+        /// </summary>
+        public const string IsgHealthView = "isg.health.view";
+
+        /// <summary>
+        /// Kaza/ramak kala kayıt defteri. isg.view'dan ayrı tutuluyor:
+        /// sahada İSG kaydı girebilen herkesin kaza defterini görmesi
+        /// gerekmiyor.
+        /// </summary>
+        public const string IsgIncidentView = "isg.incident.view";
+        public const string IsgIncidentManage = "isg.incident.manage";
     }
 
     public static readonly IReadOnlyList<PermissionDefinition> Permissions =
@@ -328,7 +350,15 @@ public static class PermissionCatalog
         new(Keys.CompanySettingsView, "Şirket Ayarları", "Görüntüleme", "Şirket kurumsal bilgilerini görüntüler."),
         new(Keys.CompanySettingsEdit, "Şirket Ayarları", "Düzenleme", "Şirket kurumsal bilgilerini (unvan, vergi, IBAN, logo) günceller."),
 
-        new(Keys.AuditLogView, "Audit Log", "Görüntüleme", "Sistem denetim kayıtlarını (kim ne yaptı) görüntüler.")
+        new(Keys.AuditLogView, "Audit Log", "Görüntüleme", "Sistem denetim kayıtlarını (kim ne yaptı) görüntüler."),
+
+        new(Keys.IsgView, "İSG", "Görüntüleme", "OSGB sözleşmesi, sağlık raporu, eğitim, sertifika ve saha İSG belgelerini görüntüler."),
+        new(Keys.IsgCreate, "İSG", "Kayıt oluşturma", "Yeni İSG kaydı (rapor, eğitim, sertifika, belge) oluşturur."),
+        new(Keys.IsgEdit, "İSG", "Düzenleme", "Mevcut İSG kaydını günceller."),
+        new(Keys.IsgDelete, "İSG", "Silme", "İSG kaydını siler."),
+        new(Keys.IsgHealthView, "İSG", "Sağlık raporu detayı", "Sağlık raporunun tıbbi detayını (teşhis, kısıtlama, rapor dosyası) görür. Rapor tarihi ve geçerliliği bu izin olmadan da görünür."),
+        new(Keys.IsgIncidentView, "İSG", "Kaza kayıtlarını görüntüleme", "Kaza ve ramak kala kayıt defterini görüntüler."),
+        new(Keys.IsgIncidentManage, "İSG", "Kaza kaydı yönetimi", "Kaza ve ramak kala kaydı oluşturur, günceller ve SGK bildirimini işler.")
     ];
 
     public static bool IsKnownPermission(string permission) =>

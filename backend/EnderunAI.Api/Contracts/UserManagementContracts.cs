@@ -35,6 +35,12 @@ public sealed class CreateManagedUserRequest
 
     /// <summary>true ise rol bazlı mesai penceresi bu kullanıcı için hiç uygulanmaz.</summary>
     public bool WorkHoursExempt { get; set; } = false;
+
+    /// <summary>
+    /// Bu kullanıcının kendi personel kartı. Self-servis ekranlarının
+    /// ("benim İSG belgelerim") dayanağı. Boş bırakılabilir.
+    /// </summary>
+    public Guid? PersonnelId { get; set; }
 }
 
 public sealed class UpdateManagedUserRequest
@@ -60,6 +66,12 @@ public sealed class UpdateManagedUserRequest
     public string[] DeniedPermissions { get; set; } = [];
     public Guid[] ProjectSiteIds { get; set; } = [];
     public bool WorkHoursExempt { get; set; } = false;
+
+    /// <summary>
+    /// Bu kullanıcının kendi personel kartı. Self-servis ekranlarının
+    /// ("benim İSG belgelerim") dayanağı. Boş bırakılabilir.
+    /// </summary>
+    public Guid? PersonnelId { get; set; }
 }
 
 public sealed class ResetManagedUserPasswordRequest

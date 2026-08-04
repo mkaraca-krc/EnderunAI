@@ -51,6 +51,13 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
     return "attendance.view";
   }
   if (pathname.startsWith("/insan-kaynaklari")) return "personnel.view";
+  // Kaza defteri kendi dar izniyle korunur; İSG kaydı girebilen herkese
+  // görünmez.
+  if (pathname.startsWith("/isg/kazalar")) return "isg.incident.view";
+  // Personelin kendi belgeleri: izin gerekmez, uç zaten yalnız kendi
+  // kaydını döndürür.
+  if (pathname.startsWith("/isg/benim")) return null;
+  if (pathname.startsWith("/isg")) return "isg.view";
   if (pathname.startsWith("/muhasebe")) return "accounting.view";
   if (pathname.startsWith("/finans")) return "finance.view";
   if (

@@ -74,6 +74,7 @@ public sealed class UserManagementController(
             .AsNoTracking()
             .Include(user => user.UserRoles)
             .ThenInclude(userRole => userRole.Role)
+            .Include(user => user.Personnel)
             .OrderByDescending(user => user.IsActive)
             .ThenBy(user => user.FullName)
             .ToListAsync(cancellationToken);
@@ -168,6 +169,12 @@ public sealed class UserManagementController(
         if (validation is not null)
             return BadRequest(new { message = validation });
 
+        var personnelLinkError = await ValidatePersonnelLinkAsync(
+            request.PersonnelId, null, cancellationToken);
+
+        if (personnelLinkError is not null)
+            return Conflict(new { message = personnelLinkError });
+
         var username = NormalizeUsername(request.Username);
         if (await db.Users.AnyAsync(
                 user => user.Username.ToLower() == username,
@@ -193,7 +200,8 @@ public sealed class UserManagementController(
             PasswordHash = password.Hash,
             PasswordSalt = password.Salt,
             IsActive = request.IsActive,
-            WorkHoursExempt = request.WorkHoursExempt
+            WorkHoursExempt = request.WorkHoursExempt,
+            PersonnelId = request.PersonnelId
         };
 
         db.Users.Add(user);
@@ -268,6 +276,12 @@ public sealed class UserManagementController(
             });
         }
 
+        var personnelLinkError = await ValidatePersonnelLinkAsync(
+            request.PersonnelId, id, cancellationToken);
+
+        if (personnelLinkError is not null)
+            return Conflict(new { message = personnelLinkError });
+
         var username = NormalizeUsername(request.Username);
         if (await db.Users.AnyAsync(
                 item => item.Id != id && item.Username.ToLower() == username,
@@ -282,6 +296,7 @@ public sealed class UserManagementController(
         user.Email = NormalizeOptional(request.Email);
         user.IsActive = request.IsActive;
         user.WorkHoursExempt = request.WorkHoursExempt;
+        user.PersonnelId = request.PersonnelId;
 
         await db.SaveChangesAsync(cancellationToken);
         await SyncUserRolesAsync(
@@ -360,6 +375,10 @@ public sealed class UserManagementController(
             user.CreatedAtUtc,
             user.LastLoginAtUtc,
             user.WorkHoursExempt,
+            user.PersonnelId,
+            personnelName = user.Personnel == null
+                ? null
+                : $"{user.Personnel.FirstName} {user.Personnel.LastName}".Trim(),
             roleNames,
             roleName = roleNames.FirstOrDefault() ?? "Rol tanımsız",
             projectSiteIds = siteAssignments.Select(x => (Guid)x.ProjectSiteId).ToArray(),
@@ -389,7 +408,39 @@ public sealed class UserManagementController(
             .AsNoTracking()
             .Include(user => user.UserRoles)
             .ThenInclude(userRole => userRole.Role)
+            .Include(user => user.Personnel)
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Personel bağını doğrular: personel var mı ve başka bir kullanıcıya
+    /// bağlı mı. Bağ tekil olmalı — aynı personel kartı iki kullanıcıya
+    /// bağlanırsa "kendi kaydım" ekranı iki kişiye açılırdı.
+    /// Hata varsa mesaj, yoksa null döner (dosyadaki doğrulama deseni).
+    /// </summary>
+    private async Task<string?> ValidatePersonnelLinkAsync(
+        Guid? personnelId,
+        Guid? currentUserId,
+        CancellationToken cancellationToken)
+    {
+        if (personnelId is not Guid id)
+            return null;
+
+        var exists = await db.Personnel
+            .AnyAsync(x => x.Id == id, cancellationToken);
+
+        if (!exists)
+            return "Seçilen personel kaydı bulunamadı.";
+
+        var takenBy = await db.Users
+            .Where(x => x.PersonnelId == id &&
+                        (currentUserId == null || x.Id != currentUserId))
+            .Select(x => x.Username)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return takenBy is null
+            ? null
+            : $"Bu personel kartı '{takenBy}' kullanıcısına bağlı. Önce o bağı kaldırın.";
     }
 
     private async Task<List<OverrideRow>> LoadOverridesAsync(

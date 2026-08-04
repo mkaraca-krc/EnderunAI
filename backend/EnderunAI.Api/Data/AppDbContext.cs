@@ -93,6 +93,10 @@ public sealed class AppDbContext(
     public DbSet<SalesInvoice> SalesInvoices => Set<SalesInvoice>();
 
     public DbSet<SalesInvoiceItem> SalesInvoiceItems => Set<SalesInvoiceItem>();
+
+    // İş sağlığı ve güvenliği
+    public DbSet<IsgOsgbContract> IsgOsgbContracts => Set<IsgOsgbContract>();
+    public DbSet<IsgOsgbExpert> IsgOsgbExperts => Set<IsgOsgbExpert>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
@@ -220,6 +224,55 @@ public sealed class AppDbContext(
         ConfigureSecurityAuditEvents(modelBuilder);
         ConfigureRbac(modelBuilder);
         ConfigureWorkHourAccess(modelBuilder);
+        ConfigureIsg(modelBuilder);
+    }
+
+    private static void ConfigureIsg(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<IsgOsgbContract>(entity =>
+        {
+            entity.ToTable("isg_osgb_contracts");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.ContractNumber })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+            entity.HasIndex(x => new { x.CompanyId, x.StartDate });
+
+            entity.Property(x => x.ContractNumber).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.BillingType).HasConversion<int>();
+            entity.Property(x => x.MonthlyFee).HasPrecision(18, 2);
+            entity.Property(x => x.PerPersonFee).HasPrecision(18, 2);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CurrentAccount).WithMany()
+                .HasForeignKey(x => x.CurrentAccountId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<IsgOsgbExpert>(entity =>
+        {
+            entity.ToTable("isg_osgb_contract_experts");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.IsgOsgbContractId);
+
+            entity.Property(x => x.ExpertType).HasConversion<int>();
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.CertificateNumber).HasMaxLength(60);
+            entity.Property(x => x.ExpertClass).HasMaxLength(5);
+            entity.Property(x => x.Phone).HasMaxLength(30);
+            entity.Property(x => x.Email).HasMaxLength(200);
+
+            entity.HasOne(x => x.IsgOsgbContract).WithMany(x => x.Experts)
+                .HasForeignKey(x => x.IsgOsgbContractId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
     }
 
     private static void ConfigureRbac(ModelBuilder modelBuilder)
@@ -343,6 +396,19 @@ public sealed class AppDbContext(
             entity.Property(x => x.Email).HasMaxLength(200);
             entity.Property(x => x.PasswordHash).IsRequired();
             entity.Property(x => x.PasswordSalt).IsRequired();
+
+            // Bir personel kartına en fazla bir kullanıcı bağlanabilir;
+            // aksi halde "kendi kaydım" iki kullanıcıya açılırdı. Filtre
+            // gerekli: bağı olmayan kullanıcılarda null tekrar eder.
+            entity.HasIndex(x => x.PersonnelId)
+                .IsUnique()
+                .HasFilter("\"PersonnelId\" IS NOT NULL");
+
+            // Personel silinirse kullanıcı silinmez, bağ kopar.
+            entity.HasOne(x => x.Personnel)
+                .WithMany()
+                .HasForeignKey(x => x.PersonnelId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<AppRole>(entity =>

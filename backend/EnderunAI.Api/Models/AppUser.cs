@@ -26,5 +26,17 @@ public sealed class AppUser
     /// </summary>
     public bool WorkHoursExempt { get; set; } = false;
 
+    /// <summary>
+    /// Bu kullanıcının kendi personel kaydı. Self-servis ekranlarının
+    /// dayanağı: "benim İSG belgelerim" gibi uçlar kimin verisini
+    /// döndüreceğini buradan bilir.
+    ///
+    /// Boş olabilir — her kullanıcı personel değildir (dış danışman,
+    /// sistem hesabı). Boşsa self-servis ekranları veri döndürmez;
+    /// asla "en yakın personeli" tahmin etmez.
+    /// </summary>
+    public Guid? PersonnelId { get; set; }
+    public Personnel? Personnel { get; set; }
+
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 }

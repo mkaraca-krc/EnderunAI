@@ -137,7 +137,25 @@ public static class RoleCatalog
             PermissionCatalog.Keys.AttendancePayrollView,
             PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.ProjectsManage, PermissionCatalog.Keys.HakedisManage,
-            PermissionCatalog.Keys.PersonnelManage, PermissionCatalog.Keys.AttendanceView, PermissionCatalog.Keys.PayrollView
+            PermissionCatalog.Keys.PersonnelManage, PermissionCatalog.Keys.AttendanceView, PermissionCatalog.Keys.PayrollView,
+            // Saha İSG kayıtları girebilir; sağlık raporunun tıbbi detayı
+            // ve kaza kayıt defteri kasıtlı olarak verilmedi.
+            PermissionCatalog.Keys.IsgView, PermissionCatalog.Keys.IsgCreate, PermissionCatalog.Keys.IsgEdit
+        ]),
+
+        new("İSG Sorumlusu",
+            "İSG tam yetki: OSGB sözleşmesi, sağlık raporu (tıbbi detay dahil), eğitim, sertifika, kaza kayıtları ve saha belgeleri.",
+        [
+            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
+            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.SitesView,
+            PermissionCatalog.Keys.PersonnelView,
+            PermissionCatalog.Keys.CurrentAccountsView,
+            PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate,
+            PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
+            PermissionCatalog.Keys.IsgView, PermissionCatalog.Keys.IsgCreate,
+            PermissionCatalog.Keys.IsgEdit, PermissionCatalog.Keys.IsgDelete,
+            PermissionCatalog.Keys.IsgHealthView,
+            PermissionCatalog.Keys.IsgIncidentView, PermissionCatalog.Keys.IsgIncidentManage
         ]),
 
         new("Şantiye Şefi", "Sadece atandığı şantiyeler: günlük rapor girme, şantiye personelini görüntüleme, sarf talebi.",
