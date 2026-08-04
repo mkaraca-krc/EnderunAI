@@ -128,6 +128,16 @@ const groups: MenuGroup[] = [
         icon: "○",
       },
       {
+        label: "Satış Faturaları",
+        href: "/muhasebe/satis-faturalari",
+        icon: "○",
+      },
+      {
+        label: "E-Fatura İçe Aktar",
+        href: "/muhasebe/e-fatura-ice-aktar",
+        icon: "○",
+      },
+      {
         label: "Muhasebe Fişleri",
         href: "/muhasebe/fisler",
         icon: "○",

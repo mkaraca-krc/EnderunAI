@@ -470,6 +470,14 @@ body {
   color: #992633;
 }
 
+/* Uyarı bandı: işlem durmuyor ama kullanıcı kontrol etmeli
+   (AI ile okunan fatura, eksik proje seçimi gibi). */
+.erp-alert.warning {
+  border: 1px solid #ecd9a6;
+  background: #fdf6e6;
+  color: #7a5a11;
+}
+
 .erp-form-card {
   margin-bottom: 18px;
   padding: 23px;
