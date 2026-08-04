@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -48,6 +48,18 @@ export default function EInvoiceImportPage() {
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Seçimi sıfırlar. Alanın kendi değeri de temizlenmeli: aynı dosya
+   * ikinci kez seçilirse tarayıcı "değişmedi" deyip onChange'i hiç
+   * tetiklemez ve seçim sessizce boş kalırdı.
+   */
+  const clearFiles = useCallback(() => {
+    setFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -188,7 +200,7 @@ export default function EInvoiceImportPage() {
       // aktarım yapılmasın.
       setPreview(null);
       setDecisions({});
-      setFiles([]);
+      clearFiles();
       await loadLookups();
     } catch (err) {
       setError(err instanceof Error ? err.message : "İçe aktarma başarısız.");
@@ -218,12 +230,49 @@ export default function EInvoiceImportPage() {
         </div>
 
         <div style={{ padding: "16px", display: "grid", gap: "12px" }}>
+          {/* Tarayıcının kendi dosya alanı gizli tutuluyor: görünümü
+              tarayıcıya göre değişiyor ve yanındaki ana butonla
+              karışıyordu. Seçimi açan tek ve net bir düğme var. */}
           <input
+            ref={fileInputRef}
             type="file"
             multiple
             accept=".xml,.zip"
+            style={{ display: "none" }}
             onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
           />
+
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="erp-secondary-button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Dosyaları Seç
+            </button>
+
+            <span>
+              {files.length === 0
+                ? "Henüz dosya seçilmedi."
+                : `${files.length} dosya seçildi`}
+            </span>
+
+            {files.length > 0 && (
+              <button type="button" className="erp-secondary-button" onClick={clearFiles}>
+                Seçimi Temizle
+              </button>
+            )}
+          </div>
+
+          {files.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: "18px" }}>
+              {files.map((file) => (
+                <li key={`${file.name}-${file.size}-${file.lastModified}`}>
+                  <small>{file.name}</small>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <small>
             Tek XML, birden çok XML veya ZIP arşivi yükleyebilirsiniz. Okunamayan
@@ -243,7 +292,7 @@ export default function EInvoiceImportPage() {
             {/* Buton pasifse sebebi yazsın; yoksa kullanıcı tıklamayı
                 deneyip bir arıza olduğunu düşünüyor. */}
             {files.length === 0 && !reading && (
-              <small>Önce yukarıdan en az bir XML veya ZIP dosyası seçin.</small>
+              <small>Okumak için önce dosya seçin.</small>
             )}
           </div>
         </div>
