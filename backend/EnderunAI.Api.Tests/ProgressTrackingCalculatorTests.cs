@@ -300,6 +300,71 @@ public sealed class ProgressTrackingCalculatorTests
             ProjectContractType.LumpSum, deviation, 10_000_000m, 5m));
     }
 
+    // ---------- İlave iş / ataşman ----------
+
+    /// <summary>
+    /// Anahtar teslimde ONAYLI ek iş erozyondan düşülür — tahsil
+    /// edilebilir olduğu için kâr kaybı değildir.
+    /// </summary>
+    [Fact]
+    public void ApprovedExtraWork_ReducesErosion()
+    {
+        var erosion = ProgressTrackingCalculator.CalculateNetErosion(
+            ProjectContractType.LumpSum,
+            netDeviationAmount: 900_000m,
+            collectibleExtraWorkAmount: 400_000m);
+
+        Assert.Equal(500_000.00m, erosion);
+    }
+
+    /// <summary>
+    /// ONAYSIZ ek iş düşülmez. Düşülseydi tahsil edilemeyecek bir tutar
+    /// kâr gibi görünür ve erozyon olduğundan küçük hesaplanırdı.
+    /// </summary>
+    [Fact]
+    public void PendingExtraWork_DoesNotReduceErosion()
+    {
+        var erosion = ProgressTrackingCalculator.CalculateNetErosion(
+            ProjectContractType.LumpSum,
+            netDeviationAmount: 900_000m,
+            // Onay bekleyen iş çağıran tarafından buraya hiç girmez.
+            collectibleExtraWorkAmount: 0m);
+
+        Assert.Equal(900_000.00m, erosion);
+    }
+
+    /// <summary>Onaylı ek iş sapmayı aşarsa erozyon negatife düşmez.</summary>
+    [Fact]
+    public void ExtraWorkExceedingDeviation_DoesNotProduceNegativeErosion()
+    {
+        Assert.Equal(0m, ProgressTrackingCalculator.CalculateNetErosion(
+            ProjectContractType.LumpSum, 300_000m, 500_000m));
+    }
+
+    /// <summary>Birim fiyatlı projede erozyon kavramı yoktur.</summary>
+    [Fact]
+    public void UnitPriceProject_HasNoErosion()
+    {
+        Assert.Equal(0m, ProgressTrackingCalculator.CalculateNetErosion(
+            ProjectContractType.UnitPrice, 900_000m, 0m));
+    }
+
+    /// <summary>
+    /// Onaylı ek iş alarmı da susturur: 600.000 sapma eşiği aşıyordu,
+    /// 400.000'i onaylanınca kalan 200.000 eşiğin (%5 = 500.000) altında.
+    /// </summary>
+    [Fact]
+    public void ApprovedExtraWork_CanSilenceErosionAlarm()
+    {
+        Assert.True(ProgressTrackingCalculator.ShouldRaiseErosionAlarm(
+            ProjectContractType.LumpSum, 600_000m, 10_000_000m, 5m,
+            collectibleExtraWorkAmount: 0m));
+
+        Assert.False(ProgressTrackingCalculator.ShouldRaiseErosionAlarm(
+            ProjectContractType.LumpSum, 600_000m, 10_000_000m, 5m,
+            collectibleExtraWorkAmount: 400_000m));
+    }
+
     // ---------- Stok sarfı ----------
 
     /// <summary>

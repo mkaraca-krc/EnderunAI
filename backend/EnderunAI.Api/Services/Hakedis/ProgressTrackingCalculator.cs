@@ -286,23 +286,51 @@ public static class ProgressTrackingCalculator
         new(false, reason, contractAmount, actualCost, completion, 0m, 0m, 0m);
 
     /// <summary>
+    /// Kâr erozyonuna fiilen giren tutar.
+    ///
+    /// Anahtar teslimde işveren tarafından ONAYLANMIŞ ek iş tahsil
+    /// edilebilir; dolayısıyla net sapmadan düşülür. Onaysız ek iş
+    /// düşülmez — düşülseydi tahsil edilemeyecek bir tutar kâr gibi
+    /// görünür ve erozyon olduğundan küçük hesaplanırdı.
+    /// </summary>
+    public static decimal CalculateNetErosion(
+        ProjectContractType contractType,
+        decimal netDeviationAmount,
+        decimal collectibleExtraWorkAmount)
+    {
+        if (contractType != ProjectContractType.LumpSum)
+            return 0m;
+
+        return Math.Max(0m, Round(netDeviationAmount - collectibleExtraWorkAmount));
+    }
+
+    /// <summary>
     /// Anahtar teslimde toplam sapma eşiği aşıldı mı — kâr erozyon
     /// alarmı. Yalnızca keşif ÜSTÜ net sapma alarm üretir; tasarruf
     /// alarm değildir.
     /// </summary>
+    /// <param name="collectibleExtraWorkAmount">İşveren onaylı ek iş
+    /// tutarı; erozyondan düşülür.</param>
     public static bool ShouldRaiseErosionAlarm(
         ProjectContractType contractType,
         decimal netDeviationAmount,
         decimal contractAmount,
-        decimal thresholdRate)
+        decimal thresholdRate,
+        decimal collectibleExtraWorkAmount = 0m)
     {
         if (contractType != ProjectContractType.LumpSum)
             return false;
 
-        if (contractAmount <= 0m || netDeviationAmount <= 0m)
+        if (contractAmount <= 0m)
             return false;
 
-        return netDeviationAmount / contractAmount * 100m > thresholdRate;
+        var erosion = CalculateNetErosion(
+            contractType, netDeviationAmount, collectibleExtraWorkAmount);
+
+        if (erosion <= 0m)
+            return false;
+
+        return erosion / contractAmount * 100m > thresholdRate;
     }
 
     private static decimal Round(decimal value) =>

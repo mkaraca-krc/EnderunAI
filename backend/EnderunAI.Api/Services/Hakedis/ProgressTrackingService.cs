@@ -18,6 +18,12 @@ public sealed record ProgressTrackingView(
     TrackingTotals Totals,
     ProfitEstimate ProfitEstimate,
     bool ErosionAlarm,
+    /// <summary>Tahsil edilebilir (onaylı) ilave iş toplamı.</summary>
+    decimal CollectibleExtraWorkAmount,
+    /// <summary>Onay bekleyen ilave iş toplamı — erozyondan düşülmez.</summary>
+    decimal PendingExtraWorkAmount,
+    /// <summary>Onaylı ek iş düşüldükten sonra kalan fiili kâr erozyonu.</summary>
+    decimal NetErosionAmount,
     IReadOnlyList<string> Warnings);
 
 public interface IProgressTrackingService
@@ -216,19 +222,50 @@ public sealed class ProgressTrackingService(AppDbContext db) : IProgressTracking
         var profit = ProgressTrackingCalculator.EstimateProfit(
             project.ContractAmount ?? 0m, actualCost, totals.PhysicalCompletionRate);
 
+        // İlave işler: anahtar teslimde YALNIZCA işveren onaylı olan
+        // tahsil edilebilir, dolayısıyla yalnızca o erozyondan düşülür.
+        var extraWorks = await db.ProjectExtraWorks
+            .AsNoTracking()
+            .Where(x => x.ProjectId == projectId &&
+                        x.ApprovalStatus != ExtraWorkApprovalStatus.Rejected)
+            .Select(x => new { x.ApprovalStatus, x.Amount })
+            .ToListAsync(cancellationToken);
+
+        var collectibleExtraWork = project.ContractType == ProjectContractType.UnitPrice
+            ? extraWorks.Sum(x => x.Amount)
+            : extraWorks
+                .Where(x => x.ApprovalStatus == ExtraWorkApprovalStatus.Approved)
+                .Sum(x => x.Amount);
+
+        var pendingExtraWork = extraWorks
+            .Where(x => x.ApprovalStatus == ExtraWorkApprovalStatus.Pending)
+            .Sum(x => x.Amount);
+
+        var netErosion = ProgressTrackingCalculator.CalculateNetErosion(
+            project.ContractType, totals.NetDeviationAmount, collectibleExtraWork);
+
         var erosionAlarm = ProgressTrackingCalculator.ShouldRaiseErosionAlarm(
             project.ContractType,
             totals.NetDeviationAmount,
             project.ContractAmount ?? 0m,
-            project.DeviationAlertThresholdRate);
+            project.DeviationAlertThresholdRate,
+            collectibleExtraWork);
 
         if (erosionAlarm)
         {
             warnings.Add(
-                $"Keşif üstü gerçekleşmelerin net etkisi " +
-                $"({totals.NetDeviationAmount:N2} TL) sözleşme bedelinin " +
-                $"%{project.DeviationAlertThresholdRate:N2} eşiğini aştı — " +
-                "anahtar teslim projede bu doğrudan kâr kaybıdır.");
+                $"Keşif üstü gerçekleşmelerin kâr erozyonu ({netErosion:N2} TL) " +
+                $"sözleşme bedelinin %{project.DeviationAlertThresholdRate:N2} " +
+                "eşiğini aştı — anahtar teslim projede bu doğrudan kâr kaybıdır.");
+        }
+
+        if (project.ContractType == ProjectContractType.LumpSum &&
+            pendingExtraWork > 0m)
+        {
+            warnings.Add(
+                $"{pendingExtraWork:N2} TL ilave iş işveren onayı bekliyor. " +
+                "Onaylanmadığı sürece tahsil edilemez ve kâr erozyonundan " +
+                "düşülmez — onay belgesini iliştirip onaylı işaretleyin.");
         }
 
         return new ProgressTrackingView(
@@ -244,6 +281,9 @@ public sealed class ProgressTrackingService(AppDbContext db) : IProgressTracking
             Totals: totals,
             ProfitEstimate: profit,
             ErosionAlarm: erosionAlarm,
+            CollectibleExtraWorkAmount: collectibleExtraWork,
+            PendingExtraWorkAmount: pendingExtraWork,
+            NetErosionAmount: netErosion,
             Warnings: warnings);
     }
 

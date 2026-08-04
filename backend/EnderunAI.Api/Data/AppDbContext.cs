@@ -86,6 +86,9 @@ public sealed class AppDbContext(
 
     public DbSet<HakedisDeductionAccountMapping> HakedisDeductionAccountMappings =>
         Set<HakedisDeductionAccountMapping>();
+
+    public DbSet<ProjectExtraWork> ProjectExtraWorks =>
+        Set<ProjectExtraWork>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
@@ -2064,6 +2067,43 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.AccountingVoucherId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProjectExtraWork>(entity =>
+        {
+            entity.ToTable("project_extra_works");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.PositionCode).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 6);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.ApprovalStatus).HasConversion<int>();
+
+            entity.HasIndex(x => new { x.ProjectId, x.ApprovalStatus });
+
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Bölüm silinse de ilave iş kaydı kalır, bağı kopar.
+            entity.HasOne(x => x.ProjectHakedisSection).WithMany()
+                .HasForeignKey(x => x.ProjectHakedisSectionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.ApprovalDocument).WithMany()
+                .HasForeignKey(x => x.ApprovalDocumentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.ProgressPayment).WithMany()
+                .HasForeignKey(x => x.ProgressPaymentId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

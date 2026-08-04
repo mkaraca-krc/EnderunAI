@@ -8,8 +8,12 @@ import ErpShell from "@/components/erp/erp-shell";
 import { ApiError } from "@/lib/api/api-client";
 import {
   DeviationImpact,
+  ExtraWorkApprovalStatus,
+  extraWorkService,
+  ProjectContractType,
   progressTrackingService,
   type ProgressTracking,
+  type ProjectExtraWork,
   type TrackingItem,
 } from "@/services/progress-tracking.service";
 
@@ -73,6 +77,7 @@ export default function MetrajTakipPage() {
   const params = useParams<{ id: string }>();
 
   const [data, setData] = useState<ProgressTracking | null>(null);
+  const [extraWorks, setExtraWorks] = useState<ProjectExtraWork[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -83,7 +88,13 @@ export default function MetrajTakipPage() {
     setError("");
 
     try {
-      setData(await progressTrackingService.get(params.id));
+      const [tracking, works] = await Promise.all([
+        progressTrackingService.get(params.id),
+        extraWorkService.list(params.id).catch(() => []),
+      ]);
+
+      setData(tracking);
+      setExtraWorks(works);
     } catch (loadError) {
       setError(getErrorMessage(loadError));
     } finally {
@@ -161,9 +172,16 @@ export default function MetrajTakipPage() {
         <Stat
           label="Net Sapma"
           value={money.format(data.totals.netDeviationAmount)}
-          tone={data.erosionAlarm ? "bad" : undefined}
           hint={`${data.totals.warningItemCount} kalem eşiği aştı`}
         />
+        {data.contractType === ProjectContractType.LumpSum && (
+          <Stat
+            label="Kâr Erozyonu"
+            value={money.format(data.netErosionAmount)}
+            tone={data.erosionAlarm ? "bad" : undefined}
+            hint="Onaylı ek iş düşülmüş hali"
+          />
+        )}
       </div>
 
       {/* --- KÂR TAHMİNİ --- */}
@@ -200,6 +218,89 @@ export default function MetrajTakipPage() {
           <p style={{ fontSize: 13, color: "#5f6874" }}>{profit.unreliableReason}</p>
         )}
       </div>
+
+      {/* --- İLAVE İŞ --- */}
+      {(extraWorks.length > 0 || data.pendingExtraWorkAmount > 0) && (
+        <div className="erp-table-card" style={{ marginTop: 18 }}>
+          <div className="erp-table-header">
+            <h2>İlave İşler</h2>
+            <p>
+              {data.contractType === ProjectContractType.LumpSum
+                ? "Anahtar teslimde yalnızca işveren onaylı ek iş tahsil edilebilir ve kâr erozyonundan düşülür."
+                : "Birim fiyatlı projede ilave işler hakedişe eklenebilir."}
+            </p>
+          </div>
+
+          <div className="erp-table-wrap">
+            <table className="erp-table">
+              <thead>
+                <tr>
+                  <th>Poz</th>
+                  <th>Açıklama</th>
+                  <th className="tabular">Miktar</th>
+                  <th className="tabular">Birim Fiyat</th>
+                  <th className="tabular">Tutar</th>
+                  <th>Onay</th>
+                  <th>Belge</th>
+                  <th>Hakediş</th>
+                </tr>
+              </thead>
+              <tbody>
+                {extraWorks.map((work) => (
+                  <tr key={work.id}>
+                    <td>{work.positionCode}</td>
+                    <td>{work.description}</td>
+                    <td className="tabular">{quantity.format(work.quantity)}</td>
+                    <td className="tabular">{money.format(work.unitPrice)}</td>
+                    <td className="tabular">
+                      <strong>{money.format(work.amount)}</strong>
+                    </td>
+                    <td>
+                      <span
+                        className={`erp-status ${
+                          work.approvalStatus === ExtraWorkApprovalStatus.Approved
+                            ? "green"
+                            : work.approvalStatus === ExtraWorkApprovalStatus.Rejected
+                              ? "red"
+                              : "yellow"
+                        }`}
+                      >
+                        {work.approvalStatus === ExtraWorkApprovalStatus.Approved
+                          ? "Onaylı"
+                          : work.approvalStatus === ExtraWorkApprovalStatus.Rejected
+                            ? "Reddedildi"
+                            : "Onay bekliyor"}
+                      </span>
+                    </td>
+                    <td>{work.approvalDocumentName ?? "-"}</td>
+                    <td>{work.progressPaymentNumber ?? "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={4}>
+                    <strong>Tahsil edilebilir (onaylı)</strong>
+                  </td>
+                  <td className="tabular">
+                    <strong>{money.format(data.collectibleExtraWorkAmount)}</strong>
+                  </td>
+                  <td colSpan={3}></td>
+                </tr>
+                {data.pendingExtraWorkAmount > 0 && (
+                  <tr>
+                    <td colSpan={4}>Onay bekleyen (erozyondan düşülmez)</td>
+                    <td className="tabular">
+                      {money.format(data.pendingExtraWorkAmount)}
+                    </td>
+                    <td colSpan={3}></td>
+                  </tr>
+                )}
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* --- KALEM TABLOSU --- */}
       <div className="erp-table-card" style={{ marginTop: 18 }}>

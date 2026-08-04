@@ -88,7 +88,39 @@ export type ProgressTracking = {
   totals: TrackingTotals;
   profitEstimate: ProfitEstimate;
   erosionAlarm: boolean;
+  /** Tahsil edilebilir (onaylı) ilave iş toplamı. */
+  collectibleExtraWorkAmount: number;
+  /** Onay bekleyen ilave iş — erozyondan düşülmez. */
+  pendingExtraWorkAmount: number;
+  /** Onaylı ek iş düşüldükten sonra kalan fiili kâr erozyonu. */
+  netErosionAmount: number;
   warnings: string[];
+};
+
+export const ExtraWorkApprovalStatus = {
+  Pending: 0,
+  Approved: 1,
+  Rejected: 2,
+} as const;
+
+export type ProjectExtraWork = {
+  id: string;
+  projectHakedisSectionId?: string | null;
+  sectionName?: string | null;
+  positionCode: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+  workDate: string;
+  approvalStatus: number;
+  approvedAtUtc?: string | null;
+  approvalDocumentId?: string | null;
+  approvalDocumentName?: string | null;
+  progressPaymentId?: string | null;
+  progressPaymentNumber?: string | null;
+  notes?: string | null;
 };
 
 export type ProgressDeviationAlert = {
@@ -111,5 +143,45 @@ export const progressTrackingService = {
   /** Sapma uyarısı üreten projeler (dashboard bildirim merkezi). */
   getAlerts() {
     return apiClient<ProgressDeviationAlert[]>("progress-tracking/alerts");
+  },
+};
+
+export const extraWorkService = {
+  list(projectId: string) {
+    return apiClient<ProjectExtraWork[]>(
+      `project-extra-works?projectId=${projectId}`
+    );
+  },
+
+  create(payload: {
+    projectId: string;
+    projectHakedisSectionId?: string | null;
+    positionCode: string;
+    description: string;
+    unit: string;
+    quantity: number;
+    unitPrice: number;
+    workDate: string;
+    notes?: string | null;
+  }) {
+    return apiClient<{ id: string; message: string }>("project-extra-works", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  /** Anahtar teslimde onay belgesi zorunlu. */
+  approve(id: string, approvalDocumentId: string | null, notes?: string | null) {
+    return apiClient<{ message: string }>(
+      `project-extra-works/${id}/approve`,
+      { method: "POST", body: { approvalDocumentId, notes: notes ?? null } }
+    );
+  },
+
+  reject(id: string, notes?: string | null) {
+    return apiClient<{ message: string }>(
+      `project-extra-works/${id}/reject`,
+      { method: "POST", body: { approvalDocumentId: null, notes: notes ?? null } }
+    );
   },
 };
