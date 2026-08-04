@@ -42,3 +42,19 @@ public sealed record AssignPersonnelRequest(
     string? Role,
     string? Notes,
     bool IsPrimaryAssignment);
+
+/// <summary>
+/// Personel kartından görev yeri belirleme.
+///
+/// Şantiye seçildiğinde <see cref="ProjectSiteId"/> zorunludur ve
+/// mevcut aktif atama varsa kapatılıp yenisi açılır — böylece "bir
+/// personelin tek aktif şantiye ataması olur" kuralı korunur.
+/// </summary>
+public sealed record SetWorkLocationRequest(
+    /// <summary>0 = Atanmadı, 1 = Merkez, 2 = Şantiye.</summary>
+    int WorkLocationType,
+    Guid? ProjectSiteId,
+    Guid? BranchId,
+    DateTime? StartDate,
+    string? Role,
+    string? Notes);

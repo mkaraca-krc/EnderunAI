@@ -77,6 +77,13 @@ public sealed class PersonnelController(
                 MonthlySalary = canViewSalary ? x.MonthlySalary : null,
                 x.Status,
                 x.IsActive,
+                WorkLocationType = (int)x.WorkLocationType,
+                // Görev yeri belirlenmemiş VEYA şantiye seçilip aktif
+                // ataması olmayan personel atama bekliyor sayılır.
+                IsAwaitingWorkLocation =
+                    x.WorkLocationType == EnderunAI.Api.Models.WorkLocationType.Unassigned ||
+                    (x.WorkLocationType == EnderunAI.Api.Models.WorkLocationType.ProjectSite &&
+                     !x.SiteAssignments.Any(a => a.IsActive && !a.IsDeleted && a.EndDate == null)),
                 ActiveAssignments = x.Assignments
                     .Where(a => a.IsActive && !a.IsDeleted && a.EndDate == null)
                     .Select(a => new
@@ -146,6 +153,11 @@ public sealed class PersonnelController(
                 MonthlySalary = canViewSalary ? x.MonthlySalary : null,
                 x.Status,
                 x.IsActive,
+                WorkLocationType = (int)x.WorkLocationType,
+                IsAwaitingWorkLocation =
+                    x.WorkLocationType == EnderunAI.Api.Models.WorkLocationType.Unassigned ||
+                    (x.WorkLocationType == EnderunAI.Api.Models.WorkLocationType.ProjectSite &&
+                     !x.SiteAssignments.Any(a => a.IsActive && !a.IsDeleted && a.EndDate == null)),
                 Assignments = x.Assignments
                     .OrderByDescending(a => a.StartDate)
                     .Select(a => new
@@ -327,6 +339,124 @@ public sealed class PersonnelController(
     }
 
     [HttpPost("{id:guid}/assignments")]
+    /// <summary>
+    /// Personel kartından görev yeri belirleme: merkez mi, şantiye mi.
+    ///
+    /// Şantiye seçilirse mevcut aktif atama kapatılıp yenisi açılır —
+    /// şantiye ekranındaki "tek aktif atama" kuralı burada da geçerli.
+    /// Merkez veya atanmadı seçilirse aktif şantiye ataması kapatılır;
+    /// aksi halde personel hem merkezde hem şantiyede görünürdü.
+    /// </summary>
+    [HttpPut("{id:guid}/gorev-yeri")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
+    public async Task<IActionResult> SetWorkLocation(
+        Guid id,
+        SetWorkLocationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(typeof(WorkLocationType), request.WorkLocationType))
+            return BadRequest(new { message = "Geçersiz görev yeri türü." });
+
+        var personnel = await db.Personnel
+            .SingleOrDefaultAsync(x => x.Id == id && x.IsActive, cancellationToken);
+
+        if (personnel is null)
+            return NotFound(new { message = "Aktif personel bulunamadı." });
+
+        var locationType = (WorkLocationType)request.WorkLocationType;
+        var now = DateTime.UtcNow;
+
+        var activeAssignments = await db.ProjectSiteAssignments
+            .Where(x => x.PersonnelId == id && x.IsActive && x.EndDate == null)
+            .ToListAsync(cancellationToken);
+
+        if (locationType == WorkLocationType.ProjectSite)
+        {
+            if (request.ProjectSiteId is not Guid siteId)
+                return BadRequest(new { message = "Şantiye seçilmelidir." });
+
+            var site = await db.ProjectSites
+                .Include(x => x.Project)
+                .SingleOrDefaultAsync(x => x.Id == siteId && x.IsActive, cancellationToken);
+
+            if (site is null)
+                return NotFound(new { message = "Aktif şantiye bulunamadı." });
+
+            if (site.Project.CompanyId != personnel.CompanyId)
+            {
+                return BadRequest(new
+                {
+                    message = "Personel ve şantiye aynı şirkete ait olmalıdır."
+                });
+            }
+
+            // Zaten aynı şantiyedeyse yeni kayıt açma; tarih/rol
+            // güncellemesi atama ekranının işi.
+            if (activeAssignments.Any(x => x.ProjectSiteId == siteId))
+            {
+                personnel.WorkLocationType = locationType;
+                personnel.UpdatedAtUtc = now;
+                await db.SaveChangesAsync(cancellationToken);
+
+                return Ok(new { message = "Personel zaten bu şantiyede görevli." });
+            }
+
+            CloseAssignments(activeAssignments, now);
+
+            db.ProjectSiteAssignments.Add(new ProjectSiteAssignment
+            {
+                PersonnelId = id,
+                ProjectSiteId = siteId,
+                StartDate = UtcDate(request.StartDate ?? now),
+                Role = request.Role?.Trim(),
+                Notes = request.Notes?.Trim()
+            });
+        }
+        else
+        {
+            CloseAssignments(activeAssignments, now);
+
+            if (locationType == WorkLocationType.HeadOffice && request.BranchId is Guid branchId)
+            {
+                var branchExists = await db.Branches.AnyAsync(
+                    x => x.Id == branchId && x.CompanyId == personnel.CompanyId,
+                    cancellationToken);
+
+                if (!branchExists)
+                    return BadRequest(new { message = "Şube bulunamadı." });
+
+                personnel.BranchId = branchId;
+            }
+        }
+
+        personnel.WorkLocationType = locationType;
+        personnel.UpdatedAtUtc = now;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = locationType switch
+            {
+                WorkLocationType.HeadOffice => "Personel merkeze atandı.",
+                WorkLocationType.ProjectSite => "Personel şantiyeye atandı.",
+                _ => "Personelin görev yeri kaldırıldı."
+            },
+            workLocationType = (int)locationType
+        });
+    }
+
+    private static void CloseAssignments(
+        IReadOnlyCollection<ProjectSiteAssignment> assignments, DateTime now)
+    {
+        foreach (var assignment in assignments)
+        {
+            assignment.EndDate = DateTime.SpecifyKind(now.Date, DateTimeKind.Utc);
+            assignment.IsActive = false;
+            assignment.UpdatedAtUtc = now;
+        }
+    }
+
     [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> AssignToProject(
         Guid id,

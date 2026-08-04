@@ -1478,6 +1478,11 @@ public sealed class AppDbContext(
             entity.HasIndex(x => x.IdentityNumber)
                 .IsUnique();
 
+            // "Atama bekleyen personel" sorgusu panelde ve uyarıda çalışır.
+            entity.HasIndex(x => new { x.CompanyId, x.WorkLocationType });
+
+            entity.Property(x => x.WorkLocationType).HasConversion<int>();
+
             entity.Property(x => x.EmployeeNumber)
                 .HasMaxLength(40)
                 .IsRequired();

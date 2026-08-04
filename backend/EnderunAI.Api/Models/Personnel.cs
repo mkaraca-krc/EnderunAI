@@ -9,6 +9,26 @@ public enum PersonnelStatus
     Terminated = 4
 }
 
+/// <summary>Personelin fiilen nerede çalıştığı.</summary>
+public enum WorkLocationType
+{
+    /// <summary>
+    /// Henüz görev yeri belirlenmedi. Varsayılan: mevcut kayıtların
+    /// tamamı buraya düşer ve "atama bekliyor" olarak işaretlenir.
+    /// </summary>
+    Unassigned = 0,
+
+    /// <summary>Merkez ofis.</summary>
+    HeadOffice = 1,
+
+    /// <summary>
+    /// Şantiye. Fiili atama ProjectSiteAssignment ile yürür; bu tür
+    /// seçili ama aktif ataması yoksa personel yine "atama bekliyor"
+    /// sayılır.
+    /// </summary>
+    ProjectSite = 2
+}
+
 public sealed class Personnel : BaseEntity
 {
     public Guid CompanyId { get; set; }
@@ -36,6 +56,18 @@ public sealed class Personnel : BaseEntity
     public DateTime? EmploymentEndDate { get; set; }
 
     public decimal? MonthlySalary { get; set; }
+
+    /// <summary>
+    /// Personelin görev yeri: merkez mi, şantiye mi, yoksa henüz
+    /// atanmadı mı.
+    ///
+    /// Şantiyeye atandıysa fiili atama <see cref="SiteAssignments"/>
+    /// üzerinden yürür; bu alan yalnızca "hangi tür" sorusunu
+    /// cevaplar. Ayrı bir alan olmasının sebebi: aktif şantiye
+    /// ataması yokluğundan "merkezde" sonucunu çıkarmak, hiç
+    /// atanmamış personeli de merkez göstermek olurdu.
+    /// </summary>
+    public WorkLocationType WorkLocationType { get; set; } = WorkLocationType.Unassigned;
     public PersonnelStatus Status { get; set; } = PersonnelStatus.Active;
 
     public string FullName => $"{FirstName} {LastName}".Trim();
