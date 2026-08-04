@@ -290,9 +290,12 @@ body {
   background: var(--erp-primary-hover);
 }
 
+/* Pasif buton "sistem meşgul" değil "şu an tıklanamaz" demektir.
+   cursor:wait imleci döndürür ve kullanıcı sayfanın kilitlendiğini
+   sanır — doğru imleç not-allowed. */
 .erp-primary-button:disabled {
   opacity: .6;
-  cursor: wait;
+  cursor: not-allowed;
 }
 
 .erp-secondary-button {
@@ -749,7 +752,7 @@ body {
 
 .erp-row-actions button:disabled {
   opacity: .55;
-  cursor: wait;
+  cursor: not-allowed;
 }
 
 .erp-approved-text {

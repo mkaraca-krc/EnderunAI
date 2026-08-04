@@ -230,7 +230,7 @@ export default function EInvoiceImportPage() {
             dosyalar atlanır, diğerleri işlenmeye devam eder.
           </small>
 
-          <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <button
               type="button"
               className="erp-primary-button"
@@ -239,6 +239,12 @@ export default function EInvoiceImportPage() {
             >
               {reading ? "Okunuyor..." : `Dosyaları Oku (${files.length})`}
             </button>
+
+            {/* Buton pasifse sebebi yazsın; yoksa kullanıcı tıklamayı
+                deneyip bir arıza olduğunu düşünüyor. */}
+            {files.length === 0 && !reading && (
+              <small>Önce yukarıdan en az bir XML veya ZIP dosyası seçin.</small>
+            )}
           </div>
         </div>
       </div>
