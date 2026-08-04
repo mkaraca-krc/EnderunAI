@@ -77,6 +77,15 @@ builder.Services.AddScoped<IAccountingAccountSeedService, AccountingAccountSeedS
 builder.Services.AddScoped<IAccountingVoucherService, AccountingVoucherService>();
 builder.Services.AddScoped<IAccountingIntegrationService, AccountingIntegrationService>();
 builder.Services.AddScoped<ISupplierInvoiceService, SupplierInvoiceService>();
+
+// E-fatura okuma: standart UBL-TR ayrıştırıcı önce, AI yedeği yalnızca
+// o yetersiz kalırsa (token maliyeti).
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.EInvoice.IAiInvoiceParser,
+    EnderunAI.Api.Services.EInvoice.AiInvoiceParser>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.EInvoice.IEInvoiceReader,
+    EnderunAI.Api.Services.EInvoice.EInvoiceReader>();
 builder.Services.AddScoped<IChequeService, ChequeService>();
 builder.Services.AddScoped<IFactoringService, FactoringService>();
 builder.Services.AddScoped<ICashFlowService, CashFlowService>();
