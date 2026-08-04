@@ -37,6 +37,10 @@ import {
   projectService,
   type ProjectListItem,
 } from "@/services/project.service";
+import {
+  projectSiteService,
+  type ProjectSiteListItem,
+} from "@/services/project-site.service";
 
 type ViewMode = "table" | "cards";
 type ActivityFilter = "all" | "active" | "passive";
@@ -164,6 +168,18 @@ export default function HrPersonnelPage() {
   const [jobTitle, setJobTitle] = useState("");
   const [projectId, setProjectId] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+
+  // Görev yeri paneli: atama mevcut bir personel üzerinde yapılan bir
+  // işlem, oluşturma formunun alanı değil — bu yüzden ayrı panel.
+  const [locationTarget, setLocationTarget] =
+    useState<PersonnelListItem | null>(null);
+  const [locationType, setLocationType] = useState("0");
+  const [locationProjectId, setLocationProjectId] = useState("");
+  const [locationSiteId, setLocationSiteId] = useState("");
+  const [locationRole, setLocationRole] = useState("");
+  const [locationSites, setLocationSites] = useState<ProjectSiteListItem[]>([]);
+  const [locationSaving, setLocationSaving] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<PersonnelForm>(emptyForm);
 
@@ -304,6 +320,67 @@ export default function HrPersonnelPage() {
     setError("");
     setSuccess("");
     setFormOpen(true);
+  }
+
+  function openWorkLocation(item: PersonnelListItem) {
+    setLocationTarget(item);
+    setLocationType(String(item.workLocationType ?? 0));
+    setLocationProjectId(item.activeSiteAssignment?.projectId ?? "");
+    setLocationSiteId(item.activeSiteAssignment?.projectSiteId ?? "");
+    setLocationRole(item.activeSiteAssignment?.role ?? "");
+    setLocationSites([]);
+    setLocationError("");
+  }
+
+  async function loadSitesForProject(projectId: string) {
+    setLocationProjectId(projectId);
+    setLocationSiteId("");
+    setLocationSites([]);
+
+    if (!projectId) return;
+
+    try {
+      setLocationSites(await projectSiteService.getAll(projectId));
+    } catch (err) {
+      setLocationError(
+        err instanceof Error ? err.message : "Şantiyeler alınamadı."
+      );
+    }
+  }
+
+  async function saveWorkLocation() {
+    if (!locationTarget) return;
+
+    const type = Number(locationType);
+
+    if (type === 2 && !locationSiteId) {
+      setLocationError("Şantiye seçilmelidir.");
+      return;
+    }
+
+    setLocationSaving(true);
+    setLocationError("");
+
+    try {
+      await personnelService.setWorkLocation(locationTarget.id, {
+        workLocationType: type,
+        projectSiteId: type === 2 ? locationSiteId : null,
+        branchId: type === 1 ? locationTarget.branchId ?? null : null,
+        startDate: null,
+        role: locationRole.trim() || null,
+        notes: null,
+      });
+
+      setLocationTarget(null);
+      setSuccess("Görev yeri güncellendi.");
+      await reloadPersonnel();
+    } catch (err) {
+      setLocationError(
+        err instanceof Error ? err.message : "Görev yeri kaydedilemedi."
+      );
+    } finally {
+      setLocationSaving(false);
+    }
   }
 
   async function openEdit(id: string) {
@@ -589,11 +666,13 @@ export default function HrPersonnelPage() {
                       </strong>
                     </div>
                     <div className="grid grid-cols-[92px_1fr] gap-3">
-                      <span className="text-slate-500">Şantiye</span>
+                      <span className="text-slate-500">Görev yeri</span>
                       <strong className="font-medium text-slate-800">
                         {item.activeSiteAssignment
                           ? `${item.activeSiteAssignment.siteCode} · ${item.activeSiteAssignment.siteName}`
-                          : "Atama bekliyor"}
+                          : item.workLocationType === 1
+                            ? "Merkez"
+                            : "Atama bekliyor"}
                       </strong>
                     </div>
                   </div>
@@ -666,6 +745,8 @@ export default function HrPersonnelPage() {
                             <span className="block max-w-52 truncate text-slate-800">{item.activeSiteAssignment.siteName}</span>
                             <span className="mt-1 block text-xs text-slate-500">{item.activeSiteAssignment.siteCode}</span>
                           </>
+                        ) : item.workLocationType === 1 ? (
+                          <span className="block text-slate-800">Merkez</span>
                         ) : (
                           <Badge variant="warning">Atama bekliyor</Badge>
                         )}
@@ -680,6 +761,13 @@ export default function HrPersonnelPage() {
                         <PersonnelShortcuts personnelId={item.id} />
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => openWorkLocation(item)}
+                        >
+                          Görev Yeri
+                        </Button>
                         <Button variant="secondary" size="sm" onClick={() => void openEdit(item.id)}>
                           Düzenle
                         </Button>
@@ -691,6 +779,132 @@ export default function HrPersonnelPage() {
             </Table>
           </CardContent>
         </Card>
+      )}
+
+      {locationTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            onClick={() => !locationSaving && setLocationTarget(null)}
+            aria-label="Paneli kapat"
+          />
+
+          <aside className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Görev Yeri — {locationTarget.fullName}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Şantiye seçilirse önceki atama kapatılır ve yenisi açılır.
+            </p>
+
+            {locationError && (
+              <div className="mt-4 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {locationError}
+              </div>
+            )}
+
+            <div className="mt-5 space-y-4">
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Görev yeri
+                </span>
+                <Select
+                  value={locationType}
+                  onChange={(event) => {
+                    setLocationType(event.target.value);
+                    setLocationError("");
+                  }}
+                  options={[
+                    { value: "0", label: "Atanmadı" },
+                    { value: "1", label: "Merkez" },
+                    { value: "2", label: "Şantiye" },
+                  ]}
+                />
+              </label>
+
+              {locationType === "2" && (
+                <>
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Proje
+                    </span>
+                    <Select
+                      value={locationProjectId}
+                      onChange={(event) =>
+                        void loadSitesForProject(event.target.value)
+                      }
+                      placeholder="Proje seçin"
+                      options={projects
+                        .filter(
+                          (project) =>
+                            project.companyId === locationTarget.companyId
+                        )
+                        .map((project) => ({
+                          value: project.id,
+                          label: `${project.code} — ${project.name}`,
+                        }))}
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Şantiye
+                    </span>
+                    <Select
+                      value={locationSiteId}
+                      onChange={(event) => {
+                        setLocationSiteId(event.target.value);
+                        setLocationError("");
+                      }}
+                      disabled={!locationProjectId}
+                      placeholder={
+                        locationProjectId
+                          ? "Şantiye seçin"
+                          : "Önce proje seçin"
+                      }
+                      options={locationSites.map((site) => ({
+                        value: site.id,
+                        label: `${site.code} — ${site.name}`,
+                      }))}
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Görev (ops.)
+                    </span>
+                    <Input
+                      value={locationRole}
+                      onChange={(event) => setLocationRole(event.target.value)}
+                      placeholder="Mühendis / Formen / Usta / İşçi"
+                    />
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Şantiye günlük raporundaki personel sayısı önerisi bu
+                      görev metnine göre dağıtılır.
+                    </span>
+                  </label>
+                </>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setLocationTarget(null)}
+                disabled={locationSaving}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                onClick={() => void saveWorkLocation()}
+                disabled={locationSaving}
+              >
+                {locationSaving ? "Kaydediliyor..." : "Kaydet"}
+              </Button>
+            </div>
+          </aside>
+        </div>
       )}
 
       {formOpen && (

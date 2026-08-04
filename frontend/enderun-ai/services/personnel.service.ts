@@ -44,8 +44,36 @@ export type PersonnelListItem = {
   monthlySalary?: number | null;
   status: number;
   isActive: boolean;
+  /** 0 = Atanmadı, 1 = Merkez, 2 = Şantiye. */
+  workLocationType: number;
+  /**
+   * Görev yeri belirlenmemiş VEYA şantiye seçilip aktif ataması
+   * olmayan personel. Şantiye seçili olması tek başına yetmez.
+   */
+  isAwaitingWorkLocation: boolean;
   activeAssignments: PersonnelAssignmentItem[];
   activeSiteAssignment?: PersonnelActiveSiteAssignment | null;
+};
+
+export const WorkLocationType = {
+  Unassigned: 0,
+  HeadOffice: 1,
+  ProjectSite: 2,
+} as const;
+
+export const WORK_LOCATION_LABELS: Record<number, string> = {
+  0: "Atanmadı",
+  1: "Merkez",
+  2: "Şantiye",
+};
+
+export type SetWorkLocationRequest = {
+  workLocationType: number;
+  projectSiteId?: string | null;
+  branchId?: string | null;
+  startDate?: string | null;
+  role?: string | null;
+  notes?: string | null;
 };
 
 export type PersonnelDetail = PersonnelListItem & {
@@ -155,6 +183,21 @@ export const personnelService = {
       `hr/personnel/${id}/assignments`,
       {
         method: "POST",
+        body: payload,
+      }
+    );
+  },
+
+  /**
+   * Görev yeri belirleme. Şantiye seçilirse mevcut aktif atama
+   * kapatılıp yenisi açılır; merkez/atanmadı seçilirse aktif atama
+   * kapatılır.
+   */
+  setWorkLocation(id: string, payload: SetWorkLocationRequest) {
+    return apiClient<{ message: string; workLocationType: number }>(
+      `hr/personnel/${id}/gorev-yeri`,
+      {
+        method: "PUT",
         body: payload,
       }
     );

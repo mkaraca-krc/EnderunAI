@@ -17,6 +17,10 @@ export type HrDashboardPersonnel = {
   employmentEndDate?: string | null;
   isActive?: boolean;
   createdAtUtc?: string | null;
+  /** 0 = Atanmadı, 1 = Merkez, 2 = Şantiye. */
+  workLocationType?: number;
+  /** Görev yeri atanmamış veya şantiye seçilip ataması olmayan. */
+  isAwaitingWorkLocation?: boolean;
 };
 
 export type HrDashboardPayroll = {

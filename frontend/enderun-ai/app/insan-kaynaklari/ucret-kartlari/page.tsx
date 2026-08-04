@@ -22,6 +22,7 @@ import {
 
 import {
   CreateSalaryDefinitionRequest,
+  NetToGrossResult,
   SalaryDefinition,
   UpdateSalaryDefinitionRequest,
   hrSalaryService,
@@ -32,6 +33,9 @@ type SalaryForm = {
   personnelId: string;
   effectiveStartDate: string;
   effectiveEndDate: string;
+  /** "0" brüt esaslı, "1" net esaslı. */
+  salaryBasis: string;
+  targetNetSalary: string;
   grossSalary: string;
   netSalary: string;
   dailyRate: string;
@@ -53,6 +57,8 @@ const emptyForm: SalaryForm = {
   personnelId: "",
   effectiveStartDate: today,
   effectiveEndDate: "",
+  salaryBasis: "0",
+  targetNetSalary: "",
   grossSalary: "",
   netSalary: "",
   dailyRate: "",
@@ -507,6 +513,12 @@ export default function SalaryCardsPage() {
           record
             .effectiveEndDate
         ),
+      salaryBasis: String(
+        record.salaryBasis ?? 0
+      ),
+      targetNetSalary: String(
+        record.targetNetSalary ?? 0
+      ),
       grossSalary:
         String(
           record.grossSalary
@@ -632,9 +644,29 @@ export default function SalaryCardsPage() {
       description:
         form.description
           .trim() || null,
+      salaryBasis: Number(
+        form.salaryBasis
+      ),
+      targetNetSalary:
+        parseNumber(
+          form.targetNetSalary
+        ),
     };
 
+    // Net esaslı kartta brüt sistemce hesaplanır; kullanıcıdan
+    // beklenen tek tutar anlaşılan nettir.
     if (
+      common.salaryBasis === 1 &&
+      common.targetNetSalary <= 0
+    ) {
+      setError(
+        "Net esaslı kartta anlaşılan net ücret girilmelidir."
+      );
+      return;
+    }
+
+    if (
+      common.salaryBasis === 0 &&
       common.grossSalary <= 0 &&
       common.netSalary <= 0 &&
       common.dailyRate <= 0 &&
@@ -745,7 +777,7 @@ export default function SalaryCardsPage() {
   return (
     <ErpShell
       title="Maaş Kartları"
-      description="Personel maaş, günlük ücret, saatlik ücret ve mesai katsayılarını yönetin."
+      description="Resmî net, elden ödeme ve toplam ele geçen tek ekranda; günlük/saatlik ücret ve mesai katsayıları dahil."
     >
       <div
         style={{
@@ -1025,7 +1057,9 @@ export default function SalaryCardsPage() {
                     "İşe Giriş",
                     "Dönem",
                     "Brüt",
-                    "Net",
+                    "Resmî Net",
+                    "Elden",
+                    "Toplam Ele Geçen",
                     "Günlük",
                     "Saatlik",
                     "Katsayılar",
@@ -1193,6 +1227,17 @@ export default function SalaryCardsPage() {
                             record.grossSalary,
                             record.currencyCode
                           )}
+
+                          {record.salaryBasis === 1 && (
+                            <small
+                              style={{
+                                display: "block",
+                                color: "#64748b",
+                              }}
+                            >
+                              netten hesaplandı
+                            </small>
+                          )}
                         </td>
 
                         <td
@@ -1204,9 +1249,47 @@ export default function SalaryCardsPage() {
                           }}
                         >
                           {money(
-                            record.netSalary,
+                            record.officialNetSalary ??
+                              record.netSalary,
                             record.currencyCode
                           )}
+                        </td>
+
+                        <td
+                          style={{
+                            padding: "13px 14px",
+                            borderBottom:
+                              "1px solid #eef2f7",
+                          }}
+                        >
+                          {record.extraPaymentHidden ? (
+                            <span style={{ color: "#94a3b8" }}>
+                              gizli
+                            </span>
+                          ) : record.extraPaymentMonthlyAmount ? (
+                            money(
+                              record.extraPaymentMonthlyAmount,
+                              record.currencyCode
+                            )
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+
+                        <td
+                          style={{
+                            padding: "13px 14px",
+                            borderBottom:
+                              "1px solid #eef2f7",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {record.totalTakeHome != null
+                            ? money(
+                                record.totalTakeHome,
+                                record.currencyCode
+                              )
+                            : "—"}
                         </td>
 
                         <td
@@ -1735,15 +1818,100 @@ export default function SalaryCardsPage() {
                 />
               </label>
 
+              <label style={{ gridColumn: "1 / -1" }}>
+                <span
+                  style={{
+                    display: "block",
+                    marginBottom: "7px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Ücret Esası
+                </span>
+
+                <select
+                  value={form.salaryBasis}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      salaryBasis:
+                        event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                >
+                  <option value="0">
+                    Brüt esaslı — brüt girilir, net ondan çıkar
+                  </option>
+                  <option value="1">
+                    Net esaslı — net girilir, brüt hesaplanır
+                  </option>
+                </select>
+
+                <small
+                  style={{
+                    display: "block",
+                    marginTop: "6px",
+                    color: "#64748b",
+                  }}
+                >
+                  {form.salaryBasis === "1"
+                    ? "Personel her ay tam olarak girilen neti alır; vergi dilimi yükseldikçe brüt otomatik artar, farkı şirket üstlenir."
+                    : "Karttaki brüt sabit kalır; yıl içinde vergi dilimi yükseldikçe ele geçen net düşer."}
+                </small>
+              </label>
+
+              {form.salaryBasis === "1" && (
+                <label style={{ gridColumn: "1 / -1" }}>
+                  <span
+                    style={{
+                      display: "block",
+                      marginBottom: "7px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Anlaşılan Resmî Net Maaş *
+                  </span>
+
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9.,]*"
+                    autoComplete="off"
+                    value={form.targetNetSalary}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        targetNetSalary:
+                          event.target.value,
+                      }))
+                    }
+                    style={inputStyle}
+                  />
+
+                  <NetToGrossPreview
+                    companyId={form.companyId}
+                    effectiveStartDate={
+                      form.effectiveStartDate
+                    }
+                    targetNet={form.targetNetSalary}
+                  />
+                </label>
+              )}
+
               {[
-                [
-                  "Brüt Maaş",
-                  "grossSalary",
-                ],
-                [
-                  "Net Maaş",
-                  "netSalary",
-                ],
+                ...(form.salaryBasis === "1"
+                  ? []
+                  : [
+                      [
+                        "Brüt Maaş",
+                        "grossSalary",
+                      ],
+                      [
+                        "Net Maaş",
+                        "netSalary",
+                      ],
+                    ]),
                 [
                   "Günlük Ücret",
                   "dailyRate",
@@ -1967,5 +2135,143 @@ export default function SalaryCardsPage() {
         </div>
       )}
     </ErpShell>
+  );
+}
+
+const moneyFormat = new Intl.NumberFormat("tr-TR", {
+  style: "currency",
+  currency: "TRY",
+});
+
+/**
+ * Girilen nete karşılık gelen brütü ve kesinti kırılımını canlı
+ * gösterir. Kayıt yazmaz.
+ *
+ * Sunucudan hesaplanır — brütleştirme kuralı arayüzde tekrar
+ * yazılsaydı iki hesap arasında sessiz bir fark doğardı.
+ */
+function NetToGrossPreview({
+  companyId,
+  effectiveStartDate,
+  targetNet,
+}: {
+  companyId: string;
+  effectiveStartDate: string;
+  targetNet: string;
+}) {
+  const [result, setResult] = useState<NetToGrossResult | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const amount = Number(targetNet.replace(",", "."));
+  const year = Number(effectiveStartDate.slice(0, 4));
+
+  const canCalculate =
+    Boolean(companyId) && Number.isFinite(amount) && amount > 0 && Boolean(year);
+
+  useEffect(() => {
+    let active = true;
+
+    // Kullanıcı yazarken her tuşta istek atmamak için kısa bekleme.
+    // Sıfırlama da bu geciktirmenin içinde: efekt gövdesinde doğrudan
+    // state yazmak zincirleme render tetikliyor.
+    const timer = window.setTimeout(() => {
+      if (!active) return;
+
+      if (!canCalculate) {
+        setResult(null);
+        setError("");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+
+      void hrSalaryService
+        .netToGross({ companyId, year, targetNet: amount, month: 1 })
+        .then((value) => {
+          if (!active) return;
+          setResult(value);
+          setError("");
+        })
+        .catch((err: unknown) => {
+          if (!active) return;
+          setResult(null);
+          setError(
+            err instanceof Error ? err.message : "Brüt hesaplanamadı."
+          );
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 400);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [companyId, amount, year, canCalculate]);
+
+  if (!canCalculate) return null;
+
+  if (loading && !result) {
+    return (
+      <small style={{ display: "block", marginTop: "8px", color: "#64748b" }}>
+        Brüt hesaplanıyor...
+      </small>
+    );
+  }
+
+  if (error) {
+    return (
+      <small style={{ display: "block", marginTop: "8px", color: "#b91c1c" }}>
+        {error}
+      </small>
+    );
+  }
+
+  if (!result) return null;
+
+  return (
+    <div
+      style={{
+        marginTop: "10px",
+        padding: "12px 14px",
+        borderRadius: "10px",
+        background: "#f8fafc",
+        border: "1px solid #e2e8f0",
+        fontSize: "13px",
+      }}
+    >
+      <strong style={{ display: "block", marginBottom: "6px" }}>
+        Hesaplanan brüt: {moneyFormat.format(result.grossSalary)}
+      </strong>
+
+      <div style={{ color: "#475569", lineHeight: 1.7 }}>
+        SGK işçi: {moneyFormat.format(result.sgkEmployee)} · İşsizlik:{" "}
+        {moneyFormat.format(result.unemploymentEmployee)} · Gelir vergisi:{" "}
+        {moneyFormat.format(result.incomeTax)} · Damga:{" "}
+        {moneyFormat.format(result.stampTax)}
+        <br />
+        Toplam kesinti: {moneyFormat.format(result.totalDeductions)} · İşverene
+        maliyeti: {moneyFormat.format(result.totalEmployerCost)}
+      </div>
+
+      {!result.isExact && (
+        <div style={{ marginTop: "8px", color: "#b45309" }}>
+          Yuvarlama nedeniyle tam olarak bu net yakalanamıyor; en yakın brütle
+          ele geçen {moneyFormat.format(result.achievedNet)} (
+          {result.difference > 0 ? "+" : ""}
+          {moneyFormat.format(result.difference)}).
+        </div>
+      )}
+
+      <small
+        style={{ display: "block", marginTop: "8px", color: "#64748b" }}
+      >
+        Ocak esaslı referans. Bordroda her ayın kümülatif vergi matrahıyla
+        yeniden hesaplanır; ele geçen net her ay aynı kalır.
+      </small>
+    </div>
   );
 }

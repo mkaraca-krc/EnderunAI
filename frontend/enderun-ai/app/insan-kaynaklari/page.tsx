@@ -1095,6 +1095,17 @@ export default function HumanResourcesDashboardPage() {
         },
         {
           label:
+            "Görev yeri ataması bekleyen personel",
+          count:
+            activePersonnel.filter(
+              (item) =>
+                item.isAwaitingWorkLocation
+            ).length,
+          href:
+            "/insan-kaynaklari/personeller",
+        },
+        {
+          label:
             "Bekleyen izin talepleri",
           count:
             pendingLeaves.length,
@@ -1130,7 +1141,9 @@ export default function HumanResourcesDashboardPage() {
           item.count > 0
       ),
       [
-        activePersonnel.length,
+        // Yalnızca uzunluk yetmez: personel sayısı değişmeden görev yeri
+        // işaretleri değişebilir ve uyarı bayat kalırdı.
+        activePersonnel,
         salaryPersonnelIds.size,
         pendingLeaves.length,
         overtimeSummary.pending,
