@@ -97,6 +97,9 @@ public sealed class AppDbContext(
     // İş sağlığı ve güvenliği
     public DbSet<IsgOsgbContract> IsgOsgbContracts => Set<IsgOsgbContract>();
     public DbSet<IsgOsgbExpert> IsgOsgbExperts => Set<IsgOsgbExpert>();
+    public DbSet<IsgHealthReport> IsgHealthReports => Set<IsgHealthReport>();
+    public DbSet<IsgTraining> IsgTrainings => Set<IsgTraining>();
+    public DbSet<IsgCertificate> IsgCertificates => Set<IsgCertificate>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
@@ -270,6 +273,80 @@ public sealed class AppDbContext(
 
             entity.HasOne(x => x.IsgOsgbContract).WithMany(x => x.Experts)
                 .HasForeignKey(x => x.IsgOsgbContractId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<IsgHealthReport>(entity =>
+        {
+            entity.ToTable("isg_health_reports");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.PersonnelId, x.ExamDate });
+            // Süresi dolanları taramak panelin ve brifingin ana sorgusu.
+            entity.HasIndex(x => new { x.CompanyId, x.ValidUntil });
+
+            entity.Property(x => x.ReportType).HasConversion<int>();
+            entity.Property(x => x.Result).HasConversion<int>();
+            entity.Property(x => x.DoctorName).HasMaxLength(200);
+            entity.Property(x => x.Restrictions).HasMaxLength(1000);
+            entity.Property(x => x.DoctorNotes).HasMaxLength(2000);
+            entity.Property(x => x.DocumentPath).HasMaxLength(500);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Personnel).WithMany()
+                .HasForeignKey(x => x.PersonnelId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.IsgOsgbContract).WithMany()
+                .HasForeignKey(x => x.IsgOsgbContractId).OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<IsgTraining>(entity =>
+        {
+            entity.ToTable("isg_trainings");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.PersonnelId, x.TrainingDate });
+            entity.HasIndex(x => new { x.CompanyId, x.ValidUntil });
+
+            entity.Property(x => x.TrainingType).HasConversion<int>();
+            entity.Property(x => x.Topic).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.DurationHours).HasPrecision(8, 2);
+            entity.Property(x => x.TrainerName).HasMaxLength(200);
+            entity.Property(x => x.DocumentPath).HasMaxLength(500);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Personnel).WithMany()
+                .HasForeignKey(x => x.PersonnelId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.IsgOsgbContract).WithMany()
+                .HasForeignKey(x => x.IsgOsgbContractId).OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<IsgCertificate>(entity =>
+        {
+            entity.ToTable("isg_certificates");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.PersonnelId, x.CertificateType });
+            entity.HasIndex(x => new { x.CompanyId, x.ExpiryDate });
+
+            entity.Property(x => x.CertificateType).HasConversion<int>();
+            entity.Property(x => x.CustomTypeName).HasMaxLength(200);
+            entity.Property(x => x.CertificateNumber).HasMaxLength(100);
+            entity.Property(x => x.IssuedBy).HasMaxLength(200);
+            entity.Property(x => x.DocumentPath).HasMaxLength(500);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Personnel).WithMany()
+                .HasForeignKey(x => x.PersonnelId).OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
