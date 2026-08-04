@@ -83,6 +83,9 @@ public sealed class AppDbContext(
 
     public DbSet<ProgressPaymentPaymentPlan> ProgressPaymentPaymentPlans =>
         Set<ProgressPaymentPaymentPlan>();
+
+    public DbSet<HakedisDeductionAccountMapping> HakedisDeductionAccountMappings =>
+        Set<HakedisDeductionAccountMapping>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
@@ -2058,6 +2061,30 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.AccountingVoucher)
                 .WithMany()
                 .HasForeignKey(x => x.AccountingVoucherId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<HakedisDeductionAccountMapping>(entity =>
+        {
+            entity.ToTable("hakedis_deduction_account_mappings");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Notes).HasMaxLength(500);
+
+            // Şirket başına her kesinti türünden tek eşleme. Soft-delete
+            // nedeniyle indeks yalnızca silinmemiş satırlarda arar.
+            entity.HasIndex(x => new { x.CompanyId, x.DeductionType })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.AccountingAccount).WithMany()
+                .HasForeignKey(x => x.AccountingAccountId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

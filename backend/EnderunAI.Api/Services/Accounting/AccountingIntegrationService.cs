@@ -297,12 +297,18 @@ public sealed class AccountingIntegrationService(
 
         // Tevkifatlı KDV'de satıcının beyan ettiği kısım yalnızca
         // tevkifat dışında kalan tutardır; kesilen kısmı alıcı beyan eder.
+        //
+        // İhzarat ayrı bir gelir satırı üretmez: fatura edilen tutarın
+        // içindedir ve KDV'ye tabidir. Kümülatif toplama girdiği için
+        // CurrentAmount'a zaten yansımıştır.
         var taxableAmount = decimal.Round(
             progressPayment.CurrentAmount + progressPayment.PriceDifferenceAmount, 2);
         var declaredVat = decimal.Round(
             progressPayment.VatAmount - progressPayment.WithholdingAmount, 2);
         var totalDeduction = decimal.Round(
             deductions.Sum(x => x.Amount), 2);
+        var incomeTaxWithholding = decimal.Round(
+            progressPayment.IncomeTaxWithholdingAmount, 2);
         var receivable = decimal.Round(
             progressPayment.NetPayableAmount, 2);
 
@@ -310,13 +316,24 @@ public sealed class AccountingIntegrationService(
             throw new InvalidOperationException(
                 "Hakediş tutarı sıfır; muhasebe fişi oluşturulamaz.");
 
-        if (decimal.Round(receivable + totalDeduction, 2) !=
+        // Stopaj da alacaktan düşen bir kalemdir; denge kontrolüne
+        // girmezse fiş tutarsız görünürdü.
+        if (decimal.Round(receivable + totalDeduction + incomeTaxWithholding, 2) !=
             decimal.Round(taxableAmount + declaredVat, 2))
         {
             throw new InvalidOperationException(
                 $"Hakediş tutarları tutarsız: net ödenecek ({receivable:N2}) + kesintiler ({totalDeduction:N2}) " +
-                $"≠ hakediş ({taxableAmount:N2}) + beyan edilen KDV ({declaredVat:N2}).");
+                $"+ stopaj ({incomeTaxWithholding:N2}) ≠ hakediş ({taxableAmount:N2}) + beyan edilen KDV ({declaredVat:N2}).");
         }
+
+        // Kesinti türü → hesap eşlemesi. Çözüm sırası: kesinti
+        // satırındaki hesap → şirketin tür eşlemesi → genel kesinti
+        // hesabı.
+        var deductionAccountByType = await db.HakedisDeductionAccountMappings
+            .AsNoTracking()
+            .Where(x => x.CompanyId == progressPayment.CompanyId)
+            .ToDictionaryAsync(
+                x => x.DeductionType, x => x.AccountingAccountId, cancellationToken);
 
         var receivableAccountId = employer.ReceivableAccountingAccountId
             ?? settings.ReceivablesAccountId
@@ -343,16 +360,50 @@ public sealed class AccountingIntegrationService(
 
         foreach (var deduction in deductions)
         {
+            Guid? mapped =
+                deductionAccountByType.TryGetValue(deduction.DeductionType, out var value)
+                    ? value
+                    : null;
+
             var deductionAccountId = deduction.AccountingAccountId
+                ?? mapped
                 ?? settings.DeductionAccountId
                 ?? throw new InvalidOperationException(
                     $"'{deduction.Description}' kesintisi için muhasebe hesabı belirlenmemiş. " +
-                    "Kesinti satırında hesap seçin veya Şirket Ayarları → Finans Ayarları'ndan varsayılan kesinti hesabını tanımlayın.");
+                    "Kesinti satırında hesap seçin, Şirket Ayarları → Hakediş Kesinti Hesapları'ndan " +
+                    "türe hesap eşleyin veya Finans Ayarları'ndan varsayılan kesinti hesabını tanımlayın.");
 
             lines.Add(new AccountingVoucherLineRequest(
                 AccountingAccountId: deductionAccountId,
                 Description: $"Hakediş kesintisi — {deduction.Description}",
                 DebitAmount: decimal.Round(deduction.Amount, 2),
+                CreditAmount: 0m,
+                CurrencyCode: progressPayment.CurrencyCode,
+                ExchangeRate: 1m,
+                CurrentAccountId: employer.Id,
+                ProjectId: progressPayment.ProjectId,
+                CostCenterCode: project.Code,
+                DocumentNumber: progressPayment.ProgressPaymentNumber,
+                DocumentDate: progressPayment.ProgressPaymentDate,
+                DueDate: null));
+        }
+
+        // Stopaj: işveren kaynağında kesip vergi dairesine yatırır, biz
+        // peşin ödenmiş vergi olarak izleriz. Alacaktan düştüğü için
+        // borç tarafında yer alır.
+        if (incomeTaxWithholding > 0m)
+        {
+            var withholdingAccountId = settings.TaxPayableAccountId
+                ?? settings.DeductionAccountId
+                ?? throw new InvalidOperationException(
+                    "Stopaj için muhasebe hesabı belirlenmemiş. Şirket Ayarları → " +
+                    "Finans Ayarları'ndan ödenecek vergiler hesabını seçin.");
+
+            lines.Add(new AccountingVoucherLineRequest(
+                AccountingAccountId: withholdingAccountId,
+                Description:
+                    $"Hakediş stopajı (%{progressPayment.IncomeTaxWithholdingRate:N2})",
+                DebitAmount: incomeTaxWithholding,
                 CreditAmount: 0m,
                 CurrencyCode: progressPayment.CurrencyCode,
                 ExchangeRate: 1m,

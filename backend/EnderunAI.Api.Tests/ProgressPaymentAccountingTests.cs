@@ -40,6 +40,23 @@ public sealed class ProgressPaymentAccountingTests(DatabaseFixture fixture)
             {
                 CompanyId = companyId, Code = "126", Name = "Verilen Depozito ve Teminatlar",
                 Nature = AccountingAccountNature.Debit, Level = 3, IsPostingAllowed = true
+            },
+            // Stopaj bu hesaba borç yazılır.
+            new AccountingAccount
+            {
+                CompanyId = companyId, Code = "360", Name = "Ödenecek Vergi ve Fonlar",
+                Nature = AccountingAccountNature.Credit, Level = 3, IsPostingAllowed = true
+            },
+            // Hakediş çeke bağlandığında alacak 120'den 101'e geçer.
+            new AccountingAccount
+            {
+                CompanyId = companyId, Code = "101", Name = "Alınan Çekler",
+                Nature = AccountingAccountNature.Debit, Level = 3, IsPostingAllowed = true
+            },
+            new AccountingAccount
+            {
+                CompanyId = companyId, Code = "101.01", Name = "Portföydeki Çekler",
+                Nature = AccountingAccountNature.Debit, Level = 4, IsPostingAllowed = true
             });
 
         await db.SaveChangesAsync();
@@ -65,7 +82,10 @@ public sealed class ProgressPaymentAccountingTests(DatabaseFixture fixture)
         decimal quantity, decimal unitPrice,
         decimal vatRate = 20m,
         int withholdingNumerator = 0, int withholdingDenominator = 0,
-        object[]? deductions = null) => new
+        object[]? deductions = null,
+        decimal incomeTaxWithholdingRate = 0m,
+        object[]? advanceMaterials = null,
+        object[]? paymentPlans = null) => new
         {
             companyId,
             projectId,
@@ -96,7 +116,10 @@ public sealed class ProgressPaymentAccountingTests(DatabaseFixture fixture)
                     notes = (string?)null
                 }
             },
-            deductions = deductions ?? Array.Empty<object>()
+            deductions = deductions ?? Array.Empty<object>(),
+            incomeTaxWithholdingRate,
+            advanceMaterials = advanceMaterials ?? Array.Empty<object>(),
+            paymentPlans = paymentPlans ?? Array.Empty<object>()
         };
 
     private async Task<Guid> CreateApprovedAsync(HttpClient client, object payload)
@@ -226,6 +249,151 @@ public sealed class ProgressPaymentAccountingTests(DatabaseFixture fixture)
             voucher.Lines.Single(x => x.AccountingAccount.Code == "120").DebitAmount);
         Assert.Equal(5_000m,
             voucher.Lines.Single(x => x.AccountingAccount.Code == "126").DebitAmount);
+    }
+
+    /// <summary>
+    /// Stopaj alacaktan düşer ve ödenecek vergiler hesabına borç yazılır.
+    /// 100.000 hakediş, %5 stopaj = 5.000 → tahsil 115.000.
+    /// </summary>
+    [Fact]
+    public async Task Post_WithIncomeTaxWithholding_DebitsTaxAccountAndReducesReceivable()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, projectId) = await CreateRevenueContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var id = await CreateApprovedAsync(client,
+            BuildPayload(companyId, projectId, quantity: 100m, unitPrice: 1_000m,
+                incomeTaxWithholdingRate: 5m));
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await client.PostAsync($"/api/progress-payments/{id}/post", null)).StatusCode);
+
+        var voucher = await LoadVoucherAsync(id);
+
+        Assert.Equal(voucher.TotalDebit, voucher.TotalCredit);
+        Assert.Equal(120_000m, voucher.TotalDebit);
+
+        Assert.Equal(115_000m,
+            voucher.Lines.Single(x => x.AccountingAccount.Code == "120").DebitAmount);
+
+        // Stopaj 360 Ödenecek Vergi ve Fonlar'a borç.
+        Assert.Equal(5_000m,
+            voucher.Lines.Single(x => x.AccountingAccount.Code == "360").DebitAmount);
+    }
+
+    /// <summary>
+    /// İhzarat ayrı gelir satırı üretmez; fatura edilen tutarın içinde
+    /// olduğu için gelir ve KDV'ye dahil olur, fiş yine dengelidir.
+    /// 100.000 imalat + 40.000 ihzarat (50 × 1.000 × %80) = 140.000
+    /// </summary>
+    [Fact]
+    public async Task Post_WithAdvanceMaterial_IncludesItInRevenueAndBalances()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, projectId) = await CreateRevenueContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var id = await CreateApprovedAsync(client,
+            BuildPayload(companyId, projectId, quantity: 100m, unitPrice: 1_000m,
+                advanceMaterials: [
+                    new
+                    {
+                        positionCode = "POZ-2",
+                        description = "Sahada bekleyen kablo",
+                        unit = "m",
+                        quantity = 50m,
+                        unitPrice = 1_000m,
+                        valuationRate = 80m,
+                        notes = (string?)null
+                    }
+                ]));
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await client.PostAsync($"/api/progress-payments/{id}/post", null)).StatusCode);
+
+        var voucher = await LoadVoucherAsync(id);
+
+        Assert.Equal(voucher.TotalDebit, voucher.TotalCredit);
+
+        // 140.000 gelir + %20 KDV
+        Assert.Equal(140_000m,
+            voucher.Lines.Single(x => x.AccountingAccount.Code == "600.03").CreditAmount);
+        Assert.Equal(28_000m,
+            voucher.Lines.Single(x => x.AccountingAccount.Code == "391.09").CreditAmount);
+        Assert.Equal(168_000m, voucher.TotalDebit);
+    }
+
+    /// <summary>
+    /// Ödeme dağılımındaki vadeli çekler kesinleştirmede çek defterine
+    /// düşer, hakedişe bağlanır ve vadeleri doğru hesaplanır.
+    /// </summary>
+    [Fact]
+    public async Task Post_WithChequePaymentPlan_CreatesLinkedChequesWithDueDates()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, projectId) = await CreateRevenueContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        // 120.000 tahsil: %40 nakit, %30 90 gün, %30 120 gün
+        var id = await CreateApprovedAsync(client,
+            BuildPayload(companyId, projectId, quantity: 100m, unitPrice: 1_000m,
+                paymentPlans: [
+                    new { paymentType = 0, rate = 40m, maturityDays = (int?)null, description = "Nakit" },
+                    new { paymentType = 1, rate = 30m, maturityDays = (int?)90, description = "90 gün" },
+                    new { paymentType = 1, rate = 30m, maturityDays = (int?)120, description = "120 gün" }
+                ]));
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await client.PostAsync($"/api/progress-payments/{id}/post", null)).StatusCode);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var cheques = await db.Cheques
+            .AsNoTracking()
+            .Where(x => x.ProgressPaymentId == id)
+            .OrderBy(x => x.DueDate)
+            .ToListAsync();
+
+        Assert.Equal(2, cheques.Count);
+        Assert.All(cheques, x => Assert.Equal(ChequeDirection.Received, x.Direction));
+
+        Assert.Equal(36_000m, cheques[0].Amount);
+        Assert.Equal(36_000m, cheques[1].Amount);
+
+        // Vadeler hakediş tarihinden sayılır.
+        Assert.Equal(90, (cheques[0].DueDate.Date - cheques[0].IssueDate.Date).Days);
+        Assert.Equal(120, (cheques[1].DueDate.Date - cheques[1].IssueDate.Date).Days);
+
+        // Nakit dahil parçaların toplamı tahsil edilecek tutarı tutmalı.
+        var plans = await db.ProgressPaymentPaymentPlans
+            .AsNoTracking()
+            .Where(x => x.ProgressPaymentId == id)
+            .ToListAsync();
+
+        Assert.Equal(120_000m, plans.Sum(x => x.Amount));
+    }
+
+    /// <summary>
+    /// Ödeme dağılımı %100 etmiyorsa hakediş kaydedilmez; hakedişin bir
+    /// kısmı hiçbir ödeme aracına bağlanmamış kalırdı.
+    /// </summary>
+    [Fact]
+    public async Task Create_WithIncompletePaymentPlan_IsRejected()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, projectId) = await CreateRevenueContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var response = await client.PostAsJsonAsync("/api/progress-payments",
+            BuildPayload(companyId, projectId, quantity: 100m, unitPrice: 1_000m,
+                paymentPlans: [
+                    new { paymentType = 0, rate = 40m, maturityDays = (int?)null, description = "Nakit" },
+                    new { paymentType = 1, rate = 30m, maturityDays = (int?)90, description = "90 gün" }
+                ]));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
