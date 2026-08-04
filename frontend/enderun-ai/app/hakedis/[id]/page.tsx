@@ -521,6 +521,10 @@ export default function ProgressPaymentDetailPage() {
           {item.status ===
             ProgressPaymentStatus.Draft && (
             <>
+              <Link href={`/hakedis/${item.id}/duzenle`}>
+                Düzenle
+              </Link>
+
               <button
                 type="button"
                 disabled={working}

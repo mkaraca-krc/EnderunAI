@@ -8,6 +8,38 @@ export enum ProgressPaymentStatus {
   Cancelled = 4,
 }
 
+/** Projenin imalat bölümü şablonu (NATURA'da 12 bölüm). */
+export interface ProjectHakedisSection {
+  id: string;
+  order: number;
+  name: string;
+  code?: string | null;
+  isActive: boolean;
+}
+
+/** Hakediş hazırlanırken gereken önceki dönem bilgileri. */
+export interface PreviousContext {
+  previousTotalAmount: number;
+  previousQuantities: Array<{ positionCode: string; quantity: number }>;
+  previousDeductions: Array<{ deductionType: number; amount: number }>;
+}
+
+/** Sonraki hakedişte mahsup edilebilecek açık ihzarat kalemi. */
+export interface OpenAdvanceMaterial {
+  id: string;
+  positionCode: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  valuationRate: number;
+  amount: number;
+  offsetAmount: number;
+  openAmount: number;
+  sourceProgressPaymentNumber: string;
+  sourcePeriodNumber: number;
+}
+
 export interface ProgressPaymentItemRequest {
   engineeringPositionId?: string | null;
   positionCode: string;
@@ -18,6 +50,36 @@ export interface ProgressPaymentItemRequest {
   unitPrice: number;
   measurementReference?: string | null;
   notes?: string | null;
+  /** Birim fiyat bileşenleri; verilirse UnitPrice bunların toplamıdır. */
+  materialUnitPrice?: number | null;
+  laborUnitPrice?: number | null;
+  overheadUnitPrice?: number | null;
+  /** Pozun ait olduğu proje bölümü. */
+  sectionId?: string | null;
+}
+
+export interface ProgressPaymentAdvanceMaterialRequest {
+  positionCode: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  valuationRate: number;
+  notes?: string | null;
+}
+
+export interface ProgressPaymentAdvanceOffsetRequest {
+  advanceMaterialId: string;
+  amount: number;
+  notes?: string | null;
+}
+
+export interface ProgressPaymentDeductionLineRequest {
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  vatRate: number;
+  notes?: string | null;
 }
 
 export interface ProgressPaymentDeductionRequest {
@@ -27,6 +89,17 @@ export interface ProgressPaymentDeductionRequest {
   baseAmount: number;
   manualAmount?: number | null;
   notes?: string | null;
+  accountingAccountId?: string | null;
+  /** Verilmezse hakedişin kümülatif toplamı kullanılır. */
+  cumulativeBaseAmount?: number | null;
+  lines?: ProgressPaymentDeductionLineRequest[] | null;
+}
+
+export interface ProgressPaymentPaymentPlanRequest {
+  paymentType: number;
+  rate: number;
+  maturityDays?: number | null;
+  description?: string | null;
 }
 
 export interface CreateProgressPaymentRequest {
@@ -46,6 +119,10 @@ export interface CreateProgressPaymentRequest {
   notes?: string | null;
   items: ProgressPaymentItemRequest[];
   deductions: ProgressPaymentDeductionRequest[];
+  advanceMaterials?: ProgressPaymentAdvanceMaterialRequest[] | null;
+  advanceOffsets?: ProgressPaymentAdvanceOffsetRequest[] | null;
+  incomeTaxWithholdingRate?: number;
+  paymentPlans?: ProgressPaymentPaymentPlanRequest[] | null;
 }
 
 export interface UpdateProgressPaymentRequest {
@@ -60,6 +137,10 @@ export interface UpdateProgressPaymentRequest {
   notes?: string | null;
   items: ProgressPaymentItemRequest[];
   deductions: ProgressPaymentDeductionRequest[];
+  advanceMaterials?: ProgressPaymentAdvanceMaterialRequest[] | null;
+  advanceOffsets?: ProgressPaymentAdvanceOffsetRequest[] | null;
+  incomeTaxWithholdingRate?: number;
+  paymentPlans?: ProgressPaymentPaymentPlanRequest[] | null;
 }
 
 export interface ProgressPaymentListItem {
@@ -367,6 +448,75 @@ export const progressPaymentService = {
   getById(id: string) {
     return apiClient<ProgressPaymentDetail>(
       `progress-payments/${id}`
+    );
+  },
+
+  /**
+   * Hazırlanan hakedişin önceki dönem bağlamı: poz bazında önceki
+   * miktarlar, kesinti türü bazında önceden kesilen ve minha toplamı.
+   */
+  getPreviousContext(
+    projectId: string,
+    periodNumber: number,
+    excludeProgressPaymentId?: string
+  ) {
+    const query = new URLSearchParams({
+      projectId,
+      periodNumber: String(periodNumber),
+    });
+
+    if (excludeProgressPaymentId) {
+      query.set("excludeProgressPaymentId", excludeProgressPaymentId);
+    }
+
+    return apiClient<PreviousContext>(
+      `progress-payments/previous-context?${query.toString()}`
+    );
+  },
+
+  /** Projenin imalat bölümleri (hakediş satırları bunlara bağlanır). */
+  getProjectSections(projectId: string) {
+    return apiClient<ProjectHakedisSection[]>(
+      `projects/${projectId}/hakedis-sections`
+    );
+  },
+
+  /** NATURA'nın 12 bölümü — yeni projede başlangıç listesi. */
+  getSectionTemplate() {
+    return apiClient<Array<{ order: number; name: string }>>(
+      "hakedis-section-template"
+    );
+  },
+
+  replaceProjectSections(
+    projectId: string,
+    sections: Array<{
+      id?: string | null;
+      order: number;
+      name: string;
+      code?: string | null;
+      isActive: boolean;
+    }>
+  ) {
+    return apiClient<{ message: string }>(
+      `projects/${projectId}/hakedis-sections`,
+      { method: "PUT", body: { sections } }
+    );
+  },
+
+  /**
+   * Projenin açık ihzarat kalemleri — bu hakedişte mahsup
+   * edilebilecekler.
+   */
+  getOpenAdvanceMaterials(projectId: string, excludeProgressPaymentId?: string) {
+    const query = new URLSearchParams({ projectId });
+
+    if (excludeProgressPaymentId) {
+      query.set("excludeProgressPaymentId", excludeProgressPaymentId);
+    }
+
+    return apiClient<OpenAdvanceMaterial[]>(
+      `progress-payments/open-advance-materials?${query.toString()}`
     );
   },
 

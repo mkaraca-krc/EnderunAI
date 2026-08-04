@@ -124,6 +124,62 @@ public sealed class ProgressPaymentsController(
             .ToListAsync(cancellationToken));
     }
 
+    /// <summary>
+    /// Hazırlanan hakedişin önceki dönem bağlamı: poz bazında önceki
+    /// miktarlar, kesinti türü bazında önceden kesilen tutarlar ve
+    /// minha edilecek toplam.
+    ///
+    /// Tek çağrıda döner; arayüzün her önceki hakedişin detayını ayrı
+    /// ayrı çekmesi gerekmesin diye.
+    /// </summary>
+    [HttpGet("previous-context")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
+    public async Task<IActionResult> PreviousContext(
+        [FromQuery] Guid projectId,
+        [FromQuery] int periodNumber,
+        [FromQuery] Guid? excludeProgressPaymentId,
+        CancellationToken cancellationToken)
+    {
+        var payments = db.ProgressPayments
+            .AsNoTracking()
+            .Where(x => x.ProjectId == projectId &&
+                        x.Status != ProgressPaymentStatus.Cancelled &&
+                        x.PeriodNumber < periodNumber);
+
+        if (excludeProgressPaymentId is Guid excluded)
+            payments = payments.Where(x => x.Id != excluded);
+
+        var previousTotal = await payments
+            .SumAsync(x => (decimal?)x.CurrentAmount, cancellationToken) ?? 0m;
+
+        var quantities = await payments
+            .SelectMany(x => x.Items)
+            .GroupBy(x => x.PositionCode)
+            .Select(g => new
+            {
+                PositionCode = g.Key,
+                Quantity = g.Sum(x => x.CurrentQuantity)
+            })
+            .ToListAsync(cancellationToken);
+
+        var deductions = await payments
+            .SelectMany(x => x.Deductions)
+            .GroupBy(x => x.DeductionType)
+            .Select(g => new
+            {
+                DeductionType = g.Key,
+                Amount = g.Sum(x => x.Amount)
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new
+        {
+            previousTotalAmount = previousTotal,
+            previousQuantities = quantities,
+            previousDeductions = deductions
+        });
+    }
+
     [HttpPost]
     [RequirePermission(PermissionCatalog.Keys.HakedisCreate)]
     public async Task<IActionResult> Create(

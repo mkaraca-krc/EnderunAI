@@ -2588,3 +2588,27 @@ body {
     padding: 20px 14px;
   }
 }
+
+/* Hakediş ekranlarında rakam kolonları hizalı okunsun. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Hakediş giriş tabloları çok kolonlu; hücre içi alanlar dar olmalı. */
+.erp-table td input,
+.erp-table td select {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--erp-border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.erp-table td input:focus,
+.erp-table td select:focus {
+  outline: none;
+  border-color: var(--erp-accent, #0f8b8d);
+}
