@@ -100,6 +100,8 @@ public sealed class AppDbContext(
     public DbSet<IsgHealthReport> IsgHealthReports => Set<IsgHealthReport>();
     public DbSet<IsgTraining> IsgTrainings => Set<IsgTraining>();
     public DbSet<IsgCertificate> IsgCertificates => Set<IsgCertificate>();
+    public DbSet<IsgIncident> IsgIncidents => Set<IsgIncident>();
+    public DbSet<IsgSiteDocument> IsgSiteDocuments => Set<IsgSiteDocument>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
@@ -347,6 +349,66 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Personnel).WithMany()
                 .HasForeignKey(x => x.PersonnelId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<IsgIncident>(entity =>
+        {
+            entity.ToTable("isg_incidents");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.IncidentDateTime });
+            entity.HasIndex(x => new { x.CompanyId, x.Status });
+            // SGK bildirimi yapılmamış kayıtlar panelde kritik olarak
+            // taranıyor; indeks o sorgu için.
+            entity.HasIndex(x => new { x.CompanyId, x.SgkNotified });
+            entity.HasIndex(x => x.ProjectSiteId);
+
+            entity.Property(x => x.IncidentType).HasConversion<int>();
+            entity.Property(x => x.Severity).HasConversion<int>();
+            entity.Property(x => x.Status).HasConversion<int>();
+            entity.Property(x => x.Description).HasMaxLength(4000).IsRequired();
+            entity.Property(x => x.RootCause).HasMaxLength(2000);
+            entity.Property(x => x.ActionTaken).HasMaxLength(2000);
+            entity.Property(x => x.SgkNotificationNumber).HasMaxLength(100);
+            entity.Property(x => x.ClosureNote).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.ProjectSite).WithMany()
+                .HasForeignKey(x => x.ProjectSiteId).OnDelete(DeleteBehavior.SetNull);
+            // Personel silinse bile kaza kaydı durur — yasal kayıt.
+            entity.HasOne(x => x.Personnel).WithMany()
+                .HasForeignKey(x => x.PersonnelId).OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<IsgSiteDocument>(entity =>
+        {
+            entity.ToTable("isg_site_documents");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.ValidUntil });
+            entity.HasIndex(x => new { x.ProjectId, x.DocumentType });
+            entity.HasIndex(x => x.ProjectSiteId);
+
+            entity.Property(x => x.DocumentType).HasConversion<int>();
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.StoredFileName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.OriginalFileName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ProjectSite).WithMany()
+                .HasForeignKey(x => x.ProjectSiteId).OnDelete(DeleteBehavior.SetNull);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

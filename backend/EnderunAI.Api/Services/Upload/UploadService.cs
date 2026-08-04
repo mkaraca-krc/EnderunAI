@@ -77,17 +77,18 @@ public sealed class UploadService : IUploadService
             storedName
         );
 
-        await using var stream = new FileStream(
+        // Akış BLOK İÇİNDE kapatılıyor: daha önce "await using var" ile
+        // metot sonuna kadar açık kalıyordu ve FileInfo henüz diske
+        // yazılmamış (tampondaki) dosyayı ölçüyordu. Küçük dosyalarda
+        // Size her zaman 0 kaydediliyordu.
+        await using (var stream = new FileStream(
             fullPath,
             FileMode.CreateNew,
             FileAccess.Write,
-            FileShare.None
-        );
-
-        await file.CopyToAsync(
-            stream,
-            cancellationToken
-        );
+            FileShare.None))
+        {
+            await file.CopyToAsync(stream, cancellationToken);
+        }
 
         var fileInfo = new FileInfo(fullPath);
 

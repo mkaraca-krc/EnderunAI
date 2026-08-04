@@ -89,6 +89,12 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Security.IIsgHealthVisibilityService,
     EnderunAI.Api.Security.IsgHealthVisibilityService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Isg.IIsgIncidentService,
+    EnderunAI.Api.Services.Isg.IsgIncidentService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Isg.IIsgSiteDocumentService,
+    EnderunAI.Api.Services.Isg.IsgSiteDocumentService>();
 
 // E-fatura okuma: standart UBL-TR ayrıştırıcı önce, AI yedeği yalnızca
 // o yetersiz kalırsa (token maliyeti).
