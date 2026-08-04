@@ -41,6 +41,21 @@ public sealed record ProgressPaymentAdvanceOffsetRequest(
     string? Notes
 );
 
+/// <summary>Alt kalemli kesintinin (yemek, konaklama, İSG) tek satırı.</summary>
+public sealed record ProgressPaymentDeductionLineRequest(
+    string Name,
+    decimal UnitPrice,
+    decimal Quantity,
+    decimal VatRate,
+    string? Notes
+);
+
+/// <param name="BaseAmount">Geriye dönük uyumluluk için korunuyor.
+/// Kümülatif taban verilmezse bu kullanılır.</param>
+/// <param name="CumulativeBaseAmount">Kesintinin uygulanacağı kümülatif
+/// taban. Verilmezse hakedişin kümülatif tutarı esas alınır.</param>
+/// <param name="Lines">Alt kalemler; doluysa tutar oranla değil
+/// bunlardan hesaplanır.</param>
 public sealed record ProgressPaymentDeductionRequest(
     int DeductionType,
     string Description,
@@ -52,7 +67,9 @@ public sealed record ProgressPaymentDeductionRequest(
     /// Kesintinin borç yazılacağı hesap. Boşsa şirket finans ayarındaki
     /// varsayılan kesinti hesabı kullanılır.
     /// </summary>
-    Guid? AccountingAccountId = null
+    Guid? AccountingAccountId = null,
+    decimal? CumulativeBaseAmount = null,
+    IReadOnlyCollection<ProgressPaymentDeductionLineRequest>? Lines = null
 );
 
 public sealed record CreateProgressPaymentRequest(

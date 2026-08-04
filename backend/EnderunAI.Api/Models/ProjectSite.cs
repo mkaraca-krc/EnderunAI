@@ -10,6 +10,13 @@ public sealed class ProjectSite : BaseEntity
     public string? Location { get; set; }
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// Bu şantiyeye özgü barter oranı (%). Barter oranı şantiyeden
+    /// şantiyeye değişir; boşsa projedeki oran kullanılır, hakedişte de
+    /// düzeltilebilir.
+    /// </summary>
+    public decimal? BarterRate { get; set; }
+
     public ICollection<ProjectSiteAssignment> Assignments { get; set; }
         = new List<ProjectSiteAssignment>();
 

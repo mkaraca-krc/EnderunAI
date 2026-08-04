@@ -340,6 +340,156 @@ public static class HakedisCalculationService
         return null;
     }
 
+    // ---------- Kesintiler ----------
+
+    /// <summary>Alt kalemli kesintinin tek satırı.</summary>
+    public sealed record DeductionLineInput(
+        string Name,
+        decimal UnitPrice,
+        decimal Quantity,
+        decimal VatRate);
+
+    public sealed record DeductionLineResult(
+        string Name,
+        decimal UnitPrice,
+        decimal Quantity,
+        decimal VatRate,
+        decimal NetAmount,
+        decimal VatAmount,
+        decimal GrossAmount);
+
+    /// <summary>
+    /// Bir kesinti kaleminin girdileri.
+    /// </summary>
+    /// <param name="CumulativeBaseAmount">Kesintinin uygulanacağı
+    /// kümülatif taban (genelde kümülatif hakediş tutarı).</param>
+    /// <param name="PreviousAmount">Önceki hakedişlerde bu türden
+    /// kesilmiş toplam.</param>
+    /// <param name="ManualAmount">Elle girilen tutar; verilirse oran
+    /// yok sayılır.</param>
+    /// <param name="Lines">Alt kalemler; doluysa tutar bunlardan gelir.</param>
+    public sealed record DeductionInput(
+        int DeductionType,
+        string Description,
+        decimal Rate,
+        decimal CumulativeBaseAmount,
+        decimal PreviousAmount,
+        decimal? ManualAmount = null,
+        IReadOnlyList<DeductionLineInput>? Lines = null);
+
+    public sealed record DeductionResult(
+        int DeductionType,
+        string Description,
+        decimal Rate,
+        decimal CumulativeBaseAmount,
+        decimal PreviousAmount,
+        decimal CumulativeAmount,
+        decimal Amount,
+        bool IsManualAmount,
+        IReadOnlyList<DeductionLineResult> Lines);
+
+    /// <summary>
+    /// Bir kesinti kalemini hesaplar.
+    ///
+    /// KÜMÜLATİF MANTIK: kümülatif kesinti = kümülatif taban × oran;
+    /// bu dönem kesilecek = kümülatif − önceki dönemlerde kesilen.
+    /// "Bu dönem tutarı × oran" yaklaşımı, oran dönemler arasında
+    /// değiştiğinde geçmişi düzeltemezdi.
+    ///
+    /// Alt kalemler (yemek, konaklama, İSG) varsa tutar oranla değil
+    /// birim fiyat × adet × KDV toplamıyla bulunur; bu kalemler zaten
+    /// dönemseldir, kümülatif düzeltmeye tabi değildir.
+    /// </summary>
+    public static DeductionResult CalculateDeduction(DeductionInput input)
+    {
+        var lines = (input.Lines ?? [])
+            .Select(CalculateDeductionLine)
+            .ToList();
+
+        var previous = Math.Max(0m, Round(input.PreviousAmount));
+
+        if (lines.Count > 0)
+        {
+            var lineTotal = Round(lines.Sum(x => x.GrossAmount));
+
+            return new DeductionResult(
+                DeductionType: input.DeductionType,
+                Description: input.Description,
+                Rate: input.Rate,
+                CumulativeBaseAmount: 0m,
+                PreviousAmount: previous,
+                CumulativeAmount: Round(previous + lineTotal),
+                Amount: lineTotal,
+                IsManualAmount: false,
+                Lines: lines);
+        }
+
+        if (input.ManualAmount is decimal manual)
+        {
+            var amount = Math.Max(0m, Round(manual));
+
+            return new DeductionResult(
+                input.DeductionType, input.Description, input.Rate,
+                CumulativeBaseAmount: Round(input.CumulativeBaseAmount),
+                PreviousAmount: previous,
+                CumulativeAmount: Round(previous + amount),
+                Amount: amount,
+                IsManualAmount: true,
+                Lines: lines);
+        }
+
+        var cumulativeBase = Math.Max(0m, Round(input.CumulativeBaseAmount));
+        var cumulativeAmount = Round(cumulativeBase * input.Rate / 100m);
+
+        // Kümülatif kesinti önceki toplamın altına düşerse (taban
+        // küçüldü) bu dönemde geri ödeme yapılmaz; kesinti sıfırlanır.
+        var currentAmount = Math.Max(0m, Round(cumulativeAmount - previous));
+
+        return new DeductionResult(
+            DeductionType: input.DeductionType,
+            Description: input.Description,
+            Rate: input.Rate,
+            CumulativeBaseAmount: cumulativeBase,
+            PreviousAmount: previous,
+            CumulativeAmount: Round(previous + currentAmount),
+            Amount: currentAmount,
+            IsManualAmount: false,
+            Lines: lines);
+    }
+
+    private static DeductionLineResult CalculateDeductionLine(DeductionLineInput line)
+    {
+        var unitPrice = Math.Max(0m, line.UnitPrice);
+        var quantity = Math.Max(0m, line.Quantity);
+        var vatRate = Math.Max(0m, line.VatRate);
+
+        var net = Round(unitPrice * quantity);
+        var vat = Round(net * vatRate / 100m);
+
+        return new DeductionLineResult(
+            Name: line.Name,
+            UnitPrice: unitPrice,
+            Quantity: quantity,
+            VatRate: vatRate,
+            NetAmount: net,
+            VatAmount: vat,
+            GrossAmount: Round(net + vat));
+    }
+
+    // ---------- Barter ----------
+
+    /// <summary>
+    /// Barter bakiyesi: hakedişlerden kesilen barter tutarı işverenden
+    /// mal/hizmet olarak alınacak alacaktır.
+    ///
+    /// Bakiye = kümülatif kesilen − teslim alınan. Teslim alınan
+    /// kesilenden fazla olamaz; fazlası hatalı kayıt demektir ve
+    /// bakiye negatife düşürülmez.
+    /// </summary>
+    public static decimal CalculateBarterBalance(
+        decimal cumulativeDeducted, decimal totalReceived) =>
+        Math.Max(0m, Round(cumulativeDeducted) - Round(totalReceived));
+
     internal static decimal Round(decimal value) =>
         decimal.Round(value, 2, MidpointRounding.AwayFromZero);
 }

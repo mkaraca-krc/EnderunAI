@@ -368,6 +368,171 @@ public sealed class HakedisCalculationTests
             HakedisCalculationService.SuggestOffset(openAdvance, currentWork));
     }
 
+    // ---------- Kesintiler ----------
+
+    private static HakedisCalculationService.DeductionInput Deduction(
+        decimal rate,
+        decimal cumulativeBase,
+        decimal previous = 0m,
+        decimal? manual = null,
+        IReadOnlyList<HakedisCalculationService.DeductionLineInput>? lines = null) =>
+        new(DeductionType: 1, Description: "Kesin teminat", Rate: rate,
+            CumulativeBaseAmount: cumulativeBase, PreviousAmount: previous,
+            ManualAmount: manual, Lines: lines);
+
+    /// <summary>
+    /// Kesinti kümülatif taban üzerinden hesaplanır; bu dönem kesilecek
+    /// tutar kümülatiften önceki kesintiler düşülerek bulunur.
+    /// 1.200.000 × %5 = 60.000; önceden 35.000 kesilmiş → 25.000.
+    /// </summary>
+    [Fact]
+    public void Deduction_IsCumulativeMinusPrevious()
+    {
+        var result = HakedisCalculationService.CalculateDeduction(
+            Deduction(rate: 5m, cumulativeBase: 1_200_000m, previous: 35_000m));
+
+        Assert.Equal(60_000.00m, result.CumulativeAmount);
+        Assert.Equal(25_000.00m, result.Amount);
+        Assert.Equal(35_000.00m, result.PreviousAmount);
+    }
+
+    /// <summary>
+    /// ORAN DEĞİŞİRSE: kümülatif mantık geçmişi de düzeltir.
+    /// İlk dönem 500.000 × %5 = 25.000 kesildi. İkinci dönemde oran
+    /// %10'a çıktı ve kümülatif taban 1.000.000 oldu → kümülatif kesinti
+    /// 100.000; bu dönem 75.000 kesilir. "Bu dönem × oran" yaklaşımı
+    /// 50.000 keser ve geçmişteki eksik kesintiyi hiç yakalayamazdı.
+    /// </summary>
+    [Fact]
+    public void Deduction_RateChange_CorrectsEarlierPeriods()
+    {
+        var first = HakedisCalculationService.CalculateDeduction(
+            Deduction(rate: 5m, cumulativeBase: 500_000m));
+
+        var second = HakedisCalculationService.CalculateDeduction(
+            Deduction(rate: 10m, cumulativeBase: 1_000_000m,
+                previous: first.Amount));
+
+        Assert.Equal(25_000.00m, first.Amount);
+        Assert.Equal(75_000.00m, second.Amount);
+        Assert.Equal(100_000.00m, second.CumulativeAmount);
+    }
+
+    /// <summary>
+    /// Kümülatif kesinti önceki toplamın altına düşerse bu dönemde geri
+    /// ödeme yapılmaz; kesinti sıfırlanır.
+    /// </summary>
+    [Fact]
+    public void Deduction_NeverGoesNegative()
+    {
+        var result = HakedisCalculationService.CalculateDeduction(
+            Deduction(rate: 5m, cumulativeBase: 100_000m, previous: 20_000m));
+
+        Assert.Equal(0m, result.Amount);
+    }
+
+    /// <summary>Elle girilen tutar oranı geçersiz kılar.</summary>
+    [Fact]
+    public void Deduction_ManualAmountOverridesRate()
+    {
+        var result = HakedisCalculationService.CalculateDeduction(
+            Deduction(rate: 5m, cumulativeBase: 1_000_000m, manual: 12_345.67m));
+
+        Assert.True(result.IsManualAmount);
+        Assert.Equal(12_345.67m, result.Amount);
+    }
+
+    /// <summary>
+    /// Alt kalemli kesinti (yemek): birim fiyat × adet × KDV. Toplam
+    /// oranla değil kalemlerden gelir.
+    ///   kahvaltı  60 × 220 = 13.200 + %20 = 15.840
+    ///   öğlen    150 × 220 = 33.000 + %20 = 39.600
+    ///   akşam    120 × 180 = 21.600 + %20 = 25.920
+    ///   kumanya   90 ×  40 =  3.600 + %20 =  4.320
+    ///                                     = 85.680
+    /// </summary>
+    [Fact]
+    public void Deduction_WithSubLines_IsSumOfLinesNotRate()
+    {
+        var result = HakedisCalculationService.CalculateDeduction(
+            Deduction(rate: 5m, cumulativeBase: 1_000_000m, lines:
+            [
+                new("Kahvaltı", 60m, 220m, 20m),
+                new("Öğlen", 150m, 220m, 20m),
+                new("Akşam", 120m, 180m, 20m),
+                new("Kumanya", 90m, 40m, 20m)
+            ]));
+
+        Assert.Equal(4, result.Lines.Count);
+        Assert.Equal(15_840.00m, result.Lines[0].GrossAmount);
+        Assert.Equal(85_680.00m, result.Amount);
+
+        // Oran yok sayıldı: 1.000.000 × %5 = 50.000 olurdu.
+        Assert.NotEqual(50_000m, result.Amount);
+
+        // Alt kalemlerin toplamı ana tutara eşit.
+        Assert.Equal(result.Amount, result.Lines.Sum(x => x.GrossAmount));
+    }
+
+    /// <summary>Alt kalemde KDV ayrı ayrı hesaplanır ve net + KDV = brüt.</summary>
+    [Fact]
+    public void DeductionLine_VatIsAddedOnTopOfNet()
+    {
+        var result = HakedisCalculationService.CalculateDeduction(
+            Deduction(rate: 0m, cumulativeBase: 0m, lines:
+                [new("Yatılı", 350m, 30m, 20m)]));
+
+        var line = result.Lines.Single();
+
+        Assert.Equal(10_500.00m, line.NetAmount);
+        Assert.Equal(2_100.00m, line.VatAmount);
+        Assert.Equal(12_600.00m, line.GrossAmount);
+        Assert.Equal(line.NetAmount + line.VatAmount, line.GrossAmount);
+    }
+
+    // ---------- Barter ----------
+
+    /// <summary>
+    /// Barter bakiyesi işverenden alınacak mal/hizmet alacağıdır:
+    /// kesilen artırır, teslim alınan azaltır.
+    /// </summary>
+    [Fact]
+    public void BarterBalance_IsDeductedMinusReceived()
+    {
+        Assert.Equal(180_000.00m,
+            HakedisCalculationService.CalculateBarterBalance(
+                cumulativeDeducted: 500_000m, totalReceived: 320_000m));
+    }
+
+    /// <summary>
+    /// Teslim alınan kesilenden fazla olamaz; bakiye negatife düşürülmez.
+    /// </summary>
+    [Fact]
+    public void BarterBalance_NeverGoesNegative()
+    {
+        Assert.Equal(0m,
+            HakedisCalculationService.CalculateBarterBalance(
+                cumulativeDeducted: 100_000m, totalReceived: 150_000m));
+    }
+
+    /// <summary>
+    /// Barter oranı NATURA'da %40. Kümülatif 1.000.000 hakedişte
+    /// 400.000 barter kesilir.
+    /// </summary>
+    [Fact]
+    public void Barter_UsesSiteSpecificRate()
+    {
+        var result = HakedisCalculationService.CalculateDeduction(
+            new HakedisCalculationService.DeductionInput(
+                DeductionType: (int)EnderunAI.Api.Models.HakedisDeductionType.Barter,
+                Description: "Barter",
+                Rate: 40m,
+                CumulativeBaseAmount: 1_000_000m,
+                PreviousAmount: 0m));
+
+        Assert.Equal(400_000.00m, result.Amount);
+    }
+
     /// <summary>
     /// Bütünlük: brüt = matrah + KDV ve net = brüt − tevkifat − stopaj −
     /// kesinti. Eşitlik bozulursa hakediş kendi içinde tutarsızdır.

@@ -269,11 +269,16 @@ public sealed class ProgressPaymentsController(
         entity.CumulativeAdvanceMaterialAmount =
             await CalculateOpenAdvanceAmountAsync(entity, cancellationToken);
 
-        ApplyDeductions(entity, request.Deductions);
+        var previousDeductions = await LoadPreviousDeductionsAsync(
+            request.ProjectId, null, request.PeriodNumber, cancellationToken);
+
+        ApplyDeductions(entity, request.Deductions, previousDeductions);
         CalculateHeader(entity, previousPayments);
 
         db.ProgressPayments.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
+
+        await SyncBarterLedgerAsync(entity, cancellationToken);
 
         return Ok(new
         {
@@ -406,10 +411,15 @@ public sealed class ProgressPaymentsController(
         entity.CumulativeAdvanceMaterialAmount =
             await CalculateOpenAdvanceAmountAsync(entity, cancellationToken);
 
-        ApplyDeductions(entity, request.Deductions);
+        var previousDeductions = await LoadPreviousDeductionsAsync(
+            entity.ProjectId, entity.Id, entity.PeriodNumber, cancellationToken);
+
+        ApplyDeductions(entity, request.Deductions, previousDeductions);
         CalculateHeader(entity, previousPayments);
 
         await db.SaveChangesAsync(cancellationToken);
+
+        await SyncBarterLedgerAsync(entity, cancellationToken);
 
         var detail = await BuildDetail(id, cancellationToken);
         return Ok(detail);
@@ -878,9 +888,20 @@ public sealed class ProgressPaymentsController(
         }
     }
 
+    /// <summary>
+    /// Kesintileri kurar.
+    ///
+    /// KÜMÜLATİF: her kesinti "kümülatif taban × oran − önceki
+    /// dönemlerde kesilen" olarak hesaplanır. Oran dönemler arasında
+    /// değişse bile toplam doğru kalır — "bu dönem × oran" yaklaşımı
+    /// geçmişi düzeltemezdi.
+    /// </summary>
+    /// <param name="previousByType">Önceki hakedişlerde her kesinti
+    /// türünden kesilmiş toplam.</param>
     private static void ApplyDeductions(
         ProgressPayment entity,
-        IEnumerable<ProgressPaymentDeductionRequest>? requests)
+        IEnumerable<ProgressPaymentDeductionRequest>? requests,
+        IReadOnlyDictionary<int, decimal>? previousByType = null)
     {
         if (requests is null)
             return;
@@ -889,29 +910,143 @@ public sealed class ProgressPaymentsController(
 
         foreach (var request in requests)
         {
-            var isManual = request.ManualAmount.HasValue;
+            var previousAmount = previousByType is null
+                ? 0m
+                : previousByType.TryGetValue(request.DeductionType, out var value)
+                    ? value
+                    : 0m;
 
-            var amount = isManual
-                ? request.ManualAmount!.Value
-                : request.BaseAmount *
-                  request.Rate / 100m;
+            var lines = request.Lines?
+                .Select(line => new HakedisCalculationService.DeductionLineInput(
+                    line.Name?.Trim() ?? string.Empty,
+                    line.UnitPrice,
+                    line.Quantity,
+                    line.VatRate))
+                .ToList();
 
-            entity.Deductions.Add(
-                new ProgressPaymentDeduction
+            var result = HakedisCalculationService.CalculateDeduction(
+                new HakedisCalculationService.DeductionInput(
+                    DeductionType: request.DeductionType,
+                    Description: request.Description?.Trim() ?? "Kesinti",
+                    Rate: request.Rate,
+                    // Kümülatif taban verilmemişse eski davranışa düşülür.
+                    CumulativeBaseAmount:
+                        request.CumulativeBaseAmount ?? request.BaseAmount,
+                    PreviousAmount: previousAmount,
+                    ManualAmount: request.ManualAmount,
+                    Lines: lines));
+
+            var deduction = new ProgressPaymentDeduction
+            {
+                LineNumber = lineNumber++,
+                DeductionType = result.DeductionType,
+                Description = result.Description,
+                Rate = result.Rate,
+                BaseAmount = request.BaseAmount,
+                CumulativeBaseAmount = result.CumulativeBaseAmount,
+                PreviousAmount = result.PreviousAmount,
+                CumulativeAmount = result.CumulativeAmount,
+                Amount = result.Amount,
+                IsManualAmount = result.IsManualAmount,
+                AccountingAccountId = request.AccountingAccountId,
+                Notes = request.Notes?.Trim()
+            };
+
+            var subLineNumber = 1;
+
+            foreach (var line in result.Lines)
+            {
+                deduction.Lines.Add(new ProgressPaymentDeductionLine
                 {
-                    LineNumber = lineNumber++,
-                    DeductionType = request.DeductionType,
-                    Description =
-                        request.Description?.Trim() ??
-                        "Kesinti",
-                    Rate = request.Rate,
-                    BaseAmount = request.BaseAmount,
-                    Amount = Math.Max(0m, amount),
-                    IsManualAmount = isManual,
-                    AccountingAccountId = request.AccountingAccountId,
-                    Notes = request.Notes?.Trim()
+                    LineNumber = subLineNumber++,
+                    Name = line.Name,
+                    UnitPrice = line.UnitPrice,
+                    Quantity = line.Quantity,
+                    VatRate = line.VatRate,
+                    NetAmount = line.NetAmount,
+                    VatAmount = line.VatAmount,
+                    GrossAmount = line.GrossAmount
                 });
+            }
+
+            entity.Deductions.Add(deduction);
         }
+    }
+
+    /// <summary>
+    /// Hakedişteki barter kesintisini barter defterine yansıtır.
+    ///
+    /// Barter, hakedişin mal/hizmet olarak ödenecek kısmıdır: kesinti
+    /// yapıldığında işverenden o tutarda mal/hizmet alacağımız doğar.
+    /// Defter kaydı hakediş başına tektir; düzenlemede güncellenir.
+    /// </summary>
+    private async Task SyncBarterLedgerAsync(
+        ProgressPayment entity, CancellationToken cancellationToken)
+    {
+        var barterAmount = entity.Deductions
+            .Where(x => x.DeductionType == (int)HakedisDeductionType.Barter)
+            .Sum(x => x.Amount);
+
+        var existing = await db.BarterLedgerEntries
+            .SingleOrDefaultAsync(
+                x => x.ProgressPaymentId == entity.Id &&
+                     x.EntryType == BarterEntryType.Deduction,
+                cancellationToken);
+
+        if (barterAmount <= 0m)
+        {
+            if (existing is not null)
+                db.BarterLedgerEntries.Remove(existing);
+
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        if (existing is null)
+        {
+            db.BarterLedgerEntries.Add(new BarterLedgerEntry
+            {
+                ProjectId = entity.ProjectId,
+                ProgressPaymentId = entity.Id,
+                EntryType = BarterEntryType.Deduction,
+                EntryDate = entity.ProgressPaymentDate,
+                Amount = barterAmount,
+                Description = $"{entity.ProgressPaymentNumber} barter kesintisi"
+            });
+        }
+        else
+        {
+            existing.Amount = barterAmount;
+            existing.EntryDate = entity.ProgressPaymentDate;
+            existing.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Önceki hakedişlerde kesinti türü bazında kesilmiş toplamlar.
+    /// Kümülatif kesinti hesabının "önceden kesilen" tarafı.
+    /// </summary>
+    private async Task<Dictionary<int, decimal>> LoadPreviousDeductionsAsync(
+        Guid projectId,
+        Guid? excludeProgressPaymentId,
+        int periodNumber,
+        CancellationToken cancellationToken)
+    {
+        var query = db.ProgressPaymentDeductions
+            .AsNoTracking()
+            .Where(x => x.ProgressPayment.ProjectId == projectId &&
+                        x.ProgressPayment.Status != ProgressPaymentStatus.Cancelled &&
+                        x.ProgressPayment.PeriodNumber < periodNumber);
+
+        if (excludeProgressPaymentId is Guid excluded)
+            query = query.Where(x => x.ProgressPaymentId != excluded);
+
+        return await query
+            .GroupBy(x => x.DeductionType)
+            .Select(g => new { Type = g.Key, Total = g.Sum(x => x.Amount) })
+            .ToDictionaryAsync(x => x.Type, x => x.Total, cancellationToken);
     }
 
     /// <summary>
@@ -1106,9 +1241,26 @@ public sealed class ProgressPaymentsController(
                         d.Description,
                         d.Rate,
                         d.BaseAmount,
+                        d.CumulativeBaseAmount,
+                        d.PreviousAmount,
+                        d.CumulativeAmount,
                         d.Amount,
                         d.IsManualAmount,
-                        d.Notes
+                        d.Notes,
+                        Lines = d.Lines
+                            .OrderBy(l => l.LineNumber)
+                            .Select(l => new
+                            {
+                                l.Id,
+                                l.LineNumber,
+                                l.Name,
+                                l.UnitPrice,
+                                l.Quantity,
+                                l.VatRate,
+                                l.NetAmount,
+                                l.VatAmount,
+                                l.GrossAmount
+                            })
                     })
             })
             .SingleOrDefaultAsync(cancellationToken);

@@ -159,6 +159,11 @@ public sealed class ProgressPaymentDeduction : BaseEntity
     public ProgressPayment ProgressPayment { get; set; } = null!;
 
     public int LineNumber { get; set; }
+
+    /// <summary>
+    /// Kesinti türü. int olarak saklanır (mevcut kayıtlar bozulmasın);
+    /// anlamı <see cref="HakedisDeductionType"/> içinde.
+    /// </summary>
     public int DeductionType { get; set; }
 
     public string Description { get; set; } = string.Empty;
@@ -166,6 +171,28 @@ public sealed class ProgressPaymentDeduction : BaseEntity
     public decimal Rate { get; set; }
     public decimal BaseAmount { get; set; }
     public decimal Amount { get; set; }
+
+    // --- Kümülatif takip ---
+    // Kesinti "bu dönem tutarı × oran" ile değil, "kümülatif taban ×
+    // oran − önceki kesintiler" ile bulunur. Oran dönemler arasında
+    // değişse bile toplam doğru kalır.
+
+    /// <summary>Kesintinin uygulandığı kümülatif taban.</summary>
+    public decimal CumulativeBaseAmount { get; set; }
+
+    /// <summary>Önceki hakedişlerde bu türden kesilen toplam.</summary>
+    public decimal PreviousAmount { get; set; }
+
+    /// <summary>Bu hakediş dahil kümülatif kesinti toplamı.</summary>
+    public decimal CumulativeAmount { get; set; }
+
+    /// <summary>
+    /// Alt kalemler (yemek: kahvaltı/öğlen/akşam/kumanya, konaklama:
+    /// yatılı/evci). Doluysa kesinti tutarı oranla değil bunlardan
+    /// hesaplanır.
+    /// </summary>
+    public ICollection<ProgressPaymentDeductionLine> Lines { get; set; }
+        = new List<ProgressPaymentDeductionLine>();
 
     public bool IsManualAmount { get; set; }
 

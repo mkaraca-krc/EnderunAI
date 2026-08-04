@@ -71,6 +71,15 @@ public sealed class Project : BaseEntity
     /// Örnek: yüzde 10 için 10.00.
     /// </summary>
     public decimal MaterialDeductionRate { get; set; }
+
+    /// <summary>All-risk inşaat sigortası kesinti oranı (%). Yaygın: 0,5.</summary>
+    public decimal AllRiskInsuranceRate { get; set; }
+
+    /// <summary>
+    /// Projenin varsayılan barter oranı (%). Şantiyede oran tanımlıysa
+    /// o öncelikli; hakedişte de düzeltilebilir.
+    /// </summary>
+    public decimal BarterRate { get; set; }
     public string? WithholdingRate { get; set; }
 
     public DateTime? PlannedStartDate { get; set; }
