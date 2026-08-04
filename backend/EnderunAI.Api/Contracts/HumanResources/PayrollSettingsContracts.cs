@@ -22,7 +22,9 @@ public sealed record UpdatePayrollSettingsRequest(
     bool MinimumWageStampTaxExemptionEnabled,
     decimal SeveranceCeiling,
     string? SeveranceCeilingPeriodNote,
-    IReadOnlyCollection<PayrollTaxBracketRequest> TaxBrackets);
+    IReadOnlyCollection<PayrollTaxBracketRequest> TaxBrackets,
+    /// <summary>Günlük normal çalışma süresi (saat). Saatlik ücret bundan türetilir.</summary>
+    decimal DailyWorkHours = 7.5m);
 
 /// <summary>
 /// Parametrelerin yürürlükteki mevzuatla karşılaştırıldığının onayı.
@@ -59,4 +61,5 @@ public sealed record PayrollSettingsResponse(
     DateTime? VerifiedAtUtc,
     string? VerificationNote,
     bool IsVerified,
-    IReadOnlyCollection<PayrollTaxBracketResponse> TaxBrackets);
+    IReadOnlyCollection<PayrollTaxBracketResponse> TaxBrackets,
+    decimal DailyWorkHours = 7.5m);

@@ -114,6 +114,8 @@ public sealed class HrDbContext(DbContextOptions<HrDbContext> options)
             entity.HasIndex(x => new { x.CompanyId, x.PersonnelId });
             entity.Property(x => x.EffectiveStartDate).HasColumnType("date");
             entity.Property(x => x.EffectiveEndDate).HasColumnType("date");
+            entity.Property(x => x.SalaryBasis).HasConversion<int>();
+            entity.Property(x => x.TargetNetSalary).HasPrecision(18, 2);
             entity.Property(x => x.GrossSalary).HasPrecision(18, 2);
             entity.Property(x => x.NetSalary).HasPrecision(18, 2);
             entity.Property(x => x.DailyRate).HasPrecision(18, 2);

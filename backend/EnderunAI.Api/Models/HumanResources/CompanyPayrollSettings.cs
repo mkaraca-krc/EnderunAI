@@ -78,6 +78,18 @@ public sealed class CompanyPayrollSettings : BaseEntity
     /// </summary>
     public bool MinimumWageStampTaxExemptionEnabled { get; set; } = true;
 
+    // --- Çalışma süresi ---
+
+    /// <summary>
+    /// Günlük normal çalışma süresi (saat). Saatlik ücret buradan
+    /// türetilir: saatlik = aylık ÷ 30 ÷ bu değer.
+    ///
+    /// Daha önce 225 (30 × 7,5) olarak koda iki ayrı yere gömülüydü;
+    /// biri güncellenip diğeri unutulabilirdi. Tek parametreye
+    /// bağlandı.
+    /// </summary>
+    public decimal DailyWorkHours { get; set; } = 7.5m;
+
     // --- Kıdem tazminatı ---
 
     /// <summary>

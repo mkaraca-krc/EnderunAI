@@ -878,6 +878,7 @@ public sealed class AppDbContext(
             entity.Property(x => x.UnemploymentEmployerRate).HasPrecision(9, 4);
             entity.Property(x => x.SgkEmployerDiscountPoints).HasPrecision(9, 4);
             entity.Property(x => x.StampTaxPerMille).HasPrecision(9, 4);
+            entity.Property(x => x.DailyWorkHours).HasPrecision(5, 2);
             entity.Property(x => x.SeveranceCeiling).HasPrecision(18, 2);
             entity.Property(x => x.SeveranceCeilingPeriodNote).HasMaxLength(100);
             entity.Property(x => x.VerificationNote).HasMaxLength(500);

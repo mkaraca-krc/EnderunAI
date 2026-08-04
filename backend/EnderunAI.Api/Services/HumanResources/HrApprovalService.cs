@@ -525,6 +525,9 @@ public sealed class HrApprovalService(
         var parameters = await LoadPayrollParametersAsync(
             request.CompanyId, request.Year, cancellationToken);
 
+        var dailyWorkHours = await LoadDailyWorkHoursAsync(
+            request.CompanyId, request.Year, cancellationToken);
+
         var personnel = await appDb.Personnel.AsNoTracking()
             .Where(x => x.CompanyId == request.CompanyId && x.IsActive &&
                         x.Status != EnderunAI.Api.Models.PersonnelStatus.Terminated)
@@ -605,7 +608,7 @@ public sealed class HrApprovalService(
             // tarih bilgisi taşımaması nedeniyle asgari ücret altı ya da
             // kişi henüz işe girmemişken bordro üretmek demekti.
             if (!salaryByPersonnel.TryGetValue(person.Id, out var salaryCard) ||
-                salaryCard.GrossSalary <= 0m)
+                !HasUsableAmount(salaryCard))
             {
                 missingSalaryDefinition++;
                 continue;
@@ -635,21 +638,21 @@ public sealed class HrApprovalService(
                 created++;
             }
 
-            var gross = salaryCard.GrossSalary;
+            cumulativeByPersonnel.TryGetValue(person.Id, out var cumulativeBefore);
 
-            // Günlük/saatlik ücret kartta boşsa aylık brütten türetilir
-            // (30 gün / 225 saat — 7,5 saatlik 30 günlük ay esası).
-            var rates = new SalaryRates(
-                MonthlyGross: gross,
-                DailyRate: salaryCard.DailyRate > 0m
-                    ? salaryCard.DailyRate
-                    : decimal.Round(gross / 30m, 2),
-                HourlyRate: salaryCard.HourlyRate > 0m
-                    ? salaryCard.HourlyRate
-                    : decimal.Round(gross / 225m, 2),
-                OvertimeMultiplier: salaryCard.OvertimeMultiplier,
-                SundayMultiplier: salaryCard.SundayMultiplier,
-                PublicHolidayMultiplier: salaryCard.PublicHolidayMultiplier);
+            // Net esaslı kartta brüt sabit değil: o ayın kümülatif
+            // matrahıyla, girilen neti verecek brüt yeniden bulunur.
+            // Brüt esaslı kartta davranış hiç değişmez.
+            var gross = salaryCard.SalaryBasis == SalaryBasis.Net
+                ? PayrollNetToGrossCalculator.CalculateGrossFromNet(
+                        parameters,
+                        salaryCard.TargetNetSalary,
+                        request.Month,
+                        cumulativeBefore)
+                    .GrossEarnings
+                : salaryCard.GrossSalary;
+
+            var rates = BuildSalaryRates(salaryCard, gross, dailyWorkHours);
 
             attendanceByPersonnel.TryGetValue(person.Id, out var attendanceDays);
 
@@ -667,8 +670,6 @@ public sealed class HrApprovalService(
                 record.SundayWorkAmount + record.PublicHolidayAmount +
                 record.BonusAmount + record.MealAmount + record.TravelAmount +
                 record.OtherEarningAmount + record.CompensationAmount;
-
-            cumulativeByPersonnel.TryGetValue(person.Id, out var cumulativeBefore);
 
             var result = PayrollCalculationService.Calculate(parameters, new PayrollInput(
                 Month: request.Month,
@@ -706,7 +707,7 @@ public sealed class HrApprovalService(
 
         await RegenerateLaborCostsAsync(
             request.CompanyId, periodStart, periodEnd,
-            salaryByPersonnel, userId, cancellationToken);
+            salaryByPersonnel, dailyWorkHours, userId, cancellationToken);
 
         var total = await hrDb.PayrollRecords.AsNoTracking()
             .Where(x => x.CompanyId == request.CompanyId &&
@@ -746,6 +747,7 @@ public sealed class HrApprovalService(
         DateTime periodStart,
         DateTime periodEnd,
         IReadOnlyDictionary<Guid, HrSalaryDefinition> salaryByPersonnel,
+        decimal dailyWorkHours,
         Guid? userId,
         CancellationToken cancellationToken)
     {
@@ -769,22 +771,17 @@ public sealed class HrApprovalService(
         foreach (var day in attendance)
         {
             if (!salaryByPersonnel.TryGetValue(day.PersonnelId, out var salaryCard) ||
-                salaryCard.GrossSalary <= 0m)
+                !HasUsableAmount(salaryCard))
             {
                 continue;
             }
 
-            var rates = new SalaryRates(
-                MonthlyGross: salaryCard.GrossSalary,
-                DailyRate: salaryCard.DailyRate > 0m
-                    ? salaryCard.DailyRate
-                    : decimal.Round(salaryCard.GrossSalary / 30m, 2),
-                HourlyRate: salaryCard.HourlyRate > 0m
-                    ? salaryCard.HourlyRate
-                    : decimal.Round(salaryCard.GrossSalary / 225m, 2),
-                OvertimeMultiplier: salaryCard.OvertimeMultiplier,
-                SundayMultiplier: salaryCard.SundayMultiplier,
-                PublicHolidayMultiplier: salaryCard.PublicHolidayMultiplier);
+            // Proje maliyeti brüt üzerinden yürür. Net esaslı kartta
+            // ocak esaslı referans brüt kullanılır: maliyet dağıtımı
+            // için ay ay brütleştirme yapmak hem pahalı hem gereksiz
+            // hassasiyet olurdu.
+            var rates = BuildSalaryRates(
+                salaryCard, ResolveReferenceGross(salaryCard), dailyWorkHours);
 
             var dayEarnings = AttendanceEarningsCalculator.CalculateDay(
                 rates,
@@ -831,6 +828,69 @@ public sealed class HrApprovalService(
         }
 
         await appDb.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Ücret kartında kullanılabilir bir tutar var mı: brüt esaslıda
+    /// brüt, net esaslıda hedef net dolu olmalı.
+    /// </summary>
+    private static bool HasUsableAmount(HrSalaryDefinition card) =>
+        card.SalaryBasis == SalaryBasis.Net
+            ? card.TargetNetSalary > 0m
+            : card.GrossSalary > 0m;
+
+    /// <summary>
+    /// Ay bağımsız referans brüt. Net esaslı kartta ocak esasıyla
+    /// hesaplanıp karta yazılan değerdir; kart kaydedilirken doldurulur.
+    /// Boşsa net tutarına düşülür — hesaplanmamış bir kartta sıfır brütle
+    /// maliyet üretmektense yaklaşık ama makul bir değer yeğdir.
+    /// </summary>
+    private static decimal ResolveReferenceGross(HrSalaryDefinition card) =>
+        card.SalaryBasis == SalaryBasis.Net
+            ? (card.GrossSalary > 0m ? card.GrossSalary : card.TargetNetSalary)
+            : card.GrossSalary;
+
+    /// <summary>
+    /// Puantaj birim ücretleri. Kartta elle girilmemişse aylık tutardan
+    /// türetilir: günlük = aylık ÷ 30, saatlik = günlük ÷ günlük çalışma
+    /// saati. Çalışma saati şirket bordro ayarından gelir.
+    /// </summary>
+    private static SalaryRates BuildSalaryRates(
+        HrSalaryDefinition card, decimal monthlyGross, decimal dailyWorkHours)
+    {
+        var dailyRate = card.DailyRate > 0m
+            ? card.DailyRate
+            : decimal.Round(monthlyGross / 30m, 2);
+
+        var hours = dailyWorkHours > 0m ? dailyWorkHours : 7.5m;
+
+        var hourlyRate = card.HourlyRate > 0m
+            ? card.HourlyRate
+            : decimal.Round(dailyRate / hours, 2);
+
+        return new SalaryRates(
+            MonthlyGross: monthlyGross,
+            DailyRate: dailyRate,
+            HourlyRate: hourlyRate,
+            OvertimeMultiplier: card.OvertimeMultiplier,
+            SundayMultiplier: card.SundayMultiplier,
+            PublicHolidayMultiplier: card.PublicHolidayMultiplier);
+    }
+
+    /// <summary>
+    /// Günlük normal çalışma süresi. Ayar yoksa yasal haftalık 45 saatin
+    /// 6 güne bölümü olan 7,5 saat kullanılır.
+    /// </summary>
+    private async Task<decimal> LoadDailyWorkHoursAsync(
+        Guid companyId, int year, CancellationToken cancellationToken)
+    {
+        var hours = await appDb.CompanyPayrollSettings
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId && x.Year == year)
+            .Select(x => (decimal?)x.DailyWorkHours)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return hours is > 0m ? hours.Value : 7.5m;
     }
 
     /// <summary>

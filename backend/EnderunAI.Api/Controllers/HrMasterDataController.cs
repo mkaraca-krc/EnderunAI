@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Models.HumanResources;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.HumanResources;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -86,12 +87,27 @@ public sealed class HrSalaryDefinitionsController(
         if (validation is not null)
             return validation;
 
+        if (!Enum.IsDefined(typeof(SalaryBasis), request.SalaryBasis))
+            return BadRequest(new { message = "Geçersiz ücret esası." });
+
+        var basis = (SalaryBasis)request.SalaryBasis;
+
+        if (basis == SalaryBasis.Net && request.TargetNetSalary <= 0m)
+        {
+            return BadRequest(new
+            {
+                message = "Net esaslı kartta anlaşılan net ücret girilmelidir."
+            });
+        }
+
         var item = new HrSalaryDefinition
         {
             CompanyId = request.CompanyId,
             PersonnelId = request.PersonnelId,
             EffectiveStartDate = UtcDate(request.EffectiveStartDate),
             EffectiveEndDate = UtcDate(request.EffectiveEndDate),
+            SalaryBasis = basis,
+            TargetNetSalary = basis == SalaryBasis.Net ? request.TargetNetSalary : 0m,
             GrossSalary = request.GrossSalary,
             NetSalary = request.NetSalary,
             DailyRate = request.DailyRate,
@@ -102,6 +118,8 @@ public sealed class HrSalaryDefinitionsController(
             CurrencyCode = NormalizeCurrency(request.CurrencyCode),
             Description = NormalizeText(request.Description)
         };
+
+        await ApplyNetBasisAsync(item, cancellationToken);
 
         hrDb.SalaryDefinitions.Add(item);
         await hrDb.SaveChangesAsync(cancellationToken);
@@ -137,8 +155,23 @@ public sealed class HrSalaryDefinitionsController(
         if (validation is not null)
             return validation;
 
+        if (!Enum.IsDefined(typeof(SalaryBasis), request.SalaryBasis))
+            return BadRequest(new { message = "Geçersiz ücret esası." });
+
+        var basis = (SalaryBasis)request.SalaryBasis;
+
+        if (basis == SalaryBasis.Net && request.TargetNetSalary <= 0m)
+        {
+            return BadRequest(new
+            {
+                message = "Net esaslı kartta anlaşılan net ücret girilmelidir."
+            });
+        }
+
         item.EffectiveStartDate = UtcDate(request.EffectiveStartDate);
         item.EffectiveEndDate = UtcDate(request.EffectiveEndDate);
+        item.SalaryBasis = basis;
+        item.TargetNetSalary = basis == SalaryBasis.Net ? request.TargetNetSalary : 0m;
         item.GrossSalary = request.GrossSalary;
         item.NetSalary = request.NetSalary;
         item.DailyRate = request.DailyRate;
@@ -149,6 +182,8 @@ public sealed class HrSalaryDefinitionsController(
         item.CurrencyCode = NormalizeCurrency(request.CurrencyCode);
         item.Description = NormalizeText(request.Description);
         item.UpdatedAtUtc = DateTime.UtcNow;
+
+        await ApplyNetBasisAsync(item, cancellationToken);
 
         await hrDb.SaveChangesAsync(cancellationToken);
 
@@ -177,6 +212,128 @@ public sealed class HrSalaryDefinitionsController(
         await hrDb.SaveChangesAsync(cancellationToken);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Net esaslı kartta referans brütü doldurur: kartın yürürlük yılına
+    /// ait parametrelerle, OCAK esasıyla (kümülatif matrah sıfır)
+    /// hesaplanır.
+    ///
+    /// Bu değer bordroda kullanılmaz — bordro her ay kendi kümülatif
+    /// matrahıyla brütü yeniden bulur. Buradaki brüt ekranda "net
+    /// girildi, karşılığı bu brüt" bilgisi ve proje maliyeti dağıtımı
+    /// için referanstır.
+    ///
+    /// Parametre tanımlı değilse brüt boş bırakılır; uydurma bir değer
+    /// yazmaktansa boş kalması yeğdir.
+    /// </summary>
+    private async Task ApplyNetBasisAsync(
+        HrSalaryDefinition item, CancellationToken cancellationToken)
+    {
+        if (item.SalaryBasis != SalaryBasis.Net)
+            return;
+
+        var parameters = await TryLoadPayrollParametersAsync(
+            item.CompanyId, item.EffectiveStartDate.Year, cancellationToken);
+
+        if (parameters is null)
+            return;
+
+        var result = PayrollNetToGrossCalculator.CalculateGrossFromNet(
+            parameters, item.TargetNetSalary, month: 1);
+
+        item.GrossSalary = result.GrossEarnings;
+        item.NetSalary = result.AchievedNet;
+    }
+
+    private async Task<PayrollParameters?> TryLoadPayrollParametersAsync(
+        Guid companyId, int year, CancellationToken cancellationToken)
+    {
+        var settings = await appDb.CompanyPayrollSettings
+            .AsNoTracking()
+            .Include(x => x.TaxBrackets)
+            .SingleOrDefaultAsync(
+                x => x.CompanyId == companyId && x.Year == year, cancellationToken);
+
+        if (settings is null || settings.TaxBrackets.Count == 0)
+            return null;
+
+        return new PayrollParameters(
+            settings.MinimumWageGross,
+            settings.SgkBaseFloor,
+            settings.SgkBaseCeiling,
+            settings.SgkEmployeeRate,
+            settings.UnemploymentEmployeeRate,
+            settings.SgkEmployerRate,
+            settings.UnemploymentEmployerRate,
+            settings.SgkEmployerDiscountEnabled,
+            settings.SgkEmployerDiscountPoints,
+            settings.StampTaxPerMille,
+            settings.MinimumWageIncomeTaxExemptionEnabled,
+            settings.MinimumWageStampTaxExemptionEnabled,
+            settings.TaxBrackets
+                .OrderBy(x => x.Order)
+                .Select(x => new PayrollTaxBracketInput(
+                    x.LowerBound, x.UpperBound, x.Rate))
+                .ToList());
+    }
+
+    /// <summary>
+    /// Ücret kartı ekranı için canlı brütleştirme. Kayıt yazmaz;
+    /// kullanıcı net girdikçe karşılığı olan brütü ve kesinti kırılımını
+    /// gösterir.
+    /// </summary>
+    [HttpPost("/api/hr/payroll/net-to-gross")]
+    [RequirePermission(PermissionCatalog.Keys.SalaryView)]
+    public async Task<IActionResult> NetToGross(
+        NetToGrossRequest request, CancellationToken cancellationToken)
+    {
+        if (request.TargetNet <= 0m)
+            return BadRequest(new { message = "Net ücret sıfırdan büyük olmalıdır." });
+
+        var month = request.Month is >= 1 and <= 12 ? request.Month : 1;
+
+        var parameters = await TryLoadPayrollParametersAsync(
+            request.CompanyId, request.Year, cancellationToken);
+
+        if (parameters is null)
+        {
+            return Conflict(new
+            {
+                message = $"{request.Year} yılı için bordro parametreleri tanımlı değil. " +
+                          "Şirket Ayarları → Bordro Parametreleri ekranından tanımlayın."
+            });
+        }
+
+        try
+        {
+            var result = PayrollNetToGrossCalculator.CalculateGrossFromNet(
+                parameters,
+                request.TargetNet,
+                month,
+                request.CumulativeIncomeTaxBaseBefore);
+
+            return Ok(new
+            {
+                grossSalary = result.GrossEarnings,
+                achievedNet = result.AchievedNet,
+                targetNet = result.TargetNet,
+                difference = result.Difference,
+                isExact = result.IsExact,
+                sgkEmployee = result.Payroll.SgkEmployeeAmount,
+                unemploymentEmployee = result.Payroll.UnemploymentEmployeeAmount,
+                incomeTax = result.Payroll.IncomeTaxAmount,
+                incomeTaxExemption = result.Payroll.IncomeTaxExemption,
+                stampTax = result.Payroll.StampTaxAmount,
+                stampTaxExemption = result.Payroll.StampTaxExemption,
+                totalDeductions = result.Payroll.TotalDeductions,
+                totalEmployerCost = result.Payroll.TotalEmployerCost
+            });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
     }
 
     private async Task<IActionResult?> ValidateAsync(
@@ -258,6 +415,11 @@ public sealed class HrSalaryDefinitionsController(
             EmploymentStartDate = employmentStartDate,
             item.EffectiveStartDate,
             item.EffectiveEndDate,
+            SalaryBasis = (int)item.SalaryBasis,
+            SalaryBasisName = item.SalaryBasis == SalaryBasis.Net
+                ? "Net esaslı"
+                : "Brüt esaslı",
+            item.TargetNetSalary,
             item.GrossSalary,
             item.NetSalary,
             item.DailyRate,
@@ -691,7 +853,11 @@ public record SaveSalaryDefinitionRequest(
     decimal SundayMultiplier,
     decimal PublicHolidayMultiplier,
     string CurrencyCode,
-    string? Description);
+    string? Description,
+    /// <summary>0 = brüt esaslı (varsayılan), 1 = net esaslı.</summary>
+    int SalaryBasis = 0,
+    /// <summary>Net esaslı kartta anlaşılan aylık resmi net.</summary>
+    decimal TargetNetSalary = 0m);
 
 public record UpdateSalaryDefinitionRequest(
     DateTime EffectiveStartDate,
@@ -704,7 +870,17 @@ public record UpdateSalaryDefinitionRequest(
     decimal SundayMultiplier,
     decimal PublicHolidayMultiplier,
     string CurrencyCode,
-    string? Description);
+    string? Description,
+    int SalaryBasis = 0,
+    decimal TargetNetSalary = 0m);
+
+/// <summary>Canlı brütleştirme isteği — kayıt yazmaz.</summary>
+public record NetToGrossRequest(
+    Guid CompanyId,
+    int Year,
+    decimal TargetNet,
+    int Month = 1,
+    decimal CumulativeIncomeTaxBaseBefore = 0m);
 
 public record SaveDepartmentRequest(
     Guid CompanyId,

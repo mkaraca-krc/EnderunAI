@@ -85,6 +85,9 @@ public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
             request.MinimumWageIncomeTaxExemptionEnabled;
         settings.MinimumWageStampTaxExemptionEnabled =
             request.MinimumWageStampTaxExemptionEnabled;
+        // Sıfır/negatif saat saatlik ücreti bozar; yasal varsayılana düşülür.
+        settings.DailyWorkHours =
+            request.DailyWorkHours > 0m ? request.DailyWorkHours : 7.5m;
         settings.SeveranceCeiling = request.SeveranceCeiling;
         settings.SeveranceCeilingPeriodNote =
             string.IsNullOrWhiteSpace(request.SeveranceCeilingPeriodNote)
@@ -273,7 +276,8 @@ public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
                 .OrderBy(x => x.Order)
                 .Select(x => new PayrollTaxBracketResponse(
                     x.Id, x.Order, x.LowerBound, x.UpperBound, x.Rate))
-                .ToList());
+                .ToList(),
+            settings.DailyWorkHours);
 
     private Guid? CurrentUserId()
     {
