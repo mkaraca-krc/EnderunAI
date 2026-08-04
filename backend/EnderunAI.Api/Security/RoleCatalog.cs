@@ -84,7 +84,12 @@ public static class RoleCatalog
             PermissionCatalog.Keys.AttendancePayrollApprove,
             PermissionCatalog.Keys.PersonnelManage, PermissionCatalog.Keys.AttendanceView,
             PermissionCatalog.Keys.AttendanceManage, PermissionCatalog.Keys.PayrollView, PermissionCatalog.Keys.PayrollManage,
-            PermissionCatalog.Keys.SalaryView, PermissionCatalog.Keys.SalaryManage
+            PermissionCatalog.Keys.SalaryView, PermissionCatalog.Keys.SalaryManage,
+            // Ek ödeme artık maaşı görenle aynı seviyede: maaş kartında
+            // resmi net, elden ödeme ve toplam ele geçen birlikte
+            // gösteriliyor. Maaş görmeyen roller (Şantiye Şefi, Formen,
+            // Sekreterya, Teknik) ek ödemeyi de görmemeye devam ediyor.
+            PermissionCatalog.Keys.ExtraPaymentView, PermissionCatalog.Keys.ExtraPaymentManage
         ]),
 
         new("Ön Muhasebe", "Fatura/cari tam yetki, muhasebe fiş girişi, satın alma görüntüleme.",

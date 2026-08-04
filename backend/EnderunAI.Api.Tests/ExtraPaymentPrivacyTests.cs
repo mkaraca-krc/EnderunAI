@@ -26,8 +26,12 @@ namespace EnderunAI.Api.Tests;
 public sealed class ExtraPaymentPrivacyTests(DatabaseFixture fixture)
 {
     /// <summary>
-    /// Elden ödemeyi ASLA görmemesi gereken roller. İK Sorumlusu
-    /// bilerek listede: bordroyu yönetir ama elden tutarları görmez.
+    /// Elden ödemeyi ASLA görmemesi gereken roller: maaşı görmeyen
+    /// herkes. Kural artık "maaşı gören ek ödemeyi de görür, görmeyen
+    /// ikisini de görmez".
+    ///
+    /// Teknik Koordinatör listede kalıyor: personel ve puantaj görür
+    /// ama ücret rakamı görmez.
     /// </summary>
     public static TheoryData<string> RestrictedRoles =>
         new()
@@ -36,15 +40,19 @@ public sealed class ExtraPaymentPrivacyTests(DatabaseFixture fixture)
             "Formen",
             "Sekreterya",
             "Teknik Ofis",
-            "Teknik Koordinatör",
-            "İK Sorumlusu"
+            "Teknik Koordinatör"
         };
 
-    /// <summary>Elden ödemeyi görmesi gereken roller.</summary>
+    /// <summary>
+    /// Elden ödemeyi görmesi gereken roller — maaşı görenlerin tamamı.
+    /// İK Sorumlusu buraya taşındı: maaş kartında resmi net, elden
+    /// ödeme ve toplam ele geçen birlikte gösteriliyor.
+    /// </summary>
     public static TheoryData<string> AuthorizedRoles =>
-        new() { "Genel Müdür", "Finans Sorumlusu", "Ön Muhasebe" };
+        new() { "Genel Müdür", "Finans Sorumlusu", "Ön Muhasebe", "İK Sorumlusu" };
 
-    private async Task<HttpClient> CreateClientForRoleAsync(string roleName)
+    private async Task<HttpClient> CreateClientForRoleAsync(
+        string roleName, string? deniedPermissionKey = null)
     {
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -73,6 +81,23 @@ public sealed class ExtraPaymentPrivacyTests(DatabaseFixture fixture)
             UserId = user.Id,
             ScopeType = DataScopeType.All
         });
+
+        // Kullanıcı bazlı kısıtlama: rol izni verse bile bu kullanıcıya
+        // kapatılır. Maskelemenin role değil izne bağlı olduğunu
+        // doğrulamak için gerekli.
+        if (deniedPermissionKey is not null)
+        {
+            var permission = await db.Permissions
+                .SingleAsync(x => x.Key == deniedPermissionKey);
+
+            db.UserPermissionOverrides.Add(new UserPermissionOverride
+            {
+                UserId = user.Id,
+                PermissionId = permission.Id,
+                Effect = PermissionOverrideEffect.Deny
+            });
+        }
+
         await db.SaveChangesAsync();
 
         var client = fixture.Factory.CreateClient();
@@ -216,18 +241,66 @@ public sealed class ExtraPaymentPrivacyTests(DatabaseFixture fixture)
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    /// <summary>
+    /// Yeni kural katalog seviyesinde: maaşı gören her rol ek ödemeyi de
+    /// görür. Bu test, ileride yeni bir rol eklenip yalnızca salary.view
+    /// verildiğinde ek ödemenin sessizce gizli kalmasını engeller.
+    /// </summary>
+    [Fact]
+    public void EverySalaryViewingRole_AlsoSeesExtraPayment()
+    {
+        var offenders = RoleCatalog.Roles
+            .Where(role => role.PermissionKeys.Contains(
+                PermissionCatalog.Keys.SalaryView, StringComparer.OrdinalIgnoreCase))
+            .Where(role => !role.PermissionKeys.Contains(
+                PermissionCatalog.Keys.ExtraPaymentView, StringComparer.OrdinalIgnoreCase))
+            .Select(role => role.Name)
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "Maaşı gören ama ek ödemeyi görmeyen rol(ler): " +
+            string.Join(", ", offenders));
+    }
+
+    /// <summary>
+    /// Tersi de doğru olmalı: ek ödemeyi gören mutlaka maaşı da görür.
+    /// Aksi halde elden tutarı görüp resmi tutarı göremeyen tuhaf bir
+    /// rol doğardı.
+    /// </summary>
+    [Fact]
+    public void EveryExtraPaymentViewingRole_AlsoSeesSalary()
+    {
+        var offenders = RoleCatalog.Roles
+            .Where(role => role.PermissionKeys.Contains(
+                PermissionCatalog.Keys.ExtraPaymentView, StringComparer.OrdinalIgnoreCase))
+            .Where(role => !role.PermissionKeys.Contains(
+                PermissionCatalog.Keys.SalaryView, StringComparer.OrdinalIgnoreCase))
+            .Select(role => role.Name)
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "Ek ödemeyi gören ama maaşı görmeyen rol(ler): " +
+            string.Join(", ", offenders));
+    }
+
     // ---------- Projeksiyon seviyesinde ----------
 
     /// <summary>
-    /// Asıl sızma yüzeyi: tazminat simülasyonu. Ücret iznini haiz ama
-    /// ek ödeme izni OLMAYAN rol (İK Sorumlusu) resmi tutarları görür,
-    /// gerçek ve fark alanlarını null görür.
+    /// Asıl sızma yüzeyi: tazminat simülasyonu. Ücreti görebilen ama
+    /// ek ödeme izni kullanıcı bazında KAPATILMIŞ biri resmi tutarları
+    /// görür, gerçek ve fark alanlarını null görür.
+    ///
+    /// Artık maaşı gören her role ek ödeme izni verildiği için bu
+    /// senaryo yalnızca kullanıcı bazlı kısıtlamayla üretilebiliyor —
+    /// ve maskelemenin role değil izne bağlı olduğunu kanıtlıyor.
     /// </summary>
     [Fact]
     public async Task PayrollRoleWithoutExtraPaymentPermission_SeesOnlyOfficialAmounts()
     {
         var personnelId = await CreatePersonnelWithExtraPaymentAsync();
-        var client = await CreateClientForRoleAsync("İK Sorumlusu");
+        var client = await CreateClientForRoleAsync(
+            "İK Sorumlusu",
+            deniedPermissionKey: PermissionCatalog.Keys.ExtraPaymentView);
 
         var response = await client.GetAsync(
             $"/api/personnel-terminations/simulation?personnelId={personnelId}" +

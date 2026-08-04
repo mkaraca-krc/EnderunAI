@@ -17,7 +17,8 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/hr/payroll/salary-definitions")]
 public sealed class HrSalaryDefinitionsController(
     HrDbContext hrDb,
-    AppDbContext appDb) : ControllerBase
+    AppDbContext appDb,
+    IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
 {
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.SalaryView)]
@@ -65,9 +66,87 @@ public sealed class HrSalaryDefinitionsController(
                 x => x.EmploymentStartDate,
                 cancellationToken);
 
-        return Ok(items.Select(x => ToSalaryDefinitionResponse(
-            x,
-            personnelEmploymentDates.GetValueOrDefault(x.PersonnelId))));
+        // Resmi net + elden ödeme + toplam ele geçen tek satırda görünsün.
+        // Elden ödeme yetkisi yoksa hiç sorgulanmaz; maskeleme
+        // projeksiyon seviyesinde, arayüzde değil.
+        var canViewExtraPayment = await extraPaymentVisibility
+            .CanViewExtraPaymentAsync(cancellationToken);
+
+        var extraPayments = canViewExtraPayment
+            ? await LoadEffectiveExtraPaymentsAsync(personnelIds, cancellationToken)
+            : new Dictionary<Guid, decimal>();
+
+        var officialNetByYear = new Dictionary<(Guid CompanyId, int Year), PayrollParameters?>();
+
+        var responses = new List<object>(items.Count);
+
+        foreach (var item in items)
+        {
+            var key = (item.CompanyId, item.EffectiveStartDate.Year);
+
+            if (!officialNetByYear.TryGetValue(key, out var parameters))
+            {
+                parameters = await TryLoadPayrollParametersAsync(
+                    item.CompanyId, item.EffectiveStartDate.Year, cancellationToken);
+                officialNetByYear[key] = parameters;
+            }
+
+            responses.Add(ToSalaryDefinitionResponse(
+                item,
+                personnelEmploymentDates.GetValueOrDefault(item.PersonnelId),
+                ResolveOfficialNet(item, parameters),
+                canViewExtraPayment
+                    ? extraPayments.GetValueOrDefault(item.PersonnelId)
+                    : null));
+        }
+
+        return Ok(responses);
+    }
+
+    /// <summary>
+    /// Personel başına yürürlükteki elden ödeme tutarı. Birden çok
+    /// kayıt varsa en son başlayan geçerlidir.
+    /// </summary>
+    private async Task<Dictionary<Guid, decimal>> LoadEffectiveExtraPaymentsAsync(
+        IReadOnlyCollection<Guid> personnelIds, CancellationToken cancellationToken)
+    {
+        var today = DateTime.UtcNow.Date;
+
+        var rows = await appDb.PersonnelExtraPayments
+            .AsNoTracking()
+            .Where(x => personnelIds.Contains(x.PersonnelId) &&
+                        x.EffectiveStartDate <= today &&
+                        (x.EffectiveEndDate == null || x.EffectiveEndDate >= today))
+            .Select(x => new { x.PersonnelId, x.MonthlyAmount, x.EffectiveStartDate })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(x => x.PersonnelId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(x => x.EffectiveStartDate).First().MonthlyAmount);
+    }
+
+    /// <summary>
+    /// Kartın resmi neti. Net esaslıda anlaşılan tutarın kendisi; brüt
+    /// esaslıda karttaki net doluysa o, boşsa brütten ocak esasıyla
+    /// hesaplanır. Parametre yoksa null — uydurulmaz.
+    /// </summary>
+    private static decimal? ResolveOfficialNet(
+        HrSalaryDefinition item, PayrollParameters? parameters)
+    {
+        if (item.SalaryBasis == SalaryBasis.Net)
+            return item.TargetNetSalary;
+
+        if (item.NetSalary > 0m)
+            return item.NetSalary;
+
+        if (parameters is null || item.GrossSalary <= 0m)
+            return null;
+
+        return PayrollCalculationService
+            .Calculate(parameters, new PayrollInput(1, item.GrossSalary))
+            .NetPay;
     }
 
     [HttpPost]
@@ -406,7 +485,9 @@ public sealed class HrSalaryDefinitionsController(
 
     private static object ToSalaryDefinitionResponse(
         HrSalaryDefinition item,
-        DateTime? employmentStartDate) =>
+        DateTime? employmentStartDate,
+        decimal? officialNetSalary = null,
+        decimal? extraPaymentMonthlyAmount = null) =>
         new
         {
             item.Id,
@@ -422,6 +503,18 @@ public sealed class HrSalaryDefinitionsController(
             item.TargetNetSalary,
             item.GrossSalary,
             item.NetSalary,
+            // Kartın gerçek resmi neti (net esaslıda anlaşılan tutar,
+            // brüt esaslıda brütten hesaplanan). NetSalary alanı elle
+            // girilen ve tutarsız olabilen eski alan; bu hesaplanmış.
+            OfficialNetSalary = officialNetSalary,
+            // Elden ödeme yetkisi yoksa null gelir — arayüzde
+            // gizlenmiyor, sorgudan hiç çıkmıyor.
+            ExtraPaymentMonthlyAmount = extraPaymentMonthlyAmount,
+            TotalTakeHome = officialNetSalary is decimal net &&
+                            extraPaymentMonthlyAmount is decimal extra
+                ? net + extra
+                : (decimal?)null,
+            ExtraPaymentHidden = extraPaymentMonthlyAmount is null,
             item.DailyRate,
             item.HourlyRate,
             item.OvertimeMultiplier,

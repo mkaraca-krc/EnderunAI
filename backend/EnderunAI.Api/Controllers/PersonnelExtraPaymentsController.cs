@@ -17,10 +17,14 @@ public sealed record UpsertExtraPaymentRequest(
 /// <summary>
 /// Elden ödeme tutarları — resmi bordroda görünmeyen kısım.
 ///
-/// Bu ucun TAMAMI extra_payment.* izinleriyle korunur. Şantiye Şefi,
-/// Formen, Teknik Ofis, Sekreterya ve hatta İK Sorumlusu bu izne sahip
-/// değildir; kendilerine 403 döner. Resmi muhasebeye hiçbir kayıt
-/// yazılmaz.
+/// Bu ucun TAMAMI extra_payment.* izinleriyle korunur. İzin, maaşı
+/// gören rollere verilir (Admin, Genel Müdür, Finans Sorumlusu, Ön
+/// Muhasebe, İK Sorumlusu). Şantiye Şefi, Formen, Teknik Ofis, Teknik
+/// Koordinatör ve Sekreterya bu izne sahip değildir; kendilerine 403
+/// döner.
+///
+/// Görünürlük genişledi ama MUHASEBE İZOLASYONU aynen duruyor: elden
+/// ödeme resmi bordroya, muhasebe fişine ve SGK matrahına girmez.
 /// </summary>
 [ApiController]
 [Authorize]
