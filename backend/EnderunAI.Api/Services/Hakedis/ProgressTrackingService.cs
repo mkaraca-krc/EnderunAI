@@ -228,18 +228,30 @@ public sealed class ProgressTrackingService(AppDbContext db) : IProgressTracking
             .AsNoTracking()
             .Where(x => x.ProjectId == projectId &&
                         x.ApprovalStatus != ExtraWorkApprovalStatus.Rejected)
-            .Select(x => new { x.ApprovalStatus, x.Amount })
+            .Select(x => new { x.ApprovalStatus, x.Amount, x.ApprovalDocumentId })
             .ToListAsync(cancellationToken);
 
+        // Anahtar teslimde onay TEK BAŞINA yetmez, belge de aranır.
+        // Aksi halde birim fiyatlıyken otomatik onaylanmış bir kayıt,
+        // proje sonradan anahtar teslime çevrilirse belgesiz olduğu
+        // hâlde tahsil edilebilir sayılırdı.
         var collectibleExtraWork = project.ContractType == ProjectContractType.UnitPrice
             ? extraWorks.Sum(x => x.Amount)
             : extraWorks
-                .Where(x => x.ApprovalStatus == ExtraWorkApprovalStatus.Approved)
+                .Where(x => x.ApprovalStatus == ExtraWorkApprovalStatus.Approved &&
+                            x.ApprovalDocumentId != null)
                 .Sum(x => x.Amount);
 
-        var pendingExtraWork = extraWorks
-            .Where(x => x.ApprovalStatus == ExtraWorkApprovalStatus.Pending)
-            .Sum(x => x.Amount);
+        // Onaylı ama belgesiz kayıtlar da "bekleyen" sayılır: tahsil
+        // edilebilir değiller ve kullanıcının belgeyi iliştirmesi gerekir.
+        var pendingExtraWork = project.ContractType == ProjectContractType.UnitPrice
+            ? extraWorks
+                .Where(x => x.ApprovalStatus == ExtraWorkApprovalStatus.Pending)
+                .Sum(x => x.Amount)
+            : extraWorks
+                .Where(x => x.ApprovalStatus == ExtraWorkApprovalStatus.Pending ||
+                            x.ApprovalDocumentId == null)
+                .Sum(x => x.Amount);
 
         var netErosion = ProgressTrackingCalculator.CalculateNetErosion(
             project.ContractType, totals.NetDeviationAmount, collectibleExtraWork);
