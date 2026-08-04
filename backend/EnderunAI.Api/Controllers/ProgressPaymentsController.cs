@@ -273,7 +273,12 @@ public sealed class ProgressPaymentsController(
         var previousDeductions = await LoadPreviousDeductionsAsync(
             request.ProjectId, null, request.PeriodNumber, cancellationToken);
 
-        ApplyDeductions(entity, request.Deductions, previousDeductions);
+        // Kesintilerin varsayılan tabanı hakedişin kümülatif toplamı;
+        // üst hesaptan önce bilinmesi gerektiği için burada kurulur.
+        var cumulativeBase = entity.Items.Sum(x => x.CumulativeAmount)
+            + entity.CumulativeAdvanceMaterialAmount;
+
+        ApplyDeductions(entity, request.Deductions, previousDeductions, cumulativeBase);
         CalculateHeader(entity, previousPayments);
 
         // Ödeme dağılımı net tutar hesaplandıktan SONRA kurulur.
@@ -420,7 +425,12 @@ public sealed class ProgressPaymentsController(
         var previousDeductions = await LoadPreviousDeductionsAsync(
             entity.ProjectId, entity.Id, entity.PeriodNumber, cancellationToken);
 
-        ApplyDeductions(entity, request.Deductions, previousDeductions);
+        // Kesintilerin varsayılan tabanı hakedişin kümülatif toplamı;
+        // üst hesaptan önce bilinmesi gerektiği için burada kurulur.
+        var cumulativeBase = entity.Items.Sum(x => x.CumulativeAmount)
+            + entity.CumulativeAdvanceMaterialAmount;
+
+        ApplyDeductions(entity, request.Deductions, previousDeductions, cumulativeBase);
         CalculateHeader(entity, previousPayments);
 
         var planError = ApplyPaymentPlans(entity, request.PaymentPlans);
@@ -931,10 +941,16 @@ public sealed class ProgressPaymentsController(
     /// </summary>
     /// <param name="previousByType">Önceki hakedişlerde her kesinti
     /// türünden kesilmiş toplam.</param>
+    /// <param name="defaultCumulativeBase">Taban verilmemiş kesintiler
+    /// için varsayılan: hakedişin kümülatif toplamı. Kesin teminat,
+    /// all-risk ve malzeme kesintisi gibi oransal kalemler zaten bunun
+    /// üzerinden yürür; her çağıranın ayrıca hesaplaması gereksiz ve
+    /// hataya açıktı.</param>
     private static void ApplyDeductions(
         ProgressPayment entity,
         IEnumerable<ProgressPaymentDeductionRequest>? requests,
-        IReadOnlyDictionary<int, decimal>? previousByType = null)
+        IReadOnlyDictionary<int, decimal>? previousByType = null,
+        decimal defaultCumulativeBase = 0m)
     {
         if (requests is null)
             return;
@@ -962,9 +978,13 @@ public sealed class ProgressPaymentsController(
                     DeductionType: request.DeductionType,
                     Description: request.Description?.Trim() ?? "Kesinti",
                     Rate: request.Rate,
-                    // Kümülatif taban verilmemişse eski davranışa düşülür.
-                    CumulativeBaseAmount:
-                        request.CumulativeBaseAmount ?? request.BaseAmount,
+                    // Taban açıkça verilmemişse hakedişin kümülatif
+                    // toplamı kullanılır; eski istemcinin gönderdiği
+                    // BaseAmount hâlâ önceliklidir.
+                    CumulativeBaseAmount: request.CumulativeBaseAmount
+                        ?? (request.BaseAmount != 0m
+                            ? request.BaseAmount
+                            : defaultCumulativeBase),
                     PreviousAmount: previousAmount,
                     ManualAmount: request.ManualAmount,
                     Lines: lines));
