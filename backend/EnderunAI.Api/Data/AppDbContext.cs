@@ -89,6 +89,10 @@ public sealed class AppDbContext(
 
     public DbSet<ProjectExtraWork> ProjectExtraWorks =>
         Set<ProjectExtraWork>();
+
+    public DbSet<SalesInvoice> SalesInvoices => Set<SalesInvoice>();
+
+    public DbSet<SalesInvoiceItem> SalesInvoiceItems => Set<SalesInvoiceItem>();
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
@@ -869,13 +873,78 @@ public sealed class AppDbContext(
 
     private static void ConfigureSupplierInvoices(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<SalesInvoice>(entity =>
+        {
+            entity.ToTable("sales_invoices");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.InternalNumber }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.Status });
+
+            // Aynı müşteriye aynı resmi fatura numarası iki kez
+            // girilemez; içe aktarmada mükerrer engeli bu indekse dayanır.
+            entity.HasIndex(x => new { x.CustomerCurrentAccountId, x.OfficialInvoiceNumber })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false AND \"OfficialInvoiceNumber\" IS NOT NULL");
+
+            entity.Property(x => x.InternalNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.OfficialInvoiceNumber).HasMaxLength(100);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.ExchangeRate).HasPrecision(18, 6);
+            entity.Property(x => x.Subtotal).HasPrecision(18, 2);
+            entity.Property(x => x.VatTotal).HasPrecision(18, 2);
+            entity.Property(x => x.GrandTotal).HasPrecision(18, 2);
+            entity.Property(x => x.WithholdingAmount).HasPrecision(18, 2);
+            entity.Property(x => x.NetReceivableAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.CancellationReason).HasMaxLength(1000);
+            entity.Property(x => x.SourceXmlPath).HasMaxLength(500);
+            entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            entity.Property(x => x.ParseSource).HasConversion<int?>();
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CustomerCurrentAccount).WithMany()
+                .HasForeignKey(x => x.CustomerCurrentAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.AccountingVoucher).WithMany()
+                .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(x => x.Items)
+                .WithOne(x => x.SalesInvoice)
+                .HasForeignKey(x => x.SalesInvoiceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<SalesInvoiceItem>(entity =>
+        {
+            entity.ToTable("sales_invoice_items");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.SalesInvoiceId, x.LineNumber }).IsUnique();
+
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 6);
+            entity.Property(x => x.VatRate).HasPrecision(8, 4);
+            entity.Property(x => x.LineSubtotal).HasPrecision(18, 2);
+            entity.Property(x => x.VatAmount).HasPrecision(18, 2);
+            entity.Property(x => x.LineTotal).HasPrecision(18, 2);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
         modelBuilder.Entity<SupplierInvoice>(entity =>
         {
             entity.ToTable("supplier_invoices");
             entity.HasKey(x => x.Id);
 
             entity.HasIndex(x => new { x.CompanyId, x.InternalNumber }).IsUnique();
-            entity.HasIndex(x => new { x.SupplierCurrentAccountId, x.InvoiceNumber });
             entity.HasIndex(x => new { x.CompanyId, x.Status });
             entity.HasIndex(x => x.ProjectId);
 
@@ -886,7 +955,16 @@ public sealed class AppDbContext(
             entity.Property(x => x.Subtotal).HasPrecision(18, 2);
             entity.Property(x => x.VatTotal).HasPrecision(18, 2);
             entity.Property(x => x.GrandTotal).HasPrecision(18, 2);
+            entity.Property(x => x.WithholdingAmount).HasPrecision(18, 2);
             entity.Property(x => x.MatchDifferenceAmount).HasPrecision(18, 2);
+            entity.Property(x => x.SourceXmlPath).HasMaxLength(500);
+            entity.Property(x => x.ParseSource).HasConversion<int?>();
+
+            // Aynı tedarikçiden aynı fatura numarası iki kez girilemez.
+            // Soft-delete nedeniyle indeks silinmemişlerle sınırlı.
+            entity.HasIndex(x => new { x.SupplierCurrentAccountId, x.InvoiceNumber })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.Property(x => x.Description).HasMaxLength(1000);
             entity.Property(x => x.MatchNote).HasMaxLength(1000);
             entity.Property(x => x.RejectionReason).HasMaxLength(1000);

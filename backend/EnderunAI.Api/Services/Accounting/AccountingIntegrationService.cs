@@ -42,6 +42,20 @@ public interface IAccountingIntegrationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Hakediş dışı satış faturası için dengeli, doğrudan Posted gelir
+    /// fişi: 120 Alıcılar (borç) / 600 Yurtiçi Satışlar + 391 Hesaplanan
+    /// KDV (alacak). Tevkifat varsa beyan edilen KDV o kadar azalır ve
+    /// alacak da düşer.
+    ///
+    /// Hakediş fişinden AYRI bir metot: ikisinin kuralları zamanla
+    /// ayrışır (hakedişte kesinti, ihzarat, minha var), tek metotta
+    /// birleştirmek ikisini de kırılgan yapardı.
+    /// </summary>
+    Task<Guid> CreateSalesInvoiceVoucherAsync(
+        SalesInvoice invoice,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Kasa/banka hareketi için dengeli, doğrudan Posted fiş üretir.
     /// Para girişinde kasa/banka hesabı borçlanır, karşı hesap alacaklanır;
     /// çıkışta tersi. Karşı hesap işlem tipine göre belirlenir
@@ -266,6 +280,125 @@ public sealed class AccountingIntegrationService(
             .FirstAsync(cancellationToken);
 
         return new SupplierInvoicePostingResult(created.Id, expenseLineId);
+    }
+
+    public async Task<Guid> CreateSalesInvoiceVoucherAsync(
+        SalesInvoice invoice,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = await GetOrCreateFinanceSettingsAsync(
+            invoice.CompanyId, cancellationToken);
+
+        if (settings.SalesAccountId is null)
+            throw new InvalidOperationException(
+                "Yurtiçi satışlar hesabı yapılandırılmamış. Şirket Ayarları → " +
+                "Finans Ayarları'ndan seçin.");
+
+        var customer = await db.CurrentAccounts
+            .SingleAsync(x => x.Id == invoice.CustomerCurrentAccountId, cancellationToken);
+
+        var project = invoice.ProjectId is Guid projectId
+            ? await db.Projects.SingleAsync(x => x.Id == projectId, cancellationToken)
+            : null;
+
+        var subtotal = decimal.Round(invoice.Subtotal, 2);
+
+        if (subtotal <= 0m)
+            throw new InvalidOperationException(
+                "Fatura tutarı sıfır; muhasebe fişi oluşturulamaz.");
+
+        // Tevkifatta KDV'nin bir kısmını alıcı beyan eder; biz yalnızca
+        // kalanı beyan eder ve tahsil ederiz.
+        var declaredVat = decimal.Round(invoice.VatTotal - invoice.WithholdingAmount, 2);
+        var receivable = decimal.Round(invoice.NetReceivableAmount, 2);
+
+        if (decimal.Round(subtotal + declaredVat, 2) != receivable)
+        {
+            throw new InvalidOperationException(
+                $"Fatura tutarları tutarsız: matrah ({subtotal:N2}) + beyan edilen " +
+                $"KDV ({declaredVat:N2}) ≠ tahsil edilecek ({receivable:N2}).");
+        }
+
+        var receivableAccountId = customer.ReceivableAccountingAccountId
+            ?? settings.ReceivablesAccountId
+            ?? throw new InvalidOperationException(
+                $"'{customer.Title}' carisi için 120 Alıcılar hesabı bulunamadı. " +
+                "Cari kartında hesap eşleyin veya Finans Ayarları'ndan varsayılanı seçin.");
+
+        var reference = invoice.OfficialInvoiceNumber ?? invoice.InternalNumber;
+
+        var lines = new List<AccountingVoucherLineRequest>
+        {
+            new(
+                AccountingAccountId: receivableAccountId,
+                Description: $"Satış faturası alacağı — {customer.Title}",
+                DebitAmount: receivable,
+                CreditAmount: 0m,
+                CurrencyCode: invoice.CurrencyCode,
+                ExchangeRate: invoice.ExchangeRate,
+                CurrentAccountId: customer.Id,
+                ProjectId: invoice.ProjectId,
+                CostCenterCode: project?.Code,
+                DocumentNumber: reference,
+                DocumentDate: invoice.InvoiceDate,
+                DueDate: invoice.DueDate),
+
+            new(
+                AccountingAccountId: settings.SalesAccountId.Value,
+                Description: $"Satış geliri — {reference}",
+                DebitAmount: 0m,
+                CreditAmount: subtotal,
+                CurrencyCode: invoice.CurrencyCode,
+                ExchangeRate: invoice.ExchangeRate,
+                CurrentAccountId: customer.Id,
+                ProjectId: invoice.ProjectId,
+                CostCenterCode: project?.Code,
+                DocumentNumber: reference,
+                DocumentDate: invoice.InvoiceDate,
+                DueDate: null)
+        };
+
+        if (declaredVat > 0m)
+        {
+            if (settings.VatOutAccountId is null)
+                throw new InvalidOperationException(
+                    "Hesaplanan KDV hesabı yapılandırılmamış. Şirket Ayarları → " +
+                    "Finans Ayarları'ndan seçin.");
+
+            lines.Add(new AccountingVoucherLineRequest(
+                AccountingAccountId: settings.VatOutAccountId.Value,
+                Description: invoice.WithholdingAmount > 0m
+                    ? "Hesaplanan KDV (tevkifat sonrası)"
+                    : "Hesaplanan KDV",
+                DebitAmount: 0m,
+                CreditAmount: declaredVat,
+                CurrencyCode: invoice.CurrencyCode,
+                ExchangeRate: invoice.ExchangeRate,
+                CurrentAccountId: customer.Id,
+                ProjectId: invoice.ProjectId,
+                CostCenterCode: project?.Code,
+                DocumentNumber: reference,
+                DocumentDate: invoice.InvoiceDate,
+                DueDate: null));
+        }
+
+        var created = await voucherService.CreateAsync(
+            new CreateAccountingVoucherRequest(
+                CompanyId: invoice.CompanyId,
+                VoucherType: (int)AccountingVoucherType.Journal,
+                VoucherDate: invoice.InvoiceDate,
+                CurrencyCode: invoice.CurrencyCode,
+                ExchangeRate: invoice.ExchangeRate,
+                Description: $"Satış faturası {reference} — {customer.Title}",
+                ReferenceNumber: reference,
+                SourceModule: "SalesInvoice",
+                SourceEntityId: invoice.Id,
+                Lines: lines),
+            cancellationToken);
+
+        await voucherService.PostAsync(created.Id, cancellationToken);
+
+        return created.Id;
     }
 
     public async Task<Guid> CreateProgressPaymentVoucherAsync(

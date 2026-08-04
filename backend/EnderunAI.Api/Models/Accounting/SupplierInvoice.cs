@@ -59,6 +59,29 @@ public sealed class SupplierInvoice : BaseEntity
     public decimal VatTotal { get; set; }
     public decimal GrandTotal { get; set; }
 
+    /// <summary>
+    /// KDV tevkifatı — alıcı olarak bizim beyan edip ödeyeceğimiz kısım.
+    /// Tevkifatlı faturada ödenecek tutar bu kadar azalır.
+    /// </summary>
+    public decimal WithholdingAmount { get; set; }
+
+    // --- E-fatura içe aktarma izi ---
+
+    /// <summary>
+    /// İçe aktarılan XML'in saklandığı yol. Denetim izi ve orijinal
+    /// belgeye erişim için; elle girilen faturada boş.
+    /// </summary>
+    public string? SourceXmlPath { get; set; }
+
+    /// <summary>Faturayı hangi katman okudu (standart / AI).</summary>
+    public EInvoiceParseSource? ParseSource { get; set; }
+
+    /// <summary>
+    /// AI ile okunduysa veya tutarlar tutmuyorsa true. Bu faturalar
+    /// gözden geçirilmeden onaylanmamalı; arayüz uyarı gösterir.
+    /// </summary>
+    public bool RequiresManualReview { get; set; }
+
     public string? Description { get; set; }
 
     public SupplierInvoiceStatus Status { get; set; } = SupplierInvoiceStatus.Draft;
