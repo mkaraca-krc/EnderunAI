@@ -119,6 +119,9 @@ builder.Services.AddSingleton<
     EnderunAI.Api.Services.EInvoice.IEInvoiceArchive,
     EnderunAI.Api.Services.EInvoice.EInvoiceArchive>();
 builder.Services.AddScoped<IChequeService, ChequeService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Projects.IProjectCostAnalysisService,
+    EnderunAI.Api.Services.Projects.ProjectCostAnalysisService>();
 builder.Services.AddScoped<IFactoringService, FactoringService>();
 builder.Services.AddScoped<ICashFlowService, CashFlowService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
@@ -181,6 +184,9 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Hizir.Briefing.HizirPendingActionBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Hizir.Briefing.ProjectCostOverrunBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Hizir.Briefing.ProgressDeviationBriefingSource>();

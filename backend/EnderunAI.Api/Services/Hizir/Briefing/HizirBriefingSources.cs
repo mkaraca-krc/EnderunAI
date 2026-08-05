@@ -355,3 +355,90 @@ public sealed class HizirPendingActionBriefingSource(AppDbContext db)
         ];
     }
 }
+
+/// <summary>
+/// Maliyet aşımı: gerçekleşen maliyet, icmal öngörüsünün ilerlemeye
+/// göre düzeltilmiş halini aşan bileşenler.
+///
+/// Eşik projenin kendi <c>DeviationAlertThresholdRate</c> ayarından
+/// gelir; tanımlı değilse %10 kullanılır. Sabit bir eşik kodlansaydı
+/// dar marjlı projede geç, geniş marjlıda gereksiz uyarı verirdi.
+/// </summary>
+public sealed class ProjectCostOverrunBriefingSource(
+    AppDbContext db,
+    Services.Projects.IProjectCostAnalysisService analysis) : IHizirBriefingSource
+{
+    /// <summary>Ayarı olmayan projede kullanılan varsayılan sapma eşiği.</summary>
+    private const decimal DefaultThresholdPercent = 10m;
+
+    public string Key => "maliyet_asimi";
+    public string? RequiredPermission => PermissionCatalog.Keys.ProjectsView;
+
+    public async Task<IReadOnlyList<BriefingItem>> BuildAsync(
+        HizirToolContext context, CancellationToken cancellationToken)
+    {
+        var query = db.Projects
+            .AsNoTracking()
+            .Where(x => x.Status == ProjectStatus.Active);
+
+        // Kapsam dışı projenin maliyeti kullanıcıyı ilgilendirmez —
+        // göstermediğimiz veriyi hesaplamayız da.
+        if (!context.Scope.HasGlobalAccess)
+        {
+            var scopeIds = context.Scope.ProjectIds.ToList();
+
+            if (scopeIds.Count == 0)
+                return [];
+
+            query = query.Where(x => scopeIds.Contains(x.Id));
+        }
+
+        var projects = await query
+            .Select(x => new { x.Id, x.Code, x.DeviationAlertThresholdRate })
+            .ToListAsync(cancellationToken);
+
+        var items = new List<BriefingItem>();
+
+        foreach (var project in projects)
+        {
+            var result = await analysis.AnalyzeAsync(project.Id, cancellationToken);
+
+            // İcmali olmayan projede karşılaştırılacak öngörü yok;
+            // uyarı üretmek uydurma olurdu.
+            if (result is null || !result.HasContractBaseline)
+                continue;
+
+            var threshold = project.DeviationAlertThresholdRate > 0m
+                ? project.DeviationAlertThresholdRate
+                : DefaultThresholdPercent;
+
+            foreach (var component in result.Components)
+            {
+                // Taşeron satırı işçilik satırının içinde de sayıldığı
+                // için ayrıca uyarı üretmez; yoksa aynı aşım iki kez
+                // bildirilirdi.
+                if (component.CostClass == (int)ProjectCostClass.SubcontractorLabor)
+                    continue;
+
+                if (component.ForecastEarned <= 0m ||
+                    component.VariancePercent is not decimal percent ||
+                    percent < threshold)
+                {
+                    continue;
+                }
+
+                items.Add(new BriefingItem(
+                    $"{project.Code}: {component.CostClassName.ToLowerInvariant()} maliyeti " +
+                    $"icmal öngörüsünü %{percent:N1} aştı",
+                    $"Hakedilen öngörü {BriefingFormat.Money(component.ForecastEarned)}, " +
+                    $"gerçekleşen {BriefingFormat.Money(component.Actual)}.",
+                    percent >= threshold * 2m
+                        ? BriefingSeverity.Critical
+                        : BriefingSeverity.Warning,
+                    $"/projeler/{project.Id}/maliyet-analizi"));
+            }
+        }
+
+        return items;
+    }
+}
