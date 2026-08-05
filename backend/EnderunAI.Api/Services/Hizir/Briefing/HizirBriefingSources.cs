@@ -442,3 +442,81 @@ public sealed class ProjectCostOverrunBriefingSource(
         return items;
     }
 }
+
+/// <summary>
+/// Yaklaşan vergi ödemeleri ve gecikmiş yükümlülükler.
+///
+/// Tutarlar TAHMİNİDİR ve bu her maddede yazar: kesin beyan müşavirde
+/// yapılır, brifing yalnızca "şu kadar nakit ayırın" der.
+/// </summary>
+public sealed class TaxDueBriefingSource(
+    AppDbContext db,
+    Services.Tax.ITaxObligationService taxObligations) : IHizirBriefingSource
+{
+    /// <summary>Kaç gün önceden hatırlatılacağı.</summary>
+    private const int ReminderWindowDays = 15;
+
+    public string Key => "vergi_odemeleri";
+    public string? RequiredPermission => PermissionCatalog.Keys.AccountingView;
+
+    public async Task<IReadOnlyList<BriefingItem>> BuildAsync(
+        HizirToolContext context, CancellationToken cancellationToken)
+    {
+        // Vergi şirket düzeyinde bir yükümlülük; şirket kapsamı olmayan
+        // kullanıcıya gösterilmez.
+        var companyIds = context.Scope.HasGlobalAccess
+            ? await db.Companies.AsNoTracking()
+                .Select(x => x.Id)
+                .ToListAsync(cancellationToken)
+            : context.Scope.VisibleCompanyIds.ToList();
+
+        if (companyIds.Count == 0)
+            return [];
+
+        var today = DateTime.UtcNow.Date;
+        var items = new List<BriefingItem>();
+
+        foreach (var companyId in companyIds)
+        {
+            var obligations = await taxObligations.GetObligationsAsync(
+                companyId,
+                today.AddDays(-90),
+                today.AddDays(ReminderWindowDays),
+                cancellationToken);
+
+            var unpaid = obligations
+                .Where(x => !x.IsPaid && x.EstimatedAmount > 0m)
+                .ToList();
+
+            foreach (var overdue in unpaid.Where(x => x.IsOverdue))
+            {
+                items.Add(new BriefingItem(
+                    $"{overdue.KindName} ödemesi gecikti — {overdue.PeriodLabel}",
+                    $"Vadesi {overdue.DueDate:dd.MM.yyyy}, tahmini tutar " +
+                    $"{BriefingFormat.Money(overdue.EstimatedAmount)}. " +
+                    "Ödendiyse vergi takviminden işaretleyin.",
+                    BriefingSeverity.Critical,
+                    "/finans/vergi"));
+            }
+
+            var upcoming = unpaid.Where(x => !x.IsOverdue).ToList();
+
+            if (upcoming.Count == 0)
+                continue;
+
+            var total = upcoming.Sum(x => x.EstimatedAmount);
+            var nearest = upcoming.Min(x => x.DueDate);
+
+            items.Add(new BriefingItem(
+                $"Yaklaşan vergi ödemesi: {BriefingFormat.Money(total)} (tahmini)",
+                $"İlk vade {nearest:dd.MM.yyyy}. " +
+                string.Join(", ", upcoming.Select(x =>
+                    $"{x.KindName} {BriefingFormat.Money(x.EstimatedAmount)}")) +
+                ". Tutarlar defterden hesaplanan tahminlerdir; beyan müşavirde kesinleşir.",
+                BriefingSeverity.Warning,
+                "/finans/vergi"));
+        }
+
+        return items;
+    }
+}

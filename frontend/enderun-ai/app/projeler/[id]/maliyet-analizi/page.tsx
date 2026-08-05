@@ -239,12 +239,19 @@ export default function ProjectCostAnalysisPage() {
                 {money.format(analysis.totalCost)}
               </strong>
               <small style={{ display: "block", marginTop: "4px" }}>
-                Kâr{" "}
+                Vergi öncesi kâr{" "}
                 <strong style={{ color: varianceColor(-analysis.profit) }}>
                   {money.format(analysis.profit)}
                 </strong>{" "}
                 · Marj {percent(analysis.profitMarginPercent)} · İlerleme{" "}
                 {percent(analysis.progressRatio * 100)}
+              </small>
+              <small style={{ display: "block", marginTop: "2px" }}>
+                Tahmini vergi (%{analysis.taxRate}){" "}
+                {money.format(analysis.estimatedTax)} · Net kâr{" "}
+                <strong style={{ color: varianceColor(-analysis.netProfitAfterTax) }}>
+                  {money.format(analysis.netProfitAfterTax)}
+                </strong>
               </small>
             </div>
 

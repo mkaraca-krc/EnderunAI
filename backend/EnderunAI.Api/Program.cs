@@ -198,6 +198,9 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.ProjectCostOverrunBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Hizir.Briefing.TaxDueBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Hizir.Briefing.ProgressDeviationBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingService,

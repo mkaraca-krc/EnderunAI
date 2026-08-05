@@ -201,6 +201,11 @@ const groups: MenuGroup[] = [
         icon: "≈",
       },
       {
+        label: "Vergi Yükü",
+        href: "/finans/vergi",
+        icon: "⚖",
+      },
+      {
         label: "Hakedişler",
         href: "/hakedis",
         icon: "▧",

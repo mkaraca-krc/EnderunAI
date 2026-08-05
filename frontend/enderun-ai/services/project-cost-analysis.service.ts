@@ -54,6 +54,10 @@ export type ProjectCostAnalysis = {
   totalCost: number;
   profit: number;
   profitMarginPercent?: number | null;
+  /** Kâr üzerinden TAHMİNİ vergi yükü. */
+  estimatedTax: number;
+  netProfitAfterTax: number;
+  taxRate: number;
   components: CostComponentComparison[];
   sections: CostSectionBreakdown[];
   monthly: CostMonthlyPoint[];

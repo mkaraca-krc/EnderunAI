@@ -57,6 +57,15 @@ public sealed record ProjectCostAnalysisResult(
     decimal TotalCost,
     decimal Profit,
     decimal? ProfitMarginPercent,
+    /// <summary>
+    /// Kâr üzerinden TAHMİNİ vergi yükü. Proje bazında kurumlar vergisi
+    /// oranının uygulanması bir yönetim yaklaşımıdır: vergi şirket
+    /// düzeyinde, tüm projelerin ve merkez giderlerinin toplamı
+    /// üzerinden hesaplanır. Kesin hesap müşavirdedir.
+    /// </summary>
+    decimal EstimatedTax,
+    decimal NetProfitAfterTax,
+    decimal TaxRate,
     IReadOnlyList<CostComponentComparison> Components,
     IReadOnlyList<CostSectionBreakdown> Sections,
     IReadOnlyList<CostMonthlyPoint> Monthly,
@@ -313,6 +322,26 @@ public sealed class ProjectCostAnalysisService(
             .OrderByDescending(x => x.TotalAmount)
             .ToList();
 
+        // --- Vergi katmanı ---
+        // Zararda vergi hesaplanmaz; eksi vergi üretmek yanıltıcı olurdu.
+        var profitBeforeTax = revenue - totalCost;
+
+        var taxRate = await db.CompanyFinanceSettings
+            .AsNoTracking()
+            .Where(x => x.CompanyId == project.CompanyId)
+            .Select(x => (decimal?)x.CorporateTaxRate)
+            .SingleOrDefaultAsync(cancellationToken) ?? 25m;
+
+        var estimatedTax = profitBeforeTax > 0m
+            ? decimal.Round(profitBeforeTax * taxRate / 100m, 2)
+            : 0m;
+
+        assumptions.Add(
+            $"Vergi yükü TAHMİNİDİR: proje kârına %{taxRate:N0} kurumlar " +
+            "vergisi oranı uygulandı. Vergi gerçekte şirket düzeyinde, tüm " +
+            "projelerin ve merkez giderlerinin toplamı üzerinden hesaplanır; " +
+            "kesin hesap müşavirdedir.");
+
         // --- Aylık trend ---
         var monthly = BuildMonthly(
             ledger.Select(x => (x.CostDate, x.CostClass, x.Amount)),
@@ -329,10 +358,13 @@ public sealed class ProjectCostAnalysisService(
             decimal.Round(revenue, 2),
             progressRatio,
             decimal.Round(totalCost, 2),
-            decimal.Round(revenue - totalCost, 2),
+            decimal.Round(profitBeforeTax, 2),
             revenue > 0m
-                ? decimal.Round((revenue - totalCost) / revenue * 100m, 2)
+                ? decimal.Round(profitBeforeTax / revenue * 100m, 2)
                 : null,
+            estimatedTax,
+            decimal.Round(profitBeforeTax - estimatedTax, 2),
+            taxRate,
             components,
             sections,
             monthly,

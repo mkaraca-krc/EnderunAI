@@ -544,6 +544,57 @@ public sealed class ProjectCostAnalysisTests(DatabaseFixture fixture)
     }
 
     /// <summary>
+    /// Kâr görünümüne vergi katmanı: vergi öncesi kâr → tahmini vergi →
+    /// net kâr. Zararda vergi hesaplanmaz; eksi vergi üretmek yanıltıcı
+    /// olurdu.
+    /// </summary>
+    [Fact]
+    public async Task Analysis_AddsEstimatedTaxLayer()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        // Gelir 100.000, maliyet 60.000 → vergi öncesi kâr 40.000.
+        await AddCostAsync(context, ProjectCostClass.Material, 60_000m);
+
+        var analysis = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/projects/{context.ProjectId}/cost-analysis");
+
+        var rate = analysis.GetProperty("taxRate").GetDecimal();
+
+        Assert.Equal(40_000m, analysis.GetProperty("profit").GetDecimal());
+        Assert.Equal(
+            decimal.Round(40_000m * rate / 100m, 2),
+            analysis.GetProperty("estimatedTax").GetDecimal());
+        Assert.Equal(
+            40_000m - decimal.Round(40_000m * rate / 100m, 2),
+            analysis.GetProperty("netProfitAfterTax").GetDecimal());
+
+        Assert.Contains(
+            analysis.GetProperty("assumptions").EnumerateArray().Select(x => x.GetString()),
+            x => x is not null && x.Contains("Vergi yükü TAHMİNİDİR"));
+    }
+
+    /// <summary>Zararda tahmini vergi sıfırdır.</summary>
+    [Fact]
+    public async Task Analysis_WhenLoss_EstimatedTaxIsZero()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        await AddCostAsync(context, ProjectCostClass.Material, 150_000m);
+
+        var analysis = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/projects/{context.ProjectId}/cost-analysis");
+
+        Assert.Equal(-50_000m, analysis.GetProperty("profit").GetDecimal());
+        Assert.Equal(0m, analysis.GetProperty("estimatedTax").GetDecimal());
+        Assert.Equal(-50_000m, analysis.GetProperty("netProfitAfterTax").GetDecimal());
+    }
+
+    /// <summary>
     /// Hızır brifingi maliyet aşımını bildirir ve eşiğin altındaki
     /// sapmada susar — her küçük sapmada uyarı verilse brifing gürültüye
     /// dönüşür ve gerçek aşım gözden kaçardı.
