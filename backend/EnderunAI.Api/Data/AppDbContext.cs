@@ -34,6 +34,7 @@ public sealed class AppDbContext(
     public DbSet<Cheque> Cheques => Set<Cheque>();
     public DbSet<ChequeMovement> ChequeMovements => Set<ChequeMovement>();
     public DbSet<ChequeAllocation> ChequeAllocations => Set<ChequeAllocation>();
+    public DbSet<TaxPayment> TaxPayments => Set<TaxPayment>();
     public DbSet<FactoringTransaction> FactoringTransactions => Set<FactoringTransaction>();
     public DbSet<SupplierInvoice> SupplierInvoices => Set<SupplierInvoice>();
     public DbSet<SupplierInvoiceItem> SupplierInvoiceItems => Set<SupplierInvoiceItem>();
@@ -1036,6 +1037,30 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.CashAccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.AccountingVoucher).WithMany()
                 .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<TaxPayment>(entity =>
+        {
+            entity.ToTable("tax_payments");
+            entity.HasKey(x => x.Id);
+
+            // Aynı dönem iki kez ödendi işaretlenemez; nakit akıştan
+            // iki kez düşülürdü.
+            entity.HasIndex(x => new
+            {
+                x.CompanyId, x.Kind, x.PeriodYear, x.PeriodNumber
+            })
+            .IsUnique()
+            .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Kind).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Note).HasMaxLength(500);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

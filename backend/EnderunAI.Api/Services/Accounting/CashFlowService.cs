@@ -24,9 +24,16 @@ public interface ICashFlowService
 /// girilen serbest tahsilat/ödemeler bu kırılımda görünmez — kalem
 /// bazlı takip için tahsilatın hakedişe/faturaya bağlanması gerekir.
 /// </summary>
-public sealed class CashFlowService(AppDbContext db) : ICashFlowService
+public sealed class CashFlowService(
+    AppDbContext db,
+    Tax.ITaxObligationService taxObligations) : ICashFlowService
 {
     private static readonly int[] BucketDays = [30, 60, 90];
+
+    /// <summary>
+    /// Vergi çıkışları en uzak kova kadar ileriye bakılarak üretilir.
+    /// </summary>
+    private static readonly int TaxHorizonDays = BucketDays.Max();
 
     public async Task<CashFlowResponse> GetAsync(
         Guid companyId,
@@ -49,6 +56,15 @@ public sealed class CashFlowService(AppDbContext db) : ICashFlowService
             companyId, projectId, ChequeDirection.Issued, today, cancellationToken));
         outflows.AddRange(await GetSupplierInvoiceItemsAsync(
             companyId, projectId, today, cancellationToken));
+
+        // Vergi çıkışları: KDV, SGK, muhtasar ve geçici vergi. Proje
+        // filtresi verildiğinde gösterilmez — vergi şirket düzeyinde bir
+        // yükümlülüktür, tek projeye pay edilmesi yanıltıcı olurdu.
+        if (projectId is null)
+        {
+            outflows.AddRange(await GetTaxItemsAsync(
+                companyId, today, cancellationToken));
+        }
 
         inflows = inflows.OrderBy(x => x.ExpectedDate).ToList();
         outflows = outflows.OrderBy(x => x.ExpectedDate).ToList();
@@ -111,6 +127,47 @@ public sealed class CashFlowService(AppDbContext db) : ICashFlowService
             .Where(x => x.Direction == CashTransactionDirection.Out).Sum(x => x.Total);
 
         return opening + inflow - outflow;
+    }
+
+    /// <summary>
+    /// Tahmini vergi ödemeleri.
+    ///
+    /// Ödendi işaretlenen dönem listeye girmez: girseydi ödenmiş vergi
+    /// nakit akışta durmaya devam eder ve şirket olduğundan daha dar
+    /// görünürdü. Vadesi geçmiş ve hâlâ ödenmemiş olanlar gecikmiş
+    /// olarak görünür — gerçekten ödenmişse işaretlenmelidir.
+    /// </summary>
+    private async Task<List<CashFlowItemResponse>> GetTaxItemsAsync(
+        Guid companyId,
+        DateTime today,
+        CancellationToken cancellationToken)
+    {
+        // Geriye dönük 90 gün: vadesi geçmiş ama işaretlenmemiş
+        // yükümlülükler de uyarı olarak görünmeli.
+        var obligations = await taxObligations.GetObligationsAsync(
+            companyId,
+            today.AddDays(-TaxHorizonDays),
+            today.AddDays(TaxHorizonDays),
+            cancellationToken);
+
+        return obligations
+            .Where(x => !x.IsPaid && x.EstimatedAmount > 0m)
+            .Select(x => new CashFlowItemResponse(
+                $"Tax{x.Kind}",
+                $"{x.KindName} (tahmini)",
+                Guid.Empty,
+                x.PeriodLabel,
+                $"{x.KindName} — {x.PeriodLabel} dönemi",
+                null,
+                null,
+                null,
+                null,
+                x.DueDate,
+                (int)(x.DueDate.Date - today).TotalDays,
+                x.DueDate.Date < today,
+                x.EstimatedAmount,
+                "TRY"))
+            .ToList();
     }
 
     private async Task<List<CashFlowItemResponse>> GetChequeItemsAsync(
