@@ -125,6 +125,9 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Tax.ITaxLedgerService,
     EnderunAI.Api.Services.Tax.TaxLedgerService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Tax.IVatAccrualService,
+    EnderunAI.Api.Services.Tax.VatAccrualService>();
 builder.Services.AddScoped<IFactoringService, FactoringService>();
 builder.Services.AddScoped<ICashFlowService, CashFlowService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();

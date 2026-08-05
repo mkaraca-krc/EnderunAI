@@ -403,12 +403,32 @@ public sealed class AccountingIntegrationService(
         var lines = await BuildSupplierInvoiceCostLinesAsync(
             invoice, settings, supplier, fallbackCostCenter, cancellationToken);
 
-        if (invoice.VatTotal > 0)
+        // KDV TEVKİFATI (alış tarafı): tevkifatlı faturada KDV'nin bir
+        // kısmını tedarikçiye değil, "sorumlu sıfatıyla" doğrudan vergi
+        // dairesine biz öderiz.
+        //
+        // Bu ayrım yapılmazsa iki şey birden bozulur: tedarikçiye
+        // borcumuz tevkifat kadar fazla görünür (oysa o tutarı ona
+        // ödemeyeceğiz) ve vergi dairesine olan yükümlülük hiç doğmaz.
+        var withholding = decimal.Round(invoice.WithholdingAmount, 2);
+
+        if (withholding > 0m && withholding > decimal.Round(invoice.VatTotal, 2))
+        {
+            throw new InvalidOperationException(
+                $"Tevkifat ({withholding:N2}) fatura KDV'sinden " +
+                $"({invoice.VatTotal:N2}) büyük olamaz.");
+        }
+
+        // İndirilecek KDV toplamda değişmez; tevkifatlı kısım yalnızca
+        // ayrı hesapta izlenir (191.05 sorumlu sıfatıyla beyan edilen).
+        var deductibleVat = decimal.Round(invoice.VatTotal - withholding, 2);
+
+        if (deductibleVat > 0m)
         {
             lines.Add(new AccountingVoucherLineRequest(
                 AccountingAccountId: settings.VatInAccountId!.Value,
                 Description: "İndirilecek KDV",
-                DebitAmount: invoice.VatTotal,
+                DebitAmount: deductibleVat,
                 CreditAmount: 0m,
                 CurrencyCode: invoice.CurrencyCode,
                 ExchangeRate: invoice.ExchangeRate,
@@ -420,11 +440,58 @@ public sealed class AccountingIntegrationService(
                 DueDate: null));
         }
 
+        if (withholding > 0m)
+        {
+            var reverseChargeInputId = settings.ReverseChargeVatInputAccountId
+                ?? settings.VatInAccountId
+                ?? throw new InvalidOperationException(
+                    "Sorumlu sıfatıyla beyan edilen KDV hesabı (191.05) " +
+                    "yapılandırılmamış. Şirket Ayarları → Finans Ayarları'ndan seçin.");
+
+            var reverseChargePayableId = settings.ReverseChargeVatPayableAccountId
+                ?? throw new InvalidOperationException(
+                    "Sorumlu sıfatıyla ödenecek KDV hesabı (360.002) " +
+                    "yapılandırılmamış. Şirket Ayarları → Finans Ayarları'ndan seçin.");
+
+            lines.Add(new AccountingVoucherLineRequest(
+                AccountingAccountId: reverseChargeInputId,
+                Description: "Sorumlu sıfatıyla beyan edilen KDV (tevkifat)",
+                DebitAmount: withholding,
+                CreditAmount: 0m,
+                CurrencyCode: invoice.CurrencyCode,
+                ExchangeRate: invoice.ExchangeRate,
+                CurrentAccountId: null,
+                ProjectId: invoice.ProjectId,
+                CostCenterCode: fallbackCostCenter,
+                DocumentNumber: invoice.InvoiceNumber,
+                DocumentDate: invoice.InvoiceDate,
+                DueDate: null));
+
+            lines.Add(new AccountingVoucherLineRequest(
+                AccountingAccountId: reverseChargePayableId,
+                Description: "Sorumlu sıfatıyla ödenecek KDV (tevkifat)",
+                DebitAmount: 0m,
+                CreditAmount: withholding,
+                CurrencyCode: invoice.CurrencyCode,
+                ExchangeRate: invoice.ExchangeRate,
+                CurrentAccountId: null,
+                ProjectId: invoice.ProjectId,
+                CostCenterCode: fallbackCostCenter,
+                DocumentNumber: invoice.InvoiceNumber,
+                DocumentDate: invoice.InvoiceDate,
+                DueDate: invoice.DueDate));
+        }
+
+        // Tedarikçiye kalan borç: fatura toplamı eksi tevkifat.
+        var supplierPayable = decimal.Round(invoice.GrandTotal - withholding, 2);
+
         lines.Add(new AccountingVoucherLineRequest(
             AccountingAccountId: payableAccountId,
-            Description: $"Satıcı borcu — {supplier.Title}",
+            Description: withholding > 0m
+                ? $"Satıcı borcu (tevkifat sonrası) — {supplier.Title}"
+                : $"Satıcı borcu — {supplier.Title}",
             DebitAmount: 0m,
-            CreditAmount: invoice.GrandTotal,
+            CreditAmount: supplierPayable,
             CurrencyCode: invoice.CurrencyCode,
             ExchangeRate: invoice.ExchangeRate,
             CurrentAccountId: supplier.Id,
