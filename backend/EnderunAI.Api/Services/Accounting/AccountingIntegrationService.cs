@@ -200,6 +200,10 @@ public sealed class AccountingIntegrationService(
             VatOutAccountId = await FindAccountIdAsync(companyId, cancellationToken, "391.09", "391"),
             SalesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "600.03", "600"),
             SalesReturnAccountId = await FindAccountIdAsync(companyId, cancellationToken, "610.01", "610"),
+            VatCarryForwardAccountId = await FindAccountIdAsync(companyId, cancellationToken, "190.01", "190"),
+            VatPayableAccountId = await FindAccountIdAsync(companyId, cancellationToken, "360.99", "360"),
+            ReverseChargeVatInputAccountId = await FindAccountIdAsync(companyId, cancellationToken, "191.05"),
+            ReverseChargeVatPayableAccountId = await FindAccountIdAsync(companyId, cancellationToken, "360.002"),
             ExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "740"),
             // Stok alışı 153'e yazılır; boş bırakılsaydı yeni şirkette
             // malzeme alışı doğrudan 740 maliyete düşer ve depodaki mal

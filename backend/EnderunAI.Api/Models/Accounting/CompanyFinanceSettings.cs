@@ -48,6 +48,41 @@ public sealed class CompanyFinanceSettings : BaseEntity
     public Guid? SalesReturnAccountId { get; set; }
     public AccountingAccount? SalesReturnAccount { get; set; }
 
+    /// <summary>
+    /// 190 Devreden KDV. Dönem sonu KDV tahakkukunda indirilecek KDV
+    /// hesaplanandan büyükse fark buraya devreder.
+    /// </summary>
+    public Guid? VatCarryForwardAccountId { get; set; }
+    public AccountingAccount? VatCarryForwardAccount { get; set; }
+
+    /// <summary>
+    /// 360.99 Ödenecek KDV. Dönem sonunda hesaplanan KDV fazlaysa
+    /// yükümlülük buraya yazılır.
+    /// </summary>
+    public Guid? VatPayableAccountId { get; set; }
+    public AccountingAccount? VatPayableAccount { get; set; }
+
+    /// <summary>
+    /// 191.05 Sorumlu sıfatıyla beyan edilen KDV — tevkifatlı alışta
+    /// bizim beyan edip indirdiğimiz kısım.
+    /// </summary>
+    public Guid? ReverseChargeVatInputAccountId { get; set; }
+    public AccountingAccount? ReverseChargeVatInputAccount { get; set; }
+
+    /// <summary>
+    /// 360.002 Sorumlu sıfatıyla ödenecek KDV — tevkifatlı alışta
+    /// tedarikçiye değil vergi dairesine ödediğimiz kısım.
+    /// </summary>
+    public Guid? ReverseChargeVatPayableAccountId { get; set; }
+    public AccountingAccount? ReverseChargeVatPayableAccount { get; set; }
+
+    /// <summary>
+    /// Kurumlar/geçici vergi oranı (%). Yalnızca YÖNETİM TAHMİNİ için
+    /// kullanılır; kesin hesap müşavirdedir. Sabit kodlanmadı çünkü oran
+    /// mevzuatla değişiyor.
+    /// </summary>
+    public decimal CorporateTaxRate { get; set; } = 25m;
+
     /// <summary>Tedarikçi faturası maliyet tarafı (ör. 740 Hizmet Üretim Maliyeti).</summary>
     public Guid? ExpenseAccountId { get; set; }
     public AccountingAccount? ExpenseAccount { get; set; }
