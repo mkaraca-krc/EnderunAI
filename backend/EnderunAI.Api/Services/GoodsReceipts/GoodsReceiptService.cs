@@ -538,11 +538,14 @@ public sealed class GoodsReceiptService(
             var inventoryItem = inventoryItems[inventoryItemId];
             var priorQuantity = priorTotalQuantities.GetValueOrDefault(inventoryItemId, 0m);
 
-            inventoryItem.AverageUnitCost = priorQuantity <= 0m
-                ? unitCostTry
-                : ((priorQuantity * inventoryItem.AverageUnitCost) +
-                   (item.AcceptedQuantity * unitCostTry)) /
-                  (priorQuantity + item.AcceptedQuantity);
+            // Formül ortak motorda: doğrudan alış faturası da aynı
+            // hesabı kullanıyor, iki yerde iki formül olmasın.
+            inventoryItem.AverageUnitCost =
+                Services.Inventory.WeightedAverageCostCalculator.Next(
+                    priorQuantity,
+                    inventoryItem.AverageUnitCost,
+                    item.AcceptedQuantity,
+                    unitCostTry);
 
             // Son alış fiyatı ortalamadan ayrı tutulur: ortalama stok
             // değerlemesi için doğru, ama "bu malzemeyi en son kaça

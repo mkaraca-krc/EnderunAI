@@ -44,6 +44,14 @@ public sealed class CompanyFinanceSettings : BaseEntity
     public Guid? ExpenseAccountId { get; set; }
     public AccountingAccount? ExpenseAccount { get; set; }
 
+    /// <summary>
+    /// ALIŞ (stok) faturasının borç tarafı — ör. 153 Ticari Mallar veya
+    /// 150 İlk Madde ve Malzeme. Boşsa maliyet hesabına düşülür ki
+    /// ayar yapılmamış şirkette fatura onayı kilitlenmesin.
+    /// </summary>
+    public Guid? InventoryAccountId { get; set; }
+    public AccountingAccount? InventoryAccount { get; set; }
+
     /// <summary>Faturasız cari için 320 Satıcılar grup/varsayılan hesabı.</summary>
     public Guid? PayablesAccountId { get; set; }
     public AccountingAccount? PayablesAccount { get; set; }

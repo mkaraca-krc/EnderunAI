@@ -31,6 +31,7 @@ public sealed class SupplierInvoiceService(
     AppDbContext db,
     IDocumentNumberService documentNumberService,
     IAccountingIntegrationService accountingIntegration,
+    Inventory.ISupplierInvoiceStockPoster stockPoster,
     ICurrentUserService currentUser) : ISupplierInvoiceService
 {
     private static readonly string[] GmRoleNames = ["Admin", "Genel Müdür"];
@@ -64,7 +65,12 @@ public sealed class SupplierInvoiceService(
             .Select(x => new SupplierInvoiceListItemResponse(
                 x.Id, x.InternalNumber, x.InvoiceNumber, x.InvoiceDate,
                 x.SupplierCurrentAccountId, x.SupplierCurrentAccount.Title,
-                x.ProjectId, x.Project.Code, x.Project.Name,
+                x.ProjectId,
+                x.Project != null ? x.Project.Code : null,
+                x.Project != null ? x.Project.Name : null,
+                (int)x.InvoiceType,
+                x.InvoiceType == SupplierInvoiceType.Expense ? "Gider" : "Alış (Stok)",
+                x.CostCenterCode,
                 x.CurrencyCode, x.Subtotal, x.VatTotal, x.GrandTotal,
                 (int)x.Status, (int)x.MatchStatus, x.RequiresGmApproval,
                 x.PurchaseOrder != null ? x.PurchaseOrder.OrderNumber : null,
@@ -90,7 +96,12 @@ public sealed class SupplierInvoiceService(
             request.InvoiceNumber, request.CurrencyCode, request.ExchangeRate,
             cancellationToken);
 
+        var invoiceType = ParseInvoiceType(request.InvoiceType);
         var items = BuildItems(request.Items);
+
+        await ValidateTypeRulesAsync(
+            request.CompanyId, invoiceType, request.ProjectId, request.WarehouseId,
+            request.GoodsReceiptId, items, cancellationToken);
 
         var internalNumber = await documentNumberService.GenerateAsync(
             request.CompanyId, "SUPPLIER_INVOICE", "SFT", cancellationToken);
@@ -99,7 +110,12 @@ public sealed class SupplierInvoiceService(
         {
             CompanyId = request.CompanyId,
             SupplierCurrentAccountId = request.SupplierCurrentAccountId,
+            InvoiceType = invoiceType,
             ProjectId = request.ProjectId,
+            WarehouseId = invoiceType == SupplierInvoiceType.Stock
+                ? request.WarehouseId
+                : null,
+            CostCenterCode = Normalize(request.CostCenterCode),
             PurchaseOrderId = request.PurchaseOrderId,
             GoodsReceiptId = request.GoodsReceiptId,
             InternalNumber = internalNumber,
@@ -134,8 +150,19 @@ public sealed class SupplierInvoiceService(
         if (string.IsNullOrWhiteSpace(request.InvoiceNumber))
             throw new ArgumentException("Tedarikçi fatura numarası zorunludur.");
 
+        var invoiceType = ParseInvoiceType(request.InvoiceType);
         var items = BuildItems(request.Items);
 
+        await ValidateTypeRulesAsync(
+            invoice.CompanyId, invoiceType, request.ProjectId, request.WarehouseId,
+            invoice.GoodsReceiptId, items, cancellationToken);
+
+        invoice.InvoiceType = invoiceType;
+        invoice.ProjectId = request.ProjectId;
+        invoice.WarehouseId = invoiceType == SupplierInvoiceType.Stock
+            ? request.WarehouseId
+            : null;
+        invoice.CostCenterCode = Normalize(request.CostCenterCode);
         invoice.InvoiceNumber = request.InvoiceNumber.Trim();
         invoice.InvoiceDate = AsUtc(request.InvoiceDate);
         invoice.DueDate = request.DueDate.HasValue ? AsUtc(request.DueDate.Value) : null;
@@ -211,6 +238,11 @@ public sealed class SupplierInvoiceService(
         var posting = await accountingIntegration.CreateSupplierInvoiceVoucherAsync(
             invoice, cancellationToken);
 
+        // Mal kabulsuz ALIŞ faturasında stok depoya girer ve ağırlıklı
+        // ortalama maliyet güncellenir. Mal kabullü faturada bu adım
+        // hiç çalışmaz: stok orada zaten girmiştir.
+        var postedStockLines = await stockPoster.PostAsync(invoice, cancellationToken);
+
         invoice.Status = SupplierInvoiceStatus.Approved;
         invoice.AccountingVoucherId = posting.VoucherId;
         invoice.ApprovedByUserId = currentUser.UserId;
@@ -221,7 +253,11 @@ public sealed class SupplierInvoiceService(
         // stok çıkışında (InventoryController → StockMovement) oluşur;
         // burada da yazılırsa maliyet çift sayılır. Yalnız depoya
         // uğramayan doğrudan hizmet/masraf faturaları projeye işlenir.
-        if (invoice.GoodsReceiptId is null)
+        //
+        // Projesiz (Merkez) gider faturasında proje maliyeti oluşmaz:
+        // ofis elektriğinin projesi yoktur, rastgele bir projeye
+        // yazılsaydı o projenin kârlılığı yanlış görünürdü.
+        if (invoice.GoodsReceiptId is null && invoice.ProjectId is Guid costProjectId)
         {
             var supplierTitle = await db.CurrentAccounts
                 .Where(x => x.Id == invoice.SupplierCurrentAccountId)
@@ -230,7 +266,7 @@ public sealed class SupplierInvoiceService(
 
             db.ProjectCostTransactions.Add(new ProjectCostTransaction
             {
-                ProjectId = invoice.ProjectId,
+                ProjectId = costProjectId,
                 CostType = invoice.PurchaseOrderId is null
                     ? ProjectCostType.Other
                     : ProjectCostType.Material,
@@ -248,9 +284,13 @@ public sealed class SupplierInvoiceService(
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
+        var message = postedStockLines > 0
+            ? $"Fatura onaylandı; muhasebe fişi kesinleştirildi ve " +
+              $"{postedStockLines} kalem depoya girildi."
+            : "Fatura onaylandı; muhasebe fişi otomatik oluşturuldu ve kesinleştirildi.";
+
         return new SupplierInvoiceActionResponse(
-            invoice.Id, invoice.InternalNumber, (int)invoice.Status,
-            "Fatura onaylandı; muhasebe fişi otomatik oluşturuldu ve kesinleştirildi.");
+            invoice.Id, invoice.InternalNumber, (int)invoice.Status, message);
     }
 
     public async Task<SupplierInvoiceActionResponse> RejectAsync(
@@ -366,7 +406,7 @@ public sealed class SupplierInvoiceService(
     }
 
     private async Task ValidateHeaderAsync(
-        Guid companyId, Guid supplierId, Guid projectId,
+        Guid companyId, Guid supplierId, Guid? projectId,
         Guid? purchaseOrderId, Guid? goodsReceiptId,
         string invoiceNumber, string currencyCode, decimal exchangeRate,
         CancellationToken cancellationToken)
@@ -385,10 +425,13 @@ public sealed class SupplierInvoiceService(
         if (supplier.Status != CurrentAccountStatus.Approved)
             throw new ArgumentException("Fatura yalnızca onaylı cari karta kesilebilir.");
 
-        var projectExists = await db.Projects
-            .AnyAsync(x => x.Id == projectId && x.CompanyId == companyId, cancellationToken);
-        if (!projectExists)
-            throw new ArgumentException("Proje bulunamadı.");
+        if (projectId is Guid project)
+        {
+            var projectExists = await db.Projects
+                .AnyAsync(x => x.Id == project && x.CompanyId == companyId, cancellationToken);
+            if (!projectExists)
+                throw new ArgumentException("Proje bulunamadı.");
+        }
 
         if (purchaseOrderId is not null)
         {
@@ -412,6 +455,181 @@ public sealed class SupplierInvoiceService(
                 throw new ArgumentException("Mal kabul bulunamadı veya seçilen siparişe ait değil.");
         }
     }
+
+    private static SupplierInvoiceType ParseInvoiceType(int value) =>
+        Enum.IsDefined(typeof(SupplierInvoiceType), value)
+            ? (SupplierInvoiceType)value
+            : throw new ArgumentException("Geçersiz fatura tipi.");
+
+    /// <summary>
+    /// Tipe göre iş kuralları.
+    ///
+    /// ALIŞ: her kalemde stok kartı ve depo gerekir — stok kimin adına
+    /// nereye girecek belli olmalı. Mal kabule bağlı faturada stok zaten
+    /// girdiği için depo İSTENMEZ ve girilse bile yok sayılır; yoksa
+    /// aynı malzeme iki kez stoğa eklenirdi.
+    ///
+    /// GİDER: her kalemde gider hesabı gerekir; stok ve depo hiç
+    /// istenmez. Hesap fişe kayıt kabul etmeli ve gider/maliyet
+    /// grubunda olmalı — 320 Satıcılar'a gider yazılması engellenir.
+    /// </summary>
+    private async Task ValidateTypeRulesAsync(
+        Guid companyId,
+        SupplierInvoiceType invoiceType,
+        Guid? projectId,
+        Guid? defaultWarehouseId,
+        Guid? goodsReceiptId,
+        IReadOnlyList<SupplierInvoiceItem> items,
+        CancellationToken cancellationToken)
+    {
+        if (invoiceType == SupplierInvoiceType.Stock)
+        {
+            // Stok girişi İSTENİYORSA (depo verilmiş ya da kalemlerde
+            // stok kartı seçilmiş) ikisi de eksiksiz olmalı: kart
+            // olmadan neyin, depo olmadan nereye gireceği belli olmaz.
+            //
+            // İkisi de boşsa fatura stok tarafına hiç girmez ve bugünkü
+            // gibi düz bir maliyet faturası olarak işlenir. Bu kasıtlı:
+            // stok kartı zorunlu tutulsaydı, hizmet/nakliye gibi
+            // depoya uğramayan alışlar ve yeni ekran yayına çıkana
+            // kadarki mevcut girişler tamamen bloke olurdu.
+            var hasWarehouse = defaultWarehouseId is not null ||
+                               items.Any(x => x.WarehouseId is not null);
+
+            var hasInventoryItem = items.Any(x => x.InventoryItemId is not null);
+
+            if (!hasWarehouse && !hasInventoryItem)
+                return;
+
+            var postsStock = goodsReceiptId is null;
+
+            foreach (var item in items)
+            {
+                if (item.InventoryItemId is null)
+                {
+                    throw new ArgumentException(
+                        $"Kalem {item.LineNumber}: stok girişi yapılan faturada " +
+                        "her kalemde stok kartı seçilmelidir.");
+                }
+
+                if (postsStock && item.WarehouseId is null && defaultWarehouseId is null)
+                {
+                    throw new ArgumentException(
+                        $"Kalem {item.LineNumber}: stok girişi için depo seçilmelidir.");
+                }
+            }
+
+            await ValidateInventoryItemsAsync(companyId, items, cancellationToken);
+
+            if (postsStock)
+                await ValidateWarehousesAsync(companyId, defaultWarehouseId, items, cancellationToken);
+
+            return;
+        }
+
+        // --- GİDER ---
+        foreach (var item in items)
+        {
+            if (item.ExpenseAccountId is null)
+            {
+                throw new ArgumentException(
+                    $"Kalem {item.LineNumber}: gider faturasında gider hesabı seçilmelidir.");
+            }
+
+            if (item.InventoryItemId is not null || item.WarehouseId is not null)
+            {
+                throw new ArgumentException(
+                    $"Kalem {item.LineNumber}: gider faturasında stok kartı ve depo seçilemez.");
+            }
+        }
+
+        await ValidateExpenseAccountsAsync(companyId, items, cancellationToken);
+    }
+
+    private async Task ValidateInventoryItemsAsync(
+        Guid companyId,
+        IReadOnlyList<SupplierInvoiceItem> items,
+        CancellationToken cancellationToken)
+    {
+        var ids = items.Select(x => x.InventoryItemId).OfType<Guid>().Distinct().ToList();
+
+        var validCount = await db.InventoryItems
+            .CountAsync(x => x.CompanyId == companyId && ids.Contains(x.Id), cancellationToken);
+
+        if (validCount != ids.Count)
+            throw new ArgumentException("Kalemlerden biri bu şirkete ait olmayan bir stok kartına bağlı.");
+    }
+
+    private async Task ValidateWarehousesAsync(
+        Guid companyId,
+        Guid? defaultWarehouseId,
+        IReadOnlyList<SupplierInvoiceItem> items,
+        CancellationToken cancellationToken)
+    {
+        var ids = items.Select(x => x.WarehouseId).OfType<Guid>().ToList();
+
+        if (defaultWarehouseId is Guid fallback)
+            ids.Add(fallback);
+
+        ids = ids.Distinct().ToList();
+
+        if (ids.Count == 0)
+            return;
+
+        var validCount = await db.Warehouses
+            .CountAsync(x => x.CompanyId == companyId && x.IsActive && ids.Contains(x.Id),
+                cancellationToken);
+
+        if (validCount != ids.Count)
+            throw new ArgumentException("Seçilen depolardan biri bulunamadı veya aktif değil.");
+    }
+
+    /// <summary>
+    /// Gider hesabı doğrulaması. Kayıt kabul etmeyen (grup) hesap ve
+    /// gider/maliyet dışındaki hesaplar reddedilir: 320'ye gider yazmak
+    /// borcu iki kez kaydeder ve mizanı bozar.
+    /// </summary>
+    private async Task ValidateExpenseAccountsAsync(
+        Guid companyId,
+        IReadOnlyList<SupplierInvoiceItem> items,
+        CancellationToken cancellationToken)
+    {
+        var ids = items.Select(x => x.ExpenseAccountId).OfType<Guid>().Distinct().ToList();
+
+        var accounts = await db.AccountingAccounts
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId && ids.Contains(x.Id))
+            .Select(x => new { x.Id, x.Code, x.Name, x.IsPostingAllowed, x.IsActive })
+            .ToListAsync(cancellationToken);
+
+        if (accounts.Count != ids.Count)
+            throw new ArgumentException("Seçilen gider hesaplarından biri bulunamadı.");
+
+        foreach (var account in accounts)
+        {
+            if (!account.IsActive || !account.IsPostingAllowed)
+            {
+                throw new ArgumentException(
+                    $"{account.Code} {account.Name} hesabına kayıt yapılamaz " +
+                    "(grup hesabı veya pasif). Alt kırılımlardan birini seçin.");
+            }
+
+            if (!IsExpenseAccountCode(account.Code))
+            {
+                throw new ArgumentException(
+                    $"{account.Code} {account.Name} bir gider/maliyet hesabı değil. " +
+                    "Gider faturasında 6xx/7xx grubundan bir hesap seçilmelidir.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tek düzen hesap planında maliyet ve gider hesapları 6 ve 7 ile
+    /// başlar (62 satışların maliyeti, 63 faaliyet giderleri, 65/66
+    /// diğer gider ve finansman, 7xx maliyet hesapları).
+    /// </summary>
+    private static bool IsExpenseAccountCode(string code) =>
+        code.StartsWith('6') || code.StartsWith('7');
 
     private static List<SupplierInvoiceItem> BuildItems(
         IReadOnlyCollection<SupplierInvoiceItemRequest> requests)
@@ -439,6 +657,10 @@ public sealed class SupplierInvoiceService(
             items.Add(new SupplierInvoiceItem
             {
                 LineNumber = lineNumber++,
+                InventoryItemId = request.InventoryItemId,
+                WarehouseId = request.WarehouseId,
+                ExpenseAccountId = request.ExpenseAccountId,
+                CostCenterCode = Normalize(request.CostCenterCode),
                 Description = request.Description.Trim(),
                 Quantity = request.Quantity,
                 Unit = string.IsNullOrWhiteSpace(request.Unit) ? "adet" : request.Unit.Trim(),
@@ -468,7 +690,13 @@ public sealed class SupplierInvoiceService(
         await db.SupplierInvoices
             .AsNoTracking()
             .Include(x => x.Items.OrderBy(i => i.LineNumber))
+                .ThenInclude(i => i.InventoryItem)
+            .Include(x => x.Items)
+                .ThenInclude(i => i.Warehouse)
+            .Include(x => x.Items)
+                .ThenInclude(i => i.ExpenseAccount)
             .Include(x => x.SupplierCurrentAccount)
+            .Include(x => x.Warehouse)
             .Include(x => x.Project)
             .Include(x => x.PurchaseOrder)
             .Include(x => x.GoodsReceipt)
@@ -480,7 +708,11 @@ public sealed class SupplierInvoiceService(
             invoice.Id, invoice.CompanyId, invoice.InternalNumber, invoice.InvoiceNumber,
             invoice.InvoiceDate, invoice.DueDate,
             invoice.SupplierCurrentAccountId, invoice.SupplierCurrentAccount.Title,
-            invoice.ProjectId, invoice.Project.Code, invoice.Project.Name,
+            invoice.ProjectId, invoice.Project?.Code, invoice.Project?.Name,
+            (int)invoice.InvoiceType,
+            invoice.InvoiceType == SupplierInvoiceType.Expense ? "Gider" : "Alış (Stok)",
+            invoice.CostCenterCode,
+            invoice.WarehouseId, invoice.Warehouse?.Name,
             invoice.PurchaseOrderId, invoice.PurchaseOrder?.OrderNumber,
             invoice.GoodsReceiptId, invoice.GoodsReceipt?.ReceiptNumber,
             invoice.CurrencyCode, invoice.ExchangeRate,
@@ -494,7 +726,16 @@ public sealed class SupplierInvoiceService(
             invoice.Items.Select(item => new SupplierInvoiceItemResponse(
                 item.Id, item.LineNumber, item.Description, item.Quantity, item.Unit,
                 item.UnitPrice, item.VatRate, item.LineSubtotal, item.VatAmount,
-                item.LineTotal, item.PurchaseOrderItemId)).ToList());
+                item.LineTotal, item.PurchaseOrderItemId,
+                item.InventoryItemId,
+                item.InventoryItem?.Code,
+                item.InventoryItem?.Name,
+                item.WarehouseId,
+                item.Warehouse?.Name,
+                item.ExpenseAccountId,
+                item.ExpenseAccount?.Code,
+                item.ExpenseAccount?.Name,
+                item.CostCenterCode)).ToList());
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

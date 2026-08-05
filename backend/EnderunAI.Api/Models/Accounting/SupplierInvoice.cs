@@ -9,6 +9,23 @@ public enum SupplierInvoiceStatus
     Cancelled = 4
 }
 
+/// <summary>
+/// Faturanın ne için kesildiği. Muhasebe fişi ve stok etkisi buna göre
+/// değişir; ikisi tek akışta birleştirilemez çünkü alışta stok hesabı
+/// ve depo, giderde gider hesabı ve masraf merkezi gerekir.
+/// </summary>
+public enum SupplierInvoiceType
+{
+    /// <summary>
+    /// Alış: stok kartına bağlı malzeme girişi. Varsayılan — tip alanı
+    /// eklenmeden önce girilmiş faturalar bugünkü davranışını korusun.
+    /// </summary>
+    Stock = 0,
+
+    /// <summary>Gider: elektrik, kira, müşavirlik gibi; stoğa girmez.</summary>
+    Expense = 1
+}
+
 public enum SupplierInvoiceMatchStatus
 {
     /// <summary>Sipariş/mal kabul bağlantısı yok — 3 yönlü kontrol uygulanmadı.</summary>
@@ -34,9 +51,31 @@ public sealed class SupplierInvoice : BaseEntity
     public Guid SupplierCurrentAccountId { get; set; }
     public CurrentAccount SupplierCurrentAccount { get; set; } = null!;
 
-    /// <summary>Zorunlu — maliyet fişindeki 320/maliyet satırları proje boyutu ister.</summary>
-    public Guid ProjectId { get; set; }
-    public Project Project { get; set; } = null!;
+    public SupplierInvoiceType InvoiceType { get; set; } = SupplierInvoiceType.Stock;
+
+    /// <summary>
+    /// OPSİYONEL. Ofis elektriği, kira, müşavirlik gibi giderlerin
+    /// gerçekten projesi yoktur; zorunlu tutulsaydı kullanıcı bunları
+    /// rastgele bir projeye yazmak zorunda kalır ve o projenin maliyeti
+    /// olduğundan yüksek görünürdü. Proje boşken proje maliyet kaydı da
+    /// oluşmaz.
+    /// </summary>
+    public Guid? ProjectId { get; set; }
+    public Project? Project { get; set; }
+
+    /// <summary>
+    /// Faturanın varsayılan masraf merkezi kodu. Merkez giderinde
+    /// merkez ofis şubesinin kodu, şantiye giderinde proje kodu.
+    /// Kalem kendi kodunu taşıyorsa o geçerlidir.
+    /// </summary>
+    public string? CostCenterCode { get; set; }
+
+    /// <summary>
+    /// ALIŞ faturasında varsayılan depo — kalemlerin çoğu aynı depoya
+    /// girer, istisna kalem kendi deposunu taşır.
+    /// </summary>
+    public Guid? WarehouseId { get; set; }
+    public Warehouse? Warehouse { get; set; }
 
     public Guid? PurchaseOrderId { get; set; }
     public PurchaseOrder.PurchaseOrder? PurchaseOrder { get; set; }
@@ -114,6 +153,30 @@ public sealed class SupplierInvoiceItem : BaseEntity
     public SupplierInvoice SupplierInvoice { get; set; } = null!;
 
     public int LineNumber { get; set; }
+
+    /// <summary>
+    /// ALIŞ faturasında kalemin stok kartı. Serbest metin yerine karttan
+    /// seçilir ki stok, maliyet ve satın alma zinciri aynı kalemi
+    /// göstersin.
+    /// </summary>
+    public Guid? InventoryItemId { get; set; }
+    public InventoryItem? InventoryItem { get; set; }
+
+    /// <summary>Kalemin gireceği depo; boşsa faturanın deposu.</summary>
+    public Guid? WarehouseId { get; set; }
+    public Warehouse? Warehouse { get; set; }
+
+    /// <summary>
+    /// GİDER faturasında kalemin yazılacağı gider hesabı (770/740 alt
+    /// kırılımları). Tek bir varsayılan hesap yerine kalem bazında
+    /// seçilir: bir faturada hem akaryakıt hem otoyol gideri olabilir.
+    /// </summary>
+    public Guid? ExpenseAccountId { get; set; }
+    public AccountingAccount? ExpenseAccount { get; set; }
+
+    /// <summary>Kalemin masraf merkezi; boşsa faturanın kodu.</summary>
+    public string? CostCenterCode { get; set; }
+
     public string Description { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public string Unit { get; set; } = string.Empty;

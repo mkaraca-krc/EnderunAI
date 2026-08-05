@@ -77,6 +77,9 @@ builder.Services.AddScoped<IAccountingAccountSeedService, AccountingAccountSeedS
 builder.Services.AddScoped<IAccountingVoucherService, AccountingVoucherService>();
 builder.Services.AddScoped<IAccountingIntegrationService, AccountingIntegrationService>();
 builder.Services.AddScoped<ISupplierInvoiceService, SupplierInvoiceService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Inventory.ISupplierInvoiceStockPoster,
+    EnderunAI.Api.Services.Inventory.SupplierInvoiceStockPoster>();
 builder.Services.AddScoped<ISalesInvoiceService, SalesInvoiceService>();
 
 // İş sağlığı ve güvenliği

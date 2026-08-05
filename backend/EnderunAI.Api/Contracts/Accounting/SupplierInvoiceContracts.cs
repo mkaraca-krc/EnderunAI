@@ -6,12 +6,24 @@ public sealed record SupplierInvoiceItemRequest(
     string Unit,
     decimal UnitPrice,
     decimal VatRate,
-    Guid? PurchaseOrderItemId);
+    Guid? PurchaseOrderItemId,
+    /// <summary>ALIŞ faturasında zorunlu — kalemin stok kartı.</summary>
+    Guid? InventoryItemId = null,
+    /// <summary>Kalemin deposu; boşsa faturanın deposu kullanılır.</summary>
+    Guid? WarehouseId = null,
+    /// <summary>GİDER faturasında zorunlu — kalemin gider hesabı.</summary>
+    Guid? ExpenseAccountId = null,
+    /// <summary>Kalemin masraf merkezi; boşsa faturanınki kullanılır.</summary>
+    string? CostCenterCode = null);
 
 public sealed record CreateSupplierInvoiceRequest(
     Guid CompanyId,
     Guid SupplierCurrentAccountId,
-    Guid ProjectId,
+    /// <summary>
+    /// Merkez giderinde boş bırakılır. Şantiye gideri ve alış
+    /// faturasında dolu olmalıdır.
+    /// </summary>
+    Guid? ProjectId,
     Guid? PurchaseOrderId,
     Guid? GoodsReceiptId,
     string InvoiceNumber,
@@ -20,7 +32,13 @@ public sealed record CreateSupplierInvoiceRequest(
     string CurrencyCode,
     decimal ExchangeRate,
     string? Description,
-    IReadOnlyCollection<SupplierInvoiceItemRequest> Items);
+    IReadOnlyCollection<SupplierInvoiceItemRequest> Items,
+    /// <summary>0 = Alış (stok), 1 = Gider. Varsayılan alış.</summary>
+    int InvoiceType = 0,
+    /// <summary>ALIŞ faturasının varsayılan deposu.</summary>
+    Guid? WarehouseId = null,
+    /// <summary>Faturanın varsayılan masraf merkezi.</summary>
+    string? CostCenterCode = null);
 
 public sealed record UpdateSupplierInvoiceRequest(
     string InvoiceNumber,
@@ -29,7 +47,11 @@ public sealed record UpdateSupplierInvoiceRequest(
     string CurrencyCode,
     decimal ExchangeRate,
     string? Description,
-    IReadOnlyCollection<SupplierInvoiceItemRequest> Items);
+    IReadOnlyCollection<SupplierInvoiceItemRequest> Items,
+    int InvoiceType = 0,
+    Guid? ProjectId = null,
+    Guid? WarehouseId = null,
+    string? CostCenterCode = null);
 
 public sealed record RejectSupplierInvoiceRequest(string Reason);
 
@@ -44,7 +66,16 @@ public sealed record SupplierInvoiceItemResponse(
     decimal LineSubtotal,
     decimal VatAmount,
     decimal LineTotal,
-    Guid? PurchaseOrderItemId);
+    Guid? PurchaseOrderItemId,
+    Guid? InventoryItemId,
+    string? InventoryItemCode,
+    string? InventoryItemName,
+    Guid? WarehouseId,
+    string? WarehouseName,
+    Guid? ExpenseAccountId,
+    string? ExpenseAccountCode,
+    string? ExpenseAccountName,
+    string? CostCenterCode);
 
 public sealed record SupplierInvoiceListItemResponse(
     Guid Id,
@@ -53,9 +84,12 @@ public sealed record SupplierInvoiceListItemResponse(
     DateTime InvoiceDate,
     Guid SupplierCurrentAccountId,
     string SupplierTitle,
-    Guid ProjectId,
-    string ProjectCode,
-    string ProjectName,
+    Guid? ProjectId,
+    string? ProjectCode,
+    string? ProjectName,
+    int InvoiceType,
+    string InvoiceTypeName,
+    string? CostCenterCode,
     string CurrencyCode,
     decimal Subtotal,
     decimal VatTotal,
@@ -75,9 +109,14 @@ public sealed record SupplierInvoiceDetailResponse(
     DateTime? DueDate,
     Guid SupplierCurrentAccountId,
     string SupplierTitle,
-    Guid ProjectId,
-    string ProjectCode,
-    string ProjectName,
+    Guid? ProjectId,
+    string? ProjectCode,
+    string? ProjectName,
+    int InvoiceType,
+    string InvoiceTypeName,
+    string? CostCenterCode,
+    Guid? WarehouseId,
+    string? WarehouseName,
     Guid? PurchaseOrderId,
     string? PurchaseOrderNumber,
     Guid? GoodsReceiptId,

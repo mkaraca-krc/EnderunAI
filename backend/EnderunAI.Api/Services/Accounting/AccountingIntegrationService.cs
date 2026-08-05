@@ -194,16 +194,154 @@ public sealed class AccountingIntegrationService(
         return settings;
     }
 
+    /// <summary>
+    /// Faturanın borç (maliyet/gider) satırları.
+    ///
+    /// ALIŞ: kalemler stok hesabına yazılır (ayarlardaki stok hesabı,
+    /// yoksa maliyet hesabı). Masraf merkezi kalemin deposunun projesi,
+    /// yoksa faturanınki.
+    ///
+    /// GİDER: her kalem KENDİ seçilen hesabına yazılır. Aynı hesap +
+    /// aynı masraf merkezine düşen kalemler tek satırda birleşir — 40
+    /// kalemlik bir kırtasiye faturası deftere 40 satır yazmasın.
+    /// </summary>
+    private async Task<List<AccountingVoucherLineRequest>> BuildSupplierInvoiceCostLinesAsync(
+        SupplierInvoice invoice,
+        CompanyFinanceSettings settings,
+        CurrentAccount supplier,
+        string fallbackCostCenter,
+        CancellationToken cancellationToken)
+    {
+        var items = invoice.Items.Count > 0
+            ? invoice.Items.ToList()
+            : await db.SupplierInvoiceItems
+                .AsNoTracking()
+                .Where(x => x.SupplierInvoiceId == invoice.Id)
+                .ToListAsync(cancellationToken);
+
+        // Kalem masraf merkezi doldurulmamışsa deponun projesinden
+        // türetilir: şantiye deposuna giren malzeme o şantiyenin
+        // maliyetidir.
+        var warehouseIds = items
+            .Select(x => x.WarehouseId ?? invoice.WarehouseId)
+            .OfType<Guid>()
+            .Distinct()
+            .ToList();
+
+        var warehouseCostCenters = warehouseIds.Count == 0
+            ? []
+            : await db.Warehouses
+                .AsNoTracking()
+                .Where(x => warehouseIds.Contains(x.Id))
+                .Select(x => new
+                {
+                    x.Id,
+                    Code = x.Project != null ? x.Project.Code : (x.Branch.CostCenterCode ?? x.Branch.Code),
+                    ProjectId = x.ProjectId
+                })
+                .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        string ResolveCostCenter(SupplierInvoiceItem item)
+        {
+            if (!string.IsNullOrWhiteSpace(item.CostCenterCode))
+                return item.CostCenterCode!;
+
+            var warehouseId = item.WarehouseId ?? invoice.WarehouseId;
+
+            if (warehouseId is Guid id &&
+                warehouseCostCenters.TryGetValue(id, out var warehouse))
+            {
+                return warehouse.Code;
+            }
+
+            return fallbackCostCenter;
+        }
+
+        Guid? ResolveProjectId(SupplierInvoiceItem item)
+        {
+            var warehouseId = item.WarehouseId ?? invoice.WarehouseId;
+
+            if (warehouseId is Guid id &&
+                warehouseCostCenters.TryGetValue(id, out var warehouse) &&
+                warehouse.ProjectId is Guid warehouseProject)
+            {
+                return warehouseProject;
+            }
+
+            return invoice.ProjectId;
+        }
+
+        Guid ResolveAccount(SupplierInvoiceItem item)
+        {
+            if (invoice.InvoiceType == SupplierInvoiceType.Expense)
+            {
+                return item.ExpenseAccountId
+                    ?? settings.ExpenseAccountId
+                    ?? throw new InvalidOperationException(
+                        $"Kalem {item.LineNumber}: gider hesabı seçilmemiş.");
+            }
+
+            // Stok hesabı ayarlanmamışsa maliyet hesabına düşülür ki
+            // ayar yapılmamış şirkette fatura onayı kilitlenmesin.
+            return settings.InventoryAccountId
+                ?? settings.ExpenseAccountId
+                ?? throw new InvalidOperationException(
+                    "Stok veya maliyet hesabı yapılandırılmamış. " +
+                    "Şirket Ayarları → Finans Ayarları'ndan seçin.");
+        }
+
+        var grouped = items
+            .Select(item => new
+            {
+                Item = item,
+                AccountId = ResolveAccount(item),
+                CostCenter = ResolveCostCenter(item),
+                ProjectId = ResolveProjectId(item)
+            })
+            .GroupBy(x => new { x.AccountId, x.CostCenter, x.ProjectId })
+            .Select(group => new AccountingVoucherLineRequest(
+                AccountingAccountId: group.Key.AccountId,
+                Description: invoice.InvoiceType == SupplierInvoiceType.Expense
+                    ? $"Gider — {supplier.Title}"
+                    : $"Stok girişi — {supplier.Title}",
+                DebitAmount: decimal.Round(group.Sum(x => x.Item.LineSubtotal), 2),
+                CreditAmount: 0m,
+                CurrencyCode: invoice.CurrencyCode,
+                ExchangeRate: invoice.ExchangeRate,
+                CurrentAccountId: null,
+                ProjectId: group.Key.ProjectId,
+                CostCenterCode: group.Key.CostCenter,
+                DocumentNumber: invoice.InvoiceNumber,
+                DocumentDate: invoice.InvoiceDate,
+                DueDate: null))
+            .ToList();
+
+        // Yuvarlama artığı: kalem toplamları fatura ara toplamından
+        // sapmışsa fark en büyük satıra eklenir; aksi halde fiş
+        // dengelenmez ve onay tamamen bloke olurdu.
+        var lineSum = grouped.Sum(x => x.DebitAmount);
+        var difference = decimal.Round(invoice.Subtotal - lineSum, 2);
+
+        if (difference != 0m && grouped.Count > 0)
+        {
+            var largest = grouped.OrderByDescending(x => x.DebitAmount).First();
+            var index = grouped.IndexOf(largest);
+
+            grouped[index] = largest with
+            {
+                DebitAmount = largest.DebitAmount + difference
+            };
+        }
+
+        return grouped;
+    }
+
     public async Task<SupplierInvoicePostingResult> CreateSupplierInvoiceVoucherAsync(
         SupplierInvoice invoice,
         CancellationToken cancellationToken = default)
     {
         var settings = await GetOrCreateFinanceSettingsAsync(
             invoice.CompanyId, cancellationToken);
-
-        if (settings.ExpenseAccountId is null)
-            throw new InvalidOperationException(
-                "Maliyet hesabı yapılandırılmamış. Şirket Ayarları → Finans Ayarları'ndan seçin.");
 
         if (invoice.VatTotal > 0 && settings.VatInAccountId is null)
             throw new InvalidOperationException(
@@ -212,28 +350,25 @@ public sealed class AccountingIntegrationService(
         var supplier = await db.CurrentAccounts
             .SingleAsync(x => x.Id == invoice.SupplierCurrentAccountId, cancellationToken);
 
-        var project = await db.Projects
-            .SingleAsync(x => x.Id == invoice.ProjectId, cancellationToken);
+        var project = invoice.ProjectId is Guid projectId
+            ? await db.Projects.SingleAsync(x => x.Id == projectId, cancellationToken)
+            : null;
 
         var payableAccountId = await ResolvePayableAccountAsync(
             supplier, settings, cancellationToken);
 
-        var lines = new List<AccountingVoucherLineRequest>
-        {
-            new(
-                AccountingAccountId: settings.ExpenseAccountId.Value,
-                Description: $"Tedarikçi faturası maliyeti — {supplier.Title}",
-                DebitAmount: invoice.Subtotal,
-                CreditAmount: 0m,
-                CurrencyCode: invoice.CurrencyCode,
-                ExchangeRate: invoice.ExchangeRate,
-                CurrentAccountId: null,
-                ProjectId: invoice.ProjectId,
-                CostCenterCode: project.Code,
-                DocumentNumber: invoice.InvoiceNumber,
-                DocumentDate: invoice.InvoiceDate,
-                DueDate: null)
-        };
+        // Faturanın varsayılan masraf merkezi: açıkça girilen kod, yoksa
+        // proje kodu, o da yoksa şirket kodu. Projesiz merkez giderinde
+        // kod boş kalmasın diye üç kademeli.
+        var fallbackCostCenter = invoice.CostCenterCode
+            ?? project?.Code
+            ?? await db.Companies
+                .Where(x => x.Id == invoice.CompanyId)
+                .Select(x => x.Code)
+                .SingleAsync(cancellationToken);
+
+        var lines = await BuildSupplierInvoiceCostLinesAsync(
+            invoice, settings, supplier, fallbackCostCenter, cancellationToken);
 
         if (invoice.VatTotal > 0)
         {
@@ -246,7 +381,7 @@ public sealed class AccountingIntegrationService(
                 ExchangeRate: invoice.ExchangeRate,
                 CurrentAccountId: null,
                 ProjectId: invoice.ProjectId,
-                CostCenterCode: project.Code,
+                CostCenterCode: fallbackCostCenter,
                 DocumentNumber: invoice.InvoiceNumber,
                 DocumentDate: invoice.InvoiceDate,
                 DueDate: null));
@@ -261,7 +396,7 @@ public sealed class AccountingIntegrationService(
             ExchangeRate: invoice.ExchangeRate,
             CurrentAccountId: supplier.Id,
             ProjectId: invoice.ProjectId,
-            CostCenterCode: project.Code,
+            CostCenterCode: fallbackCostCenter,
             DocumentNumber: invoice.InvoiceNumber,
             DocumentDate: invoice.InvoiceDate,
             DueDate: invoice.DueDate));
@@ -291,12 +426,16 @@ public sealed class AccountingIntegrationService(
 
         await voucherService.PostAsync(created.Id, cancellationToken);
 
-        // Maliyet satırı ilk sırada üretiliyor; proje maliyet kaydı buna
-        // bağlanacağı için Id'si geri veriliyor.
+        // Maliyet satırları fişin başında, KDV ve satıcı satırından önce
+        // üretiliyor. Sabit bir hesap koduna göre aranmıyor: gider
+        // faturasında her kalem kendi hesabına, alışta stok hesabına
+        // yazılıyor; hesaba göre arayan eski sorgu artık hiçbir satır
+        // bulamazdı.
         var expenseLineId = await db.AccountingVoucherLines
             .Where(x => x.AccountingVoucherId == created.Id &&
-                        x.AccountingAccountId == settings.ExpenseAccountId!.Value &&
-                        x.DebitAmount > 0m)
+                        x.DebitAmount > 0m &&
+                        (settings.VatInAccountId == null ||
+                         x.AccountingAccountId != settings.VatInAccountId))
             .OrderBy(x => x.LineNumber)
             .Select(x => x.Id)
             .FirstAsync(cancellationToken);
