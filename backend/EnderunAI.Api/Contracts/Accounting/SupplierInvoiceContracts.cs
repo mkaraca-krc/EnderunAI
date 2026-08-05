@@ -138,7 +138,13 @@ public sealed record SupplierInvoiceDetailResponse(
     string? RejectionReason,
     Guid? AccountingVoucherId,
     string? AccountingVoucherNumber,
-    IReadOnlyCollection<SupplierInvoiceItemResponse> Items);
+    IReadOnlyCollection<SupplierInvoiceItemResponse> Items,
+    /// <summary>Bu faturaya bağlanmış çek payları (dağılımdan gelir).</summary>
+    IReadOnlyCollection<InvoiceChequePaymentResponse> ChequePayments,
+    /// <summary>Çeklerle karşılanan toplam.</summary>
+    decimal ChequeAllocatedAmount,
+    /// <summary>Fatura tutarından çek payları düşüldükten sonra kalan.</summary>
+    decimal ChequeRemainingAmount);
 
 public sealed record SupplierInvoiceActionResponse(
     Guid Id,

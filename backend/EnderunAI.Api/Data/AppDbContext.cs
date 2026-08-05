@@ -33,6 +33,7 @@ public sealed class AppDbContext(
     public DbSet<PayrollTaxBracket> PayrollTaxBrackets => Set<PayrollTaxBracket>();
     public DbSet<Cheque> Cheques => Set<Cheque>();
     public DbSet<ChequeMovement> ChequeMovements => Set<ChequeMovement>();
+    public DbSet<ChequeAllocation> ChequeAllocations => Set<ChequeAllocation>();
     public DbSet<FactoringTransaction> FactoringTransactions => Set<FactoringTransaction>();
     public DbSet<SupplierInvoice> SupplierInvoices => Set<SupplierInvoice>();
     public DbSet<SupplierInvoiceItem> SupplierInvoiceItems => Set<SupplierInvoiceItem>();
@@ -995,6 +996,7 @@ public sealed class AppDbContext(
             entity.Property(x => x.Drawer).HasMaxLength(200);
             entity.Property(x => x.Amount).HasPrecision(18, 2);
             entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.CostCenterCode).HasMaxLength(50);
             entity.Property(x => x.Description).HasMaxLength(1000);
 
             entity.HasOne(x => x.Company).WithMany()
@@ -1030,6 +1032,31 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.CashAccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.AccountingVoucher).WithMany()
                 .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ChequeAllocation>(entity =>
+        {
+            entity.ToTable("cheque_allocations");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.ChequeId);
+            entity.HasIndex(x => x.SupplierInvoiceId);
+            entity.HasIndex(x => x.SalesInvoiceId);
+
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.CostCenterCode).HasMaxLength(50);
+            entity.Property(x => x.Description).HasMaxLength(500);
+
+            entity.HasOne(x => x.Cheque).WithMany(x => x.Allocations)
+                .HasForeignKey(x => x.ChequeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SupplierInvoice).WithMany()
+                .HasForeignKey(x => x.SupplierInvoiceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SalesInvoice).WithMany()
+                .HasForeignKey(x => x.SalesInvoiceId).OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

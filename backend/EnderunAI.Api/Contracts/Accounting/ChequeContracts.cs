@@ -1,5 +1,43 @@
 namespace EnderunAI.Api.Contracts.Accounting;
 
+/// <summary>
+/// Çekin bir payı. Fatura verilirse proje ve masraf merkezi faturadan
+/// türetilir; gönderilen değerler yok sayılır (tek kaynak fatura olsun).
+/// </summary>
+public sealed record ChequeAllocationRequest(
+    decimal Amount,
+    Guid? ProjectId = null,
+    string? CostCenterCode = null,
+    Guid? SupplierInvoiceId = null,
+    Guid? SalesInvoiceId = null,
+    string? Description = null);
+
+public sealed record ChequeAllocationsRequest(
+    IReadOnlyCollection<ChequeAllocationRequest> Allocations);
+
+public sealed record ChequeAllocationResponse(
+    Guid Id,
+    decimal Amount,
+    Guid? ProjectId,
+    string? ProjectCode,
+    string? ProjectName,
+    string? CostCenterCode,
+    Guid? SupplierInvoiceId,
+    string? SupplierInvoiceNumber,
+    Guid? SalesInvoiceId,
+    string? SalesInvoiceNumber,
+    string? Description);
+
+/// <summary>Bir faturayı ödeyen çekin özeti (fatura ekranında görünür).</summary>
+public sealed record InvoiceChequePaymentResponse(
+    Guid ChequeId,
+    string InternalNumber,
+    string ChequeNumber,
+    DateTime DueDate,
+    int Status,
+    string StatusName,
+    decimal AllocatedAmount);
+
 public sealed record CreateChequeRequest(
     Guid CompanyId,
     int Direction,
@@ -15,7 +53,14 @@ public sealed record CreateChequeRequest(
     DateTime DueDate,
     Guid? ProgressPaymentId,
     Guid? SupplierInvoiceId,
-    string? Description);
+    string? Description,
+    /// <summary>Merkez ofis ya da şantiye kodu; boşsa proje kodu kullanılır.</summary>
+    string? CostCenterCode = null,
+    /// <summary>
+    /// Proje/masraf merkezi dağılımı. Boş bırakılırsa çek tek parça
+    /// işlenir (bugünkü davranış).
+    /// </summary>
+    IReadOnlyCollection<ChequeAllocationRequest>? Allocations = null);
 
 public sealed record UpdateChequeRequest(
     string ChequeNumber,
@@ -29,7 +74,8 @@ public sealed record UpdateChequeRequest(
     DateTime DueDate,
     Guid? ProgressPaymentId,
     Guid? SupplierInvoiceId,
-    string? Description);
+    string? Description,
+    string? CostCenterCode = null);
 
 /// <summary>
 /// Durum geçişi. CashAccountId yalnızca para hareketi doğuran
@@ -69,6 +115,7 @@ public sealed record ChequeListItemResponse(
     string? CurrentAccountTitle,
     Guid? ProjectId,
     string? ProjectCode,
+    string? CostCenterCode,
     decimal Amount,
     string CurrencyCode,
     DateTime IssueDate,
@@ -93,6 +140,7 @@ public sealed record ChequeDetailResponse(
     Guid? ProjectId,
     string? ProjectCode,
     string? ProjectName,
+    string? CostCenterCode,
     decimal Amount,
     string CurrencyCode,
     DateTime IssueDate,
@@ -105,7 +153,8 @@ public sealed record ChequeDetailResponse(
     string? CashAccountName,
     string? Description,
     IReadOnlyCollection<int> AllowedNextStatuses,
-    IReadOnlyCollection<ChequeMovementResponse> Movements);
+    IReadOnlyCollection<ChequeMovementResponse> Movements,
+    IReadOnlyCollection<ChequeAllocationResponse> Allocations);
 
 public sealed record ChequeSummaryResponse(
     decimal ReceivedPortfolioAmount,

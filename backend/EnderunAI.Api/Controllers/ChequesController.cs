@@ -96,6 +96,33 @@ public sealed class ChequesController(IChequeService service) : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Çekin proje/masraf merkezi dağılımını baştan yazar. Boş liste
+    /// dağılımı kaldırır ve çek tek parça işlenmeye döner.
+    /// </summary>
+    [HttpPut("{id:guid}/allocations")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceEdit)]
+    public async Task<IActionResult> ReplaceAllocations(
+        Guid id, ChequeAllocationsRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await service.ReplaceAllocationsAsync(id, request, cancellationToken));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
     [HttpPost("{id:guid}/status")]
     [RequirePermission(PermissionCatalog.Keys.FinanceEdit)]
     public async Task<IActionResult> ChangeStatus(

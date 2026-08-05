@@ -30,6 +30,13 @@ public interface IChequeService
 
     Task<ChequeDetailResponse> ChangeStatusAsync(
         Guid id, ChequeStatusChangeRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Çekin proje/masraf merkezi dağılımını baştan yazar ve giriş fişini
+    /// dağılıma göre yeniden üretir. Boş liste dağılımı kaldırır.
+    /// </summary>
+    Task<ChequeDetailResponse> ReplaceAllocationsAsync(
+        Guid id, ChequeAllocationsRequest request, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -41,6 +48,7 @@ public interface IChequeService
 public sealed class ChequeService(
     AppDbContext db,
     IAccountingIntegrationService accountingIntegration,
+    IAccountingVoucherService voucherService,
     IDocumentNumberService documentNumberService) : IChequeService
 {
     /// <summary>
@@ -172,6 +180,7 @@ public sealed class ChequeService(
                 CurrentAccountTitle = x.CurrentAccount != null ? x.CurrentAccount.Title : null,
                 x.ProjectId,
                 ProjectCode = x.Project != null ? x.Project.Code : null,
+                x.CostCenterCode,
                 x.Amount,
                 x.CurrencyCode,
                 x.IssueDate,
@@ -202,6 +211,7 @@ public sealed class ChequeService(
                 x.CurrentAccountTitle,
                 x.ProjectId,
                 x.ProjectCode,
+                x.CostCenterCode,
                 x.Amount,
                 x.CurrencyCode,
                 x.IssueDate,
@@ -246,6 +256,24 @@ public sealed class ChequeService(
             })
             .ToListAsync(cancellationToken);
 
+        var allocations = await db.ChequeAllocations
+            .AsNoTracking()
+            .Where(x => x.ChequeId == id)
+            .OrderBy(x => x.CreatedAtUtc)
+            .Select(x => new ChequeAllocationResponse(
+                x.Id,
+                x.Amount,
+                x.ProjectId,
+                x.Project != null ? x.Project.Code : null,
+                x.Project != null ? x.Project.Name : null,
+                x.CostCenterCode,
+                x.SupplierInvoiceId,
+                x.SupplierInvoice != null ? x.SupplierInvoice.InvoiceNumber : null,
+                x.SalesInvoiceId,
+                x.SalesInvoice != null ? x.SalesInvoice.InternalNumber : null,
+                x.Description))
+            .ToListAsync(cancellationToken);
+
         return new ChequeDetailResponse(
             cheque.Id,
             cheque.CompanyId,
@@ -263,6 +291,7 @@ public sealed class ChequeService(
             cheque.ProjectId,
             cheque.Project?.Code,
             cheque.Project?.Name,
+            cheque.CostCenterCode,
             cheque.Amount,
             cheque.CurrencyCode,
             cheque.IssueDate,
@@ -286,7 +315,8 @@ public sealed class ChequeService(
                 x.CashAccountId,
                 x.CashAccountName,
                 x.AccountingVoucherId,
-                x.AccountingVoucherNumber)).ToList());
+                x.AccountingVoucherNumber)).ToList(),
+            allocations);
     }
 
     public async Task<ChequeSummaryResponse> GetSummaryAsync(
@@ -393,6 +423,7 @@ public sealed class ChequeService(
             Drawer = Normalize(request.Drawer),
             CurrentAccountId = request.CurrentAccountId,
             ProjectId = request.ProjectId,
+            CostCenterCode = Normalize(request.CostCenterCode),
             Amount = decimal.Round(request.Amount, 2),
             CurrencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode)
                 ? "TRY"
@@ -413,6 +444,17 @@ public sealed class ChequeService(
         {
             db.Cheques.Add(cheque);
             await db.SaveChangesAsync(cancellationToken);
+
+            // Dağılım fişten ÖNCE yazılır: fiş cari tarafını bu satırlara
+            // göre böler, sonradan eklenirse fiş dağılımı görmezdi.
+            var allocations = await BuildAllocationsAsync(
+                cheque, request.Allocations, cancellationToken);
+
+            if (allocations.Count > 0)
+            {
+                db.ChequeAllocations.AddRange(allocations);
+                await db.SaveChangesAsync(cancellationToken);
+            }
 
             var voucherId = await accountingIntegration.CreateChequeVoucherAsync(
                 cheque, null, cheque.Status, cheque.IssueDate, null, cancellationToken);
@@ -486,6 +528,7 @@ public sealed class ChequeService(
         cheque.BankBranch = Normalize(request.BankBranch);
         cheque.Drawer = Normalize(request.Drawer);
         cheque.ProjectId = request.ProjectId;
+        cheque.CostCenterCode = Normalize(request.CostCenterCode);
         cheque.IssueDate = AsUtc(request.IssueDate);
         cheque.DueDate = AsUtc(request.DueDate);
         cheque.ProgressPaymentId = request.ProgressPaymentId;
@@ -603,6 +646,299 @@ public sealed class ChequeService(
         }
 
         return await GetByIdAsync(cheque.Id, cancellationToken);
+    }
+
+    public async Task<ChequeDetailResponse> ReplaceAllocationsAsync(
+        Guid id, ChequeAllocationsRequest request, CancellationToken cancellationToken)
+    {
+        var cheque = await db.Cheques.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new KeyNotFoundException("Çek bulunamadı.");
+
+        var movements = await db.ChequeMovements
+            .Where(x => x.ChequeId == id)
+            .OrderBy(x => x.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        // Çek işlem gördükten sonra (tahsil, ödeme, karşılıksız...) dağılım
+        // değiştirilemez: sonraki fişler ilk dağılıma göre kesilmiş olur ve
+        // geriye dönük değişiklik onlarla tutarsız kalırdı.
+        if (movements.Count > 1)
+        {
+            throw new InvalidOperationException(
+                "Çek işlem gördüğü için dağılımı değiştirilemez. " +
+                "Düzeltme gerekiyorsa muhasebede düzeltme fişi düzenleyin.");
+        }
+
+        var allocations = await BuildAllocationsAsync(
+            cheque, request.Allocations, cancellationToken);
+
+        var ownsTransaction = db.Database.CurrentTransaction is null;
+        var dbTransaction = ownsTransaction
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        try
+        {
+            var existing = await db.ChequeAllocations
+                .Where(x => x.ChequeId == id)
+                .ToListAsync(cancellationToken);
+
+            db.ChequeAllocations.RemoveRange(existing);
+
+            if (allocations.Count > 0)
+                db.ChequeAllocations.AddRange(allocations);
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            // Giriş fişi dağılıma göre yeniden üretilir. Eskisi SİLİNMEZ,
+            // iptal edilir: muhasebede yazılan fişin izi kalmalı.
+            var entryMovement = movements.SingleOrDefault(x => x.FromStatus is null);
+
+            if (entryMovement?.AccountingVoucherId is Guid oldVoucherId)
+            {
+                await voucherService.CancelAsync(
+                    oldVoucherId,
+                    $"{cheque.InternalNumber} — çek dağılımı değiştirildi, fiş yeniden kesildi.",
+                    cancellationToken);
+            }
+
+            var newVoucherId = await accountingIntegration.CreateChequeVoucherAsync(
+                cheque, null, cheque.Status, cheque.IssueDate, null, cancellationToken);
+
+            if (entryMovement is not null)
+            {
+                entryMovement.AccountingVoucherId = newVoucherId;
+                entryMovement.UpdatedAtUtc = DateTime.UtcNow;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            if (dbTransaction is not null)
+                await dbTransaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            if (dbTransaction is not null)
+                await dbTransaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+        finally
+        {
+            dbTransaction?.Dispose();
+        }
+
+        return await GetByIdAsync(cheque.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Dağılım satırlarını doğrular ve kurar.
+    ///
+    /// Fatura bağlantılı satırda proje ve masraf merkezi FATURADAN alınır;
+    /// istemcinin gönderdiği değerler yok sayılır. Aksi halde aynı ödeme
+    /// faturada bir projeye, çekte başka bir projeye yazılabilir ve iki
+    /// rapor birbirini tutmazdı.
+    /// </summary>
+    private async Task<List<ChequeAllocation>> BuildAllocationsAsync(
+        Cheque cheque,
+        IReadOnlyCollection<ChequeAllocationRequest>? requests,
+        CancellationToken cancellationToken)
+    {
+        if (requests is null || requests.Count == 0)
+            return [];
+
+        var result = new List<ChequeAllocation>();
+        var lineNumber = 0;
+
+        foreach (var request in requests)
+        {
+            lineNumber++;
+
+            var amount = decimal.Round(request.Amount, 2);
+
+            if (amount <= 0m)
+                throw new ArgumentException($"Dağılım {lineNumber}: tutar sıfırdan büyük olmalıdır.");
+
+            if (request.SupplierInvoiceId is not null && request.SalesInvoiceId is not null)
+            {
+                throw new ArgumentException(
+                    $"Dağılım {lineNumber}: bir satır hem alış hem satış faturasına bağlanamaz.");
+            }
+
+            var allocation = new ChequeAllocation
+            {
+                ChequeId = cheque.Id,
+                Amount = amount,
+                Description = Normalize(request.Description)
+            };
+
+            if (request.SupplierInvoiceId is Guid supplierInvoiceId)
+            {
+                if (cheque.Direction != ChequeDirection.Issued)
+                {
+                    throw new ArgumentException(
+                        $"Dağılım {lineNumber}: tedarikçi faturası yalnızca verilen çeke bağlanabilir.");
+                }
+
+                var invoice = await db.SupplierInvoices
+                    .AsNoTracking()
+                    .Where(x => x.Id == supplierInvoiceId && x.CompanyId == cheque.CompanyId)
+                    .Select(x => new
+                    {
+                        x.Id,
+                        x.InvoiceNumber,
+                        x.SupplierCurrentAccountId,
+                        x.ProjectId,
+                        x.CostCenterCode,
+                        x.GrandTotal,
+                        x.Status,
+                        ProjectCode = x.Project != null ? x.Project.Code : null
+                    })
+                    .SingleOrDefaultAsync(cancellationToken)
+                    ?? throw new ArgumentException(
+                        $"Dağılım {lineNumber}: tedarikçi faturası bulunamadı.");
+
+                if (invoice.SupplierCurrentAccountId != cheque.CurrentAccountId)
+                {
+                    throw new ArgumentException(
+                        $"Dağılım {lineNumber}: {invoice.InvoiceNumber} numaralı fatura " +
+                        "çekin carisine ait değil.");
+                }
+
+                if (invoice.Status is SupplierInvoiceStatus.Cancelled
+                    or SupplierInvoiceStatus.Rejected)
+                {
+                    throw new ArgumentException(
+                        $"Dağılım {lineNumber}: iptal/reddedilmiş faturaya ödeme bağlanamaz.");
+                }
+
+                await EnsureInvoiceNotOverAllocatedAsync(
+                    cheque.Id, supplierInvoiceId, null, invoice.GrandTotal,
+                    requests, lineNumber, invoice.InvoiceNumber, cancellationToken);
+
+                allocation.SupplierInvoiceId = supplierInvoiceId;
+                allocation.ProjectId = invoice.ProjectId;
+                allocation.CostCenterCode = invoice.CostCenterCode ?? invoice.ProjectCode;
+                result.Add(allocation);
+                continue;
+            }
+
+            if (request.SalesInvoiceId is Guid salesInvoiceId)
+            {
+                if (cheque.Direction != ChequeDirection.Received)
+                {
+                    throw new ArgumentException(
+                        $"Dağılım {lineNumber}: satış faturası yalnızca alınan çeke bağlanabilir.");
+                }
+
+                var invoice = await db.SalesInvoices
+                    .AsNoTracking()
+                    .Where(x => x.Id == salesInvoiceId && x.CompanyId == cheque.CompanyId)
+                    .Select(x => new
+                    {
+                        x.Id,
+                        x.InternalNumber,
+                        x.CustomerCurrentAccountId,
+                        x.ProjectId,
+                        x.GrandTotal,
+                        x.Status,
+                        ProjectCode = x.Project != null ? x.Project.Code : null
+                    })
+                    .SingleOrDefaultAsync(cancellationToken)
+                    ?? throw new ArgumentException(
+                        $"Dağılım {lineNumber}: satış faturası bulunamadı.");
+
+                if (invoice.CustomerCurrentAccountId != cheque.CurrentAccountId)
+                {
+                    throw new ArgumentException(
+                        $"Dağılım {lineNumber}: {invoice.InternalNumber} numaralı fatura " +
+                        "çekin carisine ait değil.");
+                }
+
+                if (invoice.Status == SalesInvoiceStatus.Cancelled)
+                {
+                    throw new ArgumentException(
+                        $"Dağılım {lineNumber}: iptal edilmiş faturaya tahsilat bağlanamaz.");
+                }
+
+                await EnsureInvoiceNotOverAllocatedAsync(
+                    cheque.Id, null, salesInvoiceId, invoice.GrandTotal,
+                    requests, lineNumber, invoice.InternalNumber, cancellationToken);
+
+                allocation.SalesInvoiceId = salesInvoiceId;
+                allocation.ProjectId = invoice.ProjectId;
+                allocation.CostCenterCode = invoice.ProjectCode;
+                result.Add(allocation);
+                continue;
+            }
+
+            // Elle dağılım: fatura yoksa hedef birim mutlaka belirtilmeli;
+            // yoksa pay hangi masraf merkezine gideceği belirsiz kalırdı.
+            if (request.ProjectId is null && string.IsNullOrWhiteSpace(request.CostCenterCode))
+            {
+                throw new ArgumentException(
+                    $"Dağılım {lineNumber}: proje, masraf merkezi ya da fatura seçilmelidir.");
+            }
+
+            string? projectCode = null;
+
+            if (request.ProjectId is Guid projectId)
+            {
+                projectCode = await db.Projects
+                    .Where(x => x.Id == projectId && x.CompanyId == cheque.CompanyId)
+                    .Select(x => x.Code)
+                    .SingleOrDefaultAsync(cancellationToken)
+                    ?? throw new ArgumentException($"Dağılım {lineNumber}: proje bulunamadı.");
+            }
+
+            allocation.ProjectId = request.ProjectId;
+            allocation.CostCenterCode = Normalize(request.CostCenterCode) ?? projectCode;
+            result.Add(allocation);
+        }
+
+        var total = result.Sum(x => x.Amount);
+
+        if (total != decimal.Round(cheque.Amount, 2))
+        {
+            throw new ArgumentException(
+                $"Dağılım toplamı ({total:N2}) çek tutarına ({cheque.Amount:N2}) eşit olmalıdır.");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Bir faturaya bağlanan toplam ödeme fatura tutarını aşamaz; aşarsa
+    /// cari kapatma yanlış olur ve fatura fazla ödenmiş görünürdü.
+    /// Kontrol, bu çekin ESKİ satırları hariç tutularak yapılır.
+    /// </summary>
+    private async Task EnsureInvoiceNotOverAllocatedAsync(
+        Guid chequeId,
+        Guid? supplierInvoiceId,
+        Guid? salesInvoiceId,
+        decimal invoiceTotal,
+        IReadOnlyCollection<ChequeAllocationRequest> requests,
+        int lineNumber,
+        string invoiceNumber,
+        CancellationToken cancellationToken)
+    {
+        var otherCheques = await db.ChequeAllocations
+            .AsNoTracking()
+            .Where(x => x.ChequeId != chequeId &&
+                        ((supplierInvoiceId != null && x.SupplierInvoiceId == supplierInvoiceId) ||
+                         (salesInvoiceId != null && x.SalesInvoiceId == salesInvoiceId)))
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+
+        var thisRequest = requests
+            .Where(x => (supplierInvoiceId != null && x.SupplierInvoiceId == supplierInvoiceId) ||
+                        (salesInvoiceId != null && x.SalesInvoiceId == salesInvoiceId))
+            .Sum(x => decimal.Round(x.Amount, 2));
+
+        if (otherCheques + thisRequest > decimal.Round(invoiceTotal, 2))
+        {
+            throw new ArgumentException(
+                $"Dağılım {lineNumber}: {invoiceNumber} numaralı faturaya bağlanan toplam " +
+                $"({otherCheques + thisRequest:N2}) fatura tutarını ({invoiceTotal:N2}) aşıyor.");
+        }
     }
 
     private static string? Normalize(string? value) =>

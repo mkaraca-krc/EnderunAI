@@ -934,6 +934,35 @@ public sealed class AccountingIntegrationService(
     /// Kod adaylarını sırayla dener; hesap aktif ve kayıt yapılabilir
     /// (IsPostingAllowed) olmalıdır. Bulunamazsa null (admin UI'dan seçer).
     /// </summary>
+    /// <summary>
+    /// Çekin masraf merkezi: seçilen kod → proje kodu → şirket kodu.
+    /// Fatura tarafındaki üç kademeli çözümlemenin aynısı; iki modül
+    /// farklı kural işletirse aynı şantiyenin gideri iki ayrı kod
+    /// altında toplanırdı.
+    /// </summary>
+    private async Task<string?> ResolveChequeCostCenterAsync(
+        Cheque cheque, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(cheque.CostCenterCode))
+            return cheque.CostCenterCode.Trim();
+
+        if (cheque.ProjectId is Guid projectId)
+        {
+            var projectCode = await db.Projects
+                .Where(x => x.Id == projectId)
+                .Select(x => x.Code)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(projectCode))
+                return projectCode;
+        }
+
+        return await db.Companies
+            .Where(x => x.Id == cheque.CompanyId)
+            .Select(x => x.Code)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<Guid?> CreateChequeVoucherAsync(
         Cheque cheque,
         ChequeStatus? fromStatus,
@@ -980,6 +1009,10 @@ public sealed class AccountingIntegrationService(
             return id.Value;
         }
 
+        // Dağılım YALNIZCA cari tarafına uygulanır; hangi satırın cari
+        // olduğunu bilmek için çözümlenen hesap burada tutulur.
+        Guid? counterpartyAccountId = null;
+
         Guid CounterpartyAccount(bool receivable)
         {
             var id = receivable
@@ -994,6 +1027,7 @@ public sealed class AccountingIntegrationService(
                         : "Satıcılar (320) hesabı belirlenemedi. Şirket Ayarları → Finans Ayarları'ndan seçin.");
             }
 
+            counterpartyAccountId = id.Value;
             return id.Value;
         }
 
@@ -1098,35 +1132,95 @@ public sealed class AccountingIntegrationService(
             _ => AccountingVoucherType.Journal
         };
 
-        var lines = new List<AccountingVoucherLineRequest>
+        // Masraf merkezi: çekte açıkça seçilen kod, yoksa proje kodu, o da
+        // yoksa şirket kodu. Ofis kirası çekinin projesi yoktur ama
+        // Merkez'e yazılabilmelidir; kod boş kalırsa çek muhasebede
+        // hangi birime ait olduğu belirsiz durur.
+        var costCenterCode = await ResolveChequeCostCenterAsync(cheque, cancellationToken);
+
+        var allocations = await db.ChequeAllocations
+            .AsNoTracking()
+            .Where(x => x.ChequeId == cheque.Id)
+            .OrderBy(x => x.CreatedAtUtc)
+            .Select(x => new
+            {
+                x.Amount,
+                x.ProjectId,
+                x.CostCenterCode,
+                SupplierInvoiceNumber = x.SupplierInvoice != null
+                    ? x.SupplierInvoice.InvoiceNumber
+                    : null,
+                SalesInvoiceNumber = x.SalesInvoice != null
+                    ? x.SalesInvoice.InternalNumber
+                    : null
+            })
+            .ToListAsync(cancellationToken);
+
+        // Dağılım toplamı çek tutarını tutmuyorsa fiş dengesiz çıkardı;
+        // yanlış fiş kesmektense işlemi durdurmak doğru.
+        if (allocations.Count > 0 && allocations.Sum(x => x.Amount) != amount)
         {
-            new(
-                AccountingAccountId: entry.Value.Debit,
-                Description: entry.Value.Description,
-                DebitAmount: amount,
-                CreditAmount: 0m,
-                CurrencyCode: cheque.CurrencyCode,
-                ExchangeRate: 1m,
-                CurrentAccountId: cheque.CurrentAccountId,
-                ProjectId: cheque.ProjectId,
-                CostCenterCode: null,
-                DocumentNumber: cheque.ChequeNumber,
-                DocumentDate: cheque.IssueDate,
-                DueDate: cheque.DueDate),
-            new(
-                AccountingAccountId: entry.Value.Credit,
-                Description: entry.Value.Description,
-                DebitAmount: 0m,
-                CreditAmount: amount,
-                CurrencyCode: cheque.CurrencyCode,
-                ExchangeRate: 1m,
-                CurrentAccountId: cheque.CurrentAccountId,
-                ProjectId: cheque.ProjectId,
-                CostCenterCode: null,
-                DocumentNumber: cheque.ChequeNumber,
-                DocumentDate: cheque.IssueDate,
-                DueDate: cheque.DueDate)
-        };
+            throw new InvalidOperationException(
+                $"Çek dağılımı toplamı ({allocations.Sum(x => x.Amount):N2}) " +
+                $"çek tutarına ({amount:N2}) eşit değil; fiş kesilemez.");
+        }
+
+        List<AccountingVoucherLineRequest> BuildSide(Guid accountId, bool isDebit)
+        {
+            // Yalnızca cari tarafı bölünür: 101/103 bir enstrüman hesabıdır,
+            // kasa/banka gibi projesi yoktur.
+            var splittable = allocations.Count > 0 &&
+                             counterpartyAccountId is Guid id &&
+                             id == accountId;
+
+            if (!splittable)
+            {
+                return
+                [
+                    new AccountingVoucherLineRequest(
+                        AccountingAccountId: accountId,
+                        Description: entry.Value.Description,
+                        DebitAmount: isDebit ? amount : 0m,
+                        CreditAmount: isDebit ? 0m : amount,
+                        CurrencyCode: cheque.CurrencyCode,
+                        ExchangeRate: 1m,
+                        CurrentAccountId: cheque.CurrentAccountId,
+                        ProjectId: cheque.ProjectId,
+                        CostCenterCode: costCenterCode,
+                        DocumentNumber: cheque.ChequeNumber,
+                        DocumentDate: cheque.IssueDate,
+                        DueDate: cheque.DueDate)
+                ];
+            }
+
+            return allocations.Select(allocation =>
+            {
+                var invoiceNumber = allocation.SupplierInvoiceNumber
+                    ?? allocation.SalesInvoiceNumber;
+
+                var description = invoiceNumber is null
+                    ? entry.Value.Description
+                    : $"{entry.Value.Description} — fatura {invoiceNumber}";
+
+                return new AccountingVoucherLineRequest(
+                    AccountingAccountId: accountId,
+                    Description: description,
+                    DebitAmount: isDebit ? allocation.Amount : 0m,
+                    CreditAmount: isDebit ? 0m : allocation.Amount,
+                    CurrencyCode: cheque.CurrencyCode,
+                    ExchangeRate: 1m,
+                    CurrentAccountId: cheque.CurrentAccountId,
+                    ProjectId: allocation.ProjectId ?? cheque.ProjectId,
+                    CostCenterCode: allocation.CostCenterCode ?? costCenterCode,
+                    DocumentNumber: cheque.ChequeNumber,
+                    DocumentDate: cheque.IssueDate,
+                    DueDate: cheque.DueDate);
+            }).ToList();
+        }
+
+        var lines = new List<AccountingVoucherLineRequest>();
+        lines.AddRange(BuildSide(entry.Value.Debit, isDebit: true));
+        lines.AddRange(BuildSide(entry.Value.Credit, isDebit: false));
 
         var created = await voucherService.CreateAsync(
             new CreateAccountingVoucherRequest(

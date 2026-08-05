@@ -69,6 +69,13 @@ public sealed class Cheque : BaseEntity
     public Guid? ProjectId { get; set; }
     public Project? Project { get; set; }
 
+    /// <summary>
+    /// Masraf merkezi kodu — Merkez ofis (şube kodu) ya da şantiye.
+    /// Ofis kirası gibi projesi olmayan çekler için var: boş bırakılırsa
+    /// fişte proje kodu, o da yoksa şirket kodu kullanılır.
+    /// </summary>
+    public string? CostCenterCode { get; set; }
+
     public decimal Amount { get; set; }
     public string CurrencyCode { get; set; } = "TRY";
 
@@ -93,6 +100,13 @@ public sealed class Cheque : BaseEntity
 
     public ICollection<ChequeMovement> Movements { get; set; }
         = new List<ChequeMovement>();
+
+    /// <summary>
+    /// Proje/masraf merkezi dağılımı. Boşsa çek tek parça işlenir ve
+    /// yukarıdaki ProjectId/CostCenterCode geçerlidir.
+    /// </summary>
+    public ICollection<ChequeAllocation> Allocations { get; set; }
+        = new List<ChequeAllocation>();
 }
 
 /// <summary>

@@ -82,9 +82,13 @@ public sealed class SupplierInvoiceService(
         Guid id, CancellationToken cancellationToken)
     {
         var invoice = await LoadDetailAsync(id, cancellationToken);
-        return invoice is null
-            ? throw new KeyNotFoundException("Tedarikçi faturası bulunamadı.")
-            : MapDetail(invoice);
+
+        if (invoice is null)
+            throw new KeyNotFoundException("Tedarikçi faturası bulunamadı.");
+
+        return MapDetail(
+            invoice,
+            await LoadChequePaymentsAsync(id, cancellationToken));
     }
 
     public async Task<SupplierInvoiceDetailResponse> CreateAsync(
@@ -705,7 +709,30 @@ public sealed class SupplierInvoiceService(
             .Include(x => x.AccountingVoucher)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
-    private static SupplierInvoiceDetailResponse MapDetail(SupplierInvoice invoice) =>
+    /// <summary>
+    /// Faturayı ödeyen çek payları. Ayrı bir "ödeme" defteri tutulmuyor;
+    /// tek kaynak çek dağılımı — böylece çekte gördüğünüzle faturada
+    /// gördüğünüz birbirini tutmak zorunda kalır.
+    /// </summary>
+    private async Task<IReadOnlyCollection<InvoiceChequePaymentResponse>>
+        LoadChequePaymentsAsync(Guid invoiceId, CancellationToken cancellationToken) =>
+        await db.ChequeAllocations
+            .AsNoTracking()
+            .Where(x => x.SupplierInvoiceId == invoiceId)
+            .OrderBy(x => x.Cheque.DueDate)
+            .Select(x => new InvoiceChequePaymentResponse(
+                x.ChequeId,
+                x.Cheque.InternalNumber,
+                x.Cheque.ChequeNumber,
+                x.Cheque.DueDate,
+                (int)x.Cheque.Status,
+                ChequeService.StatusName(x.Cheque.Status),
+                x.Amount))
+            .ToListAsync(cancellationToken);
+
+    private static SupplierInvoiceDetailResponse MapDetail(
+        SupplierInvoice invoice,
+        IReadOnlyCollection<InvoiceChequePaymentResponse>? chequePayments = null) =>
         new(
             invoice.Id, invoice.CompanyId, invoice.InternalNumber, invoice.InvoiceNumber,
             invoice.InvoiceDate, invoice.DueDate,
@@ -737,7 +764,10 @@ public sealed class SupplierInvoiceService(
                 item.ExpenseAccountId,
                 item.ExpenseAccount?.Code,
                 item.ExpenseAccount?.Name,
-                item.CostCenterCode)).ToList());
+                item.CostCenterCode)).ToList(),
+            chequePayments ?? [],
+            chequePayments?.Sum(x => x.AllocatedAmount) ?? 0m,
+            invoice.GrandTotal - (chequePayments?.Sum(x => x.AllocatedAmount) ?? 0m));
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
