@@ -28,8 +28,25 @@ public interface IAccountingIntegrationService
     /// 320 Satıcılar (alacak). Fiş Id'si ile birlikte maliyet satırının
     /// Id'sini de döndürür (proje maliyeti ↔ muhasebe köprüsü için).
     /// </summary>
+    /// <param name="reverse">
+    /// İADE faturasında true: aynı hesaplar ve masraf merkezleriyle
+    /// borç/alacak yer değiştirir. Ayrı bir "iade fişi" metodu
+    /// yazılsaydı iki kural zamanla ayrışır ve iade, alışın tam aynası
+    /// olmaktan çıkardı.
+    /// </param>
     Task<SupplierInvoicePostingResult> CreateSupplierInvoiceVoucherAsync(
         SupplierInvoice invoice,
+        CancellationToken cancellationToken = default,
+        bool reverse = false);
+
+    /// <summary>
+    /// Kesinleşmiş bir fişin birebir ters kaydı. Orijinal fiş SİLİNMEZ;
+    /// iptal, defterde iki fişle görünür.
+    /// </summary>
+    Task<Guid> CreateReversalVoucherAsync(
+        Guid voucherId,
+        string reason,
+        DateTime voucherDate,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -51,9 +68,15 @@ public interface IAccountingIntegrationService
     /// ayrışır (hakedişte kesinti, ihzarat, minha var), tek metotta
     /// birleştirmek ikisini de kırılgan yapardı.
     /// </summary>
+    /// <param name="reverse">
+    /// İADE faturasında true: 600 yerine 610 Satıştan İadeler
+    /// borçlandırılır, KDV ve alacak tersine döner. Gelir hesabı
+    /// borçlandırılsaydı brüt satış rakamı olduğundan düşük görünürdü.
+    /// </param>
     Task<Guid> CreateSalesInvoiceVoucherAsync(
         SalesInvoice invoice,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool reverse = false);
 
     /// <summary>
     /// Kasa/banka hareketi için dengeli, doğrudan Posted fiş üretir.
@@ -176,6 +199,7 @@ public sealed class AccountingIntegrationService(
             VatInAccountId = await FindAccountIdAsync(companyId, cancellationToken, "191.01.03", "191"),
             VatOutAccountId = await FindAccountIdAsync(companyId, cancellationToken, "391.09", "391"),
             SalesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "600.03", "600"),
+            SalesReturnAccountId = await FindAccountIdAsync(companyId, cancellationToken, "610.01", "610"),
             ExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "740"),
             // Stok alışı 153'e yazılır; boş bırakılsaydı yeni şirkette
             // malzeme alışı doğrudan 740 maliyete düşer ve depodaki mal
@@ -342,7 +366,8 @@ public sealed class AccountingIntegrationService(
 
     public async Task<SupplierInvoicePostingResult> CreateSupplierInvoiceVoucherAsync(
         SupplierInvoice invoice,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool reverse = false)
     {
         var settings = await GetOrCreateFinanceSettingsAsync(
             invoice.CompanyId, cancellationToken);
@@ -414,6 +439,20 @@ public sealed class AccountingIntegrationService(
                 $"Fatura toplamları tutarsız: ara toplam + KDV ({debitTotal:N2}) ≠ genel toplam ({invoice.GrandTotal:N2}).");
         }
 
+        // İade faturasında aynı satırlar borç/alacak yer değiştirerek
+        // yazılır: hesaplar, projeler ve masraf merkezleri birebir aynı
+        // kalır, yalnızca yön döner.
+        if (reverse)
+        {
+            lines = lines
+                .Select(line => line with
+                {
+                    DebitAmount = line.CreditAmount,
+                    CreditAmount = line.DebitAmount
+                })
+                .ToList();
+        }
+
         var created = await voucherService.CreateAsync(
             new CreateAccountingVoucherRequest(
                 CompanyId: invoice.CompanyId,
@@ -421,7 +460,9 @@ public sealed class AccountingIntegrationService(
                 VoucherDate: invoice.InvoiceDate,
                 CurrencyCode: invoice.CurrencyCode,
                 ExchangeRate: invoice.ExchangeRate,
-                Description: $"Tedarikçi faturası {invoice.InternalNumber} — {supplier.Title}",
+                Description: reverse
+                    ? $"Alış iadesi {invoice.InternalNumber} — {supplier.Title}"
+                    : $"Tedarikçi faturası {invoice.InternalNumber} — {supplier.Title}",
                 ReferenceNumber: invoice.InvoiceNumber,
                 SourceModule: "SupplierInvoice",
                 SourceEntityId: invoice.Id,
@@ -435,9 +476,11 @@ public sealed class AccountingIntegrationService(
         // faturasında her kalem kendi hesabına, alışta stok hesabına
         // yazılıyor; hesaba göre arayan eski sorgu artık hiçbir satır
         // bulamazdı.
+        // İade fişinde maliyet satırları ALACAK tarafındadır; borca göre
+        // arayan sorgu orada hiçbir satır bulamazdı.
         var expenseLineId = await db.AccountingVoucherLines
             .Where(x => x.AccountingVoucherId == created.Id &&
-                        x.DebitAmount > 0m &&
+                        (reverse ? x.CreditAmount > 0m : x.DebitAmount > 0m) &&
                         (settings.VatInAccountId == null ||
                          x.AccountingAccountId != settings.VatInAccountId))
             .OrderBy(x => x.LineNumber)
@@ -449,7 +492,8 @@ public sealed class AccountingIntegrationService(
 
     public async Task<Guid> CreateSalesInvoiceVoucherAsync(
         SalesInvoice invoice,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool reverse = false)
     {
         var settings = await GetOrCreateFinanceSettingsAsync(
             invoice.CompanyId, cancellationToken);
@@ -458,6 +502,18 @@ public sealed class AccountingIntegrationService(
             throw new InvalidOperationException(
                 "Yurtiçi satışlar hesabı yapılandırılmamış. Şirket Ayarları → " +
                 "Finans Ayarları'ndan seçin.");
+
+        // İadede gelir hesabı yerine 610 Satıştan İadeler kullanılır;
+        // 600 borçlandırılsaydı brüt satış rakamı olduğundan düşük
+        // görünür ve dönem kıyasları bozulurdu.
+        var revenueAccountId = reverse
+            ? settings.SalesReturnAccountId
+                ?? await FindAccountIdAsync(
+                    invoice.CompanyId, cancellationToken, "610.01", "610")
+                ?? throw new InvalidOperationException(
+                    "Satıştan iadeler (610) hesabı bulunamadı. Hesap planında " +
+                    "tanımlayın ya da Finans Ayarları'ndan seçin.")
+            : settings.SalesAccountId.Value;
 
         var customer = await db.CurrentAccounts
             .SingleAsync(x => x.Id == invoice.CustomerCurrentAccountId, cancellationToken);
@@ -509,8 +565,10 @@ public sealed class AccountingIntegrationService(
                 DueDate: invoice.DueDate),
 
             new(
-                AccountingAccountId: settings.SalesAccountId.Value,
-                Description: $"Satış geliri — {reference}",
+                AccountingAccountId: revenueAccountId,
+                Description: reverse
+                    ? $"Satıştan iade — {reference}"
+                    : $"Satış geliri — {reference}",
                 DebitAmount: 0m,
                 CreditAmount: subtotal,
                 CurrencyCode: invoice.CurrencyCode,
@@ -547,6 +605,17 @@ public sealed class AccountingIntegrationService(
                 DueDate: null));
         }
 
+        if (reverse)
+        {
+            lines = lines
+                .Select(line => line with
+                {
+                    DebitAmount = line.CreditAmount,
+                    CreditAmount = line.DebitAmount
+                })
+                .ToList();
+        }
+
         var created = await voucherService.CreateAsync(
             new CreateAccountingVoucherRequest(
                 CompanyId: invoice.CompanyId,
@@ -554,10 +623,70 @@ public sealed class AccountingIntegrationService(
                 VoucherDate: invoice.InvoiceDate,
                 CurrencyCode: invoice.CurrencyCode,
                 ExchangeRate: invoice.ExchangeRate,
-                Description: $"Satış faturası {reference} — {customer.Title}",
+                Description: reverse
+                    ? $"Satış iadesi {reference} — {customer.Title}"
+                    : $"Satış faturası {reference} — {customer.Title}",
                 ReferenceNumber: reference,
                 SourceModule: "SalesInvoice",
                 SourceEntityId: invoice.Id,
+                Lines: lines),
+            cancellationToken);
+
+        await voucherService.PostAsync(created.Id, cancellationToken);
+
+        return created.Id;
+    }
+
+    public async Task<Guid> CreateReversalVoucherAsync(
+        Guid voucherId,
+        string reason,
+        DateTime voucherDate,
+        CancellationToken cancellationToken = default)
+    {
+        var original = await db.AccountingVouchers
+            .Include(x => x.Lines)
+            .SingleOrDefaultAsync(x => x.Id == voucherId, cancellationToken)
+            ?? throw new KeyNotFoundException("Ters kaydı alınacak fiş bulunamadı.");
+
+        if (original.Status != AccountingVoucherStatus.Posted)
+        {
+            throw new InvalidOperationException(
+                "Yalnızca kesinleşmiş fişin ters kaydı alınabilir.");
+        }
+
+        if (original.Lines.Count == 0)
+            throw new InvalidOperationException("Fişin satırı yok; ters kayıt üretilemez.");
+
+        var lines = original.Lines
+            .OrderBy(x => x.LineNumber)
+            .Select(line => new AccountingVoucherLineRequest(
+                AccountingAccountId: line.AccountingAccountId,
+                Description: $"İptal — {line.Description}",
+                // Borç ve alacak yer değiştirir; hesap, proje ve masraf
+                // merkezi aynı kalır ki iptal orijinali tam kapatsın.
+                DebitAmount: line.CreditAmount,
+                CreditAmount: line.DebitAmount,
+                CurrencyCode: line.CurrencyCode,
+                ExchangeRate: line.ExchangeRate,
+                CurrentAccountId: line.CurrentAccountId,
+                ProjectId: line.ProjectId,
+                CostCenterCode: line.CostCenterCode,
+                DocumentNumber: line.DocumentNumber,
+                DocumentDate: line.DocumentDate,
+                DueDate: line.DueDate))
+            .ToList();
+
+        var created = await voucherService.CreateAsync(
+            new CreateAccountingVoucherRequest(
+                CompanyId: original.CompanyId,
+                VoucherType: (int)original.VoucherType,
+                VoucherDate: DateTime.SpecifyKind(voucherDate.Date, DateTimeKind.Utc),
+                CurrencyCode: original.CurrencyCode,
+                ExchangeRate: original.ExchangeRate,
+                Description: $"TERS KAYIT — {original.VoucherNumber}: {reason}",
+                ReferenceNumber: original.ReferenceNumber,
+                SourceModule: original.SourceModule,
+                SourceEntityId: original.SourceEntityId,
                 Lines: lines),
             cancellationToken);
 

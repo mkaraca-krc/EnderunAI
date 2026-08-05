@@ -25,6 +25,16 @@ public interface ISalesInvoiceService
 
     Task<SalesInvoiceActionResponse> CancelAsync(
         Guid id, string reason, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Müşteriden mal iadesi. Orijinal faturaya bağlı taslak iade
+    /// faturası üretir; kesinleştiğinde fiş 610 Satıştan İadeler + 391
+    /// borç / 120 alacak olarak aynalanır. Kısmi iade desteklenir.
+    /// </summary>
+    Task<SalesInvoiceDetailResponse> CreateReturnAsync(
+        Guid originalInvoiceId,
+        CreateInvoiceReturnRequest request,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -75,7 +85,8 @@ public sealed class SalesInvoiceService(
                 x.GrandTotal, x.NetReceivableAmount,
                 (int)x.Status, x.RequiresManualReview,
                 x.ParseSource != null ? (int)x.ParseSource : null,
-                x.AccountingVoucher != null ? x.AccountingVoucher.VoucherNumber : null))
+                x.AccountingVoucher != null ? x.AccountingVoucher.VoucherNumber : null,
+                x.IsReturn))
             .ToListAsync(cancellationToken);
     }
 
@@ -188,7 +199,7 @@ public sealed class SalesInvoiceService(
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
         var voucherId = await accountingIntegration.CreateSalesInvoiceVoucherAsync(
-            invoice, cancellationToken);
+            invoice, cancellationToken, reverse: invoice.IsReturn);
 
         invoice.Status = SalesInvoiceStatus.Posted;
         invoice.AccountingVoucherId = voucherId;
@@ -201,7 +212,10 @@ public sealed class SalesInvoiceService(
 
         return new SalesInvoiceActionResponse(
             invoice.Id, invoice.InternalNumber, (int)invoice.Status,
-            "Satış faturası kesinleşti; gelir fişi oluşturuldu ve müşteri carisine borç yazıldı.");
+            invoice.IsReturn
+                ? "İade faturası kesinleşti; 610 Satıştan İadeler fişi oluşturuldu ve " +
+                  "müşteri carisindeki alacak azaltıldı."
+                : "Satış faturası kesinleşti; gelir fişi oluşturuldu ve müşteri carisine borç yazıldı.");
     }
 
     public async Task<SalesInvoiceActionResponse> CancelAsync(
@@ -217,11 +231,45 @@ public sealed class SalesInvoiceService(
         if (invoice.Status == SalesInvoiceStatus.Cancelled)
             throw new InvalidOperationException("Fatura zaten iptal edilmiş.");
 
-        // Kesinleşmiş faturanın fişi silinmez; muhasebede iz kalmalı.
-        // İptali muhasebeye yansıtmak ters kayıt işidir ve elle yapılır.
+        // Kesinleşmiş faturanın fişi SİLİNMEZ; ters kaydı üretilir ve
+        // ikisi de defterde durur. Elle ters kayıt beklemek, iptalin
+        // muhasebeye hiç yansımadan unutulmasına yol açıyordu.
         if (invoice.Status == SalesInvoiceStatus.Posted)
-            throw new InvalidOperationException(
-                "Kesinleşmiş fatura iptal edilemez; muhasebede ters kayıt fişi düzenleyin.");
+        {
+            if (invoice.AccountingVoucherId is null)
+            {
+                throw new InvalidOperationException(
+                    "Kesinleşmiş faturanın fişi bulunamadı; iptal ters kayıt " +
+                    "üretemeyeceği için durduruldu.");
+            }
+
+            var hasReturn = await db.SalesInvoices.AnyAsync(
+                x => x.OriginalInvoiceId == invoice.Id &&
+                     x.Status != SalesInvoiceStatus.Cancelled,
+                cancellationToken);
+
+            if (hasReturn)
+            {
+                throw new InvalidOperationException(
+                    "Bu faturaya bağlı iade faturası var. Önce iadeyi iptal edin.");
+            }
+
+            var hasChequeAllocation = await db.ChequeAllocations.AnyAsync(
+                x => x.SalesInvoiceId == invoice.Id, cancellationToken);
+
+            if (hasChequeAllocation)
+            {
+                throw new InvalidOperationException(
+                    "Bu faturaya bağlı çek tahsilatı var. Önce çek dağılımından " +
+                    "faturayı çıkarın.");
+            }
+
+            invoice.ReversalVoucherId = await accountingIntegration.CreateReversalVoucherAsync(
+                invoice.AccountingVoucherId.Value,
+                reason.Trim(),
+                DateTime.UtcNow.Date,
+                cancellationToken);
+        }
 
         invoice.Status = SalesInvoiceStatus.Cancelled;
         invoice.CancelledAtUtc = DateTime.UtcNow;
@@ -333,6 +381,124 @@ public sealed class SalesInvoiceService(
         return items;
     }
 
+    public async Task<SalesInvoiceDetailResponse> CreateReturnAsync(
+        Guid originalInvoiceId,
+        CreateInvoiceReturnRequest request,
+        CancellationToken cancellationToken)
+    {
+        var original = await db.SalesInvoices
+            .Include(x => x.Items)
+            .SingleOrDefaultAsync(x => x.Id == originalInvoiceId, cancellationToken)
+            ?? throw new KeyNotFoundException("İade edilecek satış faturası bulunamadı.");
+
+        // Kesinleşmemiş faturanın geliri de alacağı da oluşmamıştır;
+        // tersine çevrilecek bir kayıt yok. O fatura düzeltilir ya da
+        // iptal edilir.
+        if (original.Status != SalesInvoiceStatus.Posted)
+        {
+            throw new InvalidOperationException(
+                "Yalnızca kesinleşmiş faturadan iade yapılabilir. " +
+                "Kesinleşmemiş fatura için iade değil düzeltme/iptal kullanın.");
+        }
+
+        if (original.IsReturn)
+            throw new InvalidOperationException("İade faturasının iadesi alınamaz.");
+
+        if (request.Items is null || request.Items.Count == 0)
+            throw new ArgumentException("İade edilecek en az bir kalem seçilmelidir.");
+
+        var alreadyReturned = await db.SalesInvoiceItems
+            .AsNoTracking()
+            .Where(x => x.OriginalItemId != null &&
+                        x.SalesInvoice.OriginalInvoiceId == originalInvoiceId &&
+                        x.SalesInvoice.Status != SalesInvoiceStatus.Cancelled)
+            .GroupBy(x => x.OriginalItemId!.Value)
+            .Select(g => new { ItemId = g.Key, Quantity = g.Sum(x => x.Quantity) })
+            .ToDictionaryAsync(x => x.ItemId, x => x.Quantity, cancellationToken);
+
+        var returnItems = new List<SalesInvoiceItem>();
+        var lineNumber = 1;
+
+        foreach (var requested in request.Items)
+        {
+            if (requested.Quantity <= 0m)
+                continue;
+
+            var source = original.Items.SingleOrDefault(x => x.Id == requested.OriginalItemId)
+                ?? throw new ArgumentException(
+                    "İade edilen kalem orijinal faturada bulunamadı.");
+
+            var returnable = source.Quantity -
+                             alreadyReturned.GetValueOrDefault(source.Id, 0m);
+
+            if (requested.Quantity > returnable)
+            {
+                throw new ArgumentException(
+                    $"{source.Description}: en fazla {returnable:N4} {source.Unit} " +
+                    $"iade edilebilir (faturada {source.Quantity:N4}, " +
+                    $"daha önce iade edilen {alreadyReturned.GetValueOrDefault(source.Id, 0m):N4}).");
+            }
+
+            var lineSubtotal = decimal.Round(requested.Quantity * source.UnitPrice, 2);
+            var vatAmount = decimal.Round(lineSubtotal * source.VatRate / 100m, 2);
+
+            returnItems.Add(new SalesInvoiceItem
+            {
+                LineNumber = lineNumber++,
+                OriginalItemId = source.Id,
+                Description = source.Description,
+                Quantity = requested.Quantity,
+                Unit = source.Unit,
+                UnitPrice = source.UnitPrice,
+                VatRate = source.VatRate,
+                LineSubtotal = lineSubtotal,
+                VatAmount = vatAmount,
+                LineTotal = lineSubtotal + vatAmount
+            });
+        }
+
+        if (returnItems.Count == 0)
+            throw new ArgumentException("İade edilecek en az bir kalem seçilmelidir.");
+
+        var internalNumber = await documentNumberService.GenerateAsync(
+            original.CompanyId, "SALES_INVOICE_RETURN", "SIF", cancellationToken);
+
+        var returnInvoice = new SalesInvoice
+        {
+            CompanyId = original.CompanyId,
+            CustomerCurrentAccountId = original.CustomerCurrentAccountId,
+            ProjectId = original.ProjectId,
+            InternalNumber = internalNumber,
+            OfficialInvoiceNumber = Normalize(request.InvoiceNumber),
+            InvoiceDate = AsUtc(request.InvoiceDate),
+            CurrencyCode = original.CurrencyCode,
+            ExchangeRate = original.ExchangeRate,
+            Description = Normalize(request.Description)
+                ?? $"{original.OfficialInvoiceNumber ?? original.InternalNumber} " +
+                   "numaralı faturanın iadesi",
+            Status = SalesInvoiceStatus.Draft,
+            ParseSource = EInvoiceParseSource.Manual,
+            IsReturn = true,
+            OriginalInvoiceId = original.Id
+        };
+
+        // Tevkifat, iade edilen paya oranla taşınır: orijinalde tevkifat
+        // varsa iadede de olmalı, yoksa alacak tutarı tutmaz.
+        var returnedRatio = original.Subtotal == 0m
+            ? 0m
+            : returnItems.Sum(x => x.LineSubtotal) / original.Subtotal;
+
+        var withholding = decimal.Round(
+            original.WithholdingAmount * returnedRatio, 2, MidpointRounding.AwayFromZero);
+
+        ApplyItemsAndTotals(returnInvoice, returnItems, withholding);
+
+        db.SalesInvoices.Add(returnInvoice);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return await GetByIdAsync(returnInvoice.Id, cancellationToken);
+    }
+
     private static void ApplyItemsAndTotals(
         SalesInvoice invoice, List<SalesInvoiceItem> items, decimal withholdingAmount)
     {
@@ -364,6 +530,8 @@ public sealed class SalesInvoiceService(
             .Include(x => x.CustomerCurrentAccount)
             .Include(x => x.Project)
             .Include(x => x.AccountingVoucher)
+            .Include(x => x.ReversalVoucher)
+            .Include(x => x.OriginalInvoice)
             .Include(x => x.Items.OrderBy(item => item.LineNumber))
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
@@ -404,7 +572,13 @@ public sealed class SalesInvoiceService(
                 .Select(x => new SalesInvoiceItemResponse(
                     x.Id, x.LineNumber, x.Description, x.Quantity, x.Unit,
                     x.UnitPrice, x.VatRate, x.LineSubtotal, x.VatAmount, x.LineTotal))
-                .ToList());
+                .ToList(),
+            invoice.IsReturn,
+            invoice.OriginalInvoiceId,
+            invoice.OriginalInvoice?.OfficialInvoiceNumber
+                ?? invoice.OriginalInvoice?.InternalNumber,
+            invoice.ReversalVoucherId,
+            invoice.ReversalVoucher?.VoucherNumber);
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

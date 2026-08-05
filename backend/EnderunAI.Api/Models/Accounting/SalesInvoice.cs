@@ -75,6 +75,21 @@ public sealed class SalesInvoice : BaseEntity
     public Guid? AccountingVoucherId { get; set; }
     public AccountingVoucher? AccountingVoucher { get; set; }
 
+    /// <summary>
+    /// İADE FATURASI (müşteriden mal iadesi). Kesinleştiğinde fiş
+    /// 610 Satıştan İadeler + 391 borç / 120 alacak olarak aynalanır —
+    /// gelir hesabı 600 borçlandırılmaz, iadeler kendi hesabında
+    /// toplanır ki brüt satış rakamı bozulmasın.
+    /// </summary>
+    public bool IsReturn { get; set; }
+
+    public Guid? OriginalInvoiceId { get; set; }
+    public SalesInvoice? OriginalInvoice { get; set; }
+
+    /// <summary>Kesinleşmiş faturanın iptalinde üretilen ters fiş.</summary>
+    public Guid? ReversalVoucherId { get; set; }
+    public AccountingVoucher? ReversalVoucher { get; set; }
+
     // --- E-fatura içe aktarma izi ---
 
     public string? SourceXmlPath { get; set; }
@@ -105,4 +120,8 @@ public sealed class SalesInvoiceItem : BaseEntity
 
     /// <summary>LineSubtotal + VatAmount.</summary>
     public decimal LineTotal { get; set; }
+
+    /// <summary>İade kaleminin iade ettiği orijinal kalem.</summary>
+    public Guid? OriginalItemId { get; set; }
+    public SalesInvoiceItem? OriginalItem { get; set; }
 }

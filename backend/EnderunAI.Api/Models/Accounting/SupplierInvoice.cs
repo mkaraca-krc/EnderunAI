@@ -144,6 +144,30 @@ public sealed class SupplierInvoice : BaseEntity
     public Guid? AccountingVoucherId { get; set; }
     public AccountingVoucher? AccountingVoucher { get; set; }
 
+    /// <summary>
+    /// İADE FATURASI. Tedarikçiye mal iadesinde biz keseriz; muhasebe
+    /// fişi orijinalin aynası olur (320 borç / stok-gider + 191 alacak)
+    /// ve stok depodan çıkar.
+    ///
+    /// Ayrı bir tablo yerine aynı tabloda tutuluyor: cari bakiyesi,
+    /// liste, onay akışı ve raporlar tek kaynaktan okusun.
+    /// </summary>
+    public bool IsReturn { get; set; }
+
+    /// <summary>İade faturasında iade edilen orijinal fatura.</summary>
+    public Guid? OriginalInvoiceId { get; set; }
+    public SupplierInvoice? OriginalInvoice { get; set; }
+
+    /// <summary>
+    /// Kesinleşmiş fatura iptal edildiğinde üretilen ters fiş. Orijinal
+    /// fiş silinmez; iz kalması için ikisi de defterde durur.
+    /// </summary>
+    public Guid? ReversalVoucherId { get; set; }
+    public AccountingVoucher? ReversalVoucher { get; set; }
+
+    public DateTime? CancelledAtUtc { get; set; }
+    public string? CancellationReason { get; set; }
+
     public ICollection<SupplierInvoiceItem> Items { get; set; } = new List<SupplierInvoiceItem>();
 }
 
@@ -191,4 +215,12 @@ public sealed class SupplierInvoiceItem : BaseEntity
 
     public Guid? PurchaseOrderItemId { get; set; }
     public PurchaseOrder.PurchaseOrderItem? PurchaseOrderItem { get; set; }
+
+    /// <summary>
+    /// İade kalemi hangi orijinal kalemi iade ediyor. Kısmi iadede
+    /// "bu kalemden ne kadarı iade edildi" bu bağdan hesaplanır; yoksa
+    /// aynı mal iki kez iade edilebilirdi.
+    /// </summary>
+    public Guid? OriginalItemId { get; set; }
+    public SupplierInvoiceItem? OriginalItem { get; set; }
 }

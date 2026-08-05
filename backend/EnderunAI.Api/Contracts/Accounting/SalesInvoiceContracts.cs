@@ -69,7 +69,8 @@ public sealed record SalesInvoiceListItemResponse(
     int Status,
     bool RequiresManualReview,
     int? ParseSource,
-    string? AccountingVoucherNumber);
+    string? AccountingVoucherNumber,
+    bool IsReturn);
 
 public sealed record SalesInvoiceDetailResponse(
     Guid Id,
@@ -101,7 +102,15 @@ public sealed record SalesInvoiceDetailResponse(
     bool HasSourceXml,
     Guid? AccountingVoucherId,
     string? AccountingVoucherNumber,
-    IReadOnlyCollection<SalesInvoiceItemResponse> Items);
+    IReadOnlyCollection<SalesInvoiceItemResponse> Items,
+    /// <summary>Bu belge bir iade faturası mı.</summary>
+    bool IsReturn,
+    /// <summary>İade faturasında iade edilen orijinal fatura.</summary>
+    Guid? OriginalInvoiceId,
+    string? OriginalInvoiceNumber,
+    /// <summary>İptalde üretilen ters fiş.</summary>
+    Guid? ReversalVoucherId,
+    string? ReversalVoucherNumber);
 
 public sealed record SalesInvoiceActionResponse(
     Guid Id,

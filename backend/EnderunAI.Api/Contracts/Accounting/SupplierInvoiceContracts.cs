@@ -55,6 +55,25 @@ public sealed record UpdateSupplierInvoiceRequest(
 
 public sealed record RejectSupplierInvoiceRequest(string Reason);
 
+/// <summary>
+/// İptal talebi. Kesinleşmemiş faturada gerekçe isteğe bağlı,
+/// onaylanmış faturada zorunludur.
+/// </summary>
+public sealed record CancelInvoiceRequest(string? Reason);
+
+/// <summary>Kısmi iadede iade edilen kalem ve miktar.</summary>
+public sealed record InvoiceReturnItemRequest(Guid OriginalItemId, decimal Quantity);
+
+/// <summary>
+/// İade faturası talebi. Kalemler orijinal faturadan kopyalanır; birim
+/// fiyat ve KDV oranı DEĞİŞTİRİLEMEZ — iade, alışın aynası olmalı.
+/// </summary>
+public sealed record CreateInvoiceReturnRequest(
+    string InvoiceNumber,
+    DateTime InvoiceDate,
+    IReadOnlyCollection<InvoiceReturnItemRequest> Items,
+    string? Description = null);
+
 public sealed record SupplierInvoiceItemResponse(
     Guid Id,
     int LineNumber,
@@ -98,7 +117,8 @@ public sealed record SupplierInvoiceListItemResponse(
     int MatchStatus,
     bool RequiresGmApproval,
     string? PurchaseOrderNumber,
-    string? AccountingVoucherNumber);
+    string? AccountingVoucherNumber,
+    bool IsReturn);
 
 public sealed record SupplierInvoiceDetailResponse(
     Guid Id,
@@ -144,7 +164,29 @@ public sealed record SupplierInvoiceDetailResponse(
     /// <summary>Çeklerle karşılanan toplam.</summary>
     decimal ChequeAllocatedAmount,
     /// <summary>Fatura tutarından çek payları düşüldükten sonra kalan.</summary>
-    decimal ChequeRemainingAmount);
+    decimal ChequeRemainingAmount,
+    /// <summary>Bu belge bir iade faturası mı.</summary>
+    bool IsReturn,
+    Guid? OriginalInvoiceId,
+    string? OriginalInvoiceNumber,
+    /// <summary>İptalde üretilen ters fiş.</summary>
+    Guid? ReversalVoucherId,
+    string? ReversalVoucherNumber,
+    /// <summary>Kalem bazında iade edilebilir kalan miktarlar.</summary>
+    IReadOnlyCollection<InvoiceReturnableItemResponse> ReturnableItems);
+
+/// <summary>
+/// Orijinal faturanın bir kaleminden ne kadarının iade edilebildiği.
+/// İade ekranı bu listeden beslenir; kullanıcı kalan miktarı elle
+/// hesaplamak zorunda kalmasın.
+/// </summary>
+public sealed record InvoiceReturnableItemResponse(
+    Guid ItemId,
+    string Description,
+    string Unit,
+    decimal InvoicedQuantity,
+    decimal ReturnedQuantity,
+    decimal ReturnableQuantity);
 
 public sealed record SupplierInvoiceActionResponse(
     Guid Id,
@@ -160,6 +202,8 @@ public sealed record CompanyFinanceSettingsResponse(
     Guid? VatInAccountId,
     Guid? VatOutAccountId,
     Guid? SalesAccountId,
+    /// <summary>610 Satıştan İadeler; satış iadesi fişinde kullanılır.</summary>
+    Guid? SalesReturnAccountId,
     Guid? ExpenseAccountId,
     /// <summary>Stok hesabı (153/150); alış faturası buraya yazılır.</summary>
     Guid? InventoryAccountId,
@@ -175,6 +219,8 @@ public sealed record UpdateCompanyFinanceSettingsRequest(
     Guid? VatInAccountId,
     Guid? VatOutAccountId,
     Guid? SalesAccountId,
+    /// <summary>610 Satıştan İadeler; satış iadesi fişinde kullanılır.</summary>
+    Guid? SalesReturnAccountId,
     Guid? ExpenseAccountId,
     /// <summary>Stok hesabı (153/150); alış faturası buraya yazılır.</summary>
     Guid? InventoryAccountId,

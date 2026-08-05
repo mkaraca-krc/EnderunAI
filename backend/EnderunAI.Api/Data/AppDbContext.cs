@@ -1144,6 +1144,10 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.AccountingVoucher).WithMany()
                 .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReversalVoucher).WithMany()
+                .HasForeignKey(x => x.ReversalVoucherId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.OriginalInvoice).WithMany()
+                .HasForeignKey(x => x.OriginalInvoiceId).OnDelete(DeleteBehavior.Restrict);
 
             entity.HasMany(x => x.Items)
                 .WithOne(x => x.SalesInvoice)
@@ -1168,6 +1172,9 @@ public sealed class AppDbContext(
             entity.Property(x => x.LineSubtotal).HasPrecision(18, 2);
             entity.Property(x => x.VatAmount).HasPrecision(18, 2);
             entity.Property(x => x.LineTotal).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.OriginalItem).WithMany()
+                .HasForeignKey(x => x.OriginalItemId).OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
@@ -1216,6 +1223,12 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.GoodsReceiptId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.AccountingVoucher).WithMany()
                 .HasForeignKey(x => x.AccountingVoucherId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReversalVoucher).WithMany()
+                .HasForeignKey(x => x.ReversalVoucherId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.OriginalInvoice).WithMany()
+                .HasForeignKey(x => x.OriginalInvoiceId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.Property(x => x.CancellationReason).HasMaxLength(1000);
 
             entity.HasMany(x => x.Items)
                 .WithOne(x => x.SupplierInvoice)
@@ -1243,6 +1256,8 @@ public sealed class AppDbContext(
 
             entity.HasOne(x => x.PurchaseOrderItem).WithMany()
                 .HasForeignKey(x => x.PurchaseOrderItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.OriginalItem).WithMany()
+                .HasForeignKey(x => x.OriginalItemId).OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

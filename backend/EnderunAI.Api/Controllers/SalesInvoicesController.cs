@@ -81,6 +81,33 @@ public sealed class SalesInvoicesController(ISalesInvoiceService service) : Cont
         }
     }
 
+    /// <summary>
+    /// Müşteriden mal iadesi. Orijinal faturaya bağlı taslak iade
+    /// faturası üretir; kesinleştiğinde 610 Satıştan İadeler fişi kesilir.
+    /// </summary>
+    [HttpPost("{id:guid}/returns")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingCreate)]
+    public async Task<IActionResult> CreateReturn(
+        Guid id, CreateInvoiceReturnRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await service.CreateReturnAsync(id, request, cancellationToken));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
     [HttpPost("{id:guid}/post")]
     [RequirePermission(PermissionCatalog.Keys.AccountingEdit)]
     public async Task<IActionResult> Post(Guid id, CancellationToken cancellationToken)

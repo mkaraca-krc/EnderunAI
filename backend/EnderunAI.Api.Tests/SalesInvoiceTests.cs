@@ -269,8 +269,16 @@ public sealed class SalesInvoiceTests(DatabaseFixture fixture)
         Assert.Equal(HttpStatusCode.Conflict, post.StatusCode);
     }
 
+    /// <summary>
+    /// Kesinleşmiş fatura iptal EDİLEBİLİR ama fişi silinmez: ters kaydı
+    /// üretilir ve ikisi de defterde durur.
+    ///
+    /// Bu test önce "kesinleşmiş fatura iptal edilemez" diyordu; iptal
+    /// elle ters kayıt beklediği için muhasebeye hiç yansımadan
+    /// unutulabiliyordu. Kural değişti, testin kapsamı da değişti.
+    /// </summary>
     [Fact]
-    public async Task Post_PostedInvoice_CannotBeCancelled()
+    public async Task Cancel_PostedInvoice_PostsReversalVoucher()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var (companyId, customerId, projectId) = await CreateContextAsync(suffix);
@@ -287,6 +295,50 @@ public sealed class SalesInvoiceTests(DatabaseFixture fixture)
         var cancel = await client.PostAsJsonAsync($"/api/sales-invoices/{id}/cancel",
             new { reason = "Yanlış müşteri" });
 
-        Assert.Equal(HttpStatusCode.Conflict, cancel.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, cancel.StatusCode);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var invoice = await db.SalesInvoices.SingleAsync(x => x.Id == id);
+
+        Assert.Equal(SalesInvoiceStatus.Cancelled, invoice.Status);
+        Assert.NotNull(invoice.ReversalVoucherId);
+
+        var vouchers = await db.AccountingVouchers
+            .Include(x => x.Lines)
+            .Where(x => x.SourceModule == "SalesInvoice" && x.SourceEntityId == id)
+            .ToListAsync();
+
+        Assert.Equal(2, vouchers.Count);
+
+        // Net etki sıfır: her hesabın borcu alacağıyla kapanmalı.
+        var netByAccount = vouchers
+            .SelectMany(x => x.Lines)
+            .GroupBy(x => x.AccountingAccountId)
+            .Select(g => g.Sum(x => x.DebitAmount - x.CreditAmount));
+
+        Assert.All(netByAccount, net => Assert.Equal(0m, net));
+    }
+
+    /// <summary>
+    /// Gerekçesiz iptal reddedilir; ters fişte gerekçe görünmeli.
+    /// </summary>
+    [Fact]
+    public async Task Cancel_WithoutReason_IsRejected()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, customerId, projectId) = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var create = await client.PostAsJsonAsync("/api/sales-invoices",
+            BuildPayload(companyId, customerId, projectId, 10m, 100m));
+        var id = (await create.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var cancel = await client.PostAsJsonAsync($"/api/sales-invoices/{id}/cancel",
+            new { reason = "" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, cancel.StatusCode);
     }
 }

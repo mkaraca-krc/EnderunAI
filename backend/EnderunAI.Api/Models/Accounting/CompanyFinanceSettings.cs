@@ -40,6 +40,14 @@ public sealed class CompanyFinanceSettings : BaseEntity
     public Guid? SalesAccountId { get; set; }
     public AccountingAccount? SalesAccount { get; set; }
 
+    /// <summary>
+    /// 610 Satıştan İadeler. Satış iadesinde 600 borçlandırılmaz;
+    /// iadeler kendi hesabında toplanır ki brüt satış rakamı bozulmasın.
+    /// Boşsa hesap planından 610.01/610 aranır.
+    /// </summary>
+    public Guid? SalesReturnAccountId { get; set; }
+    public AccountingAccount? SalesReturnAccount { get; set; }
+
     /// <summary>Tedarikçi faturası maliyet tarafı (ör. 740 Hizmet Üretim Maliyeti).</summary>
     public Guid? ExpenseAccountId { get; set; }
     public AccountingAccount? ExpenseAccount { get; set; }

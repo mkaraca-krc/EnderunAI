@@ -25,6 +25,23 @@ public interface ISupplierInvoiceService
     Task<SupplierInvoiceActionResponse> ApproveAsync(Guid id, CancellationToken cancellationToken);
     Task<SupplierInvoiceActionResponse> RejectAsync(Guid id, string reason, CancellationToken cancellationToken);
     Task<SupplierInvoiceActionResponse> CancelAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gerekçeli iptal. Onaylanmış faturada gerekçe zorunludur ve ters
+    /// fiş üretilir.
+    /// </summary>
+    Task<SupplierInvoiceActionResponse> CancelAsync(
+        Guid id, string? reason, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Tedarikçiye mal iadesi. Orijinal faturaya bağlı yeni bir iade
+    /// faturası (taslak) üretir; onaylandığında ters fiş kesilir ve
+    /// stok depodan çıkar. Kısmi iade desteklenir.
+    /// </summary>
+    Task<SupplierInvoiceDetailResponse> CreateReturnAsync(
+        Guid originalInvoiceId,
+        CreateInvoiceReturnRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed class SupplierInvoiceService(
@@ -74,7 +91,8 @@ public sealed class SupplierInvoiceService(
                 x.CurrencyCode, x.Subtotal, x.VatTotal, x.GrandTotal,
                 (int)x.Status, (int)x.MatchStatus, x.RequiresGmApproval,
                 x.PurchaseOrder != null ? x.PurchaseOrder.OrderNumber : null,
-                x.AccountingVoucher != null ? x.AccountingVoucher.VoucherNumber : null))
+                x.AccountingVoucher != null ? x.AccountingVoucher.VoucherNumber : null,
+                x.IsReturn))
             .ToListAsync(cancellationToken);
     }
 
@@ -88,7 +106,8 @@ public sealed class SupplierInvoiceService(
 
         return MapDetail(
             invoice,
-            await LoadChequePaymentsAsync(id, cancellationToken));
+            await LoadChequePaymentsAsync(id, cancellationToken),
+            await LoadReturnableItemsAsync(invoice, cancellationToken));
     }
 
     public async Task<SupplierInvoiceDetailResponse> CreateAsync(
@@ -240,12 +259,17 @@ public sealed class SupplierInvoiceService(
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
         var posting = await accountingIntegration.CreateSupplierInvoiceVoucherAsync(
-            invoice, cancellationToken);
+            invoice, cancellationToken, reverse: invoice.IsReturn);
 
         // Mal kabulsuz ALIŞ faturasında stok depoya girer ve ağırlıklı
         // ortalama maliyet güncellenir. Mal kabullü faturada bu adım
         // hiç çalışmaz: stok orada zaten girmiştir.
-        var postedStockLines = await stockPoster.PostAsync(invoice, cancellationToken);
+        //
+        // İade faturasında ters yön: mal depodan çıkar ve ortalama
+        // maliyet geri sarılır.
+        var postedStockLines = invoice.IsReturn
+            ? await stockPoster.PostReturnAsync(invoice, cancellationToken)
+            : await stockPoster.PostAsync(invoice, cancellationToken);
 
         invoice.Status = SupplierInvoiceStatus.Approved;
         invoice.AccountingVoucherId = posting.VoucherId;
@@ -275,8 +299,14 @@ public sealed class SupplierInvoiceService(
                     ? ProjectCostType.Other
                     : ProjectCostType.Material,
                 CostDate = invoice.InvoiceDate,
-                Amount = decimal.Round(invoice.Subtotal * invoice.ExchangeRate, 2),
-                Description = $"Tedarikçi faturası {invoice.InternalNumber} — {supplierTitle}",
+                // İade projenin maliyetini AZALTIR; eksi tutar yazılmazsa
+                // iade edilen mal projede maliyet olarak durmaya devam
+                // eder ve kârlılık olduğundan düşük görünürdü.
+                Amount = decimal.Round(invoice.Subtotal * invoice.ExchangeRate, 2) *
+                         (invoice.IsReturn ? -1m : 1m),
+                Description = invoice.IsReturn
+                    ? $"Alış iadesi {invoice.InternalNumber} — {supplierTitle}"
+                    : $"Tedarikçi faturası {invoice.InternalNumber} — {supplierTitle}",
                 ReferenceType = "SupplierInvoice",
                 ReferenceId = invoice.Id,
                 // Muhasebedeki maliyet satırına bağla — proje maliyeti ile
@@ -288,10 +318,15 @@ public sealed class SupplierInvoiceService(
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        var message = postedStockLines > 0
-            ? $"Fatura onaylandı; muhasebe fişi kesinleştirildi ve " +
-              $"{postedStockLines} kalem depoya girildi."
-            : "Fatura onaylandı; muhasebe fişi otomatik oluşturuldu ve kesinleştirildi.";
+        var message = invoice.IsReturn
+            ? postedStockLines > 0
+                ? $"İade faturası onaylandı; ters fiş kesinleştirildi ve " +
+                  $"{postedStockLines} kalem depodan çıkarıldı."
+                : "İade faturası onaylandı; ters fiş oluşturuldu ve kesinleştirildi."
+            : postedStockLines > 0
+                ? $"Fatura onaylandı; muhasebe fişi kesinleştirildi ve " +
+                  $"{postedStockLines} kalem depoya girildi."
+                : "Fatura onaylandı; muhasebe fişi otomatik oluşturuldu ve kesinleştirildi.";
 
         return new SupplierInvoiceActionResponse(
             invoice.Id, invoice.InternalNumber, (int)invoice.Status, message);
@@ -323,19 +358,45 @@ public sealed class SupplierInvoiceService(
     }
 
     public async Task<SupplierInvoiceActionResponse> CancelAsync(
-        Guid id, CancellationToken cancellationToken)
+        Guid id, CancellationToken cancellationToken) =>
+        await CancelAsync(id, null, cancellationToken);
+
+    /// <summary>
+    /// Fatura iptali.
+    ///
+    /// Kesinleşmemiş faturada kayıt yalnızca iptal işaretlenir. ONAYLANMIŞ
+    /// faturada ise iz bırakmak şart: fiş silinmez, ters kaydı üretilir;
+    /// stok girmişse depodan geri çıkar ve proje maliyeti eksiyle
+    /// dengelenir.
+    ///
+    /// İptal ile İADE farklı şeylerdir: iade gerçekten olmuş bir alışın
+    /// malının geri gönderilmesidir ve KDV beyanına iade olarak girer;
+    /// iptal ise "bu fatura hiç olmamalıydı" demektir. Bu yüzden faturaya
+    /// bağlı iade ya da ödeme varsa iptal reddedilir — önce onlar
+    /// çözülmeli.
+    /// </summary>
+    public async Task<SupplierInvoiceActionResponse> CancelAsync(
+        Guid id, string? reason, CancellationToken cancellationToken)
     {
         var invoice = await db.SupplierInvoices
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Tedarikçi faturası bulunamadı.");
 
-        if (invoice.Status is not (SupplierInvoiceStatus.Draft or SupplierInvoiceStatus.PendingApproval))
+        if (invoice.Status == SupplierInvoiceStatus.Cancelled)
+            throw new InvalidOperationException("Fatura zaten iptal edilmiş.");
+
+        if (invoice.Status == SupplierInvoiceStatus.Approved)
+            return await CancelApprovedAsync(invoice, reason, cancellationToken);
+
+        if (invoice.Status is not (SupplierInvoiceStatus.Draft
+            or SupplierInvoiceStatus.PendingApproval))
         {
             throw new InvalidOperationException(
-                "Yalnızca taslak veya onay bekleyen faturalar iptal edilebilir. " +
-                "Onaylanmış fatura için muhasebe fişini iptal edip düzeltme kaydı oluşturun.");
+                "Yalnızca taslak, onay bekleyen veya onaylanmış faturalar iptal edilebilir.");
         }
 
+        invoice.CancellationReason = Normalize(reason);
+        invoice.CancelledAtUtc = DateTime.UtcNow;
         invoice.Status = SupplierInvoiceStatus.Cancelled;
         invoice.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -343,6 +404,99 @@ public sealed class SupplierInvoiceService(
 
         return new SupplierInvoiceActionResponse(
             invoice.Id, invoice.InternalNumber, (int)invoice.Status, "Fatura iptal edildi.");
+    }
+
+    private async Task<SupplierInvoiceActionResponse> CancelApprovedAsync(
+        SupplierInvoice invoice, string? reason, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException(
+                "Onaylanmış faturanın iptalinde gerekçe zorunludur; " +
+                "ters fişte ve denetim izinde görünür.");
+        }
+
+        var hasReturn = await db.SupplierInvoices.AnyAsync(
+            x => x.OriginalInvoiceId == invoice.Id &&
+                 x.Status != SupplierInvoiceStatus.Cancelled &&
+                 x.Status != SupplierInvoiceStatus.Rejected,
+            cancellationToken);
+
+        if (hasReturn)
+        {
+            throw new InvalidOperationException(
+                "Bu faturaya bağlı iade faturası var. Önce iadeyi iptal edin; " +
+                "iade duruyorken fatura iptal edilirse iade dayanaksız kalır.");
+        }
+
+        var hasChequeAllocation = await db.ChequeAllocations.AnyAsync(
+            x => x.SupplierInvoiceId == invoice.Id, cancellationToken);
+
+        if (hasChequeAllocation)
+        {
+            throw new InvalidOperationException(
+                "Bu faturaya bağlı çek ödemesi var. Önce çek dağılımından " +
+                "faturayı çıkarın; ödenmiş faturanın iptali cari bakiyesini bozar.");
+        }
+
+        if (invoice.AccountingVoucherId is null)
+        {
+            throw new InvalidOperationException(
+                "Onaylı faturanın muhasebe fişi bulunamadı; iptal ters kayıt " +
+                "üretemeyeceği için durduruldu.");
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        var reversalVoucherId = await accountingIntegration.CreateReversalVoucherAsync(
+            invoice.AccountingVoucherId.Value,
+            reason.Trim(),
+            DateTime.UtcNow.Date,
+            cancellationToken);
+
+        // Stok bu faturayla girdiyse geri çıkar. Mal kabullü faturada
+        // stok mal kabulde girmiştir; oraya dokunulmaz.
+        var removedStockLines = invoice.GoodsReceiptId is null
+            ? await stockPoster.PostReturnAsync(invoice, cancellationToken, "Fatura iptali")
+            : 0;
+
+        // Proje maliyeti eksiyle dengelenir; silinmez ki maliyetin
+        // oluşup sonra iptal edildiği geçmişte görünsün.
+        var costTransaction = await db.ProjectCostTransactions
+            .Where(x => x.ReferenceType == "SupplierInvoice" && x.ReferenceId == invoice.Id)
+            .OrderBy(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (costTransaction is not null)
+        {
+            db.ProjectCostTransactions.Add(new ProjectCostTransaction
+            {
+                ProjectId = costTransaction.ProjectId,
+                CostType = costTransaction.CostType,
+                CostDate = DateTime.UtcNow.Date,
+                Amount = -costTransaction.Amount,
+                Description = $"İPTAL — {costTransaction.Description}",
+                ReferenceType = "SupplierInvoice",
+                ReferenceId = invoice.Id
+            });
+        }
+
+        invoice.Status = SupplierInvoiceStatus.Cancelled;
+        invoice.ReversalVoucherId = reversalVoucherId;
+        invoice.CancellationReason = reason.Trim();
+        invoice.CancelledAtUtc = DateTime.UtcNow;
+        invoice.UpdatedAtUtc = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var message = removedStockLines > 0
+            ? $"Fatura iptal edildi; ters fiş kesildi ve {removedStockLines} kalem " +
+              "depodan geri çıkarıldı."
+            : "Fatura iptal edildi; ters fiş kesildi.";
+
+        return new SupplierInvoiceActionResponse(
+            invoice.Id, invoice.InternalNumber, (int)invoice.Status, message);
     }
 
     /// <summary>
@@ -707,7 +861,173 @@ public sealed class SupplierInvoiceService(
             .Include(x => x.PurchaseOrder)
             .Include(x => x.GoodsReceipt)
             .Include(x => x.AccountingVoucher)
+            .Include(x => x.ReversalVoucher)
+            .Include(x => x.OriginalInvoice)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+    public async Task<SupplierInvoiceDetailResponse> CreateReturnAsync(
+        Guid originalInvoiceId,
+        CreateInvoiceReturnRequest request,
+        CancellationToken cancellationToken)
+    {
+        var original = await db.SupplierInvoices
+            .Include(x => x.Items)
+            .SingleOrDefaultAsync(x => x.Id == originalInvoiceId, cancellationToken)
+            ?? throw new KeyNotFoundException("İade edilecek fatura bulunamadı.");
+
+        // İade ancak muhasebeleşmiş bir alıştan yapılabilir: onaylanmamış
+        // faturanın ne borcu ne de stoğu oluşmuştur, tersine çevrilecek
+        // bir kayıt yoktur — o faturayı düzeltmek ya da iptal etmek gerekir.
+        if (original.Status != SupplierInvoiceStatus.Approved)
+        {
+            throw new InvalidOperationException(
+                "Yalnızca onaylanmış faturadan iade yapılabilir. " +
+                "Onaylanmamış fatura için iade değil düzeltme/iptal kullanın.");
+        }
+
+        if (original.IsReturn)
+            throw new InvalidOperationException("İade faturasının iadesi alınamaz.");
+
+        if (string.IsNullOrWhiteSpace(request.InvoiceNumber))
+            throw new ArgumentException("İade fatura numarası zorunludur.");
+
+        if (request.Items is null || request.Items.Count == 0)
+            throw new ArgumentException("İade edilecek en az bir kalem seçilmelidir.");
+
+        // Daha önce iade edilmiş miktarlar: aynı mal iki kez iade
+        // edilemesin. Reddedilen/iptal edilen iadeler sayılmaz.
+        var alreadyReturned = await db.SupplierInvoiceItems
+            .AsNoTracking()
+            .Where(x => x.OriginalItemId != null &&
+                        x.SupplierInvoice.OriginalInvoiceId == originalInvoiceId &&
+                        x.SupplierInvoice.Status != SupplierInvoiceStatus.Cancelled &&
+                        x.SupplierInvoice.Status != SupplierInvoiceStatus.Rejected)
+            .GroupBy(x => x.OriginalItemId!.Value)
+            .Select(g => new { ItemId = g.Key, Quantity = g.Sum(x => x.Quantity) })
+            .ToDictionaryAsync(x => x.ItemId, x => x.Quantity, cancellationToken);
+
+        var returnItems = new List<SupplierInvoiceItem>();
+        var lineNumber = 1;
+
+        foreach (var requested in request.Items)
+        {
+            if (requested.Quantity <= 0m)
+                continue;
+
+            var source = original.Items.SingleOrDefault(x => x.Id == requested.OriginalItemId)
+                ?? throw new ArgumentException(
+                    "İade edilen kalem orijinal faturada bulunamadı.");
+
+            var returnable = source.Quantity -
+                             alreadyReturned.GetValueOrDefault(source.Id, 0m);
+
+            if (requested.Quantity > returnable)
+            {
+                throw new ArgumentException(
+                    $"{source.Description}: en fazla {returnable:N4} {source.Unit} " +
+                    $"iade edilebilir (faturada {source.Quantity:N4}, " +
+                    $"daha önce iade edilen {alreadyReturned.GetValueOrDefault(source.Id, 0m):N4}).");
+            }
+
+            // Birim fiyat ve KDV oranı orijinalden kopyalanır; iade
+            // farklı fiyattan yapılsaydı ters fiş orijinali kapatmaz ve
+            // cari bakiyesinde kalıntı borç kalırdı.
+            var lineSubtotal = decimal.Round(requested.Quantity * source.UnitPrice, 2);
+            var vatAmount = decimal.Round(lineSubtotal * source.VatRate / 100m, 2);
+
+            returnItems.Add(new SupplierInvoiceItem
+            {
+                LineNumber = lineNumber++,
+                OriginalItemId = source.Id,
+                InventoryItemId = source.InventoryItemId,
+                WarehouseId = source.WarehouseId,
+                ExpenseAccountId = source.ExpenseAccountId,
+                CostCenterCode = source.CostCenterCode,
+                Description = source.Description,
+                Quantity = requested.Quantity,
+                Unit = source.Unit,
+                UnitPrice = source.UnitPrice,
+                VatRate = source.VatRate,
+                LineSubtotal = lineSubtotal,
+                VatAmount = vatAmount,
+                LineTotal = lineSubtotal + vatAmount
+            });
+        }
+
+        if (returnItems.Count == 0)
+            throw new ArgumentException("İade edilecek en az bir kalem seçilmelidir.");
+
+        var internalNumber = await documentNumberService.GenerateAsync(
+            original.CompanyId, "SUPPLIER_INVOICE_RETURN", "AIF", cancellationToken);
+
+        var returnInvoice = new SupplierInvoice
+        {
+            CompanyId = original.CompanyId,
+            SupplierCurrentAccountId = original.SupplierCurrentAccountId,
+            InvoiceType = original.InvoiceType,
+            ProjectId = original.ProjectId,
+            WarehouseId = original.WarehouseId,
+            CostCenterCode = original.CostCenterCode,
+            InternalNumber = internalNumber,
+            InvoiceNumber = request.InvoiceNumber.Trim(),
+            InvoiceDate = AsUtc(request.InvoiceDate),
+            CurrencyCode = original.CurrencyCode,
+            ExchangeRate = original.ExchangeRate,
+            Description = Normalize(request.Description)
+                ?? $"{original.InvoiceNumber} numaralı faturanın iadesi",
+            Status = SupplierInvoiceStatus.Draft,
+            IsReturn = true,
+            OriginalInvoiceId = original.Id,
+            // Sipariş/mal kabul bağlantısı taşınmaz: 3 yönlü kontrol
+            // iadeye uygulanmaz, uygulanırsa fatura sipariş tutarını
+            // tutmadığı için tolerans dışı görünürdü.
+            MatchStatus = SupplierInvoiceMatchStatus.NotApplicable
+        };
+
+        ApplyItemsAndTotals(returnInvoice, returnItems);
+
+        db.SupplierInvoices.Add(returnInvoice);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return await GetByIdAsync(returnInvoice.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Kalem bazında iade edilebilir kalan miktar. İade faturasında ve
+    /// onaylanmamış faturada boş döner: ikisinden de iade yapılamaz.
+    /// </summary>
+    private async Task<IReadOnlyCollection<InvoiceReturnableItemResponse>>
+        LoadReturnableItemsAsync(SupplierInvoice invoice, CancellationToken cancellationToken)
+    {
+        if (invoice.IsReturn || invoice.Status != SupplierInvoiceStatus.Approved)
+            return [];
+
+        var returned = await db.SupplierInvoiceItems
+            .AsNoTracking()
+            .Where(x => x.OriginalItemId != null &&
+                        x.SupplierInvoice.OriginalInvoiceId == invoice.Id &&
+                        x.SupplierInvoice.Status != SupplierInvoiceStatus.Cancelled &&
+                        x.SupplierInvoice.Status != SupplierInvoiceStatus.Rejected)
+            .GroupBy(x => x.OriginalItemId!.Value)
+            .Select(g => new { ItemId = g.Key, Quantity = g.Sum(x => x.Quantity) })
+            .ToDictionaryAsync(x => x.ItemId, x => x.Quantity, cancellationToken);
+
+        return invoice.Items
+            .OrderBy(x => x.LineNumber)
+            .Select(item =>
+            {
+                var returnedQuantity = returned.GetValueOrDefault(item.Id, 0m);
+
+                return new InvoiceReturnableItemResponse(
+                    item.Id,
+                    item.Description,
+                    item.Unit,
+                    item.Quantity,
+                    returnedQuantity,
+                    item.Quantity - returnedQuantity);
+            })
+            .ToList();
+    }
 
     /// <summary>
     /// Faturayı ödeyen çek payları. Ayrı bir "ödeme" defteri tutulmuyor;
@@ -732,7 +1052,8 @@ public sealed class SupplierInvoiceService(
 
     private static SupplierInvoiceDetailResponse MapDetail(
         SupplierInvoice invoice,
-        IReadOnlyCollection<InvoiceChequePaymentResponse>? chequePayments = null) =>
+        IReadOnlyCollection<InvoiceChequePaymentResponse>? chequePayments = null,
+        IReadOnlyCollection<InvoiceReturnableItemResponse>? returnableItems = null) =>
         new(
             invoice.Id, invoice.CompanyId, invoice.InternalNumber, invoice.InvoiceNumber,
             invoice.InvoiceDate, invoice.DueDate,
@@ -767,7 +1088,13 @@ public sealed class SupplierInvoiceService(
                 item.CostCenterCode)).ToList(),
             chequePayments ?? [],
             chequePayments?.Sum(x => x.AllocatedAmount) ?? 0m,
-            invoice.GrandTotal - (chequePayments?.Sum(x => x.AllocatedAmount) ?? 0m));
+            invoice.GrandTotal - (chequePayments?.Sum(x => x.AllocatedAmount) ?? 0m),
+            invoice.IsReturn,
+            invoice.OriginalInvoiceId,
+            invoice.OriginalInvoice?.InvoiceNumber,
+            invoice.ReversalVoucherId,
+            invoice.ReversalVoucher?.VoucherNumber,
+            returnableItems ?? []);
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

@@ -315,7 +315,8 @@ public sealed class CompanySettingsController(
         var accountIds = new[]
         {
             request.VatInAccountId, request.VatOutAccountId, request.SalesAccountId,
-            request.ExpenseAccountId, request.InventoryAccountId, request.PayablesAccountId,
+            request.SalesReturnAccountId, request.ExpenseAccountId,
+            request.InventoryAccountId, request.PayablesAccountId,
             request.ReceivablesAccountId, request.FactoringExpenseAccountId,
             request.DeductionAccountId
         }.Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToArray();
@@ -350,6 +351,7 @@ public sealed class CompanySettingsController(
         tracked.VatInAccountId = request.VatInAccountId;
         tracked.VatOutAccountId = request.VatOutAccountId;
         tracked.SalesAccountId = request.SalesAccountId;
+        tracked.SalesReturnAccountId = request.SalesReturnAccountId;
         tracked.ExpenseAccountId = request.ExpenseAccountId;
         tracked.InventoryAccountId = request.InventoryAccountId;
         tracked.PayablesAccountId = request.PayablesAccountId;
@@ -376,6 +378,7 @@ public sealed class CompanySettingsController(
             settings.VatInAccountId,
             settings.VatOutAccountId,
             settings.SalesAccountId,
+            settings.SalesReturnAccountId,
             settings.ExpenseAccountId,
             settings.InventoryAccountId,
             settings.PayablesAccountId,

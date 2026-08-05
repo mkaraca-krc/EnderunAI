@@ -86,6 +86,35 @@ public sealed class SupplierInvoicesController(
         }
     }
 
+    /// <summary>
+    /// Tedarikçiye mal iadesi. Orijinal faturaya bağlı taslak iade
+    /// faturası üretir; onaylandığında ters fiş kesilir ve stok çıkar.
+    /// </summary>
+    [HttpPost("{id:guid}/returns")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingCreate)]
+    public async Task<IActionResult> CreateReturn(
+        Guid id,
+        CreateInvoiceReturnRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await service.CreateReturnAsync(id, request, cancellationToken));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
     [HttpPost("{id:guid}/submit")]
     [RequirePermission(PermissionCatalog.Keys.AccountingEdit)]
     public Task<IActionResult> Submit(Guid id, CancellationToken cancellationToken) =>
@@ -104,10 +133,17 @@ public sealed class SupplierInvoicesController(
         CancellationToken cancellationToken) =>
         RunAction(() => service.RejectAsync(id, request.Reason, cancellationToken));
 
+    /// <summary>
+    /// Fatura iptali. Onaylanmış faturada gerekçe zorunlu; ters fiş
+    /// kesilir, stok girmişse geri çıkar.
+    /// </summary>
     [HttpPost("{id:guid}/cancel")]
     [RequirePermission(PermissionCatalog.Keys.AccountingDelete)]
-    public Task<IActionResult> Cancel(Guid id, CancellationToken cancellationToken) =>
-        RunAction(() => service.CancelAsync(id, cancellationToken));
+    public Task<IActionResult> Cancel(
+        Guid id,
+        CancelInvoiceRequest? request,
+        CancellationToken cancellationToken) =>
+        RunAction(() => service.CancelAsync(id, request?.Reason, cancellationToken));
 
     private async Task<IActionResult> RunAction(
         Func<Task<SupplierInvoiceActionResponse>> action)
