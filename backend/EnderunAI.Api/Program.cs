@@ -122,6 +122,9 @@ builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hakedis.IProgressTrackingService,
     EnderunAI.Api.Services.Hakedis.ProgressTrackingService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hakedis.IContractSummaryProgressService,
+    EnderunAI.Api.Services.Hakedis.ContractSummaryProgressService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 builder.Services.AddScoped<ISecretariatService, SecretariatService>();
 builder.Services.AddScoped<IHrApprovalService, HrApprovalService>();

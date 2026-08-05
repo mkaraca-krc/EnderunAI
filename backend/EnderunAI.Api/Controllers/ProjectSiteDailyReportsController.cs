@@ -136,6 +136,125 @@ public sealed class ProjectSiteDailyReportsController(
         });
     }
 
+    /// <summary>
+    /// Günlük rapora kalem eklerken kullanılan HIZLI SEÇİM listesi.
+    ///
+    /// Telefonda iki dokunuşta seçilebilsin diye iki bölüm döner:
+    /// bu şantiyede son 30 günde en çok girilen kalemler önce, sonra
+    /// icmalin kalanı. Arama verilirse yalnızca eşleşenler döner.
+    ///
+    /// İcmali olmayan projede boş liste döner ve arayüz serbest metne
+    /// düşer — icmalsiz proje çalışmaya devam etmeli.
+    /// </summary>
+    [HttpGet("icmal-kalemleri")]
+    [RequirePermission(PermissionCatalog.Keys.SiteReportsView)]
+    public async Task<IActionResult> GetSummaryItems(
+        Guid siteId,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanAccessSiteAsync(siteId, cancellationToken))
+            return NotFound(new { message = "Şantiye bulunamadı." });
+
+        var projectId = await db.ProjectSites
+            .AsNoTracking()
+            .Where(x => x.Id == siteId)
+            .Select(x => x.ProjectId)
+            .SingleAsync(cancellationToken);
+
+        var boqId = await ResolveSummaryBoqIdAsync(projectId, cancellationToken);
+
+        if (boqId is null)
+            return Ok(new { hasContractSummary = false, frequent = Array.Empty<object>(), items = Array.Empty<object>() });
+
+        var query = db.ProjectBoqItems
+            .AsNoTracking()
+            .Where(x => x.ProjectBoqId == boqId.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(x =>
+                x.PositionCode.ToLower().Contains(term) ||
+                x.Description.ToLower().Contains(term));
+        }
+
+        var items = await query
+            .OrderBy(x => x.LineNumber)
+            .Select(x => new
+            {
+                x.Id,
+                x.PositionCode,
+                x.Description,
+                x.Unit,
+                x.ContractQuantity,
+                SectionName = x.ProjectHakedisSection != null
+                    ? x.ProjectHakedisSection.Name
+                    : null
+            })
+            .Take(500)
+            .ToListAsync(cancellationToken);
+
+        // Sık kullanılanlar: bu şantiyede son 30 günde girilmiş kalemler,
+        // kullanım sayısına göre. Rapor onaylı olmak zorunda değil —
+        // burası bir kolaylık listesi, gerçekleşme hesabı değil.
+        var since = DateTime.UtcNow.Date.AddDays(-30);
+
+        var frequentIds = await db.ProjectSiteDailyReportWorkItems
+            .AsNoTracking()
+            .Where(x =>
+                x.ProjectBoqItemId != null &&
+                x.DailyReport.ProjectSiteId == siteId &&
+                x.DailyReport.ReportDate >= since)
+            .GroupBy(x => x.ProjectBoqItemId!.Value)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.Key)
+            .Take(8)
+            .ToListAsync(cancellationToken);
+
+        var byId = items.ToDictionary(x => x.Id);
+
+        var frequent = frequentIds
+            .Where(byId.ContainsKey)
+            .Select(id => byId[id])
+            .ToList();
+
+        return Ok(new
+        {
+            hasContractSummary = true,
+            frequent,
+            items
+        });
+    }
+
+    /// <summary>
+    /// Projenin geçerli icmali: önce sözleşme tabanı işaretli olan,
+    /// yoksa onaylı güncel revizyon. ContractSummaryProgressService ile
+    /// aynı sıra — iki yerde farklı icmale bakmak, sahada seçilen
+    /// kalemin ilerlemede görünmemesine yol açardı.
+    /// </summary>
+    private async Task<Guid?> ResolveSummaryBoqIdAsync(
+        Guid projectId, CancellationToken cancellationToken)
+    {
+        var baseline = await db.ProjectBoqs
+            .AsNoTracking()
+            .Where(x => x.ProjectId == projectId && x.IsContractBaseline)
+            .Select(x => (Guid?)x.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (baseline is not null)
+            return baseline;
+
+        return await db.ProjectBoqs
+            .AsNoTracking()
+            .Where(x => x.ProjectId == projectId &&
+                        x.IsCurrentRevision &&
+                        x.Status == ProjectBoqStatus.Approved)
+            .OrderByDescending(x => x.RevisionNumber)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     [HttpPost]
     [RequirePermission(PermissionCatalog.Keys.SiteReportsCreate)]
     public async Task<IActionResult> Create(
@@ -181,6 +300,7 @@ public sealed class ProjectSiteDailyReportsController(
 
             report.WorkItems.Add(new ProjectSiteDailyReportWorkItem
             {
+                ProjectBoqItemId = item.ProjectBoqItemId,
                 Description = item.Description.Trim(),
                 Quantity = item.Quantity,
                 Unit = item.Unit?.Trim()
@@ -239,6 +359,7 @@ public sealed class ProjectSiteDailyReportsController(
 
             report.WorkItems.Add(new ProjectSiteDailyReportWorkItem
             {
+                ProjectBoqItemId = item.ProjectBoqItemId,
                 Description = item.Description.Trim(),
                 Quantity = item.Quantity,
                 Unit = item.Unit?.Trim()
@@ -472,6 +593,10 @@ public sealed class ProjectSiteDailyReportsController(
             WorkItems = x.WorkItems.Select(w => new
             {
                 w.Id,
+                w.ProjectBoqItemId,
+                BoqPositionCode = w.ProjectBoqItem != null
+                    ? w.ProjectBoqItem.PositionCode
+                    : null,
                 w.Description,
                 w.Quantity,
                 w.Unit
@@ -504,4 +629,9 @@ public sealed record UpsertDailyReportRequest(
 public sealed record DailyReportWorkItemRequest(
     string Description,
     decimal? Quantity,
-    string? Unit);
+    string? Unit,
+    /// <summary>
+    /// Sözleşme icmali kalemi. Opsiyonel — icmalde olmayan iş de
+    /// yazılabilmeli. Seçilirse onaylı miktar o kaleme birikir.
+    /// </summary>
+    Guid? ProjectBoqItemId = null);

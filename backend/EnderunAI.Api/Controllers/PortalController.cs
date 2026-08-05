@@ -14,9 +14,57 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/portal/{token}")]
 public sealed class PortalController(
     AppDbContext db,
-    IUploadService uploadService) : ControllerBase
+    IUploadService uploadService,
+    EnderunAI.Api.Services.Hakedis.IContractSummaryProgressService progressService)
+    : ControllerBase
 {
     private const string PhotoCategory = "site-daily-reports";
+
+    /// <summary>
+    /// İşverene açık fiziksel ilerleme — proje ve kısım bazında yüzde.
+    ///
+    /// TUTAR SIZMAZ: bu uç birim fiyat, kalem tutarı, sözleşme bedeli
+    /// veya ağırlık DÖNDÜRMEZ. Kısım ve proje yüzdesi sunucuda sözleşme
+    /// tutarıyla ağırlıklandırılır ama ağırlığın kendisi yanıta hiç
+    /// girmez; işveren yalnızca "işin ne kadarı bitti" görür.
+    ///
+    /// Yüzde YALNIZCA onaylı saha raporlarından hesaplanır. Hakedişte
+    /// işverenin kabul ettiği miktar buraya karışmaz — portal bizim
+    /// fiziksel ilerlememizi gösterir, mutabakatı değil.
+    /// </summary>
+    [HttpGet("ilerleme")]
+    public async Task<IActionResult> GetProgress(
+        string token, CancellationToken cancellationToken)
+    {
+        var link = await ResolveActiveLink(token, cancellationToken);
+        if (link is null)
+            return NotFound();
+
+        var view = await progressService.BuildAsync(link.ProjectId, cancellationToken);
+
+        if (!view.HasContractSummary)
+        {
+            // İcmalsiz projede yüzde uydurulmaz; ekran bunu yazar.
+            return Ok(new
+            {
+                hasProgress = false,
+                message = "Bu proje için sözleşme icmali tanımlı değil."
+            });
+        }
+
+        return Ok(new
+        {
+            hasProgress = true,
+            completionRate = view.FieldRate,
+            sections = view.Sections.Select(section => new
+            {
+                name = section.Name,
+                completionRate = section.FieldRate,
+                itemCount = section.Items.Count,
+                completedItemCount = section.Items.Count(x => x.FieldRate >= 100m)
+            })
+        });
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetProject(string token, CancellationToken cancellationToken)
@@ -153,8 +201,17 @@ public sealed class PortalController(
         if (string.IsNullOrWhiteSpace(token))
             return null;
 
+        // İki şart birden: IsActive VE iptal damgasının boş olması.
+        // Önceden yalnızca IsActive bakılıyordu, RevokedAtUtc karar
+        // vermede hiç kullanılmıyordu. Uygulama ikisini birlikte
+        // yazdığı için pratikte sorun çıkmamıştı; ama yalnızca iptal
+        // damgası basılan bir kayıt (veri düzeltmesi, başka bir kod
+        // yolu) portalı açık bırakırdı. Kimliği doğrulanmamış bir uçta
+        // bu farkı bırakmamak gerekir.
         return await db.EmployerPortalLinks.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Token == token && x.IsActive, cancellationToken);
+            .SingleOrDefaultAsync(
+                x => x.Token == token && x.IsActive && x.RevokedAtUtc == null,
+                cancellationToken);
     }
 
     private static DateTime ToUtcDate(DateTime value) =>

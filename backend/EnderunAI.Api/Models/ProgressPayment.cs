@@ -116,6 +116,29 @@ public sealed class ProgressPaymentItem : BaseEntity
     public Guid? ProgressPaymentSectionId { get; set; }
     public ProgressPaymentSection? Section { get; set; }
 
+    /// <summary>
+    /// Satırın geldiği sözleşme icmali kalemi. Opsiyonel: icmalsiz
+    /// projede ve icmal kurulmadan önce açılmış hakedişlerde boştur;
+    /// o durumda eşleşme poz koduyla yapılır.
+    /// </summary>
+    public Guid? ProjectBoqItemId { get; set; }
+    public ProjectBoqItem? ProjectBoqItem { get; set; }
+
+    /// <summary>
+    /// Bu dönemde SAHANIN yaptığı miktar — hakediş kesinleşirken o anki
+    /// onaylı günlük raporlardan yazılıp DONDURULUR.
+    ///
+    /// <see cref="CurrentQuantity"/> işverenle mutabık kalınan resmî
+    /// rakamdır ve bundan farklı olabilir; ikisi bilerek ayrı tutulur.
+    /// Dondurulmasının nedeni: hakediş kesinleştikten sonra onaylanan
+    /// geç bir günlük rapor, muhasebeleşmiş belgenin fark raporunu
+    /// geriye dönük değiştirmemeli.
+    /// </summary>
+    public decimal FieldQuantity { get; set; }
+
+    /// <summary>Bu döneme kadar sahada biriken toplam (dondurulmuş).</summary>
+    public decimal CumulativeFieldQuantity { get; set; }
+
     public int LineNumber { get; set; }
 
     public string PositionCode { get; set; } = string.Empty;

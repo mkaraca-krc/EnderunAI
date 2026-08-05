@@ -40,6 +40,15 @@ public sealed class ProjectSiteDailyReportWorkItem : BaseEntity
     public Guid DailyReportId { get; set; }
     public ProjectSiteDailyReport DailyReport { get; set; } = null!;
 
+    /// <summary>
+    /// Sözleşme icmalindeki kalem. OPSİYONEL: icmalde olmayan iş de
+    /// günlük rapora yazılabilmeli, aksi halde saha o günü hiç
+    /// kaydedemezdi. Seçilirse onaylı miktarlar bu kalemin iç
+    /// gerçekleşmesine birikir.
+    /// </summary>
+    public Guid? ProjectBoqItemId { get; set; }
+    public ProjectBoqItem? ProjectBoqItem { get; set; }
+
     public string Description { get; set; } = string.Empty;
     public decimal? Quantity { get; set; }
     public string? Unit { get; set; }
