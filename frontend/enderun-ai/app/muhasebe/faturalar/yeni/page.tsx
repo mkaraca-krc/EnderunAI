@@ -4,11 +4,23 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import ErpSearchSelect, {
+  type SearchSelectOption,
+} from "@/components/erp/erp-search-select";
+import {
+  accountingAccountService,
+  type AccountingAccountListItem,
+} from "@/services/accounting-account.service";
+import { branchService, type BranchListItem } from "@/services/branch.service";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
   currentAccountService,
   type CurrentAccountListItem,
 } from "@/services/current-account.service";
+import {
+  inventoryService,
+  type InventoryItemListItem,
+} from "@/services/inventory.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import {
   purchaseOrderService,
@@ -17,8 +29,13 @@ import {
 import {
   financeSettingsService,
   supplierInvoiceService,
+  SupplierInvoiceType,
   type SupplierInvoiceItemPayload,
 } from "@/services/supplier-invoice.service";
+import {
+  warehouseService,
+  type WarehouseListItem,
+} from "@/services/warehouse.service";
 
 const money = new Intl.NumberFormat("tr-TR", {
   style: "currency",
@@ -39,16 +56,65 @@ const APPROVED_STATUS = 2;
  */
 const SUPPLIER_SIDE_ROLES = 2 | 4 | 8 | 16 | 32 | 64 | 128;
 
+/** Son kullanılan gider hesapları burada tutulur (şirket bazında). */
+const RECENT_ACCOUNTS_KEY = "enderun.gider-hesabi.son-kullanilan";
+const RECENT_ACCOUNTS_LIMIT = 5;
+
 type DraftItem = {
   description: string;
   quantity: string;
   unit: string;
   unitPrice: string;
   vatRate: string;
+  inventoryItemId: string;
+  warehouseId: string;
+  expenseAccountId: string;
+  costCenterCode: string;
 };
 
 function emptyItem(vatRate: string): DraftItem {
-  return { description: "", quantity: "1", unit: "adet", unitPrice: "", vatRate };
+  return {
+    description: "",
+    quantity: "1",
+    unit: "adet",
+    unitPrice: "",
+    vatRate,
+    inventoryItemId: "",
+    warehouseId: "",
+    expenseAccountId: "",
+    costCenterCode: "",
+  };
+}
+
+function readRecentAccounts(companyId: string): string[] {
+  if (typeof window === "undefined" || !companyId) return [];
+
+  try {
+    const raw = window.localStorage.getItem(
+      `${RECENT_ACCOUNTS_KEY}.${companyId}`
+    );
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === "string")
+      : [];
+  } catch {
+    // Bozuk kayıt yüzünden ekran açılmamalı; öneri kaybolur, o kadar.
+    return [];
+  }
+}
+
+function writeRecentAccounts(companyId: string, accountIds: string[]) {
+  if (typeof window === "undefined" || !companyId) return;
+
+  try {
+    window.localStorage.setItem(
+      `${RECENT_ACCOUNTS_KEY}.${companyId}`,
+      JSON.stringify(accountIds.slice(0, RECENT_ACCOUNTS_LIMIT))
+    );
+  } catch {
+    // Depolama kotası dolu olabilir; kaydedememek akışı bozmamalı.
+  }
 }
 
 export default function NewSupplierInvoicePage() {
@@ -58,11 +124,19 @@ export default function NewSupplierInvoicePage() {
   const [suppliers, setSuppliers] = useState<CurrentAccountListItem[]>([]);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [orders, setOrders] = useState<PurchaseOrderListItem[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseListItem[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItemListItem[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<AccountingAccountListItem[]>([]);
+  const [branches, setBranches] = useState<BranchListItem[]>([]);
+  const [recentAccountIds, setRecentAccountIds] = useState<string[]>([]);
 
   const [companyId, setCompanyId] = useState("");
+  const [invoiceType, setInvoiceType] = useState<number>(SupplierInvoiceType.Stock);
   const [supplierId, setSupplierId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
+  const [costCenterCode, setCostCenterCode] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(
     new Date().toISOString().slice(0, 10)
@@ -72,8 +146,17 @@ export default function NewSupplierInvoicePage() {
   const [defaultVatRate, setDefaultVatRate] = useState("20");
   const [items, setItems] = useState<DraftItem[]>([emptyItem("20")]);
 
+  const [newCardIndex, setNewCardIndex] = useState<number | null>(null);
+  const [newCardCode, setNewCardCode] = useState("");
+  const [newCardName, setNewCardName] = useState("");
+  const [newCardUnit, setNewCardUnit] = useState("adet");
+  const [newCardSaving, setNewCardSaving] = useState(false);
+  const [newCardError, setNewCardError] = useState("");
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const isStock = invoiceType === SupplierInvoiceType.Stock;
 
   const loadReferenceData = useCallback(async () => {
     try {
@@ -108,20 +191,47 @@ export default function NewSupplierInvoicePage() {
       currentAccountService.getAll(companyId),
       projectService.getAll(companyId),
       purchaseOrderService.getAll({ companyId }),
+      warehouseService.getAll({ companyId }),
+      inventoryService.getItems({ companyId }),
+      accountingAccountService.getAll({ companyId, isActive: true }),
+      branchService.getAll(companyId).catch(() => [] as BranchListItem[]),
     ])
-      .then(([accountList, projectList, orderList]) => {
-        if (!active) return;
-        // Onaylı ve bize fatura kesebilecek roldeki cariler.
-        setSuppliers(
-          accountList.filter(
-            (account) =>
-              account.status === APPROVED_STATUS &&
-              (account.roles & SUPPLIER_SIDE_ROLES) !== 0
-          )
-        );
-        setProjects(projectList);
-        setOrders(orderList);
-      })
+      .then(
+        ([
+          accountList,
+          projectList,
+          orderList,
+          warehouseList,
+          itemList,
+          accountingList,
+          branchList,
+        ]) => {
+          if (!active) return;
+          // Onaylı ve bize fatura kesebilecek roldeki cariler.
+          setSuppliers(
+            accountList.filter(
+              (account) =>
+                account.status === APPROVED_STATUS &&
+                (account.roles & SUPPLIER_SIDE_ROLES) !== 0
+            )
+          );
+          setProjects(projectList);
+          setOrders(orderList);
+          setWarehouses(warehouseList.filter((warehouse) => warehouse.isActive));
+          setInventoryItems(itemList.filter((item) => item.isActive));
+          // Fişe kayıt kabul eden 6xx/7xx hesaplar; grup hesapları
+          // seçilemez, backend zaten reddediyor.
+          setExpenseAccounts(
+            accountingList.filter(
+              (account) =>
+                account.isPostingAllowed &&
+                (account.code.startsWith("6") || account.code.startsWith("7"))
+            )
+          );
+          setBranches(branchList);
+          setRecentAccountIds(readRecentAccounts(companyId));
+        }
+      )
       .catch((err) => {
         if (active) {
           setError(err instanceof Error ? err.message : "Liste verileri alınamadı.");
@@ -143,6 +253,59 @@ export default function NewSupplierInvoicePage() {
     [orders, supplierId, projectId]
   );
 
+  const inventoryOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      inventoryItems.map((item) => ({
+        value: item.id,
+        label: `${item.code} — ${item.name}`,
+        hint: `${item.unit}${item.category ? ` · ${item.category}` : ""} · stok ${item.totalStock}`,
+        keywords: `${item.brand ?? ""} ${item.model ?? ""} ${item.barcode ?? ""}`,
+      })),
+    [inventoryItems]
+  );
+
+  const accountOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      expenseAccounts.map((account) => ({
+        value: account.id,
+        label: `${account.code} — ${account.name}`,
+        hint: account.requiresProject ? "Proje gerektirir" : undefined,
+      })),
+    [expenseAccounts]
+  );
+
+  const recentAccountOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      recentAccountIds
+        .map((id) => accountOptions.find((option) => option.value === id))
+        .filter((option): option is SearchSelectOption => option !== undefined),
+    [recentAccountIds, accountOptions]
+  );
+
+  /**
+   * Masraf merkezi seçenekleri: Merkez (şube kodu) ve projeler. Serbest
+   * metin bırakılsaydı aynı şantiye üç farklı yazımla üç ayrı masraf
+   * merkezi gibi görünürdü.
+   */
+  const costCenterOptions = useMemo(() => {
+    const options: { code: string; label: string }[] = [];
+
+    for (const branch of branches) {
+      if (branch.costCenterCode) {
+        options.push({
+          code: branch.costCenterCode,
+          label: `${branch.costCenterCode} — ${branch.name}`,
+        });
+      }
+    }
+
+    for (const project of projects) {
+      options.push({ code: project.code, label: `${project.code} — ${project.name}` });
+    }
+
+    return options;
+  }, [branches, projects]);
+
   const totals = useMemo(() => {
     let subtotal = 0;
     let vat = 0;
@@ -159,14 +322,30 @@ export default function NewSupplierInvoicePage() {
     return { subtotal, vat, grandTotal: subtotal + vat };
   }, [items]);
 
+  /**
+   * Stok girişi isteniyor mu: depo ya da herhangi bir kalemde stok kartı
+   * seçilmişse evet. Hiçbiri yoksa fatura stoğa uğramayan düz bir alış
+   * (nakliye, hizmet) olarak kaydedilir — backend de aynı kuralı işletir.
+   */
+  const wantsStockEntry = useMemo(
+    () =>
+      isStock &&
+      (warehouseId !== "" ||
+        items.some((item) => item.inventoryItemId !== "" || item.warehouseId !== "")),
+    [isStock, warehouseId, items]
+  );
+
   const validationErrors = useMemo(() => {
     const messages: string[] = [];
 
     if (!companyId) messages.push("Şirket seçin.");
     if (!supplierId) messages.push("Tedarikçi seçin.");
-    if (!projectId) messages.push("Proje seçin.");
     if (!invoiceNumber.trim()) messages.push("Tedarikçi fatura numarası girin.");
     if (!invoiceDate) messages.push("Fatura tarihi girin.");
+
+    if (!isStock && !costCenterCode && !projectId) {
+      messages.push("Gider faturasında masraf merkezi veya proje seçin.");
+    }
 
     items.forEach((item, index) => {
       const line = index + 1;
@@ -191,15 +370,124 @@ export default function NewSupplierInvoicePage() {
       if (!(vatRate >= 0 && vatRate <= 100)) {
         messages.push(`Kalem ${line}: KDV oranı 0-100 arasında olmalı.`);
       }
+
+      if (wantsStockEntry) {
+        if (!item.inventoryItemId) {
+          messages.push(`Kalem ${line}: stok kartı seçin.`);
+        }
+
+        if (!item.warehouseId && !warehouseId) {
+          messages.push(`Kalem ${line}: depo seçin.`);
+        }
+      }
+
+      if (!isStock && !item.expenseAccountId) {
+        messages.push(`Kalem ${line}: gider hesabı seçin.`);
+      }
     });
 
     return messages;
-  }, [companyId, supplierId, projectId, invoiceNumber, invoiceDate, items]);
+  }, [
+    companyId,
+    supplierId,
+    invoiceNumber,
+    invoiceDate,
+    isStock,
+    costCenterCode,
+    projectId,
+    items,
+    wantsStockEntry,
+    warehouseId,
+  ]);
 
   function updateItem(index: number, patch: Partial<DraftItem>) {
     setItems((current) =>
       current.map((item, i) => (i === index ? { ...item, ...patch } : item))
     );
+  }
+
+  /**
+   * Kalem, stok kartı seçilince kartın adı ve birimiyle doldurulur.
+   * Açıklama zaten yazılmışsa üzerine yazılmaz — kullanıcının yazdığı
+   * metin kaybolmamalı.
+   */
+  function chooseInventoryItem(index: number, inventoryItemId: string) {
+    const card = inventoryItems.find((item) => item.id === inventoryItemId);
+
+    setItems((current) =>
+      current.map((item, i) => {
+        if (i !== index) return item;
+
+        return {
+          ...item,
+          inventoryItemId,
+          description: item.description.trim() || card?.name || item.description,
+          unit: card?.unit || item.unit,
+          vatRate:
+            card?.vatRate !== null && card?.vatRate !== undefined
+              ? String(card.vatRate)
+              : item.vatRate,
+        };
+      })
+    );
+  }
+
+  function chooseExpenseAccount(index: number, expenseAccountId: string) {
+    updateItem(index, { expenseAccountId });
+
+    if (!expenseAccountId) return;
+
+    setRecentAccountIds((current) => {
+      const next = [
+        expenseAccountId,
+        ...current.filter((id) => id !== expenseAccountId),
+      ].slice(0, RECENT_ACCOUNTS_LIMIT);
+
+      writeRecentAccounts(companyId, next);
+      return next;
+    });
+  }
+
+  async function createInventoryCard() {
+    if (newCardIndex === null) return;
+
+    if (!newCardCode.trim() || !newCardName.trim()) {
+      setNewCardError("Kart kodu ve adı zorunludur.");
+      return;
+    }
+
+    setNewCardSaving(true);
+    setNewCardError("");
+
+    try {
+      const created = await inventoryService.createItem({
+        companyId,
+        code: newCardCode.trim(),
+        name: newCardName.trim(),
+        unit: newCardUnit.trim() || "adet",
+        minimumStock: 0,
+        maximumStock: 0,
+        type: 0,
+      });
+
+      // Listeyi yeniden çekmek yerine kartı ekliyoruz: kullanıcı
+      // faturanın ortasında, tüm stok listesinin yeniden yüklenmesini
+      // beklememeli.
+      const refreshed = await inventoryService.getItems({ companyId });
+      setInventoryItems(refreshed.filter((item) => item.isActive));
+
+      chooseInventoryItem(newCardIndex, created.id);
+      setNewCardIndex(null);
+      setNewCardCode("");
+      setNewCardName("");
+      setNewCardUnit("adet");
+    } catch (err) {
+      setNewCardError(
+        err instanceof Error ? err.message : "Stok kartı oluşturulamadı."
+      );
+    } finally {
+      setNewCardSaving(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -224,12 +512,16 @@ export default function NewSupplierInvoicePage() {
         unitPrice: Number(item.unitPrice),
         vatRate: Number(item.vatRate),
         purchaseOrderItemId: null,
+        inventoryItemId: isStock ? item.inventoryItemId || null : null,
+        warehouseId: isStock ? item.warehouseId || null : null,
+        expenseAccountId: isStock ? null : item.expenseAccountId || null,
+        costCenterCode: isStock ? null : item.costCenterCode || null,
       }));
 
       const created = await supplierInvoiceService.create({
         companyId,
         supplierCurrentAccountId: supplierId,
-        projectId,
+        projectId: projectId || null,
         purchaseOrderId: purchaseOrderId || null,
         goodsReceiptId: null,
         invoiceNumber: invoiceNumber.trim(),
@@ -239,6 +531,9 @@ export default function NewSupplierInvoicePage() {
         exchangeRate: 1,
         description: description.trim() || null,
         items: payloadItems,
+        invoiceType,
+        warehouseId: isStock ? warehouseId || null : null,
+        costCenterCode: costCenterCode || null,
       });
 
       router.push(`/muhasebe/faturalar/${created.id}`);
@@ -252,7 +547,7 @@ export default function NewSupplierInvoicePage() {
   return (
     <ErpShell
       title="Yeni Tedarikçi Faturası"
-      description="Kalem bazlı KDV'li alış faturası; onaylandığında muhasebe fişi otomatik oluşur"
+      description="Alış faturası stoğa girer, gider faturası doğrudan gider hesabına yazılır"
     >
       {error && <div className="erp-alert error">{error}</div>}
 
@@ -279,6 +574,16 @@ export default function NewSupplierInvoicePage() {
                 setSupplierId("");
                 setProjectId("");
                 setPurchaseOrderId("");
+                setWarehouseId("");
+                setCostCenterCode("");
+                setItems((current) =>
+                  current.map((item) => ({
+                    ...item,
+                    inventoryItemId: "",
+                    warehouseId: "",
+                    expenseAccountId: "",
+                  }))
+                );
               }}
             >
               {companies.map((company) => (
@@ -287,6 +592,39 @@ export default function NewSupplierInvoicePage() {
                 </option>
               ))}
             </select>
+          </label>
+
+          <label>
+            <span>Fatura Tipi *</span>
+            <select
+              value={String(invoiceType)}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                setInvoiceType(next);
+
+                // Tip değişince diğer tipin alanları anlamsızlaşıyor;
+                // ekranda kalırlarsa kullanıcı gönderdiğini sanır ama
+                // backend o alanları o tipte kabul etmez.
+                setWarehouseId("");
+                setItems((current) =>
+                  current.map((item) => ({
+                    ...item,
+                    inventoryItemId: "",
+                    warehouseId: "",
+                    expenseAccountId: "",
+                    costCenterCode: "",
+                  }))
+                );
+              }}
+            >
+              <option value="0">Alış (Stok)</option>
+              <option value="1">Gider</option>
+            </select>
+            <small>
+              {isStock
+                ? "Malzeme alışı: stok kartı ve depo seçilirse onayda stok girer."
+                : "Elektrik, kira, müşavirlik gibi giderler; stoğa girmez."}
+            </small>
           </label>
 
           <label>
@@ -317,38 +655,82 @@ export default function NewSupplierInvoicePage() {
           </label>
 
           <label>
-            <span>Proje *</span>
+            <span>Proje</span>
             <select
-              required
               value={projectId}
               onChange={(e) => {
                 setProjectId(e.target.value);
                 setPurchaseOrderId("");
               }}
             >
-              <option value="">Proje seçin</option>
+              <option value="">Projesiz (merkez gideri)</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.code} — {project.name}
                 </option>
               ))}
             </select>
+            <small>
+              Ofis elektriği, kira, müşavirlik gibi giderlerin projesi yoktur;
+              boş bırakın.
+            </small>
           </label>
 
-          <label>
-            <span>Sipariş (ops.)</span>
-            <select
-              value={purchaseOrderId}
-              onChange={(e) => setPurchaseOrderId(e.target.value)}
-            >
-              <option value="">Siparişsiz (doğrudan fatura)</option>
-              {filteredOrders.map((order) => (
-                <option key={order.id} value={order.id}>
-                  {order.orderNumber} — {money.format(order.grandTotal)}
-                </option>
-              ))}
-            </select>
-          </label>
+          {isStock ? (
+            <>
+              <label>
+                <span>Sipariş (ops.)</span>
+                <select
+                  value={purchaseOrderId}
+                  onChange={(e) => setPurchaseOrderId(e.target.value)}
+                >
+                  <option value="">Siparişsiz (doğrudan fatura)</option>
+                  {filteredOrders.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      {order.orderNumber} — {money.format(order.grandTotal)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <span>Depo (fatura geneli)</span>
+                <select
+                  value={warehouseId}
+                  onChange={(e) => setWarehouseId(e.target.value)}
+                >
+                  <option value="">Depoya girmeyecek</option>
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.code} — {warehouse.name}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  Kalemde ayrı depo seçilmezse bu depo kullanılır. Depo ve stok
+                  kartı boşsa fatura stoğa uğramaz (nakliye, hizmet gibi).
+                </small>
+              </label>
+            </>
+          ) : (
+            <label>
+              <span>Masraf Merkezi (fatura geneli)</span>
+              <select
+                value={costCenterCode}
+                onChange={(e) => setCostCenterCode(e.target.value)}
+              >
+                <option value="">Seçilmedi</option>
+                {costCenterOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <small>
+                Kalemde ayrı masraf merkezi seçilmezse bu kullanılır.
+              </small>
+            </label>
+          )}
 
           <label>
             <span>Tedarikçi Fatura No *</span>
@@ -392,18 +774,28 @@ export default function NewSupplierInvoicePage() {
 
         <div className="erp-form-header" style={{ marginTop: "20px" }}>
           <h2>Kalemler</h2>
-          <p>KDV oranı kalem bazında değiştirilebilir.</p>
+          <p>
+            {isStock
+              ? "Stok kartı listeden seçilir; kart yoksa satırdaki kısayoldan açılır."
+              : "Her kalem hesap planındaki bir gider hesabına yazılır."}
+          </p>
         </div>
 
         <div className="erp-table-wrap">
           <table className="erp-table">
             <thead>
               <tr>
+                <th style={{ minWidth: "220px" }}>
+                  {isStock ? "Stok Kartı" : "Gider Hesabı *"}
+                </th>
                 <th>Açıklama *</th>
                 <th>Miktar *</th>
                 <th>Birim</th>
                 <th>Birim Fiyat *</th>
                 <th>KDV %</th>
+                <th style={{ minWidth: "150px" }}>
+                  {isStock ? "Depo" : "Masraf Merkezi"}
+                </th>
                 <th>Tutar</th>
                 <th></th>
               </tr>
@@ -414,6 +806,35 @@ export default function NewSupplierInvoicePage() {
                   (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
                 return (
                   <tr key={index}>
+                    <td>
+                      {isStock ? (
+                        <ErpSearchSelect
+                          options={inventoryOptions}
+                          value={item.inventoryItemId}
+                          onChange={(next) => chooseInventoryItem(index, next)}
+                          placeholder="Kart ara (kod, isim, marka)"
+                          emptyMessage="Eşleşen stok kartı yok."
+                          onCreate={(typed) => {
+                            setNewCardIndex(index);
+                            setNewCardName(typed || item.description);
+                            setNewCardCode("");
+                            setNewCardUnit(item.unit || "adet");
+                            setNewCardError("");
+                          }}
+                          createLabel="Yeni stok kartı"
+                        />
+                      ) : (
+                        <ErpSearchSelect
+                          options={accountOptions}
+                          value={item.expenseAccountId}
+                          onChange={(next) => chooseExpenseAccount(index, next)}
+                          placeholder="Hesap ara (kod veya ad)"
+                          emptyMessage="Eşleşen gider hesabı yok."
+                          quickPicks={recentAccountOptions}
+                          quickPickLabel="Son kullanılanlar"
+                        />
+                      )}
+                    </td>
                     <td>
                       <input
                         type="text"
@@ -457,6 +878,37 @@ export default function NewSupplierInvoicePage() {
                         value={item.vatRate}
                         onChange={(e) => updateItem(index, { vatRate: e.target.value })}
                       />
+                    </td>
+                    <td>
+                      {isStock ? (
+                        <select
+                          value={item.warehouseId}
+                          onChange={(e) =>
+                            updateItem(index, { warehouseId: e.target.value })
+                          }
+                        >
+                          <option value="">Fatura deposu</option>
+                          {warehouses.map((warehouse) => (
+                            <option key={warehouse.id} value={warehouse.id}>
+                              {warehouse.code} — {warehouse.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <select
+                          value={item.costCenterCode}
+                          onChange={(e) =>
+                            updateItem(index, { costCenterCode: e.target.value })
+                          }
+                        >
+                          <option value="">Fatura masraf merkezi</option>
+                          {costCenterOptions.map((option) => (
+                            <option key={option.code} value={option.code}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td>{money.format(lineSubtotal)}</td>
                     <td>
@@ -511,6 +963,70 @@ export default function NewSupplierInvoicePage() {
           </button>
         </div>
       </form>
+
+      {newCardIndex !== null && (
+        <div className="erp-modal-backdrop" role="presentation">
+          <div className="erp-modal" role="dialog" aria-modal="true">
+            <div className="erp-form-header">
+              <h2>Yeni Stok Kartı</h2>
+              <p>
+                Kart oluşturulunca kalem otomatik olarak bu kartla eşleşir.
+                Ayrıntılar sonradan Depo ekranından tamamlanabilir.
+              </p>
+            </div>
+
+            {newCardError && <div className="erp-alert error">{newCardError}</div>}
+
+            <div className="erp-form-grid">
+              <label>
+                <span>Kart Kodu *</span>
+                <input
+                  type="text"
+                  value={newCardCode}
+                  onChange={(e) => setNewCardCode(e.target.value)}
+                  placeholder="Örn. KBL-3X25"
+                />
+              </label>
+
+              <label>
+                <span>Kart Adı *</span>
+                <input
+                  type="text"
+                  value={newCardName}
+                  onChange={(e) => setNewCardName(e.target.value)}
+                />
+              </label>
+
+              <label>
+                <span>Birim</span>
+                <input
+                  type="text"
+                  value={newCardUnit}
+                  onChange={(e) => setNewCardUnit(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="erp-form-actions">
+              <button
+                type="button"
+                className="erp-secondary-button"
+                onClick={() => setNewCardIndex(null)}
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                className="erp-primary-button"
+                disabled={newCardSaving}
+                onClick={() => void createInventoryCard()}
+              >
+                {newCardSaving ? "Oluşturuluyor..." : "Kartı Oluştur ve Seç"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ErpShell>
   );
 }

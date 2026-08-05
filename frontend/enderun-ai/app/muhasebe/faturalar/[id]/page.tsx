@@ -193,9 +193,30 @@ export default function SupplierInvoiceDetailPage() {
                 <input readOnly value={invoice.supplierTitle} />
               </label>
               <label>
-                <span>Proje</span>
-                <input readOnly value={`${invoice.projectCode} — ${invoice.projectName}`} />
+                <span>Fatura Tipi</span>
+                <input readOnly value={invoice.invoiceTypeName} />
               </label>
+              <label>
+                <span>Proje</span>
+                <input
+                  readOnly
+                  value={
+                    invoice.projectId
+                      ? `${invoice.projectCode} — ${invoice.projectName}`
+                      : "Projesiz (merkez gideri)"
+                  }
+                />
+              </label>
+              <label>
+                <span>Masraf Merkezi</span>
+                <input readOnly value={invoice.costCenterCode ?? "—"} />
+              </label>
+              {invoice.invoiceType === 0 && (
+                <label>
+                  <span>Depo</span>
+                  <input readOnly value={invoice.warehouseName ?? "Depoya girmiyor"} />
+                </label>
+              )}
               <label>
                 <span>Fatura Tarihi</span>
                 <input readOnly value={dateFormat.format(new Date(invoice.invoiceDate))} />
@@ -255,6 +276,7 @@ export default function SupplierInvoiceDetailPage() {
                 <thead>
                   <tr>
                     <th>#</th>
+                    <th>{invoice.invoiceType === 0 ? "Stok Kartı / Depo" : "Gider Hesabı"}</th>
                     <th>Açıklama</th>
                     <th>Miktar</th>
                     <th>Birim Fiyat</th>
@@ -268,6 +290,37 @@ export default function SupplierInvoiceDetailPage() {
                   {invoice.items.map((item) => (
                     <tr key={item.id}>
                       <td>{item.lineNumber}</td>
+                      <td>
+                        {invoice.invoiceType === 0 ? (
+                          item.inventoryItemId ? (
+                            <>
+                              <div>
+                                {item.inventoryItemCode} — {item.inventoryItemName}
+                              </div>
+                              <small>
+                                {item.warehouseName ??
+                                  invoice.warehouseName ??
+                                  "Depo seçilmedi"}
+                              </small>
+                            </>
+                          ) : (
+                            <small>Stok kartı yok</small>
+                          )
+                        ) : item.expenseAccountId ? (
+                          <>
+                            <div>
+                              {item.expenseAccountCode} — {item.expenseAccountName}
+                            </div>
+                            <small>
+                              {item.costCenterCode ??
+                                invoice.costCenterCode ??
+                                "Masraf merkezi yok"}
+                            </small>
+                          </>
+                        ) : (
+                          <small>Hesap seçilmedi</small>
+                        )}
+                      </td>
                       <td>{item.description}</td>
                       <td>
                         {item.quantity} {item.unit}

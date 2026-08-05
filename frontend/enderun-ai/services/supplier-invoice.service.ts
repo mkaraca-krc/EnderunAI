@@ -37,6 +37,18 @@ export const MATCH_STATUS_COLORS: Record<number, string> = {
   2: "yellow",
 };
 
+export const SupplierInvoiceType = {
+  /** Stok kartına bağlı malzeme alışı; onayda depoya girer. */
+  Stock: 0,
+  /** Elektrik, kira, müşavirlik gibi giderler; stoğa girmez. */
+  Expense: 1,
+} as const;
+
+export const SUPPLIER_INVOICE_TYPE_LABELS: Record<number, string> = {
+  0: "Alış (Stok)",
+  1: "Gider",
+};
+
 export type SupplierInvoiceItem = {
   id: string;
   lineNumber: number;
@@ -49,6 +61,15 @@ export type SupplierInvoiceItem = {
   vatAmount: number;
   lineTotal: number;
   purchaseOrderItemId?: string | null;
+  inventoryItemId?: string | null;
+  inventoryItemCode?: string | null;
+  inventoryItemName?: string | null;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
+  expenseAccountId?: string | null;
+  expenseAccountCode?: string | null;
+  expenseAccountName?: string | null;
+  costCenterCode?: string | null;
 };
 
 export type SupplierInvoiceListItem = {
@@ -58,9 +79,12 @@ export type SupplierInvoiceListItem = {
   invoiceDate: string;
   supplierCurrentAccountId: string;
   supplierTitle: string;
-  projectId: string;
-  projectCode: string;
-  projectName: string;
+  projectId?: string | null;
+  projectCode?: string | null;
+  projectName?: string | null;
+  invoiceType: number;
+  invoiceTypeName: string;
+  costCenterCode?: string | null;
   currencyCode: string;
   subtotal: number;
   vatTotal: number;
@@ -81,9 +105,14 @@ export type SupplierInvoiceDetail = {
   dueDate?: string | null;
   supplierCurrentAccountId: string;
   supplierTitle: string;
-  projectId: string;
-  projectCode: string;
-  projectName: string;
+  projectId?: string | null;
+  projectCode?: string | null;
+  projectName?: string | null;
+  invoiceType: number;
+  invoiceTypeName: string;
+  costCenterCode?: string | null;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
   purchaseOrderId?: string | null;
   purchaseOrderNumber?: string | null;
   goodsReceiptId?: string | null;
@@ -115,12 +144,21 @@ export type SupplierInvoiceItemPayload = {
   unitPrice: number;
   vatRate: number;
   purchaseOrderItemId?: string | null;
+  /** ALIŞ faturasında stok girişi yapılacaksa kalemin stok kartı. */
+  inventoryItemId?: string | null;
+  /** Kalemin deposu; boşsa faturanın deposu kullanılır. */
+  warehouseId?: string | null;
+  /** GİDER faturasında zorunlu — kalemin gider hesabı. */
+  expenseAccountId?: string | null;
+  /** Kalemin masraf merkezi; boşsa faturanınki kullanılır. */
+  costCenterCode?: string | null;
 };
 
 export type CreateSupplierInvoicePayload = {
   companyId: string;
   supplierCurrentAccountId: string;
-  projectId: string;
+  /** Merkez giderinde boş bırakılır. */
+  projectId?: string | null;
   purchaseOrderId?: string | null;
   goodsReceiptId?: string | null;
   invoiceNumber: string;
@@ -130,6 +168,12 @@ export type CreateSupplierInvoicePayload = {
   exchangeRate: number;
   description?: string | null;
   items: SupplierInvoiceItemPayload[];
+  /** 0 = Alış (stok), 1 = Gider. */
+  invoiceType?: number;
+  /** ALIŞ faturasının varsayılan deposu. */
+  warehouseId?: string | null;
+  /** Faturanın varsayılan masraf merkezi. */
+  costCenterCode?: string | null;
 };
 
 export type SupplierInvoiceActionResult = {
@@ -197,6 +241,8 @@ export type CompanyFinanceSettings = {
   vatOutAccountId?: string | null;
   salesAccountId?: string | null;
   expenseAccountId?: string | null;
+  /** Stok hesabı (153/150); alış faturası buraya yazılır. */
+  inventoryAccountId?: string | null;
   payablesAccountId?: string | null;
   receivablesAccountId?: string | null;
   factoringExpenseAccountId?: string | null;

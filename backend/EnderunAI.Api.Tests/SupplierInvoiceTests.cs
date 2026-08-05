@@ -448,4 +448,64 @@ public sealed class SupplierInvoiceTests(DatabaseFixture fixture)
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    /// <summary>
+    /// Stok hesabı ayarlardan seçilebilmeli: seçilemezse alış faturası
+    /// her şirkette 740 maliyete düşer ve depodaki mal bilançoya girmez.
+    /// </summary>
+    [Fact]
+    public async Task FinanceSettings_PersistsInventoryAccount()
+    {
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var current = await client.GetFromJsonAsync<JsonElement>(
+            "/api/company-settings/finance-settings");
+
+        Guid inventoryAccountId;
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var companyId = await db.Companies
+                .OrderBy(x => x.CreatedAtUtc)
+                .Select(x => x.Id)
+                .FirstAsync();
+
+            var account = new AccountingAccount
+            {
+                CompanyId = companyId,
+                Code = $"153-{Guid.NewGuid():N}"[..12],
+                Name = "Ticari Mallar",
+                Nature = AccountingAccountNature.Debit,
+                Level = 3,
+                IsPostingAllowed = true
+            };
+            db.AccountingAccounts.Add(account);
+            await db.SaveChangesAsync();
+            inventoryAccountId = account.Id;
+        }
+
+        var response = await client.PutAsJsonAsync("/api/company-settings/finance-settings", new
+        {
+            gmApprovalThresholdTry = current.GetProperty("gmApprovalThresholdTry").GetDecimal(),
+            threeWayTolerancePercent = current.GetProperty("threeWayTolerancePercent").GetDecimal(),
+            defaultVatRate = current.GetProperty("defaultVatRate").GetDecimal(),
+            vatInAccountId = (Guid?)null,
+            vatOutAccountId = (Guid?)null,
+            salesAccountId = (Guid?)null,
+            expenseAccountId = (Guid?)null,
+            inventoryAccountId,
+            payablesAccountId = (Guid?)null,
+            receivablesAccountId = (Guid?)null,
+            factoringExpenseAccountId = (Guid?)null,
+            deductionAccountId = (Guid?)null
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var saved = await client.GetFromJsonAsync<JsonElement>(
+            "/api/company-settings/finance-settings");
+
+        Assert.Equal(inventoryAccountId,
+            saved.GetProperty("inventoryAccountId").GetGuid());
+    }
 }

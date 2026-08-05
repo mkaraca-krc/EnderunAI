@@ -154,8 +154,9 @@ export default function SupplierInvoicesPage() {
               <thead>
                 <tr>
                   <th>Fatura No</th>
+                  <th>Tip</th>
                   <th>Tedarikçi</th>
-                  <th>Proje</th>
+                  <th>Proje / Masraf Merkezi</th>
                   <th>Tarih</th>
                   <th>Tutar</th>
                   <th>3 Yönlü</th>
@@ -172,10 +173,26 @@ export default function SupplierInvoicesPage() {
                       </Link>
                       <small>{item.internalNumber}</small>
                     </td>
+                    <td>
+                      <span
+                        className={`erp-status ${item.invoiceType === 1 ? "yellow" : "gray"}`}
+                      >
+                        {item.invoiceTypeName}
+                      </span>
+                    </td>
                     <td>{item.supplierTitle}</td>
                     <td>
-                      {item.projectCode}
-                      <small>{item.projectName}</small>
+                      {item.projectId ? (
+                        <>
+                          {item.projectCode}
+                          <small>{item.projectName}</small>
+                        </>
+                      ) : (
+                        <>
+                          {item.costCenterCode ?? "—"}
+                          <small>Projesiz</small>
+                        </>
+                      )}
                     </td>
                     <td>{dateFormat.format(new Date(item.invoiceDate))}</td>
                     <td>

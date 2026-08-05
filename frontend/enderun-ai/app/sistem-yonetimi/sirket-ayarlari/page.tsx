@@ -351,6 +351,7 @@ export default function CompanySettingsPage() {
         vatOutAccountId: financeSettings.vatOutAccountId ?? null,
         salesAccountId: financeSettings.salesAccountId ?? null,
         expenseAccountId: financeSettings.expenseAccountId ?? null,
+        inventoryAccountId: financeSettings.inventoryAccountId ?? null,
         payablesAccountId: financeSettings.payablesAccountId ?? null,
         receivablesAccountId: financeSettings.receivablesAccountId ?? null,
         factoringExpenseAccountId: financeSettings.factoringExpenseAccountId ?? null,
@@ -685,6 +686,7 @@ export default function CompanySettingsPage() {
                       {(
                         [
                           ["expenseAccountId", "Maliyet Hesabı (740)"],
+                          ["inventoryAccountId", "Stok Hesabı (153)"],
                           ["vatInAccountId", "İndirilecek KDV (191)"],
                           ["payablesAccountId", "Satıcılar (320)"],
                           ["receivablesAccountId", "Alıcılar (120)"],

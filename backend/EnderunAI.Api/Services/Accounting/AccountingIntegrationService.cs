@@ -177,6 +177,10 @@ public sealed class AccountingIntegrationService(
             VatOutAccountId = await FindAccountIdAsync(companyId, cancellationToken, "391.09", "391"),
             SalesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "600.03", "600"),
             ExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "740"),
+            // Stok alışı 153'e yazılır; boş bırakılsaydı yeni şirkette
+            // malzeme alışı doğrudan 740 maliyete düşer ve depodaki mal
+            // hiç bilançoya girmezdi.
+            InventoryAccountId = await FindAccountIdAsync(companyId, cancellationToken, "153", "150"),
             PayablesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "320"),
             ReceivablesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "120"),
             FactoringExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "780.01.01", "780"),

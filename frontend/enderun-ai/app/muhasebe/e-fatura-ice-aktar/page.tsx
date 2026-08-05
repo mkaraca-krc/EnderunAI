@@ -4,12 +4,24 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import ErpSearchSelect, {
+  type SearchSelectOption,
+} from "@/components/erp/erp-search-select";
+import {
+  accountingAccountService,
+  type AccountingAccountListItem,
+} from "@/services/accounting-account.service";
+import { branchService, type BranchListItem } from "@/services/branch.service";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import {
   currentAccountService,
   type CurrentAccountListItem,
 } from "@/services/current-account.service";
+import {
+  warehouseService,
+  type WarehouseListItem,
+} from "@/services/warehouse.service";
 import {
   DIRECTION_COLORS,
   InvoiceDirection,
@@ -28,12 +40,20 @@ type RowDecision = {
   currentAccountId: string;
   createCurrentAccount: boolean;
   projectId: string;
+  /** 0 Alış (Stok) / 1 Gider. Öneriyle dolu gelir, değiştirilebilir. */
+  invoiceType: number;
+  expenseAccountId: string;
+  costCenterCode: string;
+  warehouseId: string;
 };
 
 export default function EInvoiceImportPage() {
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [accounts, setAccounts] = useState<CurrentAccountListItem[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<AccountingAccountListItem[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseListItem[]>([]);
+  const [branches, setBranches] = useState<BranchListItem[]>([]);
 
   const [companyId, setCompanyId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -77,12 +97,27 @@ export default function EInvoiceImportPage() {
     if (!companyId) return;
 
     try {
-      const [projectList, accountList] = await Promise.all([
-        projectService.getAll(companyId),
-        currentAccountService.getAll(companyId),
-      ]);
+      const [projectList, accountList, accountingList, warehouseList, branchList] =
+        await Promise.all([
+          projectService.getAll(companyId),
+          currentAccountService.getAll(companyId),
+          accountingAccountService.getAll({ companyId, isActive: true }),
+          warehouseService.getAll({ companyId }),
+          branchService.getAll(companyId).catch(() => [] as BranchListItem[]),
+        ]);
+
       setProjects(projectList);
       setAccounts(accountList);
+      // Fişe kayıt kabul eden 6xx/7xx hesaplar; grup hesabı seçilemez.
+      setExpenseAccounts(
+        accountingList.filter(
+          (account) =>
+            account.isPostingAllowed &&
+            (account.code.startsWith("6") || account.code.startsWith("7"))
+        )
+      );
+      setWarehouses(warehouseList.filter((warehouse) => warehouse.isActive));
+      setBranches(branchList);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Proje/cari listesi alınamadı.");
     }
@@ -115,6 +150,12 @@ export default function EInvoiceImportPage() {
           currentAccountId: item.matchedCurrentAccountId ?? "",
           createCurrentAccount: !item.matchedCurrentAccountId,
           projectId: "",
+          // Öneri seçili gelir ama kararı kullanıcı verir; elektrik
+          // sanılan kalem pekâlâ şantiyeye giden pano malzemesi olabilir.
+          invoiceType: item.suggestedInvoiceType,
+          expenseAccountId: item.suggestedExpenseAccountId ?? "",
+          costCenterCode: "",
+          warehouseId: "",
         };
       });
 
@@ -147,6 +188,39 @@ export default function EInvoiceImportPage() {
     });
   };
 
+  const expenseAccountOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      expenseAccounts.map((account) => ({
+        value: account.id,
+        label: `${account.code} — ${account.name}`,
+      })),
+    [expenseAccounts]
+  );
+
+  /**
+   * Masraf merkezi seçenekleri: Merkez (şube kodu) ve projeler. Serbest
+   * metin bırakılsaydı aynı şantiye farklı yazımlarla birden çok masraf
+   * merkezi gibi görünürdü.
+   */
+  const costCenterOptions = useMemo(() => {
+    const options: { code: string; label: string }[] = [];
+
+    for (const branch of branches) {
+      if (branch.costCenterCode) {
+        options.push({
+          code: branch.costCenterCode,
+          label: `${branch.costCenterCode} — ${branch.name}`,
+        });
+      }
+    }
+
+    for (const project of projects) {
+      options.push({ code: project.code, label: `${project.code} — ${project.name}` });
+    }
+
+    return options;
+  }, [branches, projects]);
+
   const selectedRows = useMemo(
     () =>
       (preview?.items ?? []).filter(
@@ -155,11 +229,33 @@ export default function EInvoiceImportPage() {
     [preview, decisions]
   );
 
-  const missingProject = useMemo(
+  /**
+   * Gider faturasında hesap zorunlu: hesapsız taslak kaydedilirse hata
+   * günler sonra, fatura onaya geldiğinde ortaya çıkar.
+   */
+  const missingExpenseAccount = useMemo(
     () =>
       selectedRows.filter(
         (item) =>
           item.direction === InvoiceDirection.Purchase &&
+          decisions[item.token]?.invoiceType === 1 &&
+          !decisions[item.token]?.expenseAccountId
+      ).length,
+    [selectedRows, decisions]
+  );
+
+  /**
+   * Masraf merkezi teknik olarak zorunlu değil (fiş şirket koduna
+   * düşer) ama boş bırakılan gider hangi birime ait olduğu belli
+   * olmadan raporlara girer; uyarmak gerekir.
+   */
+  const missingCostCenter = useMemo(
+    () =>
+      selectedRows.filter(
+        (item) =>
+          item.direction === InvoiceDirection.Purchase &&
+          decisions[item.token]?.invoiceType === 1 &&
+          !decisions[item.token]?.costCenterCode &&
           !decisions[item.token]?.projectId
       ).length,
     [selectedRows, decisions]
@@ -186,11 +282,18 @@ export default function EInvoiceImportPage() {
         selectedRows.map((item) => {
           const decision = decisions[item.token];
 
+          const isPurchase = item.direction === InvoiceDirection.Purchase;
+          const isExpense = isPurchase && decision.invoiceType === 1;
+
           return {
             token: item.token,
             currentAccountId: decision.currentAccountId || null,
             createCurrentAccount: decision.createCurrentAccount,
             projectId: decision.projectId || null,
+            invoiceType: isPurchase ? decision.invoiceType : 0,
+            expenseAccountId: isExpense ? decision.expenseAccountId || null : null,
+            costCenterCode: isPurchase ? decision.costCenterCode || null : null,
+            warehouseId: isExpense ? null : decision.warehouseId || null,
           };
         })
       );
@@ -406,7 +509,9 @@ export default function EInvoiceImportPage() {
                   <th>Yön</th>
                   <th>Karşı Taraf</th>
                   <th>Cari</th>
-                  <th>Proje</th>
+                  <th>Tip</th>
+                  <th style={{ minWidth: "220px" }}>Gider Hesabı / Depo</th>
+                  <th>Proje / Masraf Merkezi</th>
                   <th>Tutar</th>
                   <th>Kaynak</th>
                 </tr>
@@ -423,6 +528,9 @@ export default function EInvoiceImportPage() {
                       decision={decision}
                       projects={projects}
                       accounts={accounts}
+                      expenseAccountOptions={expenseAccountOptions}
+                      costCenterOptions={costCenterOptions}
+                      warehouses={warehouses}
                       expanded={expanded === rowKey}
                       onToggleExpand={() =>
                         setExpanded(expanded === rowKey ? null : rowKey)
@@ -436,10 +544,19 @@ export default function EInvoiceImportPage() {
           </div>
 
           <div style={{ padding: "16px", display: "grid", gap: "10px" }}>
-            {missingProject > 0 && (
+            {missingExpenseAccount > 0 && (
               <div className="erp-alert warning">
-                {missingProject} alış faturasında proje seçilmedi. Alış faturası
-                muhasebe fişinde masraf merkezi zorunludur.
+                {missingExpenseAccount} gider faturasında gider hesabı
+                seçilmedi. Hesapsız gider faturası onaya geldiğinde fiş
+                üretilemez.
+              </div>
+            )}
+
+            {missingCostCenter > 0 && (
+              <div className="erp-alert warning">
+                {missingCostCenter} gider faturasında masraf merkezi ve proje
+                boş. Gider hangi birime yazılacağı belli olmadan raporlara
+                girer.
               </div>
             )}
 
@@ -457,7 +574,7 @@ export default function EInvoiceImportPage() {
                 disabled={
                   saving ||
                   selectedRows.length === 0 ||
-                  missingProject > 0 ||
+                  missingExpenseAccount > 0 ||
                   missingAccount > 0
                 }
                 onClick={() => void handleCommit()}
@@ -497,6 +614,9 @@ function PreviewRow({
   decision,
   projects,
   accounts,
+  expenseAccountOptions,
+  costCenterOptions,
+  warehouses,
   expanded,
   onToggleExpand,
   onChange,
@@ -505,11 +625,16 @@ function PreviewRow({
   decision?: RowDecision;
   projects: ProjectListItem[];
   accounts: CurrentAccountListItem[];
+  expenseAccountOptions: SearchSelectOption[];
+  costCenterOptions: { code: string; label: string }[];
+  warehouses: WarehouseListItem[];
   expanded: boolean;
   onToggleExpand: () => void;
   onChange: (patch: Partial<RowDecision>) => void;
 }) {
   const isSales = item.direction === InvoiceDirection.Sales;
+  const isPurchase = item.direction === InvoiceDirection.Purchase;
+  const isExpense = isPurchase && decision?.invoiceType === 1;
 
   return (
     <>
@@ -587,18 +712,94 @@ function PreviewRow({
         </td>
 
         <td>
-          {item.canImport ? (
+          {item.canImport && isPurchase ? (
+            <>
+              <select
+                value={String(decision?.invoiceType ?? 0)}
+                onChange={(e) =>
+                  onChange({
+                    invoiceType: Number(e.target.value),
+                    // Tip değişince diğer tipin alanı anlamsızlaşıyor.
+                    expenseAccountId: "",
+                    warehouseId: "",
+                  })
+                }
+              >
+                <option value="0">Alış (Stok)</option>
+                <option value="1">Gider</option>
+              </select>
+              {item.suggestionReason && (
+                <small>{item.suggestionReason}</small>
+              )}
+            </>
+          ) : (
+            "—"
+          )}
+        </td>
+
+        <td>
+          {!item.canImport || !isPurchase ? (
+            "—"
+          ) : isExpense ? (
+            <>
+              <ErpSearchSelect
+                options={expenseAccountOptions}
+                value={decision?.expenseAccountId ?? ""}
+                onChange={(next) => onChange({ expenseAccountId: next })}
+                placeholder="Gider hesabı ara"
+                emptyMessage="Eşleşen gider hesabı yok."
+              />
+              {item.suggestedExpenseAccountCode &&
+                decision?.expenseAccountId === item.suggestedExpenseAccountId && (
+                  <small>Öneri: {item.suggestedExpenseAccountCode}</small>
+                )}
+            </>
+          ) : (
             <select
-              value={decision?.projectId ?? ""}
-              onChange={(e) => onChange({ projectId: e.target.value })}
+              value={decision?.warehouseId ?? ""}
+              onChange={(e) => onChange({ warehouseId: e.target.value })}
             >
-              <option value="">{isSales ? "Proje yok" : "Proje seçin"}</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.code} — {project.name}
+              <option value="">Depoya girmeyecek</option>
+              {warehouses.map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.code} — {warehouse.name}
                 </option>
               ))}
             </select>
+          )}
+        </td>
+
+        <td>
+          {item.canImport ? (
+            <>
+              <select
+                value={decision?.projectId ?? ""}
+                onChange={(e) => onChange({ projectId: e.target.value })}
+              >
+                <option value="">
+                  {isSales ? "Proje yok" : "Projesiz (merkez)"}
+                </option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.code} — {project.name}
+                  </option>
+                ))}
+              </select>
+
+              {isPurchase && (
+                <select
+                  value={decision?.costCenterCode ?? ""}
+                  onChange={(e) => onChange({ costCenterCode: e.target.value })}
+                >
+                  <option value="">Masraf merkezi seçilmedi</option>
+                  {costCenterOptions.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </>
           ) : (
             "—"
           )}
@@ -623,7 +824,7 @@ function PreviewRow({
 
       {(item.problems.length > 0 || item.requiresManualReview) && (
         <tr>
-          <td colSpan={8} style={{ paddingTop: 0 }}>
+          <td colSpan={10} style={{ paddingTop: 0 }}>
             {item.requiresManualReview && (
               <div className="erp-alert warning">
                 Bu fatura AI yedek okuyucuyla okundu veya tutarları şüpheli.
@@ -646,7 +847,7 @@ function PreviewRow({
 
       {expanded && item.lines.length > 0 && (
         <tr>
-          <td colSpan={8}>
+          <td colSpan={10}>
             <table className="erp-table">
               <thead>
                 <tr>

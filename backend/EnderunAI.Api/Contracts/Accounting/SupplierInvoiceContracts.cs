@@ -155,6 +155,8 @@ public sealed record CompanyFinanceSettingsResponse(
     Guid? VatOutAccountId,
     Guid? SalesAccountId,
     Guid? ExpenseAccountId,
+    /// <summary>Stok hesabı (153/150); alış faturası buraya yazılır.</summary>
+    Guid? InventoryAccountId,
     Guid? PayablesAccountId,
     Guid? ReceivablesAccountId,
     Guid? FactoringExpenseAccountId,
@@ -168,6 +170,8 @@ public sealed record UpdateCompanyFinanceSettingsRequest(
     Guid? VatOutAccountId,
     Guid? SalesAccountId,
     Guid? ExpenseAccountId,
+    /// <summary>Stok hesabı (153/150); alış faturası buraya yazılır.</summary>
+    Guid? InventoryAccountId,
     Guid? PayablesAccountId,
     Guid? ReceivablesAccountId,
     Guid? FactoringExpenseAccountId,

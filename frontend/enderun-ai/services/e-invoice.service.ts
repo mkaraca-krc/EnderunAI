@@ -44,6 +44,14 @@ export type ImportPreviewItem = {
   requiresManualReview: boolean;
   duplicateOfId?: string | null;
   problems: string[];
+  /** 0 Alış (Stok) / 1 Gider — anahtar kelimeden çıkan öneri. */
+  suggestedInvoiceType: number;
+  suggestedInvoiceTypeName: string;
+  suggestedExpenseAccountId?: string | null;
+  suggestedExpenseAccountCode?: string | null;
+  suggestedExpenseAccountName?: string | null;
+  /** Önerinin gerekçesi; kullanıcı körü körüne onaylamasın. */
+  suggestionReason?: string | null;
   token: string;
 };
 
@@ -64,7 +72,15 @@ export type ImportCommitItem = {
   token: string;
   currentAccountId?: string | null;
   createCurrentAccount: boolean;
+  /** Merkez giderinde boş bırakılır; zorunlu değildir. */
   projectId?: string | null;
+  /** 0 Alış (Stok) / 1 Gider. */
+  invoiceType?: number;
+  /** Gider faturasında zorunlu — kalemlere yazılacak hesap. */
+  expenseAccountId?: string | null;
+  costCenterCode?: string | null;
+  /** Alış faturasının deposu. */
+  warehouseId?: string | null;
 };
 
 export type ImportCommitCreated = {
