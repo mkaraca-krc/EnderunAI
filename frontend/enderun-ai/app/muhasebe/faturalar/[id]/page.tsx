@@ -32,6 +32,14 @@ export default function SupplierInvoiceDetailPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const [showReturnForm, setShowReturnForm] = useState(false);
+  const [returnForm, setReturnForm] = useState({
+    invoiceNumber: "",
+    invoiceDate: new Date().toISOString().slice(0, 10),
+    description: "",
+  });
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -75,8 +83,63 @@ export default function SupplierInvoiceDetailPage() {
   }
 
   async function cancel() {
+    // Onaylanmış faturada iptal muhasebeye ters fişle yansır; gerekçe
+    // hem fişte hem denetim izinde görünür, bu yüzden zorunlu.
+    if (invoice?.status === 2) {
+      const reason = window.prompt(
+        "İptal gerekçesi (ters fişte ve denetim izinde görünecek):"
+      );
+
+      if (!reason?.trim()) return;
+
+      await runAction(() => supplierInvoiceService.cancel(invoiceId, reason.trim()));
+      return;
+    }
+
     if (!window.confirm("Bu faturayı iptal etmek istediğinize emin misiniz?")) return;
     await runAction(() => supplierInvoiceService.cancel(invoiceId));
+  }
+
+  async function createReturn(event: React.FormEvent) {
+    event.preventDefault();
+    if (!invoice) return;
+
+    const items = Object.entries(returnQuantities)
+      .map(([itemId, quantity]) => ({
+        originalItemId: itemId,
+        quantity: Number(quantity) || 0,
+      }))
+      .filter((item) => item.quantity > 0);
+
+    if (items.length === 0) {
+      setError("İade edilecek en az bir kalem için miktar girin.");
+      return;
+    }
+
+    if (!returnForm.invoiceNumber.trim()) {
+      setError("İade fatura numarası zorunludur.");
+      return;
+    }
+
+    setProcessing(true);
+    setError("");
+
+    try {
+      const created = await supplierInvoiceService.createReturn(invoiceId, {
+        invoiceNumber: returnForm.invoiceNumber.trim(),
+        invoiceDate: returnForm.invoiceDate,
+        items,
+        description: returnForm.description.trim() || null,
+      });
+
+      setShowReturnForm(false);
+      setReturnQuantities({});
+      router.push(`/muhasebe/faturalar/${created.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "İade faturası oluşturulamadı.");
+    } finally {
+      setProcessing(false);
+    }
   }
 
   return (
@@ -173,8 +236,37 @@ export default function SupplierInvoiceDetailPage() {
                 >
                   Listeye Dön
                 </button>
+
+                {invoice.status === 2 && !invoice.isReturn && (
+                  <button
+                    type="button"
+                    className="erp-secondary-button"
+                    disabled={processing}
+                    onClick={() => setShowReturnForm((value) => !value)}
+                  >
+                    İade Faturası Oluştur
+                  </button>
+                )}
               </div>
             </div>
+
+            {invoice.isReturn && (
+              <div className="erp-alert warning">
+                Bu belge bir İADE faturasıdır
+                {invoice.originalInvoiceNumber
+                  ? ` (${invoice.originalInvoiceNumber} numaralı faturanın iadesi)`
+                  : ""}
+                . Onaylandığında muhasebe fişi ters yönde kesilir ve stok
+                kartlı kalemler depodan çıkar.
+              </div>
+            )}
+
+            {invoice.reversalVoucherNumber && (
+              <div className="erp-alert">
+                Bu fatura iptal edildi; {invoice.reversalVoucherNumber} numaralı ters
+                fiş kesildi. Orijinal fiş defterde durmaya devam eder.
+              </div>
+            )}
 
             {invoice.requiresGmApproval && invoice.status === 1 && (
               <div className="erp-alert warning">
@@ -185,6 +277,119 @@ export default function SupplierInvoiceDetailPage() {
 
             {invoice.matchNote && !invoice.requiresGmApproval && (
               <div className="erp-alert">{invoice.matchNote}</div>
+            )}
+
+            {showReturnForm && invoice.returnableItems.length > 0 && (
+              <form
+                onSubmit={createReturn}
+                className="erp-form-card"
+                style={{ marginBottom: "12px" }}
+              >
+                <div className="erp-form-header">
+                  <h2>İade Faturası</h2>
+                  <p>
+                    Mal iadesinde faturayı iade eden taraf keser; numarası
+                    bizim kestiğimiz belgeye aittir. Birim fiyat ve KDV oranı
+                    orijinalden kopyalanır — iade, alışın aynası olmalı.
+                  </p>
+                </div>
+
+                <div className="erp-form-grid">
+                  <label>
+                    <span>İade Fatura No *</span>
+                    <input
+                      required
+                      value={returnForm.invoiceNumber}
+                      onChange={(e) =>
+                        setReturnForm({ ...returnForm, invoiceNumber: e.target.value })
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    <span>İade Tarihi *</span>
+                    <input
+                      required
+                      type="date"
+                      value={returnForm.invoiceDate}
+                      onChange={(e) =>
+                        setReturnForm({ ...returnForm, invoiceDate: e.target.value })
+                      }
+                    />
+                  </label>
+
+                  <label className="span-2">
+                    <span>Açıklama</span>
+                    <input
+                      value={returnForm.description}
+                      onChange={(e) =>
+                        setReturnForm({ ...returnForm, description: e.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className="erp-table-wrap">
+                  <table className="erp-table">
+                    <thead>
+                      <tr>
+                        <th>Kalem</th>
+                        <th>Faturadaki</th>
+                        <th>Daha önce iade</th>
+                        <th>İade edilebilir</th>
+                        <th>İade miktarı</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoice.returnableItems.map((item) => (
+                        <tr key={item.itemId}>
+                          <td>{item.description}</td>
+                          <td>
+                            {item.invoicedQuantity} {item.unit}
+                          </td>
+                          <td>{item.returnedQuantity}</td>
+                          <td>
+                            <strong>{item.returnableQuantity}</strong>
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.0001"
+                              min="0"
+                              max={item.returnableQuantity}
+                              disabled={item.returnableQuantity <= 0}
+                              value={returnQuantities[item.itemId] ?? ""}
+                              onChange={(e) =>
+                                setReturnQuantities((current) => ({
+                                  ...current,
+                                  [item.itemId]: e.target.value,
+                                }))
+                              }
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="erp-form-actions">
+                  <button
+                    type="button"
+                    className="erp-secondary-button"
+                    onClick={() => setShowReturnForm(false)}
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    type="submit"
+                    className="erp-primary-button"
+                    disabled={processing}
+                  >
+                    {processing ? "Oluşturuluyor..." : "İade Faturasını Oluştur"}
+                  </button>
+                </div>
+              </form>
             )}
 
             <div className="erp-form-grid">
@@ -349,6 +554,47 @@ export default function SupplierInvoiceDetailPage() {
               </div>
             </div>
           </section>
+
+          {invoice.chequePayments.length > 0 && (
+            <section className="erp-panel erp-mt">
+              <div className="erp-panel-header">
+                <div>
+                  <h2>Bu Faturayı Ödeyen Çekler</h2>
+                  <p>
+                    Çek dağılımından gelir; ayrı bir ödeme defteri
+                    tutulmuyor. Karşılanan: {money.format(invoice.chequeAllocatedAmount)}{" "}
+                    · Kalan: {money.format(invoice.chequeRemainingAmount)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="erp-table-wrap">
+                <table className="erp-table">
+                  <thead>
+                    <tr>
+                      <th>Çek</th>
+                      <th>Vade</th>
+                      <th>Durum</th>
+                      <th>Tutar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoice.chequePayments.map((payment) => (
+                      <tr key={payment.chequeId}>
+                        <td>
+                          <strong>{payment.chequeNumber}</strong>
+                          <small>{payment.internalNumber}</small>
+                        </td>
+                        <td>{dateFormat.format(new Date(payment.dueDate))}</td>
+                        <td>{payment.statusName}</td>
+                        <td>{money.format(payment.allocatedAmount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {invoice.accountingVoucherId && (
             <section className="erp-panel erp-mt">

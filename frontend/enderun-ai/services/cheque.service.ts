@@ -14,6 +14,8 @@ export const ChequeStatus = {
   Issued: 10,
   Paid: 11,
   Returned: 12,
+  /** Ertelendi: yerine yeni vadeli çek verildi. */
+  Replaced: 20,
 } as const;
 
 export const CHEQUE_STATUS_LABELS: Record<number, string> = {
@@ -25,6 +27,7 @@ export const CHEQUE_STATUS_LABELS: Record<number, string> = {
   10: "Verildi",
   11: "Ödendi",
   12: "İade alındı",
+  20: "Ertelendi (değiştirildi)",
 };
 
 /** erp-status.{renk} sınıfıyla eşleşir. */
@@ -37,6 +40,7 @@ export const CHEQUE_STATUS_COLORS: Record<number, string> = {
   10: "blue",
   11: "green",
   12: "gray",
+  20: "yellow",
 };
 
 /** Bu geçişler için kasa/banka hesabı seçimi zorunlu. */
@@ -66,6 +70,29 @@ export type ChequeMovement = {
   accountingVoucherNumber?: string | null;
 };
 
+export type ChequeAllocation = {
+  id: string;
+  amount: number;
+  projectId?: string | null;
+  projectCode?: string | null;
+  projectName?: string | null;
+  costCenterCode?: string | null;
+  supplierInvoiceId?: string | null;
+  supplierInvoiceNumber?: string | null;
+  salesInvoiceId?: string | null;
+  salesInvoiceNumber?: string | null;
+  description?: string | null;
+};
+
+export type ChequeAllocationPayload = {
+  amount: number;
+  projectId?: string | null;
+  costCenterCode?: string | null;
+  supplierInvoiceId?: string | null;
+  salesInvoiceId?: string | null;
+  description?: string | null;
+};
+
 export type ChequeListItem = {
   id: string;
   companyId: string;
@@ -81,6 +108,7 @@ export type ChequeListItem = {
   currentAccountTitle?: string | null;
   projectId?: string | null;
   projectCode?: string | null;
+  costCenterCode?: string | null;
   amount: number;
   currencyCode: string;
   issueDate: string;
@@ -101,6 +129,13 @@ export type ChequeDetail = ChequeListItem & {
   description?: string | null;
   allowedNextStatuses: number[];
   movements: ChequeMovement[];
+  allocations: ChequeAllocation[];
+  replacedByChequeId?: string | null;
+  replacedByChequeNumber?: string | null;
+  replacesChequeId?: string | null;
+  replacesChequeNumber?: string | null;
+  /** Zincirde kaç kez ertelendiği — risk sinyali. */
+  renewalCount: number;
 };
 
 export type ChequeSummary = {
@@ -130,6 +165,23 @@ export type CreateChequePayload = {
   dueDate: string;
   progressPaymentId?: string | null;
   supplierInvoiceId?: string | null;
+  description?: string | null;
+  costCenterCode?: string | null;
+  allocations?: ChequeAllocationPayload[] | null;
+};
+
+/**
+ * Erteleme talebi. Tutar GÖNDERİLMEZ: yeni çek eskisiyle aynı tutarda
+ * olmak zorunda, vade farkı ayrı belgeyle kaydedilir.
+ */
+export type ReplaceChequePayload = {
+  chequeNumber: string;
+  dueDate: string;
+  movementDate: string;
+  bankName?: string | null;
+  bankBranch?: string | null;
+  drawer?: string | null;
+  issueDate?: string | null;
   description?: string | null;
 };
 
@@ -174,6 +226,20 @@ export const chequeService = {
 
   create(payload: CreateChequePayload) {
     return apiClient<ChequeDetail>("cheques", { method: "POST", body: payload });
+  },
+
+  replaceAllocations(id: string, allocations: ChequeAllocationPayload[]) {
+    return apiClient<ChequeDetail>(`cheques/${id}/allocations`, {
+      method: "PUT",
+      body: { allocations },
+    });
+  },
+
+  replace(id: string, payload: ReplaceChequePayload) {
+    return apiClient<ChequeDetail>(`cheques/${id}/replace`, {
+      method: "POST",
+      body: payload,
+    });
   },
 
   changeStatus(id: string, payload: ChequeStatusChangePayload) {

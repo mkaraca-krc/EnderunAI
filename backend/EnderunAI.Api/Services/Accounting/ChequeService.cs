@@ -579,6 +579,16 @@ public sealed class ChequeService(
                 "durumuna geçiş yapılamaz.");
         }
 
+        // "Ertelendi" düz durum değişikliğiyle seçilemez: yerine geçen
+        // çek açılmadan bu duruma geçilirse çek kapanır ama alacak/borç
+        // ortadan kaybolur ve nakit akışında hiçbir yerde görünmez.
+        if (toStatus == ChequeStatus.Replaced)
+        {
+            throw new InvalidOperationException(
+                "Erteleme durum değişikliğiyle yapılamaz; " +
+                "yerine geçecek yeni çeki de açan erteleme işlemini kullanın.");
+        }
+
         CashAccount? cashAccount = null;
         if (request.CashAccountId is not null)
         {

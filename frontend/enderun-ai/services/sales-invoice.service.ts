@@ -57,6 +57,7 @@ export type SalesInvoiceListItem = {
   netReceivableAmount: number;
   status: number;
   requiresManualReview: boolean;
+  isReturn?: boolean;
   parseSource?: number | null;
   accountingVoucherNumber?: string | null;
 };
@@ -92,6 +93,13 @@ export type SalesInvoiceDetail = {
   accountingVoucherId?: string | null;
   accountingVoucherNumber?: string | null;
   items: SalesInvoiceItem[];
+  /** Bu belge bir iade faturası mı. */
+  isReturn: boolean;
+  originalInvoiceId?: string | null;
+  originalInvoiceNumber?: string | null;
+  /** İptalde üretilen ters fiş. */
+  reversalVoucherId?: string | null;
+  reversalVoucherNumber?: string | null;
 };
 
 export type SalesInvoiceItemPayload = {
@@ -163,6 +171,21 @@ export const salesInvoiceService = {
 
   post(id: string) {
     return apiClient<SalesInvoiceActionResult>(`${root}/${id}/post`, { method: "POST" });
+  },
+
+  createReturn(
+    id: string,
+    payload: {
+      invoiceNumber: string;
+      invoiceDate: string;
+      items: { originalItemId: string; quantity: number }[];
+      description?: string | null;
+    }
+  ) {
+    return apiClient<SalesInvoiceDetail>(`${root}/${id}/returns`, {
+      method: "POST",
+      body: payload,
+    });
   },
 
   cancel(id: string, reason: string) {

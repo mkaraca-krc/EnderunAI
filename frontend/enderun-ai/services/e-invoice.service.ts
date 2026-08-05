@@ -52,6 +52,13 @@ export type ImportPreviewItem = {
   suggestedExpenseAccountName?: string | null;
   /** Önerinin gerekçesi; kullanıcı körü körüne onaylamasın. */
   suggestionReason?: string | null;
+  /** Belge bir IADE faturası mı (UBL InvoiceTypeCode = IADE). */
+  isReturn: boolean;
+  /** İadenin XML'de atıf yaptığı fatura numarası. */
+  referencedInvoiceNumber?: string | null;
+  /** Numaradan eşleşen orijinal fatura; yoksa kullanıcı seçer. */
+  matchedOriginalInvoiceId?: string | null;
+  matchedOriginalInvoiceNumber?: string | null;
   token: string;
 };
 
@@ -81,6 +88,8 @@ export type ImportCommitItem = {
   costCenterCode?: string | null;
   /** Alış faturasının deposu. */
   warehouseId?: string | null;
+  /** İade faturasında iade edilen orijinal fatura. */
+  originalInvoiceId?: string | null;
 };
 
 export type ImportCommitCreated = {

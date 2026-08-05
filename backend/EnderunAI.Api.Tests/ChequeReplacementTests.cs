@@ -378,6 +378,35 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
     }
 
     /// <summary>
+    /// "Ertelendi" düz durum değişikliğiyle seçilemez: yerine geçen çek
+    /// açılmadan bu duruma geçilirse borç ortadan kaybolur ve nakit
+    /// akışında hiçbir yerde görünmez.
+    /// </summary>
+    [Fact]
+    public async Task ChangeStatus_DirectlyToReplaced_IsRejected()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var chequeId = await CreateChequeAsync(client, context, ChequeDirection.Issued);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/cheques/{chequeId}/status",
+            new
+            {
+                toStatus = (int)ChequeStatus.Replaced,
+                movementDate = DateTime.UtcNow.Date,
+                cashAccountId = (Guid?)null,
+                description = "Ertelendi"
+            });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("erteleme işlemini kullanın",
+            await response.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
     /// Tahsil edilmiş çek ertelenemez: kapanmış bir işlem geri açılamaz.
     /// </summary>
     [Fact]

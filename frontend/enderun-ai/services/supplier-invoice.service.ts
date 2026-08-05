@@ -61,6 +61,7 @@ export type SupplierInvoiceItem = {
   vatAmount: number;
   lineTotal: number;
   purchaseOrderItemId?: string | null;
+  originalItemId?: string | null;
   inventoryItemId?: string | null;
   inventoryItemCode?: string | null;
   inventoryItemName?: string | null;
@@ -94,6 +95,7 @@ export type SupplierInvoiceListItem = {
   requiresGmApproval: boolean;
   purchaseOrderNumber?: string | null;
   accountingVoucherNumber?: string | null;
+  isReturn: boolean;
 };
 
 export type SupplierInvoiceDetail = {
@@ -135,6 +137,43 @@ export type SupplierInvoiceDetail = {
   accountingVoucherId?: string | null;
   accountingVoucherNumber?: string | null;
   items: SupplierInvoiceItem[];
+  chequePayments: InvoiceChequePayment[];
+  chequeAllocatedAmount: number;
+  chequeRemainingAmount: number;
+  isReturn: boolean;
+  originalInvoiceId?: string | null;
+  originalInvoiceNumber?: string | null;
+  reversalVoucherId?: string | null;
+  reversalVoucherNumber?: string | null;
+  returnableItems: InvoiceReturnableItem[];
+};
+
+/** Faturayı ödeyen çek payı (çek dağılımından gelir). */
+export type InvoiceChequePayment = {
+  chequeId: string;
+  internalNumber: string;
+  chequeNumber: string;
+  dueDate: string;
+  status: number;
+  statusName: string;
+  allocatedAmount: number;
+};
+
+/** Kalemden ne kadarının iade edilebildiği. */
+export type InvoiceReturnableItem = {
+  itemId: string;
+  description: string;
+  unit: string;
+  invoicedQuantity: number;
+  returnedQuantity: number;
+  returnableQuantity: number;
+};
+
+export type CreateInvoiceReturnPayload = {
+  invoiceNumber: string;
+  invoiceDate: string;
+  items: { originalItemId: string; quantity: number }[];
+  description?: string | null;
 };
 
 export type SupplierInvoiceItemPayload = {
@@ -227,8 +266,22 @@ export const supplierInvoiceService = {
     });
   },
 
-  cancel(id: string) {
-    return apiClient<SupplierInvoiceActionResult>(`${root}/${id}/cancel`, { method: "POST" });
+  /**
+   * Fatura iptali. Onaylanmış faturada gerekçe zorunlu; ters fiş kesilir
+   * ve stok girmişse depodan geri çıkar.
+   */
+  cancel(id: string, reason?: string | null) {
+    return apiClient<SupplierInvoiceActionResult>(`${root}/${id}/cancel`, {
+      method: "POST",
+      body: { reason: reason ?? null },
+    });
+  },
+
+  createReturn(id: string, payload: CreateInvoiceReturnPayload) {
+    return apiClient<SupplierInvoiceDetail>(`${root}/${id}/returns`, {
+      method: "POST",
+      body: payload,
+    });
   },
 };
 

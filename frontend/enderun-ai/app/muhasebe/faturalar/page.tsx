@@ -179,6 +179,11 @@ export default function SupplierInvoicesPage() {
                       >
                         {item.invoiceTypeName}
                       </span>
+                      {item.isReturn && (
+                        <span className="erp-status red" style={{ marginLeft: "4px" }}>
+                          İade
+                        </span>
+                      )}
                     </td>
                     <td>{item.supplierTitle}</td>
                     <td>

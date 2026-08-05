@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { branchService, type BranchListItem } from "@/services/branch.service";
 import {
   cashAccountService,
   type CashAccount,
@@ -14,6 +15,7 @@ import {
   CHEQUE_STATUS_LABELS,
   ChequeDirection,
   ChequeStatus,
+  type ChequeAllocationPayload,
   type ChequeDetail,
   type ChequeListItem,
   type ChequeSummary,
@@ -25,6 +27,10 @@ import {
 } from "@/services/current-account.service";
 import { factoringService, type FactoringCalculation } from "@/services/factoring.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
+import {
+  supplierInvoiceService,
+  type SupplierInvoiceListItem,
+} from "@/services/supplier-invoice.service";
 
 const money = new Intl.NumberFormat("tr-TR", {
   style: "currency",
@@ -42,9 +48,35 @@ const emptyChequeForm = {
   drawer: "",
   currentAccountId: "",
   projectId: "",
+  costCenterCode: "",
   amount: "",
   issueDate: today(),
   dueDate: today(),
+  description: "",
+};
+
+/** Dağılım satırı: ya bir faturaya ya da proje/masraf merkezine bağlanır. */
+type AllocationRow = {
+  amount: string;
+  /** Boşsa elle dağılım; doluysa proje/masraf merkezi faturadan gelir. */
+  supplierInvoiceId: string;
+  projectId: string;
+  costCenterCode: string;
+};
+
+const emptyAllocationRow: AllocationRow = {
+  amount: "",
+  supplierInvoiceId: "",
+  projectId: "",
+  costCenterCode: "",
+};
+
+const emptyReplaceForm = {
+  chequeNumber: "",
+  bankName: "",
+  bankBranch: "",
+  dueDate: today(),
+  movementDate: today(),
   description: "",
 };
 
@@ -78,6 +110,13 @@ export default function ChequeRegisterPage() {
     cashAccountId: "",
     description: "",
   });
+
+  const [branches, setBranches] = useState<BranchListItem[]>([]);
+  const [supplierInvoices, setSupplierInvoices] = useState<SupplierInvoiceListItem[]>([]);
+  const [allocationRows, setAllocationRows] = useState<AllocationRow[]>([]);
+
+  const [showReplaceForm, setShowReplaceForm] = useState(false);
+  const [replaceForm, setReplaceForm] = useState(emptyReplaceForm);
 
   const [showFactoringForm, setShowFactoringForm] = useState(false);
   const [factoringForm, setFactoringForm] = useState({
@@ -138,15 +177,26 @@ export default function ChequeRegisterPage() {
     if (!companyId) return;
 
     try {
-      const [carilerResult, projectsResult, cashResult] = await Promise.all([
-        currentAccountService.getAll(companyId),
-        projectService.getAll(companyId),
-        cashAccountService.getAll({ companyId }),
-      ]);
+      const [carilerResult, projectsResult, cashResult, branchResult, invoiceResult] =
+        await Promise.all([
+          currentAccountService.getAll(companyId),
+          projectService.getAll(companyId),
+          cashAccountService.getAll({ companyId }),
+          branchService.getAll(companyId).catch(() => [] as BranchListItem[]),
+          supplierInvoiceService
+            .getAll({ companyId })
+            .catch(() => [] as SupplierInvoiceListItem[]),
+        ]);
 
       setCurrentAccounts(carilerResult);
       setProjects(projectsResult);
       setCashAccounts(cashResult);
+      setBranches(branchResult);
+      // Çekin ödediği faturalar buradan seçilir; iptal/ret edilmişler
+      // ödenecek borç değildir.
+      setSupplierInvoices(
+        invoiceResult.filter((invoice) => invoice.status !== 3 && invoice.status !== 4)
+      );
     } catch {
       // Yardımcı listeler alınamazsa liste ekranı çalışmaya devam eder.
     }
@@ -184,9 +234,57 @@ export default function ChequeRegisterPage() {
     [items]
   );
 
+  /**
+   * Masraf merkezi seçenekleri: Merkez (şube kodu) ve projeler. Serbest
+   * metin bırakılsaydı aynı şantiye farklı yazımlarla birden çok masraf
+   * merkezi gibi görünürdü.
+   */
+  const costCenterOptions = useMemo(() => {
+    const options: { code: string; label: string }[] = [];
+
+    for (const branch of branches) {
+      if (branch.costCenterCode) {
+        options.push({
+          code: branch.costCenterCode,
+          label: `${branch.costCenterCode} — ${branch.name}`,
+        });
+      }
+    }
+
+    for (const project of projects) {
+      options.push({ code: project.code, label: `${project.code} — ${project.name}` });
+    }
+
+    return options;
+  }, [branches, projects]);
+
+  /** Çekin ödeyebileceği faturalar: yalnızca seçili carinin faturaları. */
+  const allocatableInvoices = useMemo(
+    () =>
+      supplierInvoices.filter(
+        (invoice) =>
+          direction === ChequeDirection.Issued &&
+          (!chequeForm.currentAccountId ||
+            invoice.supplierCurrentAccountId === chequeForm.currentAccountId)
+      ),
+    [supplierInvoices, direction, chequeForm.currentAccountId]
+  );
+
+  const allocationTotal = useMemo(
+    () => allocationRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0),
+    [allocationRows]
+  );
+
+  const allocationDifference = useMemo(
+    () => Math.round(((Number(chequeForm.amount) || 0) - allocationTotal) * 100) / 100,
+    [chequeForm.amount, allocationTotal]
+  );
+
   async function openDetail(id: string) {
     setError("");
     setShowFactoringForm(false);
+    setShowReplaceForm(false);
+    setReplaceForm(emptyReplaceForm);
     setPreview(null);
 
     try {
@@ -224,19 +322,75 @@ export default function ChequeRegisterPage() {
         drawer: chequeForm.drawer.trim() || null,
         currentAccountId: chequeForm.currentAccountId || null,
         projectId: chequeForm.projectId || null,
+        costCenterCode: chequeForm.costCenterCode || null,
         amount: Number(chequeForm.amount),
         currencyCode: "TRY",
         issueDate: chequeForm.issueDate,
         dueDate: chequeForm.dueDate,
         description: chequeForm.description.trim() || null,
+        allocations: buildAllocationPayload(),
       });
 
       setNotice(`${created.internalNumber} kaydedildi ve muhasebe fişi üretildi.`);
       setShowChequeForm(false);
       setChequeForm(emptyChequeForm);
+      setAllocationRows([]);
       await loadItems();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Çek kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
+   * Dağılım satırlarını API biçimine çevirir. Boş liste "dağılım yok"
+   * demektir ve çek tek parça işlenir.
+   */
+  function buildAllocationPayload(): ChequeAllocationPayload[] | null {
+    const rows = allocationRows.filter((row) => Number(row.amount) > 0);
+
+    if (rows.length === 0) return null;
+
+    return rows.map((row) => ({
+      amount: Number(row.amount),
+      // Fatura seçiliyse proje/masraf merkezi gönderilmez: backend
+      // bunları faturadan türetir, iki kaynak olmaz.
+      supplierInvoiceId: row.supplierInvoiceId || null,
+      projectId: row.supplierInvoiceId ? null : row.projectId || null,
+      costCenterCode: row.supplierInvoiceId ? null : row.costCenterCode || null,
+    }));
+  }
+
+  async function submitReplace(event: React.FormEvent) {
+    event.preventDefault();
+    if (!detail) return;
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const replacement = await chequeService.replace(detail.id, {
+        chequeNumber: replaceForm.chequeNumber.trim(),
+        dueDate: replaceForm.dueDate,
+        movementDate: replaceForm.movementDate,
+        bankName: replaceForm.bankName.trim() || null,
+        bankBranch: replaceForm.bankBranch.trim() || null,
+        description: replaceForm.description.trim() || null,
+      });
+
+      setNotice(
+        `${detail.chequeNumber} ertelendi; yerine ${replacement.chequeNumber} ` +
+          `düzenlendi (yeni vade ${dateFormat.format(new Date(replacement.dueDate))}).`
+      );
+
+      setShowReplaceForm(false);
+      setReplaceForm(emptyReplaceForm);
+      setDetail(replacement);
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Çek ertelenemedi.");
     } finally {
       setSaving(false);
     }
@@ -492,6 +646,26 @@ export default function ChequeRegisterPage() {
               </label>
 
               <label>
+                Masraf merkezi
+                <select
+                  value={chequeForm.costCenterCode}
+                  onChange={(e) =>
+                    setChequeForm({ ...chequeForm, costCenterCode: e.target.value })
+                  }
+                >
+                  <option value="">Proje kodu kullanılsın</option>
+                  {costCenterOptions.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  Ofis kirası gibi projesi olmayan çekler Merkez&apos;e yazılır.
+                </small>
+              </label>
+
+              <label>
                 Tutar
                 <input
                   type="number"
@@ -534,6 +708,180 @@ export default function ChequeRegisterPage() {
               </label>
             </div>
 
+            <div className="erp-form-header" style={{ marginTop: "6px" }}>
+              <h3>Dağılım (opsiyonel)</h3>
+              <p>
+                Tek çek birden fazla projeye/Merkeze bölünebilir. Fatura
+                seçilirse proje ve masraf merkezi faturadan gelir — en
+                doğrusu budur, çünkü dağılım tahmin değil belgeye dayanır.
+                Boş bırakılırsa çek tek parça işlenir.
+              </p>
+            </div>
+
+            {allocationRows.length > 0 && (
+              <div className="erp-table-wrap">
+                <table className="erp-table">
+                  <thead>
+                    <tr>
+                      <th>Tutar</th>
+                      {direction === ChequeDirection.Issued && <th>Ödenen fatura</th>}
+                      <th>Proje</th>
+                      <th>Masraf merkezi</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allocationRows.map((row, index) => {
+                      const invoiceSelected = row.supplierInvoiceId !== "";
+
+                      return (
+                        <tr key={index}>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={row.amount}
+                              onChange={(e) =>
+                                setAllocationRows((current) =>
+                                  current.map((item, i) =>
+                                    i === index ? { ...item, amount: e.target.value } : item
+                                  )
+                                )
+                              }
+                            />
+                          </td>
+
+                          {direction === ChequeDirection.Issued && (
+                            <td>
+                              <select
+                                value={row.supplierInvoiceId}
+                                onChange={(e) =>
+                                  setAllocationRows((current) =>
+                                    current.map((item, i) =>
+                                      i === index
+                                        ? {
+                                            ...item,
+                                            supplierInvoiceId: e.target.value,
+                                            projectId: "",
+                                            costCenterCode: "",
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                              >
+                                <option value="">Fatura seçilmedi</option>
+                                {allocatableInvoices.map((invoice) => (
+                                  <option key={invoice.id} value={invoice.id}>
+                                    {invoice.invoiceNumber} — {money.format(invoice.grandTotal)}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          )}
+
+                          <td>
+                            <select
+                              disabled={invoiceSelected}
+                              value={row.projectId}
+                              onChange={(e) =>
+                                setAllocationRows((current) =>
+                                  current.map((item, i) =>
+                                    i === index ? { ...item, projectId: e.target.value } : item
+                                  )
+                                )
+                              }
+                            >
+                              <option value="">
+                                {invoiceSelected ? "Faturadan" : "—"}
+                              </option>
+                              {projects.map((project) => (
+                                <option key={project.id} value={project.id}>
+                                  {project.code}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td>
+                            <select
+                              disabled={invoiceSelected}
+                              value={row.costCenterCode}
+                              onChange={(e) =>
+                                setAllocationRows((current) =>
+                                  current.map((item, i) =>
+                                    i === index
+                                      ? { ...item, costCenterCode: e.target.value }
+                                      : item
+                                  )
+                                )
+                              }
+                            >
+                              <option value="">
+                                {invoiceSelected ? "Faturadan" : "—"}
+                              </option>
+                              {costCenterOptions.map((option) => (
+                                <option key={option.code} value={option.code}>
+                                  {option.code}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td>
+                            <button
+                              type="button"
+                              className="erp-secondary-button"
+                              onClick={() =>
+                                setAllocationRows((current) =>
+                                  current.filter((_, i) => i !== index)
+                                )
+                              }
+                            >
+                              Sil
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                className="erp-secondary-button"
+                onClick={() =>
+                  setAllocationRows((current) => [...current, { ...emptyAllocationRow }])
+                }
+              >
+                + Dağılım Satırı
+              </button>
+
+              {allocationRows.length > 0 && (
+                <span>
+                  Dağılım toplamı: {money.format(allocationTotal)}
+                  {allocationDifference !== 0 && (
+                    <strong style={{ color: "#b91c1c" }}>
+                      {" "}
+                      · {money.format(Math.abs(allocationDifference))}{" "}
+                      {allocationDifference > 0 ? "eksik" : "fazla"}
+                    </strong>
+                  )}
+                </span>
+              )}
+            </div>
+
             <div style={{ display: "flex", gap: "8px" }}>
               <button type="submit" className="erp-primary-button" disabled={saving}>
                 {saving ? "Kaydediliyor..." : "Kaydet"}
@@ -541,7 +889,10 @@ export default function ChequeRegisterPage() {
               <button
                 type="button"
                 className="erp-secondary-button"
-                onClick={() => setShowChequeForm(false)}
+                onClick={() => {
+                  setShowChequeForm(false);
+                  setAllocationRows([]);
+                }}
               >
                 Vazgeç
               </button>
@@ -657,15 +1008,34 @@ export default function ChequeRegisterPage() {
               {detail.internalNumber} — {detail.chequeNumber} ({money.format(detail.amount)})
             </h2>
 
-            {canFactor && (
-              <button
-                type="button"
-                className="erp-primary-button"
-                onClick={() => setShowFactoringForm((value) => !value)}
-              >
-                Çeki Kırdır (Faktoring)
-              </button>
-            )}
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {detail.allowedNextStatuses.includes(ChequeStatus.Replaced) && (
+                <button
+                  type="button"
+                  className="erp-secondary-button"
+                  onClick={() => {
+                    setShowReplaceForm((value) => !value);
+                    setReplaceForm({
+                      ...emptyReplaceForm,
+                      bankName: detail.bankName,
+                      bankBranch: detail.bankBranch ?? "",
+                    });
+                  }}
+                >
+                  Ertele / Değiştir
+                </button>
+              )}
+
+              {canFactor && (
+                <button
+                  type="button"
+                  className="erp-primary-button"
+                  onClick={() => setShowFactoringForm((value) => !value)}
+                >
+                  Çeki Kırdır (Faktoring)
+                </button>
+              )}
+            </div>
           </div>
 
           <div style={{ padding: "16px", display: "grid", gap: "16px" }}>
@@ -678,8 +1048,152 @@ export default function ChequeRegisterPage() {
                 {detail.bankBranch ? ` / ${detail.bankBranch}` : ""} · Vade:{" "}
                 {dateFormat.format(new Date(detail.dueDate))}
                 {detail.currentAccountTitle ? ` · ${detail.currentAccountTitle}` : ""}
+                {detail.costCenterCode ? ` · Masraf merkezi: ${detail.costCenterCode}` : ""}
               </small>
+
+              {detail.renewalCount > 0 && (
+                <div
+                  className={detail.renewalCount >= 2 ? "erp-alert warning" : "erp-alert"}
+                  style={{ marginTop: "8px" }}
+                >
+                  Bu çek {detail.renewalCount} kez ertelendi
+                  {detail.replacesChequeNumber
+                    ? ` (önceki çek: ${detail.replacesChequeNumber})`
+                    : ""}
+                  .
+                  {detail.renewalCount >= 2 &&
+                    " Tekrarlayan erteleme tahsilat sorununun habercisi olabilir."}
+                </div>
+              )}
+
+              {detail.replacedByChequeNumber && (
+                <div className="erp-alert" style={{ marginTop: "8px" }}>
+                  Bu çek ertelendi; yerine {detail.replacedByChequeNumber} numaralı çek
+                  düzenlendi.
+                </div>
+              )}
+
+              {detail.allocations.length > 0 && (
+                <div style={{ marginTop: "10px" }}>
+                  <strong>Dağılım</strong>
+                  <table className="erp-table" style={{ marginTop: "6px" }}>
+                    <thead>
+                      <tr>
+                        <th>Tutar</th>
+                        <th>Proje / Masraf merkezi</th>
+                        <th>Fatura</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.allocations.map((allocation) => (
+                        <tr key={allocation.id}>
+                          <td>{money.format(allocation.amount)}</td>
+                          <td>
+                            {allocation.projectCode ?? allocation.costCenterCode ?? "—"}
+                          </td>
+                          <td>
+                            {allocation.supplierInvoiceNumber ??
+                              allocation.salesInvoiceNumber ??
+                              "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
+
+            {showReplaceForm && (
+              <form onSubmit={submitReplace} style={{ display: "grid", gap: "12px" }}>
+                <h3>Çek Erteleme / Değişim</h3>
+
+                <div className="erp-alert">
+                  Yeni çek eski çekle aynı tutarda olur ({money.format(detail.amount)}).
+                  Vade farkı varsa ayrı bir fatura/dekont ile kaydedilmelidir.
+                </div>
+
+                <div className="erp-form-grid">
+                  <label>
+                    Yeni çek numarası
+                    <input
+                      required
+                      value={replaceForm.chequeNumber}
+                      onChange={(e) =>
+                        setReplaceForm({ ...replaceForm, chequeNumber: e.target.value })
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Yeni vade
+                    <input
+                      type="date"
+                      required
+                      value={replaceForm.dueDate}
+                      onChange={(e) =>
+                        setReplaceForm({ ...replaceForm, dueDate: e.target.value })
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    İşlem tarihi
+                    <input
+                      type="date"
+                      required
+                      value={replaceForm.movementDate}
+                      onChange={(e) =>
+                        setReplaceForm({ ...replaceForm, movementDate: e.target.value })
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Banka
+                    <input
+                      value={replaceForm.bankName}
+                      onChange={(e) =>
+                        setReplaceForm({ ...replaceForm, bankName: e.target.value })
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Şube
+                    <input
+                      value={replaceForm.bankBranch}
+                      onChange={(e) =>
+                        setReplaceForm({ ...replaceForm, bankBranch: e.target.value })
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Açıklama
+                    <input
+                      value={replaceForm.description}
+                      onChange={(e) =>
+                        setReplaceForm({ ...replaceForm, description: e.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button type="submit" className="erp-primary-button" disabled={saving}>
+                    {saving ? "İşleniyor..." : "Ertele ve Yeni Çeki Aç"}
+                  </button>
+                  <button
+                    type="button"
+                    className="erp-secondary-button"
+                    onClick={() => setShowReplaceForm(false)}
+                  >
+                    Vazgeç
+                  </button>
+                </div>
+              </form>
+            )}
 
             {detail.allowedNextStatuses.length > 0 ? (
               <form onSubmit={submitStatus} style={{ display: "grid", gap: "12px" }}>

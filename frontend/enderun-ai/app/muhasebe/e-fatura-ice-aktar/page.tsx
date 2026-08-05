@@ -45,6 +45,8 @@ type RowDecision = {
   expenseAccountId: string;
   costCenterCode: string;
   warehouseId: string;
+  /** İade faturasında bağlanacak orijinal fatura. */
+  originalInvoiceId: string;
 };
 
 export default function EInvoiceImportPage() {
@@ -156,6 +158,9 @@ export default function EInvoiceImportPage() {
           expenseAccountId: item.suggestedExpenseAccountId ?? "",
           costCenterCode: "",
           warehouseId: "",
+          // Eşleşen orijinal öneri olarak gelir; eşleşme yoksa iade
+          // orijinaline bağlanmadan aktarılır (belge yine de gerçek).
+          originalInvoiceId: item.matchedOriginalInvoiceId ?? "",
         };
       });
 
@@ -291,6 +296,9 @@ export default function EInvoiceImportPage() {
             createCurrentAccount: decision.createCurrentAccount,
             projectId: decision.projectId || null,
             invoiceType: isPurchase ? decision.invoiceType : 0,
+            originalInvoiceId: item.isReturn
+              ? decision.originalInvoiceId || null
+              : null,
             expenseAccountId: isExpense ? decision.expenseAccountId || null : null,
             costCenterCode: isPurchase ? decision.costCenterCode || null : null,
             warehouseId: isExpense ? null : decision.warehouseId || null,
@@ -673,6 +681,21 @@ function PreviewRow({
           <span className={`erp-status ${DIRECTION_COLORS[item.direction] ?? "gray"}`}>
             {item.directionName}
           </span>
+
+          {item.isReturn && (
+            <>
+              <span className="erp-status red" style={{ marginTop: "4px" }}>
+                İADE
+              </span>
+              <small>
+                {item.matchedOriginalInvoiceNumber
+                  ? `Orijinal: ${item.matchedOriginalInvoiceNumber}`
+                  : item.referencedInvoiceNumber
+                    ? `Atıf: ${item.referencedInvoiceNumber} (sistemde bulunamadı)`
+                    : "Orijinal fatura belirtilmemiş"}
+              </small>
+            </>
+          )}
         </td>
 
         <td>
