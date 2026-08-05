@@ -17,7 +17,12 @@ public sealed record ProgressPaymentItemRequest(
     decimal? MaterialUnitPrice = null,
     decimal? LaborUnitPrice = null,
     decimal? OverheadUnitPrice = null,
-    Guid? SectionId = null
+    Guid? SectionId = null,
+    /// <summary>
+    /// Satırın geldiği sözleşme icmali kalemi. İcmalden üretilen
+    /// taslakta dolu gelir; teknik ofis satırı elle eklerse boş kalır.
+    /// </summary>
+    Guid? ProjectBoqItemId = null
 );
 
 /// <summary>

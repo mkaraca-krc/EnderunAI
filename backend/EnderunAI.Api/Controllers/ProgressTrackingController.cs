@@ -16,8 +16,79 @@ namespace EnderunAI.Api.Controllers;
 [Authorize]
 [Route("api")]
 public sealed class ProgressTrackingController(
-    IProgressTrackingService service) : ControllerBase
+    IProgressTrackingService service,
+    IContractSummaryProgressService summaryService) : ControllerBase
 {
+    /// <summary>
+    /// Sözleşme icmali ilerleme görünümü: kısım ve satır bazında
+    /// sözleşme miktarı / saha gerçekleşmesi / işveren kabulü / kalan,
+    /// hem yüzde hem tutar.
+    ///
+    /// Ayrı bir hesap motoru yazılmadı — aynı
+    /// <see cref="IContractSummaryProgressService"/> portalı, hakediş
+    /// önerisini ve fark raporunu da besliyor. Tek kaynak.
+    ///
+    /// Tutar içerdiği için hakediş görüntüleme izniyle korunur; portal
+    /// aynı servisi kullanır ama yalnızca yüzdeyi dışarı verir.
+    /// </summary>
+    [HttpGet("projects/{projectId:guid}/icmal-ilerleme")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
+    public async Task<IActionResult> ContractSummaryProgress(
+        Guid projectId, CancellationToken cancellationToken)
+    {
+        var view = await summaryService.BuildAsync(projectId, cancellationToken);
+
+        if (!view.HasContractSummary)
+        {
+            return Ok(new
+            {
+                hasContractSummary = false,
+                message = "Bu projede sözleşme icmali tanımlı değil."
+            });
+        }
+
+        return Ok(new
+        {
+            hasContractSummary = true,
+            view.BoqId,
+            view.BoqNumber,
+            view.ContractAmount,
+            view.FieldRate,
+            view.EmployerRate,
+            FieldAmount = view.Sections.SelectMany(x => x.Items).Sum(x => x.FieldAmount),
+            EmployerAmount = view.Sections.SelectMany(x => x.Items).Sum(x => x.EmployerAmount),
+            Sections = view.Sections.Select(section => new
+            {
+                section.SectionId,
+                section.Name,
+                section.Order,
+                section.ContractAmount,
+                section.FieldRate,
+                section.EmployerRate,
+                FieldAmount = section.Items.Sum(x => x.FieldAmount),
+                EmployerAmount = section.Items.Sum(x => x.EmployerAmount),
+                Items = section.Items.Select(item => new
+                {
+                    item.BoqItemId,
+                    item.PositionCode,
+                    item.Description,
+                    item.Unit,
+                    item.ContractQuantity,
+                    item.UnitPrice,
+                    item.ContractAmount,
+                    item.FieldQuantity,
+                    item.EmployerQuantity,
+                    item.RemainingQuantity,
+                    item.PendingQuantity,
+                    item.FieldAmount,
+                    item.EmployerAmount,
+                    item.FieldRate,
+                    item.EmployerRate
+                })
+            })
+        });
+    }
+
     [HttpGet("projects/{projectId:guid}/progress-tracking")]
     [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> Get(

@@ -16,7 +16,8 @@ namespace EnderunAI.Api.Controllers;
 public sealed class ProgressPaymentsController(
     AppDbContext db,
     IAccountingIntegrationService accountingIntegration,
-    IChequeService chequeService)
+    IChequeService chequeService,
+    IContractSummaryProgressService progressService)
     : ControllerBase
 {
     [HttpGet]
@@ -180,6 +181,148 @@ public sealed class ProgressPaymentsController(
         });
     }
 
+    /// <summary>
+    /// Yeni hakediş için İCMALDEN üretilen taslak öneri.
+    ///
+    /// Kalemler sözleşme icmalinden gelir; "bu dönem" alanı sahadan
+    /// biriken onaylı miktardan önceki hakedişlerin saha payı düşülerek
+    /// ÖN DOLDURULUR. Bu bir ÖNERİDİR, kayıt yazmaz: teknik ofis
+    /// işverenle mutabakata göre rakamları serbestçe değiştirir.
+    /// Kesinleşen hakediş, işverenle anlaşılan resmî rakamdır ve saha
+    /// verisiyle aynı olmak zorunda değildir.
+    /// </summary>
+    [HttpGet("icmal-taslagi")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
+    public async Task<IActionResult> SummaryDraft(
+        [FromQuery] Guid projectId,
+        [FromQuery] int periodNumber,
+        CancellationToken cancellationToken)
+    {
+        if (periodNumber <= 0)
+            return BadRequest(new { message = "Dönem numarası sıfırdan büyük olmalıdır." });
+
+        var view = await progressService.BuildAsync(projectId, cancellationToken);
+
+        if (!view.HasContractSummary)
+        {
+            return Ok(new
+            {
+                hasContractSummary = false,
+                message = "Bu projede sözleşme icmali tanımlı değil; " +
+                          "hakediş satırları elle girilir.",
+                items = Array.Empty<object>()
+            });
+        }
+
+        // Önceki dönemlerde bu icmal kalemine yazılmış saha ve işveren
+        // miktarları — bu dönemin payı ikisinden de düşülerek bulunur.
+        var previous = await db.ProgressPaymentItems
+            .AsNoTracking()
+            .Where(x =>
+                x.ProgressPayment.ProjectId == projectId &&
+                x.ProgressPayment.Status != ProgressPaymentStatus.Cancelled &&
+                x.ProgressPayment.PeriodNumber < periodNumber &&
+                x.ProjectBoqItemId != null)
+            .GroupBy(x => x.ProjectBoqItemId!.Value)
+            .Select(g => new
+            {
+                BoqItemId = g.Key,
+                Field = g.Sum(x => x.FieldQuantity),
+                Employer = g.Sum(x => x.CurrentQuantity)
+            })
+            .ToListAsync(cancellationToken);
+
+        var previousByItem = previous.ToDictionary(x => x.BoqItemId);
+
+        var items = view.Sections
+            .SelectMany(section => section.Items.Select(item => new
+            {
+                projectBoqItemId = item.BoqItemId,
+                sectionId = section.SectionId,
+                sectionName = section.Name,
+                positionCode = item.PositionCode,
+                description = item.Description,
+                unit = item.Unit,
+                contractQuantity = item.ContractQuantity,
+                unitPrice = item.UnitPrice,
+                previousQuantity = previousByItem.TryGetValue(item.BoqItemId, out var p)
+                    ? p.Employer
+                    : 0m,
+                // Öneri: sahanın bu dönem yaptığı miktar.
+                suggestedCurrentQuantity = Math.Max(
+                    0m,
+                    item.FieldQuantity -
+                    (previousByItem.TryGetValue(item.BoqItemId, out var q) ? q.Field : 0m)),
+                cumulativeFieldQuantity = item.FieldQuantity,
+                cumulativeEmployerQuantity = item.EmployerQuantity
+            }))
+            .ToList();
+
+        return Ok(new
+        {
+            hasContractSummary = true,
+            boqId = view.BoqId,
+            boqNumber = view.BoqNumber,
+            items
+        });
+    }
+
+    /// <summary>
+    /// Saha gerçekleşmesi ile işveren kabulü arasındaki KÜMÜLATİF fark.
+    ///
+    /// Pozitif fark = sahada yapılmış ama işverenin henüz kabul etmediği
+    /// iş (devreden). Sistematik olarak büyüyorsa işveren düzenli eksik
+    /// kabul ediyor demektir; bu raporun varlık nedeni budur.
+    /// </summary>
+    [HttpGet("saha-isveren-farki")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
+    public async Task<IActionResult> FieldEmployerDifference(
+        [FromQuery] Guid projectId,
+        CancellationToken cancellationToken)
+    {
+        var view = await progressService.BuildAsync(projectId, cancellationToken);
+
+        if (!view.HasContractSummary)
+        {
+            return Ok(new
+            {
+                hasContractSummary = false,
+                message = "Bu projede sözleşme icmali tanımlı değil."
+            });
+        }
+
+        var lines = view.Sections
+            .SelectMany(section => section.Items.Select(item => new
+            {
+                sectionName = section.Name,
+                item.PositionCode,
+                item.Description,
+                item.Unit,
+                item.ContractQuantity,
+                item.FieldQuantity,
+                item.EmployerQuantity,
+                item.PendingQuantity,
+                // Devreden işin parasal karşılığı — icmal birim
+                // fiyatıyla. Hakedişte kabul edilmediği için henüz
+                // fatura edilmemiş tutardır.
+                PendingAmount = decimal.Round(item.PendingQuantity * item.UnitPrice, 2),
+                item.FieldRate,
+                item.EmployerRate
+            }))
+            .ToList();
+
+        return Ok(new
+        {
+            hasContractSummary = true,
+            projectFieldRate = view.FieldRate,
+            projectEmployerRate = view.EmployerRate,
+            // Toplam devreden: sahada yapılmış, işverence kabul edilmemiş.
+            totalPendingAmount = lines.Sum(x => x.PendingAmount),
+            differingItemCount = lines.Count(x => x.PendingQuantity != 0m),
+            items = lines
+        });
+    }
+
     [HttpPost]
     [RequirePermission(PermissionCatalog.Keys.HakedisCreate)]
     public async Task<IActionResult> Create(
@@ -313,7 +456,9 @@ public sealed class ProgressPaymentsController(
             entity,
             request.Items,
             previousPayments.SelectMany(x => x.Items),
-            sectionMap);
+            sectionMap,
+            await progressService.GetFieldRealizationAsync(
+                entity.ProjectId, cancellationToken));
 
         ApplyAdvanceMaterials(entity, request.AdvanceMaterials);
 
@@ -465,7 +610,9 @@ public sealed class ProgressPaymentsController(
             entity,
             request.Items,
             previousPayments.SelectMany(x => x.Items),
-            sectionMap);
+            sectionMap,
+            await progressService.GetFieldRealizationAsync(
+                entity.ProjectId, cancellationToken));
 
         ApplyAdvanceMaterials(entity, request.AdvanceMaterials);
 
@@ -911,14 +1058,25 @@ public sealed class ProgressPaymentsController(
         ProgressPayment entity,
         IEnumerable<ProgressPaymentItemRequest> requests,
         IEnumerable<ProgressPaymentItem> previousItems,
-        IReadOnlyDictionary<Guid, ProgressPaymentSection>? sectionMap = null)
+        IReadOnlyDictionary<Guid, ProgressPaymentSection>? sectionMap = null,
+        IReadOnlyDictionary<Guid, decimal>? fieldRealization = null)
     {
-        var previousByCode = previousItems
+        var previousList = previousItems.ToList();
+
+        var previousByCode = previousList
             .GroupBy(x => x.PositionCode)
             .ToDictionary(
                 x => x.Key,
                 x => x.Sum(y => y.CurrentQuantity),
                 StringComparer.OrdinalIgnoreCase);
+
+        // Önceki dönemlerde bu icmal kalemine yazılmış SAHA miktarı.
+        // Bu dönemin saha payı, güncel birikimden bunun düşülmesiyle
+        // bulunur.
+        var previousFieldByBoqItem = previousList
+            .Where(x => x.ProjectBoqItemId != null)
+            .GroupBy(x => x.ProjectBoqItemId!.Value)
+            .ToDictionary(x => x.Key, x => x.Sum(y => y.FieldQuantity));
 
         var requestList = requests.ToList();
 
@@ -958,10 +1116,32 @@ public sealed class ProgressPaymentsController(
             if (request.SectionId is Guid sectionId)
                 sectionMap?.TryGetValue(sectionId, out section);
 
+            // Saha gerçekleşmesi kayda YAZILIP DONDURULUYOR. Hakediş
+            // taslaktan çıktıktan sonra düzenlenemediği için bu değer
+            // orada sabitlenir; sonradan onaylanan geç bir günlük rapor
+            // geçmiş hakedişin fark raporunu değiştirmez.
+            decimal cumulativeField = 0m;
+            decimal currentField = 0m;
+
+            if (request.ProjectBoqItemId is Guid boqItemId)
+            {
+                cumulativeField = fieldRealization?.GetValueOrDefault(boqItemId) ?? 0m;
+
+                var previousField = previousFieldByBoqItem.GetValueOrDefault(boqItemId);
+
+                // Negatife düşmesin: geçmiş dönemlerde yazılan saha
+                // toplamı bugünkü birikimi aşıyorsa (kayıt silinmiş
+                // olabilir) bu dönemin payı sıfırdır.
+                currentField = Math.Max(0m, cumulativeField - previousField);
+            }
+
             entity.Items.Add(new ProgressPaymentItem
             {
                 LineNumber = lineNumber++,
                 EngineeringPositionId = request.EngineeringPositionId,
+                ProjectBoqItemId = request.ProjectBoqItemId,
+                FieldQuantity = currentField,
+                CumulativeFieldQuantity = cumulativeField,
                 Section = section,
                 PositionCode = result.PositionCode,
                 Description = request.Description?.Trim() ?? string.Empty,
@@ -1400,6 +1580,14 @@ public sealed class ProgressPaymentsController(
                         i.PreviousQuantity,
                         i.CurrentQuantity,
                         i.CumulativeQuantity,
+                        // Saha gerçekleşmesi: hakediş hazırlanırken
+                        // dondurulan referans. CurrentQuantity işverenle
+                        // mutabık kalınan resmî rakam; ikisi bilerek
+                        // ayrı tutuluyor.
+                        i.ProjectBoqItemId,
+                        i.FieldQuantity,
+                        i.CumulativeFieldQuantity,
+                        FieldDifference = i.CurrentQuantity - i.FieldQuantity,
                         i.MaterialUnitPrice,
                         i.LaborUnitPrice,
                         i.OverheadUnitPrice,
