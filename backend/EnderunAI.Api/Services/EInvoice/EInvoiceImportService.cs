@@ -31,6 +31,18 @@ public sealed record ImportPreviewItem(
     /// <summary>Aynı fatura daha önce girilmişse dolu.</summary>
     Guid? DuplicateOfId,
     IReadOnlyList<string> Problems,
+    /// <summary>
+    /// Anahtar kelimeden çıkan tip önerisi (0 Alış / 1 Gider). Yalnızca
+    /// öneridir; ekranda seçili gelir, kullanıcı değiştirebilir.
+    /// </summary>
+    int SuggestedInvoiceType,
+    string SuggestedInvoiceTypeName,
+    /// <summary>Öneri gider ise ve hesap planında karşılığı varsa dolu.</summary>
+    Guid? SuggestedExpenseAccountId,
+    string? SuggestedExpenseAccountCode,
+    string? SuggestedExpenseAccountName,
+    /// <summary>Önerinin neden yapıldığı — kullanıcı körü körüne onaylamasın.</summary>
+    string? SuggestionReason,
     /// <summary>Commit çağrısında geri gönderilecek anahtar.</summary>
     string Token);
 
@@ -60,8 +72,26 @@ public sealed record ImportCommitItem(
     Guid? CurrentAccountId,
     /// <summary>VKN eşleşmediyse XML'deki unvan+VKN ile yeni cari açılır.</summary>
     bool CreateCurrentAccount,
-    /// <summary>Alış faturasında zorunlu — fişin masraf merkezi.</summary>
-    Guid? ProjectId);
+    /// <summary>
+    /// Proje. Ofis elektriği, kira, müşavirlik gibi giderlerin projesi
+    /// olmadığı için ZORUNLU DEĞİL.
+    /// </summary>
+    Guid? ProjectId = null,
+    /// <summary>0 Alış (Stok) / 1 Gider. Varsayılan alış.</summary>
+    int InvoiceType = 0,
+    /// <summary>
+    /// Gider faturasında kalemlerin yazılacağı hesap. Gider tipinde
+    /// zorunlu: hesapsız gider faturası onaya geldiğinde fiş üretilemez.
+    /// </summary>
+    Guid? ExpenseAccountId = null,
+    /// <summary>Masraf merkezi (Merkez veya şantiye kodu).</summary>
+    string? CostCenterCode = null,
+    /// <summary>
+    /// Alış faturasında stok girişinin yapılacağı depo. E-faturada stok
+    /// kartı eşleştirmesi yapılmadığı için depo tek başına stok girişi
+    /// başlatmaz; kalemlere stok kartı fatura ekranından bağlanır.
+    /// </summary>
+    Guid? WarehouseId = null);
 
 public sealed record ImportCommitRequest(IReadOnlyList<ImportCommitItem> Items);
 
@@ -282,15 +312,26 @@ public sealed class EInvoiceImportService(
 
         if (staged.Direction == InvoiceDirection.Purchase)
         {
-            if (item.ProjectId is not Guid projectId)
-                throw new InvalidOperationException(
-                    "Alış faturası için proje seçimi zorunludur.");
+            if (item.ProjectId is Guid projectId)
+            {
+                var projectExists = await db.Projects.AnyAsync(
+                    x => x.Id == projectId && x.CompanyId == companyId, cancellationToken);
 
-            var projectExists = await db.Projects.AnyAsync(
-                x => x.Id == projectId && x.CompanyId == companyId, cancellationToken);
+                if (!projectExists)
+                    throw new InvalidOperationException("Seçilen proje bulunamadı.");
+            }
 
-            if (!projectExists)
-                throw new InvalidOperationException("Seçilen proje bulunamadı.");
+            var invoiceType = ResolveInvoiceType(item.InvoiceType);
+
+            var expenseAccountId = await ResolveExpenseAccountAsync(
+                companyId, invoiceType, item.ExpenseAccountId, cancellationToken);
+
+            var warehouseId = await ResolveWarehouseAsync(
+                companyId, invoiceType, item.WarehouseId, cancellationToken);
+
+            var costCenterCode = string.IsNullOrWhiteSpace(item.CostCenterCode)
+                ? null
+                : item.CostCenterCode.Trim();
 
             var internalNumber = await documentNumberService.GenerateAsync(
                 companyId, "SUPPLIER_INVOICE", "SFT", cancellationToken);
@@ -299,7 +340,10 @@ public sealed class EInvoiceImportService(
             {
                 CompanyId = companyId,
                 SupplierCurrentAccountId = currentAccountId,
-                ProjectId = projectId,
+                ProjectId = item.ProjectId,
+                InvoiceType = invoiceType,
+                CostCenterCode = costCenterCode,
+                WarehouseId = warehouseId,
                 InternalNumber = internalNumber,
                 InvoiceNumber = invoice.InvoiceNumber!.Trim(),
                 InvoiceDate = issueDate,
@@ -333,7 +377,12 @@ public sealed class EInvoiceImportService(
                     VatRate = line.VatRate,
                     LineSubtotal = lineSubtotal,
                     VatAmount = lineVat,
-                    LineTotal = lineSubtotal + lineVat
+                    LineTotal = lineSubtotal + lineVat,
+                    // Gider hesabı ve masraf merkezi tüm kalemlere aynı
+                    // uygulanır; kalem bazında ayrıştırma gerekiyorsa
+                    // taslak fatura ekranından değiştirilir.
+                    ExpenseAccountId = expenseAccountId,
+                    CostCenterCode = costCenterCode
                 });
             }
 
@@ -401,6 +450,81 @@ public sealed class EInvoiceImportService(
             salesInvoice.Id, salesInvoice.InternalNumber,
             salesInvoice.OfficialInvoiceNumber, currentAccountTitle, accountCreated,
             salesInvoice.GrandTotal, salesInvoice.RequiresManualReview);
+    }
+
+    private static SupplierInvoiceType ResolveInvoiceType(int value) =>
+        Enum.IsDefined(typeof(SupplierInvoiceType), value)
+            ? (SupplierInvoiceType)value
+            : throw new InvalidOperationException("Geçersiz fatura tipi.");
+
+    /// <summary>
+    /// Gider faturasında hesap ZORUNLU. Hesapsız kaydedilseydi taslak
+    /// onaya geldiğinde fiş üretilemez ve kullanıcı hatayı günler sonra,
+    /// faturanın kaynağını unuttuğunda görürdü.
+    ///
+    /// Kurallar fatura ekranındakinin aynısı: kayıt kabul eden, aktif ve
+    /// 6xx/7xx grubunda bir hesap.
+    /// </summary>
+    private async Task<Guid?> ResolveExpenseAccountAsync(
+        Guid companyId,
+        SupplierInvoiceType invoiceType,
+        Guid? expenseAccountId,
+        CancellationToken cancellationToken)
+    {
+        if (invoiceType != SupplierInvoiceType.Expense)
+        {
+            if (expenseAccountId is not null)
+                throw new InvalidOperationException(
+                    "Gider hesabı yalnızca gider faturasında seçilebilir.");
+
+            return null;
+        }
+
+        if (expenseAccountId is not Guid accountId)
+            throw new InvalidOperationException(
+                "Gider faturası için gider hesabı seçilmelidir.");
+
+        var account = await db.AccountingAccounts
+            .AsNoTracking()
+            .Where(x => x.Id == accountId && x.CompanyId == companyId)
+            .Select(x => new { x.Code, x.Name, x.IsActive, x.IsPostingAllowed })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Seçilen gider hesabı bulunamadı.");
+
+        if (!account.IsActive || !account.IsPostingAllowed)
+            throw new InvalidOperationException(
+                $"{account.Code} {account.Name} hesabına kayıt yapılamaz " +
+                "(grup hesabı veya pasif). Alt kırılımlardan birini seçin.");
+
+        if (!account.Code.StartsWith('6') && !account.Code.StartsWith('7'))
+            throw new InvalidOperationException(
+                $"{account.Code} {account.Name} bir gider/maliyet hesabı değil. " +
+                "6xx/7xx grubundan bir hesap seçilmelidir.");
+
+        return accountId;
+    }
+
+    private async Task<Guid?> ResolveWarehouseAsync(
+        Guid companyId,
+        SupplierInvoiceType invoiceType,
+        Guid? warehouseId,
+        CancellationToken cancellationToken)
+    {
+        if (warehouseId is not Guid id)
+            return null;
+
+        if (invoiceType != SupplierInvoiceType.Stock)
+            throw new InvalidOperationException(
+                "Depo yalnızca alış (stok) faturasında seçilebilir.");
+
+        var exists = await db.Warehouses.AnyAsync(
+            x => x.Id == id && x.CompanyId == companyId && x.IsActive, cancellationToken);
+
+        if (!exists)
+            throw new InvalidOperationException(
+                "Seçilen depo bulunamadı veya aktif değil.");
+
+        return id;
     }
 
     /// <summary>
@@ -500,7 +624,10 @@ public sealed class EInvoiceImportService(
                 null, null, null, null, null, null,
                 0m, 0m, 0m, 0m, [],
                 (int)read.Source, SourceName(read.Source), true, null,
-                read.Problems, string.Empty);
+                read.Problems,
+                (int)SupplierInvoiceType.Stock, InvoiceTypeName(SupplierInvoiceType.Stock),
+                null, null, null, null,
+                string.Empty);
         }
 
         var invoice = read.Invoice;
@@ -549,6 +676,14 @@ public sealed class EInvoiceImportService(
                 read.RequiresManualReview))
             : string.Empty;
 
+        // Tip önerisi yalnızca alış faturasında anlamlı; satış faturasının
+        // stok/gider ayrımı yoktur.
+        var suggestion = direction == InvoiceDirection.Purchase
+            ? await BuildSuggestionAsync(companyId, invoice, cancellationToken)
+            : (Type: SupplierInvoiceType.Stock,
+               AccountId: (Guid?)null, Code: (string?)null,
+               Name: (string?)null, Reason: (string?)null);
+
         return new ImportPreviewItem(
             FileName: fileName,
             CanImport: canImport,
@@ -572,7 +707,45 @@ public sealed class EInvoiceImportService(
             RequiresManualReview: read.RequiresManualReview,
             DuplicateOfId: duplicateId,
             Problems: problems,
+            SuggestedInvoiceType: (int)suggestion.Type,
+            SuggestedInvoiceTypeName: InvoiceTypeName(suggestion.Type),
+            SuggestedExpenseAccountId: suggestion.AccountId,
+            SuggestedExpenseAccountCode: suggestion.Code,
+            SuggestedExpenseAccountName: suggestion.Name,
+            SuggestionReason: suggestion.Reason,
             Token: token);
+    }
+
+    /// <summary>
+    /// Anahtar kelimeden tip ve gider hesabı önerir. Önerilen kod
+    /// şirketin hesap planında yoksa (ya da kayıt kabul etmiyorsa) hesap
+    /// boş bırakılır ama gider önerisi durur — kullanıcı hesabı kendisi
+    /// seçer; yanlış hesaba yazmaktansa seçtirmek daha doğrudur.
+    /// </summary>
+    private async Task<(SupplierInvoiceType Type, Guid? AccountId, string? Code,
+        string? Name, string? Reason)> BuildSuggestionAsync(
+        Guid companyId,
+        ParsedInvoice invoice,
+        CancellationToken cancellationToken)
+    {
+        var suggestion = EInvoiceExpenseSuggester.Suggest(
+            invoice.Lines.Select(x => x.Name));
+
+        if (!suggestion.IsExpense)
+            return (SupplierInvoiceType.Stock, null, null, null, null);
+
+        var account = suggestion.AccountCode is null
+            ? null
+            : await db.AccountingAccounts
+                .AsNoTracking()
+                .Where(x => x.CompanyId == companyId &&
+                            x.Code == suggestion.AccountCode &&
+                            x.IsActive && x.IsPostingAllowed)
+                .Select(x => new { x.Id, x.Code, x.Name })
+                .FirstOrDefaultAsync(cancellationToken);
+
+        return (SupplierInvoiceType.Expense, account?.Id, account?.Code,
+            account?.Name, suggestion.Reason);
     }
 
     private async Task<CurrentAccountMatch?> MatchCurrentAccountAsync(
@@ -677,6 +850,9 @@ public sealed class EInvoiceImportService(
         InvoiceDirection.Sales => "Giden (Satış)",
         _ => "Belirlenemedi"
     };
+
+    private static string InvoiceTypeName(SupplierInvoiceType type) =>
+        type == SupplierInvoiceType.Expense ? "Gider" : "Alış (Stok)";
 
     private static string SourceName(InvoiceParseSource source) =>
         source == InvoiceParseSource.Ai ? "AI ile okundu" : "Standart";

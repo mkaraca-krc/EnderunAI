@@ -7272,6 +7272,30 @@
     "isActive": true
   },
   {
+    "code": "740.03.15",
+    "name": "TEMİZLİK GİDERLERİ",
+    "parentCode": "740.03",
+    "nature": "Debit",
+    "level": 5,
+    "isPostingAllowed": true,
+    "requiresProject": true,
+    "requiresCostCenter": true,
+    "currencyCode": "TRY",
+    "isActive": true
+  },
+  {
+    "code": "740.03.16",
+    "name": "GÜVENLİK GİDERLERİ",
+    "parentCode": "740.03",
+    "nature": "Debit",
+    "level": 5,
+    "isPostingAllowed": true,
+    "requiresProject": true,
+    "requiresCostCenter": true,
+    "currencyCode": "TRY",
+    "isActive": true
+  },
+  {
     "code": "740.04.01",
     "name": "YEMEK GİDERLERİ",
     "parentCode": "740.04",
@@ -7597,7 +7621,7 @@
   },
   {
     "code": "770.03.08",
-    "name": "HABERLERLEŞME GİDERLERİ",
+    "name": "HABERLEŞME GİDERLERİ",
     "parentCode": "770.03",
     "nature": "Debit",
     "level": 5,
@@ -7621,7 +7645,7 @@
   },
   {
     "code": "770.03.10",
-    "name": "ELEKTRİK SU DOĞALGAZ GİDERLERİ",
+    "name": "ELEKTRİK VE SU GİDERLERİ",
     "parentCode": "770.03",
     "nature": "Debit",
     "level": 5,
@@ -7634,6 +7658,54 @@
   {
     "code": "770.03.11",
     "name": "HİZMET GİDERLERİ",
+    "parentCode": "770.03",
+    "nature": "Debit",
+    "level": 5,
+    "isPostingAllowed": true,
+    "requiresProject": false,
+    "requiresCostCenter": true,
+    "currencyCode": "TRY",
+    "isActive": true
+  },
+  {
+    "code": "770.03.12",
+    "name": "DOĞALGAZ GİDERLERİ",
+    "parentCode": "770.03",
+    "nature": "Debit",
+    "level": 5,
+    "isPostingAllowed": true,
+    "requiresProject": false,
+    "requiresCostCenter": true,
+    "currencyCode": "TRY",
+    "isActive": true
+  },
+  {
+    "code": "770.03.13",
+    "name": "İNTERNET VE HAT GİDERLERİ",
+    "parentCode": "770.03",
+    "nature": "Debit",
+    "level": 5,
+    "isPostingAllowed": true,
+    "requiresProject": false,
+    "requiresCostCenter": true,
+    "currencyCode": "TRY",
+    "isActive": true
+  },
+  {
+    "code": "770.03.14",
+    "name": "TEMİZLİK GİDERLERİ",
+    "parentCode": "770.03",
+    "nature": "Debit",
+    "level": 5,
+    "isPostingAllowed": true,
+    "requiresProject": false,
+    "requiresCostCenter": true,
+    "currencyCode": "TRY",
+    "isActive": true
+  },
+  {
+    "code": "770.03.15",
+    "name": "İSG VE OSGB GİDERLERİ",
     "parentCode": "770.03",
     "nature": "Debit",
     "level": 5,

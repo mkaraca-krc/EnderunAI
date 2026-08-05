@@ -55,6 +55,24 @@ public sealed class AccountingAccountSeedTests(DatabaseFixture fixture)
 
         Assert.Equal(required.Length, found.Count);
 
+        // Gider faturasında sık geçen kırılımlar hesap planında olmalı;
+        // yoksa kullanıcı elektrik faturasını "diğer çeşitli giderler"e
+        // yazar ve gider dağılımı anlamını yitirir.
+        var expenseBreakdowns = new[]
+        {
+            "770.03.12", "770.03.13", "770.03.14", "770.03.15",
+            "740.03.15", "740.03.16"
+        };
+
+        var foundBreakdowns = await db.AccountingAccounts
+            .Where(x => x.CompanyId == company.Id &&
+                        expenseBreakdowns.Contains(x.Code) &&
+                        x.IsPostingAllowed)
+            .Select(x => x.Code)
+            .ToListAsync();
+
+        Assert.Equal(expenseBreakdowns.Length, foundBreakdowns.Count);
+
         // Hiyerarşi tutarlı kurulmuş olmalı: kök dışındaki her hesabın
         // üst hesabı bağlanmış olmalı.
         var orphanCount = await db.AccountingAccounts

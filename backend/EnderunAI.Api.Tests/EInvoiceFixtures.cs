@@ -97,7 +97,8 @@ public static class EInvoiceFixtures
     /// </summary>
     public static string PurchaseInvoice(
         string invoiceNumber = "AYG2026000000456",
-        string supplierTaxNumber = "1234567890") => $"""
+        string supplierTaxNumber = "1234567890",
+        string firstLineName = "NYAF Kablo 3x2.5") => $"""
         <?xml version="1.0" encoding="UTF-8"?>
         <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
                  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
@@ -152,7 +153,7 @@ public static class EInvoiceFixtures
                 <cbc:Percent>20</cbc:Percent>
               </cac:TaxSubtotal>
             </cac:TaxTotal>
-            <cac:Item><cbc:Name>NYAF Kablo 3x2.5</cbc:Name></cac:Item>
+            <cac:Item><cbc:Name>{firstLineName}</cbc:Name></cac:Item>
             <cac:Price><cbc:PriceAmount currencyID="TRY">18.50</cbc:PriceAmount></cac:Price>
           </cac:InvoiceLine>
           <cac:InvoiceLine>

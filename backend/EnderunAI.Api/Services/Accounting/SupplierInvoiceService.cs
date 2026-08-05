@@ -464,10 +464,12 @@ public sealed class SupplierInvoiceService(
     /// <summary>
     /// Tipe göre iş kuralları.
     ///
-    /// ALIŞ: her kalemde stok kartı ve depo gerekir — stok kimin adına
-    /// nereye girecek belli olmalı. Mal kabule bağlı faturada stok zaten
-    /// girdiği için depo İSTENMEZ ve girilse bile yok sayılır; yoksa
-    /// aynı malzeme iki kez stoğa eklenirdi.
+    /// ALIŞ: stok girişi isteniyorsa her kalemde stok kartı ve depo
+    /// gerekir — stok neyin, nereye gireceği belli olmalı. Hiçbiri
+    /// verilmemişse fatura stoğa hiç uğramaz (bkz. aşağıdaki not).
+    /// Mal kabule bağlı faturada stok zaten girdiği için depo İSTENMEZ
+    /// ve girilse bile yok sayılır; yoksa aynı malzeme iki kez stoğa
+    /// eklenirdi.
     ///
     /// GİDER: her kalemde gider hesabı gerekir; stok ve depo hiç
     /// istenmez. Hesap fişe kayıt kabul etmeli ve gider/maliyet

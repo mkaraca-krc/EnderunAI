@@ -432,8 +432,13 @@ public sealed class EInvoiceImportTests(DatabaseFixture fixture)
             .CountAsync(x => x.CompanyId == companyId));
     }
 
+    /// <summary>
+    /// Ofis elektriği, kira, müşavirlik gibi giderlerin projesi yoktur.
+    /// Proje zorunlu tutulduğu sürece kullanıcı bunları rastgele bir
+    /// projeye yazmak zorunda kalıyor ve o projenin maliyeti şişiyordu.
+    /// </summary>
     [Fact]
-    public async Task Commit_PurchaseWithoutProject_IsSkippedWithReason()
+    public async Task Commit_PurchaseWithoutProject_IsAccepted()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var (companyId, _) = await CreateContextAsync(suffix);
@@ -467,10 +472,215 @@ public sealed class EInvoiceImportTests(DatabaseFixture fixture)
 
         var result = await commit.Content.ReadFromJsonAsync<JsonElement>();
 
+        Assert.Equal(1, result.GetProperty("createdCount").GetInt32());
+
+        var invoiceId = result.GetProperty("created").EnumerateArray()
+            .Single().GetProperty("invoiceId").GetGuid();
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var invoice = await db.SupplierInvoices.AsNoTracking()
+            .SingleAsync(x => x.Id == invoiceId);
+
+        Assert.Null(invoice.ProjectId);
+        Assert.Equal(SupplierInvoiceType.Stock, invoice.InvoiceType);
+    }
+
+    /// <summary>
+    /// Malzeme faturası tedarikçinin unvanında "ELEKTRİK" geçse bile
+    /// gider olarak önerilmemeli: faturanın ne olduğunu kalem açıklaması
+    /// söyler, unvan değil.
+    /// </summary>
+    [Fact]
+    public async Task Preview_MaterialInvoice_IsSuggestedAsStockDespiteSupplierTitle()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, _) = await CreateContextAsync(suffix);
+        await CreateCurrentAccountAsync(
+            companyId, suffix, SupplierTaxNumber, CurrentAccountRoles.Supplier);
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var preview = await PreviewAsync(client, companyId,
+            BuildUpload(("alis.xml", EInvoiceFixtures.PurchaseInvoice(
+                invoiceNumber: $"AYG{suffix}"))));
+
+        var item = preview.GetProperty("items").EnumerateArray().Single();
+
+        Assert.Equal(0, item.GetProperty("suggestedInvoiceType").GetInt32());
+        Assert.Equal("Alış (Stok)",
+            item.GetProperty("suggestedInvoiceTypeName").GetString());
+        Assert.Equal(JsonValueKind.Null,
+            item.GetProperty("suggestedExpenseAccountId").ValueKind);
+    }
+
+    /// <summary>
+    /// Elektrik faturası gider olarak önerilir ve hesap planındaki
+    /// karşılığı (770.03.10) doğrudan bağlanır.
+    /// </summary>
+    [Fact]
+    public async Task Preview_UtilityInvoice_SuggestsExpenseWithMatchingAccount()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, _) = await CreateContextAsync(suffix);
+        await CreateCurrentAccountAsync(
+            companyId, suffix, SupplierTaxNumber, CurrentAccountRoles.Supplier);
+
+        var expenseAccountId = await CreateExpenseAccountAsync(
+            companyId, "770.03.10", "ELEKTRİK VE SU GİDERLERİ");
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var preview = await PreviewAsync(client, companyId,
+            BuildUpload(("elektrik.xml", EInvoiceFixtures.PurchaseInvoice(
+                invoiceNumber: $"ELK{suffix}",
+                firstLineName: "Elektrik Enerjisi Tuketim Bedeli"))));
+
+        var item = preview.GetProperty("items").EnumerateArray().Single();
+
+        Assert.Equal(1, item.GetProperty("suggestedInvoiceType").GetInt32());
+        Assert.Equal("Gider", item.GetProperty("suggestedInvoiceTypeName").GetString());
+        Assert.Equal(expenseAccountId,
+            item.GetProperty("suggestedExpenseAccountId").GetGuid());
+        Assert.Equal("770.03.10",
+            item.GetProperty("suggestedExpenseAccountCode").GetString());
+        Assert.Contains("elektrik",
+            item.GetProperty("suggestionReason").GetString());
+    }
+
+    /// <summary>
+    /// Gider olarak içe aktarılan fatura, hesap ve masraf merkezini
+    /// kalemlere taşımalı; onaya geldiğinde fiş bu hesapla üretilecek.
+    /// </summary>
+    [Fact]
+    public async Task Commit_AsExpense_CarriesAccountAndCostCenterToItems()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, _) = await CreateContextAsync(suffix);
+        var supplierId = await CreateCurrentAccountAsync(
+            companyId, suffix, SupplierTaxNumber, CurrentAccountRoles.Supplier);
+
+        var expenseAccountId = await CreateExpenseAccountAsync(
+            companyId, "770.03.10", "ELEKTRİK VE SU GİDERLERİ");
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var preview = await PreviewAsync(client, companyId,
+            BuildUpload(("elektrik.xml", EInvoiceFixtures.PurchaseInvoice(
+                invoiceNumber: $"ELK{suffix}",
+                firstLineName: "Elektrik Enerjisi Tuketim Bedeli"))));
+
+        var commit = await client.PostAsJsonAsync(
+            $"/api/e-invoice/import/commit?companyId={companyId}",
+            new
+            {
+                items = new[]
+                {
+                    new
+                    {
+                        token = preview.GetProperty("items").EnumerateArray()
+                            .Single().GetProperty("token").GetString(),
+                        currentAccountId = supplierId,
+                        createCurrentAccount = false,
+                        projectId = (Guid?)null,
+                        invoiceType = 1,
+                        expenseAccountId,
+                        costCenterCode = "MERKEZ"
+                    }
+                }
+            });
+
+        Assert.Equal(HttpStatusCode.OK, commit.StatusCode);
+
+        var invoiceId = (await commit.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("created").EnumerateArray().Single()
+            .GetProperty("invoiceId").GetGuid();
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var invoice = await db.SupplierInvoices.AsNoTracking()
+            .Include(x => x.Items)
+            .SingleAsync(x => x.Id == invoiceId);
+
+        Assert.Equal(SupplierInvoiceType.Expense, invoice.InvoiceType);
+        Assert.Equal("MERKEZ", invoice.CostCenterCode);
+        Assert.All(invoice.Items, item =>
+        {
+            Assert.Equal(expenseAccountId, item.ExpenseAccountId);
+            Assert.Equal("MERKEZ", item.CostCenterCode);
+        });
+    }
+
+    /// <summary>
+    /// Hesapsız gider faturası kaydedilseydi hata günler sonra, fatura
+    /// onaya geldiğinde ortaya çıkardı.
+    /// </summary>
+    [Fact]
+    public async Task Commit_AsExpenseWithoutAccount_IsSkippedWithReason()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (companyId, _) = await CreateContextAsync(suffix);
+        var supplierId = await CreateCurrentAccountAsync(
+            companyId, suffix, SupplierTaxNumber, CurrentAccountRoles.Supplier);
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var preview = await PreviewAsync(client, companyId,
+            BuildUpload(("elektrik.xml", EInvoiceFixtures.PurchaseInvoice(
+                invoiceNumber: $"ELK{suffix}",
+                firstLineName: "Elektrik Enerjisi Tuketim Bedeli"))));
+
+        var commit = await client.PostAsJsonAsync(
+            $"/api/e-invoice/import/commit?companyId={companyId}",
+            new
+            {
+                items = new[]
+                {
+                    new
+                    {
+                        token = preview.GetProperty("items").EnumerateArray()
+                            .Single().GetProperty("token").GetString(),
+                        currentAccountId = supplierId,
+                        createCurrentAccount = false,
+                        projectId = (Guid?)null,
+                        invoiceType = 1
+                    }
+                }
+            });
+
+        Assert.Equal(HttpStatusCode.OK, commit.StatusCode);
+
+        var result = await commit.Content.ReadFromJsonAsync<JsonElement>();
+
         Assert.Equal(0, result.GetProperty("createdCount").GetInt32());
-        Assert.Contains("proje seçimi zorunludur",
+        Assert.Contains("gider hesabı seçilmelidir",
             result.GetProperty("skipped").EnumerateArray()
                 .Single().GetProperty("reason").GetString());
+    }
+
+    private async Task<Guid> CreateExpenseAccountAsync(
+        Guid companyId, string code, string name)
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var account = new AccountingAccount
+        {
+            CompanyId = companyId,
+            Code = code,
+            Name = name,
+            Nature = AccountingAccountNature.Debit,
+            Level = 5,
+            IsPostingAllowed = true,
+            RequiresCostCenter = true
+        };
+
+        db.AccountingAccounts.Add(account);
+        await db.SaveChangesAsync();
+
+        return account.Id;
     }
 
     [Fact]
