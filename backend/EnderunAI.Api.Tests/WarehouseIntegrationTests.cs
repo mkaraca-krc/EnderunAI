@@ -150,6 +150,11 @@ public sealed class WarehouseIntegrationTests(DatabaseFixture fixture)
         // İlk mal kabul: ortalama maliyet = 2 USD * 40 kur = 80 TRY
         Assert.Equal(80m, updatedItem.AverageUnitCost);
 
+        // Son alış fiyatı ortalamadan ayrı tutulur; ilk kabulde ikisi de
+        // aynı çıkar ama alanın gerçekten dolduğu burada sabitleniyor.
+        Assert.Equal(80m, updatedItem.LastPurchasePrice);
+        Assert.Equal(receipt.ReceiptDate, updatedItem.LastPurchaseDate);
+
         var movement = await verifyDb.StockMovements.SingleAsync(x =>
             x.InventoryItemId == item.Id && x.Type == StockMovementType.Receipt);
         Assert.Equal(receipt.Id, movement.GoodsReceiptId);

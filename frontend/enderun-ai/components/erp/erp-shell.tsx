@@ -273,7 +273,14 @@ const groups: MenuGroup[] = [
         icon: "⌂",
       },
       {
-        label: "Yeni Depo",
+        label: "Depolar",
+        href: "/depo-stok/depolar",
+        icon: "▤",
+      },
+      {
+        // Etiket "Yeni Depo" idi ama bağlantı MALZEME KARTI formuna
+        // gidiyordu; depo açan kullanıcı yanlış ekrana düşüyordu.
+        label: "Yeni Malzeme Kartı",
         href: "/depo-stok/yeni",
         icon: "○",
       },
@@ -295,6 +302,17 @@ const groups: MenuGroup[] = [
       {
         label: "Depo Transferi",
         href: "/depo-stok/transfer",
+        icon: "○",
+      },
+      {
+        // Sayfa vardı ama menüde hiç yoktu; kimse ulaşamıyordu.
+        label: "Stok Sayımı",
+        href: "/depo-stok/sayim",
+        icon: "○",
+      },
+      {
+        label: "Mal Kabul",
+        href: "/depo-stok/mal-kabul",
         icon: "○",
       },
       {

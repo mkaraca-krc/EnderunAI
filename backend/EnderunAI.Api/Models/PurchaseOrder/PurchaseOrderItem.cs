@@ -12,6 +12,16 @@ public sealed class PurchaseOrderItem : BaseEntity
     public global::EnderunAI.Api.Models.Rfq.RfqSupplierQuotationItem? RfqSupplierQuotationItem { get; set; }
 
     public int LineNumber { get; set; }
+
+    /// <summary>
+    /// Sipariş edilen stok kartı. Talepteki seçim buraya, buradan da mal
+    /// kabule taşınır; böylece mal kabulde kartı elle eşleştirme adımı
+    /// çoğu kalemde gereksizleşir. Opsiyonel — katalog dışı alım
+    /// engellenmiyor.
+    /// </summary>
+    public Guid? InventoryItemId { get; set; }
+    public global::EnderunAI.Api.Models.InventoryItem? InventoryItem { get; set; }
+
     public string MaterialDescription { get; set; } = string.Empty;
     public string? Brand { get; set; }
     public string? Model { get; set; }

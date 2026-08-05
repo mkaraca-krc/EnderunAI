@@ -26,11 +26,22 @@ import {
   type DashboardInventoryMovement,
 } from "@/services/dashboard-inventory-movement.service";
 
+import {
+  inventoryMovementService,
+  type SelectOption,
+} from "@/services/inventory-movement.service";
+
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("tr-TR", {
     maximumFractionDigits: 2,
   }).format(value);
 }
+
+const money = new Intl.NumberFormat("tr-TR", {
+  style: "currency",
+  currency: "TRY",
+  maximumFractionDigits: 2,
+});
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString("tr-TR");
@@ -111,6 +122,15 @@ export default function InventoryOperationsPage() {
 
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
+  const [criticalOnly, setCriticalOnly] = useState(false);
+
+  const [categories, setCategories] = useState<string[]>([]);
+  const [warehouses, setWarehouses] = useState<SelectOption[]>([]);
+
+  /** Liste 20 satırda sessizce kesiliyordu; artık sayfalanıyor. */
+  const [visibleCount, setVisibleCount] = useState(25);
 
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -121,18 +141,22 @@ export default function InventoryOperationsPage() {
       setLoading(true);
       setError("");
 
-      const [inventoryData, requestData, movementData] =
+      const [inventoryData, requestData, movementData, categoryData, warehouseData] =
         await Promise.all([
           inventoryService.getItems(),
           purchaseRequestService.getAll({
             requestType: 1,
           }),
           dashboardInventoryMovementService.getAll(),
+          inventoryService.getCategories().catch(() => []),
+          inventoryMovementService.getWarehouses().catch(() => []),
         ]);
 
       setItems(inventoryData);
       setRequests(requestData);
       setMovements(movementData);
+      setCategories(categoryData);
+      setWarehouses(warehouseData);
     } catch (err) {
       setError(
         err instanceof Error
@@ -148,26 +172,38 @@ export default function InventoryOperationsPage() {
     void loadDashboard();
   }, [loadDashboard]);
 
-  async function loadItems(term: string) {
-    try {
-      setLoadingItems(true);
-      setError("");
+  const loadItems = useCallback(
+    async (
+      term: string,
+      selectedCategory: string,
+      selectedWarehouseId: string,
+      onlyCritical: boolean,
+    ) => {
+      try {
+        setLoadingItems(true);
+        setError("");
 
-      const data = await inventoryService.getItems({
-        search: term.trim() || undefined,
-      });
+        const data = await inventoryService.getItems({
+          search: term.trim() || undefined,
+          category: selectedCategory || undefined,
+          warehouseId: selectedWarehouseId || undefined,
+          criticalOnly: onlyCritical || undefined,
+        });
 
-      setItems(data);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Malzeme listesi yüklenemedi.",
-      );
-    } finally {
-      setLoadingItems(false);
-    }
-  }
+        setItems(data);
+        setVisibleCount(25);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Malzeme listesi yüklenemedi.",
+        );
+      } finally {
+        setLoadingItems(false);
+      }
+    },
+    [],
+  );
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -175,13 +211,40 @@ export default function InventoryOperationsPage() {
     const term = search.trim();
     setAppliedSearch(term);
 
-    void loadItems(term);
+    void loadItems(term, category, warehouseId, criticalOnly);
   }
 
   function clearSearch() {
     setSearch("");
     setAppliedSearch("");
-    void loadItems("");
+    setCategory("");
+    setWarehouseId("");
+    setCriticalOnly(false);
+    void loadItems("", "", "", false);
+  }
+
+  /** Süzgeç değişince listeyi hemen tazele — ayrı "Ara" tıklaması gerekmesin. */
+  function applyFilter(patch: {
+    category?: string;
+    warehouseId?: string;
+    criticalOnly?: boolean;
+  }) {
+    const next = {
+      category: patch.category ?? category,
+      warehouseId: patch.warehouseId ?? warehouseId,
+      criticalOnly: patch.criticalOnly ?? criticalOnly,
+    };
+
+    setCategory(next.category);
+    setWarehouseId(next.warehouseId);
+    setCriticalOnly(next.criticalOnly);
+
+    void loadItems(
+      appliedSearch,
+      next.category,
+      next.warehouseId,
+      next.criticalOnly,
+    );
   }
 
   const summary = useMemo(() => {
@@ -749,7 +812,7 @@ export default function InventoryOperationsPage() {
                 {loadingItems ? "Aranıyor..." : "Ara"}
               </button>
 
-              {appliedSearch ? (
+              {appliedSearch || category || warehouseId || criticalOnly ? (
                 <button
                   type="button"
                   onClick={clearSearch}
@@ -759,6 +822,50 @@ export default function InventoryOperationsPage() {
                 </button>
               ) : null}
             </form>
+
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <select
+                value={category}
+                onChange={(event) =>
+                  applyFilter({ category: event.target.value })
+                }
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">Tüm kategoriler</option>
+                {categories.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={warehouseId}
+                onChange={(event) =>
+                  applyFilter({ warehouseId: event.target.value })
+                }
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">Tüm depolar</option>
+                {warehouses.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.code ? `${warehouse.code} — ` : ""}
+                    {warehouse.name}
+                  </option>
+                ))}
+              </select>
+
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={criticalOnly}
+                  onChange={(event) =>
+                    applyFilter({ criticalOnly: event.target.checked })
+                  }
+                />
+                Yalnızca kritik seviyedekiler
+              </label>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -778,7 +885,11 @@ export default function InventoryOperationsPage() {
                   <TableHead right>
                     Min. Stok
                   </TableHead>
+                  <TableHead right>
+                    Stok Değeri
+                  </TableHead>
                   <TableHead>Durum</TableHead>
+                  <TableHead>{""}</TableHead>
                 </tr>
               </thead>
 
@@ -786,7 +897,7 @@ export default function InventoryOperationsPage() {
                 {loadingItems ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={10}
                       className="px-4 py-10 text-center text-slate-500"
                     >
                       Malzeme kartları yükleniyor...
@@ -795,17 +906,19 @@ export default function InventoryOperationsPage() {
                 ) : items.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={10}
                       className="px-4 py-10 text-center text-slate-500"
                     >
                       Kayıt bulunamadı.
                     </td>
                   </tr>
                 ) : (
-                  items.slice(0, 20).map((item) => {
+                  items.slice(0, visibleCount).map((item) => {
+                    // Minimum stok tanımlanmamışsa (0) kritik sayılmaz;
+                    // aksi halde stoğu biten her kalem kırmızı görünürdü.
                     const critical =
-                      item.availableStock <=
-                      item.minimumStock;
+                      item.minimumStock > 0 &&
+                      item.availableStock <= item.minimumStock;
 
                     return (
                       <tr
@@ -855,6 +968,13 @@ export default function InventoryOperationsPage() {
                           <MinimumStockCell item={item} onSaved={loadDashboard} />
                         </td>
 
+                        <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                          {money.format(item.stockValue)}
+                          <div className="text-xs text-slate-500">
+                            birim {money.format(item.averageUnitCost)}
+                          </div>
+                        </td>
+
                         <td className="px-4 py-3">
                           <span
                             className={
@@ -868,6 +988,15 @@ export default function InventoryOperationsPage() {
                               : "Normal"}
                           </span>
                         </td>
+
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <Link
+                            href={`/depo-stok/malzeme/${item.id}`}
+                            className="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            Kartı Aç
+                          </Link>
+                        </td>
                       </tr>
                     );
                   })
@@ -876,11 +1005,25 @@ export default function InventoryOperationsPage() {
             </table>
           </div>
 
-          {items.length > 20 ? (
-            <div className="border-t border-slate-200 px-5 py-3 text-center text-sm text-slate-500">
-              İlk 20 malzeme gösteriliyor. Arama
-              alanını kullanarak diğer kayıtlara
-              ulaşabilirsiniz.
+          {items.length > 0 ? (
+            <div className="flex flex-col items-center gap-2 border-t border-slate-200 px-5 py-3 text-sm text-slate-500 sm:flex-row sm:justify-between">
+              <span>
+                {Math.min(visibleCount, items.length)} / {items.length} malzeme
+                {" · "}
+                Toplam stok değeri: {money.format(
+                  items.reduce((sum, item) => sum + item.stockValue, 0),
+                )}
+              </span>
+
+              {items.length > visibleCount ? (
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((current) => current + 25)}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Daha fazla göster
+                </button>
+              ) : null}
             </div>
           ) : null}
         </section>

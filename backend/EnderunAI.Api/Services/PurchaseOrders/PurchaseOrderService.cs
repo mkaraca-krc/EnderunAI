@@ -166,6 +166,7 @@ public sealed class PurchaseOrderService(
             .Include(x => x.Quotations)
                 .ThenInclude(x => x.Items)
                     .ThenInclude(x => x.RfqItem)
+                        .ThenInclude(x => x.PurchaseRequestItem)
             .AsSplitQuery()
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -221,6 +222,12 @@ public sealed class PurchaseOrderService(
                     RfqItemId = x.RfqItemId,
                     RfqSupplierQuotationItemId = x.Id,
                     LineNumber = x.RfqItem.LineNumber,
+                    // Stok kartı bağı talepten taşınır: talep → RFQ →
+                    // sipariş → mal kabul zinciri kopmasın diye. Talepte
+                    // kart seçilmemişse null kalır, akış aynen çalışır.
+                    InventoryItemId = x.RfqItem.PurchaseRequestItem != null
+                        ? x.RfqItem.PurchaseRequestItem.InventoryItemId
+                        : null,
                     MaterialDescription = x.RfqItem.MaterialDescription,
                     Brand = x.Brand,
                     Model = x.Model,

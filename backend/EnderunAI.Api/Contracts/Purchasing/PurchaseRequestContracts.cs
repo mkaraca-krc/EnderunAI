@@ -5,7 +5,13 @@ public sealed record CreatePurchaseRequestItemRequest(
     decimal Quantity,
     string Unit,
     DateTime? RequestedDeliveryDate,
-    string? Notes);
+    string? Notes,
+    /// <summary>
+    /// Talep edilen stok kartı. Opsiyonel ve en sonda: katalogda olmayan
+    /// malzeme de talep edilebilmeli, mevcut çağıranlar da bozulmamalı.
+    /// Seçilirse zincir mal kabule kadar kopmadan taşınır.
+    /// </summary>
+    Guid? InventoryItemId = null);
 
 public sealed record CreatePurchaseRequestRequest(
     Guid CompanyId,

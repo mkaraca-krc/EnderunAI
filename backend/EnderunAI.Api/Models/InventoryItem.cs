@@ -31,6 +31,35 @@ public sealed class InventoryItem : BaseEntity
     /// </summary>
     public decimal AverageUnitCost { get; set; }
 
+    /// <summary>
+    /// En son mal kabulde ödenen TRY birim fiyat.
+    ///
+    /// <see cref="AverageUnitCost"/> stok değerlemesi için doğru olandır
+    /// ama "bu malzemeyi en son kaça aldık" sorusunu cevaplamaz —
+    /// ortalama, eski ucuz alışları da içinde taşır. Satın alma
+    /// pazarlığında bakılan rakam budur.
+    /// </summary>
+    public decimal? LastPurchasePrice { get; set; }
+
+    /// <summary>Son alışın tarihi; fiyatın ne kadar güncel olduğunu söyler.</summary>
+    public DateTime? LastPurchaseDate { get; set; }
+
+    /// <summary>
+    /// Tercih edilen tedarikçi. Zorunlu değil ve satın almayı
+    /// kısıtlamaz — yalnızca teklif isterken kime sorulacağını hatırlatır.
+    /// </summary>
+    public Guid? PreferredSupplierCurrentAccountId { get; set; }
+    public CurrentAccount? PreferredSupplierCurrentAccount { get; set; }
+
+    /// <summary>Malzemenin tabi olduğu KDV oranı (%).</summary>
+    public decimal? VatRate { get; set; }
+
+    /// <summary>Teknik özellik, kullanım notu vb.</summary>
+    public string? Description { get; set; }
+
+    /// <summary>Yüklenen görselin dosya yolu (uploads/stok-kartlari).</summary>
+    public string? ImagePath { get; set; }
+
     public ICollection<WarehouseStock> WarehouseStocks { get; set; } = new List<WarehouseStock>();
     public ICollection<StockMovement> StockMovements { get; set; } = new List<StockMovement>();
 }

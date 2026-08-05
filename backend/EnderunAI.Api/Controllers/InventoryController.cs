@@ -20,7 +20,13 @@ public sealed class InventoryController(
 {
     [HttpGet("items")]
     [RequirePermission(PermissionCatalog.Keys.InventoryView)]
-    public async Task<IActionResult> GetItems([FromQuery] Guid? companyId, [FromQuery] string? search, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetItems(
+        [FromQuery] Guid? companyId,
+        [FromQuery] string? search,
+        [FromQuery] string? category,
+        [FromQuery] Guid? warehouseId,
+        [FromQuery] bool? criticalOnly,
+        CancellationToken cancellationToken)
     {
         var query = db.InventoryItems.AsNoTracking();
         if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
@@ -29,7 +35,20 @@ public sealed class InventoryController(
             var term = search.Trim().ToLower();
             query = query.Where(x => x.Code.ToLower().Contains(term) || x.Name.ToLower().Contains(term) ||
                 (x.Brand != null && x.Brand.ToLower().Contains(term)) ||
-                (x.Model != null && x.Model.ToLower().Contains(term)));
+                (x.Model != null && x.Model.ToLower().Contains(term)) ||
+                (x.Barcode != null && x.Barcode.ToLower().Contains(term)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(category))
+            query = query.Where(x => x.Category == category);
+
+        // Depo süzgeci: o depoda stok SATIRI olan kalemler. Miktarı sıfır
+        // olan satır da gelir — "bu depoda tutulan malzeme" sorusunun
+        // cevabı, o an kaç tane olduğundan bağımsızdır.
+        if (warehouseId.HasValue)
+        {
+            query = query.Where(x =>
+                x.WarehouseStocks.Any(s => s.WarehouseId == warehouseId.Value));
         }
 
         var items = await query.OrderBy(x => x.Name).Select(x => new
@@ -37,12 +56,96 @@ public sealed class InventoryController(
             x.Id, x.CompanyId, CompanyName = x.Company.Name, x.Code, x.Name, x.Category,
             x.Brand, x.Model, x.Unit, x.Barcode, x.MinimumStock, x.MaximumStock,
             x.AverageUnitCost,
+            x.LastPurchasePrice, x.LastPurchaseDate, x.VatRate,
+            x.PreferredSupplierCurrentAccountId,
+            PreferredSupplierTitle = x.PreferredSupplierCurrentAccount != null
+                ? x.PreferredSupplierCurrentAccount.Title
+                : null,
             x.Type, x.IsActive,
             TotalStock = x.WarehouseStocks.Sum(s => s.Quantity),
-            AvailableStock = x.WarehouseStocks.Sum(s => s.Quantity - s.ReservedQuantity)
+            AvailableStock = x.WarehouseStocks.Sum(s => s.Quantity - s.ReservedQuantity),
+            // Stok değeri ağırlıklı ortalama maliyetten hesaplanır; son
+            // alış fiyatı kullanılsaydı eski stok bugünkü fiyatla
+            // değerlenir ve bilanço şişerdi.
+            StockValue = x.WarehouseStocks.Sum(s => s.Quantity) * x.AverageUnitCost
         }).ToListAsync(cancellationToken);
 
+        if (criticalOnly == true)
+        {
+            items = items
+                .Where(x => x.MinimumStock > 0m && x.AvailableStock <= x.MinimumStock)
+                .ToList();
+        }
+
         return Ok(items);
+    }
+
+    /// <summary>Kategori süzgecinin seçenekleri; serbest metin alandan türetilir.</summary>
+    [HttpGet("categories")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
+    public async Task<IActionResult> GetCategories(
+        [FromQuery] Guid? companyId, CancellationToken cancellationToken)
+    {
+        var query = db.InventoryItems.AsNoTracking();
+        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
+
+        var categories = await query
+            .Where(x => x.Category != null && x.Category != "")
+            .Select(x => x.Category!)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync(cancellationToken);
+
+        return Ok(categories);
+    }
+
+    [HttpGet("items/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
+    public async Task<IActionResult> GetItem(Guid id, CancellationToken cancellationToken)
+    {
+        var item = await db.InventoryItems
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new InventoryItemDetail(
+                x.Id,
+                x.CompanyId,
+                x.Company.Name,
+                x.Code,
+                x.Name,
+                x.Category,
+                x.Brand,
+                x.Model,
+                x.Unit,
+                x.Barcode,
+                x.MinimumStock,
+                x.MaximumStock,
+                (int)x.Type,
+                x.IsActive,
+                x.AverageUnitCost,
+                x.LastPurchasePrice,
+                x.LastPurchaseDate,
+                x.PreferredSupplierCurrentAccountId,
+                x.PreferredSupplierCurrentAccount != null
+                    ? x.PreferredSupplierCurrentAccount.Title
+                    : null,
+                x.VatRate,
+                x.Description,
+                x.ImagePath,
+                x.WarehouseStocks.Sum(s => s.Quantity),
+                x.WarehouseStocks.Sum(s => s.Quantity - s.ReservedQuantity),
+                x.WarehouseStocks.Sum(s => s.Quantity) * x.AverageUnitCost,
+                x.WarehouseStocks.Select(s => new InventoryItemWarehouseStock(
+                    s.WarehouseId,
+                    s.Warehouse.Code,
+                    s.Warehouse.Name,
+                    s.Quantity,
+                    s.ReservedQuantity,
+                    s.Quantity - s.ReservedQuantity)).ToList()))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return item is null
+            ? NotFound(new { message = "Malzeme kartı bulunamadı." })
+            : Ok(item);
     }
 
     [HttpPost("items")]
@@ -74,8 +177,14 @@ public sealed class InventoryController(
             Barcode = request.Barcode?.Trim(),
             MinimumStock = request.MinimumStock,
             MaximumStock = request.MaximumStock,
-            Type = (InventoryItemType)request.Type
+            Type = (InventoryItemType)request.Type,
+            PreferredSupplierCurrentAccountId = request.PreferredSupplierCurrentAccountId,
+            VatRate = request.VatRate,
+            Description = request.Description?.Trim()
         };
+
+        if (entity.VatRate is < 0m or > 100m)
+            return BadRequest(new { message = "KDV oranı 0-100 arasında olmalıdır." });
 
         db.InventoryItems.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
@@ -105,6 +214,13 @@ public sealed class InventoryController(
         item.MaximumStock = request.MaximumStock;
         item.Type = (InventoryItemType)request.Type;
         item.IsActive = request.IsActive;
+        item.PreferredSupplierCurrentAccountId = request.PreferredSupplierCurrentAccountId;
+        item.VatRate = request.VatRate;
+        item.Description = request.Description?.Trim();
+
+        if (item.VatRate is < 0m or > 100m)
+            return BadRequest(new { message = "KDV oranı 0-100 arasında olmalıdır." });
+
         item.UpdatedAtUtc = DateTime.UtcNow;
         item.UpdatedByUserId = currentUser.UserId;
 

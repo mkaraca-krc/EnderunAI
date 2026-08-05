@@ -249,25 +249,38 @@ public sealed class CriticalStockBriefingSource(AppDbContext db)
     {
         // Minimum stok tanımlanmamış (0) kalemler uyarı üretmemeli;
         // aksi halde her kalem kritik görünürdü.
-        var critical = await db.InventoryItems
+        var criticalQuery = db.InventoryItems
             .AsNoTracking()
             .Where(item => item.MinimumStock > 0m &&
                            db.WarehouseStocks
                                .Where(stock => stock.InventoryItemId == item.Id)
-                               .Sum(stock => (decimal?)stock.Quantity) < item.MinimumStock)
+                               .Sum(stock => (decimal?)stock.Quantity) < item.MinimumStock);
+
+        // Sayım Take'ten ÖNCE alınıyor: daha önce ilk 5 kayıt çekilip
+        // "critical.Count" raporlandığı için 30 malzeme kritikken de
+        // "5 malzeme" yazıyordu.
+        var criticalCount = await criticalQuery.CountAsync(cancellationToken);
+
+        if (criticalCount == 0)
+            return [];
+
+        var names = await criticalQuery
+            .OrderBy(item => item.Name)
             .Select(item => item.Name)
             .Take(5)
             .ToListAsync(cancellationToken);
 
-        if (critical.Count == 0)
-            return [];
+        var detail = string.Join(", ", names);
+        if (criticalCount > names.Count)
+            detail += $" ve {criticalCount - names.Count} kalem daha";
 
         return
         [
             new BriefingItem(
-                $"{critical.Count} malzeme minimum stok seviyesinin altında",
-                string.Join(", ", critical),
-                BriefingSeverity.Warning, "/stok")
+                $"{criticalCount} malzeme minimum stok seviyesinin altında",
+                detail,
+                // Bağlantı /stok idi; böyle bir sayfa yok, 404 veriyordu.
+                BriefingSeverity.Warning, "/depo-stok")
         ];
     }
 }

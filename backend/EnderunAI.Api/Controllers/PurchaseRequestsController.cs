@@ -116,6 +116,9 @@ public sealed class PurchaseRequestsController(
                     {
                         i.Id,
                         i.LineNumber,
+                        i.InventoryItemId,
+                        InventoryItemCode = i.InventoryItem != null ? i.InventoryItem.Code : null,
+                        InventoryItemName = i.InventoryItem != null ? i.InventoryItem.Name : null,
                         i.MaterialDescription,
                         i.Quantity,
                         i.Unit,
@@ -188,6 +191,7 @@ public sealed class PurchaseRequestsController(
             entity.Items.Add(new PurchaseRequestItem
             {
                 LineNumber = lineNumber++,
+                InventoryItemId = item.InventoryItemId,
                 MaterialDescription = item.MaterialDescription.Trim(),
                 Quantity = item.Quantity,
                 Unit = item.Unit.Trim(),
@@ -255,6 +259,7 @@ public sealed class PurchaseRequestsController(
             entity.Items.Add(new PurchaseRequestItem
             {
                 LineNumber = lineNumber++,
+                InventoryItemId = item.InventoryItemId,
                 MaterialDescription = item.MaterialDescription.Trim(),
                 Quantity = item.Quantity,
                 Unit = item.Unit.Trim(),

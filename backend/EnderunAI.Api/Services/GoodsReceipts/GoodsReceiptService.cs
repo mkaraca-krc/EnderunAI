@@ -231,7 +231,11 @@ public sealed class GoodsReceiptService(
             Items = remainingItems.Select(x => new GoodsReceiptItem
             {
                 PurchaseOrderItemId = x.Item.Id,
-                InventoryItemId = null,
+                // Sipariş kaleminde stok kartı seçiliyse mal kabul de
+                // onunla açılır; kullanıcı her kalemi elle eşleştirmek
+                // zorunda kalmaz. Seçili değilse eskisi gibi boş gelir ve
+                // kabul ekranında seçilir.
+                InventoryItemId = x.Item.InventoryItemId,
                 LineNumber = x.Item.LineNumber,
                 MaterialDescription = x.Item.MaterialDescription,
                 Brand = x.Item.Brand,
@@ -539,6 +543,14 @@ public sealed class GoodsReceiptService(
                 : ((priorQuantity * inventoryItem.AverageUnitCost) +
                    (item.AcceptedQuantity * unitCostTry)) /
                   (priorQuantity + item.AcceptedQuantity);
+
+            // Son alış fiyatı ortalamadan ayrı tutulur: ortalama stok
+            // değerlemesi için doğru, ama "bu malzemeyi en son kaça
+            // aldık" sorusuna eski ucuz alışları da taşıdığı için yanlış
+            // cevap verir. Satın almanın pazarlıkta baktığı rakam budur.
+            inventoryItem.LastPurchasePrice = unitCostTry;
+            inventoryItem.LastPurchaseDate = receipt.ReceiptDate;
+
             inventoryItem.UpdatedAtUtc = now;
             inventoryItem.UpdatedByUserId = currentUser.UserId;
 
