@@ -33,6 +33,8 @@ export type AttendanceItem = {
   roleName?: string | null;
   workItemCode?: string | null;
   workItemName?: string | null;
+  /** İcmal kısmı — işçiliğin hangi imalata yazılacağı. Opsiyonel. */
+  projectHakedisSectionId?: string | null;
   locationName?: string | null;
   isApproved: boolean;
   approvedByUserId?: string | null;
@@ -70,6 +72,8 @@ export type CreateAttendanceRequest = {
   roleName?: string | null;
   workItemCode?: string | null;
   workItemName?: string | null;
+  /** İcmal kısmı — işçiliğin hangi imalata yazılacağı. Opsiyonel. */
+  projectHakedisSectionId?: string | null;
   locationName?: string | null;
   description?: string | null;
 };

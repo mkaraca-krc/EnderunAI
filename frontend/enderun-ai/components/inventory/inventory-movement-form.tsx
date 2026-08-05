@@ -39,6 +39,9 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
   const [targetWarehouseId, setTargetWarehouseId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [projectSiteId, setProjectSiteId] = useState("");
+  /** İcmal kısmı — sarfın hangi imalata gittiği. Opsiyonel. */
+  const [sections, setSections] = useState<SelectOption[]>([]);
+  const [projectHakedisSectionId, setProjectHakedisSectionId] = useState("");
   const [inventoryItemId, setInventoryItemId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
@@ -63,9 +66,11 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
 
   useEffect(() => {
     setProjectSiteId("");
+    setProjectHakedisSectionId("");
 
     if (mode !== "issue" || !projectId) {
       setSites([]);
+      setSections([]);
       return;
     }
 
@@ -73,6 +78,13 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
       .getProjectSites(projectId)
       .then(setSites)
       .catch(() => setSites([]));
+
+    // Kısım listesi alınamazsa form çalışmaya devam eder: kısım
+    // opsiyonel, sarfın kaydedilmesini engellememeli.
+    void inventoryMovementService
+      .getProjectSections(projectId)
+      .then(setSections)
+      .catch(() => setSections([]));
   }, [projectId, mode]);
 
   const validationErrors: string[] = [];
@@ -126,6 +138,7 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
         const result = await inventoryMovementService.issue({
           warehouseId,
           projectSiteId: projectSiteId || undefined,
+          projectHakedisSectionId: projectHakedisSectionId || undefined,
           ...common,
         });
 
@@ -257,6 +270,29 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
                   </option>
                 ))}
               </select>
+            </label>
+          )}
+
+          {mode === "issue" && projectId && sections.length > 0 && (
+            <label>
+              <span>İcmal kısmı (ops.)</span>
+              <select
+                value={projectHakedisSectionId}
+                onChange={(event) =>
+                  setProjectHakedisSectionId(event.target.value)
+                }
+              >
+                <option value="">Kısım seçilmedi (proje geneli)</option>
+                {sections.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.code ? `${option.code} — ` : ""}
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+              <small>
+                Seçilirse maliyet o kısma işlenir; bilinmiyorsa boş bırakın.
+              </small>
             </label>
           )}
 

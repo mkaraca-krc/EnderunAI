@@ -49,6 +49,9 @@ export const inventoryMovementService = {
   getItems: async () => normalize(await request<unknown>("/api/inventory/items")),
   getProjectSites: async (projectId: string) =>
     normalize(await request<unknown>(`/api/projects/${projectId}/sites`)),
+  /** İcmal kısımları — sarfın hangi imalata gittiğini işaretlemek için. */
+  getProjectSections: async (projectId: string) =>
+    normalize(await request<unknown>(`/api/projects/${projectId}/hakedis-sections`)),
   getCriticalStockAlerts: () => request<CriticalStockAlert[]>("/api/inventory/critical-stock-alerts"),
   /** Bir deponun stok satırları; sayım ekranı mevcut miktarı buradan okur. */
   getWarehouseStocks: (warehouseId: string) =>

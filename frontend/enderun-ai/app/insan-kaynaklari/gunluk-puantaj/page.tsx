@@ -34,6 +34,10 @@ import {
   projectSiteService,
   ProjectSiteListItem,
 } from "@/services/project-site.service";
+import {
+  progressPaymentService,
+  type ProjectHakedisSection,
+} from "@/services/progress-payment.service";
 
 type AttendanceForm = {
   companyId: string;
@@ -53,6 +57,8 @@ type AttendanceForm = {
   roleName: string;
   workItemCode: string;
   workItemName: string;
+  /** İcmal kısmı — ekibin o gün çalıştığı imalat. Opsiyonel. */
+  projectHakedisSectionId: string;
   locationName: string;
   description: string;
 };
@@ -74,6 +80,8 @@ type BulkForm = {
   roleName: string;
   workItemCode: string;
   workItemName: string;
+  /** İcmal kısmı — ekibin o gün çalıştığı imalat. Opsiyonel. */
+  projectHakedisSectionId: string;
   locationName: string;
   description: string;
 };
@@ -119,6 +127,7 @@ const initialForm: AttendanceForm = {
   roleName: "",
   workItemCode: "",
   workItemName: "",
+  projectHakedisSectionId: "",
   locationName: "",
   description: "",
 };
@@ -140,6 +149,7 @@ const initialBulkForm: BulkForm = {
   roleName: "",
   workItemCode: "",
   workItemName: "",
+  projectHakedisSectionId: "",
   locationName: "",
   description: "",
 };
@@ -203,6 +213,8 @@ export default function DailyAttendancePage() {
   // İşçilik maliyetinin şantiyeye dağıtılabilmesi için seçilen projenin
   // şantiyeleri; proje değişince yeniden yüklenir.
   const [singleFormSites, setSingleFormSites] = useState<ProjectSiteListItem[]>([]);
+  const [singleFormSections, setSingleFormSections] =
+    useState<ProjectHakedisSection[]>([]);
   const [bulkFormSites, setBulkFormSites] = useState<ProjectSiteListItem[]>([]);
 
   const [form, setForm] = useState<AttendanceForm>(initialForm);
@@ -259,6 +271,30 @@ export default function DailyAttendancePage() {
       })
       .catch(() => {
         if (!cancelled) setSingleFormSites([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.projectId]);
+
+  // İcmal kısımları: seçilirse işçilik o kısma yazılır. Liste
+  // alınamazsa puantaj yine kaydedilir — kısım opsiyonel.
+  useEffect(() => {
+    if (!form.projectId) {
+      setSingleFormSections([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    progressPaymentService
+      .getProjectSections(form.projectId)
+      .then((result) => {
+        if (!cancelled) setSingleFormSections(result);
+      })
+      .catch(() => {
+        if (!cancelled) setSingleFormSections([]);
       });
 
     return () => {
@@ -541,6 +577,7 @@ export default function DailyAttendancePage() {
       roleName: item.roleName ?? "",
       workItemCode: item.workItemCode ?? "",
       workItemName: item.workItemName ?? "",
+      projectHakedisSectionId: item.projectHakedisSectionId ?? "",
       locationName: item.locationName ?? "",
       description: item.description ?? "",
     });
@@ -664,6 +701,7 @@ export default function DailyAttendancePage() {
       roleName: values.roleName.trim() || null,
       workItemCode: values.workItemCode.trim() || null,
       workItemName: values.workItemName.trim() || null,
+      projectHakedisSectionId: values.projectHakedisSectionId || null,
       locationName: values.locationName.trim() || null,
       description: values.description.trim() || null,
     };
@@ -1330,6 +1368,27 @@ export default function DailyAttendancePage() {
                 placeholder="İş kalemi adı"
                 className="rounded-lg border border-slate-300 p-3"
               />
+
+              {singleFormSections.length > 0 && (
+                <select
+                  value={form.projectHakedisSectionId}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      projectHakedisSectionId: event.target.value,
+                    }))
+                  }
+                  className="rounded-lg border border-slate-300 p-3"
+                  title="İcmal kısmı — seçilirse işçilik maliyeti o kısma yazılır"
+                >
+                  <option value="">İcmal kısmı seçilmedi</option>
+                  {singleFormSections.map((section) => (
+                    <option key={section.id} value={section.id}>
+                      {section.name}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               <input
                 value={form.locationName}
