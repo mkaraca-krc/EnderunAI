@@ -25,6 +25,20 @@ const money = new Intl.NumberFormat("tr-TR", {
   currency: "TRY",
 });
 
+/** CurrentAccountStatus.Approved */
+const APPROVED_STATUS = 2;
+
+/**
+ * Bize fatura kesebilecek cari rolleri: tedarikçi, taşeron, resmi kurum,
+ * banka, hizmet firması (OSGB burada), kiralama firması, diğer. Yalnızca
+ * "müşteri" rolü dışarıda kalır.
+ *
+ * Ekran daha önce yalnızca Tedarikçi (2) bitini arıyordu; taşeron ve OSGB
+ * faturası hiç girilemiyordu. Backend zaten yalnızca "onaylı cari" şartı
+ * koyuyor (SupplierInvoiceService.ValidateHeaderAsync).
+ */
+const SUPPLIER_SIDE_ROLES = 2 | 4 | 8 | 16 | 32 | 64 | 128;
+
 type DraftItem = {
   description: string;
   quantity: string;
@@ -97,10 +111,12 @@ export default function NewSupplierInvoicePage() {
     ])
       .then(([accountList, projectList, orderList]) => {
         if (!active) return;
-        // Yalnızca onaylı (status=2) tedarikçi rolündeki cariler.
+        // Onaylı ve bize fatura kesebilecek roldeki cariler.
         setSuppliers(
           accountList.filter(
-            (account) => account.status === 2 && (account.roles & 2) === 2
+            (account) =>
+              account.status === APPROVED_STATUS &&
+              (account.roles & SUPPLIER_SIDE_ROLES) !== 0
           )
         );
         setProjects(projectList);
@@ -143,6 +159,43 @@ export default function NewSupplierInvoicePage() {
     return { subtotal, vat, grandTotal: subtotal + vat };
   }, [items]);
 
+  const validationErrors = useMemo(() => {
+    const messages: string[] = [];
+
+    if (!companyId) messages.push("Şirket seçin.");
+    if (!supplierId) messages.push("Tedarikçi seçin.");
+    if (!projectId) messages.push("Proje seçin.");
+    if (!invoiceNumber.trim()) messages.push("Tedarikçi fatura numarası girin.");
+    if (!invoiceDate) messages.push("Fatura tarihi girin.");
+
+    items.forEach((item, index) => {
+      const line = index + 1;
+
+      if (!item.description.trim()) {
+        messages.push(`Kalem ${line}: açıklama girin.`);
+      }
+
+      if (!(Number(item.quantity) > 0)) {
+        messages.push(`Kalem ${line}: miktar sıfırdan büyük olmalı.`);
+      }
+
+      // Boş birim fiyat Number("") ile sessizce 0'a dönüşüp sıfır tutarlı
+      // fatura kaydediyordu; boş bırakmak ile 0 yazmak ayrı şeyler.
+      if (item.unitPrice.trim() === "") {
+        messages.push(`Kalem ${line}: birim fiyat girin.`);
+      } else if (!(Number(item.unitPrice) >= 0)) {
+        messages.push(`Kalem ${line}: birim fiyat geçersiz.`);
+      }
+
+      const vatRate = Number(item.vatRate);
+      if (!(vatRate >= 0 && vatRate <= 100)) {
+        messages.push(`Kalem ${line}: KDV oranı 0-100 arasında olmalı.`);
+      }
+    });
+
+    return messages;
+  }, [companyId, supplierId, projectId, invoiceNumber, invoiceDate, items]);
+
   function updateItem(index: number, patch: Partial<DraftItem>) {
     setItems((current) =>
       current.map((item, i) => (i === index ? { ...item, ...patch } : item))
@@ -151,6 +204,15 @@ export default function NewSupplierInvoicePage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    // Buton hiçbir zaman pasif değil; eksik varsa kullanıcıya NE eksik
+    // olduğu söyleniyor. Sessizce disabled kalmak, kullanıcının neyi
+    // dolduramadığını tahmin etmesine yol açıyordu.
+    if (validationErrors.length > 0) {
+      setError(validationErrors.join(" "));
+      return;
+    }
+
     setSaving(true);
     setError("");
 
@@ -187,10 +249,6 @@ export default function NewSupplierInvoicePage() {
     }
   }
 
-  const canSubmit =
-    Boolean(companyId && supplierId && projectId && invoiceNumber.trim()) &&
-    items.every((item) => item.description.trim() && Number(item.quantity) > 0);
-
   return (
     <ErpShell
       title="Yeni Tedarikçi Faturası"
@@ -213,7 +271,15 @@ export default function NewSupplierInvoicePage() {
             <select
               required
               value={companyId}
-              onChange={(e) => setCompanyId(e.target.value)}
+              onChange={(e) => {
+                // Şirket değişince tedarikçi/proje/sipariş başka şirkete ait
+                // kalıyordu ve kayıtta "Tedarikçi cari kartı bulunamadı"
+                // hatası veriyordu.
+                setCompanyId(e.target.value);
+                setSupplierId("");
+                setProjectId("");
+                setPurchaseOrderId("");
+              }}
             >
               {companies.map((company) => (
                 <option key={company.id} value={company.id}>
@@ -228,7 +294,12 @@ export default function NewSupplierInvoicePage() {
             <select
               required
               value={supplierId}
-              onChange={(e) => setSupplierId(e.target.value)}
+              onChange={(e) => {
+                // Sipariş listesi tedarikçiye göre süzülüyor; seçili sipariş
+                // artık bu tedarikçiye ait olmayabilir.
+                setSupplierId(e.target.value);
+                setPurchaseOrderId("");
+              }}
             >
               <option value="">Onaylı tedarikçi seçin</option>
               {suppliers.map((supplier) => (
@@ -237,6 +308,12 @@ export default function NewSupplierInvoicePage() {
                 </option>
               ))}
             </select>
+            {companyId && suppliers.length === 0 && (
+              <small>
+                Bu şirkette onaylı tedarikçi cari kartı yok. Cari kartı önce
+                Cariler ekranından onaylayın.
+              </small>
+            )}
           </label>
 
           <label>
@@ -244,7 +321,10 @@ export default function NewSupplierInvoicePage() {
             <select
               required
               value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
+              onChange={(e) => {
+                setProjectId(e.target.value);
+                setPurchaseOrderId("");
+              }}
             >
               <option value="">Proje seçin</option>
               {projects.map((project) => (
@@ -426,7 +506,7 @@ export default function NewSupplierInvoicePage() {
             Vazgeç
           </button>
 
-          <button type="submit" className="erp-primary-button" disabled={saving || !canSubmit}>
+          <button type="submit" className="erp-primary-button" disabled={saving}>
             {saving ? "Kaydediliyor..." : "Taslak Olarak Kaydet"}
           </button>
         </div>
