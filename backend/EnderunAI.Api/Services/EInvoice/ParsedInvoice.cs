@@ -3,9 +3,10 @@ namespace EnderunAI.Api.Services.EInvoice;
 /// <summary>
 /// Faturanın bizim açımızdan yönü.
 ///
-/// DİKKAT: UBL-TR'de <c>InvoiceTypeCode</c> her faturada "SATIS" yazar
-/// — kesen tarafın açısındandır. Yön asla oradan okunmaz; VKN
-/// karşılaştırmasıyla belirlenir.
+/// DİKKAT: UBL-TR'de <c>InvoiceTypeCode</c> normal faturada her zaman
+/// "SATIS" yazar — kesen tarafın açısındandır. Yön asla oradan okunmaz;
+/// VKN karşılaştırmasıyla belirlenir. Alan yalnızca IADE ayrımı için
+/// okunur.
 /// </summary>
 public enum InvoiceDirection
 {
@@ -66,7 +67,20 @@ public sealed record ParsedInvoice(
     /// <summary>KDV tevkifatı; yoksa sıfır.</summary>
     decimal WithholdingAmount,
     InvoiceParseSource ParseSource,
-    IReadOnlyList<string> Problems)
+    IReadOnlyList<string> Problems,
+    /// <summary>
+    /// UBL-TR <c>InvoiceTypeCode</c>: SATIS, IADE, TEVKIFAT, ISTISNA...
+    /// Yön için ASLA kullanılmaz (her fatura keseni açısından "SATIS"
+    /// yazar) ama IADE değeri belgenin bir iade faturası olduğunu
+    /// söyler ve bunun başka karşılığı yoktur.
+    /// </summary>
+    string? InvoiceTypeCode = null,
+    /// <summary>
+    /// İade faturasında atıf yapılan orijinal fatura numarası
+    /// (cac:BillingReference). Orijinali otomatik eşleştirmek için;
+    /// bulunamazsa kullanıcı elle seçer.
+    /// </summary>
+    string? ReferencedInvoiceNumber = null)
 {
     /// <summary>
     /// Zorunlu alanlar çıkarılabildi mi. Çıkarılamadıysa AI yedeği
@@ -106,4 +120,10 @@ public sealed record ParsedInvoice(
     /// </summary>
     public static string Normalize(string? taxNumber) =>
         new((taxNumber ?? string.Empty).Where(char.IsDigit).ToArray());
+
+    /// <summary>
+    /// Belge bir iade faturası mı (InvoiceTypeCode = IADE).
+    /// </summary>
+    public bool IsReturnDocument =>
+        string.Equals(InvoiceTypeCode?.Trim(), "IADE", StringComparison.OrdinalIgnoreCase);
 }

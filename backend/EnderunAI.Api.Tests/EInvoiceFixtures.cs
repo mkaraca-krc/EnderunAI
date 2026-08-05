@@ -314,4 +314,79 @@ public static class EInvoiceFixtures
           <ID>IRS2026000000001</ID>
         </DespatchAdvice>
         """;
+
+    /// <summary>
+    /// İADE faturası. İade eden taraf faturayı keser: burada satıcı BİZ
+    /// görünürüz (giden fatura) ama belge bizim ALIŞ İADEMİZDİR.
+    /// cac:BillingReference orijinal faturaya atıf yapar.
+    /// </summary>
+    public static string PurchaseReturnInvoice(
+        string invoiceNumber = "IADE2026000000001",
+        string counterpartyTaxNumber = "1234567890",
+        string referencedInvoiceNumber = "AYG2026000000456") => $"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+                 xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+                 xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2">
+          <cbc:ProfileID>TEMELFATURA</cbc:ProfileID>
+          <cbc:ID>{invoiceNumber}</cbc:ID>
+          <cbc:IssueDate>2026-04-10</cbc:IssueDate>
+          <cbc:InvoiceTypeCode>IADE</cbc:InvoiceTypeCode>
+          <cbc:DocumentCurrencyCode>TRY</cbc:DocumentCurrencyCode>
+          <cac:BillingReference>
+            <cac:InvoiceDocumentReference>
+              <cbc:ID>{referencedInvoiceNumber}</cbc:ID>
+              <cbc:IssueDate>2026-03-05</cbc:IssueDate>
+            </cac:InvoiceDocumentReference>
+          </cac:BillingReference>
+          <cac:AccountingSupplierParty>
+            <cac:Party>
+              <cac:PartyIdentification>
+                <cbc:ID schemeID="VKN">{OurTaxNumber}</cbc:ID>
+              </cac:PartyIdentification>
+              <cac:PartyName>
+                <cbc:Name>ENDERUN ELEKTRIK URETIM ENERJI A.S.</cbc:Name>
+              </cac:PartyName>
+            </cac:Party>
+          </cac:AccountingSupplierParty>
+          <cac:AccountingCustomerParty>
+            <cac:Party>
+              <cac:PartyIdentification>
+                <cbc:ID schemeID="VKN">{counterpartyTaxNumber}</cbc:ID>
+              </cac:PartyIdentification>
+              <cac:PartyName>
+                <cbc:Name>AY GLOBAL ELEKTRIK MALZEMELERI LTD. STI.</cbc:Name>
+              </cac:PartyName>
+            </cac:Party>
+          </cac:AccountingCustomerParty>
+          <cac:TaxTotal>
+            <cbc:TaxAmount currencyID="TRY">200.00</cbc:TaxAmount>
+            <cac:TaxSubtotal>
+              <cbc:TaxableAmount currencyID="TRY">1000.00</cbc:TaxableAmount>
+              <cbc:TaxAmount currencyID="TRY">200.00</cbc:TaxAmount>
+              <cbc:Percent>20</cbc:Percent>
+            </cac:TaxSubtotal>
+          </cac:TaxTotal>
+          <cac:LegalMonetaryTotal>
+            <cbc:LineExtensionAmount currencyID="TRY">1000.00</cbc:LineExtensionAmount>
+            <cbc:TaxExclusiveAmount currencyID="TRY">1000.00</cbc:TaxExclusiveAmount>
+            <cbc:TaxInclusiveAmount currencyID="TRY">1200.00</cbc:TaxInclusiveAmount>
+            <cbc:PayableAmount currencyID="TRY">1200.00</cbc:PayableAmount>
+          </cac:LegalMonetaryTotal>
+          <cac:InvoiceLine>
+            <cbc:ID>1</cbc:ID>
+            <cbc:InvoicedQuantity unitCode="MTR">50</cbc:InvoicedQuantity>
+            <cbc:LineExtensionAmount currencyID="TRY">1000.00</cbc:LineExtensionAmount>
+            <cac:TaxTotal>
+              <cbc:TaxAmount currencyID="TRY">200.00</cbc:TaxAmount>
+              <cac:TaxSubtotal>
+                <cbc:TaxAmount currencyID="TRY">200.00</cbc:TaxAmount>
+                <cbc:Percent>20</cbc:Percent>
+              </cac:TaxSubtotal>
+            </cac:TaxTotal>
+            <cac:Item><cbc:Name>NYAF Kablo 3x2.5 (iade)</cbc:Name></cac:Item>
+            <cac:Price><cbc:PriceAmount currencyID="TRY">20.00</cbc:PriceAmount></cac:Price>
+          </cac:InvoiceLine>
+        </Invoice>
+        """;
 }

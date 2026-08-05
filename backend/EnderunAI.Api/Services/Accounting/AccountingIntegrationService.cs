@@ -1236,6 +1236,24 @@ public sealed class AccountingIntegrationService(
                  CashAccountOrThrow(),
                  "Verilen çek ödendi"),
 
+            // ERTELEME: eski çekin girişi ters kayıtla kapanır, yerine
+            // geçen yeni çek kendi fişini üretir. Net etki yalnızca
+            // vadenin değişmesidir; borç/alacak yeniden doğmaz.
+            (ChequeStatus.Portfolio, ChequeStatus.Replaced) =>
+                (CounterpartyAccount(receivable: true),
+                 await ChequeAccountAsync(ChequeStatus.Portfolio),
+                 "Çek ertelendi — yenisiyle değiştirildi"),
+
+            (ChequeStatus.AtBank, ChequeStatus.Replaced) =>
+                (CounterpartyAccount(receivable: true),
+                 await ChequeAccountAsync(ChequeStatus.AtBank),
+                 "Çek ertelendi — yenisiyle değiştirildi"),
+
+            (ChequeStatus.Issued, ChequeStatus.Replaced) =>
+                (await ChequeAccountAsync(ChequeStatus.Issued),
+                 CounterpartyAccount(receivable: false),
+                 "Verilen çek ertelendi — yenisiyle değiştirildi"),
+
             // Verilen çek iade alındı: borç yeniden satıcıda.
             (ChequeStatus.Issued, ChequeStatus.Returned) =>
                 (await ChequeAccountAsync(ChequeStatus.Issued),

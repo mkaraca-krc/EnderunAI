@@ -31,7 +31,17 @@ public enum ChequeStatus
     /// <summary>Vadesinde bankadan ödendi.</summary>
     Paid = 11,
     /// <summary>Tedarikçiden geri alındı / iptal edildi.</summary>
-    Returned = 12
+    Returned = 12,
+
+    /// <summary>
+    /// ERTELENDİ/DEĞİŞTİRİLDİ: çek yerine yeni vadeli bir çek verildi
+    /// (ya da bizde alındı). Her iki yönde de kullanılır.
+    ///
+    /// Returned yeniden kullanılmadı: "iade alındı" ile "yenisiyle
+    /// değiştirildi" farklı olaylardır ve erteleme sayısı bir risk
+    /// sinyalidir — ikisi tek durumda toplanırsa o sinyal kaybolur.
+    /// </summary>
+    Replaced = 20
 }
 
 /// <summary>
@@ -97,6 +107,20 @@ public sealed class Cheque : BaseEntity
     public CashAccount? CashAccount { get; set; }
 
     public string? Description { get; set; }
+
+    /// <summary>
+    /// Bu çek ertelendiyse yerine geçen yeni çek.
+    /// </summary>
+    public Guid? ReplacedByChequeId { get; set; }
+    public Cheque? ReplacedByCheque { get; set; }
+
+    /// <summary>
+    /// Bu çek bir ertelemenin sonucuysa yerine geçtiği eski çek.
+    /// Zincir buradan geriye doğru izlenir; uzunluğu kaç kez
+    /// ertelendiğini verir.
+    /// </summary>
+    public Guid? ReplacesChequeId { get; set; }
+    public Cheque? ReplacesCheque { get; set; }
 
     public ICollection<ChequeMovement> Movements { get; set; }
         = new List<ChequeMovement>();

@@ -123,6 +123,33 @@ public sealed class ChequesController(IChequeService service) : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Çek erteleme/değişim. Eski çek "Ertelendi" olur, yerine aynı
+    /// tutarda yeni vadeli çek açılır ve zincire bağlanır.
+    /// </summary>
+    [HttpPost("{id:guid}/replace")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceEdit)]
+    public async Task<IActionResult> Replace(
+        Guid id, ReplaceChequeRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await service.ReplaceAsync(id, request, cancellationToken));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
     [HttpPost("{id:guid}/status")]
     [RequirePermission(PermissionCatalog.Keys.FinanceEdit)]
     public async Task<IActionResult> ChangeStatus(

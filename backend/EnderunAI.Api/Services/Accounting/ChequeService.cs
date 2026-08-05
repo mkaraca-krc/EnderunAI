@@ -37,6 +37,14 @@ public interface IChequeService
     /// </summary>
     Task<ChequeDetailResponse> ReplaceAllocationsAsync(
         Guid id, ChequeAllocationsRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Çek erteleme/değişim: eski çek "Ertelendi" durumuna geçip ters
+    /// kaydı kesilir, yerine aynı tutarda yeni vadeli çek açılır ve
+    /// zincire bağlanır. Verilen ve alınan çeklerin ikisinde de çalışır.
+    /// </summary>
+    Task<ChequeDetailResponse> ReplaceAsync(
+        Guid id, ReplaceChequeRequest request, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -61,11 +69,13 @@ public sealed class ChequeService(
         {
             [ChequeStatus.Portfolio] = new[]
             {
-                ChequeStatus.AtBank, ChequeStatus.Collected, ChequeStatus.Bounced
+                ChequeStatus.AtBank, ChequeStatus.Collected, ChequeStatus.Bounced,
+                ChequeStatus.Replaced
             },
             [ChequeStatus.AtBank] = new[]
             {
-                ChequeStatus.Portfolio, ChequeStatus.Collected, ChequeStatus.Bounced
+                ChequeStatus.Portfolio, ChequeStatus.Collected, ChequeStatus.Bounced,
+                ChequeStatus.Replaced
             },
             [ChequeStatus.AtFactoring] = new[]
             {
@@ -75,10 +85,11 @@ public sealed class ChequeService(
             [ChequeStatus.Bounced] = Array.Empty<ChequeStatus>(),
             [ChequeStatus.Issued] = new[]
             {
-                ChequeStatus.Paid, ChequeStatus.Returned
+                ChequeStatus.Paid, ChequeStatus.Returned, ChequeStatus.Replaced
             },
             [ChequeStatus.Paid] = Array.Empty<ChequeStatus>(),
-            [ChequeStatus.Returned] = Array.Empty<ChequeStatus>()
+            [ChequeStatus.Returned] = Array.Empty<ChequeStatus>(),
+            [ChequeStatus.Replaced] = Array.Empty<ChequeStatus>()
         };
 
     /// <summary>Kasa/banka hesabı seçimi zorunlu olan geçişler.</summary>
@@ -126,6 +137,7 @@ public sealed class ChequeService(
         ChequeStatus.Issued => "Verildi",
         ChequeStatus.Paid => "Ödendi",
         ChequeStatus.Returned => "İade alındı",
+        ChequeStatus.Replaced => "Ertelendi (değiştirildi)",
         _ => status.ToString()
     };
 
@@ -231,6 +243,8 @@ public sealed class ChequeService(
             .Include(x => x.ProgressPayment)
             .Include(x => x.SupplierInvoice)
             .Include(x => x.CashAccount)
+            .Include(x => x.ReplacedByCheque)
+            .Include(x => x.ReplacesCheque)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (cheque is null)
@@ -316,7 +330,12 @@ public sealed class ChequeService(
                 x.CashAccountName,
                 x.AccountingVoucherId,
                 x.AccountingVoucherNumber)).ToList(),
-            allocations);
+            allocations,
+            cheque.ReplacedByChequeId,
+            cheque.ReplacedByCheque?.ChequeNumber,
+            cheque.ReplacesChequeId,
+            cheque.ReplacesCheque?.ChequeNumber,
+            await CountRenewalsAsync(cheque.Id, cancellationToken));
     }
 
     public async Task<ChequeSummaryResponse> GetSummaryAsync(
@@ -646,6 +665,197 @@ public sealed class ChequeService(
         }
 
         return await GetByIdAsync(cheque.Id, cancellationToken);
+    }
+
+    public async Task<ChequeDetailResponse> ReplaceAsync(
+        Guid id, ReplaceChequeRequest request, CancellationToken cancellationToken)
+    {
+        var cheque = await db.Cheques
+            .Include(x => x.Allocations)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new KeyNotFoundException("Çek bulunamadı.");
+
+        if (!NextStatuses(cheque.Status).Contains(ChequeStatus.Replaced))
+        {
+            throw new InvalidOperationException(
+                $"'{StatusName(cheque.Status)}' durumundaki çek ertelenemez.");
+        }
+
+        if (cheque.ReplacedByChequeId is not null)
+            throw new InvalidOperationException("Bu çek zaten ertelenmiş.");
+
+        if (string.IsNullOrWhiteSpace(request.ChequeNumber))
+            throw new ArgumentException("Yeni çek numarası zorunludur.");
+
+        var newChequeNumber = request.ChequeNumber.Trim();
+
+        if (string.Equals(newChequeNumber, cheque.ChequeNumber, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "Yeni çek numarası eskisiyle aynı olamaz; erteleme yeni bir çektir.");
+        }
+
+        if (await db.Cheques.AnyAsync(
+                x => x.CompanyId == cheque.CompanyId &&
+                     x.Direction == cheque.Direction &&
+                     x.ChequeNumber == newChequeNumber,
+                cancellationToken))
+        {
+            throw new InvalidOperationException(
+                $"'{newChequeNumber}' numaralı çek zaten kayıtlı.");
+        }
+
+        var movementDate = AsUtc(request.MovementDate);
+        var newIssueDate = AsUtc(request.IssueDate ?? request.MovementDate);
+        var newDueDate = AsUtc(request.DueDate);
+
+        var internalNumber = await documentNumberService.GenerateAsync(
+            cheque.CompanyId,
+            cheque.Direction == ChequeDirection.Received ? "CHEQUE_RECEIVED" : "CHEQUE_ISSUED",
+            cheque.Direction == ChequeDirection.Received ? "ACK" : "VCK",
+            cancellationToken);
+
+        // Tutar eski çekten kopyalanır, istekten ALINMAZ: vade farkı
+        // ayrı bir belgenin konusudur ve burada sessizce bir gider
+        // hesabına yazılmamalı.
+        var replacement = new Cheque
+        {
+            CompanyId = cheque.CompanyId,
+            Direction = cheque.Direction,
+            Status = cheque.Direction == ChequeDirection.Received
+                ? ChequeStatus.Portfolio
+                : ChequeStatus.Issued,
+            InternalNumber = internalNumber,
+            ChequeNumber = newChequeNumber,
+            BankName = Normalize(request.BankName) ?? cheque.BankName,
+            BankBranch = Normalize(request.BankBranch) ?? cheque.BankBranch,
+            Drawer = Normalize(request.Drawer) ?? cheque.Drawer,
+            CurrentAccountId = cheque.CurrentAccountId,
+            ProjectId = cheque.ProjectId,
+            CostCenterCode = cheque.CostCenterCode,
+            Amount = cheque.Amount,
+            CurrencyCode = cheque.CurrencyCode,
+            IssueDate = newIssueDate,
+            DueDate = newDueDate,
+            ProgressPaymentId = cheque.ProgressPaymentId,
+            SupplierInvoiceId = cheque.SupplierInvoiceId,
+            Description = Normalize(request.Description)
+                ?? $"{cheque.ChequeNumber} numaralı çekin ertelenmesi",
+            ReplacesChequeId = cheque.Id
+        };
+
+        var ownsTransaction = db.Database.CurrentTransaction is null;
+        var dbTransaction = ownsTransaction
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        try
+        {
+            db.Cheques.Add(replacement);
+            await db.SaveChangesAsync(cancellationToken);
+
+            // Dağılım aynen taşınır: yeni çek aynı faturaları/projeleri
+            // karşılıyor. Taşınmasaydı yeni çekin fişi tek parça kesilir
+            // ve masraf merkezi kırılımı kaybolurdu.
+            foreach (var allocation in cheque.Allocations)
+            {
+                db.ChequeAllocations.Add(new ChequeAllocation
+                {
+                    ChequeId = replacement.Id,
+                    Amount = allocation.Amount,
+                    ProjectId = allocation.ProjectId,
+                    CostCenterCode = allocation.CostCenterCode,
+                    SupplierInvoiceId = allocation.SupplierInvoiceId,
+                    SalesInvoiceId = allocation.SalesInvoiceId,
+                    Description = allocation.Description
+                });
+            }
+
+            if (cheque.Allocations.Count > 0)
+                await db.SaveChangesAsync(cancellationToken);
+
+            // Eski çekin ters kaydı.
+            var oldStatus = cheque.Status;
+
+            var reversalVoucherId = await accountingIntegration.CreateChequeVoucherAsync(
+                cheque, oldStatus, ChequeStatus.Replaced, movementDate, null, cancellationToken);
+
+            cheque.Status = ChequeStatus.Replaced;
+            cheque.ReplacedByChequeId = replacement.Id;
+            cheque.UpdatedAtUtc = DateTime.UtcNow;
+
+            db.ChequeMovements.Add(new ChequeMovement
+            {
+                ChequeId = cheque.Id,
+                MovementDate = movementDate,
+                FromStatus = oldStatus,
+                ToStatus = ChequeStatus.Replaced,
+                Description =
+                    $"Ertelendi — yerine {newChequeNumber} numaralı çek verildi " +
+                    $"(yeni vade {newDueDate:dd.MM.yyyy})",
+                AccountingVoucherId = reversalVoucherId
+            });
+
+            // Yeni çekin giriş fişi.
+            var newVoucherId = await accountingIntegration.CreateChequeVoucherAsync(
+                replacement, null, replacement.Status, newIssueDate, null, cancellationToken);
+
+            db.ChequeMovements.Add(new ChequeMovement
+            {
+                ChequeId = replacement.Id,
+                MovementDate = newIssueDate,
+                FromStatus = null,
+                ToStatus = replacement.Status,
+                Description = $"{cheque.ChequeNumber} numaralı çekin yerine düzenlendi",
+                AccountingVoucherId = newVoucherId
+            });
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            if (dbTransaction is not null)
+                await dbTransaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            if (dbTransaction is not null)
+                await dbTransaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+        finally
+        {
+            dbTransaction?.Dispose();
+        }
+
+        return await GetByIdAsync(replacement.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Çekin kaç kez ertelendiği: zincirde geriye doğru yürünerek
+    /// bulunur. Sayaç alanı tutulsaydı zincirle tutarsız kalabilirdi.
+    /// </summary>
+    private async Task<int> CountRenewalsAsync(Guid chequeId, CancellationToken cancellationToken)
+    {
+        var count = 0;
+        var currentId = chequeId;
+
+        // Zincir uzunluğu için üst sınır: bozuk veri sonsuz döngüye
+        // dönüşmesin.
+        while (count < 100)
+        {
+            var previousId = await db.Cheques
+                .AsNoTracking()
+                .Where(x => x.Id == currentId)
+                .Select(x => x.ReplacesChequeId)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (previousId is not Guid previous)
+                break;
+
+            count++;
+            currentId = previous;
+        }
+
+        return count;
     }
 
     public async Task<ChequeDetailResponse> ReplaceAllocationsAsync(

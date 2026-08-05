@@ -1011,6 +1011,10 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.SupplierInvoiceId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.CashAccount).WithMany()
                 .HasForeignKey(x => x.CashAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReplacedByCheque).WithMany()
+                .HasForeignKey(x => x.ReplacedByChequeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReplacesCheque).WithMany()
+                .HasForeignKey(x => x.ReplacesChequeId).OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

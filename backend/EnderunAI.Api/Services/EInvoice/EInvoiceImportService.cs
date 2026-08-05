@@ -43,6 +43,15 @@ public sealed record ImportPreviewItem(
     string? SuggestedExpenseAccountName,
     /// <summary>Önerinin neden yapıldığı — kullanıcı körü körüne onaylamasın.</summary>
     string? SuggestionReason,
+    /// <summary>
+    /// Belge bir IADE faturası mı (UBL InvoiceTypeCode = IADE).
+    /// </summary>
+    bool IsReturn,
+    /// <summary>İade faturasının XML'de atıf yaptığı fatura numarası.</summary>
+    string? ReferencedInvoiceNumber,
+    /// <summary>Numaradan eşleşen orijinal fatura; yoksa kullanıcı seçer.</summary>
+    Guid? MatchedOriginalInvoiceId,
+    string? MatchedOriginalInvoiceNumber,
     /// <summary>Commit çağrısında geri gönderilecek anahtar.</summary>
     string Token);
 
@@ -91,7 +100,12 @@ public sealed record ImportCommitItem(
     /// kartı eşleştirmesi yapılmadığı için depo tek başına stok girişi
     /// başlatmaz; kalemlere stok kartı fatura ekranından bağlanır.
     /// </summary>
-    Guid? WarehouseId = null);
+    Guid? WarehouseId = null,
+    /// <summary>
+    /// İade faturasında iade edilen orijinal fatura. Önizlemedeki
+    /// eşleşme yalnızca öneridir; onaylayan kullanıcıdır.
+    /// </summary>
+    Guid? OriginalInvoiceId = null);
 
 public sealed record ImportCommitRequest(IReadOnlyList<ImportCommitItem> Items);
 
@@ -264,6 +278,8 @@ public sealed class EInvoiceImportService(
         CancellationToken cancellationToken)
     {
         var invoice = staged.Invoice;
+        var isReturn = invoice.IsReturnDocument;
+        var toSupplierLedger = TargetsSupplierLedger(staged.Direction, isReturn);
 
         var counterparty = staged.Direction == InvoiceDirection.Sales
             ? invoice.Customer
@@ -271,12 +287,12 @@ public sealed class EInvoiceImportService(
 
         var (currentAccountId, currentAccountTitle, accountCreated) =
             await ResolveCurrentAccountAsync(
-                companyId, item, staged.Direction, counterparty, cancellationToken);
+                companyId, item, toSupplierLedger, counterparty, cancellationToken);
 
         // Mükerrer kontrolü kaydetmeden hemen önce tekrar yapılır:
         // önizleme ile onay arasında başkası aynı faturayı girmiş olabilir.
         var duplicate = await FindDuplicateAsync(
-            companyId, staged.Direction, currentAccountId,
+            companyId, toSupplierLedger, currentAccountId,
             invoice.InvoiceNumber, cancellationToken);
 
         if (duplicate is not null)
@@ -310,7 +326,7 @@ public sealed class EInvoiceImportService(
         var issueDate = DateTime.SpecifyKind(
             (invoice.IssueDate ?? DateTime.UtcNow).Date, DateTimeKind.Utc);
 
-        if (staged.Direction == InvoiceDirection.Purchase)
+        if (toSupplierLedger)
         {
             if (item.ProjectId is Guid projectId)
             {
@@ -333,8 +349,15 @@ public sealed class EInvoiceImportService(
                 ? null
                 : item.CostCenterCode.Trim();
 
+            var originalSupplierInvoiceId = await ResolveOriginalSupplierInvoiceAsync(
+                companyId, isReturn, item.OriginalInvoiceId, currentAccountId,
+                cancellationToken);
+
             var internalNumber = await documentNumberService.GenerateAsync(
-                companyId, "SUPPLIER_INVOICE", "SFT", cancellationToken);
+                companyId,
+                isReturn ? "SUPPLIER_INVOICE_RETURN" : "SUPPLIER_INVOICE",
+                isReturn ? "AIF" : "SFT",
+                cancellationToken);
 
             var supplierInvoice = new SupplierInvoice
             {
@@ -357,7 +380,9 @@ public sealed class EInvoiceImportService(
                 ParseSource = parseSource,
                 RequiresManualReview = staged.RequiresManualReview,
                 Description = $"E-fatura içe aktarma — {staged.FileName}",
-                Status = SupplierInvoiceStatus.Draft
+                Status = SupplierInvoiceStatus.Draft,
+                IsReturn = isReturn,
+                OriginalInvoiceId = originalSupplierInvoiceId
             };
 
             var lineNumber = 1;
@@ -390,14 +415,22 @@ public sealed class EInvoiceImportService(
             await db.SaveChangesAsync(cancellationToken);
 
             return new ImportCommitCreated(
-                staged.FileName, (int)staged.Direction, DirectionName(staged.Direction),
+                staged.FileName, (int)staged.Direction,
+                DocumentName(staged.Direction, isReturn),
                 supplierInvoice.Id, supplierInvoice.InternalNumber,
                 supplierInvoice.InvoiceNumber, currentAccountTitle, accountCreated,
                 supplierInvoice.GrandTotal, supplierInvoice.RequiresManualReview);
         }
 
         var salesNumber = await documentNumberService.GenerateAsync(
-            companyId, "SALES_INVOICE", "SAT", cancellationToken);
+            companyId,
+            isReturn ? "SALES_INVOICE_RETURN" : "SALES_INVOICE",
+            isReturn ? "SIF" : "SAT",
+            cancellationToken);
+
+        var originalSalesInvoiceId = await ResolveOriginalSalesInvoiceAsync(
+            companyId, isReturn, item.OriginalInvoiceId, currentAccountId,
+            cancellationToken);
 
         var salesInvoice = new SalesInvoice
         {
@@ -418,7 +451,9 @@ public sealed class EInvoiceImportService(
             ParseSource = parseSource,
             RequiresManualReview = staged.RequiresManualReview,
             Description = $"E-fatura içe aktarma — {staged.FileName}",
-            Status = SalesInvoiceStatus.Draft
+            Status = SalesInvoiceStatus.Draft,
+            IsReturn = isReturn,
+            OriginalInvoiceId = originalSalesInvoiceId
         };
 
         var salesLineNumber = 1;
@@ -446,11 +481,31 @@ public sealed class EInvoiceImportService(
         await db.SaveChangesAsync(cancellationToken);
 
         return new ImportCommitCreated(
-            staged.FileName, (int)staged.Direction, DirectionName(staged.Direction),
+            staged.FileName, (int)staged.Direction,
+            DocumentName(staged.Direction, isReturn),
             salesInvoice.Id, salesInvoice.InternalNumber,
             salesInvoice.OfficialInvoiceNumber, currentAccountTitle, accountCreated,
             salesInvoice.GrandTotal, salesInvoice.RequiresManualReview);
     }
+
+    /// <summary>
+    /// Belge hangi deftere yazılacak: alış (tedarikçi) tarafı mı, satış
+    /// tarafı mı.
+    ///
+    /// İADE faturasında yön TERSİNE döner ve bunun sebebi mevzuattır:
+    /// mal iadesinde faturayı İADE EDEN taraf keser. Bize aldığımız malı
+    /// tedarikçiye geri gönderirken faturayı biz keseriz — XML'de satıcı
+    /// biz görünürüz ama bu bizim ALIŞ İADEMİZDİR. Tersi de doğru:
+    /// müşterimiz mal iade ederken bize fatura keser, XML'de alıcı biz
+    /// görünürüz ama bu bizim SATIŞ İADEMİZDİR.
+    ///
+    /// Bu ayrım yapılmasaydı alış iademiz sisteme satış geliri olarak
+    /// girerdi.
+    /// </summary>
+    private static bool TargetsSupplierLedger(InvoiceDirection direction, bool isReturn) =>
+        isReturn
+            ? direction == InvoiceDirection.Sales
+            : direction == InvoiceDirection.Purchase;
 
     private static SupplierInvoiceType ResolveInvoiceType(int value) =>
         Enum.IsDefined(typeof(SupplierInvoiceType), value)
@@ -535,7 +590,7 @@ public sealed class EInvoiceImportService(
     private async Task<(Guid Id, string Title, bool Created)> ResolveCurrentAccountAsync(
         Guid companyId,
         ImportCommitItem item,
-        InvoiceDirection direction,
+        bool toSupplierLedger,
         ParsedParty counterparty,
         CancellationToken cancellationToken)
     {
@@ -571,7 +626,10 @@ public sealed class EInvoiceImportService(
             ? $"VKN {taxNumber}"
             : counterparty.Name!.Trim();
 
-        var prefix = direction == InvoiceDirection.Sales ? "MUS" : "TED";
+        // Rol, belgenin YAZILACAĞI deftere göre belirlenir: iade
+        // faturasında XML yönü tersine döndüğü için yöne bakılsaydı
+        // tedarikçiye "müşteri" rolü açılırdı.
+        var prefix = toSupplierLedger ? "TED" : "MUS";
         var code = await GenerateCurrentAccountCodeAsync(
             companyId, $"{prefix}-{taxNumber}", cancellationToken);
 
@@ -581,9 +639,9 @@ public sealed class EInvoiceImportService(
             Code = code,
             Title = title,
             TaxNumber = taxNumber,
-            Roles = direction == InvoiceDirection.Sales
-                ? CurrentAccountRoles.Customer
-                : CurrentAccountRoles.Supplier,
+            Roles = toSupplierLedger
+                ? CurrentAccountRoles.Supplier
+                : CurrentAccountRoles.Customer,
             Status = CurrentAccountStatus.Draft
         };
 
@@ -627,11 +685,14 @@ public sealed class EInvoiceImportService(
                 read.Problems,
                 (int)SupplierInvoiceType.Stock, InvoiceTypeName(SupplierInvoiceType.Stock),
                 null, null, null, null,
+                false, null, null, null,
                 string.Empty);
         }
 
         var invoice = read.Invoice;
         var direction = invoice.ResolveDirection(ourTaxNumber);
+        var isReturn = invoice.IsReturnDocument;
+        var toSupplierLedger = TargetsSupplierLedger(direction, isReturn);
 
         var problems = new List<string>(read.Problems);
 
@@ -652,7 +713,15 @@ public sealed class EInvoiceImportService(
             companyId, counterparty.TaxNumber, cancellationToken);
 
         var duplicateId = await FindDuplicateAsync(
-            companyId, direction, matched?.Id, invoice.InvoiceNumber, cancellationToken);
+            companyId, toSupplierLedger, matched?.Id, invoice.InvoiceNumber, cancellationToken);
+
+        // İade faturasında orijinali numaradan bulmaya çalış; bulunamazsa
+        // kullanıcı ekrandan seçer, uydurulmaz.
+        var matchedOriginal = isReturn && matched is not null
+            ? await MatchOriginalInvoiceAsync(
+                companyId, toSupplierLedger, matched.Id,
+                invoice.ReferencedInvoiceNumber, cancellationToken)
+            : null;
 
         if (duplicateId is not null)
         {
@@ -676,9 +745,9 @@ public sealed class EInvoiceImportService(
                 read.RequiresManualReview))
             : string.Empty;
 
-        // Tip önerisi yalnızca alış faturasında anlamlı; satış faturasının
+        // Tip önerisi yalnızca alış tarafında anlamlı; satış faturasının
         // stok/gider ayrımı yoktur.
-        var suggestion = direction == InvoiceDirection.Purchase
+        var suggestion = toSupplierLedger
             ? await BuildSuggestionAsync(companyId, invoice, cancellationToken)
             : (Type: SupplierInvoiceType.Stock,
                AccountId: (Guid?)null, Code: (string?)null,
@@ -688,7 +757,7 @@ public sealed class EInvoiceImportService(
             FileName: fileName,
             CanImport: canImport,
             Direction: (int)direction,
-            DirectionName: DirectionName(direction),
+            DirectionName: DocumentName(direction, isReturn),
             InvoiceNumber: invoice.InvoiceNumber,
             IssueDate: invoice.IssueDate,
             CounterpartyTaxNumber: counterparty.TaxNumber,
@@ -713,6 +782,10 @@ public sealed class EInvoiceImportService(
             SuggestedExpenseAccountCode: suggestion.Code,
             SuggestedExpenseAccountName: suggestion.Name,
             SuggestionReason: suggestion.Reason,
+            IsReturn: isReturn,
+            ReferencedInvoiceNumber: invoice.ReferencedInvoiceNumber,
+            MatchedOriginalInvoiceId: matchedOriginal?.Id,
+            MatchedOriginalInvoiceNumber: matchedOriginal?.Number,
             Token: token);
     }
 
@@ -748,6 +821,53 @@ public sealed class EInvoiceImportService(
             account?.Name, suggestion.Reason);
     }
 
+    /// <summary>
+    /// İade faturasının atıf yaptığı orijinal faturayı numaradan bulur.
+    /// Bulunamazsa null döner — yanlış faturaya bağlamaktansa kullanıcıya
+    /// seçtirmek doğru.
+    /// </summary>
+    private async Task<(Guid Id, string Number)?> MatchOriginalInvoiceAsync(
+        Guid companyId,
+        bool toSupplierLedger,
+        Guid currentAccountId,
+        string? referencedInvoiceNumber,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(referencedInvoiceNumber))
+            return null;
+
+        var number = referencedInvoiceNumber.Trim();
+
+        if (toSupplierLedger)
+        {
+            var supplierInvoice = await db.SupplierInvoices
+                .AsNoTracking()
+                .Where(x => x.CompanyId == companyId &&
+                            x.SupplierCurrentAccountId == currentAccountId &&
+                            x.InvoiceNumber == number &&
+                            !x.IsReturn &&
+                            x.Status == SupplierInvoiceStatus.Approved)
+                .Select(x => new { x.Id, Number = x.InvoiceNumber })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return supplierInvoice is null
+                ? null
+                : (supplierInvoice.Id, supplierInvoice.Number);
+        }
+
+        var salesInvoice = await db.SalesInvoices
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId &&
+                        x.CustomerCurrentAccountId == currentAccountId &&
+                        x.OfficialInvoiceNumber == number &&
+                        !x.IsReturn &&
+                        x.Status == SalesInvoiceStatus.Posted)
+            .Select(x => new { x.Id, Number = x.OfficialInvoiceNumber! })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return salesInvoice is null ? null : (salesInvoice.Id, salesInvoice.Number);
+    }
+
     private async Task<CurrentAccountMatch?> MatchCurrentAccountAsync(
         Guid companyId, string? taxNumber, CancellationToken cancellationToken)
     {
@@ -774,7 +894,7 @@ public sealed class EInvoiceImportService(
     /// </summary>
     private async Task<Guid?> FindDuplicateAsync(
         Guid companyId,
-        InvoiceDirection direction,
+        bool toSupplierLedger,
         Guid? currentAccountId,
         string? invoiceNumber,
         CancellationToken cancellationToken)
@@ -782,7 +902,7 @@ public sealed class EInvoiceImportService(
         if (currentAccountId is null || string.IsNullOrWhiteSpace(invoiceNumber))
             return null;
 
-        if (direction == InvoiceDirection.Purchase)
+        if (toSupplierLedger)
         {
             return await db.SupplierInvoices
                 .Where(x => x.CompanyId == companyId &&
@@ -792,17 +912,79 @@ public sealed class EInvoiceImportService(
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        if (direction == InvoiceDirection.Sales)
-        {
-            return await db.SalesInvoices
-                .Where(x => x.CompanyId == companyId &&
-                            x.CustomerCurrentAccountId == currentAccountId &&
-                            x.OfficialInvoiceNumber == invoiceNumber)
-                .Select(x => (Guid?)x.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
+        return await db.SalesInvoices
+            .Where(x => x.CompanyId == companyId &&
+                        x.CustomerCurrentAccountId == currentAccountId &&
+                        x.OfficialInvoiceNumber == invoiceNumber)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
 
-        return null;
+    /// <summary>
+    /// İade faturasının bağlanacağı orijinal alış faturası. Seçim
+    /// doğrulanır: aynı şirket, aynı cari ve ONAYLANMIŞ olmalı —
+    /// onaylanmamış faturanın tersine çevrilecek kaydı yoktur.
+    /// </summary>
+    private async Task<Guid?> ResolveOriginalSupplierInvoiceAsync(
+        Guid companyId,
+        bool isReturn,
+        Guid? originalInvoiceId,
+        Guid currentAccountId,
+        CancellationToken cancellationToken)
+    {
+        if (!isReturn || originalInvoiceId is not Guid id)
+            return null;
+
+        var original = await db.SupplierInvoices
+            .AsNoTracking()
+            .Where(x => x.Id == id && x.CompanyId == companyId)
+            .Select(x => new { x.SupplierCurrentAccountId, x.Status, x.IsReturn })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Seçilen orijinal fatura bulunamadı.");
+
+        if (original.IsReturn)
+            throw new InvalidOperationException("İade faturası orijinal olarak seçilemez.");
+
+        if (original.SupplierCurrentAccountId != currentAccountId)
+            throw new InvalidOperationException(
+                "Seçilen orijinal fatura bu cariye ait değil.");
+
+        if (original.Status != SupplierInvoiceStatus.Approved)
+            throw new InvalidOperationException(
+                "Orijinal fatura onaylanmamış; iade bağlanamaz.");
+
+        return id;
+    }
+
+    private async Task<Guid?> ResolveOriginalSalesInvoiceAsync(
+        Guid companyId,
+        bool isReturn,
+        Guid? originalInvoiceId,
+        Guid currentAccountId,
+        CancellationToken cancellationToken)
+    {
+        if (!isReturn || originalInvoiceId is not Guid id)
+            return null;
+
+        var original = await db.SalesInvoices
+            .AsNoTracking()
+            .Where(x => x.Id == id && x.CompanyId == companyId)
+            .Select(x => new { x.CustomerCurrentAccountId, x.Status, x.IsReturn })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Seçilen orijinal fatura bulunamadı.");
+
+        if (original.IsReturn)
+            throw new InvalidOperationException("İade faturası orijinal olarak seçilemez.");
+
+        if (original.CustomerCurrentAccountId != currentAccountId)
+            throw new InvalidOperationException(
+                "Seçilen orijinal fatura bu cariye ait değil.");
+
+        if (original.Status != SalesInvoiceStatus.Posted)
+            throw new InvalidOperationException(
+                "Orijinal fatura kesinleşmemiş; iade bağlanamaz.");
+
+        return id;
     }
 
     /// <summary>
@@ -850,6 +1032,24 @@ public sealed class EInvoiceImportService(
         InvoiceDirection.Sales => "Giden (Satış)",
         _ => "Belirlenemedi"
     };
+
+    /// <summary>
+    /// Ekranda görünen belge adı. İade faturasında yön adı tek başına
+    /// yanıltıcı olur: alış iademizi biz kestiğimiz için XML "giden"
+    /// görünür ama belge bir ALIŞ iadesidir.
+    /// </summary>
+    private static string DocumentName(InvoiceDirection direction, bool isReturn)
+    {
+        if (!isReturn)
+            return DirectionName(direction);
+
+        return direction switch
+        {
+            InvoiceDirection.Sales => "Alış iadesi (giden)",
+            InvoiceDirection.Purchase => "Satış iadesi (gelen)",
+            _ => "Belirlenemedi"
+        };
+    }
 
     private static string InvoiceTypeName(SupplierInvoiceType type) =>
         type == SupplierInvoiceType.Expense ? "Gider" : "Alış (Stok)";

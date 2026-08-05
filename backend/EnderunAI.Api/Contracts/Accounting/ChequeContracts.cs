@@ -87,6 +87,21 @@ public sealed record ChequeStatusChangeRequest(
     Guid? CashAccountId,
     string? Description);
 
+/// <summary>
+/// Çek erteleme/değişim. Tutar YENİDEN ALINMAZ: yeni çek eski çekle
+/// aynı tutarda olmak zorunda. Vade farkı ayrı bir belgeyle (fatura ya
+/// da dekont) kaydedilir; burada otomatik bir gider hesabı uydurulmaz.
+/// </summary>
+public sealed record ReplaceChequeRequest(
+    string ChequeNumber,
+    DateTime DueDate,
+    DateTime MovementDate,
+    string? BankName = null,
+    string? BankBranch = null,
+    string? Drawer = null,
+    DateTime? IssueDate = null,
+    string? Description = null);
+
 public sealed record ChequeMovementResponse(
     Guid Id,
     DateTime MovementDate,
@@ -154,7 +169,18 @@ public sealed record ChequeDetailResponse(
     string? Description,
     IReadOnlyCollection<int> AllowedNextStatuses,
     IReadOnlyCollection<ChequeMovementResponse> Movements,
-    IReadOnlyCollection<ChequeAllocationResponse> Allocations);
+    IReadOnlyCollection<ChequeAllocationResponse> Allocations,
+    /// <summary>Bu çek ertelendiyse yerine geçen çek.</summary>
+    Guid? ReplacedByChequeId,
+    string? ReplacedByChequeNumber,
+    /// <summary>Bu çek bir ertelemenin sonucuysa yerine geçtiği çek.</summary>
+    Guid? ReplacesChequeId,
+    string? ReplacesChequeNumber,
+    /// <summary>
+    /// Zincirde kaç kez ertelendiği. Risk sinyali: sürekli ertelenen
+    /// çek tahsilat sorununun habercisidir.
+    /// </summary>
+    int RenewalCount);
 
 public sealed record ChequeSummaryResponse(
     decimal ReceivedPortfolioAmount,

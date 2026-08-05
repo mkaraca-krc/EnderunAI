@@ -58,6 +58,14 @@ public static class UblTrInvoiceParser
         }
 
         var profileId = Text(root.Element(Cbc + "ProfileID"));
+        var invoiceTypeCode = Text(root.Element(Cbc + "InvoiceTypeCode"));
+
+        // İade faturasında atıf yapılan orijinal fatura numarası.
+        var referencedInvoiceNumber = Text(root
+            .Elements(Cac + "BillingReference")
+            .Select(x => x.Element(Cac + "InvoiceDocumentReference"))
+            .FirstOrDefault(x => x is not null)?
+            .Element(Cbc + "ID"));
         var invoiceNumber = Text(root.Element(Cbc + "ID"));
         var issueDate = Date(root.Element(Cbc + "IssueDate"));
         var currency = Text(root.Element(Cbc + "DocumentCurrencyCode")) ?? "TRY";
@@ -109,7 +117,9 @@ public static class UblTrInvoiceParser
             VatTotal: vatTotal,
             WithholdingAmount: withholding,
             ParseSource: InvoiceParseSource.Standard,
-            Problems: problems);
+            Problems: problems,
+            InvoiceTypeCode: invoiceTypeCode,
+            ReferencedInvoiceNumber: referencedInvoiceNumber);
     }
 
     /// <summary>

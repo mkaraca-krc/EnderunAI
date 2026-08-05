@@ -219,15 +219,17 @@ public sealed class CashFlowService(AppDbContext db) : ICashFlowService
             .Select(g => new { ProgressPaymentId = g.Key, Total = g.Sum(x => x.Amount) })
             .ToListAsync(cancellationToken);
 
-        // Hakedişe karşılık alınan çekler: karşılıksız çıkanlar hariç
-        // tahsilat sayılır (portföyde/bankada olan çekler zaten kendi
-        // vadeleriyle listede yer alır).
+        // Hakedişe karşılık alınan çekler: karşılıksız çıkanlar ve
+        // ERTELENENLER hariç tahsilat sayılır. Ertelenen çek hariç
+        // tutulmazsa yerine geçen yeni çekle birlikte aynı tahsilat iki
+        // kez sayılır ve hakediş fazladan karşılanmış görünürdü.
         var chequeCoverage = await db.Cheques
             .AsNoTracking()
             .Where(x => x.Direction == ChequeDirection.Received
                 && x.ProgressPaymentId != null
                 && ids.Contains(x.ProgressPaymentId!.Value)
-                && x.Status != ChequeStatus.Bounced)
+                && x.Status != ChequeStatus.Bounced
+                && x.Status != ChequeStatus.Replaced)
             .GroupBy(x => x.ProgressPaymentId!.Value)
             .Select(g => new { ProgressPaymentId = g.Key, Total = g.Sum(x => x.Amount) })
             .ToListAsync(cancellationToken);
@@ -311,14 +313,16 @@ public sealed class CashFlowService(AppDbContext db) : ICashFlowService
             .Select(g => new { SupplierInvoiceId = g.Key, Total = g.Sum(x => x.Amount) })
             .ToListAsync(cancellationToken);
 
-        // Faturaya karşılık verilen çekler: iade alınanlar hariç ödeme
-        // sayılır (henüz ödenmemişse kendi vadesiyle listede yer alır).
+        // Faturaya karşılık verilen çekler: iade alınanlar ve
+        // ERTELENENLER hariç ödeme sayılır; ertelenen çek yerine geçen
+        // yeni çekle birlikte aynı ödemeyi iki kez göstermemeli.
         var chequeCoverage = await db.Cheques
             .AsNoTracking()
             .Where(x => x.Direction == ChequeDirection.Issued
                 && x.SupplierInvoiceId != null
                 && ids.Contains(x.SupplierInvoiceId!.Value)
-                && x.Status != ChequeStatus.Returned)
+                && x.Status != ChequeStatus.Returned
+                && x.Status != ChequeStatus.Replaced)
             .GroupBy(x => x.SupplierInvoiceId!.Value)
             .Select(g => new { SupplierInvoiceId = g.Key, Total = g.Sum(x => x.Amount) })
             .ToListAsync(cancellationToken);
