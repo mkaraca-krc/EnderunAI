@@ -133,7 +133,31 @@ export const publicPortalService = {
     );
   },
 
+  /**
+   * Fiziksel ilerleme yüzdesi. Yanıtta TUTAR YOKTUR — yüzde sunucuda
+   * sözleşme tutarıyla ağırlıklandırılır ama ağırlığın kendisi dışarı
+   * çıkmaz.
+   */
+  getProgress(token: string) {
+    return publicGet<PortalProgress>(
+      `portal/${encodeURIComponent(token)}/ilerleme`
+    );
+  },
+
   photoUrl(token: string, photoId: string) {
     return `/api/backend/portal/${encodeURIComponent(token)}/photos/${photoId}`;
   },
 };
+
+export type PortalProgress =
+  | { hasProgress: false; message: string }
+  | {
+      hasProgress: true;
+      completionRate: number;
+      sections: {
+        name: string;
+        completionRate: number;
+        itemCount: number;
+        completedItemCount: number;
+      }[];
+    };

@@ -93,6 +93,10 @@ type ProjectDetail = {
 };
 
 const modules = [
+  // Proje bazlı olanlar "kesintiler" gibi göreli yazılır; aşağıdaki
+  // bağlantı kurucusu başına /projeler/{id}/ ekler.
+  { label: "İcmal İlerlemesi", href: "icmal-ilerleme", icon: "◱", text: "Sözleşme, saha ve işveren kabulü" },
+  { label: "İcmal Kısımları", href: "kisimlar", icon: "▤", text: "Projenin imalat kırılımı" },
   { label: "Hakedişler", href: "/hakedis", icon: "▧", text: "Hakediş kayıtları ve kontrolleri" },
   { label: "Satın Alma", href: "/satin-alma", icon: "⌑", text: "Malzeme talepleri ve teklifler" },
   { label: "Personel", href: "/personel", icon: "♙", text: "Projeye bağlı personel" },
@@ -588,9 +592,10 @@ export default function ProjectCenterPage() {
               <Link
                 key={module.label}
                 href={
-                  module.href === "kesintiler"
-                    ? `/projeler/${project.id}/kesintiler`
-                    : module.href
+                  // Göreli hedefler (başında / yok) proje altına açılır.
+                  module.href.startsWith("/")
+                    ? module.href
+                    : `/projeler/${project.id}/${module.href}`
                 }
               >
                 {module.label}
@@ -1376,7 +1381,14 @@ export default function ProjectCenterPage() {
 
           <div className="enderun-project-module-grid">
             {modules.map((module) => (
-              <Link key={module.label} href={module.href}>
+              <Link
+                key={module.label}
+                href={
+                  module.href.startsWith("/")
+                    ? module.href
+                    : `/projeler/${project.id}/${module.href}`
+                }
+              >
                 <div className="enderun-project-module-icon">{module.icon}</div>
                 <strong>{module.label}</strong>
                 <span>{module.text}</span>

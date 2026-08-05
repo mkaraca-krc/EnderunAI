@@ -337,7 +337,9 @@ const groups: MenuGroup[] = [
         icon: "▣",
       },
       {
-        label: "Keşifler",
+        // Aynı kayıt: projenin sözleşme icmali. "Keşif" adı kodda
+        // (ProjectBoq) duruyor, kullanıcı tarafında icmal deniyor.
+        label: "Sözleşme İcmali",
         href: "/kesifler",
         icon: "▤",
       },

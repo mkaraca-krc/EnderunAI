@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { usePermissions } from "@/lib/use-permissions";
 import {
   projectBoqService,
   ProjectBoqItemType,
   ProjectBoqStatus,
+  type BoqImportPreview,
   type ProjectBoqDetail,
 } from "@/services/project-boq.service";
 
@@ -19,6 +21,13 @@ const statusLabels: Record<ProjectBoqStatus, string> = {
   [ProjectBoqStatus.Archived]: "Arşivlendi",
 };
 
+const statusColors: Record<ProjectBoqStatus, string> = {
+  [ProjectBoqStatus.Draft]: "yellow",
+  [ProjectBoqStatus.Approved]: "green",
+  [ProjectBoqStatus.Superseded]: "gray",
+  [ProjectBoqStatus.Archived]: "gray",
+};
+
 const itemTypeLabels: Record<ProjectBoqItemType, string> = {
   [ProjectBoqItemType.Mixed]: "Karma",
   [ProjectBoqItemType.Material]: "Malzeme",
@@ -26,209 +35,652 @@ const itemTypeLabels: Record<ProjectBoqItemType, string> = {
 };
 
 function money(value: number, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-  }).format(value);
+  return new Intl.NumberFormat("tr-TR", { style: "currency", currency })
+    .format(value);
 }
+
+const number = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
 
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
 }
 
-export default function ProjectBoqDetailPage() {
+export default function ContractSummaryDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { has } = usePermissions();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [item, setItem] = useState<ProjectBoqDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function load() {
+  // Excel aktarma: önce önizleme, sonra kullanıcının onayıyla yazma.
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<BoqImportPreview | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  // Revizyon formu
+  const [revisionOpen, setRevisionOpen] = useState(false);
+  const [amendmentNumber, setAmendmentNumber] = useState("");
+  const [amendmentDate, setAmendmentDate] = useState("");
+  const [revisionReason, setRevisionReason] = useState("");
+
+  const canEdit = has("hakedis.edit");
+  const canApprove = has("hakedis.approve");
+
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
-      const result = await projectBoqService.getById(params.id);
-      setItem(result);
+      setItem(await projectBoqService.getById(params.id));
     } catch (err) {
       setItem(null);
-      setError(err instanceof Error ? err.message : "Keşif yüklenemedi.");
+      setError(err instanceof Error ? err.message : "İcmal yüklenemedi.");
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    if (params.id) {
-      void load();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
-  async function approve() {
+  useEffect(() => {
+    if (!params.id) return;
+
+    const timer = window.setTimeout(() => void load(), 100);
+    return () => window.clearTimeout(timer);
+  }, [params.id, load]);
+
+  function clearImport() {
+    setImportFile(null);
+    setPreview(null);
+
+    // input.value sıfırlanmazsa aynı dosya ikinci kez seçilemez.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function runAction(
+    action: () => Promise<unknown>,
+    failureMessage: string,
+    successMessage?: string
+  ) {
     setBusy(true);
     setActionError("");
+    setNotice("");
+
     try {
-      await projectBoqService.approve(params.id);
+      await action();
+      if (successMessage) setNotice(successMessage);
       await load();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Onaylanamadı.");
+      setActionError(err instanceof Error ? err.message : failureMessage);
     } finally {
       setBusy(false);
     }
   }
 
-  async function archive() {
-    setBusy(true);
+  async function runPreview() {
+    if (!importFile) {
+      setActionError("Önce bir Excel dosyası seçin.");
+      return;
+    }
+
+    setImporting(true);
     setActionError("");
+    setNotice("");
+
     try {
-      await projectBoqService.archive(params.id);
+      setPreview(await projectBoqService.importPreview(params.id, importFile));
+    } catch (err) {
+      setPreview(null);
+      setActionError(err instanceof Error ? err.message : "Dosya okunamadı.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function commitImport() {
+    if (!importFile) return;
+
+    setImporting(true);
+    setActionError("");
+
+    try {
+      const result = await projectBoqService.importCommit(params.id, importFile);
+      setNotice(result.message);
+      clearImport();
       await load();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Arşivlenemedi.");
+      setActionError(err instanceof Error ? err.message : "Aktarım yapılamadı.");
     } finally {
+      setImporting(false);
+    }
+  }
+
+  async function createRevision() {
+    setBusy(true);
+    setActionError("");
+
+    try {
+      const result = await projectBoqService.createRevision(params.id, {
+        amendmentNumber: amendmentNumber.trim() || null,
+        amendmentDate: amendmentDate || null,
+        reason: revisionReason.trim() || null,
+      });
+
+      setRevisionOpen(false);
+      router.push(`/kesifler/${result.id}`);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Revizyon oluşturulamadı."
+      );
       setBusy(false);
     }
   }
 
-  async function remove() {
-    setBusy(true);
-    setActionError("");
-    try {
-      await projectBoqService.remove(params.id);
-      router.push("/kesifler");
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Silinemedi.");
-      setBusy(false);
-    }
+  if (loading) {
+    return (
+      <ErpShell title="Sözleşme İcmali" description="Yükleniyor">
+        <div className="erp-loading">İcmal yükleniyor...</div>
+      </ErpShell>
+    );
   }
+
+  if (!item) {
+    return (
+      <ErpShell title="Sözleşme İcmali" description="Kayıt bulunamadı">
+        <div className="erp-alert error">{error || "İcmal bulunamadı."}</div>
+        <Link className="erp-secondary-button" href="/kesifler">
+          ← İcmal listesi
+        </Link>
+      </ErpShell>
+    );
+  }
+
+  const sectionsWithItems = item.sections.filter((x) => x.itemCount > 0);
 
   return (
     <ErpShell
-      title={item ? `${item.boqNumber} · ${item.name}` : "Keşif Detayı"}
-      description={item ? `${item.projectCode} — ${item.projectName}` : "Keşif bilgileri yükleniyor"}
+      title={`${item.boqNumber} · ${item.name}`}
+      description={`${item.projectCode} — ${item.projectName}`}
     >
-      <div className="erp-project-breadcrumb">
-        <Link href="/kesifler">Keşifler</Link>
-        <span>›</span>
-        <strong>{item?.boqNumber ?? "Keşif"}</strong>
+      <div className="erp-page-toolbar">
+        <div>
+          <span className={`erp-status ${statusColors[item.status]}`}>
+            {statusLabels[item.status]}
+          </span>
+          {item.isCurrentRevision && (
+            <span className="erp-status blue" style={{ marginLeft: "6px" }}>
+              {item.revisionCode} · Güncel
+            </span>
+          )}
+          {item.isContractBaseline && (
+            <span className="erp-status green" style={{ marginLeft: "6px" }}>
+              Sözleşme tabanı
+            </span>
+          )}
+          <small style={{ display: "block", marginTop: "6px" }}>
+            {item.itemCount} poz · {sectionsWithItems.length} kısım · Genel
+            toplam {money(item.totalAmount, item.currencyCode)}
+          </small>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <Link className="erp-secondary-button" href="/kesifler">
+            ← Liste
+          </Link>
+
+          {item.status === ProjectBoqStatus.Draft && canApprove && (
+            <button
+              type="button"
+              className="erp-primary-button"
+              disabled={busy}
+              onClick={() =>
+                void runAction(
+                  () => projectBoqService.approve(params.id),
+                  "Onaylanamadı.",
+                  "İcmal onaylandı ve kilitlendi."
+                )
+              }
+            >
+              Onayla ve Kilitle
+            </button>
+          )}
+
+          {item.status === ProjectBoqStatus.Approved && canEdit && (
+            <button
+              type="button"
+              className="erp-primary-button"
+              onClick={() => {
+                setRevisionOpen((open) => !open);
+                setActionError("");
+              }}
+            >
+              {revisionOpen ? "Vazgeç" : "Revizyon Oluştur"}
+            </button>
+          )}
+        </div>
       </div>
 
-      {error && <div className="erp-alert error">{error}</div>}
+      {actionError && <div className="erp-alert error">{actionError}</div>}
+      {notice && <div className="erp-alert">{notice}</div>}
 
-      {loading ? (
-        <div className="erp-panel erp-loading">Keşif yükleniyor...</div>
-      ) : !item ? (
-        <div className="erp-panel erp-empty-state">
-          <strong>Keşif bulunamadı</strong>
+      {item.isLocked && (
+        <div className="erp-alert warning">
+          Bu icmal onaylandığı için kilitli. Kalemler değiştirilemez —
+          değişiklik revizyon (zeyilname) ile yapılır. Geçmiş hakedişler bu
+          revizyonun sözleşme miktarlarına dayanıyor.
         </div>
-      ) : (
-        <>
-          <section className="erp-panel">
-            <div className="erp-panel-header">
-              <div>
-                <h2>Keşif Bilgileri</h2>
-                <p>{item.revisionCode} · {statusLabels[item.status]}{item.isCurrentRevision ? " · Güncel" : ""}</p>
-              </div>
-
-              <div className="erp-actions">
-                {item.status === ProjectBoqStatus.Draft && (
-                  <>
-                    <button type="button" disabled={busy} onClick={() => void approve()}>
-                      Onayla
-                    </button>
-                    <button
-                      type="button"
-                      className="erp-button secondary"
-                      disabled={busy}
-                      onClick={() => void remove()}
-                    >
-                      Sil
-                    </button>
-                  </>
-                )}
-
-                {item.status !== ProjectBoqStatus.Archived && (
-                  <button
-                    type="button"
-                    className="erp-button secondary"
-                    disabled={busy}
-                    onClick={() => void archive()}
-                  >
-                    Arşivle
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {actionError && <div className="erp-alert error">{actionError}</div>}
-
-            <div className="erp-detail-grid">
-              <div><span>Keşif No</span><strong>{item.boqNumber}</strong></div>
-              <div><span>Adı</span><strong>{item.name}</strong></div>
-              <div><span>Proje</span><strong>{item.projectCode} — {item.projectName}</strong></div>
-              <div><span>Revizyon</span><strong>{item.revisionCode}</strong></div>
-              <div><span>Para Birimi</span><strong>{item.currencyCode}</strong></div>
-              <div><span>Toplam</span><strong>{money(item.totalAmount, item.currencyCode)}</strong></div>
-              <div><span>Onay Tarihi</span><strong>{formatDate(item.approvedAtUtc)}</strong></div>
-              <div><span>Oluşturulma</span><strong>{formatDate(item.createdAtUtc)}</strong></div>
-              <div className="span-2">
-                <span>Açıklama</span>
-                <strong>{item.description || "—"}</strong>
-              </div>
-              <div className="span-2">
-                <span>Notlar</span>
-                <strong>{item.notes || "—"}</strong>
-              </div>
-            </div>
-          </section>
-
-          <section className="erp-panel erp-mt">
-            <div className="erp-panel-header">
-              <div>
-                <h2>Keşif Kalemleri</h2>
-                <p>{item.items.length} kalem</p>
-              </div>
-            </div>
-
-            {item.items.length === 0 ? (
-              <div className="erp-empty-state">Kalem bulunmuyor.</div>
-            ) : (
-              <div className="erp-table-card">
-                <table className="erp-table">
-                  <thead>
-                    <tr>
-                      <th>Poz</th>
-                      <th>Açıklama</th>
-                      <th>Birim</th>
-                      <th>Miktar</th>
-                      <th>Birim Fiyat</th>
-                      <th>Tutar</th>
-                      <th>Tip</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {item.items.map((line) => (
-                      <tr key={line.id}>
-                        <td><strong>{line.positionCode}</strong></td>
-                        <td>{line.description}</td>
-                        <td>{line.unit}</td>
-                        <td>{line.contractQuantity}</td>
-                        <td>{money(line.unitPrice, item.currencyCode)}</td>
-                        <td><strong>{money(line.totalAmount, item.currencyCode)}</strong></td>
-                        <td>{itemTypeLabels[line.itemType]}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        </>
       )}
+
+      {revisionOpen && (
+        <div className="erp-form-card">
+          <div className="erp-form-header">
+            <h2>Yeni Revizyon</h2>
+            <p>
+              Kalemler yeni revizyona kopyalanır, bu kayıt eski revizyon
+              olarak donar. Silinmez: geçmiş hakedişler ona dayanıyor.
+            </p>
+          </div>
+
+          <div className="erp-form-grid">
+            <label>
+              <span>Zeyilname No</span>
+              <input
+                type="text"
+                value={amendmentNumber}
+                onChange={(event) => setAmendmentNumber(event.target.value)}
+                placeholder="Örn. ZEY-01"
+              />
+            </label>
+
+            <label>
+              <span>Zeyilname Tarihi</span>
+              <input
+                type="date"
+                value={amendmentDate}
+                onChange={(event) => setAmendmentDate(event.target.value)}
+              />
+            </label>
+
+            <label className="span-2">
+              <span>Gerekçe</span>
+              <input
+                type="text"
+                value={revisionReason}
+                onChange={(event) => setRevisionReason(event.target.value)}
+                placeholder="Örn. ilave kat imalatı"
+              />
+            </label>
+          </div>
+
+          <div className="erp-form-actions">
+            <button
+              type="button"
+              className="erp-secondary-button"
+              onClick={() => setRevisionOpen(false)}
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              className="erp-primary-button"
+              disabled={busy}
+              onClick={() => void createRevision()}
+            >
+              {busy ? "Oluşturuluyor..." : "Revizyonu Oluştur"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!item.isLocked && canEdit && (
+        <div className="erp-panel erp-mt">
+          <div className="erp-panel-header">
+            <h2>Excel ile Toplu Aktarma</h2>
+            <a
+              className="erp-row-link"
+              href={projectBoqService.templateDownloadUrl()}
+            >
+              Şablonu İndir
+            </a>
+          </div>
+
+          <p>
+            Şablonu indirip doldurun, sonra yükleyin. Dosya önce okunup
+            önizleme gösterilir; hiçbir şey siz onaylamadan yazılmaz. Aktarım
+            mevcut kalemlerin ÜZERİNE yazar.
+          </p>
+
+          <div
+            className="erp-form-actions"
+            style={{ justifyContent: "flex-start" }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                setImportFile(event.target.files?.[0] ?? null);
+                setPreview(null);
+              }}
+            />
+
+            <button
+              type="button"
+              className="erp-secondary-button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Dosya Seç
+            </button>
+
+            <span style={{ margin: "0 10px" }}>
+              {importFile ? importFile.name : "Dosya seçilmedi"}
+            </span>
+
+            <button
+              type="button"
+              className="erp-primary-button"
+              disabled={importing}
+              onClick={() => void runPreview()}
+            >
+              {importing ? "Okunuyor..." : "Önizle"}
+            </button>
+
+            {importFile && (
+              <button
+                type="button"
+                className="erp-secondary-button"
+                onClick={clearImport}
+              >
+                Temizle
+              </button>
+            )}
+          </div>
+
+          {preview && (
+            <div className="erp-mt">
+              <div className="erp-detail-grid">
+                <div>
+                  <span className="erp-stat-label">Okunan kısım</span>
+                  <strong>{preview.sectionCount}</strong>
+                </div>
+                <div>
+                  <span className="erp-stat-label">Okunan poz</span>
+                  <strong>{preview.itemCount}</strong>
+                </div>
+                <div>
+                  <span className="erp-stat-label">Toplam tutar</span>
+                  <strong>
+                    {money(preview.totalAmount, item.currencyCode)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="erp-stat-label">Atlanan satır</span>
+                  <strong>{preview.errors.length}</strong>
+                </div>
+              </div>
+
+              {preview.errors.length > 0 && (
+                <div className="erp-alert warning erp-mt">
+                  <strong>Okunamayan satırlar:</strong>
+                  <ul>
+                    {preview.errors.slice(0, 20).map((problem) => (
+                      <li key={problem.rowNumber}>
+                        Satır {problem.rowNumber}: {problem.message}
+                      </li>
+                    ))}
+                  </ul>
+                  {preview.errors.length > 20 && (
+                    <span>
+                      ve {preview.errors.length - 20} satır daha. Bu satırlar
+                      aktarılmayacak; kalanlar aktarılacak.
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {preview.sections.length > 0 && (
+                <div className="erp-table-wrap erp-mt">
+                  <table className="erp-table">
+                    <thead>
+                      <tr>
+                        <th>Kısım</th>
+                        <th>Durum</th>
+                        <th style={{ textAlign: "right" }}>Poz</th>
+                        <th style={{ textAlign: "right" }}>Tutar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.sections.map((section) => (
+                        <tr key={section.rowNumber}>
+                          <td>
+                            <strong>{section.name}</strong>
+                          </td>
+                          <td>
+                            <span
+                              className={`erp-status ${
+                                section.isNew ? "yellow" : "green"
+                              }`}
+                            >
+                              {section.isNew ? "Yeni açılacak" : "Mevcut"}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            {section.itemCount}
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            {money(section.totalAmount, item.currencyCode)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="erp-form-actions">
+                <button
+                  type="button"
+                  className="erp-secondary-button"
+                  onClick={clearImport}
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="button"
+                  className="erp-primary-button"
+                  disabled={importing || preview.itemCount === 0}
+                  onClick={() => void commitImport()}
+                >
+                  {importing
+                    ? "Aktarılıyor..."
+                    : `${preview.itemCount} pozu aktar`}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="erp-panel erp-mt">
+        <div className="erp-panel-header">
+          <h2>Kısım İcmali</h2>
+        </div>
+
+        {sectionsWithItems.length === 0 && item.unsectionedItemCount === 0 ? (
+          <div className="erp-empty-state">
+            <p>Henüz kalem yok.</p>
+          </div>
+        ) : (
+          <div className="erp-table-wrap">
+            <table className="erp-table">
+              <thead>
+                <tr>
+                  <th>Kısım</th>
+                  <th style={{ textAlign: "right" }}>Poz</th>
+                  <th style={{ textAlign: "right" }}>Malzeme</th>
+                  <th style={{ textAlign: "right" }}>Montaj</th>
+                  <th style={{ textAlign: "right" }}>GG&amp;K</th>
+                  <th style={{ textAlign: "right" }}>Ara Toplam</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sectionsWithItems.map((section) => (
+                  <tr key={section.id}>
+                    <td>
+                      <strong>{section.name}</strong>
+                      {section.code && <small>{section.code}</small>}
+                    </td>
+                    <td style={{ textAlign: "right" }}>{section.itemCount}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {money(section.materialAmount, item.currencyCode)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {money(section.laborAmount, item.currencyCode)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {money(section.overheadAmount, item.currencyCode)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <strong>
+                        {money(section.totalAmount, item.currencyCode)}
+                      </strong>
+                    </td>
+                  </tr>
+                ))}
+
+                {item.unsectionedItemCount > 0 && (
+                  <tr>
+                    <td>
+                      <strong>Kısımsız</strong>
+                      <small>Kısma bağlanmamış kalemler</small>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {item.unsectionedItemCount}
+                    </td>
+                    <td style={{ textAlign: "right" }}>—</td>
+                    <td style={{ textAlign: "right" }}>—</td>
+                    <td style={{ textAlign: "right" }}>—</td>
+                    <td style={{ textAlign: "right" }}>
+                      <strong>
+                        {money(item.unsectionedAmount, item.currencyCode)}
+                      </strong>
+                    </td>
+                  </tr>
+                )}
+
+                <tr>
+                  <td colSpan={5}>
+                    <strong>GENEL TOPLAM</strong>
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    <strong>{money(item.totalAmount, item.currencyCode)}</strong>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="erp-table-card erp-mt">
+        <div className="erp-table-header">
+          <h2>Poz Satırları ({item.items.length})</h2>
+        </div>
+
+        {item.items.length === 0 ? (
+          <div className="erp-empty-state">
+            <p>Kalem bulunmuyor. Excel ile toplu aktarabilirsiniz.</p>
+          </div>
+        ) : (
+          <div className="erp-table-wrap">
+            <table className="erp-table">
+              <thead>
+                <tr>
+                  <th>Poz</th>
+                  <th>Tanım</th>
+                  <th>Kısım</th>
+                  <th>Birim</th>
+                  <th style={{ textAlign: "right" }}>Miktar</th>
+                  <th style={{ textAlign: "right" }}>Malzeme</th>
+                  <th style={{ textAlign: "right" }}>Montaj</th>
+                  <th style={{ textAlign: "right" }}>GG&amp;K</th>
+                  <th style={{ textAlign: "right" }}>Birim Fiyat</th>
+                  <th style={{ textAlign: "right" }}>Tutar</th>
+                  <th>Tip</th>
+                </tr>
+              </thead>
+              <tbody>
+                {item.items.map((line) => (
+                  <tr key={line.id}>
+                    <td>
+                      <strong>{line.positionCode}</strong>
+                    </td>
+                    <td>{line.description}</td>
+                    <td>
+                      {item.sections.find(
+                        (x) => x.id === line.projectHakedisSectionId
+                      )?.name ?? "—"}
+                    </td>
+                    <td>{line.unit}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {number.format(line.contractQuantity)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {money(line.materialUnitPrice, item.currencyCode)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {money(line.laborUnitPrice, item.currencyCode)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {money(line.overheadUnitPrice, item.currencyCode)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {money(line.unitPrice, item.currencyCode)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <strong>
+                        {money(line.totalAmount, item.currencyCode)}
+                      </strong>
+                    </td>
+                    <td>{itemTypeLabels[line.itemType]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="erp-panel erp-mt">
+        <div className="erp-panel-header">
+          <h2>Kayıt Bilgileri</h2>
+        </div>
+
+        <div className="erp-detail-grid">
+          <div>
+            <span className="erp-stat-label">Onay tarihi</span>
+            <strong>{formatDate(item.approvedAtUtc)}</strong>
+          </div>
+          <div>
+            <span className="erp-stat-label">Oluşturulma</span>
+            <strong>{formatDate(item.createdAtUtc)}</strong>
+          </div>
+          <div className="span-2">
+            <span className="erp-stat-label">Açıklama</span>
+            <strong>{item.description || "—"}</strong>
+          </div>
+          <div className="span-2">
+            <span className="erp-stat-label">Notlar</span>
+            <strong>{item.notes || "—"}</strong>
+          </div>
+        </div>
+      </div>
     </ErpShell>
   );
 }

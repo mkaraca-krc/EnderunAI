@@ -30,9 +30,29 @@ export type PendingApprovalReport = {
 
 export type DailyReportWorkItem = {
   id?: string;
+  /** Sözleşme icmali kalemi; serbest metin kaleminde boş kalır. */
+  projectBoqItemId?: string | null;
+  boqPositionCode?: string | null;
   description: string;
   quantity?: number | null;
   unit?: string | null;
+};
+
+/** Günlük rapora kalem eklerken kullanılan hızlı seçim listesi. */
+export type SummaryQuickPickItem = {
+  id: string;
+  positionCode: string;
+  description: string;
+  unit: string;
+  contractQuantity: number;
+  sectionName?: string | null;
+};
+
+export type SummaryQuickPick = {
+  hasContractSummary: boolean;
+  /** Bu şantiyede son 30 günde en çok girilenler. */
+  frequent: SummaryQuickPickItem[];
+  items: SummaryQuickPickItem[];
 };
 
 export type DailyReportPhoto = {
@@ -95,6 +115,13 @@ export const dailyReportService = {
   getByDate(siteId: string, date: string) {
     return apiClient<DailyReportDetail>(
       `project-sites/${siteId}/daily-reports/by-date/${date}`
+    );
+  },
+
+  getSummaryItems(siteId: string, search?: string) {
+    const query = search ? `?search=${encodeURIComponent(search)}` : "";
+    return apiClient<SummaryQuickPick>(
+      `project-sites/${siteId}/daily-reports/icmal-kalemleri${query}`
     );
   },
 

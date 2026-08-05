@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 
 import {
   publicPortalService,
+  type PortalProgress,
   type PortalProject,
   type PortalReport,
 } from "@/services/employer-portal.service";
@@ -32,6 +33,7 @@ export default function EmployerPortalPage() {
   const token = params.token;
 
   const [project, setProject] = useState<PortalProject | null>(null);
+  const [progress, setProgress] = useState<PortalProgress | null>(null);
   const [reports, setReports] = useState<PortalReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,6 +52,17 @@ export default function EmployerPortalPage() {
     }
 
     if (token) void loadProject();
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    // İlerleme ayrı çağrı: icmali olmayan projede bu uç "yok" der ve
+    // raporlar yine gösterilir.
+    void publicPortalService
+      .getProgress(token)
+      .then(setProgress)
+      .catch(() => setProgress(null));
   }, [token]);
 
   useEffect(() => {
@@ -134,6 +147,93 @@ export default function EmployerPortalPage() {
       </div>
 
       <div className="portal-container">
+        {progress?.hasProgress && (
+          <div className="portal-panel">
+            <h2>İş İlerlemesi</h2>
+
+            <div style={{ marginBottom: "18px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  marginBottom: "6px",
+                }}
+              >
+                <strong style={{ fontSize: "28px" }}>
+                  %
+                  {progress.completionRate.toLocaleString("tr-TR", {
+                    maximumFractionDigits: 1,
+                  })}
+                </strong>
+                <span>proje geneli</span>
+              </div>
+
+              <div
+                style={{
+                  height: "14px",
+                  borderRadius: "999px",
+                  background: "#e4ebec",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${Math.min(100, progress.completionRate)}%`,
+                    background: "#18797c",
+                  }}
+                />
+              </div>
+            </div>
+
+            {progress.sections.map((section) => (
+              <div key={section.name} style={{ marginBottom: "12px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: "14px",
+                    marginBottom: "4px",
+                  }}
+                >
+                  <span>{section.name}</span>
+                  <span>
+                    %
+                    {section.completionRate.toLocaleString("tr-TR", {
+                      maximumFractionDigits: 1,
+                    })}
+                    {" · "}
+                    {section.completedItemCount}/{section.itemCount} kalem
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    height: "8px",
+                    borderRadius: "999px",
+                    background: "#eef2f3",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${Math.min(100, section.completionRate)}%`,
+                      background: "#5cd2d6",
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+
+            <p style={{ fontSize: "13px", color: "#5c6b68", marginTop: "12px" }}>
+              Yüzdeler onaylanmış saha raporlarındaki fiziksel imalat
+              miktarlarından hesaplanır.
+            </p>
+          </div>
+        )}
+
         <div className="portal-panel">
           <h2>Tarih Aralığı</h2>
           <div className="portal-filter-row">

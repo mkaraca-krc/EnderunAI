@@ -15,6 +15,8 @@ import {
   type DailyReportDetail,
   type DailyReportListItem,
   type DailyReportWorkItem,
+  type SummaryQuickPick,
+  type SummaryQuickPickItem,
 } from "@/services/daily-report.service";
 
 function formatDate(value?: string | null) {
@@ -44,6 +46,12 @@ function DailyReportTab({ siteId }: { siteId: string }) {
   const [form, setForm] = useState(emptyReportForm);
   const [workItems, setWorkItems] = useState<DailyReportWorkItem[]>([]);
   const [newWorkItem, setNewWorkItem] = useState({ description: "", quantity: "", unit: "" });
+
+  // Hızlı seçim: icmal kalemleri, arama ve sık kullanılanlar.
+  const [selectedBoqItemId, setSelectedBoqItemId] = useState("");
+  const [quickPick, setQuickPick] = useState<SummaryQuickPick | null>(null);
+  const [quickPickOpen, setQuickPickOpen] = useState(false);
+  const [quickPickSearch, setQuickPickSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -105,6 +113,21 @@ function DailyReportTab({ siteId }: { siteId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteId, selectedDate]);
 
+  // İcmal kalemleri: arama yazıldıkça süzülür. Projede icmal yoksa uç
+  // boş döner ve ekran serbest metne düşer.
+  useEffect(() => {
+    if (!siteId) return;
+
+    const timer = window.setTimeout(() => {
+      void dailyReportService
+        .getSummaryItems(siteId, quickPickSearch.trim() || undefined)
+        .then(setQuickPick)
+        .catch(() => setQuickPick(null));
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [siteId, quickPickSearch]);
+
   function updateForm<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
@@ -115,12 +138,28 @@ function DailyReportTab({ siteId }: { siteId: string }) {
     setWorkItems((current) => [
       ...current,
       {
+        // İcmalden seçildiyse bağ taşınır; serbest metinde boş kalır ve
+        // kalem yine kaydedilir.
+        projectBoqItemId: selectedBoqItemId || null,
         description: newWorkItem.description.trim(),
         quantity: newWorkItem.quantity ? Number(newWorkItem.quantity) : null,
         unit: newWorkItem.unit || null,
       },
     ]);
+
     setNewWorkItem({ description: "", quantity: "", unit: "" });
+    setSelectedBoqItemId("");
+  }
+
+  /** Hızlı seçimden gelen kalem: tanım ve birim karttan dolar. */
+  function pickSummaryItem(item: SummaryQuickPickItem) {
+    setSelectedBoqItemId(item.id);
+    setNewWorkItem((current) => ({
+      ...current,
+      description: `${item.positionCode} — ${item.description}`,
+      unit: item.unit,
+    }));
+    setQuickPickOpen(false);
   }
 
   function removeWorkItem(index: number) {
@@ -350,6 +389,7 @@ function DailyReportTab({ siteId }: { siteId: string }) {
                     <strong>{item.description}</strong>
                     <span>
                       {item.quantity ?? "—"} {item.unit ?? ""}
+                      {item.projectBoqItemId ? " · icmale bağlı" : " · serbest"}
                     </span>
                   </div>
                   <button
@@ -361,6 +401,97 @@ function DailyReportTab({ siteId }: { siteId: string }) {
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {quickPick?.hasContractSummary && (
+            <div className="erp-panel erp-mt">
+              <div className="erp-panel-header">
+                <div>
+                  <h3>İcmalden Seç</h3>
+                  <p>
+                    Onaylı raporlardaki miktarlar seçilen kaleme birikir ve
+                    hakediş önerisini besler.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="erp-button secondary"
+                  onClick={() => setQuickPickOpen((open) => !open)}
+                >
+                  {quickPickOpen ? "Kapat" : "Kalem Ara"}
+                </button>
+              </div>
+
+              {quickPick.frequent.length > 0 && (
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {quickPick.frequent.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="erp-button secondary"
+                      onClick={() => pickSummaryItem(item)}
+                    >
+                      {item.positionCode} · {item.description}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {quickPickOpen && (
+                <div className="erp-mt">
+                  <input
+                    className="erp-input"
+                    type="search"
+                    value={quickPickSearch}
+                    onChange={(event) => setQuickPickSearch(event.target.value)}
+                    placeholder="Poz no veya tanım ara"
+                  />
+
+                  <div className="erp-project-list erp-mt">
+                    {quickPick.items.length === 0 ? (
+                      <div className="erp-empty-state">Kalem bulunamadı.</div>
+                    ) : (
+                      quickPick.items.slice(0, 40).map((item) => (
+                        <div className="erp-project-list-item" key={item.id}>
+                          <div>
+                            <strong>
+                              {item.positionCode} — {item.description}
+                            </strong>
+                            <span>
+                              {item.sectionName ?? "Kısımsız"} · sözleşme{" "}
+                              {item.contractQuantity} {item.unit}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            className="erp-button secondary"
+                            onClick={() => pickSummaryItem(item)}
+                          >
+                            Seç
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedBoqItemId && (
+            <div className="erp-alert">
+              İcmal kalemi seçildi. Miktarı girip &quot;Kalem Ekle&quot;ye
+              basın. Seçimi kaldırmak için açıklamayı elle değiştirin ve{" "}
+              <button
+                type="button"
+                className="erp-button secondary"
+                onClick={() => setSelectedBoqItemId("")}
+              >
+                bağı kaldırın
+              </button>
+              .
             </div>
           )}
 
