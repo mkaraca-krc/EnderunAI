@@ -424,16 +424,9 @@ const groups: MenuGroup[] = [
         href: "/insan-kaynaklari/onay-merkezi",
         icon: "✓",
       },
-      {
-        label: "Eğitimler",
-        href: "/insan-kaynaklari/egitimler",
-        icon: "◇",
-      },
-      {
-        label: "Sertifikalar",
-        href: "/insan-kaynaklari/sertifikalar",
-        icon: "□",
-      },
+      // Eğitim ve sertifika takibi İSG menüsündeki "Personel Kayıtları"
+      // ekranına taşındı; buradaki iki bağlantı var olmayan bir uca
+      // bağlı taslak sayfaya gidiyordu. Eski adresler yönlendiriliyor.
       {
         label: "Yetkinlikler",
         href: "/insan-kaynaklari/yetkinlikler",
@@ -458,6 +451,43 @@ const groups: MenuGroup[] = [
         label: "Kariyer",
         href: "/insan-kaynaklari/kariyer",
         icon: "↑",
+      },
+    ],
+  },
+  {
+    key: "isg",
+    label: "İSG",
+    items: [
+      {
+        label: "İSG Paneli",
+        href: "/isg",
+        icon: "▦",
+      },
+      {
+        label: "Personel Kayıtları",
+        href: "/isg/personel",
+        icon: "♙",
+      },
+      {
+        label: "Kaza / Ramak Kala",
+        href: "/isg/kazalar",
+        icon: "!",
+      },
+      {
+        label: "Saha Belgeleri",
+        href: "/isg/belgeler",
+        icon: "□",
+      },
+      {
+        label: "OSGB Sözleşmeleri",
+        href: "/isg/osgb",
+        icon: "▤",
+      },
+      {
+        // İzin gerekmez: uç yalnızca çağıranın kendi kaydını döndürür.
+        label: "İSG Belgelerim",
+        href: "/isg/benim",
+        icon: "○",
       },
     ],
   },

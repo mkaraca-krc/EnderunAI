@@ -3,6 +3,7 @@ using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.HumanResources;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Isg;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,8 +15,31 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/hr/personnel-360")]
 public sealed class HrPersonnel360Controller(
     AppDbContext appDb,
-    HrDbContext hrDb) : ControllerBase
+    HrDbContext hrDb,
+    IUserAuthorizationService authorizationService,
+    Security.CurrentUser.ICurrentUserService currentUser) : ControllerBase
 {
+    /// <summary>
+    /// İSG eğitim ve yetki belgesi kayıtları isg.view ile korunuyor.
+    /// 360 ekranı personnel.view ile açıldığı için, izni olmayan
+    /// kullanıcıya bu bölüm doldurulmadan dönüyor — sayıyı göstermek de
+    /// izin sınırını genişletirdi.
+    ///
+    /// Sağlık raporu bu ekrana hiç girmiyor: tıbbi veri kendi dar
+    /// izniyle yalnızca İSG ekranlarında görünür.
+    /// </summary>
+    private async Task<bool> CanViewIsgAsync(CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid userId)
+            return false;
+
+        var snapshot = await authorizationService.GetAsync(userId, cancellationToken);
+
+        return snapshot is not null && snapshot.IsActive &&
+               snapshot.Permissions.Contains(
+                   PermissionCatalog.Keys.IsgView, StringComparer.OrdinalIgnoreCase);
+    }
+
     [HttpGet("{personnelId:guid}")]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> Get(
@@ -124,6 +148,26 @@ public sealed class HrPersonnel360Controller(
             .AsNoTracking()
             .Where(x => x.PersonnelId == personnelId)
             .ToListAsync(cancellationToken);
+
+        // --- İSG eğitim ve yetki belgeleri ---
+        var canViewIsg = await CanViewIsgAsync(cancellationToken);
+        var todayOnly = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var isgTrainings = canViewIsg
+            ? await appDb.IsgTrainings
+                .AsNoTracking()
+                .Where(x => x.PersonnelId == personnelId)
+                .OrderByDescending(x => x.TrainingDate)
+                .ToListAsync(cancellationToken)
+            : [];
+
+        var isgCertificates = canViewIsg
+            ? await appDb.IsgCertificates
+                .AsNoTracking()
+                .Where(x => x.PersonnelId == personnelId)
+                .OrderByDescending(x => x.IssueDate)
+                .ToListAsync(cancellationToken)
+            : [];
 
         var approvedLeaves = leaves
             .Where(x => x.Status == HrApprovalStatus.Approved)
@@ -283,11 +327,17 @@ public sealed class HrPersonnel360Controller(
                 approvedLeaveDays = approvedLeaves.Sum(x => x.TotalDays),
                 overtimeRequestCount = overtimes.Count,
                 approvedOvertimeHours = approvedOvertimes.Sum(x => x.ApprovedHours),
-                trainingCount = 0,
-                completedTrainingCount = 0,
-                certificateCount = 0,
-                validCertificateCount = 0,
-                expiredCertificateCount = 0,
+                trainingCount = isgTrainings.Count,
+                // Süresi dolmamış (veya süresiz) eğitim "geçerli" sayılır.
+                completedTrainingCount = isgTrainings.Count(x =>
+                    x.ValidUntil is null || x.ValidUntil >= todayOnly),
+                certificateCount = isgCertificates.Count,
+                validCertificateCount = isgCertificates.Count(x =>
+                    x.ExpiryDate is null || x.ExpiryDate >= todayOnly),
+                expiredCertificateCount = isgCertificates.Count(x =>
+                    x.ExpiryDate is not null && x.ExpiryDate < todayOnly),
+                // İSG bölümü izin yokluğundan boş dönüyorsa true.
+                isgGizli = !canViewIsg,
                 competencyCount = 0,
                 verifiedCompetencyCount = 0,
                 performanceReviewCount = 0,
@@ -296,8 +346,34 @@ public sealed class HrPersonnel360Controller(
                 activeAssetCount = 0,
                 careerActionCount = 0
             },
-            trainings = Array.Empty<object>(),
-            certificates = Array.Empty<object>(),
+            trainings = isgTrainings.Select(x => new
+            {
+                x.Id,
+                trainingType = (int)x.TrainingType,
+                x.Topic,
+                x.TrainingDate,
+                x.DurationHours,
+                x.ValidUntil,
+                x.TrainerName,
+                validityStatusName = IsgValidityCalculator.StatusName(
+                    IsgValidityCalculator.Evaluate(x.ValidUntil, todayOnly)),
+                validityColor = IsgValidityCalculator.StatusColor(
+                    IsgValidityCalculator.Evaluate(x.ValidUntil, todayOnly))
+            }),
+            certificates = isgCertificates.Select(x => new
+            {
+                x.Id,
+                certificateType = (int)x.CertificateType,
+                x.CustomTypeName,
+                x.CertificateNumber,
+                x.IssuedBy,
+                x.IssueDate,
+                x.ExpiryDate,
+                validityStatusName = IsgValidityCalculator.StatusName(
+                    IsgValidityCalculator.Evaluate(x.ExpiryDate, todayOnly)),
+                validityColor = IsgValidityCalculator.StatusColor(
+                    IsgValidityCalculator.Evaluate(x.ExpiryDate, todayOnly))
+            }),
             competencies = Array.Empty<object>(),
             performanceReviews = Array.Empty<object>(),
             disciplinaryRecords = Array.Empty<object>(),
