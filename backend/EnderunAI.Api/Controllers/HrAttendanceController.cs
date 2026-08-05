@@ -82,6 +82,11 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
             });
         }
 
+        var sectionError = await ValidateSectionAsync(request, cancellationToken);
+
+        if (sectionError is not null)
+            return BadRequest(new { message = sectionError });
+
         var item = new AttendanceRecord
         {
             CompanyId = request.CompanyId,
@@ -109,6 +114,11 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
         var item = await db.AttendanceRecords.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (item is null)
             return NotFound(new { message = "Puantaj kaydı bulunamadı." });
+
+        var sectionError = await ValidateSectionAsync(request, cancellationToken);
+
+        if (sectionError is not null)
+            return BadRequest(new { message = sectionError });
 
         Apply(item, request);
         item.UpdatedAtUtc = DateTime.UtcNow;
@@ -195,10 +205,30 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Kısım seçildiyse projeye ait olmalı: başka projenin kısmına
+    /// yazılan puantaj iki projenin de işçilik analizini bozar.
+    /// </summary>
+    private async Task<string?> ValidateSectionAsync(
+        SaveAttendanceRequest request, CancellationToken cancellationToken)
+    {
+        if (request.ProjectHakedisSectionId is not Guid sectionId)
+            return null;
+
+        if (request.ProjectId is not Guid projectId)
+            return "Kısım seçildiyse proje de belirtilmelidir.";
+
+        var belongs = await db.ProjectHakedisSections.AnyAsync(
+            x => x.Id == sectionId && x.ProjectId == projectId, cancellationToken);
+
+        return belongs ? null : "Seçilen kısım bu projeye ait değil.";
+    }
+
     private static void Apply(AttendanceRecord item, SaveAttendanceRequest request)
     {
         item.ProjectId = request.ProjectId;
         item.ProjectSiteId = request.ProjectSiteId;
+        item.ProjectHakedisSectionId = request.ProjectHakedisSectionId;
         item.Status = request.Status;
         item.CheckInTime = request.CheckInTime;
         item.CheckOutTime = request.CheckOutTime;
@@ -240,6 +270,7 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
         x.RoleName,
         x.WorkItemCode,
         x.WorkItemName,
+        x.ProjectHakedisSectionId,
         x.LocationName,
         x.IsApproved,
         x.ApprovedByUserId,
@@ -284,4 +315,9 @@ public sealed record SaveAttendanceRequest(
     string? WorkItemCode,
     string? WorkItemName,
     string? LocationName,
-    string? Description);
+    string? Description,
+    /// <summary>
+    /// Ekibin o gün çalıştığı icmal kısmı. OPSİYONEL — bilinmiyorsa boş
+    /// bırakılır ve işçilik proje geneline yazılır.
+    /// </summary>
+    Guid? ProjectHakedisSectionId = null);

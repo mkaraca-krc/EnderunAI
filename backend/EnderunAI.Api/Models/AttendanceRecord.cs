@@ -68,6 +68,14 @@ public sealed class AttendanceRecord : BaseEntity
     public string? RoleName { get; set; }
     public string? WorkItemCode { get; set; }
     public string? WorkItemName { get; set; }
+
+    /// <summary>
+    /// Ekibin o gün çalıştığı icmal kısmı ("bugün aydınlatmada").
+    /// OPSİYONEL: serbest metin WorkItemName alanının yerini almaz,
+    /// onu kısma bağlayarak maliyet analizinde toplanabilir kılar.
+    /// </summary>
+    public Guid? ProjectHakedisSectionId { get; set; }
+    public ProjectHakedisSection? ProjectHakedisSection { get; set; }
     public string? LocationName { get; set; }
 
     public bool IsApproved { get; set; }

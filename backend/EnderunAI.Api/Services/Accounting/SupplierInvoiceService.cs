@@ -292,27 +292,41 @@ public sealed class SupplierInvoiceService(
                 .Select(x => x.Title)
                 .SingleAsync(cancellationToken);
 
-            db.ProjectCostTransactions.Add(new ProjectCostTransaction
+            // Maliyet SINIFI kalemin yazıldığı hesaptan çıkar. Gider
+            // faturasında kalemler farklı sınıflara düşebilir (bir
+            // faturada hem taşeron işçiliği hem nakliye olabilir); bu
+            // yüzden sınıf başına ayrı kayıt yazılır. Hepsi aynı fiş
+            // satırına bağlanır, mutabakat toplam üzerinden yürüdüğü
+            // için bu bağ bozulmaz.
+            var sign = invoice.IsReturn ? -1m : 1m;
+
+            var classAmounts = await ResolveCostClassAmountsAsync(
+                invoice, cancellationToken);
+
+            foreach (var (costClass, amount) in classAmounts)
             {
-                ProjectId = costProjectId,
-                CostType = invoice.PurchaseOrderId is null
-                    ? ProjectCostType.Other
-                    : ProjectCostType.Material,
-                CostDate = invoice.InvoiceDate,
-                // İade projenin maliyetini AZALTIR; eksi tutar yazılmazsa
-                // iade edilen mal projede maliyet olarak durmaya devam
-                // eder ve kârlılık olduğundan düşük görünürdü.
-                Amount = decimal.Round(invoice.Subtotal * invoice.ExchangeRate, 2) *
-                         (invoice.IsReturn ? -1m : 1m),
-                Description = invoice.IsReturn
-                    ? $"Alış iadesi {invoice.InternalNumber} — {supplierTitle}"
-                    : $"Tedarikçi faturası {invoice.InternalNumber} — {supplierTitle}",
-                ReferenceType = "SupplierInvoice",
-                ReferenceId = invoice.Id,
-                // Muhasebedeki maliyet satırına bağla — proje maliyeti ile
-                // gider hesapları arasında iki ayrı "doğru" rakam oluşmasın.
-                AccountingVoucherLineId = posting.ExpenseLineId
-            });
+                db.ProjectCostTransactions.Add(new ProjectCostTransaction
+                {
+                    ProjectId = costProjectId,
+                    CostType = invoice.PurchaseOrderId is null
+                        ? ProjectCostType.Other
+                        : ProjectCostType.Material,
+                    CostClass = costClass,
+                    CostDate = invoice.InvoiceDate,
+                    // İade projenin maliyetini AZALTIR; eksi tutar yazılmazsa
+                    // iade edilen mal projede maliyet olarak durmaya devam
+                    // eder ve kârlılık olduğundan düşük görünürdü.
+                    Amount = decimal.Round(amount * invoice.ExchangeRate, 2) * sign,
+                    Description = invoice.IsReturn
+                        ? $"Alış iadesi {invoice.InternalNumber} — {supplierTitle}"
+                        : $"Tedarikçi faturası {invoice.InternalNumber} — {supplierTitle}",
+                    ReferenceType = "SupplierInvoice",
+                    ReferenceId = invoice.Id,
+                    // Muhasebedeki maliyet satırına bağla — proje maliyeti ile
+                    // gider hesapları arasında iki ayrı "doğru" rakam oluşmasın.
+                    AccountingVoucherLineId = posting.ExpenseLineId
+                });
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -462,20 +476,31 @@ public sealed class SupplierInvoiceService(
 
         // Proje maliyeti eksiyle dengelenir; silinmez ki maliyetin
         // oluşup sonra iptal edildiği geçmişte görünsün.
-        var costTransaction = await db.ProjectCostTransactions
+        //
+        // Bir fatura sınıf başına birden fazla maliyet satırı üretebilir
+        // (gider faturasında hem taşeron işçiliği hem nakliye olabilir);
+        // yalnız ilki dengelenirse kalanı projede maliyet olarak durur.
+        // Sınıf bazında NET tutar dengelenir: iptal ikinci kez çalışsa
+        // bile net sıfır olduğu için yeni satır yazılmaz.
+        var costRows = await db.ProjectCostTransactions
             .Where(x => x.ReferenceType == "SupplierInvoice" && x.ReferenceId == invoice.Id)
-            .OrderBy(x => x.CreatedAtUtc)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
 
-        if (costTransaction is not null)
+        foreach (var group in costRows.GroupBy(x => new { x.ProjectId, x.CostType, x.CostClass }))
         {
+            var net = group.Sum(x => x.Amount);
+
+            if (net == 0m)
+                continue;
+
             db.ProjectCostTransactions.Add(new ProjectCostTransaction
             {
-                ProjectId = costTransaction.ProjectId,
-                CostType = costTransaction.CostType,
+                ProjectId = group.Key.ProjectId,
+                CostType = group.Key.CostType,
+                CostClass = group.Key.CostClass,
                 CostDate = DateTime.UtcNow.Date,
-                Amount = -costTransaction.Amount,
-                Description = $"İPTAL — {costTransaction.Description}",
+                Amount = -net,
+                Description = $"İPTAL — {group.First().Description}",
                 ReferenceType = "SupplierInvoice",
                 ReferenceId = invoice.Id
             });
@@ -990,6 +1015,54 @@ public sealed class SupplierInvoiceService(
         await db.SaveChangesAsync(cancellationToken);
 
         return await GetByIdAsync(returnInvoice.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Faturanın maliyet sınıfı kırılımı: sınıf → KDV hariç tutar.
+    ///
+    /// ALIŞ faturası bütünüyle malzemedir. GİDER faturasında her kalem
+    /// kendi hesabına göre sınıflanır; hesabı olmayan kalem genel gider
+    /// sayılır (bilinmeyeni malzeme ya da işçilik saymak karşılaştırmayı
+    /// sessizce yanıltırdı).
+    /// </summary>
+    private async Task<IReadOnlyCollection<KeyValuePair<ProjectCostClass, decimal>>>
+        ResolveCostClassAmountsAsync(
+            SupplierInvoice invoice, CancellationToken cancellationToken)
+    {
+        if (invoice.InvoiceType == SupplierInvoiceType.Stock)
+        {
+            return
+            [
+                new KeyValuePair<ProjectCostClass, decimal>(
+                    ProjectCostClass.Material, invoice.Subtotal)
+            ];
+        }
+
+        var lines = await db.SupplierInvoiceItems
+            .AsNoTracking()
+            .Where(x => x.SupplierInvoiceId == invoice.Id)
+            .Select(x => new
+            {
+                x.LineSubtotal,
+                AccountCode = x.ExpenseAccount != null ? x.ExpenseAccount.Code : null
+            })
+            .ToListAsync(cancellationToken);
+
+        if (lines.Count == 0)
+        {
+            return
+            [
+                new KeyValuePair<ProjectCostClass, decimal>(
+                    ProjectCostClass.Overhead, invoice.Subtotal)
+            ];
+        }
+
+        return lines
+            .GroupBy(x => Projects.ProjectCostClassifier.ForExpenseAccount(x.AccountCode))
+            .Select(g => new KeyValuePair<ProjectCostClass, decimal>(
+                g.Key, g.Sum(x => x.LineSubtotal)))
+            .Where(x => x.Value != 0m)
+            .ToList();
     }
 
     /// <summary>

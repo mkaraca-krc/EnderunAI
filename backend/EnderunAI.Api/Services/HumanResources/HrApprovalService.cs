@@ -918,6 +918,9 @@ public sealed class HrApprovalService(
             cost.WorkDate = day.WorkDate;
             cost.WorkItemCode = day.WorkItemCode;
             cost.WorkItemName = day.WorkItemName;
+            // Kısım puantajdan taşınır: maliyet analizinde işçilik
+            // kısım bazında toplanabilsin.
+            cost.ProjectHakedisSectionId = day.ProjectHakedisSectionId;
 
             cost.NormalHours = day.NormalHours;
             cost.OvertimeHours = day.OvertimeHours;

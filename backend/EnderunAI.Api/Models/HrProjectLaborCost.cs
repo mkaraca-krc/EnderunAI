@@ -14,6 +14,9 @@ public sealed class HrProjectLaborCost : BaseEntity
     public string? WorkItemCode { get; set; }
     public string? WorkItemName { get; set; }
 
+    /// <summary>Puantajdan taşınan icmal kısmı; boş olabilir.</summary>
+    public Guid? ProjectHakedisSectionId { get; set; }
+
     public decimal NormalHours { get; set; }
     public decimal OvertimeHours { get; set; }
     public decimal SundayHours { get; set; }

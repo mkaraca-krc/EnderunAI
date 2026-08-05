@@ -1781,6 +1781,7 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.InventoryItem).WithMany(x => x.StockMovements).HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.ProjectSite).WithMany().HasForeignKey(x => x.ProjectSiteId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ProjectHakedisSection).WithMany().HasForeignKey(x => x.ProjectHakedisSectionId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.PurchaseRequest).WithMany().HasForeignKey(x => x.PurchaseRequestId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.GoodsReceipt).WithMany().HasForeignKey(x => x.GoodsReceiptId).OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(x => !x.IsDeleted);
@@ -3097,6 +3098,9 @@ public sealed class AppDbContext(
             entity.HasIndex(x => x.ProjectSiteId);
 
             entity.Property(x => x.CostType).HasConversion<int>();
+            entity.Property(x => x.CostClass).HasConversion<int>();
+            entity.HasIndex(x => new { x.ProjectId, x.CostClass });
+            entity.HasIndex(x => x.ProjectHakedisSectionId);
             entity.Property(x => x.Description).IsRequired();
             entity.Property(x => x.ReferenceType);
 
@@ -3115,6 +3119,11 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.AccountingVoucherLineId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(x => x.ProjectHakedisSection)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectHakedisSectionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
@@ -3128,6 +3137,7 @@ public sealed class AppDbContext(
 
             entity.HasIndex(x => new { x.ProjectId, x.PersonnelId, x.WorkDate });
             entity.HasIndex(x => x.ProjectSiteId);
+            entity.HasIndex(x => x.ProjectHakedisSectionId);
 
             entity.Property(x => x.WorkItemCode).HasMaxLength(100);
             entity.Property(x => x.WorkItemName).HasMaxLength(500);
@@ -3188,6 +3198,8 @@ public sealed class AppDbContext(
 
             entity.HasOne(x => x.ProjectSite).WithMany()
                 .HasForeignKey(x => x.ProjectSiteId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ProjectHakedisSection).WithMany()
+                .HasForeignKey(x => x.ProjectHakedisSectionId).OnDelete(DeleteBehavior.SetNull);
             entity.Property(x => x.NormalHours).HasPrecision(8, 2);
             entity.Property(x => x.OvertimeHours).HasPrecision(8, 2);
             entity.Property(x => x.NightShiftHours).HasPrecision(8, 2);

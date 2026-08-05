@@ -372,6 +372,26 @@ public sealed class InventoryController(
         if (request.ProjectSiteId.HasValue && !request.ProjectId.HasValue)
             return BadRequest(new { message = "Şantiye seçildiyse proje de belirtilmelidir." });
 
+        // Kısım seçildiyse projeye ait olmalı: başka projenin kısmına
+        // yazılan sarf, iki projenin de maliyet analizini bozar.
+        Guid? sectionId = null;
+
+        if (request.ProjectHakedisSectionId is Guid requestedSectionId)
+        {
+            if (!request.ProjectId.HasValue)
+                return BadRequest(new { message = "Kısım seçildiyse proje de belirtilmelidir." });
+
+            var sectionBelongsToProject = await db.ProjectHakedisSections
+                .AnyAsync(
+                    x => x.Id == requestedSectionId && x.ProjectId == request.ProjectId.Value,
+                    cancellationToken);
+
+            if (!sectionBelongsToProject)
+                return BadRequest(new { message = "Seçilen kısım bu projeye ait değil." });
+
+            sectionId = requestedSectionId;
+        }
+
         // DocumentNumberService kendi transaction'ını açıp kapattığı için,
         // aynı bağlantı üzerinde iç içe transaction hatası almamak adına
         // belge numarası dış transaction başlamadan ÖNCE üretilir.
@@ -403,6 +423,7 @@ public sealed class InventoryController(
             InventoryItemId = stock.InventoryItemId,
             ProjectId = request.ProjectId,
             ProjectSiteId = request.ProjectSiteId,
+            ProjectHakedisSectionId = sectionId,
             Type = StockMovementType.Issue,
             Quantity = request.Quantity,
             UnitCost = unitCost,
@@ -424,6 +445,8 @@ public sealed class InventoryController(
                 ProjectId = request.ProjectId.Value,
                 ProjectSiteId = request.ProjectSiteId,
                 CostType = ProjectCostType.Material,
+                CostClass = Services.Projects.ProjectCostClassifier.ForStockIssue(),
+                ProjectHakedisSectionId = sectionId,
                 CostDate = ToUtc(request.MovementDate),
                 Amount = totalCost,
                 Description = $"Depo sarfı: {stock.InventoryItem.Name} ({request.Quantity} {stock.InventoryItem.Unit})",

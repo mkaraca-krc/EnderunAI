@@ -27,6 +27,14 @@ public sealed class StockMovement : BaseEntity
     public Guid? ProjectSiteId { get; set; }
     public ProjectSite? ProjectSite { get; set; }
 
+    /// <summary>
+    /// Sarfın hangi icmal kısmına gittiği ("bu kablo kolon kablolarına").
+    /// OPSİYONEL — bilinmiyorsa boş bırakılır ve maliyet proje geneline
+    /// yazılır.
+    /// </summary>
+    public Guid? ProjectHakedisSectionId { get; set; }
+    public ProjectHakedisSection? ProjectHakedisSection { get; set; }
+
     public Guid? RelatedWarehouseId { get; set; }
     public Warehouse? RelatedWarehouse { get; set; }
 

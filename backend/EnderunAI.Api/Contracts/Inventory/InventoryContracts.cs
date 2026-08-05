@@ -34,7 +34,12 @@ public sealed record StockIssueRequest(
     decimal Quantity,
     string? ReferenceNumber,
     DateTime MovementDate,
-    string? Description);
+    string? Description,
+    /// <summary>
+    /// Sarfın gittiği icmal kısmı. OPSİYONEL — bilinmiyorsa boş
+    /// bırakılır, maliyet proje geneline yazılır.
+    /// </summary>
+    Guid? ProjectHakedisSectionId = null);
 
 public sealed record StockTransferRequest(
     Guid SourceWarehouseId,

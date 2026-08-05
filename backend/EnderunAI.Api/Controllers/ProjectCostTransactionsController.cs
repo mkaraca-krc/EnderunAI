@@ -44,6 +44,8 @@ public sealed class ProjectCostTransactionsController(AppDbContext db) : Control
                 SiteCode = x.ProjectSite != null ? x.ProjectSite.Code : null,
                 SiteName = x.ProjectSite != null ? x.ProjectSite.Name : null,
                 x.CostType,
+                CostClass = (int)x.CostClass,
+                CostClassName = Services.Projects.ProjectCostClassifier.Name(x.CostClass),
                 x.CostDate,
                 x.Amount,
                 x.Description
@@ -92,6 +94,8 @@ public sealed class ProjectCostTransactionsController(AppDbContext db) : Control
             ProjectId = projectId,
             ProjectSiteId = request.ProjectSiteId,
             CostType = request.CostType,
+            // Sınıf kullanıcıya sorulmaz; seçtiği türden eşlenir.
+            CostClass = Services.Projects.ProjectCostClassifier.ForCostType(request.CostType),
             CostDate = DateTime.SpecifyKind(request.CostDate.Date, DateTimeKind.Utc),
             Amount = request.Amount,
             Description = request.Description.Trim()
