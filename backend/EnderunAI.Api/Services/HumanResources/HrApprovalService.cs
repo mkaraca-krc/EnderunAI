@@ -56,7 +56,9 @@ public sealed class HrApprovalService(
             UnemploymentEmployer: records.Sum(x => x.UnemploymentEmployerAmount),
             AdvanceAndOtherDeductions: records.Sum(
                 x => x.AdvanceDeduction + x.OtherDeductionAmount),
-            PersonnelCount: records.Count);
+            PersonnelCount: records.Count,
+            CostCenters: await BuildPayrollCostCentersAsync(
+                request.CompanyId, records, cancellationToken));
 
         var voucherId = await accountingIntegration.CreatePayrollAccrualVoucherAsync(
             request.CompanyId, request.Year, request.Month, totals, cancellationToken);
@@ -154,6 +156,114 @@ public sealed class HrApprovalService(
 
     private static string PayrollPeriodReference(int year, int month) =>
         $"BORDRO-{year}-{month:00}";
+
+    /// <summary>
+    /// Bordro giderinin masraf merkezi kırılımı.
+    ///
+    /// Merkez personelinin gideri merkez ofisin masraf merkezi koduna,
+    /// şantiye personelininki çalıştığı PROJENİN koduna yazılır. Şantiye
+    /// yerine proje kodu kullanılması bilinçli: satın alma, hakediş ve
+    /// diğer tüm modüller fiş satırına proje kodunu yazıyor; şantiye kodu
+    /// yazmak aynı işin maliyetini defterde iki ayrı etikete bölerdi.
+    /// Şantiye kırılımı HrProjectLaborCost üzerinden izlenmeye devam
+    /// ediyor.
+    ///
+    /// Görev yeri belirsiz personel şirket koduna düşer — tahmin
+    /// yürütülmez.
+    /// </summary>
+    private async Task<IReadOnlyList<EnderunAI.Api.Services.Accounting.PayrollCostCenterShare>>
+        BuildPayrollCostCentersAsync(
+            Guid companyId,
+            IReadOnlyCollection<HrPayrollRecord> records,
+            CancellationToken cancellationToken)
+    {
+        var companyCode = await appDb.Companies
+            .Where(x => x.Id == companyId)
+            .Select(x => x.Code)
+            .SingleAsync(cancellationToken);
+
+        var personnelIds = records.Select(x => x.PersonnelId).Distinct().ToList();
+
+        var personnel = await appDb.Personnel
+            .AsNoTracking()
+            .Where(x => personnelIds.Contains(x.Id))
+            .Select(x => new
+            {
+                x.Id,
+                x.WorkLocationType,
+                BranchCode = x.Branch != null
+                    ? (x.Branch.CostCenterCode ?? x.Branch.Code)
+                    : null,
+                BranchName = x.Branch != null ? x.Branch.Name : null
+            })
+            .ToListAsync(cancellationToken);
+
+        var siteAssignments = await appDb.ProjectSiteAssignments
+            .AsNoTracking()
+            .Where(x => personnelIds.Contains(x.PersonnelId) &&
+                        x.IsActive && x.EndDate == null)
+            .Select(x => new
+            {
+                x.PersonnelId,
+                ProjectCode = x.ProjectSite.Project.Code,
+                ProjectName = x.ProjectSite.Project.Name
+            })
+            .ToListAsync(cancellationToken);
+
+        var personnelById = personnel.ToDictionary(x => x.Id);
+        var siteByPersonnel = siteAssignments
+            .GroupBy(x => x.PersonnelId)
+            .ToDictionary(x => x.Key, x => x.First());
+
+        var buckets = new Dictionary<string, (string Label, decimal Amount, int Count)>();
+
+        foreach (var record in records)
+        {
+            var expense = record.TotalEarnings +
+                          record.SgkEmployerAmount +
+                          record.UnemploymentEmployerAmount;
+
+            personnelById.TryGetValue(record.PersonnelId, out var person);
+
+            string code;
+            string label;
+
+            if (person?.WorkLocationType == EnderunAI.Api.Models.WorkLocationType.ProjectSite &&
+                siteByPersonnel.TryGetValue(record.PersonnelId, out var site))
+            {
+                code = site.ProjectCode;
+                label = site.ProjectName;
+            }
+            else if (person?.WorkLocationType == EnderunAI.Api.Models.WorkLocationType.HeadOffice &&
+                     person.BranchCode is not null)
+            {
+                code = person.BranchCode;
+                label = person.BranchName ?? "Merkez";
+            }
+            else
+            {
+                code = companyCode;
+                label = "Görev yeri atanmamış";
+            }
+
+            if (buckets.TryGetValue(code, out var existing))
+            {
+                buckets[code] = (
+                    existing.Label,
+                    existing.Amount + expense,
+                    existing.Count + 1);
+            }
+            else
+            {
+                buckets[code] = (label, expense, 1);
+            }
+        }
+
+        return buckets
+            .Select(x => new EnderunAI.Api.Services.Accounting.PayrollCostCenterShare(
+                x.Key, x.Value.Label, decimal.Round(x.Value.Amount, 2), x.Value.Count))
+            .ToList();
+    }
 
     private async Task<bool> PeriodVoucherExistsAsync(
         Guid companyId, string sourceModule, string reference,

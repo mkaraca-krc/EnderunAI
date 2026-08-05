@@ -178,6 +178,7 @@ export default function HrPersonnelPage() {
   const [locationSiteId, setLocationSiteId] = useState("");
   const [locationRole, setLocationRole] = useState("");
   const [locationSites, setLocationSites] = useState<ProjectSiteListItem[]>([]);
+  const [locationBranchId, setLocationBranchId] = useState("");
   const [locationSaving, setLocationSaving] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -329,6 +330,20 @@ export default function HrPersonnelPage() {
     setLocationSiteId(item.activeSiteAssignment?.projectSiteId ?? "");
     setLocationRole(item.activeSiteAssignment?.role ?? "");
     setLocationSites([]);
+
+    // Merkez seçilirse öntanımlı birim şirketin merkez ofisi. Personelin
+    // eski şubesi bir şantiye şubesi olabilir; onu taşımak merkeze
+    // atanan kişiyi yanlış masraf merkezine yazardı.
+    const headOffice = branches.find(
+      (branch) => branch.companyId === item.companyId && branch.isHeadOffice
+    );
+
+    setLocationBranchId(
+      item.workLocationType === 1 && item.branchId
+        ? item.branchId
+        : headOffice?.id ?? ""
+    );
+
     setLocationError("");
   }
 
@@ -358,6 +373,14 @@ export default function HrPersonnelPage() {
       return;
     }
 
+    if (type === 1 && !locationBranchId) {
+      setLocationError(
+        "Merkez birimi seçilmelidir. Şirkette merkez ofis tanımlı değilse " +
+          "Şubeler ekranından tanımlayın."
+      );
+      return;
+    }
+
     setLocationSaving(true);
     setLocationError("");
 
@@ -365,7 +388,7 @@ export default function HrPersonnelPage() {
       await personnelService.setWorkLocation(locationTarget.id, {
         workLocationType: type,
         projectSiteId: type === 2 ? locationSiteId : null,
-        branchId: type === 1 ? locationTarget.branchId ?? null : null,
+        branchId: type === 1 ? locationBranchId || null : null,
         startDate: null,
         role: locationRole.trim() || null,
         notes: null,
@@ -822,6 +845,36 @@ export default function HrPersonnelPage() {
                   ]}
                 />
               </label>
+
+              {locationType === "1" && (
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Merkez birimi
+                  </span>
+                  <Select
+                    value={locationBranchId}
+                    onChange={(event) => {
+                      setLocationBranchId(event.target.value);
+                      setLocationError("");
+                    }}
+                    placeholder="Birim seçin"
+                    options={branches
+                      .filter(
+                        (branch) =>
+                          branch.companyId === locationTarget.companyId
+                      )
+                      .map((branch) => ({
+                        value: branch.id,
+                        label: branch.isHeadOffice
+                          ? `${branch.name} (merkez)`
+                          : branch.name,
+                      }))}
+                  />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Bordro gideri bu birimin masraf merkezine yazılır.
+                  </span>
+                </label>
+              )}
 
               {locationType === "2" && (
                 <>

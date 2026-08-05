@@ -128,6 +128,28 @@ public sealed record PayrollAccrualTotals(
     decimal SgkEmployer,
     decimal UnemploymentEmployer,
     decimal AdvanceAndOtherDeductions,
+    int PersonnelCount,
+    /// <summary>
+    /// Gider satırının masraf merkezi kırılımı. Boşsa tek satır kesilir
+    /// ve şirket kodu kullanılır (eski davranış).
+    /// </summary>
+    IReadOnlyList<PayrollCostCenterShare>? CostCenters = null);
+
+/// <summary>
+/// Bir masraf merkezine düşen bordro gideri (brüt + işveren payı).
+///
+/// Merkez personelinin gideri merkez ofise, şantiye personelininki
+/// çalıştığı projeye yazılır. Tutarların toplamı fişin gider satırına
+/// eşit olmak zorundadır; yuvarlama artığı en büyük paya eklenir.
+/// </summary>
+/// <param name="Code">Fiş satırına yazılacak masraf merkezi kodu.</param>
+/// <param name="Label">Satır açıklamasında görünen ad.</param>
+/// <param name="ExpenseAmount">Brüt kazanç + işveren SGK/işsizlik payı.</param>
+/// <param name="PersonnelCount">Bu merkeze düşen personel sayısı.</param>
+public sealed record PayrollCostCenterShare(
+    string Code,
+    string Label,
+    decimal ExpenseAmount,
     int PersonnelCount);
 
 public sealed record PayrollPaymentPostingResult(
@@ -1103,6 +1125,71 @@ public sealed class AccountingIntegrationService(
         return created.Id;
     }
 
+    /// <summary>
+    /// Bordro gider satırlarını masraf merkezine göre böler.
+    ///
+    /// Kırılım yoksa, tek merkez varsa ya da tutarların toplamı gider
+    /// toplamına eşit değilse tek satır döner. Toplam tutmuyorsa
+    /// bölmemek bilinçli: yarım bir kırılım uğruna fişi dengesizleştirmek
+    /// veya sessizce düzeltmek, muhasebede izi sürülemeyen bir fark
+    /// yaratırdı.
+    /// </summary>
+    private static List<AccountingVoucherLineRequest> BuildPayrollExpenseLines(
+        Guid expenseAccountId,
+        decimal expense,
+        string period,
+        PayrollAccrualTotals totals,
+        string fallbackCostCenterCode,
+        DateTime voucherDate)
+    {
+        AccountingVoucherLineRequest SingleLine() => new(
+            AccountingAccountId: expenseAccountId,
+            Description: $"{period} dönemi personel gideri ({totals.PersonnelCount} kişi)",
+            DebitAmount: expense,
+            CreditAmount: 0m,
+            CurrencyCode: "TRY",
+            ExchangeRate: 1m,
+            CurrentAccountId: null,
+            ProjectId: null,
+            CostCenterCode: fallbackCostCenterCode,
+            DocumentNumber: null,
+            DocumentDate: voucherDate,
+            DueDate: null);
+
+        var shares = totals.CostCenters?
+            .Where(x => x.ExpenseAmount > 0m)
+            .ToList();
+
+        if (shares is null || shares.Count == 0)
+            return [SingleLine()];
+
+        var shareTotal = decimal.Round(shares.Sum(x => x.ExpenseAmount), 2);
+
+        if (shareTotal != expense)
+            return [SingleLine()];
+
+        // Tek merkez kalsa bile o merkezin kodu yazılır; şirket koduna
+        // düşmek merkez giderini defterde adsız bırakırdı.
+        return shares
+            .OrderByDescending(x => x.ExpenseAmount)
+            .Select(share => new AccountingVoucherLineRequest(
+                AccountingAccountId: expenseAccountId,
+                Description:
+                    $"{period} dönemi personel gideri — {share.Label} " +
+                    $"({share.PersonnelCount} kişi)",
+                DebitAmount: decimal.Round(share.ExpenseAmount, 2),
+                CreditAmount: 0m,
+                CurrencyCode: "TRY",
+                ExchangeRate: 1m,
+                CurrentAccountId: null,
+                ProjectId: null,
+                CostCenterCode: share.Code,
+                DocumentNumber: null,
+                DocumentDate: voucherDate,
+                DueDate: null))
+            .ToList();
+    }
+
     public async Task<Guid> CreatePayrollAccrualVoucherAsync(
         Guid companyId,
         int year,
@@ -1171,21 +1258,15 @@ public sealed class AccountingIntegrationService(
             .Select(x => x.Code)
             .SingleAsync(cancellationToken);
 
-        var lines = new List<AccountingVoucherLineRequest>
+        // Gider satırı masraf merkezine göre bölünür: merkez personelinin
+        // gideri merkez ofise, şantiye personelininki projesine yazılır.
+        // Kırılım gelmezse (veya toplamı tutmazsa) tek satır kesilir —
+        // eksik bir kırılım yüzünden fiş dengesizleşmemeli.
+        var expenseLines = BuildPayrollExpenseLines(
+            expenseAccountId, expense, period, totals, costCenterCode, voucherDate);
+
+        var lines = new List<AccountingVoucherLineRequest>(expenseLines)
         {
-            new(
-                AccountingAccountId: expenseAccountId,
-                Description: $"{period} dönemi personel gideri ({totals.PersonnelCount} kişi)",
-                DebitAmount: expense,
-                CreditAmount: 0m,
-                CurrencyCode: "TRY",
-                ExchangeRate: 1m,
-                CurrentAccountId: null,
-                ProjectId: null,
-                CostCenterCode: costCenterCode,
-                DocumentNumber: null,
-                DocumentDate: voucherDate,
-                DueDate: null),
             new(
                 AccountingAccountId: payableAccountId,
                 Description: $"{period} dönemi net ücret tahakkuku",

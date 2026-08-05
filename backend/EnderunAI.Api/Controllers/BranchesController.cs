@@ -37,6 +37,8 @@ public sealed class BranchesController(AppDbContext db) : ControllerBase
                 x.Email,
                 x.Address,
                 x.IsHeadOffice,
+                // Boşsa şube kodu masraf merkezi kodu olarak kullanılır.
+                CostCenterCode = x.CostCenterCode ?? x.Code,
                 x.IsActive
             })
             .ToListAsync(cancellationToken);

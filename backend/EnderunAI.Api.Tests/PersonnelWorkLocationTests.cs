@@ -170,6 +170,49 @@ public sealed class PersonnelWorkLocationTests(DatabaseFixture fixture)
             person.GetProperty("activeSiteAssignment").ValueKind);
     }
 
+    /// <summary>
+    /// Birim seçilmeden merkeze atama: personel şirketin merkez ofisine
+    /// bağlanır. Daha önce burada personelin eski şubesi ne ise o
+    /// kalıyordu — şantiye şubesindeki biri merkeze alınınca defterde
+    /// hâlâ şantiyenin masraf merkezine yazılıyordu.
+    /// </summary>
+    [Fact]
+    public async Task HeadOfficeWithoutBranch_FallsBackToCompanyHeadOffice()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/personnel/{context.PersonnelId}/gorev-yeri",
+            new
+            {
+                workLocationType = 1,
+                projectSiteId = (Guid?)null,
+                branchId = (Guid?)null,
+                startDate = (DateTime?)null,
+                role = (string?)null,
+                notes = (string?)null
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var personnel = await db.Personnel
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == context.PersonnelId);
+
+        var headOfficeId = await db.Branches
+            .Where(x => x.CompanyId == context.CompanyId && x.IsHeadOffice)
+            .Select(x => x.Id)
+            .SingleAsync();
+
+        Assert.Equal(headOfficeId, personnel.BranchId);
+        Assert.Equal(WorkLocationType.HeadOffice, personnel.WorkLocationType);
+    }
+
     [Fact]
     public async Task SiteWithoutSiteId_IsRejected()
     {

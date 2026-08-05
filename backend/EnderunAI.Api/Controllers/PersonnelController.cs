@@ -416,16 +416,42 @@ public sealed class PersonnelController(
         {
             CloseAssignments(activeAssignments, now);
 
-            if (locationType == WorkLocationType.HeadOffice && request.BranchId is Guid branchId)
+            if (locationType == WorkLocationType.HeadOffice)
             {
-                var branchExists = await db.Branches.AnyAsync(
-                    x => x.Id == branchId && x.CompanyId == personnel.CompanyId,
-                    cancellationToken);
+                if (request.BranchId is Guid branchId)
+                {
+                    var branchExists = await db.Branches.AnyAsync(
+                        x => x.Id == branchId && x.CompanyId == personnel.CompanyId,
+                        cancellationToken);
 
-                if (!branchExists)
-                    return BadRequest(new { message = "Şube bulunamadı." });
+                    if (!branchExists)
+                        return BadRequest(new { message = "Şube bulunamadı." });
 
-                personnel.BranchId = branchId;
+                    personnel.BranchId = branchId;
+                }
+                else
+                {
+                    // Birim seçilmediyse şirketin merkez ofisine atanır.
+                    // Daha önce burada personelin eski şubesi ne ise o
+                    // kalıyordu; merkeze atanan personel şantiye şubesinde
+                    // görünebiliyor, masraf merkezi de yanlış çıkıyordu.
+                    var headOfficeId = await db.Branches
+                        .Where(x => x.CompanyId == personnel.CompanyId &&
+                                    x.IsHeadOffice && x.IsActive)
+                        .Select(x => (Guid?)x.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    if (headOfficeId is null)
+                    {
+                        return BadRequest(new
+                        {
+                            message = "Şirkette merkez birimi tanımlı değil. " +
+                                      "Şubeler ekranından merkez ofisi tanımlayın."
+                        });
+                    }
+
+                    personnel.BranchId = headOfficeId;
+                }
             }
         }
 
