@@ -383,7 +383,7 @@ export default function PurchaseRequestDetailPage() {
                             }
                             className={`rounded-xl border p-4 text-left transition ${
                               selected
-                                ? "border-slate-900 bg-slate-900 text-white"
+                                ? "border-brand-700 bg-brand-700 text-white"
                                 : "border-slate-200 bg-white hover:border-slate-400"
                             }`}
                           >

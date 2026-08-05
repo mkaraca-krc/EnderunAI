@@ -170,7 +170,7 @@ function OrganizationNode({
       <article className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-lg font-semibold text-white">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-700 text-lg font-semibold text-white">
               {department.name.charAt(0).toLocaleUpperCase("tr-TR")}
             </div>
             <div className="min-w-0">
@@ -714,7 +714,7 @@ export default function OrganizationPage() {
       description="Şirket yapısını, departman hiyerarşisini, yöneticileri ve pozisyonları tek merkezden yönetin."
     >
       <div className="space-y-5">
-        <section className="overflow-hidden rounded-2xl bg-slate-950 px-5 py-6 text-white shadow-sm sm:px-7">
+        <section className="overflow-hidden rounded-2xl bg-brand-700 px-5 py-6 text-white shadow-sm sm:px-7">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
@@ -731,7 +731,7 @@ export default function OrganizationPage() {
             <div className="flex flex-wrap gap-2">
               <Link
                 href="/insan-kaynaklari/personeller"
-                className="inline-flex h-10 items-center rounded-lg border border-slate-700 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+                className="inline-flex h-10 items-center rounded-lg border border-slate-700 px-4 text-sm font-medium text-white transition hover:bg-brand-600"
               >
                 Personellere git
               </Link>
@@ -851,7 +851,7 @@ export default function OrganizationPage() {
               className={[
                 "whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition",
                 activeTab === tab.key
-                  ? "bg-slate-900 text-white"
+                  ? "bg-brand-700 text-white"
                   : "text-slate-600 hover:bg-slate-100",
               ].join(" ")}
             >

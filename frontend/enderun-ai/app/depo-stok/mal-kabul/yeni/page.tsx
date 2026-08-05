@@ -9,6 +9,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import ErpShell from "@/components/erp/erp-shell";
 import { apiClient } from "@/lib/api/api-client";
 import {
   goodsReceiptService,
@@ -168,7 +169,11 @@ function NewGoodsReceiptContent() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <ErpShell
+      title="Mal Kabul Oluştur"
+      description="Teslimat belgesini taslak olarak açın; miktar ve stok kartları sonraki ekranda doğrulanır"
+    >
+      <div className="space-y-6">
       <div>
         <Link
           href={
@@ -176,17 +181,10 @@ function NewGoodsReceiptContent() {
               ? `/satin-alma/siparis/${purchaseOrderId}`
               : "/satin-alma/siparis"
           }
-          className="text-sm font-medium text-slate-600 hover:text-slate-950"
+          className="erp-row-link"
         >
           ← Satın alma siparişine dön
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-950">
-          Mal Kabul Oluştur
-        </h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Teslimat belgesini taslak olarak açın; miktar ve stok kartlarını
-          sonraki ekranda doğrulayın.
-        </p>
       </div>
 
       {error ? (
@@ -328,14 +326,15 @@ function NewGoodsReceiptContent() {
             <button
               type="submit"
               disabled={submitting || warehouses.length === 0}
-              className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg bg-brand-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? "Oluşturuluyor..." : "Taslak Oluştur"}
             </button>
           </div>
         </form>
       ) : null}
-    </div>
+      </div>
+    </ErpShell>
   );
 }
 

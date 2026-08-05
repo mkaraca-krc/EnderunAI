@@ -1215,7 +1215,7 @@ export default function AdditionalCompensationPage() {
             type="button"
             onClick={loadData}
             disabled={loading}
-            className="rounded-lg bg-slate-800 p-3 font-semibold text-white disabled:opacity-50"
+            className="rounded-lg bg-brand-700 p-3 font-semibold text-white disabled:opacity-50"
           >
             {loading
               ? "Yükleniyor…"

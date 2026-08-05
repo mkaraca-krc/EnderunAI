@@ -276,7 +276,7 @@ export default function StockReservationsPage() {
 
           <Link
             href="/depo-stok/malzeme-talepleri"
-            className="inline-flex w-fit items-center justify-center rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+            className="inline-flex w-fit items-center justify-center rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600"
           >
             Malzeme Taleplerini Aç
           </Link>
@@ -505,7 +505,7 @@ export default function StockReservationsPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="rounded-lg bg-slate-950 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                  className="rounded-lg bg-brand-700 px-5 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
                 >
                   {loading
                     ? "Yükleniyor..."

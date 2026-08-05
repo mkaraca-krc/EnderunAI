@@ -309,7 +309,7 @@ export default function InventoryOperationsPage() {
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-slate-200 bg-slate-950 p-6 text-white shadow-sm">
+        <section className="rounded-2xl border border-slate-200 bg-brand-950 p-6 text-white shadow-sm">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <p className="text-sm font-medium text-slate-400">
@@ -337,7 +337,7 @@ export default function InventoryOperationsPage() {
 
               <Link
                 href="/depo-stok/mal-kabul"
-                className="inline-flex items-center justify-center rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+                className="inline-flex items-center justify-center rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600"
               >
                 Mal Kabul
               </Link>
@@ -346,7 +346,7 @@ export default function InventoryOperationsPage() {
                 type="button"
                 onClick={() => void loadDashboard()}
                 disabled={loading}
-                className="inline-flex items-center justify-center rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                className="inline-flex items-center justify-center rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
               >
                 {loading ? "Yenileniyor..." : "Verileri Yenile"}
               </button>
@@ -720,7 +720,7 @@ export default function InventoryOperationsPage() {
             <div className="flex gap-2">
               <Link
                 href="/depo-stok/yeni"
-                className="inline-flex items-center justify-center rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                className="inline-flex items-center justify-center rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
               >
                 + Yeni Malzeme
               </Link>
@@ -1057,7 +1057,7 @@ function MinimumStockCell({
             setSaving(false);
           }
         }}
-        className="rounded bg-slate-950 px-2 py-1 text-xs text-white disabled:opacity-50"
+        className="rounded bg-brand-700 px-2 py-1 text-xs text-white disabled:opacity-50"
       >
         ✓
       </button>

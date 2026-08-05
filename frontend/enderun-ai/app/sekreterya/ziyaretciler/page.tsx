@@ -414,7 +414,7 @@ export default function VisitorsPage() {
 
           <button
             type="button"
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+            className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white"
             onClick={() =>
               setShowForm((value) => !value)
             }
@@ -721,7 +721,7 @@ export default function VisitorsPage() {
             <div className="mt-5 flex justify-end">
               <button
                 disabled={saving}
-                className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-60"
+                className="rounded-lg bg-brand-700 px-5 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
                 {saving
                   ? "Kaydediliyor..."

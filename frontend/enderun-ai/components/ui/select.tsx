@@ -43,7 +43,7 @@ export function Select({
           "outline-none transition focus:ring-2",
           error
             ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-            : "border-slate-300 focus:border-slate-500 focus:ring-slate-100",
+            : "border-slate-300 focus:border-brand-500 focus:ring-brand-100",
           className,
         ].join(" ")}
         {...props}

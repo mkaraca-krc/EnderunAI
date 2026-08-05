@@ -106,7 +106,7 @@ export default function PurchaseOrderPrintPage() {
         <button
           type="button"
           onClick={() => window.print()}
-          className="inline-flex h-10 items-center rounded-lg bg-slate-900 px-5 text-sm font-medium text-white hover:bg-slate-800"
+          className="inline-flex h-10 items-center rounded-lg bg-brand-700 px-5 text-sm font-medium text-white hover:bg-brand-600"
         >
           PDF Kaydet / Yazdır
         </button>
@@ -422,7 +422,7 @@ export default function PurchaseOrderPrintPage() {
               </strong>
             </div>
 
-            <div className="flex justify-between bg-slate-900 px-4 py-3 text-white">
+            <div className="flex justify-between bg-brand-700 px-4 py-3 text-white">
               <span className="font-bold">
                 GENEL TOPLAM
               </span>

@@ -72,7 +72,7 @@ export default function SecretariatDashboardPage() {
               className="rounded-2xl border bg-white p-5 shadow-sm transition hover:border-slate-400 hover:shadow-md"
             >
               <div className="flex items-start gap-4">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-lg text-white">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-700 text-lg text-white">
                   {module.icon}
                 </span>
                 <div>

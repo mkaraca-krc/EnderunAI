@@ -7,6 +7,11 @@ export interface InventoryMovement {
   type: number; quantity: number; unitCost?: number | null; totalCost?: number | null;
   referenceNumber: string; movementDate: string;
 }
+export interface WarehouseStockRow {
+  inventoryItemId: string;
+  quantity: number;
+  reservedQuantity?: number;
+}
 export interface CriticalStockAlert {
   warehouseId: string; warehouseName: string;
   inventoryItemId: string; itemCode: string; itemName: string; unit: string;
@@ -45,6 +50,9 @@ export const inventoryMovementService = {
   getProjectSites: async (projectId: string) =>
     normalize(await request<unknown>(`/api/projects/${projectId}/sites`)),
   getCriticalStockAlerts: () => request<CriticalStockAlert[]>("/api/inventory/critical-stock-alerts"),
+  /** Bir deponun stok satırları; sayım ekranı mevcut miktarı buradan okur. */
+  getWarehouseStocks: (warehouseId: string) =>
+    request<WarehouseStockRow[]>(`/api/inventory/warehouses/${warehouseId}/stocks`),
   receipt: (body: unknown) => request("/api/inventory/receipts", { method: "POST", body: JSON.stringify(body) }),
   issue: (body: unknown) => request<{ referenceNumber: string; unitCost: number; totalCost: number }>(
     "/api/inventory/issues", { method: "POST", body: JSON.stringify(body) }),

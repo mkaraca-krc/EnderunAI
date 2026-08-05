@@ -1795,7 +1795,7 @@ export default function DailyAttendancePage() {
           <button
             type="button"
             onClick={loadAttendance}
-            className="rounded-lg bg-slate-800 p-3 font-semibold text-white"
+            className="rounded-lg bg-brand-700 p-3 font-semibold text-white"
           >
             Filtrele
           </button>

@@ -1,67 +1,158 @@
 "use client";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { inventoryMovementService, type InventoryMovement } from "@/services/inventory-movement.service";
 
-export default function Page(){
-  const [items,setItems]=useState<InventoryMovement[]>([]);
-  const [error,setError]=useState("");
-  const [loading,setLoading]=useState(true);
-  useEffect(()=>{void inventoryMovementService.getMovements().then(setItems).catch(e=>setError(e instanceof Error?e.message:"Hareketler yüklenemedi.")).finally(()=>setLoading(false));},[]);
-  const label=(t:number)=>({0:"Giriş",1:"Çıkış",2:"Transfer çıkış",3:"Transfer giriş",4:"İade",5:"Sayım düzeltme",6:"Sayım"}[t]??`Hareket ${t}`);
-  return <div className="space-y-6 p-6">
-    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div><Link href="/depo-stok" className="text-sm font-medium text-slate-600">← Depo & Stok</Link><h1 className="mt-2 text-2xl font-semibold">Stok hareketleri</h1></div>
-      <div className="flex flex-wrap gap-2">
-        <Link href="/depo-stok/giris" className="rounded-lg bg-slate-950 px-4 py-2 text-sm text-white">Depo girişi</Link>
-        <Link href="/depo-stok/cikis" className="rounded-lg bg-slate-950 px-4 py-2 text-sm text-white">Depo çıkışı</Link>
-        <Link href="/depo-stok/transfer" className="rounded-lg bg-slate-950 px-4 py-2 text-sm text-white">Transfer</Link>
-        <Link href="/depo-stok/sayim" className="rounded-lg border border-slate-950 px-4 py-2 text-sm text-slate-950">Sayım / Düzeltme</Link>
+import ErpShell from "@/components/erp/erp-shell";
+import {
+  inventoryMovementService,
+  type InventoryMovement,
+} from "@/services/inventory-movement.service";
+
+const MOVEMENT_LABELS: Record<number, string> = {
+  0: "Giriş",
+  1: "Çıkış",
+  2: "Transfer çıkış",
+  3: "Transfer giriş",
+  4: "İade",
+  5: "Sayım düzeltme",
+  6: "Sayım",
+};
+
+const dateFormat = new Intl.DateTimeFormat("tr-TR");
+const money = new Intl.NumberFormat("tr-TR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** Giriş yeşil, çıkış sarı, düzeltme mavi — rozet tek bakışta okunur. */
+function movementColor(type: number) {
+  if (type === 0 || type === 3 || type === 4) return "green";
+  if (type === 1 || type === 2) return "yellow";
+  return "blue";
+}
+
+export default function StockMovementsPage() {
+  const [items, setItems] = useState<InventoryMovement[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void inventoryMovementService
+      .getMovements()
+      .then(setItems)
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "Hareketler yüklenemedi.")
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <ErpShell
+      title="Stok Hareketleri"
+      description="Giriş, çıkış, transfer ve sayım hareketlerinin tek defteri"
+    >
+      <div className="erp-page-toolbar">
+        <div>
+          <strong>{items.length} hareket</strong>
+          <small style={{ display: "block", marginTop: "4px" }}>
+            Mal kabulden gelen hareketlerde belge numarası, kabul kaydına
+            gider.
+          </small>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <Link className="erp-primary-button" href="/depo-stok/giris">
+            Stok Girişi
+          </Link>
+          <Link className="erp-secondary-button" href="/depo-stok/cikis">
+            Stok Çıkışı
+          </Link>
+          <Link className="erp-secondary-button" href="/depo-stok/transfer">
+            Transfer
+          </Link>
+          <Link className="erp-secondary-button" href="/depo-stok/sayim">
+            Sayım / Düzeltme
+          </Link>
+        </div>
       </div>
-    </div>
-    {error&&<div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
-    <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-      <table className="min-w-full divide-y text-sm">
-        <thead className="bg-slate-50">
-          <tr>
-            <th className="px-4 py-3 text-left">Tarih</th>
-            <th className="px-4 py-3 text-left">Hareket</th>
-            <th className="px-4 py-3 text-left">Malzeme</th>
-            <th className="px-4 py-3 text-left">Depo</th>
-            <th className="px-4 py-3 text-left">Proje / Şantiye</th>
-            <th className="px-4 py-3 text-right">Miktar</th>
-            <th className="px-4 py-3 text-right">Tutar (TRY)</th>
-            <th className="px-4 py-3 text-left">Belge No</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {loading?(
-            <tr><td colSpan={8} className="px-4 py-10 text-center">Yükleniyor...</td></tr>
-          ):items.length===0?(
-            <tr><td colSpan={8} className="px-4 py-10 text-center">Kayıt bulunamadı.</td></tr>
-          ):items.map(x=>(
-            <tr key={x.id}>
-              <td className="px-4 py-3">{new Date(x.movementDate).toLocaleDateString("tr-TR")}</td>
-              <td className="px-4 py-3">{label(x.type)}</td>
-              <td className="px-4 py-3"><div className="font-medium">{x.itemName}</div><div className="text-xs text-slate-500">{x.itemCode}</div></td>
-              <td className="px-4 py-3">{x.warehouseName}</td>
-              <td className="px-4 py-3">
-                {x.projectName||"—"}
-                {x.projectSiteName&&<div className="text-xs text-slate-500">{x.projectSiteName}</div>}
-              </td>
-              <td className="px-4 py-3 text-right">{x.quantity}</td>
-              <td className="px-4 py-3 text-right">{x.totalCost!=null?x.totalCost.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</td>
-              <td className="px-4 py-3">
-                {x.goodsReceiptId?(
-                  <Link href={`/depo-stok/mal-kabul/${x.goodsReceiptId}`} className="font-medium text-slate-950 underline">
-                    {x.referenceNumber}
-                  </Link>
-                ):x.referenceNumber}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
+
+      {error && <div className="erp-alert error">{error}</div>}
+
+      <div className="erp-table-card">
+        <div className="erp-table-header">
+          <h2>Hareket Defteri</h2>
+        </div>
+
+        {loading ? (
+          <div className="erp-loading">Yükleniyor...</div>
+        ) : items.length === 0 ? (
+          <div className="erp-empty-state">
+            <p>Henüz stok hareketi yok.</p>
+          </div>
+        ) : (
+          <div className="erp-table-wrap">
+            <table className="erp-table">
+              <thead>
+                <tr>
+                  <th>Tarih</th>
+                  <th>Hareket</th>
+                  <th>Malzeme</th>
+                  <th>Depo</th>
+                  <th>Proje / Şantiye</th>
+                  <th style={{ textAlign: "right" }}>Miktar</th>
+                  <th style={{ textAlign: "right" }}>Tutar (TRY)</th>
+                  <th>Belge No</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((movement) => (
+                  <tr key={movement.id}>
+                    <td>{dateFormat.format(new Date(movement.movementDate))}</td>
+                    <td>
+                      <span
+                        className={`erp-status ${movementColor(movement.type)}`}
+                      >
+                        {MOVEMENT_LABELS[movement.type] ??
+                          `Hareket ${movement.type}`}
+                      </span>
+                    </td>
+                    <td>
+                      <strong>{movement.itemName}</strong>
+                      <small>{movement.itemCode}</small>
+                    </td>
+                    <td>{movement.warehouseName}</td>
+                    <td>
+                      {movement.projectName || "—"}
+                      {movement.projectSiteName && (
+                        <small>{movement.projectSiteName}</small>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "right" }}>{movement.quantity}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {movement.totalCost != null
+                        ? money.format(movement.totalCost)
+                        : "—"}
+                    </td>
+                    <td>
+                      {movement.goodsReceiptId ? (
+                        <Link
+                          className="erp-row-link"
+                          href={`/depo-stok/mal-kabul/${movement.goodsReceiptId}`}
+                        >
+                          {movement.referenceNumber}
+                        </Link>
+                      ) : (
+                        movement.referenceNumber
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </ErpShell>
+  );
 }

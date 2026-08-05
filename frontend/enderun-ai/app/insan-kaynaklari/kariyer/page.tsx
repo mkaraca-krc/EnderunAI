@@ -1140,7 +1140,7 @@ export default function CareerPage() {
                   </div>
                 ) : selectedPersonnel ? (
                   <>
-                    <div className="rounded-xl bg-slate-950 p-4 text-white">
+                    <div className="rounded-xl bg-brand-950 p-4 text-white">
                       <div className="flex items-center gap-3">
                         <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-lg font-semibold">
                           {personName(selectedPersonnel).charAt(0)}
@@ -1305,7 +1305,7 @@ export default function CareerPage() {
                       className={[
                         "rounded-xl border p-3 text-left transition",
                         form.kind === definition.kind
-                          ? "border-slate-900 bg-slate-900 text-white"
+                          ? "border-brand-700 bg-brand-700 text-white"
                           : "border-slate-200 bg-white text-slate-800 hover:border-slate-300",
                       ].join(" ")}
                     >

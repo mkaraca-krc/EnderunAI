@@ -11,15 +11,22 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   fullWidth?: boolean;
 }
 
+/*
+ * Renkler kurumsal paletten geliyor: brand-700 (#18797c) erp-primary ile,
+ * brand-600 (#1f9498) erp-primary-hover ile birebir aynı. Birincil buton
+ * daha önce bg-slate-900 idi — slate bu projede turkuaz tonlu NÖTR gri
+ * olarak yeniden tanımlı olduğu için buton koyu gri çıkıyor, marka
+ * turkuazı hiç görünmüyordu.
+ */
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "bg-slate-900 text-white hover:bg-slate-800 focus-visible:ring-slate-500",
+    "bg-brand-700 text-white hover:bg-brand-600 focus-visible:ring-brand-500",
   secondary:
-    "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 focus-visible:ring-slate-400",
+    "border border-brand-200 bg-white text-brand-800 hover:bg-brand-50 focus-visible:ring-brand-400",
   danger:
     "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500",
   ghost:
-    "bg-transparent text-slate-700 hover:bg-slate-100 focus-visible:ring-slate-400",
+    "bg-transparent text-brand-800 hover:bg-brand-50 focus-visible:ring-brand-400",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

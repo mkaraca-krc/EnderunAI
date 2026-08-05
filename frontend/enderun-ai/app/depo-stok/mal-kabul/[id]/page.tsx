@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+
+import ErpShell from "@/components/erp/erp-shell";
 import {
   goodsReceiptService,
   type GoodsReceiptDetail,
@@ -318,54 +320,49 @@ export default function GoodsReceiptDetailPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500 shadow-sm">
-          Mal Kabul kaydı yükleniyor...
-        </div>
-      </div>
+      <ErpShell title="Mal Kabul" description="Kayıt yükleniyor">
+        <div className="erp-loading">Mal Kabul kaydı yükleniyor...</div>
+      </ErpShell>
     );
   }
 
   if (!receipt) {
     return (
-      <div className="space-y-4 p-6">
-        <Link
-          href="/depo-stok/mal-kabul"
-          className="text-sm font-medium text-slate-600 hover:text-slate-950"
-        >
-          ← Mal Kabul listesi
-        </Link>
-
-        <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+      <ErpShell title="Mal Kabul" description="Kayıt bulunamadı">
+        <div className="erp-alert error">
           {error || "Mal Kabul kaydı bulunamadı."}
         </div>
 
-        <button
-          type="button"
-          onClick={() => void loadReceipt()}
-          className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          Tekrar Dene
-        </button>
-      </div>
+        <div className="erp-row-actions">
+          <Link className="erp-secondary-button" href="/depo-stok/mal-kabul">
+            ← Mal Kabul listesi
+          </Link>
+
+          <button
+            type="button"
+            className="erp-primary-button"
+            onClick={() => void loadReceipt()}
+          >
+            Tekrar Dene
+          </button>
+        </div>
+      </ErpShell>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <ErpShell
+      title={`Mal Kabul — ${receipt.receiptNumber}`}
+      description="Teslim alınan miktarlar, stok kartı eşleşmesi ve depo girişi"
+    >
+      <div className="space-y-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <Link
-            href="/depo-stok/mal-kabul"
-            className="text-sm font-medium text-slate-600 hover:text-slate-950"
-          >
+          <Link className="erp-row-link" href="/depo-stok/mal-kabul">
             ← Mal Kabul listesi
           </Link>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold text-slate-950">
-              {receipt.receiptNumber}
-            </h1>
 
             <span
               className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${statusClass(
@@ -588,7 +585,7 @@ export default function GoodsReceiptDetailPage() {
             {receipt.accountingVoucherId ? (
               <Link
                 href={`/muhasebe/fisler/${receipt.accountingVoucherId}`}
-                className="inline-flex rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                className="inline-flex rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
               >
                 Muhasebe Fişini Aç
               </Link>
@@ -744,7 +741,8 @@ export default function GoodsReceiptDetailPage() {
           </table>
         </div>
       </section>
-    </div>
+      </div>
+    </ErpShell>
   );
 }
 

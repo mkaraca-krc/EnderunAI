@@ -588,7 +588,7 @@ export default function UserManagementPage() {
                       <TableRow key={user.id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-700 text-sm font-semibold text-white">
                               {initials(user.fullName)}
                             </span>
                             <div>
@@ -1038,7 +1038,7 @@ export default function UserManagementPage() {
                                       className={[
                                         "rounded-full px-2.5 py-1 text-xs",
                                         mode === "default"
-                                          ? "bg-slate-900 text-white"
+                                          ? "bg-brand-700 text-white"
                                           : "bg-slate-100 text-slate-600",
                                       ].join(" ")}
                                     >

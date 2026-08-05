@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+
+import ErpShell from "@/components/erp/erp-shell";
 import {
   goodsReceiptService,
   type GoodsReceiptListItem,
@@ -113,30 +115,13 @@ export default function GoodsReceiptListPage() {
   );
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <Link
-            href="/depo-stok"
-            className="text-sm font-medium text-slate-600 hover:text-slate-950"
-          >
-            ← Depo &amp; Stok
-          </Link>
-
-          <h1 className="mt-2 text-2xl font-semibold text-slate-950">
-            Mal Kabul
-          </h1>
-
-          <p className="mt-1 text-sm text-slate-600">
-            Satın alma siparişlerinden oluşturulan teslimat ve depo girişlerini
-            yönetin.
-          </p>
-        </div>
-
-        <Link
-          href="/satin-alma/siparis"
-          className="inline-flex items-center justify-center rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-        >
+    <ErpShell
+      title="Mal Kabul"
+      description="Satın alma siparişlerinden oluşturulan teslimat ve depo girişleri"
+    >
+      <div className="space-y-6">
+      <div className="flex justify-end">
+        <Link className="erp-primary-button" href="/satin-alma/siparis">
           Satın Alma Siparişleri
         </Link>
       </div>
@@ -309,7 +294,8 @@ export default function GoodsReceiptListPage() {
           </table>
         </div>
       </section>
-    </div>
+      </div>
+    </ErpShell>
   );
 }
 

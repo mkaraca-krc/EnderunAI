@@ -394,7 +394,7 @@ export default function SecretariatRegistryPage({ mode }: Props) {
             <button
               type="button"
               onClick={() => setShowForm((value) => !value)}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+              className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white"
             >
               {showForm ? "Formu Kapat" : config.newLabel}
             </button>
@@ -538,7 +538,7 @@ export default function SecretariatRegistryPage({ mode }: Props) {
             <div className="mt-5 flex justify-end">
               <button
                 disabled={saving}
-                className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-lg bg-brand-700 px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
                 {saving ? "Kaydediliyor..." : "Kaydet"}
               </button>

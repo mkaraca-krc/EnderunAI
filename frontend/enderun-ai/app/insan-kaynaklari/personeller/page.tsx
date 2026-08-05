@@ -656,7 +656,7 @@ export default function HrPersonnelPage() {
               <Card key={item.id} className="overflow-hidden">
                 <CardContent className="p-0">
                   <div className="flex items-start gap-4 border-b border-slate-100 p-5">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-700 text-sm font-semibold text-white">
                       {initials(item)}
                     </div>
                     <div className="min-w-0 flex-1">

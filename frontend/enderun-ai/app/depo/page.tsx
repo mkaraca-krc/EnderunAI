@@ -1,4 +1,12 @@
-import { PlaceholderPage } from "../../components/placeholder-page";
+import { redirect } from "next/navigation";
+
+/**
+ * Depo modülünün gerçek adresi /depo-stok.
+ *
+ * Burası eski AppShell'i kullanan, hiçbir veriye bağlı olmayan bir
+ * taslaktı; menüde bağlantısı yoktu ama adres elle yazıldığında
+ * "modül hazırlanıyor" diyen ölü bir sayfa açılıyordu.
+ */
 export default function Page() {
-  return <PlaceholderPage active="Depo ve Stok" title="Depo ve Stok" description="Malzeme giriş-çıkışları, depolar ve kritik stok yönetimi" />;
+  redirect("/depo-stok");
 }

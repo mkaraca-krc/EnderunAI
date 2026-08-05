@@ -427,7 +427,7 @@ export default function CompanySettingsPage() {
                     accept="image/png,image/jpeg,image/webp"
                     onChange={handleLogoChange}
                     disabled={uploadingLogo}
-                    className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
+                    className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-700 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
                   />
                 </label>
                 <p className="text-center text-xs text-slate-400">

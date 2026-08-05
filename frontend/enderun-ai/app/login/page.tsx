@@ -133,9 +133,9 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
+    <main className="min-h-screen bg-brand-950 text-white">
       <div className="grid min-h-screen lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="hidden border-r border-white/10 bg-slate-950 p-12 lg:flex lg:flex-col lg:justify-between">
+        <section className="hidden border-r border-white/10 bg-brand-950 p-12 lg:flex lg:flex-col lg:justify-between">
           <div>
             <img
               src="/logo-full-white.png"

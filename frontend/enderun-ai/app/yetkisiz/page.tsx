@@ -16,7 +16,7 @@ export default function UnauthorizedPage() {
         </p>
         <Link
           href="/dashboard"
-          className="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-5 text-sm font-medium text-white transition hover:bg-slate-800"
+          className="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-brand-700 px-5 text-sm font-medium text-white transition hover:bg-brand-600"
         >
           Dashboard&apos;a dön
         </Link>

@@ -1095,7 +1095,7 @@ export default function HrLeaveManagementPage() {
             <button
               type="button"
               onClick={loadLeaves}
-              className="flex-1 rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900"
+              className="flex-1 rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600"
             >
               Filtrele
             </button>
