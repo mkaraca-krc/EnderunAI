@@ -56,6 +56,8 @@ export interface ProgressPaymentItemRequest {
   overheadUnitPrice?: number | null;
   /** Pozun ait olduğu proje bölümü. */
   sectionId?: string | null;
+  /** Satırın geldiği sözleşme icmali kalemi; elle satırda boş. */
+  projectBoqItemId?: string | null;
 }
 
 export interface ProgressPaymentAdvanceMaterialRequest {
@@ -178,6 +180,13 @@ export interface ProgressPaymentItem {
   previousQuantity: number;
   currentQuantity: number;
   cumulativeQuantity: number;
+  /** Satırın geldiği icmal kalemi. */
+  projectBoqItemId?: string | null;
+  /** Hakediş hazırlanırken dondurulan saha miktarı (bu dönem). */
+  fieldQuantity: number;
+  cumulativeFieldQuantity: number;
+  /** Bu dönem − saha: eksi ise devreden iş. */
+  fieldDifference: number;
   materialUnitPrice: number;
   laborUnitPrice: number;
   overheadUnitPrice: number;

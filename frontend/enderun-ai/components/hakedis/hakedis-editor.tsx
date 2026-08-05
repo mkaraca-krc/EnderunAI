@@ -20,6 +20,11 @@ import {
   type ProjectHakedisSection,
 } from "@/services/progress-payment.service";
 
+import {
+  contractSummaryProgressService,
+  type HakedisSummaryDraft,
+} from "@/services/contract-summary-progress.service";
+
 const money = new Intl.NumberFormat("tr-TR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -36,6 +41,15 @@ export type ItemForm = {
   key: string;
   engineeringPositionId: string | null;
   sectionId: string | null;
+  /** Satırın geldiği sözleşme icmali kalemi; elle eklenen satırda boş. */
+  projectBoqItemId: string | null;
+  /**
+   * Sahaya göre bu dönem yapılan miktar — YALNIZCA REFERANS.
+   * Kaydedilmez; sunucu saha rakamını kendi hesaplayıp dondurur.
+   * Burada duruyor ki kullanıcı önerisiyle girdiği rakam arasındaki
+   * farkı satırda görebilsin.
+   */
+  fieldSuggestion: number | null;
   positionCode: string;
   description: string;
   unit: string;
@@ -106,6 +120,8 @@ export function newItem(): ItemForm {
     key: crypto.randomUUID(),
     engineeringPositionId: null,
     sectionId: null,
+    projectBoqItemId: null,
+    fieldSuggestion: null,
     positionCode: "",
     description: "",
     unit: "",
@@ -169,6 +185,8 @@ type Props = {
   projectId: string;
   /** Düzenlemede kendi ihzaratını mahsup listesinden çıkarmak için. */
   progressPaymentId?: string;
+  /** İcmalden ön doldurma bu döneme göre hesaplanır. */
+  periodNumber: number;
   progressPaymentDate: string;
   priceDifferenceAmount: number;
   vatRate: number;
@@ -194,6 +212,7 @@ type Props = {
 export default function HakedisEditor({
   projectId,
   progressPaymentId,
+  periodNumber,
   progressPaymentDate,
   priceDifferenceAmount,
   vatRate,
@@ -208,6 +227,12 @@ export default function HakedisEditor({
   const [sections, setSections] = useState<ProjectHakedisSection[]>([]);
   const [openAdvances, setOpenAdvances] = useState<OpenAdvanceMaterial[]>([]);
   const [sectionNotice, setSectionNotice] = useState("");
+
+  // İcmalden ön doldurma
+  const [summaryDraft, setSummaryDraft] = useState<HakedisSummaryDraft | null>(
+    null
+  );
+  const [summaryNotice, setSummaryNotice] = useState("");
 
   const loadSections = useCallback(async () => {
     if (!projectId) {
@@ -243,6 +268,77 @@ export default function HakedisEditor({
       .then(setOpenAdvances)
       .catch(() => setOpenAdvances([]));
   }, [projectId, progressPaymentId]);
+
+  // İcmal taslağı: kalemler ve sahaya göre bu dönem önerisi.
+  // Dönem numarası kullanıcı yazarken değiştiği için küçük bir gecikme
+  // konuluyor; her tuşta ayrı istek gitmesin.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (!projectId || periodNumber <= 0) {
+        setSummaryDraft(null);
+        return;
+      }
+
+      void contractSummaryProgressService
+        .getHakedisDraft(projectId, periodNumber)
+        .then(setSummaryDraft)
+        .catch(() => setSummaryDraft(null));
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [projectId, periodNumber]);
+
+  /**
+   * Satırları icmalden kurar ve "bu dönem" alanını sahadan biriken
+   * onaylı miktarla doldurur.
+   *
+   * Bu bir ÖNERİDİR: kesinleşen hakediş işverenle mutabık kalınan
+   * rakamdır ve serbestçe değiştirilir. Zaten girilmiş satırların
+   * üzerine yazmamak için yalnızca boş listede çalışır; doluysa
+   * kullanıcıya sorulur.
+   */
+  function fillFromSummary(replaceExisting: boolean) {
+    if (!summaryDraft?.hasContractSummary) return;
+
+    if (!replaceExisting && value.items.some((x) => x.positionCode.trim())) {
+      setSummaryNotice(
+        "Listede zaten satır var. İcmalden doldurmak mevcut satırların " +
+          "yerine geçer."
+      );
+      return;
+    }
+
+    const items: ItemForm[] = summaryDraft.items.map((line) => ({
+      key: crypto.randomUUID(),
+      engineeringPositionId: null,
+      sectionId: line.sectionId ?? null,
+      projectBoqItemId: line.projectBoqItemId,
+      fieldSuggestion: line.suggestedCurrentQuantity,
+      positionCode: line.positionCode,
+      description: line.description,
+      unit: line.unit,
+      contractQuantity: line.contractQuantity,
+      previousQuantity: line.previousQuantity,
+      currentQuantity: line.suggestedCurrentQuantity,
+      // İcmal birim fiyatı tek toplam olarak geliyor; bileşen ayrımı
+      // hakediş satırında elle yapılabilir.
+      materialUnitPrice: line.unitPrice,
+      laborUnitPrice: 0,
+      overheadUnitPrice: 0,
+      measurementReference: "",
+      notes: "",
+    }));
+
+    patch({ items });
+
+    const suggested = items.filter((x) => (x.currentQuantity ?? 0) > 0).length;
+
+    setSummaryNotice(
+      `${items.length} poz icmalden getirildi. ${suggested} kalemde ` +
+        "sahaya göre bu dönem önerisi dolduruldu — işverenle mutabakata " +
+        "göre serbestçe değiştirin."
+    );
+  }
 
   async function applySectionTemplate() {
     try {
@@ -519,6 +615,43 @@ export default function HakedisEditor({
               )}
             </div>
           )}
+
+          {summaryDraft?.hasContractSummary && (
+            <div className="erp-alert" style={{ marginTop: 10 }}>
+              <strong>Sözleşme icmali bağlı ({summaryDraft.boqNumber}).</strong>{" "}
+              Satırları icmalden getirebilir, &quot;bu dönem&quot; alanını
+              sahadan biriken onaylı miktarla doldurabilirsiniz. Gelen rakam
+              bir öneridir; kesinleşen hakediş işverenle mutabık kalınandır.
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => fillFromSummary(false)}
+                >
+                  İcmalden Doldur ({summaryDraft.items.length} poz)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {summaryNotice && (
+            <div className="erp-alert warning" style={{ marginTop: 10 }}>
+              {summaryNotice}
+              {summaryDraft?.hasContractSummary &&
+                value.items.some((x) => x.positionCode.trim()) && (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSummaryNotice("");
+                        fillFromSummary(true);
+                      }}
+                    >
+                      Yine de icmalden doldur (mevcut satırlar silinir)
+                    </button>
+                  </div>
+                )}
+            </div>
+          )}
         </div>
 
         <div className="erp-table-wrap">
@@ -531,7 +664,11 @@ export default function HakedisEditor({
                 <th>Birim</th>
                 <th>Sözleşme</th>
                 <th>Önceki</th>
+                <th title="Onaylı günlük raporlardan biriken, bu döneme düşen miktar">
+                  Sahaya Göre
+                </th>
                 <th>Bu Dönem</th>
+                <th title="Bu dönem − sahaya göre">Fark</th>
                 <th>Toplam</th>
                 <th>Malzeme BF</th>
                 <th>Montaj BF</th>
@@ -604,6 +741,26 @@ export default function HakedisEditor({
                       {money.format(item.previousQuantity)}
                     </span>
                   </td>
+
+                  {/* Saha önerisi: referans, kaydedilmez. */}
+                  <td>
+                    {item.fieldSuggestion == null ? (
+                      <span className="tabular">—</span>
+                    ) : (
+                      <button
+                        type="button"
+                        title="Bu rakamı 'bu dönem' alanına yaz"
+                        onClick={() =>
+                          updateItem(item.key, {
+                            currentQuantity: item.fieldSuggestion ?? 0,
+                          })
+                        }
+                      >
+                        {money.format(item.fieldSuggestion)}
+                      </button>
+                    )}
+                  </td>
+
                   <td>
                     <input
                       type="number"
@@ -616,6 +773,42 @@ export default function HakedisEditor({
                         })
                       }
                     />
+                  </td>
+
+                  {/*
+                    Fark: işverenle mutabık kalınan rakamın sahadan
+                    sapması. Eksi değer "sahada yapıldı ama bu dönem
+                    kabul edilmedi" demektir — devreden iş.
+                  */}
+                  <td>
+                    {item.fieldSuggestion == null ? (
+                      <span className="tabular">—</span>
+                    ) : (
+                      (() => {
+                        const difference =
+                          item.currentQuantity - item.fieldSuggestion;
+
+                        if (Math.abs(difference) < 0.0001) {
+                          return <span className="erp-status green">Aynı</span>;
+                        }
+
+                        return (
+                          <span
+                            className={`erp-status ${
+                              difference < 0 ? "yellow" : "blue"
+                            }`}
+                            title={
+                              difference < 0
+                                ? "Sahada yapıldı, bu dönem kabul edilmedi"
+                                : "Sahadan fazla kabul edildi"
+                            }
+                          >
+                            {difference > 0 ? "+" : ""}
+                            {money.format(difference)}
+                          </span>
+                        );
+                      })()
+                    )}
                   </td>
                   <td>
                     <strong className="tabular">

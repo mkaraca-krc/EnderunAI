@@ -973,7 +973,13 @@ export default function ProgressPaymentDetailPage() {
                 <th>Birim</th>
                 <th>Sözleşme Miktarı</th>
                 <th>Önceki</th>
+                <th title="Hakediş hazırlanırken dondurulan saha miktarı">
+                  Sahaya Göre
+                </th>
                 <th>Bu Dönem</th>
+                <th title="Bu dönem − sahaya göre; eksi ise devreden iş">
+                  Fark
+                </th>
                 <th>Kümülatif</th>
                 <th>Birim Fiyat</th>
                 <th>Bu Dönem Tutar</th>
@@ -1009,9 +1015,42 @@ export default function ProgressPaymentDetailPage() {
                     )}
                   </td>
 
+                  {/*
+                    Saha gerçekleşmesi ve işveren kabulü bilerek ayrı
+                    tutulur; ikisi arasındaki fark devreden iştir.
+                    İcmale bağlı olmayan satırda saha rakamı yoktur.
+                  */}
+                  <td>
+                    {line.projectBoqItemId
+                      ? number.format(line.fieldQuantity)
+                      : "—"}
+                  </td>
+
                   <td>
                     {number.format(
                       line.currentQuantity
+                    )}
+                  </td>
+
+                  <td>
+                    {!line.projectBoqItemId ? (
+                      "—"
+                    ) : Math.abs(line.fieldDifference) < 0.0001 ? (
+                      <span className="erp-status green">Aynı</span>
+                    ) : (
+                      <span
+                        className={`erp-status ${
+                          line.fieldDifference < 0 ? "yellow" : "blue"
+                        }`}
+                        title={
+                          line.fieldDifference < 0
+                            ? "Sahada yapıldı, bu dönem kabul edilmedi"
+                            : "Sahadan fazla kabul edildi"
+                        }
+                      >
+                        {line.fieldDifference > 0 ? "+" : ""}
+                        {number.format(line.fieldDifference)}
+                      </span>
                     )}
                   </td>
 

@@ -144,12 +144,18 @@ export default function NewProgressPaymentPage() {
             items: boq.items.map((x) => ({
               ...newItem(),
               engineeringPositionId: x.engineeringPositionId ?? null,
+              // İcmal bağı taşınıyor: editördeki "sahaya göre" sütunu ve
+              // sunucudaki saha dondurması bu bağa dayanıyor.
+              projectBoqItemId: x.id,
+              sectionId: x.projectHakedisSectionId ?? null,
               positionCode: x.positionCode,
               description: x.description,
               unit: x.unit,
               contractQuantity: x.contractQuantity,
               currentQuantity: 0,
-              materialUnitPrice: x.unitPrice,
+              materialUnitPrice: x.materialUnitPrice || x.unitPrice,
+              laborUnitPrice: x.laborUnitPrice,
+              overheadUnitPrice: x.overheadUnitPrice,
               notes: x.notes ?? "",
             })),
           });
@@ -296,6 +302,9 @@ export default function NewProgressPaymentPage() {
           laborUnitPrice: Number(line.laborUnitPrice || 0),
           overheadUnitPrice: Number(line.overheadUnitPrice || 0),
           sectionId: line.sectionId,
+          // İcmalden gelen satırda bağ taşınır; sunucu saha miktarını
+          // bu bağ üzerinden bulup kayda dondurur.
+          projectBoqItemId: line.projectBoqItemId,
           measurementReference: line.measurementReference?.trim() || null,
           notes: line.notes?.trim() || null,
         })),
@@ -570,6 +579,7 @@ export default function NewProgressPaymentPage() {
 
         <HakedisEditor
           projectId={projectId}
+          periodNumber={periodNumber}
           progressPaymentDate={progressPaymentDate}
           priceDifferenceAmount={priceDifferenceAmount}
           vatRate={vatRate}

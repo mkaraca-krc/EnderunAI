@@ -91,6 +91,10 @@ export default function EditProgressPaymentPage() {
           sectionId: item.progressPaymentSectionId
             ? sectionSourceById.get(item.progressPaymentSectionId) ?? null
             : null,
+          projectBoqItemId: item.projectBoqItemId ?? null,
+          // Kayıtta dondurulmuş saha miktarı; satırdaki fark sütunu
+          // bunun üzerinden hesaplanıyor.
+          fieldSuggestion: item.projectBoqItemId ? item.fieldQuantity : null,
           positionCode: item.positionCode,
           description: item.description,
           unit: item.unit,
@@ -215,6 +219,9 @@ export default function EditProgressPaymentPage() {
           laborUnitPrice: Number(line.laborUnitPrice || 0),
           overheadUnitPrice: Number(line.overheadUnitPrice || 0),
           sectionId: line.sectionId,
+          // İcmalden gelen satırda bağ taşınır; sunucu saha miktarını
+          // bu bağ üzerinden bulup kayda dondurur.
+          projectBoqItemId: line.projectBoqItemId,
           measurementReference: line.measurementReference?.trim() || null,
           notes: line.notes?.trim() || null,
         })),
@@ -436,6 +443,7 @@ export default function EditProgressPaymentPage() {
         <HakedisEditor
           projectId={detail.projectId}
           progressPaymentId={detail.id}
+          periodNumber={detail.periodNumber}
           progressPaymentDate={progressPaymentDate}
           priceDifferenceAmount={priceDifferenceAmount}
           vatRate={vatRate}
