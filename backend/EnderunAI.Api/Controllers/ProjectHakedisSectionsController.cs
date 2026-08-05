@@ -49,13 +49,36 @@ public sealed class ProjectHakedisSectionsController(AppDbContext db) : Controll
             })
             .ToListAsync(cancellationToken));
 
-    /// <summary>NATURA'nın 12 bölümü — yeni proje kurarken başlangıç listesi.</summary>
+    /// <summary>
+    /// Hazır kısım şablonları. Eski uç NATURA listesini düz dizi olarak
+    /// döndürüyordu; mevcut çağıranlar bozulmasın diye o davranış
+    /// korunuyor, şablon seti ayrı uçtan geliyor.
+    /// </summary>
     [HttpGet("/api/hakedis-section-template")]
     [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public IActionResult Template() =>
         Ok(HakedisSectionTemplate.Natura
             .Select((name, index) => new { order = index + 1, name })
             .ToList());
+
+    /// <summary>
+    /// Tüm hazır şablonlar (konut, endüstriyel, otel, hastane, AVM).
+    /// Tek tıkla uygulanır; sonra serbestçe düzenlenir. Şablon seçmeden
+    /// boş başlamak da mümkündür — bu uç yalnızca öneri sunar.
+    /// </summary>
+    [HttpGet("/api/hakedis-section-templates")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
+    public IActionResult Templates() =>
+        Ok(HakedisSectionTemplate.All.Select(template => new
+        {
+            template.Key,
+            template.Name,
+            template.Description,
+            SectionCount = template.Sections.Count,
+            Sections = template.Sections
+                .Select((name, index) => new { Order = index + 1, Name = name })
+                .ToList()
+        }));
 
     /// <summary>
     /// Bölüm listesini topluca değiştirir. Id verilen satır güncellenir,

@@ -60,12 +60,28 @@ public sealed class ProgressPaymentSection : BaseEntity
     public decimal CumulativeAmount { get; set; }
 }
 
+/// <summary>Bir kısım şablonu — ad ve önerilen kısım listesi.</summary>
+public sealed record HakedisSectionTemplateDefinition(
+    string Key,
+    string Name,
+    string Description,
+    IReadOnlyList<string> Sections);
+
 /// <summary>
-/// NATURA hakedişindeki 12 imalat bölümü. Yeni projeye bölüm listesi
-/// kurulurken başlangıç noktası olarak sunulur; zorunlu değildir.
+/// Sözleşme icmalinin kısım listesi için HAZIR ŞABLONLAR.
+///
+/// Kısımlar koda gömülü değildir: her projenin imalat kırılımı farklıdır
+/// (konutta daire içi sortiler, endüstriyelde OG/trafo/busbar,
+/// hastanede izole güç/UPS). Buradakiler yalnızca tek tıkla gelen
+/// başlangıç önerileridir; geldikten sonra serbestçe düzenlenir,
+/// silinir, yenisi eklenir. Şablon seçmeden boş başlamak da mümkündür.
 /// </summary>
 public static class HakedisSectionTemplate
 {
+    /// <summary>
+    /// NATURA (konut) şablonu. Eski adıyla erişilebilir kalıyor —
+    /// mevcut çağıranlar bozulmasın.
+    /// </summary>
     public static readonly IReadOnlyList<string> Natura =
     [
         "Panolar / Tablolar",
@@ -80,5 +96,81 @@ public static class HakedisSectionTemplate
         "Kablo Tava",
         "Busbar",
         "İlave İşler"
+    ];
+
+    public static readonly IReadOnlyList<HakedisSectionTemplateDefinition> All =
+    [
+        new("konut", "Konut (NATURA)",
+            "Çok bloklu konut projesi elektrik imalat kırılımı.",
+            Natura),
+
+        new("endustriyel", "Endüstriyel Tesis",
+            "Fabrika ve üretim tesisi; OG dağıtım ve güç altyapısı ağırlıklı.",
+            [
+                "OG Hücreler / Şalt",
+                "Trafo ve Trafo Merkezi",
+                "AG Ana Dağıtım Panoları",
+                "Busbar Sistemi",
+                "Kompanzasyon",
+                "Jeneratör ve Otomatik Transfer",
+                "Kablo Tava ve Kanal",
+                "Kuvvet Tesisatı / Makine Besleme",
+                "Aydınlatma ve Priz",
+                "Topraklama / Paratoner",
+                "Yangın Algılama ve İhbar",
+                "Zayıf Akım / Otomasyon",
+                "İlave İşler"
+            ]),
+
+        new("otel", "Otel",
+            "Oda ve ortak mahal ayrımı olan konaklama tesisi.",
+            [
+                "Trafo ve Ana Dağıtım",
+                "Jeneratör ve UPS",
+                "Kolon Hatları",
+                "Oda İçi Elektrik Tesisatı",
+                "Oda Kontrol Sistemi / Kartlı Geçiş",
+                "Ortak Mahaller ve Genel Aydınlatma",
+                "Mutfak ve Çamaşırhane Besleme",
+                "Yangın Algılama ve Seslendirme",
+                "CCTV / Zayıf Akım",
+                "TV ve Data Altyapısı",
+                "Topraklama / Paratoner",
+                "İlave İşler"
+            ]),
+
+        new("hastane", "Hastane",
+            "Sağlık tesisi; kesintisiz ve izole güç gereksinimleri ayrı izlenir.",
+            [
+                "Trafo ve Ana Dağıtım",
+                "Jeneratör ve Otomatik Transfer",
+                "UPS ve Kesintisiz Güç",
+                "İzole Güç Sistemi (Ameliyathane / Yoğun Bakım)",
+                "Kolon Hatları",
+                "Kat Panoları ve Kuvvet Tesisatı",
+                "Aydınlatma ve Priz",
+                "Hemşire Çağrı Sistemi",
+                "Yangın Algılama ve İhbar",
+                "Medikal Gaz Alarm Panelleri",
+                "Zayıf Akım / Data / CCTV",
+                "Topraklama / Ekipotansiyel",
+                "İlave İşler"
+            ]),
+
+        new("avm", "AVM / Ticari",
+            "Kiracı üniteli ticari yapı; ortak alan ve mağaza besleme ayrı.",
+            [
+                "Trafo ve Ana Dağıtım",
+                "Jeneratör",
+                "Busbar ve Kolon Hatları",
+                "Mağaza Besleme Panoları",
+                "Ortak Alan Aydınlatma",
+                "Otopark Elektrik Tesisatı",
+                "Yangın Algılama ve Seslendirme",
+                "CCTV / Güvenlik",
+                "Kablo Tava ve Kanal",
+                "Topraklama / Paratoner",
+                "İlave İşler"
+            ])
     ];
 }

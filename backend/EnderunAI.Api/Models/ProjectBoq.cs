@@ -42,6 +42,21 @@ public sealed class ProjectBoq : BaseEntity
     /// </summary>
     public bool IsContractBaseline { get; set; }
 
+    /// <summary>
+    /// Bu revizyonun türetildiği önceki revizyon. Zincir sayesinde
+    /// "R3 hangi icmalden çıktı" sorusu cevaplanabiliyor.
+    /// </summary>
+    public Guid? SupersededBoqId { get; set; }
+
+    /// <summary>Zeyilname / değişiklik emri numarası.</summary>
+    public string? AmendmentNumber { get; set; }
+
+    /// <summary>Zeyilnamenin tarihi.</summary>
+    public DateTime? AmendmentDate { get; set; }
+
+    /// <summary>Revizyonun gerekçesi — denetimde sorulan budur.</summary>
+    public string? RevisionReason { get; set; }
+
     public string? Description { get; set; }
     public string? Notes { get; set; }
 
@@ -77,6 +92,20 @@ public sealed class ProjectBoqItem : BaseEntity
     public string Unit { get; set; } = string.Empty;
 
     public decimal ContractQuantity { get; set; }
+
+    // --- Birim fiyat bileşenleri ---
+    // Sözleşme icmalindeki malzeme / montaj / GG&K kolonları. Hakediş
+    // kaleminde (ProgressPaymentItem) kurulan ayrımın aynısı; icmalden
+    // hakedişe geçerken bileşenler bire bir taşınabilsin diye.
+    //
+    // UnitPrice üçünün TOPLAMIDIR ve türetilmiş değerdir: mevcut metraj,
+    // hakediş ve raporlama kodu ona bakmaya devam eder. Bileşen
+    // girilmeyen kartta tek fiyat malzemeye yazılır, toplam değişmez.
+
+    public decimal MaterialUnitPrice { get; set; }
+    public decimal LaborUnitPrice { get; set; }
+    public decimal OverheadUnitPrice { get; set; }
+
     public decimal UnitPrice { get; set; }
     public decimal TotalAmount { get; set; }
 

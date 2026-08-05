@@ -113,6 +113,17 @@ public sealed class Project : BaseEntity
         = ProjectContractType.Undetermined;
 
     /// <summary>
+    /// Proje sözleşme icmaliyle mi yürüyor?
+    ///
+    /// GERİYE UYUM: varsayılan false. İcmalsiz projede hakediş satırları
+    /// bugünkü gibi elle girilir, saha günlük raporu icmale bağlanmaz ve
+    /// portalda ilerleme yüzdesi gösterilmez. Açılan projede icmal
+    /// zorunlu hale gelmez; yalnızca icmale dayalı akışlar devreye
+    /// girer.
+    /// </summary>
+    public bool UsesContractSummary { get; set; }
+
+    /// <summary>
     /// Anahtar teslimde toplam sapmanın kâr erozyon alarmı üreteceği
     /// eşik (%). Birim fiyatlı projede kullanılmaz.
     /// </summary>
