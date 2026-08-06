@@ -113,6 +113,12 @@ export default function EngineeringPositionsPage() {
             Mühendislik Merkezi
           </Link>
           <Link
+            href="/muhendislik/pozlar/ice-aktar"
+            className="erp-secondary-button"
+          >
+            Poz Kitabı İçe Aktar
+          </Link>
+          <Link
             href="/muhendislik/pozlar/yeni"
             className="erp-primary-button"
           >
