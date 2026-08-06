@@ -185,6 +185,36 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
         });
     }
 
+    /// <summary>
+    /// Serbest metin iş tanımından poz önerir.
+    ///
+    /// Adayları kütüphane üretir; dil modeli yalnızca sıralar ve
+    /// gerekçelendirir. Model listede olmayan bir poz döndürürse
+    /// doğrulamada elenir — uydurma poz gelemez.
+    /// </summary>
+    [HttpGet("suggest")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
+    public async Task<IActionResult> Suggest(
+        [FromQuery] Guid companyId,
+        [FromQuery] string query,
+        [FromQuery] int? year,
+        [FromQuery] int? limit,
+        [FromQuery] bool useAi,
+        [FromServices] IPositionMatchService matcher,
+        CancellationToken cancellationToken)
+    {
+        if (companyId == Guid.Empty)
+            return BadRequest(new { message = "Şirket seçilmelidir." });
+
+        if (string.IsNullOrWhiteSpace(query))
+            return BadRequest(new { message = "Aranacak iş tanımını yazın." });
+
+        var take = limit is > 0 and <= 25 ? limit.Value : PositionMatcher.DefaultLimit;
+
+        return Ok(await matcher.SuggestAsync(
+            companyId, query, year, take, useAi, cancellationToken));
+    }
+
     /// <summary>Pozun yıl/kurum bazlı birim fiyat geçmişi.</summary>
     [HttpGet("{id:guid}/prices")]
     [RequirePermission(PermissionCatalog.Keys.EngineeringView)]

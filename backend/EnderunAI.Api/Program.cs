@@ -129,6 +129,9 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Engineering.IBookImportService,
     EnderunAI.Api.Services.Engineering.BookImportService>();
 builder.Services.AddScoped<
+    EnderunAI.Api.Services.Engineering.IPositionMatchService,
+    EnderunAI.Api.Services.Engineering.PositionMatchService>();
+builder.Services.AddScoped<
     EnderunAI.Api.Services.Projects.IProjectCostAnalysisService,
     EnderunAI.Api.Services.Projects.ProjectCostAnalysisService>();
 builder.Services.AddScoped<

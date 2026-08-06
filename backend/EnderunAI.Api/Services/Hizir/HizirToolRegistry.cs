@@ -34,19 +34,25 @@ public sealed class HizirToolRegistry : IHizirToolRegistry
     /// <summary>Bir araç sonucunda dönebilecek en fazla satır.</summary>
     private const int RowLimit = 25;
 
+    /// <summary>Modele verilecek aday poz sayısı.</summary>
+    private const int PositionMatcherLimit = 8;
+
     private static readonly CultureInfo Tr = new("tr-TR");
 
     private readonly AppDbContext _db;
     private readonly IHizirKnowledgeBase _knowledgeBase;
+    private readonly EnderunAI.Api.Services.Engineering.IPositionMatchService _positionMatcher;
     private readonly List<HizirTool> _tools;
 
     public HizirToolRegistry(
         AppDbContext db,
         IHizirKnowledgeBase knowledgeBase,
-        HizirActionTools actionTools)
+        HizirActionTools actionTools,
+        EnderunAI.Api.Services.Engineering.IPositionMatchService positionMatcher)
     {
         _db = db;
         _knowledgeBase = knowledgeBase;
+        _positionMatcher = positionMatcher;
 
         // Katman 1 okuma araçları + Katman 2 eylem araçları.
         _tools = [.. BuildTools(), .. actionTools.Build()];
@@ -123,6 +129,18 @@ public sealed class HizirToolRegistry : IHizirToolRegistry
                 ("gun_sayisi", "integer", "Kaç günlük geçmişe bakılacak (varsayılan 7)")),
             PermissionCatalog.Keys.SiteReportsView,
             ListDailyReportsAsync),
+
+        new HizirTool(
+            "poz_ara",
+            "Serbest metin iş tanımından poz kütüphanesinde (ÇŞB, TEDAŞ ve " +
+            "şirkete özel) aday pozları bulur; birim fiyatlarıyla birlikte " +
+            "döner. SADECE bu listeden poz öner; listede olmayan bir poz " +
+            "numarası ASLA yazma, uygun aday yoksa 'bulunamadı' de.",
+            SchemaWith(
+                ("tanim", "string", "Aranacak iş tanımı, örn. '40lık NYY kablo çekilmesi'"),
+                ("yil", "integer", "Fiyat yılı (varsayılan en yeni)")),
+            PermissionCatalog.Keys.EngineeringView,
+            SuggestPositionsAsync),
 
         new HizirTool(
             "stok_durumu",
@@ -312,6 +330,88 @@ public sealed class HizirToolRegistry : IHizirToolRegistry
                 $"- {row.ReportDate:dd.MM.yyyy} | {row.ProjectCode} / {row.SiteName} " +
                 $"| toplam personel: {row.Total} | durum: {row.Status}" +
                 $"{(row.WeatherCondition is null ? "" : $" | hava: {row.WeatherCondition}")}");
+        }
+
+        return new HizirToolOutcome(builder.ToString());
+    }
+
+    /// <summary>
+    /// Poz önerisi. Dil modeli sıralaması BURADA kapalı: bu aracın
+    /// sonucunu zaten bir dil modeli okuyor, ikinci bir model çağrısı
+    /// hem gereksiz hem masraflı olurdu. Adayları deterministik eleme
+    /// üretiyor, sıralamayı sohbetteki model yapıyor.
+    /// </summary>
+    private async Task<HizirToolOutcome> SuggestPositionsAsync(
+        HizirToolContext context,
+        IReadOnlyDictionary<string, object?> args,
+        CancellationToken cancellationToken)
+    {
+        var query = Text(args, "tanim");
+
+        if (string.IsNullOrWhiteSpace(query))
+            return new HizirToolOutcome("Aranacak iş tanımı belirtilmedi.");
+
+        var company = await _db.Companies.AsNoTracking()
+            .OrderBy(x => x.CreatedAtUtc)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (company is null)
+            return new HizirToolOutcome("Şirket kaydı bulunamadı.");
+
+        var year = args.TryGetValue("yil", out var raw)
+            && int.TryParse(raw?.ToString(), out var parsed)
+            && parsed is >= 2000 and <= 2100
+                ? parsed
+                : (int?)null;
+
+        var result = await _positionMatcher.SuggestAsync(
+            company.Value, query, year, PositionMatcherLimit,
+            useAi: false, cancellationToken);
+
+        if (result.Suggestions.Count == 0)
+            return new HizirToolOutcome(result.Explanation);
+
+        var builder = new StringBuilder();
+        builder.AppendLine($"\"{query}\" için {result.Suggestions.Count} aday poz:");
+        builder.AppendLine(
+            "UYARI: Bu liste poz kütüphanesinden geldi. Listede olmayan bir poz " +
+            "numarası önerme; uygun aday yoksa bulunamadı de.");
+
+        foreach (var suggestion in result.Suggestions)
+        {
+            var name = suggestion.Name.Length > 110
+                ? suggestion.Name[..110]
+                : suggestion.Name;
+
+            builder.Append($"- {suggestion.OfficialCode ?? suggestion.Code} | {name} " +
+                           $"| birim: {suggestion.Unit}");
+
+            if (suggestion.Institution is not null)
+                builder.Append($" | kurum: {suggestion.Institution}");
+
+            if (suggestion.UnitPrice is { } price)
+            {
+                builder.Append($" | birim fiyat: {price.ToString("N2", Tr)} TL");
+
+                if (suggestion.MaterialPrice is { } material)
+                    builder.Append($" (malzeme {material.ToString("N2", Tr)}");
+
+                if (suggestion.LaborPrice is { } labor)
+                {
+                    builder.Append(suggestion.MaterialPrice is null ? " (" : " + ");
+                    builder.Append($"montaj {labor.ToString("N2", Tr)}");
+                }
+
+                if (suggestion.MaterialPrice is not null || suggestion.LaborPrice is not null)
+                    builder.Append(')');
+            }
+            else
+            {
+                builder.Append(" | birim fiyat yok");
+            }
+
+            builder.AppendLine();
         }
 
         return new HizirToolOutcome(builder.ToString());

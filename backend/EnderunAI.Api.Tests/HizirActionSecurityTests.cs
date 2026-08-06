@@ -157,7 +157,7 @@ public sealed class HizirActionSecurityTests(DatabaseFixture fixture)
             // Katman 1 — okuma
             "projeleri_listele", "santiye_gunluk_raporlari", "stok_durumu",
             "cari_bakiye", "cek_defteri", "nakit_akis", "muhasebe_ozeti",
-            "bordro_ozeti", "bekleyen_onaylar", "kilavuz_ara",
+            "bordro_ozeti", "bekleyen_onaylar", "kilavuz_ara", "poz_ara",
             // Katman 2 — güvenli
             "taslak_hazirla", "hatirlatma_olustur", "personel_atama_onerisi",
             // Katman 2 — onaylı
