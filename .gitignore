@@ -73,3 +73,7 @@ staging/
 *.bak
 *.bak-*
 *.backup-*
+
+# Poz kitabı kaynak dosyaları: 15 MB PDF ve Excel, kod değil veri.
+# Sunucuda duruyor, depoya girmiyor.
+poz-dosyalari/

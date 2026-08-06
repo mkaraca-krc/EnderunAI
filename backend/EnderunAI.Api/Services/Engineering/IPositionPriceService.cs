@@ -7,6 +7,8 @@ public sealed record PositionPriceRow(
     int Year,
     PositionPriceInstitution Institution,
     string InstitutionName,
+    PositionPriceComponent Component,
+    string ComponentName,
     decimal UnitPrice,
     string CurrencyCode,
     DateTime? EffectiveFrom,
@@ -14,13 +16,15 @@ public sealed record PositionPriceRow(
     DateTime CreatedAtUtc);
 
 /// <summary>
-/// Bir keşif kalemine uygulanacak fiyat ve nereden geldiği. Kaynağın
-/// yanıtta dönmesi şart: aynı poz için üç farklı kurum fiyatı olabilir
-/// ve hangisinin kullanıldığı bilinmeden rakam savunulamaz.
+/// Çözümlenen fiyat ve bileşen dökümü. <paramref name="UnitPrice"/>
+/// keşifte kullanılacak tutar; <paramref name="MaterialPrice"/> ve
+/// <paramref name="LaborPrice"/> varsa malzeme/montaj ayrımını verir.
 /// </summary>
 public sealed record PositionPriceResolution(
     bool Found,
     decimal? UnitPrice,
+    decimal? MaterialPrice,
+    decimal? LaborPrice,
     string? CurrencyCode,
     int? Year,
     PositionPriceInstitution? Institution,
@@ -34,7 +38,8 @@ public sealed record UpsertPositionPriceInput(
     decimal UnitPrice,
     string? CurrencyCode,
     DateTime? EffectiveFrom,
-    string? SourceNote);
+    string? SourceNote,
+    PositionPriceComponent Component = PositionPriceComponent.Total);
 
 public interface IPositionPriceService
 {
@@ -55,6 +60,16 @@ public interface IPositionPriceService
         int? year = null,
         PositionPriceInstitution? institution = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Kurum ve bileşen adlarının insan okur karşılıkları.</summary>
+    static string ComponentNameOf(PositionPriceComponent component) => component switch
+    {
+        PositionPriceComponent.Material => "Malzeme",
+        PositionPriceComponent.Labor => "Montaj",
+        PositionPriceComponent.Dismantle => "Demontaj",
+        PositionPriceComponent.RemountFromDismantled => "Demontajdan montaj",
+        _ => "Toplam"
+    };
 
     /// <summary>
     /// Fiyatı ekler; aynı (poz, yıl, kurum) varsa GÜNCELLER. Aynı

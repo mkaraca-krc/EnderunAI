@@ -14,6 +14,9 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.0" />
     <PackageReference Include="Npgsql" Version="8.0.6" />
     <PackageReference Include="xunit" Version="2.4.2" />
+    <!-- Gerçek poz kitabı dosyaları depoda değil, sunucuda duruyor.
+         Dosya yoksa ilgili testler ATLANIR; sessizce geçmez. -->
+    <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

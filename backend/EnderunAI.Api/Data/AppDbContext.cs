@@ -2128,12 +2128,13 @@ public sealed class AppDbContext(
             // iki kez yüklenmesi satır çoğaltmamalı, fiyatı güncellemeli.
             entity.HasIndex(x => new
             {
-                x.EngineeringPositionId, x.Year, x.Institution
+                x.EngineeringPositionId, x.Year, x.Institution, x.Component
             })
             .IsUnique()
             .HasFilter("\"IsDeleted\" = false");
 
             entity.Property(x => x.Institution).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Component).HasConversion<int>().IsRequired();
             entity.Property(x => x.UnitPrice).HasPrecision(18, 4);
             entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
             entity.Property(x => x.SourceNote).HasMaxLength(300);

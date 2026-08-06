@@ -21,7 +21,35 @@ public enum PositionPriceInstitution
 }
 
 /// <summary>
-/// Bir pozun belirli bir yıla ve kuruma ait yayımlanmış birim fiyatı.
+/// Fiyatın hangi bileşeni olduğu.
+///
+/// Kitaplar tek bir rakam vermiyor: TEDAŞ malzeme, montaj, demontaj ve
+/// demontajdan montajı ayrı kolonlarda yayımlıyor; ÇŞB elektrik
+/// bölümünde "montajlı birim fiyat" ve "montaj bedeli" yan yana
+/// duruyor. Bunları tek sayıya indirmek bilgi kaybıdır ve keşifte
+/// malzeme/montaj ayrımını imkânsız kılar.
+/// </summary>
+public enum PositionPriceComponent
+{
+    /// <summary>Rayiç / birim fiyat / montajlı birim fiyat — işin tamamı.</summary>
+    Total = 0,
+
+    /// <summary>Yalnız malzeme bedeli.</summary>
+    Material = 1,
+
+    /// <summary>Yalnız montaj (işçilik) bedeli.</summary>
+    Labor = 2,
+
+    /// <summary>Sökme bedeli.</summary>
+    Dismantle = 3,
+
+    /// <summary>Sökülenin yeniden montaj bedeli.</summary>
+    RemountFromDismantled = 4
+}
+
+/// <summary>
+/// Bir pozun belirli bir yıla, kuruma ve bileşene ait yayımlanmış
+/// birim fiyatı.
 ///
 /// Fiyat poz kaydının üstüne YAZILMAZ, ayrı satır olarak eklenir:
 /// ÇŞB 2024, ÇŞB 2025 ve TEDAŞ 2025 yan yana durur. Geçmiş fiyatın
@@ -40,6 +68,12 @@ public sealed class PositionUnitPrice : BaseEntity
     public int Year { get; set; }
 
     public PositionPriceInstitution Institution { get; set; }
+
+    /// <summary>
+    /// Fiyatın hangi bileşeni olduğu. Varsayılan Toplam; tek fiyatlı
+    /// kitaplarda ve elle girişte bu kullanılır.
+    /// </summary>
+    public PositionPriceComponent Component { get; set; } = PositionPriceComponent.Total;
 
     public decimal UnitPrice { get; set; }
 

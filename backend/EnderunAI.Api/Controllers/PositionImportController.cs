@@ -17,9 +17,85 @@ namespace EnderunAI.Api.Controllers;
 [Authorize]
 [Route("api/engineering-positions/import")]
 public sealed class PositionImportController(
-    IPositionImportService importService) : ControllerBase
+    IPositionImportService importService,
+    IBookImportService bookImportService) : ControllerBase
 {
-    private const long MaxFileSize = 25L * 1024 * 1024;
+    private const long MaxFileSize = 60L * 1024 * 1024;
+
+    /// <summary>Hazır eşleme profilleri (ÇŞB, TEDAŞ).</summary>
+    [HttpGet("profiles")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
+    public IActionResult GetProfiles() => Ok(bookImportService.GetProfiles());
+
+    /// <summary>Profil ile önizleme — hiçbir şey yazmaz.</summary>
+    [HttpPost("profile/preview")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
+    [RequestSizeLimit(MaxFileSize)]
+    public Task<IActionResult> ProfilePreview(
+        IFormFile file,
+        [FromForm] string profileKey,
+        [FromForm] Guid companyId,
+        [FromForm] int year,
+        [FromForm] string? sourceNote,
+        [FromForm] string? codePrefix,
+        CancellationToken cancellationToken)
+        => RunProfileAsync(
+            file, profileKey, companyId, year, sourceNote, codePrefix,
+            write: false, cancellationToken);
+
+    /// <summary>Profil ile gerçek aktarım.</summary>
+    [HttpPost("profile/commit")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
+    [RequestSizeLimit(MaxFileSize)]
+    public Task<IActionResult> ProfileCommit(
+        IFormFile file,
+        [FromForm] string profileKey,
+        [FromForm] Guid companyId,
+        [FromForm] int year,
+        [FromForm] string? sourceNote,
+        [FromForm] string? codePrefix,
+        CancellationToken cancellationToken)
+        => RunProfileAsync(
+            file, profileKey, companyId, year, sourceNote, codePrefix,
+            write: true, cancellationToken);
+
+    private async Task<IActionResult> RunProfileAsync(
+        IFormFile file,
+        string profileKey,
+        Guid companyId,
+        int year,
+        string? sourceNote,
+        string? codePrefix,
+        bool write,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "Dosya seçilmedi." });
+
+        try
+        {
+            await using var stream = await CopyAsync(file, cancellationToken);
+
+            var summary = write
+                ? await bookImportService.ImportAsync(
+                    profileKey, stream, companyId, year, sourceNote, codePrefix, cancellationToken)
+                : await bookImportService.PreviewAsync(
+                    profileKey, stream, companyId, year, sourceNote, codePrefix, cancellationToken);
+
+            return Ok(summary);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception exception)
+        {
+            return BadRequest(new
+            {
+                message = $"Dosya işlenemedi. ({exception.GetType().Name}: {exception.Message})"
+            });
+        }
+    }
 
     /// <summary>
     /// Dosyayı açar; sayfa adlarını, tahmini başlık satırını, sütun

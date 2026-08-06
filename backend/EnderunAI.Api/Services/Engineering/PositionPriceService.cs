@@ -27,6 +27,7 @@ public sealed class PositionPriceService(AppDbContext db) : IPositionPriceServic
             .Where(x => x.EngineeringPositionId == positionId)
             .OrderByDescending(x => x.Year)
             .ThenBy(x => x.Institution)
+            .ThenBy(x => x.Component)
             .ToListAsync(cancellationToken);
 
         return rows
@@ -35,6 +36,8 @@ public sealed class PositionPriceService(AppDbContext db) : IPositionPriceServic
                 x.Year,
                 x.Institution,
                 InstitutionNameOf(x.Institution),
+                x.Component,
+                IPositionPriceService.ComponentNameOf(x.Component),
                 x.UnitPrice,
                 x.CurrencyCode,
                 x.EffectiveFrom,
@@ -59,14 +62,9 @@ public sealed class PositionPriceService(AppDbContext db) : IPositionPriceServic
         if (year.HasValue)
             query = query.Where(x => x.Year == year.Value);
 
-        // Yıl içinde birden çok yürürlük varsa en son yürürlüğe girmiş olan.
-        var match = await query
-            .OrderByDescending(x => x.Year)
-            .ThenByDescending(x => x.EffectiveFrom ?? DateTime.MinValue)
-            .ThenByDescending(x => x.CreatedAtUtc)
-            .FirstOrDefaultAsync(cancellationToken);
+        var candidates = await query.ToListAsync(cancellationToken);
 
-        if (match is null)
+        if (candidates.Count == 0)
         {
             var scope = institution.HasValue
                 ? $"{InstitutionNameOf(institution.Value)} kurumunda"
@@ -75,20 +73,75 @@ public sealed class PositionPriceService(AppDbContext db) : IPositionPriceServic
             var period = year.HasValue ? $"{year} yılı için" : "";
 
             return new PositionPriceResolution(
-                false, null, null, null, null, null, null,
+                false, null, null, null, null, null, null, null, null,
                 $"Bu poza {scope} {period} birim fiyat tanımlı değil. " +
                 "Fiyat girilmeden ya da reçete analizi kullanılmadan kalem fiyatlanamaz.");
         }
 
+        // En yeni yıl; yıl içinde en son yürürlüğe giren kitap.
+        var selectedYear = candidates.Max(x => x.Year);
+
+        var group = candidates
+            .Where(x => x.Year == selectedYear)
+            .GroupBy(x => x.Institution)
+            .OrderByDescending(g => g.Max(x => x.EffectiveFrom ?? DateTime.MinValue))
+            .ThenByDescending(g => g.Max(x => x.CreatedAtUtc))
+            .First()
+            .ToList();
+
+        var total = group.FirstOrDefault(x => x.Component == PositionPriceComponent.Total);
+        var material = group.FirstOrDefault(x => x.Component == PositionPriceComponent.Material);
+        var labor = group.FirstOrDefault(x => x.Component == PositionPriceComponent.Labor);
+
+        var reference = total ?? material ?? labor ?? group[0];
+
+        decimal? applied;
+        string explanation;
+
+        if (total is not null)
+        {
+            applied = total.UnitPrice;
+            explanation = $"{reference.Year} {InstitutionNameOf(reference.Institution)} " +
+                          "birim fiyatı (toplam)";
+        }
+        else if (material is not null || labor is not null)
+        {
+            // Kitap toplam vermemiş, bileşen vermiş. Malzeme + montaj
+            // toplanır ve bu AÇIKÇA söylenir; demontaj bedelleri farklı
+            // bir iş olduğu için toplama girmez.
+            applied = (material?.UnitPrice ?? 0m) + (labor?.UnitPrice ?? 0m);
+
+            var parts = new List<string>();
+            if (material is not null) parts.Add($"malzeme {material.UnitPrice:N2}");
+            if (labor is not null) parts.Add($"montaj {labor.UnitPrice:N2}");
+
+            explanation =
+                $"{reference.Year} {InstitutionNameOf(reference.Institution)}: " +
+                string.Join(" + ", parts) +
+                " (demontaj bedelleri toplama dahil edilmedi)";
+        }
+        else
+        {
+            // Elde yalnızca demontaj türü bir bileşen var; bunu keşif
+            // fiyatı diye sunmak yanlış olur.
+            applied = null;
+            explanation =
+                $"{reference.Year} {InstitutionNameOf(reference.Institution)} kaydında yalnızca " +
+                $"{IPositionPriceService.ComponentNameOf(reference.Component).ToLowerInvariant()} " +
+                "bedeli var; keşif birim fiyatı olarak kullanılamaz.";
+        }
+
         return new PositionPriceResolution(
-            true,
-            match.UnitPrice,
-            match.CurrencyCode,
-            match.Year,
-            match.Institution,
-            InstitutionNameOf(match.Institution),
-            match.SourceNote,
-            $"{match.Year} {InstitutionNameOf(match.Institution)} birim fiyatı");
+            applied is not null,
+            applied,
+            material?.UnitPrice,
+            labor?.UnitPrice,
+            reference.CurrencyCode,
+            reference.Year,
+            reference.Institution,
+            InstitutionNameOf(reference.Institution),
+            reference.SourceNote,
+            explanation);
     }
 
     public async Task<PositionPriceRow> UpsertAsync(
@@ -116,7 +169,8 @@ public sealed class PositionPriceService(AppDbContext db) : IPositionPriceServic
             .FirstOrDefaultAsync(
                 x => x.EngineeringPositionId == positionId
                      && x.Year == input.Year
-                     && x.Institution == input.Institution,
+                     && x.Institution == input.Institution
+                     && x.Component == input.Component,
                 cancellationToken);
 
         if (existing is null)
@@ -125,7 +179,8 @@ public sealed class PositionPriceService(AppDbContext db) : IPositionPriceServic
             {
                 EngineeringPositionId = positionId,
                 Year = input.Year,
-                Institution = input.Institution
+                Institution = input.Institution,
+                Component = input.Component
             };
 
             db.PositionUnitPrices.Add(existing);
@@ -148,6 +203,8 @@ public sealed class PositionPriceService(AppDbContext db) : IPositionPriceServic
             existing.Year,
             existing.Institution,
             InstitutionNameOf(existing.Institution),
+            existing.Component,
+            IPositionPriceService.ComponentNameOf(existing.Component),
             existing.UnitPrice,
             existing.CurrencyCode,
             existing.EffectiveFrom,
