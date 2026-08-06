@@ -64,6 +64,65 @@ public sealed class PositionPriceService(AppDbContext db) : IPositionPriceServic
 
         var candidates = await query.ToListAsync(cancellationToken);
 
+        return Resolve(candidates, year, institution);
+    }
+
+    /// <summary>
+    /// Çok sayıda poz için fiyat çözümü — TEK sorguyla.
+    ///
+    /// Toplu eşleştirmede poz başına ayrı sorgu, yüzlerce satırlık bir
+    /// icmalde binlerce gidiş dönüş demekti. Çözüm kuralları tek tek
+    /// çözümle aynı; yalnızca satırlar önceden toplu çekiliyor.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, PositionPriceResolution>> ResolveManyAsync(
+        IReadOnlyList<Guid> positionIds,
+        int? year = null,
+        PositionPriceInstitution? institution = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new Dictionary<Guid, PositionPriceResolution>();
+
+        if (positionIds.Count == 0)
+            return result;
+
+        var ids = positionIds.Distinct().ToList();
+
+        var query = db.PositionUnitPrices
+            .AsNoTracking()
+            .Where(x => ids.Contains(x.EngineeringPositionId));
+
+        if (institution.HasValue)
+            query = query.Where(x => x.Institution == institution.Value);
+
+        if (year.HasValue)
+            query = query.Where(x => x.Year == year.Value);
+
+        var rows = await query.ToListAsync(cancellationToken);
+
+        var byPosition = rows
+            .GroupBy(x => x.EngineeringPositionId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<PositionUnitPrice>)g.ToList());
+
+        foreach (var id in ids)
+        {
+            result[id] = Resolve(
+                byPosition.TryGetValue(id, out var found) ? found : [],
+                year,
+                institution);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Çözüm kuralları — veritabanından bağımsız. Tekli ve toplu çözüm
+    /// aynı kodu kullanır ki iki ayrı "doğru" fiyat oluşmasın.
+    /// </summary>
+    private static PositionPriceResolution Resolve(
+        IReadOnlyList<PositionUnitPrice> candidates,
+        int? year,
+        PositionPriceInstitution? institution)
+    {
         if (candidates.Count == 0)
         {
             var scope = institution.HasValue

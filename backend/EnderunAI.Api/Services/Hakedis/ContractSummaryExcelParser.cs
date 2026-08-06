@@ -15,7 +15,13 @@ public sealed record ContractSummaryParsedLine(
     decimal ContractQuantity,
     decimal MaterialUnitPrice,
     decimal LaborUnitPrice,
-    decimal OverheadUnitPrice)
+    decimal OverheadUnitPrice,
+    /// <summary>
+    /// Kısmın altındaki alt grup adı (örn. "SOSYAL TESİS"). Kısım
+    /// hiyerarşisi tek seviyeli olduğu için alt grup ayrı kısım açmaz;
+    /// adı burada saklanır ki bilgi kaybolmasın.
+    /// </summary>
+    string? Category = null)
 {
     public decimal UnitPrice =>
         MaterialUnitPrice + LaborUnitPrice + OverheadUnitPrice;

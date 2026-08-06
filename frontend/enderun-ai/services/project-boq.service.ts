@@ -120,6 +120,47 @@ export interface CreateBoqRevisionRequest {
   reason?: string | null;
 }
 
+/** Dosyadaki sayfa adları, başlıklar ve örnek satırlar. */
+export interface BoqSpreadsheetInspection {
+  sheetNames: string[];
+  sheetName: string;
+  headerRowIndex: number;
+  headers: string[];
+  sampleRows: string[][];
+  totalRowCount: number;
+}
+
+/** Kısım başlığının nasıl tanınacağı. */
+export const BoqSectionRule = {
+  /** Ayrı "Kısım" sütunu dolu, poz kodu boş (ENDERUN şablonu). */
+  SectionColumn: 0,
+  /** Kodu olan ama birimi boş satır başlıktır. */
+  EmptyUnit: 1,
+  /** Kod noktayla bitiyor ("01."). */
+  CodeEndsWithDot: 2,
+} as const;
+
+/**
+ * Sütun numaraları 1 tabanlı; 0 "eşlenmedi" demek.
+ *
+ * totalColumn veri olarak KULLANILMAZ: yalnızca doğrulama toplamıdır.
+ * Belirsiz sayılar onunla çözülür, tutmayan satır hata olur.
+ */
+export interface BoqImportMapping {
+  sheetName?: string | null;
+  headerRowIndex: number;
+  codeColumn: number;
+  descriptionColumn: number;
+  unitColumn: number;
+  quantityColumn: number;
+  materialColumn: number;
+  laborColumn: number;
+  overheadColumn: number;
+  sectionColumn?: number | null;
+  totalColumn?: number | null;
+  sectionRule: number;
+}
+
 /** Excel içe aktarma önizlemesi — hiçbir şey yazılmadan önce. */
 export interface BoqImportPreview {
   sectionCount: number;
@@ -312,14 +353,41 @@ export const projectBoqService = {
    * FormData gönderildiği için apiClient yerine doğrudan fetch:
    * tarayıcının kendi content-type sınırını koruması gerekiyor.
    */
-  importPreview(id: string, file: File) {
-    return uploadExcel<BoqImportPreview>(
-      `project-boqs/${id}/icmal-aktar/onizleme`,
+  /** Sayfa adlarını ve başlıkları okur — ayrıştırma yapmaz. */
+  importInspect(id: string, file: File, sheetName?: string, headerRow?: number) {
+    const query = new URLSearchParams();
+    if (sheetName) query.set("sheetName", sheetName);
+    if (headerRow) query.set("headerRow", String(headerRow));
+
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+
+    return uploadExcel<BoqSpreadsheetInspection>(
+      `project-boqs/${id}/icmal-aktar/incele${suffix}`,
       file
     );
   },
 
-  importCommit(id: string, file: File, decisions?: BoqImportMatchDecision[]) {
+  importPreview(id: string, file: File, mapping?: BoqImportMapping) {
+    return uploadExcel<BoqImportPreview>(
+      `project-boqs/${id}/icmal-aktar/onizleme`,
+      file,
+      mapping ? { mapping: JSON.stringify(mapping) } : undefined
+    );
+  },
+
+  importCommit(
+    id: string,
+    file: File,
+    decisions?: BoqImportMatchDecision[],
+    mapping?: BoqImportMapping
+  ) {
+    const fields: Record<string, string> = {};
+
+    if (decisions && decisions.length > 0)
+      fields.matches = JSON.stringify(decisions);
+
+    if (mapping) fields.mapping = JSON.stringify(mapping);
+
     return uploadExcel<{
       message: string;
       sectionCount: number;
@@ -331,9 +399,7 @@ export const projectBoqService = {
     }>(
       `project-boqs/${id}/icmal-aktar`,
       file,
-      decisions && decisions.length > 0
-        ? { matches: JSON.stringify(decisions) }
-        : undefined
+      Object.keys(fields).length > 0 ? fields : undefined
     );
   },
 

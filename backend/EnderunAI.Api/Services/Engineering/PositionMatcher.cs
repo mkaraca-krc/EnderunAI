@@ -51,9 +51,49 @@ public static class PositionMatcher
     /// </summary>
     public const double MinimumScore = 12.0;
 
+    /// <summary>
+    /// Belirteçleri önceden çıkarılmış aday. Aynı havuz onlarca satır
+    /// için taranırken adayın metnini her satırda yeniden parçalamak
+    /// işin neredeyse tamamını oluşturuyordu; toplu eşleştirmede havuz
+    /// bir kez hazırlanıp tekrar tekrar kullanılır.
+    /// </summary>
+    public sealed record PreparedCandidate(
+        MatchCandidate Candidate,
+        IReadOnlyList<string> Tokens,
+        HashSet<string> Haystack);
+
+    public static PreparedCandidate Prepare(MatchCandidate candidate)
+    {
+        var tokens = Tokenize(
+            $"{candidate.Name} {candidate.Category} {candidate.Keywords} {candidate.Unit}");
+
+        var haystack = new HashSet<string>(tokens, StringComparer.Ordinal);
+
+        // "1x40 mm2" tek belirteç olarak "1x40" veriyor; içindeki sayı
+        // dizileri ayrıca eklenmezse "40" sorgusu tutmaz. Kesit bilgisi
+        // kabloda en ayırt edici veri, kaybedilemez.
+        foreach (var token in tokens)
+        {
+            foreach (var run in System.Text.RegularExpressions.Regex.Matches(token, @"\d+"))
+                haystack.Add(run.ToString());
+        }
+
+        return new PreparedCandidate(candidate, tokens, haystack);
+    }
+
+    public static IReadOnlyList<PreparedCandidate> PrepareAll(
+        IEnumerable<MatchCandidate> candidates)
+        => candidates.Select(Prepare).ToList();
+
     public static IReadOnlyList<MatchScore> Rank(
         string query,
         IEnumerable<MatchCandidate> candidates,
+        int limit = DefaultLimit)
+        => Rank(query, PrepareAll(candidates), limit);
+
+    public static IReadOnlyList<MatchScore> Rank(
+        string query,
+        IReadOnlyList<PreparedCandidate> candidates,
         int limit = DefaultLimit)
     {
         var terms = Tokenize(query);
@@ -73,7 +113,7 @@ public static class PositionMatcher
             var score = Score(terms, codeTerms, candidate, out var matched);
 
             if (score >= MinimumScore)
-                results.Add(new MatchScore(candidate, score, matched));
+                results.Add(new MatchScore(candidate.Candidate, score, matched));
         }
 
         return results
@@ -146,11 +186,12 @@ public static class PositionMatcher
     private static double Score(
         IReadOnlyList<string> terms,
         IReadOnlyList<string> codeTerms,
-        MatchCandidate candidate,
+        PreparedCandidate prepared,
         out List<string> matched)
     {
         matched = [];
 
+        var candidate = prepared.Candidate;
         var official = candidate.OfficialCode?.Trim();
 
         // Kullanıcı doğrudan poz numarası yazdıysa tartışma yok.
@@ -161,22 +202,12 @@ public static class PositionMatcher
             return 1000;
         }
 
-        var haystackTokens = Tokenize(
-            $"{candidate.Name} {candidate.Category} {candidate.Keywords} {candidate.Unit}");
+        var haystackTokens = prepared.Tokens;
 
         if (haystackTokens.Count == 0)
             return 0;
 
-        // "1x40 mm2" tek belirteç olarak "1x40" veriyor; içindeki sayı
-        // dizileri ayrıca eklenmezse "40" sorgusu tutmaz. Kesit bilgisi
-        // kabloda en ayırt edici veri, kaybedilemez.
-        var haystack = new HashSet<string>(haystackTokens, StringComparer.Ordinal);
-
-        foreach (var token in haystackTokens)
-        {
-            foreach (var run in System.Text.RegularExpressions.Regex.Matches(token, @"\d+"))
-                haystack.Add(run.ToString()!);
-        }
+        var haystack = prepared.Haystack;
         var score = 0.0;
 
         foreach (var term in terms)

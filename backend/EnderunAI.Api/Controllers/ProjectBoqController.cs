@@ -17,6 +17,13 @@ public sealed class ProjectBoqController(
     AppDbContext db,
     ICurrentUserService currentUser) : ControllerBase
 {
+    /// <summary>
+    /// Önizlemede gösterilen ve eşleştirmeye giren en fazla poz satırı.
+    /// Gerçek bir elektrik icmali 350-400 satır; sınır bunun üstünde
+    /// olmalı ki eşleştirme kararı verilemeyen satır kalmasın.
+    /// </summary>
+    private const int PreviewLineLimit = 1000;
+
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetAll(
@@ -428,12 +435,54 @@ public sealed class ProjectBoqController(
     /// döner ve yazma kararı kullanıcıya kalır. Yarım bir icmali sessizce
     /// kaydetmek, toplamı tutmayan bir sözleşme tabanı üretirdi.
     /// </summary>
+    /// <summary>
+    /// Dosyayı açar, sayfa adlarını ve başlıkları döner — sütun eşleme
+    /// ekranı bununla dolar. Hiçbir şey yazmaz, ayrıştırma da yapmaz.
+    /// </summary>
+    [HttpPost("{id:guid}/icmal-aktar/incele")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
+    [RequestSizeLimit(20L * 1024 * 1024)]
+    public async Task<IActionResult> ImportInspect(
+        Guid id,
+        IFormFile file,
+        [FromQuery] string? sheetName,
+        [FromQuery] int? headerRow,
+        CancellationToken cancellationToken)
+    {
+        var exists = await db.ProjectBoqs
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == id, cancellationToken);
+
+        if (!exists)
+            return NotFound(new { message = "Sözleşme icmali bulunamadı." });
+
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "Excel dosyası seçilmedi." });
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+
+            return Ok(Services.Engineering.PositionImportParser.Inspect(
+                stream, sheetName, headerRow));
+        }
+        catch (Exception exception)
+        {
+            return BadRequest(new
+            {
+                message = "Dosya okunamadı. Excel (.xlsx) olduğundan ve şifreli " +
+                          $"olmadığından emin olun. ({exception.GetType().Name})"
+            });
+        }
+    }
+
     [HttpPost("{id:guid}/icmal-aktar/onizleme")]
     [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     [RequestSizeLimit(20L * 1024 * 1024)]
     public async Task<IActionResult> ImportPreview(
         Guid id,
         IFormFile file,
+        [FromForm] string? mapping,
         [FromServices] Services.Engineering.IPositionMatchService matcher,
         CancellationToken cancellationToken)
     {
@@ -456,25 +505,12 @@ public sealed class ProjectBoqController(
         if (file is null || file.Length == 0)
             return BadRequest(new { message = "Excel dosyası seçilmedi." });
 
-        ContractSummaryParseResult parsed;
+        var (parsed, parseError) = await ReadFileAsync(file, mapping);
 
-        try
-        {
-            await using var stream = file.OpenReadStream();
-            parsed = ContractSummaryExcelParser.Parse(stream);
-        }
-        catch (Exception exception)
-        {
-            // Bozuk/şifreli dosya: kullanıcıya teknik yığın değil,
-            // ne yapması gerektiği söyleniyor.
-            return BadRequest(new
-            {
-                message = "Dosya okunamadı. Şablonu indirip onun üzerine " +
-                          $"doldurduğunuzdan emin olun. ({exception.GetType().Name})"
-            });
-        }
+        if (parseError is not null)
+            return BadRequest(new { message = parseError });
 
-        return Ok(await BuildPreview(boq.ProjectId, parsed, matcher, cancellationToken));
+        return Ok(await BuildPreview(boq.ProjectId, parsed!, matcher, cancellationToken));
     }
 
     /// <summary>
@@ -492,6 +528,7 @@ public sealed class ProjectBoqController(
         Guid id,
         IFormFile file,
         [FromForm] string? matches,
+        [FromForm] string? mapping,
         [FromServices] Services.Engineering.IPositionMatchService matcher,
         CancellationToken cancellationToken)
     {
@@ -515,21 +552,12 @@ public sealed class ProjectBoqController(
         if (file is null || file.Length == 0)
             return BadRequest(new { message = "Excel dosyası seçilmedi." });
 
-        ContractSummaryParseResult parsed;
+        var (parsedResult, parseFailure) = await ReadFileAsync(file, mapping);
 
-        try
-        {
-            await using var stream = file.OpenReadStream();
-            parsed = ContractSummaryExcelParser.Parse(stream);
-        }
-        catch (Exception exception)
-        {
-            return BadRequest(new
-            {
-                message = "Dosya okunamadı. Şablonu indirip onun üzerine " +
-                          $"doldurduğunuzdan emin olun. ({exception.GetType().Name})"
-            });
-        }
+        if (parseFailure is not null)
+            return BadRequest(new { message = parseFailure });
+
+        var parsed = parsedResult!;
 
         if (parsed.ItemCount == 0)
             return BadRequest(new { message = "Dosyada okunabilir poz satırı yok." });
@@ -585,6 +613,7 @@ public sealed class ProjectBoqController(
                     PositionCode = line.PositionCode,
                     Description = line.Description,
                     Unit = line.Unit,
+                    Category = line.Category,
                     ContractQuantity = line.ContractQuantity,
                     MaterialUnitPrice = line.MaterialUnitPrice,
                     LaborUnitPrice = line.LaborUnitPrice,
@@ -615,6 +644,68 @@ public sealed class ProjectBoqController(
             UnlinkedCount = items.Count - linkedCount,
             boq.TotalAmount
         });
+    }
+
+    /// <summary>
+    /// Dosyayı okur. Sütun eşlemesi verilmişse ona göre, verilmemişse
+    /// ENDERUN şablonunun sabit düzenine göre. İki okuyucu da aynı
+    /// sonucu üretir, dolayısıyla önizleme ve aktarım kodu değişmez.
+    /// </summary>
+    private static async Task<(ContractSummaryParseResult? Result, string? Error)> ReadFileAsync(
+        IFormFile file, string? mappingJson)
+    {
+        ContractSummaryMapping? mapping = null;
+
+        if (!string.IsNullOrWhiteSpace(mappingJson))
+        {
+            try
+            {
+                mapping = JsonSerializer.Deserialize<ContractSummaryMapping>(
+                    mappingJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException)
+            {
+                return (null, "Sütun eşlemesi okunamadı.");
+            }
+
+            if (mapping is null)
+                return (null, "Sütun eşlemesi boş.");
+
+            var missing = new List<string>();
+
+            if (mapping.CodeColumn <= 0) missing.Add("poz no");
+            if (mapping.DescriptionColumn <= 0) missing.Add("tanım");
+            if (mapping.UnitColumn <= 0) missing.Add("birim");
+            if (mapping.QuantityColumn <= 0) missing.Add("miktar");
+            if (mapping.MaterialColumn <= 0) missing.Add("malzeme birim fiyatı");
+            if (mapping.LaborColumn <= 0) missing.Add("işçilik birim fiyatı");
+            if (mapping.OverheadColumn <= 0) missing.Add("genel gider / kâr");
+
+            if (missing.Count > 0)
+            {
+                return (null,
+                    "Şu sütunlar eşlenmeden aktarım yapılamaz: " +
+                    string.Join(", ", missing) + ".");
+            }
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+
+            return (mapping is null
+                ? ContractSummaryExcelParser.Parse(stream)
+                : ContractSummaryMappedParser.Parse(stream, mapping), null);
+        }
+        catch (Exception exception)
+        {
+            // Bozuk/şifreli dosya: kullanıcıya teknik yığın değil,
+            // ne yapması gerektiği söyleniyor.
+            return (null,
+                "Dosya okunamadı. Excel (.xlsx) olduğundan ve şifreli olmadığından " +
+                $"emin olun. ({exception.GetType().Name})");
+        }
     }
 
     /// <summary>
@@ -805,10 +896,12 @@ public sealed class ProjectBoqController(
             .ToList();
 
         // Önizlemede gösterilen satır sayısı sınırlı; eşleştirme de
-        // yalnızca gösterilenler için yapılır.
+        // yalnızca gösterilenler için yapılır. Sınır gerçek icmalleri
+        // kapsayacak kadar geniş: 200'de kalan bir sınır, 389 satırlık
+        // bir icmalin yarısını eşleştirme ekranından gizliyordu.
         var previewLines = parsed.Lines
             .Where(x => !x.IsSectionHeader)
-            .Take(200)
+            .Take(PreviewLineLimit)
             .ToList();
 
         var matches = new Dictionary<int, Services.Engineering.BulkMatchRow>();

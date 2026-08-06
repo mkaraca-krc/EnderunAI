@@ -232,6 +232,49 @@ public sealed class PositionMatchCertaintyTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task Bulk_MatchesLastRowOfALargeSummary()
+    {
+        // ASIL GÜVENCE: yüzlerce satırlık gerçek bir icmalde SON satır da
+        // eşleşmeli. Belirteçler sabit bir sayıda kesilirse ilk satırların
+        // kelimeleri havuzu doldurur, sonrakilerin pozları havuza hiç
+        // girmez ve o satırlar sessizce "eşleşme yok" görünür — 350
+        // satırlık bir icmalde fark edilmesi çok zor bir hata.
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        // Her biri kendine özgü kelimeler taşıyan 120 poz.
+        var seedRows = Enumerable.Range(1, 120)
+            .Select(i => ($"35.900.{i:0000}",
+                          $"Doksanyüz{i:0000} özel imalat kalemi {i:0000}",
+                          "Ad"))
+            .ToArray();
+
+        var companyId = await SeedAsync(db, suffix, seedRows);
+
+        var rows = seedRows
+            .Select((row, index) => (index + 1, row.Item2))
+            .ToList();
+
+        var results = await CreateService(db).SuggestBulkAsync(companyId, rows);
+
+        Assert.Equal(120, results.Count);
+
+        var last = results.Single(x => x.RowNumber == 120);
+
+        Assert.NotEmpty(last.Suggestions);
+        Assert.Equal("35.900.0120", last.Suggestions[0].OfficialCode);
+
+        // Ortadaki satırlar da boş kalmamalı.
+        Assert.All(results, row => Assert.NotEmpty(row.Suggestions));
+
+        // Fiyatlar toplu çözülüyor; satır başına sorgu atılmadığı için
+        // rakamlar yine de dolu gelmeli.
+        Assert.Equal(100m, last.Suggestions[0].UnitPrice);
+    }
+
+    [Fact]
     public async Task Bulk_IncludesLibraryPrices()
     {
         using var scope = fixture.Factory.Services.CreateScope();

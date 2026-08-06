@@ -100,8 +100,19 @@ public sealed class PositionMatchService(
     /// <summary>Tek bir belirtecin getirebileceği en fazla kayıt.</summary>
     private const int PrefilterPerTermLimit = 200;
 
-    /// <summary>Toplu eşleştirmede ön elemeye giren en fazla belirteç.</summary>
-    private const int BulkTermLimit = 40;
+    /// <summary>
+    /// Toplu eşleştirmede ön elemeye giren en fazla belirteç. Yüzlerce
+    /// satırlık bir icmalin farklı kelime sayısı bunun altında kalır;
+    /// sınır yalnızca kötü niyetli/bozuk girdiye karşı vardır.
+    /// </summary>
+    private const int BulkTermCap = 1200;
+
+    /// <summary>
+    /// Toplu eşleştirmede havuz sınırı. Tekli aramadaki 600'lük sınır
+    /// yüzlerce farklı satıra yetmiyor: havuz erken dolduğunda son
+    /// satırların pozları hiç değerlendirilmiyordu.
+    /// </summary>
+    private const int BulkPrefilterLimit = 6000;
 
     /// <summary>
     /// Tek sorguda aranacak en fazla belirteç. Toplu akışta bu sınır
@@ -237,28 +248,82 @@ public sealed class PositionMatchService(
         if (rows.Count == 0)
             return [];
 
-        // Bütün satırların belirteçleri birleştirilip TEK ön eleme
-        // yapılır; satır başına sorgu yüzlerce satırda kabul edilemez.
+        // Belirteçler BÜTÜN satırlardan toplanır. Sabit bir üst sınırla
+        // kesilirse sınıra kadarki satırların kelimeleri havuzu doldurur,
+        // sonraki satırların pozları havuza hiç girmez ve o satırlar
+        // sessizce "eşleşme yok" görünür — 350 satırlık bir icmalde bu
+        // fark edilmesi en zor hatalardan olurdu.
         var allTerms = rows
             .SelectMany(x => PositionMatcher.Tokenize(x.Query))
             .Distinct(StringComparer.Ordinal)
-            .Take(BulkTermLimit)
+            .Take(BulkTermCap)
             .ToList();
 
         var pool = allTerms.Count == 0
             ? []
-            : await PrefilterAsync(companyId, allTerms, cancellationToken, BulkTermLimit);
+            : await PrefilterAsync(
+                companyId, allTerms, cancellationToken,
+                maxTerms: allTerms.Count,
+                limit: BulkPrefilterLimit);
 
-        var results = new List<BulkMatchRow>(rows.Count);
+        // Havuz bir kez hazırlanır: aday metinlerini her satırda yeniden
+        // parçalamak, yüzlerce satırda işin neredeyse tamamıydı.
+        var prepared = PositionMatcher.PrepareAll(pool);
+
+        var ranked = new List<(int RowNumber, string Query, IReadOnlyList<MatchScore> Scores)>(
+            rows.Count);
 
         foreach (var (rowNumber, query) in rows)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            ranked.Add((rowNumber, query, PositionMatcher.Rank(query, prepared, limit)));
+        }
 
-            var ranked = PositionMatcher.Rank(query, pool, limit);
-            var (isCertain, reason) = EvaluateCertainty(ranked);
+        // Fiyatlar toplu çözülür; satır başına sorgu yüzlerce satırda
+        // binlerce gidiş dönüş demekti.
+        var priceIds = ranked
+            .SelectMany(x => x.Scores.Select(s => s.Candidate.Id))
+            .Distinct()
+            .ToList();
 
-            var suggestions = await BuildSuggestionsAsync(ranked, year, cancellationToken);
+        var resolvedPrices = await prices.ResolveManyAsync(
+            priceIds, year, cancellationToken: cancellationToken);
+
+        var institutions = await db.EngineeringPositions
+            .AsNoTracking()
+            .Where(x => priceIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.OfficialInstitution })
+            .ToDictionaryAsync(x => x.Id, x => x.OfficialInstitution, cancellationToken);
+
+        var results = new List<BulkMatchRow>(rows.Count);
+
+        foreach (var (rowNumber, query, scores) in ranked)
+        {
+            var (isCertain, reason) = EvaluateCertainty(scores);
+
+            var suggestions = scores
+                .Select(match =>
+                {
+                    var price = resolvedPrices[match.Candidate.Id];
+
+                    return new PositionSuggestion(
+                        match.Candidate.Id,
+                        match.Candidate.Code,
+                        match.Candidate.OfficialCode,
+                        match.Candidate.Name,
+                        match.Candidate.Unit,
+                        institutions.GetValueOrDefault(match.Candidate.Id),
+                        match.Candidate.Category,
+                        Math.Round(match.Score, 1),
+                        match.MatchedTerms,
+                        price.UnitPrice,
+                        price.MaterialPrice,
+                        price.LaborPrice,
+                        price.Explanation,
+                        null,
+                        null);
+                })
+                .ToList();
 
             results.Add(new BulkMatchRow(
                 rowNumber, query, isCertain, reason, suggestions));
@@ -277,7 +342,8 @@ public sealed class PositionMatchService(
         Guid companyId,
         IReadOnlyList<string> terms,
         CancellationToken cancellationToken,
-        int maxTerms = SingleQueryTermLimit)
+        int maxTerms = SingleQueryTermLimit,
+        int limit = PrefilterLimit)
     {
         // Belirteç başına ayrı sorgu: OR zincirini tek ifadede kurmak
         // EF tarafından SQL'e çevrilemiyor. Belirteç sayısı azdır
@@ -309,7 +375,7 @@ public sealed class PositionMatchService(
             foreach (var row in rows)
                 merged.TryAdd(row.Id, row);
 
-            if (merged.Count >= PrefilterLimit)
+            if (merged.Count >= limit)
                 break;
         }
 

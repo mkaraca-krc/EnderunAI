@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import BoqImportMappingPanel, {
+  guessMapping,
+} from "@/components/engineering/boq-import-mapping";
 import BoqImportMatchTable, {
   toDecisions,
 } from "@/components/engineering/boq-import-match-table";
@@ -13,7 +16,9 @@ import {
   projectBoqService,
   ProjectBoqItemType,
   ProjectBoqStatus,
+  type BoqImportMapping,
   type BoqImportPreview,
+  type BoqSpreadsheetInspection,
   type ProjectBoqDetail,
 } from "@/services/project-boq.service";
 
@@ -73,6 +78,12 @@ export default function ContractSummaryDetailPage() {
     Record<number, string | null>
   >({});
 
+  // Sütun eşleme: dosya düzeni varsayılmıyor.
+  const [inspection, setInspection] = useState<BoqSpreadsheetInspection | null>(
+    null
+  );
+  const [mapping, setMapping] = useState<BoqImportMapping | null>(null);
+
   // Revizyon formu
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [amendmentNumber, setAmendmentNumber] = useState("");
@@ -107,6 +118,8 @@ export default function ContractSummaryDetailPage() {
     setImportFile(null);
     setPreview(null);
     setMatchDecisions({});
+    setInspection(null);
+    setMapping(null);
 
     // input.value sıfırlanmazsa aynı dosya ikinci kez seçilemez.
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -132,6 +145,35 @@ export default function ContractSummaryDetailPage() {
     }
   }
 
+  /**
+   * Dosya seçilince önce YAPISI okunur: sayfa adları ve başlıklar.
+   * Ayrıştırma bundan sonra, kullanıcının onayladığı eşlemeyle yapılır.
+   */
+  async function runInspect(file: File, sheetName?: string, headerRow?: number) {
+    setImporting(true);
+    setActionError("");
+    setNotice("");
+    setPreview(null);
+
+    try {
+      const result = await projectBoqService.importInspect(
+        params.id,
+        file,
+        sheetName,
+        headerRow
+      );
+
+      setInspection(result);
+      setMapping(guessMapping(result));
+    } catch (err) {
+      setInspection(null);
+      setMapping(null);
+      setActionError(err instanceof Error ? err.message : "Dosya okunamadı.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function runPreview() {
     if (!importFile) {
       setActionError("Önce bir Excel dosyası seçin.");
@@ -143,7 +185,13 @@ export default function ContractSummaryDetailPage() {
     setNotice("");
 
     try {
-      setPreview(await projectBoqService.importPreview(params.id, importFile));
+      setPreview(
+        await projectBoqService.importPreview(
+          params.id,
+          importFile,
+          mapping ?? undefined
+        )
+      );
       setMatchDecisions({});
     } catch (err) {
       setPreview(null);
@@ -163,7 +211,8 @@ export default function ContractSummaryDetailPage() {
       const result = await projectBoqService.importCommit(
         params.id,
         importFile,
-        toDecisions(matchDecisions)
+        toDecisions(matchDecisions),
+        mapping ?? undefined
       );
       setNotice(result.message);
       clearImport();
@@ -365,9 +414,12 @@ export default function ContractSummaryDetailPage() {
           </div>
 
           <p>
-            Şablonu indirip doldurun, sonra yükleyin. Dosya önce okunup
-            önizleme gösterilir; hiçbir şey siz onaylamadan yazılmaz. Aktarım
-            mevcut kalemlerin ÜZERİNE yazar.
+            Kendi icmal dosyanızı yükleyebilirsiniz: sütun düzeni
+            varsayılmıyor, dosya seçilince hangi sütunun ne olduğunu
+            söylersiniz. Şablonu kullanmak isterseniz indirip
+            doldurabilirsiniz. Dosya önce okunup önizleme gösterilir; hiçbir
+            şey siz onaylamadan yazılmaz. Aktarım mevcut kalemlerin ÜZERİNE
+            yazar.
           </p>
 
           <div
@@ -380,8 +432,14 @@ export default function ContractSummaryDetailPage() {
               accept=".xlsx"
               style={{ display: "none" }}
               onChange={(event) => {
-                setImportFile(event.target.files?.[0] ?? null);
+                const selected = event.target.files?.[0] ?? null;
+
+                setImportFile(selected);
                 setPreview(null);
+                setInspection(null);
+                setMapping(null);
+
+                if (selected) void runInspect(selected);
               }}
             />
 
@@ -416,6 +474,18 @@ export default function ContractSummaryDetailPage() {
               </button>
             )}
           </div>
+
+          {inspection && mapping && (
+            <BoqImportMappingPanel
+              inspection={inspection}
+              mapping={mapping}
+              disabled={importing}
+              onChange={setMapping}
+              onReinspect={(sheetName, headerRow) => {
+                if (importFile) void runInspect(importFile, sheetName, headerRow);
+              }}
+            />
+          )}
 
           {preview && (
             <div className="erp-mt">

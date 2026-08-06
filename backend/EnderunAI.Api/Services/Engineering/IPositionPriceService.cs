@@ -61,6 +61,17 @@ public interface IPositionPriceService
         PositionPriceInstitution? institution = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Çok sayıda pozun fiyatını tek sorguda çözer. Kurallar
+    /// <see cref="ResolveAsync"/> ile aynıdır; yüzlerce satırlık toplu
+    /// eşleştirmede poz başına sorgu atmamak için vardır.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, PositionPriceResolution>> ResolveManyAsync(
+        IReadOnlyList<Guid> positionIds,
+        int? year = null,
+        PositionPriceInstitution? institution = null,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Kurum ve bileşen adlarının insan okur karşılıkları.</summary>
     static string ComponentNameOf(PositionPriceComponent component) => component switch
     {
