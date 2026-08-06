@@ -253,7 +253,18 @@ export default function NewProjectBoqPage() {
       return;
     }
 
-    const invalidLine = lines.find(
+    // Tamamen boş satırlar yok sayılır: icmal Excel'den aktarılacaksa
+    // kalem girmeden kaydedilebilmeli, sahte satır girdirmek gereksiz.
+    const filled = lines.filter(
+      (line) =>
+        line.positionCode.trim() ||
+        line.description.trim() ||
+        line.unit.trim() ||
+        Number(line.contractQuantity) > 0 ||
+        Number(line.unitPrice) > 0
+    );
+
+    const invalidLine = filled.find(
       (line) =>
         !line.positionCode.trim() ||
         !line.description.trim() ||
@@ -285,7 +296,7 @@ export default function NewProjectBoqPage() {
             description.trim() || null,
           notes:
             notes.trim() || null,
-          items: lines.map((line) => ({
+          items: filled.map((line) => ({
             engineeringPositionId:
               line.engineeringPositionId || null,
             positionCode:
@@ -498,6 +509,11 @@ export default function NewProjectBoqPage() {
               <small>
                 {lines.length} kalem ·{" "}
                 {money.format(totalAmount)}
+              </small>
+              <small style={{ display: "block" }}>
+                Kalemleri Excel&apos;den aktaracaksanız burayı boş
+                bırakabilirsiniz; kaydettikten sonra icmal ekranından
+                dosyanızı yükleyin.
               </small>
             </div>
 

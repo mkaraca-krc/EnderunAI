@@ -197,13 +197,10 @@ public sealed class ProjectBoqController(
         CreateProjectBoqRequest request,
         CancellationToken cancellationToken)
     {
-        if (request.Items is null || request.Items.Count == 0)
-        {
-            return BadRequest(new
-            {
-                message = "Metraj en az bir kalem içermelidir."
-            });
-        }
+        // Kalemsiz TASLAK icmale izin var: yüzlerce satırlık bir icmal
+        // Excel'den aktarılacaksa önce sahte bir kalem girdirmek gereksiz
+        // bir engel. Aktarım zaten mevcut kalemlerin üzerine yazıyor.
+        var requestedItems = request.Items ?? [];
 
         var duplicate = await db.ProjectBoqs.AnyAsync(
             x => x.CompanyId == request.CompanyId &&
@@ -219,12 +216,12 @@ public sealed class ProjectBoqController(
         }
 
         var sectionError = await ValidateSectionsAsync(
-            request.ProjectId, request.Items, cancellationToken);
+            request.ProjectId, requestedItems, cancellationToken);
 
         if (sectionError is not null)
             return BadRequest(new { message = sectionError });
 
-        var items = BuildItems(request.Items);
+        var items = BuildItems(requestedItems);
 
         var boq = new ProjectBoq
         {
