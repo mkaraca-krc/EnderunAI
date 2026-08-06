@@ -60,6 +60,19 @@ public sealed class ProjectCostTransaction : BaseEntity
     public Guid? ProjectHakedisSectionId { get; set; }
     public ProjectHakedisSection? ProjectHakedisSection { get; set; }
 
+    /// <summary>
+    /// Maliyetin gittiği icmal satırı. OPSİYONEL ve bilinçli olarak
+    /// zorunlu değil: saha her sarfı poza etiketleyemez.
+    ///
+    /// Doluysa maliyet o poza AYNEN yazılır ("ölçülmüş"). Boşsa maliyet
+    /// kısım düzeyinde kalır ve poz görünümünde kısımdaki pozlara
+    /// sözleşme tutarı oranında DAĞITILIR — dağıtım bir tahmindir ve
+    /// ekranda ölçülmüş rakamdan ayrı gösterilir.
+    /// </summary>
+    public Guid? ProjectBoqItemId { get; set; }
+    public ProjectBoqItem? ProjectBoqItem { get; set; }
+
+
     public ProjectCostType CostType { get; set; }
 
     /// <summary>

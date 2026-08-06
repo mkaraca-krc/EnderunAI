@@ -3236,8 +3236,17 @@ public sealed class AppDbContext(
             entity.Property(x => x.CostClass).HasConversion<int>();
             entity.HasIndex(x => new { x.ProjectId, x.CostClass });
             entity.HasIndex(x => x.ProjectHakedisSectionId);
+            entity.HasIndex(x => x.ProjectBoqItemId);
             entity.Property(x => x.Description).IsRequired();
             entity.Property(x => x.ReferenceType);
+
+            entity.HasOne(x => x.ProjectBoqItem)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectBoqItemId)
+                // İcmal revize edilip satır silinse bile maliyet kaydı
+                // durmalı; yalnızca poz bağı kopar ve maliyet kısım
+                // düzeyine döner.
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(x => x.Project)
                 .WithMany()
@@ -3273,6 +3282,15 @@ public sealed class AppDbContext(
             entity.HasIndex(x => new { x.ProjectId, x.PersonnelId, x.WorkDate });
             entity.HasIndex(x => x.ProjectSiteId);
             entity.HasIndex(x => x.ProjectHakedisSectionId);
+            entity.HasIndex(x => x.ProjectBoqItemId);
+
+            entity.HasOne(x => x.ProjectBoqItem)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectBoqItemId)
+                // İcmal revize edilip satır silinse bile maliyet kaydı
+                // durmalı; yalnızca poz bağı kopar ve maliyet kısım
+                // düzeyine döner.
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.Property(x => x.WorkItemCode).HasMaxLength(100);
             entity.Property(x => x.WorkItemName).HasMaxLength(500);

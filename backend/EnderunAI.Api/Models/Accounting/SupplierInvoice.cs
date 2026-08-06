@@ -201,6 +201,14 @@ public sealed class SupplierInvoiceItem : BaseEntity
     /// <summary>Kalemin masraf merkezi; boşsa faturanın kodu.</summary>
     public string? CostCenterCode { get; set; }
 
+    /// <summary>
+    /// Kalemin gittiği icmal satırı (poz). OPSİYONEL — doldurulursa
+    /// maliyet o poza ölçülmüş olarak yazılır, boşsa proje/kısım
+    /// düzeyinde kalır.
+    /// </summary>
+    public Guid? ProjectBoqItemId { get; set; }
+    public ProjectBoqItem? ProjectBoqItem { get; set; }
+
     public string Description { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public string Unit { get; set; } = string.Empty;

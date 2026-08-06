@@ -9,4 +9,9 @@ public sealed record CreateHrProjectLaborCostRequest(
     decimal NormalCost,
     decimal OvertimeCost,
     decimal OtherCost,
-    string? CurrencyCode);
+    string? CurrencyCode,
+    /// <summary>
+    /// İşçiliğin gittiği icmal satırı (poz). OPSİYONEL — doldurulursa
+    /// maliyet o poza ölçülmüş olarak yazılır.
+    /// </summary>
+    Guid? ProjectBoqItemId = null);

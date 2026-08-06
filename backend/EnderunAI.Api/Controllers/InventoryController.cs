@@ -392,6 +392,38 @@ public sealed class InventoryController(
             sectionId = requestedSectionId;
         }
 
+        // İcmal satırı seçildiyse aynı projeye ait olmalı; başka
+        // projenin pozuna yazılan sarf iki projenin de kâr hesabını
+        // bozar.
+        Guid? boqItemId = null;
+
+        if (request.ProjectBoqItemId is Guid requestedBoqItemId)
+        {
+            if (!request.ProjectId.HasValue)
+            {
+                return BadRequest(new
+                {
+                    message = "İcmal satırı seçildiyse proje de belirtilmelidir."
+                });
+            }
+
+            var boqItemBelongsToProject = await db.ProjectBoqItems
+                .AnyAsync(
+                    x => x.Id == requestedBoqItemId
+                         && x.ProjectBoq.ProjectId == request.ProjectId.Value,
+                    cancellationToken);
+
+            if (!boqItemBelongsToProject)
+            {
+                return BadRequest(new
+                {
+                    message = "Seçilen icmal satırı bu projeye ait değil."
+                });
+            }
+
+            boqItemId = requestedBoqItemId;
+        }
+
         // DocumentNumberService kendi transaction'ını açıp kapattığı için,
         // aynı bağlantı üzerinde iç içe transaction hatası almamak adına
         // belge numarası dış transaction başlamadan ÖNCE üretilir.
@@ -447,6 +479,7 @@ public sealed class InventoryController(
                 CostType = ProjectCostType.Material,
                 CostClass = Services.Projects.ProjectCostClassifier.ForStockIssue(),
                 ProjectHakedisSectionId = sectionId,
+                ProjectBoqItemId = boqItemId,
                 CostDate = ToUtc(request.MovementDate),
                 Amount = totalCost,
                 Description = $"Depo sarfı: {stock.InventoryItem.Name} ({request.Quantity} {stock.InventoryItem.Unit})",

@@ -117,6 +117,22 @@ public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerB
             }
         }
 
+        // İcmal satırı seçildiyse aynı projeye ait olmalı.
+        if (request.ProjectBoqItemId is Guid boqItemId)
+        {
+            var boqItemBelongsToProject = await db.ProjectBoqItems.AsNoTracking().AnyAsync(
+                x => x.Id == boqItemId && x.ProjectBoq.ProjectId == projectId,
+                cancellationToken);
+
+            if (!boqItemBelongsToProject)
+            {
+                return BadRequest(new
+                {
+                    message = "Seçilen icmal satırı bu projeye ait değil."
+                });
+            }
+        }
+
         var totalLaborCost = request.NormalCost + request.OvertimeCost + request.OtherCost;
 
         var item = new HrProjectLaborCost
@@ -125,6 +141,7 @@ public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerB
             ProjectId = projectId,
             PersonnelId = request.PersonnelId,
             ProjectSiteId = request.ProjectSiteId,
+            ProjectBoqItemId = request.ProjectBoqItemId,
             WorkDate = DateTime.SpecifyKind(request.WorkDate.Date, DateTimeKind.Utc),
             NormalHours = request.NormalHours,
             OvertimeHours = request.OvertimeHours,

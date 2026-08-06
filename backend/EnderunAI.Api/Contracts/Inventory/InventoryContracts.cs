@@ -39,7 +39,13 @@ public sealed record StockIssueRequest(
     /// Sarfın gittiği icmal kısmı. OPSİYONEL — bilinmiyorsa boş
     /// bırakılır, maliyet proje geneline yazılır.
     /// </summary>
-    Guid? ProjectHakedisSectionId = null);
+    Guid? ProjectHakedisSectionId = null,
+    /// <summary>
+    /// Sarfın gittiği icmal satırı (poz). OPSİYONEL — doldurulursa
+    /// maliyet o poza ölçülmüş olarak yazılır, boşsa kısım düzeyinde
+    /// kalır ve poz görünümünde dağıtılır.
+    /// </summary>
+    Guid? ProjectBoqItemId = null);
 
 public sealed record StockTransferRequest(
     Guid SourceWarehouseId,

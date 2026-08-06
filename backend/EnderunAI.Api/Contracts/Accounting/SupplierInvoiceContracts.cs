@@ -14,7 +14,9 @@ public sealed record SupplierInvoiceItemRequest(
     /// <summary>GİDER faturasında zorunlu — kalemin gider hesabı.</summary>
     Guid? ExpenseAccountId = null,
     /// <summary>Kalemin masraf merkezi; boşsa faturanınki kullanılır.</summary>
-    string? CostCenterCode = null);
+    string? CostCenterCode = null,
+    /// <summary>Kalemin gittiği icmal satırı (poz); opsiyonel.</summary>
+    Guid? ProjectBoqItemId = null);
 
 public sealed record CreateSupplierInvoiceRequest(
     Guid CompanyId,

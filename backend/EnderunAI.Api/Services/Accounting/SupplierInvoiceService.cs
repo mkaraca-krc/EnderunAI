@@ -333,7 +333,7 @@ public sealed class SupplierInvoiceService(
             var classAmounts = await ResolveCostClassAmountsAsync(
                 invoice, cancellationToken);
 
-            foreach (var (costClass, amount) in classAmounts)
+            foreach (var allocation in classAmounts)
             {
                 db.ProjectCostTransactions.Add(new ProjectCostTransaction
                 {
@@ -341,12 +341,13 @@ public sealed class SupplierInvoiceService(
                     CostType = invoice.PurchaseOrderId is null
                         ? ProjectCostType.Other
                         : ProjectCostType.Material,
-                    CostClass = costClass,
+                    CostClass = allocation.CostClass,
+                    ProjectBoqItemId = allocation.ProjectBoqItemId,
                     CostDate = invoice.InvoiceDate,
                     // İade projenin maliyetini AZALTIR; eksi tutar yazılmazsa
                     // iade edilen mal projede maliyet olarak durmaya devam
                     // eder ve kârlılık olduğundan düşük görünürdü.
-                    Amount = decimal.Round(amount * invoice.ExchangeRate, 2) * sign,
+                    Amount = decimal.Round(allocation.Amount * invoice.ExchangeRate, 2) * sign,
                     Description = invoice.IsReturn
                         ? $"Alış iadesi {invoice.InternalNumber} — {supplierTitle}"
                         : $"Tedarikçi faturası {invoice.InternalNumber} — {supplierTitle}",
@@ -876,6 +877,7 @@ public sealed class SupplierInvoiceService(
                 WarehouseId = request.WarehouseId,
                 ExpenseAccountId = request.ExpenseAccountId,
                 CostCenterCode = Normalize(request.CostCenterCode),
+                ProjectBoqItemId = request.ProjectBoqItemId,
                 Description = request.Description.Trim(),
                 Quantity = request.Quantity,
                 Unit = string.IsNullOrWhiteSpace(request.Unit) ? "adet" : request.Unit.Trim(),
@@ -1055,45 +1057,55 @@ public sealed class SupplierInvoiceService(
     /// sayılır (bilinmeyeni malzeme ya da işçilik saymak karşılaştırmayı
     /// sessizce yanıltırdı).
     /// </summary>
-    private async Task<IReadOnlyCollection<KeyValuePair<ProjectCostClass, decimal>>>
+    private async Task<IReadOnlyCollection<CostAllocationLine>>
         ResolveCostClassAmountsAsync(
             SupplierInvoice invoice, CancellationToken cancellationToken)
     {
-        if (invoice.InvoiceType == SupplierInvoiceType.Stock)
-        {
-            return
-            [
-                new KeyValuePair<ProjectCostClass, decimal>(
-                    ProjectCostClass.Material, invoice.Subtotal)
-            ];
-        }
-
+        // Kalemler her iki fatura tipinde de okunur: stok faturasında
+        // sınıf sabit malzemedir ama icmal satırı kalem bazında
+        // değişebilir, tek satıra indirgemek etiketi kaybettirirdi.
         var lines = await db.SupplierInvoiceItems
             .AsNoTracking()
             .Where(x => x.SupplierInvoiceId == invoice.Id)
             .Select(x => new
             {
                 x.LineSubtotal,
+                x.ProjectBoqItemId,
                 AccountCode = x.ExpenseAccount != null ? x.ExpenseAccount.Code : null
             })
             .ToListAsync(cancellationToken);
 
         if (lines.Count == 0)
         {
-            return
-            [
-                new KeyValuePair<ProjectCostClass, decimal>(
-                    ProjectCostClass.Overhead, invoice.Subtotal)
-            ];
+            var fallbackClass = invoice.InvoiceType == SupplierInvoiceType.Stock
+                ? ProjectCostClass.Material
+                : ProjectCostClass.Overhead;
+
+            return [new CostAllocationLine(fallbackClass, null, invoice.Subtotal)];
         }
 
         return lines
-            .GroupBy(x => Projects.ProjectCostClassifier.ForExpenseAccount(x.AccountCode))
-            .Select(g => new KeyValuePair<ProjectCostClass, decimal>(
-                g.Key, g.Sum(x => x.LineSubtotal)))
-            .Where(x => x.Value != 0m)
+            .GroupBy(x => new
+            {
+                CostClass = invoice.InvoiceType == SupplierInvoiceType.Stock
+                    ? ProjectCostClass.Material
+                    : Projects.ProjectCostClassifier.ForExpenseAccount(x.AccountCode),
+                x.ProjectBoqItemId
+            })
+            .Select(g => new CostAllocationLine(
+                g.Key.CostClass, g.Key.ProjectBoqItemId, g.Sum(x => x.LineSubtotal)))
+            .Where(x => x.Amount != 0m)
             .ToList();
     }
+
+    /// <summary>
+    /// Faturadan çıkan tek bir maliyet satırı: sınıf, varsa icmal
+    /// satırı ve tutar.
+    /// </summary>
+    private sealed record CostAllocationLine(
+        ProjectCostClass CostClass,
+        Guid? ProjectBoqItemId,
+        decimal Amount);
 
     /// <summary>
     /// Kalem bazında iade edilebilir kalan miktar. İade faturasında ve
