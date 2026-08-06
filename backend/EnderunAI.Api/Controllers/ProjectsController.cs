@@ -1,7 +1,11 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using EnderunAI.Api.Contracts.Core;
+using EnderunAI.Api.Contracts.Projects;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Projects;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,12 +21,18 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
     [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? companyId,
+        [FromQuery] bool includeArchived,
         CancellationToken cancellationToken)
     {
         var query = db.Projects.AsNoTracking();
 
         if (companyId.HasValue)
             query = query.Where(x => x.CompanyId == companyId.Value);
+
+        // Arşivlenen proje aktif listeden düşer; mali raporlar arşivli
+        // projenin kayıtlarını göstermeye devam eder.
+        if (!includeArchived)
+            query = query.Where(x => !x.IsArchived);
 
         var items = await query
             .OrderByDescending(x => x.CreatedAtUtc)
@@ -50,6 +60,9 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.DeviationAlertThresholdRate,
                 x.Status,
                 x.HealthStatus,
+                x.IsArchived,
+                x.ArchivedAtUtc,
+                x.ArchiveReason,
                 WarehouseCount = x.Warehouses.Count
             })
             .ToListAsync(cancellationToken);
@@ -96,6 +109,9 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.Address,
                 x.Status,
                 x.HealthStatus,
+                x.IsArchived,
+                x.ArchivedAtUtc,
+                x.ArchiveReason,
                 Warehouses = x.Warehouses.Select(w => new
                 {
                     w.Id,
@@ -566,6 +582,86 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
         return Ok(items);
     }
 
+
+    /// <summary>
+    /// Silme öncesi etki özeti: bağlı kayıt sayıları ve kalıcı silmeyi
+    /// engelleyen kesinleşmiş kayıtlar.
+    /// </summary>
+    [HttpGet("{id:guid}/deletion-impact")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsDelete)]
+    public async Task<IActionResult> GetDeletionImpact(
+        Guid id,
+        [FromServices] IProjectDeletionService deletionService,
+        CancellationToken cancellationToken)
+    {
+        var impact = await deletionService.GetImpactAsync(id, cancellationToken);
+
+        return impact is null ? NotFound() : Ok(impact);
+    }
+
+    /// <summary>Projeyi arşive alır — veriler durur, aktif listelerden düşer.</summary>
+    [HttpPost("{id:guid}/archive")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsDelete)]
+    public async Task<IActionResult> Archive(
+        Guid id,
+        [FromBody] ArchiveProjectRequest request,
+        [FromServices] IProjectDeletionService deletionService,
+        CancellationToken cancellationToken)
+    {
+        var result = await deletionService.ArchiveAsync(
+            id, request?.Reason, GetCurrentUserId(), User.Identity?.Name, cancellationToken);
+
+        return result.Success
+            ? Ok(new { message = result.Message })
+            : BadRequest(new { message = result.Message });
+    }
+
+    [HttpPost("{id:guid}/unarchive")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsDelete)]
+    public async Task<IActionResult> Unarchive(
+        Guid id,
+        [FromServices] IProjectDeletionService deletionService,
+        CancellationToken cancellationToken)
+    {
+        var result = await deletionService.UnarchiveAsync(
+            id, GetCurrentUserId(), User.Identity?.Name, cancellationToken);
+
+        return result.Success
+            ? Ok(new { message = result.Message })
+            : BadRequest(new { message = result.Message });
+    }
+
+    /// <summary>
+    /// Kalıcı silme. Kesinleşmiş kaydı olan projelerde reddedilir; onay için
+    /// proje kodunun birebir yazılması gerekir.
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsDelete)]
+    public async Task<IActionResult> Delete(
+        Guid id,
+        [FromBody] DeleteProjectRequest request,
+        [FromServices] IProjectDeletionService deletionService,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.ConfirmationCode))
+            return BadRequest(new { message = "Onay için proje kodunu yazmalısınız." });
+
+        var result = await deletionService.HardDeleteAsync(
+            id, request.ConfirmationCode, GetCurrentUserId(), User.Identity?.Name, cancellationToken);
+
+        return result.Success
+            ? Ok(new { message = result.Message })
+            : BadRequest(new { message = result.Message });
+    }
+
+    private Guid? GetCurrentUserId()
+    {
+        var value =
+            User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+            User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+        return Guid.TryParse(value, out var id) ? id : null;
+    }
 
     private static DateTime? ToUtc(DateTime? value)
     {

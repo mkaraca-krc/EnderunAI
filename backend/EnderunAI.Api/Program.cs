@@ -123,6 +123,12 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Projects.IProjectCostAnalysisService,
     EnderunAI.Api.Services.Projects.ProjectCostAnalysisService>();
 builder.Services.AddScoped<
+    EnderunAI.Api.Services.Projects.IProjectDeletionService,
+    EnderunAI.Api.Services.Projects.ProjectDeletionService>();
+builder.Services.AddSingleton<
+    EnderunAI.Api.Services.Projects.IProjectFileCleaner,
+    EnderunAI.Api.Services.Projects.ProjectFileCleaner>();
+builder.Services.AddScoped<
     EnderunAI.Api.Services.Tax.ITaxLedgerService,
     EnderunAI.Api.Services.Tax.TaxLedgerService>();
 builder.Services.AddScoped<

@@ -43,7 +43,38 @@ export type ProjectListItem = {
   materialDeductionRate: number;
   status: number;
   healthStatus: number;
+  isArchived: boolean;
+  archivedAtUtc?: string | null;
+  archiveReason?: string | null;
   warehouseCount: number;
+};
+
+/** Kalıcı silmeyi engelleyen kesinleşmiş kayıt kalemi. */
+export type ProjectDeletionBlocker = {
+  key: string;
+  label: string;
+  count: number;
+  reason: string;
+};
+
+export type ProjectDeletionDependency = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+export type ProjectDeletionImpact = {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  isArchived: boolean;
+  canHardDelete: boolean;
+  blockers: ProjectDeletionBlocker[];
+  dependencies: ProjectDeletionDependency[];
+  totalBlockingRecords: number;
+  totalDependentRecords: number;
+  documentCount: number;
+  documentSizeBytes: number;
 };
 
 export type CreateProjectRequest = {
@@ -92,12 +123,14 @@ export type UpdateProjectRequest = {
 };
 
 export const projectService = {
-  getAll(companyId?: string) {
-    const query = companyId
-      ? `?companyId=${encodeURIComponent(companyId)}`
-      : "";
+  getAll(companyId?: string, includeArchived = false) {
+    const query = new URLSearchParams();
+    if (companyId) query.set("companyId", companyId);
+    if (includeArchived) query.set("includeArchived", "true");
 
-    return apiClient<ProjectListItem[]>(`projects${query}`);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+
+    return apiClient<ProjectListItem[]>(`projects${suffix}`);
   },
 
   getById(id: string) {
@@ -115,6 +148,31 @@ export const projectService = {
     return apiClient(`projects/${id}`, {
       method: "PUT",
       body: payload,
+    });
+  },
+
+  getDeletionImpact(id: string) {
+    return apiClient<ProjectDeletionImpact>(`projects/${id}/deletion-impact`);
+  },
+
+  archive(id: string, reason?: string | null) {
+    return apiClient<{ message: string }>(`projects/${id}/archive`, {
+      method: "POST",
+      body: { reason: reason ?? null },
+    });
+  },
+
+  unarchive(id: string) {
+    return apiClient<{ message: string }>(`projects/${id}/unarchive`, {
+      method: "POST",
+    });
+  },
+
+  /** Kalıcı silme — onay olarak proje kodu birebir yazılmalı. */
+  remove(id: string, confirmationCode: string) {
+    return apiClient<{ message: string }>(`projects/${id}`, {
+      method: "DELETE",
+      body: { confirmationCode },
     });
   },
 };

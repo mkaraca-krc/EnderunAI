@@ -154,5 +154,20 @@ public sealed class Project : BaseEntity
 
     public Guid? ProjectManagerUserId { get; set; }
 
+    /// <summary>
+    /// Arşiv (yumuşak silme) bayrağı. Kesinleşmiş kaydı olan proje kalıcı
+    /// silinemez; bunun yerine arşive alınır. Bilinçli olarak
+    /// <see cref="BaseEntity.IsDeleted"/> kullanılmaz: global sorgu filtresi
+    /// projeyi tamamen görünmez yapar ve başka ekranlardaki
+    /// <c>x.Project.Code</c> projeksiyonları sessizce null'a düşer.
+    /// Arşivli proje yalnızca aktif listelerden ve seçim kutularından düşer;
+    /// mali raporlar arşivli projenin kayıtlarını göstermeye devam eder.
+    /// </summary>
+    public bool IsArchived { get; set; }
+
+    public DateTime? ArchivedAtUtc { get; set; }
+
+    public string? ArchiveReason { get; set; }
+
     public ICollection<Warehouse> Warehouses { get; set; } = new List<Warehouse>();
 }

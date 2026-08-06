@@ -220,7 +220,9 @@ public static class PermissionCatalog
         new(Keys.ProjectsManage, "Projeler", "Proje yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı proje yönetim izni."),
         new(Keys.ProjectsCreate, "Projeler", "Proje oluşturma", "Yeni proje kaydı oluşturur."),
         new(Keys.ProjectsEdit, "Projeler", "Proje düzenleme", "Mevcut proje kaydını günceller."),
-        new(Keys.ProjectsDelete, "Projeler", "Proje silme", "Proje kaydını siler."),
+        new(Keys.ProjectsDelete, "Projeler", "Proje silme/arşivleme",
+            "Projeyi arşive alır veya (kesinleşmiş kaydı yoksa) kalıcı siler. " +
+            "Yalnızca Genel Müdür ve Admin rollerinde bulunur."),
 
         new(Keys.SitesView, "Şantiyeler", "Şantiyeleri görüntüleme", "Şantiye kayıtlarını görüntüler."),
         new(Keys.SitesCreate, "Şantiyeler", "Şantiye oluşturma", "Yeni şantiye kaydı oluşturur."),

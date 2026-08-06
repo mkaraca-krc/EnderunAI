@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import ProjectDocumentsSection from "@/components/projects/project-documents-section";
+import ProjectDangerZone from "@/components/projects/project-danger-zone";
 import { projectService } from "@/services/project.service";
 import { CONTRACT_TYPE_LABELS } from "@/services/progress-tracking.service";
 
@@ -89,6 +90,9 @@ type ProjectDetail = {
   address?: string | null;
   status: number;
   healthStatus: number;
+  isArchived: boolean;
+  archivedAtUtc?: string | null;
+  archiveReason?: string | null;
   warehouses: Warehouse[];
 };
 
@@ -539,7 +543,11 @@ export default function ProjectCenterPage() {
         <>
           <section className="enderun-project-center-hero">
             <div className="enderun-project-center-title">
-              <span className="erp-status green">Aktif Proje</span>
+              <span
+                className={`erp-status ${project.isArchived ? "gray" : "green"}`}
+              >
+                {project.isArchived ? "Arşivlenmiş Proje" : "Aktif Proje"}
+              </span>
 
               {/* Sözleşme tipi rozeti — sapmanın nasıl yorumlanacağını
                   belirlediği için proje kartında görünür olmalı. */}
@@ -1427,6 +1435,12 @@ export default function ProjectCenterPage() {
           </section>
 
           <ProjectDocumentsSection projectId={project.id} sites={sites} />
+
+          <ProjectDangerZone
+            projectId={project.id}
+            projectCode={project.code}
+            isArchived={project.isArchived}
+          />
         </>
       )}
     </ErpShell>

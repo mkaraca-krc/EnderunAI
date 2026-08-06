@@ -54,6 +54,7 @@ export default function ProjectsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [includeArchived, setIncludeArchived] = useState(false);
 
   const visibleProjects = useMemo(
     () =>
@@ -73,7 +74,7 @@ export default function ProjectsPage() {
           companyService.getAll(),
           branchService.getAll(),
           currentAccountService.getAll(),
-          projectService.getAll(),
+          projectService.getAll(undefined, includeArchived),
         ]);
 
       setCompanies(companyData);
@@ -92,7 +93,7 @@ export default function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [includeArchived]);
 
   useEffect(() => {
     loadData();
@@ -682,6 +683,16 @@ export default function ProjectsPage() {
               </option>
             ))}
           </select>
+
+          {/* Arşivli proje aktif listeden düşer; buradan geri getirilebilir. */}
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={includeArchived}
+              onChange={(event) => setIncludeArchived(event.target.checked)}
+            />
+            Arşiv dahil
+          </label>
         </div>
 
         {loading ? (
@@ -729,6 +740,11 @@ export default function ProjectsPage() {
                       >
                         {PROJECT_STATUS_LABELS[project.status] ?? "Bilinmiyor"}
                       </span>
+                      {project.isArchived && (
+                        <span className="erp-status gray" style={{ marginLeft: 4 }}>
+                          Arşiv
+                        </span>
+                      )}
                     </td>
                     <td>{project.employerName || "—"}</td>
                     <td>{project.branchName}</td>

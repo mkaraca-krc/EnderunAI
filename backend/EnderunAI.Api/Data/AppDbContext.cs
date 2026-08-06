@@ -1507,6 +1507,8 @@ public sealed class AppDbContext(
             entity.Property(x => x.City).HasMaxLength(100);
             entity.Property(x => x.District).HasMaxLength(100);
             entity.Property(x => x.HealthReason).HasMaxLength(500);
+            entity.Property(x => x.ArchiveReason).HasMaxLength(500);
+            entity.HasIndex(x => x.IsArchived);
 
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.Projects)

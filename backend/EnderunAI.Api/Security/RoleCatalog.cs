@@ -111,7 +111,7 @@ public static class RoleCatalog
         [
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ProjectsCreate,
-            PermissionCatalog.Keys.ProjectsEdit, PermissionCatalog.Keys.ProjectsDelete,
+            PermissionCatalog.Keys.ProjectsEdit,
             PermissionCatalog.Keys.SitesView,
             PermissionCatalog.Keys.EngineeringView, PermissionCatalog.Keys.EngineeringManage,
             PermissionCatalog.Keys.HakedisView, PermissionCatalog.Keys.HakedisCreate,
@@ -127,7 +127,7 @@ public static class RoleCatalog
         [
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ProjectsCreate,
-            PermissionCatalog.Keys.ProjectsEdit, PermissionCatalog.Keys.ProjectsDelete,
+            PermissionCatalog.Keys.ProjectsEdit,
             PermissionCatalog.Keys.SitesView, PermissionCatalog.Keys.SitesCreate,
             PermissionCatalog.Keys.SitesEdit, PermissionCatalog.Keys.SitesDelete,
             PermissionCatalog.Keys.SiteReportsView, PermissionCatalog.Keys.SiteReportsApprove,
