@@ -119,7 +119,50 @@ public static class UblTrInvoiceParser
             ParseSource: InvoiceParseSource.Standard,
             Problems: problems,
             InvoiceTypeCode: invoiceTypeCode,
-            ReferencedInvoiceNumber: referencedInvoiceNumber);
+            ReferencedInvoiceNumber: referencedInvoiceNumber,
+            ExchangeRate: ReadExchangeRate(root, currency));
+    }
+
+    /// <summary>
+    /// Faturanın beyan ettiği kuru okur. UBL-TR'de iki yer var:
+    /// <c>cac:PricingExchangeRate</c> (fiyatlandırma) ve
+    /// <c>cac:TaxExchangeRate</c> (vergi). İlki tercih edilir; faturadaki
+    /// TL tutarlar onunla hesaplanmış oluyor.
+    ///
+    /// Yön kontrolü şart: kaynak belge para birimi, hedef TRY olmalı.
+    /// Ters yönde kotalanmış bir kur (TRY→USD) doğrudan kullanılırsa
+    /// tutar 47 kat yerine 47'de bir çıkar.
+    /// </summary>
+    private static decimal? ReadExchangeRate(XElement root, string documentCurrency)
+    {
+        if (string.Equals(documentCurrency, "TRY", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        foreach (var name in new[] { "PricingExchangeRate", "TaxExchangeRate" })
+        {
+            var element = root.Element(Cac + name);
+            if (element is null)
+                continue;
+
+            var source = Text(element.Element(Cbc + "SourceCurrencyCode"));
+            var target = Text(element.Element(Cbc + "TargetCurrencyCode"));
+            var rate = Amount(element.Element(Cbc + "CalculationRate"));
+
+            if (rate is null or <= 0)
+                continue;
+
+            // Para birimleri belirtilmemişse belge para birimi → TRY
+            // varsayılır; UBL-TR'de yaygın olan da bu.
+            var sourceOk = string.IsNullOrWhiteSpace(source)
+                || string.Equals(source, documentCurrency, StringComparison.OrdinalIgnoreCase);
+            var targetOk = string.IsNullOrWhiteSpace(target)
+                || string.Equals(target, "TRY", StringComparison.OrdinalIgnoreCase);
+
+            if (sourceOk && targetOk)
+                return rate;
+        }
+
+        return null;
     }
 
     /// <summary>

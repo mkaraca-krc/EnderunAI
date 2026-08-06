@@ -45,8 +45,29 @@ public sealed class SalesInvoiceService(
     AppDbContext db,
     IDocumentNumberService documentNumberService,
     IAccountingIntegrationService accountingIntegration,
-    ICurrentUserService currentUser) : ISalesInvoiceService
+    ICurrentUserService currentUser,
+    Market.IInvoiceExchangeRateResolver rateResolver) : ISalesInvoiceService
 {
+    /// <summary>
+    /// Faturaya uygulanacak kuru çözer. Kur bulunamıyorsa kaydetmeyi
+    /// engeller; TRY faturalarda her zaman 1 döner, dolayısıyla mevcut
+    /// TL akışların davranışı değişmez.
+    /// </summary>
+    private async Task<decimal> ResolveRateAsync(
+        string? currencyCode,
+        DateTime invoiceDate,
+        decimal requestedRate,
+        CancellationToken cancellationToken)
+    {
+        var resolution = await rateResolver.ResolveAsync(
+            currencyCode, invoiceDate, requestedRate, cancellationToken);
+
+        if (!resolution.Success)
+            throw new ArgumentException(resolution.Error);
+
+        return resolution.Rate;
+    }
+
     public async Task<IReadOnlyCollection<SalesInvoiceListItemResponse>> GetAllAsync(
         Guid? companyId, int? status, Guid? projectId, Guid? customerId,
         string? search, CancellationToken cancellationToken)
@@ -113,6 +134,12 @@ public sealed class SalesInvoiceService(
         var internalNumber = await documentNumberService.GenerateAsync(
             request.CompanyId, "SALES_INVOICE", "SAT", cancellationToken);
 
+        // Dövizli faturada kur girilmemişse fatura tarihinin TCMB döviz
+        // alışı kullanılır; kur yoksa fatura kaydedilmez.
+        var rate = await ResolveRateAsync(
+            request.CurrencyCode, AsUtc(request.InvoiceDate), request.ExchangeRate,
+            cancellationToken);
+
         var invoice = new SalesInvoice
         {
             CompanyId = request.CompanyId,
@@ -123,7 +150,7 @@ public sealed class SalesInvoiceService(
             InvoiceDate = AsUtc(request.InvoiceDate),
             DueDate = request.DueDate.HasValue ? AsUtc(request.DueDate.Value) : null,
             CurrencyCode = request.CurrencyCode.Trim().ToUpperInvariant(),
-            ExchangeRate = request.ExchangeRate,
+            ExchangeRate = rate,
             Description = Normalize(request.Description),
             Notes = Normalize(request.Notes),
             ParseSource = EInvoiceParseSource.Manual,
@@ -163,7 +190,9 @@ public sealed class SalesInvoiceService(
         invoice.InvoiceDate = AsUtc(request.InvoiceDate);
         invoice.DueDate = request.DueDate.HasValue ? AsUtc(request.DueDate.Value) : null;
         invoice.CurrencyCode = request.CurrencyCode.Trim().ToUpperInvariant();
-        invoice.ExchangeRate = request.ExchangeRate;
+        invoice.ExchangeRate = await ResolveRateAsync(
+            request.CurrencyCode, invoice.InvoiceDate, request.ExchangeRate,
+            cancellationToken);
         invoice.Description = Normalize(request.Description);
         invoice.Notes = Normalize(request.Notes);
         invoice.UpdatedAtUtc = DateTime.UtcNow;

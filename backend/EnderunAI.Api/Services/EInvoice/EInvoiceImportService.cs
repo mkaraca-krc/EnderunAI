@@ -163,7 +163,9 @@ public sealed class EInvoiceImportService(
     IEInvoiceReader reader,
     IEInvoiceStagingStore staging,
     IDocumentNumberService documentNumberService,
-    IEInvoiceArchive archive) : IEInvoiceImportService
+    IEInvoiceArchive archive,
+    EnderunAI.Api.Services.Market.IInvoiceExchangeRateResolver rateResolver)
+    : IEInvoiceImportService
 {
     public async Task<ImportPreviewResult> PreviewAsync(
         Guid companyId,
@@ -326,6 +328,19 @@ public sealed class EInvoiceImportService(
         var issueDate = DateTime.SpecifyKind(
             (invoice.IssueDate ?? DateTime.UtcNow).Date, DateTimeKind.Utc);
 
+        // Dövizli faturanın kuru: önce belgenin kendi beyanı
+        // (cac:PricingExchangeRate), yoksa fatura tarihinin TCMB döviz
+        // alışı. Burada eskiden sabit 1 yazılıyordu; USD bir fatura
+        // defterine tutarı kadar TL olarak giriyor ve tedarikçi kırk
+        // küsur kat eksik alacaklandırılıyordu.
+        var rate = await rateResolver.ResolveAsync(
+            invoice.CurrencyCode, issueDate, invoice.ExchangeRate, cancellationToken);
+
+        if (!rate.Success)
+            throw new InvalidOperationException(rate.Error);
+
+        var exchangeRate = rate.Rate;
+
         if (toSupplierLedger)
         {
             if (item.ProjectId is Guid projectId)
@@ -371,7 +386,7 @@ public sealed class EInvoiceImportService(
                 InvoiceNumber = invoice.InvoiceNumber!.Trim(),
                 InvoiceDate = issueDate,
                 CurrencyCode = invoice.CurrencyCode,
-                ExchangeRate = 1m,
+                ExchangeRate = exchangeRate,
                 Subtotal = subtotal,
                 VatTotal = vatTotal,
                 GrandTotal = grandTotal,
@@ -441,7 +456,7 @@ public sealed class EInvoiceImportService(
             OfficialInvoiceNumber = invoice.InvoiceNumber!.Trim(),
             InvoiceDate = issueDate,
             CurrencyCode = invoice.CurrencyCode,
-            ExchangeRate = 1m,
+            ExchangeRate = exchangeRate,
             Subtotal = subtotal,
             VatTotal = vatTotal,
             GrandTotal = grandTotal,

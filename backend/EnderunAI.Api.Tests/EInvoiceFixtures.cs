@@ -174,6 +174,83 @@ public static class EInvoiceFixtures
         """;
 
     /// <summary>
+    /// USD cinsinden gelen alış faturası: 5.000 + %20 KDV 1.000 = 6.000 USD.
+    /// <paramref name="declaredRate"/> doluysa fatura kendi kurunu
+    /// (cac:PricingExchangeRate) beyan eder; boşsa kur TCMB arşivinden
+    /// bulunmak zorundadır.
+    /// </summary>
+    public static string ForeignCurrencyPurchaseInvoice(
+        string invoiceNumber = "USD2026000000111",
+        string supplierTaxNumber = "1234567890",
+        decimal? declaredRate = null) => $"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+                 xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+                 xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2">
+          <cbc:ProfileID>TEMELFATURA</cbc:ProfileID>
+          <cbc:ID>{invoiceNumber}</cbc:ID>
+          <cbc:IssueDate>2026-08-05</cbc:IssueDate>
+          <cbc:InvoiceTypeCode>SATIS</cbc:InvoiceTypeCode>
+          <cbc:DocumentCurrencyCode>USD</cbc:DocumentCurrencyCode>
+        {(declaredRate is null ? string.Empty : $"""
+          <cac:PricingExchangeRate>
+            <cbc:SourceCurrencyCode>USD</cbc:SourceCurrencyCode>
+            <cbc:TargetCurrencyCode>TRY</cbc:TargetCurrencyCode>
+            <cbc:CalculationRate>{declaredRate.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}</cbc:CalculationRate>
+          </cac:PricingExchangeRate>
+        """)}
+          <cac:AccountingSupplierParty>
+            <cac:Party>
+              <cac:PartyIdentification>
+                <cbc:ID schemeID="VKN">{supplierTaxNumber}</cbc:ID>
+              </cac:PartyIdentification>
+              <cac:PartyName>
+                <cbc:Name>GLOBAL SUPPLY CORP</cbc:Name>
+              </cac:PartyName>
+            </cac:Party>
+          </cac:AccountingSupplierParty>
+          <cac:AccountingCustomerParty>
+            <cac:Party>
+              <cac:PartyIdentification>
+                <cbc:ID schemeID="VKN">{OurTaxNumber}</cbc:ID>
+              </cac:PartyIdentification>
+              <cac:PartyName>
+                <cbc:Name>ENDERUN ELEKTRIK URETIM ENERJI A.S.</cbc:Name>
+              </cac:PartyName>
+            </cac:Party>
+          </cac:AccountingCustomerParty>
+          <cac:TaxTotal>
+            <cbc:TaxAmount currencyID="USD">1000.00</cbc:TaxAmount>
+            <cac:TaxSubtotal>
+              <cbc:TaxableAmount currencyID="USD">5000.00</cbc:TaxableAmount>
+              <cbc:TaxAmount currencyID="USD">1000.00</cbc:TaxAmount>
+              <cbc:Percent>20</cbc:Percent>
+            </cac:TaxSubtotal>
+          </cac:TaxTotal>
+          <cac:LegalMonetaryTotal>
+            <cbc:LineExtensionAmount currencyID="USD">5000.00</cbc:LineExtensionAmount>
+            <cbc:TaxExclusiveAmount currencyID="USD">5000.00</cbc:TaxExclusiveAmount>
+            <cbc:TaxInclusiveAmount currencyID="USD">6000.00</cbc:TaxInclusiveAmount>
+            <cbc:PayableAmount currencyID="USD">6000.00</cbc:PayableAmount>
+          </cac:LegalMonetaryTotal>
+          <cac:InvoiceLine>
+            <cbc:ID>1</cbc:ID>
+            <cbc:InvoicedQuantity unitCode="NIU">10</cbc:InvoicedQuantity>
+            <cbc:LineExtensionAmount currencyID="USD">5000.00</cbc:LineExtensionAmount>
+            <cac:TaxTotal>
+              <cbc:TaxAmount currencyID="USD">1000.00</cbc:TaxAmount>
+              <cac:TaxSubtotal>
+                <cbc:TaxAmount currencyID="USD">1000.00</cbc:TaxAmount>
+                <cbc:Percent>20</cbc:Percent>
+              </cac:TaxSubtotal>
+            </cac:TaxTotal>
+            <cac:Item><cbc:Name>Imported Switchgear Unit</cbc:Name></cac:Item>
+            <cac:Price><cbc:PriceAmount currencyID="USD">500.00</cbc:PriceAmount></cac:Price>
+          </cac:InvoiceLine>
+        </Invoice>
+        """;
+
+    /// <summary>
     /// Tevkifatlı gelen fatura: 10.000 + %20 KDV 2.000, tevkifat 4/10 =
     /// 800 → ödenecek 11.200.
     /// </summary>

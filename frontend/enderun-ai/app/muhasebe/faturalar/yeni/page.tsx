@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import CurrencyRateFields from "@/components/accounting/currency-rate-fields";
 import ErpSearchSelect, {
   type SearchSelectOption,
 } from "@/components/erp/erp-search-select";
@@ -138,6 +139,8 @@ export default function NewSupplierInvoicePage() {
   const [warehouseId, setWarehouseId] = useState("");
   const [costCenterCode, setCostCenterCode] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [currencyCode, setCurrencyCode] = useState("TRY");
+  const [exchangeRate, setExchangeRate] = useState(1);
   const [invoiceDate, setInvoiceDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
@@ -342,6 +345,8 @@ export default function NewSupplierInvoicePage() {
     if (!supplierId) messages.push("Tedarikçi seçin.");
     if (!invoiceNumber.trim()) messages.push("Tedarikçi fatura numarası girin.");
     if (!invoiceDate) messages.push("Fatura tarihi girin.");
+    if (currencyCode !== "TRY" && (!exchangeRate || exchangeRate <= 0))
+      messages.push("Dövizli faturada kur girin.");
 
     if (!isStock && !costCenterCode && !projectId) {
       messages.push("Gider faturasında masraf merkezi veya proje seçin.");
@@ -392,6 +397,8 @@ export default function NewSupplierInvoicePage() {
     supplierId,
     invoiceNumber,
     invoiceDate,
+    currencyCode,
+    exchangeRate,
     isStock,
     costCenterCode,
     projectId,
@@ -527,8 +534,8 @@ export default function NewSupplierInvoicePage() {
         invoiceNumber: invoiceNumber.trim(),
         invoiceDate,
         dueDate: dueDate || null,
-        currencyCode: "TRY",
-        exchangeRate: 1,
+        currencyCode,
+        exchangeRate,
         description: description.trim() || null,
         items: payloadItems,
         invoiceType,
@@ -752,6 +759,16 @@ export default function NewSupplierInvoicePage() {
               onChange={(e) => setInvoiceDate(e.target.value)}
             />
           </label>
+
+          <CurrencyRateFields
+            currency={currencyCode}
+            exchangeRate={exchangeRate}
+            documentDate={invoiceDate}
+            onChange={(next) => {
+              setCurrencyCode(next.currency);
+              setExchangeRate(next.exchangeRate);
+            }}
+          />
 
           <label>
             <span>Vade Tarihi (ops.)</span>

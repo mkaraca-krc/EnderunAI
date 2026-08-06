@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import CurrencyRateFields from "@/components/accounting/currency-rate-fields";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
   currentAccountService,
@@ -41,6 +42,8 @@ export default function NewSalesInvoicePage() {
   const [customerId, setCustomerId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [officialInvoiceNumber, setOfficialInvoiceNumber] = useState("");
+  const [currencyCode, setCurrencyCode] = useState("TRY");
+  const [exchangeRate, setExchangeRate] = useState(1);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("");
   const [withholdingAmount, setWithholdingAmount] = useState("0");
@@ -158,8 +161,8 @@ export default function NewSalesInvoicePage() {
         officialInvoiceNumber: officialInvoiceNumber.trim() || null,
         invoiceDate,
         dueDate: dueDate || null,
-        currencyCode: "TRY",
-        exchangeRate: 1,
+        currencyCode,
+        exchangeRate,
         withholdingAmount: Number(withholdingAmount) || 0,
         description: description.trim() || null,
         notes: notes.trim() || null,
@@ -254,6 +257,16 @@ export default function NewSalesInvoicePage() {
               onChange={(e) => setInvoiceDate(e.target.value)}
             />
           </label>
+
+          <CurrencyRateFields
+            currency={currencyCode}
+            exchangeRate={exchangeRate}
+            documentDate={invoiceDate}
+            onChange={(next) => {
+              setCurrencyCode(next.currency);
+              setExchangeRate(next.exchangeRate);
+            }}
+          />
 
           <label>
             <span>Vade Tarihi (ops.)</span>

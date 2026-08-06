@@ -49,9 +49,30 @@ public sealed class SupplierInvoiceService(
     IDocumentNumberService documentNumberService,
     IAccountingIntegrationService accountingIntegration,
     Inventory.ISupplierInvoiceStockPoster stockPoster,
-    ICurrentUserService currentUser) : ISupplierInvoiceService
+    ICurrentUserService currentUser,
+    Market.IInvoiceExchangeRateResolver rateResolver) : ISupplierInvoiceService
 {
     private static readonly string[] GmRoleNames = ["Admin", "Genel Müdür"];
+
+    /// <summary>
+    /// Faturaya uygulanacak kuru çözer. Kur bulunamıyorsa kaydetmeyi
+    /// engeller; TRY faturalarda her zaman 1 döner, dolayısıyla mevcut
+    /// TL akışların davranışı değişmez.
+    /// </summary>
+    private async Task<decimal> ResolveRateAsync(
+        string? currencyCode,
+        DateTime invoiceDate,
+        decimal requestedRate,
+        CancellationToken cancellationToken)
+    {
+        var resolution = await rateResolver.ResolveAsync(
+            currencyCode, invoiceDate, requestedRate, cancellationToken);
+
+        if (!resolution.Success)
+            throw new ArgumentException(resolution.Error);
+
+        return resolution.Rate;
+    }
 
     public async Task<IReadOnlyCollection<SupplierInvoiceListItemResponse>> GetAllAsync(
         Guid? companyId, int? status, Guid? projectId, Guid? supplierId,
@@ -129,6 +150,13 @@ public sealed class SupplierInvoiceService(
         var internalNumber = await documentNumberService.GenerateAsync(
             request.CompanyId, "SUPPLIER_INVOICE", "SFT", cancellationToken);
 
+        // Dövizli faturada kur girilmemişse fatura tarihinin TCMB döviz
+        // alışı kullanılır. Arşivde kur yoksa fatura kaydedilmez —
+        // uydurma kurla defterlenmiş fatura geri dönülmesi zor bir hata.
+        var rate = await ResolveRateAsync(
+            request.CurrencyCode, AsUtc(request.InvoiceDate), request.ExchangeRate,
+            cancellationToken);
+
         var invoice = new SupplierInvoice
         {
             CompanyId = request.CompanyId,
@@ -146,7 +174,7 @@ public sealed class SupplierInvoiceService(
             InvoiceDate = AsUtc(request.InvoiceDate),
             DueDate = request.DueDate.HasValue ? AsUtc(request.DueDate.Value) : null,
             CurrencyCode = request.CurrencyCode.Trim().ToUpperInvariant(),
-            ExchangeRate = request.ExchangeRate,
+            ExchangeRate = rate,
             Description = Normalize(request.Description),
             Status = SupplierInvoiceStatus.Draft
         };
@@ -190,7 +218,9 @@ public sealed class SupplierInvoiceService(
         invoice.InvoiceDate = AsUtc(request.InvoiceDate);
         invoice.DueDate = request.DueDate.HasValue ? AsUtc(request.DueDate.Value) : null;
         invoice.CurrencyCode = request.CurrencyCode.Trim().ToUpperInvariant();
-        invoice.ExchangeRate = request.ExchangeRate;
+        invoice.ExchangeRate = await ResolveRateAsync(
+            request.CurrencyCode, invoice.InvoiceDate, request.ExchangeRate,
+            cancellationToken);
         invoice.Description = Normalize(request.Description);
         invoice.UpdatedAtUtc = DateTime.UtcNow;
 

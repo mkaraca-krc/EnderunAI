@@ -138,6 +138,9 @@ builder.Services.AddHttpClient<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Market.IExchangeRateService,
     EnderunAI.Api.Services.Market.ExchangeRateService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Market.IInvoiceExchangeRateResolver,
+    EnderunAI.Api.Services.Market.InvoiceExchangeRateResolver>();
 builder.Services.AddHostedService<
     EnderunAI.Api.Services.Market.MarketDataBackgroundService>();
 builder.Services.AddSingleton<

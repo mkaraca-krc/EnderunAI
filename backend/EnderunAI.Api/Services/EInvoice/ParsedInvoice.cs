@@ -80,7 +80,15 @@ public sealed record ParsedInvoice(
     /// (cac:BillingReference). Orijinali otomatik eşleştirmek için;
     /// bulunamazsa kullanıcı elle seçer.
     /// </summary>
-    string? ReferencedInvoiceNumber = null)
+    string? ReferencedInvoiceNumber = null,
+    /// <summary>
+    /// Faturanın kendi beyan ettiği kur (cac:PricingExchangeRate veya
+    /// cac:TaxExchangeRate → cbc:CalculationRate). Dövizli faturada
+    /// satıcının kullandığı kur budur; TCMB arşivinden gelen kura
+    /// tercih edilir, çünkü faturadaki TL tutarlar bu kurla hesaplanmış.
+    /// Belge TL ise veya kur beyan edilmemişse null.
+    /// </summary>
+    decimal? ExchangeRate = null)
 {
     /// <summary>
     /// Zorunlu alanlar çıkarılabildi mi. Çıkarılamadıysa AI yedeği
