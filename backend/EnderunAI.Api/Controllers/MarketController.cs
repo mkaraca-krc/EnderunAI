@@ -14,8 +14,52 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/market")]
 public sealed class MarketController(
     IExchangeRateService exchangeRates,
-    ICommodityPriceService commodityPrices) : ControllerBase
+    ICommodityPriceService commodityPrices,
+    ICopperExposureService copperExposure) : ControllerBase
 {
+    /// <summary>
+    /// Açık projelerin bakır/kur etkisi. Tonajı bilinmeyen projeler de
+    /// listede kalır — görünmezlik "risk yok" izlenimi verirdi.
+    /// </summary>
+    [HttpGet("copper-impact")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> GetCopperImpact(
+        [FromQuery] Guid? companyId,
+        CancellationToken cancellationToken)
+        => Ok(await copperExposure.GetPortfolioAsync(companyId, cancellationToken));
+
+    [HttpGet("copper-impact/{projectId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> GetProjectCopperImpact(
+        Guid projectId,
+        CancellationToken cancellationToken)
+    {
+        var impact = await copperExposure.GetForProjectAsync(projectId, cancellationToken);
+
+        return impact is null ? NotFound() : Ok(impact);
+    }
+
+    /// <summary>Projenin kalan bakır tonajını ve taban tarihini kaydeder.</summary>
+    [HttpPut("copper-impact/{projectId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceManage)]
+    public async Task<IActionResult> SaveCopperExposure(
+        Guid projectId,
+        [FromBody] CopperExposureInput input,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var impact = await copperExposure.SaveExposureAsync(
+                projectId, input, cancellationToken);
+
+            return impact is null ? NotFound() : Ok(impact);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     /// <summary>
     /// Bakır özeti ve trendi. <c>days</c> 7/30/90 olarak kullanılır.
     /// Kaynak etiketi yanıtta daima döner — COMEX ile LME'nin aynı şey

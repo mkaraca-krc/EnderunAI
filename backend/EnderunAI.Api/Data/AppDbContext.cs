@@ -165,6 +165,8 @@ public sealed class AppDbContext(
     public DbSet<SecurityAuditEvent> SecurityAuditEvents => Set<SecurityAuditEvent>();
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
     public DbSet<CommodityPrice> CommodityPrices => Set<CommodityPrice>();
+    public DbSet<ProjectCopperExposure> ProjectCopperExposures =>
+        Set<ProjectCopperExposure>();
 
     public DbSet<CompanyBankAccount> CompanyBankAccounts => Set<CompanyBankAccount>();
 
@@ -553,6 +555,28 @@ public sealed class AppDbContext(
             entity.Property(x => x.PriceUsdPerTon).HasPrecision(18, 2);
             entity.Property(x => x.PriceTryPerTon).HasPrecision(18, 2);
             entity.Property(x => x.UsdRate).HasPrecision(18, 6);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ProjectCopperExposure>(entity =>
+        {
+            entity.ToTable("project_copper_exposures");
+            entity.HasKey(x => x.Id);
+
+            // Proje başına tek maruziyet kaydı; ikincisi olsaydı hangi
+            // tonajın geçerli olduğu kayda göre değişirdi.
+            entity.HasIndex(x => x.ProjectId)
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.RemainingTons).HasPrecision(18, 3);
+            entity.Property(x => x.Note).HasMaxLength(500);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
@@ -1823,6 +1847,7 @@ public sealed class AppDbContext(
             entity.Property(x => x.Barcode).HasMaxLength(100);
             entity.Property(x => x.MinimumStock).HasPrecision(18, 4);
             entity.Property(x => x.MaximumStock).HasPrecision(18, 4);
+            entity.Property(x => x.CopperKgPerUnit).HasPrecision(18, 4);
             entity.Property(x => x.AverageUnitCost).HasPrecision(18, 4);
             entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(x => !x.IsDeleted);
@@ -2962,6 +2987,7 @@ public sealed class AppDbContext(
             entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
             entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
             entity.Property(x => x.ContractQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.CopperKgPerUnit).HasPrecision(18, 4);
             entity.Property(x => x.UnitPrice).HasPrecision(18, 6);
             entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
             entity.Property(x => x.ItemType).HasConversion<int>();

@@ -22,6 +22,12 @@ public sealed class InventoryItem : BaseEntity
     public string? Barcode { get; set; }
     public decimal MinimumStock { get; set; }
     public decimal? MaximumStock { get; set; }
+    /// <summary>
+    /// Stok kartının birimi başına bakır içeriği (kg). İcmal kalemi bu
+    /// karta bağlıysa ve kalemde katsayı yoksa buradaki değer kullanılır.
+    /// </summary>
+    public decimal? CopperKgPerUnit { get; set; }
+
     public InventoryItemType Type { get; set; } = InventoryItemType.Material;
 
     /// <summary>

@@ -109,6 +109,15 @@ public sealed class ProjectBoqItem : BaseEntity
     public decimal UnitPrice { get; set; }
     public decimal TotalAmount { get; set; }
 
+    /// <summary>
+    /// Kalemin birimi başına bakır içeriği (kg). Yalnızca kablo/iletken
+    /// kalemlerinde doldurulur; boşsa bu kalem bakır maruziyeti
+    /// hesabına HİÇ girmez. Açıklamadan kesit ayrıştırıp tahmin etmek
+    /// bilinçli olarak yapılmadı: açıklama serbest metin ve yanlış
+    /// ayrıştırma sessizce yanlış kâr etkisi üretir.
+    /// </summary>
+    public decimal? CopperKgPerUnit { get; set; }
+
     public ProjectBoqItemType ItemType { get; set; } = ProjectBoqItemType.Mixed;
     public string? Category { get; set; }
     public string? Notes { get; set; }

@@ -173,6 +173,9 @@ else
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Market.ICommodityPriceService,
     EnderunAI.Api.Services.Market.CommodityPriceService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Market.ICopperExposureService,
+    EnderunAI.Api.Services.Market.CopperExposureService>();
 builder.Services.AddHostedService<
     EnderunAI.Api.Services.Market.MarketDataBackgroundService>();
 builder.Services.AddSingleton<

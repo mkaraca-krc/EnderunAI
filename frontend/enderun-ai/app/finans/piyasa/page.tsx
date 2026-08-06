@@ -5,10 +5,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import {
   commodityService,
+  copperImpactService,
   marketService,
   type CommoditySummary,
   type ExchangeRateFreshness,
   type ExchangeRateRow,
+  type ProjectCopperImpact,
 } from "@/services/market.service";
 
 const usd = new Intl.NumberFormat("tr-TR", {
@@ -63,44 +65,71 @@ export default function MarketPage() {
   const [usdRates, setUsdRates] = useState<ExchangeRateRow[]>([]);
   const [eurRates, setEurRates] = useState<ExchangeRateRow[]>([]);
   const [freshness, setFreshness] = useState<ExchangeRateFreshness | null>(null);
+  const [impacts, setImpacts] = useState<ProjectCopperImpact[]>([]);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [tonnageDraft, setTonnageDraft] = useState("");
+  const [savingTonnage, setSavingTonnage] = useState(false);
+  /** Değeri değiştikçe veri yeniden çekilir — elle tazeleme için. */
+  const [reloadToken, setReloadToken] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const load = useCallback(async (window: number) => {
-    setLoading(true);
-    setError("");
-
+  /**
+   * Veriyi getirir; DURUM GÜNCELLEMESİ YAPMAZ. Efekt gövdesinde senkron
+   * setState çağırmak zincirleme render'a yol açtığı için yükleme
+   * bayrağı efektin dışında, kullanıcı etkileşiminde ayarlanıyor.
+   */
+  const fetchAll = useCallback(async (window: number) => {
     const to = new Date();
     const from = new Date(to);
     from.setDate(from.getDate() - window);
 
     const iso = (value: Date) => value.toISOString().slice(0, 10);
 
-    try {
-      const [copperData, usdData, eurData, freshnessData] = await Promise.all([
+    const [copperData, usdData, eurData, freshnessData, impactData] =
+      await Promise.all([
         commodityService.getCopper(window),
         marketService.getRates("USD", iso(from), iso(to)),
         marketService.getRates("EUR", iso(from), iso(to)),
         marketService.getFreshness(),
+        copperImpactService.getPortfolio(),
       ]);
 
-      setCopper(copperData);
-      setUsdRates(usdData);
-      setEurRates(eurData);
-      setFreshness(freshnessData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Piyasa verisi alınamadı.");
-    } finally {
-      setLoading(false);
-    }
+    return { copperData, usdData, eurData, freshnessData, impactData };
   }, []);
 
   useEffect(() => {
-    void load(days);
-  }, [load, days]);
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const data = await fetchAll(days);
+        if (cancelled) return;
+
+        setCopper(data.copperData);
+        setUsdRates(data.usdData);
+        setEurRates(data.eurData);
+        setFreshness(data.freshnessData);
+        setImpacts(data.impactData);
+        setError("");
+      } catch (err) {
+        if (cancelled) return;
+
+        setError(
+          err instanceof Error ? err.message : "Piyasa verisi alınamadı."
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchAll, days, reloadToken]);
 
   const latestUsd = usdRates.at(-1);
   const latestEur = eurRates.at(-1);
@@ -140,6 +169,30 @@ export default function MarketPage() {
     return { path: coords.join(" "), min, max };
   }, [copper]);
 
+  async function handleSaveTonnage(projectId: string) {
+    setSavingTonnage(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const trimmed = tonnageDraft.trim();
+
+      await copperImpactService.save(projectId, {
+        // Boş bırakmak "bilinmiyor" demektir; 0 ile karıştırılmamalı.
+        remainingTons: trimmed === "" ? null : Number(trimmed),
+      });
+
+      setEditingProjectId(null);
+      setTonnageDraft("");
+      setReloadToken((value) => value + 1);
+      setNotice("Kalan bakır tonajı kaydedildi.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Tonaj kaydedilemedi.");
+    } finally {
+      setSavingTonnage(false);
+    }
+  }
+
   async function handleRefresh() {
     setRefreshing(true);
     setError("");
@@ -152,7 +205,7 @@ export default function MarketPage() {
       ]);
 
       setNotice(`${rateResult.message} ${commodityResult.message}`);
-      await load(days);
+      setReloadToken((value) => value + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Güncelleme başarısız.");
     } finally {
@@ -181,7 +234,10 @@ export default function MarketPage() {
               key={window}
               type="button"
               className={`erp-btn ${days === window ? "" : "ghost"}`}
-              onClick={() => setDays(window)}
+              onClick={() => {
+                setLoading(true);
+                setDays(window);
+              }}
             >
               {window} gün
             </button>
@@ -312,6 +368,159 @@ export default function MarketPage() {
                 <p>Grafik için yeterli veri yok.</p>
               )}
             </div>
+          </section>
+
+          <section className="erp-table-card">
+            <div className="erp-table-header">
+              <h2>Projelere tahmini etki</h2>
+              <small>
+                Kalan bakır tonajı x (bugünkü TL/ton − taban TL/ton). Etki
+                emtia, kur ve birleşik artık olarak ayrı gösterilir.
+              </small>
+            </div>
+
+            <div className="erp-table-wrap">
+              <table className="erp-table">
+                <thead>
+                  <tr>
+                    <th>Proje</th>
+                    <th>Sözleşme</th>
+                    <th>Kalan bakır</th>
+                    <th>Bakır etkisi</th>
+                    <th>Kur etkisi</th>
+                    <th>Birleşik</th>
+                    <th>Toplam</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {impacts.length === 0 ? (
+                    <tr>
+                      <td colSpan={7}>Açık proje bulunamadı.</td>
+                    </tr>
+                  ) : (
+                    impacts.map((impact) => (
+                      <tr key={impact.projectId}>
+                        <td>
+                          <strong>{impact.projectCode}</strong>
+                          <small>{impact.projectName}</small>
+                        </td>
+                        <td>
+                          <span
+                            className={`erp-status ${
+                              impact.isCostRisk ? "yellow" : "gray"
+                            }`}
+                          >
+                            {impact.contractTypeName}
+                          </span>
+                          {!impact.isCostRisk && <small>bilgi amaçlı</small>}
+                        </td>
+                        <td>
+                          {editingProjectId === impact.projectId ? (
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <input
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                style={{ width: 100 }}
+                                value={tonnageDraft}
+                                placeholder="ton"
+                                onChange={(event) =>
+                                  setTonnageDraft(event.target.value)
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="erp-btn"
+                                disabled={savingTonnage}
+                                onClick={() => handleSaveTonnage(impact.projectId)}
+                              >
+                                Kaydet
+                              </button>
+                              <button
+                                type="button"
+                                className="erp-btn ghost"
+                                disabled={savingTonnage}
+                                onClick={() => setEditingProjectId(null)}
+                              >
+                                Vazgeç
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="erp-btn ghost"
+                              onClick={() => {
+                                setEditingProjectId(impact.projectId);
+                                setTonnageDraft(
+                                  impact.remainingTons?.toString() ?? ""
+                                );
+                              }}
+                            >
+                              {impact.remainingTons === null ||
+                              impact.remainingTons === undefined
+                                ? "Bilinmiyor — gir"
+                                : `${impact.remainingTons.toLocaleString("tr-TR")} ton`}
+                            </button>
+                          )}
+                          <small>{impact.tonnageSourceName}</small>
+                        </td>
+                        <td>
+                          {impact.copperEffect === null ||
+                          impact.copperEffect === undefined
+                            ? "—"
+                            : tl.format(impact.copperEffect)}
+                          <small>{formatPercent(impact.copperChangePercent)}</small>
+                        </td>
+                        <td>
+                          {impact.fxEffect === null || impact.fxEffect === undefined
+                            ? "—"
+                            : tl.format(impact.fxEffect)}
+                          <small>{formatPercent(impact.fxChangePercent)}</small>
+                        </td>
+                        <td>
+                          {impact.combinedEffect === null ||
+                          impact.combinedEffect === undefined
+                            ? "—"
+                            : tl.format(impact.combinedEffect)}
+                        </td>
+                        <td>
+                          <strong
+                            className={`erp-status ${toneOf(impact.totalEffect)}`}
+                          >
+                            {impact.totalEffect === null ||
+                            impact.totalEffect === undefined
+                              ? "hesaplanamadı"
+                              : tl.format(impact.totalEffect)}
+                          </strong>
+                          {impact.baselineDate && (
+                            <small>
+                              taban{" "}
+                              {dateFormat.format(new Date(impact.baselineDate))}
+                            </small>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {impacts.some((x) => x.assumptions.length > 0) && (
+              <div className="erp-panel-body">
+                <h4>Varsayımlar ve eksikler</h4>
+                <ul>
+                  {impacts
+                    .filter((x) => x.assumptions.length > 0)
+                    .map((impact) => (
+                      <li key={impact.projectId}>
+                        <strong>{impact.projectCode}:</strong>{" "}
+                        {impact.assumptions.join(" ")}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
           </section>
 
           <section className="erp-table-card">

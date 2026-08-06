@@ -115,3 +115,67 @@ export const commodityService = {
     }>(`market/commodities/refresh?days=${days}`, { method: "POST" });
   },
 };
+
+export const CopperTonnageSource = {
+  Unknown: 0,
+  Manual: 1,
+  BillOfQuantities: 2,
+} as const;
+
+/**
+ * Bakır + kur hareketinin bir projenin kalan işine tahmini etkisi.
+ *
+ * Üç bileşen ayrı gelir ve toplamları TL etkisini verir: emtia hareketi
+ * (taban kurla), kur hareketi (taban fiyatla) ve ikisinin çarpım artığı.
+ * Artık ayrı durur; birine sessizce eklenirse "bakır mı, kur mu"
+ * sorusunun cevabı bozulur.
+ */
+export type ProjectCopperImpact = {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  contractType: number;
+  contractTypeName: string;
+  /** Anahtar teslimde etki doğrudan kâr erozyonu. */
+  isCostRisk: boolean;
+  tonnageSource: number;
+  tonnageSourceName: string;
+  remainingTons?: number | null;
+  baselineDate?: string | null;
+  baselineReason?: string | null;
+  baselineUsdPerTon?: number | null;
+  baselineUsdRate?: number | null;
+  currentUsdPerTon?: number | null;
+  currentUsdRate?: number | null;
+  copperChangePercent?: number | null;
+  fxChangePercent?: number | null;
+  copperEffect?: number | null;
+  fxEffect?: number | null;
+  combinedEffect?: number | null;
+  totalEffect?: number | null;
+  assumptions: string[];
+};
+
+export const copperImpactService = {
+  getPortfolio(companyId?: string) {
+    const query = companyId
+      ? `?companyId=${encodeURIComponent(companyId)}`
+      : "";
+
+    return apiClient<ProjectCopperImpact[]>(`market/copper-impact${query}`);
+  },
+
+  save(
+    projectId: string,
+    payload: {
+      remainingTons?: number | null;
+      baselineDate?: string | null;
+      note?: string | null;
+    }
+  ) {
+    return apiClient<ProjectCopperImpact>(`market/copper-impact/${projectId}`, {
+      method: "PUT",
+      body: payload,
+    });
+  },
+};
