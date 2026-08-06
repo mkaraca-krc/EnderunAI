@@ -22,6 +22,7 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
         [FromQuery] int? discipline,
         [FromQuery] int? status,
         [FromQuery] string? search,
+        [FromQuery] int? take,
         CancellationToken cancellationToken)
     {
         var query = db.EngineeringPositions.AsNoTracking();
@@ -41,8 +42,14 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
                 (x.SearchKeywords != null && x.SearchKeywords.ToLower().Contains(term)));
         }
 
+        // Kütüphane 20 binin üzerinde poz taşıyor; tamamını döndürmek
+        // istemciyi kilitler. Varsayılan tavan uygulanır, arama
+        // yapılmadan tüm kütüphane çekilemez.
+        var limit = take is > 0 and <= 500 ? take.Value : 100;
+
         var items = await query
             .OrderBy(x => x.Code)
+            .Take(limit)
             .Select(x => new
             {
                 x.Id, x.CompanyId, CompanyName = x.Company.Name,
@@ -213,6 +220,49 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
 
         return Ok(await matcher.SuggestAsync(
             companyId, query, year, take, useAi, cancellationToken));
+    }
+
+    /// <summary>
+    /// Pozun kurum bazında referans fiyatları — ÇŞB ve TEDAŞ yan yana.
+    /// İhalede hangi kitaba göre teklif verildiği önemli olduğu için
+    /// ikisi de döner; poz yalnızca birinde varsa diğeri "yok" der.
+    /// </summary>
+    [HttpGet("{id:guid}/reference-prices")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
+    public async Task<IActionResult> GetReferencePrices(
+        Guid id,
+        [FromQuery] int? year,
+        [FromServices] IPositionPriceService prices,
+        CancellationToken cancellationToken)
+    {
+        var institutions = new[]
+        {
+            PositionPriceInstitution.Csb,
+            PositionPriceInstitution.Tedas,
+            PositionPriceInstitution.Company
+        };
+
+        var results = new List<object>();
+
+        foreach (var institution in institutions)
+        {
+            var resolution = await prices.ResolveAsync(
+                id, year, institution, cancellationToken);
+
+            results.Add(new
+            {
+                institution = (int)institution,
+                institutionName = PositionPriceService.InstitutionNameOf(institution),
+                resolution.Found,
+                resolution.UnitPrice,
+                resolution.MaterialPrice,
+                resolution.LaborPrice,
+                resolution.Year,
+                resolution.Explanation
+            });
+        }
+
+        return Ok(results);
     }
 
     /// <summary>Pozun yıl/kurum bazlı birim fiyat geçmişi.</summary>

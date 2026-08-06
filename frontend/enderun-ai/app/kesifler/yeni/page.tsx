@@ -21,11 +21,9 @@ import {
   type ProjectListItem,
 } from "@/services/project.service";
 
-import {
-  engineeringPositionService,
-  type EngineeringPositionListItem,
-} from "@/services/engineering-position.service";
-
+import PositionPicker, {
+  type PickedPosition,
+} from "@/components/engineering/position-picker";
 import {
   projectBoqService,
   ProjectBoqItemType,
@@ -34,6 +32,10 @@ import {
 
 type BoqLine = ProjectBoqItemRequest & {
   key: string;
+  /** Seçili pozun ekranda gösterilen kısa hâli; sunucuya gitmez. */
+  positionLabel?: string;
+  /** Fiyatın nereden geldiği ya da neden boş olduğu; sunucuya gitmez. */
+  priceNote?: string;
 };
 
 const money = new Intl.NumberFormat("tr-TR", {
@@ -55,6 +57,8 @@ function newLine(): BoqLine {
     itemType: ProjectBoqItemType.Mixed,
     category: "",
     notes: "",
+    positionLabel: "",
+    priceNote: "",
   };
 }
 
@@ -67,8 +71,6 @@ export default function NewProjectBoqPage() {
   const [projects, setProjects] =
     useState<ProjectListItem[]>([]);
 
-  const [positions, setPositions] =
-    useState<EngineeringPositionListItem[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -102,19 +104,13 @@ export default function NewProjectBoqPage() {
       setError("");
 
       try {
-        const [
-          companyRows,
-          projectRows,
-          positionRows,
-        ] = await Promise.all([
+        const [companyRows, projectRows] = await Promise.all([
           companyService.getAll(),
           projectService.getAll(),
-          engineeringPositionService.getAll(),
         ]);
 
         setCompanies(companyRows);
         setProjects(projectRows);
-        setPositions(positionRows);
 
         if (companyRows.length === 1) {
           setCompanyId(companyRows[0].id);
@@ -143,16 +139,6 @@ export default function NewProjectBoqPage() {
     [companyId, projects]
   );
 
-  const filteredPositions = useMemo(
-    () =>
-      positions.filter(
-        (position) =>
-          !companyId ||
-          position.companyId === companyId
-      ),
-    [companyId, positions]
-  );
-
   const totalAmount = useMemo(
     () =>
       lines.reduce(
@@ -178,32 +164,48 @@ export default function NewProjectBoqPage() {
     );
   }
 
-  function selectPosition(
-    key: string,
-    positionId: string
-  ) {
-    const position = filteredPositions.find(
-      (item) => item.id === positionId
-    );
-
+  /**
+   * Poz seçilince kalem doldurulur. Fiyat kütüphaneden gelirse
+   * malzeme/montaj ayrı ayrı yazılır; gelmezse alanlar BOŞ bırakılır —
+   * sıfır fiyat doldurmak sessiz bir hata olurdu.
+   */
+  function selectPosition(key: string, position: PickedPosition | null) {
     if (!position) {
       updateLine(key, {
         engineeringPositionId: null,
         positionCode: "",
-        description: "",
-        unit: "",
+        positionLabel: "",
+        priceNote: "",
       });
 
       return;
     }
 
-    updateLine(key, {
+    const patch: Partial<BoqLine> = {
       engineeringPositionId: position.id,
-      positionCode: position.code,
+      positionCode: position.officialCode || position.code,
+      positionLabel: `${position.officialCode || position.code} — ${position.name}`,
       description: position.name,
       unit: position.unit,
       category: position.category ?? "",
-    });
+      priceNote: position.priceExplanation ?? "",
+    };
+
+    if (position.materialPrice != null)
+      patch.materialUnitPrice = position.materialPrice;
+
+    if (position.laborPrice != null)
+      patch.laborUnitPrice = position.laborPrice;
+
+    // Kitap bileşen vermediyse toplam fiyat malzemeye yazılır;
+    // mevcut davranışla aynı, tek fiyatlı kitaplar böyle çalışıyor.
+    if (position.materialPrice == null
+        && position.laborPrice == null
+        && position.unitPrice != null) {
+      patch.materialUnitPrice = position.unitPrice;
+    }
+
+    updateLine(key, patch);
   }
 
   function addLine() {
@@ -525,39 +527,17 @@ export default function NewProjectBoqPage() {
                 {lines.map((line) => (
                   <tr key={line.key}>
                     <td style={{ minWidth: 320 }}>
-                      <select
-                        value={
-                          line.engineeringPositionId ??
-                          ""
+                      <PositionPicker
+                        value={line.engineeringPositionId}
+                        label={line.positionLabel}
+                        onPick={(position) =>
+                          selectPosition(line.key, position)
                         }
-                        onChange={(event) =>
-                          selectPosition(
-                            line.key,
-                            event.target.value
-                          )
-                        }
-                      >
-                        <option value="">
-                          Poz seçin
-                        </option>
+                      />
 
-                        {filteredPositions.map(
-                          (position) => (
-                            <option
-                              key={position.id}
-                              value={position.id}
-                            >
-                              {position.code} —{" "}
-                              {position.name}
-                            </option>
-                          )
-                        )}
-                      </select>
-
-                      <small>
-                        {line.positionCode ||
-                          "Poz seçilmedi"}
-                      </small>
+                      {line.priceNote && (
+                        <small>{line.priceNote}</small>
+                      )}
                     </td>
 
                     <td>

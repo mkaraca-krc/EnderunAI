@@ -27,6 +27,8 @@ export type EngineeringPositionFilters = {
   source?: number;
   discipline?: number;
   status?: number;
+  /** Kaç kayıt döneceği; uç varsayılan 100, tavan 500 uygular. */
+  take?: number;
 };
 
 export const engineeringPositionService = {
@@ -47,6 +49,10 @@ export const engineeringPositionService = {
 
     if (filters.status !== undefined) {
       params.set("status", String(filters.status));
+    }
+
+    if (filters.take !== undefined) {
+      params.set("take", String(filters.take));
     }
 
     const query = params.toString();
@@ -172,6 +178,10 @@ export type PositionPriceRow = {
 export type PositionPriceResolution = {
   found: boolean;
   unitPrice?: number | null;
+  /** Kitap bileşen verdiyse malzeme payı. */
+  materialPrice?: number | null;
+  /** Kitap bileşen verdiyse montaj payı. */
+  laborPrice?: number | null;
   currencyCode?: string | null;
   year?: number | null;
   institution?: number | null;
@@ -189,7 +199,27 @@ export type UpsertPositionPriceInput = {
   sourceNote?: string | null;
 };
 
+export type PositionReferencePrice = {
+  institution: number;
+  institutionName: string;
+  found: boolean;
+  unitPrice?: number | null;
+  materialPrice?: number | null;
+  laborPrice?: number | null;
+  year?: number | null;
+  explanation: string;
+};
+
 export const positionPriceService = {
+  /** ÇŞB, TEDAŞ ve şirket fiyatları yan yana. */
+  getReferencePrices(positionId: string, year?: number) {
+    const query = year ? `?year=${year}` : "";
+
+    return apiClient<PositionReferencePrice[]>(
+      `engineering-positions/${positionId}/reference-prices${query}`
+    );
+  },
+
   getHistory(positionId: string) {
     return apiClient<PositionPriceRow[]>(
       `engineering-positions/${positionId}/prices`
