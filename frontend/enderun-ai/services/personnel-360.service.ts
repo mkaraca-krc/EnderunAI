@@ -76,18 +76,25 @@ export type Personnel360Response = {
   };
   assignments: Personnel360Assignment[];
   attendance: Personnel360Attendance;
+  // Tutar alanları salary.view yoksa null gelir (salaryHidden), elden
+  // ödeme ayrıca extra_payment.view ister (extraPaymentHidden).
   financial: {
-    currentGrossSalary: number;
-    currentNetSalary: number;
-    currentDailyRate: number;
-    currentHourlyRate: number;
+    salaryHidden: boolean;
+    currentGrossSalary: number | null;
+    currentNetSalary: number | null;
+    officialNetSalary: number | null;
+    extraPaymentMonthlyAmount: number | null;
+    extraPaymentHidden: boolean;
+    totalTakeHome: number | null;
+    currentDailyRate: number | null;
+    currentHourlyRate: number | null;
     currencyCode: string;
-    totalApprovedBonus: number;
-    totalDeduction: number;
-    totalApprovedAdvance: number;
-    totalPaidAdvance: number;
-    totalNetPayroll: number;
-    lastPayrollNetAmount: number;
+    totalApprovedBonus: number | null;
+    totalDeduction: number | null;
+    totalApprovedAdvance: number | null;
+    totalPaidAdvance: number | null;
+    totalNetPayroll: number | null;
+    lastPayrollNetAmount: number | null;
     payrollCount: number;
   };
   humanResources: Personnel360HrSummary;

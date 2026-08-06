@@ -18,6 +18,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class HrSalaryDefinitionsController(
     HrDbContext hrDb,
     AppDbContext appDb,
+    SalaryTakeHomeService takeHome,
     IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
 {
     [HttpGet]
@@ -73,7 +74,7 @@ public sealed class HrSalaryDefinitionsController(
             .CanViewExtraPaymentAsync(cancellationToken);
 
         var extraPayments = canViewExtraPayment
-            ? await LoadEffectiveExtraPaymentsAsync(personnelIds, cancellationToken)
+            ? await takeHome.LoadEffectiveExtraPaymentsAsync(personnelIds, cancellationToken)
             : new Dictionary<Guid, decimal>();
 
         var officialNetByYear = new Dictionary<(Guid CompanyId, int Year), PayrollParameters?>();
@@ -86,7 +87,7 @@ public sealed class HrSalaryDefinitionsController(
 
             if (!officialNetByYear.TryGetValue(key, out var parameters))
             {
-                parameters = await TryLoadPayrollParametersAsync(
+                parameters = await takeHome.TryLoadPayrollParametersAsync(
                     item.CompanyId, item.EffectiveStartDate.Year, cancellationToken);
                 officialNetByYear[key] = parameters;
             }
@@ -94,59 +95,13 @@ public sealed class HrSalaryDefinitionsController(
             responses.Add(ToSalaryDefinitionResponse(
                 item,
                 personnelEmploymentDates.GetValueOrDefault(item.PersonnelId),
-                ResolveOfficialNet(item, parameters),
+                SalaryTakeHomeService.ResolveOfficialNet(item, parameters),
                 canViewExtraPayment
                     ? extraPayments.GetValueOrDefault(item.PersonnelId)
                     : null));
         }
 
         return Ok(responses);
-    }
-
-    /// <summary>
-    /// Personel başına yürürlükteki elden ödeme tutarı. Birden çok
-    /// kayıt varsa en son başlayan geçerlidir.
-    /// </summary>
-    private async Task<Dictionary<Guid, decimal>> LoadEffectiveExtraPaymentsAsync(
-        IReadOnlyCollection<Guid> personnelIds, CancellationToken cancellationToken)
-    {
-        var today = DateTime.UtcNow.Date;
-
-        var rows = await appDb.PersonnelExtraPayments
-            .AsNoTracking()
-            .Where(x => personnelIds.Contains(x.PersonnelId) &&
-                        x.EffectiveStartDate <= today &&
-                        (x.EffectiveEndDate == null || x.EffectiveEndDate >= today))
-            .Select(x => new { x.PersonnelId, x.MonthlyAmount, x.EffectiveStartDate })
-            .ToListAsync(cancellationToken);
-
-        return rows
-            .GroupBy(x => x.PersonnelId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(x => x.EffectiveStartDate).First().MonthlyAmount);
-    }
-
-    /// <summary>
-    /// Kartın resmi neti. Net esaslıda anlaşılan tutarın kendisi; brüt
-    /// esaslıda karttaki net doluysa o, boşsa brütten ocak esasıyla
-    /// hesaplanır. Parametre yoksa null — uydurulmaz.
-    /// </summary>
-    private static decimal? ResolveOfficialNet(
-        HrSalaryDefinition item, PayrollParameters? parameters)
-    {
-        if (item.SalaryBasis == SalaryBasis.Net)
-            return item.TargetNetSalary;
-
-        if (item.NetSalary > 0m)
-            return item.NetSalary;
-
-        if (parameters is null || item.GrossSalary <= 0m)
-            return null;
-
-        return PayrollCalculationService
-            .Calculate(parameters, new PayrollInput(1, item.GrossSalary))
-            .NetPay;
     }
 
     [HttpPost]
@@ -312,7 +267,7 @@ public sealed class HrSalaryDefinitionsController(
         if (item.SalaryBasis != SalaryBasis.Net)
             return;
 
-        var parameters = await TryLoadPayrollParametersAsync(
+        var parameters = await takeHome.TryLoadPayrollParametersAsync(
             item.CompanyId, item.EffectiveStartDate.Year, cancellationToken);
 
         if (parameters is null)
@@ -325,37 +280,6 @@ public sealed class HrSalaryDefinitionsController(
         item.NetSalary = result.AchievedNet;
     }
 
-    private async Task<PayrollParameters?> TryLoadPayrollParametersAsync(
-        Guid companyId, int year, CancellationToken cancellationToken)
-    {
-        var settings = await appDb.CompanyPayrollSettings
-            .AsNoTracking()
-            .Include(x => x.TaxBrackets)
-            .SingleOrDefaultAsync(
-                x => x.CompanyId == companyId && x.Year == year, cancellationToken);
-
-        if (settings is null || settings.TaxBrackets.Count == 0)
-            return null;
-
-        return new PayrollParameters(
-            settings.MinimumWageGross,
-            settings.SgkBaseFloor,
-            settings.SgkBaseCeiling,
-            settings.SgkEmployeeRate,
-            settings.UnemploymentEmployeeRate,
-            settings.SgkEmployerRate,
-            settings.UnemploymentEmployerRate,
-            settings.SgkEmployerDiscountEnabled,
-            settings.SgkEmployerDiscountPoints,
-            settings.StampTaxPerMille,
-            settings.MinimumWageIncomeTaxExemptionEnabled,
-            settings.MinimumWageStampTaxExemptionEnabled,
-            settings.TaxBrackets
-                .OrderBy(x => x.Order)
-                .Select(x => new PayrollTaxBracketInput(
-                    x.LowerBound, x.UpperBound, x.Rate))
-                .ToList());
-    }
 
     /// <summary>
     /// Ücret kartı ekranı için canlı brütleştirme. Kayıt yazmaz;
@@ -372,7 +296,7 @@ public sealed class HrSalaryDefinitionsController(
 
         var month = request.Month is >= 1 and <= 12 ? request.Month : 1;
 
-        var parameters = await TryLoadPayrollParametersAsync(
+        var parameters = await takeHome.TryLoadPayrollParametersAsync(
             request.CompanyId, request.Year, cancellationToken);
 
         if (parameters is null)

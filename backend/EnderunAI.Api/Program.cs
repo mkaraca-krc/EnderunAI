@@ -355,6 +355,9 @@ builder.Services.AddScoped<EnderunAI.Api.Security.IUserAuthorizationService, End
 builder.Services.AddScoped<EnderunAI.Api.Security.ICurrentDataScopeService, EnderunAI.Api.Security.CurrentDataScopeService>();
 builder.Services.AddScoped<EnderunAI.Api.Security.ISalaryVisibilityService, EnderunAI.Api.Security.SalaryVisibilityService>();
 builder.Services.AddScoped<EnderunAI.Api.Security.IExtraPaymentVisibilityService, EnderunAI.Api.Security.ExtraPaymentVisibilityService>();
+// Resmî net + elden ödeme + toplam ele geçen hesabı; ücret kartı
+// listesi ve personel 360 kartı aynı kaynaktan beslensin diye ortak.
+builder.Services.AddScoped<EnderunAI.Api.Services.HumanResources.SalaryTakeHomeService>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.HumanResources.IPersonnelTerminationService,
     EnderunAI.Api.Services.HumanResources.PersonnelTerminationService>();

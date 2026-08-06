@@ -3,6 +3,7 @@ using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.HumanResources;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.HumanResources;
 using EnderunAI.Api.Services.Isg;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,9 @@ public sealed class HrPersonnel360Controller(
     AppDbContext appDb,
     HrDbContext hrDb,
     IUserAuthorizationService authorizationService,
+    ISalaryVisibilityService salaryVisibility,
+    IExtraPaymentVisibilityService extraPaymentVisibility,
+    SalaryTakeHomeService takeHome,
     Security.CurrentUser.ICurrentUserService currentUser) : ControllerBase
 {
     /// <summary>
@@ -149,6 +153,40 @@ public sealed class HrPersonnel360Controller(
             .Where(x => x.PersonnelId == personnelId)
             .ToListAsync(cancellationToken);
 
+        // --- Ücret gizliliği ---
+        // Bu uç personnel.view ile açılıyor ama finansal blokta maaş,
+        // bordro ve avans rakamı taşıyor. Şantiye Şefi, Formen ve
+        // Teknik Koordinatör'de personnel.view var, salary.view yok:
+        // gizleme olmadan 360 kartı herkesin ücretini sızdırıyordu.
+        var canViewSalary = await salaryVisibility.CanViewSalaryAsync(cancellationToken);
+
+        // Elden ödeme maaşın üstüne bir kat daha: maaşı göremeyen
+        // hiçbir koşulda göremez, gören de ayrıca extra_payment.view
+        // istemek zorunda.
+        var canViewExtraPayment = canViewSalary &&
+            await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken);
+
+        decimal? extraPaymentAmount = null;
+
+        if (canViewExtraPayment)
+        {
+            var effectiveExtras = await takeHome.LoadEffectiveExtraPaymentsAsync(
+                [personnelId], cancellationToken);
+
+            // Yetki varsa kayıt yoksa da 0 döner; null yalnızca
+            // "göremiyorsun" demektir.
+            extraPaymentAmount = effectiveExtras.GetValueOrDefault(personnelId);
+        }
+
+        var officialNetSalary = canViewSalary && currentSalary is not null
+            ? SalaryTakeHomeService.ResolveOfficialNet(
+                currentSalary,
+                await takeHome.TryLoadPayrollParametersAsync(
+                    currentSalary.CompanyId,
+                    currentSalary.EffectiveStartDate.Year,
+                    cancellationToken))
+            : null;
+
         // --- İSG eğitim ve yetki belgeleri ---
         var canViewIsg = await CanViewIsgAsync(cancellationToken);
         var todayOnly = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -256,7 +294,7 @@ public sealed class HrPersonnel360Controller(
                 profile.SgkRegistrationNumber,
                 profile.EmploymentStartDate,
                 profile.EmploymentEndDate,
-                profile.MonthlySalary,
+                MonthlySalary = canViewSalary ? profile.MonthlySalary : null,
                 status = (int)profile.Status,
                 statusName = PersonnelStatusName(profile.Status)
             },
@@ -291,34 +329,64 @@ public sealed class HrPersonnel360Controller(
                     .Sum(x => x.ApprovedHours),
                 totalHours = approvedOvertimes.Sum(x => x.ApprovedHours)
             },
+            // Tutar alanları salary.view yoksa null döner; arayüzde
+            // gizlenmez, sorgudan hiç çıkmaz. payrollCount tutar
+            // taşımadığı için açık kalır.
             financial = new
             {
-                currentGrossSalary =
-                    currentSalary?.GrossSalary ??
-                    profile.MonthlySalary ??
-                    0m,
-                currentNetSalary =
-                    currentSalary?.NetSalary ??
-                    profile.MonthlySalary ??
-                    0m,
-                currentDailyRate = currentSalary?.DailyRate ?? 0m,
-                currentHourlyRate = currentSalary?.HourlyRate ?? 0m,
+                salaryHidden = !canViewSalary,
+                currentGrossSalary = canViewSalary
+                    ? currentSalary?.GrossSalary ?? profile.MonthlySalary ?? 0m
+                    : (decimal?)null,
+                currentNetSalary = canViewSalary
+                    ? currentSalary?.NetSalary ?? profile.MonthlySalary ?? 0m
+                    : (decimal?)null,
+                // Kartın hesaplanmış resmî neti: net esaslıda anlaşılan
+                // tutar, brüt esaslıda brütten hesaplanan. NetSalary
+                // elle girilen ve boş kalabilen eski alan.
+                officialNetSalary,
+                // Elden ödeme ve toplam ele geçen: yetki yoksa null.
+                extraPaymentMonthlyAmount = extraPaymentAmount,
+                extraPaymentHidden = extraPaymentAmount is null,
+                totalTakeHome =
+                    (officialNetSalary ?? (canViewSalary ? currentSalary?.NetSalary : null))
+                        is decimal net && extraPaymentAmount is decimal extra
+                        ? net + extra
+                        : (decimal?)null,
+                currentDailyRate = canViewSalary
+                    ? currentSalary?.DailyRate ?? 0m
+                    : (decimal?)null,
+                currentHourlyRate = canViewSalary
+                    ? currentSalary?.HourlyRate ?? 0m
+                    : (decimal?)null,
                 currencyCode =
                     currentSalary?.CurrencyCode ??
                     lastPayroll?.CurrencyCode ??
                     "TRY",
-                totalApprovedBonus = approvedPayrolls.Sum(x => x.BonusAmount),
-                totalDeduction = approvedPayrolls.Sum(x => x.TotalDeductions),
-                totalApprovedAdvance = advances
-                    .Where(x =>
-                        x.Status == HrApprovalStatus.Approved ||
-                        x.Status == HrApprovalStatus.Paid)
-                    .Sum(x => x.ApprovedAmount),
-                totalPaidAdvance = advances
-                    .Where(x => x.Status == HrApprovalStatus.Paid)
-                    .Sum(x => x.ApprovedAmount),
-                totalNetPayroll = approvedPayrolls.Sum(x => x.NetPayableAmount),
-                lastPayrollNetAmount = lastPayroll?.NetPayableAmount ?? 0m,
+                totalApprovedBonus = canViewSalary
+                    ? approvedPayrolls.Sum(x => x.BonusAmount)
+                    : (decimal?)null,
+                totalDeduction = canViewSalary
+                    ? approvedPayrolls.Sum(x => x.TotalDeductions)
+                    : (decimal?)null,
+                totalApprovedAdvance = canViewSalary
+                    ? advances
+                        .Where(x =>
+                            x.Status == HrApprovalStatus.Approved ||
+                            x.Status == HrApprovalStatus.Paid)
+                        .Sum(x => x.ApprovedAmount)
+                    : (decimal?)null,
+                totalPaidAdvance = canViewSalary
+                    ? advances
+                        .Where(x => x.Status == HrApprovalStatus.Paid)
+                        .Sum(x => x.ApprovedAmount)
+                    : (decimal?)null,
+                totalNetPayroll = canViewSalary
+                    ? approvedPayrolls.Sum(x => x.NetPayableAmount)
+                    : (decimal?)null,
+                lastPayrollNetAmount = canViewSalary
+                    ? lastPayroll?.NetPayableAmount ?? 0m
+                    : (decimal?)null,
                 payrollCount = payrolls.Count
             },
             humanResources = new

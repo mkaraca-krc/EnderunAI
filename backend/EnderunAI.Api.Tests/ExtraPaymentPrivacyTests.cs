@@ -369,4 +369,107 @@ public sealed class ExtraPaymentPrivacyTests(DatabaseFixture fixture)
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    // ---------- Personel 360 kartı ----------
+
+    /// <summary>
+    /// 360 kartı personnel.view ile açılıyor ama finansal blokta maaş,
+    /// bordro ve avans rakamı taşıyor. Şantiye Şefi, Formen ve Teknik
+    /// Koordinatör personel listesini görür, ücret göremez: kart bu
+    /// rollere tutar sızdırmamalı.
+    /// </summary>
+    [Theory]
+    [InlineData("Şantiye Şefi")]
+    [InlineData("Formen")]
+    [InlineData("Teknik Koordinatör")]
+    public async Task Personnel360_HidesSalaryFromRolesWithoutSalaryPermission(
+        string roleName)
+    {
+        var personnelId = await CreatePersonnelWithExtraPaymentAsync();
+        var client = await CreateClientForRoleAsync(roleName);
+
+        var response = await client.GetAsync($"/api/hr/personnel-360/{personnelId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var financial = payload.GetProperty("financial");
+
+        Assert.True(financial.GetProperty("salaryHidden").GetBoolean());
+
+        foreach (var field in new[]
+        {
+            "currentGrossSalary", "currentNetSalary", "officialNetSalary",
+            "extraPaymentMonthlyAmount", "totalTakeHome", "currentDailyRate",
+            "currentHourlyRate", "totalApprovedBonus", "totalDeduction",
+            "totalApprovedAdvance", "totalPaidAdvance", "totalNetPayroll",
+            "lastPayrollNetAmount"
+        })
+        {
+            Assert.Equal(JsonValueKind.Null, financial.GetProperty(field).ValueKind);
+        }
+
+        // Profildeki aylık ücret de tutar bilgisidir.
+        Assert.Equal(JsonValueKind.Null,
+            payload.GetProperty("profile").GetProperty("monthlySalary").ValueKind);
+    }
+
+    /// <summary>
+    /// Yetkili rol kartta resmi net, elden ödeme ve toplam ele geçeni
+    /// birlikte görür — kullanıcının "eline ne geçiyor" sorusu bu üç
+    /// rakamla cevaplanıyor.
+    /// </summary>
+    [Fact]
+    public async Task Personnel360_ShowsTakeHomeBreakdownToAuthorizedRole()
+    {
+        var personnelId = await CreatePersonnelWithExtraPaymentAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+
+        var response = await client.GetAsync($"/api/hr/personnel-360/{personnelId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var financial = (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("financial");
+
+        Assert.False(financial.GetProperty("salaryHidden").GetBoolean());
+        Assert.False(financial.GetProperty("extraPaymentHidden").GetBoolean());
+
+        var officialNet = financial.GetProperty("officialNetSalary").GetDecimal();
+        var extra = financial.GetProperty("extraPaymentMonthlyAmount").GetDecimal();
+        var takeHome = financial.GetProperty("totalTakeHome").GetDecimal();
+
+        Assert.Equal(33_058.43m, officialNet);
+        Assert.Equal(15_000m, extra);
+        Assert.Equal(officialNet + extra, takeHome);
+    }
+
+    /// <summary>
+    /// Maaşı gören ama ek ödeme izni kullanıcı bazında kapatılmış biri
+    /// resmi neti görür, elden ve toplam ele geçeni göremez.
+    /// </summary>
+    [Fact]
+    public async Task Personnel360_HidesOnlyExtraPaymentWhenPermissionDenied()
+    {
+        var personnelId = await CreatePersonnelWithExtraPaymentAsync();
+        var client = await CreateClientForRoleAsync(
+            "İK Sorumlusu",
+            deniedPermissionKey: PermissionCatalog.Keys.ExtraPaymentView);
+
+        var response = await client.GetAsync($"/api/hr/personnel-360/{personnelId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var financial = (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("financial");
+
+        Assert.False(financial.GetProperty("salaryHidden").GetBoolean());
+        Assert.True(financial.GetProperty("extraPaymentHidden").GetBoolean());
+        Assert.Equal(33_058.43m,
+            financial.GetProperty("officialNetSalary").GetDecimal());
+        Assert.Equal(JsonValueKind.Null,
+            financial.GetProperty("extraPaymentMonthlyAmount").ValueKind);
+        Assert.Equal(JsonValueKind.Null,
+            financial.GetProperty("totalTakeHome").ValueKind);
+    }
 }

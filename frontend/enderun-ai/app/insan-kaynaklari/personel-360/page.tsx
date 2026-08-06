@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ApiError } from "@/lib/api/api-client";
 import { personnelService } from "@/services/personnel.service";
 import {
   personnel360Service,
   type Personnel360Response,
 } from "@/services/personnel-360.service";
+import { extraPaymentService } from "@/services/termination.service";
 
 type PersonnelOption = {
   id: string;
@@ -70,6 +72,7 @@ export default function Personnel360Page() {
   const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const filteredPersonnel = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("tr-TR");
@@ -116,7 +119,8 @@ export default function Personnel360Page() {
     }
 
     void loadDetail();
-  }, [personnelId]);
+    // refreshKey: ek ödeme kaydedildikten sonra kart yeniden çekilsin.
+  }, [personnelId, refreshKey]);
 
   const activeAssignment = data?.assignments.find((x) => x.isActive && x.isPrimaryAssignment)
     ?? data?.assignments.find((x) => x.isActive);
@@ -261,6 +265,12 @@ export default function Personnel360Page() {
               </div>
             </section>
 
+            <SalaryPanel
+              personnelId={personnelId}
+              financial={data.financial}
+              onSaved={() => setRefreshKey((current) => current + 1)}
+            />
+
             <section style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 380px", gap: 18 }}>
               <div style={card}>
                 <h3 style={{ marginTop: 0 }}>Zaman Çizelgesi</h3>
@@ -341,6 +351,264 @@ export default function Personnel360Page() {
   );
 }
 
+/**
+ * Ücret bloğu: resmî net + elden ödeme + toplam ele geçen.
+ *
+ * Üçü aynı yerde durmazsa "eline ne geçiyor" sorusu hiçbir ekranda
+ * cevaplanmıyor; bugüne kadar elden ödeme yalnızca ayrı bir listede
+ * duruyordu ve personel kartında hiç görünmüyordu.
+ *
+ * Gizleme sunucuda yapılıyor: yetkisi olmayan kullanıcıya tutarlar
+ * null geliyor, burada yalnızca bunu anlatıyoruz.
+ */
+function SalaryPanel({
+  personnelId,
+  financial,
+  onSaved,
+}: {
+  personnelId: string;
+  financial: Personnel360Response["financial"];
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [startDate, setStartDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [failure, setFailure] = useState("");
+
+  const currency = financial.currencyCode;
+  const officialNet = financial.officialNetSalary ?? financial.currentNetSalary;
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+
+    const parsed = Number(amount.replace(",", "."));
+
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setFailure("Tutar geçerli bir sayı olmalıdır.");
+      return;
+    }
+
+    setSaving(true);
+    setFailure("");
+    setMessage("");
+
+    try {
+      // Yürürlükteki kayıt varsa üzerine yazılır; yoksa yeni açılır.
+      // İki kayıt bırakmak "hangisi geçerli" belirsizliği doğururdu.
+      const existing = await extraPaymentService.list(personnelId);
+      const today = new Date().toISOString().slice(0, 10);
+      const effective = existing
+        .filter(
+          (x) =>
+            x.effectiveStartDate.slice(0, 10) <= today &&
+            (!x.effectiveEndDate || x.effectiveEndDate.slice(0, 10) >= today)
+        )
+        .sort((a, b) =>
+          b.effectiveStartDate.localeCompare(a.effectiveStartDate)
+        )[0];
+
+      const payload = {
+        personnelId,
+        monthlyAmount: parsed,
+        effectiveStartDate: startDate,
+        effectiveEndDate: null,
+        note: note.trim() || null,
+      };
+
+      if (effective) {
+        await extraPaymentService.update(effective.id, payload);
+      } else {
+        await extraPaymentService.create(payload);
+      }
+
+      setMessage("Ek ödeme kaydedildi.");
+      setAmount("");
+      setNote("");
+      setOpen(false);
+      onSaved();
+    } catch (error) {
+      setFailure(
+        error instanceof ApiError || error instanceof Error
+          ? error.message
+          : "Ek ödeme kaydedilemedi."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (financial.salaryHidden) {
+    return (
+      <section style={card}>
+        <h3 style={{ marginTop: 0 }}>Ücret</h3>
+        <div style={{ color: "#64748b" }}>
+          Ücret rakamlarını görme yetkiniz yok.
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section style={card}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <h3 style={{ margin: 0 }}>Ücret ve Ek Ödeme</h3>
+        {!financial.extraPaymentHidden && (
+          <button
+            type="button"
+            onClick={() => setOpen((current) => !current)}
+            style={smallButton}
+          >
+            {open ? "Vazgeç" : "Ek Ödemeyi Düzenle"}
+          </button>
+        )}
+      </div>
+
+      <div
+        style={{
+          marginTop: 14,
+          display: "grid",
+          gridTemplateColumns: "repeat(3,minmax(0,1fr))",
+          gap: 12,
+        }}
+      >
+        <MoneyTile
+          label="Resmî Net"
+          value={officialNet != null ? money(officialNet, currency) : "—"}
+          hint="Bordroda görünen"
+        />
+        <MoneyTile
+          label="Ek Ödeme (Elden)"
+          value={
+            financial.extraPaymentHidden
+              ? "gizli"
+              : money(financial.extraPaymentMonthlyAmount, currency)
+          }
+          hint={
+            financial.extraPaymentHidden
+              ? "Görme yetkiniz yok"
+              : "Resmî bordroya girmez"
+          }
+        />
+        <MoneyTile
+          label="Toplam Ele Geçen"
+          value={
+            financial.totalTakeHome != null
+              ? money(financial.totalTakeHome, currency)
+              : "—"
+          }
+          hint="Resmî net + elden"
+          strong
+        />
+      </div>
+
+      {message && (
+        <div style={{ marginTop: 12, color: "#047857" }}>{message}</div>
+      )}
+      {failure && (
+        <div style={{ marginTop: 12, color: "#b91c1c" }}>{failure}</div>
+      )}
+
+      {open && !financial.extraPaymentHidden && (
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            marginTop: 14,
+            display: "grid",
+            gridTemplateColumns: "180px 180px minmax(0,1fr) 140px",
+            gap: 10,
+            alignItems: "end",
+          }}
+        >
+          <label style={fieldLabel}>
+            Aylık Ek Ödeme
+            <input
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              inputMode="decimal"
+              placeholder="0,00"
+              style={input}
+              required
+            />
+          </label>
+          <label style={fieldLabel}>
+            Geçerlilik Başlangıcı
+            <input
+              type="date"
+              value={startDate}
+              onChange={(event) => setStartDate(event.target.value)}
+              style={input}
+              required
+            />
+          </label>
+          <label style={fieldLabel}>
+            Not
+            <input
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="İsteğe bağlı"
+              style={input}
+            />
+          </label>
+          <button type="submit" style={smallButton} disabled={saving}>
+            {saving ? "Kaydediliyor..." : "Kaydet"}
+          </button>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function MoneyTile({
+  label,
+  value,
+  hint,
+  strong,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  strong?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        padding: 14,
+        background: strong ? "#f8fafc" : "#fff",
+      }}
+    >
+      <div style={{ fontSize: 12, color: "#64748b" }}>{label}</div>
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 22,
+          fontWeight: strong ? 700 : 600,
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {value}
+      </div>
+      <div style={{ marginTop: 4, fontSize: 12, color: "#94a3b8" }}>{hint}</div>
+    </div>
+  );
+}
+
+const fieldLabel = { display: "grid", gap: 6, fontSize: 12, color: "#475569" } as const;
+const smallButton = { height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, cursor: "pointer" } as const;
+
 function TabContent({ tab, data }: { tab: TabKey; data: Personnel360Response }) {
   if (tab === "genel") {
     return (
@@ -349,8 +617,29 @@ function TabContent({ tab, data }: { tab: TabKey; data: Personnel360Response }) 
         <Info label="SGK Sicil" value={data.profile.sgkRegistrationNumber || "—"} />
         <Info label="Doğum Tarihi" value={date(data.profile.birthDate)} />
         <Info label="Adres" value={data.profile.address || "—"} />
-        <Info label="Güncel Net Ücret" value={money(data.financial.currentNetSalary, data.financial.currencyCode)} />
-        <Info label="Son Bordro" value={money(data.financial.lastPayrollNetAmount, data.financial.currencyCode)} />
+        <Info
+          label="Güncel Net Ücret"
+          value={
+            data.financial.salaryHidden
+              ? "gizli"
+              : money(
+                  data.financial.officialNetSalary ??
+                    data.financial.currentNetSalary,
+                  data.financial.currencyCode
+                )
+          }
+        />
+        <Info
+          label="Son Bordro"
+          value={
+            data.financial.salaryHidden
+              ? "gizli"
+              : money(
+                  data.financial.lastPayrollNetAmount,
+                  data.financial.currencyCode
+                )
+          }
+        />
       </div>
     );
   }
