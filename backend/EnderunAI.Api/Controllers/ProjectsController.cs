@@ -584,6 +584,27 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
 
 
     /// <summary>
+    /// İcmal satırı bazında dört fiyat ve kâr: sözleşme, kütüphane
+    /// referansı (ÇŞB/TEDAŞ), şirketin geçmiş gerçekleşme ortalaması ve
+    /// bu projedeki anlık maliyet.
+    ///
+    /// Kâr her zaman SÖZLEŞME eksi ANLIK MALİYET'tir; referans ve
+    /// ortalama karara yardımcı bilgilerdir.
+    /// </summary>
+    [HttpGet("{id:guid}/kar-analizi")]
+    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
+    public async Task<IActionResult> GetProfitBreakdown(
+        Guid id,
+        [FromQuery] int? referenceYear,
+        [FromServices] Services.Projects.IBoqProfitService profits,
+        CancellationToken cancellationToken)
+    {
+        var result = await profits.GetAsync(id, referenceYear, cancellationToken);
+
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    /// <summary>
     /// Silme öncesi etki özeti: bağlı kayıt sayıları ve kalıcı silmeyi
     /// engelleyen kesinleşmiş kayıtlar.
     /// </summary>

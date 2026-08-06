@@ -138,6 +138,9 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Projects.IBoqItemCostService,
     EnderunAI.Api.Services.Projects.BoqItemCostService>();
 builder.Services.AddScoped<
+    EnderunAI.Api.Services.Projects.IBoqProfitService,
+    EnderunAI.Api.Services.Projects.BoqProfitService>();
+builder.Services.AddScoped<
     EnderunAI.Api.Services.Projects.IProjectDeletionService,
     EnderunAI.Api.Services.Projects.ProjectDeletionService>();
 
