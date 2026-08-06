@@ -115,6 +115,31 @@ public sealed class PositionMatchService(
     private const int BulkPrefilterLimit = 6000;
 
     /// <summary>
+    /// Bu satır sayısından itibaren kütüphanenin tamamı bir kez okunur.
+    /// Az satırda tek sorgu ön elemeden pahalı, çok satırda belirteç
+    /// başına sorgu kabul edilemez; eşik ikisinin kesiştiği yer.
+    /// </summary>
+    private const int FullLibraryRowThreshold = 25;
+
+    /// <summary>
+    /// Belleğe alınacak en fazla poz. Bunun üstünde tam tarama makul
+    /// olmaktan çıkar ve belirteç bazlı ön elemeye dönülür.
+    /// </summary>
+    private const int FullLibraryLimit = 60_000;
+
+    /// <summary>
+    /// Toplu eşleştirmede gösterilecek en düşük skor.
+    ///
+    /// Tekli aramadan (12) daha yüksek: orada tek satıra bakılıyor ve
+    /// zayıf aday bile bilgi taşıyor. Yüzlerce satırlık bir icmalde ise
+    /// tek ortak kelimeye dayanan aday gürültüdür — gerçek bir icmalde
+    /// "A Blok / At-Z Panosu" satırına "Alçı blok ustası" öneriliyordu.
+    /// Böyle bir listeyi elemek, "karşılık yok" demekten daha çok zaman
+    /// alır ve yanlış seçim riskini artırır.
+    /// </summary>
+    public const double BulkMinimumScore = 25.0;
+
+    /// <summary>
     /// Tek sorguda aranacak en fazla belirteç. Toplu akışta bu sınır
     /// yetmiyor: onlarca satırın kelimeleri birleşiyor ve ilk sekizde
     /// kalan bir sınır, sonraki satırların pozlarını havuza hiç
@@ -248,27 +273,12 @@ public sealed class PositionMatchService(
         if (rows.Count == 0)
             return [];
 
-        // Belirteçler BÜTÜN satırlardan toplanır. Sabit bir üst sınırla
-        // kesilirse sınıra kadarki satırların kelimeleri havuzu doldurur,
-        // sonraki satırların pozları havuza hiç girmez ve o satırlar
-        // sessizce "eşleşme yok" görünür — 350 satırlık bir icmalde bu
-        // fark edilmesi en zor hatalardan olurdu.
-        var allTerms = rows
-            .SelectMany(x => PositionMatcher.Tokenize(x.Query))
-            .Distinct(StringComparer.Ordinal)
-            .Take(BulkTermCap)
-            .ToList();
+        var pool = await BuildBulkPoolAsync(companyId, rows, cancellationToken);
 
-        var pool = allTerms.Count == 0
-            ? []
-            : await PrefilterAsync(
-                companyId, allTerms, cancellationToken,
-                maxTerms: allTerms.Count,
-                limit: BulkPrefilterLimit);
-
-        // Havuz bir kez hazırlanır: aday metinlerini her satırda yeniden
-        // parçalamak, yüzlerce satırda işin neredeyse tamamıydı.
-        var prepared = PositionMatcher.PrepareAll(pool);
+        // Havuz bir kez hazırlanıp dizinleniyor: aday metinlerini her
+        // satırda yeniden parçalamak ve tüm havuzu her satır için baştan
+        // sona taramak, yüzlerce satırda işin neredeyse tamamıydı.
+        var index = new PositionMatcher.CandidateIndex(PositionMatcher.PrepareAll(pool));
 
         var ranked = new List<(int RowNumber, string Query, IReadOnlyList<MatchScore> Scores)>(
             rows.Count);
@@ -276,7 +286,12 @@ public sealed class PositionMatchService(
         foreach (var (rowNumber, query) in rows)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            ranked.Add((rowNumber, query, PositionMatcher.Rank(query, prepared, limit)));
+
+            var scores = PositionMatcher.Rank(query, index, limit)
+                .Where(x => x.Score >= BulkMinimumScore)
+                .ToList();
+
+            ranked.Add((rowNumber, query, scores));
         }
 
         // Fiyatlar toplu çözülür; satır başına sorgu yüzlerce satırda
@@ -300,6 +315,10 @@ public sealed class PositionMatchService(
         foreach (var (rowNumber, query, scores) in ranked)
         {
             var (isCertain, reason) = EvaluateCertainty(scores);
+
+            // Aday kalmadıysa sebebi söylenir: sessiz boşluk, kullanıcıya
+            // "sistem bakmadı mı, bakıp bulamadı mı" sorusunu bıraktırır.
+            reason ??= "Kütüphanede yeterince yakın karşılık yok; özel poz açın.";
 
             var suggestions = scores
                 .Select(match =>
@@ -330,6 +349,64 @@ public sealed class PositionMatchService(
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Toplu eşleştirmenin aday havuzu.
+    ///
+    /// Çok satırlı bir icmalde belirteç sayısı yüzlere çıkıyor ve
+    /// belirteç başına ILIKE sorgusu kabul edilemez hale geliyor:
+    /// gerçek bir icmalin 662 farklı kelimesi için ölçülen süre ~60
+    /// saniye. Bu yüzden yeterince satır varsa kütüphane TEK sorguyla
+    /// bir kez okunup bellekte taranıyor. Yan faydası, ön elemenin
+    /// hiçbir satırı kaçırmaması: havuz kütüphanenin tamamı.
+    ///
+    /// Kütüphane çok büyükse bellekte tutmak makul olmaktan çıkar;
+    /// o durumda belirteç bazlı ön elemeye dönülür.
+    /// </summary>
+    private async Task<List<MatchCandidate>> BuildBulkPoolAsync(
+        Guid companyId,
+        IReadOnlyList<(int RowNumber, string Query)> rows,
+        CancellationToken cancellationToken)
+    {
+        if (rows.Count >= FullLibraryRowThreshold)
+        {
+            var libraryCount = await db.EngineeringPositions
+                .AsNoTracking()
+                .CountAsync(
+                    x => x.CompanyId == companyId
+                         && x.Status != EngineeringPositionStatus.Archived,
+                    cancellationToken);
+
+            if (libraryCount <= FullLibraryLimit)
+            {
+                return await db.EngineeringPositions
+                    .AsNoTracking()
+                    .Where(x => x.CompanyId == companyId
+                                && x.Status != EngineeringPositionStatus.Archived)
+                    .Select(x => new MatchCandidate(
+                        x.Id, x.Code, x.OfficialCode, x.Name, x.Unit,
+                        x.Category, x.SearchKeywords))
+                    .ToListAsync(cancellationToken);
+            }
+
+            logger.LogInformation(
+                "Poz kütüphanesi {Count} kayıtla toplu tarama sınırının üstünde; " +
+                "belirteç bazlı ön eleme kullanılıyor.", libraryCount);
+        }
+
+        var terms = rows
+            .SelectMany(x => PositionMatcher.Tokenize(x.Query))
+            .Distinct(StringComparer.Ordinal)
+            .Take(BulkTermCap)
+            .ToList();
+
+        return terms.Count == 0
+            ? []
+            : await PrefilterAsync(
+                companyId, terms, cancellationToken,
+                maxTerms: terms.Count,
+                limit: BulkPrefilterLimit);
     }
 
     /// <summary>

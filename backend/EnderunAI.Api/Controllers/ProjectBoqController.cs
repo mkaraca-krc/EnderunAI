@@ -647,6 +647,28 @@ public sealed class ProjectBoqController(
     }
 
     /// <summary>
+    /// Eşleştirme sorgusu: tanım, ve YALNIZCA resmi poz numarası
+    /// biçimindeyse kod.
+    ///
+    /// İcmalin kendi sıra numarası ("01.03") kütüphanede hiçbir şeye
+    /// karşılık gelmiyor ama belirteçlere bölününce "01" ve "03"
+    /// üretiyor; sayılar en ayırt edici veri sayıldığı için bunlar
+    /// alakasız pozları (kablo kesitleri, ölçüler) listenin başına
+    /// taşıyordu. Kod ancak kütüphanedeki bir kodu tutabilecek biçimdeyse
+    /// sorguya girer.
+    /// </summary>
+    private static string BuildMatchQuery(string? positionCode, string description)
+    {
+        var code = positionCode?.Trim() ?? string.Empty;
+
+        var isOfficialFormat = code.Length > 0
+            && System.Text.RegularExpressions.Regex.IsMatch(
+                code, @"^\d{2}\.\d{3}\.\d{3,4}$");
+
+        return isOfficialFormat ? $"{code} {description}" : description;
+    }
+
+    /// <summary>
     /// Dosyayı okur. Sütun eşlemesi verilmişse ona göre, verilmemişse
     /// ENDERUN şablonunun sabit düzenine göre. İki okuyucu da aynı
     /// sonucu üretir, dolayısıyla önizleme ve aktarım kodu değişmez.
@@ -788,9 +810,7 @@ public sealed class ProjectBoqController(
             .Where(x => !x.IsSectionHeader && !decisions.ContainsKey(x.RowNumber))
             .Select(x => (
                 x.RowNumber,
-                Query: string.IsNullOrWhiteSpace(x.PositionCode)
-                    ? x.Description
-                    : $"{x.PositionCode} {x.Description}"))
+                Query: BuildMatchQuery(x.PositionCode, x.Description)))
             .Where(x => !string.IsNullOrWhiteSpace(x.Query))
             .ToList();
 
@@ -911,9 +931,7 @@ public sealed class ProjectBoqController(
             var rows = previewLines
                 .Select(x => (
                     x.RowNumber,
-                    Query: string.IsNullOrWhiteSpace(x.PositionCode)
-                        ? x.Description
-                        : $"{x.PositionCode} {x.Description}"))
+                    Query: BuildMatchQuery(x.PositionCode, x.Description)))
                 .Where(x => !string.IsNullOrWhiteSpace(x.Query))
                 .ToList();
 

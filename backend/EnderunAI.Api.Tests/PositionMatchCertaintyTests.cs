@@ -232,6 +232,55 @@ public sealed class PositionMatchCertaintyTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task Bulk_HidesWeakCandidatesAndSaysWhy()
+    {
+        // Gerçek bir icmalde "A Blok / At-Z Panosu" satırına tek ortak
+        // kelime yüzünden "Alçı blok ustası" öneriliyordu. Yüzlerce
+        // satırda böyle bir liste, "karşılık yok" demekten daha çok
+        // zaman alır ve yanlış seçim riskini artırır.
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var companyId = await SeedAsync(db, Guid.NewGuid().ToString("N")[..8],
+            ("10.100.1034", "Alçı blok ustası", "Sa"));
+
+        var results = await CreateService(db).SuggestBulkAsync(
+            companyId, [(1, "A Blok / At-Z Panosu")]);
+
+        var row = Assert.Single(results);
+
+        Assert.Empty(row.Suggestions);
+        Assert.False(row.IsCertain);
+        Assert.Contains("özel poz", row.CertaintyReason);
+
+        // Tekli arama değişmiyor: orada tek satıra bakılıyor, zayıf aday
+        // bile bilgi taşıyor.
+        var single = await CreateService(db)
+            .SuggestAsync(companyId, "A Blok / At-Z Panosu", useAi: false);
+
+        Assert.NotEmpty(single.Suggestions);
+        Assert.False(single.IsCertain);
+    }
+
+    [Fact]
+    public async Task Bulk_DoesNotMatchOnDigitsAlone()
+    {
+        // "A Blok / At-2/4/6/8/10 Panosu" satırı, yalnızca rakamları
+        // tuttuğu için kablo kesiti pozlarını listenin başına
+        // çıkarıyordu. Sayı tek başına ayırt edici değil.
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var companyId = await SeedAsync(db, Guid.NewGuid().ToString("N")[..8],
+            ("85.850.1106", "1 X 150 / 25 mm2", "m"));
+
+        var results = await CreateService(db).SuggestBulkAsync(
+            companyId, [(1, "At-2/4/6/8/10/12/25 Panosu")]);
+
+        Assert.Empty(Assert.Single(results).Suggestions);
+    }
+
+    [Fact]
     public async Task Bulk_MatchesLastRowOfALargeSummary()
     {
         // ASIL GÜVENCE: yüzlerce satırlık gerçek bir icmalde SON satır da

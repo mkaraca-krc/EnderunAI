@@ -85,11 +85,120 @@ public static class PositionMatcher
         IEnumerable<MatchCandidate> candidates)
         => candidates.Select(Prepare).ToList();
 
+    /// <summary>
+    /// Belirteçten adaylara ters dizin.
+    ///
+    /// Anahtar, belirtecin ilk dört harfi (kısa belirteçlerde tamamı).
+    /// Skorlama yalnızca birebir eşleşmeyi ve ön ek eşleşmesini (ikisi de
+    /// en az dört harf) puanladığı için, aynı kovada olmayan bir aday
+    /// zaten sıfır alır: dizin GERÇEK aday kaybettirmez, yalnızca hiç
+    /// puan alamayacak adayları taramaz.
+    ///
+    /// Bunsuz 350 satırlık bir icmal 23 binlik kütüphaneye karşı 8
+    /// milyon skorlama demek — ölçülen süre bir dakikanın üstünde.
+    /// </summary>
+    public sealed class CandidateIndex
+    {
+        private readonly Dictionary<string, List<PreparedCandidate>> buckets;
+
+        /// <summary>
+        /// Resmi poz numarasına göre ayrı dizin. Kod, adayın metin
+        /// belirteçlerine KATILMIYOR (katılsaydı sorgudaki her sayı
+        /// rastgele kodlara puan verirdi); birebir kod eşleşmesi bu
+        /// yüzden ayrı tutuluyor.
+        /// </summary>
+        private readonly Dictionary<string, PreparedCandidate> byOfficialCode;
+
+        public CandidateIndex(IEnumerable<PreparedCandidate> candidates)
+        {
+            buckets = new Dictionary<string, List<PreparedCandidate>>(StringComparer.Ordinal);
+            byOfficialCode = new Dictionary<string, PreparedCandidate>(
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var candidate in candidates)
+            {
+                var official = candidate.Candidate.OfficialCode?.Trim();
+
+                if (!string.IsNullOrEmpty(official))
+                    byOfficialCode.TryAdd(official, candidate);
+
+                foreach (var token in candidate.Haystack)
+                {
+                    var key = BucketKey(token);
+
+                    if (!buckets.TryGetValue(key, out var bucket))
+                    {
+                        bucket = [];
+                        buckets[key] = bucket;
+                    }
+
+                    bucket.Add(candidate);
+                }
+            }
+        }
+
+        public IReadOnlyList<PreparedCandidate> CandidatesFor(
+            IReadOnlyList<string> terms, IReadOnlyList<string>? codeTerms = null)
+        {
+            var seen = new HashSet<Guid>();
+            var result = new List<PreparedCandidate>();
+
+            foreach (var code in codeTerms ?? [])
+            {
+                if (byOfficialCode.TryGetValue(code.Trim(), out var exact)
+                    && seen.Add(exact.Candidate.Id))
+                {
+                    result.Add(exact);
+                }
+            }
+
+            foreach (var term in terms)
+            {
+                // Yalnızca rakam tutan aday zaten elenecek; sayı
+                // kovalarını taramak hem gereksiz hem de en pahalısı
+                // (bir kütüphanede "2" binlerce pozda geçer).
+                if (term.All(char.IsDigit))
+                    continue;
+
+                if (!buckets.TryGetValue(BucketKey(term), out var bucket))
+                    continue;
+
+                foreach (var candidate in bucket)
+                {
+                    if (seen.Add(candidate.Candidate.Id))
+                        result.Add(candidate);
+                }
+            }
+
+            return result;
+        }
+
+        private static string BucketKey(string token) =>
+            token.Length >= 4 ? token[..4] : token;
+    }
+
     public static IReadOnlyList<MatchScore> Rank(
         string query,
         IEnumerable<MatchCandidate> candidates,
         int limit = DefaultLimit)
         => Rank(query, PrepareAll(candidates), limit);
+
+    /// <summary>
+    /// Dizin üzerinden sıralama: yalnızca puan alabilecek adaylar
+    /// taranır. Sonuç, tüm havuzu taramakla birebir aynıdır.
+    /// </summary>
+    public static IReadOnlyList<MatchScore> Rank(
+        string query,
+        CandidateIndex index,
+        int limit = DefaultLimit)
+    {
+        var terms = Tokenize(query);
+
+        if (terms.Count == 0)
+            return [];
+
+        return Rank(query, index.CandidatesFor(terms, ExtractCodes(query)), limit);
+    }
 
     public static IReadOnlyList<MatchScore> Rank(
         string query,
@@ -234,6 +343,15 @@ public static class PositionMatcher
         }
 
         if (matched.Count == 0)
+            return 0;
+
+        // YALNIZCA rakam tutan aday elenir. Sayılar tek başına ayırt
+        // edici değil: "A Blok / At-2/4/6/8/10 Panosu" satırındaki
+        // rakamlar "1 X 150 / 25 mm2" kablo pozuyla da tutuyor ve sayılar
+        // yüksek puanlı olduğu için alakasız poz listenin başına çıkıyor.
+        // İşin ne olduğunu söyleyen kelimedir; en az bir kelime tutmayan
+        // aday öneri değildir.
+        if (matched.All(x => x.All(char.IsDigit)))
             return 0;
 
         // Sorgunun ne kadarının karşılandığı: iki kelimelik sorgunun
