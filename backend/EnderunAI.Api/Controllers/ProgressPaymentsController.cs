@@ -71,6 +71,24 @@ public sealed class ProgressPaymentsController(
         return Ok(result);
     }
 
+    /// <summary>
+    /// Hakediş kâr marjı: dönem geliri (imalat / fiyat farkı / ihzarat
+    /// ayrı), iki ayrı tabanda dönem maliyeti ve kümülatif kâr.
+    /// </summary>
+    [HttpGet("{id:guid}/kar-marji")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
+    public async Task<IActionResult> GetProfit(
+        Guid id,
+        [FromServices] Services.Hakedis.IHakedisProfitService profits,
+        CancellationToken cancellationToken)
+    {
+        var result = await profits.GetAsync(id, cancellationToken);
+
+        return result is null
+            ? NotFound(new { message = "Hakediş bulunamadı." })
+            : Ok(result);
+    }
+
     [HttpGet("{id:guid}")]
     [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetById(

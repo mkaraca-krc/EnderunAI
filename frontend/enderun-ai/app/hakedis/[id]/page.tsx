@@ -484,6 +484,10 @@ export default function ProgressPaymentDetailPage() {
             NATURA Çıktısı
           </Link>
 
+          <Link href={`/hakedis/${item.id}/kar-marji`}>
+            Kâr Marjı
+          </Link>
+
           <button
             type="button"
             onClick={() => void downloadExcel()}

@@ -443,6 +443,60 @@ function buildQuery(filters?: {
   return value ? `?${value}` : "";
 }
 
+export type HakedisLineProfit = {
+  itemId: string;
+  positionCode: string;
+  description: string;
+  unit: string;
+  currentQuantity: number;
+  unitPrice: number;
+  currentAmount: number;
+  /** Hesaplanamadıysa boş — sıfır maliyet varsayılmaz. */
+  unitCost?: number | null;
+  periodCost?: number | null;
+  profit?: number | null;
+  profitMarginPercent?: number | null;
+  measuredRatio: number;
+  costBasis: string;
+};
+
+export type HakedisProfit = {
+  progressPaymentId: string;
+  progressPaymentNumber: string;
+  periodNumber: number;
+  status: number;
+  periodStartDate?: string | null;
+  periodEndDate?: string | null;
+  includesExtraPayments: boolean;
+
+  /** Kâr hesabının tabanı: bu dönem yapılan imalat. */
+  productionRevenue: number;
+  priceDifferenceAmount: number;
+  /** İhzarat hareketi — kâra girmez. */
+  advanceMaterialMovement: number;
+  hakedisAmount: number;
+
+  /** Dönem tarihleri arasında deftere işlenen maliyet (ölçüm). */
+  costByDate?: number | null;
+  profitByDate?: number | null;
+  marginByDatePercent?: number | null;
+  costByDateBasis: string;
+
+  /** Bu dönem imalatına düşen maliyet (dağıtım). */
+  costByProduction: number;
+  profitByProduction: number;
+  marginByProductionPercent?: number | null;
+  revenueWithoutCost: number;
+
+  cumulativeRevenue: number;
+  cumulativeCost: number;
+  cumulativeProfit: number;
+  cumulativeMarginPercent?: number | null;
+
+  lines: HakedisLineProfit[];
+  assumptions: string[];
+};
+
 export const progressPaymentService = {
   getAll(filters?: {
     companyId?: string;
@@ -458,6 +512,11 @@ export const progressPaymentService = {
     return apiClient<ProgressPaymentDetail>(
       `progress-payments/${id}`
     );
+  },
+
+  /** Dönem ve kümülatif kâr marjı. */
+  getProfit(id: string) {
+    return apiClient<HakedisProfit>(`progress-payments/${id}/kar-marji`);
   },
 
   /**
