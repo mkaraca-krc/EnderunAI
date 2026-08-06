@@ -164,6 +164,7 @@ public sealed class AppDbContext(
     public DbSet<EmployerPortalEmailLog> EmployerPortalEmailLogs => Set<EmployerPortalEmailLog>();
     public DbSet<SecurityAuditEvent> SecurityAuditEvents => Set<SecurityAuditEvent>();
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
+    public DbSet<CommodityPrice> CommodityPrices => Set<CommodityPrice>();
 
     public DbSet<CompanyBankAccount> CompanyBankAccounts => Set<CompanyBankAccount>();
 
@@ -532,6 +533,26 @@ public sealed class AppDbContext(
             entity.Property(x => x.ForexSelling).HasPrecision(18, 6);
             entity.Property(x => x.BanknoteBuying).HasPrecision(18, 6);
             entity.Property(x => x.BanknoteSelling).HasPrecision(18, 6);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<CommodityPrice>(entity =>
+        {
+            entity.ToTable("commodity_prices");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.Commodity, x.PriceDate })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Commodity).HasConversion<int>().IsRequired();
+            entity.Property(x => x.SourceKind).HasConversion<int>().IsRequired();
+            entity.Property(x => x.SourceSymbol).HasMaxLength(40).IsRequired();
+
+            entity.Property(x => x.PriceUsdPerTon).HasPrecision(18, 2);
+            entity.Property(x => x.PriceTryPerTon).HasPrecision(18, 2);
+            entity.Property(x => x.UsdRate).HasPrecision(18, 6);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

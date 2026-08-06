@@ -71,3 +71,47 @@ export const marketService = {
     }>(`market/exchange-rates/refresh?days=${days}`, { method: "POST" });
   },
 };
+
+export type CommodityPricePoint = {
+  priceDate: string;
+  priceUsdPerTon: number;
+  priceTryPerTon?: number | null;
+  usdRate?: number | null;
+};
+
+export type CommoditySummary = {
+  commodity: number;
+  /** Kaynak etiketi — COMEX ile LME aynı şey değil, ekranda görünmeli. */
+  sourceLabel: string;
+  sourceSymbol: string;
+  isLme: boolean;
+  latestDate?: string | null;
+  latestUsdPerTon?: number | null;
+  latestTryPerTon?: number | null;
+  usdRate?: number | null;
+  /** USD bazında yüzde değişim — yalnızca emtia hareketi. */
+  changePercentUsd?: number | null;
+  /** TL bazında yüzde değişim — emtia + kur hareketi birlikte. */
+  changePercentTry?: number | null;
+  comparedToUsdPerTon?: number | null;
+  comparedToDate?: string | null;
+  isStale: boolean;
+  warning?: string | null;
+  trend: CommodityPricePoint[];
+};
+
+export const commodityService = {
+  getCopper(days = 30) {
+    return apiClient<CommoditySummary>(`market/commodities/copper?days=${days}`);
+  },
+
+  refresh(days = 30) {
+    return apiClient<{
+      storedDays: number;
+      updatedDays: number;
+      sourceLabel: string;
+      message: string;
+      errors: string[];
+    }>(`market/commodities/refresh?days=${days}`, { method: "POST" });
+  },
+};

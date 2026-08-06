@@ -206,6 +206,11 @@ const groups: MenuGroup[] = [
         icon: "⚖",
       },
       {
+        label: "Piyasa (Bakır/Kur)",
+        href: "/finans/piyasa",
+        icon: "◭",
+      },
+      {
         label: "Hakedişler",
         href: "/hakedis",
         icon: "▧",

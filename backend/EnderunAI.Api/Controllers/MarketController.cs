@@ -12,8 +12,39 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/market")]
-public sealed class MarketController(IExchangeRateService exchangeRates) : ControllerBase
+public sealed class MarketController(
+    IExchangeRateService exchangeRates,
+    ICommodityPriceService commodityPrices) : ControllerBase
 {
+    /// <summary>
+    /// Bakır özeti ve trendi. <c>days</c> 7/30/90 olarak kullanılır.
+    /// Kaynak etiketi yanıtta daima döner — COMEX ile LME'nin aynı şey
+    /// olmadığı ekranda görünmek zorunda.
+    /// </summary>
+    [HttpGet("commodities/copper")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> GetCopper(
+        [FromQuery] int days,
+        CancellationToken cancellationToken)
+    {
+        var window = days is > 0 and <= 365 ? days : 30;
+
+        return Ok(await commodityPrices.GetSummaryAsync(
+            Models.Market.Commodity.Copper, window, cancellationToken));
+    }
+
+    [HttpPost("commodities/refresh")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceManage)]
+    public async Task<IActionResult> RefreshCommodities(
+        [FromQuery] int days,
+        CancellationToken cancellationToken)
+    {
+        var window = days is > 0 and <= 365 ? days : 30;
+        var result = await commodityPrices.RefreshAsync(window, cancellationToken);
+
+        return Ok(result);
+    }
+
     /// <summary>Belirli bir tarihe uygulanacak kur.</summary>
     [HttpGet("exchange-rates/lookup")]
     [RequirePermission(PermissionCatalog.Keys.FinanceView)]

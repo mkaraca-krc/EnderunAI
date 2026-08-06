@@ -80,5 +80,24 @@ public sealed class MarketDataBackgroundService(
             result.Message,
             result.AlreadyPresentDays,
             result.UnavailableDays);
+
+        // Emtia kurdan SONRA çekilir: TL karşılığı fiyatın kendi
+        // günündeki kurla hesaplanıyor, kur önce arşivde olmalı.
+        // Emtia kaynağı çökerse kur güncellemesi boşa gitmesin diye
+        // hata burada yutulur, bir sonraki turda yeniden denenir.
+        try
+        {
+            var commodities = scope.ServiceProvider
+                .GetRequiredService<ICommodityPriceService>();
+
+            var commodityResult = await commodities.RefreshAsync(days, cancellationToken);
+
+            logger.LogInformation(
+                "Emtia güncellemesi: {Message}", commodityResult.Message);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Emtia fiyatı güncellenemedi.");
+        }
     }
 }

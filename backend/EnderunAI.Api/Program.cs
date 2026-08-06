@@ -141,6 +141,38 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Market.IInvoiceExchangeRateResolver,
     EnderunAI.Api.Services.Market.InvoiceExchangeRateResolver>();
+
+// Emtia (bakır) fiyat kaynağı. LME resmî fiyatı ücretsiz/anahtarsız
+// hiçbir yerde yayımlanmıyor; varsayılan kaynak COMEX bakır vadeli.
+// METAL_API_KEY tanımlanırsa LME kaynağı devreye girer ve ekrandaki
+// kaynak etiketi de buna göre değişir.
+var metalApiKey = builder.Configuration["METAL_API_KEY"];
+
+if (string.IsNullOrWhiteSpace(metalApiKey))
+{
+    builder.Services.AddHttpClient<
+        EnderunAI.Api.Services.Market.ICommodityPriceSource,
+        EnderunAI.Api.Services.Market.YahooComexCopperSource>(client =>
+    {
+        client.BaseAddress = new Uri("https://query1.finance.yahoo.com/");
+        client.Timeout = TimeSpan.FromSeconds(20);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("EnderunAI/1.0");
+    });
+}
+else
+{
+    builder.Services.AddHttpClient<
+        EnderunAI.Api.Services.Market.ICommodityPriceSource,
+        EnderunAI.Api.Services.Market.MetalPriceApiLmeSource>(client =>
+    {
+        client.BaseAddress = new Uri("https://api.metalpriceapi.com/");
+        client.Timeout = TimeSpan.FromSeconds(20);
+    });
+}
+
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Market.ICommodityPriceService,
+    EnderunAI.Api.Services.Market.CommodityPriceService>();
 builder.Services.AddHostedService<
     EnderunAI.Api.Services.Market.MarketDataBackgroundService>();
 builder.Services.AddSingleton<
