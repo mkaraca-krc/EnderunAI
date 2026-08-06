@@ -313,6 +313,46 @@ public sealed class ProjectDeletionTests(DatabaseFixture fixture)
         Assert.Equal(HttpStatusCode.BadRequest, delete.StatusCode);
     }
 
+    [Theory]
+    [InlineData(ProgressPaymentStatus.PendingApproval, false)]
+    [InlineData(ProgressPaymentStatus.Approved, false)]
+    [InlineData(ProgressPaymentStatus.Draft, true)]
+    [InlineData(ProgressPaymentStatus.Cancelled, true)]
+    public async Task DeletionImpact_ProgressPaymentStatus_DecidesBlocking(
+        ProgressPaymentStatus status, bool expectedCanHardDelete)
+    {
+        // Taslak ve iptal edilmiş hakediş canlı mali kayıt değildir;
+        // onaya çıkmış ve onaylanmış olan engeller.
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+
+        Project project;
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            project = await TestDataFactory.CreateProjectAsync(
+                db, Guid.NewGuid().ToString("N")[..8]);
+
+            db.ProgressPayments.Add(new ProgressPayment
+            {
+                CompanyId = project.CompanyId,
+                ProjectId = project.Id,
+                ProgressPaymentNumber = $"HK-{Guid.NewGuid():N}"[..20],
+                PeriodNumber = 1,
+                ProgressPaymentDate = DateTime.UtcNow,
+                Status = status,
+                CurrencyCode = "TRY"
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var impact = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/projects/{project.Id}/deletion-impact");
+
+        Assert.Equal(
+            expectedCanHardDelete, impact.GetProperty("canHardDelete").GetBoolean());
+    }
+
     [Fact]
     public async Task Delete_ProjectWithSoftDeletedCheque_NotBlocked()
     {

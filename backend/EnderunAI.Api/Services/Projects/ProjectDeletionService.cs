@@ -285,10 +285,15 @@ public sealed class ProjectDeletionService(
                     cancellationToken),
             "Kesinleşmiş fiş silinemez; yasal defter kaydıdır.");
 
+        // İptal edilmiş hakediş, iptal edilmiş fatura gibi, canlı bir mali
+        // kayıt değildir — muhasebe fişi üretmişse zaten fiş satırı
+        // üzerinden engelleniyor.
         Add("progressPayments", "Taslak dışı hakediş",
             await db.ProgressPayments
                 .CountAsync(
-                    x => x.ProjectId == projectId && x.Status != ProgressPaymentStatus.Draft,
+                    x => x.ProjectId == projectId
+                         && x.Status != ProgressPaymentStatus.Draft
+                         && x.Status != ProgressPaymentStatus.Cancelled,
                     cancellationToken),
             "Onaya çıkmış veya kesinleşmiş hakediş silinemez.");
 
