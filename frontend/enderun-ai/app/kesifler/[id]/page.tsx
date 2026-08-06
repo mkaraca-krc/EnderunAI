@@ -568,6 +568,30 @@ export default function ContractSummaryDetailPage() {
                 </div>
               )}
 
+              {/* Aktarım şeridi eşleştirme tablosunun ÜSTÜNDE de duruyor:
+                  350 satırlık bir icmalde tek kopya tablonun altında
+                  kalıyor ve kullanıcı önizlemeyi görüp aktarıma hiç
+                  ulaşamıyor. */}
+              <div className="erp-form-actions">
+                <button
+                  type="button"
+                  className="erp-secondary-button"
+                  onClick={clearImport}
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="button"
+                  className="erp-primary-button"
+                  disabled={importing || preview.itemCount === 0}
+                  onClick={() => void commitImport()}
+                >
+                  {importing
+                    ? "Aktarılıyor..."
+                    : `${preview.itemCount} pozu aktar`}
+                </button>
+              </div>
+
               {preview.items.length > 0 && (
                 <div className="erp-mt">
                   <h3>Poz Eşleştirme</h3>
