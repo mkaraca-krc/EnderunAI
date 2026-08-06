@@ -1,5 +1,6 @@
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.GoodsReceipt;
+using EnderunAI.Api.Models.Market;
 using EnderunAI.Api.Models.PurchaseOrder;
 using EnderunAI.Api.Models.Rfq;
 using EnderunAI.Api.Models.Secretariat;
@@ -162,6 +163,7 @@ public sealed class AppDbContext(
     public DbSet<EmployerPortalLink> EmployerPortalLinks => Set<EmployerPortalLink>();
     public DbSet<EmployerPortalEmailLog> EmployerPortalEmailLogs => Set<EmployerPortalEmailLog>();
     public DbSet<SecurityAuditEvent> SecurityAuditEvents => Set<SecurityAuditEvent>();
+    public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
 
     public DbSet<CompanyBankAccount> CompanyBankAccounts => Set<CompanyBankAccount>();
 
@@ -229,6 +231,7 @@ public sealed class AppDbContext(
         ConfigureHrRecruitment(modelBuilder);
         ConfigureEmployerPortal(modelBuilder);
         ConfigureSecurityAuditEvents(modelBuilder);
+        ConfigureMarketData(modelBuilder);
         ConfigureRbac(modelBuilder);
         ConfigureWorkHourAccess(modelBuilder);
         ConfigureIsg(modelBuilder);
@@ -500,6 +503,35 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.ProjectSiteId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureMarketData(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ExchangeRate>(entity =>
+        {
+            entity.ToTable("exchange_rates");
+            entity.HasKey(x => x.Id);
+
+            // Aynı gün ve para birimi için ikinci kayıt olamaz; olsaydı
+            // hangi kurun kullanıldığı kayda göre değişirdi.
+            entity.HasIndex(x => new { x.RateDate, x.CurrencyCode })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Source).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.BulletinNumber).HasMaxLength(40);
+
+            // TCMB kurları dört haneden fazla ondalık yayımlamıyor; altı
+            // hane, 100 birim üzerinden kote edilenlerin bire indirgenmesi
+            // sırasındaki bölme için pay bırakır.
+            entity.Property(x => x.ForexBuying).HasPrecision(18, 6);
+            entity.Property(x => x.ForexSelling).HasPrecision(18, 6);
+            entity.Property(x => x.BanknoteBuying).HasPrecision(18, 6);
+            entity.Property(x => x.BanknoteSelling).HasPrecision(18, 6);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

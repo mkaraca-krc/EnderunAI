@@ -125,6 +125,21 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Projects.IProjectDeletionService,
     EnderunAI.Api.Services.Projects.ProjectDeletionService>();
+
+// Piyasa verisi: TCMB kurları. Dış kaynak erişilemezse uygulama normal
+// çalışır, yalnızca arşiv tazelenemez ve ekranlarda uyarı çıkar.
+builder.Services.AddHttpClient<
+    EnderunAI.Api.Services.Market.ITcmbRateClient,
+    EnderunAI.Api.Services.Market.TcmbRateClient>(client =>
+{
+    client.BaseAddress = new Uri("https://www.tcmb.gov.tr/");
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Market.IExchangeRateService,
+    EnderunAI.Api.Services.Market.ExchangeRateService>();
+builder.Services.AddHostedService<
+    EnderunAI.Api.Services.Market.MarketDataBackgroundService>();
 builder.Services.AddSingleton<
     EnderunAI.Api.Services.Projects.IProjectFileCleaner,
     EnderunAI.Api.Services.Projects.ProjectFileCleaner>();
