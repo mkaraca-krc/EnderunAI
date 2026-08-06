@@ -99,6 +99,7 @@ type ProjectDetail = {
 const modules = [
   // Proje bazlı olanlar "kesintiler" gibi göreli yazılır; aşağıdaki
   // bağlantı kurucusu başına /projeler/{id}/ ekler.
+  { label: "Şantiyeler", href: "santiyeler", icon: "▨", text: "Lokasyon kırılımı, personel atamaları ve depolar" },
   { label: "İcmal İlerlemesi", href: "icmal-ilerleme", icon: "◱", text: "Sözleşme, saha ve işveren kabulü" },
   { label: "İcmal Kısımları", href: "kisimlar", icon: "▤", text: "Projenin imalat kırılımı" },
   { label: "Maliyet Analizi", href: "maliyet-analizi", icon: "₸", text: "İcmal öngörüsü, gerçekleşen maliyet ve kâr" },
@@ -649,17 +650,29 @@ export default function ProjectCenterPage() {
                 <p>Proje altındaki lokasyon kırılımı ve depo/personel bağlantıları</p>
               </div>
 
-              <Link
-                href={`/projeler/${project.id}/santiyeler/yeni`}
-                className="erp-button secondary"
-              >
-                + Yeni Şantiye
-              </Link>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Link
+                  href={`/projeler/${project.id}/santiyeler`}
+                  className="erp-button secondary"
+                >
+                  Tümünü Yönet
+                </Link>
+                <Link
+                  href={`/projeler/${project.id}/santiyeler/yeni`}
+                  className="erp-button secondary"
+                >
+                  + Yeni Şantiye
+                </Link>
+              </div>
             </div>
 
             {sites.length === 0 ? (
               <div className="erp-empty-state">
-                Henüz şantiye tanımlanmamış.
+                <strong>Henüz şantiye tanımlanmamış</strong>
+                <p>
+                  Personelin görev yeri şantiye olarak atanabilmesi ve şantiye
+                  deposu açılabilmesi için önce en az bir şantiye tanımlanmalı.
+                </p>
               </div>
             ) : (
               <div className="erp-project-list">

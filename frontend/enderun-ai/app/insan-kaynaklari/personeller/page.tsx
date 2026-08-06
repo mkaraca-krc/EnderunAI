@@ -181,6 +181,16 @@ export default function HrPersonnelPage() {
   const [locationBranchId, setLocationBranchId] = useState("");
   const [locationSaving, setLocationSaving] = useState(false);
   const [locationError, setLocationError] = useState("");
+
+  // Kısayol: seçilen projede hiç şantiye yoksa kullanıcıyı başka bir
+  // ekrana göndermeden buradan şantiye açılabilir. Şantiye yönetimi
+  // proje merkezindeki Şantiyeler sekmesinde; buradaki yalnızca
+  // "atama yapamıyorum" tıkanmasını açan bir kestirme.
+  const [siteShortcutOpen, setSiteShortcutOpen] = useState(false);
+  const [siteShortcutCode, setSiteShortcutCode] = useState("");
+  const [siteShortcutName, setSiteShortcutName] = useState("");
+  const [siteShortcutLocation, setSiteShortcutLocation] = useState("");
+  const [siteShortcutSaving, setSiteShortcutSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<PersonnelForm>(emptyForm);
 
@@ -351,6 +361,7 @@ export default function HrPersonnelPage() {
     setLocationProjectId(projectId);
     setLocationSiteId("");
     setLocationSites([]);
+    setSiteShortcutOpen(false);
 
     if (!projectId) return;
 
@@ -360,6 +371,50 @@ export default function HrPersonnelPage() {
       setLocationError(
         err instanceof Error ? err.message : "Şantiyeler alınamadı."
       );
+    }
+  }
+
+  /**
+   * Görev yeri penceresinden şantiye açar ve yeni şantiyeyi seçili hale
+   * getirir. Kod zorunlu ve proje içinde tekil olduğu için öneri
+   * doldurulur; kullanıcı görüp değiştirebilir.
+   */
+  async function createSiteShortcut() {
+    if (!locationProjectId) return;
+
+    const code = siteShortcutCode.trim();
+    const name = siteShortcutName.trim();
+
+    if (!code || !name) {
+      setLocationError("Şantiye kodu ve adı zorunludur.");
+      return;
+    }
+
+    setSiteShortcutSaving(true);
+    setLocationError("");
+
+    try {
+      const created = await projectSiteService.create(locationProjectId, {
+        code,
+        name,
+        location: siteShortcutLocation.trim() || null,
+        notes: null,
+      });
+
+      const refreshed = await projectSiteService.getAll(locationProjectId);
+      setLocationSites(refreshed);
+      setLocationSiteId(created.id);
+
+      setSiteShortcutOpen(false);
+      setSiteShortcutCode("");
+      setSiteShortcutName("");
+      setSiteShortcutLocation("");
+    } catch (err) {
+      setLocationError(
+        err instanceof Error ? err.message : "Şantiye oluşturulamadı."
+      );
+    } finally {
+      setSiteShortcutSaving(false);
     }
   }
 
@@ -921,7 +976,101 @@ export default function HrPersonnelPage() {
                         label: `${site.code} — ${site.name}`,
                       }))}
                     />
+
+                    {locationProjectId && locationSites.length === 0 && (
+                      <span className="mt-1 block text-xs text-amber-700">
+                        Bu projede tanımlı şantiye yok — atama yapılabilmesi
+                        için önce bir şantiye açılmalı.
+                      </span>
+                    )}
                   </label>
+
+                  {locationProjectId && locationSites.length === 0 && (
+                    <div className="rounded-md border border-slate-200 p-3">
+                      {!siteShortcutOpen ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              // Liste boş olduğu için ilk şantiye; kod
+                              // önerisi doldurulur, kullanıcı değiştirebilir.
+                              setSiteShortcutCode("SANTIYE-1");
+                              setSiteShortcutName("");
+                              setSiteShortcutLocation("");
+                              setSiteShortcutOpen(true);
+                            }}
+                          >
+                            + Yeni şantiye oluştur
+                          </Button>
+
+                          <Link
+                            href={`/projeler/${locationProjectId}/santiyeler`}
+                            className="text-sm text-slate-600 underline"
+                          >
+                            Şantiye yönetimini aç
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <label className="block">
+                            <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Şantiye Kodu *
+                            </span>
+                            <Input
+                              value={siteShortcutCode}
+                              maxLength={30}
+                              onChange={(event) =>
+                                setSiteShortcutCode(event.target.value)
+                              }
+                            />
+                          </label>
+
+                          <label className="block">
+                            <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Şantiye Adı *
+                            </span>
+                            <Input
+                              value={siteShortcutName}
+                              placeholder="Merkez Şantiye"
+                              onChange={(event) =>
+                                setSiteShortcutName(event.target.value)
+                              }
+                            />
+                          </label>
+
+                          <label className="block">
+                            <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Lokasyon (ops.)
+                            </span>
+                            <Input
+                              value={siteShortcutLocation}
+                              onChange={(event) =>
+                                setSiteShortcutLocation(event.target.value)
+                              }
+                            />
+                          </label>
+
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => void createSiteShortcut()}
+                              disabled={siteShortcutSaving}
+                            >
+                              {siteShortcutSaving
+                                ? "Oluşturuluyor..."
+                                : "Oluştur ve seç"}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={() => setSiteShortcutOpen(false)}
+                              disabled={siteShortcutSaving}
+                            >
+                              Vazgeç
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <label className="block">
                     <span className="mb-1.5 block text-sm font-medium text-slate-700">
