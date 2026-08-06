@@ -1,4 +1,5 @@
 using EnderunAI.Api.Contracts.Engineering;
+using EnderunAI.Api.Services.Engineering;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
@@ -183,6 +184,76 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
             position.Id, position.Code, position.RevisionNumber
         });
     }
+
+    /// <summary>Pozun yıl/kurum bazlı birim fiyat geçmişi.</summary>
+    [HttpGet("{id:guid}/prices")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
+    public async Task<IActionResult> GetPrices(
+        Guid id,
+        [FromServices] IPositionPriceService prices,
+        CancellationToken cancellationToken)
+        => Ok(await prices.GetHistoryAsync(id, cancellationToken));
+
+    /// <summary>
+    /// Belirli bir yıl/kurum için uygulanacak fiyat. Bulunamazsa daha
+    /// eski bir yıla düşmez; gerekçesiyle "yok" döner.
+    /// </summary>
+    [HttpGet("{id:guid}/prices/resolve")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
+    public async Task<IActionResult> ResolvePrice(
+        Guid id,
+        [FromQuery] int? year,
+        [FromQuery] int? institution,
+        [FromServices] IPositionPriceService prices,
+        CancellationToken cancellationToken)
+    {
+        PositionPriceInstitution? source = null;
+
+        if (institution.HasValue)
+        {
+            if (!Enum.IsDefined(typeof(PositionPriceInstitution), institution.Value))
+                return BadRequest(new { message = "Geçersiz kurum." });
+
+            source = (PositionPriceInstitution)institution.Value;
+        }
+
+        return Ok(await prices.ResolveAsync(id, year, source, cancellationToken));
+    }
+
+    /// <summary>
+    /// Fiyat ekler veya aynı yıl/kurumdaki fiyatı günceller. Geçmiş yıl
+    /// satırlarına dokunulmaz.
+    /// </summary>
+    [HttpPut("{id:guid}/prices")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
+    public async Task<IActionResult> UpsertPrice(
+        Guid id,
+        [FromBody] UpsertPositionPriceInput input,
+        [FromServices] IPositionPriceService prices,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(typeof(PositionPriceInstitution), input.Institution))
+            return BadRequest(new { message = "Geçersiz kurum." });
+
+        try
+        {
+            return Ok(await prices.UpsertAsync(id, input, cancellationToken));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("prices/{priceId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
+    public async Task<IActionResult> DeletePrice(
+        Guid priceId,
+        [FromServices] IPositionPriceService prices,
+        CancellationToken cancellationToken)
+        => await prices.DeleteAsync(priceId, cancellationToken)
+            ? Ok(new { message = "Fiyat kaydı silindi." })
+            : NotFound(new { message = "Fiyat kaydı bulunamadı." });
 
     [HttpPatch("{id:guid}/status")]
     [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]

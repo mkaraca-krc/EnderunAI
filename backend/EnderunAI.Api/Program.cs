@@ -120,6 +120,9 @@ builder.Services.AddSingleton<
     EnderunAI.Api.Services.EInvoice.EInvoiceArchive>();
 builder.Services.AddScoped<IChequeService, ChequeService>();
 builder.Services.AddScoped<
+    EnderunAI.Api.Services.Engineering.IPositionPriceService,
+    EnderunAI.Api.Services.Engineering.PositionPriceService>();
+builder.Services.AddScoped<
     EnderunAI.Api.Services.Projects.IProjectCostAnalysisService,
     EnderunAI.Api.Services.Projects.ProjectCostAnalysisService>();
 builder.Services.AddScoped<

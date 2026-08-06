@@ -140,3 +140,85 @@ export const engineeringPositionCreateService = {
     });
   },
 };
+
+/** Birim fiyatı yayımlayan kurum. */
+export const PositionPriceInstitution = {
+  Csb: 0,
+  Tedas: 1,
+  Company: 2,
+  Other: 3,
+} as const;
+
+export const POSITION_PRICE_INSTITUTION_LABELS: Record<number, string> = {
+  [PositionPriceInstitution.Csb]: "ÇŞB",
+  [PositionPriceInstitution.Tedas]: "TEDAŞ",
+  [PositionPriceInstitution.Company]: "Şirket",
+  [PositionPriceInstitution.Other]: "Diğer",
+};
+
+export type PositionPriceRow = {
+  id: string;
+  year: number;
+  institution: number;
+  institutionName: string;
+  unitPrice: number;
+  currencyCode: string;
+  effectiveFrom?: string | null;
+  sourceNote?: string | null;
+  createdAtUtc: string;
+};
+
+/** Bulunamadıysa found=false döner; sıfır fiyat üretilmez. */
+export type PositionPriceResolution = {
+  found: boolean;
+  unitPrice?: number | null;
+  currencyCode?: string | null;
+  year?: number | null;
+  institution?: number | null;
+  institutionName?: string | null;
+  sourceNote?: string | null;
+  explanation: string;
+};
+
+export type UpsertPositionPriceInput = {
+  year: number;
+  institution: number;
+  unitPrice: number;
+  currencyCode?: string | null;
+  effectiveFrom?: string | null;
+  sourceNote?: string | null;
+};
+
+export const positionPriceService = {
+  getHistory(positionId: string) {
+    return apiClient<PositionPriceRow[]>(
+      `engineering-positions/${positionId}/prices`
+    );
+  },
+
+  resolve(positionId: string, year?: number, institution?: number) {
+    const query = new URLSearchParams();
+    if (year !== undefined) query.set("year", String(year));
+    if (institution !== undefined) query.set("institution", String(institution));
+
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+
+    return apiClient<PositionPriceResolution>(
+      `engineering-positions/${positionId}/prices/resolve${suffix}`
+    );
+  },
+
+  upsert(positionId: string, payload: UpsertPositionPriceInput) {
+    return apiClient<PositionPriceRow>(
+      `engineering-positions/${positionId}/prices`,
+      { method: "PUT", body: payload }
+    );
+  },
+
+  remove(priceId: string) {
+    return apiClient<{ message: string }>(
+      `engineering-positions/prices/${priceId}`,
+      { method: "DELETE" }
+    );
+  },
+};

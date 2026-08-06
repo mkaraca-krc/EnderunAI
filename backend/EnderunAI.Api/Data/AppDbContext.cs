@@ -50,6 +50,7 @@ public sealed class AppDbContext(
     public DbSet<ProgressPaymentDeduction> ProgressPaymentDeductions => Set<ProgressPaymentDeduction>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<EngineeringPosition> EngineeringPositions => Set<EngineeringPosition>();
+    public DbSet<PositionUnitPrice> PositionUnitPrices => Set<PositionUnitPrice>();
     public DbSet<EngineeringRecipe> EngineeringRecipes => Set<EngineeringRecipe>();
     public DbSet<EngineeringRecipeMaterial> EngineeringRecipeMaterials => Set<EngineeringRecipeMaterial>();
     public DbSet<EngineeringRecipeLabor> EngineeringRecipeLabors => Set<EngineeringRecipeLabor>();
@@ -2114,6 +2115,33 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<PositionUnitPrice>(entity =>
+        {
+            entity.ToTable("position_unit_prices");
+            entity.HasKey(x => x.Id);
+
+            // Aynı poz + yıl + kurum için tek satır: aynı fiyat kitabının
+            // iki kez yüklenmesi satır çoğaltmamalı, fiyatı güncellemeli.
+            entity.HasIndex(x => new
+            {
+                x.EngineeringPositionId, x.Year, x.Institution
+            })
+            .IsUnique()
+            .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Institution).HasConversion<int>().IsRequired();
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 4);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.SourceNote).HasMaxLength(300);
+
+            entity.HasOne(x => x.EngineeringPosition)
+                .WithMany()
+                .HasForeignKey(x => x.EngineeringPositionId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

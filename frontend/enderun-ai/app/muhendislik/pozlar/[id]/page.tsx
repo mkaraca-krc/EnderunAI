@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ErpShell from "@/components/erp/erp-shell";
 import RecipeEditor from "@/components/engineering/recipe-editor";
+import PositionPriceHistory from "@/components/engineering/position-price-history";
 import {
   EngineeringPositionDetail,
   engineeringPositionDetailService,
@@ -165,6 +166,7 @@ export default function EngineeringPositionDetailPage() {
 
   const tabs = [
     ["general", "Genel Bilgi"],
+    ["prices", "Birim Fiyatlar"],
     ["recipe", "Reçete"],
     ["materials", "Malzemeler"],
     ["labor", "İşçilik"],
@@ -504,11 +506,17 @@ export default function EngineeringPositionDetailPage() {
           </form>
         )}
 
+        {activeTab === "prices" && (
+          <PositionPriceHistory positionId={id} />
+        )}
+
         {activeTab === "recipe" && (
           <RecipeEditor positionId={id} />
         )}
 
-        {activeTab !== "general" && activeTab !== "recipe" && (
+        {activeTab !== "general" &&
+          activeTab !== "recipe" &&
+          activeTab !== "prices" && (
           <div className="erp-empty-state">
             <div className="enderun-empty-symbol">▧</div>
             <strong>
