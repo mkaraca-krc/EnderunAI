@@ -42,6 +42,9 @@ public static class RoleCatalog
             PermissionCatalog.Keys.AccountingView, PermissionCatalog.Keys.AccountingCreate, PermissionCatalog.Keys.AccountingEdit,
             PermissionCatalog.Keys.AccountingDelete, PermissionCatalog.Keys.AccountingApprove, PermissionCatalog.Keys.AccountingManage,
             PermissionCatalog.Keys.HakedisView,
+            // Taşeron ödemesi, avansı ve tevkifatı finansın işi.
+            PermissionCatalog.Keys.SubcontractorView, PermissionCatalog.Keys.SubcontractorManage,
+            PermissionCatalog.Keys.SubcontractorApprove,
             PermissionCatalog.Keys.CompaniesManage,
             // Bordro ödemesini kasadan/bankadan yapan ve aylık maliyet
             // raporunu okuyan rol; ücret rakamlarını görmesi gerekir.
@@ -140,6 +143,10 @@ public static class RoleCatalog
             PermissionCatalog.Keys.PersonnelView, PermissionCatalog.Keys.PersonnelCreate,
             PermissionCatalog.Keys.PersonnelEdit, PermissionCatalog.Keys.PersonnelDelete,
             PermissionCatalog.Keys.AttendancePayrollView,
+            // Sahadaki taşeronu yöneten ve hakedişini hazırlayan rol.
+            // Elden tutarlar extra_payment.* ile ayrıca korunuyor;
+            // bu rolde o izin YOK, dolayısıyla elden kısmı görmez.
+            PermissionCatalog.Keys.SubcontractorView, PermissionCatalog.Keys.SubcontractorManage,
             PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.ProjectsManage, PermissionCatalog.Keys.HakedisManage,
             PermissionCatalog.Keys.PersonnelManage, PermissionCatalog.Keys.AttendanceView, PermissionCatalog.Keys.PayrollView,

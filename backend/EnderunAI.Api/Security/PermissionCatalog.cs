@@ -116,6 +116,13 @@ public static class PermissionCatalog
         public const string ExtraPaymentView = "extra_payment.view";
         public const string ExtraPaymentManage = "extra_payment.manage";
 
+        // Taşeron — sözleşme, hakediş, avans ve evrak.
+        // Elden ödeme ve elden avans AYRICA extra_payment.* ister:
+        // taşeron yönetebilen herkes elden tutarları göremez.
+        public const string SubcontractorView = "subcontractor.view";
+        public const string SubcontractorManage = "subcontractor.manage";
+        public const string SubcontractorApprove = "subcontractor.approve";
+
         // Hakediş
         public const string HakedisView = "hakedis.view";
         public const string HakedisManage = "hakedis.manage";
@@ -296,6 +303,10 @@ public static class PermissionCatalog
 
         new(Keys.ExtraPaymentView, "Ek Ödeme", "Ek ödeme görüntüleme", "Resmi bordroda görünmeyen elden ödeme tutarlarını ve elden tazminat farkını görür."),
         new(Keys.ExtraPaymentManage, "Ek Ödeme", "Ek ödeme yönetimi", "Personelin elden ödeme tutarlarını tanımlar ve değiştirir."),
+
+        new(Keys.SubcontractorView, "Taşeron", "Taşeronu görüntüleme", "Taşeron sözleşmelerini, hakedişlerini ve evraklarını görüntüler."),
+        new(Keys.SubcontractorManage, "Taşeron", "Taşeron yönetimi", "Taşeron sözleşmesi, hakedişi ve avansı oluşturur ve günceller."),
+        new(Keys.SubcontractorApprove, "Taşeron", "Taşeron onayı", "Taşeron hakedişini ve avansını onaylar."),
 
         new(Keys.HakedisView, "Hakediş", "Hakedişi görüntüleme", "Hakediş, metraj ve fiyat farkı kayıtlarını görüntüler."),
         new(Keys.HakedisManage, "Hakediş", "Hakediş yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),

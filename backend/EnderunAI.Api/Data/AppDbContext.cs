@@ -67,6 +67,12 @@ public sealed class AppDbContext(
     public DbSet<PersonnelTermination> PersonnelTerminations =>
         Set<PersonnelTermination>();
 
+    public DbSet<SubcontractorContract> SubcontractorContracts =>
+        Set<SubcontractorContract>();
+
+    public DbSet<SubcontractorContractSection> SubcontractorContractSections =>
+        Set<SubcontractorContractSection>();
+
     public DbSet<ProjectHakedisSection> ProjectHakedisSections =>
         Set<ProjectHakedisSection>();
 
@@ -202,6 +208,7 @@ public sealed class AppDbContext(
         ConfigureAccountingVoucherLines(modelBuilder);
         ConfigureProjects(modelBuilder);
         ConfigureProjectDocuments(modelBuilder);
+        ConfigureSubcontractorContracts(modelBuilder);
         ConfigureProgressPayments(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigureEngineeringPositions(modelBuilder);
@@ -1637,6 +1644,77 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.UploadedByUser)
                 .WithMany()
                 .HasForeignKey(x => x.UploadedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureSubcontractorContracts(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SubcontractorContract>(entity =>
+        {
+            entity.ToTable("subcontractor_contracts");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.ContractNumber }).IsUnique();
+            entity.HasIndex(x => new { x.ProjectId, x.Status });
+            entity.HasIndex(x => x.CurrentAccountId);
+
+            entity.Property(x => x.ContractNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.WorkDescription).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.Property(x => x.ContractAmount).HasPrecision(18, 2);
+            entity.Property(x => x.RetentionRate).HasPrecision(9, 4);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CurrentAccount)
+                .WithMany()
+                .HasForeignKey(x => x.CurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectSite)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<SubcontractorContractSection>(entity =>
+        {
+            entity.ToTable("subcontractor_contract_sections");
+            entity.HasKey(x => x.Id);
+
+            // Aynı kısım aynı sözleşmede iki kez olamaz; olsaydı götürü
+            // ilerleme ağırlığı çift sayılırdı.
+            entity.HasIndex(x => new
+            {
+                x.SubcontractorContractId,
+                x.ProjectHakedisSectionId
+            }).IsUnique();
+
+            entity.Property(x => x.SectionAmount).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.SubcontractorContract)
+                .WithMany(x => x.Sections)
+                .HasForeignKey(x => x.SubcontractorContractId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ProjectHakedisSection)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectHakedisSectionId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

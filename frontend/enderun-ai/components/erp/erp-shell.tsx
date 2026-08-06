@@ -53,6 +53,9 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
   if (pathname.startsWith("/insan-kaynaklari")) return "personnel.view";
   // Kaza defteri kendi dar izniyle korunur; İSG kaydı girebilen herkese
   // görünmez.
+  // Taşeron sözleşmesi birim fiyat ve bedel taşır; saha ve ofis
+  // rollerine menüde de çıkmaz.
+  if (pathname.startsWith("/taseronlar")) return "subcontractor.view";
   if (pathname.startsWith("/isg/kazalar")) return "isg.incident.view";
   // Personelin kendi belgeleri: izin gerekmez, uç zaten yalnız kendi
   // kaydını döndürür.
@@ -76,6 +79,7 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
   ) return "engineering.view";
   if (
     pathname.startsWith("/projeler") ||
+    pathname.startsWith("/taseronlar") ||
     pathname.startsWith("/teklifler")
   ) return "projects.view";
   if (
@@ -352,6 +356,11 @@ const groups: MenuGroup[] = [
         label: "Sözleşme İcmali",
         href: "/kesifler",
         icon: "▤",
+      },
+      {
+        label: "Taşeronlar",
+        href: "/taseronlar",
+        icon: "▦",
       },
       {
         label: "Metrajlar",
