@@ -77,3 +77,9 @@ staging/
 # Poz kitabı kaynak dosyaları: 15 MB PDF ve Excel, kod değil veri.
 # Sunucuda duruyor, depoya girmiyor.
 poz-dosyalari/
+
+# Müşteri icmal/hakediş dosyaları: gerçek proje verisi, kod değil.
+# Sunucuda duruyor, depoya girmiyor.
+/*.xlsx
+/*.xls
+icmal-dosyalari/
