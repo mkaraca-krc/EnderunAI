@@ -431,7 +431,10 @@ public sealed class ProjectBoqController(
     [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     [RequestSizeLimit(20L * 1024 * 1024)]
     public async Task<IActionResult> ImportPreview(
-        Guid id, IFormFile file, CancellationToken cancellationToken)
+        Guid id,
+        IFormFile file,
+        [FromServices] Services.Engineering.IPositionMatchService matcher,
+        CancellationToken cancellationToken)
     {
         var boq = await db.ProjectBoqs
             .AsNoTracking()
@@ -470,7 +473,7 @@ public sealed class ProjectBoqController(
             });
         }
 
-        return Ok(await BuildPreview(boq.ProjectId, parsed, cancellationToken));
+        return Ok(await BuildPreview(boq.ProjectId, parsed, matcher, cancellationToken));
     }
 
     /// <summary>
@@ -629,8 +632,15 @@ public sealed class ProjectBoqController(
     private async Task<object> BuildPreview(
         Guid projectId,
         ContractSummaryParseResult parsed,
+        Services.Engineering.IPositionMatchService matcher,
         CancellationToken cancellationToken)
     {
+        var project = await db.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == projectId)
+            .Select(x => new { x.CompanyId })
+            .SingleOrDefaultAsync(cancellationToken);
+
         var existingSections = await db.ProjectHakedisSections
             .AsNoTracking()
             .Where(x => x.ProjectId == projectId)
@@ -654,6 +664,33 @@ public sealed class ProjectBoqController(
             })
             .ToList();
 
+        // Önizlemede gösterilen satır sayısı sınırlı; eşleştirme de
+        // yalnızca gösterilenler için yapılır.
+        var previewLines = parsed.Lines
+            .Where(x => !x.IsSectionHeader)
+            .Take(200)
+            .ToList();
+
+        var matches = new Dictionary<int, Services.Engineering.BulkMatchRow>();
+
+        if (project is not null && previewLines.Count > 0)
+        {
+            var rows = previewLines
+                .Select(x => (
+                    x.RowNumber,
+                    Query: string.IsNullOrWhiteSpace(x.PositionCode)
+                        ? x.Description
+                        : $"{x.PositionCode} {x.Description}"))
+                .Where(x => !string.IsNullOrWhiteSpace(x.Query))
+                .ToList();
+
+            var suggestions = await matcher.SuggestBulkAsync(
+                project.CompanyId, rows, cancellationToken: cancellationToken);
+
+            foreach (var suggestion in suggestions)
+                matches[suggestion.RowNumber] = suggestion;
+        }
+
         return new
         {
             SectionCount = parsed.SectionCount,
@@ -663,9 +700,7 @@ public sealed class ProjectBoqController(
             UnsectionedItemCount = parsed.Lines
                 .Count(x => !x.IsSectionHeader && x.SectionName is null),
             Errors = parsed.Errors.Select(x => new { x.RowNumber, x.Message }).ToList(),
-            Items = parsed.Lines
-                .Where(x => !x.IsSectionHeader)
-                .Take(200)
+            Items = previewLines
                 .Select(x => new
                 {
                     x.RowNumber,
@@ -678,7 +713,28 @@ public sealed class ProjectBoqController(
                     x.LaborUnitPrice,
                     x.OverheadUnitPrice,
                     x.UnitPrice,
-                    x.TotalAmount
+                    x.TotalAmount,
+                    // Poz önerisi: kesinse otomatik seçilebilir, değilse
+                    // kullanıcı aday listesinden seçer ya da özel poz açar.
+                    Match = matches.TryGetValue(x.RowNumber, out var match)
+                        ? new
+                        {
+                            match.IsCertain,
+                            match.CertaintyReason,
+                            Candidates = match.Suggestions.Select(s => new
+                            {
+                                s.PositionId,
+                                Code = s.OfficialCode ?? s.Code,
+                                s.Name,
+                                s.Unit,
+                                s.Institution,
+                                s.Score,
+                                s.UnitPrice,
+                                s.MaterialPrice,
+                                s.LaborPrice
+                            })
+                        }
+                        : null
                 })
                 .ToList()
         };

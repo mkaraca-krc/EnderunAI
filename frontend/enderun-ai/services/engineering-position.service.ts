@@ -252,3 +252,50 @@ export const positionPriceService = {
     );
   },
 };
+
+export type PositionSuggestion = {
+  positionId: string;
+  code: string;
+  officialCode?: string | null;
+  name: string;
+  unit: string;
+  institution?: string | null;
+  category?: string | null;
+  score: number;
+  matchedTerms: string[];
+  unitPrice?: number | null;
+  materialPrice?: number | null;
+  laborPrice?: number | null;
+  priceExplanation?: string | null;
+  aiRank?: number | null;
+  aiReason?: string | null;
+};
+
+export type PositionMatchResult = {
+  query: string;
+  aiUsed: boolean;
+  aiSkippedReason?: string | null;
+  suggestions: PositionSuggestion[];
+  explanation: string;
+  /** Kesinse otomatik seçilebilir; değilse kullanıcı seçmeli. */
+  isCertain: boolean;
+  certaintyReason?: string | null;
+};
+
+export const positionMatchService = {
+  suggest(
+    companyId: string,
+    query: string,
+    options: { year?: number; limit?: number; useAi?: boolean } = {}
+  ) {
+    const params = new URLSearchParams({ companyId, query });
+
+    if (options.year !== undefined) params.set("year", String(options.year));
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    if (options.useAi !== undefined) params.set("useAi", String(options.useAi));
+
+    return apiClient<PositionMatchResult>(
+      `engineering-positions/suggest?${params.toString()}`
+    );
+  },
+};

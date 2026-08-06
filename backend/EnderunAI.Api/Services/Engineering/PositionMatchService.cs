@@ -31,7 +31,22 @@ public sealed record PositionMatchResult(
     /// <summary>Model kullanılmadıysa nedeni; kullanıldıysa null.</summary>
     string? AiSkippedReason,
     IReadOnlyList<PositionSuggestion> Suggestions,
-    string Explanation);
+    string Explanation,
+    /// <summary>
+    /// Eşleşme KESİN mi — otomatik seçilebilir mi. Kesin değilse
+    /// kullanıcı aday listesinden seçmeli; sistem kendi başına karar
+    /// vermez.
+    /// </summary>
+    bool IsCertain = false,
+    string? CertaintyReason = null);
+
+/// <summary>Toplu eşleştirmede tek satırın sonucu.</summary>
+public sealed record BulkMatchRow(
+    int RowNumber,
+    string Query,
+    bool IsCertain,
+    string? CertaintyReason,
+    IReadOnlyList<PositionSuggestion> Suggestions);
 
 public interface IPositionMatchService
 {
@@ -41,6 +56,20 @@ public interface IPositionMatchService
         int? year = null,
         int limit = PositionMatcher.DefaultLimit,
         bool useAi = true,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Çok satırlı eşleştirme. Toplu icmal aktarımında satır başına
+    /// ayrı sorgu atmak yüzlerce satırda kabul edilemez; adaylar TEK
+    /// seferde çekilip skorlama bellekte yapılır. Dil modeli
+    /// kullanılmaz — toplu akışta yüzlerce model çağrısı ne makul ne
+    /// gerekli.
+    /// </summary>
+    Task<IReadOnlyList<BulkMatchRow>> SuggestBulkAsync(
+        Guid companyId,
+        IReadOnlyList<(int RowNumber, string Query)> rows,
+        int? year = null,
+        int limit = 5,
         CancellationToken cancellationToken = default);
 }
 
@@ -70,6 +99,17 @@ public sealed class PositionMatchService(
 
     /// <summary>Tek bir belirtecin getirebileceği en fazla kayıt.</summary>
     private const int PrefilterPerTermLimit = 200;
+
+    /// <summary>Toplu eşleştirmede ön elemeye giren en fazla belirteç.</summary>
+    private const int BulkTermLimit = 40;
+
+    /// <summary>
+    /// Tek sorguda aranacak en fazla belirteç. Toplu akışta bu sınır
+    /// yetmiyor: onlarca satırın kelimeleri birleşiyor ve ilk sekizde
+    /// kalan bir sınır, sonraki satırların pozlarını havuza hiç
+    /// almıyordu — o satırlar sessizce eşleşmesiz görünüyordu.
+    /// </summary>
+    private const int SingleQueryTermLimit = 8;
 
     public async Task<PositionMatchResult> SuggestAsync(
         Guid companyId,
@@ -109,19 +149,22 @@ public sealed class PositionMatchService(
         }
 
         var suggestions = await BuildSuggestionsAsync(ranked, year, cancellationToken);
+        var (isCertain, certaintyReason) = EvaluateCertainty(ranked);
 
         if (!useAi)
         {
             return new PositionMatchResult(
                 query, false, "Yapay zekâ sıralaması istenmedi.", suggestions,
-                $"{suggestions.Count} aday benzerlik skoruna göre sıralandı.");
+                $"{suggestions.Count} aday benzerlik skoruna göre sıralandı.",
+                isCertain, certaintyReason);
         }
 
         if (!llm.IsConfigured)
         {
             return new PositionMatchResult(
                 query, false, "Dil modeli yapılandırılmamış.", suggestions,
-                $"{suggestions.Count} aday benzerlik skoruna göre sıralandı.");
+                $"{suggestions.Count} aday benzerlik skoruna göre sıralandı.",
+                isCertain, certaintyReason);
         }
 
         try
@@ -131,7 +174,8 @@ public sealed class PositionMatchService(
             return new PositionMatchResult(
                 query, true, null, reranked,
                 $"{reranked.Count} aday listelendi. Sıralama ve gerekçeler yapay zekâdan; " +
-                "adaylar kütüphaneden geldi, kesin eşleşme kararını siz verin.");
+                "adaylar kütüphaneden geldi, kesin eşleşme kararını siz verin.",
+                isCertain, certaintyReason);
         }
         catch (Exception ex)
         {
@@ -141,8 +185,86 @@ public sealed class PositionMatchService(
             return new PositionMatchResult(
                 query, false, $"Dil modeline ulaşılamadı ({ex.GetType().Name}).",
                 suggestions,
-                $"{suggestions.Count} aday benzerlik skoruna göre sıralandı.");
+                $"{suggestions.Count} aday benzerlik skoruna göre sıralandı.",
+                isCertain, certaintyReason);
         }
+    }
+
+    /// <summary>
+    /// Eşleşmenin KESİN sayılıp otomatik seçilebileceği durumlar.
+    ///
+    /// İki koşuldan biri: (a) kullanıcı poz numarasını yazmıştır —
+    /// tartışma yok; (b) en iyi aday ikinciden belirgin biçimde
+    /// öndedir. İkisi de yoksa karar insana bırakılır: yakın iki aday
+    /// arasından sistemin seçmesi, yanlış pozla fiyatlanmış bir keşif
+    /// üretir ve bunu sonradan fark etmek çok zordur.
+    /// </summary>
+    private const double CertaintyDominanceFactor = 2.0;
+    private const double CertaintyMinimumScore = 40.0;
+
+    private static (bool IsCertain, string? Reason) EvaluateCertainty(
+        IReadOnlyList<MatchScore> ranked)
+    {
+        if (ranked.Count == 0)
+            return (false, null);
+
+        var best = ranked[0];
+
+        if (best.Score >= 1000)
+            return (true, "Poz numarası birebir eşleşti.");
+
+        if (best.Score < CertaintyMinimumScore)
+            return (false, "Benzerlik yeterince yüksek değil; aday listesinden seçin.");
+
+        if (ranked.Count == 1)
+            return (true, "Tek aday var ve benzerlik yüksek.");
+
+        var runnerUp = ranked[1].Score;
+
+        if (runnerUp <= 0 || best.Score >= runnerUp * CertaintyDominanceFactor)
+            return (true, "En iyi aday diğerlerinden belirgin biçimde önde.");
+
+        return (false, "Birbirine yakın birden çok aday var; seçim size ait.");
+    }
+
+    public async Task<IReadOnlyList<BulkMatchRow>> SuggestBulkAsync(
+        Guid companyId,
+        IReadOnlyList<(int RowNumber, string Query)> rows,
+        int? year = null,
+        int limit = 5,
+        CancellationToken cancellationToken = default)
+    {
+        if (rows.Count == 0)
+            return [];
+
+        // Bütün satırların belirteçleri birleştirilip TEK ön eleme
+        // yapılır; satır başına sorgu yüzlerce satırda kabul edilemez.
+        var allTerms = rows
+            .SelectMany(x => PositionMatcher.Tokenize(x.Query))
+            .Distinct(StringComparer.Ordinal)
+            .Take(BulkTermLimit)
+            .ToList();
+
+        var pool = allTerms.Count == 0
+            ? []
+            : await PrefilterAsync(companyId, allTerms, cancellationToken, BulkTermLimit);
+
+        var results = new List<BulkMatchRow>(rows.Count);
+
+        foreach (var (rowNumber, query) in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var ranked = PositionMatcher.Rank(query, pool, limit);
+            var (isCertain, reason) = EvaluateCertainty(ranked);
+
+            var suggestions = await BuildSuggestionsAsync(ranked, year, cancellationToken);
+
+            results.Add(new BulkMatchRow(
+                rowNumber, query, isCertain, reason, suggestions));
+        }
+
+        return results;
     }
 
     /// <summary>
@@ -152,7 +274,10 @@ public sealed class PositionMatchService(
     /// çekmek gereksiz.
     /// </summary>
     private async Task<List<MatchCandidate>> PrefilterAsync(
-        Guid companyId, IReadOnlyList<string> terms, CancellationToken cancellationToken)
+        Guid companyId,
+        IReadOnlyList<string> terms,
+        CancellationToken cancellationToken,
+        int maxTerms = SingleQueryTermLimit)
     {
         // Belirteç başına ayrı sorgu: OR zincirini tek ifadede kurmak
         // EF tarafından SQL'e çevrilemiyor. Belirteç sayısı azdır
@@ -160,7 +285,7 @@ public sealed class PositionMatchService(
         // sınırıyla dönüyor.
         var merged = new Dictionary<Guid, MatchCandidate>();
 
-        foreach (var term in terms.Take(8))
+        foreach (var term in terms.Take(maxTerms))
         {
             cancellationToken.ThrowIfCancellationRequested();
 

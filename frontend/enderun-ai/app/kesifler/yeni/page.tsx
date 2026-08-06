@@ -24,6 +24,7 @@ import {
 import PositionPicker, {
   type PickedPosition,
 } from "@/components/engineering/position-picker";
+import PositionSuggestButton from "@/components/engineering/position-suggest-button";
 import {
   projectBoqService,
   ProjectBoqItemType,
@@ -530,6 +531,14 @@ export default function NewProjectBoqPage() {
                       <PositionPicker
                         value={line.engineeringPositionId}
                         label={line.positionLabel}
+                        onPick={(position) =>
+                          selectPosition(line.key, position)
+                        }
+                      />
+
+                      <PositionSuggestButton
+                        companyId={companyId}
+                        description={line.description}
                         onPick={(position) =>
                           selectPosition(line.key, position)
                         }
