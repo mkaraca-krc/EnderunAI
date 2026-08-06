@@ -147,6 +147,40 @@ export const engineeringPositionCreateService = {
   },
 };
 
+/**
+ * Kütüphanede karşılığı olmayan kalem için şirkete özel poz.
+ * Kod verilmezse ENDERUN-xxxx üretilir; girilen fiyat "Şirket" kurumu
+ * altına yazılır, resmi kitap fiyatıymış gibi görünmez.
+ */
+export type CreateCustomPositionRequest = {
+  companyId: string;
+  name: string;
+  unit?: string | null;
+  discipline: number;
+  code?: string | null;
+  category?: string | null;
+  notes?: string | null;
+  unitPrice?: number | null;
+  year?: number | null;
+};
+
+export const customPositionService = {
+  create(payload: CreateCustomPositionRequest) {
+    return apiClient<{
+      message: string;
+      id: string;
+      code: string;
+      name: string;
+      unit: string;
+      institution: string;
+      unitPrice?: number | null;
+    }>("engineering-positions/custom", {
+      method: "POST",
+      body: payload,
+    });
+  },
+};
+
 /** Birim fiyatı yayımlayan kurum. */
 export const PositionPriceInstitution = {
   Csb: 0,

@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import BoqImportMatchTable, {
+  toDecisions,
+} from "@/components/engineering/boq-import-match-table";
 import ErpShell from "@/components/erp/erp-shell";
 import { usePermissions } from "@/lib/use-permissions";
 import {
@@ -64,6 +67,12 @@ export default function ContractSummaryDetailPage() {
   const [preview, setPreview] = useState<BoqImportPreview | null>(null);
   const [importing, setImporting] = useState(false);
 
+  // Satır bazında poz kararı: seçilen poz ya da null (bilerek atla).
+  // Dokunulmayan satırda uç yalnızca kesin eşleşmeyi uygular.
+  const [matchDecisions, setMatchDecisions] = useState<
+    Record<number, string | null>
+  >({});
+
   // Revizyon formu
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [amendmentNumber, setAmendmentNumber] = useState("");
@@ -97,6 +106,7 @@ export default function ContractSummaryDetailPage() {
   function clearImport() {
     setImportFile(null);
     setPreview(null);
+    setMatchDecisions({});
 
     // input.value sıfırlanmazsa aynı dosya ikinci kez seçilemez.
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -134,6 +144,7 @@ export default function ContractSummaryDetailPage() {
 
     try {
       setPreview(await projectBoqService.importPreview(params.id, importFile));
+      setMatchDecisions({});
     } catch (err) {
       setPreview(null);
       setActionError(err instanceof Error ? err.message : "Dosya okunamadı.");
@@ -149,7 +160,11 @@ export default function ContractSummaryDetailPage() {
     setActionError("");
 
     try {
-      const result = await projectBoqService.importCommit(params.id, importFile);
+      const result = await projectBoqService.importCommit(
+        params.id,
+        importFile,
+        toDecisions(matchDecisions)
+      );
       setNotice(result.message);
       clearImport();
       await load();
@@ -480,6 +495,40 @@ export default function ContractSummaryDetailPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {preview.items.length > 0 && (
+                <div className="erp-mt">
+                  <h3>Poz Eşleştirme</h3>
+                  <p>
+                    Kesin eşleşen satırlar aktarımda kütüphaneye bağlanır.
+                    Belirsiz satırda seçim sizde: adaydan seçin, özel poz açın
+                    ya da atlayın. Atlanan satır aktarılır, yalnızca poza
+                    bağlanmaz.
+                  </p>
+
+                  {preview.itemCount > preview.items.length && (
+                    <div className="erp-alert warning">
+                      Ekranda ilk {preview.items.length} satır gösteriliyor.
+                      Kalan {preview.itemCount - preview.items.length} satırda
+                      yalnızca kesin eşleşme uygulanacak; belirsiz olanlar poza
+                      bağlanmadan aktarılacak.
+                    </div>
+                  )}
+
+                  <BoqImportMatchTable
+                    companyId={item.companyId}
+                    items={preview.items}
+                    decisions={matchDecisions}
+                    disabled={importing}
+                    onChange={(rowNumber, positionId) =>
+                      setMatchDecisions((current) => ({
+                        ...current,
+                        [rowNumber]: positionId,
+                      }))
+                    }
+                  />
                 </div>
               )}
 

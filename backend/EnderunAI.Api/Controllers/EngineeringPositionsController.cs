@@ -193,6 +193,106 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
     }
 
     /// <summary>
+    /// Kütüphanede karşılığı olmayan bir kalemi tek adımda şirkete özel
+    /// poz olarak açar.
+    ///
+    /// Genel oluşturma ucundan farkı: kod otomatik üretilir, poz
+    /// doğrudan AKTİF açılır ve varsa fiyat aynı istekte "Şirket"
+    /// kurumuyla yazılır. Amaç keşif hazırlarken akışı kesmemek —
+    /// kullanıcı ayrı bir ekrana gidip taslak poz açıp sonra
+    /// onaylamak zorunda kalmasın.
+    /// </summary>
+    [HttpPost("custom")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
+    public async Task<IActionResult> CreateCustom(
+        CreateCustomPositionRequest request,
+        [FromServices] IPositionPriceService prices,
+        CancellationToken cancellationToken)
+    {
+        if (!await db.Companies.AnyAsync(x => x.Id == request.CompanyId, cancellationToken))
+            return BadRequest(new { message = "Geçerli şirket seçilmelidir." });
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return BadRequest(new { message = "Poz tanımı zorunludur." });
+
+        if (!Enum.IsDefined(typeof(EngineeringPositionDiscipline), request.Discipline))
+            return BadRequest(new { message = "Geçersiz disiplin." });
+
+        var discipline = (EngineeringPositionDiscipline)request.Discipline;
+        var unit = string.IsNullOrWhiteSpace(request.Unit) ? "AD" : request.Unit.Trim();
+
+        // Kod elle verilebilir; verilmezse şirket serisinden üretilir.
+        var code = string.IsNullOrWhiteSpace(request.Code)
+            ? await GenerateEnderunCode(request.CompanyId, discipline, cancellationToken)
+            : request.Code.Trim().ToUpperInvariant();
+
+        if (await db.EngineeringPositions.AnyAsync(
+                x => x.CompanyId == request.CompanyId && x.Code == code,
+                cancellationToken))
+        {
+            return Conflict(new
+            {
+                message = $"'{code}' kodu bu şirkette zaten kullanılıyor."
+            });
+        }
+
+        var name = request.Name.Trim();
+
+        var position = new EngineeringPosition
+        {
+            CompanyId = request.CompanyId,
+            Code = code,
+            Name = name.Length > 500 ? name[..500] : name,
+            Unit = unit.Length > 30 ? unit[..30] : unit,
+            Source = EngineeringPositionSource.Enderun,
+            Discipline = discipline,
+            // Özel poz hemen kullanılabilir olmalı; taslak bırakmak
+            // kullanıcıyı ikinci bir onay adımına zorlardı.
+            Status = EngineeringPositionStatus.Active,
+            OfficialInstitution = "Şirket",
+            OfficialCode = code,
+            Category = request.Category?.Trim(),
+            Description = request.Notes?.Trim(),
+            SearchKeywords = $"{code} {name} {request.Category}".Trim()
+        };
+
+        db.EngineeringPositions.Add(position);
+        await db.SaveChangesAsync(cancellationToken);
+
+        object? priceRow = null;
+
+        if (request.UnitPrice is > 0)
+        {
+            var year = request.Year is >= 2000 and <= 2100
+                ? request.Year.Value
+                : DateTime.UtcNow.Year;
+
+            priceRow = await prices.UpsertAsync(
+                position.Id,
+                new UpsertPositionPriceInput(
+                    year,
+                    PositionPriceInstitution.Company,
+                    request.UnitPrice.Value,
+                    "TRY",
+                    null,
+                    "Keşif sırasında açılan özel poz",
+                    PositionPriceComponent.Total),
+                cancellationToken);
+        }
+
+        return Ok(new
+        {
+            message = "Özel poz şirket kütüphanesine eklendi.",
+            position.Id,
+            position.Code,
+            position.Name,
+            position.Unit,
+            Institution = position.OfficialInstitution,
+            Price = priceRow
+        });
+    }
+
+    /// <summary>
     /// Serbest metin iş tanımından poz önerir.
     ///
     /// Adayları kütüphane üretir; dil modeli yalnızca sıralar ve
@@ -390,3 +490,18 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
         return $"{prefix}-{last + 1:000000}";
     }
 }
+
+/// <summary>
+/// Keşif akışından açılan şirkete özel poz. Kod boş bırakılırsa
+/// şirket serisinden üretilir.
+/// </summary>
+public sealed record CreateCustomPositionRequest(
+    Guid CompanyId,
+    string Name,
+    string? Unit,
+    int Discipline,
+    string? Code = null,
+    string? Category = null,
+    string? Notes = null,
+    decimal? UnitPrice = null,
+    int? Year = null);

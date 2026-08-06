@@ -134,19 +134,52 @@ export interface BoqImportPreview {
     totalAmount: number;
   }[];
   errors: { rowNumber: number; message: string }[];
-  items: {
-    rowNumber: number;
-    sectionName?: string | null;
-    positionCode: string;
-    description: string;
-    unit: string;
-    contractQuantity: number;
-    materialUnitPrice: number;
-    laborUnitPrice: number;
-    overheadUnitPrice: number;
-    unitPrice: number;
-    totalAmount: number;
-  }[];
+  items: BoqImportPreviewItem[];
+}
+
+/** Önizlemede bir satır için bulunan poz adayı. */
+export interface BoqImportMatchCandidate {
+  positionId: string;
+  code: string;
+  name: string;
+  unit: string;
+  institution?: string | null;
+  score: number;
+  unitPrice?: number | null;
+  materialPrice?: number | null;
+  laborPrice?: number | null;
+}
+
+export interface BoqImportPreviewItem {
+  rowNumber: number;
+  sectionName?: string | null;
+  positionCode: string;
+  description: string;
+  unit: string;
+  contractQuantity: number;
+  materialUnitPrice: number;
+  laborUnitPrice: number;
+  overheadUnitPrice: number;
+  unitPrice: number;
+  totalAmount: number;
+  /**
+   * Poz önerisi. Kesinse aktarımda otomatik bağlanır; değilse kullanıcı
+   * adaylardan seçer, özel poz açar ya da atlar.
+   */
+  match?: {
+    isCertain: boolean;
+    certaintyReason?: string | null;
+    candidates: BoqImportMatchCandidate[];
+  } | null;
+}
+
+/**
+ * Aktarımda satır bazında poz kararı. positionId boşsa satır BİLEREK
+ * atlanmış demektir; o satıra otomatik eşleştirme de uygulanmaz.
+ */
+export interface BoqImportMatchDecision {
+  rowNumber: number;
+  positionId: string | null;
 }
 
 export interface HakedisSectionTemplate {
@@ -286,14 +319,22 @@ export const projectBoqService = {
     );
   },
 
-  importCommit(id: string, file: File) {
+  importCommit(id: string, file: File, decisions?: BoqImportMatchDecision[]) {
     return uploadExcel<{
       message: string;
       sectionCount: number;
       itemCount: number;
       skippedRowCount: number;
+      linkedCount: number;
+      unlinkedCount: number;
       totalAmount: number;
-    }>(`project-boqs/${id}/icmal-aktar`, file);
+    }>(
+      `project-boqs/${id}/icmal-aktar`,
+      file,
+      decisions && decisions.length > 0
+        ? { matches: JSON.stringify(decisions) }
+        : undefined
+    );
   },
 
   getSectionTemplates() {
@@ -324,9 +365,16 @@ export const projectBoqService = {
   },
 };
 
-async function uploadExcel<T>(path: string, file: File): Promise<T> {
+async function uploadExcel<T>(
+  path: string,
+  file: File,
+  fields?: Record<string, string>
+): Promise<T> {
   const formData = new FormData();
   formData.append("file", file);
+
+  for (const [key, value] of Object.entries(fields ?? {}))
+    formData.append(key, value);
 
   const response = await fetch(`/api/backend/${path}`, {
     method: "POST",

@@ -10,8 +10,11 @@ import {
   PositionPriceInstitution,
 } from "@/services/engineering-position.service";
 import {
+  bookImportService,
   PositionImportAction,
   positionImportService,
+  type BookImportProfile,
+  type BookImportSummary,
   type PositionImportPreview,
   type SpreadsheetInspection,
 } from "@/services/position-import.service";
@@ -99,6 +102,18 @@ export default function PositionImportPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  // Hazır profil kipi: ÇŞB/TEDAŞ kitaplarının düzeni bilindiği için
+  // kullanıcı sütun seçmez.
+  const [useProfile, setUseProfile] = useState(true);
+  const [profiles, setProfiles] = useState<BookImportProfile[]>([]);
+  const [profileKey, setProfileKey] = useState("");
+  const [codePrefix, setCodePrefix] = useState("");
+  const [profileFile, setProfileFile] = useState<File | null>(null);
+  const [profileSummary, setProfileSummary] = useState<BookImportSummary | null>(
+    null
+  );
+  const [profileWritten, setProfileWritten] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -119,6 +134,67 @@ export default function PositionImportPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const data = await bookImportService.getProfiles();
+        if (cancelled) return;
+
+        setProfiles(data);
+        setProfileKey((current) => current || data[0]?.key || "");
+      } catch {
+        if (cancelled) return;
+
+        // Profiller alınamazsa elle eşleme akışı çalışmaya devam eder.
+        setProfiles([]);
+        setUseProfile(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedProfile = profiles.find((x) => x.key === profileKey) ?? null;
+
+  async function runProfile(write: boolean) {
+    if (!profileFile || !profileKey || !companyId) {
+      setError("Profil, şirket ve dosya seçilmelidir.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const fields = {
+        profileKey,
+        companyId,
+        year,
+        sourceNote: sourceNote.trim() || null,
+        codePrefix: codePrefix.trim() || null,
+      };
+
+      const summary = write
+        ? await bookImportService.commit(profileFile, fields)
+        : await bookImportService.preview(profileFile, fields);
+
+      setProfileSummary(summary);
+      setProfileWritten(write);
+
+      if (write) setNotice(summary.message);
+    } catch (err) {
+      setProfileSummary(null);
+      setError(err instanceof Error ? err.message : "Kitap okunamadı.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const mapping = {
     sheetName: inspection?.sheetName ?? null,
@@ -229,6 +305,217 @@ export default function PositionImportPage() {
       {error && <div className="erp-alert error">{error}</div>}
       {notice && <div className="erp-alert success">{notice}</div>}
 
+      {profiles.length > 0 && (
+        <section className="erp-panel">
+          <div className="erp-panel-header">
+            <div>
+              <h3>Aktarım yöntemi</h3>
+              <p>
+                Düzeni bilinen kitaplarda (ÇŞB, TEDAŞ) hazır profil kullanın;
+                sütun seçmeniz gerekmez. Başka bir dosya için elle sütun
+                eşleyin.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 16, padding: "0 16px 16px" }}>
+            <label>
+              <input
+                type="radio"
+                checked={useProfile}
+                onChange={() => setUseProfile(true)}
+              />{" "}
+              Hazır profil
+            </label>
+            <label>
+              <input
+                type="radio"
+                checked={!useProfile}
+                onChange={() => setUseProfile(false)}
+              />{" "}
+              Elle sütun eşleme
+            </label>
+          </div>
+        </section>
+      )}
+
+      {useProfile && profiles.length > 0 ? (
+        <section className="erp-panel">
+          <div className="erp-panel-header">
+            <div>
+              <h3>Hazır profille aktarım</h3>
+              <p>
+                {selectedProfile?.description ??
+                  "Bir profil seçin."}
+              </p>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+              gap: 12,
+            }}
+          >
+            <label>
+              <span>Profil *</span>
+              <select
+                className="erp-input"
+                value={profileKey}
+                onChange={(event) => {
+                  setProfileKey(event.target.value);
+                  setProfileSummary(null);
+                }}
+              >
+                {profiles.map((profile) => (
+                  <option key={profile.key} value={profile.key}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Şirket *</span>
+              <select
+                className="erp-input"
+                value={companyId}
+                onChange={(event) => setCompanyId(event.target.value)}
+              >
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Yıl *</span>
+              <input
+                className="erp-input"
+                type="number"
+                min={2000}
+                max={2100}
+                value={year}
+                onChange={(event) => setYear(Number(event.target.value))}
+              />
+            </label>
+
+            <label>
+              <span>Poz ön eki</span>
+              <input
+                className="erp-input"
+                value={codePrefix}
+                placeholder="35."
+                onChange={(event) => setCodePrefix(event.target.value)}
+              />
+            </label>
+
+            <label>
+              <span>Kaynak notu</span>
+              <input
+                className="erp-input"
+                value={sourceNote}
+                placeholder="ÇŞB 2026 Birim Fiyat Kitabı"
+                onChange={(event) => setSourceNote(event.target.value)}
+              />
+            </label>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <input
+              type="file"
+              accept={
+                selectedProfile?.fileKind === "pdf" ? ".pdf" : ".xlsx,.xlsm"
+              }
+              onChange={(event) => {
+                setProfileFile(event.target.files?.[0] ?? null);
+                setProfileSummary(null);
+              }}
+            />
+
+            <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className="erp-secondary-button"
+                disabled={busy || !profileFile}
+                onClick={() => void runProfile(false)}
+              >
+                {busy ? "Okunuyor..." : "Önizle"}
+              </button>
+
+              <button
+                type="button"
+                className="erp-primary-button"
+                disabled={busy || !profileFile || !profileSummary}
+                onClick={() => void runProfile(true)}
+              >
+                Aktar
+              </button>
+            </div>
+          </div>
+
+          {profileSummary && (
+            <div style={{ padding: 16 }}>
+              <div className="erp-detail-grid">
+                <div>
+                  <span className="erp-stat-label">Okunan satır</span>
+                  <strong>{profileSummary.parsedRows}</strong>
+                </div>
+                <div>
+                  <span className="erp-stat-label">Grup başlığı</span>
+                  <strong>{profileSummary.groupHeaders}</strong>
+                </div>
+                <div>
+                  <span className="erp-stat-label">Şüpheli satır</span>
+                  <strong>{profileSummary.suspiciousRows}</strong>
+                </div>
+                <div>
+                  <span className="erp-stat-label">
+                    {profileWritten ? "Açılan poz" : "Açılacak poz"}
+                  </span>
+                  <strong>{profileSummary.createdPositions}</strong>
+                </div>
+                <div>
+                  <span className="erp-stat-label">
+                    {profileWritten ? "Yazılan fiyat" : "Yazılacak fiyat"}
+                  </span>
+                  <strong>{profileSummary.upsertedPrices}</strong>
+                </div>
+              </div>
+
+              {profileSummary.suspiciousRows > 0 && (
+                <div className="erp-alert warning erp-mt">
+                  <strong>
+                    Okunuşundan emin olunamayan {profileSummary.suspiciousRows}{" "}
+                    satır var; bunlar aktarılmaz.
+                  </strong>
+                  <ul>
+                    {profileSummary.suspiciousLines.slice(0, 15).map((line, index) => (
+                      <li key={index}>
+                        <small>{line}</small>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {profileSummary.warnings.length > 0 && (
+                <ul className="erp-mt">
+                  {profileSummary.warnings.map((warning, index) => (
+                    <li key={index}>
+                      <small>{warning}</small>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </section>
+      ) : (
+        <>
       <section className="erp-panel">
         <div className="erp-panel-header">
           <div>
@@ -538,6 +825,8 @@ export default function PositionImportPage() {
             </table>
           </div>
         </section>
+      )}
+        </>
       )}
     </ErpShell>
   );

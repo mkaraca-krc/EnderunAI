@@ -1,4 +1,4 @@
-import { ApiError } from "@/lib/api/api-client";
+import { apiClient, ApiError } from "@/lib/api/api-client";
 
 export type SpreadsheetInspection = {
   sheetNames: string[];
@@ -110,6 +110,79 @@ async function upload<T>(
   }
 
   return payload as T;
+}
+
+/** ÇŞB / TEDAŞ gibi düzeni bilinen kitaplar için hazır eşleme. */
+export type BookImportProfile = {
+  key: string;
+  name: string;
+  description: string;
+  institution: number;
+  defaultDiscipline: number;
+  /** "xlsx" ya da "pdf". */
+  fileKind: string;
+};
+
+export type BookImportSummary = {
+  profileKey: string;
+  profileName: string;
+  parsedRows: number;
+  groupHeaders: number;
+  /** Okunuşundan emin olunamayan satırlar — uydurma yapılmadı. */
+  suspiciousRows: number;
+  createdPositions: number;
+  updatedPositions: number;
+  upsertedPrices: number;
+  inheritedUnits: number;
+  suspiciousLines: string[];
+  warnings: string[];
+  message: string;
+};
+
+export const bookImportService = {
+  getProfiles() {
+    return apiClient<BookImportProfile[]>(
+      "engineering-positions/import/profiles"
+    );
+  },
+
+  preview(file: File, fields: BookImportFields) {
+    return upload<BookImportSummary>(
+      "engineering-positions/import/profile/preview",
+      file,
+      toFormFields(fields)
+    );
+  },
+
+  commit(file: File, fields: BookImportFields) {
+    return upload<BookImportSummary>(
+      "engineering-positions/import/profile/commit",
+      file,
+      toFormFields(fields)
+    );
+  },
+};
+
+export type BookImportFields = {
+  profileKey: string;
+  companyId: string;
+  year: number;
+  sourceNote?: string | null;
+  /** Yalnızca bu ön ekle başlayan pozlar aktarılır (örn. 35.). */
+  codePrefix?: string | null;
+};
+
+function toFormFields(fields: BookImportFields): Record<string, string> {
+  const form: Record<string, string> = {
+    profileKey: fields.profileKey,
+    companyId: fields.companyId,
+    year: String(fields.year),
+  };
+
+  if (fields.sourceNote?.trim()) form.sourceNote = fields.sourceNote.trim();
+  if (fields.codePrefix?.trim()) form.codePrefix = fields.codePrefix.trim();
+
+  return form;
 }
 
 export const positionImportService = {

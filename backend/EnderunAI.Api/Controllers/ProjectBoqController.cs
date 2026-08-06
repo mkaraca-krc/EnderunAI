@@ -1,3 +1,4 @@
+using System.Text.Json;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security.CurrentUser;
@@ -488,7 +489,11 @@ public sealed class ProjectBoqController(
     [RequirePermission(PermissionCatalog.Keys.HakedisEdit)]
     [RequestSizeLimit(20L * 1024 * 1024)]
     public async Task<IActionResult> ImportCommit(
-        Guid id, IFormFile file, CancellationToken cancellationToken)
+        Guid id,
+        IFormFile file,
+        [FromForm] string? matches,
+        [FromServices] Services.Engineering.IPositionMatchService matcher,
+        CancellationToken cancellationToken)
     {
         // Kalemler yüklenmiyor: ReplaceItemsAsync onları doğrudan
         // veritabanından siliyor, izlenen kopya bayatlardı.
@@ -529,6 +534,26 @@ public sealed class ProjectBoqController(
         if (parsed.ItemCount == 0)
             return BadRequest(new { message = "Dosyada okunabilir poz satırı yok." });
 
+        Dictionary<int, Guid?> decisions;
+
+        try
+        {
+            decisions = ParseMatchDecisions(matches);
+        }
+        catch (JsonException)
+        {
+            return BadRequest(new
+            {
+                message = "Poz eşleştirme seçimleri okunamadı; aktarım yapılmadı."
+            });
+        }
+
+        var (positionMap, decisionError) = await ResolvePositionLinksAsync(
+            boq.ProjectId, parsed, decisions, matcher, cancellationToken);
+
+        if (decisionError is not null)
+            return BadRequest(new { message = decisionError });
+
         var sectionMap = await EnsureSectionsAsync(
             boq.ProjectId, parsed, cancellationToken);
 
@@ -546,9 +571,16 @@ public sealed class ProjectBoqController(
                     sectionId = resolved;
                 }
 
+                // Sözlükte yoksa BAĞ YOK demektir; GetValueOrDefault burada
+                // Guid.Empty döndürüp var olmayan bir poza bağlardı.
+                Guid? positionId = positionMap.TryGetValue(line.RowNumber, out var link)
+                    ? link
+                    : null;
+
                 return new ProjectBoqItem
                 {
                     ProjectHakedisSectionId = sectionId,
+                    EngineeringPositionId = positionId,
                     LineNumber = lineNumber++,
                     PositionCode = line.PositionCode,
                     Description = line.Description,
@@ -570,15 +602,123 @@ public sealed class ProjectBoqController(
 
         await ReplaceItemsAsync(boq, items, cancellationToken);
 
+        var linkedCount = items.Count(x => x.EngineeringPositionId is not null);
+
         return Ok(new
         {
-            message = $"{parsed.ItemCount} poz aktarıldı.",
+            message = $"{parsed.ItemCount} poz aktarıldı; {linkedCount} satır " +
+                      "poz kütüphanesine bağlandı.",
             SectionCount = parsed.SectionCount,
             ItemCount = parsed.ItemCount,
             SkippedRowCount = parsed.Errors.Count,
+            LinkedCount = linkedCount,
+            UnlinkedCount = items.Count - linkedCount,
             boq.TotalAmount
         });
     }
+
+    /// <summary>
+    /// Önizleme ekranından gelen satır kararları:
+    /// <c>[{ "rowNumber": 5, "positionId": "..." }]</c>. Değeri boş olan
+    /// satır BİLEREK atlanmış demektir — otomatik eşleştirme de yapılmaz.
+    /// </summary>
+    private static Dictionary<int, Guid?> ParseMatchDecisions(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+            return [];
+
+        var decisions = JsonSerializer.Deserialize<List<BoqImportMatchDecision>>(
+            payload,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        var map = new Dictionary<int, Guid?>();
+
+        foreach (var decision in decisions ?? [])
+            map[decision.RowNumber] = decision.PositionId;
+
+        return map;
+    }
+
+    /// <summary>
+    /// Satır → poz bağı. Kullanıcının seçimi esastır; hakkında karar
+    /// verilmemiş satırlarda YALNIZCA kesin eşleşme uygulanır. Belirsiz
+    /// adayı sessizce bağlamak, yanlış pozla fiyatlanmış bir icmal
+    /// üretir ve bunu sonradan fark etmek çok zordur.
+    /// </summary>
+    private async Task<(Dictionary<int, Guid> Map, string? Error)> ResolvePositionLinksAsync(
+        Guid projectId,
+        ContractSummaryParseResult parsed,
+        Dictionary<int, Guid?> decisions,
+        Services.Engineering.IPositionMatchService matcher,
+        CancellationToken cancellationToken)
+    {
+        var map = new Dictionary<int, Guid>();
+
+        var project = await db.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == projectId)
+            .Select(x => new { x.CompanyId })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (project is null)
+            return (map, null);
+
+        var chosen = decisions
+            .Where(x => x.Value.HasValue)
+            .Select(x => x.Value!.Value)
+            .Distinct()
+            .ToList();
+
+        if (chosen.Count > 0)
+        {
+            // Başka şirketin pozuna bağlamak, o şirketin fiyat geçmişini
+            // bu projeye sızdırırdı.
+            var valid = await db.EngineeringPositions
+                .AsNoTracking()
+                .Where(x => chosen.Contains(x.Id) && x.CompanyId == project.CompanyId)
+                .Select(x => x.Id)
+                .ToListAsync(cancellationToken);
+
+            if (valid.Count != chosen.Count)
+            {
+                return (map,
+                    "Seçilen pozlardan bazıları bu şirkete ait değil ya da " +
+                    "silinmiş; aktarım yapılmadı.");
+            }
+
+            foreach (var (rowNumber, positionId) in decisions)
+            {
+                if (positionId.HasValue)
+                    map[rowNumber] = positionId.Value;
+            }
+        }
+
+        var undecided = parsed.Lines
+            .Where(x => !x.IsSectionHeader && !decisions.ContainsKey(x.RowNumber))
+            .Select(x => (
+                x.RowNumber,
+                Query: string.IsNullOrWhiteSpace(x.PositionCode)
+                    ? x.Description
+                    : $"{x.PositionCode} {x.Description}"))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Query))
+            .ToList();
+
+        if (undecided.Count == 0)
+            return (map, null);
+
+        var suggestions = await matcher.SuggestBulkAsync(
+            project.CompanyId, undecided, cancellationToken: cancellationToken);
+
+        foreach (var suggestion in suggestions)
+        {
+            if (suggestion.IsCertain && suggestion.Suggestions.Count > 0)
+                map[suggestion.RowNumber] = suggestion.Suggestions[0].PositionId;
+        }
+
+        return (map, null);
+    }
+
+    public sealed record BoqImportMatchDecision(int RowNumber, Guid? PositionId);
 
     /// <summary>
     /// Dosyadaki kısımları projeye kurar; zaten varsa ada göre eşler.
