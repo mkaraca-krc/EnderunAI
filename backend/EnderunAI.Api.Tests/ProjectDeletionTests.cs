@@ -314,6 +314,73 @@ public sealed class ProjectDeletionTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task Delete_ProjectWithSoftDeletedCheque_NotBlocked()
+    {
+        // Yumuşak silinmiş kayıt canlı bir mali kayıt değildir: projeyi
+        // rehin almamalı. Yine de fiziksel olarak durduğu için silme
+        // sırasında temizlenmek zorunda.
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+
+        Project project;
+        Guid chequeId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            project = await TestDataFactory.CreateProjectAsync(
+                db, Guid.NewGuid().ToString("N")[..8]);
+
+            var cheque = new Cheque
+            {
+                CompanyId = project.CompanyId,
+                ProjectId = project.Id,
+                Direction = ChequeDirection.Issued,
+                ChequeNumber = $"T{Guid.NewGuid():N}"[..12],
+                BankName = "Test Bank",
+                Amount = 1000,
+                CurrencyCode = "TRY",
+                IssueDate = DateTime.UtcNow,
+                DueDate = DateTime.UtcNow.AddMonths(1),
+                Status = ChequeStatus.Issued,
+                IsDeleted = true,
+                DeletedAtUtc = DateTime.UtcNow
+            };
+            db.Cheques.Add(cheque);
+            await db.SaveChangesAsync();
+
+            chequeId = cheque.Id;
+        }
+
+        var impact = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/projects/{project.Id}/deletion-impact");
+
+        Assert.True(impact.GetProperty("canHardDelete").GetBoolean());
+        Assert.Empty(impact.GetProperty("blockers").EnumerateArray());
+
+        // Çekin fiziksel olarak durduğunu doğrula — engellemiyor olması
+        // "yok" demek değil; silme sırasında temizlenmesi gerekiyor.
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            Assert.True(await db.Cheques.IgnoreQueryFilters()
+                .AnyAsync(x => x.Id == chequeId));
+        }
+
+        var response = await DeleteAsync(client, project.Id, project.Code);
+        response.EnsureSuccessStatusCode();
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            Assert.False(await db.Projects.IgnoreQueryFilters()
+                .AnyAsync(x => x.Id == project.Id));
+            Assert.False(await db.Cheques.IgnoreQueryFilters()
+                .AnyAsync(x => x.Id == chequeId));
+        }
+    }
+
+    [Fact]
     public async Task Delete_ProjectWithDraftRecords_RemovesDependentsToo()
     {
         // Taslak keşif, şantiye ve depo kesinleşmiş sayılmaz: projeyle

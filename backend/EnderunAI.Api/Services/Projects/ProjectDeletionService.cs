@@ -54,6 +54,11 @@ public interface IProjectDeletionService
 /// engelleyiciye alındı: bunlar gerçek personelin ücret geçmişi, projeyle
 /// birlikte silinmeleri kabul edilemez.
 ///
+/// Engelleyici sayımı yumuşak silinmiş satırları HARİÇ tutar: kullanıcının
+/// sildiği kayıt canlı bir mali kayıt değildir, projeyi rehin almamalı.
+/// Bağlı kayıt sayımı ve fiziksel temizlik ise tam tersine gizli satırları
+/// da görmek zorunda — yabancı anahtarı asıl bloke eden onlar.
+///
 /// Kademe 2 — kesinleşmiş kayıt YOKSA: bağlı kayıtlar tek transaction
 /// içinde, yabancı anahtar sırasına göre temizlenip proje silinir.
 ///
@@ -274,7 +279,6 @@ public sealed class ProjectDeletionService(
 
         Add("postedVoucherLines", "Kesinleşmiş muhasebe fişi satırı",
             await db.AccountingVoucherLines
-                .IgnoreQueryFilters()
                 .CountAsync(
                     x => x.ProjectId == projectId
                          && x.AccountingVoucher.Status == AccountingVoucherStatus.Posted,
@@ -283,7 +287,6 @@ public sealed class ProjectDeletionService(
 
         Add("progressPayments", "Taslak dışı hakediş",
             await db.ProgressPayments
-                .IgnoreQueryFilters()
                 .CountAsync(
                     x => x.ProjectId == projectId && x.Status != ProgressPaymentStatus.Draft,
                     cancellationToken),
@@ -291,7 +294,6 @@ public sealed class ProjectDeletionService(
 
         Add("supplierInvoices", "Onaylı alış/gider faturası",
             await db.SupplierInvoices
-                .IgnoreQueryFilters()
                 .CountAsync(
                     x => x.ProjectId == projectId && x.Status == SupplierInvoiceStatus.Approved,
                     cancellationToken),
@@ -299,7 +301,6 @@ public sealed class ProjectDeletionService(
 
         Add("salesInvoices", "Kesinleşmiş satış faturası",
             await db.SalesInvoices
-                .IgnoreQueryFilters()
                 .CountAsync(
                     x => x.ProjectId == projectId && x.Status == SalesInvoiceStatus.Posted,
                     cancellationToken),
@@ -307,60 +308,55 @@ public sealed class ProjectDeletionService(
 
         Add("cheques", "Çek",
             await db.Cheques
-                .IgnoreQueryFilters()
                 .CountAsync(x => x.ProjectId == projectId, cancellationToken),
             "Çek defteri kaydı projeyle birlikte silinemez.");
 
         Add("chequeAllocations", "Çek dağılımı",
             await db.ChequeAllocations
-                .IgnoreQueryFilters()
                 .CountAsync(x => x.ProjectId == projectId, cancellationToken),
             "Bu projeye pay verilmiş çek dağılımı var.");
 
         Add("cashTransactions", "Kasa/banka hareketi",
             await db.CashTransactions
-                .IgnoreQueryFilters()
                 .CountAsync(x => x.ProjectId == projectId, cancellationToken),
             "Gerçekleşmiş para hareketi silinemez.");
 
         Add("stockMovements", "Stok hareketi",
             await db.StockMovements
-                .IgnoreQueryFilters()
                 .CountAsync(x => x.ProjectId == projectId, cancellationToken),
             "Stok giriş/çıkış geçmişi silinemez.");
 
         Add("factoringTransactions", "Faktoring işlemi",
             await db.FactoringTransactions
-                .IgnoreQueryFilters()
                 .CountAsync(x => x.ProjectId == projectId, cancellationToken),
             "Faktoring kaydı finansal yükümlülüktür.");
 
         Add("barterLedgerEntries", "Barter kaydı",
             await db.BarterLedgerEntries
-                .IgnoreQueryFilters()
                 .CountAsync(x => x.ProjectId == projectId, cancellationToken),
             "Barter defteri kaydı silinemez.");
 
         Add("paymentRequests", "Ödeme talebi",
-            await CountRawAsync("\"PaymentRequests\" t", projectId, cancellationToken),
+            await CountRawAsync(
+                "\"PaymentRequests\" t", projectId, cancellationToken, softDeleteAlias: "t"),
             "Ödeme talebi kaydı silinemez.");
 
         Add("attendanceRecords", "Puantaj kaydı",
             await CountRawAsync(
                 "attendance_records ar JOIN project_sites ps ON ps.\"Id\" = ar.\"ProjectSiteId\"",
-                projectId, cancellationToken, "ps"),
+                projectId, cancellationToken, "ps", softDeleteAlias: "ar"),
             "Puantaj gerçek personelin ücret geçmişidir, projeyle silinemez.");
 
         Add("laborCosts", "Bordro işçilik maliyeti",
             await CountRawAsync(
                 "hr_project_labor_costs lc JOIN project_sites ps ON ps.\"Id\" = lc.\"ProjectSiteId\"",
-                projectId, cancellationToken, "ps"),
+                projectId, cancellationToken, "ps", softDeleteAlias: "lc"),
             "Bordrodan gelen işçilik maliyeti kaydı silinemez.");
 
         Add("assetAssignments", "Zimmet kaydı",
             await CountRawAsync(
                 "hr_asset_assignments aa JOIN warehouses w ON w.\"Id\" = aa.\"WarehouseId\"",
-                projectId, cancellationToken, "w"),
+                projectId, cancellationToken, "w", softDeleteAlias: "aa"),
             "Projenin deposu üzerinden açılmış personel zimmeti var.");
 
         return blockers;
@@ -411,10 +407,23 @@ public sealed class ProjectDeletionService(
         string fromClause,
         Guid projectId,
         CancellationToken cancellationToken,
-        string alias = "t")
+        string alias = "t",
+        string? softDeleteAlias = null)
     {
         // Tablo adları kod içinde sabit; parametre olarak yalnızca proje kimliği geçer.
-        var sql = $"SELECT count(*)::int AS \"Value\" FROM {fromClause} WHERE {alias}.\"ProjectId\" = {{0}}";
+        //
+        // softDeleteAlias yalnızca ENGELLEYİCİ sayımlarında verilir: yumuşak
+        // silinmiş kayıt canlı bir mali kayıt değildir, kalıcı silmeyi
+        // engellememeli. Bağlı kayıt sayımı ve fiziksel temizlik ise tam
+        // tersine gizli satırları da görmek zorunda — orada filtre yok,
+        // çünkü yabancı anahtarı asıl bloke eden onlar.
+        var softDeleteFilter = softDeleteAlias is null
+            ? string.Empty
+            : $" AND NOT {softDeleteAlias}.\"IsDeleted\"";
+
+        var sql =
+            $"SELECT count(*)::int AS \"Value\" FROM {fromClause}" +
+            $" WHERE {alias}.\"ProjectId\" = {{0}}{softDeleteFilter}";
 
         return await db.Database
             .SqlQueryRaw<int>(sql, projectId)
@@ -433,6 +442,33 @@ public sealed class ProjectDeletionService(
         {
             // Muhasebe: yalnızca taslak fiş satırları kalmış olabilir.
             "DELETE FROM accounting_voucher_lines WHERE \"ProjectId\" = {0}",
+
+            // Engelleyici tablolarda bu noktada yalnızca YUMUŞAK SİLİNMİŞ
+            // satırlar kalmış olabilir (canlı olanları olsaydı silme zaten
+            // reddedilirdi). Mantıken çoktan silinmiş bu satırlar fiziksel
+            // olarak durduğu için yabancı anahtarı bloke ediyor; temizlenmeli.
+            "DELETE FROM cheque_movements cm USING cheques c" +
+            " WHERE cm.\"ChequeId\" = c.\"Id\" AND c.\"ProjectId\" = {0}",
+            "DELETE FROM cheque_allocations ca USING cheques c" +
+            " WHERE ca.\"ChequeId\" = c.\"Id\" AND c.\"ProjectId\" = {0}",
+            "DELETE FROM cheque_allocations WHERE \"ProjectId\" = {0}",
+            "DELETE FROM cheques WHERE \"ProjectId\" = {0}",
+            "DELETE FROM cash_transactions WHERE \"ProjectId\" = {0}",
+            "DELETE FROM factoring_transactions WHERE \"ProjectId\" = {0}",
+            "DELETE FROM barter_ledger_entries WHERE \"ProjectId\" = {0}",
+            "DELETE FROM stock_movements WHERE \"ProjectId\" = {0}",
+            "DELETE FROM stock_movements sm USING warehouses w" +
+            " WHERE (sm.\"WarehouseId\" = w.\"Id\" OR sm.\"RelatedWarehouseId\" = w.\"Id\")" +
+            " AND w.\"ProjectId\" = {0}",
+            "DELETE FROM stock_movements sm USING project_sites ps" +
+            " WHERE sm.\"ProjectSiteId\" = ps.\"Id\" AND ps.\"ProjectId\" = {0}",
+            "DELETE FROM attendance_records ar USING project_sites ps" +
+            " WHERE ar.\"ProjectSiteId\" = ps.\"Id\" AND ps.\"ProjectId\" = {0}",
+            "DELETE FROM hr_project_labor_costs WHERE \"ProjectId\" = {0}",
+            "DELETE FROM hr_project_labor_costs lc USING project_sites ps" +
+            " WHERE lc.\"ProjectSiteId\" = ps.\"Id\" AND ps.\"ProjectId\" = {0}",
+            "DELETE FROM hr_asset_assignments aa USING warehouses w" +
+            " WHERE aa.\"WarehouseId\" = w.\"Id\" AND w.\"ProjectId\" = {0}",
 
             // Hakediş ve keşif zinciri (çocukları CASCADE ile gider).
             "DELETE FROM progress_payment_advance_material_offsets o USING progress_payments p" +
