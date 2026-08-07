@@ -2,6 +2,7 @@ using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Accounting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -365,53 +366,89 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
     /// cari boyutu üzerinden hesaplanır. Bakiye = Borç − Alacak
     /// (pozitif: bizden alacaklı değil, bize borçlu → müşteri;
     /// negatif: biz borçluyuz → satıcı).
+    ///
+    /// <c>balance</c> alanı bugüne kadarki TL bakiyedir ve anlamı
+    /// değişmedi. Yanına <c>currencyBalances</c> eklendi: dövizli
+    /// carinin "kaç USD borcumuz var" sorusunun cevabı TL toplamdan
+    /// okunamıyordu.
     /// </summary>
     [HttpGet("balances")]
     [RequirePermission(PermissionCatalog.Keys.CurrentAccountsView)]
     public async Task<IActionResult> GetBalances(
         [FromQuery] Guid? companyId,
+        [FromServices] CurrentAccountCurrencyService currencyService,
         CancellationToken cancellationToken)
     {
-        var query = PostedLines();
-
-        if (companyId.HasValue)
-            query = query.Where(x => x.AccountingVoucher.CompanyId == companyId.Value);
-
-        var balances = await query
-            .Where(x => x.CurrentAccountId != null)
-            .GroupBy(x => x.CurrentAccountId!.Value)
-            .Select(g => new
-            {
-                CurrentAccountId = g.Key,
-                TotalDebit = g.Sum(x => x.DebitAmountLocal),
-                TotalCredit = g.Sum(x => x.CreditAmountLocal),
-                MovementCount = g.Count(),
-                LastMovementDate = g.Max(x => x.AccountingVoucher.VoucherDate)
-            })
-            .ToListAsync(cancellationToken);
+        var balances = await currencyService.GetBalancesAsync(
+            companyId, currentAccountId: null, cancellationToken);
 
         return Ok(balances.Select(x => new
         {
             x.CurrentAccountId,
             x.TotalDebit,
             x.TotalCredit,
-            Balance = decimal.Round(x.TotalDebit - x.TotalCredit, 2),
+            x.Balance,
             x.MovementCount,
-            x.LastMovementDate
+            x.LastMovementDate,
+            x.HasForeignCurrency,
+            CurrencyBalances = x.CurrencyBalances.Select(c => new
+            {
+                c.CurrencyCode,
+                c.TotalDebit,
+                c.TotalCredit,
+                c.Balance,
+                c.BalanceLocal,
+                c.MovementCount,
+                c.LastMovementDate
+            })
         }));
+    }
+
+    /// <summary>
+    /// Carinin döviz bakiyesinin verilen tarihteki kurla değerlemesi.
+    ///
+    /// Defter değeri (hareketlerin kendi günündeki kurla TL karşılığı)
+    /// ile değerleme değeri arasındaki fark, gerçekleşmemiş kur
+    /// farkıdır. Burada yalnızca RAPORLANIR — fiş kesilmez.
+    /// </summary>
+    [HttpGet("{id:guid}/currency-valuation")]
+    [RequirePermission(PermissionCatalog.Keys.CurrentAccountsView)]
+    public async Task<IActionResult> GetCurrencyValuation(
+        Guid id,
+        [FromQuery] DateTime? valuationDate,
+        [FromServices] CurrentAccountCurrencyService currencyService,
+        CancellationToken cancellationToken)
+    {
+        var date = valuationDate.HasValue
+            ? AsUtcDate(valuationDate.Value)
+            : DateTime.UtcNow.Date;
+
+        var result = await currencyService.ValuateAsync(id, date, cancellationToken);
+
+        return result is null
+            ? NotFound(new { message = "Cari kart bulunamadı." })
+            : Ok(result);
     }
 
     /// <summary>
     /// Cari ekstresi: dönem başı bakiyesi + hareketler + her satırda
     /// yürüyen bakiye. Kaynak muhasebe defteri (yalnızca kesinleşmiş
     /// fişler).
+    ///
+    /// Ekstre iki bakiyeyi birlikte yürütür: TL (defter) bakiyesi ve
+    /// satırın kendi para birimindeki bakiye. Dövizli bir carinin
+    /// ekstresinde yalnızca TL yürüyen bakiye vardı; "bu tarihte kaç
+    /// USD borçluyduk" sorusu cevapsız kalıyordu.
     /// </summary>
+    /// <param name="currency">Tek para birimine indirger (örn. USD).
+    /// Boşsa tüm hareketler.</param>
     [HttpGet("{id:guid}/statement")]
     [RequirePermission(PermissionCatalog.Keys.CurrentAccountsView)]
     public async Task<IActionResult> GetStatement(
         Guid id,
         [FromQuery] DateTime? startDate,
         [FromQuery] DateTime? endDate,
+        [FromQuery] string? currency,
         CancellationToken cancellationToken)
     {
         var account = await db.CurrentAccounts
@@ -425,13 +462,44 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
 
         var baseQuery = PostedLines().Where(x => x.CurrentAccountId == id);
 
+        var currencyFilter = string.IsNullOrWhiteSpace(currency)
+            ? null
+            : currency.Trim().ToUpperInvariant();
+
+        if (currencyFilter is not null)
+            baseQuery = baseQuery.Where(x => x.CurrencyCode.ToUpper() == currencyFilter);
+
         var openingBalance = 0m;
+
+        // Dönem başı bakiyesi para birimi bazında da tutulur: yürüyen
+        // döviz bakiyesi sıfırdan değil, devirden başlamalı.
+        var openingByCurrency = new Dictionary<string, (decimal Original, decimal Local)>(
+            StringComparer.OrdinalIgnoreCase);
+
         if (startDate.HasValue)
         {
             var start = AsUtcDate(startDate.Value);
-            openingBalance = await baseQuery
+
+            var openingRows = await baseQuery
                 .Where(x => x.AccountingVoucher.VoucherDate < start)
-                .SumAsync(x => x.DebitAmountLocal - x.CreditAmountLocal, cancellationToken);
+                .GroupBy(x => x.CurrencyCode)
+                .Select(g => new
+                {
+                    CurrencyCode = g.Key,
+                    Original = g.Sum(x => x.DebitAmount - x.CreditAmount),
+                    Local = g.Sum(x => x.DebitAmountLocal - x.CreditAmountLocal)
+                })
+                .ToListAsync(cancellationToken);
+
+            foreach (var row in openingRows)
+            {
+                var code = NormalizeCurrency(row.CurrencyCode);
+                openingByCurrency.TryGetValue(code, out var existing);
+                openingByCurrency[code] =
+                    (existing.Original + row.Original, existing.Local + row.Local);
+            }
+
+            openingBalance = openingRows.Sum(x => x.Local);
         }
 
         var periodQuery = baseQuery;
@@ -464,16 +532,45 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
                 x.DueDate,
                 ProjectCode = x.Project != null ? x.Project.Code : null,
                 Debit = x.DebitAmountLocal,
-                Credit = x.CreditAmountLocal
+                Credit = x.CreditAmountLocal,
+                x.CurrencyCode,
+                x.ExchangeRate,
+                DebitOriginal = x.DebitAmount,
+                CreditOriginal = x.CreditAmount
             })
             .ToListAsync(cancellationToken);
 
         var running = decimal.Round(openingBalance, 2);
         var lines = new List<object>(rows.Count);
 
+        // Her para birimi kendi yürüyen bakiyesini taşır; TL bakiye
+        // dövizli satırlarda da işlemeye devam eder (defter değeri).
+        var runningByCurrency = openingByCurrency.ToDictionary(
+            x => x.Key, x => decimal.Round(x.Value.Original, 2),
+            StringComparer.OrdinalIgnoreCase);
+
+        var periodByCurrency = new Dictionary<string, (
+            decimal Debit, decimal Credit, decimal DebitLocal, decimal CreditLocal)>(
+            StringComparer.OrdinalIgnoreCase);
+
         foreach (var row in rows)
         {
+            var code = NormalizeCurrency(row.CurrencyCode);
+
             running = decimal.Round(running + row.Debit - row.Credit, 2);
+
+            runningByCurrency.TryGetValue(code, out var currencyRunning);
+            currencyRunning = decimal.Round(
+                currencyRunning + row.DebitOriginal - row.CreditOriginal, 2);
+            runningByCurrency[code] = currencyRunning;
+
+            periodByCurrency.TryGetValue(code, out var period);
+            periodByCurrency[code] = (
+                period.Debit + row.DebitOriginal,
+                period.Credit + row.CreditOriginal,
+                period.DebitLocal + row.Debit,
+                period.CreditLocal + row.Credit);
+
             lines.Add(new
             {
                 row.Id,
@@ -489,12 +586,45 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
                 row.ProjectCode,
                 row.Debit,
                 row.Credit,
-                RunningBalance = running
+                RunningBalance = running,
+                CurrencyCode = code,
+                row.ExchangeRate,
+                row.DebitOriginal,
+                row.CreditOriginal,
+                RunningBalanceOriginal = currencyRunning
             });
         }
 
         var periodDebit = decimal.Round(rows.Sum(x => x.Debit), 2);
         var periodCredit = decimal.Round(rows.Sum(x => x.Credit), 2);
+
+        var currencyCodes = openingByCurrency.Keys
+            .Concat(periodByCurrency.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x == "TRY" ? 0 : 1)
+            .ThenBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        var currencySummary = currencyCodes.Select(code =>
+        {
+            openingByCurrency.TryGetValue(code, out var opening);
+            periodByCurrency.TryGetValue(code, out var period);
+            runningByCurrency.TryGetValue(code, out var closing);
+
+            return new
+            {
+                currencyCode = code,
+                openingBalance = decimal.Round(opening.Original, 2),
+                openingBalanceLocal = decimal.Round(opening.Local, 2),
+                periodDebit = decimal.Round(period.Debit, 2),
+                periodCredit = decimal.Round(period.Credit, 2),
+                periodDebitLocal = decimal.Round(period.DebitLocal, 2),
+                periodCreditLocal = decimal.Round(period.CreditLocal, 2),
+                closingBalance = decimal.Round(closing, 2),
+                closingBalanceLocal = decimal.Round(
+                    opening.Local + period.DebitLocal - period.CreditLocal, 2)
+            };
+        }).ToList();
 
         return Ok(new
         {
@@ -510,6 +640,9 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
             periodCredit,
             closingBalance = running,
             lineCount = lines.Count,
+            currency = currencyFilter,
+            hasForeignCurrency = currencyCodes.Any(x => x != "TRY"),
+            currencySummary,
             lines
         });
     }
@@ -525,6 +658,12 @@ public sealed class CurrentAccountsController(AppDbContext db) : ControllerBase
                 !x.IsDeleted &&
                 !x.AccountingVoucher.IsDeleted &&
                 x.AccountingVoucher.Status == AccountingVoucherStatus.Posted);
+
+    /// <summary>
+    /// Para birimi kodunu tek yazıma indirger; boşsa yerel para birimi.
+    /// </summary>
+    private static string NormalizeCurrency(string? code) =>
+        string.IsNullOrWhiteSpace(code) ? "TRY" : code.Trim().ToUpperInvariant();
 
     private static DateTime AsUtcDate(DateTime value) =>
         DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);

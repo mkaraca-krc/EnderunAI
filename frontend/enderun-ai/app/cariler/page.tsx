@@ -37,6 +37,58 @@ type Account = {
   isActive: boolean;
 };
 
+/**
+ * Cari bakiyesi. `balance` TL defter değeridir; `currencyBalances`
+ * dövizin kendi tutarını taşır — dövizli caride TL toplam kur
+ * değiştikçe oynadığı için tek başına borcu göstermez.
+ */
+type BalanceRow = {
+  currentAccountId: string;
+  balance: number;
+  hasForeignCurrency?: boolean;
+  currencyBalances?: {
+    currencyCode: string;
+    balance: number;
+    balanceLocal: number;
+  }[];
+};
+
+const tryMoney = new Intl.NumberFormat("tr-TR", {
+  style: "currency",
+  currency: "TRY",
+});
+
+const currencyFormatters = new Map<string, Intl.NumberFormat>();
+
+/**
+ * Tutarı kendi para biriminde biçimler. Bilinmeyen bir ISO kodunda
+ * Intl hata fırlatır; o durumda sayı + kod yazılır, hücre boş kalmaz.
+ */
+function formatCurrency(value: number, code: string) {
+  if (code === "TRY") return tryMoney.format(value);
+
+  let formatter = currencyFormatters.get(code);
+
+  if (!formatter) {
+    try {
+      formatter = new Intl.NumberFormat("tr-TR", {
+        style: "currency",
+        currency: code,
+      });
+    } catch {
+      formatter = new Intl.NumberFormat("tr-TR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    }
+    currencyFormatters.set(code, formatter);
+  }
+
+  return formatter.resolvedOptions().style === "currency"
+    ? formatter.format(value)
+    : `${formatter.format(value)} ${code}`;
+}
+
 type FormState = {
   companyId: string;
   code: string;
@@ -125,7 +177,7 @@ function toForm(account: Account): FormState {
 export default function Page() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [items, setItems] = useState<Account[]>([]);
-  const [balances, setBalances] = useState<Record<string, number>>({});
+  const [balances, setBalances] = useState<Record<string, BalanceRow>>({});
   const [form, setForm] = useState<FormState>(blank);
   const [show, setShow] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -147,9 +199,10 @@ export default function Page() {
       setItems(accountList);
       setBalances(
         Object.fromEntries(
-          (balanceList as { currentAccountId: string; balance: number }[]).map(
-            (row) => [row.currentAccountId, row.balance]
-          )
+          (balanceList as BalanceRow[]).map((row) => [
+            row.currentAccountId,
+            row,
+          ])
         )
       );
       setForm((current) => ({
@@ -647,18 +700,29 @@ export default function Page() {
                   ) : (
                     <>
                       <strong>
-                        {new Intl.NumberFormat("tr-TR", {
-                          style: "currency",
-                          currency: "TRY",
-                        }).format(Math.abs(balances[account.id]))}
+                        {tryMoney.format(Math.abs(balances[account.id].balance))}
                       </strong>
                       <small>
-                        {balances[account.id] === 0
+                        {balances[account.id].balance === 0
                           ? "Kapalı"
-                          : balances[account.id] > 0
+                          : balances[account.id].balance > 0
                             ? "Borç"
                             : "Alacak"}
                       </small>
+                      {/* Dövizli caride TL toplam kurla oynadığı için tek
+                          başına yanıltıcı; dövizin kendi tutarı da yazılır. */}
+                      {balances[account.id].hasForeignCurrency &&
+                        (balances[account.id].currencyBalances ?? [])
+                          .filter((row) => row.currencyCode !== "TRY")
+                          .map((row) => (
+                            <small key={row.currencyCode}>
+                              {formatCurrency(
+                                Math.abs(row.balance),
+                                row.currencyCode
+                              )}{" "}
+                              {row.balance >= 0 ? "borç" : "alacak"}
+                            </small>
+                          ))}
                     </>
                   )}
                 </td>

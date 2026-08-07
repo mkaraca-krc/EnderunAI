@@ -35,14 +35,52 @@ export interface CurrentAccountListItem {
  * Cari bakiyesi — ayrı bir hareket defterinden değil, doğrudan muhasebe
  * defterinden (kesinleşmiş fişlerin cari boyutu) hesaplanır.
  */
+export interface CurrentAccountCurrencyBalance {
+  currencyCode: string;
+  /** İşlem para biriminde borç toplamı. */
+  totalDebit: number;
+  totalCredit: number;
+  /** İşlem para biriminde bakiye (örn. 12.500 USD). */
+  balance: number;
+  /** Aynı bakiyenin defterdeki TL karşılığı (işlem günü kurlarıyla). */
+  balanceLocal: number;
+  movementCount: number;
+  lastMovementDate?: string | null;
+}
+
 export interface CurrentAccountBalance {
   currentAccountId: string;
   totalDebit: number;
   totalCredit: number;
-  /** Borç − Alacak. Pozitif: bize borçlu, negatif: biz borçluyuz. */
+  /** Borç − Alacak, TL. Pozitif: bize borçlu, negatif: biz borçluyuz. */
   balance: number;
   movementCount: number;
   lastMovementDate?: string | null;
+  hasForeignCurrency?: boolean;
+  currencyBalances?: CurrentAccountCurrencyBalance[];
+}
+
+export interface CurrentAccountCurrencyValuation {
+  currencyCode: string;
+  balance: number;
+  /** Defter değeri: hareketlerin kendi günündeki kurla TL toplamı. */
+  bookValueLocal: number;
+  rateAvailable: boolean;
+  valuationRate?: number | null;
+  rateSource?: string | null;
+  valuedLocal?: number | null;
+  /** Değerlenmiş − defter. Gerçekleşmemiş kur farkı. */
+  difference?: number | null;
+  message?: string | null;
+}
+
+export interface CurrentAccountValuation {
+  currentAccountId: string;
+  valuationDate: string;
+  currencies: CurrentAccountCurrencyValuation[];
+  totalDifference: number;
+  /** Kuru bulunamayan döviz varsa toplam eksiktir. */
+  hasMissingRate: boolean;
 }
 
 export interface CurrentAccountStatementLine {
@@ -57,9 +95,30 @@ export interface CurrentAccountStatementLine {
   documentNumber?: string | null;
   dueDate?: string | null;
   projectCode?: string | null;
+  /** TL (defter) tutarı. */
   debit: number;
   credit: number;
+  /** TL yürüyen bakiye. */
   runningBalance: number;
+  currencyCode?: string;
+  exchangeRate?: number;
+  /** İşlem para birimindeki tutar; TL satırda debit ile aynıdır. */
+  debitOriginal?: number;
+  creditOriginal?: number;
+  /** Aynı para biriminin kendi içinde yürüyen bakiyesi. */
+  runningBalanceOriginal?: number;
+}
+
+export interface CurrentAccountStatementCurrencySummary {
+  currencyCode: string;
+  openingBalance: number;
+  openingBalanceLocal: number;
+  periodDebit: number;
+  periodCredit: number;
+  periodDebitLocal: number;
+  periodCreditLocal: number;
+  closingBalance: number;
+  closingBalanceLocal: number;
 }
 
 export interface CurrentAccountStatement {
@@ -74,6 +133,10 @@ export interface CurrentAccountStatement {
   periodCredit: number;
   closingBalance: number;
   lineCount: number;
+  /** Uygulanan para birimi filtresi; yoksa null. */
+  currency?: string | null;
+  hasForeignCurrency?: boolean;
+  currencySummary?: CurrentAccountStatementCurrencySummary[];
   lines: CurrentAccountStatementLine[];
 }
 
@@ -131,15 +194,31 @@ export const currentAccountService = {
 
   getStatement(
     id: string,
-    range: { startDate?: string; endDate?: string } = {}
+    range: { startDate?: string; endDate?: string; currency?: string } = {}
   ) {
     const params = new URLSearchParams();
     if (range.startDate) params.set("startDate", range.startDate);
     if (range.endDate) params.set("endDate", range.endDate);
+    if (range.currency) params.set("currency", range.currency);
     const query = params.toString();
 
     return apiClient<CurrentAccountStatement>(
       `current-accounts/${id}/statement${query ? `?${query}` : ""}`
+    );
+  },
+
+  /**
+   * Döviz bakiyesinin verilen tarihteki kurla değerlemesi. Defter
+   * değeriyle arasındaki fark gerçekleşmemiş kur farkıdır; bu uç
+   * yalnızca raporlar, fiş kesmez.
+   */
+  getCurrencyValuation(id: string, valuationDate?: string) {
+    const query = valuationDate
+      ? `?valuationDate=${encodeURIComponent(valuationDate)}`
+      : "";
+
+    return apiClient<CurrentAccountValuation>(
+      `current-accounts/${id}/currency-valuation${query}`
     );
   }
 
