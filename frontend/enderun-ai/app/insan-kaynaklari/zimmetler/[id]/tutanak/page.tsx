@@ -4,18 +4,31 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { companyService, type CompanyListItem } from "@/services/company.service";
-import { hrAssetService, type AssetAssignment } from "@/services/hr-asset.service";
+import {
+  hrAssetService,
+  HrAssetAssignmentStatus,
+  type AssetAssignment,
+} from "@/services/hr-asset.service";
 import { personnelService, type PersonnelDetail } from "@/services/personnel.service";
+import { projectService, type ProjectListItem } from "@/services/project.service";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
+function formatDate(value?: string | null) {
+  return value ? dateFormat.format(new Date(value)) : "—";
+}
+
 /**
- * Zimmet tutanağı — imzalanıp dosyalanacak çıktı.
+ * Zimmet tutanağı — imzalanıp dosyalanacak tek resmi çıktı.
  *
  * ErpShell KULLANILMIYOR: menü ve kabuk kağıda basılır, tutanak
  * kayardı. Sayfa doğrudan yazdırılabilir bir belge olarak kuruluyor;
  * ekrandaki tek etkileşim yazdırma düğmesi ve o da @media print ile
  * gizleniyor.
+ *
+ * Zimmet iade edilmişse belge TESLİM/İADE tutanağına dönüşür ve iade
+ * satırları görünür; iade bilgisi olmayan bir tutanak imzalatmak
+ * ekipmanın geri geldiğini belgelemezdi.
  */
 export default function AssetHandoverPage() {
   const params = useParams<{ id: string }>();
@@ -24,6 +37,7 @@ export default function AssetHandoverPage() {
   const [assignment, setAssignment] = useState<AssetAssignment | null>(null);
   const [company, setCompany] = useState<CompanyListItem | null>(null);
   const [personnel, setPersonnel] = useState<PersonnelDetail | null>(null);
+  const [project, setProject] = useState<ProjectListItem | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -36,9 +50,12 @@ export default function AssetHandoverPage() {
 
         setAssignment(record);
 
-        const [companies, employee] = await Promise.all([
+        const [companies, employee, projects] = await Promise.all([
           companyService.getAll(),
           personnelService.getById(record.personnelId),
+          record.projectId
+            ? projectService.getAll().catch(() => [] as ProjectListItem[])
+            : Promise.resolve([] as ProjectListItem[]),
         ]);
         if (cancelled) return;
 
@@ -46,6 +63,7 @@ export default function AssetHandoverPage() {
           companies.find((x) => x.id === record.companyId) ?? companies[0] ?? null
         );
         setPersonnel(employee);
+        setProject(projects.find((x) => x.id === record.projectId) ?? null);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Tutanak alınamadı.");
@@ -60,6 +78,8 @@ export default function AssetHandoverPage() {
 
   if (error) return <main style={{ padding: 32 }}>{error}</main>;
   if (!assignment) return <main style={{ padding: 32 }}>Tutanak yükleniyor...</main>;
+
+  const returned = assignment.status === HrAssetAssignmentStatus.Returned;
 
   return (
     <main className="handover">
@@ -82,6 +102,9 @@ export default function AssetHandoverPage() {
         }
         .handover th { background: #f2f2f2; width: 38%; }
         .handover .letterhead {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
           border-bottom: 2px solid #18797c;
           padding-bottom: 12px;
           margin-bottom: 20px;
@@ -89,14 +112,19 @@ export default function AssetHandoverPage() {
         .handover h1 { font-size: 16px; text-align: center; margin: 20px 0; }
         .handover .signatures {
           display: flex;
-          gap: 48px;
-          margin-top: 48px;
+          gap: 32px;
+          margin-top: 56px;
         }
         .handover .signatures > div {
           flex: 1;
           border-top: 1px solid #111;
           padding-top: 8px;
           text-align: center;
+        }
+        .handover .footer {
+          margin-top: 32px;
+          font-size: 11px;
+          color: #555;
         }
         .handover .print-actions { margin-bottom: 16px; }
         @media print {
@@ -113,9 +141,16 @@ export default function AssetHandoverPage() {
 
       <header className="letterhead">
         <strong style={{ fontSize: 16 }}>{company?.name ?? "—"}</strong>
+        <span style={{ fontSize: 12 }}>
+          Tutanak No: <strong>{assignment.id.slice(0, 8).toUpperCase()}</strong>
+        </span>
       </header>
 
-      <h1>ZİMMET TESLİM TUTANAĞI</h1>
+      <h1>
+        {returned
+          ? "ZİMMET TESLİM / İADE TUTANAĞI"
+          : "ZİMMET TESLİM TUTANAĞI"}
+      </h1>
 
       <p>
         Aşağıda bilgileri yer alan demirbaş/alet, teslim alan personele
@@ -132,6 +167,12 @@ export default function AssetHandoverPage() {
           <tr>
             <th>Sicil No</th>
             <td>{personnel?.employeeNumber ?? "—"}</td>
+          </tr>
+          <tr>
+            <th>Proje</th>
+            <td>
+              {project ? `${project.code} — ${project.name}` : "Projesiz"}
+            </td>
           </tr>
           <tr>
             <th>Demirbaş Kodu</th>
@@ -151,19 +192,35 @@ export default function AssetHandoverPage() {
           </tr>
           <tr>
             <th>Zimmet Tarihi</th>
-            <td>{dateFormat.format(new Date(assignment.assignmentDate))}</td>
+            <td>{formatDate(assignment.assignmentDate)}</td>
           </tr>
           <tr>
             <th>Planlanan İade</th>
             <td>
               {assignment.plannedReturnDate
-                ? dateFormat.format(new Date(assignment.plannedReturnDate))
+                ? formatDate(assignment.plannedReturnDate)
                 : "Süresiz"}
             </td>
           </tr>
           <tr>
             <th>Teslim Anındaki Durum</th>
             <td>{assignment.conditionAtAssignment ?? "Sağlam"}</td>
+          </tr>
+          {returned && (
+            <>
+              <tr>
+                <th>Gerçek İade Tarihi</th>
+                <td>{formatDate(assignment.actualReturnDate)}</td>
+              </tr>
+              <tr>
+                <th>İade Anındaki Durum</th>
+                <td>{assignment.conditionAtReturn ?? "—"}</td>
+              </tr>
+            </>
+          )}
+          <tr>
+            <th>Kayıt Durumu</th>
+            <td>{assignment.statusName}</td>
           </tr>
           {assignment.notes && (
             <tr>
@@ -181,12 +238,21 @@ export default function AssetHandoverPage() {
           <small>Ad Soyad / İmza</small>
         </div>
         <div>
-          Teslim Alan
+          Teslim Alan Personel
           <br />
           <strong>{personnel?.fullName ?? ""}</strong>
           <br />
           <small>İmza</small>
         </div>
+        <div>
+          İK / Birim Yetkilisi
+          <br />
+          <small>Ad Soyad / İmza</small>
+        </div>
+      </div>
+
+      <div className="footer">
+        Enderun AI Yönetim Sistemi tarafından oluşturulmuştur.
       </div>
     </main>
   );

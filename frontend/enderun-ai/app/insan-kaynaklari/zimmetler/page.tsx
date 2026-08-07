@@ -481,74 +481,6 @@ export default function HrAssetsPage() {
     }
   }
 
-  function printAssetDocument(item: AssetAssignment) {
-    const employee = personnelMap.get(item.personnelId);
-    const project = item.projectId ? projectMap.get(item.projectId) : null;
-    const company = companies.find((x) => x.id === item.companyId);
-
-    const popup = window.open("", "_blank", "width=980,height=760");
-    if (!popup) {
-      setError("Yazdırma penceresi açılamadı. Tarayıcı açılır pencere iznini kontrol edin.");
-      return;
-    }
-
-    const safe = (value: unknown) =>
-      String(value ?? "-")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;");
-
-    popup.document.write(`<!doctype html>
-<html lang="tr">
-<head>
-<meta charset="utf-8"/>
-<title>Zimmet Tutanağı - ${safe(item.assetCode)}</title>
-<style>
-  body{font-family:Arial,sans-serif;color:#111827;margin:36px}
-  .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f766e;padding-bottom:16px;margin-bottom:24px}
-  h1{font-size:24px;margin:0}.sub{color:#64748b;margin-top:6px}
-  table{width:100%;border-collapse:collapse;margin-top:18px}
-  td,th{border:1px solid #cbd5e1;padding:10px;text-align:left}
-  th{background:#f1f5f9;width:24%}
-  .note{margin-top:22px;border:1px solid #cbd5e1;padding:14px;min-height:70px}
-  .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:70px;text-align:center}
-  .line{border-top:1px solid #111827;padding-top:8px}
-  .footer{margin-top:40px;font-size:11px;color:#64748b}
-  @media print{button{display:none}body{margin:18mm}}
-</style>
-</head>
-<body>
-  <div class="head">
-    <div>
-      <h1>ENDERUN ENERJİ</h1>
-      <div class="sub">Personel Zimmet Teslim / İade Tutanağı</div>
-    </div>
-    <div><strong>Tutanak No:</strong> ${safe(item.id.slice(0,8).toUpperCase())}</div>
-  </div>
-  <table>
-    <tr><th>Şirket</th><td>${safe(company?.name)}</td><th>Durum</th><td>${safe(item.statusName || statusNames[item.status])}</td></tr>
-    <tr><th>Personel</th><td>${safe(employee?.fullName)}</td><th>Sicil No</th><td>${safe(employee?.employeeNumber)}</td></tr>
-    <tr><th>Proje</th><td>${safe(project ? `${project.code} - ${project.name}` : "Projesiz")}</td><th>Ekipman Türü</th><td>${safe(item.assetType)}</td></tr>
-    <tr><th>Ekipman Kodu</th><td>${safe(item.assetCode)}</td><th>Ekipman Adı</th><td>${safe(item.assetName)}</td></tr>
-    <tr><th>Seri Numarası</th><td>${safe(item.serialNumber)}</td><th>Teslim Tarihi</th><td>${safe(formatDate(item.assignmentDate))}</td></tr>
-    <tr><th>Planlanan İade</th><td>${safe(formatDate(item.plannedReturnDate))}</td><th>Gerçek İade</th><td>${safe(formatDate(item.actualReturnDate))}</td></tr>
-    <tr><th>Teslim Durumu</th><td colspan="3">${safe(item.conditionAtAssignment)}</td></tr>
-    <tr><th>İade Durumu</th><td colspan="3">${safe(item.conditionAtReturn)}</td></tr>
-  </table>
-  <div class="note"><strong>Açıklama / Notlar</strong><br/><br/>${safe(item.notes)}</div>
-  <p>Yukarıda bilgileri bulunan ekipman, belirtilen durumu ile personele teslim edilmiş / personelden teslim alınmıştır.</p>
-  <div class="signatures">
-    <div class="line">Teslim Eden</div>
-    <div class="line">Teslim Alan Personel</div>
-    <div class="line">İK / Birim Yetkilisi</div>
-  </div>
-  <div class="footer">Enderun AI Yönetim Sistemi tarafından oluşturulmuştur · ${safe(new Date().toLocaleString("tr-TR"))}</div>
-  <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script>
-</body>
-</html>`);
-    popup.document.close();
-  }
 
   async function deleteItem(item: AssetAssignment) {
     if (!window.confirm(`${item.assetCode} zimmet kaydı kalıcı olarak silinsin mi?`)) return;
@@ -726,7 +658,14 @@ export default function HrAssetsPage() {
                     <td style={{ padding: 13, borderBottom: "1px solid #eef2f7" }}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         <button onClick={() => openEdit(item)} disabled={busyId === item.id} style={actionButton("#334155")}>Düzenle</button>
-                        <button onClick={() => printAssetDocument(item)} style={actionButton("#0369a1")}>Tutanak</button>
+                        <a
+                          href={`/insan-kaynaklari/zimmetler/${item.id}/tutanak`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ ...actionButton("#0369a1"), display: "inline-flex", alignItems: "center", textDecoration: "none" }}
+                        >
+                          Tutanak
+                        </a>
                         <button onClick={() => void openQr(item)} style={actionButton("#6d28d9")}>QR</button>
                         <button onClick={() => void openPersonnelAnalysis(item.personnelId)} style={actionButton("#9333ea")}>Risk</button>
                         {active && <>
