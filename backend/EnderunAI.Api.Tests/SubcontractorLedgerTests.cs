@@ -572,6 +572,133 @@ public sealed class SubcontractorLedgerTests(DatabaseFixture fixture)
             payload.GetProperty("overAdvanceWarning").ValueKind);
     }
 
+    // ---------- Proje maliyeti ve kâr (T8) ----------
+
+    /// <summary>
+    /// Faturalı taşeron ödemesi kârlılık ekranında taşeron maliyeti
+    /// olarak görünür.
+    /// </summary>
+    [Fact]
+    public async Task Profitability_IncludesInvoicedSubcontractorCost()
+    {
+        var data = await CreateFixtureAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+        var contractId = await CreateContractAsync(client, data);
+
+        await client.PostAsJsonAsync(
+            "/api/subcontractor-ledger",
+            BuildPayment(contractId, data.SectionId, 90_000m));
+
+        var payload = await (await client
+                .GetAsync($"/api/projects/{data.ProjectId}/profitability"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(90_000m, payload.GetProperty("subcontractorCost").GetDecimal());
+    }
+
+    /// <summary>
+    /// Elden taşeron ödemesi maliyet defterine yazılmıyor ama YETKİLİ
+    /// kullanıcının kârlılık ekranında maliyete ekleniyor: gerçek kâr
+    /// elden ödemeyi de içerir.
+    /// </summary>
+    [Fact]
+    public async Task Profitability_AddsCashCostForAuthorizedUser()
+    {
+        var data = await CreateFixtureAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+        var contractId = await CreateContractAsync(client, data);
+
+        await client.PostAsJsonAsync(
+            "/api/subcontractor-ledger",
+            BuildPayment(contractId, data.SectionId, 90_000m));
+
+        await client.PostAsJsonAsync(
+            "/api/subcontractor-ledger/cash",
+            new
+            {
+                subcontractorContractId = contractId,
+                subcontractorProgressPaymentId = (Guid?)null,
+                kind = (int)SubcontractorLedgerKind.Payment,
+                entryDate = "2026-03-31",
+                amount = 25_000m,
+                description = (string?)null
+            });
+
+        var payload = await (await client
+                .GetAsync($"/api/projects/{data.ProjectId}/profitability"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(115_000m, payload.GetProperty("subcontractorCost").GetDecimal());
+    }
+
+    /// <summary>
+    /// Yetkisiz kullanıcı yalnızca faturalı kısmı görür. "Gizlendi"
+    /// diye bir işaret de YOKTUR: toplamın eksik olduğunu bilmek, elden
+    /// ödeme yapıldığı bilgisini sızdırmak demektir.
+    /// </summary>
+    [Fact]
+    public async Task Profitability_ShowsOnlyInvoicedCostToUnauthorizedUser()
+    {
+        var data = await CreateFixtureAsync();
+        var manager = await CreateClientForRoleAsync("Genel Müdür");
+        var contractId = await CreateContractAsync(manager, data);
+
+        await manager.PostAsJsonAsync(
+            "/api/subcontractor-ledger",
+            BuildPayment(contractId, data.SectionId, 90_000m));
+
+        await manager.PostAsJsonAsync(
+            "/api/subcontractor-ledger/cash",
+            new
+            {
+                subcontractorContractId = contractId,
+                subcontractorProgressPaymentId = (Guid?)null,
+                kind = (int)SubcontractorLedgerKind.Payment,
+                entryDate = "2026-03-31",
+                amount = 25_000m,
+                description = (string?)null
+            });
+
+        var restricted = await CreateClientForRoleAsync(
+            "Genel Müdür",
+            deniedPermissionKey: PermissionCatalog.Keys.ExtraPaymentView);
+
+        var payload = await (await restricted
+                .GetAsync($"/api/projects/{data.ProjectId}/profitability"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(90_000m, payload.GetProperty("subcontractorCost").GetDecimal());
+    }
+
+    /// <summary>
+    /// Elden AVANS maliyete girmez — resmî tarafla aynı kural.
+    /// </summary>
+    [Fact]
+    public async Task Profitability_ExcludesCashAdvanceFromCost()
+    {
+        var data = await CreateFixtureAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+        var contractId = await CreateContractAsync(client, data);
+
+        await client.PostAsJsonAsync(
+            "/api/subcontractor-ledger/cash",
+            new
+            {
+                subcontractorContractId = contractId,
+                subcontractorProgressPaymentId = (Guid?)null,
+                kind = (int)SubcontractorLedgerKind.Advance,
+                entryDate = "2026-03-31",
+                amount = 25_000m,
+                description = (string?)null
+            });
+
+        var payload = await (await client
+                .GetAsync($"/api/projects/{data.ProjectId}/profitability"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(0m, payload.GetProperty("subcontractorCost").GetDecimal());
+    }
+
     /// <summary>
     /// Silinen ödemenin proje maliyeti de düşer; kalırsa proje
     /// maliyeti silinmiş bir ödemeyi taşımaya devam ederdi.

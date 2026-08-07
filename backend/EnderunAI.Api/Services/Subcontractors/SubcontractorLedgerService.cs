@@ -172,6 +172,34 @@ public sealed class SubcontractorLedgerService(AppDbContext db)
     }
 
     /// <summary>
+    /// Projenin ELDEN taşeron ödemeleri toplamı.
+    ///
+    /// Bu tutar proje maliyeti defterine (ProjectCostTransaction) HİÇ
+    /// yazılmaz — o defter projects.view ile okunuyor ve elden rakam
+    /// oradan sızardı. Maliyet ekranında okuma anında, extra_payment
+    /// yetkisi doğrulanmışsa ekleniyor.
+    ///
+    /// Yetkisiz kullanıcıya SIFIR döner; "gizlendi" bilgisi bile
+    /// verilmez — toplamın eksik olduğunu bilmek, elden ödeme yapıldığı
+    /// bilgisini sızdırmak demektir.
+    /// </summary>
+    public async Task<decimal> GetProjectCashCostAsync(
+        Guid projectId, bool canViewCash, CancellationToken cancellationToken)
+    {
+        if (!canViewCash)
+            return 0m;
+
+        // Avans maliyet değildir — resmî tarafla aynı kural.
+        var total = await db.SubcontractorCashLedgerEntries
+            .AsNoTracking()
+            .Where(x => x.SubcontractorContract.ProjectId == projectId &&
+                        x.Kind == SubcontractorLedgerKind.Payment)
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+
+        return decimal.Round(total, 2);
+    }
+
+    /// <summary>
     /// Faturalı ödemeyi proje maliyetine yazar.
     ///
     /// Elden ödeme buraya YAZILMAZ: proje maliyeti defteri

@@ -99,6 +99,9 @@ public sealed class AppDbContext(
     public DbSet<SubcontractorCashLedgerEntry> SubcontractorCashLedgerEntries =>
         Set<SubcontractorCashLedgerEntry>();
 
+    public DbSet<SubcontractorDocument> SubcontractorDocuments =>
+        Set<SubcontractorDocument>();
+
     public DbSet<ProjectHakedisSection> ProjectHakedisSections =>
         Set<ProjectHakedisSection>();
 
@@ -237,6 +240,7 @@ public sealed class AppDbContext(
         ConfigureSubcontractorContracts(modelBuilder);
         ConfigureSubcontractorProgressPayments(modelBuilder);
         ConfigureSubcontractorLedger(modelBuilder);
+        ConfigureSubcontractorDocuments(modelBuilder);
         ConfigureProgressPayments(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigureEngineeringPositions(modelBuilder);
@@ -2006,6 +2010,42 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.SubcontractorProgressPayment)
                 .WithMany()
                 .HasForeignKey(x => x.SubcontractorProgressPaymentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureSubcontractorDocuments(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SubcontractorDocument>(entity =>
+        {
+            entity.ToTable("subcontractor_documents");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.SubcontractorContractId,
+                x.DocumentType
+            });
+
+            // "Süresi dolan evraklar" sorgusu panelde ve uyarıda çalışır.
+            entity.HasIndex(x => x.ValidUntil);
+
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.StoredFileName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.OriginalFileName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(500);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SubcontractorContract)
+                .WithMany()
+                .HasForeignKey(x => x.SubcontractorContractId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

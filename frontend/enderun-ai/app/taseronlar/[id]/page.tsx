@@ -11,9 +11,13 @@ import {
 } from "@/services/personnel.service";
 import {
   subcontractorService,
+  subcontractorDocumentService,
   SubcontractorContractType,
+  SubcontractorDocumentStatus,
+  SubcontractorDocumentType,
   SubcontractorResponsibility,
   type SubcontractorContractDetail,
+  type SubcontractorDocument,
 } from "@/services/subcontractor.service";
 import {
   subcontractorProgressPaymentService,
@@ -83,6 +87,15 @@ export default function SubcontractorDetailPage({
   const [periodStart, setPeriodStart] = useState(today());
   const [periodEnd, setPeriodEnd] = useState(today());
 
+  const [documents, setDocuments] = useState<SubcontractorDocument[]>([]);
+  const [docType, setDocType] = useState(
+    String(SubcontractorDocumentType.SocialSecurityClearance)
+  );
+  const [docTitle, setDocTitle] = useState("");
+  const [docIssueDate, setDocIssueDate] = useState(today());
+  const [docValidUntil, setDocValidUntil] = useState("");
+  const [docFile, setDocFile] = useState<File | null>(null);
+
   const [ledger, setLedger] = useState<SubcontractorLedgerSummary | null>(null);
   const [entryKind, setEntryKind] = useState(String(SubcontractorLedgerKind.Payment));
   const [entryIsCash, setEntryIsCash] = useState(false);
@@ -102,6 +115,7 @@ export default function SubcontractorDetailPage({
           teamResult,
           personnelResult,
           ledgerResult,
+          documentResult,
         ] = await Promise.all([
           subcontractorService.getById(id),
           subcontractorProgressPaymentService.list({
@@ -110,6 +124,7 @@ export default function SubcontractorDetailPage({
           subcontractorTeamService.get(id),
           personnelService.getAll(),
           subcontractorLedgerService.get(id),
+          subcontractorDocumentService.list(id),
         ]);
 
         if (cancelled) return;
@@ -119,6 +134,7 @@ export default function SubcontractorDetailPage({
         setTeam(teamResult.members);
         setSocialSecurityWithUs(teamResult.socialSecurityWithUs);
         setLedger(ledgerResult);
+        setDocuments(documentResult);
         setPersonnel(
           personnelResult.filter(
             (x) => x.companyId === contractResult.companyId && x.isActive
@@ -255,6 +271,35 @@ export default function SubcontractorDetailPage({
       setRefreshKey((current) => current + 1);
     } catch (entryError) {
       setError(errorMessage(entryError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function uploadDocument() {
+    if (!docFile) return;
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const result = await subcontractorDocumentService.upload({
+        subcontractorContractId: id,
+        documentType: Number(docType),
+        title: docTitle.trim(),
+        issueDate: docIssueDate,
+        validUntil: docValidUntil || null,
+        file: docFile,
+      });
+
+      setNotice(result.message);
+      setDocTitle("");
+      setDocValidUntil("");
+      setDocFile(null);
+      setRefreshKey((current) => current + 1);
+    } catch (uploadError) {
+      setError(errorMessage(uploadError));
     } finally {
       setSaving(false);
     }
@@ -402,6 +447,176 @@ export default function SubcontractorDetailPage({
             </div>
           </section>
         )}
+
+        <section style={{ ...card, display: "grid", gap: 14 }}>
+          <h2 style={{ margin: 0, fontSize: 18 }}>Evraklar</h2>
+          <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+            SGK borcu yoktur yazısı kanunen üç ay geçerlidir; bitiş tarihi
+            girilmese bile buna göre takip edilir.
+          </p>
+
+          {documents.length === 0 ? (
+            <div style={{ color: "#94a3b8" }}>Evrak yüklenmemiş.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {documents.map((document) => {
+                const tone =
+                  document.status === SubcontractorDocumentStatus.Expired
+                    ? { bg: "#fef2f2", border: "#fecaca", text: "#b91c1c" }
+                    : document.status === SubcontractorDocumentStatus.ExpiringSoon
+                      ? { bg: "#fffbeb", border: "#fde68a", text: "#b45309" }
+                      : { bg: "#fff", border: "#e2e8f0", text: "#0f172a" };
+
+                return (
+                  <div
+                    key={document.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      padding: 12,
+                      borderRadius: 10,
+                      background: tone.bg,
+                      border: `1px solid ${tone.border}`,
+                    }}
+                  >
+                    <div>
+                      <strong>{document.documentTypeName}</strong> ·{" "}
+                      {document.title}
+                      <div style={{ marginTop: 4, fontSize: 12, color: "#64748b" }}>
+                        Düzenlenme: {date(document.issueDate)}
+                        {document.effectiveValidUntil && (
+                          <>
+                            {" · "}Geçerlilik:{" "}
+                            {date(document.effectiveValidUntil)}
+                            {document.validUntilIsImplied && " (kanuni üç ay)"}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                      }}
+                    >
+                      <span style={{ color: tone.text, fontWeight: 600 }}>
+                        {document.statusName}
+                        {document.daysRemaining != null &&
+                          document.status !== SubcontractorDocumentStatus.NoExpiry &&
+                          ` (${document.daysRemaining} gün)`}
+                      </span>
+                      <a
+                        href={subcontractorDocumentService.downloadUrl(document.id)}
+                        style={linkButton}
+                      >
+                        İndir
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "190px minmax(0,1fr) 150px 150px 200px 120px",
+              gap: 10,
+              alignItems: "end",
+            }}
+          >
+            <label style={fieldLabel}>
+              Belge Türü
+              <select
+                value={docType}
+                onChange={(event) => setDocType(event.target.value)}
+                style={input}
+              >
+                <option value={SubcontractorDocumentType.Contract}>
+                  Sözleşme
+                </option>
+                <option value={SubcontractorDocumentType.SignatureCircular}>
+                  İmza sirküleri
+                </option>
+                <option value={SubcontractorDocumentType.TaxCertificate}>
+                  Vergi levhası
+                </option>
+                <option value={SubcontractorDocumentType.SocialSecurityClearance}>
+                  SGK borcu yoktur
+                </option>
+                <option value={SubcontractorDocumentType.TaxClearance}>
+                  Vergi borcu yoktur
+                </option>
+                <option value={SubcontractorDocumentType.OccupationalSafety}>
+                  İSG evrakı
+                </option>
+                <option value={SubcontractorDocumentType.TradeRegistry}>
+                  Ticaret sicil gazetesi
+                </option>
+                <option value={SubcontractorDocumentType.InsurancePolicy}>
+                  Sigorta poliçesi
+                </option>
+                <option value={SubcontractorDocumentType.Other}>Diğer</option>
+              </select>
+            </label>
+
+            <label style={fieldLabel}>
+              Başlık
+              <input
+                value={docTitle}
+                onChange={(event) => setDocTitle(event.target.value)}
+                style={input}
+              />
+            </label>
+
+            <label style={fieldLabel}>
+              Düzenlenme
+              <input
+                type="date"
+                value={docIssueDate}
+                onChange={(event) => setDocIssueDate(event.target.value)}
+                style={input}
+              />
+            </label>
+
+            <label style={fieldLabel}>
+              Geçerlilik Bitişi
+              <input
+                type="date"
+                value={docValidUntil}
+                onChange={(event) => setDocValidUntil(event.target.value)}
+                style={input}
+              />
+            </label>
+
+            <label style={fieldLabel}>
+              Dosya
+              <input
+                type="file"
+                onChange={(event) =>
+                  setDocFile(event.target.files?.[0] ?? null)
+                }
+                style={{ ...input, paddingTop: 9 }}
+              />
+            </label>
+
+            <button
+              type="button"
+              style={primaryButton}
+              disabled={saving || !docFile || !docTitle.trim()}
+              onClick={() => void uploadDocument()}
+            >
+              Yükle
+            </button>
+          </div>
+        </section>
 
         {ledger && (
           <section style={{ ...card, display: "grid", gap: 14 }}>
@@ -942,5 +1157,6 @@ const fieldLabel = { display: "grid", gap: 6, fontSize: 13, color: "#475569" } a
 const th = { padding: "13px 14px", textAlign: "left", color: "#475569", fontSize: 13, borderBottom: "1px solid #e2e8f0" } as const;
 const td = { padding: "13px 14px", borderBottom: "1px solid #eef2f7" } as const;
 const primaryButton = { height: 42, padding: "0 18px", borderRadius: 10, border: "none", background: "#0f766e", color: "#fff", fontWeight: 600, cursor: "pointer" } as const;
+const linkButton = { display: "inline-flex", alignItems: "center", height: 34, padding: "0 12px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, textDecoration: "none" } as const;
 const hiddenTile = { border: "1px dashed #cbd5e1", borderRadius: 12, padding: 14, background: "#f8fafc" } as const;
 const smallButton = { height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, cursor: "pointer" } as const;

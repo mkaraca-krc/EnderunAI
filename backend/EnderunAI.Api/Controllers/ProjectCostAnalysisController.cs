@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.Projects;
+using EnderunAI.Api.Services.Subcontractors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,9 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/projects")]
 public sealed class ProjectCostAnalysisController(
     AppDbContext db,
-    IProjectCostAnalysisService analysisService) : ControllerBase
+    IProjectCostAnalysisService analysisService,
+    SubcontractorLedgerService subcontractorLedger,
+    IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
 {
     [HttpGet("{id:guid}/cost-analysis")]
     [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
@@ -43,9 +46,27 @@ public sealed class ProjectCostAnalysisController(
     {
         var result = await analysisService.AnalyzeAsync(id, cancellationToken);
 
-        return result is null
-            ? NotFound(new { message = "Proje bulunamadı." })
-            : Ok(ToProfitability(result));
+        if (result is null)
+            return NotFound(new { message = "Proje bulunamadı." });
+
+        return Ok(ToProfitability(
+            result, await GetCashCostAsync(id, cancellationToken)));
+    }
+
+    /// <summary>
+    /// Projenin elden taşeron maliyeti. Yetkisiz kullanıcıya SIFIR
+    /// döner ve bu "gizlendi" diye işaretlenmez: toplamın eksik
+    /// olduğunu bilmek, elden ödeme yapıldığı bilgisini sızdırmak
+    /// demektir.
+    /// </summary>
+    private async Task<decimal> GetCashCostAsync(
+        Guid projectId, CancellationToken cancellationToken)
+    {
+        var canViewCash = await extraPaymentVisibility
+            .CanViewExtraPaymentAsync(cancellationToken);
+
+        return await subcontractorLedger.GetProjectCashCostAsync(
+            projectId, canViewCash, cancellationToken);
     }
 
     /// <summary>
@@ -75,7 +96,11 @@ public sealed class ProjectCostAnalysisController(
             var analysis = await analysisService.AnalyzeAsync(projectId, cancellationToken);
 
             if (analysis is not null)
-                results.Add(ToProfitability(analysis));
+            {
+                results.Add(ToProfitability(
+                    analysis,
+                    await GetCashCostAsync(projectId, cancellationToken)));
+            }
         }
 
         return Ok(results);
@@ -86,7 +111,8 @@ public sealed class ProjectCostAnalysisController(
     /// çevirir. Sınıflar dörde indiği için "otherCost" her zaman sıfır;
     /// alan arayüz sözleşmesi bozulmasın diye duruyor.
     /// </summary>
-    private static object ToProfitability(ProjectCostAnalysisResult analysis)
+    private static object ToProfitability(
+        ProjectCostAnalysisResult analysis, decimal subcontractorCashCost)
     {
         decimal ByClass(ProjectCostClass costClass) =>
             analysis.Components
@@ -106,12 +132,19 @@ public sealed class ProjectCostAnalysisController(
             revenue = analysis.RevenueAmount,
             materialCost = ByClass(ProjectCostClass.Material),
             laborCost = decimal.Round(labor, 2),
-            subcontractorCost = ByClass(ProjectCostClass.SubcontractorLabor),
+            // Elden taşeron ödemesi maliyet defterinde durmuyor; yetkisi
+            // olana okuma anında ekleniyor, olmayana sıfır geliyor.
+            subcontractorCost = decimal.Round(
+                ByClass(ProjectCostClass.SubcontractorLabor) + subcontractorCashCost, 2),
             generalExpenseCost = ByClass(ProjectCostClass.Overhead),
             otherCost = 0m,
-            totalCost = analysis.TotalCost,
-            profit = analysis.Profit,
-            profitMargin = analysis.ProfitMarginPercent ?? 0m
+            totalCost = decimal.Round(analysis.TotalCost + subcontractorCashCost, 2),
+            profit = decimal.Round(analysis.Profit - subcontractorCashCost, 2),
+            profitMargin = analysis.RevenueAmount > 0m
+                ? decimal.Round(
+                    (analysis.Profit - subcontractorCashCost) /
+                    analysis.RevenueAmount * 100m, 2)
+                : 0m
         };
     }
 }
