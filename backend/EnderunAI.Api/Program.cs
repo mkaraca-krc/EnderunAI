@@ -205,6 +205,7 @@ builder.Services
     .AddScoped<EnderunAI.Api.Services.Purchasing.SupplierPriceIntelligenceService>();
 builder.Services
     .AddScoped<EnderunAI.Api.Services.Purchasing.SupplierQualityService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Assets.ToolServiceWorkflow>();
 builder.Services.AddHostedService<
     EnderunAI.Api.Services.Market.MarketDataBackgroundService>();
 builder.Services.AddSingleton<

@@ -193,6 +193,9 @@ public sealed class AppDbContext(
     public DbSet<HrShiftDefinition> HrShiftDefinitions => Set<HrShiftDefinition>();
     public DbSet<HrShiftAssignment> HrShiftAssignments => Set<HrShiftAssignment>();
     public DbSet<HrAssetAssignment> HrAssetAssignments => Set<HrAssetAssignment>();
+    public DbSet<ToolAsset> ToolAssets => Set<ToolAsset>();
+    public DbSet<ToolServiceRequest> ToolServiceRequests =>
+        Set<ToolServiceRequest>();
     public DbSet<ProjectMeasurement> ProjectMeasurements => Set<ProjectMeasurement>();
     public DbSet<ProjectMeasurementItem> ProjectMeasurementItems => Set<ProjectMeasurementItem>();
     public DbSet<JobPosting> JobPostings => Set<JobPosting>();
@@ -4010,6 +4013,83 @@ public sealed class AppDbContext(
             entity.Property(x => x.Notes).HasMaxLength(4000);
             entity.Property(x => x.InventoryQuantity).HasPrecision(18, 4);
             entity.Property(x => x.IssuedUnitCost).HasPrecision(18, 6);
+
+            // Alet kartı sonradan geldi: mevcut serbest metinli
+            // zimmetler bozulmasın diye bağ OPSİYONEL.
+            entity.HasOne(x => x.ToolAsset).WithMany()
+                .HasForeignKey(x => x.ToolAssetId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.ToolAssetId, x.Status });
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ToolAsset>(entity =>
+        {
+            entity.ToTable("tool_assets");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.Code })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            // Seri numarası girilmişse şirket içinde benzersiz: aynı
+            // seriyi iki karta yazmak, servis geçmişini ikiye böler.
+            entity.HasIndex(x => new { x.CompanyId, x.SerialNumber })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false AND \"SerialNumber\" IS NOT NULL");
+
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Brand).HasMaxLength(150);
+            entity.Property(x => x.Model).HasMaxLength(150);
+            entity.Property(x => x.SerialNumber).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.PurchaseCost).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasConversion<int>();
+            entity.Property(x => x.LocationType).HasConversion<int>();
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ProjectSite).WithMany()
+                .HasForeignKey(x => x.ProjectSiteId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.AssignedPersonnel).WithMany()
+                .HasForeignKey(x => x.AssignedPersonnelId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<ToolServiceRequest>(entity =>
+        {
+            entity.ToTable("tool_service_requests");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.RequestNumber })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+            entity.HasIndex(x => new { x.ToolAssetId, x.Status });
+            entity.HasIndex(x => new { x.ProjectId, x.RequestDate });
+
+            entity.Property(x => x.RequestNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.FaultDescription).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.DecisionNote).HasMaxLength(2000);
+            entity.Property(x => x.ServiceProviderName).HasMaxLength(300);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.ServiceCost).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasConversion<int>();
+            entity.Property(x => x.Decision).HasConversion<int>();
+            entity.Property(x => x.Urgency).HasConversion<int>();
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ToolAsset).WithMany()
+                .HasForeignKey(x => x.ToolAssetId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Project).WithMany()
+                .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.ProjectSite).WithMany()
+                .HasForeignKey(x => x.ProjectSiteId).OnDelete(DeleteBehavior.SetNull);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }

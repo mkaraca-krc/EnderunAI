@@ -212,6 +212,35 @@ public sealed class PersonnelTerminationService(
                 "Hizmet süresi bir yılı doldurmadığı için kıdem tazminatı doğmadı.");
         }
 
+        // --- İade edilmemiş zimmet ---
+        // Çıkış hesabı yapılırken üzerinde zimmet duran personel
+        // uyarılmalı: ödeme yapıldıktan sonra alet peşinde koşmak
+        // pratikte imkânsız.
+        var openAssignments = await db.HrAssetAssignments
+            .AsNoTracking()
+            .Where(x => x.PersonnelId == personnel.Id &&
+                        x.Status == HrAssetAssignmentStatus.Assigned)
+            .Select(x => new
+            {
+                Name = x.ToolAsset != null ? x.ToolAsset.Name : x.AssetName,
+                Code = x.ToolAsset != null ? x.ToolAsset.Code : x.AssetCode
+            })
+            .ToListAsync(cancellationToken);
+
+        if (openAssignments.Count > 0)
+        {
+            var sample = string.Join(", ", openAssignments
+                .Take(3)
+                .Select(x => string.IsNullOrWhiteSpace(x.Code)
+                    ? x.Name
+                    : $"{x.Code} {x.Name}"));
+
+            warnings.Add(
+                $"{openAssignments.Count} zimmet iade edilmemiş ({sample}" +
+                (openAssignments.Count > 3 ? ", ..." : "") +
+                "). Çıkış ödemesinden önce iade alın.");
+        }
+
         return new TerminationCalculationView(
             PersonnelId: personnel.Id,
             PersonnelFullName: $"{personnel.FirstName} {personnel.LastName}".Trim(),
