@@ -5,6 +5,7 @@ using EnderunAI.Api.Models.HumanResources;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Security.CurrentUser;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.HumanResources;
 
@@ -201,7 +202,7 @@ public sealed class PersonnelTerminationService(
         if (official.CeilingApplied)
         {
             warnings.Add(
-                $"Kıdem tazminatı yasal tavana ({settings.SeveranceCeiling:N2} TL/yıl) " +
+                $"Kıdem tazminatı yasal tavana ({TurkishFormat.Amount(settings.SeveranceCeiling)} TL/yıl) " +
                 "takıldı; resmi tutar tavandan hesaplandı.");
         }
 

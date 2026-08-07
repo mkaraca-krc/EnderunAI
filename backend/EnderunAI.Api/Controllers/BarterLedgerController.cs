@@ -5,6 +5,7 @@ using EnderunAI.Api.Services.Hakedis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Controllers;
 
@@ -118,8 +119,8 @@ public sealed class BarterLedgerController(AppDbContext db) : ControllerBase
         {
             return Conflict(new
             {
-                message = $"Teslim alma tutarı ({request.Amount:N2}) açık barter " +
-                          $"bakiyesini ({openBalance:N2}) aşamaz."
+                message = $"Teslim alma tutarı ({TurkishFormat.Amount(request.Amount)}) açık barter " +
+                          $"bakiyesini ({TurkishFormat.Amount(openBalance)}) aşamaz."
             });
         }
 

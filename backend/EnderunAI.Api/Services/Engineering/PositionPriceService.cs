@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Engineering;
 
@@ -171,8 +172,8 @@ public sealed class PositionPriceService(AppDbContext db) : IPositionPriceServic
             applied = (material?.UnitPrice ?? 0m) + (labor?.UnitPrice ?? 0m);
 
             var parts = new List<string>();
-            if (material is not null) parts.Add($"malzeme {material.UnitPrice:N2}");
-            if (labor is not null) parts.Add($"montaj {labor.UnitPrice:N2}");
+            if (material is not null) parts.Add($"malzeme {TurkishFormat.Amount(material.UnitPrice)}");
+            if (labor is not null) parts.Add($"montaj {TurkishFormat.Amount(labor.UnitPrice)}");
 
             explanation =
                 $"{reference.Year} {InstitutionNameOf(reference.Institution)}: " +

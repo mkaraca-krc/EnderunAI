@@ -144,7 +144,10 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
 
         setNotice(
           `Kaydedildi — belge no: ${result.referenceNumber}, ` +
-            `tutar: ${result.totalCost.toFixed(2)} TRY`
+            `tutar: ${result.totalCost.toLocaleString("tr-TR", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })} TRY`
         );
       } else {
         const result = await inventoryMovementService.transfer({

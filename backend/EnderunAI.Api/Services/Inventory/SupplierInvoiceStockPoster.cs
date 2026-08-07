@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security.CurrentUser;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Inventory;
 
@@ -218,8 +219,8 @@ public sealed class SupplierInvoiceStockPoster(
             {
                 throw new InvalidOperationException(
                     $"Kalem {item.LineNumber} ({inventoryItem.Code}): depoda " +
-                    $"{stock?.Quantity ?? 0m:N4} {inventoryItem.Unit} var, " +
-                    $"{item.Quantity:N4} iade edilemez. Malzeme kullanıldıysa " +
+                    $"{TurkishFormat.Quantity(stock?.Quantity ?? 0m)} {inventoryItem.Unit} var, " +
+                    $"{TurkishFormat.Quantity(item.Quantity)} iade edilemez. Malzeme kullanıldıysa " +
                     "iade yerine stok düzeltmesi yapın.");
             }
 

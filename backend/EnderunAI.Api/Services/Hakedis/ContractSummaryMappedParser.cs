@@ -1,5 +1,6 @@
 using ClosedXML.Excel;
 using EnderunAI.Api.Services.Engineering;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Hakedis;
 
@@ -226,8 +227,8 @@ public static class ContractSummaryMappedParser
             {
                 errors.Add(new ContractSummaryParseError(
                     row,
-                    $"Dosyadaki tutar {expected:N2} ile miktar × birim fiyattan " +
-                    $"hesaplanan {computed:N2} uyuşmuyor. Satır aktarılmadı; " +
+                    $"Dosyadaki tutar {TurkishFormat.Amount(expected)} ile miktar × birim fiyattan " +
+                    $"hesaplanan {TurkishFormat.Amount(computed)} uyuşmuyor. Satır aktarılmadı; " +
                     "kaynak dosyadaki değeri kontrol edin."));
 
                 continue;
@@ -273,8 +274,8 @@ public static class ContractSummaryMappedParser
         if (fileTotal is not decimal expected || expected == 0m || unitPrice == 0m)
         {
             return (null,
-                $"Miktar belirsiz: \"{text}\" hem {candidates[0]:N4} hem " +
-                $"{candidates[1]:N4} okunabilir. Doğrulanacak tutar sütunu " +
+                $"Miktar belirsiz: \"{text}\" hem {TurkishFormat.Quantity(candidates[0])} hem " +
+                $"{TurkishFormat.Quantity(candidates[1])} okunabilir. Doğrulanacak tutar sütunu " +
                 "eşlenmediği için tahmin edilmedi.");
         }
 
@@ -287,7 +288,7 @@ public static class ContractSummaryMappedParser
 
         return (null,
             $"Miktar belirsiz: \"{text}\" okumalarının hiçbiri dosyadaki " +
-            $"{expected:N2} tutarını doğrulamıyor.");
+            $"{TurkishFormat.Amount(expected)} tutarını doğrulamıyor.");
     }
 
     /// <summary>

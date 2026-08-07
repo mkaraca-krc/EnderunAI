@@ -1,3 +1,4 @@
+using EnderunAI.Api.Formatting;
 namespace EnderunAI.Api.Services.HumanResources;
 
 /// <summary>
@@ -114,7 +115,7 @@ public static class PayrollNetToGrossCalculator
             if (++iterations > MaxIterations)
             {
                 throw new InvalidOperationException(
-                    $"Brütleştirme yakınsamadı: {target:N2} TL net için makul bir brüt " +
+                    $"Brütleştirme yakınsamadı: {TurkishFormat.Amount(target)} TL net için makul bir brüt " +
                     "bulunamadı. Bordro parametrelerini kontrol edin.");
             }
         }

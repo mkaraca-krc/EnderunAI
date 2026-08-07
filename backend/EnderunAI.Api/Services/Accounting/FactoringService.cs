@@ -3,6 +3,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Accounting;
 
@@ -94,7 +95,7 @@ public sealed class FactoringService(
         if (net <= 0m)
         {
             throw new ArgumentException(
-                $"Kesintiler ({totalDeduction:N2}) çek tutarını ({nominal:N2}) " +
+                $"Kesintiler ({TurkishFormat.Amount(totalDeduction)}) çek tutarını ({TurkishFormat.Amount(nominal)}) " +
                 "aştığı için net tahsilat kalmıyor.");
         }
 
@@ -254,7 +255,7 @@ public sealed class FactoringService(
                 Amount = calculation.NetAmount,
                 CurrencyCode = cheque.CurrencyCode,
                 Description = $"Çek kırdırma {internalNumber} — çek no {cheque.ChequeNumber} " +
-                    $"(net, kesinti {calculation.TotalDeductionAmount:N2})",
+                    $"(net, kesinti {TurkishFormat.Amount(calculation.TotalDeductionAmount)})",
                 DocumentNumber = internalNumber,
                 CurrentAccountId = request.FactoringCurrentAccountId,
                 ProjectId = projectId,
@@ -279,7 +280,7 @@ public sealed class FactoringService(
                 FromStatus = ChequeStatus.Portfolio,
                 ToStatus = ChequeStatus.AtFactoring,
                 Description = $"Faktoringe verildi ({internalNumber}) — " +
-                    $"net {calculation.NetAmount:N2}, kesinti {calculation.TotalDeductionAmount:N2}",
+                    $"net {TurkishFormat.Amount(calculation.NetAmount)}, kesinti {TurkishFormat.Amount(calculation.TotalDeductionAmount)}",
                 CashAccountId = cashAccount.Id,
                 AccountingVoucherId = voucherId
             });

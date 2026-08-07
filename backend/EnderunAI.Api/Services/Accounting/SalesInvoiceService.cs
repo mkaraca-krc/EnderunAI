@@ -4,6 +4,7 @@ using EnderunAI.Api.Models;
 using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Accounting;
 
@@ -463,9 +464,9 @@ public sealed class SalesInvoiceService(
             if (requested.Quantity > returnable)
             {
                 throw new ArgumentException(
-                    $"{source.Description}: en fazla {returnable:N4} {source.Unit} " +
-                    $"iade edilebilir (faturada {source.Quantity:N4}, " +
-                    $"daha önce iade edilen {alreadyReturned.GetValueOrDefault(source.Id, 0m):N4}).");
+                    $"{source.Description}: en fazla {TurkishFormat.Quantity(returnable)} {source.Unit} " +
+                    $"iade edilebilir (faturada {TurkishFormat.Quantity(source.Quantity)}, " +
+                    $"daha önce iade edilen {TurkishFormat.Quantity(alreadyReturned.GetValueOrDefault(source.Id, 0m))}).");
             }
 
             var lineSubtotal = decimal.Round(requested.Quantity * source.UnitPrice, 2);
@@ -546,7 +547,7 @@ public sealed class SalesInvoiceService(
         // Tevkifat KDV'nin bir kısmıdır; KDV'yi aşamaz.
         if (withholding > invoice.VatTotal)
             throw new ArgumentException(
-                $"Tevkifat ({withholding:N2}) hesaplanan KDV'den ({invoice.VatTotal:N2}) büyük olamaz.");
+                $"Tevkifat ({TurkishFormat.Amount(withholding)}) hesaplanan KDV'den ({TurkishFormat.Amount(invoice.VatTotal)}) büyük olamaz.");
 
         invoice.WithholdingAmount = withholding;
         invoice.NetReceivableAmount = invoice.GrandTotal - withholding;

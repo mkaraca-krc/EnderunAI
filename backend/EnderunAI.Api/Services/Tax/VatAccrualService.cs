@@ -3,6 +3,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.Accounting;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Tax;
 
@@ -165,7 +166,7 @@ public sealed class VatAccrualService(
         if (debitTotal != creditTotal)
         {
             throw new InvalidOperationException(
-                $"KDV tahakkuk fişi dengesiz: borç {debitTotal:N2} ≠ alacak {creditTotal:N2}. " +
+                $"KDV tahakkuk fişi dengesiz: borç {TurkishFormat.Amount(debitTotal)} ≠ alacak {TurkishFormat.Amount(creditTotal)}. " +
                 "Dönemdeki KDV hesap hareketleri kendi içinde tutarsız.");
         }
 
@@ -189,9 +190,9 @@ public sealed class VatAccrualService(
 
         var message = period.PayableVat > 0m
             ? $"{month:00}/{year} dönemi KDV tahakkuku kesildi; " +
-              $"ödenecek KDV {period.PayableVat:N2} TL."
+              $"ödenecek KDV {TurkishFormat.Amount(period.PayableVat)} TL."
             : $"{month:00}/{year} dönemi KDV tahakkuku kesildi; " +
-              $"sonraki döneme {period.CarryForwardOut:N2} TL devrediyor.";
+              $"sonraki döneme {TurkishFormat.Amount(period.CarryForwardOut)} TL devrediyor.";
 
         return new VatAccrualResult(
             created.Id,

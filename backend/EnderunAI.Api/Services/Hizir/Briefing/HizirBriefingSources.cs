@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Hizir.Briefing;
 
@@ -15,7 +16,7 @@ namespace EnderunAI.Api.Services.Hizir.Briefing;
 /// </summary>
 internal static class BriefingFormat
 {
-    public static string Money(decimal amount) => $"{amount:N2} TL";
+    public static string Money(decimal amount) => $"{TurkishFormat.Amount(amount)} TL";
 }
 
 /// <summary>Onay bekleyen işler — kullanıcının kendi izin alanında.</summary>
@@ -429,7 +430,7 @@ public sealed class ProjectCostOverrunBriefingSource(
 
                 items.Add(new BriefingItem(
                     $"{project.Code}: {component.CostClassName.ToLowerInvariant()} maliyeti " +
-                    $"icmal öngörüsünü %{percent:N1} aştı",
+                    $"icmal öngörüsünü %{TurkishFormat.Number(percent, 1)} aştı",
                     $"Hakedilen öngörü {BriefingFormat.Money(component.ForecastEarned)}, " +
                     $"gerçekleşen {BriefingFormat.Money(component.Actual)}.",
                     percent >= threshold * 2m

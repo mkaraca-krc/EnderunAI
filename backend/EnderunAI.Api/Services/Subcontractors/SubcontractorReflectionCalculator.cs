@@ -1,4 +1,5 @@
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Subcontractors;
 
@@ -98,7 +99,7 @@ public static class SubcontractorReflectionCalculator
             Amount: amount,
             Description: "İSG katılım payı yansıtması",
             Basis:
-                $"İşveren İSG kesintisi {TurkishAmountFormat.Amount(employerOhsDeduction)} × " +
+                $"İşveren İSG kesintisi {TurkishFormat.Amount(employerOhsDeduction)} × " +
                 $"({subcontractorWorkerCount} taşeron işçisi / " +
                 $"{siteWorkerCount} şantiye işçisi)");
     }
@@ -159,8 +160,8 @@ public static class SubcontractorReflectionCalculator
 
             total += amount;
             parts.Add(
-                $"{line.Name}: {TurkishAmountFormat.Count(line.SubcontractorQuantity)} × " +
-                $"{TurkishAmountFormat.Amount(line.EmployerUnitPrice)}");
+                $"{line.Name}: {TurkishFormat.Whole(line.SubcontractorQuantity)} × " +
+                $"{TurkishFormat.Amount(line.EmployerUnitPrice)}");
         }
 
         if (total <= 0m)

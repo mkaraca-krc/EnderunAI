@@ -3,6 +3,7 @@ using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.Projects;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Hakedis;
 
@@ -151,7 +152,7 @@ public sealed class HakedisProfitService(
         if (advanceMovement != 0)
         {
             assumptions.Add(
-                $"Hakediş tutarının {advanceMovement:N2} TL'lik kısmı ihzarat " +
+                $"Hakediş tutarının {TurkishFormat.Amount(advanceMovement)} TL'lik kısmı ihzarat " +
                 "hareketidir; henüz yapılmamış imalatın malzeme bedeli olduğu için " +
                 "kâr hesabına girmez.");
         }
@@ -239,7 +240,7 @@ public sealed class HakedisProfitService(
         if (revenueWithoutCost != 0)
         {
             assumptions.Add(
-                $"{revenueWithoutCost:N2} TL gelirin maliyeti hesaplanamadı; imalata " +
+                $"{TurkishFormat.Amount(revenueWithoutCost)} TL gelirin maliyeti hesaplanamadı; imalata " +
                 "düşen maliyet bu kadar eksik, kâr o oranda iyimser görünüyor.");
         }
 

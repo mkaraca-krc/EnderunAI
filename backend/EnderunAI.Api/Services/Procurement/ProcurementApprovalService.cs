@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using PurchaseOrderEntity = EnderunAI.Api.Models.PurchaseOrder.PurchaseOrder;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Procurement;
 
@@ -612,7 +613,7 @@ public sealed class ProcurementApprovalService(
             cancellationToken);
         if (state.IsActive && state.AmountTry < committed)
             throw new ProcurementValidationException(
-                $"Bütçe tutarı mevcut {committed:N2} TL taahhüdün altına indirilemez.");
+                $"Bütçe tutarı mevcut {TurkishFormat.Amount(committed)} TL taahhüdün altına indirilemez.");
 
         await WriteAuditAsync(
             BudgetConfiguredAction,
@@ -660,7 +661,7 @@ public sealed class ProcurementApprovalService(
             if (amountAfter > budget.AmountTry)
             {
                 throw new ProcurementValidationException(
-                    $"Sipariş proje bütçesini {amountAfter - budget.AmountTry:N2} TL aşıyor.");
+                    $"Sipariş proje bütçesini {TurkishFormat.Amount(amountAfter - budget.AmountTry)} TL aşıyor.");
             }
         }
 

@@ -5,6 +5,7 @@ using EnderunAI.Api.Services.Subcontractors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Controllers;
 
@@ -636,9 +637,9 @@ public sealed class SubcontractorContractsController(
             return BadRequest(new
             {
                 message =
-                    $"Kısım bedelleri toplamı ({TurkishAmountFormat.Amount(sectionTotal)}) " +
+                    $"Kısım bedelleri toplamı ({TurkishFormat.Amount(sectionTotal)}) " +
                     "sözleşme bedelini " +
-                    $"({TurkishAmountFormat.Amount(request.ContractAmount)}) aşamaz."
+                    $"({TurkishFormat.Amount(request.ContractAmount)}) aşamaz."
             });
         }
 

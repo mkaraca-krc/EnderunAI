@@ -3,6 +3,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Accounting;
 
@@ -276,7 +277,7 @@ public sealed class AccountingVoucherService(
             decimal.Round(voucher.TotalCredit, 2))
         {
             throw new InvalidOperationException(
-                $"Fiş dengeli değil. Borç: {voucher.TotalDebit:N2}, Alacak: {voucher.TotalCredit:N2}");
+                $"Fiş dengeli değil. Borç: {TurkishFormat.Amount(voucher.TotalDebit)}, Alacak: {TurkishFormat.Amount(voucher.TotalCredit)}");
         }
 
         voucher.Status = AccountingVoucherStatus.Posted;

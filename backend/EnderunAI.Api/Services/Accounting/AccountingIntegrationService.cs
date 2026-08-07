@@ -2,6 +2,7 @@ using EnderunAI.Api.Contracts.Accounting;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Accounting;
 
@@ -415,8 +416,8 @@ public sealed class AccountingIntegrationService(
         if (withholding > 0m && withholding > decimal.Round(invoice.VatTotal, 2))
         {
             throw new InvalidOperationException(
-                $"Tevkifat ({withholding:N2}) fatura KDV'sinden " +
-                $"({invoice.VatTotal:N2}) büyük olamaz.");
+                $"Tevkifat ({TurkishFormat.Amount(withholding)}) fatura KDV'sinden " +
+                $"({TurkishFormat.Amount(invoice.VatTotal)}) büyük olamaz.");
         }
 
         // İndirilecek KDV toplamda değişmez; tevkifatlı kısım yalnızca
@@ -507,7 +508,7 @@ public sealed class AccountingIntegrationService(
         if (debitTotal != decimal.Round(invoice.GrandTotal, 2))
         {
             throw new InvalidOperationException(
-                $"Fatura toplamları tutarsız: ara toplam + KDV ({debitTotal:N2}) ≠ genel toplam ({invoice.GrandTotal:N2}).");
+                $"Fatura toplamları tutarsız: ara toplam + KDV ({TurkishFormat.Amount(debitTotal)}) ≠ genel toplam ({TurkishFormat.Amount(invoice.GrandTotal)}).");
         }
 
         // İade faturasında aynı satırlar borç/alacak yer değiştirerek
@@ -607,8 +608,8 @@ public sealed class AccountingIntegrationService(
         if (decimal.Round(subtotal + declaredVat, 2) != receivable)
         {
             throw new InvalidOperationException(
-                $"Fatura tutarları tutarsız: matrah ({subtotal:N2}) + beyan edilen " +
-                $"KDV ({declaredVat:N2}) ≠ tahsil edilecek ({receivable:N2}).");
+                $"Fatura tutarları tutarsız: matrah ({TurkishFormat.Amount(subtotal)}) + beyan edilen " +
+                $"KDV ({TurkishFormat.Amount(declaredVat)}) ≠ tahsil edilecek ({TurkishFormat.Amount(receivable)}).");
         }
 
         var receivableAccountId = customer.ReceivableAccountingAccountId
@@ -819,9 +820,9 @@ public sealed class AccountingIntegrationService(
         if (receivable < 0m)
         {
             throw new InvalidOperationException(
-                $"Kesintiler ve stopaj toplamı ({totalDeduction + incomeTaxWithholding:N2}) " +
-                $"hakediş tutarını ({taxableAmount + progressPayment.VatAmount:N2}) aşıyor; " +
-                $"tahsil edilecek tutar negatif ({receivable:N2}). Bu hakediş " +
+                $"Kesintiler ve stopaj toplamı ({TurkishFormat.Amount(totalDeduction + incomeTaxWithholding)}) " +
+                $"hakediş tutarını ({TurkishFormat.Amount(taxableAmount + progressPayment.VatAmount)}) aşıyor; " +
+                $"tahsil edilecek tutar negatif ({TurkishFormat.Amount(receivable)}). Bu hakediş " +
                 "kesinleştirilemez — kesintileri gözden geçirin veya fazlasını " +
                 "sonraki hakedişe bırakın.");
         }
@@ -832,8 +833,8 @@ public sealed class AccountingIntegrationService(
             decimal.Round(taxableAmount + declaredVat, 2))
         {
             throw new InvalidOperationException(
-                $"Hakediş tutarları tutarsız: net ödenecek ({receivable:N2}) + kesintiler ({totalDeduction:N2}) " +
-                $"+ stopaj ({incomeTaxWithholding:N2}) ≠ hakediş ({taxableAmount:N2}) + beyan edilen KDV ({declaredVat:N2}).");
+                $"Hakediş tutarları tutarsız: net ödenecek ({TurkishFormat.Amount(receivable)}) + kesintiler ({TurkishFormat.Amount(totalDeduction)}) " +
+                $"+ stopaj ({TurkishFormat.Amount(incomeTaxWithholding)}) ≠ hakediş ({TurkishFormat.Amount(taxableAmount)}) + beyan edilen KDV ({TurkishFormat.Amount(declaredVat)}).");
         }
 
         // Kesinti türü → hesap eşlemesi. Çözüm sırası: kesinti
@@ -912,7 +913,7 @@ public sealed class AccountingIntegrationService(
             lines.Add(new AccountingVoucherLineRequest(
                 AccountingAccountId: withholdingAccountId,
                 Description:
-                    $"Hakediş stopajı (%{progressPayment.IncomeTaxWithholdingRate:N2})",
+                    $"Hakediş stopajı (%{TurkishFormat.Rate(progressPayment.IncomeTaxWithholdingRate)})",
                 DebitAmount: incomeTaxWithholding,
                 CreditAmount: 0m,
                 CurrencyCode: progressPayment.CurrencyCode,
@@ -1379,8 +1380,8 @@ public sealed class AccountingIntegrationService(
         if (allocations.Count > 0 && allocations.Sum(x => x.Amount) != amount)
         {
             throw new InvalidOperationException(
-                $"Çek dağılımı toplamı ({allocations.Sum(x => x.Amount):N2}) " +
-                $"çek tutarına ({amount:N2}) eşit değil; fiş kesilemez.");
+                $"Çek dağılımı toplamı ({TurkishFormat.Amount(allocations.Sum(x => x.Amount))}) " +
+                $"çek tutarına ({TurkishFormat.Amount(amount)}) eşit değil; fiş kesilemez.");
         }
 
         List<AccountingVoucherLineRequest> BuildSide(Guid accountId, bool isDebit)
@@ -1495,8 +1496,8 @@ public sealed class AccountingIntegrationService(
         if (net + deduction != nominal)
         {
             throw new InvalidOperationException(
-                $"Faktoring tutarları tutarsız: net ({net:N2}) + kesinti ({deduction:N2}) " +
-                $"≠ çek tutarı ({nominal:N2}).");
+                $"Faktoring tutarları tutarsız: net ({TurkishFormat.Amount(net)}) + kesinti ({TurkishFormat.Amount(deduction)}) " +
+                $"≠ çek tutarı ({TurkishFormat.Amount(nominal)}).");
         }
 
         var project = transaction.ProjectId is null
@@ -1695,8 +1696,8 @@ public sealed class AccountingIntegrationService(
         if (creditTotal != expense)
         {
             throw new InvalidOperationException(
-                $"Bordro toplamları tutarsız: gider ({expense:N2}) ≠ " +
-                $"net + vergi + SGK + avans ({creditTotal:N2}).");
+                $"Bordro toplamları tutarsız: gider ({TurkishFormat.Amount(expense)}) ≠ " +
+                $"net + vergi + SGK + avans ({TurkishFormat.Amount(creditTotal)}).");
         }
 
         var voucherDate = new DateTime(

@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Tax;
 
@@ -142,7 +143,7 @@ public sealed class TaxLedgerService(AppDbContext db) : ITaxLedgerService
         {
             "Rakamlar kesinleşmiş muhasebe fişlerinden okunur; " +
             "muhasebeleşmemiş belgeler bu görünüme girmez.",
-            $"Geçici ve kurumlar vergisi tahminleri %{taxRate:N0} oranıyla, " +
+            $"Geçici ve kurumlar vergisi tahminleri %{TurkishFormat.Whole(taxRate)} oranıyla, " +
             "defterdeki ticari kâr üzerinden hesaplandı: 60x satışlar eksi " +
             "61x iade/indirimler eksi gider hesapları. Yansıtma (741/771) " +
             "kullanan şirkette gider 62x/63x'ten, kullanmayanda 7'li " +

@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Projects;
 
@@ -337,7 +338,7 @@ public sealed class ProjectCostAnalysisService(
             : 0m;
 
         assumptions.Add(
-            $"Vergi yükü TAHMİNİDİR: proje kârına %{taxRate:N0} kurumlar " +
+            $"Vergi yükü TAHMİNİDİR: proje kârına %{TurkishFormat.Whole(taxRate)} kurumlar " +
             "vergisi oranı uygulandı. Vergi gerçekte şirket düzeyinde, tüm " +
             "projelerin ve merkez giderlerinin toplamı üzerinden hesaplanır; " +
             "kesin hesap müşavirdedir.");

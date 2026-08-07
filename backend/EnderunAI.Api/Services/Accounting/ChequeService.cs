@@ -3,6 +3,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Accounting;
 
@@ -1120,7 +1121,7 @@ public sealed class ChequeService(
         if (total != decimal.Round(cheque.Amount, 2))
         {
             throw new ArgumentException(
-                $"Dağılım toplamı ({total:N2}) çek tutarına ({cheque.Amount:N2}) eşit olmalıdır.");
+                $"Dağılım toplamı ({TurkishFormat.Amount(total)}) çek tutarına ({TurkishFormat.Amount(cheque.Amount)}) eşit olmalıdır.");
         }
 
         return result;
@@ -1157,7 +1158,7 @@ public sealed class ChequeService(
         {
             throw new ArgumentException(
                 $"Dağılım {lineNumber}: {invoiceNumber} numaralı faturaya bağlanan toplam " +
-                $"({otherCheques + thisRequest:N2}) fatura tutarını ({invoiceTotal:N2}) aşıyor.");
+                $"({TurkishFormat.Amount(otherCheques + thisRequest)}) fatura tutarını ({TurkishFormat.Amount(invoiceTotal)}) aşıyor.");
         }
     }
 

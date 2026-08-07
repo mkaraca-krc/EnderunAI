@@ -1,4 +1,5 @@
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Hakedis;
 
@@ -254,8 +255,8 @@ public static class ProgressTrackingCalculator
         if (physicalCompletionRate < MinimumCompletionForProfitEstimate)
         {
             return Unreliable(
-                $"Fiziksel gerçekleşme %{physicalCompletionRate:N2}; " +
-                $"%{MinimumCompletionForProfitEstimate:N0} altında maliyet " +
+                $"Fiziksel gerçekleşme %{TurkishFormat.Rate(physicalCompletionRate)}; " +
+                $"%{TurkishFormat.Whole(MinimumCompletionForProfitEstimate)} altında maliyet " +
                 "tahmini yanıltıcı olacağı için üretilmedi.",
                 contractAmount, actualCost, physicalCompletionRate);
         }

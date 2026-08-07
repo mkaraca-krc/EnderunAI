@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Hakedis;
 
@@ -266,8 +267,8 @@ public sealed class ProgressTrackingService(AppDbContext db) : IProgressTracking
         if (erosionAlarm)
         {
             warnings.Add(
-                $"Keşif üstü gerçekleşmelerin kâr erozyonu ({netErosion:N2} TL) " +
-                $"sözleşme bedelinin %{project.DeviationAlertThresholdRate:N2} " +
+                $"Keşif üstü gerçekleşmelerin kâr erozyonu ({TurkishFormat.Amount(netErosion)} TL) " +
+                $"sözleşme bedelinin %{TurkishFormat.Rate(project.DeviationAlertThresholdRate)} " +
                 "eşiğini aştı — anahtar teslim projede bu doğrudan kâr kaybıdır.");
         }
 
@@ -275,7 +276,7 @@ public sealed class ProgressTrackingService(AppDbContext db) : IProgressTracking
             pendingExtraWork > 0m)
         {
             warnings.Add(
-                $"{pendingExtraWork:N2} TL ilave iş işveren onayı bekliyor. " +
+                $"{TurkishFormat.Amount(pendingExtraWork)} TL ilave iş işveren onayı bekliyor. " +
                 "Onaylanmadığı sürece tahsil edilemez ve kâr erozyonundan " +
                 "düşülmez — onay belgesini iliştirip onaylı işaretleyin.");
         }

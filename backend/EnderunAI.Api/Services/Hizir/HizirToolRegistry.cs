@@ -4,6 +4,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Hizir;
 
@@ -456,7 +457,7 @@ public sealed class HizirToolRegistry : IHizirToolRegistry
         {
             builder.AppendLine(
                 $"- {row.ItemCode} {row.ItemName} | {row.WarehouseName} | " +
-                $"mevcut: {row.Quantity:N2} {row.Unit} | rezerve: {row.ReservedQuantity:N2}");
+                $"mevcut: {TurkishFormat.Amount(row.Quantity)} {row.Unit} | rezerve: {TurkishFormat.Amount(row.ReservedQuantity)}");
         }
 
         return new HizirToolOutcome(builder.ToString());

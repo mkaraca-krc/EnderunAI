@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using EnderunAI.Api.Models.Market;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Market;
 
@@ -156,7 +157,7 @@ public sealed class MetalPriceApiLmeSource(
                 {
                     return new CommodityFetchResult(
                         [],
-                        $"LME: {day.Name} için hesaplanan {usdPerTon:N0} USD/ton akla yatkın " +
+                        $"LME: {day.Name} için hesaplanan {TurkishFormat.Whole(usdPerTon)} USD/ton akla yatkın " +
                         "aralıkta değil. METAL_API_UNIT ayarı (ton | lb | oz) yanlış olabilir.");
                 }
 

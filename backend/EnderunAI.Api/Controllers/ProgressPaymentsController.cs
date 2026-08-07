@@ -7,6 +7,7 @@ using EnderunAI.Api.Services.Hakedis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Controllers;
 
@@ -757,8 +758,8 @@ public sealed class ProgressPaymentsController(
             {
                 return Conflict(new
                 {
-                    message = $"Ödeme dağılımı toplamı ({planTotal:N2}) tahsil " +
-                              $"edilecek tutarı ({entity.NetPayableAmount:N2}) tutmuyor. " +
+                    message = $"Ödeme dağılımı toplamı ({TurkishFormat.Amount(planTotal)}) tahsil " +
+                              $"edilecek tutarı ({TurkishFormat.Amount(entity.NetPayableAmount)}) tutmuyor. " +
                               "Hakedişi düzenleyip dağılımı yenileyin."
                 });
             }

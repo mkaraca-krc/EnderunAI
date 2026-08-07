@@ -1,3 +1,4 @@
+using EnderunAI.Api.Formatting;
 namespace EnderunAI.Api.Services.EInvoice;
 
 public sealed record InvoiceValidationResult(
@@ -36,8 +37,8 @@ public static class UblTrInvoiceValidator
             if (Math.Abs(computed - Round(declaredLines)) > Tolerance)
             {
                 issues.Add(
-                    $"Kalem toplamı ({computed:N2}) belgedeki toplamla " +
-                    $"({declaredLines:N2}) uyuşmuyor.");
+                    $"Kalem toplamı ({TurkishFormat.Amount(computed)}) belgedeki toplamla " +
+                    $"({TurkishFormat.Amount(declaredLines)}) uyuşmuyor.");
             }
         }
 
@@ -51,8 +52,8 @@ public static class UblTrInvoiceValidator
                 Math.Abs(computedVat - Round(invoice.VatTotal)) > Tolerance)
             {
                 issues.Add(
-                    $"Satır KDV toplamı ({computedVat:N2}) belge KDV'siyle " +
-                    $"({invoice.VatTotal:N2}) uyuşmuyor.");
+                    $"Satır KDV toplamı ({TurkishFormat.Amount(computedVat)}) belge KDV'siyle " +
+                    $"({TurkishFormat.Amount(invoice.VatTotal)}) uyuşmuyor.");
             }
         }
 
@@ -65,8 +66,8 @@ public static class UblTrInvoiceValidator
             if (Math.Abs(expected - Round(inclusive)) > Tolerance)
             {
                 issues.Add(
-                    $"KDV hariç ({exclusive:N2}) + KDV ({invoice.VatTotal:N2}) = " +
-                    $"{expected:N2}, ancak KDV dahil tutar {inclusive:N2} yazıyor.");
+                    $"KDV hariç ({TurkishFormat.Amount(exclusive)}) + KDV ({TurkishFormat.Amount(invoice.VatTotal)}) = " +
+                    $"{TurkishFormat.Amount(expected)}, ancak KDV dahil tutar {TurkishFormat.Amount(inclusive)} yazıyor.");
             }
         }
 
@@ -80,9 +81,9 @@ public static class UblTrInvoiceValidator
             if (Math.Abs(expected - Round(payable)) > Tolerance)
             {
                 issues.Add(
-                    $"Ödenecek tutar ({payable:N2}), KDV dahil tutardan " +
-                    $"({taxInclusive:N2}) tevkifat ({invoice.WithholdingAmount:N2}) " +
-                    $"düşülmüş haliyle ({expected:N2}) uyuşmuyor.");
+                    $"Ödenecek tutar ({TurkishFormat.Amount(payable)}), KDV dahil tutardan " +
+                    $"({TurkishFormat.Amount(taxInclusive)}) tevkifat ({TurkishFormat.Amount(invoice.WithholdingAmount)}) " +
+                    $"düşülmüş haliyle ({TurkishFormat.Amount(expected)}) uyuşmuyor.");
             }
         }
 

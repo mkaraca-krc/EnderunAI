@@ -1,4 +1,5 @@
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.HumanResources;
 
@@ -132,7 +133,7 @@ public static class AttendanceEarningsCalculator
             if (multiplier > MaxMultiplier)
             {
                 throw new InvalidOperationException(
-                    $"{name} çarpanı {multiplier:N2} olarak girilmiş; bu değer " +
+                    $"{name} çarpanı {TurkishFormat.Amount(multiplier)} olarak girilmiş; bu değer " +
                     "çarpan değil yüzde olarak girilmiş olabilir " +
                     $"(1,5 = %50 zamlı). Ücret kartını düzeltin.");
             }

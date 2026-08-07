@@ -20,7 +20,9 @@ function formatSize(bytes: number) {
   if (bytes <= 0) return "0 KB";
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
 
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024)).toLocaleString("tr-TR", {
+    maximumFractionDigits: 1,
+  })} MB`;
 }
 
 /**

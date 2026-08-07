@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Subcontractors;
 
@@ -61,7 +62,7 @@ public sealed class SubcontractorDeductionPlanner(
                 Rate: 0m,
                 Amount: null,
                 Basis:
-                    $"Açık resmî avans {TurkishAmountFormat.Amount(openAdvance.OpenAdvance)}; " +
+                    $"Açık resmî avans {TurkishFormat.Amount(openAdvance.OpenAdvance)}; " +
                     "mahsup edilecek tutarı girin (elden avanslar bu " +
                     "rakama dahil değil)."));
         }
@@ -77,8 +78,8 @@ public sealed class SubcontractorDeductionPlanner(
                 // yalnızca oranı taşıyoruz.
                 Amount: null,
                 Basis:
-                    $"Kümülatif iş {TurkishAmountFormat.Amount(cumulativeWorkAmount)} " +
-                    $"× %{TurkishAmountFormat.Rate(contract.RetentionRate)}"));
+                    $"Kümülatif iş {TurkishFormat.Amount(cumulativeWorkAmount)} " +
+                    $"× %{TurkishFormat.Rate(contract.RetentionRate)}"));
         }
 
         // --- SGK/işçilik: bizim bordromuzdaki taşeron ekibi ---

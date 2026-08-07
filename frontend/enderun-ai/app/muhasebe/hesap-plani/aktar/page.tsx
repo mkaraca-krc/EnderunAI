@@ -338,7 +338,10 @@ export default function AccountingAccountImportPage() {
               <br />
               <span>
                 Boyut:{" "}
-                {(file.size / 1024).toFixed(1)} KB
+                {(file.size / 1024).toLocaleString("tr-TR", {
+                  maximumFractionDigits: 1,
+                })}{" "}
+                KB
               </span>
             </div>
           )}

@@ -1,4 +1,5 @@
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Hakedis;
 
@@ -334,8 +335,8 @@ public static class HakedisCalculationService
 
         if (Round(requestedOffset) > Round(openAdvanceAmount))
         {
-            return $"'{positionCode}' için mahsup ({requestedOffset:N2}) açık " +
-                   $"ihzarat bakiyesini ({openAdvanceAmount:N2}) aşamaz. " +
+            return $"'{positionCode}' için mahsup ({TurkishFormat.Amount(requestedOffset)}) açık " +
+                   $"ihzarat bakiyesini ({TurkishFormat.Amount(openAdvanceAmount)}) aşamaz. " +
                    "Aşan mahsup aynı işin iki kez tahsil edilmesi demek olurdu.";
         }
 
@@ -574,7 +575,7 @@ public static class HakedisCalculationService
         if (total != 100m)
         {
             return $"Ödeme dağılım oranlarının toplamı %100 olmalıdır " +
-                   $"(şu an %{total:N2}).";
+                   $"(şu an %{TurkishFormat.Rate(total)}).";
         }
 
         var chequeWithoutMaturity = parts.Any(x =>

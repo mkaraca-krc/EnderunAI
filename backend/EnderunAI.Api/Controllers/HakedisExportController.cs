@@ -6,6 +6,7 @@ using EnderunAI.Api.Services.Hakedis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Controllers;
 
@@ -123,7 +124,7 @@ public sealed class HakedisExportController(AppDbContext db) : ControllerBase
         if (payment.PriceDifferenceAmount != 0m)
             Money("Fiyat Farkı", payment.PriceDifferenceAmount);
 
-        Money($"KDV (%{payment.VatRate:N0})", payment.VatAmount);
+        Money($"KDV (%{TurkishFormat.Whole(payment.VatRate)})", payment.VatAmount);
         Money("Brüt Tutar", payment.GrossPayableAmount, bold: true);
 
         if (payment.WithholdingAmount > 0m)
@@ -134,7 +135,7 @@ public sealed class HakedisExportController(AppDbContext db) : ControllerBase
         }
 
         if (payment.IncomeTaxWithholdingAmount > 0m)
-            Money($"Stopaj (%{payment.IncomeTaxWithholdingRate:N2})", -payment.IncomeTaxWithholdingAmount);
+            Money($"Stopaj (%{TurkishFormat.Rate(payment.IncomeTaxWithholdingRate)})", -payment.IncomeTaxWithholdingAmount);
 
         Money("Kesintiler Toplamı", -payment.TotalDeductionAmount);
         Money("TAHSİL EDİLECEK", payment.NetPayableAmount, bold: true);
@@ -290,7 +291,7 @@ public sealed class HakedisExportController(AppDbContext db) : ControllerBase
             foreach (var line in deduction.Lines.OrderBy(x => x.LineNumber))
             {
                 sheet.Cell(row, 1).Value = $"    {line.Name} " +
-                    $"({line.Quantity:N0} × {line.UnitPrice:N2}, KDV %{line.VatRate:N0})";
+                    $"({TurkishFormat.Whole(line.Quantity)} × {TurkishFormat.Amount(line.UnitPrice)}, KDV %{TurkishFormat.Whole(line.VatRate)})";
                 sheet.Cell(row, 5).Value = line.GrossAmount;
                 sheet.Cell(row, 5).Style.NumberFormat.Format = MoneyFormat;
                 row++;

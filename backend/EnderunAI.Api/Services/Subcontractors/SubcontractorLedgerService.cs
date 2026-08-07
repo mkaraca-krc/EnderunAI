@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Subcontractors;
 
@@ -142,9 +143,9 @@ public sealed class SubcontractorLedgerService(AppDbContext db)
         var amount = Math.Min(summary.OpenAdvance, decimal.Round(currentPeriodAmount, 2));
 
         var basis = summary.CashHidden
-            ? $"Açık resmî avans {TurkishAmountFormat.Amount(summary.OpenAdvance)} " +
+            ? $"Açık resmî avans {TurkishFormat.Amount(summary.OpenAdvance)} " +
               "(elden avanslar bu rakama dahil değil)"
-            : $"Açık avans {TurkishAmountFormat.Amount(summary.OpenAdvance)}";
+            : $"Açık avans {TurkishFormat.Amount(summary.OpenAdvance)}";
 
         return (amount,
             amount < summary.OpenAdvance
@@ -166,8 +167,8 @@ public sealed class SubcontractorLedgerService(AppDbContext db)
             return null;
 
         return
-            $"Açık avans ({TurkishAmountFormat.Amount(openAdvance)}) kalan işten " +
-            $"({TurkishAmountFormat.Amount(remainingWork)}) " +
+            $"Açık avans ({TurkishFormat.Amount(openAdvance)}) kalan işten " +
+            $"({TurkishFormat.Amount(remainingWork)}) " +
             "fazla. Bu tutar hakedişlerden mahsup edilemeyebilir.";
     }
 

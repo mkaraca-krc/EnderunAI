@@ -4,6 +4,7 @@ using EnderunAI.Api.Models;
 using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Services.Accounting;
 
@@ -253,7 +254,7 @@ public sealed class SupplierInvoiceService(
         {
             invoice.RequiresGmApproval = true;
             invoice.MatchNote = AppendNote(invoice.MatchNote,
-                $"Tutar ({grandTotalTry:N2} TL) GM onay eşiğini ({settings.GmApprovalThresholdTry:N2} TL) aşıyor.");
+                $"Tutar ({TurkishFormat.Amount(grandTotalTry)} TL) GM onay eşiğini ({TurkishFormat.Amount(settings.GmApprovalThresholdTry)} TL) aşıyor.");
         }
 
         invoice.Status = SupplierInvoiceStatus.PendingApproval;
@@ -601,21 +602,21 @@ public sealed class SupplierInvoiceService(
         invoice.MatchDifferenceAmount = decimal.Round(maxDiff, 2);
 
         var summary =
-            $"Fatura (KDV hariç): {invoiceNet:N2} | Sipariş: {poNet:N2}" +
-            (grNet.HasValue ? $" | Mal kabul: {grNet.Value:N2}" : "");
+            $"Fatura (KDV hariç): {TurkishFormat.Amount(invoiceNet)} | Sipariş: {TurkishFormat.Amount(poNet)}" +
+            (grNet.HasValue ? $" | Mal kabul: {TurkishFormat.Amount(grNet.Value)}" : "");
 
         if (diffPercent > settings.ThreeWayTolerancePercent)
         {
             invoice.MatchStatus = SupplierInvoiceMatchStatus.ToleranceExceeded;
             invoice.RequiresGmApproval = true;
             invoice.MatchNote =
-                $"{summary} — fark %{diffPercent:N2}, tolerans %{settings.ThreeWayTolerancePercent:N2} aşıldı.";
+                $"{summary} — fark %{TurkishFormat.Rate(diffPercent)}, tolerans %{TurkishFormat.Rate(settings.ThreeWayTolerancePercent)} aşıldı.";
         }
         else
         {
             invoice.MatchStatus = SupplierInvoiceMatchStatus.Matched;
             invoice.RequiresGmApproval = false;
-            invoice.MatchNote = $"{summary} — tolerans içinde (%{diffPercent:N2}).";
+            invoice.MatchNote = $"{summary} — tolerans içinde (%{TurkishFormat.Rate(diffPercent)}).";
         }
     }
 
@@ -981,9 +982,9 @@ public sealed class SupplierInvoiceService(
             if (requested.Quantity > returnable)
             {
                 throw new ArgumentException(
-                    $"{source.Description}: en fazla {returnable:N4} {source.Unit} " +
-                    $"iade edilebilir (faturada {source.Quantity:N4}, " +
-                    $"daha önce iade edilen {alreadyReturned.GetValueOrDefault(source.Id, 0m):N4}).");
+                    $"{source.Description}: en fazla {TurkishFormat.Quantity(returnable)} {source.Unit} " +
+                    $"iade edilebilir (faturada {TurkishFormat.Quantity(source.Quantity)}, " +
+                    $"daha önce iade edilen {TurkishFormat.Quantity(alreadyReturned.GetValueOrDefault(source.Id, 0m))}).");
             }
 
             // Birim fiyat ve KDV oranı orijinalden kopyalanır; iade

@@ -6,6 +6,7 @@ using EnderunAI.Api.Services.Subcontractors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Controllers;
 
@@ -675,8 +676,8 @@ public sealed class SubcontractorProgressPaymentsController(
             {
                 return
                     $"İlerleme geriye alınamaz: önceki dönemde " +
-                    $"%{TurkishAmountFormat.Rate(entity.PreviousProgressRate)} kabul " +
-                    $"edilmiş, %{TurkishAmountFormat.Rate(line.AgreedProgressRate)} " +
+                    $"%{TurkishFormat.Rate(entity.PreviousProgressRate)} kabul " +
+                    $"edilmiş, %{TurkishFormat.Rate(line.AgreedProgressRate)} " +
                     "girilmiş.";
             }
 
