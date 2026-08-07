@@ -1113,6 +1113,8 @@ public sealed class AppDbContext(
             entity.Property(x => x.BankBranch).HasMaxLength(150);
             entity.Property(x => x.Drawer).HasMaxLength(200);
             entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.ExchangeRate).HasPrecision(18, 6);
+            entity.Property(x => x.AmountTry).HasPrecision(18, 2);
             entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
             entity.Property(x => x.CostCenterCode).HasMaxLength(50);
             entity.Property(x => x.Description).HasMaxLength(1000);

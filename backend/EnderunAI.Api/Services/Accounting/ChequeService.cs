@@ -4,6 +4,7 @@ using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.EntityFrameworkCore;
 using EnderunAI.Api.Formatting;
+using EnderunAI.Api.Services.Market;
 
 namespace EnderunAI.Api.Services.Accounting;
 
@@ -58,7 +59,8 @@ public sealed class ChequeService(
     AppDbContext db,
     IAccountingIntegrationService accountingIntegration,
     IAccountingVoucherService voucherService,
-    IDocumentNumberService documentNumberService) : IChequeService
+    IDocumentNumberService documentNumberService,
+    IInvoiceExchangeRateResolver exchangeRateResolver) : IChequeService
 {
     /// <summary>
     /// İzin verilen durum geçişleri. Portföy → Faktoringde geçişi
@@ -196,6 +198,8 @@ public sealed class ChequeService(
                 x.CostCenterCode,
                 x.Amount,
                 x.CurrencyCode,
+                x.ExchangeRate,
+                x.AmountTry,
                 x.IssueDate,
                 x.DueDate
             })
@@ -227,6 +231,8 @@ public sealed class ChequeService(
                 x.CostCenterCode,
                 x.Amount,
                 x.CurrencyCode,
+                x.ExchangeRate,
+                x.AmountTry,
                 x.IssueDate,
                 x.DueDate,
                 daysToDue,
@@ -309,6 +315,8 @@ public sealed class ChequeService(
             cheque.CostCenterCode,
             cheque.Amount,
             cheque.CurrencyCode,
+            cheque.ExchangeRate,
+            cheque.AmountTry,
             cheque.IssueDate,
             cheque.DueDate,
             cheque.ProgressPaymentId,
@@ -429,6 +437,25 @@ public sealed class ChequeService(
             direction == ChequeDirection.Received ? "ACK" : "VCK",
             cancellationToken);
 
+        var currencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode)
+            ? "TRY"
+            : request.CurrencyCode.Trim().ToUpperInvariant();
+
+        // Kur, faturalarla AYNI çözümleyiciden geliyor: belge/elle kur
+        // varsa o, yoksa TCMB arşivi. Bulunamazsa çek kaydedilmez —
+        // dövizli bir çeki kursuz deftere yazmak, 10.000 doları 10.000
+        // TL göstermek demekti ve tam olarak bu oluyordu.
+        var rate = await exchangeRateResolver.ResolveAsync(
+            currencyCode,
+            AsUtc(request.IssueDate),
+            request.ExchangeRate,
+            cancellationToken);
+
+        if (!rate.Success)
+            throw new InvalidOperationException(rate.Error ?? "Çek kuru belirlenemedi.");
+
+        var amount = decimal.Round(request.Amount, 2);
+
         var cheque = new Cheque
         {
             CompanyId = request.CompanyId,
@@ -444,10 +471,10 @@ public sealed class ChequeService(
             CurrentAccountId = request.CurrentAccountId,
             ProjectId = request.ProjectId,
             CostCenterCode = Normalize(request.CostCenterCode),
-            Amount = decimal.Round(request.Amount, 2),
-            CurrencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode)
-                ? "TRY"
-                : request.CurrencyCode.Trim().ToUpperInvariant(),
+            Amount = amount,
+            CurrencyCode = currencyCode,
+            ExchangeRate = rate.Rate,
+            AmountTry = decimal.Round(amount * rate.Rate, 2),
             IssueDate = AsUtc(request.IssueDate),
             DueDate = AsUtc(request.DueDate),
             ProgressPaymentId = request.ProgressPaymentId,

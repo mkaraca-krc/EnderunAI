@@ -182,7 +182,9 @@ public sealed record PayrollPaymentPostingResult(
 
 public sealed class AccountingIntegrationService(
     AppDbContext db,
-    IAccountingVoucherService voucherService) : IAccountingIntegrationService
+    IAccountingVoucherService voucherService,
+    Market.IInvoiceExchangeRateResolver exchangeRateResolver)
+    : IAccountingIntegrationService
 {
     public async Task<CompanyFinanceSettings> GetOrCreateFinanceSettingsAsync(
         Guid companyId,
@@ -1187,6 +1189,14 @@ public sealed class AccountingIntegrationService(
         if (amount <= 0m)
             throw new InvalidOperationException("Çek tutarı sıfırdan büyük olmalıdır.");
 
+        // Çekin DEFTER kuru: keşide anında sabitlendi ve ömrü boyunca
+        // değişmez. Geçmiş kaydı sonradan yeniden çözmek, TCMB arşivi
+        // güncellendiğinde eski fişle tutmayan bir fark üretirdi.
+        //
+        // Eski kayıtlarda alan 0 kalmış olabilir; o durumda 1 kabul
+        // ediliyor — hepsi TRY olduğu için sonuç değişmiyor.
+        var bookRate = cheque.ExchangeRate > 0m ? cheque.ExchangeRate : 1m;
+
         // Çekin durumuna karşılık gelen muhasebe hesabı.
         async Task<Guid> ChequeAccountAsync(ChequeStatus status)
         {
@@ -1402,7 +1412,9 @@ public sealed class AccountingIntegrationService(
                         DebitAmount: isDebit ? amount : 0m,
                         CreditAmount: isDebit ? 0m : amount,
                         CurrencyCode: cheque.CurrencyCode,
-                        ExchangeRate: 1m,
+                        // Çekin DEFTER kuru. Sabit 1 bırakıldığı sürece
+                        // dövizli çek TL tutarıyla aynı deftere giriyordu.
+                        ExchangeRate: bookRate,
                         CurrentAccountId: cheque.CurrentAccountId,
                         ProjectId: cheque.ProjectId,
                         CostCenterCode: costCenterCode,
@@ -1427,7 +1439,7 @@ public sealed class AccountingIntegrationService(
                     DebitAmount: isDebit ? allocation.Amount : 0m,
                     CreditAmount: isDebit ? 0m : allocation.Amount,
                     CurrencyCode: cheque.CurrencyCode,
-                    ExchangeRate: 1m,
+                    ExchangeRate: bookRate,
                     CurrentAccountId: cheque.CurrentAccountId,
                     ProjectId: allocation.ProjectId ?? cheque.ProjectId,
                     CostCenterCode: allocation.CostCenterCode ?? costCenterCode,
@@ -1441,13 +1453,103 @@ public sealed class AccountingIntegrationService(
         lines.AddRange(BuildSide(entry.Value.Debit, isDebit: true));
         lines.AddRange(BuildSide(entry.Value.Credit, isDebit: false));
 
+        // --- Kur farkı: yalnızca PARA HAREKET ETTİĞİNDE ---
+        //
+        // Dövizli bir çek keşide kuruyla deftere girer; tahsil ya da
+        // ödeme günü kur farklıysa kasaya giren/çıkan TL ile çekin
+        // defter değeri arasında GERÇEKLEŞMİŞ bir fark doğar ve bu fark
+        // 646/656'ya yazılmalıdır.
+        //
+        // Portföy → Bankada gibi geçişlerde para hareket etmez: aynı
+        // enstrüman iki hesap arasında taşınır, defter değeri korunur ve
+        // fark YAZILMAZ. Değerleme farkı (henüz gerçekleşmemiş) dönem
+        // sonu işidir, bu fişin konusu değil.
+        var settlesInCash =
+            toStatus is ChequeStatus.Collected or ChequeStatus.Paid;
+
+        if (!cheque.IsLocalCurrency && settlesInCash)
+        {
+            var settlement = await exchangeRateResolver.ResolveAsync(
+                cheque.CurrencyCode, voucherDate, null, cancellationToken);
+
+            if (!settlement.Success)
+            {
+                throw new InvalidOperationException(
+                    settlement.Error ??
+                    $"{cheque.CurrencyCode} için tahsilat/ödeme tarihine " +
+                    "kur bulunamadı; kur olmadan fiş kesilemez.");
+            }
+
+            var bookValue = decimal.Round(amount * bookRate, 2);
+            var settlementValue = decimal.Round(amount * settlement.Rate, 2);
+            var difference = decimal.Round(settlementValue - bookValue, 2);
+
+            // Kasa/banka satırı GERÇEKTEN hareket eden TL'yi taşımalı:
+            // tahsilat günü 38 ise kasaya 38 × tutar girer, çekin 35'lik
+            // defter değeri değil. Satır aynı para biriminde kalıyor,
+            // yalnızca kuru tahsilat kuruna çekiliyor.
+            var cashAccountId = cashAccount?.AccountingAccountId;
+
+            for (var i = 0; i < lines.Count; i++)
+            {
+                if (lines[i].AccountingAccountId == cashAccountId)
+                    lines[i] = lines[i] with { ExchangeRate = settlement.Rate };
+            }
+
+            if (difference != 0m)
+            {
+                // Fark İŞARETİ yön belirler:
+                // Alınan çekte kur yükseldiyse elimize daha çok TL geçti
+                // (kâr); verilen çekte kur yükseldiyse daha çok TL ödedik
+                // (zarar). Bu yüzden yön çekin yönüne göre ters çevriliyor.
+                var isGain = cheque.Direction == ChequeDirection.Received
+                    ? difference > 0m
+                    : difference < 0m;
+
+                var codes = isGain
+                    ? new[] { "646.01", "646" }
+                    : new[] { "656.01", "656" };
+
+                var accountId = await FindAccountIdAsync(
+                    cheque.CompanyId, cancellationToken, codes);
+
+                if (accountId is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Kambiyo {(isGain ? "kârı" : "zararı")} hesabı " +
+                        $"bulunamadı ({string.Join(" / ", codes)}). " +
+                        "Hesap planında ilgili hesabı tanımlayın.");
+                }
+
+                var magnitude = Math.Abs(difference);
+
+                lines.Add(new AccountingVoucherLineRequest(
+                    AccountingAccountId: accountId.Value,
+                    Description:
+                        $"Kur farkı — {cheque.CurrencyCode} " +
+                        $"{TurkishFormat.Rate(bookRate)} → " +
+                        $"{TurkishFormat.Rate(settlement.Rate)}",
+                    // Kâr alacağa, zarar borca yazılır.
+                    DebitAmount: isGain ? 0m : magnitude,
+                    CreditAmount: isGain ? magnitude : 0m,
+                    CurrencyCode: "TRY",
+                    ExchangeRate: 1m,
+                    CurrentAccountId: cheque.CurrentAccountId,
+                    ProjectId: cheque.ProjectId,
+                    CostCenterCode: costCenterCode,
+                    DocumentNumber: cheque.ChequeNumber,
+                    DocumentDate: cheque.IssueDate,
+                    DueDate: cheque.DueDate));
+            }
+        }
+
         var created = await voucherService.CreateAsync(
             new CreateAccountingVoucherRequest(
                 CompanyId: cheque.CompanyId,
                 VoucherType: (int)voucherType,
                 VoucherDate: voucherDate,
                 CurrencyCode: cheque.CurrencyCode,
-                ExchangeRate: 1m,
+                ExchangeRate: bookRate,
                 Description: $"{cheque.InternalNumber} — {entry.Value.Description}",
                 ReferenceNumber: cheque.ChequeNumber,
                 SourceModule: "Cheque",

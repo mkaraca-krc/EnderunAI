@@ -50,6 +50,8 @@ const emptyChequeForm = {
   projectId: "",
   costCenterCode: "",
   amount: "",
+  currencyCode: "TRY",
+  exchangeRate: "",
   issueDate: today(),
   dueDate: today(),
   description: "",
@@ -229,8 +231,11 @@ export default function ChequeRegisterPage() {
     [direction]
   );
 
+  // Toplam TL KARŞILIĞI üzerinden: farklı para birimlerindeki ham
+  // tutarları toplamak (10.000 USD + 5.000 TRY = 15.000) anlamsız bir
+  // sayı üretirdi.
   const listTotal = useMemo(
-    () => items.reduce((sum, item) => sum + item.amount, 0),
+    () => items.reduce((sum, item) => sum + (item.amountTry || item.amount), 0),
     [items]
   );
 
@@ -324,7 +329,12 @@ export default function ChequeRegisterPage() {
         projectId: chequeForm.projectId || null,
         costCenterCode: chequeForm.costCenterCode || null,
         amount: Number(chequeForm.amount),
-        currencyCode: "TRY",
+        currencyCode: chequeForm.currencyCode,
+        // Boş bırakılırsa sunucu TCMB arşivinden çözer; arşivde de
+        // yoksa dövizli çek kaydedilmez (kur uydurulmaz).
+        exchangeRate: chequeForm.exchangeRate
+          ? Number(chequeForm.exchangeRate.replace(",", "."))
+          : null,
         issueDate: chequeForm.issueDate,
         dueDate: chequeForm.dueDate,
         description: chequeForm.description.trim() || null,
@@ -678,6 +688,40 @@ export default function ChequeRegisterPage() {
               </label>
 
               <label>
+                Para birimi
+                <select
+                  value={chequeForm.currencyCode}
+                  onChange={(e) =>
+                    setChequeForm({ ...chequeForm, currencyCode: e.target.value })
+                  }
+                >
+                  <option value="TRY">TRY</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                </select>
+              </label>
+
+              {chequeForm.currencyCode !== "TRY" && (
+                <label>
+                  Kur (boşsa TCMB)
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Keşide günü kuru"
+                    value={chequeForm.exchangeRate}
+                    onChange={(e) =>
+                      setChequeForm({ ...chequeForm, exchangeRate: e.target.value })
+                    }
+                  />
+                  <small>
+                    Boş bırakılırsa keşide tarihinin TCMB döviz alış kuru
+                    kullanılır. Kur bulunamazsa çek kaydedilmez.
+                  </small>
+                </label>
+              )}
+
+              <label>
                 Keşide tarihi
                 <input
                   type="date"
@@ -986,7 +1030,25 @@ export default function ChequeRegisterPage() {
                       </small>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <strong>{money.format(item.amount)}</strong>
+                      <strong>
+                        {item.currencyCode === "TRY"
+                          ? money.format(item.amount)
+                          : item.amount.toLocaleString("tr-TR", {
+                              style: "currency",
+                              currency: item.currencyCode,
+                            })}
+                      </strong>
+                      {/* Dövizli çekte defter değeri de görünmeli:
+                          yalnızca döviz tutarı gösterilseydi liste
+                          toplamıyla satırlar tutmazdı. */}
+                      {item.currencyCode !== "TRY" && (
+                        <small style={{ display: "block", color: "#64748b" }}>
+                          {money.format(item.amountTry)} · kur{" "}
+                          {item.exchangeRate.toLocaleString("tr-TR", {
+                            maximumFractionDigits: 4,
+                          })}
+                        </small>
+                      )}
                     </td>
                     <td>
                       <span className={`erp-status ${CHEQUE_STATUS_COLORS[item.status] ?? "gray"}`}>

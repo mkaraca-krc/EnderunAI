@@ -111,6 +111,10 @@ export type ChequeListItem = {
   costCenterCode?: string | null;
   amount: number;
   currencyCode: string;
+  /** Keşide kuru; TL çekte 1. */
+  exchangeRate: number;
+  /** Keşide tarihindeki TL karşılığı — defter değeri. */
+  amountTry: number;
   issueDate: string;
   dueDate: string;
   daysToDue: number;
@@ -161,6 +165,11 @@ export type CreateChequePayload = {
   projectId?: string | null;
   amount: number;
   currencyCode: string;
+  /**
+   * Keşide tarihindeki kur. Boş bırakılırsa TCMB arşivinden çözülür;
+   * arşivde de yoksa dövizli çek kaydedilmez.
+   */
+  exchangeRate?: number | null;
   issueDate: string;
   dueDate: string;
   progressPaymentId?: string | null;

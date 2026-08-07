@@ -89,6 +89,29 @@ public sealed class Cheque : BaseEntity
     public decimal Amount { get; set; }
     public string CurrencyCode { get; set; } = "TRY";
 
+    /// <summary>
+    /// Keşide tarihindeki kur — çekin DEFTER DEĞERİ bununla belirlenir.
+    ///
+    /// Dövizli çekte 1 bırakılamaz: geçmişte fiş satırları sabit 1 kuru
+    /// ile kesiliyordu ve 10.000 dolarlık bir çek deftere 10.000 TL
+    /// olarak giriyordu. Kur, faturalarla aynı çözümleyiciden gelir
+    /// (belge/elle → TCMB arşivi); bulunamazsa çek kaydedilmez.
+    /// </summary>
+    public decimal ExchangeRate { get; set; } = 1m;
+
+    /// <summary>
+    /// Keşide tarihindeki TL karşılığı (<c>Amount × ExchangeRate</c>).
+    ///
+    /// Saklanıyor çünkü tahsilat/ödeme anındaki kur farkı bu değere göre
+    /// hesaplanıyor; kuru sonradan yeniden çözmek, arşiv değiştiğinde
+    /// geçmiş fişle tutmayan bir fark üretirdi.
+    /// </summary>
+    public decimal AmountTry { get; set; }
+
+    /// <summary>Yerel para birimi mi — dövizli mantığın anahtarı.</summary>
+    public bool IsLocalCurrency =>
+        string.Equals(CurrencyCode, "TRY", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Keşide tarihi.</summary>
     public DateTime IssueDate { get; set; }
     /// <summary>Vade — nakit akışı bu tarihe göre hesaplanır.</summary>

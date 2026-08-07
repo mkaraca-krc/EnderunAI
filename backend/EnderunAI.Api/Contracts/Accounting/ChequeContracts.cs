@@ -57,6 +57,11 @@ public sealed record CreateChequeRequest(
     /// <summary>Merkez ofis ya da şantiye kodu; boşsa proje kodu kullanılır.</summary>
     string? CostCenterCode = null,
     /// <summary>
+    /// Keşide tarihindeki kur. Boş bırakılırsa TCMB arşivinden çözülür;
+    /// arşivde de yoksa dövizli çek kaydedilmez.
+    /// </summary>
+    decimal? ExchangeRate = null,
+    /// <summary>
     /// Proje/masraf merkezi dağılımı. Boş bırakılırsa çek tek parça
     /// işlenir (bugünkü davranış).
     /// </summary>
@@ -133,6 +138,10 @@ public sealed record ChequeListItemResponse(
     string? CostCenterCode,
     decimal Amount,
     string CurrencyCode,
+    /// <summary>Keşide kuru; TL çekte 1.</summary>
+    decimal ExchangeRate,
+    /// <summary>Keşide tarihindeki TL karşılığı — defter değeri.</summary>
+    decimal AmountTry,
     DateTime IssueDate,
     DateTime DueDate,
     int DaysToDue,
@@ -158,6 +167,10 @@ public sealed record ChequeDetailResponse(
     string? CostCenterCode,
     decimal Amount,
     string CurrencyCode,
+    /// <summary>Keşide kuru; TL çekte 1.</summary>
+    decimal ExchangeRate,
+    /// <summary>Keşide tarihindeki TL karşılığı — defter değeri.</summary>
+    decimal AmountTry,
     DateTime IssueDate,
     DateTime DueDate,
     Guid? ProgressPaymentId,
