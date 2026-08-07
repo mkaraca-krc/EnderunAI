@@ -5,7 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import {
   EngineeringPositionListItem,
+  EngineeringPositionSource,
   engineeringPositionService,
+  positionSourceLabel,
 } from "@/services/engineering-position.service";
 
 const disciplineLabels: Record<number, string> = {
@@ -17,14 +19,6 @@ const disciplineLabels: Record<number, string> = {
   5: "Fiber",
   6: "Mekanik",
   7: "İnşaat",
-};
-
-const sourceLabels: Record<number, string> = {
-  0: "Enderun",
-  1: "ÇŞİDB",
-  2: "MSB",
-  3: "TEDAŞ",
-  4: "Özel",
 };
 
 const statusLabels: Record<number, string> = {
@@ -46,6 +40,7 @@ export default function EngineeringPositionsPage() {
   const [search, setSearch] = useState("");
   const [discipline, setDiscipline] = useState("");
   const [status, setStatus] = useState("");
+  const [source, setSource] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -58,6 +53,7 @@ export default function EngineeringPositionsPage() {
         search: search || undefined,
         discipline: discipline === "" ? undefined : Number(discipline),
         status: status === "" ? undefined : Number(status),
+        source: source === "" ? undefined : Number(source),
       });
 
       setItems(result);
@@ -70,7 +66,7 @@ export default function EngineeringPositionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, discipline, status]);
+  }, [search, discipline, status, source]);
 
   useEffect(() => {
     const timer = window.setTimeout(loadPositions, 350);
@@ -81,7 +77,12 @@ export default function EngineeringPositionsPage() {
     return {
       total: items.length,
       active: items.filter((x) => x.status === 1).length,
-      enderun: items.filter((x) => x.source === 0).length,
+      // Kaynak 0 RESMÎ kurum pozu, 1 şirkete özel. Bir dönem burada
+      // 0 sayılıp "Enderun" diye gösteriliyordu; 23.500 resmî poz
+      // şirketin kendi pozuymuş gibi görünüyordu.
+      custom: items.filter(
+        (x) => x.source === EngineeringPositionSource.Custom
+      ).length,
       totalHours: items.reduce(
         (sum, x) => sum + (x.totalLaborHours ?? 0),
         0
@@ -147,11 +148,11 @@ export default function EngineeringPositionsPage() {
         </div>
 
         <div className="enderun-dashboard-stat">
-          <div className="enderun-dashboard-stat-icon">E</div>
+          <div className="enderun-dashboard-stat-icon">Ö</div>
           <div>
-            <span>Enderun Pozu</span>
-            <strong>{loading ? "…" : summary.enderun}</strong>
-            <small>Şirket içi pozlar</small>
+            <span>Özel Poz</span>
+            <strong>{loading ? "…" : summary.custom}</strong>
+            <small>Şirkete özel pozlar</small>
           </div>
         </div>
 
@@ -199,6 +200,20 @@ export default function EngineeringPositionsPage() {
                 {label}
               </option>
             ))}
+          </select>
+
+          <select
+            className="erp-input"
+            value={source}
+            onChange={(event) => setSource(event.target.value)}
+          >
+            <option value="">Tüm kaynaklar</option>
+            <option value={EngineeringPositionSource.Official}>
+              Resmî kurum (ÇŞB, TEDAŞ)
+            </option>
+            <option value={EngineeringPositionSource.Custom}>
+              Özel (şirket)
+            </option>
           </select>
 
           <select
@@ -285,7 +300,7 @@ export default function EngineeringPositionsPage() {
                     <td>{item.unit}</td>
 
                     <td>
-                      {sourceLabels[item.source] ?? `Kaynak ${item.source}`}
+                      {positionSourceLabel(item.source, item.officialInstitution)}
                     </td>
 
                     <td>{formatHours(item.totalLaborHours)}</td>

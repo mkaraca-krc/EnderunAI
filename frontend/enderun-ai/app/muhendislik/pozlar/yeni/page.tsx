@@ -24,12 +24,19 @@ const disciplines = [
   [7, "İnşaat"],
 ];
 
+/**
+ * Poz kaynağı BACKEND'DE İKİ DEĞERLİ: Official = 0, Enderun = 1.
+ *
+ * Burada bir dönem beş seçenek vardı (Enderun/ÇŞİDB/MSB/TEDAŞ/Özel):
+ * 2/3/4 backend'de tanımsız olduğu için "Geçersiz poz kaynağı" 400
+ * dönüyordu, "Enderun"(0) seçilince kod alanı gizlendiği hâlde backend
+ * resmî pozda kodu zorunlu tuttuğu için o seçim de hep hata veriyordu.
+ * Çalışan tek seçenek "ÇŞİDB"(1) idi ve aslında ŞİRKETE ÖZEL poz
+ * yaratıyordu. Kurum bilgisi kaynak değil, ayrı bir alandır.
+ */
 const sources = [
-  [0, "Enderun"],
-  [1, "ÇŞİDB"],
-  [2, "MSB"],
-  [3, "TEDAŞ"],
-  [4, "Özel"],
+  [0, "Resmî kurum kitabı (ÇŞB, TEDAŞ, MSB…)"],
+  [1, "Şirkete özel poz"],
 ];
 
 export default function NewEngineeringPositionPage() {
@@ -85,7 +92,9 @@ export default function NewEngineeringPositionPage() {
     try {
       const result = await engineeringPositionCreateService.create({
         companyId,
-        code: Number(source) === 0 ? null : code.trim() || null,
+        // Resmî pozda kod ZORUNLU (kitaptaki poz numarası); şirkete
+        // özel pozda kod backend'de şirket serisinden üretilir.
+        code: Number(source) === 1 ? null : code.trim() || null,
         name: name.trim(),
         unit: unit.trim(),
         source: Number(source),
@@ -201,7 +210,7 @@ export default function NewEngineeringPositionPage() {
             </select>
           </label>
 
-          {Number(source) !== 0 && (
+          {Number(source) === 0 && (
             <label>
               <span>Poz Kodu</span>
               <input

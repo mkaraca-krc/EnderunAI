@@ -545,6 +545,11 @@ const groups: MenuGroup[] = [
         icon: "▦",
       },
       {
+        label: "Özel Pozlar",
+        href: "/muhendislik/pozlar/ozel",
+        icon: "Ö",
+      },
+      {
         label: "Reçeteler",
         href: "/muhendislik/receteler",
         icon: "⚙",

@@ -22,6 +22,35 @@ export type EngineeringPositionListItem = {
   updatedAtUtc?: string | null;
 };
 
+/**
+ * Poz kaynağı. Backend'de YALNIZCA İKİ değer var:
+ * Official = 0 (resmî kurum kitabı), Enderun = 1 (şirkete özel).
+ *
+ * Ekranlarda bir dönem beş seçenekli bir liste vardı (Enderun/ÇŞİDB/
+ * MSB/TEDAŞ/Özel) ve eşleme TERSTİ: resmî pozlar "Enderun", şirkete
+ * özel poz "ÇŞİDB" görünüyordu; 2/3/4 değerleri ise backend'de hiç
+ * tanımlı olmadığı için 400 dönüyordu. Kurum bilgisi kaynakta değil,
+ * ayrı OfficialInstitution alanında tutuluyor.
+ */
+export const EngineeringPositionSource = {
+  Official: 0,
+  Custom: 1,
+} as const;
+
+/**
+ * Pozun kaynağını kullanıcının dilinde yazar.
+ *
+ * Resmî pozda kaynak adı KURUMDUR (ÇŞB, TEDAŞ); "Resmî" demek
+ * kullanıcıya hangi kitaptan geldiğini söylemezdi.
+ */
+export function positionSourceLabel(
+  source: number,
+  officialInstitution?: string | null
+) {
+  if (source === EngineeringPositionSource.Custom) return "Özel (şirket)";
+  return officialInstitution?.trim() || "Resmî kurum";
+}
+
 export type EngineeringPositionFilters = {
   search?: string;
   source?: number;
@@ -91,6 +120,16 @@ export type UpdateEngineeringPositionRequest = {
   defaultLaborHours: number;
   defaultHelperHours: number;
   defaultMachineHours: number;
+};
+
+export const engineeringPositionStatusService = {
+  /** Poz durumunu değiştirir (0 Taslak, 1 Aktif, 2 Pasif, 3 Arşiv). */
+  change(positionId: string, status: number) {
+    return apiClient<{ message: string }>(
+      `engineering-positions/${positionId}/status`,
+      { method: "PATCH", body: { status } }
+    );
+  },
 };
 
 export const engineeringPositionDetailService = {
