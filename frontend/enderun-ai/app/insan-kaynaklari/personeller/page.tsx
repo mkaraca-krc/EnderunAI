@@ -41,6 +41,9 @@ import {
   projectSiteService,
   type ProjectSiteListItem,
 } from "@/services/project-site.service";
+import { hrSalaryService } from "@/services/hr-salary.service";
+import { extraPaymentService } from "@/services/termination.service";
+import { apiClient } from "@/lib/api/api-client";
 
 type ViewMode = "table" | "cards";
 type ActivityFilter = "all" | "active" | "passive";
@@ -105,6 +108,14 @@ function badgeVariant(status: number): "default" | "success" | "warning" | "dang
   if (status === 2) return "warning";
   if (status === 3 || status === 4) return "danger";
   return "default";
+}
+
+function moneyFormat(value: number) {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function dateValue(value?: string | null) {
@@ -194,6 +205,16 @@ export default function HrPersonnelPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<PersonnelForm>(emptyForm);
 
+  // Ek ödeme bloğu. Resmî net RAKAMI maaş kartı ucundan geliyor
+  // (Maaş Kartları ekranıyla aynı kaynak); iki ekranda ayrı hesap
+  // yapılsaydı er ya da geç ayrışırdı.
+  const [permissions, setPermissions] = useState<Set<string>>(new Set());
+  const [officialNet, setOfficialNet] = useState<number | null>(null);
+  const [officialNetSource, setOfficialNetSource] = useState("");
+  const [extraPayment, setExtraPayment] = useState("");
+  const [extraPaymentId, setExtraPaymentId] = useState<string | null>(null);
+  const [extraPaymentLoading, setExtraPaymentLoading] = useState(false);
+
   async function loadScreen() {
     setLoading(true);
     setError("");
@@ -225,6 +246,26 @@ export default function HrPersonnelPage() {
 
   useEffect(() => {
     void loadScreen();
+  }, []);
+
+  // Ek ödeme bloğunun görünürlüğü izne bağlı. Sunucu zaten yetkisiz
+  // kullanıcıya tutar döndürmüyor; buradaki kontrol kullanıcıyı
+  // dolduramayacağı bir alanla karşılaştırmamak için.
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const session = await apiClient<{ permissions: string[] }>("auth/me");
+        if (!cancelled) setPermissions(new Set(session.permissions));
+      } catch {
+        if (!cancelled) setPermissions(new Set());
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -328,9 +369,80 @@ export default function HrPersonnelPage() {
     const defaultCompanyId = companies.length === 1 ? companies[0].id : "";
     setEditingId(null);
     setForm({ ...emptyForm, companyId: defaultCompanyId });
+    resetExtraPayment();
     setError("");
     setSuccess("");
     setFormOpen(true);
+  }
+
+  function resetExtraPayment() {
+    setOfficialNet(null);
+    setOfficialNetSource("");
+    setExtraPayment("");
+    setExtraPaymentId(null);
+  }
+
+  /**
+   * Personelin resmî neti ve yürürlükteki elden ödemesi.
+   *
+   * Resmî net MAAŞ KARTI ucundan geliyor — Maaş Kartları ekranıyla aynı
+   * kaynak. Kart yoksa personel kartındaki Aylık Ücret'e düşülüyor ve
+   * bunun nereden geldiği ekranda yazıyor; sessizce bir rakam
+   * göstermek, hangi tutara baktığını bilmeyen bir kullanıcı üretirdi.
+   */
+  async function loadPayDetails(personnelId: string, fallbackSalary: string) {
+    if (!permissions.has("salary.view")) return;
+
+    setExtraPaymentLoading(true);
+
+    try {
+      const cards = await hrSalaryService.getAll({ personnelId });
+      const today = new Date().toISOString().slice(0, 10);
+
+      const active =
+        cards.find(
+          (card) =>
+            card.effectiveStartDate.slice(0, 10) <= today &&
+            (!card.effectiveEndDate ||
+              card.effectiveEndDate.slice(0, 10) >= today)
+        ) ?? cards[0];
+
+      if (active?.officialNetSalary != null) {
+        setOfficialNet(active.officialNetSalary);
+        setOfficialNetSource("Maaş kartından");
+      } else if (fallbackSalary) {
+        setOfficialNet(Number(fallbackSalary));
+        setOfficialNetSource("Maaş kartı yok; personel kartındaki aylık ücret");
+      } else {
+        setOfficialNet(null);
+        setOfficialNetSource("Maaş kartı ve aylık ücret tanımlı değil");
+      }
+
+      // Elden ödeme AYRI tabloda; yetkisi olmayanın sorgusu 403 alır ve
+      // blok zaten görünmez.
+      if (permissions.has("extra_payment.view")) {
+        const entries = await extraPaymentService.list(personnelId);
+        const effective = entries
+          .filter(
+            (x) =>
+              x.effectiveStartDate.slice(0, 10) <= today &&
+              (!x.effectiveEndDate || x.effectiveEndDate.slice(0, 10) >= today)
+          )
+          .sort((a, b) =>
+            b.effectiveStartDate.localeCompare(a.effectiveStartDate)
+          )[0];
+
+        setExtraPaymentId(effective?.id ?? null);
+        setExtraPayment(effective ? String(effective.monthlyAmount) : "");
+      }
+    } catch {
+      // Ücret bilgisi alınamadıysa blok boş kalır; personel kaydının
+      // kendisi bundan etkilenmemeli.
+      setOfficialNet(null);
+      setOfficialNetSource("Ücret bilgisi okunamadı");
+    } finally {
+      setExtraPaymentLoading(false);
+    }
   }
 
   function openWorkLocation(item: PersonnelListItem) {
@@ -490,11 +602,56 @@ export default function HrPersonnelPage() {
         status: String(detail.status),
         isActive: detail.isActive,
       });
+
+      resetExtraPayment();
+      await loadPayDetails(
+        id,
+        detail.monthlySalary == null ? "" : String(detail.monthlySalary));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Personel detayı yüklenemedi.");
       setFormOpen(false);
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  /**
+   * Elden ödemeyi yazar.
+   *
+   * AYRI TABLOYA gider (PersonnelExtraPayment): personel kartına kolon
+   * olsaydı personnel.view üzerinden sızardı. Resmî bordroya, muhasebe
+   * fişine ve SGK matrahına HİÇ girmez; değişen yalnızca görünürlük.
+   *
+   * Yürürlükteki kayıt varsa üzerine yazılır; iki kayıt bırakmak
+   * "hangisi geçerli" belirsizliği doğururdu.
+   */
+  async function saveExtraPaymentAsync(personnelId: string) {
+    if (!permissions.has("extra_payment.manage")) return;
+
+    const raw = extraPayment.trim();
+
+    // Alan hiç ellenmediyse dokunma: boş bırakmak "sıfır gir" demek
+    // değil, "bu ekrandan yönetmiyorum" demek.
+    if (!raw && !extraPaymentId) return;
+
+    const amount = raw ? Number(raw.replace(",", ".")) : 0;
+
+    if (!Number.isFinite(amount) || amount < 0)
+      throw new Error("Ek ödeme tutarı geçerli bir sayı olmalıdır.");
+
+    const payload = {
+      personnelId,
+      monthlyAmount: amount,
+      effectiveStartDate:
+        form.employmentStartDate || new Date().toISOString().slice(0, 10),
+      effectiveEndDate: null,
+      note: null,
+    };
+
+    if (extraPaymentId) {
+      await extraPaymentService.update(extraPaymentId, payload);
+    } else if (amount > 0) {
+      await extraPaymentService.create(payload);
     }
   }
 
@@ -524,9 +681,10 @@ export default function HrPersonnelPage() {
           status: Number(form.status),
           isActive: form.isActive,
         });
+        await saveExtraPaymentAsync(editingId);
         setSuccess("Personel kaydı güncellendi.");
       } else {
-        await personnelService.create({
+        const created = await personnelService.create({
           companyId: form.companyId,
           branchId: form.branchId || null,
           employeeNumber: form.employeeNumber,
@@ -543,6 +701,10 @@ export default function HrPersonnelPage() {
           employmentStartDate: form.employmentStartDate || null,
           monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : null,
         });
+
+        // Ek ödeme personelin kimliğine bağlı; kayıt oluşmadan
+        // yazılamaz, o yüzden oluşturmadan SONRA.
+        await saveExtraPaymentAsync(created.id);
         setSuccess("Yeni personel kaydı oluşturuldu.");
       }
 
@@ -1214,6 +1376,74 @@ export default function HrPersonnelPage() {
                     <Input label="Aylık Ücret" type="number" min="0" step="0.01" value={form.monthlySalary} onChange={(event) => updateForm("monthlySalary", event.target.value)} />
                     <Input label="İşe Giriş Tarihi" type="date" value={form.employmentStartDate} onChange={(event) => updateForm("employmentStartDate", event.target.value)} />
                     <Input label="İşten Çıkış Tarihi" type="date" value={form.employmentEndDate} onChange={(event) => updateForm("employmentEndDate", event.target.value)} disabled={!editingId} />
+
+                    {/* EK ÖDEME (ELDEN).
+                        Resmî net + elden + toplam ele geçen tek yerde:
+                        üçü ayrı ekranlarda durduğu sürece "eline ne
+                        geçiyor" sorusu hiçbir yerde cevaplanmıyordu.
+                        Blok salary.view olmayana hiç açılmaz. */}
+                    {permissions.has("salary.view") && (
+                      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <strong className="text-sm text-slate-800">
+                            Ek ödeme ve ele geçen
+                          </strong>
+                          {extraPaymentLoading && (
+                            <span className="text-xs text-slate-500">
+                              yükleniyor...
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                          <div className="rounded-lg border border-slate-200 px-3 py-2">
+                            <div className="text-xs text-slate-500">Resmî Net Maaş</div>
+                            <div className="mt-1 text-lg font-semibold tabular-nums">
+                              {officialNet == null ? "—" : moneyFormat(officialNet)}
+                            </div>
+                            {officialNetSource && (
+                              <div className="mt-1 text-xs text-slate-400">
+                                {officialNetSource}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="rounded-lg border border-slate-200 px-3 py-2">
+                            <label className="text-xs text-slate-500">
+                              Aylık Ek Ödeme (elden)
+                            </label>
+                            <input
+                              value={extraPayment}
+                              onChange={(event) => setExtraPayment(event.target.value)}
+                              inputMode="decimal"
+                              placeholder="0,00"
+                              disabled={!permissions.has("extra_payment.manage")}
+                              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-lg font-semibold tabular-nums disabled:bg-slate-50 disabled:text-slate-400"
+                            />
+                            <div className="mt-1 text-xs text-slate-400">
+                              {permissions.has("extra_payment.manage")
+                                ? "Resmî bordroya, muhasebe fişine ve SGK matrahına girmez."
+                                : "Değiştirme yetkiniz yok."}
+                            </div>
+                          </div>
+
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                            <div className="text-xs text-slate-500">Toplam Ele Geçen</div>
+                            <div className="mt-1 text-lg font-bold tabular-nums">
+                              {officialNet == null
+                                ? "—"
+                                : moneyFormat(
+                                    officialNet +
+                                      (Number(extraPayment.replace(",", ".")) || 0)
+                                  )}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-400">
+                              Resmî net + elden
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {editingId && (
                       <label className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 md:col-span-2">
                         <input
