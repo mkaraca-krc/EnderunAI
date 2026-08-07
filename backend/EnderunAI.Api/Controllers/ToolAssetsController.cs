@@ -35,6 +35,28 @@ public sealed record SaveToolAssetRequest(
     Guid? ProjectSiteId,
     string? Notes);
 
+/// <summary>Aleti personele zimmetleme / devretme.</summary>
+/// <param name="PersonnelId">Zimmeti alan personel.</param>
+/// <param name="ProjectId">Hangi projede kullanılacak.</param>
+/// <param name="AssignmentDate">Teslim tarihi.</param>
+/// <param name="PlannedReturnDate">Planlanan iade tarihi.</param>
+/// <param name="ConditionAtAssignment">Teslim anındaki durum.</param>
+/// <param name="Notes">Not.</param>
+public sealed record AssignToolAssetRequest(
+    Guid PersonnelId,
+    Guid? ProjectId,
+    DateTime AssignmentDate,
+    DateTime? PlannedReturnDate,
+    string? ConditionAtAssignment,
+    string? Notes);
+
+/// <summary>Zimmet iadesi.</summary>
+/// <param name="ReturnDate">İade tarihi.</param>
+/// <param name="ConditionAtReturn">İade anındaki durum.</param>
+public sealed record ReturnToolAssetRequest(
+    DateTime ReturnDate,
+    string? ConditionAtReturn);
+
 /// <summary>
 /// Demirbaş / el aleti kartları.
 ///
@@ -131,7 +153,11 @@ public sealed class ToolAssetsController(AppDbContext db) : ControllerBase
                 StatusName = StatusName(x.Status),
                 LocationType = (int)x.LocationType,
                 x.ProjectSiteId,
+                SiteName = x.ProjectSite != null ? x.ProjectSite.Name : null,
                 x.AssignedPersonnelId,
+                AssignedPersonnelName = x.AssignedPersonnel != null
+                    ? x.AssignedPersonnel.FirstName + " " + x.AssignedPersonnel.LastName
+                    : null,
                 x.Notes
             })
             .SingleOrDefaultAsync(cancellationToken);
@@ -141,6 +167,29 @@ public sealed class ToolAssetsController(AppDbContext db) : ControllerBase
 
         var (count, totalCost, lastDate) =
             await workflow.GetHistorySummaryAsync(id, cancellationToken);
+
+        // Açık zimmet: tutanak yazdırma ve "kimin üzerinde" sorusu
+        // buradan cevaplanır.
+        var assignment = await db.HrAssetAssignments
+            .AsNoTracking()
+            .Where(x => x.ToolAssetId == id &&
+                        x.Status == HrAssetAssignmentStatus.Assigned)
+            .OrderByDescending(x => x.AssignmentDate)
+            .Select(x => new
+            {
+                x.Id,
+                x.PersonnelId,
+                PersonnelName = x.PersonnelId == Guid.Empty
+                    ? null
+                    : db.Personnel
+                        .Where(p => p.Id == x.PersonnelId)
+                        .Select(p => p.FirstName + " " + p.LastName)
+                        .FirstOrDefault(),
+                x.ProjectId,
+                x.AssignmentDate,
+                x.PlannedReturnDate
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
         var history = await db.ToolServiceRequests
             .AsNoTracking()
@@ -165,6 +214,7 @@ public sealed class ToolAssetsController(AppDbContext db) : ControllerBase
             serviceCount = count,
             serviceTotalCost = totalCost,
             lastServiceDate = lastDate,
+            assignment,
             history
         });
     }
@@ -267,6 +317,159 @@ public sealed class ToolAssetsController(AppDbContext db) : ControllerBase
                 Status = (int)x.Status
             })
             .ToListAsync(cancellationToken));
+    }
+
+    /// <summary>
+    /// Demirbaş uyarı özeti — dashboard kartı buradan beslenir.
+    /// Brifing de aynı servisi kullanır ki iki ekran farklı sayı
+    /// göstermesin.
+    /// </summary>
+    [HttpGet("alerts")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
+    public async Task<IActionResult> GetAlerts(
+        [FromServices] ToolAssetAlertService alerts,
+        [FromServices] ICurrentDataScopeService dataScope,
+        CancellationToken cancellationToken)
+    {
+        var scope = await dataScope.GetAsync(cancellationToken);
+
+        var summary = await alerts.GetSummaryAsync(
+            scope is null || scope.HasGlobalAccess ? null : scope.VisibleCompanyIds,
+            cancellationToken);
+
+        return Ok(summary);
+    }
+
+    /// <summary>
+    /// Aleti personele zimmetler.
+    ///
+    /// Alet başkasının üzerindeyse bu bir DEVİRdir: eski zimmet iade
+    /// olarak kapanır ve yenisi açılır. Aynı kaydı üzerine yazmak
+    /// "bu alet kimdeydi" geçmişini siler; iki ayrı kayıt kalır ki
+    /// hasar çıktığında hangi dönemde kimde olduğu belli olsun.
+    /// </summary>
+    [HttpPost("{id:guid}/assign")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
+    public async Task<IActionResult> Assign(
+        Guid id, AssignToolAssetRequest request, CancellationToken cancellationToken)
+    {
+        var asset = await db.ToolAssets
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (asset is null)
+            return NotFound(new { message = "Alet bulunamadı." });
+
+        if (asset.Status == ToolAssetStatus.Scrapped)
+            return BadRequest(new { message = "Hurdaya ayrılmış alet zimmetlenemez." });
+
+        if (asset.Status == ToolAssetStatus.InService)
+            return BadRequest(new { message = "Serviste olan alet zimmetlenemez." });
+
+        var personnel = await db.Personnel
+            .Where(x => x.Id == request.PersonnelId)
+            .Select(x => new { x.Id, x.CompanyId })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (personnel is null)
+            return NotFound(new { message = "Personel bulunamadı." });
+
+        var assignmentDate = DateTime.SpecifyKind(
+            request.AssignmentDate.Date, DateTimeKind.Utc);
+
+        var open = await db.HrAssetAssignments
+            .Where(x => x.ToolAssetId == id &&
+                        x.Status == HrAssetAssignmentStatus.Assigned)
+            .ToListAsync(cancellationToken);
+
+        foreach (var previous in open)
+        {
+            if (previous.PersonnelId == request.PersonnelId)
+                return BadRequest(new { message = "Alet zaten bu personelin üzerinde." });
+
+            previous.Status = HrAssetAssignmentStatus.Returned;
+            previous.ActualReturnDate = assignmentDate;
+            previous.ConditionAtReturn = Clean(request.ConditionAtAssignment);
+            previous.Notes = string.IsNullOrWhiteSpace(previous.Notes)
+                ? "Devir nedeniyle kapatıldı."
+                : previous.Notes + " | Devir nedeniyle kapatıldı.";
+            previous.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        var assignment = new HrAssetAssignment
+        {
+            CompanyId = asset.CompanyId,
+            PersonnelId = request.PersonnelId,
+            ProjectId = request.ProjectId,
+            ToolAssetId = asset.Id,
+            AssetType = "Alet / Demirbaş",
+            AssetCode = asset.Code,
+            AssetName = asset.Name,
+            SerialNumber = asset.SerialNumber,
+            AssignmentDate = assignmentDate,
+            PlannedReturnDate = AsUtc(request.PlannedReturnDate),
+            ConditionAtAssignment = Clean(request.ConditionAtAssignment),
+            Status = HrAssetAssignmentStatus.Assigned,
+            Notes = Clean(request.Notes)
+        };
+
+        db.HrAssetAssignments.Add(assignment);
+
+        asset.Status = ToolAssetStatus.InUse;
+        asset.AssignedPersonnelId = request.PersonnelId;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = open.Count > 0 ? "Alet devredildi." : "Alet zimmetlendi.",
+            assignmentId = assignment.Id,
+            transferred = open.Count > 0
+        });
+    }
+
+    /// <summary>
+    /// Zimmeti kapatır, alet depoya döner.
+    /// </summary>
+    [HttpPost("{id:guid}/return")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
+    public async Task<IActionResult> Return(
+        Guid id, ReturnToolAssetRequest request, CancellationToken cancellationToken)
+    {
+        var asset = await db.ToolAssets
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (asset is null)
+            return NotFound(new { message = "Alet bulunamadı." });
+
+        var open = await db.HrAssetAssignments
+            .Where(x => x.ToolAssetId == id &&
+                        x.Status == HrAssetAssignmentStatus.Assigned)
+            .ToListAsync(cancellationToken);
+
+        if (open.Count == 0)
+            return BadRequest(new { message = "Aletin açık zimmeti yok." });
+
+        var returnDate = DateTime.SpecifyKind(
+            request.ReturnDate.Date, DateTimeKind.Utc);
+
+        foreach (var item in open)
+        {
+            item.Status = HrAssetAssignmentStatus.Returned;
+            item.ActualReturnDate = returnDate;
+            item.ConditionAtReturn = Clean(request.ConditionAtReturn);
+            item.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        // Serviste ya da hurdadaki alet iade edildiğinde depoya
+        // düşürülmez; onun durumunu servis akışı yönetir.
+        if (asset.Status == ToolAssetStatus.InUse)
+            asset.Status = ToolAssetStatus.InWarehouse;
+
+        asset.AssignedPersonnelId = null;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { message = "Zimmet kapatıldı, alet depoya alındı." });
     }
 
     private async Task<string?> ValidateAsync(

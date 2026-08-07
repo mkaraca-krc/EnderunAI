@@ -245,6 +245,18 @@ export default function HrAssetsPage() {
     }
   }, [companyId, personnelId, projectId, status, assetType, search, overdueOnly]);
 
+  // Personel kartından "Zimmet" bağlantısıyla gelindiğinde liste o
+  // kişiyle açılır. useSearchParams yerine doğrudan adres çubuğu
+  // okunuyor; bu sayfa Suspense sınırı istemiyor.
+  useEffect(() => {
+    void (async () => {
+      const fromLink = new URLSearchParams(window.location.search)
+        .get("personnelId");
+
+      if (fromLink) setPersonnelId(fromLink);
+    })();
+  }, []);
+
   useEffect(() => {
     void loadCompanies().catch((err) => setError(messageOf(err)));
   }, [loadCompanies]);

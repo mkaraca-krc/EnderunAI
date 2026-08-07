@@ -487,6 +487,16 @@ const groups: MenuGroup[] = [
         icon: "⚖",
       },
       {
+        label: "Demirbaş / Aletler",
+        href: "/demirbas",
+        icon: "○",
+      },
+      {
+        label: "Alet Servisi",
+        href: "/demirbas/servis",
+        icon: "○",
+      },
+      {
         label: "Zimmetler",
         href: "/insan-kaynaklari/zimmetler",
         icon: "▣",

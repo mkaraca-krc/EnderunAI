@@ -206,6 +206,7 @@ builder.Services
 builder.Services
     .AddScoped<EnderunAI.Api.Services.Purchasing.SupplierQualityService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Assets.ToolServiceWorkflow>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Assets.ToolAssetAlertService>();
 builder.Services.AddHostedService<
     EnderunAI.Api.Services.Market.MarketDataBackgroundService>();
 builder.Services.AddSingleton<
@@ -297,6 +298,9 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Purchasing.PurchasingBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Assets.ToolAssetBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingService,
     EnderunAI.Api.Services.Hizir.Briefing.HizirBriefingService>();

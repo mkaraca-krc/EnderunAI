@@ -14,6 +14,7 @@ import FinanceSummaryWidget from "@/components/dashboard/finance-summary-widget"
 import OperationsSummaryWidget from "@/components/dashboard/operations-summary-widget";
 import ProfitabilityWidget from "@/components/dashboard/profitability-widget";
 import MarketSummaryWidget from "@/components/market/market-summary-widget";
+import ToolAssetAlertWidget from "@/components/assets/tool-asset-alert-widget";
 import NotificationCenterWidget from "@/components/dashboard/notification-center-widget";
 import RecentActivitiesWidget, { type DashboardActivity } from "@/components/dashboard/recent-activities-widget";
 import ExecutiveAiSummaryWidget from "@/components/dashboard/executive-ai-summary-widget";
@@ -918,6 +919,8 @@ export default function DashboardPage() {
         />
 
         <MarketSummaryWidget />
+
+        <ToolAssetAlertWidget />
       </section>
 
       <div className="mb-6">
