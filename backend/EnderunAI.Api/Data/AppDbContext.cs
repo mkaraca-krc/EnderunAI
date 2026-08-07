@@ -205,6 +205,10 @@ public sealed class AppDbContext(
     public DbSet<SecurityAuditEvent> SecurityAuditEvents => Set<SecurityAuditEvent>();
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
     public DbSet<CommodityPrice> CommodityPrices => Set<CommodityPrice>();
+    public DbSet<CommodityAlertThreshold> CommodityAlertThresholds =>
+        Set<CommodityAlertThreshold>();
+    public DbSet<CommodityAlertTrigger> CommodityAlertTriggers =>
+        Set<CommodityAlertTrigger>();
     public DbSet<ProjectCopperExposure> ProjectCopperExposures =>
         Set<ProjectCopperExposure>();
 
@@ -600,6 +604,53 @@ public sealed class AppDbContext(
             entity.Property(x => x.PriceUsdPerTon).HasPrecision(18, 2);
             entity.Property(x => x.PriceTryPerTon).HasPrecision(18, 2);
             entity.Property(x => x.UsdRate).HasPrecision(18, 6);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<CommodityAlertThreshold>(entity =>
+        {
+            entity.ToTable("commodity_alert_thresholds");
+            entity.HasKey(x => x.Id);
+
+            // Şirket başına emtia başına tek eşik.
+            entity.HasIndex(x => new { x.CompanyId, x.Commodity })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Commodity).HasConversion<int>().IsRequired();
+            entity.Property(x => x.BuyBelowUsdPerTon).HasPrecision(18, 2);
+            entity.Property(x => x.AlertAboveUsdPerTon).HasPrecision(18, 2);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<CommodityAlertTrigger>(entity =>
+        {
+            entity.ToTable("commodity_alert_triggers");
+            entity.HasKey(x => x.Id);
+
+            // Aynı eşik + gün + yön ikinci kez yazılamaz: değerlendirme
+            // idempotent, gecelik iş birden fazla koşsa da uyarı çoğalmaz.
+            entity.HasIndex(x => new
+                {
+                    x.CommodityAlertThresholdId, x.PriceDate, x.Direction
+                })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Direction).HasConversion<int>().IsRequired();
+            entity.Property(x => x.PriceUsdPerTon).HasPrecision(18, 2);
+            entity.Property(x => x.PriceTryPerTon).HasPrecision(18, 2);
+            entity.Property(x => x.ThresholdUsdPerTon).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.CommodityAlertThreshold).WithMany(x => x.Triggers)
+                .HasForeignKey(x => x.CommodityAlertThresholdId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
@@ -2547,6 +2598,9 @@ public sealed class AppDbContext(
             entity.Property(x => x.ProfitRate).HasPrecision(9, 4);
             entity.Property(x => x.UnitCost).HasPrecision(18, 6);
             entity.Property(x => x.UnitSalesPrice).HasPrecision(18, 6);
+            entity.Property(x => x.MaterialUnitPrice).HasPrecision(18, 6);
+            entity.Property(x => x.LaborUnitPrice).HasPrecision(18, 6);
+            entity.Property(x => x.OverheadUnitPrice).HasPrecision(18, 6);
             entity.Property(x => x.CostTotal).HasPrecision(18, 2);
             entity.Property(x => x.SalesTotal).HasPrecision(18, 2);
 
@@ -3476,6 +3530,12 @@ public sealed class AppDbContext(
 
             entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+
+            // Teklif silinse bile icmal ayakta kalmalı: icmal hakedişin
+            // referansı, teklif ise yalnızca nereden geldiğinin kaydı.
+            entity.HasOne(x => x.SourceOffer).WithMany()
+                .HasForeignKey(x => x.SourceOfferId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => x.SourceOfferId);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

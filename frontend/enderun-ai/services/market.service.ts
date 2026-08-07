@@ -100,6 +100,43 @@ export type CommoditySummary = {
   trend: CommodityPricePoint[];
 };
 
+/** Eşiğin hangi yönde aşıldığı. */
+export const CommodityAlertDirection = {
+  BuyOpportunity: 0,
+  CostRisk: 1,
+} as const;
+
+export type CommodityAlertTrigger = {
+  id: string;
+  direction: number;
+  /** Geçişin gerçekleştiği fiyat günü. */
+  priceDate: string;
+  priceUsdPerTon: number;
+  priceTryPerTon?: number | null;
+  thresholdUsdPerTon: number;
+  acknowledgedAtUtc?: string | null;
+};
+
+/**
+ * Şirketin bakır eşiği ve bekleyen tetiklenmeleri.
+ *
+ * Eşikler USD/ton'dur: TL eşiği tutmak kur hareketini emtia
+ * hareketiyle karıştırıp "bakır mı pahalandı, lira mı değer kaybetti"
+ * sorusunu eşiğin içine gömerdi.
+ */
+export type CommodityAlertStatus = {
+  companyId: string;
+  commodity: number;
+  buyBelowUsdPerTon?: number | null;
+  alertAboveUsdPerTon?: number | null;
+  isEnabled: boolean;
+  latestPriceUsdPerTon?: number | null;
+  latestPriceDate?: string | null;
+  /** Şu an hangi bölgedeyiz; hiçbirinde değilsek null. */
+  currentState?: number | null;
+  pendingTriggers: CommodityAlertTrigger[];
+};
+
 export const commodityService = {
   getCopper(days = 30) {
     return apiClient<CommoditySummary>(`market/commodities/copper?days=${days}`);
@@ -112,7 +149,34 @@ export const commodityService = {
       sourceLabel: string;
       message: string;
       errors: string[];
+      newTriggers: number;
     }>(`market/commodities/refresh?days=${days}`, { method: "POST" });
+  },
+
+  getCopperAlert(companyId: string) {
+    return apiClient<CommodityAlertStatus>(
+      `market/commodities/copper/alert?companyId=${encodeURIComponent(companyId)}`
+    );
+  },
+
+  saveCopperAlert(input: {
+    companyId: string;
+    buyBelowUsdPerTon: number | null;
+    alertAboveUsdPerTon: number | null;
+    isEnabled: boolean;
+    notes: string | null;
+  }) {
+    return apiClient<CommodityAlertStatus>("market/commodities/copper/alert", {
+      method: "PUT",
+      body: input,
+    });
+  },
+
+  acknowledgeAlert(triggerId: string) {
+    return apiClient<{ message: string }>(
+      `market/commodities/alerts/${triggerId}/acknowledge`,
+      { method: "POST" }
+    );
   },
 };
 

@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import ErpShell from "@/components/erp/erp-shell";
 import RecipeEditor from "@/components/engineering/recipe-editor";
 import PositionPriceHistory from "@/components/engineering/position-price-history";
+import PositionPurchaseIntelligence from "@/components/engineering/position-purchase-intelligence";
 import {
   EngineeringPositionDetail,
   engineeringPositionDetailService,
@@ -168,6 +169,7 @@ export default function EngineeringPositionDetailPage() {
     ["general", "Genel Bilgi"],
     ["prices", "Birim Fiyatlar"],
     ["recipe", "Reçete"],
+    ["purchase", "Gerçek Alış"],
     ["materials", "Malzemeler"],
     ["labor", "İşçilik"],
     ["machines", "Makinalar"],
@@ -514,8 +516,16 @@ export default function EngineeringPositionDetailPage() {
           <RecipeEditor positionId={id} />
         )}
 
+        {activeTab === "purchase" && item && (
+          <PositionPurchaseIntelligence
+            positionId={id}
+            companyId={item.companyId}
+          />
+        )}
+
         {activeTab !== "general" &&
           activeTab !== "recipe" &&
+          activeTab !== "purchase" &&
           activeTab !== "prices" && (
           <div className="erp-empty-state">
             <div className="enderun-empty-symbol">▧</div>

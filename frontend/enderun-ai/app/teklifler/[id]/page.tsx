@@ -51,9 +51,38 @@ function date(value?: string | null) {
 
 export default function OfferDetailPage() {
   const params = useParams<{ id: string }>();
+  const offerId = params.id;
   const [item, setItem] = useState<OfferDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [transferring, setTransferring] = useState(false);
+  const [transferMessage, setTransferMessage] = useState("");
+  const [transferWarnings, setTransferWarnings] = useState<string[]>([]);
+
+  /**
+   * Teklifi keşif icmaline aktarır. Aktarım TEK YÖNLÜdür: sonrasında
+   * teklifte yapılan düzeltme icmali değiştirmez, çünkü icmal
+   * hakedişin referansıdır.
+   */
+  async function handleTransfer() {
+    setTransferring(true);
+    setTransferMessage("");
+    setTransferWarnings([]);
+
+    try {
+      const result = await offerService.transferToBoq(offerId);
+
+      setTransferMessage(
+        `İcmal oluşturuldu: ${result.boqNumber} — ${result.itemCount} kalem.`
+      );
+      setTransferWarnings(result.warnings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "İcmale aktarılamadı.");
+    } finally {
+      setTransferring(false);
+    }
+  }
 
   const load = useCallback(async () => {
     if (!params.id) return;
@@ -92,7 +121,31 @@ export default function OfferDetailPage() {
         <strong className="text-slate-800">
           {item?.offerNumber ?? "Teklif"}
         </strong>
+
+        <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <Link className="erp-secondary-button" href={`/teklifler/${offerId}/yazdir`}>
+            Yazdır
+          </Link>
+          <button
+            type="button"
+            className="erp-secondary-button"
+            disabled={transferring}
+            onClick={() => void handleTransfer()}
+          >
+            {transferring ? "Aktarılıyor..." : "İcmale Aktar"}
+          </button>
+        </span>
       </div>
+
+      {transferMessage && (
+        <div className="erp-alert success">{transferMessage}</div>
+      )}
+
+      {transferWarnings.map((warning) => (
+        <div key={warning} className="erp-alert warning">
+          {warning}
+        </div>
+      ))}
 
       {error && (
         <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

@@ -5,6 +5,19 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EnderunAI.Api.Controllers;
 
+/// <summary>Emtia eşiği kaydetme isteği.</summary>
+/// <param name="CompanyId">Şirket.</param>
+/// <param name="BuyBelowUsdPerTon">Alım eşiği (USD/ton); null ise kapalı.</param>
+/// <param name="AlertAboveUsdPerTon">Risk eşiği (USD/ton); null ise kapalı.</param>
+/// <param name="IsEnabled">Eşik açık mı.</param>
+/// <param name="Notes">Serbest not.</param>
+public sealed record SaveCommodityAlertRequest(
+    Guid CompanyId,
+    decimal? BuyBelowUsdPerTon,
+    decimal? AlertAboveUsdPerTon,
+    bool IsEnabled,
+    string? Notes);
+
 /// <summary>
 /// Piyasa verisi: TCMB kurları (ve ilerleyen fazda emtia fiyatları).
 /// Okuma finans görüntüleme iznine, elle tazeleme finans yönetimine bağlı.
@@ -81,12 +94,99 @@ public sealed class MarketController(
     [RequirePermission(PermissionCatalog.Keys.FinanceManage)]
     public async Task<IActionResult> RefreshCommodities(
         [FromQuery] int days,
+        [FromServices] CommodityAlertService alerts,
         CancellationToken cancellationToken)
     {
         var window = days is > 0 and <= 365 ? days : 30;
         var result = await commodityPrices.RefreshAsync(window, cancellationToken);
 
-        return Ok(result);
+        // Arşiv tazelendiyse eşikleri hemen değerlendir: kullanıcı
+        // "yenile"ye bastıktan sonra uyarıyı bir sonraki geceye kadar
+        // beklememeli.
+        var newTriggers = await alerts.EvaluateAllAsync(cancellationToken);
+
+        return Ok(new
+        {
+            result.StoredDays,
+            result.UpdatedDays,
+            result.SourceLabel,
+            result.Message,
+            result.Errors,
+            newTriggers
+        });
+    }
+
+    /// <summary>
+    /// Şirketin bakır alım/risk eşiği ve bekleyen tetiklenmeleri.
+    /// </summary>
+    [HttpGet("commodities/copper/alert")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> GetCopperAlert(
+        [FromQuery] Guid companyId,
+        [FromServices] CommodityAlertService alerts,
+        CancellationToken cancellationToken)
+    {
+        if (companyId == Guid.Empty)
+            return BadRequest(new { message = "Şirket seçilmedi." });
+
+        return Ok(await alerts.GetStatusAsync(
+            companyId, Models.Market.Commodity.Copper, cancellationToken));
+    }
+
+    /// <summary>
+    /// Eşiği kaydeder ve hemen değerlendirir.
+    /// </summary>
+    [HttpPut("commodities/copper/alert")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceManage)]
+    public async Task<IActionResult> SaveCopperAlert(
+        [FromBody] SaveCommodityAlertRequest request,
+        [FromServices] CommodityAlertService alerts,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || request.CompanyId == Guid.Empty)
+            return BadRequest(new { message = "Şirket seçilmedi." });
+
+        try
+        {
+            await alerts.SaveThresholdAsync(
+                request.CompanyId,
+                Models.Market.Commodity.Copper,
+                request.BuyBelowUsdPerTon,
+                request.AlertAboveUsdPerTon,
+                request.IsEnabled,
+                request.Notes,
+                cancellationToken);
+
+            await alerts.EvaluateAsync(
+                request.CompanyId, Models.Market.Commodity.Copper, cancellationToken);
+
+            return Ok(await alerts.GetStatusAsync(
+                request.CompanyId, Models.Market.Commodity.Copper, cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Tetiklenmeyi görüldü olarak işaretler; brifingden ve karttan düşer.
+    /// </summary>
+    [HttpPost("commodities/alerts/{id:guid}/acknowledge")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> AcknowledgeAlert(
+        Guid id,
+        [FromServices] CommodityAlertService alerts,
+        CancellationToken cancellationToken)
+    {
+        var raw = User.FindFirst("sub")?.Value
+            ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        var actorId = Guid.TryParse(raw, out var parsed) ? parsed : (Guid?)null;
+
+        return await alerts.AcknowledgeAsync(id, actorId, cancellationToken)
+            ? Ok(new { message = "Uyarı görüldü olarak işaretlendi." })
+            : NotFound(new { message = "Uyarı bulunamadı." });
     }
 
     /// <summary>Belirli bir tarihe uygulanacak kur.</summary>

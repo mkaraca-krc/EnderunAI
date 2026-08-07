@@ -372,3 +372,65 @@ export const positionMatchService = {
     );
   },
 };
+
+/**
+ * Reçetedeki tek bir malzemenin gerçek alış geçmişi.
+ *
+ * Zincirin (poz → reçete → stok kartı → alış faturası) koptuğu yerde
+ * fiyat alanları null gelir ve `message` nedenini söyler; sıfır
+ * yazılmaz.
+ */
+export type MaterialPurchaseInsight = {
+  inventoryItemId?: string | null;
+  materialCode: string;
+  materialName: string;
+  unit: string;
+  /** Fire dahil, birim poz başına miktar. */
+  effectiveQuantity: number;
+  hasStockLink: boolean;
+  lastPurchaseUnitPrice?: number | null;
+  lastPurchaseDate?: string | null;
+  lastSupplierTitle?: string | null;
+  weightedAverageUnitPrice?: number | null;
+  purchasedQuantity?: number | null;
+  invoiceCount: number;
+  message?: string | null;
+};
+
+export type PositionPurchaseIntelligence = {
+  engineeringPositionId: string;
+  positionCode: string;
+  positionName: string;
+  unit: string;
+  engineeringRecipeId?: string | null;
+  recipeVersion?: number | null;
+  officialUnitPrice?: number | null;
+  officialYear?: number | null;
+  officialSource?: string | null;
+  /** Tüm malzemeler fiyatlanamadıysa null gelir. */
+  lastPurchaseMaterialCost?: number | null;
+  weightedAverageMaterialCost?: number | null;
+  materialCount: number;
+  linkedMaterialCount: number;
+  pricedMaterialCount: number;
+  materials: MaterialPurchaseInsight[];
+  /** Rakamın nerede eksik kaldığını söyleyen açıklamalar. */
+  warnings: string[];
+};
+
+export const positionPurchaseIntelligenceService = {
+  get(
+    positionId: string,
+    companyId: string,
+    options: { months?: number; year?: number } = {}
+  ) {
+    const params = new URLSearchParams({ companyId });
+
+    if (options.months !== undefined) params.set("months", String(options.months));
+    if (options.year !== undefined) params.set("year", String(options.year));
+
+    return apiClient<PositionPurchaseIntelligence>(
+      `engineering-positions/${positionId}/purchase-intelligence?${params.toString()}`
+    );
+  },
+};

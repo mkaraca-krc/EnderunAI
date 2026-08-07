@@ -41,6 +41,20 @@ public sealed class OfferItem : BaseEntity
     public decimal UnitCost { get; set; }
     public decimal UnitSalesPrice { get; set; }
 
+    // --- Satış fiyatının bileşenleri ---
+    // Malzeme / montaj / genel gider ayrımı. İcmal kaleminde
+    // (ProjectBoqItem) kurulan ayrımın aynısı; teklif icmale
+    // aktarıldığında bileşenler bire bir taşınabilsin diye.
+    //
+    // UnitSalesPrice üçünün TOPLAMIdır ve tek gerçek satış fiyatıdır;
+    // bileşen girilmemiş kalemde tutarın tamamı malzemeye yazılır ve
+    // toplam değişmez. Böylece eski teklifler aynen çalışmaya devam
+    // eder.
+
+    public decimal MaterialUnitPrice { get; set; }
+    public decimal LaborUnitPrice { get; set; }
+    public decimal OverheadUnitPrice { get; set; }
+
     public decimal CostTotal { get; set; }
     public decimal SalesTotal { get; set; }
 

@@ -99,5 +99,26 @@ public sealed class MarketDataBackgroundService(
         {
             logger.LogError(ex, "Emtia fiyatı güncellenemedi.");
         }
+
+        // Eşik değerlendirmesi arşiv tazelendikten SONRA koşar; aksi
+        // hâlde bir gün geriden uyarır. Değerlendirme idempotent
+        // olduğu için tekrar koşması sorun değil.
+        try
+        {
+            var alerts = scope.ServiceProvider
+                .GetRequiredService<CommodityAlertService>();
+
+            var newTriggers = await alerts.EvaluateAllAsync(cancellationToken);
+
+            if (newTriggers > 0)
+            {
+                logger.LogInformation(
+                    "Emtia eşiği: {Count} yeni tetiklenme kaydedildi.", newTriggers);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Emtia eşikleri değerlendirilemedi.");
+        }
     }
 }

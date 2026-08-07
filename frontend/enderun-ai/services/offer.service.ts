@@ -165,4 +165,108 @@ export const offerService = {
       body: payload,
     });
   },
+
+  /**
+   * Pozdan kalem ekler. Fiyat ya kurumun resmî yıl fiyatından ya da
+   * pozun reçete analizinden gelir; ikisi de bulunamazsa uç hata
+   * döner ve kalem eklenmez — sıfır fiyatlı bir keşif satırı toplamı
+   * sessizce düşürürdü.
+   */
+  addItemFromPosition(
+    offerId: string,
+    payload: {
+      engineeringPositionId: string;
+      quantity: number;
+      source: OfferPositionPriceSourceValue;
+      year?: number | null;
+      institution?: number | null;
+      profitRate: number;
+      laborHourRate: number;
+      machineHourRate: number;
+    }
+  ) {
+    return apiClient<{
+      message: string;
+      id: string;
+      lineNumber: number;
+      unitSalesPrice: number;
+      materialUnitPrice: number;
+      laborUnitPrice: number;
+      overheadUnitPrice: number;
+      salesTotal: number;
+      sourceNote: string;
+    }>(`offers/${offerId}/items/from-position`, {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  /** Teklifi projenin keşif icmaline aktarır (tek yönlü). */
+  transferToBoq(offerId: string, payload?: { projectId?: string; name?: string }) {
+    return apiClient<OfferBoqTransferResult>(`offers/${offerId}/icmale-aktar`, {
+      method: "POST",
+      body: payload ?? {},
+    });
+  },
+
+  /** Antetli çıktı için teklif + şirket bilgisi tek istekte. */
+  getPrintData(offerId: string) {
+    return apiClient<OfferPrintData>(`offers/${offerId}/print`);
+  },
+};
+
+export const OfferPositionPriceSource = {
+  /** Kurumun yayımladığı yıl birim fiyatı. */
+  OfficialYearPrice: 0,
+  /** Pozun reçetesinden malzeme + işçilik analizi. */
+  RecipeAnalysis: 1,
+} as const;
+
+export type OfferPositionPriceSourceValue =
+  (typeof OfferPositionPriceSource)[keyof typeof OfferPositionPriceSource];
+
+export type OfferBoqTransferResult = {
+  projectBoqId: string;
+  boqNumber: string;
+  itemCount: number;
+  totalAmount: number;
+  /** Aktarımda varsayıma düşülen yerler; boş olabilir. */
+  warnings: string[];
+};
+
+export type OfferPrintData = {
+  id: string;
+  offerNumber: string;
+  title: string;
+  offerDate: string;
+  validUntil?: string | null;
+  currency: string;
+  status: number;
+  description?: string | null;
+  notes?: string | null;
+  subtotal: number;
+  discountTotal: number;
+  grandTotal: number;
+  company: {
+    name: string;
+    taxOffice?: string | null;
+    taxNumber?: string | null;
+    address?: string | null;
+    phone?: string | null;
+    email?: string | null;
+  };
+  projectCode?: string | null;
+  projectName?: string | null;
+  items: {
+    lineNumber: number;
+    positionNumber?: string | null;
+    description: string;
+    unit: string;
+    quantity: number;
+    unitSalesPrice: number;
+    materialUnitPrice: number;
+    laborUnitPrice: number;
+    overheadUnitPrice: number;
+    salesTotal: number;
+  }[];
 };

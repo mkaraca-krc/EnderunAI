@@ -234,8 +234,13 @@ public sealed class OffersController(
             CustomerId = request.CustomerId,
             OfferNumber = offerNumber,
             Title = request.Title.Trim(),
-            OfferDate = request.OfferDate.Date,
-            ValidUntil = request.ValidUntil?.Date,
+            // Tarihler UTC'ye normalize edilir: Kind belirtilmemiş bir
+            // tarih Postgres'e yazılamıyor ve istek 500 ile düşüyordu.
+            // İstemcinin saat dilimi eklemesine güvenilmez.
+            OfferDate = AsUtcDate(request.OfferDate),
+            ValidUntil = request.ValidUntil.HasValue
+                ? AsUtcDate(request.ValidUntil.Value)
+                : null,
             Currency = request.Currency.Trim().ToUpperInvariant(),
             ExchangeRate = request.ExchangeRate,
             Description = request.Description?.Trim(),
@@ -310,6 +315,12 @@ public sealed class OffersController(
                 SalesTotal = calculation.SalesTotal,
                 Notes = item.Notes?.Trim()
             });
+
+            ApplyComponents(
+                entity.Items.Last(),
+                item.MaterialUnitPrice,
+                item.LaborUnitPrice,
+                item.OverheadUnitPrice);
         }
 
         entity.Subtotal = decimal.Round(
@@ -340,6 +351,359 @@ public sealed class OffersController(
             entity.Status
         });
     }
+
+    /// <summary>
+    /// Pozdan teklif kalemi üretir ve teklife ekler.
+    ///
+    /// İki kaynak var ve ikisi de gerçek veriden gelir:
+    /// - RESMÎ YIL FİYATI: kurumun yayımladığı birim fiyat; malzeme ve
+    ///   montaj ayrımı varsa birebir taşınır.
+    /// - REÇETE ANALİZİ: pozun reçetesindeki malzeme ve işçilikten
+    ///   maliyet çıkarılır, üstüne kâr eklenir.
+    ///
+    /// Fiyat bulunamazsa kalem EKLENMEZ: sıfır fiyatlı bir keşif satırı,
+    /// olmayan bir satırdan daha tehlikelidir çünkü toplamı sessizce
+    /// düşürür.
+    /// </summary>
+    [HttpPost("{id:guid}/items/from-position")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
+    public async Task<IActionResult> AddItemFromPosition(
+        Guid id,
+        OfferItemFromPositionRequest request,
+        [FromServices] Services.Engineering.IPositionPriceService positionPrices,
+        [FromServices] Services.Costing.ICostEngine costEngine,
+        CancellationToken cancellationToken)
+    {
+        if (request.Quantity <= 0)
+            return BadRequest(new { message = "Metraj sıfırdan büyük olmalıdır." });
+
+        var offer = await db.Offers
+            .Include(x => x.Items)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (offer is null)
+            return NotFound(new { message = "Teklif bulunamadı." });
+
+        if (offer.Status != OfferStatus.Draft)
+        {
+            return BadRequest(new
+            {
+                message = "Yalnızca taslak teklife kalem eklenebilir."
+            });
+        }
+
+        var position = await db.EngineeringPositions
+            .AsNoTracking()
+            .Where(x => x.Id == request.EngineeringPositionId)
+            .Select(x => new { x.Id, x.Code, x.Name, x.Unit })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (position is null)
+            return NotFound(new { message = "Poz bulunamadı." });
+
+        decimal unitSalesPrice;
+        decimal material, labor, overhead;
+        string sourceNote;
+
+        if (request.Source == OfferPositionPriceSource.OfficialYearPrice)
+        {
+            var institution = request.Institution.HasValue
+                ? (PositionPriceInstitution)request.Institution.Value
+                : (PositionPriceInstitution?)null;
+
+            var resolution = await positionPrices.ResolveAsync(
+                position.Id, request.Year, institution, cancellationToken);
+
+            if (!resolution.Found || resolution.UnitPrice is not > 0m)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        $"{position.Code} pozuna fiyat bulunamadı. {resolution.Explanation}"
+                });
+            }
+
+            unitSalesPrice = resolution.UnitPrice.Value;
+
+            // Kurum malzeme/montaj ayrımı yayımladıysa birebir taşınır;
+            // yayımlamadıysa tutarın tamamı malzemeye yazılır.
+            material = resolution.MaterialPrice ?? unitSalesPrice;
+            labor = resolution.LaborPrice ?? 0m;
+            overhead = decimal.Round(unitSalesPrice - material - labor, 6);
+
+            if (overhead < 0m)
+            {
+                // Bileşen toplamı birim fiyatı aşıyorsa kurumun verisi
+                // kendi içinde tutarsız; uydurma bir GG üretmek yerine
+                // ayrımı bırakıp tamamını malzemeye yazıyoruz.
+                material = unitSalesPrice;
+                labor = 0m;
+                overhead = 0m;
+            }
+
+            sourceNote = resolution.Explanation;
+        }
+        else
+        {
+            var estimate = await costEngine.EstimatePositionAsync(
+                new Contracts.OfferCosting.EstimatePositionCostRequest(
+                    offer.CompanyId,
+                    position.Id,
+                    offer.Currency,
+                    request.LaborHourRate,
+                    request.MachineHourRate),
+                cancellationToken);
+
+            if (estimate.UnitCost <= 0m)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        $"{position.Code} pozunun reçete analizi sıfır maliyet " +
+                        "üretti; malzeme fiyatları eksik olabilir."
+                });
+            }
+
+            var profit = request.ProfitRate is >= 0m and <= 100m
+                ? request.ProfitRate
+                : 0m;
+
+            unitSalesPrice = decimal.Round(
+                estimate.UnitCost * (1 + profit / 100m), 6);
+
+            // Analizde malzeme ve işçilik zaten ayrı çıkıyor; kâr her
+            // ikisine oranlı dağıtılır ki bileşen toplamı satış
+            // fiyatına eşit kalsın.
+            var costMaterial = estimate.MaterialCost;
+            var costLabor = estimate.LaborCost + estimate.MachineCost;
+            var costTotal = costMaterial + costLabor;
+
+            if (costTotal > 0m)
+            {
+                material = decimal.Round(
+                    unitSalesPrice * (costMaterial / costTotal), 6);
+                labor = decimal.Round(unitSalesPrice - material, 6);
+            }
+            else
+            {
+                material = unitSalesPrice;
+                labor = 0m;
+            }
+
+            overhead = 0m;
+
+            sourceNote =
+                $"Reçete analizi (v{estimate.RecipeVersion}); " +
+                $"{estimate.PricedMaterialCount} malzeme fiyatlandı, " +
+                $"{estimate.UnpricedMaterialCount} fiyatsız.";
+        }
+
+        var nextLine = offer.Items.Count == 0
+            ? 1
+            : offer.Items.Max(x => x.LineNumber) + 1;
+
+        var newItem = new OfferItem
+        {
+            OfferId = offer.Id,
+            LineNumber = nextLine,
+            PositionNumber = position.Code,
+            EngineeringPositionId = position.Id,
+            Description = position.Name,
+            Quantity = request.Quantity,
+            Unit = string.IsNullOrWhiteSpace(position.Unit) ? "ad" : position.Unit,
+            // Pozdan gelen kalemde liste fiyatı/iskonto kavramı yok:
+            // birim fiyat doğrudan belirlenmiştir.
+            ListPrice = unitSalesPrice,
+            NetPurchasePrice = unitSalesPrice,
+            UnitCost = unitSalesPrice,
+            UnitSalesPrice = unitSalesPrice,
+            MaterialUnitPrice = material,
+            LaborUnitPrice = labor,
+            OverheadUnitPrice = overhead,
+            CostTotal = decimal.Round(unitSalesPrice * request.Quantity, 2),
+            SalesTotal = decimal.Round(unitSalesPrice * request.Quantity, 2),
+            Notes = sourceNote
+        };
+
+        offer.Items.Add(newItem);
+
+        // BaseEntity yapıcıda Id atadığı için EF, izlenen üst kaydın
+        // koleksiyonundan gelen yeni çocuğu "mevcut" sanabiliyor.
+        db.Entry(newItem).State = EntityState.Added;
+
+        RecalculateOfferTotals(offer);
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Kalem pozdan eklendi.",
+            newItem.Id,
+            newItem.LineNumber,
+            newItem.UnitSalesPrice,
+            newItem.MaterialUnitPrice,
+            newItem.LaborUnitPrice,
+            newItem.OverheadUnitPrice,
+            newItem.SalesTotal,
+            sourceNote
+        });
+    }
+
+    /// <summary>
+    /// Teklifi projenin keşif icmaline aktarır.
+    /// </summary>
+    [HttpPost("{id:guid}/icmale-aktar")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
+    public async Task<IActionResult> TransferToBoq(
+        Guid id,
+        TransferOfferToBoqRequest? request,
+        [FromServices] Services.Offers.OfferBoqTransferService transfer,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var raw = User.FindFirst("sub")?.Value
+                ?? User.FindFirst(
+                    System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            var result = await transfer.TransferAsync(
+                id,
+                request?.ProjectId,
+                request?.Name,
+                Guid.TryParse(raw, out var actorId) ? actorId : null,
+                cancellationToken);
+
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Antetli çıktı için teklif ve şirket bilgisi.
+    ///
+    /// Yazdırma ekranı bu uçtan beslenir; şirket bilgisi ayrı bir
+    /// istekle çekilseydi antet ile içerik farklı anlarda gelir ve
+    /// yazdırma sırasında yarım görünürdü.
+    /// </summary>
+    [HttpGet("{id:guid}/print")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
+    public async Task<IActionResult> GetPrintData(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var offer = await db.Offers
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new
+            {
+                x.Id,
+                x.OfferNumber,
+                x.Title,
+                x.OfferDate,
+                x.ValidUntil,
+                x.Currency,
+                x.Status,
+                x.Description,
+                x.Notes,
+                x.Subtotal,
+                x.DiscountTotal,
+                x.GrandTotal,
+                Company = new
+                {
+                    x.Company.Name,
+                    x.Company.TaxOffice,
+                    x.Company.TaxNumber,
+                    x.Company.Address,
+                    x.Company.Phone,
+                    x.Company.Email
+                },
+                ProjectCode = x.Project != null ? x.Project.Code : null,
+                ProjectName = x.Project != null ? x.Project.Name : null,
+                Items = x.Items
+                    .OrderBy(item => item.LineNumber)
+                    .Select(item => new
+                    {
+                        item.LineNumber,
+                        item.PositionNumber,
+                        item.Description,
+                        item.Unit,
+                        item.Quantity,
+                        item.UnitSalesPrice,
+                        item.MaterialUnitPrice,
+                        item.LaborUnitPrice,
+                        item.OverheadUnitPrice,
+                        item.SalesTotal
+                    })
+                    .ToList()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return offer is null
+            ? NotFound(new { message = "Teklif bulunamadı." })
+            : Ok(offer);
+    }
+
+    /// <summary>
+    /// Kalemin malzeme/montaj/GG dağılımını uygular.
+    ///
+    /// Bileşen verilmemişse tutarın TAMAMI malzemeye yazılır; toplam
+    /// korunur. Verilmişse bileşen toplamı satış fiyatı olur — iki
+    /// rakamın çelişmesindense bileşenlerin esas alınması, keşfin
+    /// hakedişe bire bir taşınabilmesi için gerekli.
+    /// </summary>
+    private static void ApplyComponents(
+        OfferItem item,
+        decimal? material,
+        decimal? labor,
+        decimal? overhead)
+    {
+        var hasComponents =
+            material is > 0m || labor is > 0m || overhead is > 0m;
+
+        if (!hasComponents)
+        {
+            item.MaterialUnitPrice = item.UnitSalesPrice;
+            item.LaborUnitPrice = 0m;
+            item.OverheadUnitPrice = 0m;
+            return;
+        }
+
+        item.MaterialUnitPrice = material ?? 0m;
+        item.LaborUnitPrice = labor ?? 0m;
+        item.OverheadUnitPrice = overhead ?? 0m;
+
+        item.UnitSalesPrice = decimal.Round(
+            item.MaterialUnitPrice + item.LaborUnitPrice + item.OverheadUnitPrice, 6);
+
+        item.SalesTotal = decimal.Round(item.UnitSalesPrice * item.Quantity, 2);
+    }
+
+    /// <summary>Teklif toplamlarını kalemlerden yeniden hesaplar.</summary>
+    private static void RecalculateOfferTotals(Offer offer)
+    {
+        offer.Subtotal = decimal.Round(
+            offer.Items.Sum(x => x.ListPrice * x.Quantity), 2);
+
+        offer.DiscountTotal = decimal.Round(
+            offer.Items.Sum(x => (x.ListPrice - x.NetPurchasePrice) * x.Quantity), 2);
+
+        offer.CostTotal = decimal.Round(offer.Items.Sum(x => x.CostTotal), 2);
+        offer.GrandTotal = decimal.Round(offer.Items.Sum(x => x.SalesTotal), 2);
+        offer.ProfitTotal = decimal.Round(offer.GrandTotal - offer.CostTotal, 2);
+    }
+
+    /// <summary>
+    /// Tarihi gün başlangıcına indirip UTC olarak damgalar.
+    /// </summary>
+    private static DateTime AsUtcDate(DateTime value) =>
+        DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
 
     private static string? ValidateRates(
         decimal quantity,

@@ -3,6 +3,7 @@ using System;
 using EnderunAI.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EnderunAI.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807154146_AddCommodityAlertThresholds")]
+    partial class AddCommodityAlertThresholds
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -5206,10 +5209,6 @@ namespace EnderunAI.Api.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<decimal>("LaborUnitPrice")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
-
                     b.Property<int>("LineNumber")
                         .HasColumnType("integer");
 
@@ -5223,10 +5222,6 @@ namespace EnderunAI.Api.Migrations
 
                     b.Property<Guid?>("ManufacturerPriceListItemId")
                         .HasColumnType("uuid");
-
-                    b.Property<decimal>("MaterialUnitPrice")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
 
                     b.Property<string>("Model")
                         .HasMaxLength(150)
@@ -5242,10 +5237,6 @@ namespace EnderunAI.Api.Migrations
 
                     b.Property<Guid>("OfferId")
                         .HasColumnType("uuid");
-
-                    b.Property<decimal>("OverheadUnitPrice")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
 
                     b.Property<string>("PositionNumber")
                         .HasMaxLength(100)
@@ -7103,9 +7094,6 @@ namespace EnderunAI.Api.Migrations
                     b.Property<string>("RevisionReason")
                         .HasColumnType("text");
 
-                    b.Property<Guid?>("SourceOfferId")
-                        .HasColumnType("uuid");
-
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -7127,8 +7115,6 @@ namespace EnderunAI.Api.Migrations
                     b.HasIndex("ProjectId")
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false AND \"IsContractBaseline\" = true");
-
-                    b.HasIndex("SourceOfferId");
 
                     b.HasIndex("ProjectId", "IsCurrentRevision");
 
@@ -13231,16 +13217,9 @@ namespace EnderunAI.Api.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("EnderunAI.Api.Models.Offer", "SourceOffer")
-                        .WithMany()
-                        .HasForeignKey("SourceOfferId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("Company");
 
                     b.Navigation("Project");
-
-                    b.Navigation("SourceOffer");
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.ProjectBoqItem", b =>

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import CopperAlertPanel from "@/components/market/copper-alert-panel";
+import { useCurrentUser } from "@/lib/use-current-user";
+import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
   commodityService,
   copperImpactService,
@@ -76,6 +79,38 @@ export default function MarketPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  // Eşik şirket bazlı olduğu için bu ekranda bir şirket seçimi gerekiyor.
+  const [companies, setCompanies] = useState<CompanyListItem[]>([]);
+  const [alertCompanyId, setAlertCompanyId] = useState("");
+
+  const { user } = useCurrentUser();
+
+  const canManageAlert =
+    user?.permissions.some(
+      (permission) => permission.toLowerCase() === "finance.manage"
+    ) ?? false;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const list = await companyService.getAll();
+        if (cancelled) return;
+
+        setCompanies(list);
+        setAlertCompanyId((current) => current || list[0]?.id || "");
+      } catch {
+        // Şirket listesi alınamazsa eşik paneli gizlenir; ekranın
+        // geri kalanı (fiyat ve kur) çalışmaya devam etmeli.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /**
    * Veriyi getirir; DURUM GÜNCELLEMESİ YAPMAZ. Efekt gövdesinde senkron
@@ -523,7 +558,36 @@ export default function MarketPage() {
             )}
           </section>
 
-          <section className="erp-table-card">
+          {alertCompanyId && (
+            <>
+              {companies.length > 1 && (
+                <div className="erp-page-toolbar" style={{ marginTop: 16 }}>
+                  <label>
+                    <span style={{ display: "block", fontSize: 11 }}>
+                      Eşik şirketi
+                    </span>
+                    <select
+                      value={alertCompanyId}
+                      onChange={(e) => setAlertCompanyId(e.target.value)}
+                    >
+                      {companies.map((company) => (
+                        <option key={company.id} value={company.id}>
+                          {company.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+
+              <CopperAlertPanel
+                companyId={alertCompanyId}
+                canManage={canManageAlert}
+              />
+            </>
+          )}
+
+          <section className="erp-table-card" style={{ marginTop: 16 }}>
             <div className="erp-table-header">
               <h2>Günlük kayıtlar</h2>
             </div>

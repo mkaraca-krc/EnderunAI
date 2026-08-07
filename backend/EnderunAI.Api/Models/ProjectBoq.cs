@@ -57,6 +57,16 @@ public sealed class ProjectBoq : BaseEntity
     /// <summary>Revizyonun gerekçesi — denetimde sorulan budur.</summary>
     public string? RevisionReason { get; set; }
 
+    /// <summary>
+    /// Bu icmal bir teklifin aktarımıyla doğduysa kaynak teklif.
+    /// Aktarım TEK YÖNLÜdür: sonrasında teklifte yapılan düzeltme
+    /// icmali değiştirmez, çünkü icmal hakedişin referansıdır ve satış
+    /// belgesindeki bir dokunuş sözleşme metrajını sessizce
+    /// kaydırmamalıdır. Bağ yalnızca izlenebilirlik için tutulur.
+    /// </summary>
+    public Guid? SourceOfferId { get; set; }
+    public Offer? SourceOffer { get; set; }
+
     public string? Description { get; set; }
     public string? Notes { get; set; }
 

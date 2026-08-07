@@ -14,6 +14,36 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/engineering-positions")]
 public sealed class EngineeringPositionsController(AppDbContext db) : ControllerBase
 {
+    /// <summary>
+    /// Pozun GERÇEK alış maliyeti: reçetesindeki malzemelerin onaylı
+    /// alış faturalarından son fiyat ve ağırlıklı ortalama, resmî
+    /// birim fiyatla birlikte.
+    ///
+    /// Zincirin (poz → reçete → stok kartı → alış faturası) koptuğu
+    /// yerde sayı üretilmez; eksik toplam maliyeti olduğundan düşük
+    /// gösterirdi. Nerede koptuğu uyarı olarak döner.
+    /// </summary>
+    [HttpGet("{id:guid}/purchase-intelligence")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
+    public async Task<IActionResult> GetPurchaseIntelligence(
+        Guid id,
+        [FromQuery] Guid companyId,
+        [FromQuery] int? months,
+        [FromQuery] int? year,
+        [FromServices] Services.Purchasing.SupplierPriceIntelligenceService intelligence,
+        CancellationToken cancellationToken)
+    {
+        if (companyId == Guid.Empty)
+            return BadRequest(new { message = "Şirket seçilmedi." });
+
+        var result = await intelligence.AnalyzeAsync(
+            companyId, id, months, year, cancellationToken);
+
+        return result is null
+            ? NotFound(new { message = "Poz bulunamadı." })
+            : Ok(result);
+    }
+
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> GetAll(

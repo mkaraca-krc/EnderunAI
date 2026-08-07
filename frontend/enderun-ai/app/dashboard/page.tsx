@@ -13,6 +13,7 @@ import QuickActionsWidget from "@/components/dashboard/quick-actions-widget";
 import FinanceSummaryWidget from "@/components/dashboard/finance-summary-widget";
 import OperationsSummaryWidget from "@/components/dashboard/operations-summary-widget";
 import ProfitabilityWidget from "@/components/dashboard/profitability-widget";
+import MarketSummaryWidget from "@/components/market/market-summary-widget";
 import NotificationCenterWidget from "@/components/dashboard/notification-center-widget";
 import RecentActivitiesWidget, { type DashboardActivity } from "@/components/dashboard/recent-activities-widget";
 import ExecutiveAiSummaryWidget from "@/components/dashboard/executive-ai-summary-widget";
@@ -915,6 +916,8 @@ export default function DashboardPage() {
         <ProfitabilityWidget
           projects={profitability}
         />
+
+        <MarketSummaryWidget />
       </section>
 
       <div className="mb-6">

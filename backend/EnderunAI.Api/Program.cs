@@ -199,6 +199,10 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Market.ICopperExposureService,
     EnderunAI.Api.Services.Market.CopperExposureService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Market.CommodityAlertService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Offers.OfferBoqTransferService>();
+builder.Services
+    .AddScoped<EnderunAI.Api.Services.Purchasing.SupplierPriceIntelligenceService>();
 builder.Services.AddHostedService<
     EnderunAI.Api.Services.Market.MarketDataBackgroundService>();
 builder.Services.AddSingleton<
@@ -284,6 +288,9 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Hizir.Briefing.ProgressDeviationBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Market.MarketBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingService,
     EnderunAI.Api.Services.Hizir.Briefing.HizirBriefingService>();
