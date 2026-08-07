@@ -525,6 +525,272 @@ public sealed class SubcontractorLedgerTests(DatabaseFixture fixture)
     }
 
     /// <summary>
+    /// Mahsup ÖNERİSİ hakediş kaydedilince otomatik yazılır: açık avans
+    /// 60.000, bu dönem işi 100.000 → tamamı mahsup edilir ve net
+    /// 40.000'e düşer.
+    /// </summary>
+    [Fact]
+    public async Task AdvanceOffset_IsSuggestedAutomaticallyOnSave()
+    {
+        var data = await CreateFixtureAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+        var contractId = await CreateContractAsync(client, data);
+
+        await client.PostAsJsonAsync(
+            "/api/subcontractor-ledger",
+            BuildPayment(
+                contractId, data.SectionId, 60_000m,
+                kind: (int)SubcontractorLedgerKind.Advance));
+
+        var paymentId = await CreateProgressPaymentAsync(client, contractId);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/subcontractor-progress-payments/{paymentId}",
+            BuildWorkPayload(data.SectionId, agreed: 400m));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        // 400 × 250 = 100.000 iş, 60.000 mahsup, net 40.000.
+        Assert.Equal(100_000m, payload.GetProperty("currentAmount").GetDecimal());
+        Assert.Equal(60_000m, payload.GetProperty("totalDeductionAmount").GetDecimal());
+        Assert.Equal(40_000m, payload.GetProperty("netPayableAmount").GetDecimal());
+    }
+
+    /// <summary>
+    /// Öneri dönem tutarını AŞAMAZ: 60.000 açık avans varken dönem işi
+    /// 25.000 ise yalnızca 25.000 mahsup edilir. Aşsaydı net eksiye
+    /// düşerdi ve bu, taşerondan para istemek demektir.
+    /// </summary>
+    [Fact]
+    public async Task AdvanceOffset_NeverExceedsThePeriodAmount()
+    {
+        var data = await CreateFixtureAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+        var contractId = await CreateContractAsync(client, data);
+
+        await client.PostAsJsonAsync(
+            "/api/subcontractor-ledger",
+            BuildPayment(
+                contractId, data.SectionId, 60_000m,
+                kind: (int)SubcontractorLedgerKind.Advance));
+
+        var paymentId = await CreateProgressPaymentAsync(client, contractId);
+
+        var payload = await (await client.PutAsJsonAsync(
+                $"/api/subcontractor-progress-payments/{paymentId}",
+                BuildWorkPayload(data.SectionId, agreed: 100m)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        // 100 × 250 = 25.000; mahsup 25.000, net sıfır.
+        Assert.Equal(25_000m, payload.GetProperty("totalDeductionAmount").GetDecimal());
+        Assert.Equal(0m, payload.GetProperty("netPayableAmount").GetDecimal());
+    }
+
+    /// <summary>
+    /// Elle girilen mahsup EZİLMEZ — sıfır girilmişse bile. "Bu dönem
+    /// mahsup yapma" da bir karardır.
+    /// </summary>
+    [Fact]
+    public async Task AdvanceOffset_DoesNotOverwriteAManualZero()
+    {
+        var data = await CreateFixtureAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+        var contractId = await CreateContractAsync(client, data);
+
+        await client.PostAsJsonAsync(
+            "/api/subcontractor-ledger",
+            BuildPayment(
+                contractId, data.SectionId, 60_000m,
+                kind: (int)SubcontractorLedgerKind.Advance));
+
+        var paymentId = await CreateProgressPaymentAsync(client, contractId);
+
+        var payload = await (await client.PutAsJsonAsync(
+                $"/api/subcontractor-progress-payments/{paymentId}",
+                BuildWorkPayload(
+                    data.SectionId,
+                    agreed: 400m,
+                    deductions: new object[]
+                    {
+                        new
+                        {
+                            deductionType = (int)HakedisDeductionType.AdvanceOffset,
+                            description = "Avans mahsubu",
+                            rate = 0m,
+                            manualAmount = 0m,
+                            suggestionBasis = (string?)null,
+                            lines = Array.Empty<object>()
+                        }
+                    })))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(0m, payload.GetProperty("totalDeductionAmount").GetDecimal());
+        Assert.Equal(100_000m, payload.GetProperty("netPayableAmount").GetDecimal());
+    }
+
+    /// <summary>
+    /// Öneri yalnızca RESMÎ avanslardan hesaplanır. Elden avans da
+    /// toplansaydı, mahsup tutarı resmî açık avanstan büyük çıkar ve
+    /// hakedişi okuyan yetkisiz kullanıcı elden avans verildiğini bu
+    /// farktan anlardı.
+    /// </summary>
+    [Fact]
+    public async Task AdvanceOffset_IgnoresCashAdvancesSoTheyCannotLeak()
+    {
+        var data = await CreateFixtureAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+        var contractId = await CreateContractAsync(client, data);
+
+        await client.PostAsJsonAsync(
+            "/api/subcontractor-ledger",
+            BuildPayment(
+                contractId, data.SectionId, 20_000m,
+                kind: (int)SubcontractorLedgerKind.Advance));
+
+        await client.PostAsJsonAsync(
+            "/api/subcontractor-ledger/cash",
+            new
+            {
+                subcontractorContractId = contractId,
+                subcontractorProgressPaymentId = (Guid?)null,
+                kind = (int)SubcontractorLedgerKind.Advance,
+                entryDate = "2026-03-31",
+                amount = 45_000m,
+                description = (string?)null
+            });
+
+        var paymentId = await CreateProgressPaymentAsync(client, contractId);
+
+        var payload = await (await client.PutAsJsonAsync(
+                $"/api/subcontractor-progress-payments/{paymentId}",
+                BuildWorkPayload(data.SectionId, agreed: 400m)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        // Yalnızca resmî 20.000 mahsup edilir; elden 45.000 girmez.
+        Assert.Equal(20_000m, payload.GetProperty("totalDeductionAmount").GetDecimal());
+    }
+
+    /// <summary>
+    /// TEMİNAT KESİNTİSİ dönemin İLK kaydında da uygulanmalı.
+    ///
+    /// Oransal kesintiler kümülatif iş tutarını taban alıyor; kesintiler
+    /// iş toplamlarından önce hesaplansaydı taban bir dönem geriden
+    /// gelir ve ilk kayıtta sıfır olduğu için teminat hiç kesilmezdi.
+    /// </summary>
+    [Fact]
+    public async Task Retention_IsAppliedOnTheFirstSaveOfThePeriod()
+    {
+        var data = await CreateFixtureAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+
+        var contractId = await CreateContractWithRetentionAsync(client, data, 5m);
+        var paymentId = await CreateProgressPaymentAsync(client, contractId);
+
+        var payload = await (await client.PutAsJsonAsync(
+                $"/api/subcontractor-progress-payments/{paymentId}",
+                BuildWorkPayload(data.SectionId, agreed: 400m)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        // 100.000 kümülatif iş × %5 = 5.000 teminat.
+        Assert.Equal(100_000m, payload.GetProperty("currentAmount").GetDecimal());
+        Assert.Equal(5_000m, payload.GetProperty("totalDeductionAmount").GetDecimal());
+        Assert.Equal(95_000m, payload.GetProperty("netPayableAmount").GetDecimal());
+    }
+
+    private static async Task<Guid> CreateProgressPaymentAsync(
+        HttpClient client, Guid contractId)
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/subcontractor-progress-payments",
+            new
+            {
+                subcontractorContractId = contractId,
+                progressPaymentNumber = (string?)null,
+                periodStartDate = "2026-03-01",
+                periodEndDate = "2026-03-31",
+                progressPaymentDate = "2026-04-05",
+                notes = (string?)null
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        return (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+    }
+
+    private static object BuildWorkPayload(
+        Guid sectionId, decimal agreed, object[]? deductions = null) =>
+        new
+        {
+            items = new[]
+            {
+                new
+                {
+                    id = (Guid?)null,
+                    projectHakedisSectionId = sectionId,
+                    projectBoqItemId = (Guid?)null,
+                    positionCode = "EL-001",
+                    description = "NYA kablo çekimi",
+                    unit = "m",
+                    contractQuantity = 1_000m,
+                    suggestedQuantity = agreed,
+                    agreedQuantity = agreed,
+                    unitPrice = 250m,
+                    notes = (string?)null
+                }
+            },
+            sections = Array.Empty<object>(),
+            deductions = deductions ?? Array.Empty<object>(),
+            notes = (string?)null
+        };
+
+    private static async Task<Guid> CreateContractWithRetentionAsync(
+        HttpClient client, Fixture data, decimal retentionRate)
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/subcontractor-contracts",
+            new
+            {
+                companyId = data.CompanyId,
+                currentAccountId = data.AccountId,
+                projectId = data.ProjectId,
+                projectSiteId = (Guid?)null,
+                contractNumber = $"TS-{Guid.NewGuid():N}"[..12],
+                workDescription = "Kaba elektrik tesisatı",
+                contractType = (int)ProjectContractType.UnitPrice,
+                contractAmount = 500_000m,
+                currencyCode = "TRY",
+                startDate = "2026-01-01",
+                endDate = "2026-12-31",
+                retentionRate,
+                withholdingNumerator = 0,
+                withholdingDenominator = 0,
+                mealResponsibility = (int)SubcontractorResponsibility.Subcontractor,
+                accommodationResponsibility = (int)SubcontractorResponsibility.Subcontractor,
+                socialSecurityResponsibility = (int)SubcontractorResponsibility.Subcontractor,
+                materialResponsibility = (int)SubcontractorResponsibility.Subcontractor,
+                ohsResponsibility = (int)SubcontractorResponsibility.Subcontractor,
+                notes = (string?)null,
+                sections = new[]
+                {
+                    new
+                    {
+                        projectHakedisSectionId = data.SectionId,
+                        sectionAmount = 500_000m,
+                        order = 1
+                    }
+                }
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        return (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+    }
+
+    /// <summary>
     /// Açık avans kalan işi aşarsa uyarı çıkar: taşerona kalan işinden
     /// fazlasını ödemişiz demektir ve bu tahsil riski taşır.
     /// </summary>

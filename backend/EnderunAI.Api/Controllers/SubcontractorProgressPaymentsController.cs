@@ -74,7 +74,8 @@ public sealed record SaveSubcontractorProgressPaymentRequest(
 [Route("api/subcontractor-progress-payments")]
 public sealed class SubcontractorProgressPaymentsController(
     AppDbContext db,
-    SubcontractorDeductionPlanner planner) : ControllerBase
+    SubcontractorDeductionPlanner planner,
+    SubcontractorLedgerService ledger) : ControllerBase
 {
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.SubcontractorView)]
@@ -336,7 +337,8 @@ public sealed class SubcontractorProgressPaymentsController(
         await AddPlannedDeductionsAsync(
             item, contract, previous?.Id, previousAmount, cancellationToken);
 
-        Recalculate(item, contract.ContractType);
+        RecalculateWork(item, contract.ContractType);
+        RecalculateTotals(item);
 
         db.SubcontractorProgressPayments.Add(item);
         await db.SaveChangesAsync(cancellationToken);
@@ -383,13 +385,21 @@ public sealed class SubcontractorProgressPaymentsController(
         if (failure is not null)
             return BadRequest(new { message = failure });
 
+        // SIRA ÖNEMLİ: oransal kesintiler (teminat) kümülatif iş
+        // tutarını taban alıyor. Kesintiler iş toplamlarından ÖNCE
+        // hesaplanırsa taban bir dönem geriden gelir ve dönemin ilk
+        // kaydında sıfır olduğu için teminat hiç kesilmez.
+        RecalculateWork(item, contractType);
+
         ApplyDeductions(item, request.Deductions ?? []);
+
+        await ApplyAdvanceOffsetSuggestionAsync(item, cancellationToken);
 
         item.Notes = string.IsNullOrWhiteSpace(request.Notes)
             ? null
             : request.Notes.Trim();
 
-        Recalculate(item, contractType);
+        RecalculateTotals(item);
         item.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
@@ -689,20 +699,49 @@ public sealed class SubcontractorProgressPaymentsController(
         return null;
     }
 
+    /// <summary>
+    /// Kesinti satırlarını günceller.
+    ///
+    /// TÜM satırlar üzerinden dönülüyor, yalnızca istemcinin
+    /// gönderdikleri değil: ORANSAL kesinti (teminat) türetilmiş bir
+    /// değerdir, kullanıcı girdisi değil. Yalnızca gönderilenler
+    /// hesaplansaydı, arayüz her kaydetmede bütün kesinti satırlarını
+    /// geri göndermedikçe teminat sessizce sıfır kalırdı — ve bunu
+    /// kimse fark etmezdi, çünkü satır ekranda duruyor.
+    ///
+    /// Elle girilmiş satırlar (IsManualAmount) istek gelmediği sürece
+    /// olduğu gibi bırakılır.
+    /// </summary>
     private void ApplyDeductions(
         SubcontractorProgressPayment payment,
         IReadOnlyList<SubcontractorDeductionRequest> requested)
     {
-        if (requested.Count == 0)
-            return;
-
-        foreach (var line in requested)
+        foreach (var entity in payment.Deductions)
         {
-            var entity = payment.Deductions.SingleOrDefault(
-                x => x.DeductionType == line.DeductionType);
+            var line = requested.SingleOrDefault(
+                x => x.DeductionType == entity.DeductionType);
 
-            if (entity is null)
+            if (line is null)
+            {
+                // İstek yok: yalnızca oransal satır yeniden hesaplanır.
+                // Tutarı öneriden gelen (İSG, SGK) ya da elle girilmiş
+                // satırlara dokunulmaz.
+                if (entity.Rate <= 0m || entity.IsManualAmount)
+                    continue;
+
+                var recalculated = HakedisCalculationService.CalculateDeduction(
+                    new HakedisCalculationService.DeductionInput(
+                        DeductionType: entity.DeductionType,
+                        Description: entity.Description,
+                        Rate: entity.Rate,
+                        CumulativeBaseAmount: payment.CumulativeAmount,
+                        PreviousAmount: entity.PreviousAmount));
+
+                entity.CumulativeBaseAmount = recalculated.CumulativeBaseAmount;
+                entity.CumulativeAmount = recalculated.CumulativeAmount;
+                entity.Amount = recalculated.Amount;
                 continue;
+            }
 
             var result = HakedisCalculationService.CalculateDeduction(
                 new HakedisCalculationService.DeductionInput(
@@ -730,11 +769,14 @@ public sealed class SubcontractorProgressPaymentsController(
     }
 
     /// <summary>
-    /// Toplamları satırlardan yeniden hesaplar. Toplam hiçbir zaman
+    /// İş toplamlarını satırlardan hesaplar. Toplam hiçbir zaman
     /// kullanıcıdan alınmaz: satırlarla toplamın ayrışması, hakedişte
     /// en pahalı hata türüdür.
+    ///
+    /// Kesintilerden ÖNCE çalışmalı — oransal kesintiler kümülatif iş
+    /// tutarını taban alıyor.
     /// </summary>
-    private static void Recalculate(
+    private static void RecalculateWork(
         SubcontractorProgressPayment payment, ProjectContractType contractType)
     {
         var current = contractType == ProjectContractType.LumpSum
@@ -747,6 +789,11 @@ public sealed class SubcontractorProgressPaymentsController(
 
         payment.CurrentAmount = decimal.Round(current, 2);
         payment.CumulativeAmount = decimal.Round(cumulative, 2);
+    }
+
+    /// <summary>Kesinti toplamı ve ödeme satırı.</summary>
+    private static void RecalculateTotals(SubcontractorProgressPayment payment)
+    {
         payment.TotalDeductionAmount = decimal.Round(
             payment.Deductions.Sum(x => x.Amount), 2);
 
@@ -755,6 +802,42 @@ public sealed class SubcontractorProgressPaymentsController(
 
         payment.GrossPayableAmount = gross;
         payment.NetPayableAmount = net;
+    }
+
+    /// <summary>
+    /// Avans mahsubu satırına ÖNERİ tutarını yazar.
+    ///
+    /// Yalnızca kullanıcı o satıra elle bir tutar girmediyse çalışır:
+    /// elle girilen mahsup (IsManualAmount) bir daha ezilmez — sıfır
+    /// girilmişse bile, çünkü "bu dönem mahsup yapma" da bir karardır.
+    ///
+    /// Öneri YALNIZCA RESMÎ avanslardan hesaplanıyor (canViewCash:
+    /// false). Elden avanslar da toplansaydı, mahsup tutarı resmî açık
+    /// avanstan büyük çıkar ve hakedişi okuyan yetkisiz kullanıcı elden
+    /// avans verildiğini bu farktan anlardı. Elden avansın mahsubu,
+    /// yetkisi olan kişinin elle gireceği bir karar.
+    /// </summary>
+    private async Task ApplyAdvanceOffsetSuggestionAsync(
+        SubcontractorProgressPayment payment, CancellationToken cancellationToken)
+    {
+        var line = payment.Deductions.SingleOrDefault(
+            x => x.DeductionType == (int)HakedisDeductionType.AdvanceOffset);
+
+        if (line is null || line.IsManualAmount)
+            return;
+
+        var suggestion = await ledger.SuggestAdvanceOffsetAsync(
+            payment.SubcontractorContractId,
+            payment.CurrentAmount,
+            canViewCash: false,
+            cancellationToken);
+
+        if (suggestion is not (var amount, var basis))
+            return;
+
+        line.Amount = amount;
+        line.CumulativeAmount = decimal.Round(line.PreviousAmount + amount, 2);
+        line.SuggestionBasis = basis;
     }
 
     private static DateTime UtcDate(DateTime value) =>
