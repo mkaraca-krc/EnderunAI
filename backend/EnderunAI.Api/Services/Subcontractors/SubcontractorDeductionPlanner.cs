@@ -30,7 +30,8 @@ public sealed record PlannedDeduction(
 public sealed class SubcontractorDeductionPlanner(
     AppDbContext db,
     SubcontractorTeamService teamService,
-    SubcontractorLedgerService ledgerService)
+    SubcontractorLedgerService ledgerService,
+    SubcontractorReflectionSourceService reflectionSource)
 {
     /// <summary>
     /// Dönemin kesinti planı.
@@ -111,42 +112,87 @@ public sealed class SubcontractorDeductionPlanner(
         // --- Yemek ve konaklama yansıtması ---
         if (contract.MealResponsibility == SubcontractorResponsibility.Us)
         {
-            planned.Add(new PlannedDeduction(
-                DeductionType: (int)HakedisDeductionType.Meal,
-                Description: "Yemek yansıtması",
-                Rate: 0m,
-                Amount: null,
-                Basis:
-                    "Alt kalemleri (kahvaltı/öğlen/akşam/kumanya) işveren " +
-                    "birim fiyatı ve taşeron puantaj adediyle girin."));
+            planned.Add(await PlanReflectionAsync(
+                contract,
+                contract.MealResponsibility,
+                (int)HakedisDeductionType.Meal,
+                "Yemek yansıtması",
+                year, month, cancellationToken));
         }
 
         if (contract.AccommodationResponsibility == SubcontractorResponsibility.Us)
         {
-            planned.Add(new PlannedDeduction(
-                DeductionType: (int)HakedisDeductionType.Accommodation,
-                Description: "Konaklama yansıtması",
-                Rate: 0m,
-                Amount: null,
-                Basis:
-                    "Alt kalemleri (yatılı/evci) işveren birim fiyatı ve " +
-                    "taşeron puantaj adediyle girin."));
+            planned.Add(await PlanReflectionAsync(
+                contract,
+                contract.AccommodationResponsibility,
+                (int)HakedisDeductionType.Accommodation,
+                "Konaklama yansıtması",
+                year, month, cancellationToken));
         }
 
         // --- Malzeme: bizim verdiğimiz malzemenin bedeli ---
         if (contract.MaterialResponsibility == SubcontractorResponsibility.Us)
         {
+            var material = await reflectionSource.BuildMaterialAsync(
+                contract, year, month, cancellationToken);
+
             planned.Add(new PlannedDeduction(
                 DeductionType: (int)HakedisDeductionType.MaterialDeduction,
                 Description: "Malzeme kesintisi (bizden verilen)",
                 Rate: 0m,
-                Amount: null,
-                Basis:
-                    "Bu döneme ait malzeme çıkışının bedelini girin; " +
-                    "otomatik hesap depo sarfı bağlanınca gelecek."));
+                Amount: material?.Amount,
+                Basis: material?.Basis
+                    ?? "Bu dönemde bu taşerona etiketlenmiş depo çıkışı yok; " +
+                       "sarfı depo çıkışında taşerona işaretleyin ya da tutarı " +
+                       "elle girin."));
         }
 
         return planned;
+    }
+
+    /// <summary>
+    /// Yemek/konaklama yansıtması: işveren hakedişimizdeki alt kalem
+    /// birim fiyatları × taşeron ekibinin sahada geçen gün adedi.
+    ///
+    /// Tutar ÖNERİDİR; taşeronla mutabakat farklı çıkarsa ekrandan
+    /// düzeltilir. Girdi eksikse tutar üretilmez ve NEDENİ yazılır —
+    /// "hesaplanamadı" demek yetmez, kullanıcı eksik olanı görmeden
+    /// düzeltemez.
+    /// </summary>
+    private async Task<PlannedDeduction> PlanReflectionAsync(
+        SubcontractorContract contract,
+        SubcontractorResponsibility responsibility,
+        int deductionType,
+        string description,
+        int year,
+        int month,
+        CancellationToken cancellationToken)
+    {
+        var source = await reflectionSource.BuildAsync(
+            contract, deductionType, year, month, cancellationToken);
+
+        if (source.FailureReason is not null)
+        {
+            return new PlannedDeduction(
+                deductionType, description, Rate: 0m,
+                Amount: null, Basis: source.FailureReason);
+        }
+
+        var reflection = deductionType == (int)HakedisDeductionType.Meal
+            ? SubcontractorReflectionCalculator.CalculateMeal(
+                responsibility, source.Lines)
+            : SubcontractorReflectionCalculator.CalculateAccommodation(
+                responsibility, source.Lines);
+
+        return reflection is null
+            ? new PlannedDeduction(
+                deductionType, description, Rate: 0m,
+                Amount: null,
+                Basis: "Alt kalemlerden tutar üretilemedi; elle girin.")
+            : new PlannedDeduction(
+                deductionType, description, Rate: 0m,
+                Amount: reflection.Amount,
+                Basis: reflection.Basis);
     }
 
     /// <summary>

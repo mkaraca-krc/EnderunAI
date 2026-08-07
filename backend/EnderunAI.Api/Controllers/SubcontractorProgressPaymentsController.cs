@@ -10,6 +10,18 @@ using EnderunAI.Api.Formatting;
 
 namespace EnderunAI.Api.Controllers;
 
+/// <summary>Hakediş onaylama ve fatura üretme isteği.</summary>
+/// <param name="GenerateInvoice">Fatura üretilsin mi; varsayılan
+/// evet. Tamamen elden ödenen hakedişte false verilir.</param>
+/// <param name="InvoicedAmount">Faturalanacak tutar (KDV hariç).
+/// Boşsa netin tamamı. Karma ödemede yalnızca faturalı kısım
+/// verilir; kalan elden ödenmiştir ve muhasebeye uğramaz.</param>
+/// <param name="VatRate">KDV oranı; boşsa varsayılan.</param>
+public sealed record ApproveSubcontractorPaymentRequest(
+    bool? GenerateInvoice = true,
+    decimal? InvoicedAmount = null,
+    decimal? VatRate = null);
+
 public sealed record CreateSubcontractorProgressPaymentRequest(
     Guid SubcontractorContractId,
     string? ProgressPaymentNumber,
@@ -414,10 +426,30 @@ public sealed class SubcontractorProgressPaymentsController(
         });
     }
 
+    /// <summary>
+    /// Hakedişi onaylar ve FATURALI kısmı için tedarikçi faturası
+    /// üretir.
+    ///
+    /// Fatura üretimi onaya bağlı: hakediş onaylandığında ne kadar
+    /// borçlandığımız kesinleşir. Elle girilmesine bırakılsaydı hakediş
+    /// ile muhasebe ayrışırdı — hakedişte onaylı, defterde yok.
+    ///
+    /// Faturalı tutar varsayılan olarak NET ÖDENECEK tutardır; karma
+    /// ödemede istekle yalnızca faturalı kısım verilir, kalan elden
+    /// ödenmiştir ve muhasebeye HİÇ uğramaz.
+    ///
+    /// Fatura üretilemezse onay GERİ ALINMAZ: hakedişin onaylanması iş
+    /// mutabakatıdır, faturanın kesilememesi muhasebe eksiğidir. İkisini
+    /// birbirine bağlamak, hesap planı eksik diye mutabakatı
+    /// engellerdi. Eksik, yanıtta açıkça bildirilir.
+    /// </summary>
     [HttpPost("{id:guid}/approve")]
     [RequirePermission(PermissionCatalog.Keys.SubcontractorApprove)]
     public async Task<IActionResult> Approve(
-        Guid id, CancellationToken cancellationToken)
+        Guid id,
+        [FromBody] ApproveSubcontractorPaymentRequest? request,
+        [FromServices] Services.Subcontractors.SubcontractorInvoiceGenerator invoices,
+        CancellationToken cancellationToken)
     {
         var item = await db.SubcontractorProgressPayments
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -440,8 +472,52 @@ public sealed class SubcontractorProgressPaymentsController(
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return Ok(new { message = "Taşeron hakedişi onaylandı." });
+        if (request?.GenerateInvoice == false)
+        {
+            return Ok(new
+            {
+                message = "Taşeron hakedişi onaylandı; fatura üretilmedi.",
+                invoiceSkipped = "Fatura üretimi istekte kapatıldı."
+            });
+        }
+
+        var contract = await db.SubcontractorContracts
+            .AsNoTracking()
+            .Where(x => x.Id == item.SubcontractorContractId)
+            .Select(x => new { x.CompanyId })
+            .SingleAsync(cancellationToken);
+
+        // Faturalanacak tutar: verilmediyse netin tamamı. Karma ödemede
+        // çağıran yalnızca faturalı kısmı geçer.
+        var invoicedAmount = request?.InvoicedAmount ?? item.NetPayableAmount;
+
+        var expenseAccountId = await invoices.ResolveExpenseAccountAsync(
+            contract.CompanyId, cancellationToken);
+
+        var result = await invoices.GenerateAsync(
+            item,
+            invoicedAmount,
+            request?.VatRate ?? DefaultVatRate,
+            expenseAccountId,
+            cancellationToken);
+
+        return Ok(new
+        {
+            message = result.Skipped is null
+                ? "Taşeron hakedişi onaylandı ve tedarikçi faturası üretildi."
+                : "Taşeron hakedişi onaylandı.",
+            supplierInvoiceId = result.SupplierInvoiceId,
+            invoiceNumber = result.InvoiceNumber,
+            invoicedAmount = result.Amount,
+            invoiceSkipped = result.Skipped
+        });
     }
+
+    /// <summary>
+    /// Taşeron faturalarında varsayılan KDV oranı. İstekle
+    /// değiştirilebilir.
+    /// </summary>
+    private const decimal DefaultVatRate = 20m;
 
     [HttpDelete("{id:guid}")]
     [RequirePermission(PermissionCatalog.Keys.SubcontractorManage)]

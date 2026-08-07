@@ -2437,6 +2437,13 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.ProjectSite).WithMany().HasForeignKey(x => x.ProjectSiteId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.ProjectHakedisSection).WithMany().HasForeignKey(x => x.ProjectHakedisSectionId).OnDelete(DeleteBehavior.SetNull);
+            // Sözleşme silinse bile stok hareketi ayakta kalmalı: hareket
+            // gerçekleşmiş bir depo olayı, sözleşme yalnızca etiketi.
+            entity.HasOne(x => x.SubcontractorContract).WithMany()
+                .HasForeignKey(x => x.SubcontractorContractId)
+                .OnDelete(DeleteBehavior.SetNull);
+            // Malzeme kesintisi bu yolu tarıyor.
+            entity.HasIndex(x => new { x.SubcontractorContractId, x.MovementDate });
             entity.HasOne(x => x.PurchaseRequest).WithMany().HasForeignKey(x => x.PurchaseRequestId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.GoodsReceipt).WithMany().HasForeignKey(x => x.GoodsReceiptId).OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(x => !x.IsDeleted);

@@ -78,6 +78,25 @@ public sealed class SubcontractorProgressPayment : BaseEntity
 
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// Bu hakedişin FATURALI kısmından üretilen tedarikçi faturası.
+    ///
+    /// Bağ hakediş tarafında duruyor çünkü mükerrer fatura kontrolü tek
+    /// alan kontrolüne iniyor: dolu ise ikinci kez üretilmez. Aynı
+    /// hakedişten iki fatura, aynı gideri iki kez deftere yazardı.
+    ///
+    /// Elden ödenen kısım buraya HİÇ girmez; o tutar ayrı tabloda
+    /// durur ve muhasebeye uğramaz.
+    /// </summary>
+    public Guid? SupplierInvoiceId { get; set; }
+    public SupplierInvoice? SupplierInvoice { get; set; }
+
+    /// <summary>
+    /// Faturalanan tutar (KDV hariç). Karma ödemede net tutarın
+    /// yalnızca faturalı kısmıdır; kalan elden ödenmiştir.
+    /// </summary>
+    public decimal InvoicedAmount { get; set; }
+
     public DateTime? SubmittedAtUtc { get; set; }
     public DateTime? ApprovedAtUtc { get; set; }
     public Guid? ApprovedByUserId { get; set; }

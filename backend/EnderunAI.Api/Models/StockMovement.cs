@@ -35,6 +35,21 @@ public sealed class StockMovement : BaseEntity
     public Guid? ProjectHakedisSectionId { get; set; }
     public ProjectHakedisSection? ProjectHakedisSection { get; set; }
 
+    /// <summary>
+    /// Sarf bir taşerona verildiyse hangi sözleşme kapsamında.
+    ///
+    /// OPSİYONEL ve yalnızca çıkış (Issue) hareketlerinde anlamlı.
+    /// Sözleşmede malzeme yükümlülüğü BİZDEYSE, bu etiketi taşıyan
+    /// çıkışların bedeli taşeron hakedişinden malzeme kesintisi olarak
+    /// düşülür.
+    ///
+    /// Etiketsiz sarf taşerona YAZILMAZ: projedeki tüm sarfı taşerona
+    /// yüklemek, olmayan bir borç yaratmak olurdu. Bu yüzden kesinti
+    /// önerisi yalnızca etiketlenmiş çıkışlardan üretilir.
+    /// </summary>
+    public Guid? SubcontractorContractId { get; set; }
+    public SubcontractorContract? SubcontractorContract { get; set; }
+
     public Guid? RelatedWarehouseId { get; set; }
     public Warehouse? RelatedWarehouse { get; set; }
 

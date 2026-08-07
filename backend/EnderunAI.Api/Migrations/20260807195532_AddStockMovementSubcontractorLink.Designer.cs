@@ -3,6 +3,7 @@ using System;
 using EnderunAI.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EnderunAI.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807195532_AddStockMovementSubcontractorLink")]
+    partial class AddStockMovementSubcontractorLink
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -10795,9 +10798,6 @@ namespace EnderunAI.Api.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<decimal>("InvoicedAmount")
-                        .HasColumnType("numeric");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -10845,9 +10845,6 @@ namespace EnderunAI.Api.Migrations
                     b.Property<DateTime?>("SubmittedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("SupplierInvoiceId")
-                        .HasColumnType("uuid");
-
                     b.Property<decimal>("TotalDeductionAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -10862,8 +10859,6 @@ namespace EnderunAI.Api.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("SupplierInvoiceId");
 
                     b.HasIndex("CompanyId", "ProgressPaymentNumber")
                         .IsUnique();
@@ -14249,15 +14244,9 @@ namespace EnderunAI.Api.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("EnderunAI.Api.Models.SupplierInvoice", "SupplierInvoice")
-                        .WithMany()
-                        .HasForeignKey("SupplierInvoiceId");
-
                     b.Navigation("Company");
 
                     b.Navigation("SubcontractorContract");
-
-                    b.Navigation("SupplierInvoice");
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.SubcontractorProgressPaymentDeduction", b =>

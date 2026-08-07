@@ -375,7 +375,11 @@ builder.Services
 builder.Services.AddScoped<EnderunAI.Api.Services.Subcontractors.SubcontractorTeamService>();
 // Taşeron hakedişinin kesinti kalemlerini sözleşmenin kapsam
 // tiklerinden kurar; tutarlar öneri olarak gelir.
+builder.Services
+    .AddScoped<EnderunAI.Api.Services.Subcontractors.SubcontractorReflectionSourceService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Subcontractors.SubcontractorDeductionPlanner>();
+builder.Services
+    .AddScoped<EnderunAI.Api.Services.Subcontractors.SubcontractorInvoiceGenerator>();
 // Taşeron ödemeleri, avansları ve mahsup takibi. Elden tutarlar ayrı
 // tabloda; servis onları yalnızca yetki doğrulanmışsa sorguluyor.
 builder.Services.AddScoped<EnderunAI.Api.Services.Subcontractors.SubcontractorLedgerService>();
