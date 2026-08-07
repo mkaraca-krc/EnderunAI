@@ -67,6 +67,8 @@ public sealed class AppDbContext(
     /// </summary>
     public DbSet<PersonnelExtraPayment> PersonnelExtraPayments =>
         Set<PersonnelExtraPayment>();
+    public DbSet<PersonnelCashPaymentEntry> PersonnelCashPayments =>
+        Set<PersonnelCashPaymentEntry>();
 
     public DbSet<PersonnelTermination> PersonnelTerminations =>
         Set<PersonnelTermination>();
@@ -1088,6 +1090,26 @@ public sealed class AppDbContext(
             entity.Property(x => x.Note).HasMaxLength(500);
 
             entity.HasIndex(x => new { x.PersonnelId, x.EffectiveStartDate });
+
+            entity.HasOne(x => x.Personnel).WithMany()
+                .HasForeignKey(x => x.PersonnelId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<PersonnelCashPaymentEntry>(entity =>
+        {
+            entity.ToTable("personnel_cash_payments");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Kind).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Note).HasMaxLength(500);
+
+            entity.HasIndex(x => new { x.PersonnelId, x.PaymentDate });
+            entity.HasIndex(x => new { x.CompanyId, x.PeriodYear, x.PeriodMonth });
 
             entity.HasOne(x => x.Personnel).WithMany()
                 .HasForeignKey(x => x.PersonnelId).OnDelete(DeleteBehavior.Restrict);

@@ -103,7 +103,16 @@ public sealed record PayrollResponse(
     decimal NetPayableAmount, string CurrencyCode, int Status,
     string StatusName, DateTime? ApprovedAtUtc, Guid? ApprovedByUserId,
     DateTime? PaidAtUtc, string? PaymentReference, string? Description,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    // --- Elden ödeme: SALT GÖSTERİM, okuma anında yetkiyle eklenir ---
+    //
+    // Bu üç alan veritabanında TUTULMAZ. Bordro kaydı salary.view ile
+    // okunuyor; elden tutar oraya kolon olarak yazılsaydı yetkisiz
+    // kullanıcıya sızardı. Resmî tutarlar, SGK matrahı ve muhasebe
+    // fişi bu alanlardan hiç etkilenmez.
+    decimal? ExtraPaymentAmount = null,
+    decimal? TotalTakeHome = null,
+    bool ExtraPaymentHidden = true);
 
 /// <summary>
 /// Aylık toplu bordro hesabı. Kesinti tutarları artık istekle

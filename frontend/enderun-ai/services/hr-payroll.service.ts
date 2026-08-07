@@ -33,6 +33,18 @@ export type PayrollRecord = {
   officialNetPayableAmount: number;
   actualPayableAmount: number;
   netPayableAmount: number;
+  /**
+   * Elden ödeme — SALT GÖSTERİM, okuma anında yetkiyle eklenir.
+   *
+   * Veritabanında tutulmaz: bordro salary.view ile okunuyor, kolon
+   * olsaydı yetkisiz kullanıcıya sızardı. Resmî tutarlar, SGK matrahı
+   * ve muhasebe fişi bu alanlardan etkilenmez.
+   */
+  extraPaymentAmount?: number | null;
+  /** Resmî net + elden ödeme. */
+  totalTakeHome?: number | null;
+  /** Yetki yoksa true; yukarıdaki iki alan null gelir. */
+  extraPaymentHidden?: boolean;
   currencyCode: string;
   status: PayrollStatus;
   statusName: string;

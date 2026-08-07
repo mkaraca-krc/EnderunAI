@@ -2156,6 +2156,10 @@ export default function PayrollManagementPage() {
                   </strong>
                 </article>
 
+                {/* Elden ödeme yalnızca yetkiliye; yetki yoksa panel
+                    hiç çizilmez ve "gizlendi" bile denmez değil —
+                    aksine açıkça söylenir ki kullanıcı toplamın eksik
+                    olduğunu bilsin. */}
                 <article
                   style={{
                     ...panelStyle,
@@ -2170,7 +2174,46 @@ export default function PayrollManagementPage() {
                       marginBottom: "8px",
                     }}
                   >
-                    GERÇEK ÖDEME
+                    ELDEN ÖDEME
+                  </span>
+
+                  <strong style={{ fontSize: "22px" }}>
+                    {selectedRecord.extraPaymentHidden
+                      ? "—"
+                      : formatMoney(
+                          selectedRecord
+                            .extraPaymentAmount ?? 0,
+                          selectedRecord.currencyCode
+                        )}
+                  </strong>
+
+                  {selectedRecord.extraPaymentHidden && (
+                    <small
+                      style={{
+                        display: "block",
+                        color: "#64748b",
+                      }}
+                    >
+                      Görme yetkiniz yok
+                    </small>
+                  )}
+                </article>
+
+                <article
+                  style={{
+                    ...panelStyle,
+                    padding: "17px",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "block",
+                      color: "#64748b",
+                      fontSize: "12px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    TOPLAM ELE GEÇEN
                   </span>
 
                   <strong
@@ -2180,13 +2223,23 @@ export default function PayrollManagementPage() {
                     }}
                   >
                     {formatMoney(
-                      selectedRecord
-                        .actualPayableAmount ||
+                      selectedRecord.totalTakeHome ??
                         selectedRecord
-                          .netPayableAmount,
+                          .officialNetPayableAmount,
                       selectedRecord.currencyCode
                     )}
                   </strong>
+
+                  {selectedRecord.extraPaymentHidden && (
+                    <small
+                      style={{
+                        display: "block",
+                        color: "#64748b",
+                      }}
+                    >
+                      Elden kısım dahil değil
+                    </small>
+                  )}
                 </article>
               </section>
 

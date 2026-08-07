@@ -367,6 +367,8 @@ builder.Services.AddScoped<EnderunAI.Api.Security.IExtraPaymentVisibilityService
 // Resmî net + elden ödeme + toplam ele geçen hesabı; ücret kartı
 // listesi ve personel 360 kartı aynı kaynaktan beslensin diye ortak.
 builder.Services.AddScoped<EnderunAI.Api.Services.HumanResources.SalaryTakeHomeService>();
+builder.Services
+    .AddScoped<EnderunAI.Api.Services.HumanResources.ActualDailyWageService>();
 // Taşeron ekibi (SGK bizde) ve o ekibin bordro maliyeti.
 builder.Services.AddScoped<EnderunAI.Api.Services.Subcontractors.SubcontractorTeamService>();
 // Taşeron hakedişinin kesinti kalemlerini sözleşmenin kapsam

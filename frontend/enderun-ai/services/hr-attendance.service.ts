@@ -167,4 +167,31 @@ export const hrAttendanceService = {
       })}`
     );
   },
+  /**
+   * Personelin GERÇEK yevmiyesi: resmî günlük/saatlik ücret ve
+   * üzerine elden ödemenin günlük payı.
+   *
+   * Elden kısım extra_payment.view ister; yoksa yalnızca resmî
+   * rakamlar döner ve `extraPaymentHidden` ile eksiklik bildirilir.
+   * Bu rakam SALT GÖSTERİMdir; bordroya ve muhasebeye girmez.
+   */
+  getDailyWage(personnelId: string, asOf?: string) {
+    return apiClient<ActualDailyWage>(
+      `hr/attendance/daily-wage${buildQuery({ personnelId, asOf })}`
+    );
+  },
+};
+
+export type ActualDailyWage = {
+  personnelId: string;
+  asOf: string;
+  monthlyGross: number;
+  officialDailyRate: number;
+  officialHourlyRate: number;
+  dailyWorkHours: number;
+  extraMonthlyAmount?: number | null;
+  extraDailyRate?: number | null;
+  actualDailyRate?: number | null;
+  actualHourlyRate?: number | null;
+  extraPaymentHidden: boolean;
 };

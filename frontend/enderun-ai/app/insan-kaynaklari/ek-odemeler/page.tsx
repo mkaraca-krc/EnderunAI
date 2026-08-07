@@ -11,6 +11,7 @@ import {
 } from "@/services/personnel.service";
 
 import { extraPaymentService, type ExtraPayment } from "@/services/termination.service";
+import CashPaymentLedger from "@/components/hr/cash-payment-ledger";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -244,6 +245,16 @@ export default function ExtraPaymentsPage() {
           </div>
         )}
       </section>
+
+      {/* Tanım ile FİİLİ ödeme ayrı: tanım olmadan da ödeme
+          yapılabiliyor (bir kerelik prim), tanım varken ödeme
+          yapılmamış olabiliyor. Kasa bu farkı görünür kılıyor. */}
+      {!denied && personnel.length > 0 && (
+        <CashPaymentLedger
+          personnel={personnel}
+          companyId={personnel[0].companyId}
+        />
+      )}
     </ErpShell>
   );
 }

@@ -159,6 +159,43 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
         return Ok(new { message = "Puantaj kaydı silindi." });
     }
 
+    /// <summary>
+    /// Personelin GERÇEK yevmiyesi: resmî günlük/saatlik ücret ve
+    /// üzerine elden ödemenin günlük payı.
+    ///
+    /// Yetki puantaj değil ÜCRET görme iznidir: burada dönen rakam bir
+    /// gün sayısı değil, ücret. Elden kısım ayrıca
+    /// <c>extra_payment.view</c> ister; yoksa yalnızca resmî rakamlar
+    /// döner ve <c>extraPaymentHidden</c> ile bunun eksik olduğu
+    /// bildirilir.
+    ///
+    /// SALT GÖSTERİM: bu rakam bordroya, SGK matrahına ve muhasebeye
+    /// girmez.
+    /// </summary>
+    [HttpGet("daily-wage")]
+    [RequirePermission(PermissionCatalog.Keys.SalaryView)]
+    public async Task<IActionResult> GetDailyWage(
+        [FromQuery] Guid personnelId,
+        [FromQuery] DateTime? asOf,
+        [FromServices] ActualDailyWageService wages,
+        CancellationToken cancellationToken)
+    {
+        if (personnelId == Guid.Empty)
+            return BadRequest(new { message = "Personel seçilmedi." });
+
+        var result = await wages.ResolveAsync(
+            personnelId, asOf ?? DateTime.UtcNow.Date, cancellationToken);
+
+        return result is null
+            ? NotFound(new
+            {
+                message =
+                    "Bu tarihte yürürlükte bir ücret kartı yok; yevmiye " +
+                    "hesaplanamıyor."
+            })
+            : Ok(result);
+    }
+
     [HttpGet("summary")]
     [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetSummary(

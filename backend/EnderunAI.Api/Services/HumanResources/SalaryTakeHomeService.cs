@@ -20,19 +20,33 @@ public sealed class SalaryTakeHomeService(AppDbContext appDb)
     /// Personel başına yürürlükteki elden ödeme tutarı. Birden çok
     /// kayıt varsa en son başlayan geçerlidir.
     /// </summary>
+    public Task<Dictionary<Guid, decimal>> LoadEffectiveExtraPaymentsAsync(
+        IReadOnlyCollection<Guid> personnelIds, CancellationToken cancellationToken) =>
+        LoadEffectiveExtraPaymentsAsync(
+            personnelIds, DateTime.UtcNow.Date, cancellationToken);
+
+    /// <summary>
+    /// Personel başına, VERİLEN TARİHTE yürürlükteki elden ödeme.
+    ///
+    /// Bordro geçmiş bir ay için hesaplanabildiğinden "bugün"e bakmak
+    /// yanlış tutar üretir: Mart bordrosuna Ağustos'ta yürürlüğe giren
+    /// zam yansımamalı.
+    /// </summary>
     public async Task<Dictionary<Guid, decimal>> LoadEffectiveExtraPaymentsAsync(
-        IReadOnlyCollection<Guid> personnelIds, CancellationToken cancellationToken)
+        IReadOnlyCollection<Guid> personnelIds,
+        DateTime asOf,
+        CancellationToken cancellationToken)
     {
         if (personnelIds.Count == 0)
             return [];
 
-        var today = DateTime.UtcNow.Date;
+        var date = asOf.Date;
 
         var rows = await appDb.PersonnelExtraPayments
             .AsNoTracking()
             .Where(x => personnelIds.Contains(x.PersonnelId) &&
-                        x.EffectiveStartDate <= today &&
-                        (x.EffectiveEndDate == null || x.EffectiveEndDate >= today))
+                        x.EffectiveStartDate <= date &&
+                        (x.EffectiveEndDate == null || x.EffectiveEndDate >= date))
             .Select(x => new { x.PersonnelId, x.MonthlyAmount, x.EffectiveStartDate })
             .ToListAsync(cancellationToken);
 

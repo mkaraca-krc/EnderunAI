@@ -9,7 +9,9 @@ namespace EnderunAI.Api.Services.HumanResources;
 public sealed class HrApprovalService(
     HrDbContext hrDb,
     AppDbContext appDb,
-    EnderunAI.Api.Services.Accounting.IAccountingIntegrationService accountingIntegration)
+    EnderunAI.Api.Services.Accounting.IAccountingIntegrationService accountingIntegration,
+    EnderunAI.Api.Security.IExtraPaymentVisibilityService extraPaymentVisibility,
+    SalaryTakeHomeService takeHome)
     : IHrApprovalService
 {
     /// <summary>
@@ -589,16 +591,82 @@ public sealed class HrApprovalService(
         if (year.HasValue) query = query.Where(x => x.Year == year);
         if (month.HasValue) query = query.Where(x => x.Month == month);
         if (status.HasValue) query = query.Where(x => (int)x.Status == status);
-        return (await query.OrderByDescending(x => x.Year)
-                .ThenByDescending(x => x.Month)
-                .ThenBy(x => x.PersonnelId)
-                .ToListAsync(cancellationToken))
-            .Select(ToPayrollResponse).ToList();
+        var records = await query.OrderByDescending(x => x.Year)
+            .ThenByDescending(x => x.Month)
+            .ThenBy(x => x.PersonnelId)
+            .ToListAsync(cancellationToken);
+
+        return await WithTakeHomeAsync(records, cancellationToken);
     }
 
     public async Task<PayrollResponse> GetPayrollAsync(
-        Guid id, CancellationToken cancellationToken) =>
-        ToPayrollResponse(await FindPayrollAsync(id, cancellationToken));
+        Guid id, CancellationToken cancellationToken)
+    {
+        var record = await FindPayrollAsync(id, cancellationToken);
+
+        return (await WithTakeHomeAsync([record], cancellationToken))[0];
+    }
+
+    /// <summary>
+    /// Bordro satırlarına "resmî net + elden + toplam ele geçen"
+    /// üçlüsünü OKUMA ANINDA ekler.
+    ///
+    /// Elden tutar bordro tablosuna YAZILMAZ: bordro salary.view ile
+    /// okunuyor, kolon olsaydı yetkisiz kullanıcıya sızardı. Yetki
+    /// yoksa elden tablosuna hiç sorgu atılmaz — maskeleme arayüzde
+    /// değil, sorgu seviyesinde.
+    ///
+    /// Resmî tutarlar, SGK matrahı ve muhasebe fişi bu işlemden
+    /// ETKİLENMEZ; yalnızca yanıta üç alan eklenir.
+    /// </summary>
+    private async Task<List<PayrollResponse>> WithTakeHomeAsync(
+        IReadOnlyList<HrPayrollRecord> records,
+        CancellationToken cancellationToken)
+    {
+        if (records.Count == 0)
+            return [];
+
+        if (!await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken))
+            return records.Select(ToPayrollResponse).ToList();
+
+        var result = new List<PayrollResponse>(records.Count);
+
+        // Elden ödeme dönem bazlı: her bordro ayının SON gününde
+        // yürürlükte olan tutar geçerli. "Bugün"e bakmak, geçmiş ay
+        // bordrosuna sonradan yapılan zammı yansıtırdı.
+        foreach (var monthGroup in records.GroupBy(x => new { x.Year, x.Month }))
+        {
+            var asOf = new DateTime(
+                monthGroup.Key.Year, monthGroup.Key.Month,
+                DateTime.DaysInMonth(monthGroup.Key.Year, monthGroup.Key.Month),
+                0, 0, 0, DateTimeKind.Utc);
+
+            var extras = await takeHome.LoadEffectiveExtraPaymentsAsync(
+                monthGroup.Select(x => x.PersonnelId).Distinct().ToList(),
+                asOf,
+                cancellationToken);
+
+            foreach (var record in monthGroup)
+            {
+                var extra = extras.GetValueOrDefault(record.PersonnelId, 0m);
+
+                result.Add(ToPayrollResponse(record) with
+                {
+                    ExtraPaymentAmount = extra,
+                    TotalTakeHome = decimal.Round(
+                        record.OfficialNetPayableAmount + extra, 2),
+                    ExtraPaymentHidden = false
+                });
+            }
+        }
+
+        // Gruplama sırayı bozduğu için kayıt sırası geri kuruluyor.
+        var order = records
+            .Select((record, index) => (record.Id, index))
+            .ToDictionary(x => x.Id, x => x.index);
+
+        return result.OrderBy(x => order[x.Id]).ToList();
+    }
 
     public async Task<PayrollSummary> GetPayrollSummaryAsync(
         Guid companyId, int year, int month, CancellationToken cancellationToken)
