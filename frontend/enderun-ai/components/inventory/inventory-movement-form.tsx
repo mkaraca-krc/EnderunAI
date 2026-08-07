@@ -42,6 +42,8 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
   /** İcmal kısmı — sarfın hangi imalata gittiği. Opsiyonel. */
   const [sections, setSections] = useState<SelectOption[]>([]);
   const [projectHakedisSectionId, setProjectHakedisSectionId] = useState("");
+  const [contracts, setContracts] = useState<SelectOption[]>([]);
+  const [subcontractorContractId, setSubcontractorContractId] = useState("");
   const [inventoryItemId, setInventoryItemId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
@@ -67,10 +69,12 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
   useEffect(() => {
     setProjectSiteId("");
     setProjectHakedisSectionId("");
+    setSubcontractorContractId("");
 
     if (mode !== "issue" || !projectId) {
       setSites([]);
       setSections([]);
+      setContracts([]);
       return;
     }
 
@@ -85,6 +89,13 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
       .getProjectSections(projectId)
       .then(setSections)
       .catch(() => setSections([]));
+
+    // Taşeron listesi alınamazsa (yetki yok ya da sözleşme yok) alan
+    // hiç gösterilmez; sarfın kaydedilmesini engellemez.
+    void inventoryMovementService
+      .getSubcontractorContracts(projectId)
+      .then(setContracts)
+      .catch(() => setContracts([]));
   }, [projectId, mode]);
 
   const validationErrors: string[] = [];
@@ -139,6 +150,7 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
           warehouseId,
           projectSiteId: projectSiteId || undefined,
           projectHakedisSectionId: projectHakedisSectionId || undefined,
+          subcontractorContractId: subcontractorContractId || undefined,
           ...common,
         });
 
@@ -162,6 +174,7 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
       setQuantity("");
       setDescription("");
       setReferenceNumber("");
+      setSubcontractorContractId("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "İşlem kaydedilemedi.");
     } finally {
@@ -295,6 +308,30 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
               </select>
               <small>
                 Seçilirse maliyet o kısma işlenir; bilinmiyorsa boş bırakın.
+              </small>
+            </label>
+          )}
+
+          {mode === "issue" && projectId && contracts.length > 0 && (
+            <label>
+              <span>Taşeron (ops.)</span>
+              <select
+                value={subcontractorContractId}
+                onChange={(event) =>
+                  setSubcontractorContractId(event.target.value)
+                }
+              >
+                <option value="">Taşeron seçilmedi (bizim sarfımız)</option>
+                {contracts.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+              <small>
+                Seçilirse bu sarfın bedeli o taşeronun hakedişinde malzeme
+                kesintisi olarak önerilir. Boş bırakılan sarf taşerona
+                yazılmaz.
               </small>
             </label>
           )}

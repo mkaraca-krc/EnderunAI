@@ -45,7 +45,18 @@ public sealed record StockIssueRequest(
     /// maliyet o poza ölçülmüş olarak yazılır, boşsa kısım düzeyinde
     /// kalır ve poz görünümünde dağıtılır.
     /// </summary>
-    Guid? ProjectBoqItemId = null);
+    Guid? ProjectBoqItemId = null,
+    /// <summary>
+    /// Sarf bir taşerona veriliyorsa hangi sözleşme kapsamında.
+    /// OPSİYONEL — boş bırakmak "bizim sarfımız" demektir.
+    ///
+    /// Doldurulursa ve sözleşmede malzeme yükümlülüğü BİZDEYSE, bu
+    /// çıkışın bedeli taşeron hakedişinde malzeme kesintisi olarak
+    /// otomatik önerilir. Boş bırakılan sarf taşerona YAZILMAZ —
+    /// projedeki tüm sarfı taşerona yüklemek olmayan bir borç
+    /// yaratırdı.
+    /// </summary>
+    Guid? SubcontractorContractId = null);
 
 public sealed record StockTransferRequest(
     Guid SourceWarehouseId,

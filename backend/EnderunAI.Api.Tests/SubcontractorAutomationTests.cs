@@ -481,4 +481,200 @@ public sealed class SubcontractorAutomationTests(DatabaseFixture fixture)
         Assert.Null(material.Amount);
         Assert.Contains("etiketlenmiş", material.Basis!);
     }
+    // ---------- T9b uc: depo cikisinda taseron secimi ----------
+
+    /// <summary>
+    /// UÇTAN UCA: depo çıkışında taşeron seçilirse hareket etiketlenir
+    /// ve tutar malzeme kesintisi önerisine girer. Alanın arayüzde
+    /// olması yetmez; ucun kabul edip kaydetmesi gerekir.
+    /// </summary>
+    [Fact]
+    public async Task StockIssue_WithSubcontractor_FeedsMaterialDeduction()
+    {
+        var context = await CreateContextAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+
+        var (warehouseId, itemId) = await SeedStockAsync(context, quantity: 500m);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/inventory/issues",
+            new
+            {
+                warehouseId,
+                inventoryItemId = itemId,
+                projectId = context.ProjectId,
+                projectSiteId = context.SiteId,
+                subcontractorContractId = context.ContractId,
+                quantity = 100m,
+                movementDate = new DateTime(2026, 3, 15),
+                description = "Taşerona kablo"
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var movement = await db.StockMovements
+                .AsNoTracking()
+                .SingleAsync(x => x.SubcontractorContractId == context.ContractId);
+
+            Assert.Equal(StockMovementType.Issue, movement.Type);
+            Assert.Equal(100m, movement.Quantity);
+        }
+
+        var planned = await PlanAsync(context);
+
+        var material = planned.Single(
+            x => x.DeductionType == (int)HakedisDeductionType.MaterialDeduction);
+
+        // 100 × 25 = 2.500 (SeedStockAsync birim maliyeti 25)
+        Assert.Equal(2_500m, material.Amount);
+    }
+
+    /// <summary>
+    /// Taşeron seçilmezse hareket etiketsiz kalır ve kesinti önerisi
+    /// üretilmez — "bizim sarfımız" varsayılanı korunmalı.
+    /// </summary>
+    [Fact]
+    public async Task StockIssue_WithoutSubcontractor_StaysUntagged()
+    {
+        var context = await CreateContextAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+
+        var (warehouseId, itemId) = await SeedStockAsync(context, quantity: 500m);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/inventory/issues",
+            new
+            {
+                warehouseId,
+                inventoryItemId = itemId,
+                projectId = context.ProjectId,
+                quantity = 100m,
+                movementDate = new DateTime(2026, 3, 15)
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var planned = await PlanAsync(context);
+
+        var material = planned.Single(
+            x => x.DeductionType == (int)HakedisDeductionType.MaterialDeduction);
+
+        Assert.Null(material.Amount);
+    }
+
+    /// <summary>
+    /// Başka projenin taşeronu seçilemez: o taşeronun hakedişinden
+    /// haksız kesinti önerirdi.
+    /// </summary>
+    [Fact]
+    public async Task StockIssue_WithForeignContract_IsRejected()
+    {
+        var context = await CreateContextAsync();
+        var other = await CreateContextAsync();
+        var client = await CreateClientForRoleAsync("Genel Müdür");
+
+        var (warehouseId, itemId) = await SeedStockAsync(context, quantity: 500m);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/inventory/issues",
+            new
+            {
+                warehouseId,
+                inventoryItemId = itemId,
+                projectId = context.ProjectId,
+                // Başka projenin sözleşmesi
+                subcontractorContractId = other.ContractId,
+                quantity = 10m,
+                movementDate = new DateTime(2026, 3, 15)
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>Depo, malzeme ve stok bakiyesi kurar.</summary>
+    private async Task<(Guid WarehouseId, Guid ItemId)> SeedStockAsync(
+        Context context, decimal quantity)
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var branchId = await db.Branches
+            .Where(x => x.CompanyId == context.CompanyId)
+            .Select(x => x.Id)
+            .FirstAsync();
+
+        var warehouse = new Warehouse
+        {
+            CompanyId = context.CompanyId,
+            BranchId = branchId,
+            Code = $"DEP-{Guid.NewGuid():N}"[..10],
+            Name = "Test Depo"
+        };
+        var item = new InventoryItem
+        {
+            CompanyId = context.CompanyId,
+            Code = $"STK-{Guid.NewGuid():N}"[..10],
+            Name = "NYY kablo",
+            Unit = "MTR",
+            AverageUnitCost = 25m
+        };
+
+        db.Warehouses.Add(warehouse);
+        db.InventoryItems.Add(item);
+        await db.SaveChangesAsync();
+
+        db.WarehouseStocks.Add(new WarehouseStock
+        {
+            WarehouseId = warehouse.Id,
+            InventoryItemId = item.Id,
+            Quantity = quantity
+        });
+
+        await db.SaveChangesAsync();
+
+        return (warehouse.Id, item.Id);
+    }
+
+    private async Task<HttpClient> CreateClientForRoleAsync(string roleName)
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var passwordService = scope.ServiceProvider.GetRequiredService<PasswordService>();
+
+        const string password = "SubAuto!2026";
+        var username = $"test-subauto-{Guid.NewGuid():N}"[..40];
+        var hash = passwordService.Hash(password);
+
+        var user = new AppUser
+        {
+            Username = username,
+            FullName = $"Test {roleName}",
+            PasswordHash = hash.Hash,
+            PasswordSalt = hash.Salt,
+            IsActive = true,
+            WorkHoursExempt = true
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var role = await db.Roles.SingleAsync(x => x.Name == roleName);
+        db.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+        db.UserDataScopes.Add(new UserDataScope
+        {
+            UserId = user.Id,
+            ScopeType = DataScopeType.All
+        });
+        await db.SaveChangesAsync();
+
+        var client = fixture.Factory.CreateClient();
+        var token = await AuthHelper.LoginAsync(client, username, password);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        return client;
+    }
 }

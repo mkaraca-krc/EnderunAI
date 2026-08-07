@@ -52,6 +52,40 @@ export const inventoryMovementService = {
   /** İcmal kısımları — sarfın hangi imalata gittiğini işaretlemek için. */
   getProjectSections: async (projectId: string) =>
     normalize(await request<unknown>(`/api/projects/${projectId}/hakedis-sections`)),
+  /**
+   * Projenin taşeron sözleşmeleri — sarfın hangi taşerona verildiğini
+   * işaretlemek için.
+   *
+   * Boş bırakmak "bizim sarfımız" demektir ve taşerona yazılmaz;
+   * seçilirse bedeli o taşeronun hakedişinde malzeme kesintisi olarak
+   * otomatik önerilir. Yetkisi olmayan kullanıcıda liste boş döner ve
+   * alan hiç görünmez.
+   */
+  getSubcontractorContracts: async (projectId: string) => {
+    try {
+      const raw = await request<unknown>(
+        `/api/subcontractor-contracts?projectId=${encodeURIComponent(projectId)}`
+      );
+
+      const rows = Array.isArray(raw) ? raw : [];
+
+      return rows.map((x) => {
+        const r = x as Record<string, unknown>;
+        return {
+          id: String(r.id ?? ""),
+          // Sözleşme numarası + taşeron unvanı birlikte gösterilir;
+          // aynı taşeronun birden fazla sözleşmesi olabiliyor.
+          name: [r.contractNumber, r.subcontractorTitle]
+            .filter(Boolean)
+            .join(" · ") || "İsimsiz sözleşme",
+          code: typeof r.contractNumber === "string" ? r.contractNumber : undefined,
+        };
+      }).filter((x) => x.id);
+    } catch {
+      // Taşeron görme yetkisi yoksa alan hiç gösterilmez.
+      return [] as SelectOption[];
+    }
+  },
   getCriticalStockAlerts: () => request<CriticalStockAlert[]>("/api/inventory/critical-stock-alerts"),
   /** Bir deponun stok satırları; sayım ekranı mevcut miktarı buradan okur. */
   getWarehouseStocks: (warehouseId: string) =>

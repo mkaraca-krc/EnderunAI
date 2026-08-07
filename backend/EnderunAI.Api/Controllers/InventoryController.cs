@@ -392,6 +392,38 @@ public sealed class InventoryController(
             sectionId = requestedSectionId;
         }
 
+        // Taşeron seçildiyse sözleşmesi aynı projeye ait olmalı: başka
+        // projenin taşeronuna yazılan sarf, o taşeronun hakedişinden
+        // haksız kesinti önerir.
+        Guid? subcontractorContractId = null;
+
+        if (request.SubcontractorContractId is Guid requestedContractId)
+        {
+            if (!request.ProjectId.HasValue)
+            {
+                return BadRequest(new
+                {
+                    message = "Taşeron seçildiyse proje de belirtilmelidir."
+                });
+            }
+
+            var contractBelongsToProject = await db.SubcontractorContracts
+                .AnyAsync(
+                    x => x.Id == requestedContractId &&
+                         x.ProjectId == request.ProjectId.Value,
+                    cancellationToken);
+
+            if (!contractBelongsToProject)
+            {
+                return BadRequest(new
+                {
+                    message = "Seçilen taşeron sözleşmesi bu projeye ait değil."
+                });
+            }
+
+            subcontractorContractId = requestedContractId;
+        }
+
         // İcmal satırı seçildiyse aynı projeye ait olmalı; başka
         // projenin pozuna yazılan sarf iki projenin de kâr hesabını
         // bozar.
@@ -456,6 +488,7 @@ public sealed class InventoryController(
             ProjectId = request.ProjectId,
             ProjectSiteId = request.ProjectSiteId,
             ProjectHakedisSectionId = sectionId,
+            SubcontractorContractId = subcontractorContractId,
             Type = StockMovementType.Issue,
             Quantity = request.Quantity,
             UnitCost = unitCost,
