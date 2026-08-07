@@ -37,7 +37,13 @@ public enum HakedisDeductionType
     OhsPenalty = 7,
 
     /// <summary>İSG katılım payı (aylık).</summary>
-    OhsContribution = 8
+    OhsContribution = 8,
+
+    /// <summary>
+    /// Avans mahsubu — daha önce verilen avansın hakedişten
+    /// düşülmesi. Taşeron hakedişinde kullanılır.
+    /// </summary>
+    AdvanceOffset = 9
 }
 
 /// <summary>

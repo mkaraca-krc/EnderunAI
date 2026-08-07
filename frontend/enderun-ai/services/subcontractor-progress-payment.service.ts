@@ -233,3 +233,94 @@ export const subcontractorTeamService = {
     );
   },
 };
+
+// --- Ödemeler ve avanslar (T5/T6) ---
+
+export enum SubcontractorLedgerKind {
+  Payment = 0,
+  Advance = 1,
+}
+
+export interface SubcontractorLedgerEntry {
+  id: string;
+  kind: number;
+  kindName: string;
+  isCash: boolean;
+  entryDate: string;
+  amount: number;
+  vatRate?: number;
+  vatAmount?: number;
+  withholdingAmount?: number;
+  payableAmount?: number;
+  currencyCode: string;
+  supplierInvoiceId?: string | null;
+  subcontractorProgressPaymentId?: string | null;
+  description?: string | null;
+}
+
+/**
+ * Elden tutarlar yalnızca extra_payment.view olan kullanıcıya döner;
+ * yetkisizde cashHidden true ve elden alanlar null gelir.
+ */
+export interface SubcontractorLedgerSummary {
+  invoicedPaymentTotal: number;
+  invoicedAdvanceTotal: number;
+  cashPaymentTotal: number | null;
+  cashAdvanceTotal: number | null;
+  offsetTotal: number;
+  openAdvance: number;
+  cashHidden: boolean;
+  currencyCode: string;
+  cumulativeWorkAmount: number;
+  /** Açık avans kalan işi aşıyorsa uyarı; aşmıyorsa null. */
+  overAdvanceWarning: string | null;
+  entries: SubcontractorLedgerEntry[];
+  cashEntries: SubcontractorLedgerEntry[] | null;
+}
+
+export const subcontractorLedgerService = {
+  get(contractId: string) {
+    return apiClient<SubcontractorLedgerSummary>(
+      `subcontractor-ledger/${contractId}`
+    );
+  },
+
+  create(payload: {
+    subcontractorContractId: string;
+    subcontractorProgressPaymentId?: string | null;
+    kind: number;
+    entryDate: string;
+    amount: number;
+    vatRate: number;
+    projectHakedisSectionId?: string | null;
+    supplierInvoiceId?: string | null;
+    description?: string | null;
+  }) {
+    return apiClient<{
+      id: string;
+      payableAmount: number;
+      withholdingAmount: number;
+      message: string;
+    }>("subcontractor-ledger", { method: "POST", body: payload });
+  },
+
+  createCash(payload: {
+    subcontractorContractId: string;
+    subcontractorProgressPaymentId?: string | null;
+    kind: number;
+    entryDate: string;
+    amount: number;
+    description?: string | null;
+  }) {
+    return apiClient<{ message: string }>("subcontractor-ledger/cash", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  remove(id: string) {
+    return apiClient<{ message: string }>(`subcontractor-ledger/${id}`, {
+      method: "DELETE",
+    });
+  },
+};

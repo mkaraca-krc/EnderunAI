@@ -28,7 +28,8 @@ public sealed record PlannedDeduction(
 /// </summary>
 public sealed class SubcontractorDeductionPlanner(
     AppDbContext db,
-    SubcontractorTeamService teamService)
+    SubcontractorTeamService teamService,
+    SubcontractorLedgerService ledgerService)
 {
     /// <summary>
     /// Dönemin kesinti planı.
@@ -44,6 +45,27 @@ public sealed class SubcontractorDeductionPlanner(
     {
         var planned = new List<PlannedDeduction>();
 
+        // --- Avans mahsubu ---
+        // Açık avans varsa mahsup kalemi açılır. Öneri tutarı hakediş
+        // kalemleri girildikten sonra ekranda güncelleniyor; burada
+        // kalem açılıyor ki dönem tutarı sıfırken bile kullanıcı
+        // avansın varlığını görsün.
+        var openAdvance = await ledgerService.GetSummaryAsync(
+            contract.Id, canViewCash: false, cancellationToken);
+
+        if (openAdvance.OpenAdvance > 0m)
+        {
+            planned.Add(new PlannedDeduction(
+                DeductionType: (int)HakedisDeductionType.AdvanceOffset,
+                Description: "Avans mahsubu",
+                Rate: 0m,
+                Amount: null,
+                Basis:
+                    $"Açık resmî avans {TurkishAmountFormat.Amount(openAdvance.OpenAdvance)}; " +
+                    "mahsup edilecek tutarı girin (elden avanslar bu " +
+                    "rakama dahil değil)."));
+        }
+
         // --- Teminat: oransal, kümülatif tabandan ---
         if (contract.RetentionRate > 0m)
         {
@@ -54,7 +76,9 @@ public sealed class SubcontractorDeductionPlanner(
                 // Oransal kesintide tutarı motor hesaplıyor; burada
                 // yalnızca oranı taşıyoruz.
                 Amount: null,
-                Basis: $"Kümülatif iş {cumulativeWorkAmount:N2} × %{contract.RetentionRate:N2}"));
+                Basis:
+                    $"Kümülatif iş {TurkishAmountFormat.Amount(cumulativeWorkAmount)} " +
+                    $"× %{TurkishAmountFormat.Rate(contract.RetentionRate)}"));
         }
 
         // --- SGK/işçilik: bizim bordromuzdaki taşeron ekibi ---

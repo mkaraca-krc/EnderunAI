@@ -98,7 +98,7 @@ public static class SubcontractorReflectionCalculator
             Amount: amount,
             Description: "İSG katılım payı yansıtması",
             Basis:
-                $"İşveren İSG kesintisi {employerOhsDeduction:N2} × " +
+                $"İşveren İSG kesintisi {TurkishAmountFormat.Amount(employerOhsDeduction)} × " +
                 $"({subcontractorWorkerCount} taşeron işçisi / " +
                 $"{siteWorkerCount} şantiye işçisi)");
     }
@@ -159,8 +159,8 @@ public static class SubcontractorReflectionCalculator
 
             total += amount;
             parts.Add(
-                $"{line.Name}: {line.SubcontractorQuantity:N0} × " +
-                $"{line.EmployerUnitPrice:N2}");
+                $"{line.Name}: {TurkishAmountFormat.Count(line.SubcontractorQuantity)} × " +
+                $"{TurkishAmountFormat.Amount(line.EmployerUnitPrice)}");
         }
 
         if (total <= 0m)

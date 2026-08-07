@@ -665,8 +665,9 @@ public sealed class SubcontractorProgressPaymentsController(
             {
                 return
                     $"İlerleme geriye alınamaz: önceki dönemde " +
-                    $"%{entity.PreviousProgressRate:N2} kabul edilmiş, " +
-                    $"%{line.AgreedProgressRate:N2} girilmiş.";
+                    $"%{TurkishAmountFormat.Rate(entity.PreviousProgressRate)} kabul " +
+                    $"edilmiş, %{TurkishAmountFormat.Rate(line.AgreedProgressRate)} " +
+                    "girilmiş.";
             }
 
             var result = SubcontractorHakedisCalculator.CalculateSection(

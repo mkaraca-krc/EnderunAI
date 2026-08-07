@@ -636,8 +636,9 @@ public sealed class SubcontractorContractsController(
             return BadRequest(new
             {
                 message =
-                    $"Kısım bedelleri toplamı ({sectionTotal:N2}) sözleşme " +
-                    $"bedelini ({request.ContractAmount:N2}) aşamaz."
+                    $"Kısım bedelleri toplamı ({TurkishAmountFormat.Amount(sectionTotal)}) " +
+                    "sözleşme bedelini " +
+                    $"({TurkishAmountFormat.Amount(request.ContractAmount)}) aşamaz."
             });
         }
 

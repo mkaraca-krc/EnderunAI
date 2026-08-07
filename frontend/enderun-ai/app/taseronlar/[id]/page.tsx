@@ -18,7 +18,10 @@ import {
 import {
   subcontractorProgressPaymentService,
   subcontractorTeamService,
+  subcontractorLedgerService,
+  SubcontractorLedgerKind,
   SubcontractorProgressPaymentStatus,
+  type SubcontractorLedgerSummary,
   type SubcontractorProgressPaymentDetail,
   type SubcontractorProgressPaymentListItem,
   type SubcontractorTeamMember,
@@ -80,20 +83,34 @@ export default function SubcontractorDetailPage({
   const [periodStart, setPeriodStart] = useState(today());
   const [periodEnd, setPeriodEnd] = useState(today());
 
+  const [ledger, setLedger] = useState<SubcontractorLedgerSummary | null>(null);
+  const [entryKind, setEntryKind] = useState(String(SubcontractorLedgerKind.Payment));
+  const [entryIsCash, setEntryIsCash] = useState(false);
+  const [entryAmount, setEntryAmount] = useState("");
+  const [entryVatRate, setEntryVatRate] = useState("20");
+  const [entryDate, setEntryDate] = useState(today());
+  const [entryDescription, setEntryDescription] = useState("");
+
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
       try {
-        const [contractResult, paymentResult, teamResult, personnelResult] =
-          await Promise.all([
-            subcontractorService.getById(id),
-            subcontractorProgressPaymentService.list({
-              subcontractorContractId: id,
-            }),
-            subcontractorTeamService.get(id),
-            personnelService.getAll(),
-          ]);
+        const [
+          contractResult,
+          paymentResult,
+          teamResult,
+          personnelResult,
+          ledgerResult,
+        ] = await Promise.all([
+          subcontractorService.getById(id),
+          subcontractorProgressPaymentService.list({
+            subcontractorContractId: id,
+          }),
+          subcontractorTeamService.get(id),
+          personnelService.getAll(),
+          subcontractorLedgerService.get(id),
+        ]);
 
         if (cancelled) return;
 
@@ -101,6 +118,7 @@ export default function SubcontractorDetailPage({
         setPayments(paymentResult);
         setTeam(teamResult.members);
         setSocialSecurityWithUs(teamResult.socialSecurityWithUs);
+        setLedger(ledgerResult);
         setPersonnel(
           personnelResult.filter(
             (x) => x.companyId === contractResult.companyId && x.isActive
@@ -194,6 +212,49 @@ export default function SubcontractorDetailPage({
       setRefreshKey((current) => current + 1);
     } catch (approveError) {
       setError(errorMessage(approveError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveLedgerEntry() {
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    const amount = Number(entryAmount.replace(",", ".")) || 0;
+
+    try {
+      if (entryIsCash) {
+        await subcontractorLedgerService.createCash({
+          subcontractorContractId: id,
+          kind: Number(entryKind),
+          entryDate,
+          amount,
+          description: entryDescription.trim() || null,
+        });
+      } else {
+        const result = await subcontractorLedgerService.create({
+          subcontractorContractId: id,
+          kind: Number(entryKind),
+          entryDate,
+          amount,
+          vatRate: Number(entryVatRate.replace(",", ".")) || 0,
+          description: entryDescription.trim() || null,
+        });
+
+        setNotice(
+          `Kaydedildi. Tevkifat ${money(result.withholdingAmount)}, ` +
+            `ödenecek ${money(result.payableAmount)}.`
+        );
+      }
+
+      if (entryIsCash) setNotice("Elden kayıt eklendi.");
+      setEntryAmount("");
+      setEntryDescription("");
+      setRefreshKey((current) => current + 1);
+    } catch (entryError) {
+      setError(errorMessage(entryError));
     } finally {
       setSaving(false);
     }
@@ -339,6 +400,215 @@ export default function SubcontractorDetailPage({
                 Ekibe Ekle
               </button>
             </div>
+          </section>
+        )}
+
+        {ledger && (
+          <section style={{ ...card, display: "grid", gap: 14 }}>
+            <h2 style={{ margin: 0, fontSize: 18 }}>Ödemeler ve Avanslar</h2>
+
+            {ledger.overAdvanceWarning && (
+              <div
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  background: "#fffbeb",
+                  border: "1px solid #fde68a",
+                  color: "#b45309",
+                }}
+              >
+                {ledger.overAdvanceWarning}
+              </div>
+            )}
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+                gap: 12,
+              }}
+            >
+              <Total
+                label="Faturalı Ödeme"
+                value={ledger.invoicedPaymentTotal}
+                currency={ledger.currencyCode}
+              />
+              <Total
+                label="Faturalı Avans"
+                value={ledger.invoicedAdvanceTotal}
+                currency={ledger.currencyCode}
+              />
+              {/* Elden tutarlar yetki yoksa sunucudan hiç gelmiyor. */}
+              {ledger.cashHidden ? (
+                <div style={hiddenTile}>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Elden</div>
+                  <div style={{ marginTop: 6, fontSize: 18, color: "#94a3b8" }}>
+                    gizli
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 12, color: "#94a3b8" }}>
+                    Görme yetkiniz yok
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Total
+                    label="Elden Ödeme"
+                    value={ledger.cashPaymentTotal ?? 0}
+                    currency={ledger.currencyCode}
+                  />
+                  <Total
+                    label="Elden Avans"
+                    value={ledger.cashAdvanceTotal ?? 0}
+                    currency={ledger.currencyCode}
+                  />
+                </>
+              )}
+              <Total
+                label="Açık Avans"
+                value={ledger.openAdvance}
+                currency={ledger.currencyCode}
+                strong
+              />
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "150px 140px 140px 110px 150px minmax(0,1fr) 120px",
+                gap: 10,
+                alignItems: "end",
+              }}
+            >
+              <label style={fieldLabel}>
+                Tür
+                <select
+                  value={entryKind}
+                  onChange={(event) => setEntryKind(event.target.value)}
+                  style={input}
+                >
+                  <option value={SubcontractorLedgerKind.Payment}>Ödeme</option>
+                  <option value={SubcontractorLedgerKind.Advance}>Avans</option>
+                </select>
+              </label>
+
+              <label style={fieldLabel}>
+                Kayıt Şekli
+                <select
+                  value={entryIsCash ? "cash" : "invoiced"}
+                  onChange={(event) =>
+                    setEntryIsCash(event.target.value === "cash")
+                  }
+                  style={input}
+                >
+                  <option value="invoiced">Faturalı</option>
+                  <option value="cash">Elden</option>
+                </select>
+              </label>
+
+              <label style={fieldLabel}>
+                Tutar
+                <input
+                  value={entryAmount}
+                  onChange={(event) => setEntryAmount(event.target.value)}
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  style={input}
+                />
+              </label>
+
+              <label style={fieldLabel}>
+                KDV %
+                <input
+                  value={entryVatRate}
+                  onChange={(event) => setEntryVatRate(event.target.value)}
+                  inputMode="decimal"
+                  style={input}
+                  disabled={entryIsCash}
+                />
+              </label>
+
+              <label style={fieldLabel}>
+                Tarih
+                <input
+                  type="date"
+                  value={entryDate}
+                  onChange={(event) => setEntryDate(event.target.value)}
+                  style={input}
+                />
+              </label>
+
+              <label style={fieldLabel}>
+                Açıklama
+                <input
+                  value={entryDescription}
+                  onChange={(event) => setEntryDescription(event.target.value)}
+                  style={input}
+                />
+              </label>
+
+              <button
+                type="button"
+                style={primaryButton}
+                disabled={saving || !entryAmount}
+                onClick={() => void saveLedgerEntry()}
+              >
+                Kaydet
+              </button>
+            </div>
+
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              {entryIsCash
+                ? "Elden kayıt resmî muhasebeye fiş yazmaz ve proje maliyeti defterine satır açmaz."
+                : "Tevkifat oranı sözleşmeden alınır; faturalı ödeme proje maliyetine taşeron işçiliği olarak yazılır."}
+            </div>
+
+            {(ledger.entries.length > 0 ||
+              (ledger.cashEntries?.length ?? 0) > 0) && (
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}
+                >
+                  <thead>
+                    <tr style={{ background: "#f8fafc" }}>
+                      {["Tarih", "Tür", "Şekil", "Tutar", "Tevkifat", "Açıklama"].map(
+                        (title) => (
+                          <th key={title} style={th}>
+                            {title}
+                          </th>
+                        )
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...ledger.entries, ...(ledger.cashEntries ?? [])]
+                      .sort((a, b) => b.entryDate.localeCompare(a.entryDate))
+                      .map((entry) => (
+                        <tr key={entry.id}>
+                          <td style={td}>{date(entry.entryDate)}</td>
+                          <td style={td}>{entry.kindName}</td>
+                          <td style={td}>
+                            {entry.isCash ? (
+                              <span style={{ color: "#b45309" }}>Elden</span>
+                            ) : (
+                              "Faturalı"
+                            )}
+                          </td>
+                          <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>
+                            {money(entry.amount, entry.currencyCode)}
+                          </td>
+                          <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>
+                            {entry.withholdingAmount != null
+                              ? money(entry.withholdingAmount, entry.currencyCode)
+                              : "—"}
+                          </td>
+                          <td style={td}>{entry.description ?? "—"}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
         )}
 
@@ -672,4 +942,5 @@ const fieldLabel = { display: "grid", gap: 6, fontSize: 13, color: "#475569" } a
 const th = { padding: "13px 14px", textAlign: "left", color: "#475569", fontSize: 13, borderBottom: "1px solid #e2e8f0" } as const;
 const td = { padding: "13px 14px", borderBottom: "1px solid #eef2f7" } as const;
 const primaryButton = { height: 42, padding: "0 18px", borderRadius: 10, border: "none", background: "#0f766e", color: "#fff", fontWeight: 600, cursor: "pointer" } as const;
+const hiddenTile = { border: "1px dashed #cbd5e1", borderRadius: 12, padding: 14, background: "#f8fafc" } as const;
 const smallButton = { height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, cursor: "pointer" } as const;

@@ -88,6 +88,17 @@ public sealed class AppDbContext(
         SubcontractorProgressPaymentDeductions =>
         Set<SubcontractorProgressPaymentDeduction>();
 
+    public DbSet<SubcontractorLedgerEntry> SubcontractorLedgerEntries =>
+        Set<SubcontractorLedgerEntry>();
+
+    /// <summary>
+    /// Taşerona elden ödeme ve elden avans. Ayrı tablo tutulmasının
+    /// sebebi izolasyon: extra_payment.view olmayan kullanıcının
+    /// sorgusu buraya uğramaz.
+    /// </summary>
+    public DbSet<SubcontractorCashLedgerEntry> SubcontractorCashLedgerEntries =>
+        Set<SubcontractorCashLedgerEntry>();
+
     public DbSet<ProjectHakedisSection> ProjectHakedisSections =>
         Set<ProjectHakedisSection>();
 
@@ -225,6 +236,7 @@ public sealed class AppDbContext(
         ConfigureProjectDocuments(modelBuilder);
         ConfigureSubcontractorContracts(modelBuilder);
         ConfigureSubcontractorProgressPayments(modelBuilder);
+        ConfigureSubcontractorLedger(modelBuilder);
         ConfigureProgressPayments(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigureEngineeringPositions(modelBuilder);
@@ -1922,6 +1934,79 @@ public sealed class AppDbContext(
                 .WithMany(x => x.Deductions)
                 .HasForeignKey(x => x.SubcontractorProgressPaymentId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureSubcontractorLedger(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SubcontractorLedgerEntry>(entity =>
+        {
+            entity.ToTable("subcontractor_ledger_entries");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.SubcontractorContractId, x.Kind });
+            entity.HasIndex(x => x.SubcontractorProgressPaymentId);
+
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.Property(x => x.VatRate).HasPrecision(9, 4);
+
+            foreach (var property in new[]
+            {
+                nameof(SubcontractorLedgerEntry.Amount),
+                nameof(SubcontractorLedgerEntry.VatAmount),
+                nameof(SubcontractorLedgerEntry.WithholdingAmount),
+                nameof(SubcontractorLedgerEntry.PayableAmount)
+            })
+            {
+                entity.Property(property).HasPrecision(18, 2);
+            }
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SubcontractorContract)
+                .WithMany()
+                .HasForeignKey(x => x.SubcontractorContractId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SubcontractorProgressPayment)
+                .WithMany()
+                .HasForeignKey(x => x.SubcontractorProgressPaymentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<SubcontractorCashLedgerEntry>(entity =>
+        {
+            entity.ToTable("subcontractor_cash_ledger_entries");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.SubcontractorContractId, x.Kind });
+
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SubcontractorContract)
+                .WithMany()
+                .HasForeignKey(x => x.SubcontractorContractId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SubcontractorProgressPayment)
+                .WithMany()
+                .HasForeignKey(x => x.SubcontractorProgressPaymentId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
