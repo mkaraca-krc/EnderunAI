@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import DailyWageBadge from "@/components/hr/daily-wage-badge";
 
 import {
   AttendanceItem,
@@ -1251,6 +1252,14 @@ export default function DailyAttendancePage() {
                   }))
                 }
                 className="rounded-lg border border-slate-300 p-3"
+              />
+
+              {/* Seçilen personelin o günkü gerçek günlük maliyeti.
+                  Elden ödemeyi görme yetkisi olan gerçek rakamı,
+                  olmayan yalnızca resmî yevmiyeyi görür. */}
+              <DailyWageBadge
+                personnelId={form.personnelId}
+                workDate={form.workDate}
               />
 
               <select

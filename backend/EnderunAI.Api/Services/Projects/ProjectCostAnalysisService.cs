@@ -105,7 +105,9 @@ public interface IProjectCostAnalysisService
 /// </summary>
 public sealed class ProjectCostAnalysisService(
     AppDbContext db,
-    IExtraPaymentVisibilityService extraPaymentVisibility) : IProjectCostAnalysisService
+    IExtraPaymentVisibilityService extraPaymentVisibility,
+    EnderunAI.Api.Services.HumanResources.ExtraPaymentAllocationService
+        extraPaymentAllocation) : IProjectCostAnalysisService
 {
     public async Task<ProjectCostAnalysisResult?> AnalyzeAsync(
         Guid projectId, CancellationToken cancellationToken)
@@ -227,7 +229,7 @@ public sealed class ProjectCostAnalysisService(
 
         if (canSeeExtraPayments)
         {
-            extraPaymentLabor = await CalculateExtraPaymentShareAsync(
+            extraPaymentLabor = await extraPaymentAllocation.GetProjectShareAsync(
                 project.CompanyId, projectId, cancellationToken);
 
             assumptions.Add(
@@ -416,81 +418,6 @@ public sealed class ProjectCostAnalysisService(
             return 1m;
 
         return 1m + ((settings.SgkEmployerRate + settings.UnemploymentEmployerRate) / 100m);
-    }
-
-    /// <summary>
-    /// Elden ödemelerin bu projeye düşen payı: personelin o ay bu
-    /// projede çalıştığı gün / o ay toplam çalıştığı gün.
-    ///
-    /// Doğrudan aylık tutarın tamamı yazılsaydı, birden fazla projede
-    /// çalışan personelin elden ödemesi her projeye ayrı ayrı yüklenir
-    /// ve toplam maliyet gerçekte ödenenin katı çıkardı.
-    /// </summary>
-    private async Task<decimal> CalculateExtraPaymentShareAsync(
-        Guid companyId, Guid projectId, CancellationToken cancellationToken)
-    {
-        var payments = await db.PersonnelExtraPayments
-            .AsNoTracking()
-            .Where(x => x.CompanyId == companyId)
-            .Select(x => new
-            {
-                x.PersonnelId,
-                x.MonthlyAmount,
-                x.EffectiveStartDate,
-                x.EffectiveEndDate
-            })
-            .ToListAsync(cancellationToken);
-
-        if (payments.Count == 0)
-            return 0m;
-
-        var personnelIds = payments.Select(x => x.PersonnelId).Distinct().ToList();
-
-        // Yalnızca çalışılan günler; izin/rapor günü projeye yüklenmez.
-        var days = await db.AttendanceRecords
-            .AsNoTracking()
-            .Where(x => x.CompanyId == companyId &&
-                        x.IsApproved &&
-                        x.ProjectId != null &&
-                        personnelIds.Contains(x.PersonnelId))
-            .Select(x => new { x.PersonnelId, x.ProjectId, x.WorkDate })
-            .ToListAsync(cancellationToken);
-
-        if (days.Count == 0)
-            return 0m;
-
-        var total = 0m;
-
-        foreach (var group in days.GroupBy(x => new
-        {
-            x.PersonnelId,
-            x.WorkDate.Year,
-            x.WorkDate.Month
-        }))
-        {
-            var monthDays = group.Count();
-
-            if (monthDays == 0)
-                continue;
-
-            var projectDays = group.Count(x => x.ProjectId == projectId);
-
-            if (projectDays == 0)
-                continue;
-
-            var monthStart = new DateTime(group.Key.Year, group.Key.Month, 1);
-
-            var monthlyAmount = payments
-                .Where(x => x.PersonnelId == group.Key.PersonnelId &&
-                            x.EffectiveStartDate.Date <= monthStart.AddMonths(1).AddDays(-1) &&
-                            (x.EffectiveEndDate == null ||
-                             x.EffectiveEndDate.Value.Date >= monthStart))
-                .Sum(x => x.MonthlyAmount);
-
-            total += monthlyAmount * projectDays / monthDays;
-        }
-
-        return decimal.Round(total, 2);
     }
 
     private async Task<IReadOnlyList<(int Year, int Month, decimal Amount)>>

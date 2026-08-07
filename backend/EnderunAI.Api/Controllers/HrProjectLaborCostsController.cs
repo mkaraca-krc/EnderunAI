@@ -165,16 +165,29 @@ public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerB
         });
     }
 
+    /// <summary>
+    /// Şantiye bazında işçilik maliyeti.
+    ///
+    /// Resmî tutar <c>HrProjectLaborCosts</c> defterinden gelir. Elden
+    /// ödemenin payı BU DEFTERE YAZILMAZ — defter projects/personnel
+    /// yetkisiyle okunuyor ve elden tutar oradan sızardı. Pay okuma
+    /// anında, <c>extra_payment.view</c> doğrulanarak ekleniyor ve
+    /// yetkisiz kullanıcı yalnızca resmî rakamı görüyor.
+    /// </summary>
     [HttpGet("labor-cost-breakdown")]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetBreakdown(
         Guid projectId,
+        [FromServices] IExtraPaymentVisibilityService extraPaymentVisibility,
+        [FromServices] Services.HumanResources.ExtraPaymentAllocationService allocation,
         CancellationToken cancellationToken)
     {
-        var projectExists = await db.Projects.AsNoTracking()
-            .AnyAsync(x => x.Id == projectId, cancellationToken);
+        var project = await db.Projects.AsNoTracking()
+            .Where(x => x.Id == projectId)
+            .Select(x => new { x.Id, x.CompanyId })
+            .SingleOrDefaultAsync(cancellationToken);
 
-        if (!projectExists)
+        if (project is null)
             return NotFound(new { message = "Proje bulunamadı." });
 
         var rows = await db.HrProjectLaborCosts
@@ -190,28 +203,66 @@ public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerB
             .Select(x => new { x.Id, x.Code, x.Name })
             .ToListAsync(cancellationToken);
 
-        var siteBreakdown = sites.Select(site => new
+        var canSeeExtra =
+            await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken);
+
+        // Yetki yoksa dağıtım HİÇ hesaplanmaz; sorgu elden tablosuna
+        // uğramaz.
+        var extraShares = canSeeExtra
+            ? await allocation.GetSiteSharesAsync(
+                project.CompanyId, projectId, cancellationToken)
+            : new Services.HumanResources.SiteExtraPaymentShares(
+                new Dictionary<Guid, decimal>(), 0m);
+
+        var siteBreakdown = sites.Select(site =>
         {
-            site.Id,
-            site.Code,
-            site.Name,
-            Amount = rows
+            var official = rows
                 .Where(x => x.ProjectSiteId == site.Id)
-                .Sum(x => x.TotalLaborCost)
+                .Sum(x => x.TotalLaborCost);
+
+            var extra = extraShares.BySite.GetValueOrDefault(site.Id, 0m);
+
+            return new
+            {
+                site.Id,
+                site.Code,
+                site.Name,
+                // Geriye uyum: mevcut ekranlar Amount'a bakıyor ve
+                // resmî rakamı görmeye devam ediyor.
+                Amount = official,
+                OfficialAmount = official,
+                ExtraPaymentAmount = canSeeExtra ? extra : (decimal?)null,
+                ActualAmount = canSeeExtra ? decimal.Round(official + extra, 2) : (decimal?)null
+            };
         }).ToList();
 
-        var sharedCost = rows
+        var sharedOfficial = rows
             .Where(x => x.ProjectSiteId == null)
             .Sum(x => x.TotalLaborCost);
 
-        var projectTotal = rows.Sum(x => x.TotalLaborCost);
+        // Şantiyesi belli olmayan puantaj günlerinin elden payı; uydurma
+        // dağıtım yapmak yerine ayrı gösteriliyor.
+        var sharedExtra = extraShares.Unassigned;
+
+        var projectOfficial = rows.Sum(x => x.TotalLaborCost);
+        var projectExtra = extraShares.Total;
 
         return Ok(new
         {
             projectId,
             sites = siteBreakdown,
-            sharedCost,
-            projectTotal
+            sharedCost = sharedOfficial,
+            sharedOfficialCost = sharedOfficial,
+            sharedExtraPaymentCost = canSeeExtra ? sharedExtra : (decimal?)null,
+            projectTotal = projectOfficial,
+            projectOfficialTotal = projectOfficial,
+            projectExtraPaymentTotal = canSeeExtra
+                ? decimal.Round(projectExtra, 2)
+                : (decimal?)null,
+            projectActualTotal = canSeeExtra
+                ? decimal.Round(projectOfficial + projectExtra, 2)
+                : (decimal?)null,
+            extraPaymentHidden = !canSeeExtra
         });
     }
 }

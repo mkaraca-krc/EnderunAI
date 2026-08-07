@@ -1122,8 +1122,28 @@ export default function ProjectCenterPage() {
                   <div key={site.id}>
                     <span>{site.code} · {site.name}</span>
                     <strong>
-                      {formatMoney(site.amount, project.currencyCode)}
+                      {formatMoney(
+                        site.actualAmount ?? site.amount,
+                        project.currencyCode
+                      )}
                     </strong>
+                    {/* Elden payı yetkiliye ayrıca gösteriliyor;
+                        gerçek maliyetin neyden oluştuğu görünmeli. */}
+                    {site.extraPaymentAmount != null &&
+                      site.extraPaymentAmount > 0 && (
+                        <small>
+                          resmî{" "}
+                          {formatMoney(
+                            site.officialAmount ?? site.amount,
+                            project.currencyCode
+                          )}{" "}
+                          + elden{" "}
+                          {formatMoney(
+                            site.extraPaymentAmount,
+                            project.currencyCode
+                          )}
+                        </small>
+                      )}
                   </div>
                 ))}
 
@@ -1132,13 +1152,47 @@ export default function ProjectCenterPage() {
                   <strong>
                     {formatMoney(laborBreakdown.sharedCost, project.currencyCode)}
                   </strong>
+                  {laborBreakdown.sharedExtraPaymentCost != null &&
+                    laborBreakdown.sharedExtraPaymentCost > 0 && (
+                      <small>
+                        şantiyesiz elden{" "}
+                        {formatMoney(
+                          laborBreakdown.sharedExtraPaymentCost,
+                          project.currencyCode
+                        )}
+                      </small>
+                    )}
                 </div>
 
                 <div>
                   <span>Proje Toplamı</span>
                   <strong>
-                    {formatMoney(laborBreakdown.projectTotal, project.currencyCode)}
+                    {formatMoney(
+                      laborBreakdown.projectActualTotal ??
+                        laborBreakdown.projectTotal,
+                      project.currencyCode
+                    )}
                   </strong>
+                  {laborBreakdown.extraPaymentHidden ? (
+                    <small>Elden ödemeler dahil değil (yetki yok)</small>
+                  ) : (
+                    laborBreakdown.projectExtraPaymentTotal != null &&
+                    laborBreakdown.projectExtraPaymentTotal > 0 && (
+                      <small>
+                        resmî{" "}
+                        {formatMoney(
+                          laborBreakdown.projectOfficialTotal ??
+                            laborBreakdown.projectTotal,
+                          project.currencyCode
+                        )}{" "}
+                        + elden{" "}
+                        {formatMoney(
+                          laborBreakdown.projectExtraPaymentTotal,
+                          project.currencyCode
+                        )}
+                      </small>
+                    )
+                  )}
                 </div>
               </div>
             )}
