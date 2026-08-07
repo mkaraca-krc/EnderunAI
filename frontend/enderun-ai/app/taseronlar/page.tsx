@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { ApiError } from "@/lib/api/api-client";
@@ -527,13 +528,18 @@ export default function SubcontractorsPage() {
                     </td>
                     <td style={td}>{item.statusName}</td>
                     <td style={td}>
-                      <button
-                        type="button"
-                        onClick={() => void openEdit(item.id)}
-                        style={smallButton}
-                      >
-                        Düzenle
-                      </button>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <Link href={`/taseronlar/${item.id}`} style={linkButton}>
+                          Aç
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => void openEdit(item.id)}
+                          style={smallButton}
+                        >
+                          Düzenle
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -881,4 +887,5 @@ const grid3 = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(24
 const th = { padding: "13px 14px", textAlign: "left", color: "#475569", fontSize: 13, borderBottom: "1px solid #e2e8f0" } as const;
 const td = { padding: "13px 14px", borderBottom: "1px solid #eef2f7" } as const;
 const primaryButton = { height: 42, padding: "0 18px", borderRadius: 10, border: "none", background: "#0f766e", color: "#fff", fontWeight: 600, cursor: "pointer" } as const;
+const linkButton = { display: "inline-flex", alignItems: "center", height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, textDecoration: "none" } as const;
 const smallButton = { height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, cursor: "pointer" } as const;

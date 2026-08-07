@@ -73,6 +73,21 @@ public sealed class AppDbContext(
     public DbSet<SubcontractorContractSection> SubcontractorContractSections =>
         Set<SubcontractorContractSection>();
 
+    public DbSet<SubcontractorProgressPayment> SubcontractorProgressPayments =>
+        Set<SubcontractorProgressPayment>();
+
+    public DbSet<SubcontractorProgressPaymentItem>
+        SubcontractorProgressPaymentItems =>
+        Set<SubcontractorProgressPaymentItem>();
+
+    public DbSet<SubcontractorProgressPaymentSection>
+        SubcontractorProgressPaymentSections =>
+        Set<SubcontractorProgressPaymentSection>();
+
+    public DbSet<SubcontractorProgressPaymentDeduction>
+        SubcontractorProgressPaymentDeductions =>
+        Set<SubcontractorProgressPaymentDeduction>();
+
     public DbSet<ProjectHakedisSection> ProjectHakedisSections =>
         Set<ProjectHakedisSection>();
 
@@ -209,6 +224,7 @@ public sealed class AppDbContext(
         ConfigureProjects(modelBuilder);
         ConfigureProjectDocuments(modelBuilder);
         ConfigureSubcontractorContracts(modelBuilder);
+        ConfigureSubcontractorProgressPayments(modelBuilder);
         ConfigureProgressPayments(modelBuilder);
         ConfigureWarehouses(modelBuilder);
         ConfigureEngineeringPositions(modelBuilder);
@@ -1721,6 +1737,196 @@ public sealed class AppDbContext(
         });
     }
 
+    private static void ConfigureSubcontractorProgressPayments(
+        ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SubcontractorProgressPayment>(entity =>
+        {
+            entity.ToTable("subcontractor_progress_payments");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.ProgressPaymentNumber })
+                .IsUnique();
+
+            // Aynı sözleşmede aynı dönem numarası iki kez olamaz;
+            // olsaydı kümülatif zincir çatallanırdı.
+            entity.HasIndex(x => new
+            {
+                x.SubcontractorContractId,
+                x.PeriodNumber
+            }).IsUnique();
+
+            entity.Property(x => x.ProgressPaymentNumber)
+                .HasMaxLength(50).IsRequired();
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            foreach (var property in new[]
+            {
+                nameof(SubcontractorProgressPayment.ContractAmount),
+                nameof(SubcontractorProgressPayment.PreviousAmount),
+                nameof(SubcontractorProgressPayment.CurrentAmount),
+                nameof(SubcontractorProgressPayment.CumulativeAmount),
+                nameof(SubcontractorProgressPayment.TotalDeductionAmount),
+                nameof(SubcontractorProgressPayment.GrossPayableAmount),
+                nameof(SubcontractorProgressPayment.NetPayableAmount)
+            })
+            {
+                entity.Property(property).HasPrecision(18, 2);
+            }
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SubcontractorContract)
+                .WithMany()
+                .HasForeignKey(x => x.SubcontractorContractId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<SubcontractorProgressPaymentItem>(entity =>
+        {
+            entity.ToTable("subcontractor_progress_payment_items");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.SubcontractorProgressPaymentId,
+                x.LineNumber
+            });
+
+            entity.Property(x => x.PositionCode).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(500);
+
+            foreach (var property in new[]
+            {
+                nameof(SubcontractorProgressPaymentItem.ContractQuantity),
+                nameof(SubcontractorProgressPaymentItem.PreviousQuantity),
+                nameof(SubcontractorProgressPaymentItem.SuggestedQuantity),
+                nameof(SubcontractorProgressPaymentItem.AgreedQuantity),
+                nameof(SubcontractorProgressPaymentItem.CurrentQuantity)
+            })
+            {
+                entity.Property(property).HasPrecision(18, 4);
+            }
+
+            foreach (var property in new[]
+            {
+                nameof(SubcontractorProgressPaymentItem.UnitPrice),
+                nameof(SubcontractorProgressPaymentItem.PreviousAmount),
+                nameof(SubcontractorProgressPaymentItem.CurrentAmount),
+                nameof(SubcontractorProgressPaymentItem.CumulativeAmount)
+            })
+            {
+                entity.Property(property).HasPrecision(18, 2);
+            }
+
+            entity.HasOne(x => x.SubcontractorProgressPayment)
+                .WithMany(x => x.Items)
+                .HasForeignKey(x => x.SubcontractorProgressPaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ProjectHakedisSection)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectHakedisSectionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectBoqItem)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectBoqItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<SubcontractorProgressPaymentSection>(entity =>
+        {
+            entity.ToTable("subcontractor_progress_payment_sections");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.SubcontractorProgressPaymentId,
+                x.ProjectHakedisSectionId
+            }).IsUnique();
+
+            entity.Property(x => x.Notes).HasMaxLength(500);
+
+            foreach (var property in new[]
+            {
+                nameof(SubcontractorProgressPaymentSection.PreviousProgressRate),
+                nameof(SubcontractorProgressPaymentSection.SuggestedProgressRate),
+                nameof(SubcontractorProgressPaymentSection.AgreedProgressRate)
+            })
+            {
+                entity.Property(property).HasPrecision(9, 4);
+            }
+
+            foreach (var property in new[]
+            {
+                nameof(SubcontractorProgressPaymentSection.SectionAmount),
+                nameof(SubcontractorProgressPaymentSection.PreviousAmount),
+                nameof(SubcontractorProgressPaymentSection.CurrentAmount),
+                nameof(SubcontractorProgressPaymentSection.CumulativeAmount)
+            })
+            {
+                entity.Property(property).HasPrecision(18, 2);
+            }
+
+            entity.HasOne(x => x.SubcontractorProgressPayment)
+                .WithMany(x => x.Sections)
+                .HasForeignKey(x => x.SubcontractorProgressPaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ProjectHakedisSection)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectHakedisSectionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<SubcontractorProgressPaymentDeduction>(entity =>
+        {
+            entity.ToTable("subcontractor_progress_payment_deductions");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new
+            {
+                x.SubcontractorProgressPaymentId,
+                x.LineNumber
+            });
+
+            entity.Property(x => x.Description).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.SuggestionBasis).HasMaxLength(500);
+            entity.Property(x => x.Rate).HasPrecision(9, 4);
+
+            foreach (var property in new[]
+            {
+                nameof(SubcontractorProgressPaymentDeduction.CumulativeBaseAmount),
+                nameof(SubcontractorProgressPaymentDeduction.PreviousAmount),
+                nameof(SubcontractorProgressPaymentDeduction.CumulativeAmount),
+                nameof(SubcontractorProgressPaymentDeduction.Amount)
+            })
+            {
+                entity.Property(property).HasPrecision(18, 2);
+            }
+
+            entity.HasOne(x => x.SubcontractorProgressPayment)
+                .WithMany(x => x.Deductions)
+                .HasForeignKey(x => x.SubcontractorProgressPaymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
     private static void ConfigureWarehouses(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Warehouse>(entity =>
@@ -1802,6 +2008,15 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.Branch)
                 .WithMany()
                 .HasForeignKey(x => x.BranchId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Taşeron ekibi: hakediş kesintisi bu bağ üzerinden
+            // hesaplandığı için sözleşme bazlı sorgu indeksli.
+            entity.HasIndex(x => x.SubcontractorContractId);
+
+            entity.HasOne(x => x.SubcontractorContract)
+                .WithMany()
+                .HasForeignKey(x => x.SubcontractorContractId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

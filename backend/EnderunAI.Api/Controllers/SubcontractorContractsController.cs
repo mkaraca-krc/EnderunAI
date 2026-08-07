@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Subcontractors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,10 @@ public sealed record SubcontractorContractSectionRequest(
     Guid ProjectHakedisSectionId,
     decimal SectionAmount,
     int Order);
+
+/// <summary>Ekip tam liste olarak gönderilir.</summary>
+public sealed record ReplaceSubcontractorTeamRequest(
+    IReadOnlyList<Guid>? PersonnelIds);
 
 public sealed record SaveSubcontractorContractRequest(
     Guid CompanyId,
@@ -55,7 +60,9 @@ public sealed record SaveSubcontractorContractRequest(
 [ApiController]
 [Authorize]
 [Route("api/subcontractor-contracts")]
-public sealed class SubcontractorContractsController(AppDbContext db) : ControllerBase
+public sealed class SubcontractorContractsController(
+    AppDbContext db,
+    SubcontractorTeamService teamService) : ControllerBase
 {
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.SubcontractorView)]
@@ -263,6 +270,81 @@ public sealed class SubcontractorContractsController(AppDbContext db) : Controll
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new { message = "Taşeron sözleşmesi silindi." });
+    }
+
+    // ---------- Taşeron ekibi (SGK bizde) ----------
+
+    /// <summary>
+    /// Sözleşmenin ekibi: SGK bizdeyken bizim bordromuzda olan taşeron
+    /// işçileri. Ücret rakamı DÖNMEZ — burada yalnızca kimlerin ekipte
+    /// olduğu var; bordro maliyeti hakediş ekranında tek toplam olarak
+    /// görünür.
+    /// </summary>
+    [HttpGet("{id:guid}/team")]
+    [RequirePermission(PermissionCatalog.Keys.SubcontractorView)]
+    public async Task<IActionResult> GetTeam(
+        Guid id, CancellationToken cancellationToken)
+    {
+        var contract = await db.SubcontractorContracts
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new
+            {
+                x.CompanyId,
+                x.SocialSecurityResponsibility
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (contract is null)
+            return NotFound(new { message = "Taşeron sözleşmesi bulunamadı." });
+
+        var members = await db.Personnel
+            .AsNoTracking()
+            .Where(x => x.SubcontractorContractId == id)
+            .OrderBy(x => x.FirstName)
+            .ThenBy(x => x.LastName)
+            .Select(x => new
+            {
+                x.Id,
+                x.EmployeeNumber,
+                FullName = x.FirstName + " " + x.LastName,
+                x.JobTitle,
+                x.IsActive
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new
+        {
+            socialSecurityWithUs =
+                contract.SocialSecurityResponsibility ==
+                SubcontractorResponsibility.Us,
+            members
+        });
+    }
+
+    /// <summary>
+    /// Ekibi verilen listeyle değiştirir. Liste tam gönderilir:
+    /// gönderilmeyen üyenin bağı kopar.
+    /// </summary>
+    [HttpPut("{id:guid}/team")]
+    [RequirePermission(PermissionCatalog.Keys.SubcontractorManage)]
+    public async Task<IActionResult> ReplaceTeam(
+        Guid id,
+        ReplaceSubcontractorTeamRequest request,
+        CancellationToken cancellationToken)
+    {
+        var contract = await db.SubcontractorContracts
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (contract is null)
+            return NotFound(new { message = "Taşeron sözleşmesi bulunamadı." });
+
+        var failure = await teamService.ReplaceTeamAsync(
+            contract, request.PersonnelIds ?? [], cancellationToken);
+
+        return failure is not null
+            ? BadRequest(new { message = failure })
+            : Ok(new { message = "Taşeron ekibi güncellendi." });
     }
 
     // ---------- Yardımcılar ----------

@@ -68,6 +68,22 @@ public sealed class Personnel : BaseEntity
     /// atanmamış personeli de merkez göstermek olurdu.
     /// </summary>
     public WorkLocationType WorkLocationType { get; set; } = WorkLocationType.Unassigned;
+
+    /// <summary>
+    /// Personel bir TAŞERON EKİBİNİN üyesiyse o taşeron sözleşmesi.
+    ///
+    /// Yalnızca sözleşmede SGK yükümlülüğü BİZDE olduğunda doldurulur:
+    /// işçi taşeronun ama bordro bizde. Bu durumda işçinin bordro
+    /// maliyeti taşeron hakedişinde "SGK/işçilik kesintisi" olarak
+    /// birikir — yoksa aynı işçiliği hem kendi maliyetimizde hem
+    /// taşerona ödediğimiz hakedişte iki kez saymış oluruz.
+    ///
+    /// Boş olması "bizim personelimiz" demektir; maliyet analizinde
+    /// taşeron ekibi kendi satırında toplanır.
+    /// </summary>
+    public Guid? SubcontractorContractId { get; set; }
+    public SubcontractorContract? SubcontractorContract { get; set; }
+
     public PersonnelStatus Status { get; set; } = PersonnelStatus.Active;
 
     public string FullName => $"{FirstName} {LastName}".Trim();
