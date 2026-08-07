@@ -744,13 +744,68 @@ public sealed class ProcurementApprovalService(
             .OrderByDescending(x => x.OccurredAtUtc)
             .FirstOrDefault();
         if (ledger is null)
-            return null;
+            return await BuildDefaultPolicyAsync(companyId, cancellationToken);
 
         var payload = DeserializeRequired<PolicyPayload>(
             ledger.DetailsJson,
             "Onay politikası kaydı okunamadı.");
         return ToPolicyResponse(payload);
     }
+
+    /// <summary>
+    /// Politika hiç yapılandırılmamışsa kullanılan varsayılan.
+    ///
+    /// NEDEN SEED DEĞİL: politika, denetim defterine yazılan bir İNSAN
+    /// KARARIdır. Kurulumda sahte bir "politika yapılandırıldı" olayı
+    /// yazmak, kimsenin vermediği bir kararı deftere koymak olurdu ve
+    /// defterin anlamını bozardı. Varsayılan burada, okuma anında
+    /// üretiliyor; kullanıcı gerçekten yapılandırdığında defterdeki
+    /// kayıt bunun önüne geçiyor.
+    ///
+    /// NEDEN BU RAKAMLAR: şirketin FATURA tarafında zaten seçtiği GM
+    /// onay eşiği çıpa alınıyor. Uydurma bir sabit yerine şirketin
+    /// kendi kararını kullanmak hem tutarlı hem savunulabilir:
+    /// - Finans kademesi = GM eşiği (üstü GM'ye gider)
+    /// - Satın alma kademesi = GM eşiğinin beşte biri
+    ///
+    /// Bütçe zorunluluğu varsayılanda KAPALI: bütçe tanımlanmamış bir
+    /// şirkette açık olsaydı hiçbir sipariş onaya gidemezdi.
+    /// </summary>
+    private async Task<ProcurementApprovalPolicyResponse> BuildDefaultPolicyAsync(
+        Guid companyId, CancellationToken cancellationToken)
+    {
+        var gmThreshold = await db.CompanyFinanceSettings
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId)
+            .Select(x => (decimal?)x.GmApprovalThresholdTry)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var financeLimit = gmThreshold is > 0m
+            ? gmThreshold.Value
+            : DefaultFinanceApprovalLimitTry;
+
+        // Satın alma limiti finans limitinden KÜÇÜK olmak zorunda
+        // (ValidatePolicy aynı kuralı elle girişte de uyguluyor).
+        var purchasingLimit = decimal.Round(financeLimit / 5m, 2);
+
+        return new ProcurementApprovalPolicyResponse(
+            VersionId: Guid.Empty,
+            CompanyId: companyId,
+            PurchasingApprovalLimitTry: purchasingLimit,
+            FinanceApprovalLimitTry: financeLimit,
+            RequireBudget: false,
+            Note:
+                "Varsayılan politika — henüz yapılandırılmadı. Limitler " +
+                "şirketin GM onay eşiğinden türetildi; Satın Alma → Onay " +
+                "Politikası ekranından değiştirin.",
+            UpdatedBy: null,
+            UpdatedAtUtc: DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// Şirketin GM onay eşiği de tanımlı değilse kullanılan son çare.
+    /// </summary>
+    private const decimal DefaultFinanceApprovalLimitTry = 100_000m;
 
     private async Task<List<BudgetState>> LoadBudgetStatesAsync(
         IReadOnlyCollection<Guid> projectIds,
