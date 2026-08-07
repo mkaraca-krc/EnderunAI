@@ -77,6 +77,7 @@ builder.Services.AddScoped<IAccountingAccountSeedService, AccountingAccountSeedS
 builder.Services.AddScoped<IAccountingVoucherService, AccountingVoucherService>();
 builder.Services.AddScoped<IAccountingIntegrationService, AccountingIntegrationService>();
 builder.Services.AddScoped<CurrentAccountCurrencyService>();
+builder.Services.AddScoped<CurrencyValuationService>();
 builder.Services.AddScoped<ISupplierInvoiceService, SupplierInvoiceService>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Inventory.ISupplierInvoiceStockPoster,

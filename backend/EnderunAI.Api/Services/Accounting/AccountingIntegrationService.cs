@@ -183,7 +183,8 @@ public sealed record PayrollPaymentPostingResult(
 public sealed class AccountingIntegrationService(
     AppDbContext db,
     IAccountingVoucherService voucherService,
-    Market.IInvoiceExchangeRateResolver exchangeRateResolver)
+    Market.IInvoiceExchangeRateResolver exchangeRateResolver,
+    CurrentAccountCurrencyService currencyService)
     : IAccountingIntegrationService
 {
     public async Task<CompanyFinanceSettings> GetOrCreateFinanceSettingsAsync(
@@ -1039,6 +1040,32 @@ public sealed class AccountingIntegrationService(
         var isInflow = transaction.Direction == CashTransactionDirection.In;
         var amount = decimal.Round(transaction.Amount, 2);
 
+        // KUR: dövizli hareket buraya kadar sabit 1 ile geliyordu, yani
+        // 10.000 dolarlık bir ödeme deftere 10.000 TL olarak giriyordu.
+        // Çekte aynı hata D4'te kapatılmıştı; kasa/banka tarafında
+        // duruyordu. Kur bulunamazsa fiş KESİLMEZ — yanlış kurla
+        // defterlenmiş bir hareket, hiç defterlenmemişten pahalıdır.
+        var rateResolution = await exchangeRateResolver.ResolveAsync(
+            transaction.CurrencyCode,
+            transaction.TransactionDate,
+            transaction.ExchangeRate > 0m && transaction.ExchangeRate != 1m
+                ? transaction.ExchangeRate
+                : null,
+            cancellationToken);
+
+        if (!rateResolution.Success)
+        {
+            throw new InvalidOperationException(
+                rateResolution.Error ??
+                $"{transaction.CurrencyCode} için {transaction.TransactionDate:dd.MM.yyyy} " +
+                "tarihine kur bulunamadı; kur olmadan fiş kesilemez.");
+        }
+
+        var rate = rateResolution.Rate;
+
+        transaction.ExchangeRate = rate;
+        transaction.AmountTry = decimal.Round(amount * rate, 2);
+
         var lines = new List<AccountingVoucherLineRequest>
         {
             new(
@@ -1047,7 +1074,7 @@ public sealed class AccountingIntegrationService(
                 DebitAmount: isInflow ? amount : 0m,
                 CreditAmount: isInflow ? 0m : amount,
                 CurrencyCode: transaction.CurrencyCode,
-                ExchangeRate: 1m,
+                ExchangeRate: rate,
                 CurrentAccountId: transaction.CurrentAccountId,
                 ProjectId: transaction.ProjectId,
                 CostCenterCode: null,
@@ -1060,7 +1087,7 @@ public sealed class AccountingIntegrationService(
                 DebitAmount: isInflow ? 0m : amount,
                 CreditAmount: isInflow ? amount : 0m,
                 CurrencyCode: transaction.CurrencyCode,
-                ExchangeRate: 1m,
+                ExchangeRate: rate,
                 CurrentAccountId: transaction.CurrentAccountId,
                 ProjectId: transaction.ProjectId,
                 CostCenterCode: null,
@@ -1068,6 +1095,10 @@ public sealed class AccountingIntegrationService(
                 DocumentDate: transaction.TransactionDate,
                 DueDate: null)
         };
+
+        await AddRealizedExchangeDifferenceAsync(
+            transaction, cashAccount.CompanyId, amount, rate, isInflow,
+            lines, cancellationToken);
 
         var voucherType = isInflow
             ? AccountingVoucherType.Collection
@@ -1079,7 +1110,7 @@ public sealed class AccountingIntegrationService(
                 VoucherType: (int)voucherType,
                 VoucherDate: transaction.TransactionDate,
                 CurrencyCode: transaction.CurrencyCode,
-                ExchangeRate: 1m,
+                ExchangeRate: rate,
                 Description: transaction.Description,
                 ReferenceNumber: transaction.DocumentNumber,
                 SourceModule: transaction.SourceModule ?? "CashTransaction",
@@ -1090,6 +1121,106 @@ public sealed class AccountingIntegrationService(
         await voucherService.PostAsync(created.Id, cancellationToken);
 
         return created.Id;
+    }
+
+    /// <summary>
+    /// Dövizli bir tahsilat/ödeme cari bakiyesini kapatırken doğan
+    /// GERÇEKLEŞMİŞ kur farkını fişe ekler.
+    ///
+    /// Taban, carinin o dövizdeki TAŞIMA KURUdur: defter değeri ÷ döviz
+    /// bakiyesi. Fatura bazlı FIFO eşleştirme yerine bunun seçilmesi
+    /// bilinçlidir — ERP'de bir tahsilatın hangi faturayı kapattığı
+    /// çoğu zaman girilmiyor; taşıma kuru ise defterden birebir
+    /// okunabilen, açıklanabilir ve mutabakatta savunulabilir bir taban.
+    ///
+    /// Fark yoksa, taşıma kuru hesaplanamıyorsa (bakiye sıfır ya da
+    /// defter değeriyle ters işaretli) veya hareket bir cariye bağlı
+    /// değilse HİÇBİR ŞEY eklenmez: uydurma taban üzerinden 646/656
+    /// yazmak defteri bozar.
+    /// </summary>
+    private async Task AddRealizedExchangeDifferenceAsync(
+        CashTransaction transaction,
+        Guid companyId,
+        decimal amount,
+        decimal settlementRate,
+        bool isInflow,
+        List<AccountingVoucherLineRequest> lines,
+        CancellationToken cancellationToken)
+    {
+        if (transaction.IsLocalCurrency || transaction.CurrentAccountId is null)
+            return;
+
+        // Yalnızca cari kapatan hareketler: çek tahsili/ödemesi kendi
+        // farkını çek fişinde zaten yazıyor, burada ikinci kez yazılmaz.
+        if (transaction.TransactionType is not (
+                CashTransactionType.Collection or CashTransactionType.Payment))
+        {
+            return;
+        }
+
+        var balances = await currencyService.GetBalancesAsync(
+            companyId, transaction.CurrentAccountId, cancellationToken);
+
+        var currency = balances
+            .SelectMany(x => x.CurrencyBalances)
+            .SingleOrDefault(x => string.Equals(
+                x.CurrencyCode, transaction.CurrencyCode,
+                StringComparison.OrdinalIgnoreCase));
+
+        if (currency is null)
+            return;
+
+        var carryingRate = ExchangeDifferenceCalculator.CarryingRate(
+            currency.Balance, currency.BalanceLocal);
+
+        if (carryingRate is null)
+            return;
+
+        // Tahsilat alacağı, ödeme borcu kapatır.
+        var difference = ExchangeDifferenceCalculator.CalculateRealized(
+            settledAmount: amount,
+            carryingRate: carryingRate.Value,
+            settlementRate: settlementRate,
+            isReceivable: isInflow);
+
+        if (difference is null)
+            return;
+
+        var codes = difference.IsGain
+            ? new[] { "646.01", "646" }
+            : new[] { "656.01", "656" };
+
+        var accountId = await FindAccountIdAsync(companyId, cancellationToken, codes);
+
+        if (accountId is null)
+        {
+            throw new InvalidOperationException(
+                $"Kambiyo {(difference.IsGain ? "kârı" : "zararı")} hesabı " +
+                $"bulunamadı ({string.Join(" / ", codes)}). " +
+                "Hesap planında ilgili hesabı tanımlayın.");
+        }
+
+        lines.Add(new AccountingVoucherLineRequest(
+            AccountingAccountId: accountId.Value,
+            Description:
+                $"Kur farkı — {transaction.CurrencyCode} " +
+                $"{TurkishFormat.Rate(difference.CarryingRate)} → " +
+                $"{TurkishFormat.Rate(difference.SettlementRate)}",
+            // Kâr alacağa, zarar borca yazılır.
+            DebitAmount: difference.IsGain ? 0m : difference.Amount,
+            CreditAmount: difference.IsGain ? difference.Amount : 0m,
+            CurrencyCode: "TRY",
+            ExchangeRate: 1m,
+            // Cari boyutu YOK: bakiye bu boyutu taşıyan satırların
+            // borç − alacağı olarak hesaplanıyor, kâr/zarar satırını da
+            // cariye etiketlemek cari bakiyesini olduğundan farklı
+            // gösterir.
+            CurrentAccountId: null,
+            ProjectId: transaction.ProjectId,
+            CostCenterCode: null,
+            DocumentNumber: transaction.DocumentNumber,
+            DocumentDate: transaction.TransactionDate,
+            DueDate: null));
     }
 
     /// <summary>
@@ -1534,7 +1665,12 @@ public sealed class AccountingIntegrationService(
                     CreditAmount: isGain ? magnitude : 0m,
                     CurrencyCode: "TRY",
                     ExchangeRate: 1m,
-                    CurrentAccountId: cheque.CurrentAccountId,
+                    // Cari boyutu YOK: cari bakiyesi bu boyutu taşıyan
+                    // satırların borç − alacağı olarak hesaplanıyor;
+                    // kambiyo kâr/zararını da cariye etiketlemek carinin
+                    // bakiyesini kur farkı kadar kaydırırdı. Kâr/zarar
+                    // cariye değil, şirkete aittir.
+                    CurrentAccountId: null,
                     ProjectId: cheque.ProjectId,
                     CostCenterCode: costCenterCode,
                     DocumentNumber: cheque.ChequeNumber,

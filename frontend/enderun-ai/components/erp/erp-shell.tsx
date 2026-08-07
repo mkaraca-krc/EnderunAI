@@ -169,6 +169,11 @@ const groups: MenuGroup[] = [
         icon: "○",
       },
       {
+        label: "Kur Değerlemesi",
+        href: "/muhasebe/kur-degerlemesi",
+        icon: "○",
+      },
+      {
         label: "Rapor Merkezi",
         href: "/raporlar",
         icon: "▤",

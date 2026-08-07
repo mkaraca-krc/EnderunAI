@@ -70,6 +70,26 @@ public sealed class CashTransaction : BaseEntity
     public decimal Amount { get; set; }
     public string CurrencyCode { get; set; } = "TRY";
 
+    /// <summary>
+    /// İşlem günündeki kur. TRY hareketlerde 1.
+    ///
+    /// Bu alan olmadan dövizli kasa/banka hareketi deftere 1:1 giriyordu:
+    /// 10.000 dolarlık bir ödeme 10.000 TL olarak defterleniyordu. Çekte
+    /// aynı hata D4'te düzeltilmişti; kasa tarafında duruyordu.
+    /// </summary>
+    public decimal ExchangeRate { get; set; } = 1m;
+
+    /// <summary>
+    /// Deftere giren TL karşılığı (Amount × ExchangeRate). Ayrı alan
+    /// tutuluyor ki kur arşivi sonradan güncellense bile hareketin
+    /// defter değeri değişmesin.
+    /// </summary>
+    public decimal AmountTry { get; set; }
+
+    /// <summary>Hareket yerel para biriminde mi.</summary>
+    public bool IsLocalCurrency =>
+        string.Equals(CurrencyCode, "TRY", StringComparison.OrdinalIgnoreCase);
+
     public string Description { get; set; } = string.Empty;
     public string? DocumentNumber { get; set; }
 

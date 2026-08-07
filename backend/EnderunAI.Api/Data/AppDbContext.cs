@@ -26,6 +26,10 @@ public sealed class AppDbContext(
     public DbSet<CompanyFinanceSettings> CompanyFinanceSettings => Set<CompanyFinanceSettings>();
     public DbSet<CashAccount> CashAccounts => Set<CashAccount>();
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
+    public DbSet<CurrencyValuationRun> CurrencyValuationRuns =>
+        Set<CurrencyValuationRun>();
+    public DbSet<CurrencyValuationRunLine> CurrencyValuationRunLines =>
+        Set<CurrencyValuationRunLine>();
     public DbSet<HizirConversation> HizirConversations => Set<HizirConversation>();
     public DbSet<HizirMessage> HizirMessages => Set<HizirMessage>();
     public DbSet<HizirPendingAction> HizirPendingActions => Set<HizirPendingAction>();
@@ -228,6 +232,7 @@ public sealed class AppDbContext(
         ConfigureAccountingAccounts(modelBuilder);
         ConfigureAccountingVouchers(modelBuilder);
         ConfigureCompanyFinanceSettings(modelBuilder);
+        ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
         ConfigureHizir(modelBuilder);
@@ -803,6 +808,55 @@ public sealed class AppDbContext(
         });
     }
 
+    private static void ConfigureCurrencyValuation(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CurrencyValuationRun>(entity =>
+        {
+            entity.ToTable("currency_valuation_runs");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.PostedDifference).HasPrecision(18, 2);
+
+            // Aynı şirket + tarih için birden fazla İPTAL EDİLMEMİŞ tur
+            // olmamalı; kontrol serviste, burada arama için indeks.
+            entity.HasIndex(x => new { x.CompanyId, x.ValuationDate });
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AccountingVoucher).WithMany()
+                .HasForeignKey(x => x.AccountingVoucherId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<CurrencyValuationRunLine>(entity =>
+        {
+            entity.ToTable("currency_valuation_run_lines");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.CurrencyCode).HasMaxLength(8).IsRequired();
+            entity.Property(x => x.Balance).HasPrecision(18, 2);
+            entity.Property(x => x.BookValueLocal).HasPrecision(18, 2);
+            entity.Property(x => x.ValuationRate).HasPrecision(18, 6);
+            entity.Property(x => x.ValuedLocal).HasPrecision(18, 2);
+            entity.Property(x => x.TotalDifference).HasPrecision(18, 2);
+            entity.Property(x => x.PostedDifference).HasPrecision(18, 2);
+
+            // Kümülatif düzeltme sorgusunun taradığı yol.
+            entity.HasIndex(x => new { x.CurrentAccountId, x.CurrencyCode });
+
+            entity.HasOne(x => x.CurrencyValuationRun).WithMany(x => x.Lines)
+                .HasForeignKey(x => x.CurrencyValuationRunId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.CurrentAccount).WithMany()
+                .HasForeignKey(x => x.CurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
     private static void ConfigureCompanyFinanceSettings(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<CompanyFinanceSettings>(entity =>
@@ -891,6 +945,8 @@ public sealed class AppDbContext(
             entity.Property(x => x.TransactionType).HasConversion<int>().IsRequired();
             entity.Property(x => x.Direction).HasConversion<int>().IsRequired();
             entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.ExchangeRate).HasPrecision(18, 6);
+            entity.Property(x => x.AmountTry).HasPrecision(18, 2);
             entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
             entity.Property(x => x.DocumentNumber).HasMaxLength(100);
