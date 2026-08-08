@@ -137,3 +137,33 @@ public sealed record CalculateOfferItemResponse(
     decimal CostTotal,
     decimal SalesTotal,
     decimal ProfitTotal);
+
+/// <summary>
+/// Kazanılan teklif için sözleşme künyesi ve proje isteği.
+///
+/// ProjectId doluysa EK İŞtir: o projenin sözleşme künyesi korunur,
+/// yalnız ek icmal açılır. Boşsa künye yeni projeyi kurar.
+/// </summary>
+public sealed record CreateOfferContractRequest(
+    Guid? ProjectId,
+    Guid? BranchId,
+    string? Code,
+    string? Name,
+    string? ContractNumber,
+    DateTime? ContractDate,
+    decimal? ContractAmount,
+    ProjectContractType? ContractType,
+    DateTime? PlannedStartDate,
+    DateTime? PlannedEndDate,
+    decimal CashRetentionRate = 0m,
+    decimal VatRate = 20m,
+    decimal WithholdingTaxRate = 0m,
+    decimal MaterialDeductionRate = 0m,
+    ProjectProgressPaymentPeriod ProgressPaymentPeriod
+        = ProjectProgressPaymentPeriod.Unspecified,
+    string? PaymentTerms = null,
+    string? City = null,
+    string? District = null,
+    string? Address = null,
+    bool TransferToBoq = true,
+    string? BoqName = null);

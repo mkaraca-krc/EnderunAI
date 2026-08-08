@@ -43,6 +43,26 @@ public enum ProjectStatus
     Cancelled = 5
 }
 
+/// <summary>
+/// Hakediş düzenleme periyodu. Nakit akışı tahmini buna dayanıyor:
+/// aylık hakediş kesen bir işle iş bitiminde tek ödeme alınan iş aynı
+/// takvimde nakit üretmez.
+/// </summary>
+public enum ProjectProgressPaymentPeriod
+{
+    /// <summary>Belirlenmedi — nakit takvimi tahmin edilmez.</summary>
+    Unspecified = 0,
+
+    Monthly = 1,
+    BiWeekly = 2,
+    Quarterly = 3,
+
+    /// <summary>İş bitiminde tek hakediş.</summary>
+    OnCompletion = 4,
+
+    Other = 5
+}
+
 public enum ProjectHealthStatus
 {
     Green = 0,
@@ -72,6 +92,28 @@ public sealed class Project : BaseEntity
     public string? ContractNumber { get; set; }
     public DateTime? ContractDate { get; set; }
     public decimal? ContractAmount { get; set; }
+
+    /// <summary>
+    /// Bu proje hangi kazanılan tekliften doğdu.
+    ///
+    /// Zincirin (teklif → proje → icmal → hakediş) ilk halkası. Boş
+    /// olması normaldir: teklif modülü gelmeden önce açılmış projeler
+    /// ve doğrudan açılan projeler bu bağı taşımaz.
+    /// </summary>
+    public Guid? SourceOfferId { get; set; }
+
+    /// <summary>
+    /// Hakediş periyodu. Nakit akışı takvimi buna bağlı.
+    /// </summary>
+    public ProjectProgressPaymentPeriod ProgressPaymentPeriod { get; set; }
+        = ProjectProgressPaymentPeriod.Unspecified;
+
+    /// <summary>
+    /// Ödeme koşulları (vade, kesinti, teminat iadesi gibi sözleşme
+    /// metninden gelen serbest hükümler). Sayılabilir bir şey
+    /// olmadığı için serbest metin; periyot ayrı alanda tutuluyor.
+    /// </summary>
+    public string? PaymentTerms { get; set; }
 
     public string CurrencyCode { get; set; } = "TRY";
     public decimal VatRate { get; set; }

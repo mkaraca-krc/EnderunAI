@@ -1748,6 +1748,7 @@ public sealed class AppDbContext(
             entity.Property(x => x.Name).HasMaxLength(300).IsRequired();
             entity.Property(x => x.ContractNumber).HasMaxLength(100);
             entity.Property(x => x.ContractAmount).HasPrecision(18, 2);
+            entity.Property(x => x.PaymentTerms).HasMaxLength(2000);
             entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
             entity.Property(x => x.VatRate).HasPrecision(5, 2);
             entity.Property(x => x.WithholdingRate).HasMaxLength(20);

@@ -201,6 +201,7 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Market.CopperExposureService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Market.CommodityAlertService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Offers.OfferBoqTransferService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Offers.OfferContractService>();
 builder.Services
     .AddScoped<EnderunAI.Api.Services.Purchasing.SupplierPriceIntelligenceService>();
 builder.Services

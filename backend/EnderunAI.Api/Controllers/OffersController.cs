@@ -4,6 +4,7 @@ using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.DocumentNumbers;
 using EnderunAI.Api.Services.Offers;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Security.CurrentUser;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -701,6 +702,119 @@ public sealed class OffersController(
     }
 
     /// <summary>
+    /// Kazanılan teklifin sözleşmesini açar: yeni proje kurar ya da
+    /// mevcut projeye ek iş olarak bağlar, ardından icmali teklif
+    /// kalemlerinden üretir.
+    ///
+    /// Proje AÇMA yetkisi de aranır ve bilinçli olarak KOD İÇİNDE
+    /// kontrol edilir: birden fazla [RequirePermission] birleştiği
+    /// zaman "herhangi biri yeterli" anlamına geliyor, yani ikinci
+    /// attribute yetkiyi daraltmak yerine genişletirdi. Yeni proje
+    /// açılmayan ek iş bağlamasında bu koşul aranmaz.
+    /// </summary>
+    [HttpPost("{id:guid}/sozlesme")]
+    [RequirePermission(PermissionCatalog.Keys.OfferTrackingManage)]
+    public async Task<IActionResult> CreateContract(
+        Guid id,
+        CreateOfferContractRequest request,
+        [FromServices] OfferContractService contracts,
+        [FromServices] ICurrentUserService currentUser,
+        [FromServices] IUserAuthorizationService authorization,
+        CancellationToken cancellationToken)
+    {
+        if (request.ProjectId is null &&
+            !await HasPermissionAsync(
+                currentUser, authorization,
+                PermissionCatalog.Keys.ProjectsCreate, cancellationToken))
+        {
+            return StatusCode(403, new
+            {
+                message = "Yeni proje açmak için proje oluşturma yetkisi gerekir.",
+                requiredPermission = PermissionCatalog.Keys.ProjectsCreate
+            });
+        }
+
+        if (request.ContractType is ProjectContractType type &&
+            !Enum.IsDefined(typeof(ProjectContractType), type))
+        {
+            return BadRequest(new { message = "Geçersiz sözleşme tipi." });
+        }
+
+        if (!Enum.IsDefined(
+                typeof(ProjectProgressPaymentPeriod),
+                request.ProgressPaymentPeriod))
+        {
+            return BadRequest(new { message = "Geçersiz hakediş periyodu." });
+        }
+
+        if (request.ContractAmount is decimal amount && amount < 0m)
+            return BadRequest(new { message = "Sözleşme bedeli negatif olamaz." });
+
+        if (request.PlannedStartDate is DateTime start &&
+            request.PlannedEndDate is DateTime end &&
+            end < start)
+        {
+            return BadRequest(new
+            {
+                message = "Termin, işe başlama tarihinden önce olamaz."
+            });
+        }
+
+        try
+        {
+            var result = await contracts.CreateAsync(
+                id,
+                new OfferContractInput(
+                    request.ProjectId,
+                    request.BranchId,
+                    request.Code,
+                    request.Name,
+                    request.ContractNumber,
+                    request.ContractDate,
+                    request.ContractAmount,
+                    request.ContractType,
+                    request.PlannedStartDate,
+                    request.PlannedEndDate,
+                    request.CashRetentionRate,
+                    request.VatRate,
+                    request.WithholdingTaxRate,
+                    request.MaterialDeductionRate,
+                    request.ProgressPaymentPeriod,
+                    request.PaymentTerms,
+                    request.City,
+                    request.District,
+                    request.Address,
+                    request.TransferToBoq,
+                    request.BoqName),
+                cancellationToken);
+
+            return Ok(new
+            {
+                message = result.ProjectCreated
+                    ? "Sözleşme künyesi kaydedildi, proje ve icmal oluşturuldu."
+                    : "Teklif mevcut projeye ek iş olarak bağlandı.",
+                result.ProjectId,
+                result.ProjectCode,
+                result.ProjectCreated,
+                result.WarehouseId,
+                result.ProjectBoqId,
+                result.BoqNumber,
+                result.BoqItemCount,
+                result.BoqTotalAmount,
+                result.Warnings
+            });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Kazanma oranı özeti — adet ve tutar bazında.
     ///
     /// Oranın paydası kazanılan + kaybedilendir; sonucu belli olmamış
@@ -779,6 +893,34 @@ public sealed class OffersController(
                     Amount = decimal.Round(x.Amount, 2)
                 })
         });
+    }
+
+    /// <summary>
+    /// Oturumdaki kullanıcının belirli bir izne sahip olup olmadığı.
+    /// Attribute'lar VEYA mantığıyla birleştiği için ikinci bir izin
+    /// koşulu ancak burada zorlanabiliyor.
+    /// </summary>
+    private static async Task<bool> HasPermissionAsync(
+        ICurrentUserService currentUser,
+        IUserAuthorizationService authorization,
+        string permissionKey,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid userId)
+            return false;
+
+        var snapshot = await authorization.GetAsync(userId, cancellationToken);
+
+        if (snapshot is null || !snapshot.IsActive)
+            return false;
+
+        // Admin rolü yetki katmanının tamamını atlıyor (middleware ile
+        // aynı davranış); burada da aynı istisna geçerli olmalı.
+        if (snapshot.RoleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        return snapshot.Permissions.Contains(
+            permissionKey, StringComparer.OrdinalIgnoreCase);
     }
 
     [HttpPost("{id:guid}/icmale-aktar")]
