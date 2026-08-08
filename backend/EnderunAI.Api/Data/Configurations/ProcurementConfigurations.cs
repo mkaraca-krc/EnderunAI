@@ -19,6 +19,8 @@ public static class ProcurementModelConfiguration
         modelBuilder.ApplyConfiguration(new PurchaseOrderItemConfiguration());
         modelBuilder.ApplyConfiguration(new GoodsReceiptConfiguration());
         modelBuilder.ApplyConfiguration(new GoodsReceiptItemConfiguration());
+        modelBuilder.ApplyConfiguration(new PurchaseReturnConfiguration());
+        modelBuilder.ApplyConfiguration(new PurchaseReturnItemConfiguration());
     }
 }
 
@@ -246,6 +248,7 @@ public sealed class GoodsReceiptItemConfiguration :
         entity.HasIndex(x => x.PurchaseOrderItemId);
         entity.HasIndex(x => x.InventoryItemId);
         entity.Property(x => x.MaterialDescription).HasMaxLength(500).IsRequired();
+        entity.Property(x => x.RejectionReason).HasMaxLength(1000);
         entity.Property(x => x.Brand).HasMaxLength(150);
         entity.Property(x => x.Model).HasMaxLength(150);
         entity.Property(x => x.OrderedQuantity).HasPrecision(18, 4);
@@ -268,6 +271,89 @@ public sealed class GoodsReceiptItemConfiguration :
         entity.HasOne(x => x.InventoryItem).WithMany()
             .HasForeignKey(x => x.InventoryItemId)
             .OnDelete(DeleteBehavior.SetNull);
+        entity.HasQueryFilter(x => !x.IsDeleted);
+    }
+}
+
+
+public sealed class PurchaseReturnConfiguration :
+    IEntityTypeConfiguration<PurchaseReturn>
+{
+    public void Configure(EntityTypeBuilder<PurchaseReturn> entity)
+    {
+        entity.ToTable("purchase_returns");
+        entity.HasKey(x => x.Id);
+
+        entity.HasIndex(x => new { x.CompanyId, x.ReturnNumber }).IsUnique();
+
+        // Bekleyen iade listesi durum üzerinden filtreleniyor.
+        entity.HasIndex(x => new { x.CompanyId, x.Status });
+        entity.HasIndex(x => x.GoodsReceiptId);
+        entity.HasIndex(x => x.PurchaseOrderId);
+        entity.HasIndex(x => x.SupplierCurrentAccountId);
+
+        entity.Property(x => x.ReturnNumber).HasMaxLength(50).IsRequired();
+        entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
+        entity.Property(x => x.ExchangeRate).HasPrecision(18, 6);
+        entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
+        entity.Property(x => x.Notes).HasMaxLength(2000);
+        entity.Property(x => x.CancellationReason).HasMaxLength(1000);
+
+        entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(x => x.GoodsReceipt).WithMany()
+            .HasForeignKey(x => x.GoodsReceiptId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(x => x.PurchaseOrder).WithMany()
+            .HasForeignKey(x => x.PurchaseOrderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(x => x.SupplierCurrentAccount).WithMany()
+            .HasForeignKey(x => x.SupplierCurrentAccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(x => x.Project).WithMany()
+            .HasForeignKey(x => x.ProjectId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasQueryFilter(x => !x.IsDeleted);
+    }
+}
+
+public sealed class PurchaseReturnItemConfiguration :
+    IEntityTypeConfiguration<PurchaseReturnItem>
+{
+    public void Configure(EntityTypeBuilder<PurchaseReturnItem> entity)
+    {
+        entity.ToTable("purchase_return_items");
+        entity.HasKey(x => x.Id);
+
+        // Yumuşak silme nedeniyle filtreli: silinmiş satır numarasını
+        // rezerve etmemeli.
+        entity.HasIndex(x => new { x.PurchaseReturnId, x.LineNumber })
+            .IsUnique()
+            .HasFilter("\"IsDeleted\" = false");
+
+        entity.HasIndex(x => x.GoodsReceiptItemId);
+
+        entity.Property(x => x.MaterialDescription).HasMaxLength(500).IsRequired();
+        entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
+        entity.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+
+        entity.Property(x => x.Quantity).HasPrecision(18, 4);
+        entity.Property(x => x.UnitPrice).HasPrecision(18, 6);
+        entity.Property(x => x.LineTotal).HasPrecision(18, 2);
+
+        entity.HasOne(x => x.PurchaseReturn).WithMany(x => x.Items)
+            .HasForeignKey(x => x.PurchaseReturnId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(x => x.GoodsReceiptItem).WithMany()
+            .HasForeignKey(x => x.GoodsReceiptItemId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         entity.HasQueryFilter(x => !x.IsDeleted);
     }
 }

@@ -276,6 +276,11 @@ const groups: MenuGroup[] = [
         icon: "✓",
       },
       {
+        label: "Alış İadeleri",
+        href: "/depo-stok/iadeler",
+        icon: "○",
+      },
+      {
         label: "Mal Kabul",
         href: "/depo-stok/mal-kabul",
         icon: "○",

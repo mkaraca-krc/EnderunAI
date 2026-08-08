@@ -7,9 +7,11 @@ import { useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import {
   goodsReceiptService,
+  purchaseReturnService,
   type GoodsReceiptDetail,
   type GoodsReceiptInventoryOption,
   type GoodsReceiptItem,
+  type PurchaseReturnListItem,
   type UpdateGoodsReceiptItemRequest,
 } from "@/services/goods-receipt.service";
 
@@ -66,6 +68,10 @@ function formatMoney(value?: number | null) {
 export default function GoodsReceiptDetailPage() {
   const params = useParams<{ id: string }>();
 
+  const [purchaseReturns, setPurchaseReturns] = useState<
+    PurchaseReturnListItem[]
+  >([]);
+
   const [receipt, setReceipt] =
     useState<GoodsReceiptDetail | null>(null);
   const [draftItems, setDraftItems] = useState<
@@ -94,6 +100,16 @@ export default function GoodsReceiptDetailPage() {
 
       const data = await goodsReceiptService.getById(id);
       setReceipt(data);
+
+      // Kesinleşmiş kabulde iade belgesi doğmuş olabilir; yetki yoksa
+      // sessizce boş kalır.
+      if (data.status === 1) {
+        setPurchaseReturns(
+          await purchaseReturnService
+            .getAll({ goodsReceiptId: data.id })
+            .catch(() => [])
+        );
+      }
       setDraftItems(
         data.items.map((item) => ({
           id: item.id,
@@ -109,6 +125,7 @@ export default function GoodsReceiptDetailPage() {
           warrantyEndDate: item.warrantyEndDate,
           shelfLocation: item.shelfLocation,
           notes: item.notes,
+          rejectionReason: item.rejectionReason,
         })),
       );
 
@@ -162,6 +179,19 @@ export default function GoodsReceiptDetailPage() {
         0,
       ),
       lines: items.length,
+
+      // Kısmi kabul tablosu: siparişten ne kadarı hâlâ AÇIK.
+      // Reddedilen miktar teslim alınmış sayılmadığı için açık
+      // bakiyeye geri döner ve tedarikçi eksiği yeniden gönderebilir.
+      ordered: items.reduce((sum, item) => {
+        const source = receipt?.items.find((x) => x.id === item.id);
+        return sum + (source?.orderedQuantity ?? 0);
+      }, 0),
+
+      previously: items.reduce((sum, item) => {
+        const source = receipt?.items.find((x) => x.id === item.id);
+        return sum + (source?.previouslyReceivedQuantity ?? 0);
+      }, 0),
     };
   }, [draftItems, receipt]);
 
@@ -213,6 +243,18 @@ export default function GoodsReceiptDetailPage() {
         !draft.inventoryItemId
       ) {
         return `${item.lineNumber}. kalemde kabul edilen miktar için stok kartı seçilmelidir.`;
+      }
+
+      // Red/hasar varsa GEREKÇE zorunlu. Uç da bunu reddediyor;
+      // burada kullanıcı sunucuya gitmeden uyarılıyor. Gerekçesiz red
+      // tedarikçiyle mutabakatta savunulamaz ve alış iadesi belgesi
+      // "sebebi bilinmeyen" satırla doğardı.
+      if (
+        requireAcceptedStock &&
+        draft.rejectedQuantity + draft.damagedQuantity > 0 &&
+        !draft.rejectionReason?.trim()
+      ) {
+        return `${item.lineNumber}. kalemde reddedilen/hasarlı miktar için gerekçe zorunludur.`;
       }
     }
 
@@ -479,6 +521,64 @@ export default function GoodsReceiptDetailPage() {
         />
       </div>
 
+      {/* Kısmi kabulün ne anlama geldiği tek cümlede: kaç adet
+          stoğa girdi, kaç adet iade edildi, kaç adet hâlâ bekleniyor.
+          Bu üç sayı ayrı ayrı duruyordu ve birlikte okunmadıkça
+          "eksik mi geldi yoksa reddettik mi" anlaşılmıyordu. */}
+      {(totals.rejected > 0 ||
+        totals.damaged > 0 ||
+        totals.delivered <
+          totals.ordered - totals.previously) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>Kısmi kabul:</strong>{" "}
+          {formatNumber(totals.ordered)} sipariş ·{" "}
+          {formatNumber(totals.previously + totals.delivered)} geldi ·{" "}
+          <strong>{formatNumber(totals.accepted)} stoğa girecek</strong>
+          {totals.rejected + totals.damaged > 0 && (
+            <>
+              {" · "}
+              {formatNumber(totals.rejected + totals.damaged)} iade edilecek
+            </>
+          )}
+          {totals.ordered -
+            totals.previously -
+            totals.delivered >
+            0 && (
+            <>
+              {" · "}
+              {formatNumber(
+                totals.ordered - totals.previously - totals.delivered
+              )}{" "}
+              hiç gelmedi
+            </>
+          )}
+          <span className="mt-1 block text-xs">
+            Reddedilen miktar siparişte açık kalır; tedarikçi eksiği
+            yeniden gönderebilir.
+          </span>
+        </div>
+      )}
+
+      {receipt.status === 1 && purchaseReturns.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <strong className="text-slate-900">Alış İadesi Belgesi</strong>
+          <ul className="mt-2 space-y-1">
+            {purchaseReturns.map((row) => (
+              <li key={row.id}>
+                <Link
+                  href={`/depo-stok/iadeler/${row.id}`}
+                  className="text-teal-700 underline"
+                >
+                  {row.returnNumber}
+                </Link>{" "}
+                · {row.statusName} · {formatNumber(row.totalQuantity)} adet ·{" "}
+                {row.supplierName}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-3">
         <InfoSection title="Sipariş ve Proje">
           <InfoRow
@@ -688,6 +788,7 @@ export default function GoodsReceiptDetailPage() {
                 <th className="px-4 py-3 text-right">Kabul</th>
                 <th className="px-4 py-3 text-right">Red</th>
                 <th className="px-4 py-3 text-right">Hasarlı</th>
+                <th className="px-4 py-3">Red / Hasar Gerekçesi</th>
                 <th className="px-4 py-3">Lot / Seri</th>
                 <th className="px-4 py-3">Raf</th>
               </tr>
@@ -848,6 +949,36 @@ function DraftGoodsReceiptItemRow({
         onChange={(value) => onChange({ damagedQuantity: value })}
       />
 
+      {/* Gerekçe alanı yalnız red/hasar girildiğinde AÇILIR ve o
+          zaman zorunludur. Her kalemde sürekli görünmesi tamamı
+          kabul edilen teslimatlarda gereksiz gürültü olurdu. */}
+      <td className="min-w-56 space-y-2 px-4 py-4">
+        {draft.rejectedQuantity + draft.damagedQuantity > 0 ? (
+          <>
+            <textarea
+              value={draft.rejectionReason ?? ""}
+              onChange={(event) =>
+                onChange({ rejectionReason: event.target.value })
+              }
+              rows={2}
+              placeholder="Red / hasar gerekçesi (zorunlu)"
+              className={`w-full rounded-lg border bg-white px-2 py-1.5 text-xs outline-none ring-slate-300 focus:ring-2 ${
+                draft.rejectionReason?.trim()
+                  ? "border-slate-300"
+                  : "border-amber-400 bg-amber-50"
+              }`}
+            />
+            {!draft.rejectionReason?.trim() && (
+              <p className="text-[11px] text-amber-700">
+                Gerekçe girilmeden kabul kesinleştirilemez.
+              </p>
+            )}
+          </>
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        )}
+      </td>
+
       <td className="min-w-52 space-y-2 px-4 py-4">
         <input
           value={draft.lotNumber ?? ""}
@@ -992,6 +1123,12 @@ function GoodsReceiptItemRow({
         value={item.damagedQuantity}
         unit={item.unit}
       />
+
+      <td className="min-w-56 px-4 py-4 text-xs text-slate-700">
+        {item.rejectedQuantity + item.damagedQuantity > 0
+          ? item.rejectionReason || "—"
+          : "—"}
+      </td>
 
       <td className="min-w-48 px-4 py-4 text-slate-700">
         <div>

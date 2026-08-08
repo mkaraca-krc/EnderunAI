@@ -48,6 +48,8 @@ export type GoodsReceiptItem = {
   warrantyEndDate?: string | null;
   shelfLocation?: string | null;
   notes?: string | null;
+  /** Red / hasar gerekçesi — reddedilen/hasarlı miktar varsa dolu. */
+  rejectionReason?: string | null;
 };
 
 export type GoodsReceiptDetail = {
@@ -137,6 +139,11 @@ export type UpdateGoodsReceiptItemRequest = {
   warrantyEndDate?: string | null;
   shelfLocation?: string | null;
   notes?: string | null;
+  /**
+   * Red / hasar gerekçesi. Reddedilen ya da hasarlı miktar varsa
+   * kesinleştirmede zorunlu.
+   */
+  rejectionReason?: string | null;
 };
 
 export type GoodsReceiptActionResponse = {
@@ -249,3 +256,93 @@ export const goodsReceiptService = {
   },
 };
 
+
+
+/** Alış iadesi belge durumları. */
+export const PURCHASE_RETURN_STATUS = {
+  Draft: 0,
+  Sent: 1,
+  Completed: 2,
+  Cancelled: 3,
+} as const;
+
+export type PurchaseReturnListItem = {
+  id: string;
+  companyId: string;
+  returnNumber: string;
+  returnDate: string;
+  status: number;
+  statusName: string;
+  currencyCode: string;
+  totalAmount: number;
+  goodsReceiptId: string;
+  receiptNumber: string;
+  purchaseOrderId: string;
+  orderNumber: string;
+  supplierCurrentAccountId: string;
+  supplierName: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  itemCount: number;
+  totalQuantity: number;
+};
+
+export type PurchaseReturnDetail = PurchaseReturnListItem & {
+  exchangeRate: number;
+  notes?: string | null;
+  sentAtUtc?: string | null;
+  completedAtUtc?: string | null;
+  cancelledAtUtc?: string | null;
+  cancellationReason?: string | null;
+  items: {
+    id: string;
+    lineNumber: number;
+    materialDescription: string;
+    unit: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+    reasonKind: number;
+    reasonKindName: string;
+    reason: string;
+  }[];
+};
+
+/**
+ * Alış iadesi belgeleri — mal kabulde reddedilen/hasarlı miktar için
+ * kabul kesinleşirken otomatik doğar.
+ */
+export const purchaseReturnService = {
+  getAll(params: {
+    companyId?: string;
+    projectId?: string;
+    goodsReceiptId?: string;
+    status?: number;
+    openOnly?: boolean;
+  } = {}) {
+    const query = new URLSearchParams();
+
+    if (params.companyId) query.set("companyId", params.companyId);
+    if (params.projectId) query.set("projectId", params.projectId);
+    if (params.goodsReceiptId)
+      query.set("goodsReceiptId", params.goodsReceiptId);
+    if (params.status !== undefined) query.set("status", String(params.status));
+    if (params.openOnly) query.set("openOnly", "true");
+
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return apiClient<PurchaseReturnListItem[]>(`purchase-returns${suffix}`);
+  },
+
+  getById(id: string) {
+    return apiClient<PurchaseReturnDetail>(`purchase-returns/${id}`);
+  },
+
+  /** Taslak → Gönderildi → Kapandı, ya da İptal (gerekçe zorunlu). */
+  advance(id: string, status: number, note?: string | null) {
+    return apiClient<{ message: string; status: number }>(
+      `purchase-returns/${id}/durum`,
+      { method: "POST", body: { status, note: note ?? null } },
+    );
+  },
+};

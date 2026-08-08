@@ -150,6 +150,10 @@ public sealed class AppDbContext(
     public DbSet<PersonnelAssignment> PersonnelAssignments => Set<PersonnelAssignment>();
     public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
     public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
+    public DbSet<Models.GoodsReceipt.PurchaseReturn> PurchaseReturns =>
+        Set<Models.GoodsReceipt.PurchaseReturn>();
+    public DbSet<Models.GoodsReceipt.PurchaseReturnItem> PurchaseReturnItems =>
+        Set<Models.GoodsReceipt.PurchaseReturnItem>();
     public DbSet<Rfq> Rfqs => Set<Rfq>();
     public DbSet<RfqItem> RfqItems => Set<RfqItem>();
     public DbSet<RfqSupplier> RfqSuppliers => Set<RfqSupplier>();

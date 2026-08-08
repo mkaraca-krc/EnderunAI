@@ -21,6 +21,16 @@ public sealed class GoodsReceiptItem : BaseEntity
     public decimal AcceptedQuantity { get; set; }
     public decimal RejectedQuantity { get; set; }
     public decimal DamagedQuantity { get; set; }
+
+    /// <summary>
+    /// Red / hasar gerekçesi. Reddedilen ya da hasarlı miktar varsa
+    /// ZORUNLU.
+    ///
+    /// Gerekçesiz red, tedarikçiyle mutabakatta savunulamaz ve
+    /// tedarikçi kalite geçmişini "sebebi bilinmeyen redler"le
+    /// doldurur. Alış iadesi belgesine de buradan kopyalanır.
+    /// </summary>
+    public string? RejectionReason { get; set; }
     public string Unit { get; set; } = string.Empty;
     public string? LotNumber { get; set; }
     public string? SerialNumber { get; set; }

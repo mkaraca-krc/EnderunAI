@@ -139,7 +139,8 @@ public sealed class GoodsReceiptService(
                         i.ExpiryDate,
                         i.WarrantyEndDate,
                         i.ShelfLocation,
-                        i.Notes))
+                        i.Notes,
+                        i.RejectionReason))
                     .ToList()))
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -378,6 +379,8 @@ public sealed class GoodsReceiptService(
             item.AcceptedQuantity = update.AcceptedQuantity;
             item.RejectedQuantity = update.RejectedQuantity;
             item.DamagedQuantity = update.DamagedQuantity;
+            item.RejectionReason =
+                TrimOrNull(update.RejectionReason, 1000, "Red gerekçesi");
             item.LotNumber = TrimOrNull(update.LotNumber, 100, "Lot numarası");
             item.SerialNumber = TrimOrNull(update.SerialNumber, 250, "Seri numarası");
             item.ProductionDate = update.ProductionDate.AsUtc();
@@ -439,7 +442,20 @@ public sealed class GoodsReceiptService(
         }
 
         foreach (var item in receipt.Items)
+        {
             ValidatePostingQuantities(item);
+
+            // Reddedilen ya da hasarlı miktar varsa gerekçe ZORUNLU.
+            // Gerekçesiz red tedarikçiyle mutabakatta savunulamaz ve
+            // kalite geçmişini "sebebi bilinmeyen redler"le doldurur.
+            if (item.RejectedQuantity + item.DamagedQuantity > 0m &&
+                string.IsNullOrWhiteSpace(item.RejectionReason))
+            {
+                throw new ProcurementValidationException(
+                    $"{item.LineNumber}. kalemde reddedilen/hasarlı miktar " +
+                    "için gerekçe zorunludur.");
+            }
+        }
 
         var acceptedItems = receipt.Items
             .Where(x => x.AcceptedQuantity > 0m)
@@ -579,6 +595,83 @@ public sealed class GoodsReceiptService(
                 Description = $"Mal kabul {receipt.ReceiptNumber} - {item.MaterialDescription}",
                 CreatedByUserId = currentUser.UserId
             });
+        }
+
+        // Reddedilen ve hasarlı miktar için ALIŞ İADESİ belgesi
+        // otomatik doğar.
+        //
+        // Elle açma adımı olsaydı unutulduğunda reddedilen mal
+        // kayıtsız kalır, tedarikçiye neyin neden iade edildiği
+        // belgelenemezdi. Belge TASLAK doğar; tedarikçiye gönderim
+        // ayrı bir adımdır.
+        //
+        // Reddedilen miktar ReceivedQuantity'ye EKLENMEZ (yukarıda
+        // yalnız AcceptedQuantity ekleniyor), yani sipariş o miktar
+        // için AÇIK kalır ve tedarikçi eksiği yeniden gönderebilir.
+        var returnLines = receipt.Items
+            .Where(x => x.RejectedQuantity + x.DamagedQuantity > 0m)
+            .OrderBy(x => x.LineNumber)
+            .ToArray();
+
+        if (returnLines.Length > 0)
+        {
+            var returnNumber = await documentNumbers.GenerateAsync(
+                receipt.CompanyId,
+                "PURCHASE_RETURN",
+                "AI",
+                cancellationToken);
+
+            var purchaseReturn = new PurchaseReturn
+            {
+                CompanyId = receipt.CompanyId,
+                GoodsReceiptId = receipt.Id,
+                PurchaseOrderId = purchaseOrder.Id,
+                SupplierCurrentAccountId = purchaseOrder.SupplierCurrentAccountId,
+                ProjectId = purchaseOrder.ProjectId,
+                ReturnNumber = returnNumber,
+                ReturnDate = receipt.ReceiptDate,
+                Status = PurchaseReturnStatus.Draft,
+                CurrencyCode = purchaseOrder.Currency,
+                ExchangeRate = purchaseOrder.ExchangeRate,
+                Notes = $"{receipt.ReceiptNumber} mal kabulünden otomatik üretildi."
+            };
+
+            var returnLineNumber = 1;
+
+            foreach (var item in returnLines)
+            {
+                var orderItem = purchaseOrderItems[item.PurchaseOrderItemId];
+
+                // Red ve hasar AYRI satır: ikisi farklı gerekçedir ve
+                // tedarikçi kalite analizinde ayrı sayılmalı.
+                foreach (var (quantity, kind) in new[]
+                         {
+                             (item.RejectedQuantity, PurchaseReturnReasonKind.Rejected),
+                             (item.DamagedQuantity, PurchaseReturnReasonKind.Damaged)
+                         })
+                {
+                    if (quantity <= 0m) continue;
+
+                    purchaseReturn.Items.Add(new PurchaseReturnItem
+                    {
+                        GoodsReceiptItemId = item.Id,
+                        PurchaseOrderItemId = item.PurchaseOrderItemId,
+                        LineNumber = returnLineNumber++,
+                        MaterialDescription = item.MaterialDescription,
+                        Unit = item.Unit,
+                        Quantity = quantity,
+                        UnitPrice = orderItem.NetUnitPrice,
+                        LineTotal = decimal.Round(quantity * orderItem.NetUnitPrice, 2),
+                        ReasonKind = kind,
+                        Reason = item.RejectionReason ?? string.Empty
+                    });
+                }
+            }
+
+            purchaseReturn.TotalAmount = decimal.Round(
+                purchaseReturn.Items.Sum(x => x.LineTotal), 2);
+
+            db.PurchaseReturns.Add(purchaseReturn);
         }
 
         purchaseOrder.Status = purchaseOrder.Items.All(x =>

@@ -44,7 +44,9 @@ public sealed record GoodsReceiptItemResponse(
     DateTime? ExpiryDate,
     DateTime? WarrantyEndDate,
     string? ShelfLocation,
-    string? Notes);
+    string? Notes,
+    /// <summary>Red / hasar gerekçesi.</summary>
+    string? RejectionReason = null);
 
 public sealed record GoodsReceiptDetailResponse(
     Guid Id,
@@ -129,7 +131,13 @@ public sealed record UpdateGoodsReceiptItemRequest(
     DateTime? ExpiryDate,
     DateTime? WarrantyEndDate,
     string? ShelfLocation,
-    string? Notes);
+    string? Notes,
+    /// <summary>
+    /// Red / hasar gerekçesi. Reddedilen ya da hasarlı miktar varsa
+    /// kesinleştirmede zorunlu. Opsiyonel ve sonda: mevcut çağıranlar
+    /// bozulmasın.
+    /// </summary>
+    string? RejectionReason = null);
 
 public sealed record GoodsReceiptReasonRequest(string Reason);
 
