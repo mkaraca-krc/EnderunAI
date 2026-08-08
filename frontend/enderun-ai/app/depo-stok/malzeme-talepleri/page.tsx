@@ -23,6 +23,7 @@ const statusLabels: Record<number, string> = {
   5: "Tamamlandı",
   6: "İptal",
   7: "Reddedildi",
+  8: "Düzeltmeye İade",
 };
 
 const priorityLabels: Record<number, string> = {

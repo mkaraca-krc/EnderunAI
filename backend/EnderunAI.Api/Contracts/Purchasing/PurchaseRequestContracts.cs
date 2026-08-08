@@ -33,3 +33,13 @@ public sealed record UpdatePurchaseRequestRequest(
 
 public sealed record CancelPurchaseRequestRequest(
     string? Reason);
+
+/// <summary>
+/// Talep red / düzeltmeye iade kararı.
+/// </summary>
+/// <param name="Reason">
+/// Gerekçe — her iki kararda da ZORUNLU. Gerekçesiz red talep
+/// sahibine neyi yanlış yaptığını söylemez; gerekçesiz iade ise
+/// talebi ne yapacağı belli olmadan bekletir.
+/// </param>
+public sealed record PurchaseRequestDecisionRequest(string Reason);

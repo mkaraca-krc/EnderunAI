@@ -17,7 +17,22 @@ public enum PurchaseRequestStatus
     Ordered = 4,
     Completed = 5,
     Cancelled = 6,
-    Rejected = 7
+
+    /// <summary>
+    /// Reddedildi — talep uygun bulunmadı, NİHAİdir. Gerekçesi
+    /// <see cref="PurchaseRequest.RejectionReason"/> alanında zorunlu.
+    /// </summary>
+    Rejected = 7,
+
+    /// <summary>
+    /// Düzeltmeye iade edildi — talep sahibine geri döndü.
+    ///
+    /// Redden farkı: red kapıyı kapatır, iade "şunu düzelt ve yeniden
+    /// gönder" der. İkisini tek duruma sıkıştırmak talep sahibinin
+    /// düzeltip yeniden gönderebileceği işleri de kalıcı olarak
+    /// öldürürdü.
+    /// </summary>
+    ReturnedForRevision = 8
 }
 
 public sealed class PurchaseRequest : BaseEntity
@@ -49,6 +64,25 @@ public sealed class PurchaseRequest : BaseEntity
     public Guid? CancelledByUserId { get; set; }
     public DateTime? CancelledAtUtc { get; set; }
     public string? CancellationReason { get; set; }
+
+    /// <summary>Red gerekçesi. Reddedildi durumunda zorunlu.</summary>
+    public string? RejectionReason { get; set; }
+    public Guid? RejectedByUserId { get; set; }
+    public DateTime? RejectedAtUtc { get; set; }
+
+    /// <summary>
+    /// Düzeltmeye iade gerekçesi — talep sahibinin neyi düzelteceği.
+    /// Gerekçesiz iade, talep sahibini ne yapacağını bilmeden bekletir.
+    /// </summary>
+    public string? ReturnReason { get; set; }
+    public Guid? ReturnedByUserId { get; set; }
+    public DateTime? ReturnedAtUtc { get; set; }
+
+    /// <summary>
+    /// Kaç kez düzeltmeye iade edilip yeniden gönderildi. Sürekli
+    /// gidip gelen talep, formu ya da süreci sorgulamak için sinyal.
+    /// </summary>
+    public int RevisionCount { get; set; }
 
     public ICollection<PurchaseRequestItem> Items { get; set; }
         = new List<PurchaseRequestItem>();

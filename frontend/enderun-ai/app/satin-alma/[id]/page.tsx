@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import {
+  PURCHASE_REQUEST_STATUS_LABELS,
   PurchaseRequestDetail,
   purchaseRequestService,
 } from "@/services/purchase-request.service";
@@ -29,16 +30,9 @@ import {
 } from "@/services/current-account.service";
 import { rfqService } from "@/services/rfq.service";
 
-const statusLabels: Record<number, string> = {
-  0: "Taslak",
-  1: "Onaya Gönderildi",
-  2: "Onaylandı",
-  3: "Teklif Aşamasında",
-  4: "Siparişe Dönüştü",
-  5: "Tamamlandı",
-  6: "İptal",
-  7: "Reddedildi",
-};
+// Durum adları servisle aynı kaynaktan; iki ekranın aynı duruma
+// farklı isim vermesi yanıltırdı.
+const statusLabels = PURCHASE_REQUEST_STATUS_LABELS;
 
 const priorityLabels: Record<number, string> = {
   0: "Düşük",
@@ -51,6 +45,8 @@ function statusVariant(status: number) {
   if (status === 2 || status === 5) return "success" as const;
   if (status === 1 || status === 3 || status === 4) return "warning" as const;
   if (status === 6 || status === 7) return "danger" as const;
+  // Düzeltmeye iade: kaybedilmiş değil, iş talep sahibinde.
+  if (status === 8) return "warning" as const;
   return "default" as const;
 }
 
@@ -119,7 +115,9 @@ export default function PurchaseRequestDetailPage() {
     load();
   }, [load]);
 
-  async function runAction(action: "submit" | "approve" | "cancel") {
+  async function runAction(
+    action: "submit" | "approve" | "cancel" | "reject" | "return"
+  ) {
     if (!item) return;
 
     let reason = "";
@@ -127,6 +125,35 @@ export default function PurchaseRequestDetailPage() {
     if (action === "cancel") {
       reason = window.prompt("İptal gerekçesini yazın:") ?? "";
       if (!window.confirm("Bu satın alma talebi iptal edilsin mi?")) {
+        return;
+      }
+    }
+
+    // Red ve iade GEREKÇESİZ yapılamaz: gerekçesiz red talep sahibine
+    // neyi yanlış yaptığını söylemez, gerekçesiz iade ise talebi ne
+    // yapacağı belli olmadan bekletir. Uç da boş gerekçeyi reddediyor;
+    // burada kullanıcıyı sunucuya gitmeden uyarıyoruz.
+    if (action === "reject" || action === "return") {
+      const prompt =
+        action === "reject"
+          ? "Red gerekçesini yazın (zorunlu):"
+          : "Neyin düzeltilmesi gerektiğini yazın (zorunlu):";
+
+      reason = (window.prompt(prompt) ?? "").trim();
+
+      if (!reason) {
+        setError(
+          action === "reject"
+            ? "Red gerekçesi zorunludur."
+            : "İade gerekçesi zorunludur."
+        );
+        return;
+      }
+
+      if (
+        action === "reject" &&
+        !window.confirm("Talep reddedilsin mi? Bu karar geri alınamaz.")
+      ) {
         return;
       }
     }
@@ -141,7 +168,11 @@ export default function PurchaseRequestDetailPage() {
           ? await purchaseRequestService.submit(item.id)
           : action === "approve"
             ? await purchaseRequestService.approve(item.id)
-            : await purchaseRequestService.cancel(item.id, reason);
+            : action === "reject"
+              ? await purchaseRequestService.reject(item.id, reason)
+              : action === "return"
+                ? await purchaseRequestService.returnForRevision(item.id, reason)
+                : await purchaseRequestService.cancel(item.id, reason);
 
       setSuccess(result.message);
       await load();
@@ -263,25 +294,72 @@ export default function PurchaseRequestDetailPage() {
                   <p className="mt-1 text-sm text-slate-500">
                     {item.projectCode} · {item.projectName}
                   </p>
+
+                  {/* Gerekçe kararın yanında durmalı: talep sahibi
+                      talebi açtığı anda neden geri geldiğini görmeli,
+                      aşağıda bir yerde aramamalı. */}
+                  {item.status === 8 && item.returnReason && (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      <strong>Düzeltmeye iade edildi:</strong>{" "}
+                      {item.returnReason}
+                      <span className="mt-1 block text-xs">
+                        Talebi düzenleyip &quot;Düzeltildi, Yeniden
+                        Gönder&quot; ile tekrar onaya gönderebilirsiniz.
+                      </span>
+                    </div>
+                  )}
+
+                  {item.status === 7 && item.rejectionReason && (
+                    <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                      <strong>Reddedildi:</strong> {item.rejectionReason}
+                    </div>
+                  )}
+
+                  {(item.revisionCount ?? 0) > 0 && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Bu talep {item.revisionCount} kez düzeltilip yeniden
+                      gönderildi.
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  {item.status === 0 && (
+                  {(item.status === 0 || item.status === 8) && (
                     <Button
                       loading={processing}
                       onClick={() => runAction("submit")}
                     >
-                      Onaya Gönder
+                      {item.status === 8
+                        ? "Düzeltildi, Yeniden Gönder"
+                        : "Onaya Gönder"}
                     </Button>
                   )}
 
                   {item.status === 1 && (
-                    <Button
-                      loading={processing}
-                      onClick={() => runAction("approve")}
-                    >
-                      Onayla
-                    </Button>
+                    <>
+                      <Button
+                        loading={processing}
+                        onClick={() => runAction("approve")}
+                      >
+                        Onayla
+                      </Button>
+
+                      <Button
+                        variant="secondary"
+                        loading={processing}
+                        onClick={() => runAction("return")}
+                      >
+                        Düzeltmeye İade Et
+                      </Button>
+
+                      <Button
+                        variant="danger"
+                        loading={processing}
+                        onClick={() => runAction("reject")}
+                      >
+                        Reddet
+                      </Button>
+                    </>
                   )}
 
                   {item.status === 2 && (

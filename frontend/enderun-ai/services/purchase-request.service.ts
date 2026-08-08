@@ -10,7 +10,33 @@ export type PurchaseRequestStatus =
   | 4
   | 5
   | 6
-  | 7;
+  | 7
+  | 8;
+
+export const PURCHASE_REQUEST_STATUS = {
+  Draft: 0,
+  Submitted: 1,
+  Approved: 2,
+  Quotation: 3,
+  Ordered: 4,
+  Completed: 5,
+  Cancelled: 6,
+  Rejected: 7,
+  /** Düzeltmeye iade edildi — talep sahibi düzeltip yeniden gönderir. */
+  ReturnedForRevision: 8,
+} as const;
+
+export const PURCHASE_REQUEST_STATUS_LABELS: Record<number, string> = {
+  0: "Taslak",
+  1: "Onaya Gönderildi",
+  2: "Onaylandı",
+  3: "Teklif",
+  4: "Sipariş",
+  5: "Tamamlandı",
+  6: "İptal",
+  7: "Reddedildi",
+  8: "Düzeltmeye İade",
+};
 
 export type PurchaseRequestItem = {
   id: string;
@@ -52,6 +78,16 @@ export type PurchaseRequestListItem = {
 
   priority: PurchaseRequestPriority;
   status: PurchaseRequestStatus;
+
+  /** Red gerekçesi — Reddedildi durumunda dolu. */
+  rejectionReason?: string | null;
+  rejectedAtUtc?: string | null;
+  /** İade gerekçesi — talep sahibinin neyi düzelteceği. */
+  returnReason?: string | null;
+  returnedAtUtc?: string | null;
+  /** Kaç kez düzeltilip yeniden gönderildi. */
+  revisionCount?: number | null;
+
   isActive: boolean;
 
   itemCount: number;
@@ -311,6 +347,31 @@ export const purchaseRequestService = {
       `purchase-requests/${id}/approve`,
       {
         method: "POST",
+      },
+    );
+  },
+
+  /** Talebi reddeder — nihai. Gerekçe zorunlu. */
+  reject(id: string, reason: string) {
+    return apiClient<{ message: string }>(
+      `purchase-requests/${id}/reject`,
+      {
+        method: "POST",
+        body: { reason },
+      },
+    );
+  },
+
+  /**
+   * Talebi düzeltmeye iade eder — talep sahibi düzeltip yeniden
+   * gönderebilir. Gerekçe zorunlu.
+   */
+  returnForRevision(id: string, reason: string) {
+    return apiClient<{ message: string }>(
+      `purchase-requests/${id}/iade`,
+      {
+        method: "POST",
+        body: { reason },
       },
     );
   },

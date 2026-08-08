@@ -2357,11 +2357,17 @@ public sealed class AppDbContext(
             entity.ToTable("purchase_request_items");
             entity.HasKey(x => x.Id);
 
+            // Silmeler YUMUŞAK (AuditSaveChangesInterceptor satırı
+            // fiziksel silmez, IsDeleted=true yapar). Filtresiz bir
+            // tekil indeks, silinmiş satırın numarasını da rezerve
+            // ettiği için talep düzenlenip kalemleri yeniden
+            // numaralandığında çakışıyordu. Kod tabanının başka
+            // yerlerinde kullanılan desenin aynısı.
             entity.HasIndex(x => new
             {
                 x.PurchaseRequestId,
                 x.LineNumber
-            }).IsUnique();
+            }).IsUnique().HasFilter("\"IsDeleted\" = false");
 
             entity.Property(x => x.MaterialDescription)
                 .HasMaxLength(500)
