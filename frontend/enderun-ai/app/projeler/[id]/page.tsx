@@ -8,6 +8,10 @@ import ProjectDocumentsSection from "@/components/projects/project-documents-sec
 import ProjectDangerZone from "@/components/projects/project-danger-zone";
 import { projectService } from "@/services/project.service";
 import { CONTRACT_TYPE_LABELS } from "@/services/progress-tracking.service";
+import { PROGRESS_PAYMENT_PERIODS } from "@/services/offer.service";
+
+const PROGRESS_PAYMENT_PERIOD_LABELS: Record<number, string> =
+  Object.fromEntries(PROGRESS_PAYMENT_PERIODS);
 
 import {
   projectProfitabilityService,
@@ -82,6 +86,12 @@ type ProjectDetail = {
   materialDeductionRate: number;
   /** Keşif–gerçekleşen sapmasının nasıl yorumlanacağını belirler. */
   contractType: number;
+  progressPaymentPeriod?: number | null;
+  paymentTerms?: string | null;
+  /** Bu proje hangi kazanılan tekliften doğdu (varsa). */
+  sourceOfferId?: string | null;
+  sourceOfferNumber?: string | null;
+  sourceOfferTitle?: string | null;
   deviationAlertThresholdRate: number;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
@@ -572,6 +582,22 @@ export default function ProjectCenterPage() {
                 </p>
               )}
 
+              {project.sourceOfferId && (
+                <p style={{ marginTop: 6, fontSize: 13 }}>
+                  Bu proje{" "}
+                  <Link href={`/teklifler/${project.sourceOfferId}`}>
+                    {project.sourceOfferNumber} · {project.sourceOfferTitle}
+                  </Link>{" "}
+                  teklifinden doğdu.
+                </p>
+              )}
+
+              {project.paymentTerms && (
+                <p style={{ marginTop: 6, fontSize: 13, color: "#475569" }}>
+                  Ödeme koşulları: {project.paymentTerms}
+                </p>
+              )}
+
               <p style={{ marginTop: 6 }}>
                 <Link href={`/projeler/${project.id}/metraj-takip`}>
                   Metraj Takip (Keşif vs Gerçekleşen)
@@ -584,6 +610,18 @@ export default function ProjectCenterPage() {
                 <span>Sözleşme Bedeli</span>
                 <strong>
                   {formatMoney(project.contractAmount, project.currencyCode)}
+                </strong>
+              </div>
+              <div>
+                <span>Sözleşme No</span>
+                <strong>{project.contractNumber || "—"}</strong>
+              </div>
+              <div>
+                <span>Hakediş Periyodu</span>
+                <strong>
+                  {PROGRESS_PAYMENT_PERIOD_LABELS[
+                    project.progressPaymentPeriod ?? 0
+                  ] ?? "Belirlenmedi"}
                 </strong>
               </div>
               <div>

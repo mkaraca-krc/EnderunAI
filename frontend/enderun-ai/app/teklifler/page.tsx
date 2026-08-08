@@ -21,17 +21,16 @@ import {
   TableRow,
 } from "@/components/ui";
 import { companyService, type CompanyListItem } from "@/services/company.service";
-import { offerService, type OfferListItem } from "@/services/offer.service";
+import {
+  OFFER_COUNTERPARTY_ROLES,
+  OFFER_STATUS_LABELS,
+  offerService,
+  type OfferListItem,
+} from "@/services/offer.service";
 
-const statusLabels: Record<number, string> = {
-  0: "Taslak",
-  1: "Onaya Gönderildi",
-  2: "Onaylandı",
-  3: "Reddedildi",
-  4: "Kazanıldı",
-  5: "Kaybedildi",
-  6: "İptal",
-};
+// Durum adları huni ile aynı kaynaktan gelir; iki ekranın aynı
+// duruma farklı isim vermesi kullanıcıyı yanıltırdı.
+const statusLabels = OFFER_STATUS_LABELS;
 
 function money(value: number, currency = "TRY") {
   return new Intl.NumberFormat("tr-TR", {
@@ -155,9 +154,14 @@ export default function OffersPage() {
           </Button>
         </form>
 
-        <Link href="/teklifler/yeni">
-          <Button>+ Yeni Teklif</Button>
-        </Link>
+        <div className="flex gap-3">
+          <Link href="/teklifler/takip">
+            <Button variant="secondary">İş / Teklif Takibi</Button>
+          </Link>
+          <Link href="/teklifler/yeni">
+            <Button>+ Yeni Teklif</Button>
+          </Link>
+        </div>
       </div>
 
       <Card>
@@ -195,6 +199,7 @@ export default function OffersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Teklif</TableHead>
+                  <TableHead>Kime Verildi</TableHead>
                   <TableHead>Proje</TableHead>
                   <TableHead>Kalem</TableHead>
                   <TableHead>Maliyet</TableHead>
@@ -221,6 +226,16 @@ export default function OffersPage() {
                         <span className="mt-1 block text-xs text-slate-500">
                           {item.title}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        {item.counterpartyName ?? "—"}
+                        {item.counterpartyName && (
+                          <span className="mt-1 block text-xs text-slate-500">
+                            {OFFER_COUNTERPARTY_ROLES.find(
+                              ([key]) => key === item.counterpartyRole
+                            )?.[1] ?? ""}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>{item.projectName || "—"}</TableCell>
                       <TableCell>{item.itemCount}</TableCell>

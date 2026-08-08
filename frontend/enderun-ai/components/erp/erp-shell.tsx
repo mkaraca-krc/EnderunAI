@@ -373,6 +373,11 @@ const groups: MenuGroup[] = [
         icon: "▥",
       },
       {
+        label: "İş / Teklif Takibi",
+        href: "/teklifler/takip",
+        icon: "◷",
+      },
+      {
         label: "Teklifler",
         href: "/teklifler",
         icon: "₺",

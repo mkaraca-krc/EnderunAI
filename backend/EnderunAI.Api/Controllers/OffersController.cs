@@ -63,6 +63,17 @@ public sealed class OffersController(
                 x.ProjectId,
                 ProjectName = x.Project != null ? x.Project.Name : null,
                 x.CustomerId,
+                // Takip künyesi: huni ekranı bu alanlardan besleniyor.
+                x.CounterpartyCurrentAccountId,
+                CounterpartyName = x.CounterpartyCurrentAccount != null
+                    ? x.CounterpartyCurrentAccount.Title
+                    : null,
+                CounterpartyRole = (int)x.CounterpartyRole,
+                Kind = (int)x.Kind,
+                LostReason = (int)x.LostReason,
+                x.LostReasonNote,
+                x.StatusChangedAtUtc,
+                x.StatusNote,
                 x.OfferNumber,
                 x.Title,
                 x.OfferDate,
@@ -99,6 +110,17 @@ public sealed class OffersController(
                 x.ProjectId,
                 ProjectName = x.Project != null ? x.Project.Name : null,
                 x.CustomerId,
+                // Takip künyesi: huni ekranı bu alanlardan besleniyor.
+                x.CounterpartyCurrentAccountId,
+                CounterpartyName = x.CounterpartyCurrentAccount != null
+                    ? x.CounterpartyCurrentAccount.Title
+                    : null,
+                CounterpartyRole = (int)x.CounterpartyRole,
+                Kind = (int)x.Kind,
+                LostReason = (int)x.LostReason,
+                x.LostReasonNote,
+                x.StatusChangedAtUtc,
+                x.StatusNote,
                 x.OfferNumber,
                 x.Title,
                 x.OfferDate,

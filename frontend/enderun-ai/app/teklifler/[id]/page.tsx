@@ -18,16 +18,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
-import { offerService, type OfferDetail } from "@/services/offer.service";
+import OfferChainPanel from "@/components/offers/offer-chain-panel";
+import {
+  OFFER_STATUS_LABELS,
+  offerService,
+  type OfferDetail,
+} from "@/services/offer.service";
 
 const statusLabels: Record<number, string> = {
-  0: "Taslak",
-  1: "Onaya Gönderildi",
-  2: "Onaylandı",
-  3: "Reddedildi",
-  4: "Kazanıldı",
-  5: "Kaybedildi",
-  6: "İptal",
+  ...OFFER_STATUS_LABELS,
 };
 
 function statusVariant(status: number) {
@@ -348,6 +347,8 @@ export default function OfferDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          <OfferChainPanel offerId={item.id} />
         </>
       )}
     </ErpShell>
