@@ -2,6 +2,7 @@ using EnderunAI.Api.Contracts.Offers;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.DocumentNumbers;
+using EnderunAI.Api.Services.Offers;
 using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -232,6 +233,9 @@ public sealed class OffersController(
             CompanyId = request.CompanyId,
             ProjectId = request.ProjectId,
             CustomerId = request.CustomerId,
+            CounterpartyCurrentAccountId = request.CounterpartyCurrentAccountId,
+            CounterpartyRole = request.CounterpartyRole,
+            Kind = request.Kind,
             OfferNumber = offerNumber,
             Title = request.Title.Trim(),
             // Tarihler UTC'ye normalize edilir: Kind belirtilmemiş bir
@@ -552,6 +556,231 @@ public sealed class OffersController(
     /// <summary>
     /// Teklifi projenin keşif icmaline aktarır.
     /// </summary>
+    /// <summary>
+    /// Teklifin takip künyesi: kime verildi (işveren / ana yüklenici)
+    /// ve hangi tipte.
+    ///
+    /// Teklif HAZIRLAMA yetkisinden ayrı bir anahtarla korunuyor;
+    /// Finans teklif kalemi giremeden huniyi yönetebilsin diye.
+    /// </summary>
+    [HttpPut("{id:guid}/takip")]
+    [RequirePermission(PermissionCatalog.Keys.OfferTrackingManage)]
+    public async Task<IActionResult> UpdateTracking(
+        Guid id,
+        UpdateOfferTrackingRequest request,
+        CancellationToken cancellationToken)
+    {
+        var offer = await db.Offers
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (offer is null)
+            return NotFound(new { message = "Teklif bulunamadı." });
+
+        if (OfferStatusTransitions.IsFinal(offer.Status))
+        {
+            return BadRequest(new
+            {
+                message = $"{OfferStatusTransitions.Label(offer.Status)} " +
+                          "durumundaki teklifin künyesi değiştirilemez."
+            });
+        }
+
+        if (!Enum.IsDefined(typeof(OfferCounterpartyRole), request.CounterpartyRole))
+            return BadRequest(new { message = "Geçersiz karşı taraf rolü." });
+
+        if (!Enum.IsDefined(typeof(OfferKind), request.Kind))
+            return BadRequest(new { message = "Geçersiz teklif tipi." });
+
+        if (request.CounterpartyCurrentAccountId is Guid accountId)
+        {
+            var belongs = await db.CurrentAccounts.AnyAsync(
+                x => x.Id == accountId && x.CompanyId == offer.CompanyId,
+                cancellationToken);
+
+            if (!belongs)
+            {
+                return BadRequest(new
+                {
+                    message = "Seçilen cari teklifin şirketine ait değil."
+                });
+            }
+
+            // Rolü olmayan bir cariye teklif verildiğini kaydetmek,
+            // huniyi "kime verdiğimiz belirsiz" satırlarla doldurur.
+            if (request.CounterpartyRole == OfferCounterpartyRole.Unspecified)
+            {
+                return BadRequest(new
+                {
+                    message = "Cari seçildiğinde işveren mi ana yüklenici mi " +
+                              "olduğu da belirtilmelidir."
+                });
+            }
+        }
+        else if (request.CounterpartyRole != OfferCounterpartyRole.Unspecified)
+        {
+            return BadRequest(new
+            {
+                message = "Karşı taraf rolü için cari seçilmelidir."
+            });
+        }
+
+        offer.CounterpartyCurrentAccountId = request.CounterpartyCurrentAccountId;
+        offer.CounterpartyRole = request.CounterpartyRole;
+        offer.Kind = request.Kind;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { message = "Teklif takip künyesi güncellendi." });
+    }
+
+    /// <summary>
+    /// Teklif durumunu değiştirir (fırsat hunisi).
+    ///
+    /// Geçerli geçişler tek yerde tanımlı
+    /// (<see cref="OfferStatusTransitions"/>) ve burada zorlanıyor;
+    /// serbest durum ataması hunide "verilmeden kazanılmış" gibi
+    /// imkânsız satırlar üretirdi.
+    /// </summary>
+    [HttpPost("{id:guid}/durum")]
+    [RequirePermission(PermissionCatalog.Keys.OfferTrackingManage)]
+    public async Task<IActionResult> ChangeStatus(
+        Guid id,
+        ChangeOfferStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        var offer = await db.Offers
+            .Include(x => x.Items)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (offer is null)
+            return NotFound(new { message = "Teklif bulunamadı." });
+
+        if (!Enum.IsDefined(typeof(OfferLostReason), request.LostReason))
+            return BadRequest(new { message = "Geçersiz kayıp nedeni." });
+
+        var problem = OfferStatusTransitions.Validate(
+            offer.Status,
+            request.Status,
+            offer.CounterpartyCurrentAccountId.HasValue,
+            request.LostReason,
+            offer.Items.Count);
+
+        if (problem is not null)
+            return BadRequest(new { message = problem });
+
+        var previous = offer.Status;
+
+        offer.Status = request.Status;
+        offer.LostReason = request.LostReason;
+        offer.LostReasonNote = request.Status == OfferStatus.Lost
+            ? request.LostReasonNote?.Trim()
+            : null;
+        offer.StatusNote = request.Note?.Trim();
+        offer.StatusChangedAtUtc = DateTime.UtcNow;
+
+        var raw = User.FindFirst("sub")?.Value
+            ?? User.FindFirst(
+                System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        offer.StatusChangedByUserId =
+            Guid.TryParse(raw, out var actorId) ? actorId : null;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = $"Teklif {OfferStatusTransitions.Label(previous)} " +
+                      $"durumundan {OfferStatusTransitions.Label(request.Status)} " +
+                      "durumuna alındı.",
+            status = (int)offer.Status,
+            statusName = OfferStatusTransitions.Label(offer.Status),
+            // Kazanıldı işaretlemek tek başına proje açmaz; sözleşme
+            // künyesi ayrı adımda girilir.
+            requiresContract = offer.Status == OfferStatus.Won
+        });
+    }
+
+    /// <summary>
+    /// Kazanma oranı özeti — adet ve tutar bazında.
+    ///
+    /// Oranın paydası kazanılan + kaybedilendir; sonucu belli olmamış
+    /// teklif henüz kaybedilmediği için oranı yapay olarak düşürürdü.
+    /// </summary>
+    [HttpGet("kazanma-orani")]
+    [RequirePermission(PermissionCatalog.Keys.OfferTrackingView)]
+    public async Task<IActionResult> GetWinRate(
+        [FromQuery] Guid? companyId,
+        [FromQuery] Guid? counterpartyId,
+        [FromQuery] int? kind,
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate,
+        CancellationToken cancellationToken)
+    {
+        var query = db.Offers.AsNoTracking();
+
+        if (companyId is Guid cid) query = query.Where(x => x.CompanyId == cid);
+
+        if (counterpartyId is Guid partyId)
+            query = query.Where(x => x.CounterpartyCurrentAccountId == partyId);
+
+        if (kind is int k)
+        {
+            if (!Enum.IsDefined(typeof(OfferKind), k))
+                return BadRequest(new { message = "Geçersiz teklif tipi." });
+
+            query = query.Where(x => x.Kind == (OfferKind)k);
+        }
+
+        if (fromDate is DateTime from)
+            query = query.Where(x => x.OfferDate >= AsUtcDate(from));
+
+        if (toDate is DateTime to)
+            query = query.Where(x => x.OfferDate <= AsUtcDate(to));
+
+        var rows = await query
+            .Select(x => new { x.Status, x.GrandTotal })
+            .ToListAsync(cancellationToken);
+
+        var summary = OfferWinRateCalculator.Calculate(
+            rows.Select(x => (x.Status, x.GrandTotal)));
+
+        // Kayıp nedenlerinin dağılımı: "fiyatımız mı yüksek yoksa
+        // referansımız mı yetmiyor" sorusunun cevabı.
+        var lostBreakdown = await query
+            .Where(x => x.Status == OfferStatus.Lost)
+            .GroupBy(x => x.LostReason)
+            .Select(g => new
+            {
+                Reason = g.Key,
+                Count = g.Count(),
+                Amount = g.Sum(x => x.GrandTotal)
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new
+        {
+            summary.TotalCount,
+            summary.WonCount,
+            summary.LostCount,
+            summary.OpenCount,
+            summary.CancelledCount,
+            summary.WonAmount,
+            summary.LostAmount,
+            summary.OpenAmount,
+            summary.CountWinRate,
+            summary.AmountWinRate,
+            lostReasons = lostBreakdown
+                .OrderByDescending(x => x.Count)
+                .Select(x => new
+                {
+                    reason = (int)x.Reason,
+                    reasonName = OfferStatusTransitions.LostReasonLabel(x.Reason),
+                    x.Count,
+                    Amount = decimal.Round(x.Amount, 2)
+                })
+        });
+    }
+
     [HttpPost("{id:guid}/icmale-aktar")]
     [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> TransferToBoq(

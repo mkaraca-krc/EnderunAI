@@ -38,11 +38,16 @@ public sealed class PurchaseRequestGenerator(
                 "Satın alma talebi oluşturabilmek için teklif bir projeye bağlı olmalıdır.");
         }
 
-        if (offer.Status is not OfferStatus.Approved
-            and not OfferStatus.Won)
+        // Eskiden Approved(2) durumu da kabul ediliyordu. O değer artık
+        // BEKLEMEDE anlamına geliyor (karşı taraftan cevap bekliyoruz)
+        // ve henüz kazanmadığımız bir iş için malzeme talebi açmak
+        // bağlayıcı olmayan bir teklif yüzünden gerçek para harcamak
+        // demek olurdu. Canlıda hiçbir teklif o durumda olmadığı için
+        // davranış kaybı yok.
+        if (offer.Status is not OfferStatus.Won)
         {
             throw new InvalidOperationException(
-                "Yalnızca onaylanmış veya kazanılmış tekliflerden satın alma talebi oluşturulabilir.");
+                "Yalnızca kazanılmış tekliflerden satın alma talebi oluşturulabilir.");
         }
 
         if (offer.Items.Count == 0)

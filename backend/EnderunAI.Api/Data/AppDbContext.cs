@@ -2597,6 +2597,17 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.Property(x => x.LostReasonNote).HasMaxLength(1000);
+            entity.Property(x => x.StatusNote).HasMaxLength(1000);
+
+            // Huni ekranı durum ve karşı tarafa göre filtreliyor.
+            entity.HasIndex(x => new { x.CompanyId, x.Status });
+
+            entity.HasOne(x => x.CounterpartyCurrentAccount)
+                .WithMany()
+                .HasForeignKey(x => x.CounterpartyCurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }

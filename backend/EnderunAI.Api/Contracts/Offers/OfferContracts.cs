@@ -1,3 +1,4 @@
+using EnderunAI.Api.Models;
 namespace EnderunAI.Api.Contracts.Offers;
 
 public sealed record CreateOfferItemRequest(
@@ -91,7 +92,33 @@ public sealed record CreateOfferRequest(
     string? Description,
     string? Notes,
 
-    IReadOnlyCollection<CreateOfferItemRequest> Items);
+    IReadOnlyCollection<CreateOfferItemRequest> Items,
+
+    // Takip alanları isteğe bağlı ve sonda: mevcut istemciler bu
+    // alanları göndermeden aynen çalışmaya devam eder.
+    Guid? CounterpartyCurrentAccountId = null,
+    OfferCounterpartyRole CounterpartyRole = OfferCounterpartyRole.Unspecified,
+    OfferKind Kind = OfferKind.Unspecified);
+
+/// <summary>Teklifin takip künyesi (kime verildi, hangi tipte).</summary>
+/// <param name="CounterpartyCurrentAccountId">İşveren ya da ana yüklenici carisi.</param>
+/// <param name="CounterpartyRole">Karşı tarafın rolü.</param>
+/// <param name="Kind">Birim fiyatlı / anahtar teslim.</param>
+public sealed record UpdateOfferTrackingRequest(
+    Guid? CounterpartyCurrentAccountId,
+    OfferCounterpartyRole CounterpartyRole,
+    OfferKind Kind);
+
+/// <summary>Teklif durumu değiştirme isteği.</summary>
+/// <param name="Status">Hedef durum.</param>
+/// <param name="LostReason">Yalnız Kaybedildi'de zorunlu.</param>
+/// <param name="LostReasonNote">Kaybın serbest açıklaması.</param>
+/// <param name="Note">Karar gerekçesi.</param>
+public sealed record ChangeOfferStatusRequest(
+    OfferStatus Status,
+    OfferLostReason LostReason = OfferLostReason.None,
+    string? LostReasonNote = null,
+    string? Note = null);
 
 public sealed record CalculateOfferItemRequest(
     decimal Quantity,

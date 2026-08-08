@@ -50,7 +50,11 @@ public static class RoleCatalog
             // raporunu okuyan rol; ücret rakamlarını görmesi gerekir.
             PermissionCatalog.Keys.SalaryView,
             // Elden ödemeler ve elden tazminat farkı finansın yükümlülüğü.
-            PermissionCatalog.Keys.ExtraPaymentView, PermissionCatalog.Keys.ExtraPaymentManage
+            PermissionCatalog.Keys.ExtraPaymentView, PermissionCatalog.Keys.ExtraPaymentManage,
+            // Hangi işe teklif verildiği ve kazanma oranı finansın
+            // nakit planlamasını doğrudan etkiler; teklif HAZIRLAMA
+            // yetkisi verilmeden yalnız takip katmanı açılıyor.
+            PermissionCatalog.Keys.OfferTrackingView, PermissionCatalog.Keys.OfferTrackingManage
         ]),
 
         new("Satın Alma Sorumlusu", "Talep, RFQ, sipariş, mal kabul ve stok süreçleri tam yetki; cari görüntüleme.",
@@ -117,6 +121,7 @@ public static class RoleCatalog
             PermissionCatalog.Keys.ProjectsEdit,
             PermissionCatalog.Keys.SitesView,
             PermissionCatalog.Keys.EngineeringView, PermissionCatalog.Keys.EngineeringManage,
+            PermissionCatalog.Keys.OfferTrackingView, PermissionCatalog.Keys.OfferTrackingManage,
             PermissionCatalog.Keys.HakedisView, PermissionCatalog.Keys.HakedisCreate,
             PermissionCatalog.Keys.HakedisEdit, PermissionCatalog.Keys.HakedisDelete,
             PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate,
@@ -135,6 +140,7 @@ public static class RoleCatalog
             PermissionCatalog.Keys.SitesEdit, PermissionCatalog.Keys.SitesDelete,
             PermissionCatalog.Keys.SiteReportsView, PermissionCatalog.Keys.SiteReportsApprove,
             PermissionCatalog.Keys.EngineeringView, PermissionCatalog.Keys.EngineeringManage,
+            PermissionCatalog.Keys.OfferTrackingView, PermissionCatalog.Keys.OfferTrackingManage,
             PermissionCatalog.Keys.HakedisView, PermissionCatalog.Keys.HakedisCreate,
             PermissionCatalog.Keys.HakedisEdit, PermissionCatalog.Keys.HakedisDelete,
             PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate,

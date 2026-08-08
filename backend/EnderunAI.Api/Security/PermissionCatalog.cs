@@ -158,6 +158,14 @@ public static class PermissionCatalog
         public const string EngineeringView = "engineering.view";
         public const string EngineeringManage = "engineering.manage";
 
+        // Teklif / iş takibi (fırsat hunisi)
+        //
+        // Teklif HAZIRLAMA engineering.manage'de kalır; aşağıdakiler
+        // takip katmanıdır. Ayrı anahtar, Finans'ın teklif hazırlama
+        // yetkisi almadan huniyi ve kazanma oranını görebilmesi için.
+        public const string OfferTrackingView = "offer_tracking.view";
+        public const string OfferTrackingManage = "offer_tracking.manage";
+
         // Sekreterya
         public const string SecretariatView = "secretariat.view";
         public const string SecretariatManage = "secretariat.manage";
@@ -337,6 +345,9 @@ public static class PermissionCatalog
 
         new(Keys.EngineeringView, "Mühendislik", "Mühendisliği görüntüleme", "Poz, reçete, keşif ve teknik kayıtları görüntüler."),
         new(Keys.EngineeringManage, "Mühendislik", "Mühendislik yönetimi", "Poz, reçete, keşif ve teknik kayıtları yönetir."),
+
+        new(Keys.OfferTrackingView, "Teklif Takibi", "İş/teklif takibini görüntüleme", "Verilen teklifleri, durumlarını ve kazanma oranını görüntüler."),
+        new(Keys.OfferTrackingManage, "Teklif Takibi", "İş/teklif takibi yönetimi", "Teklif durumunu değiştirir (verildi/beklemede/kazanıldı/kaybedildi) ve karşı tarafı belirler."),
 
         new(Keys.SecretariatView, "Sekreterya", "Sekreteryayı görüntüleme", "Evrak, kargo, ziyaretçi ve toplantı kayıtlarını görüntüler."),
         new(Keys.SecretariatManage, "Sekreterya", "Sekreterya yönetimi", "Evrak, kargo, ziyaretçi, telefon notu ve toplantıları yönetir."),
