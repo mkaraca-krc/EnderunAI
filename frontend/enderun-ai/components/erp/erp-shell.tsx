@@ -47,7 +47,9 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
   if (/^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|cikis-tazminat|avanslar)/.test(pathname)) {
     return "payroll.view";
   }
-  if (/^\/insan-kaynaklari\/(puantaj|gunluk-puantaj|izinler|fazla-mesai)/.test(pathname)) {
+  // puantaj-cetveli ve tatil-takvimi de puantaj alanına ait: cetvel
+  // takvimden dolduğu için ikisi aynı yetkiyle yürüyor.
+  if (/^\/insan-kaynaklari\/(puantaj|gunluk-puantaj|izinler|fazla-mesai|tatil-takvimi)/.test(pathname)) {
     return "attendance.view";
   }
   if (pathname.startsWith("/insan-kaynaklari")) return "personnel.view";
@@ -457,6 +459,16 @@ const groups: MenuGroup[] = [
         label: "İşe Alım",
         href: "/insan-kaynaklari/ise-alim",
         icon: "+",
+      },
+      {
+        label: "Puantaj Cetveli",
+        href: "/insan-kaynaklari/puantaj-cetveli",
+        icon: "▦",
+      },
+      {
+        label: "Tatil Takvimi",
+        href: "/insan-kaynaklari/tatil-takvimi",
+        icon: "◵",
       },
       {
         label: "Puantaj",
