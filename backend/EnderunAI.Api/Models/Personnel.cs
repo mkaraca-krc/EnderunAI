@@ -70,6 +70,16 @@ public sealed class Personnel : BaseEntity
     public WorkLocationType WorkLocationType { get; set; } = WorkLocationType.Unassigned;
 
     /// <summary>
+    /// Bu personele özel çalışma haftası (gün bayrağı). Boşsa görev
+    /// yerine, o da yoksa şirket varsayılanına düşer — bkz.
+    /// <see cref="Services.HumanResources.WorkWeekResolver"/>.
+    ///
+    /// İSTİSNA içindir: yarı zamanlı çalışan ya da cumartesi gelmeyen
+    /// tek bir kişi için bütün şirketi değiştirmek gerekmesin.
+    /// </summary>
+    public int? WorkWeek { get; set; }
+
+    /// <summary>
     /// Personel bir TAŞERON EKİBİNİN üyesiyse o taşeron sözleşmesi.
     ///
     /// Yalnızca sözleşmede SGK yükümlülüğü BİZDE olduğunda doldurulur:

@@ -35,6 +35,10 @@ public sealed class AppDbContext(
     public DbSet<HizirPendingAction> HizirPendingActions => Set<HizirPendingAction>();
     public DbSet<CompanyPayrollSettings> CompanyPayrollSettings =>
         Set<CompanyPayrollSettings>();
+    public DbSet<Models.HumanResources.CompanyHolidayCalendar> CompanyHolidayCalendars =>
+        Set<Models.HumanResources.CompanyHolidayCalendar>();
+    public DbSet<Models.HumanResources.CompanyHoliday> CompanyHolidays =>
+        Set<Models.HumanResources.CompanyHoliday>();
     public DbSet<PayrollTaxBracket> PayrollTaxBrackets => Set<PayrollTaxBracket>();
     public DbSet<Cheque> Cheques => Set<Cheque>();
     public DbSet<ChequeMovement> ChequeMovements => Set<ChequeMovement>();
@@ -1184,6 +1188,44 @@ public sealed class AppDbContext(
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
 
+        modelBuilder.Entity<Models.HumanResources.CompanyHolidayCalendar>(entity =>
+        {
+            entity.ToTable("company_holiday_calendars");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.Year })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.VerificationNote).HasMaxLength(500);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.HumanResources.CompanyHoliday>(entity =>
+        {
+            entity.ToTable("company_holidays");
+            entity.HasKey(x => x.Id);
+
+            // Aynı güne iki tatil kaydı, ücrete esas gün sayısını iki
+            // kez düşürürdü.
+            entity.HasIndex(x => new { x.CompanyHolidayCalendarId, x.Date })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+
+            entity.HasOne(x => x.CompanyHolidayCalendar).WithMany(x => x.Days)
+                .HasForeignKey(x => x.CompanyHolidayCalendarId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
         modelBuilder.Entity<CompanyPayrollSettings>(entity =>
         {
             entity.ToTable("company_payroll_settings");
@@ -1208,6 +1250,11 @@ public sealed class AppDbContext(
             entity.Property(x => x.SgkEmployerDiscountPoints).HasPrecision(9, 4);
             entity.Property(x => x.StampTaxPerMille).HasPrecision(9, 4);
             entity.Property(x => x.DailyWorkHours).HasPrecision(5, 2);
+
+            // Kolon varsayılanı Pazartesi–Cumartesi. Sıfır "hiçbir gün
+            // çalışılmıyor" demek olurdu ve süre hesabı yapılamazdı.
+            entity.Property(x => x.WorkWeek)
+                .HasDefaultValue((int)Services.Schedule.WorkWeekDays.MondayToSaturday);
             entity.Property(x => x.SeveranceCeiling).HasPrecision(18, 2);
             entity.Property(x => x.SeveranceCeilingPeriodNote).HasMaxLength(100);
             entity.Property(x => x.VerificationNote).HasMaxLength(500);

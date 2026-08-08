@@ -90,6 +90,26 @@ public sealed class CompanyPayrollSettings : BaseEntity
     /// </summary>
     public decimal DailyWorkHours { get; set; } = 7.5m;
 
+    // --- Çalışma haftası ---
+
+    /// <summary>
+    /// Şirketin varsayılan çalışma haftası (gün bayrağı; bkz.
+    /// <see cref="Services.Schedule.WorkWeekDays"/>). Şantiyede yaygın
+    /// olan pazar hariç her gün.
+    /// </summary>
+    public int WorkWeek { get; set; } = (int)Services.Schedule.WorkWeekDays.MondayToSaturday;
+
+    /// <summary>
+    /// MERKEZ kadrosunun çalışma haftası. Boşsa şirket varsayılanı
+    /// geçerlidir.
+    ///
+    /// Ayrı tutulmasının nedeni: ofis/idari kadro genelde cumartesi
+    /// çalışmaz. Tek bir şirket ayarıyla yürütülürse ya sahanın
+    /// cumartesisi kaybolur ya ofise olmayan bir gün yazılır; ikisi de
+    /// gün ve mesai sayısını, dolayısıyla bordroyu bozar.
+    /// </summary>
+    public int? HeadOfficeWorkWeek { get; set; }
+
     // --- Kıdem tazminatı ---
 
     /// <summary>
