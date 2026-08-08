@@ -274,7 +274,26 @@ export type ActivityInput = {
   notes?: string | null;
 };
 
+export type ScheduleListItem = {
+  id: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  projectStatus: number;
+  name: string;
+  status: number;
+  statusName: string;
+  baselineRevisionNumber: number;
+  deadline?: string | null;
+  hasContractDeadline: boolean;
+  activityCount: number;
+};
+
 export const projectScheduleService = {
+  /** Kullanıcının veri kapsamındaki iş programları. */
+  list: () =>
+    apiClient<{ count: number; items: ScheduleListItem[] }>("is-programi"),
+
   get: (projectId: string) =>
     apiClient<ProjectScheduleResponse>(`projects/${projectId}/is-programi`),
 

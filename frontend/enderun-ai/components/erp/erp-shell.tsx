@@ -79,7 +79,9 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
   ) return "engineering.view";
   // İş programını okuma bilinçli olarak geniş: planı uygulayan saha
   // (Şantiye Şefi, Formen) proje listesini görmez ama kendi terminini
-  // görmeden çalışamaz. Veri kapsamı zaten şantiyeleriyle sınırlı.
+  // görmeden çalışamaz. Veri kapsamı zaten şantiyeleriyle sınırlı —
+  // liste ucu yalnızca kullanıcının projelerini döndürüyor.
+  if (pathname.startsWith("/is-programi")) return "schedule.view";
   if (/^\/projeler\/[^/]+\/is-programi/.test(pathname)) {
     return ["projects.view", "schedule.view"];
   }
@@ -365,6 +367,13 @@ const groups: MenuGroup[] = [
         label: "Projeler",
         href: "/projeler",
         icon: "▣",
+      },
+      {
+        // Proje listesine giremeyen saha (Şantiye Şefi, Formen) kendi
+        // şantiyelerinin iş programına buradan ulaşır.
+        label: "İş Programı",
+        href: "/is-programi",
+        icon: "▰",
       },
       {
         // Aynı kayıt: projenin sözleşme icmali. "Keşif" adı kodda

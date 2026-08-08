@@ -80,8 +80,73 @@ public sealed record ReplaceScheduleHolidaysRequest(
 public sealed class ProjectSchedulesController(
     AppDbContext db,
     IProjectScheduleService schedules,
-    IScheduleAlertService alerts) : ControllerBase
+    IScheduleAlertService alerts,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
+    // ---------------- Liste ----------------
+
+    /// <summary>
+    /// Kullanıcının görebildiği projelerin iş programları.
+    ///
+    /// Proje listesine giremeyen ama planı uygulayan saha (Şantiye Şefi,
+    /// Formen) buradan kendi şantiyelerinin projelerine ulaşır. Kapsam
+    /// ŞANTİYEDEN PROJEYE çıkarak çözülüyor; standart proje kapsamı
+    /// şantiye kapsamlı kullanıcıya hiçbir proje göstermez.
+    /// </summary>
+    [HttpGet("api/is-programi")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleView)]
+    public async Task<IActionResult> List(CancellationToken cancellationToken)
+    {
+        var visible = await VisibleProjectIdsAsync(cancellationToken);
+
+        var query = db.ProjectSchedules
+            .AsNoTracking()
+            .Where(x => x.Status != ProjectScheduleStatus.Archived &&
+                        !x.Project.IsArchived);
+
+        if (visible is not null)
+            query = query.Where(x => visible.Contains(x.ProjectId));
+
+        var rows = await query
+            .Select(x => new
+            {
+                x.Id,
+                x.ProjectId,
+                ProjectCode = x.Project.Code,
+                ProjectName = x.Project.Name,
+                ProjectStatus = (int)x.Project.Status,
+                x.Name,
+                Status = (int)x.Status,
+                x.BaselineRevisionNumber,
+                Deadline = x.Project.ContractDeadlineDate ?? x.Project.PlannedEndDate,
+                HasContractDeadline = x.Project.ContractDeadlineDate != null,
+                ActivityCount = x.Activities.Count
+            })
+            .OrderBy(x => x.ProjectCode)
+            .ToListAsync(cancellationToken);
+
+        return Ok(new
+        {
+            // Kapsam dışı proje hiç sorgulanmadı; sayı da kapsam içi.
+            count = rows.Count,
+            items = rows.Select(x => new
+            {
+                x.Id,
+                x.ProjectId,
+                x.ProjectCode,
+                x.ProjectName,
+                x.ProjectStatus,
+                x.Name,
+                x.Status,
+                StatusName = ScheduleLabels.Status((ProjectScheduleStatus)x.Status),
+                x.BaselineRevisionNumber,
+                x.Deadline,
+                x.HasContractDeadline,
+                x.ActivityCount
+            })
+        });
+    }
+
     // ---------------- Termin, ceza ve uyarılar ----------------
 
     /// <summary>
@@ -104,8 +169,27 @@ public sealed class ProjectSchedulesController(
             currentUser, authorization,
             PermissionCatalog.Keys.HakedisView, cancellationToken);
 
-        var rows = await alerts.GetAsync(
-            projectId is Guid id ? [id] : null, showPenalty, cancellationToken);
+        var visible = await VisibleProjectIdsAsync(cancellationToken);
+
+        // Tek proje istendiğinde de kapsam süzgeci geçerli.
+        var scoped = projectId is Guid id
+            ? (visible is null || visible.Contains(id) ? [id] : Array.Empty<Guid>())
+            : visible?.ToArray();
+
+        // BOŞ küme ile null'u karıştırmamak kritik: servis boş listeyi
+        // "süzgeç yok" sayar ve her projeyi döndürürdü. Kapsamı boş olan
+        // kullanıcı hiçbir uyarı görmemeli.
+        if (scoped is { Length: 0 })
+        {
+            return Ok(new
+            {
+                horizonDays = ScheduleAlertService.DeadlineHorizonDays,
+                showsPenalty = showPenalty,
+                items = Array.Empty<ScheduleAlert>()
+            });
+        }
+
+        var rows = await alerts.GetAsync(scoped, showPenalty, cancellationToken);
 
         return Ok(new
         {
@@ -126,6 +210,9 @@ public sealed class ProjectSchedulesController(
     public async Task<IActionResult> DelayPenalty(
         Guid projectId, CancellationToken cancellationToken)
     {
+        if (!await CanAccessProjectAsync(projectId, cancellationToken))
+            return Forbid();
+
         var settings = await db.Projects
             .AsNoTracking()
             .Where(x => x.Id == projectId)
@@ -174,6 +261,9 @@ public sealed class ProjectSchedulesController(
         UpdateProjectDeadlineRequest request,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessProjectAsync(projectId, cancellationToken))
+            return Forbid();
+
         var project = await db.Projects
             .SingleOrDefaultAsync(x => x.Id == projectId, cancellationToken);
 
@@ -233,6 +323,82 @@ public sealed class ProjectSchedulesController(
     }
 
     /// <summary>
+    /// Görülebilir proje kimlikleri; sınırsız erişimde null.
+    /// </summary>
+    private async Task<IReadOnlyCollection<Guid>?> VisibleProjectIdsAsync(
+        CancellationToken cancellationToken) =>
+        await schedules.ResolveVisibleProjectIdsAsync(
+            await dataScope.GetAsync(cancellationToken), cancellationToken);
+
+    /// <summary>
+    /// Proje kullanıcının veri kapsamında mı.
+    ///
+    /// İzin (schedule.view) "iş programı okuyabilir" der; KAPSAM
+    /// "hangi projelerin" sorusunu cevaplar. İkisi ayrı kapı:
+    /// izni olan herkesin bütün projeleri görmesi, sahaya geniş okuma
+    /// vermenin bedeli olmamalı.
+    /// </summary>
+    private async Task<bool> CanAccessProjectAsync(
+        Guid projectId, CancellationToken cancellationToken)
+    {
+        var visible = await VisibleProjectIdsAsync(cancellationToken);
+        return visible is null || visible.Contains(projectId);
+    }
+
+    private async Task<Guid?> ProjectOfScheduleAsync(
+        Guid scheduleId, CancellationToken cancellationToken)
+    {
+        var projectId = await db.ProjectSchedules
+            .AsNoTracking()
+            .Where(x => x.Id == scheduleId)
+            .Select(x => x.ProjectId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return projectId == Guid.Empty ? null : projectId;
+    }
+
+    private async Task<Guid?> ProjectOfActivityAsync(
+        Guid activityId, CancellationToken cancellationToken)
+    {
+        var projectId = await db.ScheduleActivities
+            .AsNoTracking()
+            .Where(x => x.Id == activityId)
+            .Select(x => x.ProjectSchedule.ProjectId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return projectId == Guid.Empty ? null : projectId;
+    }
+
+    /// <summary>
+    /// Programa erişim kapısı: bulunamadıysa 404, kapsam dışıysa 403.
+    /// </summary>
+    private async Task<IActionResult?> GuardScheduleAsync(
+        Guid scheduleId, CancellationToken cancellationToken)
+    {
+        var projectId = await ProjectOfScheduleAsync(scheduleId, cancellationToken);
+
+        if (projectId is null)
+            return NotFound(new { message = "İş programı bulunamadı." });
+
+        return await CanAccessProjectAsync(projectId.Value, cancellationToken)
+            ? null
+            : Forbid();
+    }
+
+    private async Task<IActionResult?> GuardActivityAsync(
+        Guid activityId, CancellationToken cancellationToken)
+    {
+        var projectId = await ProjectOfActivityAsync(activityId, cancellationToken);
+
+        if (projectId is null)
+            return NotFound(new { message = "Aktivite bulunamadı." });
+
+        return await CanAccessProjectAsync(projectId.Value, cancellationToken)
+            ? null
+            : Forbid();
+    }
+
+    /// <summary>
     /// Oturumdaki kullanıcının belirli bir izne sahip olup olmadığı.
     /// Attribute'lar VEYA mantığıyla birleştiği için ikinci bir izin
     /// koşulu ancak burada zorlanabiliyor.
@@ -271,6 +437,9 @@ public sealed class ProjectSchedulesController(
     public async Task<IActionResult> Get(
         Guid projectId, CancellationToken cancellationToken)
     {
+        if (!await CanAccessProjectAsync(projectId, cancellationToken))
+            return Forbid();
+
         var project = await db.Projects
             .AsNoTracking()
             .Where(x => x.Id == projectId)
@@ -319,6 +488,9 @@ public sealed class ProjectSchedulesController(
         CreateProjectScheduleRequest request,
         CancellationToken cancellationToken)
     {
+        if (!await CanAccessProjectAsync(projectId, cancellationToken))
+            return Forbid();
+
         var project = await db.Projects
             .AsNoTracking()
             .Where(x => x.Id == projectId)
@@ -385,6 +557,9 @@ public sealed class ProjectSchedulesController(
         UpdateProjectScheduleRequest request,
         CancellationToken cancellationToken)
     {
+        if (await GuardScheduleAsync(id, cancellationToken) is IActionResult denied)
+            return denied;
+
         var schedule = await db.ProjectSchedules
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
@@ -428,6 +603,9 @@ public sealed class ProjectSchedulesController(
     public async Task<IActionResult> SeedFromSections(
         Guid id, CancellationToken cancellationToken)
     {
+        if (await GuardScheduleAsync(id, cancellationToken) is IActionResult denied)
+            return denied;
+
         var schedule = await db.ProjectSchedules
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
@@ -461,6 +639,9 @@ public sealed class ProjectSchedulesController(
         ScheduleActivityRequest request,
         CancellationToken cancellationToken)
     {
+        if (await GuardScheduleAsync(id, cancellationToken) is IActionResult denied)
+            return denied;
+
         var schedule = await db.ProjectSchedules
             .AsNoTracking()
             .Where(x => x.Id == id)
@@ -506,6 +687,9 @@ public sealed class ProjectSchedulesController(
         ScheduleActivityRequest request,
         CancellationToken cancellationToken)
     {
+        if (await GuardActivityAsync(activityId, cancellationToken) is IActionResult denied)
+            return denied;
+
         var activity = await db.ScheduleActivities
             .SingleOrDefaultAsync(x => x.Id == activityId, cancellationToken);
 
@@ -554,6 +738,9 @@ public sealed class ProjectSchedulesController(
     public async Task<IActionResult> DeleteActivity(
         Guid activityId, CancellationToken cancellationToken)
     {
+        if (await GuardActivityAsync(activityId, cancellationToken) is IActionResult denied)
+            return denied;
+
         var activity = await db.ScheduleActivities
             .SingleOrDefaultAsync(x => x.Id == activityId, cancellationToken);
 
@@ -599,6 +786,9 @@ public sealed class ProjectSchedulesController(
         ScheduleDependencyRequest request,
         CancellationToken cancellationToken)
     {
+        if (await GuardScheduleAsync(id, cancellationToken) is IActionResult denied)
+            return denied;
+
         var exists = await db.ProjectSchedules.AnyAsync(
             x => x.Id == id, cancellationToken);
 
@@ -641,6 +831,12 @@ public sealed class ProjectSchedulesController(
         if (dependency is null)
             return NotFound(new { message = "Bağımlılık bulunamadı." });
 
+        if (await GuardScheduleAsync(
+                dependency.ProjectScheduleId, cancellationToken) is IActionResult denied)
+        {
+            return denied;
+        }
+
         db.ScheduleDependencies.Remove(dependency);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -664,6 +860,9 @@ public sealed class ProjectSchedulesController(
         SaveBaselineRequest request,
         CancellationToken cancellationToken)
     {
+        if (await GuardScheduleAsync(id, cancellationToken) is IActionResult denied)
+            return denied;
+
         var schedule = await db.ProjectSchedules
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
@@ -740,8 +939,12 @@ public sealed class ProjectSchedulesController(
     [HttpGet("api/is-programi/{id:guid}/baseline-gecmisi")]
     [RequirePermission(PermissionCatalog.Keys.ScheduleView)]
     public async Task<IActionResult> BaselineHistory(
-        Guid id, CancellationToken cancellationToken) =>
-        Ok(await db.ScheduleBaselineRevisions
+        Guid id, CancellationToken cancellationToken)
+    {
+        if (await GuardScheduleAsync(id, cancellationToken) is IActionResult denied)
+            return denied;
+
+        return Ok(await db.ScheduleBaselineRevisions
             .AsNoTracking()
             .Where(x => x.ProjectScheduleId == id)
             .OrderByDescending(x => x.RevisionNumber)
@@ -757,6 +960,7 @@ public sealed class ProjectSchedulesController(
                 x.PlannedEndDate
             })
             .ToListAsync(cancellationToken));
+    }
 
     // ---------------- Tatiller ----------------
 
@@ -767,11 +971,8 @@ public sealed class ProjectSchedulesController(
         ReplaceScheduleHolidaysRequest request,
         CancellationToken cancellationToken)
     {
-        var exists = await db.ProjectSchedules.AnyAsync(
-            x => x.Id == id, cancellationToken);
-
-        if (!exists)
-            return NotFound(new { message = "İş programı bulunamadı." });
+        if (await GuardScheduleAsync(id, cancellationToken) is IActionResult denied)
+            return denied;
 
         var incoming = request.Holidays
             .GroupBy(x => x.Date)
@@ -830,6 +1031,9 @@ public sealed class ProjectSchedulesController(
         AssignScheduleResourceRequest request,
         CancellationToken cancellationToken)
     {
+        if (await GuardActivityAsync(activityId, cancellationToken) is IActionResult denied)
+            return denied;
+
         var activity = await db.ScheduleActivities
             .AsNoTracking()
             .Where(x => x.Id == activityId)
@@ -957,6 +1161,12 @@ public sealed class ProjectSchedulesController(
         if (assignment is null)
             return NotFound(new { message = "Kaynak ataması bulunamadı." });
 
+        if (await GuardActivityAsync(
+                assignment.ScheduleActivityId, cancellationToken) is IActionResult denied)
+        {
+            return denied;
+        }
+
         db.ScheduleResourceAssignments.Remove(assignment);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -975,6 +1185,9 @@ public sealed class ProjectSchedulesController(
     public async Task<IActionResult> ResourceConflicts(
         Guid id, CancellationToken cancellationToken)
     {
+        if (await GuardScheduleAsync(id, cancellationToken) is IActionResult denied)
+            return denied;
+
         var exists = await db.ProjectSchedules.AnyAsync(
             x => x.Id == id, cancellationToken);
 
@@ -1003,6 +1216,9 @@ public sealed class ProjectSchedulesController(
     public async Task<IActionResult> ResourceSuggestions(
         Guid activityId, CancellationToken cancellationToken)
     {
+        if (await GuardActivityAsync(activityId, cancellationToken) is IActionResult denied)
+            return denied;
+
         var activity = await db.ScheduleActivities
             .AsNoTracking()
             .Where(x => x.Id == activityId)

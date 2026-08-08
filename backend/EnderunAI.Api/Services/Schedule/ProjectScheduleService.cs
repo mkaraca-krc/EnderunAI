@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.Schedule;
+using EnderunAI.Api.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Services.Schedule;
@@ -128,6 +129,19 @@ public interface IProjectScheduleService
     /// </summary>
     Task<IReadOnlyList<ResourceConflict>> GetConflictsAsync(
         Guid scheduleId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Kullanıcının görebileceği proje kimlikleri; sınırsız erişimde
+    /// null.
+    ///
+    /// <see cref="CurrentDataScopeSnapshot.Apply(IQueryable{Project})"/>
+    /// yalnızca şirket/şube/proje kapsamına bakar; ŞANTİYE kapsamlı
+    /// kullanıcı (Şantiye Şefi, Formen) orada hiçbir proje görmez.
+    /// İş programını sahanın okuması gerektiği için burada şantiyeden
+    /// projeye çıkılıyor.
+    /// </summary>
+    Task<IReadOnlyCollection<Guid>?> ResolveVisibleProjectIdsAsync(
+        CurrentDataScopeSnapshot? scope, CancellationToken cancellationToken);
 
     /// <summary>
     /// Bir bağ eklendiğinde döngü oluşup oluşmayacağını sınar.
@@ -559,6 +573,36 @@ public sealed class ProjectScheduleService(
                         x.Notes))
                     .OrderBy(x => x.Name, StringComparer.CurrentCulture)
                     .ToList());
+    }
+
+    public async Task<IReadOnlyCollection<Guid>?> ResolveVisibleProjectIdsAsync(
+        CurrentDataScopeSnapshot? scope, CancellationToken cancellationToken)
+    {
+        // Kapsam çözülemiyorsa hiçbir şey görünmez. Boş küme ile null
+        // arasındaki fark burada kritik: null "sınırsız" demek.
+        if (scope is null)
+            return Array.Empty<Guid>();
+
+        if (scope.HasGlobalAccess)
+            return null;
+
+        var direct = await db.Projects
+            .AsNoTracking()
+            .Where(x => scope.CompanyIds.Contains(x.CompanyId) ||
+                        scope.BranchIds.Contains(x.BranchId) ||
+                        scope.ProjectIds.Contains(x.Id))
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var fromSites = scope.SiteIds.Count == 0
+            ? []
+            : await db.ProjectSites
+                .AsNoTracking()
+                .Where(x => scope.SiteIds.Contains(x.Id))
+                .Select(x => x.ProjectId)
+                .ToListAsync(cancellationToken);
+
+        return direct.Concat(fromSites).ToHashSet();
     }
 
     public async Task<IReadOnlyList<ResourceConflict>> GetConflictsAsync(

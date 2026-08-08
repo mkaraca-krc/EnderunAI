@@ -14,8 +14,9 @@ namespace EnderunAI.Api.Services.Schedule;
 /// rolde var; sözleşme bedeli oradan sızmamalı — cezanın tutarından
 /// bedel geri hesaplanabilir.
 /// </summary>
-public sealed class ScheduleBriefingSource(IScheduleAlertService alerts)
-    : IHizirBriefingSource
+public sealed class ScheduleBriefingSource(
+    IScheduleAlertService alerts,
+    IProjectScheduleService schedules) : IHizirBriefingSource
 {
     public string Key => "is_programi";
 
@@ -25,10 +26,14 @@ public sealed class ScheduleBriefingSource(IScheduleAlertService alerts)
         HizirToolContext context, CancellationToken cancellationToken)
     {
         // Kapsam dışı projenin gecikmesi kullanıcıyı ilgilendirmez.
-        var projectIds = context.Scope.HasGlobalAccess
-            ? null
-            : context.Scope.ProjectIds.ToList();
+        //
+        // Kapsam ŞANTİYEDEN PROJEYE çıkılarak çözülüyor: yalnızca
+        // Scope.ProjectIds'e bakılsaydı şantiye kapsamlı kullanıcı
+        // (Şantiye Şefi, Formen) hiçbir brifing satırı görmezdi.
+        var projectIds = await schedules.ResolveVisibleProjectIdsAsync(
+            context.Scope, cancellationToken);
 
+        // Boş küme "hiçbiri" demek; servise verilse "süzgeç yok" sayılırdı.
         if (projectIds is { Count: 0 })
             return [];
 
