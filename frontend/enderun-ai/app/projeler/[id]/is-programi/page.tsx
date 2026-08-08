@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import GanttChart from "@/components/schedule/gantt-chart";
+import { usePermissions } from "@/lib/use-permissions";
 import {
   DELAY_PENALTY_KIND,
   DELAY_PENALTY_KIND_LABELS,
@@ -77,6 +78,12 @@ const emptyActivity: ActivityForm = {
 export default function WorkSchedulePage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
+
+  // Düzenleme yetkisi olmayan kullanıcıya (saha) işe yaramayan düğme
+  // göstermek, 403'e tıklatmaktan başka bir şey yapmaz. Gerçek kontrol
+  // uçlarda; bu yalnızca arayüz nezaketi.
+  const { has } = usePermissions();
+  const canManage = has("schedule.manage");
 
   const [schedule, setSchedule] = useState<ProjectSchedule | null>(null);
   const [hasSchedule, setHasSchedule] = useState(true);
@@ -293,7 +300,12 @@ export default function WorkSchedulePage() {
             <strong>Bu proje için iş programı yok</strong>
             <p>{absenceMessage}</p>
 
-            {sectionCount > 0 ? (
+            {!canManage ? (
+              <p>
+                İş programını açma yetkisi Genel Müdür ve Teknik
+                Koordinatör{"’"}dedir.
+              </p>
+            ) : sectionCount > 0 ? (
               <button
                 type="button"
                 className="erp-primary-button"
@@ -340,43 +352,47 @@ export default function WorkSchedulePage() {
           Proje Merkezi
         </Link>
 
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={busy}
-          onClick={() =>
-            run(async () => {
-              const result = await projectScheduleService.seedFromSections(
-                schedule.id
-              );
-              return result.message;
-            })
-          }
-        >
-          Kısımlardan Doldur
-        </button>
+        {canManage && (
+          <>
+            <button
+              type="button"
+              className="erp-secondary-button"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  const result = await projectScheduleService.seedFromSections(
+                    schedule.id
+                  );
+                  return result.message;
+                })
+              }
+            >
+              Kısımlardan Doldur
+            </button>
 
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={busy}
-          onClick={() => setActivityForm({ ...emptyActivity })}
-        >
-          Aktivite Ekle
-        </button>
+            <button
+              type="button"
+              className="erp-secondary-button"
+              disabled={busy}
+              onClick={() => setActivityForm({ ...emptyActivity })}
+            >
+              Aktivite Ekle
+            </button>
 
-        <button
-          type="button"
-          className="erp-primary-button"
-          disabled={busy}
-          onClick={saveBaseline}
-        >
-          {schedule.baselineRevisionNumber === 0
-            ? "Baseline Kaydet"
-            : "Baseline'ı Yenile"}
-        </button>
+            <button
+              type="button"
+              className="erp-primary-button"
+              disabled={busy}
+              onClick={saveBaseline}
+            >
+              {schedule.baselineRevisionNumber === 0
+                ? "Baseline Kaydet"
+                : "Baseline'ı Yenile"}
+            </button>
+          </>
+        )}
 
-        {penalty && (
+        {penalty && canManage && (
           <button
             type="button"
             className="erp-secondary-button"
@@ -505,6 +521,7 @@ export default function WorkSchedulePage() {
         <ActivityPanel
           activity={selected}
           schedule={schedule}
+          canManage={canManage}
           suggestions={
             suggestions?.activityId === selected.id ? suggestions.data : null
           }
@@ -533,6 +550,7 @@ export default function WorkSchedulePage() {
       <DependencyList
         schedule={schedule}
         busy={busy}
+        canManage={canManage}
         onRun={run}
       />
 
@@ -667,6 +685,7 @@ function ActivityPanel({
   schedule,
   suggestions,
   busy,
+  canManage,
   onEdit,
   onRun,
   onClose,
@@ -675,6 +694,7 @@ function ActivityPanel({
   schedule: ProjectSchedule;
   suggestions: ResourceSuggestions | null;
   busy: boolean;
+  canManage: boolean;
   onEdit: () => void;
   onRun: (action: () => Promise<string>) => Promise<void>;
   onClose: () => void;
@@ -781,24 +801,30 @@ function ActivityPanel({
           )}
       </div>
 
-      <div style={{ display: "flex", gap: 8, padding: "0 16px 16px", flexWrap: "wrap" }}>
-        <button type="button" className="erp-secondary-button" onClick={onEdit}>
-          Tarihleri Düzenle
-        </button>
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={busy}
-          onClick={() =>
-            onRun(async () => {
-              const result = await projectScheduleService.deleteActivity(activity.id);
-              return result.message;
-            })
-          }
+      {canManage && (
+        <div
+          style={{ display: "flex", gap: 8, padding: "0 16px 16px", flexWrap: "wrap" }}
         >
-          Aktiviteyi Sil
-        </button>
-      </div>
+          <button type="button" className="erp-secondary-button" onClick={onEdit}>
+            Tarihleri Düzenle
+          </button>
+          <button
+            type="button"
+            className="erp-secondary-button"
+            disabled={busy}
+            onClick={() =>
+              onRun(async () => {
+                const result = await projectScheduleService.deleteActivity(
+                  activity.id
+                );
+                return result.message;
+              })
+            }
+          >
+            Aktiviteyi Sil
+          </button>
+        </div>
+      )}
 
       {/* Kaynaklar */}
       <div style={{ padding: "0 16px 16px" }}>
@@ -824,27 +850,36 @@ function ActivityPanel({
                 <span className="erp-status blue">{resource.kindName}</span>
                 <strong>{resource.name}</strong>
                 {resource.role && <small>{resource.role}</small>}
-                <button
-                  type="button"
-                  className="erp-secondary-button"
-                  disabled={busy}
-                  onClick={() =>
-                    onRun(async () => {
-                      const result = await projectScheduleService.removeResource(
-                        resource.id
-                      );
-                      return result.message;
-                    })
-                  }
-                >
-                  Kaldır
-                </button>
+                {canManage && (
+                  <button
+                    type="button"
+                    className="erp-secondary-button"
+                    disabled={busy}
+                    onClick={() =>
+                      onRun(async () => {
+                        const result = await projectScheduleService.removeResource(
+                          resource.id
+                        );
+                        return result.message;
+                      })
+                    }
+                  >
+                    Kaldır
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         )}
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div
+          style={{
+            display: canManage ? "flex" : "none",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
           <select
             value={resourceKind}
             onChange={(event) => {
@@ -914,7 +949,7 @@ function ActivityPanel({
       </div>
 
       {/* Bağımlılık ekleme */}
-      <div style={{ padding: "0 16px 16px" }}>
+      <div style={{ padding: "0 16px 16px", display: canManage ? "block" : "none" }}>
         <h3 style={{ fontSize: 14, marginBottom: 8 }}>Bu aktiviteden sonra gelen</h3>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -1055,10 +1090,12 @@ function SectionProgressTable({ activities }: { activities: ScheduleActivity[] }
 function DependencyList({
   schedule,
   busy,
+  canManage,
   onRun,
 }: {
   schedule: ProjectSchedule;
   busy: boolean;
+  canManage: boolean;
   onRun: (action: () => Promise<string>) => Promise<void>;
 }) {
   if (schedule.dependencies.length === 0) return null;
@@ -1078,7 +1115,7 @@ function DependencyList({
               <th>Ardıl</th>
               <th>Tür</th>
               <th>Gecikme Payı</th>
-              <th>İşlem</th>
+              {canManage && <th>İşlem</th>}
             </tr>
           </thead>
           <tbody>
@@ -1092,24 +1129,26 @@ function DependencyList({
                     ? "—"
                     : `${dependency.lagWorkDays} iş günü`}
                 </td>
-                <td>
-                  <button
-                    type="button"
-                    className="erp-secondary-button"
-                    disabled={busy}
-                    onClick={() =>
-                      onRun(async () => {
-                        const result =
-                          await projectScheduleService.deleteDependency(
-                            dependency.id
-                          );
-                        return result.message;
-                      })
-                    }
-                  >
-                    Kaldır
-                  </button>
-                </td>
+                {canManage && (
+                  <td>
+                    <button
+                      type="button"
+                      className="erp-secondary-button"
+                      disabled={busy}
+                      onClick={() =>
+                        onRun(async () => {
+                          const result =
+                            await projectScheduleService.deleteDependency(
+                              dependency.id
+                            );
+                          return result.message;
+                        })
+                      }
+                    >
+                      Kaldır
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
