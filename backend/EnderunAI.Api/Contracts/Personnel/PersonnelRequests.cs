@@ -58,3 +58,17 @@ public sealed record SetWorkLocationRequest(
     DateTime? StartDate,
     string? Role,
     string? Notes);
+
+/// <summary>
+/// Eksik alan tamamlama isteği. Gönderilmeyen (null/boş) alan
+/// DEĞİŞTİRİLMEZ — bu uç alan doldurmak için var, boşaltmak için tam
+/// güncelleme kullanılır.
+/// </summary>
+public sealed record CompletePersonnelDataRequest(
+    string? IdentityNumber,
+    string? SgkRegistrationNumber,
+    string? Phone,
+    string? JobTitle,
+    DateTime? BirthDate,
+    DateTime? EmploymentStartDate,
+    Guid? BranchId);

@@ -129,7 +129,67 @@ export type AssignPersonnelRequest = {
   isPrimaryAssignment: boolean;
 };
 
+/** Eksik alanın hangi süreci engellediği. */
+export const DATA_SEVERITY = {
+  PayrollBlocking: 0,
+  OfficialBlocking: 1,
+  Operational: 2,
+} as const;
+
+export type PersonnelDataIssue = {
+  field: string;
+  label: string;
+  severity: number;
+  severityName: string;
+  reason: string;
+};
+
+export type PersonnelDataCompleteness = {
+  personnelId: string;
+  employeeNumber: string;
+  fullName: string;
+  issues: PersonnelDataIssue[];
+  payrollReady: boolean;
+  officialReady: boolean;
+  completionRate: number;
+};
+
+export type PersonnelDataCompletenessSummary = {
+  total: number;
+  payrollReadyCount: number;
+  officialReadyCount: number;
+  completeCount: number;
+  byField: Record<string, number>;
+  items: PersonnelDataCompleteness[];
+};
+
+/** Gönderilmeyen alan değiştirilmez; bu uç alan doldurmak için. */
+export type CompletePersonnelDataRequest = {
+  identityNumber?: string | null;
+  sgkRegistrationNumber?: string | null;
+  phone?: string | null;
+  jobTitle?: string | null;
+  birthDate?: string | null;
+  employmentStartDate?: string | null;
+  branchId?: string | null;
+};
+
 export const personnelService = {
+  dataCompleteness(companyId?: string) {
+    const suffix = companyId ? `?companyId=${companyId}` : "";
+
+    return apiClient<PersonnelDataCompletenessSummary>(
+      `hr/personnel/veri-eksikleri${suffix}`
+    );
+  },
+
+  completeData(id: string, payload: CompletePersonnelDataRequest) {
+    return apiClient<{ message: string; filledFields: string[] }>(
+      `hr/personnel/${id}/veri-tamamla`,
+      { method: "PUT", body: payload }
+    );
+  },
+
   getAll(params?: {
     companyId?: string;
     projectId?: string;

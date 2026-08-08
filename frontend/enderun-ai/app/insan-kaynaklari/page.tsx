@@ -42,6 +42,11 @@ import {
   branchService,
 } from "@/services/branch.service";
 
+import {
+  personnelService,
+  type PersonnelDataCompletenessSummary,
+} from "@/services/personnel.service";
+
 const TODAY =
   new Date();
 
@@ -329,6 +334,17 @@ export default function HumanResourcesDashboardPage() {
     new Set()
   );
 
+  /**
+   * Personel kartı veri eksikleri özeti. Ayrı uçtan geliyor;
+   * alınamazsa uyarı kalemi hiç görünmez, dashboard yine çalışır.
+   */
+  const [
+    dataGapSummary,
+    setDataGapSummary,
+  ] = useState<PersonnelDataCompletenessSummary | null>(
+    null
+  );
+
   const [
     trendPayrolls,
     setTrendPayrolls,
@@ -558,6 +574,14 @@ export default function HumanResourcesDashboardPage() {
         setPayrolls(
           currentPayrollRows
         );
+
+        try {
+          setDataGapSummary(
+            await personnelService.dataCompleteness()
+          );
+        } catch {
+          setDataGapSummary(null);
+        }
 
         setSalaryPersonnelIds(
           new Set(
@@ -1136,6 +1160,19 @@ export default function HumanResourcesDashboardPage() {
           href:
             "/insan-kaynaklari/bordro",
         },
+        {
+          // Resmî bildirim engeli: kimlik, SGK sicil, doğum ya da işe
+          // giriş tarihi eksik. Bordro üretilebilir ama bildirilemez.
+          label:
+            "Resmî bildirime hazır olmayan personel",
+          count:
+            dataGapSummary
+              ? dataGapSummary.total -
+                dataGapSummary.officialReadyCount
+              : 0,
+          href:
+            "/insan-kaynaklari/veri-eksikleri",
+        },
       ].filter(
         (item) =>
           item.count > 0
@@ -1149,6 +1186,7 @@ export default function HumanResourcesDashboardPage() {
         overtimeSummary.pending,
         advanceSummary.pending,
         approvedPayrolls.length,
+        dataGapSummary,
       ]
     );
 

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui";
 import {
   personnelService,
+  type PersonnelDataCompleteness,
   type PersonnelDetail,
   type PersonnelListItem,
 } from "@/services/personnel.service";
@@ -162,6 +163,11 @@ function PersonnelShortcuts({ personnelId }: { personnelId: string }) {
 
 export default function HrPersonnelPage() {
   const [items, setItems] = useState<PersonnelListItem[]>([]);
+
+  /** Personel kimliği → eksik veri özeti. Eksiği olmayan kayıt yok. */
+  const [dataGaps, setDataGaps] = useState<
+    Record<string, PersonnelDataCompleteness>
+  >({});
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [branches, setBranches] = useState<BranchListItem[]>([]);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
@@ -229,6 +235,23 @@ export default function HrPersonnelPage() {
         ]);
 
       setItems(personnelResult);
+
+      // Eksik veri özeti ayrı uçtan; alınamazsa liste yine çalışır,
+      // yalnızca rozetler çıkmaz.
+      try {
+        const completeness = await personnelService.dataCompleteness();
+
+        setDataGaps(
+          Object.fromEntries(
+            completeness.items
+              .filter((entry) => entry.issues.length > 0)
+              .map((entry) => [entry.personnelId, entry])
+          )
+        );
+      } catch {
+        setDataGaps({});
+      }
+
       setCompanies(companyResult.filter((company) => company.isActive !== false));
       setBranches(branchResult.filter((branch) => branch.isActive !== false));
       setProjects(projectResult);
@@ -968,6 +991,30 @@ export default function HrPersonnelPage() {
                           <div>
                             <strong className="block whitespace-nowrap text-slate-900">{item.fullName}</strong>
                             <span className="mt-1 block text-xs text-slate-500">{item.employeeNumber}</span>
+                            {/* Eksik veri rozeti: ayrıntı ve tamamlama
+                                ayrı ekranda; burada yalnızca ağırlık
+                                gösteriliyor. */}
+                            {dataGaps[item.id] && (
+                              <Link
+                                href="/insan-kaynaklari/veri-eksikleri"
+                                className="mt-1 inline-block"
+                              >
+                                <Badge
+                                  variant={
+                                    dataGaps[item.id].payrollReady
+                                      ? "warning"
+                                      : "danger"
+                                  }
+                                  title={dataGaps[item.id].issues
+                                    .map((issue) => issue.label)
+                                    .join(", ")}
+                                >
+                                  {dataGaps[item.id].payrollReady
+                                    ? `${dataGaps[item.id].issues.length} eksik alan`
+                                    : "Bordroya giremez"}
+                                </Badge>
+                              </Link>
+                            )}
                           </div>
                         </div>
                       </TableCell>

@@ -99,6 +99,121 @@ public sealed class PersonnelController(
         return Ok(summary);
     }
 
+    /// <summary>
+    /// Eksik alanları TAMAMLAR — yalnızca gönderilen alanlara dokunur.
+    ///
+    /// Tam güncelleme ucu (PUT) ad, soyad, durum ve aktiflik gibi
+    /// alanları da ister; toplu tamamlama ekranında her satır için önce
+    /// kartın tamamını çekip geri göndermek gerekirdi. O yol, ekranın
+    /// görmediği bir alanı yanlışlıkla eski değerine döndürme riski
+    /// taşıyor.
+    ///
+    /// Gönderilmeyen (null) alan DEĞİŞTİRİLMEZ. Bu uç alan doldurmak
+    /// için var; alan boşaltmak için tam güncelleme kullanılır.
+    /// </summary>
+    [HttpPut("{id:guid}/veri-tamamla")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
+    public async Task<IActionResult> CompleteData(
+        Guid id,
+        CompletePersonnelDataRequest request,
+        CancellationToken cancellationToken)
+    {
+        var personnel = await db.Personnel
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (personnel is null)
+            return NotFound(new { message = "Personel bulunamadı." });
+
+        var filled = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(request.IdentityNumber))
+        {
+            var identity = request.IdentityNumber.Trim();
+
+            if (TurkishIdentityNumber.Describe(identity) is string problem)
+                return BadRequest(new { message = problem });
+
+            if (!string.Equals(identity, personnel.IdentityNumber, StringComparison.Ordinal))
+            {
+                var taken = await db.Personnel.AnyAsync(
+                    x => x.Id != id && x.IdentityNumber == identity, cancellationToken);
+
+                if (taken)
+                {
+                    return Conflict(new
+                    {
+                        message = "Bu kimlik numarasıyla kayıtlı başka personel var."
+                    });
+                }
+
+                personnel.IdentityNumber = identity;
+                filled.Add("T.C. kimlik no");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.SgkRegistrationNumber))
+        {
+            personnel.SgkRegistrationNumber = request.SgkRegistrationNumber.Trim();
+            filled.Add("SGK sicil no");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Phone))
+        {
+            personnel.Phone = request.Phone.Trim();
+            filled.Add("telefon");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.JobTitle))
+        {
+            personnel.JobTitle = request.JobTitle.Trim();
+            filled.Add("ünvan");
+        }
+
+        if (request.BirthDate is not null)
+        {
+            personnel.BirthDate = UtcDate(request.BirthDate);
+            filled.Add("doğum tarihi");
+        }
+
+        if (request.EmploymentStartDate is not null)
+        {
+            personnel.EmploymentStartDate = UtcDate(request.EmploymentStartDate);
+            filled.Add("işe giriş tarihi");
+        }
+
+        if (request.BranchId is Guid branchId)
+        {
+            var branchExists = await db.Branches.AnyAsync(
+                x => x.Id == branchId &&
+                     x.CompanyId == personnel.CompanyId &&
+                     x.IsActive,
+                cancellationToken);
+
+            if (!branchExists)
+            {
+                return BadRequest(new
+                {
+                    message = "Seçilen şube şirkete ait değil veya pasif."
+                });
+            }
+
+            personnel.BranchId = branchId;
+            filled.Add("şube");
+        }
+
+        if (filled.Count == 0)
+            return Ok(new { message = "Değişiklik yok.", filledFields = filled });
+
+        personnel.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = $"{string.Join(", ", filled)} kaydedildi.",
+            filledFields = filled
+        });
+    }
+
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetAll(

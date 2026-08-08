@@ -419,6 +419,11 @@ const groups: MenuGroup[] = [
         icon: "♙",
       },
       {
+        label: "Veri Eksikleri",
+        href: "/insan-kaynaklari/veri-eksikleri",
+        icon: "!",
+      },
+      {
         label: "Personel 360°",
         href: "/insan-kaynaklari/personel-360",
         icon: "◎",

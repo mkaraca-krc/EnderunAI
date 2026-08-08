@@ -357,6 +357,161 @@ public sealed class PersonnelDataIntegrationTests(DatabaseFixture fixture)
         Assert.Equal(1, byField.GetProperty("salaryCard").GetInt32());
     }
 
+    // ---------- Toplu tamamlama ----------
+
+    /// <summary>
+    /// Tamamlama ucu YALNIZCA gönderilen alanlara dokunur; ekranın
+    /// görmediği bir alan sessizce eski değerine dönmemeli.
+    /// </summary>
+    [Fact]
+    public async Task CompleteData_FillsOnlyTheSentFields()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var companyId = await CreateCompanyAsync(suffix);
+        var client = await ClientAsync();
+
+        var created = await client.PostAsJsonAsync("/api/personnel", new
+        {
+            companyId,
+            employeeNumber = $"PRS-{suffix}",
+            firstName = "Ayşe",
+            lastName = "Yılmaz",
+            jobTitle = "Teknisyen"
+        });
+
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/personnel/{id}/veri-tamamla",
+            new { phone = "5321112233", sgkRegistrationNumber = "9876543210987" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var detail = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/personnel/{id}");
+
+        Assert.Equal("5321112233", detail.GetProperty("phone").GetString());
+        Assert.Equal("9876543210987",
+            detail.GetProperty("sgkRegistrationNumber").GetString());
+
+        // Gönderilmeyen alan olduğu gibi kaldı.
+        Assert.Equal("Teknisyen", detail.GetProperty("jobTitle").GetString());
+    }
+
+    [Fact]
+    public async Task CompleteData_RejectsInvalidIdentity()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var companyId = await CreateCompanyAsync(suffix);
+        var client = await ClientAsync();
+
+        var created = await client.PostAsJsonAsync(
+            "/api/personnel", NewPersonnel(companyId, suffix, null));
+
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/personnel/{id}/veri-tamamla",
+            new { identityNumber = InvalidIdentity });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Aynı kimlik numarası ikinci bir kayda yazılamaz; toplu
+    /// tamamlamada kopyala-yapıştır hatası buradan yakalanır.
+    /// </summary>
+    [Fact]
+    public async Task CompleteData_RejectsIdentityTakenByAnother()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var companyId = await CreateCompanyAsync(suffix);
+        var client = await ClientAsync();
+
+        var identity = NewValidIdentity();
+
+        await client.PostAsJsonAsync(
+            "/api/personnel", NewPersonnel(companyId, $"{suffix}a", identity));
+
+        var second = await client.PostAsJsonAsync(
+            "/api/personnel", NewPersonnel(companyId, $"{suffix}b", null));
+
+        var id = (await second.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/personnel/{id}/veri-tamamla",
+            new { identityNumber = identity });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CompleteData_WithNothingToFill_IsHarmless()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var companyId = await CreateCompanyAsync(suffix);
+        var client = await ClientAsync();
+
+        var created = await client.PostAsJsonAsync(
+            "/api/personnel", NewPersonnel(companyId, suffix, NewValidIdentity()));
+
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/personnel/{id}/veri-tamamla", new { });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Empty(payload.GetProperty("filledFields").EnumerateArray());
+    }
+
+    /// <summary>Tamamlanan alan eksik listesinden düşüyor.</summary>
+    [Fact]
+    public async Task CompletedField_DisappearsFromTheGapList()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var companyId = await CreateCompanyAsync(suffix);
+        var client = await ClientAsync();
+
+        var created = await client.PostAsJsonAsync("/api/personnel", new
+        {
+            companyId,
+            employeeNumber = $"PRS-{suffix}",
+            firstName = "Mehmet",
+            lastName = "Kaya"
+        });
+
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var before = Person(
+            await CompletenessAsync(client, companyId), $"PRS-{suffix}");
+
+        Assert.Contains(
+            before.GetProperty("issues").EnumerateArray(),
+            x => x.GetProperty("field").GetString() == "phone");
+
+        await client.PutAsJsonAsync(
+            $"/api/personnel/{id}/veri-tamamla", new { phone = "5321112233" });
+
+        var after = Person(
+            await CompletenessAsync(client, companyId), $"PRS-{suffix}");
+
+        Assert.DoesNotContain(
+            after.GetProperty("issues").EnumerateArray(),
+            x => x.GetProperty("field").GetString() == "phone");
+
+        Assert.True(
+            after.GetProperty("completionRate").GetDecimal() >
+            before.GetProperty("completionRate").GetDecimal());
+    }
+
     /// <summary>
     /// Uç ücret TUTARI döndürmüyor: eksik veri görmek maaş görme
     /// yetkisi gerektirmemeli.
