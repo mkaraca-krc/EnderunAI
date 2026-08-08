@@ -101,6 +101,8 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.WithholdingTaxRate,
                 x.MaterialDeductionRate,
                 ContractType = (int)x.ContractType,
+                ProgressPaymentPeriod = (int)x.ProgressPaymentPeriod,
+                x.PaymentTerms,
                 x.DeviationAlertThresholdRate,
                 x.PlannedStartDate,
                 x.PlannedEndDate,
@@ -112,6 +114,18 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.IsArchived,
                 x.ArchivedAtUtc,
                 x.ArchiveReason,
+
+                // Zincirin geri yönü: "bu proje hangi tekliften geldi".
+                // Teklif modülü öncesi açılan projelerde boştur.
+                x.SourceOfferId,
+                SourceOfferNumber = db.Offers
+                    .Where(o => o.Id == x.SourceOfferId)
+                    .Select(o => o.OfferNumber)
+                    .FirstOrDefault(),
+                SourceOfferTitle = db.Offers
+                    .Where(o => o.Id == x.SourceOfferId)
+                    .Select(o => o.Title)
+                    .FirstOrDefault(),
                 Warehouses = x.Warehouses.Select(w => new
                 {
                     w.Id,

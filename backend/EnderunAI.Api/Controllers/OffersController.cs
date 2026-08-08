@@ -815,6 +815,142 @@ public sealed class OffersController(
     }
 
     /// <summary>
+    /// Teklifin iş zinciri: teklif → proje → icmal → hakediş.
+    ///
+    /// "Bu proje hangi tekliften geldi" ve "verdiğimiz teklif ne oldu"
+    /// soruları bugüne kadar cevapsızdı: ProjectBoq.SourceOfferId
+    /// yazılıyordu ama hiçbir yerde okunmuyordu. Zincir, bir kalemin
+    /// fiyatı tartışıldığında hangi teklife dayandığını göstermek için
+    /// gerekli.
+    /// </summary>
+    [HttpGet("{id:guid}/zincir")]
+    [RequirePermission(PermissionCatalog.Keys.OfferTrackingView)]
+    public async Task<IActionResult> GetChain(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var offer = await db.Offers
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new
+            {
+                x.Id,
+                x.OfferNumber,
+                x.Title,
+                x.OfferDate,
+                x.Currency,
+                x.GrandTotal,
+                x.Status,
+                x.Kind,
+                x.LostReason,
+                x.CounterpartyCurrentAccountId,
+                CounterpartyName = x.CounterpartyCurrentAccount != null
+                    ? x.CounterpartyCurrentAccount.Title
+                    : null,
+                x.CounterpartyRole,
+                x.ProjectId
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (offer is null)
+            return NotFound(new { message = "Teklif bulunamadı." });
+
+        object? project = null;
+        object[] boqs = [];
+        object[] payments = [];
+
+        if (offer.ProjectId is Guid projectId)
+        {
+            project = await db.Projects
+                .AsNoTracking()
+                .Where(x => x.Id == projectId)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.Code,
+                    x.Name,
+                    x.ContractNumber,
+                    x.ContractDate,
+                    x.ContractAmount,
+                    x.CurrencyCode,
+                    ContractType = (int)x.ContractType,
+                    ProgressPaymentPeriod = (int)x.ProgressPaymentPeriod,
+                    x.PaymentTerms,
+                    Status = (int)x.Status,
+                    x.IsArchived,
+                    // Bu proje bu tekliften mi doğdu, yoksa teklif
+                    // sonradan ek iş olarak mı bağlandı?
+                    BornFromThisOffer = x.SourceOfferId == id
+                })
+                .SingleOrDefaultAsync(cancellationToken);
+
+            boqs = await db.ProjectBoqs
+                .AsNoTracking()
+                .Where(x => x.ProjectId == projectId)
+                .OrderBy(x => x.CreatedAtUtc)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.BoqNumber,
+                    x.Name,
+                    Status = (int)x.Status,
+                    x.TotalAmount,
+                    x.IsCurrentRevision,
+                    x.SourceOfferId,
+                    // Bu icmal bu teklifin kalemlerinden mi üretildi?
+                    FromThisOffer = x.SourceOfferId == id,
+                    ItemCount = x.Items.Count
+                })
+                .ToArrayAsync(cancellationToken);
+
+            payments = await db.ProgressPayments
+                .AsNoTracking()
+                .Where(x => x.ProjectId == projectId)
+                .OrderBy(x => x.PeriodNumber)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.ProgressPaymentNumber,
+                    x.PeriodNumber,
+                    x.ProgressPaymentDate,
+                    Status = (int)x.Status,
+                    x.CurrentAmount,
+                    x.CumulativeAmount,
+                    x.CurrencyCode
+                })
+                .ToArrayAsync(cancellationToken);
+        }
+
+        return Ok(new
+        {
+            offer = new
+            {
+                offer.Id,
+                offer.OfferNumber,
+                offer.Title,
+                offer.OfferDate,
+                offer.Currency,
+                offer.GrandTotal,
+                Status = (int)offer.Status,
+                StatusName = OfferStatusTransitions.Label(offer.Status),
+                Kind = (int)offer.Kind,
+                KindName = OfferStatusTransitions.KindLabel(offer.Kind),
+                LostReason = (int)offer.LostReason,
+                LostReasonName =
+                    OfferStatusTransitions.LostReasonLabel(offer.LostReason),
+                offer.CounterpartyCurrentAccountId,
+                offer.CounterpartyName,
+                CounterpartyRole = (int)offer.CounterpartyRole,
+                CounterpartyRoleName =
+                    OfferStatusTransitions.RoleLabel(offer.CounterpartyRole)
+            },
+            project,
+            boqs,
+            progressPayments = payments
+        });
+    }
+
+    /// <summary>
     /// Kazanma oranı özeti — adet ve tutar bazında.
     ///
     /// Oranın paydası kazanılan + kaybedilendir; sonucu belli olmamış
