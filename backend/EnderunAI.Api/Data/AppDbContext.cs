@@ -1772,6 +1772,9 @@ public sealed class AppDbContext(
             entity.Property(x => x.BarterRate).HasPrecision(8, 4);
             entity.Property(x => x.ContractType).HasConversion<int>();
             entity.Property(x => x.DeviationAlertThresholdRate).HasPrecision(8, 4);
+            entity.Property(x => x.DelayPenaltyKind).HasConversion<int>();
+            entity.Property(x => x.DelayPenaltyValue).HasPrecision(18, 4);
+            entity.Property(x => x.DelayPenaltyCapRate).HasPrecision(8, 4);
             entity.Property(x => x.City).HasMaxLength(100);
             entity.Property(x => x.District).HasMaxLength(100);
             entity.Property(x => x.HealthReason).HasMaxLength(500);

@@ -186,6 +186,41 @@ public sealed class Project : BaseEntity
     public DateTime? ActualStartDate { get; set; }
     public DateTime? ActualEndDate { get; set; }
 
+    /// <summary>
+    /// İŞVERENİN DAYATTIĞI sözleşme termini. İş programının referansı
+    /// budur.
+    ///
+    /// <see cref="PlannedEndDate"/>'den ayrı tutuluyor: planlanan bitiş
+    /// bizim takvimimizdir ve iş programı düzenlendikçe kayar; termin
+    /// ise sözleşmede yazar ve kaymaz. İkisini tek alanda tutmak,
+    /// planı öteleyen her düzenlemenin gecikme cezası hesabını da
+    /// sessizce sıfırlaması demekti.
+    ///
+    /// Boşsa planlanan bitiş termin kabul edilir.
+    /// </summary>
+    public DateTime? ContractDeadlineDate { get; set; }
+
+    /// <summary>
+    /// Sözleşmedeki gecikme cezasının biçimi. Tanımsızsa ceza HİÇ
+    /// hesaplanmaz — sıfır TL göstermek "ceza yok" demek olurdu.
+    /// </summary>
+    public Services.Schedule.DelayPenaltyKind DelayPenaltyKind { get; set; }
+        = Services.Schedule.DelayPenaltyKind.None;
+
+    /// <summary>
+    /// Oransal cezada günlük YÜZDE (binde 1 için 0,1), sabit cezada
+    /// günlük tutar. Yüzde seçildi çünkü bu kod tabanındaki bütün
+    /// oranlar (teminat, stopaj, KDV) yüzde tutuluyor; tek bir alanın
+    /// binde olması sessiz on kat hatası üretirdi.
+    /// </summary>
+    public decimal DelayPenaltyValue { get; set; }
+
+    /// <summary>
+    /// Ceza tavanı, sözleşme bedelinin yüzdesi olarak (yaygın: 10).
+    /// Boşsa tavan yok.
+    /// </summary>
+    public decimal? DelayPenaltyCapRate { get; set; }
+
     public string? City { get; set; }
     public string? District { get; set; }
     public string? Address { get; set; }

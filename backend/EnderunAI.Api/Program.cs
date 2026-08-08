@@ -234,6 +234,9 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Schedule.IProjectScheduleService,
     EnderunAI.Api.Services.Schedule.ProjectScheduleService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Schedule.IScheduleAlertService,
+    EnderunAI.Api.Services.Schedule.ScheduleAlertService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 builder.Services.AddScoped<ISecretariatService, SecretariatService>();
 builder.Services.AddScoped<IHrApprovalService, HrApprovalService>();
@@ -305,6 +308,9 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Assets.ToolAssetBriefingSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Schedule.ScheduleBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingService,
     EnderunAI.Api.Services.Hizir.Briefing.HizirBriefingService>();

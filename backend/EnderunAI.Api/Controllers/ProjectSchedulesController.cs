@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.Schedule;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Schedule;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -42,6 +43,18 @@ public sealed record ScheduleDependencyRequest(
 
 public sealed record SaveBaselineRequest(string? Reason);
 
+/// <param name="ContractDeadlineDate">İşverenin dayattığı termin.
+/// Boş bırakılırsa projenin planlanan bitişi termin sayılır.</param>
+/// <param name="DelayPenaltyValue">Oransal cezada günlük YÜZDE
+/// (binde 1 için 0,1); sabit cezada günlük tutar.</param>
+/// <param name="DelayPenaltyCapRate">Ceza tavanı, sözleşme bedelinin
+/// yüzdesi (yaygın: 10).</param>
+public sealed record UpdateProjectDeadlineRequest(
+    DateTime? ContractDeadlineDate,
+    int DelayPenaltyKind,
+    decimal DelayPenaltyValue,
+    decimal? DelayPenaltyCapRate);
+
 public sealed record ScheduleHolidayRequest(DateOnly Date, string? Name);
 
 public sealed record ReplaceScheduleHolidaysRequest(
@@ -59,8 +72,185 @@ public sealed record ReplaceScheduleHolidaysRequest(
 [Authorize]
 public sealed class ProjectSchedulesController(
     AppDbContext db,
-    IProjectScheduleService schedules) : ControllerBase
+    IProjectScheduleService schedules,
+    IScheduleAlertService alerts) : ControllerBase
 {
+    // ---------------- Termin, ceza ve uyarılar ----------------
+
+    /// <summary>
+    /// Uyarı üreten iş programları: geciken, kritik yolda riskli ve
+    /// termini yaklaşan projeler.
+    ///
+    /// Ceza TUTARI yalnızca hakediş görüntüleme yetkisi olana yazılır.
+    /// schedule.view neredeyse her rolde var; ceza tutarından sözleşme
+    /// bedeli geri hesaplanabildiği için o kapıdan sızmamalı.
+    /// </summary>
+    [HttpGet("api/is-programi/uyarilar")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleView)]
+    public async Task<IActionResult> Alerts(
+        [FromQuery] Guid? projectId,
+        [FromServices] ICurrentUserService currentUser,
+        [FromServices] IUserAuthorizationService authorization,
+        CancellationToken cancellationToken)
+    {
+        var showPenalty = await HasPermissionAsync(
+            currentUser, authorization,
+            PermissionCatalog.Keys.HakedisView, cancellationToken);
+
+        var rows = await alerts.GetAsync(
+            projectId is Guid id ? [id] : null, showPenalty, cancellationToken);
+
+        return Ok(new
+        {
+            horizonDays = ScheduleAlertService.DeadlineHorizonDays,
+            showsPenalty = showPenalty,
+            items = rows
+        });
+    }
+
+    /// <summary>
+    /// Projenin gecikme cezası ayarları ve TAHMİNİ ceza.
+    ///
+    /// Tutar içerdiği için hakediş görüntüleme izniyle korunuyor —
+    /// iş programı ekranının geri kalanından farklı bir kapı.
+    /// </summary>
+    [HttpGet("api/projects/{projectId:guid}/gecikme-cezasi")]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
+    public async Task<IActionResult> DelayPenalty(
+        Guid projectId, CancellationToken cancellationToken)
+    {
+        var settings = await db.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == projectId)
+            .Select(x => new
+            {
+                x.ContractAmount,
+                x.CurrencyCode,
+                x.ContractDeadlineDate,
+                x.PlannedEndDate,
+                Kind = (int)x.DelayPenaltyKind,
+                x.DelayPenaltyValue,
+                x.DelayPenaltyCapRate
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (settings is null)
+            return NotFound(new { message = "Proje bulunamadı." });
+
+        var estimate = await alerts.EstimatePenaltyAsync(projectId, cancellationToken);
+
+        return Ok(new
+        {
+            settings.ContractAmount,
+            settings.CurrencyCode,
+            settings.ContractDeadlineDate,
+            settings.PlannedEndDate,
+            hasContractDeadline = settings.ContractDeadlineDate is not null,
+            delayPenaltyKind = settings.Kind,
+            settings.DelayPenaltyValue,
+            settings.DelayPenaltyCapRate,
+            deadline = estimate.Deadline,
+            forecastFinish = estimate.ForecastFinish,
+            delayCalendarDays = estimate.DelayCalendarDays,
+            penalty = estimate.Penalty,
+            // Hesap her zaman tahmindir: gerçek kesinti işverenin ihtar
+            // pratiğine, mücbir sebebe ve süre uzatımına bağlıdır.
+            disclaimer = "Tahmini tutardır; mücbir sebep ve süre uzatımı " +
+                         "hesaba katılmaz."
+        });
+    }
+
+    [HttpPut("api/projects/{projectId:guid}/termin")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> UpdateDeadline(
+        Guid projectId,
+        UpdateProjectDeadlineRequest request,
+        CancellationToken cancellationToken)
+    {
+        var project = await db.Projects
+            .SingleOrDefaultAsync(x => x.Id == projectId, cancellationToken);
+
+        if (project is null)
+            return NotFound(new { message = "Proje bulunamadı." });
+
+        if (!Enum.IsDefined(typeof(DelayPenaltyKind), request.DelayPenaltyKind))
+            return BadRequest(new { message = "Geçersiz gecikme cezası biçimi." });
+
+        var kind = (DelayPenaltyKind)request.DelayPenaltyKind;
+
+        if (kind != DelayPenaltyKind.None && request.DelayPenaltyValue <= 0m)
+        {
+            return BadRequest(new
+            {
+                message = "Gecikme cezası seçildiyse günlük oran veya tutar " +
+                          "girilmelidir."
+            });
+        }
+
+        if (request.DelayPenaltyCapRate is decimal cap && (cap < 0m || cap > 100m))
+        {
+            return BadRequest(new
+            {
+                message = "Ceza tavanı sözleşme bedelinin yüzdesidir; 0 ile 100 " +
+                          "arasında olmalıdır."
+            });
+        }
+
+        var deadline = request.ContractDeadlineDate is DateTime value
+            ? DateTime.SpecifyKind(value, DateTimeKind.Utc)
+            : (DateTime?)null;
+
+        if (deadline is DateTime due &&
+            project.PlannedStartDate is DateTime start &&
+            due < start)
+        {
+            return BadRequest(new
+            {
+                message = "Termin, işe başlama tarihinden önce olamaz."
+            });
+        }
+
+        project.ContractDeadlineDate = deadline;
+        project.DelayPenaltyKind = kind;
+        project.DelayPenaltyValue = kind == DelayPenaltyKind.None
+            ? 0m
+            : request.DelayPenaltyValue;
+        project.DelayPenaltyCapRate = kind == DelayPenaltyKind.None
+            ? null
+            : request.DelayPenaltyCapRate;
+        project.UpdatedAtUtc = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { message = "Termin ve gecikme cezası kaydedildi." });
+    }
+
+    /// <summary>
+    /// Oturumdaki kullanıcının belirli bir izne sahip olup olmadığı.
+    /// Attribute'lar VEYA mantığıyla birleştiği için ikinci bir izin
+    /// koşulu ancak burada zorlanabiliyor.
+    /// </summary>
+    private static async Task<bool> HasPermissionAsync(
+        ICurrentUserService currentUser,
+        IUserAuthorizationService authorization,
+        string permissionKey,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid userId)
+            return false;
+
+        var snapshot = await authorization.GetAsync(userId, cancellationToken);
+
+        if (snapshot is null || !snapshot.IsActive)
+            return false;
+
+        if (snapshot.RoleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        return snapshot.Permissions.Contains(
+            permissionKey, StringComparer.OrdinalIgnoreCase);
+    }
+
     // ---------------- Program ----------------
 
     /// <summary>

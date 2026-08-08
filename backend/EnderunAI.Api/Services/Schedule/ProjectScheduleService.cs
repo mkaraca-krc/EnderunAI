@@ -84,6 +84,7 @@ public sealed record ProjectScheduleView(
     DateOnly? ProjectStart,
     DateOnly? ProjectFinish,
     DateOnly? Deadline,
+    bool HasContractDeadline,
     int? DeadlineFloatWorkDays,
     DateOnly AsOf,
     bool HasContractSummary,
@@ -173,9 +174,11 @@ public sealed class ProjectScheduleService(
                 x.BaselineSetAtUtc,
                 ProjectCode = x.Project.Code,
                 ProjectName = x.Project.Name,
-                // Termin: sözleşmeden gelen ayrı alan henüz yok, projenin
-                // planlanan bitişi kullanılıyor.
-                Deadline = x.Project.PlannedEndDate
+                // Termin ÖNCE sözleşmeden gelir. Yoksa planlanan bitiş
+                // kullanılır — ama o bizim takvimimizdir ve program
+                // düzenlendikçe kayar; sözleşme termini kaymaz.
+                Deadline = x.Project.ContractDeadlineDate ?? x.Project.PlannedEndDate,
+                HasContractDeadline = x.Project.ContractDeadlineDate != null
             })
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new KeyNotFoundException("İş programı bulunamadı.");
@@ -382,6 +385,7 @@ public sealed class ProjectScheduleService(
             ProjectStart: activities.Count == 0 ? null : plan.ProjectStart,
             ProjectFinish: activities.Count == 0 ? null : plan.ProjectFinish,
             Deadline: deadline,
+            HasContractDeadline: schedule.HasContractDeadline,
             DeadlineFloatWorkDays: plan.DeadlineFloatWorkDays,
             AsOf: asOf,
             HasContractSummary: summary.HasContractSummary,
