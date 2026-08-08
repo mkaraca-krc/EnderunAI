@@ -554,7 +554,6 @@ public sealed class PersonnelController(
         return Ok(new { message = "Personel kaydı güncellendi." });
     }
 
-    [HttpPost("{id:guid}/assignments")]
     /// <summary>
     /// Personel kartından görev yeri belirleme: merkez mi, şantiye mi.
     ///
@@ -699,6 +698,10 @@ public sealed class PersonnelController(
         }
     }
 
+    // Bu nitelik daha önce SetWorkLocation'ın üstüne kaymıştı: POST
+    // /assignments görev yeri işleyicisine düşüyor, projeye atama ucu ise
+    // fiil niteliği olmadığı için hiç yönlendirilmiyordu.
+    [HttpPost("{id:guid}/assignments")]
     [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
     public async Task<IActionResult> AssignToProject(
         Guid id,

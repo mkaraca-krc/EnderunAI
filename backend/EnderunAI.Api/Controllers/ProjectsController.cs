@@ -605,8 +605,12 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
     /// Kâr her zaman SÖZLEŞME eksi ANLIK MALİYET'tir; referans ve
     /// ortalama karara yardımcı bilgilerdir.
     /// </summary>
+    // Poz bazında birim fiyat ve KÂR MARJI taşıyor. projects.view depo,
+    // araç ve sekreterya rollerinde de var; sözleşme marjı oradan
+    // görünmemeli. İcmal ilerleme ucuyla aynı kapı: tutar içeren proje
+    // verisi hakediş görüntüleme iznine bağlı.
     [HttpGet("{id:guid}/kar-analizi")]
-    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetProfitBreakdown(
         Guid id,
         [FromQuery] int? referenceYear,

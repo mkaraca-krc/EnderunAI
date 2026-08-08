@@ -79,6 +79,12 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
     pathname.startsWith("/muhendislik") ||
     pathname.startsWith("/kesifler")
   ) return "engineering.view";
+  // Tutar ve kâr marjı taşıyan proje alt ekranları: uçları hakediş
+  // görüntüleme iznine bağlı, menü/bağlantı da aynı kapıda olmalı ki
+  // kullanıcı göremeyeceği bir ekrana tıklamasın.
+  if (/^\/projeler\/[^/]+\/(kar-analizi|icmal-ilerleme|maliyet-analizi)/.test(pathname)) {
+    return "hakedis.view";
+  }
   // İş programını okuma bilinçli olarak geniş: planı uygulayan saha
   // (Şantiye Şefi, Formen) proje listesini görmez ama kendi terminini
   // görmeden çalışamaz. Veri kapsamı zaten şantiyeleriyle sınırlı —

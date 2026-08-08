@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Security.CurrentUser;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,9 +12,24 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/hr/career")]
+/// <summary>
+/// Kariyer hareketleri.
+///
+/// ÜCRET GİZLİLİĞİ: bu uçlar maaş rakamı taşıyor (kariyer geçmişindeki
+/// eski/yeni maaş ve güncel maaş). Okuma izni personnel.view; o izin
+/// sahada da var (Şantiye Şefi, Formen) ve maaş oradan görünmemeli.
+/// Bu yüzden tutarlar salary.view olmayan kullanıcıya HİÇ dönmüyor —
+/// personel listesi ve Personel 360 ekranındaki desenin aynısı.
+///
+/// Maaş DEĞİŞTİREN dal ayrıca salary.manage istiyor: kariyer hareketi
+/// açabilmek (personnel.create) maaş yazma yetkisi değildir.
+/// </summary>
 public sealed class HrCareerController(
     AppDbContext db,
-    HrDbContext hrDb) : ControllerBase
+    HrDbContext hrDb,
+    ISalaryVisibilityService salaryVisibility,
+    ICurrentUserService currentUser,
+    IUserAuthorizationService authorization) : ControllerBase
 {
     private static readonly string[] KindByActionType =
     {
@@ -105,7 +121,10 @@ public sealed class HrCareerController(
             positionChangeCount = rows.Count(x => x.ActionType == HrCareerActionType.PositionChange),
             projectChangeCount = rows.Count(x => x.ActionType == HrCareerActionType.ProjectChange),
             salaryChangeCount = rows.Count(x => x.ActionType == HrCareerActionType.SalaryChange),
-            currentSalary = lastSalary?.NewSalary ?? personnel.MonthlySalary,
+            // Tutar, maaş izni olmayana HİÇ dönmüyor.
+            currentSalary = await salaryVisibility.CanViewSalaryAsync(cancellationToken)
+                ? lastSalary?.NewSalary ?? personnel.MonthlySalary
+                : null,
             lastPromotionDate = lastPromotion?.EffectiveDate,
             nextPromotionCandidate = monthsSincePromotion is >= 18,
             promotionReadinessScore = readinessScore,
@@ -133,6 +152,21 @@ public sealed class HrCareerController(
 
         if (personnel is null)
             return NotFound(new { message = "Personel bulunamadı." });
+
+        // B2: kariyer hareketi AÇMAK (personnel.create) maaş YAZMA yetkisi
+        // değildir. Nitelikler VEYA mantığıyla birleştiği için ikinci
+        // koşul kod içinde zorlanıyor.
+        if ((request.NewSalary.HasValue || request.PreviousSalary.HasValue) &&
+            !await HasPermissionAsync(
+                PermissionCatalog.Keys.SalaryManage, cancellationToken))
+        {
+            return StatusCode(403, new
+            {
+                message = "Maaş bilgisi içeren kariyer hareketi için ücret " +
+                          "yönetimi yetkisi gerekir.",
+                requiredPermission = PermissionCatalog.Keys.SalaryManage
+            });
+        }
 
         var item = new HrCareerHistory
         {
@@ -176,6 +210,35 @@ public sealed class HrCareerController(
         });
     }
 
+    /// <summary>
+    /// Oturumdaki kullanıcının belirli bir izne sahip olup olmadığı.
+    /// Nitelikler VEYA mantığıyla birleştiği için ikinci bir izin koşulu
+    /// ancak burada zorlanabiliyor.
+    /// </summary>
+    private async Task<bool> HasPermissionAsync(
+        string permissionKey, CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid userId)
+            return false;
+
+        var snapshot = await authorization.GetAsync(userId, cancellationToken);
+
+        if (snapshot is null || !snapshot.IsActive)
+            return false;
+
+        if (snapshot.RoleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        return snapshot.Permissions.Contains(
+            permissionKey, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Kariyer hareketlerini DTO'ya çevirir.
+    ///
+    /// Maaş alanları yalnızca salary.view olan kullanıcıya yazılır;
+    /// olmayan kullanıcıya null döner (gizlenmez, HİÇ gelmez).
+    /// </summary>
     private async Task<IReadOnlyList<object>> ToDtosAsync(
         IReadOnlyList<HrCareerHistory> rows,
         CancellationToken cancellationToken)
@@ -221,6 +284,9 @@ public sealed class HrCareerController(
             .Where(x => positionIds.Contains(x.Id))
             .ToDictionaryAsync(x => x.Id, x => x.Title, cancellationToken);
 
+        var canViewSalary = await salaryVisibility.CanViewSalaryAsync(
+            cancellationToken);
+
         return rows.Select(x => (object)new
         {
             x.Id,
@@ -252,8 +318,8 @@ public sealed class HrCareerController(
             newProjectId = x.NewProjectId,
             newProjectName = x.NewProjectId.HasValue
                 ? projectNames.GetValueOrDefault(x.NewProjectId.Value) : null,
-            oldSalary = x.PreviousSalary,
-            newSalary = x.NewSalary,
+            oldSalary = canViewSalary ? x.PreviousSalary : null,
+            newSalary = canViewSalary ? x.NewSalary : null,
             reason = x.Reason,
             notes = x.Notes,
             createdAt = x.CreatedAtUtc,

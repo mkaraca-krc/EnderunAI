@@ -27,7 +27,10 @@ public sealed class ProcurementApprovalController : ControllerBase
             () => HttpContext);
     }
 
+    // Bütçe ve bekleyen tutarları taşıyor; sınıftaki [Authorize] tek
+    // başına "oturum açan herkes" demekti.
     [HttpGet("dashboard")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingView)]
     public async Task<IActionResult> GetDashboard(
         [FromQuery] Guid companyId,
         [FromQuery] Guid? projectId,
@@ -38,6 +41,7 @@ public sealed class ProcurementApprovalController : ControllerBase
             cancellationToken));
 
     [HttpGet("orders/{purchaseOrderId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingView)]
     public async Task<IActionResult> GetOrderContext(
         Guid purchaseOrderId,
         CancellationToken cancellationToken) =>
@@ -56,7 +60,9 @@ public sealed class ProcurementApprovalController : ControllerBase
             request,
             cancellationToken));
 
+    // Bütçe açmak bir kontrol işlemi: onay yetkisi aranıyor.
     [HttpPost("projects/{projectId:guid}/budgets")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingApprove)]
     public async Task<IActionResult> CreateBudget(
         Guid projectId,
         UpsertProcurementBudgetRequest request,
@@ -67,6 +73,7 @@ public sealed class ProcurementApprovalController : ControllerBase
             cancellationToken));
 
     [HttpPut("projects/{projectId:guid}/budgets/{budgetId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingApprove)]
     public async Task<IActionResult> UpdateBudget(
         Guid projectId,
         Guid budgetId,

@@ -12,6 +12,10 @@ namespace EnderunAI.Api.Controllers;
 /// <summary>
 /// Şantiye maliyet analizi: icmal öngörüsü ↔ gerçekleşen ↔ kâr.
 ///
+/// Yetki hakediş görüntülemedir, proje görüntüleme DEĞİL: üç uç da
+/// projenin kâr marjını döndürüyor, projects.view ise depo, araç,
+/// sekreterya, satın alma, ön muhasebe, İK ve İSG rollerinde de var.
+///
 /// Kârlılık uçları (profitability / profitability-summary) arayüz
 /// tarafından zaten çağrılıyordu ama backend'de KARŞILIĞI YOKTU; panel
 /// hatayı yutup "veri bulunamadı" gösteriyordu. Analiz servisi bu
@@ -28,7 +32,7 @@ public sealed class ProjectCostAnalysisController(
     IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
 {
     [HttpGet("{id:guid}/cost-analysis")]
-    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetCostAnalysis(
         Guid id, CancellationToken cancellationToken)
     {
@@ -40,7 +44,7 @@ public sealed class ProjectCostAnalysisController(
     }
 
     [HttpGet("{id:guid}/profitability")]
-    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetProfitability(
         Guid id, CancellationToken cancellationToken)
     {
@@ -74,7 +78,7 @@ public sealed class ProjectCostAnalysisController(
     /// çalışır; proje sayısı arttığında bu uç sayfalanmalı.
     /// </summary>
     [HttpGet("profitability-summary")]
-    [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
+    [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetProfitabilitySummary(
         [FromQuery] Guid? companyId,
         CancellationToken cancellationToken)

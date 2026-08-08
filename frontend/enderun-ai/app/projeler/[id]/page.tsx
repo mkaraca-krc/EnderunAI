@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { usePermissions } from "@/lib/use-permissions";
 import ProjectDocumentsSection from "@/components/projects/project-documents-section";
 import ProjectDangerZone from "@/components/projects/project-danger-zone";
 import { projectService } from "@/services/project.service";
@@ -106,15 +107,27 @@ type ProjectDetail = {
   warehouses: Warehouse[];
 };
 
-const modules = [
+type ProjectModule = {
+  label: string;
+  href: string;
+  icon: string;
+  text: string;
+  permission?: string;
+};
+
+const modules: ProjectModule[] = [
   // Proje bazlı olanlar "kesintiler" gibi göreli yazılır; aşağıdaki
   // bağlantı kurucusu başına /projeler/{id}/ ekler.
+  //
+  // permission alanı yalnızca kâr marjı / maliyet tutarı taşıyan
+  // kartlarda dolu: uçları hakediş görüntüleme iznine bağlı, kart da
+  // aynı kapıda olmalı ki kullanıcı 403 alacağı ekrana tıklamasın.
   { label: "Şantiyeler", href: "santiyeler", icon: "▨", text: "Lokasyon kırılımı, personel atamaları ve depolar" },
   { label: "İş Programı", href: "is-programi", icon: "▰", text: "Gantt, kritik yol ve gecikme takibi" },
-  { label: "İcmal İlerlemesi", href: "icmal-ilerleme", icon: "◱", text: "Sözleşme, saha ve işveren kabulü" },
+  { permission: "hakedis.view", label: "İcmal İlerlemesi", href: "icmal-ilerleme", icon: "◱", text: "Sözleşme, saha ve işveren kabulü" },
   { label: "İcmal Kısımları", href: "kisimlar", icon: "▤", text: "Projenin imalat kırılımı" },
-  { label: "Maliyet Analizi", href: "maliyet-analizi", icon: "₸", text: "İcmal öngörüsü, gerçekleşen maliyet ve kâr" },
-  { label: "Poz Kâr Analizi", href: "kar-analizi", icon: "◈", text: "Poz bazında dört fiyat ve kâr" },
+  { permission: "hakedis.view", label: "Maliyet Analizi", href: "maliyet-analizi", icon: "₸", text: "İcmal öngörüsü, gerçekleşen maliyet ve kâr" },
+  { permission: "hakedis.view", label: "Poz Kâr Analizi", href: "kar-analizi", icon: "◈", text: "Poz bazında dört fiyat ve kâr" },
   { label: "Hakedişler", href: "/hakedis", icon: "▧", text: "Hakediş kayıtları ve kontrolleri" },
   { label: "Satın Alma", href: "/satin-alma", icon: "⌑", text: "Malzeme talepleri ve teklifler" },
   { label: "Personel", href: "/personel", icon: "♙", text: "Projeye bağlı personel" },
@@ -146,6 +159,14 @@ function formatPercentage(value?: number | null) {
 }
 
 export default function ProjectCenterPage() {
+  const { has } = usePermissions();
+
+  // İzin isteyen kartlar yalnızca yetkiliye görünür; izin alanı boş
+  // olan kartlar herkeste durur.
+  const visibleModules = useMemo(
+    () => modules.filter((x) => !x.permission || has(x.permission)),
+    [has]
+  );
   const params = useParams<{ id: string }>();
   const [project, setProject] = useState<ProjectDetail | null>(null);
 
@@ -638,7 +659,7 @@ export default function ProjectCenterPage() {
 
           <div className="enderun-project-center-tabs">
             <a className="active" href="#genel">Genel</a>
-            {modules.map((module) => (
+            {visibleModules.map((module) => (
               <Link
                 key={module.label}
                 href={
@@ -1496,7 +1517,7 @@ export default function ProjectCenterPage() {
 
 
           <div className="enderun-project-module-grid">
-            {modules.map((module) => (
+            {visibleModules.map((module) => (
               <Link
                 key={module.label}
                 href={
