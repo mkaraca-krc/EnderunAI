@@ -96,6 +96,10 @@ public static class RoleCatalog
             // resmi net, elden ödeme ve toplam ele geçen birlikte
             // gösteriliyor. Maaş görmeyen roller (Şantiye Şefi, Formen,
             // Sekreterya, Teknik) ek ödemeyi de görmemeye devam ediyor.
+            // Özlük belgeleri kimlik ve adli sicil taşıyor; kendi dar
+            // anahtarıyla korunuyor ve yalnızca İK'da.
+            PermissionCatalog.Keys.PersonnelDocumentView,
+            PermissionCatalog.Keys.PersonnelDocumentManage,
             PermissionCatalog.Keys.ExtraPaymentView, PermissionCatalog.Keys.ExtraPaymentManage
         ]),
 

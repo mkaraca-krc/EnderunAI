@@ -39,6 +39,8 @@ public sealed class AppDbContext(
         Set<Models.HumanResources.CompanyHolidayCalendar>();
     public DbSet<Models.HumanResources.CompanyHoliday> CompanyHolidays =>
         Set<Models.HumanResources.CompanyHoliday>();
+    public DbSet<Models.HumanResources.PersonnelDocument> PersonnelDocuments =>
+        Set<Models.HumanResources.PersonnelDocument>();
     public DbSet<PayrollTaxBracket> PayrollTaxBrackets => Set<PayrollTaxBracket>();
     public DbSet<Cheque> Cheques => Set<Cheque>();
     public DbSet<ChequeMovement> ChequeMovements => Set<ChequeMovement>();
@@ -1221,6 +1223,34 @@ public sealed class AppDbContext(
 
             entity.HasOne(x => x.CompanyHolidayCalendar).WithMany(x => x.Days)
                 .HasForeignKey(x => x.CompanyHolidayCalendarId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.HumanResources.PersonnelDocument>(entity =>
+        {
+            // MEVCUT tabloya bağlanıyor: hr_personnel_documents canlıda
+            // zaten vardı (modeli ve ucu olmayan, terk edilmiş bir
+            // tasarımdan kalma, boş). İkinci bir personel belgesi
+            // tablosu açmak iki ayrı kaynak yaratırdı.
+            entity.ToTable("hr_personnel_documents");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.PersonnelId, x.DocumentType });
+            entity.HasIndex(x => new { x.CompanyId, x.ExpiryDate });
+
+            entity.Property(x => x.DocumentType).HasConversion<int>().IsRequired();
+            entity.Property(x => x.DocumentName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.DocumentNumber).HasMaxLength(150);
+            entity.Property(x => x.IssuingInstitution).HasMaxLength(300);
+            entity.Property(x => x.FilePath).HasMaxLength(1000);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.Property(x => x.OriginalName).HasMaxLength(300);
+            entity.Property(x => x.ContentType).HasMaxLength(200);
+
+            entity.HasOne(x => x.Personnel).WithMany()
+                .HasForeignKey(x => x.PersonnelId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

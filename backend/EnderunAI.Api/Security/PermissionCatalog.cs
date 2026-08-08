@@ -169,6 +169,12 @@ public static class PermissionCatalog
         // İş programı (Gantt). Okuma geniş tutuldu: planı görmesi
         // gereken herkes sahadadır. Düzenleme dar: tarih ve bağımlılık
         // değiştirmek bütün zinciri kaydırır.
+        // Özlük belgeleri kimlik fotokopisi ve adli sicil taşıyor;
+        // personnel.view sahada da var (Şantiye Şefi, Formen). Elden
+        // ödemedeki gibi kendi dar anahtarıyla korunuyor.
+        public const string PersonnelDocumentView = "personnel_document.view";
+        public const string PersonnelDocumentManage = "personnel_document.manage";
+
         public const string ScheduleView = "schedule.view";
         public const string ScheduleManage = "schedule.manage";
 
@@ -354,6 +360,9 @@ public static class PermissionCatalog
 
         new(Keys.OfferTrackingView, "Teklif Takibi", "İş/teklif takibini görüntüleme", "Verilen teklifleri, durumlarını ve kazanma oranını görüntüler."),
         new(Keys.OfferTrackingManage, "Teklif Takibi", "İş/teklif takibi yönetimi", "Teklif durumunu değiştirir (verildi/beklemede/kazanıldı/kaybedildi) ve karşı tarafı belirler."),
+
+        new(Keys.PersonnelDocumentView, "Özlük Belgeleri", "Özlük belgelerini görüntüleme", "Kimlik, sözleşme, diploma gibi özlük dosyası belgelerini görüntüler ve indirir."),
+        new(Keys.PersonnelDocumentManage, "Özlük Belgeleri", "Özlük belgesi yönetimi", "Özlük dosyasına belge yükler ve siler."),
 
         new(Keys.ScheduleView, "İş Programı", "İş programını görüntüleme", "Gantt şemasını, kritik yolu ve gecikme durumunu görüntüler."),
         new(Keys.ScheduleManage, "İş Programı", "İş programı yönetimi", "Aktivite, tarih, bağımlılık ve baseline düzenler; kaynak atar."),
