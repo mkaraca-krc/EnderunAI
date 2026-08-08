@@ -13,6 +13,7 @@ public sealed class HrDbContext(DbContextOptions<HrDbContext> options)
     public DbSet<HrSalaryDefinition> SalaryDefinitions => Set<HrSalaryDefinition>();
     public DbSet<HrDepartment> Departments => Set<HrDepartment>();
     public DbSet<HrPosition> Positions => Set<HrPosition>();
+    public DbSet<HrAdvanceDeduction> AdvanceDeductions => Set<HrAdvanceDeduction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -56,6 +57,24 @@ public sealed class HrDbContext(DbContextOptions<HrDbContext> options)
             entity.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
             entity.Property(x => x.PaymentReference).HasMaxLength(150);
             entity.Property(x => x.ApprovalNote).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<HrAdvanceDeduction>(entity =>
+        {
+            entity.ToTable("hr_advance_deductions");
+            ConfigureBase(entity);
+
+            // Bir avanstan bir dönemde yalnızca bir kesinti satırı
+            // olabilir; bordro yeniden hesaplanınca satır güncellenir,
+            // ikincisi eklenmez.
+            entity.HasIndex(x => new { x.AdvanceRequestId, x.Year, x.Month })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.HasIndex(x => new { x.CompanyId, x.PersonnelId, x.Year, x.Month });
+
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.ScheduledAmount).HasPrecision(18, 2);
         });
 
         modelBuilder.Entity<HrPayrollRecord>(entity =>

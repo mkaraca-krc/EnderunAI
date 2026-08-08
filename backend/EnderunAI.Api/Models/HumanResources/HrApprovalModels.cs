@@ -152,3 +152,30 @@ public sealed class HrPayrollRecord : BaseEntity
     public string? PaymentReference { get; set; }
     public string? Description { get; set; }
 }
+
+/// <summary>
+/// Bordrodan kesilen avans taksiti — avans başına, dönem başına.
+///
+/// Neden ayrı defter: bordro kaydındaki <see cref="HrPayrollRecord.AdvanceDeduction"/>
+/// tek bir toplam. Birden fazla açık avansı olan personelde hangi
+/// avanstan ne kadar kesildiği oradan okunamaz; kalan bakiye
+/// hesaplanamaz ve neti yetmediği için ertelenen taksit takip
+/// edilemezdi.
+/// </summary>
+public sealed class HrAdvanceDeduction : BaseEntity
+{
+    public Guid CompanyId { get; set; }
+    public Guid AdvanceRequestId { get; set; }
+    public Guid PersonnelId { get; set; }
+
+    public int Year { get; set; }
+    public int Month { get; set; }
+
+    public decimal Amount { get; set; }
+
+    /// <summary>
+    /// Plana göre bu döneme kadar kesilmesi gereken tutar. Kesilenle
+    /// arasındaki fark, neti yetmediği için ertelenen kısımdır.
+    /// </summary>
+    public decimal ScheduledAmount { get; set; }
+}

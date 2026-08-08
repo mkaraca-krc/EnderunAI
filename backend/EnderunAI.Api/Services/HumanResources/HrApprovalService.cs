@@ -775,6 +775,71 @@ public sealed class HrApprovalService(
                         x.Year == request.Year && x.Month == request.Month)
             .ToDictionaryAsync(x => x.PersonnelId, cancellationToken);
 
+        // --- Avans taksitleri ---
+        // Yalnızca ÖDENMİŞ avans kesilir: verilmemiş parayı geri almak
+        // olmaz, onaylı ama ödenmemiş avans bekler.
+        var openAdvances = await hrDb.AdvanceRequests.AsNoTracking()
+            .Where(x => x.CompanyId == request.CompanyId &&
+                        x.Status == HrApprovalStatus.Paid &&
+                        x.ApprovedAmount > 0m &&
+                        personnelIds.Contains(x.PersonnelId))
+            .Select(x => new
+            {
+                x.Id,
+                x.PersonnelId,
+                x.ApprovedAmount,
+                x.DeductionInstallmentCount,
+                x.FirstDeductionDate,
+                x.RequestDate,
+                x.PaidAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var advanceIds = openAdvances.Select(x => x.Id).ToList();
+
+        // Bugüne kadarki kesintiler — HESAPLANAN DÖNEM HARİÇ. Bordro
+        // yeniden hesaplandığında o dönemin kendi satırı sayılırsa
+        // kesinti iki kez düşülmüş olurdu.
+        var deductedByAdvance = advanceIds.Count == 0
+            ? new Dictionary<Guid, decimal>()
+            : (await hrDb.AdvanceDeductions.AsNoTracking()
+                .Where(x => advanceIds.Contains(x.AdvanceRequestId) &&
+                            !(x.Year == request.Year && x.Month == request.Month))
+                .GroupBy(x => x.AdvanceRequestId)
+                .Select(g => new { Id = g.Key, Total = g.Sum(x => x.Amount) })
+                .ToListAsync(cancellationToken))
+                .ToDictionary(x => x.Id, x => x.Total);
+
+        var advancesByPersonnel = openAdvances
+            .GroupBy(x => x.PersonnelId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => new AdvanceDeductionInput(
+                        AdvanceId: x.Id,
+                        ApprovedAmount: x.ApprovedAmount,
+                        InstallmentCount: x.DeductionInstallmentCount,
+                        // İlk kesinti tarihi girilmemişse ödemeyi izleyen
+                        // ay: aynı ay kesmek, avansı verip aynı bordroda
+                        // geri almak olurdu.
+                        FirstDeductionDate: DateOnly.FromDateTime(
+                            (x.FirstDeductionDate
+                             ?? (x.PaidAtUtc ?? x.RequestDate).AddMonths(1)).Date),
+                        AlreadyDeducted: deductedByAdvance.GetValueOrDefault(x.Id)))
+                    .ToList());
+
+        // Bu dönemin eski kesinti satırları silinip yeniden yazılır.
+        var periodDeductions = advanceIds.Count == 0
+            ? []
+            : await hrDb.AdvanceDeductions
+                .Where(x => advanceIds.Contains(x.AdvanceRequestId) &&
+                            x.Year == request.Year && x.Month == request.Month)
+                .ToListAsync(cancellationToken);
+
+        // Dönemin eski kesinti satırları temizleniyor: yeniden hesap
+        // aynı dönemi baştan yazar, üst üste bindirmez.
+        if (periodDeductions.Count > 0)
+            hrDb.AdvanceDeductions.RemoveRange(periodDeductions);
+
         var created = 0;
         var updated = 0;
         var skipped = 0;
@@ -849,7 +914,11 @@ public sealed class HrApprovalService(
                 record.BonusAmount + record.MealAmount + record.TravelAmount +
                 record.OtherEarningAmount + record.CompensationAmount;
 
-            var result = PayrollCalculationService.Calculate(parameters, new PayrollInput(
+            // İKİ GEÇİŞ: avans kesintisi netin üstüne çıkamaz, ama neti
+            // bilmek için önce avanssız hesap gerekiyor. Diğer kesintiler
+            // (icra vb.) net üzerinden düşüldüğü için ilk geçiş bordronun
+            // vergi tarafını hiç değiştirmiyor.
+            PayrollInput BuildInput(decimal advanceDeduction) => new(
                 Month: request.Month,
                 GrossEarnings: record.TotalEarnings,
                 // Yemek/yol istisnaları kişiye özel kalemlerle birlikte
@@ -857,7 +926,38 @@ public sealed class HrApprovalService(
                 SgkExemptEarnings: 0m,
                 IncomeTaxExemptEarnings: 0m,
                 CumulativeIncomeTaxBaseBefore: cumulativeBefore,
-                OtherDeductions: record.AdvanceDeduction + record.OtherDeductionAmount));
+                OtherDeductions: advanceDeduction + record.OtherDeductionAmount);
+
+            var beforeAdvance = PayrollCalculationService.Calculate(
+                parameters, BuildInput(0m));
+
+            var advanceResult = advancesByPersonnel.TryGetValue(
+                    person.Id, out var personAdvances)
+                ? AdvanceInstallmentCalculator.Resolve(
+                    personAdvances, request.Year, request.Month,
+                    beforeAdvance.NetPay)
+                : new AdvanceDeductionResult([], 0m, 0m);
+
+            record.AdvanceDeduction = advanceResult.Total;
+
+            foreach (var line in advanceResult.Lines)
+            {
+                hrDb.AdvanceDeductions.Add(new HrAdvanceDeduction
+                {
+                    CompanyId = request.CompanyId,
+                    AdvanceRequestId = line.AdvanceId,
+                    PersonnelId = person.Id,
+                    Year = request.Year,
+                    Month = request.Month,
+                    Amount = line.Amount,
+                    ScheduledAmount = line.ScheduledAmount
+                });
+            }
+
+            var result = advanceResult.Total > 0m
+                ? PayrollCalculationService.Calculate(
+                    parameters, BuildInput(advanceResult.Total))
+                : beforeAdvance;
 
             record.SgkBase = result.SgkBase;
             record.SgkEmployeeDeduction = result.SgkEmployeeAmount;
