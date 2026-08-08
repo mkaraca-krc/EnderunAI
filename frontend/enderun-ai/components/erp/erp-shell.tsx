@@ -77,6 +77,12 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
     pathname.startsWith("/muhendislik") ||
     pathname.startsWith("/kesifler")
   ) return "engineering.view";
+  // İş programını okuma bilinçli olarak geniş: planı uygulayan saha
+  // (Şantiye Şefi, Formen) proje listesini görmez ama kendi terminini
+  // görmeden çalışamaz. Veri kapsamı zaten şantiyeleriyle sınırlı.
+  if (/^\/projeler\/[^/]+\/is-programi/.test(pathname)) {
+    return ["projects.view", "schedule.view"];
+  }
   if (
     pathname.startsWith("/projeler") ||
     pathname.startsWith("/taseronlar") ||

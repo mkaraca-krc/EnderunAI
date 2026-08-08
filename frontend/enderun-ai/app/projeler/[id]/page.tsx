@@ -110,6 +110,7 @@ const modules = [
   // Proje bazlı olanlar "kesintiler" gibi göreli yazılır; aşağıdaki
   // bağlantı kurucusu başına /projeler/{id}/ ekler.
   { label: "Şantiyeler", href: "santiyeler", icon: "▨", text: "Lokasyon kırılımı, personel atamaları ve depolar" },
+  { label: "İş Programı", href: "is-programi", icon: "▰", text: "Gantt, kritik yol ve gecikme takibi" },
   { label: "İcmal İlerlemesi", href: "icmal-ilerleme", icon: "◱", text: "Sözleşme, saha ve işveren kabulü" },
   { label: "İcmal Kısımları", href: "kisimlar", icon: "▤", text: "Projenin imalat kırılımı" },
   { label: "Maliyet Analizi", href: "maliyet-analizi", icon: "₸", text: "İcmal öngörüsü, gerçekleşen maliyet ve kâr" },
