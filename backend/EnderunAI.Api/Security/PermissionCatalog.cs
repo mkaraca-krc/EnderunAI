@@ -166,6 +166,12 @@ public static class PermissionCatalog
         public const string OfferTrackingView = "offer_tracking.view";
         public const string OfferTrackingManage = "offer_tracking.manage";
 
+        // İş programı (Gantt). Okuma geniş tutuldu: planı görmesi
+        // gereken herkes sahadadır. Düzenleme dar: tarih ve bağımlılık
+        // değiştirmek bütün zinciri kaydırır.
+        public const string ScheduleView = "schedule.view";
+        public const string ScheduleManage = "schedule.manage";
+
         // Sekreterya
         public const string SecretariatView = "secretariat.view";
         public const string SecretariatManage = "secretariat.manage";
@@ -348,6 +354,9 @@ public static class PermissionCatalog
 
         new(Keys.OfferTrackingView, "Teklif Takibi", "İş/teklif takibini görüntüleme", "Verilen teklifleri, durumlarını ve kazanma oranını görüntüler."),
         new(Keys.OfferTrackingManage, "Teklif Takibi", "İş/teklif takibi yönetimi", "Teklif durumunu değiştirir (verildi/beklemede/kazanıldı/kaybedildi) ve karşı tarafı belirler."),
+
+        new(Keys.ScheduleView, "İş Programı", "İş programını görüntüleme", "Gantt şemasını, kritik yolu ve gecikme durumunu görüntüler."),
+        new(Keys.ScheduleManage, "İş Programı", "İş programı yönetimi", "Aktivite, tarih, bağımlılık ve baseline düzenler; kaynak atar."),
 
         new(Keys.SecretariatView, "Sekreterya", "Sekreteryayı görüntüleme", "Evrak, kargo, ziyaretçi ve toplantı kayıtlarını görüntüler."),
         new(Keys.SecretariatManage, "Sekreterya", "Sekreterya yönetimi", "Evrak, kargo, ziyaretçi, telefon notu ve toplantıları yönetir."),

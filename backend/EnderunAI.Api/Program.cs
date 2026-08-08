@@ -231,6 +231,9 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hakedis.IContractSummaryProgressService,
     EnderunAI.Api.Services.Hakedis.ContractSummaryProgressService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Schedule.IProjectScheduleService,
+    EnderunAI.Api.Services.Schedule.ProjectScheduleService>();
 builder.Services.AddScoped<ICostEngine, CostEngine>();
 builder.Services.AddScoped<ISecretariatService, SecretariatService>();
 builder.Services.AddScoped<IHrApprovalService, HrApprovalService>();

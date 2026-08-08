@@ -200,6 +200,18 @@ public sealed class AppDbContext(
     public DbSet<ToolAsset> ToolAssets => Set<ToolAsset>();
     public DbSet<ToolServiceRequest> ToolServiceRequests =>
         Set<ToolServiceRequest>();
+    public DbSet<Models.Schedule.ProjectSchedule> ProjectSchedules =>
+        Set<Models.Schedule.ProjectSchedule>();
+    public DbSet<Models.Schedule.ScheduleActivity> ScheduleActivities =>
+        Set<Models.Schedule.ScheduleActivity>();
+    public DbSet<Models.Schedule.ScheduleDependency> ScheduleDependencies =>
+        Set<Models.Schedule.ScheduleDependency>();
+    public DbSet<Models.Schedule.ScheduleBaselineRevision> ScheduleBaselineRevisions =>
+        Set<Models.Schedule.ScheduleBaselineRevision>();
+    public DbSet<Models.Schedule.ScheduleHoliday> ScheduleHolidays =>
+        Set<Models.Schedule.ScheduleHoliday>();
+    public DbSet<Models.Schedule.ScheduleResourceAssignment> ScheduleResourceAssignments =>
+        Set<Models.Schedule.ScheduleResourceAssignment>();
     public DbSet<ProjectMeasurement> ProjectMeasurements => Set<ProjectMeasurement>();
     public DbSet<ProjectMeasurementItem> ProjectMeasurementItems => Set<ProjectMeasurementItem>();
     public DbSet<JobPosting> JobPostings => Set<JobPosting>();
@@ -4317,6 +4329,185 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.SourceAccessRequestId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        ConfigureSchedule(modelBuilder);
+    }
+
+    /// <summary>
+    /// İş programı (Gantt) tabloları.
+    ///
+    /// Aktivite icmal kısmına ve icmal satırına SetNull ile bağlı:
+    /// kısım silinse bile çubuk kaybolmaz, yalnızca bağsız kalır ve
+    /// ekranda öyle görünür. Cascade seçilseydi bir kısmın silinmesi
+    /// iş programının bir bölümünü sessizce yok ederdi.
+    /// </summary>
+    private static void ConfigureSchedule(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Models.Schedule.ProjectSchedule>(entity =>
+        {
+            entity.ToTable("project_schedules");
+            entity.HasKey(x => x.Id);
+
+            // Proje başına yalnızca bir yürürlükteki program. Arşivlenmiş
+            // programlar sınırın dışında: geçmiş plan saklanabilmeli.
+            entity.HasIndex(x => x.ProjectId)
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false AND \"Status\" <> 2");
+
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            entity.Property(x => x.WorkWeek).HasConversion<int>().IsRequired();
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.Schedule.ScheduleActivity>(entity =>
+        {
+            entity.ToTable("schedule_activities");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.ProjectScheduleId);
+            entity.HasIndex(x => x.ParentActivityId);
+
+            entity.Property(x => x.Name).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.ManualProgressRate).HasPrecision(5, 2);
+
+            entity.HasOne(x => x.ProjectSchedule)
+                .WithMany(x => x.Activities)
+                .HasForeignKey(x => x.ProjectScheduleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ParentActivity)
+                .WithMany(x => x.Children)
+                .HasForeignKey(x => x.ParentActivityId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectHakedisSection)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectHakedisSectionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.ProjectBoqItem)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectBoqItemId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.Schedule.ScheduleDependency>(entity =>
+        {
+            entity.ToTable("schedule_dependencies");
+            entity.HasKey(x => x.Id);
+
+            // Aynı iki aktivite arasında ikinci bir bağ olamaz. Yumuşak
+            // silinen satır sırayı işgal etmesin diye filtreli.
+            entity.HasIndex(x => new
+                {
+                    x.ProjectScheduleId,
+                    x.PredecessorActivityId,
+                    x.SuccessorActivityId
+                })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Type).HasConversion<int>().IsRequired();
+
+            entity.HasOne(x => x.ProjectSchedule)
+                .WithMany(x => x.Dependencies)
+                .HasForeignKey(x => x.ProjectScheduleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // İki ucu da aynı tabloya bakıyor; cascade çoklu yol
+            // üretirdi. Aktivite silinirken bağları kod açıkça siliyor.
+            entity.HasOne(x => x.PredecessorActivity)
+                .WithMany()
+                .HasForeignKey(x => x.PredecessorActivityId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SuccessorActivity)
+                .WithMany()
+                .HasForeignKey(x => x.SuccessorActivityId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.Schedule.ScheduleBaselineRevision>(entity =>
+        {
+            entity.ToTable("schedule_baseline_revisions");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ProjectScheduleId, x.RevisionNumber })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Reason).HasMaxLength(1000);
+
+            entity.HasOne(x => x.ProjectSchedule)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectScheduleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.Schedule.ScheduleHoliday>(entity =>
+        {
+            entity.ToTable("schedule_holidays");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.ProjectScheduleId, x.Date })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Name).HasMaxLength(200);
+
+            entity.HasOne(x => x.ProjectSchedule)
+                .WithMany(x => x.Holidays)
+                .HasForeignKey(x => x.ProjectScheduleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.Schedule.ScheduleResourceAssignment>(entity =>
+        {
+            entity.ToTable("schedule_resource_assignments");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.ScheduleActivityId);
+            entity.HasIndex(x => x.PersonnelId);
+            entity.HasIndex(x => x.SubcontractorContractId);
+
+            entity.Property(x => x.Kind).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Role).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.ScheduleActivity)
+                .WithMany(x => x.Resources)
+                .HasForeignKey(x => x.ScheduleActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Personnel)
+                .WithMany()
+                .HasForeignKey(x => x.PersonnelId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SubcontractorContract)
+                .WithMany()
+                .HasForeignKey(x => x.SubcontractorContractId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

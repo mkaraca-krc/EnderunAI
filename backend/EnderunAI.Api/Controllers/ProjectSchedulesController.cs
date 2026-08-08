@@ -1,0 +1,816 @@
+using EnderunAI.Api.Data;
+using EnderunAI.Api.Models;
+using EnderunAI.Api.Models.Schedule;
+using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Schedule;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace EnderunAI.Api.Controllers;
+
+/// <param name="SeedFromSections">İcmal kısımlarından ana çubukları
+/// otomatik oluştur.</param>
+public sealed record CreateProjectScheduleRequest(
+    string? Name,
+    int? WorkWeek,
+    bool SeedFromSections = true,
+    string? Notes = null);
+
+public sealed record UpdateProjectScheduleRequest(
+    string? Name,
+    int? WorkWeek,
+    int? Status,
+    string? Notes);
+
+public sealed record ScheduleActivityRequest(
+    string Name,
+    DateOnly PlannedStartDate,
+    DateOnly PlannedEndDate,
+    Guid? ParentActivityId,
+    Guid? ProjectHakedisSectionId,
+    Guid? ProjectBoqItemId,
+    decimal? ManualProgressRate,
+    int? Order,
+    string? Notes);
+
+public sealed record ScheduleDependencyRequest(
+    Guid PredecessorActivityId,
+    Guid SuccessorActivityId,
+    int Type,
+    int LagWorkDays);
+
+public sealed record SaveBaselineRequest(string? Reason);
+
+public sealed record ScheduleHolidayRequest(DateOnly Date, string? Name);
+
+public sealed record ReplaceScheduleHolidaysRequest(
+    IReadOnlyCollection<ScheduleHolidayRequest> Holidays);
+
+/// <summary>
+/// İş programı (Gantt).
+///
+/// Aktiviteler icmal KISIMLARINA bağlanır; iş programı ayrı bir iş
+/// kalemi listesi tutmaz. Bu denetleyici programın kendisini, çubukları,
+/// bağımlılıkları ve baseline'ı yönetir; hesap
+/// <see cref="SchedulePlanner"/> içinde.
+/// </summary>
+[ApiController]
+[Authorize]
+public sealed class ProjectSchedulesController(
+    AppDbContext db,
+    IProjectScheduleService schedules) : ControllerBase
+{
+    // ---------------- Program ----------------
+
+    /// <summary>
+    /// Projenin iş programı. Program henüz açılmamışsa 404 yerine
+    /// "yok" bilgisi döner: ekranın kullanıcıyı yönlendirebilmesi için
+    /// kısım sayısını da taşır — kısım tanımlı değilse iş programı boş
+    /// görünür ve bunun nedeni söylenmelidir.
+    /// </summary>
+    [HttpGet("api/projects/{projectId:guid}/is-programi")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleView)]
+    public async Task<IActionResult> Get(
+        Guid projectId, CancellationToken cancellationToken)
+    {
+        var project = await db.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == projectId)
+            .Select(x => new { x.Id, x.Code, x.Name })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (project is null)
+            return NotFound(new { message = "Proje bulunamadı." });
+
+        var schedule = await db.ProjectSchedules
+            .AsNoTracking()
+            .Where(x => x.ProjectId == projectId &&
+                        x.Status != ProjectScheduleStatus.Archived)
+            .Select(x => x.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var sectionCount = await db.ProjectHakedisSections
+            .CountAsync(x => x.ProjectId == projectId && x.IsActive, cancellationToken);
+
+        if (schedule == Guid.Empty)
+        {
+            return Ok(new
+            {
+                hasSchedule = false,
+                projectId = project.Id,
+                projectCode = project.Code,
+                projectName = project.Name,
+                sectionCount,
+                message = sectionCount == 0
+                    ? "Bu projede icmal kısmı tanımlı değil. İş programı " +
+                      "kısımlardan doğar — önce İcmal Kısımları ekranından " +
+                      "kısımları tanımlayın."
+                    : "Bu proje için henüz iş programı açılmamış."
+            });
+        }
+
+        var view = await schedules.BuildAsync(schedule, cancellationToken);
+
+        return Ok(new { hasSchedule = true, sectionCount, schedule = view });
+    }
+
+    [HttpPost("api/projects/{projectId:guid}/is-programi")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> Create(
+        Guid projectId,
+        CreateProjectScheduleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var project = await db.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == projectId)
+            .Select(x => new { x.Id, x.Name, x.PlannedStartDate, x.PlannedEndDate })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (project is null)
+            return NotFound(new { message = "Proje bulunamadı." });
+
+        var exists = await db.ProjectSchedules.AnyAsync(
+            x => x.ProjectId == projectId &&
+                 x.Status != ProjectScheduleStatus.Archived,
+            cancellationToken);
+
+        if (exists)
+        {
+            return BadRequest(new
+            {
+                message = "Bu projenin zaten bir iş programı var. İkinci bir " +
+                          "program açmak için önce mevcut programı arşivleyin."
+            });
+        }
+
+        if (!TryReadWorkWeek(request.WorkWeek, out var workWeek, out var problem))
+            return BadRequest(new { message = problem });
+
+        var schedule = new ProjectSchedule
+        {
+            ProjectId = projectId,
+            Name = string.IsNullOrWhiteSpace(request.Name)
+                ? $"{project.Name} İş Programı"
+                : request.Name.Trim(),
+            WorkWeek = workWeek,
+            Status = ProjectScheduleStatus.Draft,
+            Notes = request.Notes?.Trim()
+        };
+
+        db.ProjectSchedules.Add(schedule);
+        await db.SaveChangesAsync(cancellationToken);
+
+        var seeded = 0;
+
+        if (request.SeedFromSections)
+        {
+            seeded = await SeedFromSectionsAsync(
+                schedule, project.PlannedStartDate, cancellationToken);
+        }
+
+        return Ok(new
+        {
+            id = schedule.Id,
+            seededActivityCount = seeded,
+            message = seeded > 0
+                ? $"İş programı açıldı; {seeded} icmal kısmı ana çubuk olarak eklendi."
+                : "İş programı açıldı. Aktivite eklemek için icmal kısımlarını " +
+                  "kullanabilir ya da elle çubuk tanımlayabilirsiniz."
+        });
+    }
+
+    [HttpPut("api/is-programi/{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> Update(
+        Guid id,
+        UpdateProjectScheduleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var schedule = await db.ProjectSchedules
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (schedule is null)
+            return NotFound(new { message = "İş programı bulunamadı." });
+
+        if (request.WorkWeek is not null)
+        {
+            if (!TryReadWorkWeek(request.WorkWeek, out var workWeek, out var problem))
+                return BadRequest(new { message = problem });
+
+            schedule.WorkWeek = workWeek;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Name))
+            schedule.Name = request.Name.Trim();
+
+        if (request.Status is int status)
+        {
+            if (!Enum.IsDefined(typeof(ProjectScheduleStatus), status))
+                return BadRequest(new { message = "Geçersiz program durumu." });
+
+            schedule.Status = (ProjectScheduleStatus)status;
+        }
+
+        schedule.Notes = request.Notes?.Trim();
+        schedule.UpdatedAtUtc = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { message = "İş programı güncellendi." });
+    }
+
+    /// <summary>
+    /// İcmal kısımlarından eksik ana çubukları ekler. Zaten bağlı olan
+    /// kısım TEKRAR eklenmez — aynı kısmın iki çubuğu, ilerlemeyi iki
+    /// kez sayılmış gibi gösterirdi.
+    /// </summary>
+    [HttpPost("api/is-programi/{id:guid}/kisimlardan-olustur")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> SeedFromSections(
+        Guid id, CancellationToken cancellationToken)
+    {
+        var schedule = await db.ProjectSchedules
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (schedule is null)
+            return NotFound(new { message = "İş programı bulunamadı." });
+
+        var plannedStart = await db.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == schedule.ProjectId)
+            .Select(x => x.PlannedStartDate)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var added = await SeedFromSectionsAsync(
+            schedule, plannedStart, cancellationToken);
+
+        return Ok(new
+        {
+            addedActivityCount = added,
+            message = added == 0
+                ? "Eklenecek yeni kısım yok — bütün kısımların çubuğu zaten var."
+                : $"{added} kısım ana çubuk olarak eklendi."
+        });
+    }
+
+    // ---------------- Aktiviteler ----------------
+
+    [HttpPost("api/is-programi/{id:guid}/aktiviteler")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> CreateActivity(
+        Guid id,
+        ScheduleActivityRequest request,
+        CancellationToken cancellationToken)
+    {
+        var schedule = await db.ProjectSchedules
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new { x.Id, x.ProjectId })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (schedule is null)
+            return NotFound(new { message = "İş programı bulunamadı." });
+
+        var problem = await ValidateActivityAsync(
+            schedule.Id, schedule.ProjectId, request, null, cancellationToken);
+
+        if (problem is not null)
+            return BadRequest(new { message = problem });
+
+        var order = request.Order ?? await NextOrderAsync(
+            schedule.Id, request.ParentActivityId, cancellationToken);
+
+        var activity = new ScheduleActivity
+        {
+            ProjectScheduleId = schedule.Id,
+            ParentActivityId = request.ParentActivityId,
+            ProjectHakedisSectionId = request.ProjectHakedisSectionId,
+            ProjectBoqItemId = request.ProjectBoqItemId,
+            Name = request.Name.Trim(),
+            Order = order,
+            PlannedStartDate = request.PlannedStartDate,
+            PlannedEndDate = request.PlannedEndDate,
+            ManualProgressRate = request.ManualProgressRate,
+            Notes = request.Notes?.Trim()
+        };
+
+        db.ScheduleActivities.Add(activity);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { id = activity.Id, message = "Aktivite eklendi." });
+    }
+
+    [HttpPut("api/is-programi/aktiviteler/{activityId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> UpdateActivity(
+        Guid activityId,
+        ScheduleActivityRequest request,
+        CancellationToken cancellationToken)
+    {
+        var activity = await db.ScheduleActivities
+            .SingleOrDefaultAsync(x => x.Id == activityId, cancellationToken);
+
+        if (activity is null)
+            return NotFound(new { message = "Aktivite bulunamadı." });
+
+        var projectId = await db.ProjectSchedules
+            .AsNoTracking()
+            .Where(x => x.Id == activity.ProjectScheduleId)
+            .Select(x => x.ProjectId)
+            .SingleAsync(cancellationToken);
+
+        var problem = await ValidateActivityAsync(
+            activity.ProjectScheduleId, projectId, request, activityId,
+            cancellationToken);
+
+        if (problem is not null)
+            return BadRequest(new { message = problem });
+
+        activity.Name = request.Name.Trim();
+        activity.ParentActivityId = request.ParentActivityId;
+        activity.ProjectHakedisSectionId = request.ProjectHakedisSectionId;
+        activity.ProjectBoqItemId = request.ProjectBoqItemId;
+        activity.PlannedStartDate = request.PlannedStartDate;
+        activity.PlannedEndDate = request.PlannedEndDate;
+        activity.ManualProgressRate = request.ManualProgressRate;
+        activity.Notes = request.Notes?.Trim();
+        activity.UpdatedAtUtc = DateTime.UtcNow;
+
+        if (request.Order is int order)
+            activity.Order = order;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { message = "Aktivite güncellendi." });
+    }
+
+    /// <summary>
+    /// Aktiviteyi ve ona bağlı bağımlılıkları siler.
+    ///
+    /// Alt aktivitesi olan ana çubuk silinemez: sessizce onları da
+    /// silmek, kullanıcının görmediği bir veri kaybı olurdu.
+    /// </summary>
+    [HttpDelete("api/is-programi/aktiviteler/{activityId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> DeleteActivity(
+        Guid activityId, CancellationToken cancellationToken)
+    {
+        var activity = await db.ScheduleActivities
+            .SingleOrDefaultAsync(x => x.Id == activityId, cancellationToken);
+
+        if (activity is null)
+            return NotFound(new { message = "Aktivite bulunamadı." });
+
+        var childCount = await db.ScheduleActivities.CountAsync(
+            x => x.ParentActivityId == activityId, cancellationToken);
+
+        if (childCount > 0)
+        {
+            return BadRequest(new
+            {
+                message = $"Bu aktivitenin {childCount} alt aktivitesi var; " +
+                          "önce onları silin."
+            });
+        }
+
+        var links = await db.ScheduleDependencies
+            .Where(x => x.PredecessorActivityId == activityId ||
+                        x.SuccessorActivityId == activityId)
+            .ToListAsync(cancellationToken);
+
+        db.ScheduleDependencies.RemoveRange(links);
+        db.ScheduleActivities.Remove(activity);
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = links.Count == 0
+                ? "Aktivite silindi."
+                : $"Aktivite ve {links.Count} bağımlılığı silindi."
+        });
+    }
+
+    // ---------------- Bağımlılıklar ----------------
+
+    [HttpPost("api/is-programi/{id:guid}/bagimliliklar")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> CreateDependency(
+        Guid id,
+        ScheduleDependencyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var exists = await db.ProjectSchedules.AnyAsync(
+            x => x.Id == id, cancellationToken);
+
+        if (!exists)
+            return NotFound(new { message = "İş programı bulunamadı." });
+
+        if (!Enum.IsDefined(typeof(ScheduleDependencyType), request.Type))
+            return BadRequest(new { message = "Geçersiz bağımlılık türü." });
+
+        var problem = await schedules.ValidateNewDependencyAsync(
+            id, request.PredecessorActivityId, request.SuccessorActivityId,
+            cancellationToken);
+
+        if (problem is not null)
+            return BadRequest(new { message = problem });
+
+        var dependency = new ScheduleDependency
+        {
+            ProjectScheduleId = id,
+            PredecessorActivityId = request.PredecessorActivityId,
+            SuccessorActivityId = request.SuccessorActivityId,
+            Type = (ScheduleDependencyType)request.Type,
+            LagWorkDays = request.LagWorkDays
+        };
+
+        db.ScheduleDependencies.Add(dependency);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { id = dependency.Id, message = "Bağımlılık eklendi." });
+    }
+
+    [HttpDelete("api/is-programi/bagimliliklar/{dependencyId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> DeleteDependency(
+        Guid dependencyId, CancellationToken cancellationToken)
+    {
+        var dependency = await db.ScheduleDependencies
+            .SingleOrDefaultAsync(x => x.Id == dependencyId, cancellationToken);
+
+        if (dependency is null)
+            return NotFound(new { message = "Bağımlılık bulunamadı." });
+
+        db.ScheduleDependencies.Remove(dependency);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { message = "Bağımlılık silindi." });
+    }
+
+    // ---------------- Baseline ----------------
+
+    /// <summary>
+    /// Baseline kaydeder: o anki HESAPLANMIŞ plan tarihleri kilitli
+    /// referans olarak kopyalanır.
+    ///
+    /// Baseline değiştirilebilir ama iz bırakır. Sık revizyon, planın
+    /// gerçeğe uydurulduğunun işaretidir ve görünmesi gerekir; bu yüzden
+    /// ikinci ve sonraki revizyonlarda GEREKÇE zorunludur.
+    /// </summary>
+    [HttpPost("api/is-programi/{id:guid}/baseline")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> SaveBaseline(
+        Guid id,
+        SaveBaselineRequest request,
+        CancellationToken cancellationToken)
+    {
+        var schedule = await db.ProjectSchedules
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (schedule is null)
+            return NotFound(new { message = "İş programı bulunamadı." });
+
+        var reason = request.Reason?.Trim();
+
+        if (schedule.BaselineRevisionNumber > 0 && string.IsNullOrWhiteSpace(reason))
+        {
+            return BadRequest(new
+            {
+                message = "Baseline'ı yeniden kaydetmek için gerekçe zorunludur; " +
+                          "referans tarih değiştiğinde gecikme ölçüsü de değişir."
+            });
+        }
+
+        var view = await schedules.BuildAsync(id, cancellationToken);
+
+        if (view.Activities.Count == 0)
+        {
+            return BadRequest(new
+            {
+                message = "Aktivitesi olmayan programda baseline kaydedilemez."
+            });
+        }
+
+        var computed = view.Activities.ToDictionary(x => x.Id);
+
+        var activities = await db.ScheduleActivities
+            .Where(x => x.ProjectScheduleId == id)
+            .ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+
+        foreach (var activity in activities)
+        {
+            if (!computed.TryGetValue(activity.Id, out var line))
+                continue;
+
+            activity.BaselineStartDate = line.PlannedStart;
+            activity.BaselineEndDate = line.PlannedEnd;
+            activity.UpdatedAtUtc = now;
+        }
+
+        schedule.BaselineRevisionNumber++;
+        schedule.BaselineSetAtUtc = now;
+        schedule.BaselineSetByUserId = ActorId();
+        schedule.UpdatedAtUtc = now;
+
+        db.ScheduleBaselineRevisions.Add(new ScheduleBaselineRevision
+        {
+            ProjectScheduleId = id,
+            RevisionNumber = schedule.BaselineRevisionNumber,
+            SetAtUtc = now,
+            SetByUserId = ActorId(),
+            Reason = reason,
+            ActivityCount = activities.Count,
+            PlannedStartDate = view.ProjectStart,
+            PlannedEndDate = view.ProjectFinish
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            revisionNumber = schedule.BaselineRevisionNumber,
+            message = schedule.BaselineRevisionNumber == 1
+                ? "Baseline kaydedildi; gecikme bundan sonra bu referansa göre ölçülür."
+                : $"Baseline {schedule.BaselineRevisionNumber}. kez kaydedildi."
+        });
+    }
+
+    [HttpGet("api/is-programi/{id:guid}/baseline-gecmisi")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleView)]
+    public async Task<IActionResult> BaselineHistory(
+        Guid id, CancellationToken cancellationToken) =>
+        Ok(await db.ScheduleBaselineRevisions
+            .AsNoTracking()
+            .Where(x => x.ProjectScheduleId == id)
+            .OrderByDescending(x => x.RevisionNumber)
+            .Select(x => new
+            {
+                x.Id,
+                x.RevisionNumber,
+                x.SetAtUtc,
+                x.SetByUserId,
+                x.Reason,
+                x.ActivityCount,
+                x.PlannedStartDate,
+                x.PlannedEndDate
+            })
+            .ToListAsync(cancellationToken));
+
+    // ---------------- Tatiller ----------------
+
+    [HttpPut("api/is-programi/{id:guid}/tatiller")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> ReplaceHolidays(
+        Guid id,
+        ReplaceScheduleHolidaysRequest request,
+        CancellationToken cancellationToken)
+    {
+        var exists = await db.ProjectSchedules.AnyAsync(
+            x => x.Id == id, cancellationToken);
+
+        if (!exists)
+            return NotFound(new { message = "İş programı bulunamadı." });
+
+        var incoming = request.Holidays
+            .GroupBy(x => x.Date)
+            .Select(g => g.First())
+            .ToList();
+
+        var current = await db.ScheduleHolidays
+            .Where(x => x.ProjectScheduleId == id)
+            .ToListAsync(cancellationToken);
+
+        db.ScheduleHolidays.RemoveRange(
+            current.Where(x => incoming.All(i => i.Date != x.Date)));
+
+        foreach (var holiday in incoming)
+        {
+            var existing = current.SingleOrDefault(x => x.Date == holiday.Date);
+
+            if (existing is null)
+            {
+                db.ScheduleHolidays.Add(new ScheduleHoliday
+                {
+                    ProjectScheduleId = id,
+                    Date = holiday.Date,
+                    Name = holiday.Name?.Trim()
+                });
+
+                continue;
+            }
+
+            existing.Name = holiday.Name?.Trim();
+            existing.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            count = incoming.Count,
+            message = $"{incoming.Count} tatil günü kaydedildi."
+        });
+    }
+
+    // ---------------- Yardımcılar ----------------
+
+    /// <summary>
+    /// İcmal kısımlarını ana çubuğa çevirir. Tarih verisi yoksa çubuk
+    /// projenin başlangıcından itibaren bir haftalık varsayılan süreyle
+    /// açılır — kullanıcı sonra düzeltir. Tarihsiz çubuk çizilemezdi.
+    /// </summary>
+    private async Task<int> SeedFromSectionsAsync(
+        ProjectSchedule schedule,
+        DateTime? projectStart,
+        CancellationToken cancellationToken)
+    {
+        var linked = await db.ScheduleActivities
+            .AsNoTracking()
+            .Where(x => x.ProjectScheduleId == schedule.Id &&
+                        x.ProjectHakedisSectionId != null)
+            .Select(x => x.ProjectHakedisSectionId!.Value)
+            .ToListAsync(cancellationToken);
+
+        var sections = await db.ProjectHakedisSections
+            .AsNoTracking()
+            .Where(x => x.ProjectId == schedule.ProjectId &&
+                        x.IsActive &&
+                        !linked.Contains(x.Id))
+            .OrderBy(x => x.Order)
+            .Select(x => new { x.Id, x.Name, x.Order })
+            .ToListAsync(cancellationToken);
+
+        if (sections.Count == 0)
+            return 0;
+
+        var calendar = await schedules.BuildCalendarAsync(
+            schedule.Id, cancellationToken);
+
+        var start = calendar.NextWorkDay(projectStart is DateTime value
+            ? DateOnly.FromDateTime(value)
+            : DateOnly.FromDateTime(DateTime.UtcNow));
+
+        var nextOrder = await NextOrderAsync(schedule.Id, null, cancellationToken);
+
+        foreach (var section in sections)
+        {
+            db.ScheduleActivities.Add(new ScheduleActivity
+            {
+                ProjectScheduleId = schedule.Id,
+                ProjectHakedisSectionId = section.Id,
+                Name = section.Name,
+                Order = nextOrder++,
+                PlannedStartDate = start,
+                PlannedEndDate = calendar.FinishFromStart(start, 6)
+            });
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return sections.Count;
+    }
+
+    private async Task<int> NextOrderAsync(
+        Guid scheduleId, Guid? parentId, CancellationToken cancellationToken)
+    {
+        var max = await db.ScheduleActivities
+            .Where(x => x.ProjectScheduleId == scheduleId &&
+                        x.ParentActivityId == parentId)
+            .MaxAsync(x => (int?)x.Order, cancellationToken);
+
+        return (max ?? 0) + 1;
+    }
+
+    private async Task<string?> ValidateActivityAsync(
+        Guid scheduleId,
+        Guid projectId,
+        ScheduleActivityRequest request,
+        Guid? activityId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return "Aktivite adı zorunludur.";
+
+        if (request.PlannedEndDate < request.PlannedStartDate)
+            return "Bitiş tarihi başlangıç tarihinden önce olamaz.";
+
+        if (request.ParentActivityId is Guid parentId)
+        {
+            if (parentId == activityId)
+                return "Bir aktivite kendisinin alt aktivitesi olamaz.";
+
+            var parent = await db.ScheduleActivities
+                .AsNoTracking()
+                .Where(x => x.Id == parentId)
+                .Select(x => new { x.ProjectScheduleId, x.ParentActivityId })
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (parent is null || parent.ProjectScheduleId != scheduleId)
+                return "Üst aktivite bu iş programında bulunamadı.";
+
+            // İki seviye yeter: kısım → alt aktivite. Derinleşen ağaç
+            // Gantt'ı okunmaz yapar ve ilerleme toplamayı belirsizleştirir.
+            if (parent.ParentActivityId is not null)
+                return "Alt aktivitenin altına yeni bir seviye açılamaz.";
+
+            if (activityId is Guid current)
+            {
+                var hasChildren = await db.ScheduleActivities.AnyAsync(
+                    x => x.ParentActivityId == current, cancellationToken);
+
+                if (hasChildren)
+                {
+                    return "Alt aktivitesi olan bir çubuk başka bir çubuğun " +
+                           "altına taşınamaz.";
+                }
+            }
+        }
+
+        if (request.ProjectHakedisSectionId is Guid sectionId)
+        {
+            if (request.ParentActivityId is not null)
+            {
+                return "İcmal kısmı yalnızca ana çubuğa bağlanır; alt aktivite " +
+                       "icmal satırına bağlanabilir.";
+            }
+
+            var belongs = await db.ProjectHakedisSections.AnyAsync(
+                x => x.Id == sectionId && x.ProjectId == projectId,
+                cancellationToken);
+
+            if (!belongs)
+                return "Seçilen icmal kısmı bu projeye ait değil.";
+
+            // Aynı kısmın iki çubuğu, ilerlemeyi iki kez sayılmış gibi
+            // gösterirdi.
+            var duplicate = await db.ScheduleActivities.AnyAsync(
+                x => x.ProjectScheduleId == scheduleId &&
+                     x.ProjectHakedisSectionId == sectionId &&
+                     (activityId == null || x.Id != activityId),
+                cancellationToken);
+
+            if (duplicate)
+                return "Bu icmal kısmı için zaten bir çubuk var.";
+        }
+
+        if (request.ProjectBoqItemId is Guid boqItemId)
+        {
+            var belongs = await db.ProjectBoqItems.AnyAsync(
+                x => x.Id == boqItemId && x.ProjectBoq.ProjectId == projectId,
+                cancellationToken);
+
+            if (!belongs)
+                return "Seçilen icmal satırı bu projeye ait değil.";
+        }
+
+        if (request.ManualProgressRate is decimal rate)
+        {
+            if (rate < 0m || rate > 100m)
+                return "İlerleme yüzdesi 0 ile 100 arasında olmalıdır.";
+
+            // İcmale bağlı çubukta gerçekleşme saha raporundan gelir;
+            // elle girilen yüzde onu sessizce ezerdi.
+            if (request.ProjectHakedisSectionId is not null ||
+                request.ProjectBoqItemId is not null)
+            {
+                return "İcmale bağlı aktivitede ilerleme elle girilemez; " +
+                       "gerçekleşme saha raporundan gelir.";
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryReadWorkWeek(
+        int? value, out WorkWeekDays workWeek, out string? problem)
+    {
+        workWeek = WorkWeekDays.MondayToSaturday;
+        problem = null;
+
+        if (value is not int raw)
+            return true;
+
+        if (raw is <= 0 or > 127)
+        {
+            problem = "Çalışma haftasında en az bir gün seçilmelidir.";
+            return false;
+        }
+
+        workWeek = (WorkWeekDays)raw;
+        return true;
+    }
+
+    private Guid? ActorId()
+    {
+        var raw = User.FindFirst("sub")?.Value
+            ?? User.FindFirst(
+                System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        return Guid.TryParse(raw, out var parsed) ? parsed : null;
+    }
+}

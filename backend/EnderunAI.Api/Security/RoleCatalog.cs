@@ -33,7 +33,7 @@ public static class RoleCatalog
         new("Finans Sorumlusu", "Finans, kasa, çek, cari ve muhasebe tam yetki; raporlar.",
         [
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
-            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
+            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.FinanceView, PermissionCatalog.Keys.FinanceCreate, PermissionCatalog.Keys.FinanceEdit,
             PermissionCatalog.Keys.FinanceDelete, PermissionCatalog.Keys.FinanceApprove, PermissionCatalog.Keys.FinanceManage,
             PermissionCatalog.Keys.CurrentAccountsView, PermissionCatalog.Keys.CurrentAccountsCreate,
@@ -60,7 +60,7 @@ public static class RoleCatalog
         new("Satın Alma Sorumlusu", "Talep, RFQ, sipariş, mal kabul ve stok süreçleri tam yetki; cari görüntüleme.",
         [
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
-            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
+            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.PurchasingRequestsView, PermissionCatalog.Keys.PurchasingRequestsCreate,
             PermissionCatalog.Keys.PurchasingRequestsEdit, PermissionCatalog.Keys.PurchasingRequestsDelete,
             PermissionCatalog.Keys.PurchasingRequestsApprove,
@@ -83,7 +83,7 @@ public static class RoleCatalog
         new("İK Sorumlusu", "Personel, puantaj ve bordro tam yetki; ücret rakamlarını görür.",
         [
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
-            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
+            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.PersonnelView, PermissionCatalog.Keys.PersonnelCreate,
             PermissionCatalog.Keys.PersonnelEdit, PermissionCatalog.Keys.PersonnelDelete,
             PermissionCatalog.Keys.AttendancePayrollView, PermissionCatalog.Keys.AttendancePayrollCreate,
@@ -101,7 +101,7 @@ public static class RoleCatalog
 
         new("Ön Muhasebe", "Fatura/cari tam yetki, muhasebe fiş girişi, satın alma görüntüleme.",
         [
-            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView, PermissionCatalog.Keys.ProjectsView,
+            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView, PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.ReportsView,
             PermissionCatalog.Keys.CurrentAccountsView, PermissionCatalog.Keys.CurrentAccountsCreate,
             PermissionCatalog.Keys.CurrentAccountsEdit, PermissionCatalog.Keys.CurrentAccountsDelete,
@@ -117,7 +117,7 @@ public static class RoleCatalog
         new("Teknik Ofis", "Projeler; keşif/metraj/hakediş tam yetki; dosyalar tam yetki; maliyet ve kâr görünür.",
         [
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
-            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ProjectsCreate,
+            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ProjectsCreate,
             PermissionCatalog.Keys.ProjectsEdit,
             PermissionCatalog.Keys.SitesView,
             PermissionCatalog.Keys.EngineeringView, PermissionCatalog.Keys.EngineeringManage,
@@ -134,7 +134,7 @@ public static class RoleCatalog
         new("Teknik Koordinatör", "Teknik Ofis + tüm şantiyeler + günlük rapor onaylama + saha personel yönetimi.",
         [
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
-            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ProjectsCreate,
+            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ProjectsCreate,
             PermissionCatalog.Keys.ProjectsEdit,
             PermissionCatalog.Keys.SitesView, PermissionCatalog.Keys.SitesCreate,
             PermissionCatalog.Keys.SitesEdit, PermissionCatalog.Keys.SitesDelete,
@@ -156,6 +156,10 @@ public static class RoleCatalog
             PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.ProjectsManage, PermissionCatalog.Keys.HakedisManage,
             PermissionCatalog.Keys.PersonnelManage, PermissionCatalog.Keys.AttendanceView, PermissionCatalog.Keys.PayrollView,
+            // İş programını DÜZENLER. Tarih ve bağımlılık değiştirmek
+            // bütün zinciri kaydırdığı için bu yetki bilinçli olarak dar:
+            // Genel Müdür ve Teknik Koordinatör. Diğer roller okur.
+            PermissionCatalog.Keys.ScheduleManage,
             // Saha İSG kayıtları girebilir; sağlık raporunun tıbbi detayı
             // ve kaza kayıt defteri kasıtlı olarak verilmedi.
             PermissionCatalog.Keys.IsgView, PermissionCatalog.Keys.IsgCreate, PermissionCatalog.Keys.IsgEdit
@@ -165,7 +169,7 @@ public static class RoleCatalog
             "İSG tam yetki: OSGB sözleşmesi, sağlık raporu (tıbbi detay dahil), eğitim, sertifika, kaza kayıtları ve saha belgeleri.",
         [
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
-            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.SitesView,
+            PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.SitesView,
             PermissionCatalog.Keys.PersonnelView,
             PermissionCatalog.Keys.CurrentAccountsView,
             PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate,
@@ -186,6 +190,10 @@ public static class RoleCatalog
             PermissionCatalog.Keys.PurchasingRequestsView, PermissionCatalog.Keys.PurchasingRequestsCreate,
             PermissionCatalog.Keys.InventoryManage, PermissionCatalog.Keys.PurchasingView, PermissionCatalog.Keys.PurchasingManage,
             PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate,
+            // İş programını OKUR: planı uygulayan saha, terminini
+            // görmeden çalışamaz. Veri kapsamı zaten kendi şantiyesiyle
+            // sınırlı; düzenleme yetkisi yok.
+            PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.AiUse
         ], RoleDataScopePolicy.SiteOnly),
 
@@ -196,12 +204,16 @@ public static class RoleCatalog
             PermissionCatalog.Keys.SiteReportsEdit,
             PermissionCatalog.Keys.PersonnelView,
             PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate,
+            // İş programını OKUR: planı uygulayan saha, terminini
+            // görmeden çalışamaz. Veri kapsamı zaten kendi şantiyesiyle
+            // sınırlı; düzenleme yetkisi yok.
+            PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.AiUse
         ], RoleDataScopePolicy.SiteOnly),
 
         new("Sekreterya", "Dosyalar tam yetki, cari kart oluşturma/görüntüleme, projeler görüntüleme.",
         [
-            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView,
+            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate,
             PermissionCatalog.Keys.DocumentsEdit, PermissionCatalog.Keys.DocumentsDelete,
             PermissionCatalog.Keys.CurrentAccountsView, PermissionCatalog.Keys.CurrentAccountsCreate,
@@ -212,13 +224,13 @@ public static class RoleCatalog
 
         new("Araç Sorumlusu", "Filo modülü devreye girene kadar görüntüleme ağırlıklı dar kapsamlı rol.",
         [
-            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView,
+            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.AiUse
         ]),
 
         new("Depo Sorumlusu", "Stok giriş-çıkış, transfer, rezervasyon ve mal kabul.",
         [
-            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView,
+            PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.InventoryView, PermissionCatalog.Keys.InventoryCreate,
             PermissionCatalog.Keys.InventoryEdit, PermissionCatalog.Keys.InventoryDelete,
             PermissionCatalog.Keys.PurchasingReceiptsView, PermissionCatalog.Keys.PurchasingReceiptsCreate,
