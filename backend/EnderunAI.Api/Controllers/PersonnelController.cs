@@ -2,6 +2,7 @@ using EnderunAI.Api.Contracts.Personnel;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.HumanResources;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,88 @@ public sealed class PersonnelController(
     AppDbContext db,
     ISalaryVisibilityService salaryVisibility) : ControllerBase
 {
+    /// <summary>
+    /// Personel kartlarındaki veri eksikleri, engelledikleri sürece
+    /// göre sınıflandırılmış.
+    ///
+    /// Eksiklik kaydı ENGELLEMİYOR; bu uç eksikliğin neye mal olduğunu
+    /// söylüyor. Canlıda aktif personelin yarısından fazlasında SGK
+    /// sicil yok — zorunluluk konsaydı bu kayıtların hiçbiri
+    /// düzenlenemezdi.
+    ///
+    /// Ücret rakamı DÖNMÜYOR: yalnızca kartın var olup olmadığı
+    /// bakılıyor. Tutar görmek maaş izni ister, veri eksiği görmek
+    /// istemez.
+    /// </summary>
+    [HttpGet("veri-eksikleri")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
+    public async Task<IActionResult> DataCompleteness(
+        [FromQuery] Guid? companyId,
+        [FromServices] Data.HumanResources.HrDbContext hrDb,
+        CancellationToken cancellationToken)
+    {
+        var query = db.Personnel
+            .AsNoTracking()
+            .Where(x => x.Status == PersonnelStatus.Active && x.IsActive);
+
+        if (companyId is Guid id)
+            query = query.Where(x => x.CompanyId == id);
+
+        var personnel = await query
+            .Select(x => new
+            {
+                x.Id,
+                x.EmployeeNumber,
+                x.FirstName,
+                x.LastName,
+                x.IdentityNumber,
+                x.BirthDate,
+                x.Phone,
+                x.SgkRegistrationNumber,
+                x.EmploymentStartDate,
+                x.JobTitle,
+                x.BranchId,
+                WorkLocationType = (int)x.WorkLocationType,
+                HasActiveSiteAssignment = x.SiteAssignments.Any(a => a.EndDate == null)
+            })
+            .ToListAsync(cancellationToken);
+
+        var ids = personnel.Select(x => x.Id).ToList();
+
+        // Bugün yürürlükte olan kart aranıyor: süresi geçmiş bir kart,
+        // kart yokmuş gibi bordroyu engeller.
+        var today = DateTime.UtcNow.Date;
+
+        var withSalaryCard = (await hrDb.SalaryDefinitions
+            .AsNoTracking()
+            .Where(x => ids.Contains(x.PersonnelId) &&
+                        x.EffectiveStartDate <= today &&
+                        (x.EffectiveEndDate == null || x.EffectiveEndDate >= today))
+            .Select(x => x.PersonnelId)
+            .ToListAsync(cancellationToken))
+            .ToHashSet();
+
+        var summary = PersonnelDataCompletenessCalculator.Summarize(
+            personnel
+                .Select(x => new PersonnelDataInput(
+                    Id: x.Id,
+                    EmployeeNumber: x.EmployeeNumber,
+                    FullName: $"{x.FirstName} {x.LastName}".Trim(),
+                    IdentityNumber: x.IdentityNumber,
+                    BirthDate: x.BirthDate,
+                    Phone: x.Phone,
+                    SgkRegistrationNumber: x.SgkRegistrationNumber,
+                    EmploymentStartDate: x.EmploymentStartDate,
+                    JobTitle: x.JobTitle,
+                    BranchId: x.BranchId,
+                    WorkLocationType: x.WorkLocationType,
+                    HasActiveSiteAssignment: x.HasActiveSiteAssignment,
+                    HasSalaryCard: withSalaryCard.Contains(x.Id)))
+                .ToList());
+
+        return Ok(summary);
+    }
+
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetAll(
@@ -240,6 +323,12 @@ public sealed class PersonnelController(
             return Conflict(new { message = "Bu personel numarası zaten kullanılıyor." });
         }
 
+        // Kimlik numarası BOŞ bırakılabilir ama yanlış girilemez.
+        // Yanlış numara sisteme sessizce girer ve ancak SGK bildirimi
+        // reddedildiğinde — aylar sonra — ortaya çıkardı.
+        if (TurkishIdentityNumber.Describe(request.IdentityNumber) is string problem)
+            return BadRequest(new { message = problem });
+
         if (!string.IsNullOrWhiteSpace(request.IdentityNumber) &&
             await db.Personnel.AnyAsync(
                 x => x.IdentityNumber == request.IdentityNumber.Trim(),
@@ -298,6 +387,18 @@ public sealed class PersonnelController(
             string.IsNullOrWhiteSpace(request.LastName))
         {
             return BadRequest(new { message = "Ad ve soyad zorunludur." });
+        }
+
+        // Değişmemiş bozuk bir numara güncellemeyi kilitlemesin: kontrol
+        // yalnızca GİRİLEN değer değiştiğinde uygulanıyor. (Canlıdaki 75
+        // kaydın tamamı geçerli; bu güvenlik ağı ileriye dönük.)
+        var incomingIdentity = request.IdentityNumber?.Trim();
+
+        if (!string.Equals(incomingIdentity, personnel.IdentityNumber,
+                StringComparison.Ordinal) &&
+            TurkishIdentityNumber.Describe(incomingIdentity) is string problem)
+        {
+            return BadRequest(new { message = problem });
         }
 
         if (request.BranchId.HasValue)

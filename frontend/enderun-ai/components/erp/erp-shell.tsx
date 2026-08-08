@@ -496,21 +496,12 @@ const groups: MenuGroup[] = [
       // Eğitim ve sertifika takibi İSG menüsündeki "Personel Kayıtları"
       // ekranına taşındı; buradaki iki bağlantı var olmayan bir uca
       // bağlı taslak sayfaya gidiyordu. Eski adresler yönlendiriliyor.
-      {
-        label: "Yetkinlikler",
-        href: "/insan-kaynaklari/yetkinlikler",
-        icon: "★",
-      },
-      {
-        label: "Performans",
-        href: "/insan-kaynaklari/performans",
-        icon: "↗",
-      },
-      {
-        label: "Disiplin",
-        href: "/insan-kaynaklari/disiplin",
-        icon: "⚖",
-      },
+      //
+      // Yetkinlikler, Performans ve Disiplin de aynı durumdaydı: üçünün
+      // de arkasında model, tablo ve uç YOKTU; ekran yalnızca "yakında"
+      // plakası gösteriyordu. Gidecek bir yerleri olmadığı için
+      // yönlendirilmediler, menüden kaldırıldılar. Modül gerçekten
+      // geldiğinde menü satırı geri eklenir.
       {
         label: "Demirbaş / Aletler",
         href: "/demirbas",
