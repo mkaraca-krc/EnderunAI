@@ -7,6 +7,14 @@ namespace EnderunAI.Api.Services.Schedule;
 
 /// <param name="BaselineSlipWorkDays">Planın baseline'dan kaç iş günü
 /// kaydığı. Baseline yoksa null — kıyas için referans yok demektir.</param>
+/// <param name="ProgressRate">Gerçekleşen yüzde. Kaynağı
+/// <paramref name="ProgressSourceName"/> içinde yazılı; ölçülmüş bir
+/// oranla elle girilmiş bir oran aynı görünmemeli.</param>
+/// <param name="ExpectedRate">Plana göre bugün olması gereken yüzde.</param>
+/// <param name="EmployerRate">İşverenin hakedişte kabul ettiği yüzde;
+/// saha ile arasındaki fark devreden iştir.</param>
+/// <param name="ProjectImpactWorkDays">Bolluk düşüldükten sonra proje
+/// bitişine yansıyan gecikme.</param>
 public sealed record ScheduleActivityView(
     Guid Id,
     Guid? ParentActivityId,
@@ -27,6 +35,17 @@ public sealed record ScheduleActivityView(
     int ShiftedWorkDays,
     int? BaselineSlipWorkDays,
     decimal? ManualProgressRate,
+    decimal ProgressRate,
+    int ProgressSource,
+    string ProgressSourceName,
+    decimal? EmployerRate,
+    decimal ExpectedRate,
+    DateOnly? ForecastFinish,
+    int SlipWorkDays,
+    int ProjectImpactWorkDays,
+    bool IsBehind,
+    bool IsCompleted,
+    string? ForecastNote,
     string? Notes);
 
 public sealed record ScheduleDependencyView(
@@ -42,6 +61,13 @@ public sealed record ScheduleDependencyView(
 /// <param name="Deadline">Termin. Şimdilik projenin planlanan bitişi;
 /// sözleşmeden gelen ayrı termin alanı ileriki fazda bunun yerine
 /// geçecek.</param>
+/// <param name="HasContractSummary">Projede sözleşme icmali var mı.
+/// Yoksa gerçekleşme saha raporundan gelemez ve yüzdeler yalnızca elle
+/// girilenlerden ibarettir.</param>
+/// <param name="ForecastFinish">Bu gidişle tahmini bitiş. Plan
+/// DEĞİŞMEZ; bu ondan ayrı bir hesaptır.</param>
+/// <param name="DrivingActivityIds">Proje bitişini öteleyen
+/// aktiviteler.</param>
 public sealed record ProjectScheduleView(
     Guid Id,
     Guid ProjectId,
@@ -59,6 +85,13 @@ public sealed record ProjectScheduleView(
     DateOnly? ProjectFinish,
     DateOnly? Deadline,
     int? DeadlineFloatWorkDays,
+    DateOnly AsOf,
+    bool HasContractSummary,
+    decimal ProgressRate,
+    decimal? EmployerRate,
+    DateOnly? ForecastFinish,
+    int DelayWorkDays,
+    IReadOnlyList<Guid> DrivingActivityIds,
     IReadOnlyList<ScheduleActivityView> Activities,
     IReadOnlyList<ScheduleDependencyView> Dependencies,
     IReadOnlyList<Guid> CriticalActivityIds,
@@ -92,7 +125,9 @@ public interface IProjectScheduleService
 /// Hesabın kendisi <see cref="SchedulePlanner"/> içinde; burada sorgu
 /// ve eşleme var.
 /// </summary>
-public sealed class ProjectScheduleService(AppDbContext db) : IProjectScheduleService
+public sealed class ProjectScheduleService(
+    AppDbContext db,
+    Hakedis.IContractSummaryProgressService progress) : IProjectScheduleService
 {
     public Task<ProjectSchedule?> FindAsync(
         Guid projectId, CancellationToken cancellationToken) =>
@@ -217,6 +252,67 @@ public sealed class ProjectScheduleService(AppDbContext db) : IProjectScheduleSe
             deadline);
 
         var scheduled = plan.Activities.ToDictionary(x => x.Id);
+        var warnings = plan.Warnings.ToList();
+        var asOf = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // --- Gerçekleşen: saha raporundan, icmal üzerinden ---
+        var summary = await progress.BuildAsync(
+            schedule.ProjectId, cancellationToken);
+
+        var sectionField = summary.Sections
+            .Where(x => x.SectionId is not null)
+            .ToDictionary(x => x.SectionId!.Value, x => x.FieldRate);
+
+        var sectionEmployer = summary.Sections
+            .Where(x => x.SectionId is not null)
+            .ToDictionary(x => x.SectionId!.Value, x => x.EmployerRate);
+
+        var itemField = summary.Sections
+            .SelectMany(x => x.Items)
+            .ToDictionary(x => x.BoqItemId, x => x.FieldRate);
+
+        var itemEmployer = summary.Sections
+            .SelectMany(x => x.Items)
+            .ToDictionary(x => x.BoqItemId, x => x.EmployerRate);
+
+        var resolved = ScheduleProgressResolver.Resolve(
+            activities
+                .Select(x => new ScheduleProgressInput(
+                    x.Id,
+                    x.ParentActivityId,
+                    x.ProjectHakedisSectionId,
+                    x.ProjectBoqItemId,
+                    x.ManualProgressRate,
+                    scheduled.TryGetValue(x.Id, out var line)
+                        ? line.DurationWorkDays
+                        : 1))
+                .ToList(),
+            sectionField, sectionEmployer, itemField, itemEmployer);
+
+        var forecast = ScheduleForecastCalculator.ForProject(
+            calendar,
+            activities
+                .Where(x => scheduled.ContainsKey(x.Id))
+                .Select(x => new ActivityForecastInput(
+                    x.Id,
+                    x.Name,
+                    scheduled[x.Id].Start,
+                    scheduled[x.Id].Finish,
+                    resolved[x.Id].Rate,
+                    scheduled[x.Id].TotalFloatWorkDays))
+                .ToList(),
+            activities.Count == 0
+                ? asOf
+                : plan.ProjectFinish,
+            asOf);
+
+        var forecasts = forecast.Activities.ToDictionary(x => x.Id);
+
+        AddProgressWarnings(
+            warnings, summary, activities.Count, sectionField, activities
+                .Select(x => (x.Id, x.Name, x.ProjectHakedisSectionId))
+                .ToList());
+
         var views = new List<ScheduleActivityView>(activities.Count);
 
         foreach (var activity in activities)
@@ -229,6 +325,9 @@ public sealed class ProjectScheduleService(AppDbContext db) : IProjectScheduleSe
             int? baselineSlip = activity.BaselineEndDate is DateOnly baseEnd
                 ? calendar.WorkDayOffset(baseEnd, computed.Finish)
                 : null;
+
+            var actual = resolved[activity.Id];
+            var line = forecasts[activity.Id];
 
             views.Add(new ScheduleActivityView(
                 Id: activity.Id,
@@ -250,6 +349,17 @@ public sealed class ProjectScheduleService(AppDbContext db) : IProjectScheduleSe
                 ShiftedWorkDays: computed.ShiftedWorkDays,
                 BaselineSlipWorkDays: baselineSlip,
                 ManualProgressRate: activity.ManualProgressRate,
+                ProgressRate: actual.Rate,
+                ProgressSource: (int)actual.Source,
+                ProgressSourceName: actual.SourceName,
+                EmployerRate: actual.EmployerRate,
+                ExpectedRate: line.ExpectedRate,
+                ForecastFinish: line.ForecastFinish,
+                SlipWorkDays: line.SlipWorkDays,
+                ProjectImpactWorkDays: line.ProjectImpactWorkDays,
+                IsBehind: line.IsBehind,
+                IsCompleted: line.IsCompleted,
+                ForecastNote: line.Note,
                 Notes: activity.Notes));
         }
 
@@ -273,6 +383,19 @@ public sealed class ProjectScheduleService(AppDbContext db) : IProjectScheduleSe
             ProjectFinish: activities.Count == 0 ? null : plan.ProjectFinish,
             Deadline: deadline,
             DeadlineFloatWorkDays: plan.DeadlineFloatWorkDays,
+            AsOf: asOf,
+            HasContractSummary: summary.HasContractSummary,
+            // Projenin bütünündeki yüzde: icmal varsa ONUN tutar
+            // ağırlıklı oranı esastır. Çubukların süre ağırlıklı
+            // ortalaması yalnızca icmalsiz projede kullanılıyor —
+            // orada başka ölçü yok.
+            ProgressRate: summary.HasContractSummary
+                ? summary.FieldRate
+                : WeightedProgress(ordered),
+            EmployerRate: summary.HasContractSummary ? summary.EmployerRate : null,
+            ForecastFinish: activities.Count == 0 ? null : forecast.ForecastFinish,
+            DelayWorkDays: forecast.DelayWorkDays,
+            DrivingActivityIds: forecast.DrivingActivityIds,
             Activities: ordered,
             Dependencies: dependencies
                 .Select(x => new ScheduleDependencyView(
@@ -286,7 +409,80 @@ public sealed class ProjectScheduleService(AppDbContext db) : IProjectScheduleSe
                     x.LagWorkDays))
                 .ToList(),
             CriticalActivityIds: plan.CriticalActivityIds,
-            Warnings: plan.Warnings);
+            Warnings: warnings);
+    }
+
+    /// <summary>
+    /// İcmalsiz projede bütünün yüzdesi: ana çubukların SÜRE ağırlıklı
+    /// ortalaması. Alt aktiviteler sayılmaz — zaten ana çubuğun
+    /// içindeler, ikinci kez sayılırlardı.
+    /// </summary>
+    private static decimal WeightedProgress(
+        IReadOnlyList<ScheduleActivityView> activities)
+    {
+        var top = activities.Where(x => x.ParentActivityId is null).ToList();
+
+        if (top.Count == 0)
+            return 0m;
+
+        var totalWeight = top.Sum(x => Math.Max(1, x.DurationWorkDays));
+
+        return decimal.Round(
+            top.Sum(x => x.ProgressRate * Math.Max(1, x.DurationWorkDays))
+                / totalWeight,
+            2);
+    }
+
+    /// <summary>
+    /// Gerçekleşme neden ölçülemiyor sorusunun cevapları.
+    ///
+    /// Canlıda bugün hiçbir projede icmal kısmı tanımlı değil ve hiçbir
+    /// saha rapor satırı icmale bağlanmamış durumda; ekran boş yüzde
+    /// gösterecekse bunun NEDENİNİ de söylemeli, aksi halde hata
+    /// sanılır.
+    /// </summary>
+    private static void AddProgressWarnings(
+        List<string> warnings,
+        Hakedis.ContractSummaryProgressView summary,
+        int activityCount,
+        IReadOnlyDictionary<Guid, decimal> sectionRates,
+        IReadOnlyList<(Guid Id, string Name, Guid? SectionId)> activities)
+    {
+        if (activityCount == 0)
+            return;
+
+        if (!summary.HasContractSummary)
+        {
+            warnings.Add(
+                "Projede sözleşme icmali tanımlı değil; gerçekleşen ilerleme " +
+                "saha raporundan gelemiyor. Yüzdeler yalnızca elle girilen " +
+                "değerlerden oluşuyor.");
+
+            return;
+        }
+
+        var unmeasured = activities
+            .Where(x => x.SectionId is Guid id && !sectionRates.ContainsKey(id))
+            .Select(x => x.Name)
+            .ToList();
+
+        if (unmeasured.Count > 0)
+        {
+            warnings.Add(
+                $"Şu kısımlarda icmal kalemi yok, ilerlemeleri ölçülemiyor: " +
+                $"{string.Join(", ", unmeasured)}.");
+        }
+
+        var unsectioned = summary.Sections
+            .Where(x => x.SectionId is null)
+            .Sum(x => x.Items.Count);
+
+        if (unsectioned > 0)
+        {
+            warnings.Add(
+                $"{unsectioned} icmal kalemi hiçbir kısma bağlı değil; bu " +
+                "kalemlerin ilerlemesi iş programına yansımıyor.");
+        }
     }
 
     public async Task<string?> ValidateNewDependencyAsync(
