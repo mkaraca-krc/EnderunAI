@@ -46,6 +46,18 @@ public sealed record ScheduleActivityView(
     bool IsBehind,
     bool IsCompleted,
     string? ForecastNote,
+    IReadOnlyList<ScheduleResourceView> Resources,
+    string? Notes);
+
+/// <param name="Name">Personelin adı ya da taşeronun cari unvanı.</param>
+public sealed record ScheduleResourceView(
+    Guid Id,
+    int Kind,
+    string KindName,
+    Guid? PersonnelId,
+    Guid? SubcontractorContractId,
+    string Name,
+    string? Role,
     string? Notes);
 
 public sealed record ScheduleDependencyView(
@@ -108,6 +120,13 @@ public interface IProjectScheduleService
 
     /// <summary>Hesaplanmış program görünümü.</summary>
     Task<ProjectScheduleView> BuildAsync(
+        Guid scheduleId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Kaynak çakışmaları: aynı personel/taşeron çakışan tarihli
+    /// aktivitelerde.
+    /// </summary>
+    Task<IReadOnlyList<ResourceConflict>> GetConflictsAsync(
         Guid scheduleId, CancellationToken cancellationToken);
 
     /// <summary>
@@ -311,6 +330,8 @@ public sealed class ProjectScheduleService(
 
         var forecasts = forecast.Activities.ToDictionary(x => x.Id);
 
+        var resources = await LoadResourcesAsync(scheduleId, cancellationToken);
+
         AddProgressWarnings(
             warnings, summary, activities.Count, sectionField, activities
                 .Select(x => (x.Id, x.Name, x.ProjectHakedisSectionId))
@@ -363,6 +384,9 @@ public sealed class ProjectScheduleService(
                 IsBehind: line.IsBehind,
                 IsCompleted: line.IsCompleted,
                 ForecastNote: line.Note,
+                Resources: resources.TryGetValue(activity.Id, out var assigned)
+                    ? assigned
+                    : [],
                 Notes: activity.Notes));
         }
 
@@ -487,6 +511,79 @@ public sealed class ProjectScheduleService(
                 $"{unsectioned} icmal kalemi hiçbir kısma bağlı değil; bu " +
                 "kalemlerin ilerlemesi iş programına yansımıyor.");
         }
+    }
+
+    /// <summary>
+    /// Aktivite başına atanmış kaynaklar. Personelin adı ile taşeronun
+    /// cari unvanı aynı alanda toplanıyor: ekranda ikisi de "kim
+    /// yapıyor" sorusunun cevabı.
+    /// </summary>
+    private async Task<Dictionary<Guid, List<ScheduleResourceView>>>
+        LoadResourcesAsync(Guid scheduleId, CancellationToken cancellationToken)
+    {
+        var rows = await db.ScheduleResourceAssignments
+            .AsNoTracking()
+            .Where(x => x.ScheduleActivity.ProjectScheduleId == scheduleId)
+            .Select(x => new
+            {
+                x.Id,
+                x.ScheduleActivityId,
+                x.Kind,
+                x.PersonnelId,
+                PersonnelName = x.Personnel == null
+                    ? null
+                    : x.Personnel.FirstName + " " + x.Personnel.LastName,
+                x.SubcontractorContractId,
+                SubcontractorName = x.SubcontractorContract == null
+                    ? null
+                    : x.SubcontractorContract.CurrentAccount.Title,
+                x.Role,
+                x.Notes
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(x => x.ScheduleActivityId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => new ScheduleResourceView(
+                        x.Id,
+                        (int)x.Kind,
+                        ScheduleLabels.Resource(x.Kind),
+                        x.PersonnelId,
+                        x.SubcontractorContractId,
+                        (x.Kind == ScheduleResourceKind.Subcontractor
+                            ? x.SubcontractorName
+                            : x.PersonnelName) ?? "—",
+                        x.Role,
+                        x.Notes))
+                    .OrderBy(x => x.Name, StringComparer.CurrentCulture)
+                    .ToList());
+    }
+
+    public async Task<IReadOnlyList<ResourceConflict>> GetConflictsAsync(
+        Guid scheduleId, CancellationToken cancellationToken)
+    {
+        var view = await BuildAsync(scheduleId, cancellationToken);
+        var calendar = await BuildCalendarAsync(scheduleId, cancellationToken);
+
+        var windows = view.Activities
+            .SelectMany(activity => activity.Resources.Select(resource =>
+                new ResourceWindow(
+                    Kind: (ScheduleResourceKind)resource.Kind,
+                    ResourceId: resource.PersonnelId
+                        ?? resource.SubcontractorContractId
+                        ?? Guid.Empty,
+                    ResourceName: resource.Name,
+                    ActivityId: activity.Id,
+                    ActivityName: activity.Name,
+                    Start: activity.PlannedStart,
+                    Finish: activity.PlannedEnd,
+                    IsCritical: activity.IsCritical)))
+            .Where(x => x.ResourceId != Guid.Empty)
+            .ToList();
+
+        return ResourceConflictDetector.Detect(calendar, windows);
     }
 
     public async Task<string?> ValidateNewDependencyAsync(

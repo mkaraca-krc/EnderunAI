@@ -57,6 +57,13 @@ public sealed record UpdateProjectDeadlineRequest(
 
 public sealed record ScheduleHolidayRequest(DateOnly Date, string? Name);
 
+public sealed record AssignScheduleResourceRequest(
+    int Kind,
+    Guid? PersonnelId,
+    Guid? SubcontractorContractId,
+    string? Role,
+    string? Notes);
+
 public sealed record ReplaceScheduleHolidaysRequest(
     IReadOnlyCollection<ScheduleHolidayRequest> Holidays);
 
@@ -804,6 +811,273 @@ public sealed class ProjectSchedulesController(
         {
             count = incoming.Count,
             message = $"{incoming.Count} tatil günü kaydedildi."
+        });
+    }
+
+    // ---------------- Kaynaklar ----------------
+
+    /// <summary>
+    /// Aktiviteye personel ya da taşeron atar.
+    ///
+    /// Ayrı bir "ekip" kavramı AÇILMADI: taşeron zaten taşeron
+    /// sözleşmesi, personel zaten personeldir. Üçüncü bir kavram aynı
+    /// kişiyi iki yerde tutmayı gerektirirdi.
+    /// </summary>
+    [HttpPost("api/is-programi/aktiviteler/{activityId:guid}/kaynaklar")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> AssignResource(
+        Guid activityId,
+        AssignScheduleResourceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var activity = await db.ScheduleActivities
+            .AsNoTracking()
+            .Where(x => x.Id == activityId)
+            .Select(x => new
+            {
+                x.Id,
+                x.ProjectScheduleId,
+                ProjectId = x.ProjectSchedule.ProjectId,
+                CompanyId = x.ProjectSchedule.Project.CompanyId
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (activity is null)
+            return NotFound(new { message = "Aktivite bulunamadı." });
+
+        if (!Enum.IsDefined(typeof(ScheduleResourceKind), request.Kind))
+            return BadRequest(new { message = "Geçersiz kaynak türü." });
+
+        var kind = (ScheduleResourceKind)request.Kind;
+
+        if (kind == ScheduleResourceKind.Personnel)
+        {
+            if (request.PersonnelId is not Guid personnelId)
+                return BadRequest(new { message = "Personel seçilmelidir." });
+
+            var belongs = await db.Personnel.AnyAsync(
+                x => x.Id == personnelId && x.CompanyId == activity.CompanyId,
+                cancellationToken);
+
+            if (!belongs)
+            {
+                return BadRequest(new
+                {
+                    message = "Seçilen personel projenin şirketine ait değil."
+                });
+            }
+        }
+        else
+        {
+            if (request.SubcontractorContractId is not Guid contractId)
+            {
+                return BadRequest(new
+                {
+                    message = "Taşeron sözleşmesi seçilmelidir."
+                });
+            }
+
+            var belongs = await db.SubcontractorContracts.AnyAsync(
+                x => x.Id == contractId && x.ProjectId == activity.ProjectId,
+                cancellationToken);
+
+            if (!belongs)
+            {
+                return BadRequest(new
+                {
+                    message = "Seçilen taşeron sözleşmesi bu projeye ait değil."
+                });
+            }
+        }
+
+        var personnelKey = kind == ScheduleResourceKind.Personnel
+            ? request.PersonnelId
+            : null;
+
+        var contractKey = kind == ScheduleResourceKind.Subcontractor
+            ? request.SubcontractorContractId
+            : null;
+
+        var duplicate = await db.ScheduleResourceAssignments.AnyAsync(
+            x => x.ScheduleActivityId == activityId &&
+                 x.Kind == kind &&
+                 x.PersonnelId == personnelKey &&
+                 x.SubcontractorContractId == contractKey,
+            cancellationToken);
+
+        if (duplicate)
+        {
+            return BadRequest(new
+            {
+                message = "Bu kaynak zaten bu aktiviteye atanmış."
+            });
+        }
+
+        var assignment = new ScheduleResourceAssignment
+        {
+            ScheduleActivityId = activityId,
+            Kind = kind,
+            PersonnelId = personnelKey,
+            SubcontractorContractId = contractKey,
+            Role = request.Role?.Trim(),
+            Notes = request.Notes?.Trim()
+        };
+
+        db.ScheduleResourceAssignments.Add(assignment);
+        await db.SaveChangesAsync(cancellationToken);
+
+        // Atamadan hemen sonra çakışma söylenmeli: kullanıcı ekranı
+        // kapattıktan sonra fark ederse geç kalır.
+        var conflicts = await schedules.GetConflictsAsync(
+            activity.ProjectScheduleId, cancellationToken);
+
+        var related = conflicts
+            .Where(x => x.FirstActivityId == activityId ||
+                        x.SecondActivityId == activityId)
+            .ToList();
+
+        return Ok(new
+        {
+            id = assignment.Id,
+            message = related.Count == 0
+                ? "Kaynak atandı."
+                : $"Kaynak atandı; {related.Count} çakışma tespit edildi.",
+            conflicts = related
+        });
+    }
+
+    [HttpDelete("api/is-programi/kaynaklar/{assignmentId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleManage)]
+    public async Task<IActionResult> RemoveResource(
+        Guid assignmentId, CancellationToken cancellationToken)
+    {
+        var assignment = await db.ScheduleResourceAssignments
+            .SingleOrDefaultAsync(x => x.Id == assignmentId, cancellationToken);
+
+        if (assignment is null)
+            return NotFound(new { message = "Kaynak ataması bulunamadı." });
+
+        db.ScheduleResourceAssignments.Remove(assignment);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { message = "Kaynak ataması kaldırıldı." });
+    }
+
+    /// <summary>
+    /// Programdaki bütün kaynak çakışmaları.
+    ///
+    /// Çakışma HATA DEĞİL, uyarıdır: bir ustabaşı gerçekten iki işi
+    /// birden yürütebilir. Engellenmesi değil görünür olması gerekiyor —
+    /// özellikle iki aktivite de kritik yoldaysa.
+    /// </summary>
+    [HttpGet("api/is-programi/{id:guid}/kaynak-cakismalari")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleView)]
+    public async Task<IActionResult> ResourceConflicts(
+        Guid id, CancellationToken cancellationToken)
+    {
+        var exists = await db.ProjectSchedules.AnyAsync(
+            x => x.Id == id, cancellationToken);
+
+        if (!exists)
+            return NotFound(new { message = "İş programı bulunamadı." });
+
+        var conflicts = await schedules.GetConflictsAsync(id, cancellationToken);
+
+        return Ok(new
+        {
+            criticalCount = conflicts.Count(x => x.BothCritical),
+            items = conflicts
+        });
+    }
+
+    /// <summary>
+    /// Aktiviteye atanabilecek kaynak önerileri.
+    ///
+    /// Taşeron tarafı mevcut sözleşme–kısım bağını okur: bir kısım
+    /// zaten bir taşerondaysa öneri listesinin başında o çıkar. "Hangi
+    /// kısım hangi taşeronda" bilgisi sistemde zaten vardı; iş programı
+    /// onu tekrar sormuyor.
+    /// </summary>
+    [HttpGet("api/is-programi/aktiviteler/{activityId:guid}/kaynak-onerileri")]
+    [RequirePermission(PermissionCatalog.Keys.ScheduleView)]
+    public async Task<IActionResult> ResourceSuggestions(
+        Guid activityId, CancellationToken cancellationToken)
+    {
+        var activity = await db.ScheduleActivities
+            .AsNoTracking()
+            .Where(x => x.Id == activityId)
+            .Select(x => new
+            {
+                x.Id,
+                x.ProjectHakedisSectionId,
+                ParentSectionId = x.ParentActivity == null
+                    ? null
+                    : x.ParentActivity.ProjectHakedisSectionId,
+                ProjectId = x.ProjectSchedule.ProjectId,
+                CompanyId = x.ProjectSchedule.Project.CompanyId
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (activity is null)
+            return NotFound(new { message = "Aktivite bulunamadı." });
+
+        // Alt aktivitenin kendi kısmı olmaz; ana çubuğunun kısmı geçerli.
+        var sectionId = activity.ProjectHakedisSectionId ?? activity.ParentSectionId;
+
+        var contracts = await db.SubcontractorContracts
+            .AsNoTracking()
+            .Where(x => x.ProjectId == activity.ProjectId &&
+                        x.Status != SubcontractorContractStatus.Cancelled)
+            .Select(x => new
+            {
+                x.Id,
+                x.ContractNumber,
+                x.WorkDescription,
+                Name = x.CurrentAccount.Title,
+                CoversSection = sectionId != null &&
+                    x.Sections.Any(s => s.ProjectHakedisSectionId == sectionId)
+            })
+            .ToListAsync(cancellationToken);
+
+        // Projeye/şantiyelerine atanmış personel önce gelir: sahada
+        // olmayan birini önermek kullanıcıya iş çıkarır.
+        var assignedPersonnel = await db.ProjectSiteAssignments
+            .AsNoTracking()
+            .Where(x => x.ProjectSite.ProjectId == activity.ProjectId &&
+                        x.EndDate == null)
+            .Select(x => x.PersonnelId)
+            .ToListAsync(cancellationToken);
+
+        var personnel = await db.Personnel
+            .AsNoTracking()
+            .Where(x => x.CompanyId == activity.CompanyId &&
+                        x.Status == PersonnelStatus.Active)
+            .Select(x => new
+            {
+                x.Id,
+                x.EmployeeNumber,
+                Name = x.FirstName + " " + x.LastName
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new
+        {
+            sectionId,
+            subcontractors = contracts
+                .OrderByDescending(x => x.CoversSection)
+                .ThenBy(x => x.Name, StringComparer.CurrentCulture)
+                .ToList(),
+            personnel = personnel
+                .Select(x => new
+                {
+                    x.Id,
+                    x.EmployeeNumber,
+                    x.Name,
+                    OnThisProject = assignedPersonnel.Contains(x.Id)
+                })
+                .OrderByDescending(x => x.OnThisProject)
+                .ThenBy(x => x.Name, StringComparer.CurrentCulture)
+                .ToList()
         });
     }
 
