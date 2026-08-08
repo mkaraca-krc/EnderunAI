@@ -295,6 +295,57 @@ public sealed class HrApprovalService(
             .Select(ToLeaveResponse).ToList();
     }
 
+    /// <summary>
+    /// Yıllık izin talebi bakiyeyi aşıyorsa açıklama üretir.
+    ///
+    /// Yalnızca YILLIK izin bakiyeye tabi: rapor, mazeret ve ücretsiz
+    /// izin ayrı kalemler ve hak edişten düşmez. Kaydı engellemez.
+    /// </summary>
+    private async Task<string?> DescribeLeaveOverdraftAsync(
+        HrLeaveRequest entity, CancellationToken cancellationToken)
+    {
+        if (entity.LeaveType != HrLeaveType.Annual)
+            return null;
+
+        var personnel = await appDb.Personnel.AsNoTracking()
+            .Where(x => x.Id == entity.PersonnelId)
+            .Select(x => new
+            {
+                x.EmployeeNumber,
+                FullName = x.FirstName + " " + x.LastName,
+                x.EmploymentStartDate
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (personnel is null)
+            return null;
+
+        // Bu talebin kendisi de sayıma girer: aynı günü iki kez vaat
+        // etmemek için bekleyenler dahil hesaplanıyor.
+        var days = await hrDb.LeaveRequests.AsNoTracking()
+            .Where(x => x.PersonnelId == entity.PersonnelId &&
+                        x.Id != entity.Id &&
+                        x.LeaveType == HrLeaveType.Annual &&
+                        (x.Status == HrApprovalStatus.Approved ||
+                         x.Status == HrApprovalStatus.Pending))
+            .Select(x => new { x.Status, x.TotalDays })
+            .ToListAsync(cancellationToken);
+
+        var balance = LeaveBalanceCalculator.Calculate(
+            new LeaveBalanceInput(
+                entity.PersonnelId,
+                personnel.EmployeeNumber,
+                personnel.FullName,
+                personnel.EmploymentStartDate,
+                days.Where(x => x.Status == HrApprovalStatus.Approved)
+                    .Sum(x => x.TotalDays),
+                days.Where(x => x.Status == HrApprovalStatus.Pending)
+                    .Sum(x => x.TotalDays)),
+            DateOnly.FromDateTime(DateTime.UtcNow));
+
+        return LeaveBalanceCalculator.DescribeOverdraft(balance, entity.TotalDays);
+    }
+
     public async Task<HrLeaveResponse> CreateLeaveAsync(
         CreateHrLeaveRequest request, Guid? userId, CancellationToken cancellationToken)
     {
@@ -318,7 +369,11 @@ public sealed class HrApprovalService(
         };
         hrDb.LeaveRequests.Add(entity);
         await hrDb.SaveChangesAsync(cancellationToken);
-        return ToLeaveResponse(entity);
+
+        return ToLeaveResponse(entity) with
+        {
+            BalanceWarning = await DescribeLeaveOverdraftAsync(entity, cancellationToken)
+        };
     }
 
     public async Task<HrLeaveResponse> UpdateLeaveAsync(

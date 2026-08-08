@@ -22,12 +22,16 @@ public sealed record UpdateHrLeaveRequest(
     int Status,
     string? ApprovalNote);
 
+/// <param name="BalanceWarning">Talep yıllık izin bakiyesini aşıyorsa
+/// açıklama; aşmıyorsa null. Talep ENGELLENMEZ — avans izin gerçek bir
+/// uygulama ve engellemek onay merciini sistemin dışına iterdi.</param>
 public sealed record HrLeaveResponse(
     Guid Id, Guid CompanyId, Guid PersonnelId, Guid? ProjectId,
     int LeaveType, string LeaveTypeName, DateTime StartDate, DateTime EndDate,
     decimal TotalDays, string Reason, string? DocumentPath, int Status,
     string StatusName, Guid? ApprovedByUserId, DateTime? ApprovedAtUtc,
-    string? ApprovalNote, DateTime CreatedAtUtc);
+    string? ApprovalNote, DateTime CreatedAtUtc,
+    string? BalanceWarning = null);
 
 public sealed record CreateHrOvertimeRequest(
     Guid CompanyId,
