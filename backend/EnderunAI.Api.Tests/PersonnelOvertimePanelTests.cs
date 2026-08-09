@@ -19,20 +19,33 @@ namespace EnderunAI.Api.Tests;
 ///
 /// Yetki ayrımı H2/Block 1 çizgisinde: saat, döküm ve muvafakat
 /// personnel.view ile açık (şantiye şefi ve formen kendi ekibinin
-/// mesaisini görmeden çalışamaz), TL TUTAR yalnızca payroll.view ile.
-/// Sahaya mesai tutarı sızmamalı.
+/// mesaisini görmeden çalışamaz). TUTAR ise ELDEN ödemedir ve elden
+/// izolasyonuna tabidir: yalnızca extra_payment.view olan kullanıcı
+/// görür. payroll.view tek başına yetmez.
 /// </summary>
 [Collection("Integration")]
 public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
 {
-    private const int Year = 2026;
-    private const decimal HourlyRate = 200m;
+    // "Bu ay" bloğu bugüne bağlı; yıl da bugünden alınıyor ki test
+    // yıl dönümünde kırılmasın.
+    private static readonly int Year = DateTime.UtcNow.Year;
+
+    private static readonly DateTime CurrentMonthDay = new(
+        Year, DateTime.UtcNow.Month, 5, 0, 0, 0, DateTimeKind.Utc);
+
+    // Taban ele geçen = resmî net 45.000 + manuel elden 9.000 = 54.000
+    // Saatlik = 54.000 / (30 × 7,5) = 240
+    private const decimal OfficialNet = 45_000m;
+    private const decimal ManualExtra = 9_000m;
+    private const decimal ExpectedHourly = 240m;
 
     private sealed record Context(Guid CompanyId, Guid PersonnelId);
 
     /// <summary>
-    /// Saatlik ücreti 200 TL olan bir personel; 10 saat fazla çalışma
-    /// (1,5× → 3.000 TL) ve 8 saat genel tatil (2× → 3.200 TL).
+    /// Resmî neti 45.000, manuel eldeni 9.000 olan personel:
+    /// taban 54.000 → saatlik 240 TL.
+    /// 10 saat fazla çalışma (1,5× → 3.600) ve 8 saat genel tatil
+    /// (2× → 3.840).
     /// </summary>
     private async Task<Context> CreateContextAsync(
         string suffix, decimal? annualLimit = null, int? consentYear = null)
@@ -58,6 +71,14 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
             AnnualOvertimeHourLimit = annualLimit
         });
 
+        db.PersonnelExtraPayments.Add(new PersonnelExtraPayment
+        {
+            CompanyId = project.CompanyId,
+            PersonnelId = personnel.Id,
+            MonthlyAmount = ManualExtra,
+            EffectiveStartDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+
         await db.SaveChangesAsync();
 
         hrDb.SalaryDefinitions.Add(new HrSalaryDefinition
@@ -65,8 +86,9 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
             CompanyId = project.CompanyId,
             PersonnelId = personnel.Id,
             EffectiveStartDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            SalaryBasis = SalaryBasis.Net,
+            TargetNetSalary = OfficialNet,
             GrossSalary = 60_000m,
-            HourlyRate = HourlyRate,
             OvertimeMultiplier = 1.5m,
             SundayMultiplier = 2m,
             PublicHolidayMultiplier = 2m,
@@ -95,6 +117,18 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
                 IsPublicHolidayWork = true,
                 Status = HrApprovalStatus.Approved,
                 Reason = "Bayram vardiyası"
+            },
+            // Bu ayın mesaisi: ele geçen hesabına bu satır girer.
+            new HrOvertimeRequest
+            {
+                CompanyId = project.CompanyId,
+                PersonnelId = personnel.Id,
+                WorkDate = CurrentMonthDay,
+                RequestedHours = 5m,
+                ApprovedHours = 5m,
+                Status = HrApprovalStatus.Approved,
+                Reason = "Bu ay mesai",
+                AttendanceRecordId = Guid.NewGuid()
             });
 
         await hrDb.SaveChangesAsync();
@@ -189,7 +223,7 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
         var payload = JsonDocument.Parse(
             await response.Content.ReadAsStringAsync()).RootElement;
 
-        Assert.Equal(10m, payload.GetProperty("overtimeHours").GetDecimal());
+        Assert.Equal(15m, payload.GetProperty("overtimeHours").GetDecimal());
         Assert.Equal(8m, payload.GetProperty("publicHolidayHours").GetDecimal());
         Assert.Equal(0m, payload.GetProperty("sundayHours").GetDecimal());
         Assert.Equal("ok", payload.GetProperty("limitStatus").GetString());
@@ -198,8 +232,8 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
 
     /// <summary>Sınır aşımı ve yaklaşma durumları.</summary>
     [Theory]
-    [InlineData(5, "exceeded")]
-    [InlineData(11, "near")]
+    [InlineData(10, "exceeded")]
+    [InlineData(16, "near")]
     [InlineData(100, "ok")]
     public async Task LimitStatus_ReflectsTheAnnualCap(int limit, string expected)
     {
@@ -255,7 +289,7 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
 
         var lines = payload.GetProperty("lines").EnumerateArray().ToList();
 
-        Assert.Equal(2, lines.Count);
+        Assert.Equal(3, lines.Count);
 
         var holiday = lines.Single(x => x.GetProperty("kind").GetInt32() == 2);
         Assert.Equal("Genel tatil çalışması",
@@ -263,7 +297,9 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
         Assert.Equal(2m, holiday.GetProperty("multiplier").GetDecimal());
         Assert.False(holiday.GetProperty("landedOnAttendance").GetBoolean());
 
-        var overtime = lines.Single(x => x.GetProperty("kind").GetInt32() == 0);
+        var overtime = lines.Single(
+            x => x.GetProperty("kind").GetInt32() == 0 &&
+                 x.GetProperty("hours").GetDecimal() == 10m);
         Assert.Equal(1.5m, overtime.GetProperty("multiplier").GetDecimal());
         Assert.True(overtime.GetProperty("landedOnAttendance").GetBoolean());
         Assert.Equal("2026-03",
@@ -272,12 +308,14 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
         Assert.Equal(1, payload.GetProperty("notLandedCount").GetInt32());
     }
 
-    /// <summary>Muvafakat durumu yıla göre değerlendiriliyor.</summary>
+    /// <summary>
+    /// Muvafakat yalnızca AYNI yıl için geçerli: geçen yılın onayı bu
+    /// yılın mesaisini karşılamaz.
+    /// </summary>
     [Theory]
-    [InlineData(null, false)]
-    [InlineData(2025, false)]
-    [InlineData(Year, true)]
-    public async Task Consent_IsValidOnlyForTheSameYear(int? consentYear, bool valid)
+    [InlineData(null)]
+    [InlineData(2000)]
+    public async Task Consent_IsInvalidWithoutMatchingYear(int? consentYear)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var context = await CreateContextAsync(suffix, consentYear: consentYear);
@@ -287,18 +325,36 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
         var payload = JsonDocument.Parse(await (await client.GetAsync(Url(context)))
             .Content.ReadAsStringAsync()).RootElement;
 
-        Assert.Equal(
-            valid, payload.GetProperty("consent").GetProperty("isValid").GetBoolean());
+        Assert.False(
+            payload.GetProperty("consent").GetProperty("isValid").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Consent_IsValidForTheSameYear()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix, consentYear: Year);
+
+        var client = await ClientWithAsync(PermissionCatalog.Keys.PersonnelView);
+
+        var payload = JsonDocument.Parse(await (await client.GetAsync(Url(context)))
+            .Content.ReadAsStringAsync()).RootElement;
+
+        Assert.True(
+            payload.GetProperty("consent").GetProperty("isValid").GetBoolean());
     }
 
     // ---------------- Tutar sızıntısı ----------------
 
     /// <summary>
-    /// NEGATİF TEST: personnel.view olan saha kullanıcısı mesai
-    /// TUTARINI göremiyor. Yanıtın HAM METNİNDE tutar aranıyor —
-    /// alan adı değişse bile sızıntı yakalanır.
+    /// NEGATİF TEST: mesai tutarı ELDEN ödemedir ve elden
+    /// izolasyonuna tabidir. personnel.view olan saha kullanıcısı
+    /// saatleri görüyor ama hiçbir tutarı görmüyor. Yanıtın HAM
+    /// METNİNDE tutar aranıyor — alan adı değişse bile sızıntı
+    /// yakalanır.
     ///
-    /// 10 saat × 200 × 1,5 = 3.000 · 8 saat × 200 × 2 = 3.200
+    /// Taban 54.000 → saatlik 240. 10×240×1,5 = 3.600 ·
+    /// 8×240×2 = 3.840 · 5×240×1,5 = 1.800.
     /// </summary>
     [Fact]
     public async Task PersonnelViewOnly_SeesHoursButNoAmount()
@@ -312,12 +368,14 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
             .ReadAsStringAsync();
 
         // Saatler görünüyor: panelin işi bu.
-        Assert.Contains("\"overtimeHours\":10", raw);
+        Assert.Contains("\"overtimeHours\":15", raw);
 
-        // Tutar hiç gelmiyor.
-        Assert.DoesNotContain("3000", raw);
-        Assert.DoesNotContain("3200", raw);
-        Assert.DoesNotContain("6200", raw);
+        // Hiçbir tutar gelmiyor — resmî net ve elden dahil.
+        foreach (var amount in new[]
+                 { "3600", "3840", "1800", "9000", "45000", "54000", "240" })
+        {
+            Assert.DoesNotContain(amount, raw);
+        }
 
         var payload = JsonDocument.Parse(raw).RootElement;
 
@@ -325,20 +383,120 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
         Assert.Equal(
             JsonValueKind.Null, payload.GetProperty("totalAmount").ValueKind);
 
+        var takeHome = payload.GetProperty("takeHome");
+
+        Assert.Equal(JsonValueKind.Null, takeHome.GetProperty("officialNet").ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null, takeHome.GetProperty("totalTakeHome").ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null, takeHome.GetProperty("hourlyRate").ValueKind);
+
         foreach (var line in payload.GetProperty("lines").EnumerateArray())
             Assert.Equal(JsonValueKind.Null, line.GetProperty("amount").ValueKind);
     }
 
     /// <summary>
-    /// OLUMLU KONTROL: payroll.view olan kullanıcı tutarı görüyor.
-    /// Maskeleme her şeyi boşaltmıyor ve tutar bordroyla aynı
-    /// kaynaktan (saatlik ücret × çarpan) hesaplanıyor.
+    /// Mesai saat ücreti RESMÎ NET + MANUEL ELDEN üzerinden yürüyor,
+    /// yalnız resmî tutar değil.
+    ///
+    /// Taban = 45.000 + 9.000 = 54.000 → saatlik = 54.000 / (30 × 7,5)
+    /// = 240. Salt resmî netten yürüseydi saatlik 200 çıkardı.
     /// </summary>
     [Fact]
-    public async Task PayrollViewer_SeesTheAmounts()
+    public async Task HourlyRate_IsBasedOnNetPlusCash()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var context = await CreateContextAsync(suffix, annualLimit: 270m);
+        var context = await CreateContextAsync(suffix);
+
+        var client = await ClientWithAsync(
+            PermissionCatalog.Keys.PersonnelView,
+            PermissionCatalog.Keys.ExtraPaymentView);
+
+        var payload = JsonDocument.Parse(await (await client.GetAsync(Url(context)))
+            .Content.ReadAsStringAsync()).RootElement;
+
+        var takeHome = payload.GetProperty("takeHome");
+
+        Assert.Equal(OfficialNet, takeHome.GetProperty("officialNet").GetDecimal());
+        Assert.Equal(
+            ManualExtra, takeHome.GetProperty("manualExtraMonthly").GetDecimal());
+        Assert.Equal(ExpectedHourly, takeHome.GetProperty("hourlyRate").GetDecimal());
+
+        // 10 × 240 × 1,5 = 3.600
+        var lines = payload.GetProperty("lines").EnumerateArray().ToList();
+
+        Assert.Equal(3_600m, lines
+            .Single(x => x.GetProperty("kind").GetInt32() == 0 &&
+                         x.GetProperty("hours").GetDecimal() == 10m)
+            .GetProperty("amount").GetDecimal());
+
+        // 8 × 240 × 2 = 3.840
+        Assert.Equal(3_840m, lines
+            .Single(x => x.GetProperty("kind").GetInt32() == 2)
+            .GetProperty("amount").GetDecimal());
+    }
+
+    /// <summary>
+    /// ÇİFT SAYIM TESTİ: mesai toplam eldene BİR KEZ giriyor.
+    ///
+    /// toplam elden = manuel elden + bu ayın mesaisi
+    /// ele geçen = resmî net + toplam elden
+    ///
+    /// Ayrıca mesai tabana GERİ BESLENMİYOR: saatlik ücret hâlâ
+    /// 54.000 tabanından türüyor, mesai eklenmiş 55.800'den değil.
+    /// </summary>
+    [Fact]
+    public async Task OvertimeEntersCashExactlyOnce()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        var client = await ClientWithAsync(
+            PermissionCatalog.Keys.PersonnelView,
+            PermissionCatalog.Keys.ExtraPaymentView);
+
+        var payload = JsonDocument.Parse(await (await client.GetAsync(Url(context)))
+            .Content.ReadAsStringAsync()).RootElement;
+
+        // Bu ayın mesaisi: 5 saat × 240 × 1,5 = 1.800
+        var currentMonth = payload.GetProperty("currentMonth");
+
+        Assert.Equal(5m, currentMonth.GetProperty("hours").GetDecimal());
+        Assert.Equal(1_800m, currentMonth.GetProperty("amount").GetDecimal());
+
+        var takeHome = payload.GetProperty("takeHome");
+
+        var manual = takeHome.GetProperty("manualExtraMonthly").GetDecimal();
+        var overtime = takeHome.GetProperty("overtimeExtra").GetDecimal();
+        var totalExtra = takeHome.GetProperty("totalExtra").GetDecimal();
+        var totalTakeHome = takeHome.GetProperty("totalTakeHome").GetDecimal();
+
+        Assert.Equal(9_000m, manual);
+        Assert.Equal(1_800m, overtime);
+
+        // Toplam elden manuel + mesai; mesai iki kez sayılmıyor.
+        Assert.Equal(manual + overtime, totalExtra);
+        Assert.Equal(10_800m, totalExtra);
+
+        // Ele geçen = resmî net + toplam elden.
+        Assert.Equal(OfficialNet + totalExtra, totalTakeHome);
+        Assert.Equal(55_800m, totalTakeHome);
+
+        // Mesai tabana geri beslenmiyor: saatlik hâlâ 240.
+        Assert.Equal(ExpectedHourly, takeHome.GetProperty("hourlyRate").GetDecimal());
+        Assert.True(takeHome.GetProperty("baseExcludesOvertime").GetBoolean());
+    }
+
+    /// <summary>
+    /// ELDEN İZOLASYONU: payroll.view tek başına yetmiyor. Mesai
+    /// tutarı elden ödemedir; bordroyu yöneten ama elden ödeme
+    /// yetkisi olmayan kullanıcı da göremez.
+    /// </summary>
+    [Fact]
+    public async Task PayrollViewWithoutExtraPayment_StillSeesNoAmount()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
 
         var client = await ClientWithAsync(
             PermissionCatalog.Keys.PersonnelView, PermissionCatalog.Keys.PayrollView);
@@ -346,20 +504,12 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
         var raw = await (await client.GetAsync(Url(context))).Content
             .ReadAsStringAsync();
 
+        Assert.DoesNotContain("3600", raw);
+        Assert.DoesNotContain("54000", raw);
+
         var payload = JsonDocument.Parse(raw).RootElement;
 
-        Assert.False(payload.GetProperty("amountsHidden").GetBoolean());
-        Assert.Equal(6_200m, payload.GetProperty("totalAmount").GetDecimal());
-
-        var lines = payload.GetProperty("lines").EnumerateArray().ToList();
-
-        Assert.Equal(3_000m,
-            lines.Single(x => x.GetProperty("kind").GetInt32() == 0)
-                .GetProperty("amount").GetDecimal());
-
-        Assert.Equal(3_200m,
-            lines.Single(x => x.GetProperty("kind").GetInt32() == 2)
-                .GetProperty("amount").GetDecimal());
+        Assert.True(payload.GetProperty("amountsHidden").GetBoolean());
     }
 
     /// <summary>Yetkisiz kullanıcı panele hiç giremiyor.</summary>

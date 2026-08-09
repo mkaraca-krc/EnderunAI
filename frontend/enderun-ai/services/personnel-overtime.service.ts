@@ -21,7 +21,10 @@ export type PersonnelOvertimeLine = {
   reason?: string | null;
   approvedAtUtc?: string | null;
 
-  /** Yalnızca payroll.view ile dolu; yoksa null gelir. */
+  /**
+   * Mesai tutarı — ELDEN ödemedir. Yalnızca extra_payment.view olan
+   * kullanıcıya döner; yoksa null gelir (gizlenmez, hiç gelmez).
+   */
   amount?: number | null;
 };
 
@@ -50,6 +53,34 @@ export type PersonnelOvertimeSummary = {
 
   amountsHidden: boolean;
   totalAmount?: number | null;
+
+  /** Bu ayın mesaisi — ele geçen hesabına bu ay girer. */
+  currentMonth: {
+    year: number;
+    month: number;
+    hours: number;
+    overtimeHours: number;
+    sundayHours: number;
+    publicHolidayHours: number;
+    amount?: number | null;
+  };
+
+  /**
+   * Ele geçen kırılımı. Mesai toplam eldene BİR KEZ girer: manuel
+   * elden ve mesai ayrı ayrı da döner ki ekran ikisini toplayıp çift
+   * saymasın. Saatlik ücret resmî net + manuel eldenden türer; mesai
+   * tabana geri beslenmez.
+   */
+  takeHome: {
+    officialNet?: number | null;
+    manualExtraMonthly?: number | null;
+    overtimeExtra?: number | null;
+    totalExtra?: number | null;
+    totalTakeHome?: number | null;
+    hourlyRate?: number | null;
+    dailyWorkHours?: number | null;
+    baseExcludesOvertime: boolean;
+  };
 
   notLandedCount: number;
   lines: PersonnelOvertimeLine[];

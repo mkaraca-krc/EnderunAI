@@ -19,11 +19,21 @@ namespace EnderunAI.Api.Controllers;
 /// konusu değildir. Saatlik ücret de bordroyla aynı kaynaktan
 /// (ActualDailyWageService) okunur.
 ///
+/// ÜCRET TABANI: mesai saat ücreti RESMÎ NET + MANUEL ELDEN üzerinden
+/// yürür — yalnız resmî tutar değil. Sıra sabittir ve döngü yoktur:
+///   1) taban ele geçen = resmî net + manuel elden (MESAİ HARİÇ)
+///   2) saatlik = taban / (30 × günlük çalışma saati)
+///   3) mesai tutarı = Σ(saat × saatlik × katsayı), tamamı ELDEN
+///   4) toplam elden = manuel elden + mesai; ele geçen = resmî net +
+///      toplam elden — mesai eldene BİR KEZ girer
+///   5) mesai 1. adımdaki tabana GERİ BESLENMEZ (yüzdesel kalem ve
+///      brütleştirme kararlarındaki disiplinin aynısı)
+///
 /// GİZLİLİK: saat, döküm ve muvafakat personnel.view ile açıktır —
 /// şantiye şefi ve formen kendi ekibinin mesaisini görmeden
-/// çalışamaz. TL TUTAR ise yalnızca payroll.view ile döner; sahaya
-/// mesai tutarı sızmamalı. Tutar alanları gizlenmez, sorgudan hiç
-/// çıkmaz.
+/// çalışamaz. TUTAR ise ELDEN ödemedir ve elden izolasyonuna tabidir:
+/// yalnızca extra_payment.view olan kullanıcıya döner. Tutar
+/// gizlenmez, sorgudan hiç çıkmaz.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -31,12 +41,17 @@ namespace EnderunAI.Api.Controllers;
 public sealed class PersonnelOvertimeController(
     AppDbContext db,
     HrDbContext hrDb,
-    ActualDailyWageService dailyWage,
-    ICurrentUserService currentUser,
-    IUserAuthorizationService authorization) : ControllerBase
+    SalaryTakeHomeService takeHome,
+    IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
 {
     /// <summary>Sınıra yaklaşma eşiği — köprüdeki uyarıyla aynı.</summary>
     private const decimal NearLimitRatio = 0.9m;
+
+    /// <summary>Aylık tutarın güne bölünmesi — bordroyla aynı bölen.</summary>
+    private const decimal MonthlyToDailyDivisor = 30m;
+
+    /// <summary>Ayar yoksa yasal haftalık 45 saatin 6 güne bölümü.</summary>
+    private const decimal DefaultDailyWorkHours = 7.5m;
 
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
@@ -113,36 +128,65 @@ public sealed class PersonnelOvertimeController(
 
         var (limitStatus, limitStatusName) = ResolveLimitStatus(limit, overtimeHours);
 
-        // --- Tutar: yalnız payroll.view ---
-        var canViewAmounts = await HasPermissionAsync(
-            PermissionCatalog.Keys.PayrollView, cancellationToken);
+        // --- Tutar: ELDEN, elden izolasyonuna tabi ---
+        var canViewAmounts = await extraPaymentVisibility
+            .CanViewExtraPaymentAsync(cancellationToken);
 
         decimal? hourlyRate = null;
+        decimal? officialNet = null;
+        decimal? manualExtra = null;
+        decimal? dailyWorkHours = null;
         var multipliers = (Overtime: 1.5m, Sunday: 2m, PublicHoliday: 2m);
 
-        if (canViewAmounts && approved.Count > 0)
+        if (canViewAmounts)
         {
-            var wage = await dailyWage.ResolveAsync(
-                personnelId, approved[0].WorkDate, cancellationToken);
-
-            hourlyRate = wage?.OfficialHourlyRate;
+            // Kartın esas alındığı an: yılın en son onaylı mesai günü.
+            // Elden ödeme tarih aralıklı olduğu için "bugün"e bakmak
+            // geçmiş yılın mesaisine bugünkü zammı yansıtırdı.
+            var asOf = approved.Count > 0
+                ? approved[0].WorkDate
+                : yearEnd;
 
             var card = await hrDb.SalaryDefinitions
                 .AsNoTracking()
-                .Where(x => x.PersonnelId == personnelId)
+                .Where(x => x.PersonnelId == personnelId &&
+                            x.EffectiveStartDate <= asOf &&
+                            (x.EffectiveEndDate == null || x.EffectiveEndDate >= asOf))
                 .OrderByDescending(x => x.EffectiveStartDate)
-                .Select(x => new
-                {
-                    x.OvertimeMultiplier,
-                    x.SundayMultiplier,
-                    x.PublicHolidayMultiplier
-                })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (card is not null)
             {
                 multipliers = (card.OvertimeMultiplier, card.SundayMultiplier,
                     card.PublicHolidayMultiplier);
+
+                officialNet = SalaryTakeHomeService.ResolveOfficialNet(
+                    card,
+                    await takeHome.TryLoadPayrollParametersAsync(
+                        personnel.CompanyId, asOf.Year, cancellationToken));
+
+                var extras = await takeHome.LoadEffectiveExtraPaymentsAsync(
+                    [personnelId], asOf, cancellationToken);
+
+                manualExtra = extras.GetValueOrDefault(personnelId);
+
+                dailyWorkHours = await db.CompanyPayrollSettings
+                    .AsNoTracking()
+                    .Where(x => x.CompanyId == personnel.CompanyId &&
+                                x.Year == asOf.Year)
+                    .Select(x => (decimal?)x.DailyWorkHours)
+                    .SingleOrDefaultAsync(cancellationToken) ?? DefaultDailyWorkHours;
+
+                // ADIM 1-2: taban ele geçen = resmî net + manuel elden
+                // (mesai HARİÇ), saatlik = taban / (30 × günlük saat).
+                // Bölen bordrodaki konvansiyonun aynısı.
+                var baseTakeHome = (officialNet ?? 0m) + manualExtra.Value;
+
+                if (baseTakeHome > 0m && dailyWorkHours > 0m)
+                {
+                    hourlyRate = decimal.Round(
+                        baseTakeHome / (MonthlyToDailyDivisor * dailyWorkHours.Value), 2);
+                }
             }
         }
 
@@ -153,6 +197,7 @@ public sealed class PersonnelOvertimeController(
             _ => multipliers.Overtime
         };
 
+        // ADIM 3: mesai tutarı = saat × saatlik × katsayı. Tamamı ELDEN.
         decimal? AmountOf(int kind, decimal hours) =>
             hourlyRate is decimal rate
                 ? decimal.Round(hours * rate * MultiplierOf(kind), 2)
@@ -182,6 +227,15 @@ public sealed class PersonnelOvertimeController(
             };
         }).ToList();
 
+        // "Bu ay": mesai tutarı aylık ele geçene girdiği için ay
+        // kırılımı gerekiyor.
+        var currentPeriod = DateTime.UtcNow;
+
+        var currentMonthLines = lines
+            .Where(x => x.WorkDate.Year == currentPeriod.Year &&
+                        x.WorkDate.Month == currentPeriod.Month)
+            .ToList();
+
         return Ok(new
         {
             personnelId = personnel.Id,
@@ -209,6 +263,48 @@ public sealed class PersonnelOvertimeController(
             totalAmount = canViewAmounts
                 ? lines.Sum(x => x.amount ?? 0m)
                 : (decimal?)null,
+
+            // Bu ayın mesaisi ayrı satır olarak: kartta "şu an ne
+            // birikti" sorusunun cevabı yıllık toplamda kayboluyordu.
+            currentMonth = new
+            {
+                year = currentPeriod.Year,
+                month = currentPeriod.Month,
+                hours = currentMonthLines.Sum(x => x.hours),
+                overtimeHours = currentMonthLines
+                    .Where(x => x.kind == 0).Sum(x => x.hours),
+                sundayHours = currentMonthLines
+                    .Where(x => x.kind == 1).Sum(x => x.hours),
+                publicHolidayHours = currentMonthLines
+                    .Where(x => x.kind == 2).Sum(x => x.hours),
+                amount = canViewAmounts
+                    ? currentMonthLines.Sum(x => x.amount ?? 0m)
+                    : (decimal?)null
+            },
+
+            // ADIM 4: mesai eldene BİR KEZ girer. Manuel elden ile
+            // mesai ayrı ayrı da dönüyor ki ekran ikisini toplayıp
+            // çift saymasın.
+            takeHome = new
+            {
+                officialNet,
+                manualExtraMonthly = manualExtra,
+                overtimeExtra = canViewAmounts
+                    ? currentMonthLines.Sum(x => x.amount ?? 0m)
+                    : (decimal?)null,
+                totalExtra = canViewAmounts
+                    ? (manualExtra ?? 0m) + currentMonthLines.Sum(x => x.amount ?? 0m)
+                    : (decimal?)null,
+                totalTakeHome = canViewAmounts
+                    ? (officialNet ?? 0m) + (manualExtra ?? 0m) +
+                      currentMonthLines.Sum(x => x.amount ?? 0m)
+                    : (decimal?)null,
+                hourlyRate,
+                dailyWorkHours,
+                // Mesai tabana geri beslenmez: saatlik ücret yalnızca
+                // resmî net + manuel eldenden türer.
+                baseExcludesOvertime = true
+            },
 
             notLandedCount = lines.Count(x => !x.landedOnAttendance),
             lines
@@ -241,25 +337,4 @@ public sealed class PersonnelOvertimeController(
         _ => "Fazla çalışma"
     };
 
-    /// <summary>
-    /// Birden çok RequirePermission VEYA anlamına geldiği için ikinci
-    /// koşul kod içinde denetleniyor.
-    /// </summary>
-    private async Task<bool> HasPermissionAsync(
-        string permissionKey, CancellationToken cancellationToken)
-    {
-        if (currentUser.UserId is not Guid userId)
-            return false;
-
-        var snapshot = await authorization.GetAsync(userId, cancellationToken);
-
-        if (snapshot is null || !snapshot.IsActive)
-            return false;
-
-        if (snapshot.RoleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase))
-            return true;
-
-        return snapshot.Permissions.Contains(
-            permissionKey, StringComparer.OrdinalIgnoreCase);
-    }
 }

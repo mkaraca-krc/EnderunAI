@@ -14,9 +14,9 @@ import {
  * durumu uçtan gelir; uç da fazla mesai köprüsündeki kuralın aynısını
  * kullanır. Ekran yalnızca gösterir.
  *
- * TL tutar yalnızca payroll.view olan kullanıcıya döner. Tutar
- * gizlenmez, yanıttan hiç gelmez — saha kullanıcısı mesai tutarını
- * görmemeli.
+ * Mesai tutarı ELDEN ödemedir: yalnızca extra_payment.view olan
+ * kullanıcıya döner, payroll.view tek başına yetmez. Tutar gizlenmez,
+ * yanıttan hiç gelmez — saha kullanıcısı saati görür, tutarı görmez.
  */
 export default function PersonnelOvertimePanel({
   personnelId,
@@ -124,6 +124,67 @@ export default function PersonnelOvertimePanel({
           {format(data.publicHolidayHours)} saat — tatil çalışması yasal sınır
           sayımına girmez.
         </div>
+      </div>
+
+      {/* --- Bu ay: saat ve tutar ayrı satır --- */}
+      <div style={{ ...panel, background: "#fff" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
+          Bu ay ({String(data.currentMonth.month).padStart(2, "0")}.
+          {data.currentMonth.year})
+        </div>
+
+        <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 13 }}>
+          <div style={splitRow}>
+            <span style={{ color: "#64748b" }}>Mesai saati</span>
+            <strong>{format(data.currentMonth.hours)} saat</strong>
+          </div>
+
+          {data.amountsHidden ? null : (
+            <div style={splitRow}>
+              <span style={{ color: "#64748b" }}>Mesai tutarı (elden)</span>
+              <strong>{money(data.currentMonth.amount)}</strong>
+            </div>
+          )}
+        </div>
+
+        {data.amountsHidden ? null : (
+          <div
+            style={{
+              marginTop: 10,
+              paddingTop: 10,
+              borderTop: "1px solid #e2e8f0",
+              display: "grid",
+              gap: 6,
+              fontSize: 13,
+            }}
+          >
+            <div style={splitRow}>
+              <span style={{ color: "#64748b" }}>Resmî net</span>
+              <span>{money(data.takeHome.officialNet)}</span>
+            </div>
+
+            <div style={splitRow}>
+              <span style={{ color: "#64748b" }}>Manuel elden</span>
+              <span>{money(data.takeHome.manualExtraMonthly)}</span>
+            </div>
+
+            <div style={splitRow}>
+              <span style={{ color: "#64748b" }}>Mesai (elden)</span>
+              <span>{money(data.takeHome.overtimeExtra)}</span>
+            </div>
+
+            <div style={{ ...splitRow, fontWeight: 700 }}>
+              <span>Toplam ele geçen</span>
+              <span>{money(data.takeHome.totalTakeHome)}</span>
+            </div>
+
+            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+              Mesai saat ücreti resmî net + manuel elden üzerinden
+              hesaplanır ({money(data.takeHome.hourlyRate)}/saat); mesai bu
+              tabana geri beslenmez ve toplam eldene bir kez girer.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* --- Muvafakat --- */}
@@ -265,6 +326,12 @@ const row = {
   border: "1px solid #e2e8f0",
   borderRadius: 11,
   background: "#f8fafc",
+} as const;
+
+const splitRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
 } as const;
 
 const select = {
