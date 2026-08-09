@@ -127,6 +127,43 @@ public sealed class PersonnelDocumentTests(DatabaseFixture fixture)
         Assert.Equal("sozlesme.pdf", item.GetProperty("originalName").GetString());
     }
 
+    /// <summary>
+    /// Doğrulama durumu LİSTEDE dönüyor: özlük ekranındaki "aslı
+    /// görüldü / görülmedi" rozetinin kaynağı bu. Yalnızca kayda
+    /// yazılıp listede dönmeseydi ekran her belgeyi doğrulanmamış
+    /// gösterirdi.
+    /// </summary>
+    [Fact]
+    public async Task VerificationState_IsVisibleInTheList()
+    {
+        var context = await CreateContextAsync();
+        var client = await ClientAsync();
+
+        await UploadAsync(client, context);
+
+        var before = (await ListAsync(client, context))
+            .GetProperty("items").EnumerateArray().Single();
+
+        Assert.False(before.GetProperty("isVerified").GetBoolean());
+        Assert.Equal(JsonValueKind.Null,
+            before.GetProperty("verifiedAtUtc").ValueKind);
+
+        var documentId = before.GetProperty("id").GetGuid();
+
+        var verify = await client.PostAsJsonAsync(
+            $"/api/hr/personel-belgeleri/{documentId}/dogrula",
+            new { isVerified = true, notes = (string?)null });
+
+        Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
+
+        var after = (await ListAsync(client, context))
+            .GetProperty("items").EnumerateArray().Single();
+
+        Assert.True(after.GetProperty("isVerified").GetBoolean());
+        Assert.NotEqual(JsonValueKind.Null,
+            after.GetProperty("verifiedAtUtc").ValueKind);
+    }
+
     /// <summary>Dosya depodan indirilebiliyor ve özgün adıyla dönüyor.</summary>
     [Fact]
     public async Task Document_CanBeDownloaded()

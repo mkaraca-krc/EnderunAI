@@ -1,5 +1,6 @@
 "use client";
 
+import PersonnelDocumentsPanel from "@/components/hr/personnel-documents-panel";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { ApiError } from "@/lib/api/api-client";
@@ -24,6 +25,7 @@ type TabKey =
   | "zimmet"
   | "egitim"
   | "belgeler"
+  | "ozluk"
   | "kariyer"
   | "performans"
   | "disiplin";
@@ -34,6 +36,7 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "zimmet", label: "Zimmet" },
   { key: "egitim", label: "Eğitim" },
   { key: "belgeler", label: "Sertifikalar" },
+  { key: "ozluk", label: "Özlük Belgeleri" },
   { key: "kariyer", label: "Kariyer" },
   { key: "performans", label: "Performans" },
   { key: "disiplin", label: "Disiplin" },
@@ -259,7 +262,11 @@ export default function Personnel360Page() {
                     ))}
                   </div>
                   <div style={{ padding: 18 }}>
-                    <TabContent tab={tab} data={data} />
+                    <TabContent
+                      tab={tab}
+                      data={data}
+                      personnelId={personnelId}
+                    />
                   </div>
                 </section>
               </div>
@@ -609,7 +616,15 @@ function MoneyTile({
 const fieldLabel = { display: "grid", gap: 6, fontSize: 12, color: "#475569" } as const;
 const smallButton = { height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, cursor: "pointer" } as const;
 
-function TabContent({ tab, data }: { tab: TabKey; data: Personnel360Response }) {
+function TabContent({
+  tab,
+  data,
+  personnelId,
+}: {
+  tab: TabKey;
+  data: Personnel360Response;
+  personnelId: string;
+}) {
   if (tab === "genel") {
     return (
       <div style={grid2}>
@@ -679,6 +694,12 @@ function TabContent({ tab, data }: { tab: TabKey; data: Personnel360Response }) 
       detail: `${x.issuingAuthority || "Kurum belirtilmemiş"} · ${x.statusName} · ${x.isVerified ? "Doğrulanmış" : "Doğrulanmamış"}`,
       date: x.expiryDate || x.issueDate,
     }))} empty="Sertifika kaydı bulunmuyor." />;
+  }
+
+  // Özlük belgeleri kendi verisini çeker: 360 yanıtında yok ve
+  // yükleme/doğrulama/silme kendi uçlarına gider.
+  if (tab === "ozluk") {
+    return <PersonnelDocumentsPanel personnelId={personnelId} />;
   }
 
   if (tab === "kariyer") {
