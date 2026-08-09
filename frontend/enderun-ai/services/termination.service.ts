@@ -78,6 +78,27 @@ export type TerminationListItem = {
   finalizedAtUtc: string | null;
 };
 
+/**
+ * Ayrılış değerlendirmesi — tekrar işe alım kodu ve gerekçesi.
+ *
+ * Yasal çıkış nedeninden AYRI katman. Kod boşsa "değerlendirilmedi":
+ * nötr, ne engel ne uyarı üretir.
+ *
+ * GİZLİLİK: yalnız İK/GM okuyup atayabilir; saha personeli göremez.
+ */
+export type RehireAssessment = {
+  id: string;
+  personnelId: string;
+  personnelFullName: string;
+  terminationDate: string;
+  reason: number;
+  rehireCode: number | null;
+  rehireCodeName: string;
+  rehireNote: string | null;
+  rehireMarkedAtUtc: string | null;
+  rehireMarkedByUserId: string | null;
+};
+
 export type ExtraPayment = {
   id: string;
   personnelId: string;
@@ -117,6 +138,24 @@ export const terminationService = {
 
   list() {
     return apiClient<TerminationListItem[]>("personnel-terminations");
+  },
+
+  getRehireAssessment(terminationId: string) {
+    return apiClient<RehireAssessment>(
+      `personnel-terminations/${terminationId}/rehire-degerlendirmesi`
+    );
+  },
+
+  /** Kırmızı ve sarıda gerekçe zorunludur. */
+  setRehireAssessment(
+    terminationId: string,
+    rehireCode: number | null,
+    rehireNote: string | null
+  ) {
+    return apiClient<{ message: string }>(
+      `personnel-terminations/${terminationId}/rehire-degerlendirmesi`,
+      { method: "POST", body: { rehireCode, rehireNote } }
+    );
   },
 
   create(payload: {

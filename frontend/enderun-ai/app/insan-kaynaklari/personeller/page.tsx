@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  rehireCheckService,
+  type RehireCheckResult,
+} from "@/services/rehire-check.service";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
@@ -213,6 +217,15 @@ export default function HrPersonnelPage() {
   const [siteShortcutLocation, setSiteShortcutLocation] = useState("");
   const [siteShortcutSaving, setSiteShortcutSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // İşe alım öncesi TC kontrolü: form dolmadan, kimlik alanından
+  // çıkınca çalışır. Kırmızı eşleşmede kayıt zaten uçta engellenir;
+  // buradaki kutu engeli GEREKÇESİYLE gösterir.
+  const [rehireCheck, setRehireCheck] =
+    useState<RehireCheckResult | null>(null);
+  const [checkingRehire, setCheckingRehire] = useState(false);
+  const [rehireOverrideReason, setRehireOverrideReason] = useState("");
+
   const [form, setForm] = useState<PersonnelForm>(emptyForm);
 
   // Ek ödeme bloğu. Resmî net RAKAMI maaş kartı ucundan geliyor
@@ -686,6 +699,29 @@ export default function HrPersonnelPage() {
     }
   }
 
+  /**
+   * Kimlik alanından çıkınca çalışır. Uç, geçersiz numarada 400
+   * döndüğü için sessizce yutulur — asıl doğrulama kaydetmede.
+   */
+  async function checkRehire(identity: string) {
+    const value = identity.trim();
+
+    if (value.length !== 11) {
+      setRehireCheck(null);
+      return;
+    }
+
+    try {
+      setCheckingRehire(true);
+
+      setRehireCheck(await rehireCheckService.check(value));
+    } catch {
+      setRehireCheck(null);
+    } finally {
+      setCheckingRehire(false);
+    }
+  }
+
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -699,6 +735,7 @@ export default function HrPersonnelPage() {
           firstName: form.firstName,
           lastName: form.lastName,
           identityNumber: form.identityNumber || null,
+          rehireOverrideReason: rehireOverrideReason.trim() || null,
           birthDate: form.birthDate || null,
           phone: form.phone || null,
           email: form.email || null,
@@ -727,6 +764,7 @@ export default function HrPersonnelPage() {
           firstName: form.firstName,
           lastName: form.lastName,
           identityNumber: form.identityNumber || null,
+          rehireOverrideReason: rehireOverrideReason.trim() || null,
           birthDate: form.birthDate || null,
           phone: form.phone || null,
           email: form.email || null,
@@ -1421,13 +1459,100 @@ export default function HrPersonnelPage() {
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     <Input label="Ad" value={form.firstName} onChange={(event) => updateForm("firstName", event.target.value)} required />
                     <Input label="Soyad" value={form.lastName} onChange={(event) => updateForm("lastName", event.target.value)} required />
-                    <Input label="TC Kimlik Numarası" value={form.identityNumber} onChange={(event) => updateForm("identityNumber", event.target.value)} maxLength={11} inputMode="numeric" />
+                    <Input label="TC Kimlik Numarası" value={form.identityNumber} onChange={(event) => updateForm("identityNumber", event.target.value)} onBlur={(event) => void checkRehire(event.target.value)} maxLength={11} inputMode="numeric" />
                     <Input label="Doğum Tarihi" type="date" value={form.birthDate} onChange={(event) => updateForm("birthDate", event.target.value)} />
                     <Input label="Telefon" value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} />
                     <Input label="E-posta" type="email" value={form.email} onChange={(event) => updateForm("email", event.target.value)} />
                     <Input label="Adres" value={form.address} onChange={(event) => updateForm("address", event.target.value)} className="md:col-span-2" />
                   </div>
                 </div>
+
+                {/* İşe alım öncesi kontrol: eski personel eşleşmesi.
+                    Engel körlemesine değil — kod, tarih ve GEREKÇE
+                    burada görünür. */}
+                {checkingRehire ? (
+                  <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    Geçmiş kayıt kontrol ediliyor...
+                  </div>
+                ) : null}
+
+                {rehireCheck && rehireCheck.matched &&
+                 rehireCheck.decision !== "clear" ? (
+                  <div
+                    className={`mb-6 rounded-xl border p-4 text-sm ${
+                      rehireCheck.decision === "blocked"
+                        ? "border-red-300 bg-red-50 text-red-900"
+                        : "border-amber-300 bg-amber-50 text-amber-900"
+                    }`}
+                  >
+                    <div className="font-bold">
+                      {rehireCheck.decision === "blocked"
+                        ? "İşe alım engellendi"
+                        : "Dikkat: şartlı değerlendirme"}
+                    </div>
+
+                    <div className="mt-2">{rehireCheck.message}</div>
+
+                    <dl className="mt-3 grid gap-1 text-xs">
+                      <div>
+                        <span className="font-semibold">Kişi: </span>
+                        {rehireCheck.personnelFullName}
+                      </div>
+
+                      {rehireCheck.terminationDate ? (
+                        <div>
+                          <span className="font-semibold">Ayrılış: </span>
+                          {new Date(
+                            rehireCheck.terminationDate
+                          ).toLocaleDateString("tr-TR")}
+                        </div>
+                      ) : null}
+
+                      <div>
+                        <span className="font-semibold">Değerlendirme: </span>
+                        {rehireCheck.rehireCodeName}
+                      </div>
+
+                      {rehireCheck.rehireNote ? (
+                        <div>
+                          <span className="font-semibold">Gerekçe: </span>
+                          {rehireCheck.rehireNote}
+                        </div>
+                      ) : null}
+
+                      {rehireCheck.rehireMarkedByName ? (
+                        <div>
+                          <span className="font-semibold">İşaretleyen: </span>
+                          {rehireCheck.rehireMarkedByName}
+                        </div>
+                      ) : null}
+                    </dl>
+
+                    {rehireCheck.decision === "blocked" ? (
+                      <label className="mt-4 block">
+                        <span className="text-xs font-semibold">
+                          Engeli geçme gerekçesi (yalnız Genel Müdür)
+                        </span>
+
+                        <textarea
+                          value={rehireOverrideReason}
+                          onChange={(event) =>
+                            setRehireOverrideReason(event.target.value)
+                          }
+                          rows={2}
+                          placeholder="Neden bu kişiyle yeniden çalışılıyor?"
+                          className="mt-1 w-full rounded-lg border border-red-300 p-2 text-sm"
+                        />
+
+                        <span className="mt-1 block text-xs opacity-80">
+                          Gerekçe girilmeden kayıt açılamaz. Her geçiş
+                          kim/ne zaman/hangi gerekçe olarak denetim izine
+                          yazılır.
+                        </span>
+                      </label>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <h3 className="font-semibold text-slate-900">İstihdam ve ücret</h3>

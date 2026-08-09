@@ -1,5 +1,6 @@
 "use client";
 
+import RehireAssessmentPanel from "@/components/hr/rehire-assessment-panel";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
@@ -46,6 +47,10 @@ export default function TerminationPage() {
   const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
   const [reasons, setReasons] = useState<TerminationReasonOption[]>([]);
   const [terminations, setTerminations] = useState<TerminationListItem[]>([]);
+
+  // Açık değerlendirme paneli — tabloda tek satır için açılır.
+  const [assessing, setAssessing] =
+    useState<{ id: string; name: string } | null>(null);
 
   const [personnelId, setPersonnelId] = useState("");
   const [reason, setReason] = useState(0);
@@ -322,15 +327,35 @@ export default function TerminationPage() {
                       )}
                     </td>
                     <td className="py-2 text-right">
-                      {row.status !== TerminationStatus.Finalized && (
+                      <div className="flex justify-end gap-2">
+                        {/* Değerlendirme geçmiş çıkışlara da eklenebilir:
+                            çıkış anında yapılamamış olabilir. */}
                         <button
                           type="button"
-                          onClick={() => void finalize(row.id)}
-                          className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800"
+                          onClick={() =>
+                            setAssessing(
+                              assessing?.id === row.id
+                                ? null
+                                : { id: row.id, name: row.personnelFullName }
+                            )
+                          }
+                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
                         >
-                          Kesinleştir
+                          {assessing?.id === row.id
+                            ? "Kapat"
+                            : "Ayrılış Değerlendirmesi"}
                         </button>
-                      )}
+
+                        {row.status !== TerminationStatus.Finalized && (
+                          <button
+                            type="button"
+                            onClick={() => void finalize(row.id)}
+                            className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800"
+                          >
+                            Kesinleştir
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -338,6 +363,16 @@ export default function TerminationPage() {
             </table>
           </div>
         )}
+
+        {assessing ? (
+          <div className="mt-4">
+            <RehireAssessmentPanel
+              key={assessing.id}
+              terminationId={assessing.id}
+              personnelFullName={assessing.name}
+            />
+          </div>
+        ) : null}
       </section>
     </ErpShell>
   );

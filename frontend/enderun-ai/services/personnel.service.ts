@@ -41,6 +41,11 @@ export type PersonnelListItem = {
   profession?: string | null;
   employmentStartDate?: string | null;
   /** Fazla mesai muvafakatinin geçerli olduğu yıl. Boşsa alınmamış. */
+  /**
+   * Kırmızı (işe alınamaz) engelini geçmek için gerekçe. Yalnız Genel
+   * Müdür ve Admin kullanabilir; boş bırakılırsa engel uygulanır.
+   */
+  rehireOverrideReason?: string | null;
   overtimeConsentYear?: number | null;
   overtimeConsentDate?: string | null;
   employmentEndDate?: string | null;
@@ -102,6 +107,11 @@ export type CreatePersonnelRequest = {
   sgkRegistrationNumber?: string | null;
   employmentStartDate?: string | null;
   /** Fazla mesai muvafakatinin geçerli olduğu yıl. Boşsa alınmamış. */
+  /**
+   * Kırmızı (işe alınamaz) engelini geçmek için gerekçe. Yalnız Genel
+   * Müdür ve Admin kullanabilir; boş bırakılırsa engel uygulanır.
+   */
+  rehireOverrideReason?: string | null;
   overtimeConsentYear?: number | null;
   overtimeConsentDate?: string | null;
   monthlySalary?: number | null;
@@ -121,6 +131,11 @@ export type UpdatePersonnelRequest = {
   sgkRegistrationNumber?: string | null;
   employmentStartDate?: string | null;
   /** Fazla mesai muvafakatinin geçerli olduğu yıl. Boşsa alınmamış. */
+  /**
+   * Kırmızı (işe alınamaz) engelini geçmek için gerekçe. Yalnız Genel
+   * Müdür ve Admin kullanabilir; boş bırakılırsa engel uygulanır.
+   */
+  rehireOverrideReason?: string | null;
   overtimeConsentYear?: number | null;
   overtimeConsentDate?: string | null;
   employmentEndDate?: string | null;
@@ -181,6 +196,11 @@ export type CompletePersonnelDataRequest = {
   birthDate?: string | null;
   employmentStartDate?: string | null;
   /** Fazla mesai muvafakatinin geçerli olduğu yıl. Boşsa alınmamış. */
+  /**
+   * Kırmızı (işe alınamaz) engelini geçmek için gerekçe. Yalnız Genel
+   * Müdür ve Admin kullanabilir; boş bırakılırsa engel uygulanır.
+   */
+  rehireOverrideReason?: string | null;
   overtimeConsentYear?: number | null;
   overtimeConsentDate?: string | null;
   branchId?: string | null;
