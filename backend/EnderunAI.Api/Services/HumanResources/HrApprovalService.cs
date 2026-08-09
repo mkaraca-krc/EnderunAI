@@ -1172,6 +1172,75 @@ public sealed class HrApprovalService(
                         attendanceIds.Contains(x.AttendanceRecordId!.Value))
             .ToDictionaryAsync(x => x.AttendanceRecordId!.Value, cancellationToken);
 
+        // Proje maliyetine giren ek ücret kalemleri. Yemek, konaklama
+        // ve servis maliyeti buradan gelir; daha önce hiç yazılmadığı
+        // için kâr olduğundan yüksek görünüyordu.
+        var costPersonnelIds = attendance.Select(x => x.PersonnelId).Distinct().ToList();
+
+        var costComponents = (await appDb.HrCompensationComponents.AsNoTracking()
+                .Where(x => x.CompanyId == companyId &&
+                            x.IsActive &&
+                            x.IncludeInProjectCost &&
+                            costPersonnelIds.Contains(x.PersonnelId) &&
+                            x.EffectiveStartDate <= periodEnd &&
+                            (x.EffectiveEndDate == null ||
+                             x.EffectiveEndDate >= periodStart))
+                .ToListAsync(cancellationToken))
+            .GroupBy(x => x.PersonnelId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<CompensationComponentInput>)g
+                    .Select(x => new CompensationComponentInput(
+                        Name: string.IsNullOrWhiteSpace(x.Name) ? x.Code : x.Name,
+                        ComponentType: x.ComponentType,
+                        CalculationType: x.CalculationType,
+                        PaymentMethod: x.PaymentMethod,
+                        Amount: x.Amount,
+                        IsAttendanceBased: x.IsAttendanceBased,
+                        IsInKindBenefit: x.IsInKindBenefit,
+                        IncludeInPayroll: x.IncludeInPayroll,
+                        IncludeInSgkBase: x.IncludeInSgkBase,
+                        IncludeInIncomeTaxBase: x.IncludeInIncomeTaxBase,
+                        IncludeInStampTaxBase: x.IncludeInStampTaxBase,
+                        EffectiveStartDate: x.EffectiveStartDate,
+                        EffectiveEndDate: x.EffectiveEndDate,
+                        IncludeInProjectCost: x.IncludeInProjectCost,
+                        IncludeInProgressPaymentCost: x.IncludeInProgressPaymentCost,
+                        ProjectId: x.ProjectId))
+                    .ToList());
+
+        // Aylık ve tek seferlik kalemlerin böleni: kişinin dönemde
+        // ÜCRET ÜRETEN proje günü sayısı. Sabit 30'a bölmek, 20 gün
+        // çalışan birinde kalemin üçte birini hiçbir projeye
+        // yazmamak olurdu.
+        var dayEarningsById = new Dictionary<Guid, AttendanceEarnings>();
+        var workedDaysByPersonnel = new Dictionary<Guid, int>();
+
+        foreach (var day in attendance)
+        {
+            if (!salaryByPersonnel.TryGetValue(day.PersonnelId, out var card) ||
+                !HasUsableAmount(card))
+            {
+                continue;
+            }
+
+            var earnings = AttendanceEarningsCalculator.CalculateDay(
+                BuildSalaryRates(card, ResolveReferenceGross(card), dailyWorkHours),
+                new AttendanceDay(
+                    (EnderunAI.Api.Models.AttendanceStatus)day.Status,
+                    day.OvertimeHours,
+                    day.SundayHours,
+                    day.PublicHolidayHours));
+
+            dayEarningsById[day.Id] = earnings;
+
+            if (earnings.TotalEarnings > 0m)
+            {
+                workedDaysByPersonnel[day.PersonnelId] =
+                    workedDaysByPersonnel.GetValueOrDefault(day.PersonnelId) + 1;
+            }
+        }
+
         foreach (var day in attendance)
         {
             if (!salaryByPersonnel.TryGetValue(day.PersonnelId, out var salaryCard) ||
@@ -1184,16 +1253,19 @@ public sealed class HrApprovalService(
             // ocak esaslı referans brüt kullanılır: maliyet dağıtımı
             // için ay ay brütleştirme yapmak hem pahalı hem gereksiz
             // hassasiyet olurdu.
-            var rates = BuildSalaryRates(
-                salaryCard, ResolveReferenceGross(salaryCard), dailyWorkHours);
+            var dayEarnings = dayEarningsById[day.Id];
 
-            var dayEarnings = AttendanceEarningsCalculator.CalculateDay(
-                rates,
-                new AttendanceDay(
-                    (EnderunAI.Api.Models.AttendanceStatus)day.Status,
-                    day.OvertimeHours,
-                    day.SundayHours,
-                    day.PublicHolidayHours));
+            var allocation = ProjectLaborCostAllocator.Allocate(
+                costComponents.TryGetValue(day.PersonnelId, out var personComponents)
+                    ? personComponents
+                    : Array.Empty<CompensationComponentInput>(),
+                projectId: day.ProjectId!.Value,
+                workDate: day.WorkDate,
+                workedDaysInPeriod:
+                    workedDaysByPersonnel.GetValueOrDefault(day.PersonnelId),
+                dayHours: day.NormalHours + day.OvertimeHours,
+                dayEarnings: dayEarnings.TotalEarnings,
+                monthlyGross: ResolveReferenceGross(salaryCard));
 
             if (!existingCosts.TryGetValue(day.Id, out var cost))
             {
@@ -1225,9 +1297,16 @@ public sealed class HrApprovalService(
             cost.OvertimeCost = dayEarnings.OvertimeAmount;
             cost.SundayCost = dayEarnings.SundayWorkAmount;
             cost.PublicHolidayCost = dayEarnings.PublicHolidayAmount;
-            cost.TotalLaborCost = dayEarnings.TotalEarnings
-                + cost.MealCost + cost.AccommodationCost
-                + cost.ShuttleCost + cost.OtherCost + cost.CompensationCost;
+            cost.MealCost = allocation.MealCost;
+            cost.AccommodationCost = allocation.AccommodationCost;
+            cost.ShuttleCost = allocation.ShuttleCost;
+            cost.OtherCost = allocation.OtherCost;
+            cost.CompensationCost = allocation.CompensationCost;
+
+            cost.TotalLaborCost = dayEarnings.TotalEarnings + allocation.Total;
+            cost.ProgressPaymentCost = allocation.ProgressPaymentCost;
+            cost.ProgressPaymentCompensationCost =
+                allocation.ProgressPaymentCompensationCost;
 
             cost.CurrencyCode = "TRY";
             cost.UpdatedAtUtc = DateTime.UtcNow;

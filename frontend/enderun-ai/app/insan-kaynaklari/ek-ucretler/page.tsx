@@ -1020,6 +1020,16 @@ export default function AdditionalCompensationPage() {
               />
             </div>
 
+            {(form.includeInProjectCost || form.includeInProgressPaymentCost) && (
+              <p className="mt-4 rounded-lg border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">
+                <strong>Proje maliyetine dâhil</strong>, kalemi çalışılan günlere
+                dağıtıp projenin işçilik maliyetine yazar.{" "}
+                <strong>Hakediş maliyetine dâhil</strong> ise ayrı bir kapı:
+                işaretlenmezse kalem şirketin üstünde kalır — proje kârını
+                düşürür ama hakediş kârını düşürmez.
+              </p>
+            )}
+
             {form.paymentMethod === "1" && (
               <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                 Ödeme yöntemi <strong>Nakit</strong> seçili. Bu kalem resmî

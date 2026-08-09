@@ -133,7 +133,10 @@ public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerB
             }
         }
 
-        var totalLaborCost = request.NormalCost + request.OvertimeCost + request.OtherCost;
+        var totalLaborCost =
+            request.NormalCost + request.OvertimeCost + request.OtherCost +
+            request.MealCost + request.AccommodationCost +
+            request.ShuttleCost + request.CompensationCost;
 
         var item = new HrProjectLaborCost
         {
@@ -148,7 +151,15 @@ public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerB
             NormalCost = request.NormalCost,
             OvertimeCost = request.OvertimeCost,
             OtherCost = request.OtherCost,
+            MealCost = request.MealCost,
+            AccommodationCost = request.AccommodationCost,
+            ShuttleCost = request.ShuttleCost,
+            CompensationCost = request.CompensationCost,
             TotalLaborCost = totalLaborCost,
+            // Elle girilen satırda kalem bayrağı yok: tamamı hakedişe
+            // yansıyan maliyet sayılır, elden payı ayrıca işaretlenir.
+            ProgressPaymentCost = totalLaborCost,
+            ProgressPaymentCompensationCost = request.CompensationCost,
             CurrencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode)
                 ? "TRY"
                 : request.CurrencyCode.Trim().ToUpperInvariant()

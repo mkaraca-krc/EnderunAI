@@ -3989,6 +3989,8 @@ public sealed class AppDbContext(
             entity.Property(x => x.ShuttleCost).HasPrecision(18, 2);
             entity.Property(x => x.OtherCost).HasPrecision(18, 2);
             entity.Property(x => x.CompensationCost).HasPrecision(18, 2);
+            entity.Property(x => x.ProgressPaymentCost).HasPrecision(18, 2);
+            entity.Property(x => x.ProgressPaymentCompensationCost).HasPrecision(18, 2);
             entity.Property(x => x.TotalLaborCost).HasPrecision(18, 2);
             entity.Property(x => x.CurrencyCode).HasMaxLength(10).IsRequired();
 

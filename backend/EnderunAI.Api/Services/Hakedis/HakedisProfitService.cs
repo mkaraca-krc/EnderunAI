@@ -326,12 +326,36 @@ public sealed class HakedisProfitService(
             .AsNoTracking()
             .Where(x => x.ProjectId == projectId
                         && x.WorkDate >= from && x.WorkDate < to)
-            .Select(x => new { x.TotalLaborCost, x.CompensationCost })
+            .Select(x => new
+            {
+                x.TotalLaborCost,
+                x.CompensationCost,
+                x.ProgressPaymentCost,
+                x.ProgressPaymentCompensationCost
+            })
             .ToListAsync(cancellationToken);
 
-        var labor = laborRows.Sum(x => includesExtraPayments
-            ? x.TotalLaborCost
-            : x.TotalLaborCost - x.CompensationCost);
+        // Hakedişe yansıyan maliyet, proje maliyetinin tamamı değil:
+        // "hakediş maliyetine dâhil" işaretlenmemiş kalemler şirketin
+        // üstünde kalır, proje kârını düşürür ama hakediş kârını
+        // değil.
+        //
+        // ProgressPaymentCost sıfır ama toplam maliyet doluysa satır
+        // yeni yazıcıdan geçmemiştir (dışarıdan aktarılmış ya da eski
+        // biçimde kalmış). Sıfır saymak maliyeti hiç yokmuş gibi
+        // gösterip hakediş kârını şişirirdi; eski davranışa düşülür.
+        var labor = laborRows.Sum(x =>
+        {
+            var total = x.ProgressPaymentCost <= 0m && x.TotalLaborCost > 0m
+                ? x.TotalLaborCost
+                : x.ProgressPaymentCost;
+
+            var cash = x.ProgressPaymentCost <= 0m && x.TotalLaborCost > 0m
+                ? x.CompensationCost
+                : x.ProgressPaymentCompensationCost;
+
+            return includesExtraPayments ? total : total - cash;
+        });
 
         return (decimal.Round(material + labor, 2),
             "Dönem tarihleri arasında deftere işlenen maliyet. Peşin alınan " +

@@ -50,7 +50,13 @@ public sealed record CompensationComponentInput(
     bool IncludeInIncomeTaxBase,
     bool IncludeInStampTaxBase,
     DateTime EffectiveStartDate,
-    DateTime? EffectiveEndDate);
+    DateTime? EffectiveEndDate,
+    // Proje maliyeti tarafı: bordroyu ilgilendirmez ama aynı kalemden
+    // okunur, bu yüzden aynı girdide taşınır.
+    bool IncludeInProjectCost = false,
+    bool IncludeInProgressPaymentCost = false,
+    // Kaleme proje bağlanmışsa maliyet yalnızca o projeye yazılır.
+    Guid? ProjectId = null);
 
 /// <summary>
 /// Nakdî yemek ve yol yardımının günlük istisna tavanları. Her biri

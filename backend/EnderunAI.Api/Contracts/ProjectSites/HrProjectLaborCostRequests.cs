@@ -14,4 +14,12 @@ public sealed record CreateHrProjectLaborCostRequest(
     /// İşçiliğin gittiği icmal satırı (poz). OPSİYONEL — doldurulursa
     /// maliyet o poza ölçülmüş olarak yazılır.
     /// </summary>
-    Guid? ProjectBoqItemId = null);
+    Guid? ProjectBoqItemId = null,
+    // Ek maliyet bileşenleri. Puantajdan üretilen satırlarda ek ücret
+    // kalemlerinden gelir; elle girilen satırda buradan yazılır.
+    // Toplama girmedikleri sürece kâr olduğundan yüksek görünüyordu.
+    decimal MealCost = 0m,
+    decimal AccommodationCost = 0m,
+    decimal ShuttleCost = 0m,
+    // Elden ödeme payı: yetkisiz kullanıcıya maskelenir.
+    decimal CompensationCost = 0m);
