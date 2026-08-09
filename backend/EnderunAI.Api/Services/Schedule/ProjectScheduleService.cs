@@ -104,6 +104,12 @@ public sealed record ProjectScheduleView(
     decimal ProgressRate,
     decimal? EmployerRate,
     DateOnly? ForecastFinish,
+    /// <summary>Bitiş tarihi tahmin değil, gerçekleşen mi.</summary>
+    bool ForecastIsActual,
+    DateOnly? ActualStart,
+    DateOnly? ActualFinish,
+    /// <summary>Fiili başlangıcın plandan kaç iş günü sonra olduğu.</summary>
+    int StartSlipWorkDays,
     int DelayWorkDays,
     IReadOnlyList<Guid> DrivingActivityIds,
     IReadOnlyList<ScheduleActivityView> Activities,
@@ -211,7 +217,12 @@ public sealed class ProjectScheduleService(
                 // kullanılır — ama o bizim takvimimizdir ve program
                 // düzenlendikçe kayar; sözleşme termini kaymaz.
                 Deadline = x.Project.ContractDeadlineDate ?? x.Project.PlannedEndDate,
-                HasContractDeadline = x.Project.ContractDeadlineDate != null
+                HasContractDeadline = x.Project.ContractDeadlineDate != null,
+                // Gerçekleşen tarihler: proje fiilen bittiyse gecikme
+                // tahminden değil buradan okunur.
+                x.Project.PlannedStartDate,
+                x.Project.ActualStartDate,
+                x.Project.ActualEndDate
             })
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new KeyNotFoundException("İş programı bulunamadı.");
@@ -342,6 +353,14 @@ public sealed class ProjectScheduleService(
                 : plan.ProjectFinish,
             asOf);
 
+        forecast = ScheduleForecastCalculator.ApplyActuals(
+            calendar,
+            forecast,
+            plannedStart: ToDateOnly(schedule.PlannedStartDate),
+            actualStart: ToDateOnly(schedule.ActualStartDate),
+            actualFinish: ToDateOnly(schedule.ActualEndDate),
+            deadline: deadline);
+
         var forecasts = forecast.Activities.ToDictionary(x => x.Id);
 
         var resources = await LoadResourcesAsync(scheduleId, cancellationToken);
@@ -435,7 +454,13 @@ public sealed class ProjectScheduleService(
                 ? summary.FieldRate
                 : WeightedProgress(ordered),
             EmployerRate: summary.HasContractSummary ? summary.EmployerRate : null,
-            ForecastFinish: activities.Count == 0 ? null : forecast.ForecastFinish,
+            ForecastFinish: activities.Count == 0 && !forecast.IsActual
+                ? null
+                : forecast.ForecastFinish,
+            ForecastIsActual: forecast.IsActual,
+            ActualStart: ToDateOnly(schedule.ActualStartDate),
+            ActualFinish: ToDateOnly(schedule.ActualEndDate),
+            StartSlipWorkDays: forecast.StartSlipWorkDays,
             DelayWorkDays: forecast.DelayWorkDays,
             DrivingActivityIds: forecast.DrivingActivityIds,
             Activities: ordered,
@@ -459,6 +484,10 @@ public sealed class ProjectScheduleService(
     /// ortalaması. Alt aktiviteler sayılmaz — zaten ana çubuğun
     /// içindeler, ikinci kez sayılırlardı.
     /// </summary>
+    /// <summary>UTC tarih alanını takvim gününe çevirir.</summary>
+    private static DateOnly? ToDateOnly(DateTime? value) =>
+        value is DateTime date ? DateOnly.FromDateTime(date) : null;
+
     private static decimal WeightedProgress(
         IReadOnlyList<ScheduleActivityView> activities)
     {

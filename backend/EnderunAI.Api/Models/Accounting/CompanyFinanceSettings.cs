@@ -76,13 +76,6 @@ public sealed class CompanyFinanceSettings : BaseEntity
     public Guid? ReverseChargeVatPayableAccountId { get; set; }
     public AccountingAccount? ReverseChargeVatPayableAccount { get; set; }
 
-    /// <summary>
-    /// Kurumlar/geçici vergi oranı (%). Yalnızca YÖNETİM TAHMİNİ için
-    /// kullanılır; kesin hesap müşavirdedir. Sabit kodlanmadı çünkü oran
-    /// mevzuatla değişiyor.
-    /// </summary>
-    public decimal CorporateTaxRate { get; set; } = 25m;
-
     /// <summary>Tedarikçi faturası maliyet tarafı (ör. 740 Hizmet Üretim Maliyeti).</summary>
     public Guid? ExpenseAccountId { get; set; }
     public AccountingAccount? ExpenseAccount { get; set; }

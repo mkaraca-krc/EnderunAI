@@ -31,6 +31,11 @@ export default function CreateInventoryItemPage() {
   const router = useRouter();
 
   const [form, setForm] = useState<CreateInventoryItemRequest>(initialForm);
+
+  // Ayrı metin durumu: boş bırakmak "bilinmiyor" demek, sıfır demek
+  // değil. Sayı durumunda tutulsaydı boş alan sıfıra düşer ve
+  // malzemenin bakır içermediği iddia edilmiş olurdu.
+  const [copperKgPerUnit, setCopperKgPerUnit] = useState("");
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -93,6 +98,10 @@ export default function CreateInventoryItemPage() {
         code: form.code.trim(),
         name: form.name.trim(),
         unit: form.unit.trim(),
+        // Boş bırakılan katsayı sıfır değil "bilinmiyor" demek: sıfır
+        // yazmak, bakır içermediğini iddia etmek olurdu.
+        copperKgPerUnit:
+          copperKgPerUnit.trim() === "" ? null : Number(copperKgPerUnit),
       });
 
       router.push("/depo-stok");
@@ -241,6 +250,23 @@ export default function CreateInventoryItemPage() {
               }
             />
             <small>0 bırakılırsa kritik stok uyarısı üretilmez.</small>
+          </label>
+
+          <label>
+            <span>Bakır Katsayısı (kg/birim)</span>
+            <input
+              type="number"
+              min="0"
+              step="0.0001"
+              value={copperKgPerUnit}
+              onChange={(event) => setCopperKgPerUnit(event.target.value)}
+              placeholder="Örn. 0,0675"
+            />
+            <small>
+              Birim başına bakır miktarı. Bakır maruziyeti raporu yalnızca bu
+              alandan beslenir; boş bırakılan malzeme emtia riskine hiç
+              girmez.
+            </small>
           </label>
 
           <label>

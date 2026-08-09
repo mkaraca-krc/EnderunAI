@@ -70,7 +70,8 @@ public sealed record TaxOverview(
     IReadOnlyList<VatPeriodSummary> Vat,
     IReadOnlyList<PayrollTaxPeriodSummary> Payroll,
     IReadOnlyList<AdvanceTaxPeriodSummary> AdvanceTax,
-    decimal CorporateTaxRate,
+    /// <summary>Yıla ait kurumlar vergisi oranı. Tanımlı değilse null.</summary>
+    decimal? CorporateTaxRate,
     decimal EstimatedAnnualCorporateTax,
     IReadOnlyList<string> Assumptions);
 
@@ -127,30 +128,25 @@ public sealed class TaxLedgerService(AppDbContext db) : ITaxLedgerService
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new KeyNotFoundException("Şirket bulunamadı.");
 
-        var settings = await db.CompanyFinanceSettings
+        // Oran YIL BAZLI ve koda gömülü varsayılanı yok. Daha önce
+        // hesap sessizce %25'e düşüyordu; kimse girmediği için o
+        // rakamın doğru olduğu bilinmiyordu.
+        var taxRate = await db.CompanyCorporateTaxRates
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId)
-            .Select(x => new { x.CorporateTaxRate })
+            .Where(x => x.CompanyId == companyId && x.Year == year)
+            .Select(x => (decimal?)x.Rate)
             .SingleOrDefaultAsync(cancellationToken);
-
-        var taxRate = settings?.CorporateTaxRate ?? 25m;
 
         var vat = await BuildVatPeriodsAsync(companyId, year, cancellationToken);
         var payroll = await BuildPayrollPeriodsAsync(companyId, year, cancellationToken);
-        var advance = await BuildAdvanceTaxAsync(companyId, year, taxRate, cancellationToken);
+        var advance = await BuildAdvanceTaxAsync(
+            companyId, year, taxRate ?? 0m, cancellationToken);
 
         var assumptions = new List<string>
         {
             "Rakamlar kesinleşmiş muhasebe fişlerinden okunur; " +
             "muhasebeleşmemiş belgeler bu görünüme girmez.",
-            $"Geçici ve kurumlar vergisi tahminleri %{TurkishFormat.Whole(taxRate)} oranıyla, " +
-            "defterdeki ticari kâr üzerinden hesaplandı: 60x satışlar eksi " +
-            "61x iade/indirimler eksi gider hesapları. Yansıtma (741/771) " +
-            "kullanan şirkette gider 62x/63x'ten, kullanmayanda 7'li " +
-            "hesaplardan okunur — ikisi toplansaydı aynı maliyet iki kez " +
-            "sayılırdı. " +
-            "Kanunen kabul edilmeyen giderler, istisnalar ve geçmiş yıl " +
-            "zararları dikkate alınmadı — kesin hesap müşavirindedir.",
+            CorporateTaxAssumption(year, taxRate),
             "Bu ekran beyanname üretmez; müşavirin beyanıyla mutabakat için " +
             "hazırlanmıştır."
         };
@@ -164,9 +160,30 @@ public sealed class TaxLedgerService(AppDbContext db) : ITaxLedgerService
             payroll,
             advance,
             taxRate,
-            annualProfit > 0m ? decimal.Round(annualProfit * taxRate / 100m, 2) : 0m,
+            taxRate is decimal rate && annualProfit > 0m
+                ? decimal.Round(annualProfit * rate / 100m, 2)
+                : 0m,
             assumptions);
     }
+
+    /// <summary>
+    /// Kurumlar vergisi tahminine ilişkin açıklama. Oran tanımlı
+    /// değilse tahminin ÜRETİLMEDİĞİ açıkça yazılır: sessizce bir
+    /// varsayılana düşüp doğruymuş gibi rakam göstermek, yanlış
+    /// rakamın en kötü biçimidir.
+    /// </summary>
+    private static string CorporateTaxAssumption(int year, decimal? taxRate) =>
+        taxRate is null
+            ? $"{year} yılı için kurumlar vergisi oranı tanımlanmadı; geçici ve " +
+              "kurumlar vergisi tahmini ÜRETİLMEDİ. Oranı Şirket Ayarları → " +
+              "Kurumlar Vergisi Oranı ekranından girin."
+            : $"Geçici ve kurumlar vergisi tahminleri %{TurkishFormat.Whole(taxRate.Value)} " +
+              "oranıyla, defterdeki ticari kâr üzerinden hesaplandı: 60x satışlar " +
+              "eksi 61x iade/indirimler eksi gider hesapları. Yansıtma (741/771) " +
+              "kullanan şirkette gider 62x/63x'ten, kullanmayanda 7'li " +
+              "hesaplardan okunur — ikisi toplansaydı aynı maliyet iki kez " +
+              "sayılırdı. Kanunen kabul edilmeyen giderler, istisnalar ve geçmiş " +
+              "yıl zararları dikkate alınmadı — kesin hesap müşavirindedir.";
 
     /// <summary>
     /// Aylık KDV netleştirmesi ve devreden zinciri.

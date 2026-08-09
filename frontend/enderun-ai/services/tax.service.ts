@@ -59,7 +59,8 @@ export type TaxOverview = {
   vat: VatPeriodSummary[];
   payroll: PayrollTaxPeriodSummary[];
   advanceTax: AdvanceTaxPeriodSummary[];
-  corporateTaxRate: number;
+  /** Yıla ait kurumlar vergisi oranı. Tanımlı değilse null. */
+  corporateTaxRate: number | null;
   estimatedAnnualCorporateTax: number;
   assumptions: string[];
 };
@@ -99,6 +100,29 @@ export type VatReconciliationRow = {
   accruedPayable: number;
   accruedCarryForward: number;
   difference: number;
+};
+
+export type CorporateTaxRateRow = {
+  id: string;
+  companyId: string;
+  year: number;
+  rate: number;
+  note?: string | null;
+};
+
+export const corporateTaxRateService = {
+  list(companyId: string) {
+    return apiClient<CorporateTaxRateRow[]>(
+      `kurumlar-vergisi-oranlari?companyId=${companyId}`
+    );
+  },
+
+  save(companyId: string, year: number, rate: number, note?: string | null) {
+    return apiClient<{ message: string }>("kurumlar-vergisi-oranlari", {
+      method: "PUT",
+      body: { companyId, year, rate, note: note ?? null },
+    });
+  },
 };
 
 export const taxService = {

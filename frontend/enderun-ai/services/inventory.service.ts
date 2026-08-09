@@ -66,6 +66,11 @@ export interface InventoryItemDetail {
   availableStock: number;
   stockValue: number;
   warehouses: InventoryItemWarehouseStock[];
+  /**
+   * Birim başına bakır (kg). Bakır maruziyeti raporunun tek kaynağı;
+   * girilmediği sürece emtia riski boş çalışır.
+   */
+  copperKgPerUnit?: number | null;
 }
 
 export interface CreateInventoryItemRequest {
@@ -83,6 +88,11 @@ export interface CreateInventoryItemRequest {
   preferredSupplierCurrentAccountId?: string | null;
   vatRate?: number | null;
   description?: string | null;
+  /**
+   * Birim başına bakır (kg). Bakır maruziyeti raporunun tek kaynağı;
+   * girilmediği sürece emtia riski boş çalışır.
+   */
+  copperKgPerUnit?: number | null;
 }
 
 export interface UpdateInventoryItemRequest {
@@ -98,6 +108,11 @@ export interface UpdateInventoryItemRequest {
   isActive: boolean;
   preferredSupplierCurrentAccountId?: string | null;
   vatRate?: number | null;
+  /**
+   * Birim başına bakır (kg). Bakır maruziyeti raporunun tek kaynağı;
+   * girilmediği sürece emtia riski boş çalışır.
+   */
+  copperKgPerUnit?: number | null;
   description?: string | null;
 }
 
@@ -191,6 +206,7 @@ export const inventoryService = {
         detail.preferredSupplierCurrentAccountId ?? null,
       vatRate: detail.vatRate ?? null,
       description: detail.description ?? null,
+      copperKgPerUnit: detail.copperKgPerUnit ?? null,
     });
   },
 };

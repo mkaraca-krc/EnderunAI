@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.HumanResources;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Isg;
 using EnderunAI.Api.Services.Upload;
 using Microsoft.AspNetCore.Authorization;
@@ -29,7 +30,8 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/hr/personel-belgeleri")]
 public sealed class PersonnelDocumentsController(
     AppDbContext db,
-    IUploadService uploadService) : ControllerBase
+    IUploadService uploadService,
+    ICurrentUserService currentUser) : ControllerBase
 {
     private const string Category = "ozluk-belgeleri";
 
@@ -71,6 +73,7 @@ public sealed class PersonnelDocumentsController(
                 x.IssuingInstitution,
                 x.IsMandatory,
                 x.IsVerified,
+                x.VerifiedAtUtc,
                 x.OriginalName,
                 x.ContentType,
                 x.FileSize,
@@ -104,6 +107,7 @@ public sealed class PersonnelDocumentsController(
                 x.IssuingInstitution,
                 x.IsMandatory,
                 x.IsVerified,
+                x.VerifiedAtUtc,
                 Status = (int)status,
                 StatusName = IsgValidityCalculator.StatusName(status),
                 StatusColor = IsgValidityCalculator.StatusColor(status),
@@ -260,6 +264,62 @@ public sealed class PersonnelDocumentsController(
         return Ok(new { message = "Belge silindi." });
     }
 
+    /// <summary>
+    /// "Aslı görüldü" işareti.
+    ///
+    /// Belgenin sisteme yüklenmiş olması aslının görüldüğü anlamına
+    /// gelmiyor; özlük denetiminde sorulan şey bu. İşaret, yükleyenden
+    /// AYRI bir kullanıcı tarafından da konabilsin diye ayrı uçta ve
+    /// kim/ne zaman bilgisiyle birlikte tutuluyor.
+    /// </summary>
+    [HttpPost("{id:guid}/dogrula")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelDocumentManage)]
+    public async Task<IActionResult> Verify(
+        Guid id,
+        VerifyPersonnelDocumentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var document = await db.PersonnelDocuments
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (document is null)
+            return NotFound(new { message = "Belge bulunamadı." });
+
+        if (request.IsVerified)
+        {
+            // Damga yeniden basılmıyor: ilk doğrulayan ve tarihi
+            // korunuyor, yoksa her açılışta damga tazelenip denetim
+            // izi anlamını yitirirdi.
+            if (!document.IsVerified)
+            {
+                document.IsVerified = true;
+                document.VerifiedByUserId = currentUser.UserId;
+                document.VerifiedAtUtc = DateTime.UtcNow;
+            }
+        }
+        else
+        {
+            document.IsVerified = false;
+            document.VerifiedByUserId = null;
+            document.VerifiedAtUtc = null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Notes))
+            document.Notes = request.Notes.Trim();
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = document.IsVerified
+                ? "Belgenin aslı görüldü olarak işaretlendi."
+                : "Doğrulama işareti kaldırıldı.",
+            document.Id,
+            document.IsVerified,
+            document.VerifiedAtUtc
+        });
+    }
+
     /// <summary>Belge türlerinin listesi — ekran seçim kutusu için.</summary>
     [HttpGet("turler")]
     [RequirePermission(PermissionCatalog.Keys.PersonnelDocumentView)]
@@ -288,3 +348,7 @@ public sealed class PersonnelDocumentsController(
         _ => "Diğer"
     };
 }
+
+public sealed record VerifyPersonnelDocumentRequest(
+    bool IsVerified,
+    string? Notes = null);

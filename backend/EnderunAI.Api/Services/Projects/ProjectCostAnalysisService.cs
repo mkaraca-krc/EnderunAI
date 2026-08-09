@@ -66,7 +66,8 @@ public sealed record ProjectCostAnalysisResult(
     /// </summary>
     decimal EstimatedTax,
     decimal NetProfitAfterTax,
-    decimal TaxRate,
+    /// <summary>Kurumlar vergisi oranı. Yıl için tanımlı değilse null.</summary>
+    decimal? TaxRate,
     IReadOnlyList<CostComponentComparison> Components,
     IReadOnlyList<CostSectionBreakdown> Sections,
     IReadOnlyList<CostMonthlyPoint> Monthly,
@@ -329,21 +330,30 @@ public sealed class ProjectCostAnalysisService(
         // Zararda vergi hesaplanmaz; eksi vergi üretmek yanıltıcı olurdu.
         var profitBeforeTax = revenue - totalCost;
 
-        var taxRate = await db.CompanyFinanceSettings
-            .AsNoTracking()
-            .Where(x => x.CompanyId == project.CompanyId)
-            .Select(x => (decimal?)x.CorporateTaxRate)
-            .SingleOrDefaultAsync(cancellationToken) ?? 25m;
+        // Oran yıl bazlı ve koda gömülü varsayılanı yok. Proje bir
+        // yıla ait olmadığı için içinde bulunulan yılın oranı esas
+        // alınır; oran tanımlı değilse vergi TAHMİN EDİLMEZ.
+        var taxYear = DateTime.UtcNow.Year;
 
-        var estimatedTax = profitBeforeTax > 0m
-            ? decimal.Round(profitBeforeTax * taxRate / 100m, 2)
+        var taxRate = await db.CompanyCorporateTaxRates
+            .AsNoTracking()
+            .Where(x => x.CompanyId == project.CompanyId && x.Year == taxYear)
+            .Select(x => (decimal?)x.Rate)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var estimatedTax = taxRate is decimal rate && profitBeforeTax > 0m
+            ? decimal.Round(profitBeforeTax * rate / 100m, 2)
             : 0m;
 
-        assumptions.Add(
-            $"Vergi yükü TAHMİNİDİR: proje kârına %{TurkishFormat.Whole(taxRate)} kurumlar " +
-            "vergisi oranı uygulandı. Vergi gerçekte şirket düzeyinde, tüm " +
-            "projelerin ve merkez giderlerinin toplamı üzerinden hesaplanır; " +
-            "kesin hesap müşavirdedir.");
+        assumptions.Add(taxRate is null
+            ? $"{taxYear} yılı için kurumlar vergisi oranı tanımlanmadığından " +
+              "vergi yükü hesaplanmadı; vergi sonrası kâr, vergi öncesi kârla " +
+              "aynı gösteriliyor. Oranı Şirket Ayarları → Kurumlar Vergisi " +
+              "Oranı ekranından girin."
+            : $"Vergi yükü TAHMİNİDİR: proje kârına %{TurkishFormat.Whole(taxRate.Value)} " +
+              "kurumlar vergisi oranı uygulandı. Vergi gerçekte şirket düzeyinde, " +
+              "tüm projelerin ve merkez giderlerinin toplamı üzerinden hesaplanır; " +
+              "kesin hesap müşavirdedir.");
 
         // --- Aylık trend ---
         var monthly = BuildMonthly(

@@ -93,4 +93,9 @@ public sealed record UpdateProjectRequest(
     string? Address,
     ProjectStatus Status,
     ProjectContractType ContractType = ProjectContractType.Undetermined,
-    decimal DeviationAlertThresholdRate = 5m);
+    decimal DeviationAlertThresholdRate = 5m,
+    // Gerçekleşen tarihler. Elle girilebilir; girilmemişse durum
+    // geçişinde otomatik damgalanır (Aktif → başlangıç, Tamamlandı →
+    // bitiş). İş programının gecikme hesabı bunları kullanır.
+    DateTime? ActualStartDate = null,
+    DateTime? ActualEndDate = null);

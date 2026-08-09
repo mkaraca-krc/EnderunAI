@@ -65,6 +65,15 @@ public sealed class TaxLedgerTests(DatabaseFixture fixture)
             accounts[code] = account.Id;
         }
 
+        // Kurumlar vergisi oranı artık yıl bazlı ve varsayılanı yok:
+        // tanımlanmadan geçici vergi tahmini üretilmiyor.
+        db.CompanyCorporateTaxRates.Add(new CompanyCorporateTaxRate
+        {
+            CompanyId = project.CompanyId,
+            Year = 2026,
+            Rate = 25m
+        });
+
         await db.SaveChangesAsync();
 
         return new TestContext(project.CompanyId, accounts);

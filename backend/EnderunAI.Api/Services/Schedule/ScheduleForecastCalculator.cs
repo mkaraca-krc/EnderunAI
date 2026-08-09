@@ -30,12 +30,23 @@ public sealed record ActivityForecast(
     bool IsCompleted,
     string? Note);
 
+/// <param name="IsActual">
+/// Bitiş TAHMİN değil, gerçekleşen. Proje fiilen bittiğinde tahmin
+/// üretmenin anlamı kalmaz; gecikme gerçekleşen bitişten okunur.
+/// </param>
+/// <param name="StartSlipWorkDays">
+/// Fiili başlangıcın planlanan başlangıcı kaç iş günü aştığı. Erken
+/// başlayan projede sıfır: erken başlamak gecikmeyi silmez, program
+/// bunu kendi ilerlemesinden zaten gösterir.
+/// </param>
 public sealed record ScheduleForecast(
     DateOnly PlannedFinish,
     DateOnly? ForecastFinish,
     int DelayWorkDays,
     IReadOnlyList<Guid> DrivingActivityIds,
-    IReadOnlyList<ActivityForecast> Activities);
+    IReadOnlyList<ActivityForecast> Activities,
+    bool IsActual = false,
+    int StartSlipWorkDays = 0);
 
 /// <summary>
 /// Tahmini bitiş.
@@ -190,6 +201,63 @@ public static class ScheduleForecastCalculator
             DelayWorkDays: delay,
             DrivingActivityIds: driving,
             Activities: results);
+    }
+
+    /// <summary>
+    /// Gerçekleşen tarihleri tahminin üstüne uygular.
+    ///
+    /// Proje fiilen BİTTİYSE tahmin düşer: gecikme, gerçekleşen bitişin
+    /// termini kaç iş günü aştığıdır. Tahmini bitişi göstermeye devam
+    /// etmek, sonucu bilinen bir işi hâlâ öngörüyormuş gibi sunmak
+    /// olurdu.
+    ///
+    /// Proje geç BAŞLADIYSA bu kayma ayrıca raporlanır ama tahminin
+    /// üstüne EKLENMEZ: geç başlamanın bitişe yansıyıp yansımadığını
+    /// aktivite ilerlemesi zaten gösteriyor; ikisini toplamak aynı
+    /// gecikmeyi iki kez saymak olurdu.
+    /// </summary>
+    public static ScheduleForecast ApplyActuals(
+        ScheduleCalendar calendar,
+        ScheduleForecast forecast,
+        DateOnly? plannedStart,
+        DateOnly? actualStart,
+        DateOnly? actualFinish,
+        DateOnly? deadline)
+    {
+        ArgumentNullException.ThrowIfNull(calendar);
+        ArgumentNullException.ThrowIfNull(forecast);
+
+        // WorkDaysBetween iki ucu da sayar: kayma, planlanan günün
+        // ERTESİNDEN itibaren sayılmalı. Planlanan günün kendisini
+        // saymak, zamanında başlayan projeye bir gün gecikme yazardı.
+        var startSlip = plannedStart is DateOnly planned &&
+                        actualStart is DateOnly actual &&
+                        actual > planned
+            ? calendar.WorkDaysBetween(
+                calendar.NextWorkDay(planned.AddDays(1)), actual)
+            : 0;
+
+        if (actualFinish is not DateOnly finished)
+            return forecast with { StartSlipWorkDays = startSlip };
+
+        // Termin yoksa karşılaştırma tabanı planlanan bitiştir.
+        var reference = deadline ?? forecast.PlannedFinish;
+
+        var delay = finished > reference
+            ? calendar.WorkDaysBetween(
+                calendar.NextWorkDay(reference.AddDays(1)), finished)
+            : 0;
+
+        return forecast with
+        {
+            ForecastFinish = finished,
+            DelayWorkDays = delay,
+            IsActual = true,
+            StartSlipWorkDays = startSlip,
+            // Bitmiş projede "gecikmeyi süren aktivite" diye bir şey
+            // yok; sorumluyu tahminden okumak yanıltıcı olurdu.
+            DrivingActivityIds = Array.Empty<Guid>()
+        };
     }
 
     private static decimal Clamp(decimal rate) =>

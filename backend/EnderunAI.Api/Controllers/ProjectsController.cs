@@ -344,7 +344,35 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
         if (employerError is not null)
             return BadRequest(new { message = employerError });
 
+        var previousStatus = project.Status;
+
         project.Status = request.Status;
+
+        // Gerçekleşen tarihler: elle girilen değer her zaman kazanır.
+        // Elle girilmediyse durum geçişi damgalar — proje aktife
+        // alındığı gün fiilen başlamıştır, tamamlandı işaretlendiği gün
+        // fiilen bitmiştir. İkisi de daha önce hiç yazılmıyordu:
+        // gecikme hesabı gerçekleşeni değil yalnızca planı görüyordu.
+        project.ActualStartDate = ToUtc(request.ActualStartDate)
+            ?? project.ActualStartDate;
+
+        project.ActualEndDate = ToUtc(request.ActualEndDate)
+            ?? project.ActualEndDate;
+
+        if (project.ActualStartDate is null &&
+            request.Status == ProjectStatus.Active &&
+            previousStatus != ProjectStatus.Active)
+        {
+            project.ActualStartDate = DateTime.UtcNow.Date;
+        }
+
+        if (project.ActualEndDate is null &&
+            request.Status == ProjectStatus.Completed &&
+            previousStatus != ProjectStatus.Completed)
+        {
+            project.ActualEndDate = DateTime.UtcNow.Date;
+        }
+
         project.EmployerCurrentAccountId = request.EmployerCurrentAccountId;
         project.Name = request.Name.Trim();
         project.ContractNumber = request.ContractNumber?.Trim();

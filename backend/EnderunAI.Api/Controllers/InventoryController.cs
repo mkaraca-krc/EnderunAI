@@ -130,6 +130,7 @@ public sealed class InventoryController(
                     : null,
                 x.VatRate,
                 x.Description,
+                x.CopperKgPerUnit,
                 x.ImagePath,
                 x.WarehouseStocks.Sum(s => s.Quantity),
                 x.WarehouseStocks.Sum(s => s.Quantity - s.ReservedQuantity),
@@ -176,6 +177,7 @@ public sealed class InventoryController(
             Unit = request.Unit.Trim(),
             Barcode = request.Barcode?.Trim(),
             MinimumStock = request.MinimumStock,
+            CopperKgPerUnit = request.CopperKgPerUnit,
             MaximumStock = request.MaximumStock,
             Type = (InventoryItemType)request.Type,
             PreferredSupplierCurrentAccountId = request.PreferredSupplierCurrentAccountId,
@@ -211,6 +213,7 @@ public sealed class InventoryController(
         item.Unit = request.Unit.Trim();
         item.Barcode = request.Barcode?.Trim();
         item.MinimumStock = request.MinimumStock;
+        item.CopperKgPerUnit = request.CopperKgPerUnit;
         item.MaximumStock = request.MaximumStock;
         item.Type = (InventoryItemType)request.Type;
         item.IsActive = request.IsActive;

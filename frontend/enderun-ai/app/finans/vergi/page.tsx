@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
+  corporateTaxRateService,
   taxService,
   type TaxObligation,
   type TaxOverview,
@@ -33,6 +34,11 @@ export default function TaxPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Kurumlar vergisi oranı yıl bazlı ve varsayılanı yok; tanımsız
+  // yılda buradan girilir.
+  const [rateInput, setRateInput] = useState("");
+  const [savingRate, setSavingRate] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -76,6 +82,27 @@ export default function TaxPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function saveRate() {
+    if (!companyId) return;
+
+    setSavingRate(true);
+    setError("");
+    setNotice("");
+
+    try {
+      await corporateTaxRateService.save(companyId, year, Number(rateInput));
+
+      setRateInput("");
+      setNotice(`${year} kurumlar vergisi oranı kaydedildi.`);
+
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Oran kaydedilemedi.");
+    } finally {
+      setSavingRate(false);
+    }
+  }
 
   useEffect(() => {
     if (!notice) return;
@@ -226,11 +253,52 @@ export default function TaxPage() {
               {money.format(overview.estimatedAnnualCorporateTax)}
             </strong>
             <small style={{ display: "block" }}>
-              Oran %{overview.corporateTaxRate}
+              {overview.corporateTaxRate === null
+                ? "Oran tanımlı değil"
+                : `Oran %${overview.corporateTaxRate}`}
             </small>
           </div>
         )}
       </div>
+
+      {overview && overview.corporateTaxRate === null && (
+        <div
+          className="erp-panel"
+          style={{
+            border: "1px solid #fcd34d",
+            background: "#fffbeb",
+            marginBottom: "14px",
+          }}
+        >
+          <strong>{year} kurumlar vergisi oranı tanımlanmadı</strong>
+          <p style={{ margin: "6px 0 10px" }}>
+            Oran girilmediği için geçici ve kurumlar vergisi tahmini
+            üretilmedi. Oran mevzuatla değiştiği için koda gömülmedi; her yıl
+            için ayrı girilir.
+          </p>
+
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={rateInput}
+              onChange={(event) => setRateInput(event.target.value)}
+              placeholder="Örn. 25"
+              style={{ width: "120px" }}
+            />
+            <button
+              type="button"
+              className="erp-primary-button"
+              disabled={savingRate || rateInput.trim() === "" || !companyId}
+              onClick={() => void saveRate()}
+            >
+              {savingRate ? "Kaydediliyor..." : `${year} oranını kaydet`}
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="erp-panel erp-loading">Vergi görünümü hesaplanıyor...</div>

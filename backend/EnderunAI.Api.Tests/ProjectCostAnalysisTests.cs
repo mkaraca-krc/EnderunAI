@@ -555,6 +555,22 @@ public sealed class ProjectCostAnalysisTests(DatabaseFixture fixture)
         var context = await CreateContextAsync(suffix);
         var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
 
+        // Kurumlar vergisi oranı yıl bazlı ve varsayılanı yok; tahmin
+        // katmanının çalışması için önce oran tanımlanır.
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            db.CompanyCorporateTaxRates.Add(new CompanyCorporateTaxRate
+            {
+                CompanyId = context.CompanyId,
+                Year = DateTime.UtcNow.Year,
+                Rate = 25m
+            });
+
+            await db.SaveChangesAsync();
+        }
+
         // Gelir 100.000, maliyet 60.000 → vergi öncesi kâr 40.000.
         await AddCostAsync(context, ProjectCostClass.Material, 60_000m);
 

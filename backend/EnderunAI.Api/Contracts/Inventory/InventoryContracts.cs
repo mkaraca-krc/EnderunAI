@@ -14,7 +14,11 @@ public sealed record CreateInventoryItemRequest(
     int Type,
     Guid? PreferredSupplierCurrentAccountId = null,
     decimal? VatRate = null,
-    string? Description = null);
+    string? Description = null,
+    // Malzemenin birim başına içerdiği bakır (kg). Bakır maruziyeti
+    // raporu YALNIZCA bu alandan besleniyor; girilmediği sürece emtia
+    // modülünün proje ayağı boş çalışır.
+    decimal? CopperKgPerUnit = null);
 
 public sealed record StockReceiptRequest(
     Guid WarehouseId,
@@ -89,7 +93,11 @@ public sealed record UpdateInventoryItemRequest(
     bool IsActive,
     Guid? PreferredSupplierCurrentAccountId = null,
     decimal? VatRate = null,
-    string? Description = null);
+    string? Description = null,
+    // Malzemenin birim başına içerdiği bakır (kg). Bakır maruziyeti
+    // raporu YALNIZCA bu alandan besleniyor; girilmediği sürece emtia
+    // modülünün proje ayağı boş çalışır.
+    decimal? CopperKgPerUnit = null);
 
 /// <summary>Malzeme kartı detayı — düzenleme ekranı bunu okur.</summary>
 public sealed record InventoryItemDetail(
@@ -114,6 +122,8 @@ public sealed record InventoryItemDetail(
     string? PreferredSupplierTitle,
     decimal? VatRate,
     string? Description,
+    /// <summary>Birim başına bakır (kg) — bakır maruziyeti raporunun tek kaynağı.</summary>
+    decimal? CopperKgPerUnit,
     string? ImagePath,
     decimal TotalStock,
     decimal AvailableStock,

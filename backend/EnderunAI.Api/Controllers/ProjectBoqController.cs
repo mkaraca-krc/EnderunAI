@@ -127,6 +127,10 @@ public sealed class ProjectBoqController(
                 x.TotalAmount,
                 x.ItemType,
                 x.Category,
+                // Kaydetme akışı kalemleri toptan yeniden yazıyor:
+                // katsayı okunmazsa ekran onu boş gönderir ve girilen
+                // değer ilk düzenlemede kaybolurdu.
+                x.CopperKgPerUnit,
                 x.Notes
             })
             .ToList();
@@ -383,6 +387,7 @@ public sealed class ProjectBoqController(
                 TotalAmount = decimal.Round(line.ContractQuantity * unitPrice, 2),
                 ItemType = line.ItemType,
                 Category = line.Category?.Trim(),
+                CopperKgPerUnit = line.CopperKgPerUnit,
                 Notes = line.Notes?.Trim()
             };
         }).ToList();
@@ -1118,6 +1123,7 @@ public sealed class ProjectBoqController(
                     TotalAmount = x.TotalAmount,
                     ItemType = x.ItemType,
                     Category = x.Category,
+                    CopperKgPerUnit = x.CopperKgPerUnit,
                     Notes = x.Notes
                 })
                 .ToList()
@@ -1226,7 +1232,13 @@ public sealed record ProjectBoqItemRequest(
     /// </summary>
     decimal? MaterialUnitPrice = null,
     decimal? LaborUnitPrice = null,
-    decimal? OverheadUnitPrice = null);
+    decimal? OverheadUnitPrice = null,
+    /// <summary>
+    /// Pozun birim başına içerdiği bakır (kg). Bakır maruziyeti raporu
+    /// YALNIZCA bu alandan besleniyor; boş bırakılan poz emtia riskine
+    /// hiç girmez. Malzeme kartında katsayı varsa oradan da okunur.
+    /// </summary>
+    decimal? CopperKgPerUnit = null);
 
 public sealed record CreateProjectBoqRequest(
     Guid CompanyId,

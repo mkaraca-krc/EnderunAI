@@ -24,6 +24,8 @@ public sealed class AppDbContext(
     public DbSet<AccountingAccount> AccountingAccounts =>
         Set<AccountingAccount>();
     public DbSet<CompanyFinanceSettings> CompanyFinanceSettings => Set<CompanyFinanceSettings>();
+    public DbSet<CompanyCorporateTaxRate> CompanyCorporateTaxRates =>
+        Set<CompanyCorporateTaxRate>();
     public DbSet<CashAccount> CashAccounts => Set<CashAccount>();
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
     public DbSet<CurrencyValuationRun> CurrencyValuationRuns =>
@@ -263,6 +265,7 @@ public sealed class AppDbContext(
         ConfigureAccountingAccounts(modelBuilder);
         ConfigureAccountingVouchers(modelBuilder);
         ConfigureCompanyFinanceSettings(modelBuilder);
+        ConfigureCompanyCorporateTaxRates(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -932,6 +935,29 @@ public sealed class AppDbContext(
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureCompanyCorporateTaxRates(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyCorporateTaxRate>(entity =>
+        {
+            entity.ToTable("company_corporate_tax_rates");
+            entity.HasKey(x => x.Id);
+
+            // Bir şirketin bir yıl için tek oranı olur. Silinmiş satır
+            // yeni kaydı engellemesin diye filtreli.
+            entity.HasIndex(x => new { x.CompanyId, x.Year })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Rate).HasPrecision(5, 2);
+            entity.Property(x => x.Note).HasMaxLength(500);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 
