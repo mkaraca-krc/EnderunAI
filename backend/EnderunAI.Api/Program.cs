@@ -388,6 +388,8 @@ builder.Services.AddScoped<EnderunAI.Api.Security.IExtraPaymentVisibilityService
 // listesi ve personel 360 kartı aynı kaynaktan beslensin diye ortak.
 builder.Services.AddScoped<EnderunAI.Api.Services.HumanResources.SalaryTakeHomeService>();
 builder.Services
+    .AddScoped<EnderunAI.Api.Services.HumanResources.RehireGuardService>();
+builder.Services
     .AddScoped<EnderunAI.Api.Services.HumanResources.ActualDailyWageService>();
 builder.Services
     .AddScoped<EnderunAI.Api.Services.HumanResources.ExtraPaymentAllocationService>();

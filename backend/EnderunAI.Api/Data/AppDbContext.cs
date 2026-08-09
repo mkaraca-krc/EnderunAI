@@ -26,6 +26,8 @@ public sealed class AppDbContext(
     public DbSet<CompanyFinanceSettings> CompanyFinanceSettings => Set<CompanyFinanceSettings>();
     public DbSet<CompanyCorporateTaxRate> CompanyCorporateTaxRates =>
         Set<CompanyCorporateTaxRate>();
+    public DbSet<PersonnelRehireOverride> PersonnelRehireOverrides =>
+        Set<PersonnelRehireOverride>();
     public DbSet<CashAccount> CashAccounts => Set<CashAccount>();
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
     public DbSet<CurrencyValuationRun> CurrencyValuationRuns =>
@@ -265,6 +267,7 @@ public sealed class AppDbContext(
         ConfigureAccountingVouchers(modelBuilder);
         ConfigureCompanyFinanceSettings(modelBuilder);
         ConfigureCompanyCorporateTaxRates(modelBuilder);
+        ConfigurePersonnelRehireOverrides(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -933,6 +936,28 @@ public sealed class AppDbContext(
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigurePersonnelRehireOverrides(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PersonnelRehireOverride>(entity =>
+        {
+            entity.ToTable("personnel_rehire_overrides");
+            entity.HasKey(x => x.Id);
+
+            // Denetim izi kişi bazında sorgulanır: "bu kişi için kaç
+            // kez engel geçildi".
+            entity.HasIndex(x => x.MatchedPersonnelId);
+            entity.HasIndex(x => x.IdentityNumber);
+
+            entity.Property(x => x.IdentityNumber)
+                .HasMaxLength(11)
+                .IsRequired();
+
+            entity.Property(x => x.Reason)
+                .HasMaxLength(1000)
+                .IsRequired();
         });
     }
 

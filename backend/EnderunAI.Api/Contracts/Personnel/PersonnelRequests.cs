@@ -15,7 +15,10 @@ public sealed record CreatePersonnelRequest(
     string? Profession,
     string? SgkRegistrationNumber,
     DateTime? EmploymentStartDate,
-    decimal? MonthlySalary);
+    decimal? MonthlySalary,
+    // Kırmızı (işe alınamaz) engelini geçmek için gerekçe. Yalnız
+    // GM ve Admin kullanabilir; boş bırakılırsa engel uygulanır.
+    string? RehireOverrideReason = null);
 
 public sealed record UpdatePersonnelRequest(
     Guid? BranchId,
@@ -37,7 +40,10 @@ public sealed record UpdatePersonnelRequest(
     // Fazla mesai muvafakati: yıllık yazılı onayın hangi yıla ait
     // olduğu ve alındığı tarih. Belgenin kendisi özlük arşivinde.
     int? OvertimeConsentYear = null,
-    DateTime? OvertimeConsentDate = null);
+    DateTime? OvertimeConsentDate = null,
+    // Kırmızı (işe alınamaz) engelini geçmek için gerekçe. Yalnız
+    // GM ve Admin kullanabilir; boş bırakılırsa engel uygulanır.
+    string? RehireOverrideReason = null);
 
 public sealed record AssignPersonnelRequest(
     Guid ProjectId,

@@ -15,7 +15,8 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/hr/personnel")]
 public sealed class PersonnelController(
     AppDbContext db,
-    ISalaryVisibilityService salaryVisibility) : ControllerBase
+    ISalaryVisibilityService salaryVisibility,
+    RehireGuardService rehireGuard) : ControllerBase
 {
     /// <summary>
     /// Personel kartlarındaki veri eksikleri, engelledikleri sürece
@@ -454,6 +455,47 @@ public sealed class PersonnelController(
             return Conflict(new { message = "Bu kimlik numarasıyla kayıtlı personel bulunuyor." });
         }
 
+        // KAPI: kırmızı işaretli eski personel yeniden giremez.
+        // Kimlik benzersizliği bunu zaten çoğu durumda yakalıyor ama
+        // SİLİNMİŞ eski kaydı görmüyor — yumuşak silme, kişinin bizde
+        // çalışmış olduğu gerçeğini değiştirmez.
+        var guard = await rehireGuard.EvaluateAsync(
+            request.IdentityNumber,
+            request.RehireOverrideReason,
+            targetPersonnelId: null,
+            cancellationToken);
+
+        if (guard.Blocked)
+        {
+            return Conflict(new
+            {
+                message = guard.Message,
+                rehireBlocked = true,
+                matchedPersonnelId = guard.MatchedPersonnelId,
+                rehireNote = guard.Note
+            });
+        }
+
+        // SİLİNMİŞ kayıt çakışması: kimlik benzersiz indeksi filtresiz,
+        // yani yumuşak silinmiş satır TC'yi işgal etmeye devam ediyor.
+        // Yukarıdaki benzersizlik kontrolü global filtre yüzünden bunu
+        // görmüyordu ve kayıt veritabanı hatasıyla 500 dönüyordu.
+        // Yeniden işe alma zaten mevcut kaydın aktifleştirilmesinden
+        // geçiyor; kullanıcıya bunu söylemek gerekiyor.
+        if (guard.MatchedPersonnelId is Guid existingId &&
+            !await db.Personnel.AnyAsync(x => x.Id == existingId, cancellationToken))
+        {
+            return Conflict(new
+            {
+                message =
+                    "Bu kimlik numarası silinmiş bir personel kaydına ait. " +
+                    "Yeni kayıt açılamaz; yeniden işe alım mevcut kaydın " +
+                    "aktifleştirilmesiyle yapılır.",
+                matchedPersonnelId = existingId,
+                deletedRecordConflict = true
+            });
+        }
+
         var personnel = new Personnel
         {
             CompanyId = request.CompanyId,
@@ -532,6 +574,35 @@ public sealed class PersonnelController(
 
         if (!Enum.IsDefined(typeof(PersonnelStatus), request.Status))
             return BadRequest(new { message = "Geçersiz personel durumu." });
+
+        // KAPI: yeniden işe alma bu uçtan geçiyor — çıkmış personelin
+        // durumu Aktif'e çevriliyor. Ayrı bir "yeniden işe al" ucu yok
+        // (kimlik benzersiz olduğu için yeni kayıt açılamıyor), o
+        // yüzden engel buraya da konuyor. Aksi halde kırmızı işaretli
+        // kişi kartından tek tıkla geri alınabilirdi.
+        var reactivating =
+            personnel.Status == PersonnelStatus.Terminated &&
+            (PersonnelStatus)request.Status == PersonnelStatus.Active;
+
+        if (reactivating)
+        {
+            var guard = await rehireGuard.EvaluateAsync(
+                personnel.IdentityNumber,
+                request.RehireOverrideReason,
+                targetPersonnelId: personnel.Id,
+                cancellationToken);
+
+            if (guard.Blocked)
+            {
+                return Conflict(new
+                {
+                    message = guard.Message,
+                    rehireBlocked = true,
+                    matchedPersonnelId = guard.MatchedPersonnelId,
+                    rehireNote = guard.Note
+                });
+            }
+        }
 
         personnel.BranchId = request.BranchId;
         personnel.FirstName = request.FirstName.Trim();
