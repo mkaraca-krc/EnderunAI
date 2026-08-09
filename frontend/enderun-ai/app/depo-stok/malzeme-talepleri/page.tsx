@@ -144,7 +144,7 @@ export default function MaterialRequestsPage() {
             </Link>
 
             <p className="mt-2 text-sm text-slate-500">
-              Talep, rezervasyon ve depo çıkış
+              Talep ve onay
               süreçlerini proje bazında izleyin.
             </p>
           </div>

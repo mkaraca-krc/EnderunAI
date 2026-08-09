@@ -10,12 +10,11 @@ export interface InventoryMovement {
 export interface WarehouseStockRow {
   inventoryItemId: string;
   quantity: number;
-  reservedQuantity?: number;
 }
 export interface CriticalStockAlert {
   warehouseId: string; warehouseName: string;
   inventoryItemId: string; itemCode: string; itemName: string; unit: string;
-  availableQuantity: number; minimumStock: number;
+  minimumStock: number;
 }
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const backendPath = path.replace(/^\/api\//, "");

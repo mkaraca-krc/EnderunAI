@@ -48,10 +48,6 @@ export type PurchaseRequestItem = {
 
   materialDescription: string;
   quantity: number;
-  reservedQuantity: number;
-  issuedQuantity: number;
-  remainingQuantity: number;
-  availableToReserveQuantity: number;
 
   unit: string;
   requestedDeliveryDate?: string | null;
@@ -137,118 +133,12 @@ export type UpdatePurchaseRequestPayload = {
   items: PurchaseRequestItemPayload[];
 };
 
-export type StockReservationListItem = {
-  id: string;
-  reservationNumber: string;
 
-  warehouseId: string;
-  warehouseName: string;
 
-  inventoryItemId: string;
-  inventoryItemCode: string;
-  inventoryItemName: string;
 
-  projectId: string;
-  purchaseRequestId: string;
-  purchaseRequestItemId: string;
 
-  reservedQuantity: number;
-  consumedQuantity: number;
-  remainingQuantity: number;
 
-  reservationDate: string;
-  expirationDate?: string | null;
 
-  status: number;
-  statusName: string;
-  description?: string | null;
-  isExpired: boolean;
-};
-
-export type PurchaseRequestStockStatusLine = {
-  purchaseRequestItemId: string;
-  lineNumber: number;
-
-  inventoryItemId: string;
-  inventoryItemCode: string;
-  inventoryItemName: string;
-
-  materialDescription: string;
-  unit: string;
-
-  requestedQuantity: number;
-  reservedQuantity: number;
-  issuedQuantity: number;
-
-  remainingRequestQuantity: number;
-  unreservedQuantity: number;
-
-  warehouseQuantity: number;
-  warehouseReservedQuantity: number;
-  warehouseAvailableQuantity: number;
-
-  reservableQuantity: number;
-  missingQuantity: number;
-};
-
-export type PurchaseRequestStockStatus = {
-  purchaseRequestId: string;
-  requestNumber: string;
-  requestType: number;
-  status: number;
-
-  companyId: string;
-  projectId: string;
-
-  warehouseId?: string | null;
-  warehouseName?: string | null;
-
-  totalRequestedQuantity: number;
-  totalReservedQuantity: number;
-  totalIssuedQuantity: number;
-  totalRemainingQuantity: number;
-  totalUnreservedQuantity: number;
-  totalReservableQuantity: number;
-  totalMissingQuantity: number;
-
-  isFullyReserved: boolean;
-  isFullyIssued: boolean;
-
-  lines: PurchaseRequestStockStatusLine[];
-};
-
-export type ReservePurchaseRequestPayload = {
-  warehouseId: string;
-  expirationDate?: string | null;
-  description?: string | null;
-};
-
-export type ReservePurchaseRequestResponse = {
-  purchaseRequestId: string;
-  requestNumber: string;
-  warehouseId: string;
-  reservedLineCount: number;
-  totalNewlyReservedQuantity: number;
-  totalMissingQuantity: number;
-};
-
-export type IssueStockReservationPayload = {
-  stockReservationId: string;
-  quantity: number;
-  movementDate: string;
-  description?: string | null;
-};
-
-export type IssueStockReservationResponse = {
-  stockMovementId: string;
-  accountingVoucherId?: string | null;
-  accountingVoucherNumber?: string | null;
-  averageUnitCost?: number | null;
-  totalCost?: number | null;
-  reservationRemaining?: number | null;
-  requestStatus?: number | null;
-  accountingVoucherStatus?: number | null;
-};
 
 function buildQuery(params?: {
   companyId?: string;
@@ -388,82 +278,9 @@ export const purchaseRequestService = {
     );
   },
 
-  getReservations(id: string) {
-    return apiClient<StockReservationListItem[]>(
-      `purchase-requests/${id}/reservations`,
-    );
-  },
 
-  getStockStatus(
-    id: string,
-    warehouseId?: string,
-  ) {
-    const query = warehouseId
-      ? `?warehouseId=${encodeURIComponent(
-          warehouseId,
-        )}`
-      : "";
 
-    return apiClient<PurchaseRequestStockStatus>(
-      `purchase-requests/${id}/stock-status${query}`,
-    );
-  },
 
-  reserve(
-    id: string,
-    payload: ReservePurchaseRequestPayload,
-  ) {
-    return apiClient<ReservePurchaseRequestResponse>(
-      `purchase-requests/${id}/reserve`,
-      {
-        method: "POST",
-        body: payload,
-      },
-    );
-  },
 
-  issueReservation(
-    id: string,
-    payload: IssueStockReservationPayload,
-  ) {
-    return apiClient<IssueStockReservationResponse>(
-      `purchase-requests/${id}/reservations/issue`,
-      {
-        method: "POST",
-        body: payload,
-      },
-    );
-  },
 
-  releaseReservation(
-    id: string,
-    reservationId: string,
-    reason?: string,
-  ) {
-    return apiClient(
-      `purchase-requests/${id}/reservations/${reservationId}/release`,
-      {
-        method: "POST",
-        body: {
-          reason: reason || null,
-        },
-      },
-    );
-  },
-
-  cancelReservation(
-    id: string,
-    reservationId: string,
-    reason?: string,
-  ) {
-    return apiClient(
-      `purchase-requests/${id}/reservations/${reservationId}/cancel`,
-      {
-        method: "POST",
-        body: {
-          reason: reason || null,
-        },
-      },
-    );
-  },
 };

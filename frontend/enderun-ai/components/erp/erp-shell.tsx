@@ -360,11 +360,6 @@ const groups: MenuGroup[] = [
         href: "/depo-stok/malzeme-talepleri",
         icon: "○",
       },
-      {
-        label: "Rezervasyonlar",
-        href: "/depo-stok/rezervasyonlar",
-        icon: "○",
-      },
     ],
   },
   {

@@ -171,14 +171,11 @@ public sealed class Project : BaseEntity
     /// </summary>
     public decimal DeviationAlertThresholdRate { get; set; } = 5m;
 
-    /// <summary>All-risk inşaat sigortası kesinti oranı (%). Yaygın: 0,5.</summary>
-    public decimal AllRiskInsuranceRate { get; set; }
 
     /// <summary>
     /// Projenin varsayılan barter oranı (%). Şantiyede oran tanımlıysa
     /// o öncelikli; hakedişte de düzeltilebilir.
     /// </summary>
-    public decimal BarterRate { get; set; }
     public string? WithholdingRate { get; set; }
 
     public DateTime? PlannedStartDate { get; set; }
@@ -227,7 +224,6 @@ public sealed class Project : BaseEntity
 
     public ProjectStatus Status { get; set; } = ProjectStatus.Kesif;
     public ProjectHealthStatus HealthStatus { get; set; } = ProjectHealthStatus.Green;
-    public string? HealthReason { get; set; }
 
     public Guid? ProjectManagerUserId { get; set; }
 

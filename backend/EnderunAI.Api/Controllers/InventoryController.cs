@@ -63,7 +63,6 @@ public sealed class InventoryController(
                 : null,
             x.Type, x.IsActive,
             TotalStock = x.WarehouseStocks.Sum(s => s.Quantity),
-            AvailableStock = x.WarehouseStocks.Sum(s => s.Quantity - s.ReservedQuantity),
             // Stok değeri ağırlıklı ortalama maliyetten hesaplanır; son
             // alış fiyatı kullanılsaydı eski stok bugünkü fiyatla
             // değerlenir ve bilanço şişerdi.
@@ -73,7 +72,7 @@ public sealed class InventoryController(
         if (criticalOnly == true)
         {
             items = items
-                .Where(x => x.MinimumStock > 0m && x.AvailableStock <= x.MinimumStock)
+                .Where(x => x.MinimumStock > 0m && x.TotalStock <= x.MinimumStock)
                 .ToList();
         }
 
@@ -133,15 +132,12 @@ public sealed class InventoryController(
                 x.CopperKgPerUnit,
                 x.ImagePath,
                 x.WarehouseStocks.Sum(s => s.Quantity),
-                x.WarehouseStocks.Sum(s => s.Quantity - s.ReservedQuantity),
                 x.WarehouseStocks.Sum(s => s.Quantity) * x.AverageUnitCost,
                 x.WarehouseStocks.Select(s => new InventoryItemWarehouseStock(
                     s.WarehouseId,
                     s.Warehouse.Code,
                     s.Warehouse.Name,
-                    s.Quantity,
-                    s.ReservedQuantity,
-                    s.Quantity - s.ReservedQuantity)).ToList()))
+                    s.Quantity)).ToList()))
             .SingleOrDefaultAsync(cancellationToken);
 
         return item is null
@@ -237,7 +233,7 @@ public sealed class InventoryController(
     {
         var query = db.WarehouseStocks.AsNoTracking()
             .Where(x => x.InventoryItem.MinimumStock > 0 &&
-                        (x.Quantity - x.ReservedQuantity) <= x.InventoryItem.MinimumStock);
+                        x.Quantity <= x.InventoryItem.MinimumStock);
 
         if (companyId.HasValue)
             query = query.Where(x => x.InventoryItem.CompanyId == companyId.Value);
@@ -252,7 +248,7 @@ public sealed class InventoryController(
                 ItemCode = x.InventoryItem.Code,
                 ItemName = x.InventoryItem.Name,
                 x.InventoryItem.Unit,
-                AvailableQuantity = x.Quantity - x.ReservedQuantity,
+                x.Quantity,
                 x.InventoryItem.MinimumStock
             })
             .ToListAsync(cancellationToken);
@@ -274,11 +270,10 @@ public sealed class InventoryController(
             {
                 x.InventoryItemId, x.InventoryItem.Code, x.InventoryItem.Name,
                 x.InventoryItem.Category, x.InventoryItem.Brand, x.InventoryItem.Model,
-                x.InventoryItem.Unit, x.Quantity, x.ReservedQuantity,
-                AvailableQuantity = x.Quantity - x.ReservedQuantity,
+                x.InventoryItem.Unit, x.Quantity,
                 x.InventoryItem.MinimumStock,
                 x.InventoryItem.AverageUnitCost,
-                IsCritical = x.Quantity - x.ReservedQuantity <= x.InventoryItem.MinimumStock
+                IsCritical = x.Quantity <= x.InventoryItem.MinimumStock
             }).ToListAsync(cancellationToken);
 
         return Ok(stocks);
@@ -369,8 +364,8 @@ public sealed class InventoryController(
             x => x.WarehouseId == request.WarehouseId && x.InventoryItemId == request.InventoryItemId, cancellationToken);
 
         if (stock is null) return NotFound(new { message = "Depoda bu malzeme bulunmuyor." });
-        if (stock.Quantity - stock.ReservedQuantity < request.Quantity)
-            return Conflict(new { message = "Kullanılabilir stok yetersiz." });
+        if (stock.Quantity < request.Quantity)
+            return Conflict(new { message = "Stok yetersiz." });
 
         if (request.ProjectSiteId.HasValue && !request.ProjectId.HasValue)
             return BadRequest(new { message = "Şantiye seçildiyse proje de belirtilmelidir." });
@@ -546,7 +541,7 @@ public sealed class InventoryController(
         if (targetWarehouse is null) return NotFound(new { message = "Hedef depo bulunamadı." });
         if (source.Warehouse.CompanyId != targetWarehouse.CompanyId)
             return BadRequest(new { message = "Depolar aynı şirkete ait olmalıdır." });
-        if (source.Quantity - source.ReservedQuantity < request.Quantity)
+        if (source.Quantity < request.Quantity)
             return Conflict(new { message = "Kaynak depoda yeterli stok yok." });
 
         var referenceNumber = await documentNumbers.GenerateAsync(

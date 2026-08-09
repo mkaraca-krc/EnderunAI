@@ -500,7 +500,6 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
                 x.Address,
                 x.Status,
                 x.HealthStatus,
-                x.HealthReason,
                 WarehouseCount = x.Warehouses.Count(w => w.IsActive)
             })
             .SingleOrDefaultAsync(cancellationToken);

@@ -44,9 +44,7 @@ public sealed class HrAssetAssignment : BaseEntity
     public string? Notes { get; set; }
 
     public Guid? InventoryItemId { get; set; }
-    public decimal? InventoryQuantity { get; set; }
     public Guid? IssueStockMovementId { get; set; }
-    public decimal? IssuedUnitCost { get; set; }
     public Guid? ReturnStockMovementId { get; set; }
     public Guid? WarehouseId { get; set; }
 }

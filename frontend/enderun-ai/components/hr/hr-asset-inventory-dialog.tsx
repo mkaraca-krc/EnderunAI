@@ -130,7 +130,7 @@ export default function HrAssetInventoryDialog({
           x.companyId === companyId &&
           x.type === 1 &&
           x.isActive &&
-          Number(x.availableStock) > 0
+          Number(x.totalStock) > 0
       )
       .filter((x) => {
         if (!term) return true;
@@ -264,7 +264,7 @@ export default function HrAssetInventoryDialog({
                 <option value="">Seçiniz</option>
                 {equipmentItems.map((x) => (
                   <option key={x.id} value={x.id}>
-                    {x.code} · {x.name}{x.brand ? ` · ${x.brand}` : ""}{x.model ? ` ${x.model}` : ""} · Kullanılabilir: {x.availableStock} {x.unit}
+                    {x.code} · {x.name}{x.brand ? ` · ${x.brand}` : ""}{x.model ? ` ${x.model}` : ""} · Stok: {x.totalStock} {x.unit}
                   </option>
                 ))}
               </select>
@@ -275,7 +275,7 @@ export default function HrAssetInventoryDialog({
             <div style={{ gridColumn: "1 / -1", padding: 13, borderRadius: 12, background: "#f0fdfa", border: "1px solid #99f6e4", color: "#134e4a" }}>
               <strong>{selectedItem.code} · {selectedItem.name}</strong>
               <div style={{ marginTop: 5, fontSize: 13 }}>
-                Marka/Model: {selectedItem.brand || "-"} / {selectedItem.model || "-"} · Kullanılabilir stok: {selectedItem.availableStock} {selectedItem.unit}
+                Marka/Model: {selectedItem.brand || "-"} / {selectedItem.model || "-"} · Stok: {selectedItem.totalStock} {selectedItem.unit}
               </div>
             </div>
           )}

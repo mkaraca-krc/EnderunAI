@@ -90,12 +90,6 @@ public sealed class PersonnelTermination : BaseEntity
     /// <summary>Kıdem tavanı resmi hesabı kesti mi (şeffaflık için).</summary>
     public bool SeveranceCeilingApplied { get; set; }
 
-    // --- GERÇEK tutarlar (fiilen ödenecek) ---
-    // Elden kısım içerdikleri için extra_payment.view olmadan dönmez.
-
-    public decimal ActualSeveranceGross { get; set; }
-    public decimal ActualNoticeGross { get; set; }
-    public decimal ActualLeaveGross { get; set; }
     public decimal ActualNetTotal { get; set; }
 
     /// <summary>Elden ödenecek fark: gerçek net − resmi net.</summary>

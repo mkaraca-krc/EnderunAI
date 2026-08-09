@@ -557,7 +557,7 @@ export default function NewMaterialRequestPage() {
                       {selectedItem ? (
                         <p className="mt-1 text-xs text-slate-500">
                           Kullanılabilir stok:{" "}
-                          {selectedItem.availableStock}{" "}
+                          {selectedItem.totalStock}{" "}
                           {selectedItem.unit}
                         </p>
                       ) : null}
@@ -604,7 +604,7 @@ export default function NewMaterialRequestPage() {
                               value={item.id}
                             >
                               {item.code} · {item.name} ·{" "}
-                              {item.availableStock}{" "}
+                              {item.totalStock}{" "}
                               {item.unit}
                             </option>
                           ))}

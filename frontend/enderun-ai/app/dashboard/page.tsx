@@ -8,7 +8,6 @@ import DashboardStat from "@/components/dashboard/dashboard-stat";
 import RecentProgressPayments from "@/components/dashboard/recent-progress-payments";
 import AiManagementWidget from "@/components/dashboard/ai-management-widget";
 import ProjectHealthWidget from "@/components/dashboard/project-health-widget";
-import ProjectWorkflowWidget from "@/components/dashboard/project-workflow-widget";
 import QuickActionsWidget from "@/components/dashboard/quick-actions-widget";
 import FinanceSummaryWidget from "@/components/dashboard/finance-summary-widget";
 import OperationsSummaryWidget from "@/components/dashboard/operations-summary-widget";
@@ -211,6 +210,15 @@ export default function DashboardPage() {
       financeResult,
       profitabilityResult,
     ] = results;
+
+    // Kârlılık uçtan geliyordu ama sonuç hiç saklanmıyordu; widget her
+    // kullanıcıda boş render ediliyordu. Yetkisi olmayan kullanıcıda uç
+    // 403 döner — bu bir hata değil, kâr rakamı ona kapalı demektir.
+    setProfitability(
+      profitabilityResult.status === "fulfilled"
+        ? profitabilityResult.value
+        : []
+    );
 
     if (projectResult.status === "fulfilled") {
       setProjects(projectResult.value);
@@ -430,7 +438,7 @@ export default function DashboardPage() {
     const criticalStock = inventory.filter(
       (x) =>
         x.isActive &&
-        x.availableStock <= x.minimumStock
+        x.totalStock <= x.minimumStock
     );
 
     const activePersonnel = personnel.filter(
@@ -957,7 +965,6 @@ export default function DashboardPage() {
             items={recentProgressPayments}
           />
 
-          <ProjectWorkflowWidget />
 
       <ProjectHealthWidget
             totalProjects={projects.length}

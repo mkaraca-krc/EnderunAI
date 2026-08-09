@@ -251,22 +251,12 @@ export default function InventoryOperationsPage() {
     const criticalItems = items.filter(
       (item) =>
         item.isActive &&
-        item.availableStock <= item.minimumStock,
+        item.totalStock <= item.minimumStock,
     );
 
     const totalStock = items.reduce(
       (sum, item) => sum + item.totalStock,
       0,
-    );
-
-    const availableStock = items.reduce(
-      (sum, item) => sum + item.availableStock,
-      0,
-    );
-
-    const reservedStock = Math.max(
-      0,
-      totalStock - availableStock,
     );
 
     const openRequests = requests.filter(
@@ -310,8 +300,6 @@ export default function InventoryOperationsPage() {
       ).length,
       criticalItems,
       totalStock,
-      availableStock,
-      reservedStock,
       openRequests,
       waitingApproval,
       approvedRequests,
@@ -353,8 +341,8 @@ export default function InventoryOperationsPage() {
       [...summary.criticalItems]
         .sort(
           (a, b) =>
-            a.availableStock -
-            b.availableStock,
+            a.totalStock -
+            b.totalStock,
         )
         .slice(0, 8),
     [summary.criticalItems],
@@ -384,7 +372,7 @@ export default function InventoryOperationsPage() {
               </h2>
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                Şantiye talepleri, rezervasyon,
+                Şantiye talepleri,
                 mal kabul, depo çıkışı ve stok
                 hareketlerini aynı merkezden takip edin.
               </p>
@@ -441,18 +429,6 @@ export default function InventoryOperationsPage() {
           />
 
           <StatCard
-            label="Rezerve Stok"
-            value={
-              loading
-                ? "…"
-                : formatNumber(
-                    summary.reservedStock,
-                  )
-            }
-            description="Toplam stoktan ayrılmış miktar"
-          />
-
-          <StatCard
             label="Bugünkü Çıkış"
             value={
               loading
@@ -479,7 +455,7 @@ export default function InventoryOperationsPage() {
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <QuickAction
               title="Malzeme Talepleri"
-              description="Talep, onay ve rezervasyon"
+              description="Talep ve onay akışı"
               href="/depo-stok/malzeme-talepleri"
               icon="○"
             />
@@ -637,7 +613,7 @@ export default function InventoryOperationsPage() {
                     <div className="shrink-0 text-right">
                       <strong className="block text-sm text-red-700">
                         {formatNumber(
-                          item.availableStock,
+                          item.totalStock,
                         )}{" "}
                         {item.unit}
                       </strong>
@@ -918,7 +894,7 @@ export default function InventoryOperationsPage() {
                     // aksi halde stoğu biten her kalem kırmızı görünürdü.
                     const critical =
                       item.minimumStock > 0 &&
-                      item.availableStock <= item.minimumStock;
+                      item.totalStock <= item.minimumStock;
 
                     return (
                       <tr
@@ -959,7 +935,7 @@ export default function InventoryOperationsPage() {
 
                         <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
                           {formatNumber(
-                            item.availableStock,
+                            item.totalStock,
                           )}{" "}
                           {item.unit}
                         </td>

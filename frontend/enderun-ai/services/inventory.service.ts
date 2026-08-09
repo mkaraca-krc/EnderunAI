@@ -18,7 +18,6 @@ export interface InventoryItemListItem {
   type: InventoryItemType;
   isActive: boolean;
   totalStock: number;
-  availableStock: number;
   /** Ağırlıklı ortalama birim maliyet (TRY). */
   averageUnitCost: number;
   /** Toplam stok × ortalama maliyet. */
@@ -35,8 +34,6 @@ export interface InventoryItemWarehouseStock {
   warehouseCode: string;
   warehouseName: string;
   quantity: number;
-  reservedQuantity: number;
-  availableQuantity: number;
 }
 
 export interface InventoryItemDetail {
@@ -63,7 +60,6 @@ export interface InventoryItemDetail {
   description?: string | null;
   imagePath?: string | null;
   totalStock: number;
-  availableStock: number;
   stockValue: number;
   warehouses: InventoryItemWarehouseStock[];
   /**

@@ -201,7 +201,7 @@ export default function InventoryItemDetailPage() {
     );
   }
 
-  const critical = item.minimumStock > 0 && item.availableStock <= item.minimumStock;
+  const critical = item.minimumStock > 0 && item.totalStock <= item.minimumStock;
 
   return (
     <ErpShell
@@ -217,7 +217,7 @@ export default function InventoryItemDetailPage() {
             {number.format(item.totalStock)} {item.unit}
           </strong>
           <small style={{ display: "block", marginTop: "4px" }}>
-            Kullanılabilir: {number.format(item.availableStock)} {item.unit}
+            Stok: {number.format(item.totalStock)} {item.unit}
             {" · "}
             Stok değeri: {money.format(item.stockValue)}
           </small>
@@ -286,7 +286,6 @@ export default function InventoryItemDetailPage() {
                 <tr>
                   <th>Depo</th>
                   <th style={{ textAlign: "right" }}>Miktar</th>
-                  <th style={{ textAlign: "right" }}>Rezerve</th>
                   <th style={{ textAlign: "right" }}>Kullanılabilir</th>
                   <th style={{ textAlign: "right" }}>Değer</th>
                 </tr>
@@ -302,10 +301,8 @@ export default function InventoryItemDetailPage() {
                       {number.format(warehouse.quantity)} {item.unit}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {number.format(warehouse.reservedQuantity)}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {number.format(warehouse.availableQuantity)}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       {money.format(warehouse.quantity * item.averageUnitCost)}

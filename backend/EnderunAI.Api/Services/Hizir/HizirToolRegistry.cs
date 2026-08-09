@@ -443,7 +443,6 @@ public sealed class HizirToolRegistry : IHizirToolRegistry
                 ItemName = x.InventoryItem.Name,
                 WarehouseName = x.Warehouse.Name,
                 x.Quantity,
-                x.ReservedQuantity,
                 Unit = x.InventoryItem.Unit
             })
             .ToListAsync(cancellationToken);
@@ -457,7 +456,7 @@ public sealed class HizirToolRegistry : IHizirToolRegistry
         {
             builder.AppendLine(
                 $"- {row.ItemCode} {row.ItemName} | {row.WarehouseName} | " +
-                $"mevcut: {TurkishFormat.Amount(row.Quantity)} {row.Unit} | rezerve: {TurkishFormat.Amount(row.ReservedQuantity)}");
+                $"mevcut: {TurkishFormat.Amount(row.Quantity)} {row.Unit}");
         }
 
         return new HizirToolOutcome(builder.ToString());

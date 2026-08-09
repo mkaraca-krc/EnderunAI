@@ -126,7 +126,6 @@ public sealed record InventoryItemDetail(
     decimal? CopperKgPerUnit,
     string? ImagePath,
     decimal TotalStock,
-    decimal AvailableStock,
     /// <summary>Toplam stok × ağırlıklı ortalama maliyet.</summary>
     decimal StockValue,
     IReadOnlyList<InventoryItemWarehouseStock> Warehouses);
@@ -154,6 +153,4 @@ public sealed record InventoryItemWarehouseStock(
     Guid WarehouseId,
     string WarehouseCode,
     string WarehouseName,
-    decimal Quantity,
-    decimal ReservedQuantity,
-    decimal AvailableQuantity);
+    decimal Quantity);

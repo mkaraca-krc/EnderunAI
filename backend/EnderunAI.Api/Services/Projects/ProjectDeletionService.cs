@@ -394,7 +394,6 @@ public sealed class ProjectDeletionService(
         await AddAsync("purchaseRequests", "Satın alma talebi", "purchase_requests t");
         await AddAsync("purchaseOrders", "Satın alma siparişi", "purchase_orders t");
         await AddAsync("offers", "Teklif", "offers t");
-        await AddAsync("stockReservations", "Stok rezervasyonu", "stock_reservations t");
         await AddAsync("personnelAssignments", "Personel ataması", "personnel_assignments t");
         await AddAsync("isgSiteDocuments", "İSG saha dokümanı", "isg_site_documents t");
         await AddAsync("isgIncidents", "İSG olayı", "isg_incidents t");
@@ -496,14 +495,6 @@ public sealed class ProjectDeletionService(
             "UPDATE supplier_invoices SET \"WarehouseId\" = NULL FROM warehouses w" +
             " WHERE supplier_invoices.\"WarehouseId\" = w.\"Id\" AND w.\"ProjectId\" = {0}",
             "UPDATE sales_invoices SET \"ProjectId\" = NULL WHERE \"ProjectId\" = {0}",
-
-            // Stok rezervasyonları: hem satın alma talebine hem depoya bağlı,
-            // ikisinden de önce gitmeli.
-            "DELETE FROM stock_reservations WHERE \"ProjectId\" = {0}",
-            "DELETE FROM stock_reservations sr USING warehouses w" +
-            " WHERE sr.\"WarehouseId\" = w.\"Id\" AND w.\"ProjectId\" = {0}",
-            "DELETE FROM stock_reservations sr USING purchase_requests pr" +
-            " WHERE sr.\"PurchaseRequestId\" = pr.\"Id\" AND pr.\"ProjectId\" = {0}",
 
             // Satın alma zinciri: mal kabul → sipariş → RFQ → talep.
             "DELETE FROM goods_receipt_items gi USING goods_receipts g, purchase_orders po" +

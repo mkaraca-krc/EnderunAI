@@ -69,10 +69,8 @@ public sealed class JobCandidate : BaseEntity
     public string? Email { get; set; }
     public string? City { get; set; }
     public string? Profession { get; set; }
-    public string? CurrentCompany { get; set; }
     public int? TotalExperienceYears { get; set; }
     public string? EducationLevel { get; set; }
-    public string? CvFilePath { get; set; }
     public string? Source { get; set; }
     public string? Notes { get; set; }
     public JobCandidateStatus Status { get; set; } = JobCandidateStatus.New;
@@ -108,11 +106,8 @@ public sealed class CandidateInterview : BaseEntity
     public DateTime PlannedAtUtc { get; set; }
     public string? InterviewType { get; set; }
     public string? LocationOrLink { get; set; }
-    public Guid? InterviewerUserId { get; set; }
     public string? InterviewerName { get; set; }
     public decimal? Score { get; set; }
-    public string? Strengths { get; set; }
-    public string? Weaknesses { get; set; }
     public string? EvaluationNote { get; set; }
     public bool? IsRecommended { get; set; }
     public CandidateInterviewStatus Status { get; set; } = CandidateInterviewStatus.Scheduled;

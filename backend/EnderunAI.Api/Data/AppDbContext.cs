@@ -193,7 +193,6 @@ public sealed class AppDbContext(
     public DbSet<PriceDifferenceIndexPeriod> PriceDifferenceIndexPeriods => Set<PriceDifferenceIndexPeriod>();
     public DbSet<ProjectBoq> ProjectBoqs => Set<ProjectBoq>();
     public DbSet<ProjectBoqItem> ProjectBoqItems => Set<ProjectBoqItem>();
-    public DbSet<StockReservation> StockReservations => Set<StockReservation>();
     public DbSet<ProjectSite> ProjectSites => Set<ProjectSite>();
     public DbSet<ProjectSiteAssignment> ProjectSiteAssignments => Set<ProjectSiteAssignment>();
     public DbSet<ProjectCostTransaction> ProjectCostTransactions => Set<ProjectCostTransaction>();
@@ -299,7 +298,6 @@ public sealed class AppDbContext(
         ConfigureSecretariat(modelBuilder);
         ConfigurePriceDifference(modelBuilder);
         ConfigureProjectBoq(modelBuilder);
-        ConfigureStockReservations(modelBuilder);
         ConfigureProjectSites(modelBuilder);
         ConfigureProjectCostTransactions(modelBuilder);
         ConfigureHrProjectLaborCosts(modelBuilder);
@@ -1190,9 +1188,6 @@ public sealed class AppDbContext(
                 nameof(PersonnelTermination.OfficialLeaveIncomeTax),
                 nameof(PersonnelTermination.OfficialLeaveStampTax),
                 nameof(PersonnelTermination.OfficialNetTotal),
-                nameof(PersonnelTermination.ActualSeveranceGross),
-                nameof(PersonnelTermination.ActualNoticeGross),
-                nameof(PersonnelTermination.ActualLeaveGross),
                 nameof(PersonnelTermination.ActualNetTotal),
                 nameof(PersonnelTermination.ExtraPaymentDifference)
             })
@@ -1871,8 +1866,6 @@ public sealed class AppDbContext(
             entity.Property(x => x.CurrencyCode).HasMaxLength(3).IsRequired();
             entity.Property(x => x.VatRate).HasPrecision(5, 2);
             entity.Property(x => x.WithholdingRate).HasMaxLength(20);
-            entity.Property(x => x.AllRiskInsuranceRate).HasPrecision(8, 4);
-            entity.Property(x => x.BarterRate).HasPrecision(8, 4);
             entity.Property(x => x.ContractType).HasConversion<int>();
             entity.Property(x => x.DeviationAlertThresholdRate).HasPrecision(8, 4);
             entity.Property(x => x.DelayPenaltyKind).HasConversion<int>();
@@ -1880,7 +1873,6 @@ public sealed class AppDbContext(
             entity.Property(x => x.DelayPenaltyCapRate).HasPrecision(8, 4);
             entity.Property(x => x.City).HasMaxLength(100);
             entity.Property(x => x.District).HasMaxLength(100);
-            entity.Property(x => x.HealthReason).HasMaxLength(500);
             entity.Property(x => x.ArchiveReason).HasMaxLength(500);
             entity.HasIndex(x => x.IsArchived);
 
@@ -2544,7 +2536,6 @@ public sealed class AppDbContext(
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.WarehouseId, x.InventoryItemId }).IsUnique();
             entity.Property(x => x.Quantity).HasPrecision(18, 4);
-            entity.Property(x => x.ReservedQuantity).HasPrecision(18, 4);
             entity.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.InventoryItem).WithMany(x => x.WarehouseStocks).HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(x => !x.IsDeleted);
@@ -3749,38 +3740,6 @@ public sealed class AppDbContext(
         });
     }
 
-    private static void ConfigureStockReservations(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<StockReservation>(entity =>
-        {
-            entity.ToTable("stock_reservations");
-            entity.HasKey(x => x.Id);
-
-            entity.HasIndex(x => x.ReservationNumber).IsUnique();
-            entity.HasIndex(x => x.CompanyId);
-            entity.HasIndex(x => x.InventoryItemId);
-            entity.HasIndex(x => x.ProjectId);
-            entity.HasIndex(x => new { x.PurchaseRequestId, x.PurchaseRequestItemId });
-            entity.HasIndex(x => x.PurchaseRequestItemId);
-            entity.HasIndex(x => new { x.WarehouseId, x.InventoryItemId, x.Status });
-
-            entity.Property(x => x.ReservationNumber).HasMaxLength(100).IsRequired();
-            entity.Property(x => x.ReservedQuantity).HasPrecision(18, 4);
-            entity.Property(x => x.ConsumedQuantity).HasPrecision(18, 4);
-            entity.Property(x => x.Status).HasConversion<int>();
-            entity.Property(x => x.Description).HasMaxLength(1000);
-
-            entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.InventoryItem).WithMany().HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.PurchaseRequest).WithMany().HasForeignKey(x => x.PurchaseRequestId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.PurchaseRequestItem).WithMany().HasForeignKey(x => x.PurchaseRequestItemId).OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasQueryFilter(x => !x.IsDeleted);
-        });
-    }
-
     private static void ConfigureProjectSites(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ProjectSite>(entity =>
@@ -3794,7 +3753,6 @@ public sealed class AppDbContext(
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Location).HasMaxLength(500);
             entity.Property(x => x.Notes).HasMaxLength(2000);
-            entity.Property(x => x.BarterRate).HasPrecision(8, 4);
 
             entity.HasOne(x => x.Project)
                 .WithMany()
@@ -4153,8 +4111,6 @@ public sealed class AppDbContext(
             entity.Property(x => x.ConditionAtReturn).HasMaxLength(2000);
             entity.Property(x => x.DocumentPath).HasMaxLength(1000);
             entity.Property(x => x.Notes).HasMaxLength(4000);
-            entity.Property(x => x.InventoryQuantity).HasPrecision(18, 4);
-            entity.Property(x => x.IssuedUnitCost).HasPrecision(18, 6);
 
             // Alet kartı sonradan geldi: mevcut serbest metinli
             // zimmetler bozulmasın diye bağ OPSİYONEL.
@@ -4335,9 +4291,7 @@ public sealed class AppDbContext(
             entity.Property(x => x.Email).HasMaxLength(250);
             entity.Property(x => x.City).HasMaxLength(150);
             entity.Property(x => x.Profession).HasMaxLength(250);
-            entity.Property(x => x.CurrentCompany).HasMaxLength(300);
             entity.Property(x => x.EducationLevel).HasMaxLength(150);
-            entity.Property(x => x.CvFilePath).HasMaxLength(1000);
             entity.Property(x => x.Source).HasMaxLength(200);
             entity.Property(x => x.Notes).HasMaxLength(4000);
             entity.HasQueryFilter(x => !x.IsDeleted);
@@ -4374,8 +4328,6 @@ public sealed class AppDbContext(
             entity.Property(x => x.LocationOrLink).HasMaxLength(1000);
             entity.Property(x => x.InterviewerName).HasMaxLength(250);
             entity.Property(x => x.Score).HasPrecision(8, 2);
-            entity.Property(x => x.Strengths).HasMaxLength(4000);
-            entity.Property(x => x.Weaknesses).HasMaxLength(4000);
             entity.Property(x => x.EvaluationNote).HasMaxLength(4000);
 
             entity.HasOne(x => x.JobApplication)
