@@ -102,6 +102,19 @@ public sealed class CompanyPayrollSettings : BaseEntity
     /// <summary>Nakdî yol yardımının günlük gelir vergisi istisna tavanı.</summary>
     public decimal? TravelIncomeTaxExemptionDailyCap { get; set; }
 
+    // --- Fazla mesai ---
+
+    /// <summary>
+    /// Bir personelin yıl içinde çalışabileceği azami fazla mesai
+    /// saati (İş Kanunu m.41: 270 saat).
+    ///
+    /// Koda gömülü varsayılan YOK: tanımlanmamış yılda uyarı
+    /// üretilmez ve bordro ön kontrolü sınırın tanımsız olduğunu
+    /// söyler. Sınır ENGEL DEĞİL uyarıdır — aşımda onaylayan görür,
+    /// onay yine geçer.
+    /// </summary>
+    public decimal? AnnualOvertimeHourLimit { get; set; }
+
     // --- Çalışma süresi ---
 
     /// <summary>

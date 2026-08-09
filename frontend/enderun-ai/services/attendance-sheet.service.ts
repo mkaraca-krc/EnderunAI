@@ -66,6 +66,8 @@ export type AttendanceCell = {
   status?: number | null;
   normalHours?: number | null;
   overtimeHours?: number | null;
+  sundayHours?: number | null;
+  publicHolidayHours?: number | null;
   isApproved: boolean;
 };
 

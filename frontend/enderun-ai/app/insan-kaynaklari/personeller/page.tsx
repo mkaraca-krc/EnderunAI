@@ -65,6 +65,8 @@ type PersonnelForm = {
   sgkRegistrationNumber: string;
   employmentStartDate: string;
   employmentEndDate: string;
+  overtimeConsentYear: string;
+  overtimeConsentDate: string;
   monthlySalary: string;
   status: string;
   isActive: boolean;
@@ -86,6 +88,8 @@ const emptyForm: PersonnelForm = {
   sgkRegistrationNumber: "",
   employmentStartDate: "",
   employmentEndDate: "",
+  overtimeConsentYear: "",
+  overtimeConsentDate: "",
   monthlySalary: "",
   status: "1",
   isActive: true,
@@ -621,6 +625,10 @@ export default function HrPersonnelPage() {
         sgkRegistrationNumber: detail.sgkRegistrationNumber ?? "",
         employmentStartDate: dateValue(detail.employmentStartDate),
         employmentEndDate: dateValue(detail.employmentEndDate),
+        overtimeConsentYear: detail.overtimeConsentYear
+          ? String(detail.overtimeConsentYear)
+          : "",
+        overtimeConsentDate: dateValue(detail.overtimeConsentDate),
         monthlySalary: detail.monthlySalary == null ? "" : String(detail.monthlySalary),
         status: String(detail.status),
         isActive: detail.isActive,
@@ -700,6 +708,11 @@ export default function HrPersonnelPage() {
           sgkRegistrationNumber: form.sgkRegistrationNumber || null,
           employmentStartDate: form.employmentStartDate || null,
           employmentEndDate: form.employmentEndDate || null,
+          // Muvafakat: yıl girilmemişse tarih de anlamsız kalır.
+          overtimeConsentYear: form.overtimeConsentYear
+            ? Number(form.overtimeConsentYear)
+            : null,
+          overtimeConsentDate: form.overtimeConsentDate || null,
           monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : null,
           status: Number(form.status),
           isActive: form.isActive,
@@ -1423,6 +1436,8 @@ export default function HrPersonnelPage() {
                     <Input label="Aylık Ücret" type="number" min="0" step="0.01" value={form.monthlySalary} onChange={(event) => updateForm("monthlySalary", event.target.value)} />
                     <Input label="İşe Giriş Tarihi" type="date" value={form.employmentStartDate} onChange={(event) => updateForm("employmentStartDate", event.target.value)} />
                     <Input label="İşten Çıkış Tarihi" type="date" value={form.employmentEndDate} onChange={(event) => updateForm("employmentEndDate", event.target.value)} disabled={!editingId} />
+                    <Input label="Fazla Mesai Muvafakati (yıl)" type="number" min={2000} max={2100} placeholder="Alınmadı" value={form.overtimeConsentYear} onChange={(event) => updateForm("overtimeConsentYear", event.target.value)} />
+                    <Input label="Muvafakat Tarihi" type="date" value={form.overtimeConsentDate} onChange={(event) => updateForm("overtimeConsentDate", event.target.value)} />
 
                     {/* EK ÖDEME (ELDEN).
                         Resmî net + elden + toplam ele geçen tek yerde:

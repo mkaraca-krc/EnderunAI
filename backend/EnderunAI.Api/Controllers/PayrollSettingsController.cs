@@ -97,6 +97,8 @@ public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
             NonNegative(request.TravelSgkExemptionDailyCap);
         settings.TravelIncomeTaxExemptionDailyCap =
             NonNegative(request.TravelIncomeTaxExemptionDailyCap);
+        settings.AnnualOvertimeHourLimit =
+            NonNegative(request.AnnualOvertimeHourLimit);
         settings.SeveranceCeiling = request.SeveranceCeiling;
         settings.SeveranceCeilingPeriodNote =
             string.IsNullOrWhiteSpace(request.SeveranceCeilingPeriodNote)
@@ -290,7 +292,8 @@ public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
             settings.MealSgkExemptionDailyCap,
             settings.MealIncomeTaxExemptionDailyCap,
             settings.TravelSgkExemptionDailyCap,
-            settings.TravelIncomeTaxExemptionDailyCap);
+            settings.TravelIncomeTaxExemptionDailyCap,
+            settings.AnnualOvertimeHourLimit);
 
     private static decimal? NonNegative(decimal? value) =>
         value is null || value.Value < 0m ? null : value;

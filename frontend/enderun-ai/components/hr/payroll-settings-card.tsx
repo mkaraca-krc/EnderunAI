@@ -169,6 +169,7 @@ export default function PayrollSettingsCard({ companyId }: Props) {
         travelSgkExemptionDailyCap: settings.travelSgkExemptionDailyCap,
         travelIncomeTaxExemptionDailyCap:
           settings.travelIncomeTaxExemptionDailyCap,
+        annualOvertimeHourLimit: settings.annualOvertimeHourLimit,
         taxBrackets: settings.taxBrackets.map((bracket) => ({
           order: bracket.order,
           lowerBound: bracket.lowerBound,
@@ -443,6 +444,30 @@ export default function PayrollSettingsCard({ companyId }: Props) {
                 }
               />
             </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <Input
+                label="Yıllık Fazla Mesai Sınırı (saat)"
+                type="number"
+                min={0}
+                step={1}
+                value={settings.annualOvertimeHourLimit === null
+                  ? ""
+                  : String(settings.annualOvertimeHourLimit)}
+                placeholder="Tanımlanmadı"
+                onChange={(e) =>
+                  patch({ annualOvertimeHourLimit: optionalNumeric(e.target.value) })
+                }
+              />
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Yıllık fazla mesai sınırı (yasal 270 saat) ENGEL DEĞİL uyarıdır:
+              aşan onay yine geçer, ama onaylayan aşımı görür ve bordro ön
+              kontrolü sınırı aşan personeli listeler. Boş bırakılırsa aşım
+              kontrolü yapılmaz. Sayıma yalnızca fazla çalışma girer; hafta
+              tatili ve genel tatil çalışması yasal sınırın konusu değildir.
+            </p>
 
             <p className="text-xs text-slate-500">
               Nakdî yemek ve yol yardımı günlük tavana kadar SGK priminden ve

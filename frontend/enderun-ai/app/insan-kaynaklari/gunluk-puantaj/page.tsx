@@ -51,7 +51,6 @@ type AttendanceForm = {
   checkOutTime: string;
   normalHours: string;
   overtimeHours: string;
-  nightShiftHours: string;
   sundayHours: string;
   publicHolidayHours: string;
   teamName: string;
@@ -74,7 +73,6 @@ type BulkForm = {
   checkOutTime: string;
   normalHours: string;
   overtimeHours: string;
-  nightShiftHours: string;
   sundayHours: string;
   publicHolidayHours: string;
   teamName: string;
@@ -121,7 +119,6 @@ const initialForm: AttendanceForm = {
   checkOutTime: "17:00",
   normalHours: "8",
   overtimeHours: "0",
-  nightShiftHours: "0",
   sundayHours: "0",
   publicHolidayHours: "0",
   teamName: "",
@@ -143,7 +140,6 @@ const initialBulkForm: BulkForm = {
   checkOutTime: "17:00",
   normalHours: "8",
   overtimeHours: "0",
-  nightShiftHours: "0",
   sundayHours: "0",
   publicHolidayHours: "0",
   teamName: "",
@@ -392,11 +388,6 @@ export default function DailyAttendancePage() {
     0
   );
 
-  const totalNight = items.reduce(
-    (sum, item) => sum + Number(item.nightShiftHours),
-    0
-  );
-
   const totalSunday = items.reduce(
     (sum, item) => sum + Number(item.sundayHours),
     0
@@ -571,7 +562,6 @@ export default function DailyAttendancePage() {
       checkOutTime: timeValue(item.checkOutTime),
       normalHours: String(item.normalHours),
       overtimeHours: String(item.overtimeHours),
-      nightShiftHours: String(item.nightShiftHours),
       sundayHours: String(item.sundayHours),
       publicHolidayHours: String(item.publicHolidayHours),
       teamName: item.teamName ?? "",
@@ -620,8 +610,7 @@ export default function DailyAttendancePage() {
             checkOutTime: "",
             normalHours: "0",
             overtimeHours: "0",
-            nightShiftHours: "0",
-            sundayHours: "0",
+                      sundayHours: "0",
             publicHolidayHours: "0",
           }
         : {}),
@@ -640,8 +629,7 @@ export default function DailyAttendancePage() {
             checkOutTime: "",
             normalHours: "0",
             overtimeHours: "0",
-            nightShiftHours: "0",
-            sundayHours: "0",
+                      sundayHours: "0",
             publicHolidayHours: "0",
           }
         : {}),
@@ -651,14 +639,12 @@ export default function DailyAttendancePage() {
   function validateHours(values: {
     normalHours: string;
     overtimeHours: string;
-    nightShiftHours: string;
     sundayHours: string;
     publicHolidayHours: string;
   }) {
     const hours = [
       numberValue(values.normalHours),
       numberValue(values.overtimeHours),
-      numberValue(values.nightShiftHours),
       numberValue(values.sundayHours),
       numberValue(values.publicHolidayHours),
     ];
@@ -693,7 +679,6 @@ export default function DailyAttendancePage() {
       checkOutTime: apiTime(values.checkOutTime),
       normalHours: numberValue(values.normalHours),
       overtimeHours: numberValue(values.overtimeHours),
-      nightShiftHours: numberValue(values.nightShiftHours),
       sundayHours: numberValue(values.sundayHours),
       publicHolidayHours: numberValue(
         values.publicHolidayHours
@@ -742,7 +727,6 @@ export default function DailyAttendancePage() {
           checkOutTime: payload.checkOutTime,
           normalHours: payload.normalHours,
           overtimeHours: payload.overtimeHours,
-          nightShiftHours: payload.nightShiftHours,
           sundayHours: payload.sundayHours,
           publicHolidayHours: payload.publicHolidayHours,
           teamName: payload.teamName,
@@ -980,7 +964,6 @@ export default function DailyAttendancePage() {
         timeValue(item.checkOutTime),
         item.normalHours,
         item.overtimeHours,
-        item.nightShiftHours,
         item.sundayHours,
         item.publicHolidayHours,
         item.totalHours,
@@ -1057,7 +1040,7 @@ export default function DailyAttendancePage() {
           ["Onaylanan", approvedCount],
           ["Normal Saat", totalNormal],
           ["Fazla Mesai", totalOvertime],
-          ["Gece + Pazar", totalNight + totalSunday],
+          ["Hafta Tatili", totalSunday],
           ["Toplam Adam/Saat", totalHours],
         ].map(([title, value]) => (
           <article
@@ -1306,7 +1289,6 @@ export default function DailyAttendancePage() {
               {[
                 ["normalHours", "Normal saat"],
                 ["overtimeHours", "Fazla mesai"],
-                ["nightShiftHours", "Gece saati"],
                 ["sundayHours", "Pazar saati"],
                 ["publicHolidayHours", "Resmî tatil saati"],
               ].map(([key, placeholder]) => (
@@ -1577,7 +1559,6 @@ export default function DailyAttendancePage() {
               {[
                 ["normalHours", "Normal saat"],
                 ["overtimeHours", "Fazla mesai"],
-                ["nightShiftHours", "Gece saati"],
                 ["sundayHours", "Pazar saati"],
                 ["publicHolidayHours", "Resmî tatil saati"],
               ].map(([key, placeholder]) => (
@@ -1987,10 +1968,6 @@ export default function DailyAttendancePage() {
 
                     <td className="p-4">
                       {item.overtimeHours}
-                    </td>
-
-                    <td className="p-4">
-                      {item.nightShiftHours}
                     </td>
 
                     <td className="p-4">

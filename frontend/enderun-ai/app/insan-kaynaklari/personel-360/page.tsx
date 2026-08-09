@@ -665,7 +665,6 @@ function TabContent({
         <Info label="Kayıt Sayısı" value={String(data.attendance.recordCount)} />
         <Info label="Onaylı Kayıt" value={String(data.attendance.approvedRecordCount)} />
         <Info label="Normal Saat" value={String(data.attendance.normalHours)} />
-        <Info label="Gece Mesaisi" value={String(data.attendance.nightShiftHours)} />
         <Info label="Pazar Mesaisi" value={String(data.attendance.sundayHours)} />
         <Info label="Resmî Tatil" value={String(data.attendance.publicHolidayHours)} />
       </div>

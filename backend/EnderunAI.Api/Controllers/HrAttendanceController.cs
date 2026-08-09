@@ -235,7 +235,6 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
                     or (int)AttendanceStatus.ExcusedAbsence),
             normalHours = rows.Sum(x => x.NormalHours),
             overtimeHours = rows.Sum(x => x.OvertimeHours),
-            nightShiftHours = rows.Sum(x => x.NightShiftHours),
             sundayHours = rows.Sum(x => x.SundayHours),
             publicHolidayHours = rows.Sum(x => x.PublicHolidayHours),
             totalHours = rows.Sum(x => x.TotalHours)
@@ -271,12 +270,10 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
         item.CheckOutTime = request.CheckOutTime;
         item.NormalHours = request.NormalHours;
         item.OvertimeHours = request.OvertimeHours;
-        item.NightShiftHours = request.NightShiftHours;
         item.SundayHours = request.SundayHours;
         item.PublicHolidayHours = request.PublicHolidayHours;
         item.TotalHours = request.NormalHours + request.OvertimeHours +
-                           request.NightShiftHours + request.SundayHours +
-                           request.PublicHolidayHours;
+                           request.SundayHours + request.PublicHolidayHours;
         item.TeamName = request.TeamName?.Trim();
         item.RoleName = request.RoleName?.Trim();
         item.WorkItemCode = request.WorkItemCode?.Trim();
@@ -299,7 +296,6 @@ public sealed class HrAttendanceController(AppDbContext db) : ControllerBase
         CheckOutTime = x.CheckOutTime?.ToString(),
         x.NormalHours,
         x.OvertimeHours,
-        x.NightShiftHours,
         x.SundayHours,
         x.PublicHolidayHours,
         x.TotalHours,
@@ -344,7 +340,6 @@ public sealed record SaveAttendanceRequest(
     TimeSpan? CheckOutTime,
     decimal NormalHours,
     decimal OvertimeHours,
-    decimal NightShiftHours,
     decimal SundayHours,
     decimal PublicHolidayHours,
     string? TeamName,

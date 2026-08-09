@@ -141,6 +141,11 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
                         status = saved?.Status,
                         normalHours = saved?.NormalHours,
                         overtimeHours = saved?.OvertimeHours,
+                        // Tatil çalışması saatleri de hücrede taşınır:
+                        // cetvel bunları geri göndermezse kaydetme
+                        // sırasında sıfırlanıp siliniyorlardı.
+                        sundayHours = saved?.SundayHours,
+                        publicHolidayHours = saved?.PublicHolidayHours,
                         isApproved = saved?.IsApproved ?? false
                     };
                 })

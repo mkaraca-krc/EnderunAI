@@ -25,7 +25,6 @@ export type AttendanceItem = {
   checkOutTime?: string | null;
   normalHours: number;
   overtimeHours: number;
-  nightShiftHours: number;
   sundayHours: number;
   publicHolidayHours: number;
   totalHours: number;
@@ -65,7 +64,6 @@ export type CreateAttendanceRequest = {
   checkOutTime?: string | null;
   normalHours: number;
   overtimeHours: number;
-  nightShiftHours: number;
   sundayHours: number;
   publicHolidayHours: number;
   teamName?: string | null;
@@ -92,7 +90,6 @@ export type AttendanceSummary = {
   absenceDays: number;
   normalHours: number;
   overtimeHours: number;
-  nightShiftHours: number;
   sundayHours: number;
   publicHolidayHours: number;
   totalHours: number;

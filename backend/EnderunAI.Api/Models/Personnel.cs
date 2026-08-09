@@ -55,6 +55,20 @@ public sealed class Personnel : BaseEntity
     public DateTime? EmploymentStartDate { get; set; }
     public DateTime? EmploymentEndDate { get; set; }
 
+    // --- Fazla mesai muvafakati ---
+    //
+    // Fazla çalışma için işçiden YILDA BİR yazılı onay alınması
+    // gerekiyor (İş Kanunu m.41). Belgenin kendisi özlük arşivinde
+    // durur; burada yalnızca hangi yıl için alındığı ve tarihi tutulur
+    // ki bordro ön kontrolü "mesai ödemesi var ama muvafakati yok"
+    // durumunu yakalayabilsin.
+
+    /// <summary>Muvafakatin geçerli olduğu yıl. Boşsa alınmamış.</summary>
+    public int? OvertimeConsentYear { get; set; }
+
+    /// <summary>Muvafakatin alındığı tarih.</summary>
+    public DateTime? OvertimeConsentDate { get; set; }
+
     public decimal? MonthlySalary { get; set; }
 
     /// <summary>

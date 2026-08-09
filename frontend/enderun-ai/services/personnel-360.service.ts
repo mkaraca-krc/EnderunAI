@@ -18,7 +18,6 @@ export type Personnel360Attendance = {
   approvedRecordCount: number;
   normalHours: number;
   overtimeHours: number;
-  nightShiftHours: number;
   sundayHours: number;
   publicHolidayHours: number;
   totalHours: number;

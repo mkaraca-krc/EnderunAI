@@ -318,9 +318,6 @@ public sealed class HrPersonnel360Controller(
                 approvedRecordCount = 0,
                 normalHours = 0m,
                 overtimeHours = approvedOvertimes.Sum(x => x.ApprovedHours),
-                nightShiftHours = approvedOvertimes
-                    .Where(x => x.IsNightWork)
-                    .Sum(x => x.ApprovedHours),
                 sundayHours = approvedOvertimes
                     .Where(x => x.IsSundayWork)
                     .Sum(x => x.ApprovedHours),

@@ -10,7 +10,6 @@ export type HrOvertimeItem = {
   approvedHours: number;
   isSundayWork: boolean;
   isPublicHolidayWork: boolean;
-  isNightWork: boolean;
   reason: string;
   status: number;
   statusName: string;
@@ -37,7 +36,6 @@ export type CreateHrOvertimeRequest = {
   requestedHours: number;
   isSundayWork: boolean;
   isPublicHolidayWork: boolean;
-  isNightWork: boolean;
   reason: string;
 };
 
@@ -48,7 +46,6 @@ export type UpdateHrOvertimeRequest = {
   approvedHours: number;
   isSundayWork: boolean;
   isPublicHolidayWork: boolean;
-  isNightWork: boolean;
   reason: string;
   status: number;
   approvalNote?: string | null;

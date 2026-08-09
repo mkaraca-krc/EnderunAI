@@ -1756,7 +1756,6 @@ export default function HrApprovalCenterPage() {
                     "Onay",
                     "Pazar",
                     "Resmî Tatil",
-                    "Gece",
                     "Sebep",
                     "Durum",
                     "İşlem",
@@ -1904,9 +1903,6 @@ export default function HrApprovalCenterPage() {
                             "1px solid #eef2f7",
                         }}
                       >
-                        {item.isNightWork
-                          ? "Evet"
-                          : "Hayır"}
                       </td>
 
                       <td

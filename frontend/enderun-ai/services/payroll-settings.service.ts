@@ -39,6 +39,11 @@ export type PayrollSettings = {
   mealIncomeTaxExemptionDailyCap: number | null;
   travelSgkExemptionDailyCap: number | null;
   travelIncomeTaxExemptionDailyCap: number | null;
+  /**
+   * Yıllık azami fazla mesai saati (yasal 270). null = tanımlanmadı;
+   * aşım kontrolü yapılmaz ve bordro ön kontrolü bunu söyler.
+   */
+  annualOvertimeHourLimit: number | null;
   verifiedAtUtc: string | null;
   verificationNote: string | null;
   isVerified: boolean;

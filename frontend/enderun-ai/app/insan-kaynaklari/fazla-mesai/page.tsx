@@ -29,7 +29,6 @@ type OvertimeForm = {
   approvedHours: string;
   isSundayWork: boolean;
   isPublicHolidayWork: boolean;
-  isNightWork: boolean;
   reason: string;
   status: string;
   approvalNote: string;
@@ -43,7 +42,6 @@ const initialForm: OvertimeForm = {
   approvedHours: "0",
   isSundayWork: false,
   isPublicHolidayWork: false,
-  isNightWork: false,
   reason: "",
   status: "1",
   approvalNote: "",
@@ -223,7 +221,6 @@ export default function OvertimePage() {
       approvedHours: String(item.approvedHours),
       isSundayWork: item.isSundayWork,
       isPublicHolidayWork: item.isPublicHolidayWork,
-      isNightWork: item.isNightWork,
       reason: item.reason,
       status: String(item.status),
       approvalNote: item.approvalNote ?? "",
@@ -262,7 +259,6 @@ export default function OvertimePage() {
           approvedHours,
           isSundayWork: form.isSundayWork,
           isPublicHolidayWork: form.isPublicHolidayWork,
-          isNightWork: form.isNightWork,
           reason: form.reason.trim(),
           status: Number(form.status),
           approvalNote: form.approvalNote.trim() || null,
@@ -278,7 +274,6 @@ export default function OvertimePage() {
           requestedHours,
           isSundayWork: form.isSundayWork,
           isPublicHolidayWork: form.isPublicHolidayWork,
-          isNightWork: form.isNightWork,
           reason: form.reason.trim(),
         });
 
@@ -507,7 +502,6 @@ export default function OvertimePage() {
                 {[
                   ["isSundayWork", "Pazar çalışması"],
                   ["isPublicHolidayWork", "Resmî tatil"],
-                  ["isNightWork", "Gece çalışması"],
                 ].map(([key, label]) => (
                   <label key={key} className="flex items-center gap-2">
                     <input
@@ -673,7 +667,6 @@ export default function OvertimePage() {
                 const types = [
                   item.isSundayWork ? "Pazar" : "",
                   item.isPublicHolidayWork ? "Resmî Tatil" : "",
-                  item.isNightWork ? "Gece" : "",
                 ].filter(Boolean);
 
                 return (

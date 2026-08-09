@@ -56,6 +56,8 @@ public sealed class PersonnelController(
                 x.Phone,
                 x.SgkRegistrationNumber,
                 x.EmploymentStartDate,
+                x.OvertimeConsentYear,
+                x.OvertimeConsentDate,
                 x.JobTitle,
                 x.BranchId,
                 WorkLocationType = (int)x.WorkLocationType,
@@ -544,6 +546,8 @@ public sealed class PersonnelController(
         personnel.SgkRegistrationNumber = request.SgkRegistrationNumber?.Trim();
         personnel.EmploymentStartDate = UtcDate(request.EmploymentStartDate);
         personnel.EmploymentEndDate = UtcDate(request.EmploymentEndDate);
+        personnel.OvertimeConsentYear = request.OvertimeConsentYear;
+        personnel.OvertimeConsentDate = UtcDate(request.OvertimeConsentDate);
         personnel.MonthlySalary = request.MonthlySalary;
         personnel.Status = (PersonnelStatus)request.Status;
         personnel.IsActive = request.IsActive;

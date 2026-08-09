@@ -4023,7 +4023,6 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.ProjectHakedisSectionId).OnDelete(DeleteBehavior.SetNull);
             entity.Property(x => x.NormalHours).HasPrecision(8, 2);
             entity.Property(x => x.OvertimeHours).HasPrecision(8, 2);
-            entity.Property(x => x.NightShiftHours).HasPrecision(8, 2);
             entity.Property(x => x.SundayHours).HasPrecision(8, 2);
             entity.Property(x => x.PublicHolidayHours).HasPrecision(8, 2);
             entity.Property(x => x.TotalHours).HasPrecision(8, 2);

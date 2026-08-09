@@ -59,7 +59,6 @@ public sealed class AttendanceRecord : BaseEntity
 
     public decimal NormalHours { get; set; }
     public decimal OvertimeHours { get; set; }
-    public decimal NightShiftHours { get; set; }
     public decimal SundayHours { get; set; }
     public decimal PublicHolidayHours { get; set; }
     public decimal TotalHours { get; set; }

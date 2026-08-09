@@ -60,7 +60,16 @@ public sealed class HrOvertimeRequest : BaseEntity
     public decimal ApprovedHours { get; set; }
     public bool IsSundayWork { get; set; }
     public bool IsPublicHolidayWork { get; set; }
-    public bool IsNightWork { get; set; }
+
+    /// <summary>
+    /// Onayın saat yazdığı puantaj kaydı.
+    ///
+    /// Bağ tutulmasının nedeni mükerrer sayımı önlemek: onay yeniden
+    /// çalıştığında saat EKLENMEZ, aynı kaydın onaylı mesai toplamına
+    /// EŞİTLENİR. Bağ olmasaydı her düzeltme puantaja bir kez daha
+    /// saat yazardı.
+    /// </summary>
+    public Guid? AttendanceRecordId { get; set; }
     public string Reason { get; set; } = string.Empty;
     public HrApprovalStatus Status { get; set; } = HrApprovalStatus.Pending;
     public Guid? ApprovedByUserId { get; set; }

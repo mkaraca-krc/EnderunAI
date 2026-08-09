@@ -1,3 +1,4 @@
+using EnderunAI.Api.Formatting;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Models;
@@ -111,6 +112,7 @@ public sealed class PayrollReadinessController(AppDbContext db, HrDbContext hrDb
             .Select(x => new
             {
                 x.VerifiedAtUtc,
+                x.AnnualOvertimeHourLimit,
                 x.MealSgkExemptionDailyCap,
                 x.MealIncomeTaxExemptionDailyCap,
                 x.TravelSgkExemptionDailyCap,
@@ -227,6 +229,66 @@ public sealed class PayrollReadinessController(AppDbContext db, HrDbContext hrDb
                     "istisna tavanı tanımlanmadı; istisna uygulanmayacak ve " +
                     "kalemin tamamı vergi matrahına girecek. Şirket Ayarları → " +
                     "Bordro Parametreleri ekranından girin.");
+            }
+        }
+
+        // --- Fazla mesai: yıllık sınır ve muvafakat ---
+        //
+        // İkisi de ENGEL DEĞİL uyarı: bordro üretilir, ama onaylayan
+        // yasal riski bordro çıkmadan görür.
+        var overtimeByPersonnel = await hrDb.OvertimeRequests
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId &&
+                        x.Status == HrApprovalStatus.Approved &&
+                        !x.IsSundayWork && !x.IsPublicHolidayWork &&
+                        x.WorkDate.Year == year &&
+                        x.ApprovedHours > 0m)
+            .GroupBy(x => x.PersonnelId)
+            .Select(g => new { PersonnelId = g.Key, Hours = g.Sum(x => x.ApprovedHours) })
+            .ToListAsync(cancellationToken);
+
+        if (overtimeByPersonnel.Count > 0)
+        {
+            if (settings?.AnnualOvertimeHourLimit is decimal overtimeLimit &&
+                overtimeLimit > 0m)
+            {
+                var exceeding = overtimeByPersonnel
+                    .Count(x => x.Hours > overtimeLimit);
+
+                if (exceeding > 0)
+                {
+                    warnings.Add(
+                        $"{exceeding} personelin {year} yılı onaylı fazla mesaisi " +
+                        $"yıllık sınırı ({TurkishFormat.Amount(overtimeLimit)} saat) " +
+                        "aşıyor.");
+                }
+            }
+            else
+            {
+                warnings.Add(
+                    $"{year} yılı için yıllık fazla mesai sınırı tanımlanmadı; " +
+                    "aşım kontrolü yapılamadı. Şirket Ayarları → Bordro " +
+                    "Parametreleri ekranından girin.");
+            }
+
+            // Muvafakati olmayan personele mesai ödemesi çıkıyor mu.
+            var overtimeIds = overtimeByPersonnel
+                .Select(x => x.PersonnelId)
+                .ToList();
+
+            var withoutConsent = await db.Personnel
+                .AsNoTracking()
+                .Where(x => overtimeIds.Contains(x.Id) &&
+                            (x.OvertimeConsentYear == null ||
+                             x.OvertimeConsentYear != year))
+                .CountAsync(cancellationToken);
+
+            if (withoutConsent > 0)
+            {
+                warnings.Add(
+                    $"{withoutConsent} personelin {year} yılı fazla mesai " +
+                    "muvafakati yok ama onaylı mesaisi bordroya girecek. " +
+                    "Yıllık yazılı onay personel kartından işaretlenir.");
             }
         }
 

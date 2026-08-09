@@ -33,7 +33,11 @@ public sealed record UpdatePersonnelRequest(
     DateTime? EmploymentEndDate,
     decimal? MonthlySalary,
     int Status,
-    bool IsActive);
+    bool IsActive,
+    // Fazla mesai muvafakati: yıllık yazılı onayın hangi yıla ait
+    // olduğu ve alındığı tarih. Belgenin kendisi özlük arşivinde.
+    int? OvertimeConsentYear = null,
+    DateTime? OvertimeConsentDate = null);
 
 public sealed record AssignPersonnelRequest(
     Guid ProjectId,

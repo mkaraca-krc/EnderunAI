@@ -1,3 +1,4 @@
+using EnderunAI.Api.Formatting;
 using EnderunAI.Api.Contracts.HumanResources;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Data.HumanResources;
@@ -430,7 +431,7 @@ public sealed class HrApprovalService(
         if (endDate.HasValue) query = query.Where(x => x.WorkDate <= endDate.Value.Date);
         return (await query.OrderByDescending(x => x.WorkDate)
                 .ToListAsync(cancellationToken))
-            .Select(ToOvertimeResponse).ToList();
+            .Select(x => ToOvertimeResponse(x)).ToList();
     }
 
     public async Task<HrOvertimeResponse> CreateOvertimeAsync(
@@ -449,7 +450,6 @@ public sealed class HrApprovalService(
             RequestedHours = request.RequestedHours,
             IsSundayWork = request.IsSundayWork,
             IsPublicHolidayWork = request.IsPublicHolidayWork,
-            IsNightWork = request.IsNightWork,
             Reason = request.Reason.Trim(),
             Status = HrApprovalStatus.Pending,
             CreatedByUserId = userId
@@ -475,7 +475,6 @@ public sealed class HrApprovalService(
         entity.ApprovedHours = request.ApprovedHours;
         entity.IsSundayWork = request.IsSundayWork;
         entity.IsPublicHolidayWork = request.IsPublicHolidayWork;
-        entity.IsNightWork = request.IsNightWork;
         entity.Reason = request.Reason.Trim();
         entity.Status = (HrApprovalStatus)request.Status;
         entity.ApprovalNote = Clean(request.ApprovalNote);
@@ -493,8 +492,192 @@ public sealed class HrApprovalService(
             ? entity.ApprovedHours
             : entity.RequestedHours;
         SetApproval(entity, userId, null);
+
+        // KÖPRÜ: onaylanan saat o günün puantajına düşer. Bu adım
+        // yokken mesai onaylanıyor ama bordroya hiç yansımıyordu;
+        // sahanın aynı saati elle ikinci kez girmesi gerekiyordu.
+        var warnings = new List<string>(await BridgeOvertimeToAttendanceAsync(
+            entity, userId, cancellationToken));
+
+        warnings.AddRange(
+            await BuildOvertimeLimitWarningsAsync(entity, cancellationToken));
+
         await hrDb.SaveChangesAsync(cancellationToken);
-        return ToOvertimeResponse(entity);
+
+        return ToOvertimeResponse(entity, warnings);
+    }
+
+    /// <summary>
+    /// Yıllık fazla mesai sınırı uyarıları.
+    ///
+    /// Sınır ENGEL DEĞİL: aşan onay yine geçer, ama onaylayan aşımı
+    /// görür. Sınır tanımlı değilse uyarı üretilmez — koda gömülü bir
+    /// 270 varsaymaktansa parametrenin girilmediğini bordro ön
+    /// kontrolünde söylemek yeğdir.
+    ///
+    /// Sayıma yalnızca FAZLA MESAİ girer; hafta tatili ve genel tatil
+    /// çalışması yasal sınırın konusu değildir.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> BuildOvertimeLimitWarningsAsync(
+        HrOvertimeRequest entity, CancellationToken cancellationToken)
+    {
+        var warnings = new List<string>();
+        var year = entity.WorkDate.Year;
+
+        var limit = await appDb.CompanyPayrollSettings
+            .AsNoTracking()
+            .Where(x => x.CompanyId == entity.CompanyId && x.Year == year)
+            .Select(x => x.AnnualOvertimeHourLimit)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (limit is not decimal cap || cap <= 0m)
+            return warnings;
+
+        var yearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var yearEnd = new DateTime(year, 12, 31, 0, 0, 0, DateTimeKind.Utc);
+
+        // Bu onay henüz kaydedilmedi; veritabanı toplamı onu görmez.
+        // Kendi saatini elle eklemezsek sınır bir onay geç yakalanırdı.
+        var previous = await hrDb.OvertimeRequests
+            .AsNoTracking()
+            .Where(x => x.PersonnelId == entity.PersonnelId &&
+                        x.Id != entity.Id &&
+                        x.Status == HrApprovalStatus.Approved &&
+                        !x.IsSundayWork && !x.IsPublicHolidayWork &&
+                        x.WorkDate >= yearStart && x.WorkDate <= yearEnd)
+            .SumAsync(x => (decimal?)x.ApprovedHours, cancellationToken) ?? 0m;
+
+        var current = entity.IsSundayWork || entity.IsPublicHolidayWork
+            ? 0m
+            : entity.ApprovedHours;
+
+        var total = previous + current;
+
+        // Tatil çalışması sınırın konusu değil: yalnızca fazla
+        // çalışma sayılır.
+        if (total <= 0m) return warnings;
+
+        if (total > cap)
+        {
+            warnings.Add(
+                $"{year} yılı fazla mesai sınırı AŞILDI: onaylı toplam " +
+                $"{TurkishFormat.Amount(total)} saat, sınır " +
+                $"{TurkishFormat.Amount(cap)} saat.");
+        }
+        else if (total >= cap * 0.9m)
+        {
+            warnings.Add(
+                $"{year} yılı fazla mesai sınırına yaklaşıldı: onaylı toplam " +
+                $"{TurkishFormat.Amount(total)} / {TurkishFormat.Amount(cap)} saat.");
+        }
+
+        return warnings;
+    }
+
+    /// <summary>
+    /// Onaylanan mesai saatini puantaj kaydına yazar.
+    ///
+    /// Saat türüne göre ayrı alana gider: genel tatil ve hafta tatili
+    /// çalışması kendi çarpanlarıyla (2×) ücretlendiği için fazla
+    /// mesaiyle (1,5×) aynı kovaya konamaz.
+    ///
+    /// EKLEMEZ, EŞİTLER: aynı gün için onaylı mesai toplamı ne ise o
+    /// yazılır. Onay yeniden çalıştığında ya da talep düzeltilip tekrar
+    /// onaylandığında mükerrer saat üretmemesinin yolu bu.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> BridgeOvertimeToAttendanceAsync(
+        HrOvertimeRequest entity, Guid? userId, CancellationToken cancellationToken)
+    {
+        var warnings = new List<string>();
+
+        if (entity.ApprovedHours <= 0m)
+            return warnings;
+
+        var workDate = DateTime.SpecifyKind(entity.WorkDate.Date, DateTimeKind.Utc);
+
+        var record = await appDb.AttendanceRecords.SingleOrDefaultAsync(
+            x => x.PersonnelId == entity.PersonnelId && x.WorkDate == workDate,
+            cancellationToken);
+
+        // Onaylı puantaja dokunulmaz: saati sessizce değiştirmek
+        // kesinleşmiş bordroyu kaydırırdı.
+        if (record is not null && record.IsApproved)
+        {
+            warnings.Add(
+                $"{workDate:dd.MM.yyyy} puantajı onaylanmış; mesai saati " +
+                "puantaja yazılmadı. Puantajın onayını kaldırıp yeniden " +
+                "onaylayın.");
+
+            return warnings;
+        }
+
+        if (record is null)
+        {
+            // Puantajı olmayan güne mesai yazılamaz; kayıt açılır ve
+            // normal çalışma sıfır bırakılır — o günün normal saati
+            // sahanın kendi girişidir.
+            record = new EnderunAI.Api.Models.AttendanceRecord
+            {
+                CompanyId = entity.CompanyId,
+                PersonnelId = entity.PersonnelId,
+                ProjectId = entity.ProjectId,
+                WorkDate = workDate,
+                Status = (int)EnderunAI.Api.Models.AttendanceStatus.Worked,
+                Description = "Onaylı fazla mesaiden oluşturuldu.",
+                CreatedByUserId = userId
+            };
+
+            appDb.AttendanceRecords.Add(record);
+
+            warnings.Add(
+                $"{workDate:dd.MM.yyyy} için puantaj kaydı yoktu; onaylı " +
+                "mesai saatiyle açıldı. Normal çalışma saatini puantajdan " +
+                "girmeyi unutmayın.");
+        }
+
+        // O güne ait TÜM onaylı mesai talepleri toplanır: aynı güne
+        // birden çok talep açılmışsa hepsi tek puantaj satırına düşer.
+        var approvedSameDay = await hrDb.OvertimeRequests
+            .AsNoTracking()
+            .Where(x => x.PersonnelId == entity.PersonnelId &&
+                        x.WorkDate == entity.WorkDate.Date &&
+                        x.Status == HrApprovalStatus.Approved &&
+                        x.Id != entity.Id)
+            .Select(x => new
+            {
+                x.ApprovedHours,
+                x.IsSundayWork,
+                x.IsPublicHolidayWork
+            })
+            .ToListAsync(cancellationToken);
+
+        decimal Total(bool sunday, bool holiday) =>
+            approvedSameDay
+                .Where(x => x.IsSundayWork == sunday &&
+                            x.IsPublicHolidayWork == holiday)
+                .Sum(x => x.ApprovedHours) +
+            (entity.IsSundayWork == sunday && entity.IsPublicHolidayWork == holiday
+                ? entity.ApprovedHours
+                : 0m);
+
+        // Genel tatil, hafta tatilinden önce bakılır: ikisi de
+        // işaretliyse gün genel tatildir.
+        record.PublicHolidayHours =
+            Total(sunday: false, holiday: true) + Total(sunday: true, holiday: true);
+        record.SundayHours = Total(sunday: true, holiday: false);
+        record.OvertimeHours = Total(sunday: false, holiday: false);
+
+        record.TotalHours = record.NormalHours + record.OvertimeHours +
+                            record.SundayHours + record.PublicHolidayHours;
+
+        record.UpdatedAtUtc = DateTime.UtcNow;
+        record.UpdatedByUserId = userId;
+
+        await appDb.SaveChangesAsync(cancellationToken);
+
+        entity.AttendanceRecordId = record.Id;
+
+        return warnings;
     }
 
     public async Task<HrOvertimeResponse> RejectOvertimeAsync(
@@ -1697,12 +1880,13 @@ public sealed class HrApprovalService(
             x.Reason, x.DocumentPath, (int)x.Status, ApprovalName(x.Status),
             x.ApprovedByUserId, x.ApprovedAtUtc, x.ApprovalNote, x.CreatedAtUtc);
 
-    private static HrOvertimeResponse ToOvertimeResponse(HrOvertimeRequest x) =>
+    private static HrOvertimeResponse ToOvertimeResponse(
+        HrOvertimeRequest x, IReadOnlyList<string>? warnings = null) =>
         new(x.Id, x.CompanyId, x.PersonnelId, x.ProjectId, x.WorkDate,
             x.RequestedHours, x.ApprovedHours, x.IsSundayWork,
-            x.IsPublicHolidayWork, x.IsNightWork, x.Reason, (int)x.Status,
+            x.IsPublicHolidayWork, x.Reason, (int)x.Status,
             ApprovalName(x.Status), x.ApprovedByUserId, x.ApprovedAtUtc,
-            x.ApprovalNote, x.CreatedAtUtc);
+            x.ApprovalNote, x.CreatedAtUtc, x.AttendanceRecordId, warnings);
 
     private static HrAdvanceResponse ToAdvanceResponse(HrAdvanceRequest x) =>
         new(x.Id, x.CompanyId, x.PersonnelId, x.ProjectId, x.RequestDate,

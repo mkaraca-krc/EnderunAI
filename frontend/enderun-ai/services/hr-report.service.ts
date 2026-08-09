@@ -65,7 +65,6 @@ export type HrReportOvertime = {
   approvedHours: number;
   isSundayWork: boolean;
   isPublicHolidayWork: boolean;
-  isNightWork: boolean;
   reason: string;
   status: number;
   statusName: string;

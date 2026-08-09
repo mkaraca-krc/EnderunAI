@@ -180,9 +180,12 @@ export default function AttendanceSheetPage() {
           workDate: date.slice(0, 10),
           status,
           normalHours: hours,
+          // Mevcut değerler aynen geri gönderiliyor: sıfır göndermek,
+          // günlük puantajdan ya da onaylı mesaiden gelen tatil
+          // saatlerini silmek demekti.
           overtimeHours: cell?.overtimeHours ?? 0,
-          sundayHours: 0,
-          publicHolidayHours: 0,
+          sundayHours: cell?.sundayHours ?? 0,
+          publicHolidayHours: cell?.publicHolidayHours ?? 0,
           description: null,
         };
       }

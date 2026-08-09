@@ -41,7 +41,6 @@ public sealed record CreateHrOvertimeRequest(
     decimal RequestedHours,
     bool IsSundayWork,
     bool IsPublicHolidayWork,
-    bool IsNightWork,
     string Reason);
 
 public sealed record UpdateHrOvertimeRequest(
@@ -51,7 +50,6 @@ public sealed record UpdateHrOvertimeRequest(
     decimal ApprovedHours,
     bool IsSundayWork,
     bool IsPublicHolidayWork,
-    bool IsNightWork,
     string Reason,
     int Status,
     string? ApprovalNote);
@@ -59,9 +57,13 @@ public sealed record UpdateHrOvertimeRequest(
 public sealed record HrOvertimeResponse(
     Guid Id, Guid CompanyId, Guid PersonnelId, Guid? ProjectId,
     DateTime WorkDate, decimal RequestedHours, decimal ApprovedHours,
-    bool IsSundayWork, bool IsPublicHolidayWork, bool IsNightWork,
+    bool IsSundayWork, bool IsPublicHolidayWork,
     string Reason, int Status, string StatusName, Guid? ApprovedByUserId,
-    DateTime? ApprovedAtUtc, string? ApprovalNote, DateTime CreatedAtUtc);
+    DateTime? ApprovedAtUtc, string? ApprovalNote, DateTime CreatedAtUtc,
+    // Onayın saat yazdığı puantaj kaydı; yazılamadıysa null ve
+    // Warnings nedenini söyler.
+    Guid? AttendanceRecordId = null,
+    IReadOnlyList<string>? Warnings = null);
 
 public sealed record CreateHrAdvanceRequest(
     Guid CompanyId,

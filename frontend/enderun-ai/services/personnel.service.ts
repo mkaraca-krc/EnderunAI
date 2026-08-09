@@ -40,6 +40,9 @@ export type PersonnelListItem = {
   jobTitle?: string | null;
   profession?: string | null;
   employmentStartDate?: string | null;
+  /** Fazla mesai muvafakatinin geçerli olduğu yıl. Boşsa alınmamış. */
+  overtimeConsentYear?: number | null;
+  overtimeConsentDate?: string | null;
   employmentEndDate?: string | null;
   monthlySalary?: number | null;
   status: number;
@@ -98,6 +101,9 @@ export type CreatePersonnelRequest = {
   profession?: string | null;
   sgkRegistrationNumber?: string | null;
   employmentStartDate?: string | null;
+  /** Fazla mesai muvafakatinin geçerli olduğu yıl. Boşsa alınmamış. */
+  overtimeConsentYear?: number | null;
+  overtimeConsentDate?: string | null;
   monthlySalary?: number | null;
 };
 
@@ -114,6 +120,9 @@ export type UpdatePersonnelRequest = {
   profession?: string | null;
   sgkRegistrationNumber?: string | null;
   employmentStartDate?: string | null;
+  /** Fazla mesai muvafakatinin geçerli olduğu yıl. Boşsa alınmamış. */
+  overtimeConsentYear?: number | null;
+  overtimeConsentDate?: string | null;
   employmentEndDate?: string | null;
   monthlySalary?: number | null;
   status: number;
@@ -171,6 +180,9 @@ export type CompletePersonnelDataRequest = {
   jobTitle?: string | null;
   birthDate?: string | null;
   employmentStartDate?: string | null;
+  /** Fazla mesai muvafakatinin geçerli olduğu yıl. Boşsa alınmamış. */
+  overtimeConsentYear?: number | null;
+  overtimeConsentDate?: string | null;
   branchId?: string | null;
 };
 

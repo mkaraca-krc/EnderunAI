@@ -30,7 +30,10 @@ public sealed record UpdatePayrollSettingsRequest(
     decimal? MealSgkExemptionDailyCap = null,
     decimal? MealIncomeTaxExemptionDailyCap = null,
     decimal? TravelSgkExemptionDailyCap = null,
-    decimal? TravelIncomeTaxExemptionDailyCap = null);
+    decimal? TravelIncomeTaxExemptionDailyCap = null,
+    // Yıllık azami fazla mesai saati (yasal 270). Boşsa aşım kontrolü
+    // yapılmaz ve bordro ön kontrolü bunu söyler.
+    decimal? AnnualOvertimeHourLimit = null);
 
 /// <summary>
 /// Parametrelerin yürürlükteki mevzuatla karşılaştırıldığının onayı.
@@ -72,4 +75,5 @@ public sealed record PayrollSettingsResponse(
     decimal? MealSgkExemptionDailyCap = null,
     decimal? MealIncomeTaxExemptionDailyCap = null,
     decimal? TravelSgkExemptionDailyCap = null,
-    decimal? TravelIncomeTaxExemptionDailyCap = null);
+    decimal? TravelIncomeTaxExemptionDailyCap = null,
+    decimal? AnnualOvertimeHourLimit = null);
