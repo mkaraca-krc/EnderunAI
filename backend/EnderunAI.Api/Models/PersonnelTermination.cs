@@ -34,6 +34,30 @@ public enum TerminationReason
     Death = 8
 }
 
+/// <summary>
+/// Ayrılış değerlendirmesi — tekrar işe alım kodu.
+///
+/// Yasal çıkış nedeninden (TerminationReason) AYRIDIR ve onun yerine
+/// geçmez: neden SGK/İş Kanunu tarafını, bu kod İK'nın "bu kişiyi
+/// yeniden alır mıyız" değerlendirmesini tutar. Aynı çıkış nedeni iki
+/// kişide farklı değerlendirme doğurabilir.
+///
+/// Alan BOŞ bırakılabilir: değerlendirilmemiş çıkış nötrdür, ne engel
+/// ne uyarı üretir. Sessizce "sorunsuz" saymak da yanlış olurdu —
+/// değerlendirilmemiş olmak, sorunsuz olmak değildir.
+/// </summary>
+public enum RehireCode
+{
+    /// <summary>Sorunsuz ayrıldı; yeniden alınabilir.</summary>
+    Green = 0,
+
+    /// <summary>Dikkat: şartlı değerlendirilir. Uyarı verir, engellemez.</summary>
+    Yellow = 1,
+
+    /// <summary>İşe alınamaz. Yeni kayıt ve yeniden aktifleştirme engellenir.</summary>
+    Red = 2
+}
+
 public enum TerminationStatus
 {
     Draft = 0,
@@ -96,6 +120,33 @@ public sealed class PersonnelTermination : BaseEntity
     public decimal ExtraPaymentDifference { get; set; }
 
     public string? Note { get; set; }
+
+    // --- Ayrılış değerlendirmesi (tekrar işe alım) ---
+    //
+    // Tazminat notundan AYRI tutuluyor: Note çıkışın mali tarafını
+    // anlatır, buradaki gerekçe İK'nın değerlendirmesidir. Tek alanda
+    // birleştirmek iki farklı amacı karıştırırdı.
+    //
+    // GİZLİLİK: kod ve gerekçe yalnızca İK/GM'ye döner; saha
+    // personeli (personnel.view) hiçbir uçtan göremez.
+
+    /// <summary>Boşsa "değerlendirilmedi" — nötr, engel/uyarı üretmez.</summary>
+    public RehireCode? RehireCode { get; set; }
+
+    /// <summary>
+    /// Değerlendirmenin gerekçesi. Kırmızı ve sarıda ZORUNLU: kod tek
+    /// başına "neden" sorusunu cevaplamaz ve gerekçesiz bir engel,
+    /// itiraz edilemez bir engeldir.
+    ///
+    /// Faktüel ve mesleki olmalı (davranış, uyum, performans,
+    /// devamsızlık); sağlık, inanç, sendika gibi özel nitelikli
+    /// kişisel veri yazılmamalı.
+    /// </summary>
+    public string? RehireNote { get; set; }
+
+    public Guid? RehireMarkedByUserId { get; set; }
+    public DateTime? RehireMarkedAtUtc { get; set; }
+
     public DateTime? FinalizedAtUtc { get; set; }
     public Guid? FinalizedByUserId { get; set; }
 }
