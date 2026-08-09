@@ -45,6 +45,7 @@ type CompensationForm = {
   effectiveStartDate: string;
   effectiveEndDate: string;
   isAttendanceBased: boolean;
+  isInKindBenefit: boolean;
   includeInPayroll: boolean;
   includeInSgkBase: boolean;
   includeInIncomeTaxBase: boolean;
@@ -98,6 +99,7 @@ const initialForm: CompensationForm = {
   effectiveStartDate: today,
   effectiveEndDate: "",
   isAttendanceBased: false,
+  isInKindBenefit: false,
   includeInPayroll: true,
   includeInSgkBase: false,
   includeInIncomeTaxBase: false,
@@ -418,6 +420,8 @@ export default function AdditionalCompensationPage() {
         dateValue(item.effectiveEndDate),
       isAttendanceBased:
         item.isAttendanceBased,
+      isInKindBenefit:
+        item.isInKindBenefit ?? false,
       includeInPayroll:
         item.includeInPayroll,
       includeInSgkBase:
@@ -507,6 +511,8 @@ export default function AdditionalCompensationPage() {
         form.effectiveEndDate || null,
       isAttendanceBased:
         form.isAttendanceBased,
+      isInKindBenefit:
+        form.isInKindBenefit,
       includeInPayroll:
         form.includeInPayroll,
       includeInSgkBase:
@@ -1014,11 +1020,30 @@ export default function AdditionalCompensationPage() {
               />
             </div>
 
+            {form.paymentMethod === "1" && (
+              <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                Ödeme yöntemi <strong>Nakit</strong> seçili. Bu kalem resmî
+                bordroya, SGK matrahına ve muhasebeye yansımaz — &quot;Bordroya
+                dâhil&quot; işaretlense bile hesap dışında kalır.
+              </p>
+            )}
+
+            {form.isInKindBenefit && (
+              <p className="mt-4 rounded-lg border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">
+                Ayni yardımda günlük istisna tavanı uygulanmaz: matrah
+                işareti kapalı olduğu sürece kalemin tamamı istisnadır.
+              </p>
+            )}
+
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {[
                 [
                   "isAttendanceBased",
                   "Puantaja bağlı",
+                ],
+                [
+                  "isInKindBenefit",
+                  "Ayni yardım (nakdî değil)",
                 ],
                 [
                   "includeInPayroll",

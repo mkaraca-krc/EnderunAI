@@ -108,7 +108,14 @@ public sealed class PayrollReadinessController(AppDbContext db, HrDbContext hrDb
         var settings = await db.CompanyPayrollSettings
             .AsNoTracking()
             .Where(x => x.CompanyId == companyId && x.Year == year)
-            .Select(x => new { x.VerifiedAtUtc })
+            .Select(x => new
+            {
+                x.VerifiedAtUtc,
+                x.MealSgkExemptionDailyCap,
+                x.MealIncomeTaxExemptionDailyCap,
+                x.TravelSgkExemptionDailyCap,
+                x.TravelIncomeTaxExemptionDailyCap
+            })
             .SingleOrDefaultAsync(cancellationToken);
 
         var calendarVerified = await db.CompanyHolidayCalendars
@@ -165,6 +172,64 @@ public sealed class PayrollReadinessController(AppDbContext db, HrDbContext hrDb
                 "yalnızca onaylı günler bordroya girer.");
         }
 
+        // Nakdî yemek/yol yardımı olup istisna tavanı tanımlanmamışsa
+        // kalemin tamamı matraha girer: bordro çıkar ama fazla vergi ve
+        // fazla prim hesaplanmış olur. Bunu bordro üretildikten sonra
+        // fark etmek, bordronun iptal edilip yeniden üretilmesi demek.
+        var cappedComponents = await db.HrCompensationComponents
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId &&
+                        x.IsActive &&
+                        x.IncludeInPayroll &&
+                        !x.IsInKindBenefit &&
+                        x.PaymentMethod != 1 &&
+                        (x.ComponentType == 2 || x.ComponentType == 3) &&
+                        x.EffectiveStartDate <= periodEnd &&
+                        (x.EffectiveEndDate == null || x.EffectiveEndDate >= periodStart))
+            .Select(x => new
+            {
+                x.ComponentType,
+                x.IncludeInSgkBase,
+                x.IncludeInIncomeTaxBase
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var (componentType, label) in
+                 new[] { (3, "yemek"), (2, "yol") })
+        {
+            var rows = cappedComponents
+                .Where(x => x.ComponentType == componentType)
+                .ToList();
+
+            if (rows.Count == 0) continue;
+
+            var sgkCap = componentType == 3
+                ? settings?.MealSgkExemptionDailyCap
+                : settings?.TravelSgkExemptionDailyCap;
+
+            var incomeTaxCap = componentType == 3
+                ? settings?.MealIncomeTaxExemptionDailyCap
+                : settings?.TravelIncomeTaxExemptionDailyCap;
+
+            if (rows.Any(x => !x.IncludeInSgkBase) && sgkCap is null)
+            {
+                warnings.Add(
+                    $"{year} yılı için {label} yardımının günlük SGK istisna " +
+                    "tavanı tanımlanmadı; istisna uygulanmayacak ve kalemin " +
+                    "tamamı prime esas kazanca girecek. Şirket Ayarları → " +
+                    "Bordro Parametreleri ekranından girin.");
+            }
+
+            if (rows.Any(x => !x.IncludeInIncomeTaxBase) && incomeTaxCap is null)
+            {
+                warnings.Add(
+                    $"{year} yılı için {label} yardımının günlük gelir vergisi " +
+                    "istisna tavanı tanımlanmadı; istisna uygulanmayacak ve " +
+                    "kalemin tamamı vergi matrahına girecek. Şirket Ayarları → " +
+                    "Bordro Parametreleri ekranından girin.");
+            }
+        }
+
         if (!calendarVerified)
         {
             warnings.Add(
@@ -183,6 +248,11 @@ public sealed class PayrollReadinessController(AppDbContext db, HrDbContext hrDb
             approvedAttendanceCount = attendance.Count(x => x.IsApproved),
             holidayCalendarVerified = calendarVerified,
             settingsVerified = settings?.VerifiedAtUtc is not null,
+            mealTravelExemptionCapsDefined =
+                settings?.MealSgkExemptionDailyCap is not null &&
+                settings?.MealIncomeTaxExemptionDailyCap is not null &&
+                settings?.TravelSgkExemptionDailyCap is not null &&
+                settings?.TravelIncomeTaxExemptionDailyCap is not null,
             canCalculate = blockers.Count == 0,
             blockers,
             warnings,

@@ -764,7 +764,7 @@ public sealed class HrApprovalService(
         var personnel = await appDb.Personnel.AsNoTracking()
             .Where(x => x.CompanyId == request.CompanyId && x.IsActive &&
                         x.Status != EnderunAI.Api.Models.PersonnelStatus.Terminated)
-            .Select(x => new { x.Id, Salary = x.MonthlySalary ?? 0m })
+            .Select(x => new { x.Id, x.FullName, Salary = x.MonthlySalary ?? 0m })
             .ToListAsync(cancellationToken);
 
         var personnelIds = personnel.Select(x => x.Id).ToList();
@@ -895,6 +895,44 @@ public sealed class HrApprovalService(
         if (periodDeductions.Count > 0)
             hrDb.AdvanceDeductions.RemoveRange(periodDeductions);
 
+        // Kişiye özel ek ücret kalemleri (prim, yemek, yol, tazminat,
+        // kesinti). Dönemde yürürlükte olanlar alınır; hangisinin
+        // bordroya ve hangi matraha gireceğine kalemin kendi bayrakları
+        // karar verir.
+        var componentsByPersonnel = (await appDb.HrCompensationComponents
+                .AsNoTracking()
+                .Where(x => x.CompanyId == request.CompanyId &&
+                            x.IsActive &&
+                            personnelIds.Contains(x.PersonnelId) &&
+                            x.EffectiveStartDate <= periodEnd &&
+                            (x.EffectiveEndDate == null ||
+                             x.EffectiveEndDate >= periodStart))
+                .ToListAsync(cancellationToken))
+            .GroupBy(x => x.PersonnelId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<CompensationComponentInput>)g
+                    .Select(x => new CompensationComponentInput(
+                        Name: string.IsNullOrWhiteSpace(x.Name) ? x.Code : x.Name,
+                        ComponentType: x.ComponentType,
+                        CalculationType: x.CalculationType,
+                        PaymentMethod: x.PaymentMethod,
+                        Amount: x.Amount,
+                        IsAttendanceBased: x.IsAttendanceBased,
+                        IsInKindBenefit: x.IsInKindBenefit,
+                        IncludeInPayroll: x.IncludeInPayroll,
+                        IncludeInSgkBase: x.IncludeInSgkBase,
+                        IncludeInIncomeTaxBase: x.IncludeInIncomeTaxBase,
+                        IncludeInStampTaxBase: x.IncludeInStampTaxBase,
+                        EffectiveStartDate: x.EffectiveStartDate,
+                        EffectiveEndDate: x.EffectiveEndDate))
+                    .ToList());
+
+        var exemptionCaps = await LoadExemptionCapsAsync(
+            request.CompanyId, request.Year, cancellationToken);
+
+        var componentWarnings = new List<string>();
+
         var created = 0;
         var updated = 0;
         var skipped = 0;
@@ -957,11 +995,44 @@ public sealed class HrApprovalService(
             var earnings = AttendanceEarningsCalculator.Calculate(
                 rates, attendanceDays ?? Array.Empty<AttendanceDay>());
 
+            // Ek ücret kalemleri: tutarlar bordro alanlarına, istisna
+            // kısımları da matrah dışına ayrı ayrı çıkar.
+            var compensation = componentsByPersonnel.TryGetValue(
+                    person.Id, out var personComponents)
+                ? CompensationComponentCalculator.Calculate(
+                    personComponents,
+                    request.Year,
+                    request.Month,
+                    gross,
+                    earnings.PaidDays,
+                    // Saatlik kalemin dayanağı ödenen gün × günlük
+                    // çalışma süresi: puantaj normal çalışmayı saat
+                    // olarak ayrıca tutmuyor.
+                    earnings.PaidDays * dailyWorkHours,
+                    dailyWorkHours,
+                    exemptionCaps)
+                : CompensationResult.Empty;
+
+            foreach (var warning in compensation.Warnings)
+            {
+                var line = $"{person.FullName}: {warning}";
+
+                if (!componentWarnings.Contains(line))
+                    componentWarnings.Add(line);
+            }
+
             record.GrossSalary = gross;
             record.NormalWorkAmount = earnings.NormalWorkAmount;
             record.OvertimeAmount = earnings.OvertimeAmount;
             record.SundayWorkAmount = earnings.SundayWorkAmount;
             record.PublicHolidayAmount = earnings.PublicHolidayAmount;
+
+            record.BonusAmount = compensation.BonusAmount;
+            record.MealAmount = compensation.MealAmount;
+            record.TravelAmount = compensation.TravelAmount;
+            record.OtherEarningAmount = compensation.OtherEarningAmount;
+            record.CompensationAmount = compensation.CompensationAmount;
+            record.OtherDeductionAmount = compensation.DeductionAmount;
 
             record.TotalEarnings =
                 record.NormalWorkAmount + record.OvertimeAmount +
@@ -976,12 +1047,11 @@ public sealed class HrApprovalService(
             PayrollInput BuildInput(decimal advanceDeduction) => new(
                 Month: request.Month,
                 GrossEarnings: record.TotalEarnings,
-                // Yemek/yol istisnaları kişiye özel kalemlerle birlikte
-                // Faz E3'te devreye girecek; şu an tüm kazanç primlidir.
-                SgkExemptEarnings: 0m,
-                IncomeTaxExemptEarnings: 0m,
+                SgkExemptEarnings: compensation.SgkExemptEarnings,
+                IncomeTaxExemptEarnings: compensation.IncomeTaxExemptEarnings,
                 CumulativeIncomeTaxBaseBefore: cumulativeBefore,
-                OtherDeductions: advanceDeduction + record.OtherDeductionAmount);
+                OtherDeductions: advanceDeduction + record.OtherDeductionAmount,
+                StampTaxExemptEarnings: compensation.StampTaxExemptEarnings);
 
             var beforeAdvance = PayrollCalculationService.Calculate(
                 parameters, BuildInput(0m));
@@ -1048,7 +1118,8 @@ public sealed class HrApprovalService(
             .SumAsync(x => x.NetPayableAmount, cancellationToken);
         return new CompanyPayrollCalculationResult(
             request.CompanyId, request.Year, request.Month, personnel.Count,
-            created, updated, skipped, total, missingSalaryDefinition);
+            created, updated, skipped, total, missingSalaryDefinition,
+            componentWarnings);
     }
 
     public async Task<PayrollResponse> ApprovePayrollAsync(
@@ -1282,6 +1353,28 @@ public sealed class HrApprovalService(
     /// parametreyle üretilen resmi bordro, eksik prim/vergi beyanı
     /// anlamına geldiği için akış bilinçli olarak fail-closed.
     /// </summary>
+    /// <summary>
+    /// Nakdî yemek/yol istisna tavanları. Tanımlı değilse null döner ve
+    /// istisna uygulanmaz — varsayılana düşmek, o yılın tebliğini
+    /// beklemeden sessizce eksik vergi hesaplamak olurdu.
+    /// </summary>
+    private async Task<CompensationExemptionCaps> LoadExemptionCapsAsync(
+        Guid companyId, int year, CancellationToken cancellationToken)
+    {
+        var settings = await appDb.CompanyPayrollSettings
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.CompanyId == companyId && x.Year == year, cancellationToken);
+
+        return settings is null
+            ? new CompensationExemptionCaps()
+            : new CompensationExemptionCaps(
+                MealSgkDaily: settings.MealSgkExemptionDailyCap,
+                MealIncomeTaxDaily: settings.MealIncomeTaxExemptionDailyCap,
+                TravelSgkDaily: settings.TravelSgkExemptionDailyCap,
+                TravelIncomeTaxDaily: settings.TravelIncomeTaxExemptionDailyCap);
+    }
+
     private async Task EnsurePayrollSettingsVerifiedAsync(
         Guid companyId, int year, CancellationToken cancellationToken)
     {

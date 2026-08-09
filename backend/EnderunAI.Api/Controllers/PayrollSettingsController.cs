@@ -88,6 +88,15 @@ public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
         // Sıfır/negatif saat saatlik ücreti bozar; yasal varsayılana düşülür.
         settings.DailyWorkHours =
             request.DailyWorkHours > 0m ? request.DailyWorkHours : 7.5m;
+        // Negatif tavan anlamsız; boş bırakmak "tanımlanmadı" demektir
+        // ve varsayılana düşmez.
+        settings.MealSgkExemptionDailyCap = NonNegative(request.MealSgkExemptionDailyCap);
+        settings.MealIncomeTaxExemptionDailyCap =
+            NonNegative(request.MealIncomeTaxExemptionDailyCap);
+        settings.TravelSgkExemptionDailyCap =
+            NonNegative(request.TravelSgkExemptionDailyCap);
+        settings.TravelIncomeTaxExemptionDailyCap =
+            NonNegative(request.TravelIncomeTaxExemptionDailyCap);
         settings.SeveranceCeiling = request.SeveranceCeiling;
         settings.SeveranceCeilingPeriodNote =
             string.IsNullOrWhiteSpace(request.SeveranceCeilingPeriodNote)
@@ -277,7 +286,14 @@ public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
                 .Select(x => new PayrollTaxBracketResponse(
                     x.Id, x.Order, x.LowerBound, x.UpperBound, x.Rate))
                 .ToList(),
-            settings.DailyWorkHours);
+            settings.DailyWorkHours,
+            settings.MealSgkExemptionDailyCap,
+            settings.MealIncomeTaxExemptionDailyCap,
+            settings.TravelSgkExemptionDailyCap,
+            settings.TravelIncomeTaxExemptionDailyCap);
+
+    private static decimal? NonNegative(decimal? value) =>
+        value is null || value.Value < 0m ? null : value;
 
     private Guid? CurrentUserId()
     {

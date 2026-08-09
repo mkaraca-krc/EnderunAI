@@ -28,6 +28,17 @@ export type PayrollSettings = {
   /** Kıdem tazminatı tavanı: bir hizmet yılı için ödenecek üst sınır. */
   severanceCeiling: number;
   severanceCeilingPeriodNote: string | null;
+  /** Günlük normal çalışma süresi (saat); saatlik ücret bundan türer. */
+  dailyWorkHours: number;
+  /**
+   * Nakdî yemek/yol yardımının günlük istisna tavanları. null =
+   * o yıl için tanımlanmadı; istisna uygulanmaz ve bordro ön kontrolü
+   * uyarır.
+   */
+  mealSgkExemptionDailyCap: number | null;
+  mealIncomeTaxExemptionDailyCap: number | null;
+  travelSgkExemptionDailyCap: number | null;
+  travelIncomeTaxExemptionDailyCap: number | null;
   verifiedAtUtc: string | null;
   verificationNote: string | null;
   isVerified: boolean;

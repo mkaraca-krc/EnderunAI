@@ -78,6 +78,30 @@ public sealed class CompanyPayrollSettings : BaseEntity
     /// </summary>
     public bool MinimumWageStampTaxExemptionEnabled { get; set; } = true;
 
+    // --- Yemek / yol istisna tavanları ---
+    //
+    // Nakdî yemek ve yol yardımı, GÜNLÜK bir tavana kadar istisnadır;
+    // tavanı aşan kısım matraha girer. Tavanlar her yıl tebliğle
+    // değiştiği ve SGK ile gelir vergisi için AYRI belirlendiği için
+    // dördü de ayrı parametre — hiçbiri koda gömülü değil.
+    //
+    // Boş (null) bırakılan tavan "bu yıl için tanımlanmadı" demektir ve
+    // varsayılana düşmez: o kalemde istisna UYGULANMAZ, bordro ön
+    // kontrolü uyarır. Eksik parametre yüzünden sessizce eksik vergi
+    // hesaplamaktansa, fazla hesaplayıp uyarmak tercih edildi.
+
+    /// <summary>Nakdî yemek yardımının günlük SGK istisna tavanı.</summary>
+    public decimal? MealSgkExemptionDailyCap { get; set; }
+
+    /// <summary>Nakdî yemek yardımının günlük gelir vergisi istisna tavanı.</summary>
+    public decimal? MealIncomeTaxExemptionDailyCap { get; set; }
+
+    /// <summary>Nakdî yol yardımının günlük SGK istisna tavanı.</summary>
+    public decimal? TravelSgkExemptionDailyCap { get; set; }
+
+    /// <summary>Nakdî yol yardımının günlük gelir vergisi istisna tavanı.</summary>
+    public decimal? TravelIncomeTaxExemptionDailyCap { get; set; }
+
     // --- Çalışma süresi ---
 
     /// <summary>

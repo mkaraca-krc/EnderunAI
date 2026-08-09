@@ -164,6 +164,7 @@ public sealed class HrCompensationComponentsController(AppDbContext db) : Contro
             ? DateTime.SpecifyKind(request.EffectiveEndDate.Value.Date, DateTimeKind.Utc)
             : null;
         item.IsAttendanceBased = request.IsAttendanceBased;
+        item.IsInKindBenefit = request.IsInKindBenefit;
         item.IncludeInPayroll = request.IncludeInPayroll;
         item.IncludeInSgkBase = request.IncludeInSgkBase;
         item.IncludeInIncomeTaxBase = request.IncludeInIncomeTaxBase;
@@ -205,6 +206,7 @@ public sealed class HrCompensationComponentsController(AppDbContext db) : Contro
         x.EffectiveStartDate,
         x.EffectiveEndDate,
         x.IsAttendanceBased,
+        x.IsInKindBenefit,
         x.IncludeInPayroll,
         x.IncludeInSgkBase,
         x.IncludeInIncomeTaxBase,
@@ -241,4 +243,7 @@ public sealed record SaveCompensationComponentRequest(
     bool IncludeInProjectCost,
     bool IncludeInProgressPaymentCost,
     bool IsActive,
-    string? Description);
+    string? Description,
+    // Ayni yardım (işyerinde yemek, şirket servisi): nakdî değil.
+    // Matrah bayrağı kapalıyken tavan uygulanmaz, tamamı istisnadır.
+    bool IsInKindBenefit = false);

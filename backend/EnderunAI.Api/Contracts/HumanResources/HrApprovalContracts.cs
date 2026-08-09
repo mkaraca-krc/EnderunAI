@@ -172,7 +172,13 @@ public sealed record CompanyPayrollCalculationResult(
     Guid CompanyId, int Year, int Month, int PersonnelCount,
     int CreatedCount, int UpdatedCount, int SkippedCount,
     decimal TotalNetPayableAmount,
-    int MissingSalaryDefinitionCount = 0);
+    int MissingSalaryDefinitionCount = 0,
+    // Ek ücret kalemleriyle ilgili uyarılar: nakit ödendiği için
+    // bordroya girmeyen kalemler ve istisna tavanı tanımsız olduğu için
+    // tamamı matraha giren yemek/yol yardımları. Hesap durmaz, ama
+    // kullanıcı neyin dışarıda kaldığını görmeden bordroyu
+    // onaylamamalı.
+    IReadOnlyList<string>? Warnings = null);
 
 public sealed record PayrollSummary(
     Guid CompanyId, int Year, int Month, int PayrollCount,

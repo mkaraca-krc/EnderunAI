@@ -83,6 +83,13 @@ export type CompanyPayrollCalculationResult = {
   updatedCount: number;
   skippedCount: number;
   totalNetPayableAmount: number;
+  missingSalaryDefinitionCount?: number;
+  /**
+   * Ek ücret kalemleriyle ilgili uyarılar: nakit ödendiği için
+   * bordroya girmeyen kalemler ve istisna tavanı tanımsız olduğu için
+   * tamamı matraha giren yemek/yol yardımları.
+   */
+  warnings?: string[] | null;
 };
 
 export type MarkPayrollPaidRequest = {

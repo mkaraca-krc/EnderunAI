@@ -20,6 +20,18 @@ public sealed class HrCompensationComponent : BaseEntity
     public DateTime? EffectiveEndDate { get; set; }
 
     public bool IsAttendanceBased { get; set; }
+
+    /// <summary>
+    /// Yardım ayni mi (işyerinde yemek, şirket servisi) yoksa nakdî mi.
+    ///
+    /// İstisnanın yasal ayrımı tam olarak burada: nakdî yemek/yol
+    /// yardımı günlük tavana kadar istisnadır, tavanı aşan kısım
+    /// matraha girer. Ayni yardımda tavan yoktur, tamamı istisnadır.
+    /// Matrah bayrağı (IncludeInSgkBase / IncludeInIncomeTaxBase) açıksa
+    /// bu alanın hükmü yoktur — kalem zaten tamamen matrahtadır.
+    /// </summary>
+    public bool IsInKindBenefit { get; set; }
+
     public bool IncludeInPayroll { get; set; }
     public bool IncludeInSgkBase { get; set; }
     public bool IncludeInIncomeTaxBase { get; set; }

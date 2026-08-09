@@ -28,6 +28,17 @@ function numeric(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/**
+ * İstisna tavanları gibi "tanımlanmamış olabilir" alanlar: boş giriş
+ * sıfıra değil null'a düşer. Sıfır tavan "istisna yok" demek olurdu ve
+ * tanımsızlıktan ayırt edilemezdi.
+ */
+function optionalNumeric(value: string) {
+  if (value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 type Props = { companyId: string | null };
 
 export default function PayrollSettingsCard({ companyId }: Props) {
@@ -149,6 +160,15 @@ export default function PayrollSettingsCard({ companyId }: Props) {
           settings.minimumWageStampTaxExemptionEnabled,
         severanceCeiling: settings.severanceCeiling,
         severanceCeilingPeriodNote: settings.severanceCeilingPeriodNote,
+        // Gönderilmeyen alan sunucuda varsayılana düşer: günlük çalışma
+        // süresi payload'da yoktu ve her kayıtta sessizce 7,5'e
+        // dönüyordu.
+        dailyWorkHours: settings.dailyWorkHours,
+        mealSgkExemptionDailyCap: settings.mealSgkExemptionDailyCap,
+        mealIncomeTaxExemptionDailyCap: settings.mealIncomeTaxExemptionDailyCap,
+        travelSgkExemptionDailyCap: settings.travelSgkExemptionDailyCap,
+        travelIncomeTaxExemptionDailyCap:
+          settings.travelIncomeTaxExemptionDailyCap,
         taxBrackets: settings.taxBrackets.map((bracket) => ({
           order: bracket.order,
           lowerBound: bracket.lowerBound,
@@ -364,6 +384,75 @@ export default function PayrollSettingsCard({ companyId }: Props) {
                 }
               />
             </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <Input
+                label="Yemek — Günlük SGK İstisnası (TL)"
+                type="number"
+                min={0}
+                step={0.01}
+                value={settings.mealSgkExemptionDailyCap === null
+                  ? ""
+                  : String(settings.mealSgkExemptionDailyCap)}
+                placeholder="Tanımlanmadı"
+                onChange={(e) =>
+                  patch({ mealSgkExemptionDailyCap: optionalNumeric(e.target.value) })
+                }
+              />
+              <Input
+                label="Yemek — Günlük Gelir Vergisi İstisnası (TL)"
+                type="number"
+                min={0}
+                step={0.01}
+                value={settings.mealIncomeTaxExemptionDailyCap === null
+                  ? ""
+                  : String(settings.mealIncomeTaxExemptionDailyCap)}
+                placeholder="Tanımlanmadı"
+                onChange={(e) =>
+                  patch({
+                    mealIncomeTaxExemptionDailyCap: optionalNumeric(e.target.value),
+                  })
+                }
+              />
+              <Input
+                label="Yol — Günlük SGK İstisnası (TL)"
+                type="number"
+                min={0}
+                step={0.01}
+                value={settings.travelSgkExemptionDailyCap === null
+                  ? ""
+                  : String(settings.travelSgkExemptionDailyCap)}
+                placeholder="Tanımlanmadı"
+                onChange={(e) =>
+                  patch({ travelSgkExemptionDailyCap: optionalNumeric(e.target.value) })
+                }
+              />
+              <Input
+                label="Yol — Günlük Gelir Vergisi İstisnası (TL)"
+                type="number"
+                min={0}
+                step={0.01}
+                value={settings.travelIncomeTaxExemptionDailyCap === null
+                  ? ""
+                  : String(settings.travelIncomeTaxExemptionDailyCap)}
+                placeholder="Tanımlanmadı"
+                onChange={(e) =>
+                  patch({
+                    travelIncomeTaxExemptionDailyCap: optionalNumeric(e.target.value),
+                  })
+                }
+              />
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Nakdî yemek ve yol yardımı günlük tavana kadar SGK priminden ve
+              gelir vergisinden müstesnadır; tavanı aşan kısım matraha girer.
+              Tavanlar her yıl tebliğle değiştiği için koda gömülmedi. Boş
+              bırakılan tavan &quot;tanımlanmadı&quot; sayılır: o kalemde istisna
+              uygulanmaz ve bordro ön kontrolü uyarır. Ayni yardımda (işyeri
+              yemeği, şirket servisi) tavan aranmaz — kalem ek ücret kartında
+              &quot;Ayni yardım&quot; olarak işaretlenir.
+            </p>
 
             <p className="text-xs text-slate-500">
               Kıdem tazminatı tavanı memur maaş katsayısına bağlı olduğu için

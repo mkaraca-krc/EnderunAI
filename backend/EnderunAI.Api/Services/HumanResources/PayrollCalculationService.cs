@@ -49,7 +49,8 @@ public sealed record PayrollInput(
     decimal SgkExemptEarnings = 0m,
     decimal IncomeTaxExemptEarnings = 0m,
     decimal CumulativeIncomeTaxBaseBefore = 0m,
-    decimal OtherDeductions = 0m);
+    decimal OtherDeductions = 0m,
+    decimal StampTaxExemptEarnings = 0m);
 
 /// <summary>
 /// Bordro hesabının tüm ara ve nihai değerleri. Ara değerler bordro
@@ -142,7 +143,10 @@ public static class PayrollCalculationService
         var incomeTax = Math.Max(0m, incomeTaxBeforeExemption - incomeTaxExemption);
 
         // --- Damga vergisi ---
-        var stampBeforeExemption = Round(gross * parameters.StampTaxPerMille / 1000m);
+        // Damga matrahı da brütün tamamı değil: damgadan müstesna
+        // kalemler (ör. ayni yemek yardımı) önce düşülür.
+        var stampLiable = Math.Max(0m, gross - Round(input.StampTaxExemptEarnings));
+        var stampBeforeExemption = Round(stampLiable * parameters.StampTaxPerMille / 1000m);
 
         var stampExemption = parameters.MinimumWageStampTaxExemptionEnabled
             ? Round(parameters.MinimumWageGross * parameters.StampTaxPerMille / 1000m)

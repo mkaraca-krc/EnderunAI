@@ -1575,6 +1575,23 @@ export default function PayrollManagementPage() {
             <strong>
               {calculationResult.skippedCount}
             </strong>
+
+            {(calculationResult.warnings?.length ?? 0) > 0 && (
+              <ul
+                style={{
+                  marginTop: "10px",
+                  padding: "10px 12px 10px 28px",
+                  border: "1px solid #fcd34d",
+                  background: "#fffbeb",
+                  borderRadius: "8px",
+                  color: "#78350f",
+                }}
+              >
+                {calculationResult.warnings?.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </section>

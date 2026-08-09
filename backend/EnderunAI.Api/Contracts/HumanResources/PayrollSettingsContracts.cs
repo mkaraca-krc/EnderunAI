@@ -24,7 +24,13 @@ public sealed record UpdatePayrollSettingsRequest(
     string? SeveranceCeilingPeriodNote,
     IReadOnlyCollection<PayrollTaxBracketRequest> TaxBrackets,
     /// <summary>Günlük normal çalışma süresi (saat). Saatlik ücret bundan türetilir.</summary>
-    decimal DailyWorkHours = 7.5m);
+    decimal DailyWorkHours = 7.5m,
+    // Nakdî yemek/yol yardımının günlük istisna tavanları. Boş
+    // bırakılırsa o yıl için tanımsız sayılır ve istisna uygulanmaz.
+    decimal? MealSgkExemptionDailyCap = null,
+    decimal? MealIncomeTaxExemptionDailyCap = null,
+    decimal? TravelSgkExemptionDailyCap = null,
+    decimal? TravelIncomeTaxExemptionDailyCap = null);
 
 /// <summary>
 /// Parametrelerin yürürlükteki mevzuatla karşılaştırıldığının onayı.
@@ -62,4 +68,8 @@ public sealed record PayrollSettingsResponse(
     string? VerificationNote,
     bool IsVerified,
     IReadOnlyCollection<PayrollTaxBracketResponse> TaxBrackets,
-    decimal DailyWorkHours = 7.5m);
+    decimal DailyWorkHours = 7.5m,
+    decimal? MealSgkExemptionDailyCap = null,
+    decimal? MealIncomeTaxExemptionDailyCap = null,
+    decimal? TravelSgkExemptionDailyCap = null,
+    decimal? TravelIncomeTaxExemptionDailyCap = null);

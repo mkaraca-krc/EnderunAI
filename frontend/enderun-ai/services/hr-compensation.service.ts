@@ -42,6 +42,7 @@ export type CompensationComponent = {
   effectiveStartDate: string;
   effectiveEndDate?: string | null;
   isAttendanceBased: boolean;
+  isInKindBenefit: boolean;
   includeInPayroll: boolean;
   includeInSgkBase: boolean;
   includeInIncomeTaxBase: boolean;
@@ -75,6 +76,7 @@ export type CreateCompensationComponentRequest = {
   effectiveStartDate: string;
   effectiveEndDate?: string | null;
   isAttendanceBased: boolean;
+  isInKindBenefit: boolean;
   includeInPayroll: boolean;
   includeInSgkBase: boolean;
   includeInIncomeTaxBase: boolean;
