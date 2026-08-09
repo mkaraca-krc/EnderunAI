@@ -1,6 +1,7 @@
 "use client";
 
 import PersonnelDocumentsPanel from "@/components/hr/personnel-documents-panel";
+import PersonnelOvertimePanel from "@/components/hr/personnel-overtime-panel";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { ApiError } from "@/lib/api/api-client";
@@ -26,6 +27,7 @@ type TabKey =
   | "egitim"
   | "belgeler"
   | "ozluk"
+  | "mesai"
   | "kariyer"
   | "performans"
   | "disiplin";
@@ -37,6 +39,7 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "egitim", label: "Eğitim" },
   { key: "belgeler", label: "Sertifikalar" },
   { key: "ozluk", label: "Özlük Belgeleri" },
+  { key: "mesai", label: "Fazla Mesai" },
   { key: "kariyer", label: "Kariyer" },
   { key: "performans", label: "Performans" },
   { key: "disiplin", label: "Disiplin" },
@@ -699,6 +702,13 @@ function TabContent({
   // yükleme/doğrulama/silme kendi uçlarına gider.
   if (tab === "ozluk") {
     return <PersonnelDocumentsPanel personnelId={personnelId} />;
+  }
+
+  // Fazla mesai kendi verisini çeker: yıllık kümülatif ve sınır
+  // durumu 360 yanıtında yok, köprüyle aynı kuralı kullanan ayrı
+  // uçtan gelir.
+  if (tab === "mesai") {
+    return <PersonnelOvertimePanel personnelId={personnelId} />;
   }
 
   if (tab === "kariyer") {
