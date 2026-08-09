@@ -1,3 +1,5 @@
+using EnderunAI.Api.Data.HumanResources;
+using EnderunAI.Api.Services.HumanResources;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
@@ -24,6 +26,18 @@ public sealed record CreatePersonnelDutyRequest(
 
 public sealed record DecidePersonnelDutyRequest(string? DecisionNote);
 
+public sealed record SaveDutyExpenseRequest(
+    decimal TravelCost,
+    decimal AccommodationCost,
+    decimal ReceiptAmount);
+
+public sealed record SettleDutyRequest(
+    /// <summary>0 personelden düş · 1 gider kabul et.</summary>
+    int Decision,
+    string? Note,
+    /// <summary>Personelden düşmede taksit sayısı.</summary>
+    int InstallmentCount = 1);
+
 /// <summary>
 /// Personel görevlendirmeleri.
 ///
@@ -46,6 +60,8 @@ public sealed record DecidePersonnelDutyRequest(string? DecisionNote);
 [Route("api/hr/gorevlendirmeler")]
 public sealed class PersonnelDutiesController(
     AppDbContext db,
+    HrDbContext hrDb,
+    DutyExpensePostingService expensePosting,
     ICurrentUserService currentUser,
     IUserAuthorizationService authorization,
     IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
@@ -288,6 +304,10 @@ public sealed class PersonnelDutiesController(
         duty.ApprovedAtUtc = DateTime.UtcNow;
         duty.DecisionNote = request.DecisionNote?.Trim();
 
+        // Masraf onayla birlikte hedef projeye yansır; onaysız görev
+        // maliyet üretmez.
+        await expensePosting.PostAsync(duty, cancellationToken);
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new
@@ -341,6 +361,159 @@ public sealed class PersonnelDutiesController(
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new { message = "Görevlendirme reddedildi.", duty.Id });
+    }
+
+    /// <summary>
+    /// Masraf kalemleri: yol, konaklama ve fiş toplamı. Harcırah
+    /// buradan girilmez — görev kartındaki sabit tutardan hesaplanır.
+    /// </summary>
+    [HttpPost("{id:guid}/masraf")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
+    public async Task<IActionResult> SaveExpense(
+        Guid id, SaveDutyExpenseRequest request, CancellationToken cancellationToken)
+    {
+        if (request.TravelCost < 0m || request.AccommodationCost < 0m ||
+            request.ReceiptAmount < 0m)
+        {
+            return BadRequest(new { message = "Tutarlar negatif olamaz." });
+        }
+
+        var duty = await db.PersonnelDuties
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (duty is null)
+            return NotFound(new { message = "Görevlendirme bulunamadı." });
+
+        duty.TravelCost = request.TravelCost;
+        duty.AccommodationCost = request.AccommodationCost;
+        duty.ReceiptAmount = request.ReceiptAmount;
+
+        // Onaylı görevde defter güncellenir; onaysızda hiçbir şey
+        // yansımaz. Yeniden yansıtma satırı günceller, ikincisini
+        // açmaz.
+        await expensePosting.PostAsync(duty, cancellationToken);
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Görev masrafı kaydedildi.",
+            duty.Id,
+            travelCost = duty.TravelCost,
+            accommodationCost = duty.AccommodationCost,
+            allowance = duty.TotalAllowance,
+            totalExpense = duty.TotalExpense,
+            receiptAmount = duty.ReceiptAmount,
+            settlementGap = duty.SettlementGap,
+            settlementPending = duty.SettlementPending
+        });
+    }
+
+    /// <summary>
+    /// Harcırah mahsubu: fişle karşılanmayan fark için karar.
+    ///
+    /// Sabit kural yok — fark ya personelden düşülür ya şirket gideri
+    /// kabul edilir; ikisi de meşru ve karar GM/İK'nın. Ama karar
+    /// KAYIT ALTINA alınır: kim, ne zaman, hangi gerekçeyle.
+    ///
+    /// "Personelden düş" seçilirse kesinti YENİ BİR YOLDAN değil,
+    /// bordroda zaten çalışan avans zincirinden yürür. Kayıt
+    /// "Harcırah Mahsubu" etiketiyle açılır ki personelin gerçek avans
+    /// talepleriyle karışmasın.
+    /// </summary>
+    [HttpPost("{id:guid}/mahsup")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
+    public async Task<IActionResult> Settle(
+        Guid id, SettleDutyRequest request, CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(typeof(DutySettlementDecision), request.Decision))
+            return BadRequest(new { message = "Geçersiz mahsup kararı." });
+
+        var note = request.Note?.Trim();
+
+        if (string.IsNullOrWhiteSpace(note))
+            return BadRequest(new { message = "Mahsup gerekçesi zorunludur." });
+
+        var duty = await db.PersonnelDuties
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (duty is null)
+            return NotFound(new { message = "Görevlendirme bulunamadı." });
+
+        if (duty.Status != PersonnelDutyStatus.Approved)
+        {
+            return BadRequest(new
+            {
+                message = "Yalnızca onaylı görevlendirmede mahsup yapılır."
+            });
+        }
+
+        if (duty.SettlementGap <= 0m)
+        {
+            return BadRequest(new
+            {
+                message = "Mahsup edilecek fark yok: fişler harcırahı karşılıyor."
+            });
+        }
+
+        if (duty.SettlementDecision is not null)
+        {
+            return Conflict(new
+            {
+                message = "Bu görevin mahsubu zaten karara bağlanmış."
+            });
+        }
+
+        var decision = (DutySettlementDecision)request.Decision;
+
+        duty.SettlementDecision = decision;
+        duty.SettlementNote = note;
+        duty.SettlementByUserId = currentUser.UserId;
+        duty.SettlementAtUtc = DateTime.UtcNow;
+
+        if (decision == DutySettlementDecision.DeductFromPersonnel)
+        {
+            var installments = request.InstallmentCount < 1
+                ? 1
+                : request.InstallmentCount;
+
+            // Avans zinciri: kesinti bordroda zaten çalışan tek
+            // yoldan yürür. Etiket kaynağı ayırıyor.
+            var advance = new Models.HumanResources.HrAdvanceRequest
+            {
+                CompanyId = duty.CompanyId,
+                PersonnelId = duty.PersonnelId,
+                ProjectId = duty.TargetProjectId,
+                RequestDate = DateTime.UtcNow.Date,
+                RequestedAmount = duty.SettlementGap,
+                ApprovedAmount = duty.SettlementGap,
+                CurrencyCode = "TRY",
+                DeductionInstallmentCount = installments,
+                Reason = $"Harcırah Mahsubu — {duty.Purpose}",
+                Status = Models.HumanResources.HrApprovalStatus.Paid,
+                ApprovedByUserId = currentUser.UserId,
+                ApprovedAtUtc = DateTime.UtcNow,
+                PaidAtUtc = DateTime.UtcNow
+            };
+
+            hrDb.AdvanceRequests.Add(advance);
+            await hrDb.SaveChangesAsync(cancellationToken);
+
+            duty.SettlementAdvanceId = advance.Id;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = decision == DutySettlementDecision.DeductFromPersonnel
+                ? "Fark personelden kesilmek üzere harcırah mahsubu açıldı."
+                : "Fark şirket gideri olarak kabul edildi.",
+            duty.Id,
+            settlementGap = duty.SettlementGap,
+            decision = (int)decision,
+            duty.SettlementAdvanceId
+        });
     }
 
     private async Task<bool> CanApproveAsync(CancellationToken cancellationToken)

@@ -37,6 +37,21 @@ public enum PersonnelDutyType
 }
 
 /// <summary>
+/// Harcırah mahsup kararı. Fiş harcırahtan azsa fark bir yere
+/// gitmek zorunda: ya personelden düşülür ya şirket gideri kabul
+/// edilir. Sabit kural yok — karar GM/İK'nın, ama KAYIT ALTINA
+/// alınıyor.
+/// </summary>
+public enum DutySettlementDecision
+{
+    /// <summary>Fark personelden kesilir; avans zincirine bağlanır.</summary>
+    DeductFromPersonnel = 0,
+
+    /// <summary>Fark şirket gideri kabul edilir.</summary>
+    AcceptAsExpense = 1
+}
+
+/// <summary>
 /// Görevlendirme durumu. Onaylanmadan hiçbir maliyet doğmaz.
 /// </summary>
 public enum PersonnelDutyStatus
@@ -120,6 +135,36 @@ public sealed class PersonnelDuty : BaseEntity
     /// <summary>Reddedildiyse gerekçe; gerekçesiz ret bilgi vermez.</summary>
     public string? DecisionNote { get; set; }
 
+    // --- Masraf kalemleri ---
+    //
+    // Yol, konaklama ve harcırah AYRI AYRI tutuluyor; tek bir toplama
+    // çökertilmiyor. Gider merkezi tarafı "şantiyeye ne kadar yol / ne
+    // kadar konaklama / ne kadar harcırah" diye kategori bazında
+    // soracak; kırılım sonradan ayrıştırılamaz.
+
+    public decimal TravelCost { get; set; }
+    public decimal AccommodationCost { get; set; }
+
+    /// <summary>
+    /// Getirilen fişlerin toplamı. Harcırahın karşılığı: fiş belge
+    /// olduğu için resmî gider tarafında durur.
+    /// </summary>
+    public decimal ReceiptAmount { get; set; }
+
+    // --- Mahsup ---
+
+    public DutySettlementDecision? SettlementDecision { get; set; }
+    public string? SettlementNote { get; set; }
+    public Guid? SettlementByUserId { get; set; }
+    public DateTime? SettlementAtUtc { get; set; }
+
+    /// <summary>
+    /// "Personelden düş" kararında açılan avans kaydı. Kesinti yeni
+    /// bir yoldan değil, bordroda zaten çalışan avans zincirinden
+    /// yürür; bağ tutuluyor ki ikinci kez avans açılmasın.
+    /// </summary>
+    public Guid? SettlementAdvanceId { get; set; }
+
     /// <summary>Görevin kapsadığı gün sayısı (uçlar sınır dahil sayar).</summary>
     public int DayCount => EndDate.Date < StartDate.Date
         ? 0
@@ -136,4 +181,23 @@ public sealed class PersonnelDuty : BaseEntity
     /// evet — ziyaret ve keşifte kişi orada imalat üretmiyor.
     /// </summary>
     public bool ShiftsLaborCost => DutyType == PersonnelDutyType.Work;
+
+    /// <summary>Hedef projeye yansıyan toplam masraf.</summary>
+    public decimal TotalExpense => TravelCost + AccommodationCost + TotalAllowance;
+
+    /// <summary>
+    /// Mahsup farkı: hak edilen harcırahın fişle karşılanmayan kısmı.
+    /// Eksi çıkmaz — fiş harcırahı aşarsa fark sıfırdır, fazlası ayrı
+    /// bir masraf kalemidir, mahsup konusu değil.
+    /// </summary>
+    public decimal SettlementGap => Math.Max(0m, TotalAllowance - ReceiptAmount);
+
+    /// <summary>
+    /// Mahsup bekliyor mu: fark var ve karar verilmemiş. Onaysız
+    /// görevde mahsup da yok.
+    /// </summary>
+    public bool SettlementPending =>
+        Status == PersonnelDutyStatus.Approved &&
+        SettlementGap > 0m &&
+        SettlementDecision is null;
 }

@@ -390,6 +390,8 @@ builder.Services.AddScoped<EnderunAI.Api.Services.HumanResources.SalaryTakeHomeS
 builder.Services
     .AddScoped<EnderunAI.Api.Services.HumanResources.RehireGuardService>();
 builder.Services
+    .AddScoped<EnderunAI.Api.Services.HumanResources.DutyExpensePostingService>();
+builder.Services
     .AddScoped<EnderunAI.Api.Services.HumanResources.ActualDailyWageService>();
 builder.Services
     .AddScoped<EnderunAI.Api.Services.HumanResources.ExtraPaymentAllocationService>();
