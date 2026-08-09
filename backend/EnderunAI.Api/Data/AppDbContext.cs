@@ -28,6 +28,7 @@ public sealed class AppDbContext(
         Set<CompanyCorporateTaxRate>();
     public DbSet<PersonnelRehireOverride> PersonnelRehireOverrides =>
         Set<PersonnelRehireOverride>();
+    public DbSet<PersonnelDuty> PersonnelDuties => Set<PersonnelDuty>();
     public DbSet<CashAccount> CashAccounts => Set<CashAccount>();
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
     public DbSet<CurrencyValuationRun> CurrencyValuationRuns =>
@@ -268,6 +269,7 @@ public sealed class AppDbContext(
         ConfigureCompanyFinanceSettings(modelBuilder);
         ConfigureCompanyCorporateTaxRates(modelBuilder);
         ConfigurePersonnelRehireOverrides(modelBuilder);
+        ConfigurePersonnelDuties(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -936,6 +938,50 @@ public sealed class AppDbContext(
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigurePersonnelDuties(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PersonnelDuty>(entity =>
+        {
+            entity.ToTable("personnel_duties");
+            entity.HasKey(x => x.Id);
+
+            // Çakışma kontrolü ve gün dağıtımı bu iki eksenden
+            // sorgulanıyor.
+            entity.HasIndex(x => new { x.PersonnelId, x.StartDate });
+            entity.HasIndex(x => x.TargetProjectId);
+
+            entity.Property(x => x.DailyAllowance).HasPrecision(18, 2);
+            entity.Property(x => x.Purpose).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.DecisionNote).HasMaxLength(1000);
+
+            // Hesaplanan alanlar veritabanına yazılmaz.
+            entity.Ignore(x => x.DayCount);
+            entity.Ignore(x => x.TotalAllowance);
+            entity.Ignore(x => x.ShiftsLaborCost);
+
+            entity.HasOne(x => x.Personnel)
+                .WithMany()
+                .HasForeignKey(x => x.PersonnelId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.TargetProject)
+                .WithMany()
+                .HasForeignKey(x => x.TargetProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SourceProject)
+                .WithMany()
+                .HasForeignKey(x => x.SourceProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.TargetProjectSite)
+                .WithMany()
+                .HasForeignKey(x => x.TargetProjectSiteId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 
