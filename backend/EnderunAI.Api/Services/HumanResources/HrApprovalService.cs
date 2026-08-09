@@ -1392,6 +1392,36 @@ public sealed class HrApprovalService(
                         ProjectId: x.ProjectId))
                     .ToList());
 
+        // GÖREVLENDİRME: onaylı ÇALIŞMA görevleri günü hedef projeye
+        // yönlendirir. Puantaja DOKUNULMAZ — gün zaten tek satır olarak
+        // yazılıyor, yalnızca hangi projeye yazıldığı değişiyor. Böylece
+        // toplam işçilik korunur: yeniden dağıtılır, yaratılmaz. Ev
+        // projesinden "düşme" diye ayrı bir işlem yok; gün oraya hiç
+        // yazılmıyor.
+        //
+        // Keşif ve ziyaret görevleri buraya GİRMEZ (ShiftsLaborCost
+        // false): o günlerde kişi hedefte imalat üretmiyor, işçiliği
+        // kendi yerinde kalıyor; hedefe yalnız masraf düşer.
+        var workDuties = await appDb.PersonnelDuties
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId &&
+                        x.DutyType == EnderunAI.Api.Models.PersonnelDutyType.Work &&
+                        x.Status == EnderunAI.Api.Models.PersonnelDutyStatus.Approved &&
+                        x.StartDate <= periodEnd && x.EndDate >= periodStart)
+            .Select(x => new
+            {
+                x.PersonnelId,
+                x.StartDate,
+                x.EndDate,
+                x.TargetProjectId,
+                x.TargetProjectSiteId
+            })
+            .ToListAsync(cancellationToken);
+
+        var dutiesByPersonnel = workDuties
+            .GroupBy(x => x.PersonnelId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         // Aylık ve tek seferlik kalemlerin böleni: kişinin dönemde
         // ÜCRET ÜRETEN proje günü sayısı. Sabit 30'a bölmek, 20 gün
         // çalışan birinde kalemin üçte birini hiçbir projeye
@@ -1461,8 +1491,17 @@ public sealed class HrApprovalService(
                 appDb.HrProjectLaborCosts.Add(cost);
             }
 
-            cost.ProjectId = day.ProjectId!.Value;
-            cost.ProjectSiteId = day.ProjectSiteId;
+            // Görev günüyse maliyet hedef projeye yazılır; yoksa
+            // puantajdaki proje geçerli.
+            var duty = dutiesByPersonnel.TryGetValue(day.PersonnelId, out var personDuties)
+                ? personDuties.FirstOrDefault(x =>
+                    x.StartDate <= day.WorkDate && x.EndDate >= day.WorkDate)
+                : null;
+
+            cost.ProjectId = duty?.TargetProjectId ?? day.ProjectId!.Value;
+            cost.ProjectSiteId = duty is null
+                ? day.ProjectSiteId
+                : duty.TargetProjectSiteId;
             cost.PersonnelId = day.PersonnelId;
             cost.WorkDate = day.WorkDate;
             cost.WorkItemCode = day.WorkItemCode;
