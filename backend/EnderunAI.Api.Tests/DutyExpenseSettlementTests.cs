@@ -551,4 +551,81 @@ public sealed class DutyExpenseSettlementTests(DatabaseFixture fixture)
 
         Assert.Contains("\"totalAllowance\":5000", visible);
     }
+
+    // ---------------- Detay ucu (ekranın beslediği yer) ----------------
+
+    /// <summary>
+    /// Ekran masraf kırılımını detay ucundan okuyor; liste her satırda
+    /// masraf taşımıyor.
+    /// </summary>
+    [Fact]
+    public async Task Detail_CarriesTheExpenseBreakdown()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions);
+
+        await SaveExpenseAsync(client, dutyId, receipt: 3_200m);
+
+        var payload = JsonDocument.Parse(await (await client.GetAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}"))
+            .Content.ReadAsStringAsync()).RootElement;
+
+        Assert.False(payload.GetProperty("amountsHidden").GetBoolean());
+        Assert.Equal(Travel, payload.GetProperty("travelCost").GetDecimal());
+        Assert.Equal(Accommodation,
+            payload.GetProperty("accommodationCost").GetDecimal());
+        Assert.Equal(5_000m, payload.GetProperty("totalAllowance").GetDecimal());
+        Assert.Equal(11_500m, payload.GetProperty("totalExpense").GetDecimal());
+        Assert.Equal(1_800m, payload.GetProperty("settlementGap").GetDecimal());
+        Assert.True(payload.GetProperty("settlementPending").GetBoolean());
+
+        // Keşif olmayan görevde rapor da beklenmiyor.
+        Assert.False(payload.GetProperty("hasSurveyReport").GetBoolean());
+    }
+
+    /// <summary>
+    /// NEGATİF TEST: saha personeli detayı açabiliyor ama TEK BİR
+    /// tutar alanı bile dolu gelmiyor — mahsup bekliyor bilgisi dahil,
+    /// çünkü o da "bu kişiye fark borcu var" demektir.
+    /// </summary>
+    [Fact]
+    public async Task Detail_HidesEveryAmountFromFieldStaff()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var hr = await ClientWithAsync(HrPermissions);
+        await SaveExpenseAsync(hr, dutyId, receipt: 3_200m);
+
+        var field = await ClientWithAsync([PermissionCatalog.Keys.PersonnelView]);
+
+        var response = await field.GetAsync($"/api/hr/gorevlendirmeler/{dutyId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync()).RootElement;
+
+        // Görevi ve tarihini görüyor.
+        Assert.Equal("Şantiye denetimi", payload.GetProperty("purpose").GetString());
+        Assert.Equal(5, payload.GetProperty("dayCount").GetInt32());
+
+        Assert.True(payload.GetProperty("amountsHidden").GetBoolean());
+
+        foreach (var field_ in new[]
+        {
+            "dailyAllowance", "totalAllowance", "travelCost",
+            "accommodationCost", "receiptAmount", "totalExpense",
+            "settlementGap", "settlementPending", "settlementDecision",
+            "settlementNote", "settlementAdvanceId"
+        })
+        {
+            Assert.Equal(
+                JsonValueKind.Null, payload.GetProperty(field_).ValueKind);
+        }
+    }
 }

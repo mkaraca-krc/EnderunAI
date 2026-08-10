@@ -1,0 +1,777 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+
+import ErpShell from "@/components/erp/erp-shell";
+import DutyDetailPanel from "@/components/hr/duty-detail-panel";
+import { usePermissions } from "@/lib/use-permissions";
+import {
+  personnelDutyService,
+  PersonnelDutyItem,
+  DutyType,
+  dutyTypeOptions,
+} from "@/services/personnel-duty.service";
+import {
+  personnelService,
+  PersonnelListItem,
+} from "@/services/personnel.service";
+import { companyService, CompanyListItem } from "@/services/company.service";
+import { projectService, ProjectListItem } from "@/services/project.service";
+
+type DutyForm = {
+  companyId: string;
+  personnelId: string;
+  dutyType: string;
+  targetProjectId: string;
+  sourceProjectId: string;
+  startDate: string;
+  endDate: string;
+  isOutOfCity: boolean;
+  dailyAllowance: string;
+  purpose: string;
+  notes: string;
+};
+
+const initialForm: DutyForm = {
+  companyId: "",
+  personnelId: "",
+  dutyType: "0",
+  targetProjectId: "",
+  sourceProjectId: "",
+  startDate: "",
+  endDate: "",
+  isOutOfCity: false,
+  dailyAllowance: "0",
+  purpose: "",
+  notes: "",
+};
+
+const statusOptions = [
+  { value: 0, label: "Onay bekliyor" },
+  { value: 1, label: "Onaylandı" },
+  { value: 2, label: "Reddedildi" },
+  { value: 3, label: "Tamamlandı" },
+  { value: 4, label: "İptal" },
+];
+
+function statusClass(value: number) {
+  if (value === 1) return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (value === 0) return "border-amber-200 bg-amber-50 text-amber-700";
+  if (value === 2 || value === 4) return "border-red-200 bg-red-50 text-red-700";
+
+  return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+function dutyTypeClass(value: DutyType) {
+  if (value === 0) return "border-blue-200 bg-blue-50 text-blue-700";
+  if (value === 1) return "border-violet-200 bg-violet-50 text-violet-700";
+
+  return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+const currency = new Intl.NumberFormat("tr-TR", {
+  style: "currency",
+  currency: "TRY",
+  maximumFractionDigits: 2,
+});
+
+function formatDate(value?: string | null) {
+  return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
+}
+
+/**
+ * Görevlendirme akışının tek ekranı: talep açma, GM onayı, üç görev
+ * türü, masraf/fiş/mahsup, keşif saha raporu ve kazan/kaybet sonucu.
+ *
+ * YETKİ: buradaki kontroller yalnızca kullanıcıya işe yaramayacak
+ * düğme göstermemek için. Gerçek kapı uçlarda — tutarlar
+ * extra_payment.view yoksa sunucudan hiç gelmiyor, onay yalnızca
+ * Genel Müdür/Admin rolünde geçiyor.
+ */
+export default function PersonnelDutiesPage() {
+  const { has, user } = usePermissions();
+
+  const canEdit = has("personnel.edit");
+  const canWriteReport = has("projects.edit") || has("site-reports.edit");
+  const canDecideOutcome = has("projects.edit");
+
+  const canApprove = Boolean(
+    user?.roles?.includes("Admin") || user?.roles?.includes("Genel Müdür")
+  );
+
+  const [items, setItems] = useState<PersonnelDutyItem[]>([]);
+  const [companies, setCompanies] = useState<CompanyListItem[]>([]);
+  const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+
+  const [form, setForm] = useState<DutyForm>(initialForm);
+  const [showForm, setShowForm] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [personnelFilter, setPersonnelFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const amountsHidden = items.length > 0 && items[0].amountsHidden;
+
+  const formProjects = useMemo(() => {
+    // Keşif görevi keşif statüsündeki projeye, diğerleri aktif
+    // projeye açılır — uç da bunu doğruluyor; listeyi daraltmak
+    // kullanıcıyı reddedilecek bir seçimden koruyor.
+    const wantsSurvey = form.dutyType === "1";
+
+    return projects.filter((project) => {
+      if (form.companyId && project.companyId !== form.companyId) return false;
+
+      return wantsSurvey ? project.status === 0 : project.status === 2;
+    });
+  }, [form.companyId, form.dutyType, projects]);
+
+  const formPersonnel = useMemo(
+    () =>
+      form.companyId
+        ? personnel.filter((x) => x.companyId === form.companyId)
+        : personnel,
+    [form.companyId, personnel]
+  );
+
+  const visibleItems = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase("tr-TR");
+
+    if (!term) return items;
+
+    return items.filter((item) =>
+      [
+        item.personnelFullName,
+        item.targetProjectCode,
+        item.targetProjectName,
+        item.purpose,
+        item.statusName,
+        item.dutyTypeName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("tr-TR")
+        .includes(term)
+    );
+  }, [items, search]);
+
+  const pendingApproval = items.filter((x) => x.status === 0).length;
+  const approved = items.filter((x) => x.status === 1).length;
+  const settlementPending = items.filter((x) => x.settlementPending).length;
+  const missingReports = items.filter(
+    (x) => x.dutyType === 1 && x.status === 1 && !x.hasSurveyReport
+  ).length;
+
+  async function loadItems() {
+    setLoading(true);
+    setError("");
+
+    try {
+      setItems(
+        await personnelDutyService.getAll({
+          companyId: companyFilter || undefined,
+          personnelId: personnelFilter || undefined,
+          status: statusFilter === "" ? undefined : Number(statusFilter),
+        })
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Görevlendirmeler yüklenemedi."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    async function loadPage() {
+      try {
+        const [companyResult, personnelResult, projectResult, dutyResult] =
+          await Promise.all([
+            companyService.getAll(),
+            personnelService.getAll(),
+            projectService.getAll(),
+            personnelDutyService.getAll(),
+          ]);
+
+        setCompanies(companyResult);
+        setPersonnel(personnelResult);
+        setProjects(projectResult);
+        setItems(dutyResult);
+
+        if (companyResult.length === 1) {
+          setForm((current) => ({
+            ...current,
+            companyId: companyResult[0].id,
+          }));
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Görevlendirme ekranı yüklenemedi."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadPage();
+  }, []);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      if (!form.companyId) throw new Error("Şirket seçilmelidir.");
+      if (!form.personnelId) throw new Error("Personel seçilmelidir.");
+      if (!form.targetProjectId) throw new Error("Hedef proje seçilmelidir.");
+      if (!form.startDate || !form.endDate) {
+        throw new Error("Başlangıç ve bitiş tarihi zorunludur.");
+      }
+      if (!form.purpose.trim()) throw new Error("Görev amacı zorunludur.");
+
+      const dailyAllowance = Number(form.dailyAllowance);
+
+      if (!Number.isFinite(dailyAllowance) || dailyAllowance < 0) {
+        throw new Error("Günlük harcırah negatif olamaz.");
+      }
+
+      const response = await personnelDutyService.create({
+        companyId: form.companyId,
+        personnelId: form.personnelId,
+        dutyType: Number(form.dutyType) as DutyType,
+        targetProjectId: form.targetProjectId,
+        sourceProjectId: form.sourceProjectId || null,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        isOutOfCity: form.isOutOfCity,
+        dailyAllowance,
+        purpose: form.purpose.trim(),
+        notes: form.notes.trim() || null,
+      });
+
+      setSuccess(response.message);
+      setShowForm(false);
+      setForm({
+        ...initialForm,
+        companyId: companies.length === 1 ? companies[0].id : "",
+      });
+
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kayıt işlemi başarısız.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function approve(item: PersonnelDutyItem) {
+    if (!window.confirm("Görevlendirme onaylansın mı?")) return;
+
+    setActionId(item.id);
+    setError("");
+    setSuccess("");
+
+    try {
+      const response = await personnelDutyService.approve(item.id);
+
+      setSuccess(response.message);
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Onay işlemi başarısız.");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function reject(item: PersonnelDutyItem) {
+    const reason = window.prompt("Ret gerekçesi (zorunlu):")?.trim();
+
+    if (!reason) return;
+
+    setActionId(item.id);
+    setError("");
+    setSuccess("");
+
+    try {
+      const response = await personnelDutyService.reject(item.id, reason);
+
+      setSuccess(response.message);
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ret işlemi başarısız.");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  const selectedType = Number(form.dutyType) as DutyType;
+  const selectedTypeHint = dutyTypeOptions.find(
+    (x) => x.value === selectedType
+  )?.hint;
+
+  return (
+    <ErpShell
+      title="Görevlendirmeler"
+      description="Talep, onay, harcırah ve keşif sonucu tek akışta"
+    >
+      {error && (
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          {success}
+        </div>
+      )}
+
+      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["Toplam Görevlendirme", items.length],
+          ["Onay Bekleyen", pendingApproval],
+          ["Onaylı", approved],
+          [
+            amountsHidden ? "Rapor Bekleyen Keşif" : "Mahsup Bekleyen",
+            amountsHidden ? missingReports : settlementPending,
+          ],
+        ].map(([title, value]) => (
+          <article
+            key={String(title)}
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <span className="text-xs font-bold text-slate-500">{title}</span>
+            <strong className="mt-3 block text-3xl text-slate-800">
+              {loading ? "…" : value}
+            </strong>
+          </article>
+        ))}
+      </div>
+
+      <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-bold text-slate-800">
+            Görevlendirme Listesi
+          </h2>
+
+          <div className="flex flex-wrap gap-2">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Personel, proje, amaç ara"
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+            />
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+            >
+              <option value="">Tüm durumlar</option>
+              {statusOptions.map((x) => (
+                <option key={x.value} value={x.value}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+
+            {companies.length > 1 && (
+              <select
+                value={companyFilter}
+                onChange={(e) => setCompanyFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+              >
+                <option value="">Tüm şirketler</option>
+                {companies.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <select
+              value={personnelFilter}
+              onChange={(e) => setPersonnelFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+            >
+              <option value="">Tüm personel</option>
+              {personnel.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.fullName}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={loadItems}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
+            >
+              Uygula
+            </button>
+
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setShowForm((x) => !x)}
+                className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+              >
+                {showForm ? "Formu Kapat" : "+ Yeni Görevlendirme"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {!canApprove && (
+          <p className="mt-3 text-xs text-slate-500">
+            Görevlendirmeyi Genel Müdür onaylar; onaylanmadan maliyet ve
+            harcırah hedef projeye yansımaz.
+          </p>
+        )}
+      </section>
+
+      {showForm && canEdit && (
+        <section className="mb-5 rounded-xl border border-blue-200 bg-white p-5 shadow-sm">
+          <form onSubmit={save} className="grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <label className="text-sm text-slate-600">
+                Şirket
+                <select
+                  value={form.companyId}
+                  onChange={(e) =>
+                    setForm((x) => ({
+                      ...x,
+                      companyId: e.target.value,
+                      personnelId: "",
+                      targetProjectId: "",
+                    }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                >
+                  <option value="">Şirket seçin</option>
+                  {companies.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm text-slate-600">
+                Personel
+                <select
+                  value={form.personnelId}
+                  onChange={(e) =>
+                    setForm((x) => ({ ...x, personnelId: e.target.value }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                >
+                  <option value="">Personel seçin</option>
+                  {formPersonnel.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm text-slate-600">
+                Görev türü
+                <select
+                  value={form.dutyType}
+                  onChange={(e) =>
+                    setForm((x) => ({
+                      ...x,
+                      dutyType: e.target.value,
+                      targetProjectId: "",
+                    }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                >
+                  {dutyTypeOptions.map((x) => (
+                    <option key={x.value} value={x.value}>
+                      {x.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm text-slate-600">
+                Hedef proje
+                <select
+                  value={form.targetProjectId}
+                  onChange={(e) =>
+                    setForm((x) => ({ ...x, targetProjectId: e.target.value }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                >
+                  <option value="">
+                    {form.dutyType === "1"
+                      ? "Keşif statüsündeki proje seçin"
+                      : "Aktif proje seçin"}
+                  </option>
+                  {formProjects.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.code} — {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm text-slate-600">
+                Başlangıç
+                <input
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) =>
+                    setForm((x) => ({ ...x, startDate: e.target.value }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                />
+              </label>
+
+              <label className="text-sm text-slate-600">
+                Bitiş
+                <input
+                  type="date"
+                  value={form.endDate}
+                  onChange={(e) =>
+                    setForm((x) => ({ ...x, endDate: e.target.value }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                />
+              </label>
+
+              <label className="text-sm text-slate-600">
+                Günlük harcırah
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.dailyAllowance}
+                  onChange={(e) =>
+                    setForm((x) => ({ ...x, dailyAllowance: e.target.value }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                />
+              </label>
+
+              <label className="flex items-center gap-2 self-end text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={form.isOutOfCity}
+                  onChange={(e) =>
+                    setForm((x) => ({ ...x, isOutOfCity: e.target.checked }))
+                  }
+                />
+                Şehir dışı görev
+              </label>
+            </div>
+
+            <input
+              value={form.purpose}
+              onChange={(e) =>
+                setForm((x) => ({ ...x, purpose: e.target.value }))
+              }
+              placeholder="Görev amacı (zorunlu)"
+              className="rounded-lg border border-slate-300 p-3"
+            />
+
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm((x) => ({ ...x, notes: e.target.value }))}
+              rows={2}
+              placeholder="Notlar"
+              className="rounded-lg border border-slate-300 p-3"
+            />
+
+            {selectedTypeHint && (
+              <p className="text-xs text-slate-500">{selectedTypeHint}</p>
+            )}
+
+            <div>
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-lg bg-blue-700 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {saving ? "Kaydediliyor…" : "Talebi Aç"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {selectedId && (
+        <DutyDetailPanel
+          dutyId={selectedId}
+          canEdit={canEdit}
+          canWriteReport={canWriteReport}
+          canDecideOutcome={canDecideOutcome}
+          onChanged={loadItems}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
+
+      <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <table className="w-full min-w-[1000px] text-left text-sm">
+          <thead className="border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-500">
+            <tr>
+              <th className="p-4">Personel</th>
+              <th className="p-4">Tür</th>
+              <th className="p-4">Hedef Proje</th>
+              <th className="p-4">Tarih</th>
+              <th className="p-4">Harcırah</th>
+              <th className="p-4">Durum</th>
+              <th className="p-4">İşlem</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {loading && (
+              <tr>
+                <td colSpan={7} className="p-6 text-center text-slate-500">
+                  Yükleniyor…
+                </td>
+              </tr>
+            )}
+
+            {!loading && visibleItems.length === 0 && (
+              <tr>
+                <td colSpan={7} className="p-6 text-center text-slate-500">
+                  Görevlendirme kaydı yok.
+                </td>
+              </tr>
+            )}
+
+            {!loading &&
+              visibleItems.map((item) => (
+                <tr
+                  key={item.id}
+                  className="border-b border-slate-100 last:border-0"
+                >
+                  <td className="p-4 font-semibold text-slate-800">
+                    {item.personnelFullName}
+                    <span className="mt-1 block text-xs font-normal text-slate-500">
+                      {item.purpose}
+                    </span>
+                  </td>
+
+                  <td className="p-4">
+                    <span
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${dutyTypeClass(
+                        item.dutyType
+                      )}`}
+                    >
+                      {item.dutyTypeName}
+                    </span>
+                    {item.shiftsLaborCost && (
+                      <span className="mt-1 block text-xs text-slate-500">
+                        Gün maliyeti hedefe kayar
+                      </span>
+                    )}
+                  </td>
+
+                  <td className="p-4 text-slate-700">
+                    {item.targetProjectCode}
+                    <span className="mt-1 block text-xs text-slate-500">
+                      {item.targetProjectName}
+                    </span>
+                  </td>
+
+                  <td className="p-4 text-slate-700">
+                    {formatDate(item.startDate)} – {formatDate(item.endDate)}
+                    <span className="mt-1 block text-xs text-slate-500">
+                      {item.dayCount} gün
+                      {item.isOutOfCity ? " · şehir dışı" : ""}
+                    </span>
+                  </td>
+
+                  <td className="p-4 text-slate-700">
+                    {item.totalAllowance === null ||
+                    item.totalAllowance === undefined
+                      ? "—"
+                      : currency.format(item.totalAllowance)}
+                    {item.settlementPending && (
+                      <span className="mt-1 block text-xs font-semibold text-amber-700">
+                        Mahsup bekliyor
+                      </span>
+                    )}
+                  </td>
+
+                  <td className="p-4">
+                    <span
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(
+                        item.status
+                      )}`}
+                    >
+                      {item.statusName}
+                    </span>
+                    {item.dutyType === 1 &&
+                      item.status === 1 &&
+                      !item.hasSurveyReport && (
+                        <span className="mt-1 block text-xs font-semibold text-violet-700">
+                          Saha raporu bekliyor
+                        </span>
+                      )}
+                  </td>
+
+                  <td className="p-4">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedId((current) =>
+                            current === item.id ? null : item.id
+                          )
+                        }
+                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-semibold"
+                      >
+                        {selectedId === item.id ? "Kapat" : "Detay"}
+                      </button>
+
+                      {canApprove && item.status === 0 && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={actionId === item.id}
+                            onClick={() => approve(item)}
+                            className="rounded-lg bg-emerald-700 px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                          >
+                            Onayla
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={actionId === item.id}
+                            onClick={() => reject(item)}
+                            className="rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"
+                          >
+                            Reddet
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </section>
+    </ErpShell>
+  );
+}

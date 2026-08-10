@@ -104,8 +104,14 @@ public sealed class PersonnelDutiesController(
                 x.EndDate,
                 x.IsOutOfCity,
                 x.DailyAllowance,
+                x.ReceiptAmount,
+                SettlementDecided = x.SettlementDecision != null,
                 x.Purpose,
                 Status = (int)x.Status,
+                // Rapor yazıldı mı: ekran keşif satırında "rapor
+                // bekliyor" uyarısını buradan çıkarıyor.
+                HasSurveyReport = db.DutySurveyReports
+                    .Any(r => r.DutyId == x.Id),
                 x.RequestedAtUtc,
                 x.ApprovedAtUtc,
                 x.DecisionNote
@@ -138,10 +144,131 @@ public sealed class PersonnelDutiesController(
             x.Purpose,
             x.Status,
             statusName = StatusName((PersonnelDutyStatus)x.Status),
+            // Mahsup bekliyor bilgisi de mali bir durum: "bu kişiye
+            // fark borcu var" demektir, tutar kadar olmasa da
+            // maskelemeye tabi.
+            settlementPending = canViewAmounts
+                ? x.Status == (int)PersonnelDutyStatus.Approved &&
+                  !x.SettlementDecided &&
+                  x.DailyAllowance * DayCountOf(x.StartDate, x.EndDate) >
+                      x.ReceiptAmount
+                : (bool?)null,
+            x.HasSurveyReport,
             x.RequestedAtUtc,
             x.ApprovedAtUtc,
             x.DecisionNote
         }));
+    }
+
+    /// <summary>
+    /// Tek görevin tümü: masraf kalemleri, fiş ve mahsup durumu.
+    ///
+    /// Listede taşınmıyor çünkü liste her satırda masraf okumak
+    /// zorunda kalırdı; ekran yalnızca açtığı görevin detayını
+    /// ister. Tutarlar burada da extra_payment.view'e tabi.
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
+    public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
+    {
+        var duty = await db.PersonnelDuties
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new
+            {
+                x.Id,
+                x.CompanyId,
+                x.PersonnelId,
+                PersonnelFullName = x.Personnel.FirstName + " " + x.Personnel.LastName,
+                DutyType = (int)x.DutyType,
+                x.TargetProjectId,
+                TargetProjectCode = x.TargetProject.Code,
+                TargetProjectName = x.TargetProject.Name,
+                TargetProjectStatus = (int)x.TargetProject.Status,
+                TargetProjectSurveyOutcome = (int)x.TargetProject.SurveyOutcome,
+                x.TargetProjectSiteId,
+                x.SourceProjectId,
+                x.StartDate,
+                x.EndDate,
+                x.IsOutOfCity,
+                x.DailyAllowance,
+                x.TravelCost,
+                x.AccommodationCost,
+                x.ReceiptAmount,
+                x.Purpose,
+                x.Notes,
+                Status = (int)x.Status,
+                SettlementDecision = (int?)x.SettlementDecision,
+                x.SettlementNote,
+                x.SettlementAtUtc,
+                x.SettlementAdvanceId,
+                x.RequestedAtUtc,
+                x.ApprovedAtUtc,
+                x.DecisionNote,
+                HasSurveyReport = db.DutySurveyReports.Any(r => r.DutyId == x.Id)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (duty is null)
+            return NotFound(new { message = "Görevlendirme bulunamadı." });
+
+        var canViewAmounts = await extraPaymentVisibility
+            .CanViewExtraPaymentAsync(cancellationToken);
+
+        var dayCount = DayCountOf(duty.StartDate, duty.EndDate);
+        var totalAllowance = duty.DailyAllowance * dayCount;
+        var gap = Math.Max(0m, totalAllowance - duty.ReceiptAmount);
+
+        return Ok(new
+        {
+            duty.Id,
+            duty.CompanyId,
+            duty.PersonnelId,
+            duty.PersonnelFullName,
+            duty.DutyType,
+            dutyTypeName = DutyTypeName((PersonnelDutyType)duty.DutyType),
+            shiftsLaborCost =
+                (PersonnelDutyType)duty.DutyType == PersonnelDutyType.Work,
+            duty.TargetProjectId,
+            duty.TargetProjectCode,
+            duty.TargetProjectName,
+            duty.TargetProjectStatus,
+            duty.TargetProjectSurveyOutcome,
+            duty.TargetProjectSiteId,
+            duty.SourceProjectId,
+            duty.StartDate,
+            duty.EndDate,
+            dayCount,
+            duty.IsOutOfCity,
+            duty.Purpose,
+            duty.Notes,
+            duty.Status,
+            statusName = StatusName((PersonnelDutyStatus)duty.Status),
+            duty.RequestedAtUtc,
+            duty.ApprovedAtUtc,
+            duty.DecisionNote,
+            duty.HasSurveyReport,
+
+            // Tutarlar gizlenmiyor, hiç gelmiyor.
+            amountsHidden = !canViewAmounts,
+            dailyAllowance = canViewAmounts ? duty.DailyAllowance : (decimal?)null,
+            totalAllowance = canViewAmounts ? totalAllowance : (decimal?)null,
+            travelCost = canViewAmounts ? duty.TravelCost : (decimal?)null,
+            accommodationCost = canViewAmounts ? duty.AccommodationCost : (decimal?)null,
+            receiptAmount = canViewAmounts ? duty.ReceiptAmount : (decimal?)null,
+            totalExpense = canViewAmounts
+                ? duty.TravelCost + duty.AccommodationCost + totalAllowance
+                : (decimal?)null,
+            settlementGap = canViewAmounts ? gap : (decimal?)null,
+            settlementPending = canViewAmounts
+                ? duty.Status == (int)PersonnelDutyStatus.Approved &&
+                  gap > 0m && duty.SettlementDecision is null
+                : (bool?)null,
+            settlementDecision = canViewAmounts ? duty.SettlementDecision : null,
+            settlementNote = canViewAmounts ? duty.SettlementNote : null,
+            settlementAtUtc = canViewAmounts ? duty.SettlementAtUtc : null,
+            settlementAdvanceId = canViewAmounts ? duty.SettlementAdvanceId : null
+        });
     }
 
     [HttpPost]
