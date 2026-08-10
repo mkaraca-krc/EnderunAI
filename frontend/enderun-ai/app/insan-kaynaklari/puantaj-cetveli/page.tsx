@@ -81,6 +81,19 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 /**
+ * Mesai kutusu ne zaman kilitli.
+ *
+ * YALNIZ İKİ SEBEP: gün onaylanmış (Ayı Onayla) ya da o günün mesaisi
+ * onaylı bir fazla mesai talebinden geliyor. GÜN TÜRÜ ASLA KİLİTLEMEZ:
+ * hafta tatili ve genel tatilde çalışmanın kendisi zaten mesaidir ve
+ * en yüksek çarpana (×2) gider — kapatılsaydı en pahalı mesai hiç
+ * girilemezdi.
+ */
+function isOvertimeLocked(cell: AttendanceCell) {
+  return cell.isApproved || cell.overtimeLocked;
+}
+
+/**
  * Aylık puantaj cetveli.
  *
  * Izgara personel × gün. Cetvel resmî tatil takviminden DOLU gelir;
@@ -625,9 +638,7 @@ export default function AttendanceSheetPage() {
                               step="0.5"
                               inputMode="decimal"
                               value={overtimeValue}
-                              disabled={
-                                cell.isApproved || cell.overtimeLocked || busy
-                              }
+                              disabled={isOvertimeLocked(cell) || busy}
                               onChange={(event) =>
                                 setOvertimeDraft((state) => ({
                                   ...state,
@@ -639,18 +650,21 @@ export default function AttendanceSheetPage() {
                                   ? "Bu günün mesaisi onaylı fazla mesai " +
                                     "talebinden geliyor; düzeltme talep " +
                                     "ekranından yapılır."
-                                  : `Mesai saati · ${KIND_LABEL[overtimeKindOf(cell)]}`
+                                  : cell.isApproved
+                                    ? "Gün onaylı; mesai değiştirilemez."
+                                    : `Mesai saati · ${KIND_LABEL[overtimeKindOf(cell)]}`
                               }
                               className={`mt-0.5 h-6 w-7 rounded border text-center text-[10px] ${
-                                cell.overtimeLocked
-                                  ? "border-slate-200 bg-slate-100 text-slate-500"
+                                isOvertimeLocked(cell)
+                                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500"
                                   : overtimeDirty
                                     ? "border-brand-600 ring-1 ring-brand-400"
-                                    : "border-slate-200"
-                              } ${
-                                cell.isApproved
-                                  ? "cursor-not-allowed opacity-70"
-                                  : ""
+                                    : // Çalışma günü olmayan günlerde mesai ×2:
+                                      // sütun gri olduğu için kutu ayrıca
+                                      // vurgulanıyor, kapalı sanılmasın.
+                                      overtimeKindOf(cell) === "overtimeHours"
+                                      ? "border-slate-300 bg-white"
+                                      : "border-amber-300 bg-amber-50 text-amber-900"
                               }`}
                             />
                           )}
@@ -688,9 +702,14 @@ export default function AttendanceSheetPage() {
               Alt kutuya o günün mesai saati girilir. Saat günün türüne
               göre ayrılır: normal günde fazla çalışma (×1,5), hafta
               tatilinde ×2, genel tatilde ×2 — ayrı bir onay yok,{" "}
-              <strong>Ayı Onayla</strong> ile kesinleşir. Gri kutular o
-              gün için onaylı fazla mesai talebi olduğunu gösterir;
-              düzeltme talep ekranından yapılır.
+              <strong>Ayı Onayla</strong> ile kesinleşir.{" "}
+              <span className="rounded border border-amber-300 bg-amber-50 px-1 text-amber-900">
+                Sarı
+              </span>{" "}
+              kutular çalışma günü olmayan günler: oraya girilen saat
+              ×2&apos;ye gider. Gri kutular kilitlidir — gün onaylanmış
+              ya da o güne onaylı fazla mesai talebi var; düzeltme talep
+              ekranından yapılır.
             </p>
           )}
         </>

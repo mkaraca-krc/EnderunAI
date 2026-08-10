@@ -367,6 +367,144 @@ public sealed class AttendanceSheetOvertimeTests(DatabaseFixture fixture)
         Assert.Single(panel.GetProperty("lines").EnumerateArray());
     }
 
+    // ---------------- Çalışma günü olmayan günler ----------------
+
+    /// <summary>
+    /// HAFTA TATİLİ: mesai girilebiliyor ve ×2 kovaya gidiyor.
+    ///
+    /// Girişin günün TÜRÜNE bağlı kapatılması, en yüksek çarpanlı
+    /// mesainin hiç girilememesi demekti — oysa hafta tatilinde
+    /// çalışmanın kendisi zaten mesaidir.
+    /// </summary>
+    [Fact]
+    public async Task WeeklyHoliday_AcceptsOvertimeIntoTheDoubleBucket()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix, consentYear: Year);
+        var client = await ClientAsync();
+
+        var sheet = await SheetAsync(client, context.CompanyId);
+
+        // Çalışma günü olmayan ilk gün (tatil takvimi kurulmadığı için
+        // yalnız hafta tatili düşer).
+        var restDay = sheet.GetProperty("rows").EnumerateArray().First()
+            .GetProperty("cells").EnumerateArray()
+            .First(x => !x.GetProperty("isWorkDay").GetBoolean() &&
+                        !x.GetProperty("isHoliday").GetBoolean());
+
+        var date = DateTime.Parse(restDay.GetProperty("date").GetString()!)
+            .Date;
+
+        // Kutu kilitli DEĞİL: ne onaylı gün ne onaylı talep var.
+        Assert.False(restDay.GetProperty("overtimeLocked").GetBoolean());
+        Assert.False(restDay.GetProperty("isApproved").GetBoolean());
+
+        var response = await client.PostAsJsonAsync(
+            "/api/hr/attendance/cetvel/kaydet", new
+            {
+                companyId = context.CompanyId,
+                entries = new[]
+                {
+                    new
+                    {
+                        personnelId = context.PersonnelId,
+                        workDate = date.ToString("yyyy-MM-dd"),
+                        status = (int)AttendanceStatus.WeeklyHoliday,
+                        normalHours = 0m,
+                        overtimeHours = 0m,
+                        sundayHours = 6m,
+                        publicHolidayHours = 0m,
+                        description = (string?)null
+                    }
+                }
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var record = await LoadRecordAsync(
+            context.PersonnelId,
+            DateTime.SpecifyKind(date, DateTimeKind.Utc));
+
+        Assert.Equal(6m, record!.SundayHours);
+        Assert.Equal(0m, record.OvertimeHours);
+
+        var panel = await (await client.GetAsync(
+            $"/api/hr/personel/{context.PersonnelId}/fazla-mesai?year={Year}"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(6m, panel.GetProperty("sundayHours").GetDecimal());
+
+        // Yıllık sınır sayımına GİRMEZ: tatil çalışması ayrı kova.
+        Assert.Equal(0m, panel.GetProperty("overtimeHours").GetDecimal());
+
+        var line = panel.GetProperty("lines").EnumerateArray().Single();
+
+        Assert.Equal(2m, line.GetProperty("multiplier").GetDecimal());
+        Assert.Equal("sheet", line.GetProperty("source").GetString());
+    }
+
+    /// <summary>
+    /// GENEL TATİL: mesai girilebiliyor ve genel tatil kovasına
+    /// gidiyor. Köprünün sırası: genel tatil hafta tatilinden önce.
+    /// </summary>
+    [Fact]
+    public async Task PublicHoliday_AcceptsOvertimeIntoTheHolidayBucket()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix, consentYear: Year);
+        var client = await ClientAsync();
+
+        await client.PostAsJsonAsync(
+            $"/api/hr/tatil-takvimi/{Year}/sabit-tatiller?companyId={context.CompanyId}",
+            new { });
+
+        var sheet = await SheetAsync(client, context.CompanyId);
+
+        // 23 Nisan: Nisan ayının sabit resmî tatili.
+        var holiday = sheet.GetProperty("rows").EnumerateArray().First()
+            .GetProperty("cells").EnumerateArray()
+            .First(x => x.GetProperty("isHoliday").GetBoolean());
+
+        var date = DateTime.Parse(holiday.GetProperty("date").GetString()!).Date;
+
+        Assert.False(holiday.GetProperty("overtimeLocked").GetBoolean());
+
+        await client.PostAsJsonAsync("/api/hr/attendance/cetvel/kaydet", new
+        {
+            companyId = context.CompanyId,
+            entries = new[]
+            {
+                new
+                {
+                    personnelId = context.PersonnelId,
+                    workDate = date.ToString("yyyy-MM-dd"),
+                    status = (int)AttendanceStatus.PublicHoliday,
+                    normalHours = 0m,
+                    overtimeHours = 0m,
+                    sundayHours = 0m,
+                    publicHolidayHours = 8m,
+                    description = (string?)null
+                }
+            }
+        });
+
+        var record = await LoadRecordAsync(
+            context.PersonnelId,
+            DateTime.SpecifyKind(date, DateTimeKind.Utc));
+
+        Assert.Equal(8m, record!.PublicHolidayHours);
+        Assert.Equal(0m, record.SundayHours);
+        Assert.Equal(0m, record.OvertimeHours);
+
+        var panel = await (await client.GetAsync(
+            $"/api/hr/personel/{context.PersonnelId}/fazla-mesai?year={Year}"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(8m, panel.GetProperty("publicHolidayHours").GetDecimal());
+        Assert.Equal(2m, panel.GetProperty("lines").EnumerateArray()
+            .Single().GetProperty("multiplier").GetDecimal());
+    }
+
     // ---------------- 270 saat ve muvafakat ----------------
 
     /// <summary>
@@ -429,6 +567,161 @@ public sealed class AttendanceSheetOvertimeTests(DatabaseFixture fixture)
             .ToList();
 
         Assert.Contains(warnings, x => x.Contains("muvafakati yok"));
+    }
+
+    // ---------------- Maaş kartındaki mesai ----------------
+
+    /// <summary>
+    /// Personel kartındaki "Ek ödeme ve ele geçen" bloğu bu uçtan
+    /// besleniyor: cetvelden girilen mesai saat ve TUTAR olarak bir
+    /// kez görünüyor, doğru çarpanla.
+    ///
+    /// Taban ele geçen = resmî net 45.000 + elden 9.000 = 54.000
+    /// Saatlik = 54.000 / (30 × 7,5) = 240
+    /// 3 saat × 240 × 1,5 = 1.080
+    /// </summary>
+    [Fact]
+    public async Task SalaryCard_ShowsSheetOvertimeOnceWithTheRightMultiplier()
+    {
+        var (context, day) = await CreateCurrentMonthContextAsync();
+        var client = await ClientAsync();
+
+        await SaveAsync(client, context.CompanyId, context.PersonnelId,
+            overtime: 3m, date: day);
+
+        var panel = await LoadPanelAsync(client, context.PersonnelId, day.Year);
+
+        var month = panel.GetProperty("currentMonth");
+
+        Assert.Equal(3m, month.GetProperty("hours").GetDecimal());
+        Assert.Equal(1_080m, month.GetProperty("amount").GetDecimal());
+
+        var takeHome = panel.GetProperty("takeHome");
+
+        Assert.Equal(45_000m, takeHome.GetProperty("officialNet").GetDecimal());
+        Assert.Equal(9_000m,
+            takeHome.GetProperty("manualExtraMonthly").GetDecimal());
+        Assert.Equal(1_080m, takeHome.GetProperty("overtimeExtra").GetDecimal());
+
+        // Mesai toplam eldene BİR KEZ giriyor: 9.000 + 1.080
+        Assert.Equal(10_080m, takeHome.GetProperty("totalExtra").GetDecimal());
+        Assert.Equal(55_080m, takeHome.GetProperty("totalTakeHome").GetDecimal());
+    }
+
+    /// <summary>
+    /// Aynı güne fazla mesai talebi onaylanınca kart çift saymıyor:
+    /// gün talebe geçiyor, cetvelin saati zaten yazılamıyor.
+    /// </summary>
+    [Fact]
+    public async Task SalaryCard_DoesNotDoubleCountWhenARequestOwnsTheDay()
+    {
+        var (context, day) = await CreateCurrentMonthContextAsync();
+        var client = await ClientAsync();
+
+        await SaveAsync(client, context.CompanyId, context.PersonnelId,
+            overtime: 3m, date: day);
+
+        var created = await client.PostAsJsonAsync(
+            "/api/hr/workforce/overtimes", new
+            {
+                companyId = context.CompanyId,
+                personnelId = context.PersonnelId,
+                projectId = context.ProjectId,
+                workDate = day,
+                requestedHours = 2m,
+                isSundayWork = false,
+                isPublicHolidayWork = false,
+                reason = "Termin baskısı"
+            });
+
+        var overtimeId = JsonDocument
+            .Parse(await created.Content.ReadAsStringAsync())
+            .RootElement.GetProperty("id").GetGuid();
+
+        await client.PostAsync(
+            $"/api/hr/workforce/overtimes/{overtimeId}/approve", null);
+
+        var panel = await LoadPanelAsync(client, context.PersonnelId, day.Year);
+
+        // Talep günü sahiplendi: 2 saat, 3+2=5 değil.
+        Assert.Equal(2m,
+            panel.GetProperty("currentMonth").GetProperty("hours").GetDecimal());
+
+        Assert.Equal(720m,
+            panel.GetProperty("takeHome").GetProperty("overtimeExtra")
+                .GetDecimal());
+
+        Assert.Single(panel.GetProperty("lines").EnumerateArray());
+    }
+
+    private async Task<JsonElement> LoadPanelAsync(
+        HttpClient client, Guid personnelId, int year) =>
+        await (await client.GetAsync(
+            $"/api/hr/personel/{personnelId}/fazla-mesai?year={year}"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+    /// <summary>
+    /// Ele geçen hesabı BU AYA bakıyor; tutar testleri o yüzden
+    /// içinde bulunulan ayı kullanıyor.
+    /// </summary>
+    private async Task<(Context Context, DateTime Day)>
+        CreateCurrentMonthContextAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var now = DateTime.UtcNow;
+
+        var day = new DateTime(now.Year, now.Month, 5, 0, 0, 0, DateTimeKind.Utc);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var hrDb = scope.ServiceProvider.GetRequiredService<HrDbContext>();
+
+        var project = await TestDataFactory.CreateProjectAsync(db, suffix);
+        var personnel = await TestDataFactory.CreatePersonnelAsync(
+            db, project.CompanyId, suffix);
+
+        personnel.WorkLocationType = WorkLocationType.ProjectSite;
+        personnel.OvertimeConsentYear = now.Year;
+
+        db.CompanyPayrollSettings.Add(new CompanyPayrollSettings
+        {
+            CompanyId = project.CompanyId,
+            Year = now.Year,
+            MinimumWageGross = 33_030m,
+            MinimumWageNet = 28_075m,
+            SgkBaseFloor = 33_030m,
+            SgkBaseCeiling = 247_725m,
+            DailyWorkHours = 7.5m
+        });
+
+        db.PersonnelExtraPayments.Add(new PersonnelExtraPayment
+        {
+            CompanyId = project.CompanyId,
+            PersonnelId = personnel.Id,
+            MonthlyAmount = 9_000m,
+            EffectiveStartDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+
+        await db.SaveChangesAsync();
+
+        hrDb.SalaryDefinitions.Add(new HrSalaryDefinition
+        {
+            CompanyId = project.CompanyId,
+            PersonnelId = personnel.Id,
+            EffectiveStartDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            SalaryBasis = SalaryBasis.Net,
+            TargetNetSalary = 45_000m,
+            GrossSalary = 60_000m,
+            OvertimeMultiplier = 1.5m,
+            SundayMultiplier = 2m,
+            PublicHolidayMultiplier = 2m,
+            CurrencyCode = "TRY"
+        });
+
+        await hrDb.SaveChangesAsync();
+
+        return (new Context(
+            project.CompanyId, personnel.Id, project.Id, Guid.Empty), day);
     }
 
     // ---------------- Şantiye / merkez filtresi ----------------

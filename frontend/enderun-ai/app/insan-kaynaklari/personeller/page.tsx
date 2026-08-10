@@ -48,6 +48,10 @@ import {
 } from "@/services/project-site.service";
 import { hrSalaryService } from "@/services/hr-salary.service";
 import { extraPaymentService } from "@/services/termination.service";
+import {
+  personnelOvertimeService,
+  type PersonnelOvertimeSummary,
+} from "@/services/personnel-overtime.service";
 import { apiClient } from "@/lib/api/api-client";
 
 type ViewMode = "table" | "cards";
@@ -238,6 +242,17 @@ export default function HrPersonnelPage() {
   const [extraPaymentId, setExtraPaymentId] = useState<string | null>(null);
   const [extraPaymentLoading, setExtraPaymentLoading] = useState(false);
 
+  /**
+   * Bu ayın mesaisi: saat ve ELDEN tutar.
+   *
+   * Kaynak, personel kartındaki mesai paneliyle AYNI uç — orada iki
+   * kaynak (fazla mesai talebi + puantaj cetveli) zaten birleştirilip
+   * talebin sahiplendiği gün elendiği için burada çift sayım riski
+   * doğmuyor. Ayrıca hesaplasaydık iki yer ayrı rakam gösterirdi.
+   */
+  const [overtimeSummary, setOvertimeSummary] =
+    useState<PersonnelOvertimeSummary | null>(null);
+
   async function loadScreen() {
     setLoading(true);
     setError("");
@@ -420,6 +435,7 @@ export default function HrPersonnelPage() {
     setOfficialNetSource("");
     setExtraPayment("");
     setExtraPaymentId(null);
+    setOvertimeSummary(null);
   }
 
   /**
@@ -474,6 +490,16 @@ export default function HrPersonnelPage() {
 
         setExtraPaymentId(effective?.id ?? null);
         setExtraPayment(effective ? String(effective.monthlyAmount) : "");
+
+        // Mesai tutarı da elden tarafında: aynı yetki kapısından
+        // geçiyor, ayrı bir kapı açılmıyor.
+        try {
+          setOvertimeSummary(
+            await personnelOvertimeService.get(personnelId)
+          );
+        } catch {
+          setOvertimeSummary(null);
+        }
       }
     } catch {
       // Ücret bilgisi alınamadıysa blok boş kalır; personel kaydının
@@ -1582,7 +1608,7 @@ export default function HrPersonnelPage() {
                           )}
                         </div>
 
-                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                        <div className="mt-3 grid gap-3 md:grid-cols-4">
                           <div className="rounded-lg border border-slate-200 px-3 py-2">
                             <div className="text-xs text-slate-500">Resmî Net Maaş</div>
                             <div className="mt-1 text-lg font-semibold tabular-nums">
@@ -1614,6 +1640,32 @@ export default function HrPersonnelPage() {
                             </div>
                           </div>
 
+                          {/* BU AYIN MESAİSİ.
+                              Saat ve tutar personel kartındaki mesai
+                              paneliyle AYNI uçtan: orada fazla mesai
+                              talebi ve puantaj cetveli birleştirilip
+                              talebin sahiplendiği gün elendiği için
+                              rakam bir kez sayılıyor. Burada yeniden
+                              hesaplasaydık iki ekran ayrı rakam
+                              gösterirdi. */}
+                          <div className="rounded-lg border border-slate-200 px-3 py-2">
+                            <div className="text-xs text-slate-500">
+                              Bu Ay Mesai (elden)
+                            </div>
+                            <div className="mt-1 text-lg font-semibold tabular-nums">
+                              {overtimeSummary?.currentMonth.amount == null
+                                ? "—"
+                                : moneyFormat(
+                                    overtimeSummary.currentMonth.amount
+                                  )}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-400">
+                              {overtimeSummary
+                                ? `${overtimeSummary.currentMonth.hours} saat · talep + cetvel`
+                                : "Mesai bilgisi yok"}
+                            </div>
+                          </div>
+
                           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                             <div className="text-xs text-slate-500">Toplam Ele Geçen</div>
                             <div className="mt-1 text-lg font-bold tabular-nums">
@@ -1621,11 +1673,12 @@ export default function HrPersonnelPage() {
                                 ? "—"
                                 : moneyFormat(
                                     officialNet +
-                                      (Number(extraPayment.replace(",", ".")) || 0)
+                                      (Number(extraPayment.replace(",", ".")) || 0) +
+                                      (overtimeSummary?.currentMonth.amount ?? 0)
                                   )}
                             </div>
                             <div className="mt-1 text-xs text-slate-400">
-                              Resmî net + elden
+                              Resmî net + elden + bu ayın mesaisi
                             </div>
                           </div>
                         </div>
