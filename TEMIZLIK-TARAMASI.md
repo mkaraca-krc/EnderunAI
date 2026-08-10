@@ -28,3 +28,58 @@ yeniden adlandırmak, ya da alanı tamamen kaldırıp tüketicileri
 tek başına değil temizlik turunda.
 
 **Şimdilik:** XML doc yorumuyla tuzak yazıldı, kod değişmedi.
+
+## "Uç var, ekran yok" taraması
+
+**Ne:** Backend'de yazılıp frontend'den hiç çağrılmayan uçlar. Bu
+oturumda üç tanesi tek tek, tesadüfen çıktı: özlük belge uçları, çek
+düzenleme, görev iptali. Üçü de backend'de hazırdı ama kullanıcı
+hiçbirine ulaşamıyordu.
+
+**Neden riskli:** Bir uç ekrandan çağrılmıyorsa iş bitmiş sayılmıyor
+ama bitmiş görünüyor — paket "kapandı" diye kapanıyor, özellik
+kullanılamıyor. Tek tek fark edilmesi şansa kalıyor.
+
+**O turda değerlendirilecek:** Toplu sweep — controller route
+listesini çıkarıp (`[Http*]` öznitelikleri) frontend `services/`
+altındaki `apiClient` çağrılarıyla karşılaştırmak, eşleşmeyenleri
+listelemek. Çıkan listede her kalem için karar: ekran aç, ucu kaldır,
+ya da bilinçli olarak iç/otomasyon ucu diye işaretle. Sweep'i
+tekrarlanabilir bir betiğe bağlamak, tek seferlik elle taramaya
+tercih edilir.
+
+## Hayalet alan taraması (2. tur)
+
+**Ne:** "Okunuyor/toplanıyor ama hiç yazılmıyor" alanlar ve yanıltıcı
+adlı alanlar. Birinci kalem yukarıdaki `ActualPayableAmount`.
+
+**Neden riskli:** İki yönü de sessiz. Yazılmayan bir alan raporlarda
+hep sıfır/boş çıkar ve kimse fark etmez; yanıltıcı adlı bir alan ise
+adına güvenilerek okunur ve yanlış sayı üretir. İkisi de test
+patlatmaz.
+
+**O turda değerlendirilecek:** Modellerdeki alanları set edildikleri
+yerlerle karşılaştırıp hiç yazılmayanları çıkarmak; adı içeriğini
+yanlış anlatanları (fiili/gerçek/toplam gibi sözler taşıyıp
+kapsamı dar olanlar) ayrı listelemek. Her kalem için: doldur,
+yeniden adlandır, ya da kaldır.
+
+## Frontend test altyapısı — Vitest + Testing Library
+
+**Ne:** Frontend'de otomatik test yok. Bugün tek güvence
+`tsc --noEmit`, eslint ve `npm run build`; davranış test edilmiyor.
+
+**Neden riskli ve neden ŞİMDİ sıraya giriyor:** Modal standardı
+(`components/ui/modal.tsx`, `confirm-dialog.tsx`) app-wide
+yayılmadan önce kurulmalı. Bileşen bir kez onlarca ekrana
+dağıldıktan sonra Esc davranışı, odak tuzağı, odağın geri
+verilmesi, gövde kaydırma kilidi ve "gerekçe zorunlu → onay
+düğmesi kapalı" kuralı elle doğrulanamaz hale gelir; bir
+regresyon sessizce her ekrana birden yayılır.
+
+**O turda değerlendirilecek:** Vitest + @testing-library/react +
+jsdom kurulumu ve ilk testlerin modal/ConfirmDialog üzerine
+yazılması: Esc kapatıyor, odak modalın içinde kalıyor, kapanınca
+tetikleyen düğmeye dönüyor, gerekçe boşken onay verilemiyor,
+`busy` sırasında çift gönderim engelleniyor. Sıra: altyapı →
+modal testleri → standardın app-wide yayılması.
