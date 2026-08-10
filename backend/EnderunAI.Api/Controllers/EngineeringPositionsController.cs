@@ -232,6 +232,12 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
     /// kullanıcı ayrı bir ekrana gidip taslak poz açıp sonra
     /// onaylamak zorunda kalmasın.
     /// </summary>
+    // YETKİ KASITLI OLARAK DAR: özel poz şirketin mühendislik
+    // kütüphanesine KALICI satır yazar. Talep açabilen herkese
+    // (Şantiye Şefi'nde purchasing-requests.create var) açılsaydı 23
+    // binlik kütüphane mükerrer ve gelişigüzel kalemlerle dolardı.
+    // Talep tarafı kaleme poz bulamazsa serbest metinle açmaya devam
+    // eder; pozu teknik taraf tanımlar.
     [HttpPost("custom")]
     [RequirePermission(PermissionCatalog.Keys.EngineeringManage)]
     public async Task<IActionResult> CreateCustom(

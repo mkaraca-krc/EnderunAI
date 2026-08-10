@@ -1,3 +1,15 @@
+export type PurchasePositionOption = {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  source: number;
+  sourceName: string;
+  /** Şirketin kendi açtığı özel poz mu — listede ayırt edilir. */
+  isCustom: boolean;
+  category?: string | null;
+};
+
 import { apiClient } from "@/lib/api/api-client";
 
 export type PurchaseRequestType = 0 | 1;
@@ -104,6 +116,8 @@ export type PurchaseRequestDetail = Omit<
 
 export type PurchaseRequestItemPayload = {
   inventoryItemId?: string | null;
+  /** Talebin dayandığı poz; stok kartından bağımsız ayrı bir eksen. */
+  engineeringPositionId?: string | null;
   materialDescription: string;
   quantity: number;
   unit: string;
@@ -280,7 +294,18 @@ export const purchaseRequestService = {
 
 
 
+  /**
+   * Talep kalemi için poz arama.
+   *
+   * Mühendislik ucundan ayrı bir kapı: talep açan kişide
+   * engineering.view olmayabilir. Yalnız kimlik bilgisi döner —
+   * fiyat ve işçilik saati dönmez.
+   */
+  searchPositions(companyId: string, search: string) {
+    const query = new URLSearchParams({ companyId, search });
 
-
-
+    return apiClient<PurchasePositionOption[]>(
+      `purchase-requests/poz-ara?${query.toString()}`
+    );
+  },
 };

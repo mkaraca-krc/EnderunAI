@@ -228,6 +228,7 @@ public sealed class PurchaseOrderService(
                     InventoryItemId = x.RfqItem.PurchaseRequestItem != null
                         ? x.RfqItem.PurchaseRequestItem.InventoryItemId
                         : null,
+                    EngineeringPositionId = x.RfqItem.EngineeringPositionId,
                     MaterialDescription = x.RfqItem.MaterialDescription,
                     Brand = x.Brand,
                     Model = x.Model,

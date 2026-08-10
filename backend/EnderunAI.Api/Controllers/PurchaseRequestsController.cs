@@ -163,6 +163,12 @@ public sealed class PurchaseRequestsController(
         if (validation is not null)
             return BadRequest(new { message = validation });
 
+        var positionError = await ValidatePositionsAsync(
+            request.CompanyId, request.Items, cancellationToken);
+
+        if (positionError is not null)
+            return BadRequest(new { message = positionError });
+
         var project = await db.Projects
             .AsNoTracking()
             .SingleOrDefaultAsync(
@@ -206,6 +212,7 @@ public sealed class PurchaseRequestsController(
             {
                 LineNumber = lineNumber++,
                 InventoryItemId = item.InventoryItemId,
+                EngineeringPositionId = item.EngineeringPositionId,
                 MaterialDescription = item.MaterialDescription.Trim(),
                 Quantity = item.Quantity,
                 Unit = item.Unit.Trim(),
@@ -262,6 +269,12 @@ public sealed class PurchaseRequestsController(
         if (validation is not null)
             return BadRequest(new { message = validation });
 
+        var positionError = await ValidatePositionsAsync(
+            entity.CompanyId, request.Items, cancellationToken);
+
+        if (positionError is not null)
+            return BadRequest(new { message = positionError });
+
         entity.RequestDate = request.RequestDate;
         entity.NeededByDate = request.NeededByDate;
         entity.RequestedByName = request.RequestedByName.Trim();
@@ -310,6 +323,7 @@ public sealed class PurchaseRequestsController(
 
             target.LineNumber = index + 1;
             target.InventoryItemId = source.InventoryItemId;
+            target.EngineeringPositionId = source.EngineeringPositionId;
             target.MaterialDescription = source.MaterialDescription.Trim();
             target.Quantity = source.Quantity;
             target.Unit = source.Unit.Trim();
@@ -562,6 +576,101 @@ public sealed class PurchaseRequestsController(
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new { message = "Satın alma talebi iptal edildi." });
+    }
+
+    /// <summary>
+    /// Talep kalemi için POZ ARAMA.
+    ///
+    /// Mühendislik ucundan ayrı bir kapı: talep açan kişide
+    /// engineering.view olmayabilir ama listede olmayan bir kalemi
+    /// arayabilmeli. Buradan yalnız KİMLİK bilgisi dönüyor — kod, ad,
+    /// birim, kaynak; işçilik saati ve fiyat dönmüyor, o veriler
+    /// mühendislik ekranının konusu.
+    ///
+    /// Aramasız çağrı boş liste döndürür: 23 binin üzerinde poz var,
+    /// tamamını dökmek istemciyi kilitlerdi.
+    /// </summary>
+    [HttpGet("poz-ara")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRequestsCreate)]
+    public async Task<IActionResult> SearchPositions(
+        [FromQuery] Guid companyId,
+        [FromQuery] string? search,
+        [FromQuery] int? take,
+        CancellationToken cancellationToken)
+    {
+        var term = search?.Trim();
+
+        if (string.IsNullOrWhiteSpace(term) || term.Length < 2)
+            return Ok(Array.Empty<object>());
+
+        var lowered = term.ToLower();
+        var limit = take is > 0 and <= 100 ? take.Value : 30;
+
+        var rows = await db.EngineeringPositions
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId &&
+                        x.Status == EngineeringPositionStatus.Active &&
+                        (x.Code.ToLower().Contains(lowered) ||
+                         x.Name.ToLower().Contains(lowered) ||
+                         (x.OfficialCode != null &&
+                          x.OfficialCode.ToLower().Contains(lowered)) ||
+                         (x.SearchKeywords != null &&
+                          x.SearchKeywords.ToLower().Contains(lowered))))
+            // Şirketin kendi pozları önce: listede olmayan kalem için
+            // bir kez özel poz açıldıysa ikinci talepte önde çıksın,
+            // yeniden açılmasın.
+            .OrderByDescending(x => x.Source == EngineeringPositionSource.Enderun)
+            .ThenBy(x => x.Code)
+            .Take(limit)
+            .Select(x => new
+            {
+                x.Id,
+                x.Code,
+                x.Name,
+                x.Unit,
+                Source = (int)x.Source,
+                sourceName = x.Source == EngineeringPositionSource.Enderun
+                    ? "Özel"
+                    : (x.OfficialInstitution ?? "Resmî"),
+                isCustom = x.Source == EngineeringPositionSource.Enderun,
+                x.Category
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(rows);
+    }
+
+    /// <summary>
+    /// Seçilen pozların şirkete ait ve kullanılabilir olduğunu doğrular.
+    ///
+    /// Ad ve birim SUNUCUDA EZİLMİYOR: ekran poz seçildiğinde ikisini
+    /// de dolduruyor, ama saha kalemi daraltmak isteyebilir ("... 3x2,5
+    /// NYA, kırmızı"). Bağ poz kimliğinde duruyor; metni ezmek o
+    /// daraltmayı sessizce silerdi.
+    /// </summary>
+    private async Task<string?> ValidatePositionsAsync(
+        Guid companyId,
+        IReadOnlyCollection<CreatePurchaseRequestItemRequest> items,
+        CancellationToken cancellationToken)
+    {
+        var ids = items
+            .Where(x => x.EngineeringPositionId is not null)
+            .Select(x => x.EngineeringPositionId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+            return null;
+
+        var found = await db.EngineeringPositions
+            .AsNoTracking()
+            .Where(x => ids.Contains(x.Id) && x.CompanyId == companyId)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return found.Count == ids.Count
+            ? null
+            : "Seçilen pozlardan biri bulunamadı ya da bu şirkete ait değil.";
     }
 
     private static string? ValidateRequest(

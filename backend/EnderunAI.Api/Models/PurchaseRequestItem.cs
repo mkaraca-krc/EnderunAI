@@ -16,6 +16,21 @@ public sealed class PurchaseRequestItem : BaseEntity
     public Guid? InventoryItemId { get; set; }
     public InventoryItem? InventoryItem { get; set; }
 
+    /// <summary>
+    /// Talebin dayandığı POZ (keşif kütüphanesi). Stok kartından AYRI
+    /// bir eksen: stok kartı "depoda hangi ürün", poz "hangi imalat
+    /// kalemi". Şirketin 23 binin üzerinde pozu var, stok kartı ise
+    /// avuç içi kadar; talebin gerçek karşılığı çoğu zaman pozdur.
+    ///
+    /// OPSİYONEL: pozsuz serbest metin talebi hâlâ açılabilir — acil
+    /// bir ihtiyaç, poz tanımlanana kadar bekleyemez.
+    ///
+    /// Ad ve birim seçim anında KOPYALANIR (aşağıdaki alanlara): poz
+    /// sonradan revize edilirse geçmiş talep oynamasın.
+    /// </summary>
+    public Guid? EngineeringPositionId { get; set; }
+    public EngineeringPosition? EngineeringPosition { get; set; }
+
     public string MaterialDescription { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public string Unit { get; set; } = string.Empty;

@@ -2657,6 +2657,13 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.PurchaseRequestId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Poz silinse bile talep tarihçesi durmalı: Restrict, poza
+            // bağlı bir talep varken pozun silinmesini engelliyor.
+            entity.HasOne(x => x.EngineeringPosition)
+                .WithMany()
+                .HasForeignKey(x => x.EngineeringPositionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }

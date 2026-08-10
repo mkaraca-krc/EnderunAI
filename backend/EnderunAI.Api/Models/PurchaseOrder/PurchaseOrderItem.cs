@@ -22,6 +22,17 @@ public sealed class PurchaseOrderItem : BaseEntity
     public Guid? InventoryItemId { get; set; }
     public global::EnderunAI.Api.Models.InventoryItem? InventoryItem { get; set; }
 
+    /// <summary>
+    /// Zincirin dayandığı poz — talep kaleminden taşınıyor.
+    ///
+    /// Ad ve birim kopyası bugünkü gibi devam ediyor; poz kimliği ONUN
+    /// YANINDA duruyor ki "bu sipariş hangi imalat kalemine ait"
+    /// sorusu metin eşleştirmeden cevaplanabilsin. Opsiyonel: pozsuz
+    /// serbest kalem zinciri hâlâ yürüyor.
+    /// </summary>
+    public Guid? EngineeringPositionId { get; set; }
+    public global::EnderunAI.Api.Models.EngineeringPosition? EngineeringPosition { get; set; }
+
     public string MaterialDescription { get; set; } = string.Empty;
     public string? Brand { get; set; }
     public string? Model { get; set; }

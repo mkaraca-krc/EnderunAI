@@ -208,6 +208,9 @@ public sealed class RfqService(
                 {
                     PurchaseRequestItemId = x.Id,
                     LineNumber = x.LineNumber,
+                    // Poz bağı talepten taşınır; stok kartı bağıyla
+                    // aynı mantık.
+                    EngineeringPositionId = x.EngineeringPositionId,
                     MaterialDescription = x.MaterialDescription,
                     Quantity = x.Quantity,
                     Unit = x.Unit,

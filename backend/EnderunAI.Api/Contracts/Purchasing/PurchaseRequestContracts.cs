@@ -11,7 +11,12 @@ public sealed record CreatePurchaseRequestItemRequest(
     /// malzeme de talep edilebilmeli, mevcut çağıranlar da bozulmamalı.
     /// Seçilirse zincir mal kabule kadar kopmadan taşınır.
     /// </summary>
-    Guid? InventoryItemId = null);
+    Guid? InventoryItemId = null,
+    /// <summary>
+    /// Talebin dayandığı poz. Seçilirse ad ve birim pozdan kopyalanır;
+    /// stok kartından bağımsızdır, ikisi bir arada da verilebilir.
+    /// </summary>
+    Guid? EngineeringPositionId = null);
 
 public sealed record CreatePurchaseRequestRequest(
     Guid CompanyId,
