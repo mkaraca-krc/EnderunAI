@@ -205,6 +205,22 @@ export type ChequeStatusChangePayload = {
   description?: string | null;
 };
 
+export type UpdateChequePayload = {
+  chequeNumber: string;
+  bankName: string;
+  bankBranch?: string | null;
+  drawer?: string | null;
+  currentAccountId?: string | null;
+  projectId?: string | null;
+  amount: number;
+  issueDate: string;
+  dueDate: string;
+  progressPaymentId?: string | null;
+  supplierInvoiceId?: string | null;
+  description?: string | null;
+  costCenterCode?: string | null;
+};
+
 export const chequeService = {
   getAll(
     params: {
@@ -235,6 +251,18 @@ export const chequeService = {
 
   getById(id: string) {
     return apiClient<ChequeDetail>(`cheques/${id}`);
+  },
+
+  /**
+   * Çek düzeltme. Tutar ve cari değişirse giriş fişi ters kayıtla
+   * kapanıp yenisi kesiliyor; işlem görmüş çekte uç reddediyor —
+   * önce durumu geri almak gerekiyor.
+   */
+  update(id: string, payload: UpdateChequePayload) {
+    return apiClient<ChequeDetail>(`cheques/${id}`, {
+      method: "PUT",
+      body: payload,
+    });
   },
 
   create(payload: CreateChequePayload) {

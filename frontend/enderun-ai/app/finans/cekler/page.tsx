@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { Input, Select } from "@/components/ui";
+import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
 import { branchService, type BranchListItem } from "@/services/branch.service";
 import {
   cashAccountService,
@@ -126,6 +126,21 @@ export default function ChequeRegisterPage() {
 
   const [showReplaceForm, setShowReplaceForm] = useState(false);
   const [replaceForm, setReplaceForm] = useState(emptyReplaceForm);
+
+  /**
+   * Düzeltme/iptal akışları MODALDA yürüyor.
+   *
+   * Önce window.prompt kullanılıyordu: tarayıcının penceresi gerekçeyi
+   * zorunlu tutamıyor, boş metni kabul ediyor ve hata mesajını aynı
+   * yerde gösteremiyor. Modal açıkken arkadaki liste DOM'da kalıyor —
+   * kullanıcı kapatınca bıraktığı yerde buluyor.
+   */
+  const [confirmMode, setConfirmMode] = useState<"reverse" | "void" | null>(null);
+  const [confirmError, setConfirmError] = useState("");
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState(emptyChequeForm);
+  const [editError, setEditError] = useState("");
 
   const [showFactoringForm, setShowFactoringForm] = useState(false);
   const [factoringForm, setFactoringForm] = useState({
@@ -486,53 +501,102 @@ export default function ChequeRegisterPage() {
    * gerekçesiz isteği reddediyor, buradaki sorma yalnızca kullanıcıyı
    * sunucu hatasıyla karşılaştırmamak için.
    */
-  async function reverseStatus() {
-    if (!detail) return;
-
-    const reason = window
-      .prompt("Son durum değişikliği geri alınacak. Gerekçe (zorunlu):")
-      ?.trim();
-
-    if (!reason) return;
+  /**
+   * Modaldan gelen onay: geri alma ya da iptal. İkisi de aynı yoldan
+   * geçiyor çünkü fark yalnız çağrılan uç ve mesaj.
+   */
+  async function runConfirmedAction(reason: string) {
+    if (!detail || !confirmMode) return;
 
     setSaving(true);
+    setConfirmError("");
     setError("");
     setNotice("");
 
     try {
-      const updated = await chequeService.reverseStatus(detail.id, reason);
+      const updated = confirmMode === "reverse"
+        ? await chequeService.reverseStatus(detail.id, reason)
+        : await chequeService.void(detail.id, reason);
 
       setDetail(updated);
-      setNotice("Durum geri alındı; banka hareketi ve fiş ters kayıtla dengelendi.");
+      setNotice(
+        confirmMode === "reverse"
+          ? "Durum geri alındı; banka hareketi ve fiş ters kayıtla dengelendi."
+          : "Çek iptal edildi; banka hareketi ve fişler ters kayıtla geri alındı."
+      );
+
+      setConfirmMode(null);
+
+      // Modal kapanınca liste tazeleniyor: toplamlar ve durum rozeti
+      // arkada eski haliyle kalmasın.
       await loadItems();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Geri alma başarısız.");
+      // Hata MODALDA kalıyor: kullanıcı gerekçeyi yeniden yazmadan
+      // düzeltip tekrar deneyebilsin.
+      setConfirmError(err instanceof Error ? err.message : "İşlem başarısız.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function voidCheque() {
+  function openEditModal() {
     if (!detail) return;
 
-    const reason = window
-      .prompt("Çek iptal edilecek ve mali etkileri geri alınacak. Gerekçe (zorunlu):")
-      ?.trim();
+    setEditForm({
+      chequeNumber: detail.chequeNumber,
+      bankName: detail.bankName,
+      bankBranch: detail.bankBranch ?? "",
+      drawer: detail.drawer ?? "",
+      currentAccountId: detail.currentAccountId ?? "",
+      projectId: detail.projectId ?? "",
+      costCenterCode: detail.costCenterCode ?? "",
+      amount: String(detail.amount),
+      currencyCode: detail.currencyCode,
+      exchangeRate: String(detail.exchangeRate),
+      issueDate: detail.issueDate.slice(0, 10),
+      dueDate: detail.dueDate.slice(0, 10),
+      description: detail.description ?? "",
+    });
 
-    if (!reason) return;
+    setEditError("");
+    setShowEditModal(true);
+  }
+
+  async function submitEdit() {
+    if (!detail) return;
 
     setSaving(true);
-    setError("");
-    setNotice("");
+    setEditError("");
 
     try {
-      const updated = await chequeService.void(detail.id, reason);
+      const amount = Number(editForm.amount);
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error("Çek tutarı sıfırdan büyük olmalıdır.");
+      }
+
+      const updated = await chequeService.update(detail.id, {
+        chequeNumber: editForm.chequeNumber.trim(),
+        bankName: editForm.bankName.trim(),
+        bankBranch: editForm.bankBranch.trim() || null,
+        drawer: editForm.drawer.trim() || null,
+        currentAccountId: editForm.currentAccountId || null,
+        projectId: editForm.projectId || null,
+        amount,
+        issueDate: editForm.issueDate,
+        dueDate: editForm.dueDate,
+        progressPaymentId: detail.progressPaymentId ?? null,
+        supplierInvoiceId: detail.supplierInvoiceId ?? null,
+        description: editForm.description.trim() || null,
+        costCenterCode: editForm.costCenterCode || null,
+      });
 
       setDetail(updated);
-      setNotice("Çek iptal edildi; banka hareketi ve fişler ters kayıtla geri alındı.");
+      setShowEditModal(false);
+      setNotice("Çek güncellendi.");
       await loadItems();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "İptal başarısız.");
+      setEditError(err instanceof Error ? err.message : "Güncelleme başarısız.");
     } finally {
       setSaving(false);
     }
@@ -1591,7 +1655,19 @@ export default function ChequeRegisterPage() {
                     type="button"
                     className="erp-secondary-button"
                     disabled={saving}
-                    onClick={() => void reverseStatus()}
+                    onClick={openEditModal}
+                  >
+                    Çeki Düzenle
+                  </button>
+
+                  <button
+                    type="button"
+                    className="erp-secondary-button"
+                    disabled={saving}
+                    onClick={() => {
+                      setConfirmError("");
+                      setConfirmMode("reverse");
+                    }}
                   >
                     Son Durumu Geri Al
                   </button>
@@ -1600,7 +1676,10 @@ export default function ChequeRegisterPage() {
                     type="button"
                     className="erp-secondary-button"
                     disabled={saving}
-                    onClick={() => void voidCheque()}
+                    onClick={() => {
+                      setConfirmError("");
+                      setConfirmMode("void");
+                    }}
                   >
                     Çeki İptal Et
                   </button>
@@ -1849,6 +1928,177 @@ export default function ChequeRegisterPage() {
           </div>
         </div>
       )}
+
+      {/* ONAY DİYALOĞU: geri alınamaz işlemler için gerekçe ZORUNLU.
+          Onay düğmesi gerekçe yazılmadan açılmıyor; hata modalda
+          kalıyor ki kullanıcı yazdığını kaybetmesin. */}
+      <ConfirmDialog
+        // key ile her modda yeniden kuruluyor: bir önceki işlemin
+        // gerekçesi yenisine yapışmasın.
+        key={confirmMode ?? "kapali"}
+        open={confirmMode !== null}
+        title={
+          confirmMode === "reverse"
+            ? "Son durumu geri al"
+            : "Çeki iptal et"
+        }
+        description={
+          confirmMode === "reverse"
+            ? "Çek bir önceki durumuna döner. Muhasebe fişi ters kayıtla kapanır ve banka hareketi karşıt bir hareketle dengelenir; kayıtlar silinmez."
+            : "Çekin ürettiği bütün mali etkiler geri alınır ve çek iptal durumuna geçer. Kayıt denetim izi için listede kalır."
+        }
+        confirmLabel={
+          confirmMode === "reverse" ? "Geri Al" : "İptal Et"
+        }
+        requireReason
+        busy={saving}
+        error={confirmError}
+        onCancel={() => {
+          setConfirmMode(null);
+          setConfirmError("");
+        }}
+        onConfirm={(reason) => void runConfirmedAction(reason)}
+      />
+
+      {/* DÜZELTME: işlem görmüş çekte uç reddediyor — önce durumu geri
+          almak gerekiyor. Ekran bunu engellemek yerine sunucunun
+          gerekçesini gösteriyor. */}
+      <Modal
+        open={showEditModal}
+        title="Çeki düzenle"
+        description="Tutar ya da cari değişirse giriş fişi ters kayıtla kapanır ve yeni tutarla yenisi kesilir."
+        onClose={() => setShowEditModal(false)}
+        busy={saving}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={saving}
+              onClick={() => setShowEditModal(false)}
+            >
+              Vazgeç
+            </Button>
+
+            <Button
+              type="button"
+              disabled={saving}
+              onClick={() => void submitEdit()}
+            >
+              {saving ? "Kaydediliyor…" : "Kaydet"}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <Input
+            label="Çek numarası"
+            value={editForm.chequeNumber}
+            onChange={(e) =>
+              setEditForm({ ...editForm, chequeNumber: e.target.value })
+            }
+          />
+
+          <Input
+            label="Banka"
+            value={editForm.bankName}
+            onChange={(e) =>
+              setEditForm({ ...editForm, bankName: e.target.value })
+            }
+          />
+
+          <Input
+            label="Şube"
+            value={editForm.bankBranch}
+            onChange={(e) =>
+              setEditForm({ ...editForm, bankBranch: e.target.value })
+            }
+          />
+
+          <Input
+            label="Keşideci"
+            value={editForm.drawer}
+            onChange={(e) =>
+              setEditForm({ ...editForm, drawer: e.target.value })
+            }
+          />
+
+          <Select
+            label="Cari"
+            value={editForm.currentAccountId}
+            onChange={(e) =>
+              setEditForm({ ...editForm, currentAccountId: e.target.value })
+            }
+            options={[
+              { value: "", label: "Seçin" },
+              ...currentAccounts.map((account) => ({
+                value: account.id,
+                label: account.title,
+              })),
+            ]}
+          />
+
+          <Input
+            label="Tutar"
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={editForm.amount}
+            onChange={(e) =>
+              setEditForm({ ...editForm, amount: e.target.value })
+            }
+          />
+
+          <Select
+            label="Proje"
+            value={editForm.projectId}
+            onChange={(e) =>
+              setEditForm({ ...editForm, projectId: e.target.value })
+            }
+            options={[
+              { value: "", label: "—" },
+              ...projects.map((project) => ({
+                value: project.id,
+                label: `${project.code} — ${project.name}`,
+              })),
+            ]}
+          />
+
+          <Input
+            label="Keşide tarihi"
+            type="date"
+            value={editForm.issueDate}
+            onChange={(e) =>
+              setEditForm({ ...editForm, issueDate: e.target.value })
+            }
+          />
+
+          <Input
+            label="Vade"
+            type="date"
+            value={editForm.dueDate}
+            onChange={(e) =>
+              setEditForm({ ...editForm, dueDate: e.target.value })
+            }
+          />
+
+          <div className="md:col-span-2">
+            <Input
+              label="Açıklama"
+              value={editForm.description}
+              onChange={(e) =>
+                setEditForm({ ...editForm, description: e.target.value })
+              }
+            />
+          </div>
+        </div>
+
+        {editError && (
+          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {editError}
+          </p>
+        )}
+      </Modal>
     </ErpShell>
   );
 }
