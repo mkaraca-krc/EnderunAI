@@ -421,43 +421,17 @@ public sealed class ProjectsController(AppDbContext db) : ControllerBase
     }
 
     /// <summary>
-    /// Keşif statüsünde işveren opsiyoneldir (verilirse sadece şirkete
-    /// ait olduğu kontrol edilir, Onaylı/Müşteri şartı aranmaz). Keşif
-    /// dışındaki statülerde işveren zorunludur ve Onaylı + Müşteri
-    /// rolünde olmalıdır.
+    /// İşveren kuralı <see cref="ProjectEmployerRule"/> içinde: aynı
+    /// kural keşif "kazanıldı" akışında da uygulanıyor, iki kopya
+    /// tutulmuyor.
     /// </summary>
-    private async Task<(CurrentAccount? Employer, string? Error)> ValidateEmployerForStatusAsync(
+    private Task<(CurrentAccount? Employer, string? Error)> ValidateEmployerForStatusAsync(
         ProjectStatus status,
         Guid? employerCurrentAccountId,
         Guid companyId,
-        CancellationToken cancellationToken)
-    {
-        if (employerCurrentAccountId is null)
-        {
-            return status == ProjectStatus.Kesif
-                ? (null, null)
-                : (null, "Keşif dışındaki statülerde işveren cari kartı zorunludur.");
-        }
-
-        var employer = await db.CurrentAccounts
-            .SingleOrDefaultAsync(
-                x => x.Id == employerCurrentAccountId.Value && x.CompanyId == companyId,
-                cancellationToken);
-
-        if (employer is null)
-            return (null, "İşveren cari kartı bulunamadı.");
-
-        if (status != ProjectStatus.Kesif)
-        {
-            if (employer.Status != CurrentAccountStatus.Approved)
-                return (null, "Proje yalnızca onaylanmış cari kart ile açılabilir.");
-
-            if (!employer.Roles.HasFlag(CurrentAccountRoles.Customer))
-                return (null, "Seçilen cari kartın müşteri rolü bulunmuyor.");
-        }
-
-        return (employer, null);
-    }
+        CancellationToken cancellationToken) =>
+        ProjectEmployerRule.ValidateAsync(
+            db, status, employerCurrentAccountId, companyId, cancellationToken);
 
     [HttpGet("{id:guid}/summary")]
     [RequirePermission(PermissionCatalog.Keys.ProjectsView)]

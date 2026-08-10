@@ -44,6 +44,32 @@ public enum ProjectStatus
 }
 
 /// <summary>
+/// Keşfin sonucu. Dört durumlu proje akışına yeni bir statü EKLENMEDİ:
+/// "kaybedildi" statü değil, keşfin sonucudur. Statüye eklenseydi
+/// projeyi statüsüne göre süzen her ekran ve her rapor yeni değeri
+/// tek tek öğrenmek zorunda kalırdı.
+/// </summary>
+public enum ProjectSurveyOutcome
+{
+    /// <summary>Karar verilmedi ya da iş zaten keşiften gelmedi.</summary>
+    Pending = 0,
+
+    /// <summary>
+    /// İş kazanıldı: proje aktife alınır ve keşif masrafı OLDUĞU
+    /// YERDE KALIR — artık gerçek işin maliyetidir. Taşıma yok;
+    /// taşınsaydı aynı harcama iki defterde görünme riski doğardı.
+    /// </summary>
+    Won = 1,
+
+    /// <summary>
+    /// Teklif kaybedildi: masraf silinmez, gerçek para harcandı.
+    /// Satırlar yerinde kalır ama "proje adı — Proje Keşfi" gideri
+    /// olarak okunur; kazanılmış bir işin maliyeti gibi görünmez.
+    /// </summary>
+    Lost = 2
+}
+
+/// <summary>
 /// Hakediş düzenleme periyodu. Nakit akışı tahmini buna dayanıyor:
 /// aylık hakediş kesen bir işle iş bitiminde tek ödeme alınan iş aynı
 /// takvimde nakit üretmez.
@@ -241,6 +267,22 @@ public sealed class Project : BaseEntity
     public DateTime? ArchivedAtUtc { get; set; }
 
     public string? ArchiveReason { get; set; }
+
+    /// <summary>
+    /// Keşfin sonucu. Statüden AYRI tutuluyor: dört durumlu akış
+    /// "iptal" ile "teklif kaybedildi"yi aynı kutuya koyar, oysa
+    /// ikisinin gider anlamı farklıdır. Kaybedilen teklifin keşif
+    /// masrafı gerçek bir harcamadır ve iptal edilmiş bir işle
+    /// karıştırılmamalıdır.
+    /// </summary>
+    public ProjectSurveyOutcome SurveyOutcome { get; set; }
+        = ProjectSurveyOutcome.Pending;
+
+    public DateTime? SurveyOutcomeAtUtc { get; set; }
+    public Guid? SurveyOutcomeByUserId { get; set; }
+
+    /// <summary>Kaybedildiyse gerekçe; sonraki tekliflerin öğreneceği tek yer.</summary>
+    public string? SurveyOutcomeNote { get; set; }
 
     public ICollection<Warehouse> Warehouses { get; set; } = new List<Warehouse>();
 }

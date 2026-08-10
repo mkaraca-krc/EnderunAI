@@ -29,6 +29,9 @@ public sealed class AppDbContext(
     public DbSet<PersonnelRehireOverride> PersonnelRehireOverrides =>
         Set<PersonnelRehireOverride>();
     public DbSet<PersonnelDuty> PersonnelDuties => Set<PersonnelDuty>();
+    public DbSet<DutySurveyReport> DutySurveyReports => Set<DutySurveyReport>();
+    public DbSet<DutySurveyMeasurement> DutySurveyMeasurements => Set<DutySurveyMeasurement>();
+    public DbSet<DutySurveyPhoto> DutySurveyPhotos => Set<DutySurveyPhoto>();
     public DbSet<CashAccount> CashAccounts => Set<CashAccount>();
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
     public DbSet<CurrencyValuationRun> CurrencyValuationRuns =>
@@ -270,6 +273,7 @@ public sealed class AppDbContext(
         ConfigureCompanyCorporateTaxRates(modelBuilder);
         ConfigurePersonnelRehireOverrides(modelBuilder);
         ConfigurePersonnelDuties(modelBuilder);
+        ConfigureDutySurveyReports(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -962,6 +966,9 @@ public sealed class AppDbContext(
             entity.Ignore(x => x.DayCount);
             entity.Ignore(x => x.TotalAllowance);
             entity.Ignore(x => x.ShiftsLaborCost);
+            entity.Ignore(x => x.TotalExpense);
+            entity.Ignore(x => x.SettlementGap);
+            entity.Ignore(x => x.SettlementPending);
 
             entity.HasOne(x => x.Personnel)
                 .WithMany()
@@ -982,6 +989,84 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.TargetProjectSiteId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+    }
+
+    private static void ConfigureDutySurveyReports(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<DutySurveyReport>(entity =>
+        {
+            entity.ToTable("duty_survey_reports");
+            entity.HasKey(x => x.Id);
+
+            // Silinen kayıt okunmaz: tabloda kalır, listelerden düşer.
+            entity.HasQueryFilter(x => !x.IsDeleted);
+
+            // Görev başına tek rapor: ikinci bir rapor "hangisi
+            // geçerli" sorusunu doğururdu. Düzeltme aynı kaydın
+            // üzerine yazılır.
+            entity.HasIndex(x => x.DutyId).IsUnique();
+
+            // Bir projenin keşif dosyası proje üzerinden okunuyor.
+            entity.HasIndex(x => x.ProjectId);
+
+            entity.Property(x => x.Summary).HasMaxLength(8000).IsRequired();
+            entity.Property(x => x.SiteConditions).HasMaxLength(4000);
+            entity.Property(x => x.AccessNotes).HasMaxLength(4000);
+            entity.Property(x => x.Risks).HasMaxLength(4000);
+
+            entity.HasOne(x => x.Duty)
+                .WithMany()
+                .HasForeignKey(x => x.DutyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Rapor ARŞİVDE KALIR: proje kaybedilse de silinmez.
+            // Restrict, projeyi silmeye çalışan bir akışın raporu
+            // sessizce götürmesini engeller.
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DutySurveyMeasurement>(entity =>
+        {
+            entity.ToTable("duty_survey_measurements");
+            entity.HasKey(x => x.Id);
+
+            // Ölçüm listesi her kayıtta bütün olarak yenileniyor;
+            // filtresiz kalsaydı eski sürümler rapora karışırdı.
+            entity.HasQueryFilter(x => !x.IsDeleted);
+            entity.HasIndex(x => x.SurveyReportId);
+
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.Unit).HasMaxLength(20);
+            entity.Property(x => x.Note).HasMaxLength(1000);
+
+            entity.HasOne(x => x.SurveyReport)
+                .WithMany(x => x.Measurements)
+                .HasForeignKey(x => x.SurveyReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DutySurveyPhoto>(entity =>
+        {
+            entity.ToTable("duty_survey_photos");
+            entity.HasKey(x => x.Id);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+            entity.HasIndex(x => x.SurveyReportId);
+
+            entity.Property(x => x.StoredFileName).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.OriginalName).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Caption).HasMaxLength(500);
+
+            entity.HasOne(x => x.SurveyReport)
+                .WithMany(x => x.Photos)
+                .HasForeignKey(x => x.SurveyReportId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

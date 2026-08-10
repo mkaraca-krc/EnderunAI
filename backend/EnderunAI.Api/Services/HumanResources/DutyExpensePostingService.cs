@@ -42,14 +42,45 @@ public sealed class DutyExpensePostingService(AppDbContext db)
         if (duty.Status != PersonnelDutyStatus.Approved)
             return;
 
+        var target = await db.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == duty.TargetProjectId)
+            .Select(x => new { x.Name, x.SurveyOutcome })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var lostBidLabel = target is { SurveyOutcome: ProjectSurveyOutcome.Lost }
+            ? $"{target.Name} — Proje Keşfi"
+            : null;
+
         await UpsertAsync(duty, TravelReference, "Yol gideri",
-            duty.TravelCost, cancellationToken);
+            duty.TravelCost, lostBidLabel, cancellationToken);
 
         await UpsertAsync(duty, AccommodationReference, "Konaklama gideri",
-            duty.AccommodationCost, cancellationToken);
+            duty.AccommodationCost, lostBidLabel, cancellationToken);
 
         await UpsertAsync(duty, AllowanceReference, "Harcırah",
-            duty.TotalAllowance, cancellationToken);
+            duty.TotalAllowance, lostBidLabel, cancellationToken);
+    }
+
+    /// <summary>
+    /// Bir projenin keşif sonucu değişince o projeye bağlı onaylı
+    /// görevlerin satırlarını yeniden yazar.
+    ///
+    /// Açıklamayı burada değil TEK YAZICIDA ürettiği için defterle
+    /// görev arasında kayma olmaz: masraf sonradan düzeltilse bile
+    /// satır yine sonucun anlattığı adla yazılır. Tutarlara
+    /// DOKUNMAZ — kaybetmek harcanan parayı değiştirmez.
+    /// </summary>
+    public async Task RepostForProjectAsync(
+        Guid projectId, CancellationToken cancellationToken)
+    {
+        var duties = await db.PersonnelDuties
+            .Where(x => x.TargetProjectId == projectId &&
+                        x.Status == PersonnelDutyStatus.Approved)
+            .ToListAsync(cancellationToken);
+
+        foreach (var duty in duties)
+            await PostAsync(duty, cancellationToken);
     }
 
     /// <summary>
@@ -63,6 +94,7 @@ public sealed class DutyExpensePostingService(AppDbContext db)
         string referenceType,
         string label,
         decimal amount,
+        string? lostBidLabel,
         CancellationToken cancellationToken)
     {
         var existing = await db.ProjectCostTransactions
@@ -78,9 +110,14 @@ public sealed class DutyExpensePostingService(AppDbContext db)
             return;
         }
 
-        var description =
-            $"{label} — {DutyLabel(duty.DutyType)} ({duty.StartDate:dd.MM.yyyy}" +
-            $"–{duty.EndDate:dd.MM.yyyy})";
+        // Kaybedilen teklifte satır, kazanılmış bir işin maliyeti gibi
+        // değil, "proje adı — Proje Keşfi" gideri olarak okunur.
+        // Tutar aynı kalır: kaybetmek harcanan parayı geri getirmez.
+        var description = lostBidLabel is null
+            ? $"{label} — {DutyLabel(duty.DutyType)} ({duty.StartDate:dd.MM.yyyy}" +
+              $"–{duty.EndDate:dd.MM.yyyy})"
+            : $"{label} — {lostBidLabel} ({duty.StartDate:dd.MM.yyyy}" +
+              $"–{duty.EndDate:dd.MM.yyyy})";
 
         if (existing is null)
         {
