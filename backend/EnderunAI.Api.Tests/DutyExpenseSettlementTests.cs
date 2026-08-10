@@ -970,4 +970,171 @@ public sealed class DutyExpenseSettlementTests(DatabaseFixture fixture)
                 JsonValueKind.Null, payload.GetProperty(field_).ValueKind);
         }
     }
+
+    // ---------------- İptal ----------------
+
+    /// <summary>
+    /// ANA TEST: iptal edilen görev projeye maliyet yazmayı BIRAKIYOR.
+    ///
+    /// Eskiden yayınlayıcı onaysız görevde erken dönüyordu; satırlar
+    /// defterde kalıyor ve iptal edilmiş bir görev projenin maliyetini
+    /// şişirmeye devam ediyordu — çekteki iptal dersinin aynısı.
+    /// </summary>
+    [Fact]
+    public async Task CancelledDuty_LeavesNoCostBehind()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions, "Genel Müdür");
+
+        await SaveExpenseAsync(client, dutyId);
+
+        Assert.Equal(3, (await LoadCostsAsync(context)).Count);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/iptal",
+            new { decisionNote = "Görev yapılmadı" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // Defter temiz: sıfır tutarlı gürültü satırı da bırakılmıyor.
+        Assert.Empty(await LoadCostsAsync(context));
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var duty = await db.PersonnelDuties.AsNoTracking()
+            .SingleAsync(x => x.Id == dutyId);
+
+        Assert.Equal(PersonnelDutyStatus.Cancelled, duty.Status);
+        Assert.NotNull(duty.CancelledAtUtc);
+        Assert.NotNull(duty.CancelledByUserId);
+        Assert.Equal("Görev yapılmadı", duty.CancellationReason);
+    }
+
+    /// <summary>Gerekçesiz iptal denetlenemez.</summary>
+    [Fact]
+    public async Task Cancel_RequiresAReason()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions, "Genel Müdür");
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/iptal",
+            new { decisionNote = "  " })).StatusCode);
+    }
+
+    /// <summary>
+    /// İptal MAHSUP AVANSINI da kapatıyor: personelden kesilecek bir
+    /// borç, iptal edilmiş bir görevden doğamaz.
+    /// </summary>
+    [Fact]
+    public async Task Cancel_ClosesTheSettlementAdvance()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions, "Genel Müdür");
+
+        await SaveExpenseAsync(client, dutyId, receipt: 3_200m);
+
+        await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/mahsup",
+            new { decision = 0, note = "Fiş eksik" });
+
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/iptal",
+            new { decisionNote = "Görev iptal" })).StatusCode);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var hrDb = scope.ServiceProvider.GetRequiredService<HrDbContext>();
+
+        var advance = await hrDb.AdvanceRequests.AsNoTracking()
+            .SingleAsync(x => x.PersonnelId == context.PersonnelId);
+
+        Assert.Equal(0m, advance.ApprovedAmount);
+        Assert.Equal(HrApprovalStatus.Cancelled, advance.Status);
+    }
+
+    /// <summary>
+    /// KESİLMİŞSE İPTAL EDİLEMEZ: bordro avanstan kesmişse iptal
+    /// personelin alacağını sessizce yok ederdi.
+    /// </summary>
+    [Fact]
+    public async Task Cancel_IsRejectedWhenTheAdvanceWasAlreadyDeducted()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions, "Genel Müdür");
+
+        await SaveExpenseAsync(client, dutyId, receipt: 3_200m);
+
+        await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/mahsup",
+            new { decision = 0, note = "Fiş eksik" });
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var hrDb = scope.ServiceProvider.GetRequiredService<HrDbContext>();
+
+            var advance = await hrDb.AdvanceRequests
+                .SingleAsync(x => x.PersonnelId == context.PersonnelId);
+
+            hrDb.AdvanceDeductions.Add(new HrAdvanceDeduction
+            {
+                CompanyId = advance.CompanyId,
+                AdvanceRequestId = advance.Id,
+                PersonnelId = advance.PersonnelId,
+                Year = 2026,
+                Month = 7,
+                Amount = 600m,
+                ScheduledAmount = 600m
+            });
+
+            await hrDb.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/iptal",
+            new { decisionNote = "İptal denemesi" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("600", await response.Content.ReadAsStringAsync());
+
+        // Masraf da yerinde: hiçbir şey yarım kalmadı.
+        Assert.Equal(3, (await LoadCostsAsync(context)).Count);
+    }
+
+    /// <summary>
+    /// NEGATİF TEST: onay yetkisi olmayan kullanıcı iptal edemiyor.
+    /// İptal onaylanmış bir maliyeti siliyor; talebi açan yetki bunun
+    /// için yeterli değil.
+    /// </summary>
+    [Fact]
+    public async Task Cancel_RequiresTheApprovalRole()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var hr = await ClientWithAsync(HrPermissions, "Genel Müdür");
+        await SaveExpenseAsync(hr, dutyId);
+
+        // Rolsüz kullanıcı: izinleri var ama onay makamı değil.
+        var editor = await ClientWithAsync(HrPermissions);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await editor.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/iptal",
+            new { decisionNote = "Yetkisiz deneme" })).StatusCode);
+
+        Assert.Equal(3, (await LoadCostsAsync(context)).Count);
+    }
 }

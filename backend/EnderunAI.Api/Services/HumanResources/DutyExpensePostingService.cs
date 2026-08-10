@@ -39,8 +39,18 @@ public sealed class DutyExpensePostingService(AppDbContext db)
     /// </summary>
     public async Task PostAsync(PersonnelDuty duty, CancellationToken cancellationToken)
     {
+        // ONAYSIZ GÖREV DEFTERDE DURMAZ.
+        //
+        // Eskiden burada yalnızca "return" vardı: onaylı bir görev
+        // sonradan iptal edilse masraf satırları defterde kalıyordu ve
+        // proje maliyeti olmayan bir görevi saymaya devam ediyordu.
+        // Çekteki iptal dersinin aynısı — kaydı kapatmak, ürettiği
+        // mali etkiyi de geri almayı gerektiriyor.
         if (duty.Status != PersonnelDutyStatus.Approved)
+        {
+            await RemoveAsync(duty, cancellationToken);
             return;
+        }
 
         var target = await db.Projects
             .AsNoTracking()
@@ -60,6 +70,27 @@ public sealed class DutyExpensePostingService(AppDbContext db)
 
         await UpsertAsync(duty, AllowanceReference, "Harcırah",
             duty.TotalAllowance, lostBidLabel, cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Görevin bütün masraf satırlarını defterden kaldırır.
+    ///
+    /// Tutarı sıfırlamak yerine satır siliniyor: sıfır tutarlı bir
+    /// maliyet satırı "yansıtıldı ama sıfır" ile "hiç yansıtılmadı"
+    /// ayrımını bulanıklaştırır ve raporlarda gürültü yapar.
+    /// </summary>
+    public async Task RemoveAsync(
+        PersonnelDuty duty, CancellationToken cancellationToken)
+    {
+        var rows = await db.ProjectCostTransactions
+            .Where(x => x.ReferenceId == duty.Id &&
+                        x.ReferenceType != null &&
+                        x.ReferenceType.StartsWith(ReferencePrefix))
+            .ToListAsync(cancellationToken);
+
+        if (rows.Count > 0)
+            db.ProjectCostTransactions.RemoveRange(rows);
     }
 
     /// <summary>

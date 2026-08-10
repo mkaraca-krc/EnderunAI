@@ -692,6 +692,116 @@ public sealed class PersonnelDutiesController(
     }
 
     /// <summary>
+    /// Onaylı görevi iptal eder ve deftere yazdığı masrafı AYNI
+    /// işlemde geri alır.
+    ///
+    /// Ret'ten ayrı bir uç: ret onaylanmamış bir talebi kapatır,
+    /// iptal ise onaylanmış ve projeye maliyet yazmış bir görevi geri
+    /// alır. İkisi tek uçta toplanırsa "onaylanmadı" ile "onaylandı
+    /// sonra iptal edildi" ayrımı kaybolur.
+    ///
+    /// MASRAF ORTADA KALMAZ: görev onaydan çıkınca masraf satırları
+    /// defterden siliniyor. Kalsaydı iptal edilmiş bir görev projenin
+    /// maliyetini şişirmeye devam ederdi — çekteki iptal dersinin
+    /// aynısı.
+    ///
+    /// MAHSUP AÇILDIYSA AVANS DA KAPANIR; ama bordro o avanstan zaten
+    /// kesmişse iptal REDDEDİLİR: kesilen parayı geri vermek iade
+    /// akışı ister, sessizce silmek personelin alacağını yok ederdi.
+    /// </summary>
+    [HttpPost("{id:guid}/iptal")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
+    public async Task<IActionResult> Cancel(
+        Guid id, DecidePersonnelDutyRequest request,
+        CancellationToken cancellationToken)
+    {
+        // Onayı veren makam geri de alır: iptal onaylanmış bir maliyeti
+        // siliyor, talebi açan yetki (personnel.edit) bunun için
+        // yeterli değil.
+        if (!await CanApproveAsync(cancellationToken))
+        {
+            return StatusCode(403, new
+            {
+                message = "Görevlendirmeyi yalnızca Genel Müdür iptal edebilir."
+            });
+        }
+
+        var reason = request.DecisionNote?.Trim();
+
+        if (string.IsNullOrWhiteSpace(reason))
+            return BadRequest(new { message = "İptal gerekçesi zorunludur." });
+
+        var duty = await db.PersonnelDuties
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (duty is null)
+            return NotFound(new { message = "Görevlendirme bulunamadı." });
+
+        if (duty.Status == PersonnelDutyStatus.Cancelled)
+            return Conflict(new { message = "Görevlendirme zaten iptal edilmiş." });
+
+        if (duty.Status is not (PersonnelDutyStatus.Requested or
+            PersonnelDutyStatus.Approved))
+        {
+            return Conflict(new
+            {
+                message = "Yalnızca talep ya da onay durumundaki görevlendirme " +
+                          "iptal edilebilir."
+            });
+        }
+
+        if (duty.SettlementAdvanceId is Guid advanceId)
+        {
+            var deducted = await hrDb.AdvanceDeductions
+                .Where(x => x.AdvanceRequestId == advanceId)
+                .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+
+            if (deducted > 0m)
+            {
+                return Conflict(new
+                {
+                    message = "Bu görevin harcırah mahsubundan personele zaten " +
+                              $"{TurkishFormat.Amount(deducted)} TL kesilmiş; görev " +
+                              "iptal edilemez. Önce kesintinin iadesi yapılmalı."
+                });
+            }
+
+            var advance = await hrDb.AdvanceRequests
+                .SingleOrDefaultAsync(x => x.Id == advanceId, cancellationToken);
+
+            if (advance is not null)
+            {
+                advance.ApprovedAmount = 0m;
+                advance.RequestedAmount = 0m;
+                advance.Status = Models.HumanResources.HrApprovalStatus.Cancelled;
+                advance.ApprovalNote = $"Görevlendirme iptali — {reason}";
+                advance.UpdatedAtUtc = DateTime.UtcNow;
+                advance.UpdatedByUserId = currentUser.UserId;
+            }
+
+            duty.SettlementAdvanceId = null;
+        }
+
+        duty.Status = PersonnelDutyStatus.Cancelled;
+        duty.CancelledAtUtc = DateTime.UtcNow;
+        duty.CancelledByUserId = currentUser.UserId;
+        duty.CancellationReason = reason;
+
+        // Durum onaydan çıktığı için bu çağrı satırları siliyor.
+        await expensePosting.PostAsync(duty, cancellationToken);
+
+        await db.SaveChangesAsync(cancellationToken);
+        await hrDb.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Görevlendirme iptal edildi; projeye yansıyan masraf geri alındı.",
+            duty.Id,
+            status = (int)duty.Status
+        });
+    }
+
+    /// <summary>
     /// Masraf kalemleri: yol, konaklama ve fiş toplamı. Harcırah
     /// buradan girilmez — görev kartındaki sabit tutardan hesaplanır.
     /// </summary>

@@ -147,6 +147,17 @@ public sealed class PersonnelDuty : BaseEntity
     /// <summary>Reddedildiyse gerekçe; gerekçesiz ret bilgi vermez.</summary>
     public string? DecisionNote { get; set; }
 
+    // --- İptal izi ---
+    //
+    // Ret'ten AYRI tutuluyor: ret onaylanmamış bir talebi kapatır,
+    // iptal ise ONAYLANMIŞ ve deftere maliyet yazmış bir görevi geri
+    // alır. İkisini tek alanda toplamak "bu görev neden kapandı"
+    // sorusunu bulanıklaştırırdı.
+
+    public DateTime? CancelledAtUtc { get; set; }
+    public Guid? CancelledByUserId { get; set; }
+    public string? CancellationReason { get; set; }
+
     // --- Masraf kalemleri ---
     //
     // Yol, konaklama ve harcırah AYRI AYRI tutuluyor; tek bir toplama
