@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import CashFlowProjectionPanel from "@/components/finance/cash-flow-projection";
+import { usePermissions } from "@/lib/use-permissions";
 import {
   cashFlowService,
   type CashFlowForecast,
@@ -94,6 +96,17 @@ export default function CashFlowPage() {
   const [projectId, setProjectId] = useState("");
 
   const [forecast, setForecast] = useState<CashFlowForecast | null>(null);
+
+  /**
+   * İki görünüm: LİKİDİTE TAKVİMİ (tarih bazlı yürüyen bakiye) ve
+   * VADE KOVASI (30/60/90). Takvim ayrı ve dar bir izinde
+   * (cashflow.view) çünkü bordroyu elden dahil tam tutarla taşıyor;
+   * kova görünümü finance.view ile açık kalmaya devam ediyor.
+   */
+  const { has } = usePermissions();
+  const canSeeProjection = has("cashflow.view");
+
+  const [view, setView] = useState<"projection" | "buckets">("projection");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -157,8 +170,42 @@ export default function CashFlowPage() {
   return (
     <ErpShell
       title="Nakit Akışı"
-      description="Vade bazlı beklenen tahsilatlar ve ödemeler — 30 / 60 / 90 gün"
+      description="Likidite takvimi ve vade bazlı beklenen tahsilat/ödemeler"
     >
+      {canSeeProjection && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setView("projection")}
+            className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
+              view === "projection"
+                ? "border-brand-500 bg-brand-50 text-brand-900"
+                : "border-slate-300 bg-white text-slate-600"
+            }`}
+          >
+            Likidite Takvimi
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setView("buckets")}
+            className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
+              view === "buckets"
+                ? "border-brand-500 bg-brand-50 text-brand-900"
+                : "border-slate-300 bg-white text-slate-600"
+            }`}
+          >
+            Vade Kovası (30/60/90)
+          </button>
+        </div>
+      )}
+
+      {canSeeProjection && view === "projection" && companyId && (
+        <CashFlowProjectionPanel companyId={companyId} projects={projects} />
+      )}
+
+      {(!canSeeProjection || view === "buckets") && (
+      <>
       <div className="erp-page-toolbar">
         <div>
           {forecast && (
@@ -280,6 +327,8 @@ export default function CashFlowPage() {
             />
           </div>
         </>
+      )}
+      </>
       )}
     </ErpShell>
   );

@@ -612,4 +612,114 @@ public sealed class CashFlowProjectionTests(DatabaseFixture fixture)
 
         Assert.Equal(HttpStatusCode.OK, legacy.StatusCode);
     }
+
+    // ---------------- Tahmini gider uçları ----------------
+
+    /// <summary>
+    /// Tahmini gider ucundan eklenince takvime düşüyor ve
+    /// kaldırılınca çıkıyor: satır doğrudan bakiyeyi etkiliyor.
+    /// </summary>
+    [Fact]
+    public async Task EstimatedExpenseEndpoints_AffectTheProjection()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix, openingBalance: 500_000m);
+
+        var client = await ClientWithAsync(CashFlowPermissions);
+
+        var created = await client.PostAsJsonAsync(
+            "/api/cash-flow/tahmini-giderler", new
+            {
+                companyId = context.CompanyId,
+                description = $"Kira {suffix}",
+                amount = 40_000m,
+                startYear = Today.Year,
+                startMonth = Today.Month,
+                recurrenceCount = 2,
+                paymentDay = 28,
+                projectId = (Guid?)null
+            });
+
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+
+        var expenseId = JsonDocument
+            .Parse(await created.Content.ReadAsStringAsync())
+            .RootElement.GetProperty("id").GetGuid();
+
+        var withExpense = await ProjectionAsync(client, context);
+
+        var count = withExpense.GetProperty("days").EnumerateArray()
+            .SelectMany(x => x.GetProperty("items").EnumerateArray())
+            .Count(x => x.GetProperty("kind").GetString() == "EstimatedExpense");
+
+        Assert.InRange(count, 1, 2);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.DeleteAsync(
+            $"/api/cash-flow/tahmini-giderler/{expenseId}")).StatusCode);
+
+        var without = await ProjectionAsync(client, context);
+
+        Assert.DoesNotContain(
+            without.GetProperty("days").EnumerateArray()
+                .SelectMany(x => x.GetProperty("items").EnumerateArray()),
+            x => x.GetProperty("kind").GetString() == "EstimatedExpense");
+    }
+
+    /// <summary>
+    /// SÜRESİZ TEKRAR YOK: gözden geçirilmeyen bir varsayıma
+    /// dönüşürdü. Üst sınır en uzun ufkun iki katı.
+    /// </summary>
+    [Fact]
+    public async Task EstimatedExpense_RejectsUnboundedRecurrence()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        var client = await ClientWithAsync(CashFlowPermissions);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/cash-flow/tahmini-giderler", new
+            {
+                companyId = context.CompanyId,
+                description = "Süresiz kira",
+                amount = 10_000m,
+                startYear = Today.Year,
+                startMonth = Today.Month,
+                recurrenceCount = 120,
+                paymentDay = 1,
+                projectId = (Guid?)null
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// NEGATİF TEST: tahmini gider uçları da dar kapıda — satırlar
+    /// likidite tablosunu doğrudan değiştiriyor.
+    /// </summary>
+    [Fact]
+    public async Task EstimatedExpenseEndpoints_RequireCashFlowPermission()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        var limited = await ClientWithAsync([PermissionCatalog.Keys.FinanceView]);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await limited.GetAsync(
+            $"/api/cash-flow/tahmini-giderler?companyId={context.CompanyId}"))
+            .StatusCode);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await limited.PostAsJsonAsync(
+            "/api/cash-flow/tahmini-giderler", new
+            {
+                companyId = context.CompanyId,
+                description = "Yetkisiz",
+                amount = 1_000m,
+                startYear = Today.Year,
+                startMonth = Today.Month,
+                recurrenceCount = 1,
+                paymentDay = 1,
+                projectId = (Guid?)null
+            })).StatusCode);
+    }
 }
