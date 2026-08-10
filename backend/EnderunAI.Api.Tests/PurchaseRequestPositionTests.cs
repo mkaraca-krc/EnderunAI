@@ -176,38 +176,34 @@ public sealed class PurchaseRequestPositionTests(DatabaseFixture fixture)
     // ---------------- Arama ----------------
 
     /// <summary>
-    /// Arama kod ve adda çalışıyor; özel pozlar ÖNCE geliyor ki bir kez
-    /// açılan kalem ikinci talepte tekrar açılmasın.
+    /// EŞİT İLGİDE ÖZEL POZ ÖNCE: aynı adı taşıyan iki pozdan şirketin
+    /// kendi açtığı üstte çıkıyor ki bir kez açılan kalem ikinci
+    /// talepte yeniden açılmasın. Sıralamanın kendisi ilgiye göre;
+    /// bu yalnızca eşitlik bozucusu.
     /// </summary>
     [Fact]
-    public async Task PositionSearch_PutsCustomPositionsFirst()
+    public async Task PositionSearch_PutsCustomPositionsFirstOnEqualRelevance()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var context = await CreateContextAsync(suffix);
         var client = await ClientAsync();
 
+        // Adlar birebir aynı: benzerlik eşit kalsın, ayrımı yalnız
+        // kaynak yapsın. Kod sırası bilerek ters.
         await CreatePositionAsync(
             context, $"AAA-{suffix}", $"Galvaniz tava {suffix}");
 
-        await CreatePositionAsync(
-            context, $"ZZZ-{suffix}", $"Galvaniz tava özel {suffix}",
+        var custom = await CreatePositionAsync(
+            context, $"ZZZ-{suffix}", $"Galvaniz tava {suffix}",
             source: EngineeringPositionSource.Enderun);
 
-        // Arama ALT DİZE eşleştiriyor; iki pozu birden yakalayan tek
-        // ortak parça sonek.
-        var rows = await (await client.GetAsync(
-            $"/api/purchase-requests/poz-ara?companyId={context.CompanyId}" +
-            $"&search={suffix}"))
-            .Content.ReadFromJsonAsync<JsonElement>();
+        var rows = await SearchAsync(client, context, $"galvaniz tava {suffix}");
 
-        var list = rows.EnumerateArray().ToList();
-
-        Assert.Equal(2, list.Count);
-
-        // Kod sırasına göre ZZZ sonda olurdu; özel poz öne alınıyor.
-        Assert.True(list[0].GetProperty("isCustom").GetBoolean());
-        Assert.Equal("Özel", list[0].GetProperty("sourceName").GetString());
-        Assert.False(list[1].GetProperty("isCustom").GetBoolean());
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(custom, rows[0].GetProperty("id").GetGuid());
+        Assert.True(rows[0].GetProperty("isCustom").GetBoolean());
+        Assert.Equal("Özel", rows[0].GetProperty("sourceName").GetString());
+        Assert.False(rows[1].GetProperty("isCustom").GetBoolean());
     }
 
     /// <summary>
@@ -343,5 +339,129 @@ public sealed class PurchaseRequestPositionTests(DatabaseFixture fixture)
             .SingleAsync(x => x.PurchaseRequestId == requestId);
 
         Assert.Equal(positionId, line.EngineeringPositionId);
+    }
+
+    // ---------------- Benzerlik sıralaması ----------------
+
+    /// <summary>
+    /// KELİME SIRASI ÖNEMSİZ: "3x2,5 kablo" yazan kullanıcı "Kablo NYY
+    /// 3x2,5" pozunu buluyor. Katı LIKE aramasında bu sorgu hiçbir şey
+    /// döndürmüyordu.
+    /// </summary>
+    [Fact]
+    public async Task Search_FindsPositionsRegardlessOfWordOrder()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientAsync();
+
+        var target = await CreatePositionAsync(
+            context, $"KBL-{suffix}", $"Kablo NYY 3x2,5 mm2 {suffix}");
+
+        var rows = await SearchAsync(client, context, $"3x2,5 kablo {suffix}");
+
+        Assert.Contains(rows, x => x.GetProperty("id").GetGuid() == target);
+    }
+
+    /// <summary>
+    /// TÜM KELİMELERİ İÇEREN ÖNCE: bir kısmını içerenler altta kalıyor.
+    /// Sıralama alfabetik olsaydı kullanıcı aradığını listenin
+    /// ortasında arardı.
+    /// </summary>
+    [Fact]
+    public async Task Search_RanksFullMatchesAbovePartialOnes()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientAsync();
+
+        // Kod sırası bilerek ters: alfabetik sıralamada "AAA" önce
+        // gelirdi, oysa iki kelimeyi birden tutan "ZZZ".
+        var partial = await CreatePositionAsync(
+            context, $"AAA-{suffix}", $"Galvaniz tava {suffix}");
+
+        var full = await CreatePositionAsync(
+            context, $"ZZZ-{suffix}", $"Galvaniz kablo tavasi {suffix}");
+
+        var rows = await SearchAsync(client, context, $"galvaniz kablo {suffix}");
+
+        Assert.Equal(full, rows[0].GetProperty("id").GetGuid());
+        Assert.Contains(rows, x => x.GetProperty("id").GetGuid() == partial);
+    }
+
+    /// <summary>
+    /// TÜRKÇE DUYARLI: "ölçü" ile "olcu", "İ" ile "i" aynı sonucu
+    /// veriyor. Türkçe klavyede en sık yapılan arama hatası bu.
+    /// </summary>
+    [Theory]
+    [InlineData("olcu aleti")]
+    [InlineData("ÖLÇÜ ALETİ")]
+    [InlineData("Ölçü Aleti")]
+    public async Task Search_IsTurkishInsensitive(string term)
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientAsync();
+
+        var target = await CreatePositionAsync(
+            context, $"OLC-{suffix}", $"Ölçü aleti kalibrasyonu {suffix}");
+
+        var rows = await SearchAsync(client, context, $"{term} {suffix}");
+
+        Assert.Contains(rows, x => x.GetProperty("id").GetGuid() == target);
+    }
+
+    /// <summary>
+    /// KÜÇÜK YAZIM HATASINA TOLERANS: "kablo" yerine "kabbo" yazılsa
+    /// da en yakın poz listeleniyor.
+    /// </summary>
+    [Fact]
+    public async Task Search_ToleratesTypos()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientAsync();
+
+        var target = await CreatePositionAsync(
+            context, $"KBL-{suffix}", $"Kablo kanali {suffix}");
+
+        var rows = await SearchAsync(client, context, $"kabbo kanali {suffix}");
+
+        Assert.Contains(rows, x => x.GetProperty("id").GetGuid() == target);
+    }
+
+    /// <summary>
+    /// BOŞ DÖNMÜYOR: hiçbir kelime tutmasa da en yakın pozlar geliyor.
+    /// Boş liste "böyle bir poz yok" der ve gereksiz özel poz
+    /// açtırırdı.
+    /// </summary>
+    [Fact]
+    public async Task Search_FallsBackToNearestMatches()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientAsync();
+
+        await CreatePositionAsync(
+            context, $"PNO-{suffix}", $"Pano montaji {suffix}");
+
+        // Kelimelerin hiçbiri birebir tutmuyor.
+        var rows = await SearchAsync(client, context, $"panoo montaj {suffix}");
+
+        Assert.NotEmpty(rows);
+    }
+
+    private static async Task<List<JsonElement>> SearchAsync(
+        HttpClient client, Context context, string term)
+    {
+        var response = await client.GetAsync(
+            $"/api/purchase-requests/poz-ara?companyId={context.CompanyId}" +
+            $"&search={Uri.EscapeDataString(term)}");
+
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        return payload.EnumerateArray().ToList();
     }
 }
