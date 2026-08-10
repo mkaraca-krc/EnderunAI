@@ -517,7 +517,7 @@ public sealed class AttendanceSheetController(
         return new SheetContext(
             CompanyWorkWeek: settings is { WorkWeek: > 0 } ? settings.WorkWeek : null,
             HeadOfficeWorkWeek: settings?.HeadOfficeWorkWeek,
-            DailyWorkHours: settings?.DailyWorkHours ?? 7.5m,
+            DailyWorkHours: settings?.DailyWorkHours ?? 8m,
             HolidayCalendarVerified: calendar?.VerifiedAtUtc is not null,
             Holidays: holidays);
     }

@@ -1570,7 +1570,7 @@ public sealed class HrApprovalService(
             ? card.DailyRate
             : decimal.Round(monthlyGross / 30m, 2);
 
-        var hours = dailyWorkHours > 0m ? dailyWorkHours : 7.5m;
+        var hours = dailyWorkHours > 0m ? dailyWorkHours : 8m;
 
         var hourlyRate = card.HourlyRate > 0m
             ? card.HourlyRate
@@ -1586,8 +1586,8 @@ public sealed class HrApprovalService(
     }
 
     /// <summary>
-    /// Günlük normal çalışma süresi. Ayar yoksa yasal haftalık 45 saatin
-    /// 6 güne bölümü olan 7,5 saat kullanılır.
+    /// Günlük normal çalışma süresi. Ayar yoksa şirketin uyguladığı
+    /// 8 saat kullanılır.
     /// </summary>
     private async Task<decimal> LoadDailyWorkHoursAsync(
         Guid companyId, int year, CancellationToken cancellationToken)
@@ -1598,7 +1598,7 @@ public sealed class HrApprovalService(
             .Select(x => (decimal?)x.DailyWorkHours)
             .SingleOrDefaultAsync(cancellationToken);
 
-        return hours is > 0m ? hours.Value : 7.5m;
+        return hours is > 0m ? hours.Value : 8m;
     }
 
     /// <summary>

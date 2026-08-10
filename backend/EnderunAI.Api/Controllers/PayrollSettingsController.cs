@@ -87,7 +87,7 @@ public sealed class PayrollSettingsController(AppDbContext db) : ControllerBase
             request.MinimumWageStampTaxExemptionEnabled;
         // Sıfır/negatif saat saatlik ücreti bozar; yasal varsayılana düşülür.
         settings.DailyWorkHours =
-            request.DailyWorkHours > 0m ? request.DailyWorkHours : 7.5m;
+            request.DailyWorkHours > 0m ? request.DailyWorkHours : 8m;
         // Negatif tavan anlamsız; boş bırakmak "tanımlanmadı" demektir
         // ve varsayılana düşmez.
         settings.MealSgkExemptionDailyCap = NonNegative(request.MealSgkExemptionDailyCap);

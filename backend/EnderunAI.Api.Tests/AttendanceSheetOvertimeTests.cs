@@ -654,6 +654,41 @@ public sealed class AttendanceSheetOvertimeTests(DatabaseFixture fixture)
         Assert.Single(panel.GetProperty("lines").EnumerateArray());
     }
 
+    /// <summary>
+    /// Saatlik ücretin böleni ŞİRKET PARAMETRESİNDEN geliyor, kodda
+    /// sabit değil: günlük çalışma süresi 8 saat olan şirkette
+    /// saatlik = taban / (30 × 8).
+    ///
+    /// Şirket yevmiyeyi 8 saat üzerinden buluyor; bölen 7,5 kalsaydı
+    /// saatlik ücret ve mesai tutarı %6,7 yüksek çıkardı.
+    ///
+    /// Taban 54.000 → 54.000 / 240 = 225,00
+    /// 3 saat × 225 × 1,5 = 1.012,50
+    /// </summary>
+    [Fact]
+    public async Task HourlyRate_FollowsTheCompanyDailyWorkHours()
+    {
+        var (context, day) = await CreateCurrentMonthContextAsync(
+            dailyWorkHours: 8m);
+
+        var client = await ClientAsync();
+
+        await SaveAsync(client, context.CompanyId, context.PersonnelId,
+            overtime: 3m, date: day);
+
+        var panel = await LoadPanelAsync(client, context.PersonnelId, day.Year);
+        var takeHome = panel.GetProperty("takeHome");
+
+        Assert.Equal(8m, takeHome.GetProperty("dailyWorkHours").GetDecimal());
+        Assert.Equal(225m, takeHome.GetProperty("hourlyRate").GetDecimal());
+
+        Assert.Equal(1_012.50m,
+            panel.GetProperty("currentMonth").GetProperty("amount").GetDecimal());
+
+        Assert.Equal(1_012.50m,
+            takeHome.GetProperty("overtimeExtra").GetDecimal());
+    }
+
     private async Task<JsonElement> LoadPanelAsync(
         HttpClient client, Guid personnelId, int year) =>
         await (await client.GetAsync(
@@ -665,7 +700,7 @@ public sealed class AttendanceSheetOvertimeTests(DatabaseFixture fixture)
     /// içinde bulunulan ayı kullanıyor.
     /// </summary>
     private async Task<(Context Context, DateTime Day)>
-        CreateCurrentMonthContextAsync()
+        CreateCurrentMonthContextAsync(decimal dailyWorkHours = 7.5m)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var now = DateTime.UtcNow;
@@ -691,7 +726,7 @@ public sealed class AttendanceSheetOvertimeTests(DatabaseFixture fixture)
             MinimumWageNet = 28_075m,
             SgkBaseFloor = 33_030m,
             SgkBaseCeiling = 247_725m,
-            DailyWorkHours = 7.5m
+            DailyWorkHours = dailyWorkHours
         });
 
         db.PersonnelExtraPayments.Add(new PersonnelExtraPayment

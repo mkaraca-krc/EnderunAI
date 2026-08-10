@@ -50,8 +50,13 @@ public sealed class PersonnelOvertimeController(
     /// <summary>Aylık tutarın güne bölünmesi — bordroyla aynı bölen.</summary>
     private const decimal MonthlyToDailyDivisor = 30m;
 
-    /// <summary>Ayar yoksa yasal haftalık 45 saatin 6 güne bölümü.</summary>
-    private const decimal DefaultDailyWorkHours = 7.5m;
+    /// <summary>
+    /// Ayar yoksa şirketin uyguladığı günlük çalışma süresi: 8 saat.
+    /// Yevmiye ve saatlik ücret bu bölenden çıkıyor; merkez ve şantiye
+    /// için AYNI — ayrım çalışma HAFTASINDA (cumartesi), günlük sürede
+    /// değil.
+    /// </summary>
+    private const decimal DefaultDailyWorkHours = 8m;
 
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]

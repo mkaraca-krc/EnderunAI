@@ -55,8 +55,8 @@ public sealed class ActualDailyWageService(
     /// <summary>Aylık tutarın günlüğe çevrilmesinde kullanılan bölen.</summary>
     private const decimal MonthlyToDailyDivisor = 30m;
 
-    /// <summary>Bordro ayarı yoksa yasal haftalık 45 saatin 6 güne bölümü.</summary>
-    private const decimal DefaultDailyWorkHours = 7.5m;
+    /// <summary>Bordro ayarı yoksa şirketin günlük çalışma süresi: 8 saat.</summary>
+    private const decimal DefaultDailyWorkHours = 8m;
 
     /// <summary>
     /// Personelin verilen tarihteki gerçek yevmiyesi.

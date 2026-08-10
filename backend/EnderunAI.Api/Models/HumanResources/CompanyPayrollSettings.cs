@@ -121,11 +121,13 @@ public sealed class CompanyPayrollSettings : BaseEntity
     /// Günlük normal çalışma süresi (saat). Saatlik ücret buradan
     /// türetilir: saatlik = aylık ÷ 30 ÷ bu değer.
     ///
-    /// Daha önce 225 (30 × 7,5) olarak koda iki ayrı yere gömülüydü;
-    /// biri güncellenip diğeri unutulabilirdi. Tek parametreye
-    /// bağlandı.
+    /// Koda gömülü değil: tek parametre. Merkez ve şantiye için AYNI
+    /// değer geçerli — ikisi arasındaki fark çalışma HAFTASINDA
+    /// (cumartesi çalışılıyor mu), günlük sürede değil.
+    ///
+    /// Varsayılan 8: şirket yevmiyeyi 8 saat üzerinden buluyor.
     /// </summary>
-    public decimal DailyWorkHours { get; set; } = 7.5m;
+    public decimal DailyWorkHours { get; set; } = 8m;
 
     // --- Çalışma haftası ---
 
