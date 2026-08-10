@@ -1,4 +1,5 @@
 using EnderunAI.Api.Data.HumanResources;
+using EnderunAI.Api.Formatting;
 using EnderunAI.Api.Services.HumanResources;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
@@ -91,6 +92,72 @@ public sealed class PersonnelDutiesController(
         message = "Harcırah ve masraf tutarlarını yalnızca ek ödeme " +
                   "yetkisi olan kullanıcı girebilir."
     });
+
+    /// <summary>
+    /// Mahsup avansını güncel farka çeker.
+    ///
+    /// Harcırah ya da fiş sonradan düzeltilince fark değişir; avans
+    /// eski farkta kalırsa personelden yanlış tutar kesilmeye devam
+    /// eder. Kural TEK YERDE: hem harcırah düzeltmesi hem masraf/fiş
+    /// düzeltmesi buradan geçiyor — biri güncelleyip diğeri
+    /// güncellemeseydi hangi ucun kullanıldığına göre farklı sonuç
+    /// çıkardı.
+    ///
+    /// KESİLMİŞİN ALTINA İNİLMEZ: bordro bu avanstan zaten kesmişse
+    /// tutarı kesilenin altına çekmek, personele fazla kesilmiş parayı
+    /// iade etmek anlamına gelir; iade akışı yok, o yüzden reddediliyor.
+    /// Hata mesajı ne kadarın kesildiğini söyler.
+    /// </summary>
+    private async Task<string?> SyncSettlementAdvanceAsync(
+        PersonnelDuty duty, CancellationToken cancellationToken)
+    {
+        // Karar yoksa ya da "gider kabul edildi" ise ortada avans yok.
+        if (duty.SettlementAdvanceId is not Guid advanceId)
+            return null;
+
+        var advance = await hrDb.AdvanceRequests
+            .SingleOrDefaultAsync(x => x.Id == advanceId, cancellationToken);
+
+        if (advance is null)
+            return null;
+
+        var gap = duty.SettlementGap;
+
+        if (advance.ApprovedAmount == gap)
+            return null;
+
+        var alreadyDeducted = await hrDb.AdvanceDeductions
+            .Where(x => x.AdvanceRequestId == advanceId)
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+
+        if (gap < alreadyDeducted)
+        {
+            return $"Bu görevin harcırah mahsubundan personele zaten " +
+                   $"{TurkishFormat.Amount(alreadyDeducted)} TL kesilmiş; fark " +
+                   $"bunun altına ({TurkishFormat.Amount(gap)} TL) çekilemez. " +
+                   $"Fazla kesilen tutarın iadesi ayrı bir işlemdir.";
+        }
+
+        var previous = advance.ApprovedAmount;
+
+        advance.RequestedAmount = gap;
+        advance.ApprovedAmount = gap;
+
+        // Fark sıfıra indiyse kesilecek bir şey kalmadı: avans iptale
+        // çekiliyor ki bordro onu hiç görmesin.
+        advance.Status = gap > 0m
+            ? Models.HumanResources.HrApprovalStatus.Paid
+            : Models.HumanResources.HrApprovalStatus.Cancelled;
+
+        advance.ApprovalNote =
+            $"Harcırah mahsubu düzeltildi: {TurkishFormat.Amount(previous)} → " +
+            $"{TurkishFormat.Amount(gap)} TL ({DateTime.UtcNow:dd.MM.yyyy}).";
+
+        advance.UpdatedAtUtc = DateTime.UtcNow;
+        advance.UpdatedByUserId = currentUser.UserId;
+
+        return null;
+    }
 
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
@@ -492,15 +559,6 @@ public sealed class PersonnelDutiesController(
             });
         }
 
-        if (duty.SettlementDecision is not null)
-        {
-            return Conflict(new
-            {
-                message = "Mahsubu karara bağlanmış görevin harcırahı " +
-                          "değiştirilemez; kapanmış hesabı geriye dönük açardı."
-            });
-        }
-
         var previous = duty.DailyAllowance;
 
         duty.DailyAllowance = request.DailyAllowance;
@@ -508,11 +566,21 @@ public sealed class PersonnelDutiesController(
         duty.AllowanceRevisedByUserId = currentUser.UserId;
         duty.AllowanceRevisionNote = note;
 
+        // Mahsup zaten karara bağlanmışsa avans da yeni farka çekilir;
+        // eski farkta kalsaydı personelden yanlış tutar kesilirdi.
+        // Hata dönerse HİÇBİR ŞEY kaydedilmez: harcırah da avans da
+        // eski halinde kalır.
+        var advanceError = await SyncSettlementAdvanceAsync(duty, cancellationToken);
+
+        if (advanceError is not null)
+            return Conflict(new { message = advanceError });
+
         // Onaylı görevde defterdeki harcırah satırı da yeni tutara
         // çekilir; satır güncellenir, ikincisi açılmaz.
         await expensePosting.PostAsync(duty, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
+        await hrDb.SaveChangesAsync(cancellationToken);
 
         return Ok(new
         {
@@ -522,7 +590,8 @@ public sealed class PersonnelDutiesController(
             dailyAllowance = duty.DailyAllowance,
             totalAllowance = duty.TotalAllowance,
             settlementGap = duty.SettlementGap,
-            settlementPending = duty.SettlementPending
+            settlementPending = duty.SettlementPending,
+            settlementAdvanceUpdated = duty.SettlementAdvanceId is not null
         });
     }
 
@@ -650,12 +719,21 @@ public sealed class PersonnelDutiesController(
         duty.AccommodationCost = request.AccommodationCost;
         duty.ReceiptAmount = request.ReceiptAmount;
 
+        // Fiş sonradan düzeltilirse fark da değişir; mahsup karara
+        // bağlanmışsa avans yeni farka çekilir. Harcırah düzeltmesiyle
+        // AYNI kuraldan geçiyor.
+        var advanceError = await SyncSettlementAdvanceAsync(duty, cancellationToken);
+
+        if (advanceError is not null)
+            return Conflict(new { message = advanceError });
+
         // Onaylı görevde defter güncellenir; onaysızda hiçbir şey
         // yansımaz. Yeniden yansıtma satırı günceller, ikincisini
         // açmaz.
         await expensePosting.PostAsync(duty, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
+        await hrDb.SaveChangesAsync(cancellationToken);
 
         return Ok(new
         {

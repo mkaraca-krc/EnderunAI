@@ -713,13 +713,57 @@ public sealed class DutyExpenseSettlementTests(DatabaseFixture fixture)
             new { dailyAllowance = 750m, note = "  " })).StatusCode);
     }
 
+    // ---------------- Mahsup sonrası düzeltme ----------------
+
     /// <summary>
-    /// Mahsubu karara bağlanmış görevin harcırahı değişmiyor: kapanmış
-    /// bir hesabı geriye dönük açardı — avans zaten eski farka göre
-    /// açılmıştı.
+    /// Kesinti açıldıktan sonra harcırah düzeltilirse AVANS DA yeni
+    /// farka çekiliyor. Eski farkta kalsaydı personelden yanlış tutar
+    /// kesilmeye devam ederdi.
     /// </summary>
     [Fact]
-    public async Task AfterSettlement_AllowanceIsFrozen()
+    public async Task AfterSettlement_RevisingAllowance_MovesTheAdvanceToo()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions);
+
+        await SaveExpenseAsync(client, dutyId, receipt: 3_200m);
+
+        // 5.000 − 3.200 = 1.800
+        await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/mahsup",
+            new { decision = 0, note = "Fiş eksik", installmentCount = 2 });
+
+        // Günlük 1.400 → toplam 7.000 → yeni fark 3.800
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/harcirah",
+            new { dailyAllowance = 1_400m, note = "Tarife düzeltmesi" }))
+            .StatusCode);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var hrDb = scope.ServiceProvider.GetRequiredService<HrDbContext>();
+
+        var advance = await hrDb.AdvanceRequests.AsNoTracking()
+            .SingleAsync(x => x.PersonnelId == context.PersonnelId);
+
+        Assert.Equal(3_800m, advance.ApprovedAmount);
+        Assert.Equal(3_800m, advance.RequestedAmount);
+        Assert.Equal(HrApprovalStatus.Paid, advance.Status);
+        Assert.Contains("düzeltildi", advance.ApprovalNote ?? "");
+
+        // İkinci avans açılmadı: aynı kayıt izleniyor.
+        Assert.Equal(1, await hrDb.AdvanceRequests
+            .CountAsync(x => x.PersonnelId == context.PersonnelId));
+    }
+
+    /// <summary>
+    /// Fark sıfıra inerse kesilecek bir şey kalmıyor: avans iptale
+    /// çekiliyor ki bordro onu hiç görmesin.
+    /// </summary>
+    [Fact]
+    public async Task AfterSettlement_ZeroGap_CancelsTheAdvance()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var context = await CreateContextAsync(suffix);
@@ -731,19 +775,122 @@ public sealed class DutyExpenseSettlementTests(DatabaseFixture fixture)
 
         await client.PostAsJsonAsync(
             $"/api/hr/gorevlendirmeler/{dutyId}/mahsup",
-            new { decision = 1, note = "Gider kabul edildi" });
+            new { decision = 0, note = "Fiş eksik" });
 
-        var response = await client.PostAsJsonAsync(
+        // Günlük 600 → toplam 3.000, fiş 3.200 → fark yok
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
             $"/api/hr/gorevlendirmeler/{dutyId}/harcirah",
-            new { dailyAllowance = 400m, note = "Düzeltme denemesi" });
-
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            new { dailyAllowance = 600m, note = "Şehir içi göreve çevrildi" }))
+            .StatusCode);
 
         using var scope = fixture.Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var hrDb = scope.ServiceProvider.GetRequiredService<HrDbContext>();
 
+        var advance = await hrDb.AdvanceRequests.AsNoTracking()
+            .SingleAsync(x => x.PersonnelId == context.PersonnelId);
+
+        Assert.Equal(0m, advance.ApprovedAmount);
+        Assert.Equal(HrApprovalStatus.Cancelled, advance.Status);
+    }
+
+    /// <summary>
+    /// Fişin sonradan düzeltilmesi de aynı kuraldan geçiyor: avans
+    /// farkı izliyor. İki uç ayrı davransaydı sonuç hangi ucun
+    /// kullanıldığına bağlı olurdu.
+    /// </summary>
+    [Fact]
+    public async Task AfterSettlement_CorrectingTheReceipt_MovesTheAdvanceToo()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions);
+
+        await SaveExpenseAsync(client, dutyId, receipt: 3_200m);
+
+        await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/mahsup",
+            new { decision = 0, note = "Fiş eksik" });
+
+        // Eksik fiş sonradan geldi: 4.500 → fark 500
+        Assert.Equal(HttpStatusCode.OK,
+            (await SaveExpenseAsync(client, dutyId, receipt: 4_500m)).StatusCode);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var hrDb = scope.ServiceProvider.GetRequiredService<HrDbContext>();
+
+        Assert.Equal(500m, (await hrDb.AdvanceRequests.AsNoTracking()
+            .SingleAsync(x => x.PersonnelId == context.PersonnelId))
+            .ApprovedAmount);
+    }
+
+    /// <summary>
+    /// KESİLMİŞİN ALTINA İNİLMEZ: bordro bu avanstan zaten kestiyse
+    /// tutarı kesilenin altına çekmek, fazla kesilen parayı iade etmek
+    /// demektir; iade akışı yok. Reddediliyor ve HİÇBİR ŞEY
+    /// kaydedilmiyor — harcırah da avans da eski halinde kalıyor.
+    /// </summary>
+    [Fact]
+    public async Task AfterDeduction_CannotDropBelowWhatWasAlreadyTaken()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions);
+
+        await SaveExpenseAsync(client, dutyId, receipt: 3_200m);
+
+        await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/mahsup",
+            new { decision = 0, note = "Fiş eksik", installmentCount = 2 });
+
+        Guid advanceId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var hrDb = scope.ServiceProvider.GetRequiredService<HrDbContext>();
+
+            var advance = await hrDb.AdvanceRequests
+                .SingleAsync(x => x.PersonnelId == context.PersonnelId);
+
+            advanceId = advance.Id;
+
+            // Bordro ilk taksiti kesmiş: 900 TL.
+            hrDb.AdvanceDeductions.Add(new HrAdvanceDeduction
+            {
+                CompanyId = advance.CompanyId,
+                AdvanceRequestId = advance.Id,
+                PersonnelId = advance.PersonnelId,
+                Year = 2026,
+                Month = 7,
+                Amount = 900m,
+                ScheduledAmount = 900m
+            });
+
+            await hrDb.SaveChangesAsync();
+        }
+
+        // Günlük 700 → toplam 3.500, fiş 3.200 → fark 300 < kesilen 900
+        var response = await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/harcirah",
+            new { dailyAllowance = 700m, note = "Aşırı düzeltme" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("900",
+            await response.Content.ReadAsStringAsync());
+
+        using var check = fixture.Factory.Services.CreateScope();
+        var db = check.ServiceProvider.GetRequiredService<AppDbContext>();
+        var hr = check.ServiceProvider.GetRequiredService<HrDbContext>();
+
+        // Ne harcırah ne avans değişti.
         Assert.Equal(DailyAllowance, (await db.PersonnelDuties.AsNoTracking()
             .SingleAsync(x => x.Id == dutyId)).DailyAllowance);
+
+        Assert.Equal(1_800m, (await hr.AdvanceRequests.AsNoTracking()
+            .SingleAsync(x => x.Id == advanceId)).ApprovedAmount);
     }
 
     // ---------------- Detay ucu (ekranın beslediği yer) ----------------

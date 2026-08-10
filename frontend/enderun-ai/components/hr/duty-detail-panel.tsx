@@ -355,10 +355,12 @@ export default function DutyDetailPanel({
   // vermiyor, uçtaki kuralı yansıtıyor.
   const canWriteAmounts = canEdit && duty.canWriteAmounts;
 
-  // Mahsup karara bağlandıysa harcırah donar; kapanmış hesabı geriye
-  // dönük açmamak için.
-  const allowanceFrozen =
+  // Mahsup karara bağlanmış olsa da harcırah düzeltilebilir; kesinti
+  // açıldıysa avans da yeni farka çekilir.
+  const settlementDecided =
     duty.settlementDecision !== null && duty.settlementDecision !== undefined;
+
+  const advanceOpen = settlementDecided && duty.settlementDecision === 0;
   const outcomeDecided = duty.targetProjectSurveyOutcome !== 0;
   const projectInSurvey = duty.targetProjectStatus === 0;
 
@@ -449,25 +451,24 @@ export default function DutyDetailPanel({
                   Günlük harcırah: {money(duty.dailyAllowance)}
                 </h4>
                 <p className="mt-1 text-xs text-slate-500">
-                  {allowanceFrozen
-                    ? "Mahsup karara bağlandığı için harcırah donduruldu; " +
-                      "geriye dönük değişse kapanmış hesabı açardı."
+                  {advanceOpen
+                    ? "Düzeltme iz bırakır ve açılmış harcırah mahsubu " +
+                      "avansı da yeni farka çekilir. Bordro bu avanstan " +
+                      "kestiyse tutar kesilenin altına indirilemez."
                     : "Düzeltme iz bırakır: kim, ne zaman, hangi gerekçeyle."}
                 </p>
               </div>
 
-              {!allowanceFrozen && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllowanceForm((x) => !x)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
-                >
-                  {showAllowanceForm ? "Vazgeç" : "Harcırahı Düzelt"}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowAllowanceForm((x) => !x)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
+              >
+                {showAllowanceForm ? "Vazgeç" : "Harcırahı Düzelt"}
+              </button>
             </div>
 
-            {showAllowanceForm && !allowanceFrozen && (
+            {showAllowanceForm && (
               <form
                 onSubmit={reviseAllowance}
                 className="mt-3 grid gap-3 md:grid-cols-[1fr_2fr_auto]"
@@ -638,6 +639,12 @@ export default function DutyDetailPanel({
                   : "Şirket gideri kabul edildi"}
               </strong>{" "}
               · {formatDate(duty.settlementAtUtc)} · {duty.settlementNote}
+              {advanceOpen && (
+                <span className="mt-2 block text-xs text-slate-500">
+                  Harcırah ya da fiş düzeltilirse avans tutarı da farkı
+                  izler; fark sıfıra inerse avans iptale çekilir.
+                </span>
+              )}
             </p>
           )}
       </div>
