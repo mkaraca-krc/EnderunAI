@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { Input, Select } from "@/components/ui";
 import { branchService, type BranchListItem } from "@/services/branch.service";
 import {
   cashAccountService,
@@ -1012,46 +1013,91 @@ export default function ChequeRegisterPage() {
         <div className="erp-table-header">
           <h2>Çek Listesi</h2>
 
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <select
-              value={String(direction)}
-              onChange={(e) => {
-                setDirection(Number(e.target.value));
-                setStatusFilter("");
-                setDetail(null);
-              }}
-            >
-              <option value={String(ChequeDirection.Received)}>Alınan çekler</option>
-              <option value={String(ChequeDirection.Issued)}>Verilen çekler</option>
-            </select>
+          {/* Filtre çubuğu uygulamanın ORTAK bileşenleriyle: Select ve
+              Input başka ekranlarda da kullanılan aynı sınıfları
+              taşıyor (h-10, rounded-lg, marka turkuazı odak halkası).
+              Buraya özel stil yazmak çek ekranını sistemin dışına
+              düşürürdü. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-44">
+              <Select
+                aria-label="Çek yönü"
+                value={String(direction)}
+                onChange={(e) => {
+                  setDirection(Number(e.target.value));
+                  setStatusFilter("");
+                  setDetail(null);
+                }}
+                options={[
+                  {
+                    value: String(ChequeDirection.Received),
+                    label: "Alınan çekler",
+                  },
+                  {
+                    value: String(ChequeDirection.Issued),
+                    label: "Verilen çekler",
+                  },
+                ]}
+              />
+            </div>
 
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">Tüm durumlar</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={String(status)}>
-                  {CHEQUE_STATUS_LABELS[status]}
-                </option>
-              ))}
-            </select>
+            <div className="w-44">
+              <Select
+                aria-label="Çek durumu"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                options={[
+                  { value: "", label: "Tüm durumlar" },
+                  ...statusOptions.map((status) => ({
+                    value: String(status),
+                    label: CHEQUE_STATUS_LABELS[status],
+                  })),
+                ]}
+              />
+            </div>
 
-            <select
-              value={projectFilter}
-              onChange={(e) => setProjectFilter(e.target.value)}
-            >
-              <option value="">Tüm projeler</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.code} — {project.name}
-                </option>
-              ))}
-            </select>
+            <div className="w-56">
+              <Select
+                aria-label="Proje"
+                value={projectFilter}
+                onChange={(e) => setProjectFilter(e.target.value)}
+                options={[
+                  { value: "", label: "Tüm projeler" },
+                  ...projects.map((project) => ({
+                    value: project.id,
+                    label: `${project.code} — ${project.name}`,
+                  })),
+                ]}
+              />
+            </div>
 
-            <input
-              type="text"
-              placeholder="Çek no / banka / keşideci ara..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            {/* Arama ikonu kutunun İÇİNDE: Input'un kendi stili
+                korunuyor, yalnız sol boşluk açılıyor. */}
+            <div className="relative w-64">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5" />
+                </svg>
+              </span>
+
+              <Input
+                aria-label="Çek ara"
+                className="pl-9"
+                placeholder="Çek no / banka / keşideci ara..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
@@ -1082,10 +1128,17 @@ export default function ChequeRegisterPage() {
                     {/* AY BAŞLIĞI: proje filtresiyle birlikte
                         "bu projeye bu ay ne kadar" sorusunu
                         cevaplıyor. */}
-                    <tr className="erp-group-row">
-                      <td colSpan={5} style={{ fontWeight: 700 }}>
+                    {/* Ay bandı: marka turkuazının en açık tonu
+                        (brand-50/100). Bağırmıyor ama detay
+                        satırlarından net ayrışıyor; tablo yine aynı
+                        ızgarada duruyor. */}
+                    <tr className="bg-brand-50">
+                      <td
+                        colSpan={5}
+                        className="border-t-2 border-brand-200 !py-2 font-bold text-brand-900"
+                      >
                         {group.label}
-                        <small style={{ display: "block", color: "#64748b" }}>
+                        <small className="!mt-0.5 block font-normal text-brand-800">
                           {group.rows.length} çek
                           {projectFilter
                             ? ` · ${
@@ -1095,10 +1148,10 @@ export default function ChequeRegisterPage() {
                             : ""}
                         </small>
                       </td>
-                      <td style={{ textAlign: "right", fontWeight: 700 }}>
+                      <td className="border-t-2 border-brand-200 !py-2 text-right font-bold tabular-nums text-brand-900">
                         {money.format(group.total)}
                       </td>
-                      <td />
+                      <td className="border-t-2 border-brand-200 !py-2" />
                     </tr>
 
                     {group.rows.map((item) => (
