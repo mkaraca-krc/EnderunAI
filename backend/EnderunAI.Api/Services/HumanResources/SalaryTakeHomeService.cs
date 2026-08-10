@@ -98,6 +98,37 @@ public sealed class SalaryTakeHomeService(AppDbContext appDb)
     /// esaslıda karttaki net doluysa o, boşsa brütten ocak esasıyla
     /// hesaplanır. Parametre yoksa null — uydurulmaz.
     /// </summary>
+    /// <summary>Aylık tutarın güne bölünmesi — bordroyla aynı bölen.</summary>
+    public const decimal MonthlyToDailyDivisor = 30m;
+
+    /// <summary>Bordro ayarı yoksa şirketin günlük çalışma süresi.</summary>
+    public const decimal DefaultDailyWorkHours = 8m;
+
+    /// <summary>
+    /// MESAİ SAAT ÜCRETİ — tek kaynak.
+    ///
+    /// Taban ele geçen (resmî net + MANUEL elden) ÷ (30 × günlük
+    /// çalışma saati). Mesai tabana geri beslenmez: mesai tutarı bu
+    /// saatlikten türediği için tabana eklenirse kendi kendini
+    /// büyütürdü.
+    ///
+    /// Personel kartındaki mesai paneli ve nakit akış projeksiyonu
+    /// AYNI formülü kullanmak zorunda. Kopyalansaydı ikisi zamanla
+    /// ayrışır ve aynı personel için iki ekran iki farklı rakam
+    /// gösterirdi.
+    /// </summary>
+    public static decimal? ResolveOvertimeHourlyRate(
+        decimal? officialNet, decimal? manualExtraMonthly, decimal? dailyWorkHours)
+    {
+        var hours = dailyWorkHours is > 0m ? dailyWorkHours.Value : DefaultDailyWorkHours;
+        var baseTakeHome = (officialNet ?? 0m) + (manualExtraMonthly ?? 0m);
+
+        if (baseTakeHome <= 0m || hours <= 0m)
+            return null;
+
+        return decimal.Round(baseTakeHome / (MonthlyToDailyDivisor * hours), 2);
+    }
+
     public static decimal? ResolveOfficialNet(
         HrSalaryDefinition item, PayrollParameters? parameters)
     {

@@ -228,11 +228,12 @@ public sealed class PersonnelOvertimeController(
                 // Bölen bordrodaki konvansiyonun aynısı.
                 var baseTakeHome = (officialNet ?? 0m) + manualExtra.Value;
 
-                if (baseTakeHome > 0m && dailyWorkHours > 0m)
-                {
-                    hourlyRate = decimal.Round(
-                        baseTakeHome / (MonthlyToDailyDivisor * dailyWorkHours.Value), 2);
-                }
+                // Formül ORTAK YARDIMCIDAN: nakit akış projeksiyonu da
+                // aynı hesabı yapıyor. Satır içinde kalsaydı ikisi
+                // zamanla ayrışır ve aynı personel için iki ekran iki
+                // farklı rakam gösterirdi.
+                hourlyRate = SalaryTakeHomeService.ResolveOvertimeHourlyRate(
+                    officialNet, manualExtra, dailyWorkHours);
             }
         }
 
