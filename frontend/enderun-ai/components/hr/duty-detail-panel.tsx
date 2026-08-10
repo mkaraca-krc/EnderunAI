@@ -93,6 +93,10 @@ export default function DutyDetailPanel({
 
   const [reportForm, setReportForm] = useState<ReportForm>(emptyReport);
 
+  const [allowanceValue, setAllowanceValue] = useState("0");
+  const [allowanceNote, setAllowanceNote] = useState("");
+  const [showAllowanceForm, setShowAllowanceForm] = useState(false);
+
   const [settlementNote, setSettlementNote] = useState("");
   const [installments, setInstallments] = useState("1");
   const [outcomeNote, setOutcomeNote] = useState("");
@@ -128,6 +132,8 @@ export default function DutyDetailPanel({
           accommodationCost: String(detail.accommodationCost ?? 0),
           receiptAmount: String(detail.receiptAmount ?? 0),
         });
+
+        setAllowanceValue(String(detail.dailyAllowance ?? 0));
 
         setReportForm(
           surveyReport
@@ -215,6 +221,33 @@ export default function DutyDetailPanel({
       });
 
       return "Görev masrafı kaydedildi.";
+    });
+  }
+
+  function reviseAllowance(event: FormEvent) {
+    event.preventDefault();
+
+    run("allowance", async () => {
+      const value = Number(allowanceValue);
+
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error("Günlük harcırah negatif olamaz.");
+      }
+
+      if (!allowanceNote.trim()) {
+        throw new Error("Düzeltme gerekçesi zorunludur.");
+      }
+
+      await personnelDutyService.reviseAllowance(
+        dutyId,
+        value,
+        allowanceNote.trim()
+      );
+
+      setAllowanceNote("");
+      setShowAllowanceForm(false);
+
+      return "Harcırah düzeltildi.";
     });
   }
 
@@ -317,6 +350,15 @@ export default function DutyDetailPanel({
 
   const isSurvey = duty.dutyType === 1;
   const isApproved = duty.status === 1;
+
+  // Tutar yazma kapısı SUNUCUDAN geliyor: ekran kendi kararını
+  // vermiyor, uçtaki kuralı yansıtıyor.
+  const canWriteAmounts = canEdit && duty.canWriteAmounts;
+
+  // Mahsup karara bağlandıysa harcırah donar; kapanmış hesabı geriye
+  // dönük açmamak için.
+  const allowanceFrozen =
+    duty.settlementDecision !== null && duty.settlementDecision !== undefined;
   const outcomeDecided = duty.targetProjectSurveyOutcome !== 0;
   const projectInSurvey = duty.targetProjectStatus === 0;
 
@@ -372,8 +414,8 @@ export default function DutyDetailPanel({
         {duty.amountsHidden ? (
           <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
             Harcırah ve masraf tutarları elden ödeme niteliğindedir;
-            görüntülemek için ek ödeme yetkisi gerekir. Görevin kendisi
-            ve tarihleri yukarıda görünüyor.
+            görüntülemek ve girmek için ek ödeme yetkisi gerekir.
+            Görevin kendisi ve tarihleri yukarıda görünüyor.
           </p>
         ) : (
           <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -398,7 +440,74 @@ export default function DutyDetailPanel({
           </div>
         )}
 
-        {canEdit && (
+        {/* Harcırah düzeltme */}
+        {canWriteAmounts && (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-bold text-slate-700">
+                  Günlük harcırah: {money(duty.dailyAllowance)}
+                </h4>
+                <p className="mt-1 text-xs text-slate-500">
+                  {allowanceFrozen
+                    ? "Mahsup karara bağlandığı için harcırah donduruldu; " +
+                      "geriye dönük değişse kapanmış hesabı açardı."
+                    : "Düzeltme iz bırakır: kim, ne zaman, hangi gerekçeyle."}
+                </p>
+              </div>
+
+              {!allowanceFrozen && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllowanceForm((x) => !x)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
+                >
+                  {showAllowanceForm ? "Vazgeç" : "Harcırahı Düzelt"}
+                </button>
+              )}
+            </div>
+
+            {showAllowanceForm && !allowanceFrozen && (
+              <form
+                onSubmit={reviseAllowance}
+                className="mt-3 grid gap-3 md:grid-cols-[1fr_2fr_auto]"
+              >
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={allowanceValue}
+                  onChange={(e) => setAllowanceValue(e.target.value)}
+                  className="rounded-lg border border-slate-300 p-3"
+                />
+
+                <input
+                  value={allowanceNote}
+                  onChange={(e) => setAllowanceNote(e.target.value)}
+                  placeholder="Düzeltme gerekçesi (zorunlu)"
+                  className="rounded-lg border border-slate-300 p-3"
+                />
+
+                <button
+                  type="submit"
+                  disabled={busy === "allowance"}
+                  className="rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {busy === "allowance" ? "Kaydediliyor…" : "Kaydet"}
+                </button>
+              </form>
+            )}
+
+            {duty.allowanceRevisedAtUtc && (
+              <p className="mt-3 text-xs text-slate-500">
+                Son düzeltme: {formatDate(duty.allowanceRevisedAtUtc)} ·{" "}
+                {duty.allowanceRevisionNote}
+              </p>
+            )}
+          </div>
+        )}
+
+        {canWriteAmounts && (
           <form onSubmit={saveExpense} className="grid gap-3 md:grid-cols-4">
             <label className="text-sm text-slate-600">
               Yol gideri
@@ -464,7 +573,7 @@ export default function DutyDetailPanel({
         )}
 
         {/* Mahsup kararı */}
-        {canEdit && !duty.amountsHidden && duty.settlementPending && (
+        {canWriteAmounts && duty.settlementPending && (
           <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
             <h4 className="text-sm font-bold text-amber-900">
               Mahsup bekliyor — fark {money(duty.settlementGap)}

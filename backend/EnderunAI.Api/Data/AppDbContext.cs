@@ -961,6 +961,7 @@ public sealed class AppDbContext(
             entity.Property(x => x.Purpose).HasMaxLength(500).IsRequired();
             entity.Property(x => x.Notes).HasMaxLength(2000);
             entity.Property(x => x.DecisionNote).HasMaxLength(1000);
+            entity.Property(x => x.AllowanceRevisionNote).HasMaxLength(1000);
 
             // Hesaplanan alanlar veritabanına yazılmaz.
             entity.Ignore(x => x.DayCount);

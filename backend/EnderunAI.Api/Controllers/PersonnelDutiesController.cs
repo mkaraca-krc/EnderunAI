@@ -31,6 +31,10 @@ public sealed record SaveDutyExpenseRequest(
     decimal AccommodationCost,
     decimal ReceiptAmount);
 
+public sealed record ReviseDutyAllowanceRequest(
+    decimal DailyAllowance,
+    string? Note);
+
 public sealed record SettleDutyRequest(
     /// <summary>0 personelden düş · 1 gider kabul et.</summary>
     int Decision,
@@ -68,6 +72,25 @@ public sealed class PersonnelDutiesController(
 {
     /// <summary>Görevi onaylayabilen roller.</summary>
     private static readonly string[] ApprovalRoles = ["Admin", "Genel Müdür"];
+
+    /// <summary>
+    /// Tutar YAZMA kapısı: personnel.edit yetmiyor, ek ödeme yetkisi
+    /// de aranıyor.
+    ///
+    /// Görmediği bir tutarı yazabilen kullanıcı, yazdığının doğru
+    /// olup olmadığını da denetleyemez — kaydettiği rakamı bir daha
+    /// göremez, yanlışını fark edemez. Yazma ile görme aynı kapıda
+    /// olmalı. Görevin kendisini açmak bu kapıya tabi DEĞİL: talebi
+    /// İК açar, tutarı yetkili girer.
+    /// </summary>
+    private async Task<bool> CanWriteAmountsAsync(CancellationToken cancellationToken) =>
+        await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken);
+
+    private ObjectResult AmountWriteForbidden() => StatusCode(403, new
+    {
+        message = "Harcırah ve masraf tutarlarını yalnızca ek ödeme " +
+                  "yetkisi olan kullanıcı girebilir."
+    });
 
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
@@ -198,6 +221,8 @@ public sealed class PersonnelDutiesController(
                 x.Purpose,
                 x.Notes,
                 Status = (int)x.Status,
+                x.AllowanceRevisedAtUtc,
+                x.AllowanceRevisionNote,
                 SettlementDecision = (int?)x.SettlementDecision,
                 x.SettlementNote,
                 x.SettlementAtUtc,
@@ -267,7 +292,20 @@ public sealed class PersonnelDutiesController(
             settlementDecision = canViewAmounts ? duty.SettlementDecision : null,
             settlementNote = canViewAmounts ? duty.SettlementNote : null,
             settlementAtUtc = canViewAmounts ? duty.SettlementAtUtc : null,
-            settlementAdvanceId = canViewAmounts ? duty.SettlementAdvanceId : null
+            settlementAdvanceId = canViewAmounts ? duty.SettlementAdvanceId : null,
+
+            // Düzeltme izi de tutar bilgisidir: "harcırah sonradan
+            // değiştirildi" demek, değişen rakamı görebilecek kişiye
+            // ait bir bilgi.
+            allowanceRevisedAtUtc = canViewAmounts
+                ? duty.AllowanceRevisedAtUtc
+                : null,
+            allowanceRevisionNote = canViewAmounts
+                ? duty.AllowanceRevisionNote
+                : null,
+
+            // Ekran düğmeyi buna göre çiziyor; kapı yine uçta.
+            canWriteAmounts = canViewAmounts
         });
     }
 
@@ -295,6 +333,14 @@ public sealed class PersonnelDutiesController(
 
         if (request.DailyAllowance < 0m)
             return BadRequest(new { message = "Harcırah negatif olamaz." });
+
+        // Talebi İК açar ama tutarı yetkili girer: yetkisiz kullanıcının
+        // yazdığı harcırah SESSİZCE DÜŞMEZ, hiç alınmaz ve cevapta
+        // söylenir. Görev sıfır harcırahla açılır, yetkili sonradan
+        // harcırah ucundan düzeltir.
+        var canWriteAmounts = await CanWriteAmountsAsync(cancellationToken);
+        var allowance = canWriteAmounts ? request.DailyAllowance : 0m;
+        var allowanceDeferred = !canWriteAmounts && request.DailyAllowance > 0m;
 
         var personnel = await db.Personnel
             .AsNoTracking()
@@ -375,7 +421,7 @@ public sealed class PersonnelDutiesController(
             StartDate = start,
             EndDate = end,
             IsOutOfCity = request.IsOutOfCity,
-            DailyAllowance = request.DailyAllowance,
+            DailyAllowance = allowance,
             Purpose = request.Purpose.Trim(),
             Notes = request.Notes?.Trim(),
             Status = PersonnelDutyStatus.Requested,
@@ -389,8 +435,94 @@ public sealed class PersonnelDutiesController(
         return Ok(new
         {
             duty.Id,
-            message = "Görevlendirme talebi açıldı; Genel Müdür onayı bekliyor.",
-            status = (int)duty.Status
+            message = allowanceDeferred
+                ? "Görevlendirme talebi açıldı; Genel Müdür onayı bekliyor. " +
+                  "Harcırah tutarı kaydedilmedi — girmek için ek ödeme " +
+                  "yetkisi gerekiyor, yetkili kullanıcı harcırahı sonradan " +
+                  "girecek."
+                : "Görevlendirme talebi açıldı; Genel Müdür onayı bekliyor.",
+            status = (int)duty.Status,
+            allowanceDeferred
+        });
+    }
+
+    /// <summary>
+    /// Harcırah düzeltme.
+    ///
+    /// Tutar görev kartında sabit tutulduğu için yanlış girilen bir
+    /// harcırahın tek çaresi görevi iptal edip yeniden açmaktı; bu da
+    /// onay izini ve varsa masraf satırlarını çöpe atıyordu. Düzeltme
+    /// İZ BIRAKARAK yapılır: kim, ne zaman, hangi gerekçeyle.
+    ///
+    /// MAHSUP SONRASI KAPALI: fark bir kez karara bağlandıysa
+    /// (personelden kesildiyse ya da gider kabul edildiyse) harcırahın
+    /// geriye dönük değişmesi, kapanmış bir hesabı sessizce açardı.
+    /// Bu durumda düzeltme reddedilir.
+    /// </summary>
+    [HttpPost("{id:guid}/harcirah")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
+    public async Task<IActionResult> ReviseAllowance(
+        Guid id, ReviseDutyAllowanceRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanWriteAmountsAsync(cancellationToken))
+            return AmountWriteForbidden();
+
+        if (request.DailyAllowance < 0m)
+            return BadRequest(new { message = "Harcırah negatif olamaz." });
+
+        var note = request.Note?.Trim();
+
+        if (string.IsNullOrWhiteSpace(note))
+            return BadRequest(new { message = "Düzeltme gerekçesi zorunludur." });
+
+        var duty = await db.PersonnelDuties
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (duty is null)
+            return NotFound(new { message = "Görevlendirme bulunamadı." });
+
+        if (duty.Status is not (PersonnelDutyStatus.Requested or
+            PersonnelDutyStatus.Approved))
+        {
+            return BadRequest(new
+            {
+                message = "Yalnızca talep ya da onay durumundaki görevde " +
+                          "harcırah düzeltilir."
+            });
+        }
+
+        if (duty.SettlementDecision is not null)
+        {
+            return Conflict(new
+            {
+                message = "Mahsubu karara bağlanmış görevin harcırahı " +
+                          "değiştirilemez; kapanmış hesabı geriye dönük açardı."
+            });
+        }
+
+        var previous = duty.DailyAllowance;
+
+        duty.DailyAllowance = request.DailyAllowance;
+        duty.AllowanceRevisedAtUtc = DateTime.UtcNow;
+        duty.AllowanceRevisedByUserId = currentUser.UserId;
+        duty.AllowanceRevisionNote = note;
+
+        // Onaylı görevde defterdeki harcırah satırı da yeni tutara
+        // çekilir; satır güncellenir, ikincisi açılmaz.
+        await expensePosting.PostAsync(duty, cancellationToken);
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Harcırah düzeltildi.",
+            duty.Id,
+            previousDailyAllowance = previous,
+            dailyAllowance = duty.DailyAllowance,
+            totalAllowance = duty.TotalAllowance,
+            settlementGap = duty.SettlementGap,
+            settlementPending = duty.SettlementPending
         });
     }
 
@@ -499,6 +631,9 @@ public sealed class PersonnelDutiesController(
     public async Task<IActionResult> SaveExpense(
         Guid id, SaveDutyExpenseRequest request, CancellationToken cancellationToken)
     {
+        if (!await CanWriteAmountsAsync(cancellationToken))
+            return AmountWriteForbidden();
+
         if (request.TravelCost < 0m || request.AccommodationCost < 0m ||
             request.ReceiptAmount < 0m)
         {
@@ -553,6 +688,9 @@ public sealed class PersonnelDutiesController(
     public async Task<IActionResult> Settle(
         Guid id, SettleDutyRequest request, CancellationToken cancellationToken)
     {
+        if (!await CanWriteAmountsAsync(cancellationToken))
+            return AmountWriteForbidden();
+
         if (!Enum.IsDefined(typeof(DutySettlementDecision), request.Decision))
             return BadRequest(new { message = "Geçersiz mahsup kararı." });
 

@@ -552,6 +552,200 @@ public sealed class DutyExpenseSettlementTests(DatabaseFixture fixture)
         Assert.Contains("\"totalAllowance\":5000", visible);
     }
 
+    // ---------------- Tutar yazma kapısı ----------------
+
+    /// <summary>
+    /// NEGATİF TEST: ek ödeme yetkisi olmayan personnel.edit kullanıcısı
+    /// artık tutar YAZAMIYOR. Görmediği bir rakamı yazabilen kullanıcı
+    /// yanlışını bir daha fark edemezdi.
+    /// </summary>
+    [Fact]
+    public async Task WithoutExtraPaymentView_AmountWritesAreForbidden()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var editor = await ClientWithAsync(
+            [PermissionCatalog.Keys.PersonnelView,
+             PermissionCatalog.Keys.PersonnelEdit]);
+
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SaveExpenseAsync(editor, dutyId)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await editor.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/harcirah",
+            new { dailyAllowance = 1_200m, note = "Düzeltme" })).StatusCode);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await editor.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/mahsup",
+            new { decision = 1, note = "Kabul" })).StatusCode);
+
+        // Hiçbiri deftere düşmedi.
+        Assert.Empty(await LoadCostsAsync(context));
+    }
+
+    /// <summary>
+    /// Talebi ek ödeme yetkisi olmayan İК açabiliyor ama harcırah
+    /// SESSİZCE düşmüyor: sıfır kaydediliyor ve cevapta söyleniyor.
+    /// Sessizce kaydedilseydi kimse tutarın kaybolduğunu fark etmezdi.
+    /// </summary>
+    [Fact]
+    public async Task WithoutExtraPaymentView_DutyOpensWithoutTheAllowance()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        var editor = await ClientWithAsync(
+            [PermissionCatalog.Keys.PersonnelView,
+             PermissionCatalog.Keys.PersonnelEdit]);
+
+        var response = await editor.PostAsJsonAsync("/api/hr/gorevlendirmeler", new
+        {
+            companyId = context.CompanyId,
+            personnelId = context.PersonnelId,
+            dutyType = 0,
+            targetProjectId = context.TargetProjectId,
+            startDate = Start,
+            endDate = End,
+            isOutOfCity = true,
+            dailyAllowance = DailyAllowance,
+            purpose = "Talep İК'dan"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync()).RootElement;
+
+        Assert.True(payload.GetProperty("allowanceDeferred").GetBoolean());
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var duty = await db.PersonnelDuties.AsNoTracking()
+            .SingleAsync(x => x.Id == payload.GetProperty("id").GetGuid());
+
+        Assert.Equal(0m, duty.DailyAllowance);
+    }
+
+    // ---------------- Harcırah düzeltme ----------------
+
+    /// <summary>
+    /// Düzeltme defterdeki harcırah satırını da yeni tutara çekiyor;
+    /// satır güncelleniyor, ikincisi açılmıyor.
+    /// </summary>
+    [Fact]
+    public async Task RevisingAllowance_UpdatesTheLedgerRowInPlace()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions);
+
+        await SaveExpenseAsync(client, dutyId);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/harcirah",
+            new { dailyAllowance = 1_400m, note = "Şehir dışı tarifesi uygulandı" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync()).RootElement;
+
+        Assert.Equal(1_000m,
+            payload.GetProperty("previousDailyAllowance").GetDecimal());
+
+        // 5 gün × 1.400
+        Assert.Equal(7_000m, payload.GetProperty("totalAllowance").GetDecimal());
+
+        var costs = await LoadCostsAsync(context);
+
+        Assert.Equal(3, costs.Count);
+        Assert.Equal(7_000m, costs
+            .Single(x => x.ReferenceType == DutyExpensePostingService.AllowanceReference)
+            .Amount);
+
+        // Yol ve konaklama düzeltmeden etkilenmedi.
+        Assert.Equal(13_500m, costs.Sum(x => x.Amount));
+    }
+
+    /// <summary>Düzeltme iz bırakıyor: kim, ne zaman, neden.</summary>
+    [Fact]
+    public async Task RevisingAllowance_LeavesAnAuditTrail()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions);
+
+        await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/harcirah",
+            new { dailyAllowance = 750m, note = "Şehir içi göreve çevrildi" });
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var duty = await db.PersonnelDuties.AsNoTracking()
+            .SingleAsync(x => x.Id == dutyId);
+
+        Assert.Equal(750m, duty.DailyAllowance);
+        Assert.NotNull(duty.AllowanceRevisedAtUtc);
+        Assert.NotNull(duty.AllowanceRevisedByUserId);
+        Assert.Equal("Şehir içi göreve çevrildi", duty.AllowanceRevisionNote);
+    }
+
+    /// <summary>Gerekçesiz tutar değişimi denetlenemez.</summary>
+    [Fact]
+    public async Task RevisingAllowance_RequiresAReason()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/harcirah",
+            new { dailyAllowance = 750m, note = "  " })).StatusCode);
+    }
+
+    /// <summary>
+    /// Mahsubu karara bağlanmış görevin harcırahı değişmiyor: kapanmış
+    /// bir hesabı geriye dönük açardı — avans zaten eski farka göre
+    /// açılmıştı.
+    /// </summary>
+    [Fact]
+    public async Task AfterSettlement_AllowanceIsFrozen()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var dutyId = await CreateApprovedDutyAsync(context);
+
+        var client = await ClientWithAsync(HrPermissions);
+
+        await SaveExpenseAsync(client, dutyId, receipt: 3_200m);
+
+        await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/mahsup",
+            new { decision = 1, note = "Gider kabul edildi" });
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/hr/gorevlendirmeler/{dutyId}/harcirah",
+            new { dailyAllowance = 400m, note = "Düzeltme denemesi" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        Assert.Equal(DailyAllowance, (await db.PersonnelDuties.AsNoTracking()
+            .SingleAsync(x => x.Id == dutyId)).DailyAllowance);
+    }
+
     // ---------------- Detay ucu (ekranın beslediği yer) ----------------
 
     /// <summary>
@@ -621,7 +815,8 @@ public sealed class DutyExpenseSettlementTests(DatabaseFixture fixture)
             "dailyAllowance", "totalAllowance", "travelCost",
             "accommodationCost", "receiptAmount", "totalExpense",
             "settlementGap", "settlementPending", "settlementDecision",
-            "settlementNote", "settlementAdvanceId"
+            "settlementNote", "settlementAdvanceId",
+            "allowanceRevisedAtUtc", "allowanceRevisionNote"
         })
         {
             Assert.Equal(

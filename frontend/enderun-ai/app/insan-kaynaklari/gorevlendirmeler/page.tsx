@@ -92,6 +92,11 @@ export default function PersonnelDutiesPage() {
   const { has, user } = usePermissions();
 
   const canEdit = has("personnel.edit");
+
+  // Tutar yazmak görmekle aynı kapıda: görmediği rakamı yazan
+  // kullanıcı yanlışını bir daha fark edemez. Talebi açmak bu kapıya
+  // tabi değil — harcırahı yetkili sonradan girer.
+  const canWriteAmounts = canEdit && has("extra_payment.view");
   const canWriteReport = has("projects.edit") || has("site-reports.edit");
   const canDecideOutcome = has("projects.edit");
 
@@ -257,7 +262,8 @@ export default function PersonnelDutiesPage() {
         startDate: form.startDate,
         endDate: form.endDate,
         isOutOfCity: form.isOutOfCity,
-        dailyAllowance,
+        // Yetkisiz kullanıcı zaten alanı görmüyor; uç da yazmıyor.
+        dailyAllowance: canWriteAmounts ? dailyAllowance : 0,
         purpose: form.purpose.trim(),
         notes: form.notes.trim() || null,
       });
@@ -556,19 +562,27 @@ export default function PersonnelDutiesPage() {
                 />
               </label>
 
-              <label className="text-sm text-slate-600">
-                Günlük harcırah
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.dailyAllowance}
-                  onChange={(e) =>
-                    setForm((x) => ({ ...x, dailyAllowance: e.target.value }))
-                  }
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-3"
-                />
-              </label>
+              {canWriteAmounts ? (
+                <label className="text-sm text-slate-600">
+                  Günlük harcırah
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.dailyAllowance}
+                    onChange={(e) =>
+                      setForm((x) => ({ ...x, dailyAllowance: e.target.value }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 p-3"
+                  />
+                </label>
+              ) : (
+                <p className="self-end rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                  Harcırah tutarını ek ödeme yetkisi olan kullanıcı
+                  girer; görev sıfır harcırahla açılır ve detayda
+                  düzeltilir.
+                </p>
+              )}
 
               <label className="flex items-center gap-2 self-end text-sm text-slate-600">
                 <input

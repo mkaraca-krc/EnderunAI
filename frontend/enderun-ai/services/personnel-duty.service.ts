@@ -63,6 +63,16 @@ export type PersonnelDutyDetail = PersonnelDutyItem & {
   settlementNote?: string | null;
   settlementAtUtc?: string | null;
   settlementAdvanceId?: string | null;
+
+  allowanceRevisedAtUtc?: string | null;
+  allowanceRevisionNote?: string | null;
+
+  /**
+   * Tutar YAZMA kapısı: personnel.edit yetmiyor, ek ödeme yetkisi de
+   * gerekiyor. Görmediği rakamı yazan kullanıcı yanlışını fark
+   * edemezdi.
+   */
+  canWriteAmounts: boolean;
 };
 
 export type CreateDutyRequest = {
@@ -164,6 +174,18 @@ export const personnelDutyService = {
     return apiClient<{ message: string }>(
       `hr/gorevlendirmeler/${id}/masraf`,
       { method: "POST", body: payload }
+    );
+  },
+
+  /**
+   * Harcırah düzeltme. Görev kartındaki tutar sabit tutulduğu için
+   * yanlış girilen harcırahın tek çaresi görevi iptal edip yeniden
+   * açmaktı; bu uç düzeltmeyi iz bırakarak yapıyor.
+   */
+  reviseAllowance(id: string, dailyAllowance: number, note: string) {
+    return apiClient<{ message: string }>(
+      `hr/gorevlendirmeler/${id}/harcirah`,
+      { method: "POST", body: { dailyAllowance, note } }
     );
   },
 

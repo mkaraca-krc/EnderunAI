@@ -143,8 +143,13 @@ public sealed class PersonnelDutyTests(DatabaseFixture fixture)
         return client;
     }
 
+    /// <summary>
+    /// Harcırahı da girebilen İК: tutar YAZMAK ek ödeme yetkisine
+    /// bağlı, görevin kendisini açmak değil.
+    /// </summary>
     private static readonly string[] HrPermissions =
-        [PermissionCatalog.Keys.PersonnelView, PermissionCatalog.Keys.PersonnelEdit];
+        [PermissionCatalog.Keys.PersonnelView, PermissionCatalog.Keys.PersonnelEdit,
+         PermissionCatalog.Keys.ExtraPaymentView];
 
     private static object Body(
         Context context,

@@ -117,8 +117,20 @@ public sealed class PersonnelDuty : BaseEntity
     /// Günlük harcırah tutarı. Görev kartında SABİT tutulur: sonradan
     /// değişen bir parametreden okunsaydı kapanmış görevin tutarı
     /// geriye dönük oynardı.
+    ///
+    /// Elle düzeltilebilir ama düzeltme İZ BIRAKIR (aşağıdaki damga):
+    /// tutar geriye dönük değiştiğinde defterdeki satır da değişir,
+    /// bunun kim tarafından ve neden yapıldığı kayıtsız kalmamalı.
     /// </summary>
     public decimal DailyAllowance { get; set; }
+
+    // --- Harcırah düzeltme izi ---
+
+    public DateTime? AllowanceRevisedAtUtc { get; set; }
+    public Guid? AllowanceRevisedByUserId { get; set; }
+
+    /// <summary>Düzeltme gerekçesi; gerekçesiz tutar değişimi denetlenemez.</summary>
+    public string? AllowanceRevisionNote { get; set; }
 
     public string Purpose { get; set; } = string.Empty;
     public string? Notes { get; set; }
