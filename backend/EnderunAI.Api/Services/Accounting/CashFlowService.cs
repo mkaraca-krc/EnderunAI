@@ -286,7 +286,10 @@ public sealed class CashFlowService(
                 && x.ProgressPaymentId != null
                 && ids.Contains(x.ProgressPaymentId!.Value)
                 && x.Status != ChequeStatus.Bounced
-                && x.Status != ChequeStatus.Replaced)
+                && x.Status != ChequeStatus.Replaced
+                // İPTAL EDİLEN ÇEK TAHSİLAT SAYILMAZ: mali etkileri
+                // ters kayıtla geri alındı, hakedişi karşılamıyor.
+                && x.Status != ChequeStatus.Voided)
             .GroupBy(x => x.ProgressPaymentId!.Value)
             .Select(g => new { ProgressPaymentId = g.Key, Total = g.Sum(x => x.Amount) })
             .ToListAsync(cancellationToken);
@@ -379,7 +382,10 @@ public sealed class CashFlowService(
                 && x.SupplierInvoiceId != null
                 && ids.Contains(x.SupplierInvoiceId!.Value)
                 && x.Status != ChequeStatus.Returned
-                && x.Status != ChequeStatus.Replaced)
+                && x.Status != ChequeStatus.Replaced
+                // İptal edilen çek ödeme de sayılmaz; faturayı açık
+                // bırakır.
+                && x.Status != ChequeStatus.Voided)
             .GroupBy(x => x.SupplierInvoiceId!.Value)
             .Select(g => new { SupplierInvoiceId = g.Key, Total = g.Sum(x => x.Amount) })
             .ToListAsync(cancellationToken);

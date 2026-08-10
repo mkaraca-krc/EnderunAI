@@ -543,4 +543,155 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
         Assert.Equal(ChequeStatus.Paid, (await LoadChequeAsync(chequeId)).Status);
         Assert.Equal(-100_000m, await BalanceAsync(context));
     }
+
+    // ---------------- Toplamlar ----------------
+
+    /// <summary>
+    /// İPTAL EDİLEN ÇEK ÖZET KARTLARINA GİRMEZ: "verilen açık" toplamı
+    /// ve adedi iptal tutarı kadar düşüyor. Girseydi ödenmeyecek bir
+    /// borç açık görünmeye devam ederdi.
+    /// </summary>
+    [Fact]
+    public async Task VoidedCheque_IsExcludedFromSummary()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientAsync();
+
+        // Üç çek: ikisi açık kalacak, biri iptal edilecek.
+        var first = await CreateIssuedChequeAsync(client, context, 40_000m);
+        await CreateIssuedChequeAsync(client, context, 60_000m);
+        var voided = await CreateIssuedChequeAsync(client, context, 25_000m);
+
+        var before = await SummaryAsync(client, context);
+
+        Assert.Equal(125_000m, before.GetProperty("issuedOpenAmount").GetDecimal());
+        Assert.Equal(3, before.GetProperty("issuedOpenCount").GetInt32());
+
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
+            $"/api/cheques/{voided}/iptal",
+            new { reason = "Yanlışlıkla girildi" })).StatusCode);
+
+        var after = await SummaryAsync(client, context);
+
+        // Tutar 25.000 düştü, adet bir azaldı.
+        Assert.Equal(100_000m, after.GetProperty("issuedOpenAmount").GetDecimal());
+        Assert.Equal(2, after.GetProperty("issuedOpenCount").GetInt32());
+
+        // Diğer çekler etkilenmedi.
+        Assert.Equal(ChequeStatus.Issued, (await LoadChequeAsync(first)).Status);
+    }
+
+    /// <summary>
+    /// İptal edilen kayıt LİSTEDE KALIYOR (denetim izi) ve durum
+    /// filtresiyle süzülebiliyor. Listeden düşseydi "bu çek neden
+    /// yoktu" sorusu cevapsız kalırdı.
+    /// </summary>
+    [Fact]
+    public async Task VoidedCheque_StaysVisibleAndFilterable()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientAsync();
+
+        var voided = await CreateIssuedChequeAsync(client, context, 10_000m);
+
+        await client.PostAsJsonAsync(
+            $"/api/cheques/{voided}/iptal", new { reason = "Test kaydı" });
+
+        var all = await ListAsync(client, context, status: null);
+
+        Assert.Contains(all, x => x.GetProperty("id").GetGuid() == voided);
+
+        var filtered = await ListAsync(
+            client, context, status: (int)ChequeStatus.Voided);
+
+        var row = Assert.Single(filtered);
+
+        Assert.Equal(voided, row.GetProperty("id").GetGuid());
+        Assert.Equal("İptal edildi", row.GetProperty("statusName").GetString());
+    }
+
+    /// <summary>
+    /// NAKİT AKIŞI: iptal edilen çek ne giriş ne çıkış sayılıyor.
+    /// Verilen çek açık statüsünden çıktığı için çıkış listesinden de
+    /// düşüyor.
+    /// </summary>
+    [Fact]
+    public async Task VoidedCheque_LeavesTheCashFlow()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientAsync();
+
+        var chequeId = await CreateIssuedChequeAsync(client, context, 80_000m);
+
+        var before = await (await client.GetAsync(
+            $"/api/cash-flow?companyId={context.CompanyId}&days=365"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Contains(
+            before.GetProperty("outflows").EnumerateArray(),
+            x => x.GetProperty("kind").GetString() == "IssuedCheque");
+
+        await client.PostAsJsonAsync(
+            $"/api/cheques/{chequeId}/iptal", new { reason = "İptal" });
+
+        var after = await (await client.GetAsync(
+            $"/api/cash-flow?companyId={context.CompanyId}&days=365"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.DoesNotContain(
+            after.GetProperty("outflows").EnumerateArray(),
+            x => x.GetProperty("kind").GetString() == "IssuedCheque" &&
+                 x.GetProperty("amount").GetDecimal() == 80_000m);
+    }
+
+    /// <summary>Verilen çek açar; durumu değiştirmeden bırakır.</summary>
+    private async Task<Guid> CreateIssuedChequeAsync(
+        HttpClient client, Context context, decimal amount)
+    {
+        var created = await client.PostAsJsonAsync("/api/cheques", new
+        {
+            companyId = context.CompanyId,
+            direction = (int)ChequeDirection.Issued,
+            chequeNumber = $"CK{Guid.NewGuid():N}"[..10],
+            bankName = "Test Bankası",
+            bankBranch = "Merkez",
+            drawer = "Test",
+            currentAccountId = context.SupplierId,
+            projectId = context.ProjectId,
+            amount,
+            currencyCode = "TRY",
+            issueDate = DateTime.UtcNow.Date,
+            dueDate = DateTime.UtcNow.Date.AddDays(45),
+            progressPaymentId = (Guid?)null,
+            supplierInvoiceId = (Guid?)null,
+            description = "Toplam testi"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+
+        return JsonDocument.Parse(await created.Content.ReadAsStringAsync())
+            .RootElement.GetProperty("id").GetGuid();
+    }
+
+    private static async Task<JsonElement> SummaryAsync(
+        HttpClient client, Context context) =>
+        await (await client.GetAsync(
+            $"/api/cheques/summary?companyId={context.CompanyId}"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+    private static async Task<List<JsonElement>> ListAsync(
+        HttpClient client, Context context, int? status)
+    {
+        var suffix = status is int value ? $"&status={value}" : "";
+
+        var payload = await (await client.GetAsync(
+            $"/api/cheques?companyId={context.CompanyId}" +
+            $"&direction={(int)ChequeDirection.Issued}{suffix}"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        return payload.EnumerateArray().ToList();
+    }
 }

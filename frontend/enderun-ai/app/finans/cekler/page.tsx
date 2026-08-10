@@ -245,7 +245,14 @@ export default function ChequeRegisterPage() {
   const monthGroups = useMemo(() => {
     const groups = new Map<
       string,
-      { key: string; label: string; total: number; rows: ChequeListItem[] }
+      {
+        key: string;
+        label: string;
+        total: number;
+        /** Toplama giren çek sayısı — iptaller hariç. */
+        count: number;
+        rows: ChequeListItem[];
+      }
     >();
 
     for (const item of items) {
@@ -260,16 +267,23 @@ export default function ChequeRegisterPage() {
           key,
           label: `${MONTH_NAMES[Number(month) - 1]} ${year}`,
           total: 0,
+          count: 0,
           rows: [],
         };
 
         groups.set(key, group);
       }
 
+      // İPTAL EDİLEN ÇEK LİSTEDE KALIR (denetim izi) ama TOPLAMA
+      // GİRMEZ: mali etkileri ters kayıtla geri alındı, ne giriş ne
+      // çıkış sayılıyor. Sayıya da girmiyor — "3 çek" yazıp ikisinin
+      // tutarını toplamak okuyanı yanıltırdı.
       group.rows.push(item);
 
-      // Dövizli çekte TL karşılığı yoksa toplama katılmaz: farklı para
-      // birimlerini toplamak yanlış bir rakam üretirdi.
+      if (item.status === ChequeStatus.Voided) continue;
+
+      group.count += 1;
+
       // Defter değeri (keşide kurundaki TL karşılığı): farklı para
       // birimlerini ham tutarla toplamak yanlış rakam üretirdi.
       group.total += item.amountTry;
@@ -1196,7 +1210,10 @@ export default function ChequeRegisterPage() {
                       >
                         {group.label}
                         <small className="!mt-0.5 block font-normal text-brand-800">
-                          {group.rows.length} çek
+                          {group.count} çek
+                          {group.rows.length > group.count
+                            ? ` · ${group.rows.length - group.count} iptal (toplam dışı)`
+                            : ""}
                           {projectFilter
                             ? ` · ${
                                 projects.find((x) => x.id === projectFilter)?.code ??
@@ -1218,6 +1235,13 @@ export default function ChequeRegisterPage() {
                     style={{
                       cursor: "pointer",
                       fontWeight: item.id === detail?.id ? 600 : undefined,
+                      // İptal edilen kayıt denetim izi için listede
+                      // kalıyor ama toplam dışı olduğu belli olsun.
+                      opacity: item.status === ChequeStatus.Voided ? 0.55 : undefined,
+                      textDecoration:
+                        item.status === ChequeStatus.Voided
+                          ? "line-through"
+                          : undefined,
                     }}
                   >
                     <td>

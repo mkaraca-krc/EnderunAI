@@ -374,6 +374,13 @@ public sealed class ChequeService(
         if (companyId is not null)
             query = query.Where(x => x.CompanyId == companyId.Value);
 
+        // İPTAL EDİLEN ÇEK TOPLAMLARA GİRMEZ. Durum kırılımı zaten
+        // yalnız belirli durumları topluyor ve İptal onların dışında —
+        // ama filtre AÇIKÇA yazılıyor ki ileride buraya "toplam çek"
+        // gibi bir alan eklendiğinde iptalliler sessizce geri
+        // sızmasın.
+        query = query.Where(x => x.Status != ChequeStatus.Voided);
+
         var groups = await query
             .GroupBy(x => x.Status)
             .Select(g => new
