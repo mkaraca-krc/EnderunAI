@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import DutyDetailPanel from "@/components/hr/duty-detail-panel";
 import { usePermissions } from "@/lib/use-permissions";
 import {
@@ -117,6 +118,20 @@ export default function PersonnelDutiesPage() {
   const [personnelFilter, setPersonnelFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+
+  /**
+   * Ret ve iptal ConfirmDialog'da yürüyor.
+   *
+   * İkisi de GEREKÇE istiyor ve window.prompt gerekçeyi zorunlu
+   * tutamıyordu: boş metni kabul ediyor, sunucunun reddini de
+   * gösteremiyordu. Özellikle iptalde bu kritik — bordro avanstan
+   * kesmişse uç "şu kadar kesilmiş" diyerek reddediyor ve o mesaj
+   * kaybolmamalı.
+   */
+  const [confirmTarget, setConfirmTarget] =
+    useState<{ item: PersonnelDutyItem; mode: "reject" | "cancel" } | null>(null);
+
+  const [confirmError, setConfirmError] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -302,22 +317,36 @@ export default function PersonnelDutiesPage() {
     }
   }
 
-  async function reject(item: PersonnelDutyItem) {
-    const reason = window.prompt("Ret gerekçesi (zorunlu):")?.trim();
+  /**
+   * Modaldan gelen onay: ret ya da iptal. Fark yalnız çağrılan uç ve
+   * mesaj, o yüzden tek yoldan geçiyorlar.
+   */
+  async function runConfirmedAction(reason: string) {
+    if (!confirmTarget) return;
 
-    if (!reason) return;
+    const { item, mode } = confirmTarget;
 
     setActionId(item.id);
+    setConfirmError("");
     setError("");
     setSuccess("");
 
     try {
-      const response = await personnelDutyService.reject(item.id, reason);
+      const response = mode === "reject"
+        ? await personnelDutyService.reject(item.id, reason)
+        : await personnelDutyService.cancel(item.id, reason);
 
       setSuccess(response.message);
+      setConfirmTarget(null);
+
+      // Modal kapanınca liste tazeleniyor: durum rozeti ve mahsup
+      // uyarısı arkada eski haliyle kalmasın.
       await loadItems();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ret işlemi başarısız.");
+      // Hata MODALDA kalıyor. Bordro avanstan kesmişse sunucu
+      // "şu kadar kesilmiş" diyor; o cümle kullanıcının kararını
+      // değiştiren tek bilgi, kaybolmamalı.
+      setConfirmError(err instanceof Error ? err.message : "İşlem başarısız.");
     } finally {
       setActionId(null);
     }
@@ -772,12 +801,34 @@ export default function PersonnelDutiesPage() {
                           <button
                             type="button"
                             disabled={actionId === item.id}
-                            onClick={() => reject(item)}
+                            onClick={() => {
+                              setConfirmError("");
+                              setConfirmTarget({ item, mode: "reject" });
+                            }}
                             className="rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"
                           >
                             Reddet
                           </button>
                         </>
+                      )}
+
+                      {/* İPTAL yalnız ONAYLI görevde ve yalnız onay
+                          makamına görünüyor. Kapı zaten uçta (GM/Admin
+                          + gerekçe); buradaki gizleme savunma
+                          derinliği — kullanıcıya çalışmayacak bir
+                          düğme göstermemek için. */}
+                      {canApprove && item.status === 1 && (
+                        <button
+                          type="button"
+                          disabled={actionId === item.id}
+                          onClick={() => {
+                            setConfirmError("");
+                            setConfirmTarget({ item, mode: "cancel" });
+                          }}
+                          className="rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"
+                        >
+                          İptal Et
+                        </button>
                       )}
                     </div>
                   </td>
@@ -786,6 +837,32 @@ export default function PersonnelDutiesPage() {
           </tbody>
         </table>
       </section>
+
+      <ConfirmDialog
+        // key ile her hedefte yeniden kuruluyor: önceki işlemin
+        // gerekçesi yenisine yapışmasın.
+        key={`${confirmTarget?.mode ?? "kapali"}-${confirmTarget?.item.id ?? ""}`}
+        open={confirmTarget !== null}
+        title={
+          confirmTarget?.mode === "cancel"
+            ? "Görevlendirmeyi iptal et"
+            : "Görevlendirmeyi reddet"
+        }
+        description={
+          confirmTarget?.mode === "cancel"
+            ? "Projeye yansıyan yol, konaklama ve harcırah aynı işlemde geri alınır. Mahsup avansı açılmışsa o da kapanır; bordro o avanstan zaten kesmişse iptal reddedilir."
+            : "Talep kapanır ve talebi açana gerekçe iletilir. Onaylanmamış görev maliyet üretmediği için deftere dokunulmaz."
+        }
+        confirmLabel={confirmTarget?.mode === "cancel" ? "İptal Et" : "Reddet"}
+        requireReason
+        busy={actionId !== null}
+        error={confirmError}
+        onCancel={() => {
+          setConfirmTarget(null);
+          setConfirmError("");
+        }}
+        onConfirm={(reason) => void runConfirmedAction(reason)}
+      />
     </ErpShell>
   );
 }

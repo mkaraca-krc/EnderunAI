@@ -170,6 +170,18 @@ export const personnelDutyService = {
     );
   },
 
+  /**
+   * Onaylı görevi iptal eder ve projeye yansıyan masrafı aynı işlemde
+   * geri alır. Mahsup avansı açılmışsa o da kapanır; bordro o
+   * avanstan zaten kesmişse uç reddeder.
+   */
+  cancel(id: string, decisionNote: string) {
+    return apiClient<{ message: string }>(
+      `hr/gorevlendirmeler/${id}/iptal`,
+      { method: "POST", body: { decisionNote } }
+    );
+  },
+
   saveExpense(id: string, payload: SaveDutyExpenseRequest) {
     return apiClient<{ message: string }>(
       `hr/gorevlendirmeler/${id}/masraf`,
