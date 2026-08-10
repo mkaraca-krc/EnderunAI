@@ -26,6 +26,16 @@ public sealed class ProgressPayment : BaseEntity
     public DateTime? PeriodEndDate { get; set; }
     public DateTime ProgressPaymentDate { get; set; }
 
+    /// <summary>
+    /// Beklenen tahsilat tarihi — OPSİYONEL EZME.
+    /// 
+    /// Doluysa projedeki vade gününün önüne geçer ve kalem KESİN
+    /// sayılır: işverenle konuşulmuş bir tarih, formülle üretilmiş bir
+    /// tahminden daha iyi bilgidir. Boşsa proje vadesinden hesaplanır
+    /// ve TAHMİNİ kalır.
+    /// </summary>
+    public DateTime? ExpectedCollectionDate { get; set; }
+
     public ProgressPaymentStatus Status { get; set; }
         = ProgressPaymentStatus.Draft;
 

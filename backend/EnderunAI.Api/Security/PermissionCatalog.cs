@@ -136,6 +136,14 @@ public static class PermissionCatalog
         public const string FinanceManage = "finance.manage";
         public const string FinanceApprove = "finance.approve";
         public const string FinanceCreate = "finance.create";
+
+        /// <summary>
+        /// Nakit akış projeksiyonu. AYRI ANAHTAR: tablo bordroyu ELDEN
+        /// DAHİL tam tutarla gösteriyor, yani finance.view kadar geniş
+        /// bir kapıya bırakılamaz — o izin Teknik Ofis ve Teknik
+        /// Koordinatör'de de var ve ikisinde ek ödeme yetkisi yok.
+        /// </summary>
+        public const string CashFlowView = "cashflow.view";
         public const string FinanceEdit = "finance.edit";
         public const string FinanceDelete = "finance.delete";
 
@@ -339,6 +347,7 @@ public static class PermissionCatalog
         new(Keys.FinanceManage, "Finans", "Finans yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
         new(Keys.FinanceApprove, "Finans", "Finans onayı", "Ödeme ve finans işlemlerini onaylar."),
         new(Keys.FinanceCreate, "Finans", "Finans kaydı oluşturma", "Tahsilat, ödeme ve finans kaydı oluşturur."),
+        new(Keys.CashFlowView, "Finans", "Nakit akış projeksiyonu", "Likidite takvimini görüntüler; bordro çıkışı elden dahil tam tutarla görünür."),
         new(Keys.FinanceEdit, "Finans", "Finans kaydı düzenleme", "Finans kaydını günceller."),
         new(Keys.FinanceDelete, "Finans", "Finans kaydı silme", "Finans kaydını siler."),
 

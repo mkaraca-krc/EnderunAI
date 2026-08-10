@@ -29,6 +29,8 @@ public sealed class AppDbContext(
     public DbSet<PersonnelRehireOverride> PersonnelRehireOverrides =>
         Set<PersonnelRehireOverride>();
     public DbSet<PersonnelDuty> PersonnelDuties => Set<PersonnelDuty>();
+    public DbSet<CashFlowEstimatedExpense> CashFlowEstimatedExpenses =>
+        Set<CashFlowEstimatedExpense>();
     public DbSet<DutySurveyReport> DutySurveyReports => Set<DutySurveyReport>();
     public DbSet<DutySurveyMeasurement> DutySurveyMeasurements => Set<DutySurveyMeasurement>();
     public DbSet<DutySurveyPhoto> DutySurveyPhotos => Set<DutySurveyPhoto>();
@@ -274,6 +276,7 @@ public sealed class AppDbContext(
         ConfigurePersonnelRehireOverrides(modelBuilder);
         ConfigurePersonnelDuties(modelBuilder);
         ConfigureDutySurveyReports(modelBuilder);
+        ConfigureCashFlowEstimatedExpenses(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -990,6 +993,33 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.TargetProjectSiteId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+    }
+
+    private static void ConfigureCashFlowEstimatedExpenses(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CashFlowEstimatedExpense>(entity =>
+        {
+            entity.ToTable("cash_flow_estimated_expenses");
+            entity.HasKey(x => x.Id);
+
+            // Projeksiyon şirket + dönem üzerinden okuyor.
+            entity.HasIndex(x => new { x.CompanyId, x.StartYear, x.StartMonth });
+
+            entity.Property(x => x.Description).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
 

@@ -25,6 +25,17 @@ public sealed class CompanyFinanceSettings : BaseEntity
     /// </summary>
     public decimal ThreeWayTolerancePercent { get; set; } = 1m;
 
+    /// <summary>
+    /// Maaş ödeme günü (ayın kaçı). Nakit akış takvimi bordro çıkışını
+    /// bu güne koyar.
+    /// 
+    /// Bordro kaydında ileriye dönük bir ödeme tarihi yok — PaidAtUtc
+    /// ödeme SONRASI damga. Bu parametre olmadan şirketin en büyük ve
+    /// en düzenli aylık çıkışı takvimde hiç görünmüyordu ve tablo
+    /// ciddi şekilde iyimser çıkıyordu.
+    /// </summary>
+    public int PayrollPaymentDay { get; set; } = 5;
+
     /// <summary>Sipariş oluştururken uygulanan varsayılan KDV oranı (%).</summary>
     public decimal DefaultVatRate { get; set; } = 20m;
 

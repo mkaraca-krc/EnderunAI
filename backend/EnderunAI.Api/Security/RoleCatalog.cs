@@ -36,6 +36,10 @@ public static class RoleCatalog
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.FinanceView, PermissionCatalog.Keys.FinanceCreate, PermissionCatalog.Keys.FinanceEdit,
             PermissionCatalog.Keys.FinanceDelete, PermissionCatalog.Keys.FinanceApprove, PermissionCatalog.Keys.FinanceManage,
+            // Nakit akış projeksiyonu: elden dahil bordro çıkışını
+            // taşıdığı için ayrı anahtar. Admin ve Genel Müdür bütün
+            // anahtarları aldığı için burada tekrar listelenmiyor.
+            PermissionCatalog.Keys.CashFlowView,
             PermissionCatalog.Keys.CurrentAccountsView, PermissionCatalog.Keys.CurrentAccountsCreate,
             PermissionCatalog.Keys.CurrentAccountsEdit, PermissionCatalog.Keys.CurrentAccountsDelete,
             PermissionCatalog.Keys.CurrentAccountsApprove,

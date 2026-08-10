@@ -141,6 +141,20 @@ public sealed class Project : BaseEntity
     /// </summary>
     public string? PaymentTerms { get; set; }
 
+    /// <summary>
+    /// İşverenin ödeme vadesi (GÜN). Hakediş düzenlendikten kaç gün
+    /// sonra tahsil edilmesi beklendiği.
+    /// 
+    /// <see cref="PaymentTerms"/> serbest metin olduğu için hesaba
+    /// giremiyor ("30 gün vadeli" gibi yazılıyor). Nakit akış takvimi
+    /// tarih hesaplamak zorunda: bu alan olmadan hakediş DÜZENLENDİĞİ
+    /// GÜN tahsil ediliyormuş gibi görünüyor ve para girişi haftalarca
+    /// erken çıkıyordu.
+    /// 
+    /// Boşsa hakediş tarihi kullanılır ve kalem TAHMİNİ işaretlenir.
+    /// </summary>
+    public int? CollectionTermDays { get; set; }
+
     public string CurrencyCode { get; set; } = "TRY";
     public decimal VatRate { get; set; }
 
