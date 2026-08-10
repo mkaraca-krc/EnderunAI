@@ -236,16 +236,42 @@ public sealed class PayrollReadinessController(AppDbContext db, HrDbContext hrDb
         //
         // İkisi de ENGEL DEĞİL uyarı: bordro üretilir, ama onaylayan
         // yasal riski bordro çıkmadan görür.
-        var overtimeByPersonnel = await hrDb.OvertimeRequests
+        var requestOvertime = await hrDb.OvertimeRequests
             .AsNoTracking()
             .Where(x => x.CompanyId == companyId &&
                         x.Status == HrApprovalStatus.Approved &&
                         !x.IsSundayWork && !x.IsPublicHolidayWork &&
                         x.WorkDate.Year == year &&
                         x.ApprovedHours > 0m)
-            .GroupBy(x => x.PersonnelId)
-            .Select(g => new { PersonnelId = g.Key, Hours = g.Sum(x => x.ApprovedHours) })
+            .Select(x => new { x.PersonnelId, x.WorkDate, Hours = x.ApprovedHours })
             .ToListAsync(cancellationToken);
+
+        // Mesai iki yoldan giriliyor: talep ve puantaj cetveli. Yalnız
+        // talepler sayılsaydı cetvelden girilen saat yasal sınıra ve
+        // muvafakat uyarısına hiç görünmezdi — bordro o saati ödediği
+        // halde.
+        //
+        // ÇİFT SAYIM YOK: talebin sahiplendiği gün cetvelde kilitli;
+        // burada da o günler cetvel tarafından eleniyor.
+        var requestDays = requestOvertime
+            .Select(x => (x.PersonnelId, x.WorkDate.Date))
+            .ToHashSet();
+
+        var sheetOvertime = (await db.AttendanceRecords
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId &&
+                        x.WorkDate.Year == year &&
+                        x.OvertimeHours > 0m)
+            .Select(x => new { x.PersonnelId, x.WorkDate, Hours = x.OvertimeHours })
+            .ToListAsync(cancellationToken))
+            .Where(x => !requestDays.Contains((x.PersonnelId, x.WorkDate.Date)))
+            .ToList();
+
+        var overtimeByPersonnel = requestOvertime
+            .Concat(sheetOvertime)
+            .GroupBy(x => x.PersonnelId)
+            .Select(g => new { PersonnelId = g.Key, Hours = g.Sum(x => x.Hours) })
+            .ToList();
 
         if (overtimeByPersonnel.Count > 0)
         {

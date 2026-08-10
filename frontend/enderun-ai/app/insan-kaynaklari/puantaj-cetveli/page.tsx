@@ -6,6 +6,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, EmptyState, Select } from "@/components/ui";
 import { companyService, type CompanyListItem } from "@/services/company.service";
+import { projectService, type ProjectListItem } from "@/services/project.service";
+import {
+  projectSiteService,
+  type ProjectSiteListItem,
+} from "@/services/project-site.service";
 import {
   ATTENDANCE_STATUS,
   ATTENDANCE_STATUS_LABELS,
@@ -45,6 +50,37 @@ function currentStatus(cell: AttendanceCell) {
 }
 
 /**
+ * Girilen mesai saati hangi kovaya gider.
+ *
+ * KÖPRÜNÜN KURALIYLA AYNI: genel tatil hafta tatilinden önce bakılır.
+ * Gün başına tek kova olduğu için tek giriş kutusu yetiyor ve aynı
+ * saat iki kovaya birden yazılamıyor.
+ */
+function overtimeKindOf(
+  cell: AttendanceCell
+): "publicHolidayHours" | "sundayHours" | "overtimeHours" {
+  if (cell.isHoliday) return "publicHolidayHours";
+  if (!cell.isWorkDay) return "sundayHours";
+
+  return "overtimeHours";
+}
+
+/** Hücrenin toplam mesai saati; gün başına tek kova dolu olur. */
+function currentOvertime(cell: AttendanceCell) {
+  return (
+    (cell.overtimeHours ?? 0) +
+    (cell.sundayHours ?? 0) +
+    (cell.publicHolidayHours ?? 0)
+  );
+}
+
+const KIND_LABEL: Record<string, string> = {
+  overtimeHours: "fazla çalışma ×1,5",
+  sundayHours: "hafta tatili ×2",
+  publicHolidayHours: "genel tatil ×2",
+};
+
+/**
  * Aylık puantaj cetveli.
  *
  * Izgara personel × gün. Cetvel resmî tatil takviminden DOLU gelir;
@@ -67,6 +103,19 @@ export default function AttendanceSheetPage() {
   /** Kaydedilmemiş düzeltmeler: "personelId|tarih" → durum. */
   const [draft, setDraft] = useState<Record<string, number>>({});
 
+  /** Kaydedilmemiş mesai saatleri: "personelId|tarih" → saat metni. */
+  const [overtimeDraft, setOvertimeDraft] = useState<Record<string, string>>({});
+
+  /** Mesai sütunu açık mı: kapalıyken ızgara okunaklı kalıyor. */
+  const [overtimeMode, setOvertimeMode] = useState(false);
+
+  // Kapsam: merkez / şantiye ekseni ya da belirli bir proje-şantiye.
+  const [scope, setScope] = useState<"" | "office" | "site" | "project">("");
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projectId, setProjectId] = useState("");
+  const [sites, setSites] = useState<ProjectSiteListItem[]>([]);
+  const [projectSiteId, setProjectSiteId] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -79,14 +128,24 @@ export default function AttendanceSheetPage() {
     setError("");
 
     try {
-      setSheet(await attendanceSheetService.get(companyId, year, month));
+      setSheet(
+        await attendanceSheetService.get(companyId, year, month, {
+          workLocation:
+            scope === "office" ? 1 : scope === "site" ? 2 : undefined,
+          projectId: scope === "project" ? projectId || undefined : undefined,
+          projectSiteId:
+            scope === "project" ? projectSiteId || undefined : undefined,
+        })
+      );
+
       setDraft({});
+      setOvertimeDraft({});
     } catch (err) {
       setError(messageOf(err));
     } finally {
       setLoading(false);
     }
-  }, [companyId, year, month]);
+  }, [companyId, year, month, scope, projectId, projectSiteId]);
 
   useEffect(() => {
     void (async () => {
@@ -110,7 +169,47 @@ export default function AttendanceSheetPage() {
     })();
   }, [load]);
 
-  const dirtyCount = Object.keys(draft).length;
+  // Proje listesi yalnız proje kapsamı seçilince gerekiyor.
+  useEffect(() => {
+    if (!companyId) return;
+
+    void (async () => {
+      try {
+        const rows = await projectService.getAll(companyId);
+        setProjects(rows);
+      } catch {
+        // Proje listesi alınamazsa kapsam seçimi çalışmaz ama cetvel
+        // açılmaya devam eder; hata mesajı cetveli gizlememeli.
+        setProjects([]);
+      }
+    })();
+  }, [companyId]);
+
+  useEffect(() => {
+    void (async () => {
+      if (!projectId) {
+        setSites([]);
+        return;
+      }
+
+      try {
+        setSites(await projectSiteService.getAll(projectId));
+      } catch {
+        setSites([]);
+      }
+    })();
+  }, [projectId]);
+
+  // Aynı hücrenin hem durumu hem mesaisi değişmiş olabilir; sayım
+  // hücre başına.
+  const dirtyKeys = useMemo(
+    () => [
+      ...new Set([...Object.keys(draft), ...Object.keys(overtimeDraft)]),
+    ],
+    [draft, overtimeDraft]
+  );
+
+  const dirtyCount = dirtyKeys.length;
 
   const days = useMemo(
     () => sheet?.rows[0]?.cells ?? [],
@@ -159,37 +258,53 @@ export default function AttendanceSheetPage() {
   async function saveDraft() {
     if (!sheet || dirtyCount === 0) return;
 
-    const entries: AttendanceSheetEntry[] = Object.entries(draft).map(
-      ([key, status]) => {
-        const [personnelId, date] = key.split("|");
-        const cell = sheet.rows
-          .find((row) => row.personnelId === personnelId)
-          ?.cells.find((x) => x.date === date);
+    const entries: AttendanceSheetEntry[] = dirtyKeys.map((key) => {
+      const [personnelId, date] = key.split("|");
+      const cell = sheet.rows
+        .find((row) => row.personnelId === personnelId)
+        ?.cells.find((x) => x.date === date);
 
-        const worksFullDay = status === ATTENDANCE_STATUS.Worked ||
-          status === ATTENDANCE_STATUS.RemoteWork;
+      const status =
+        draft[key] ?? (cell ? currentStatus(cell) : ATTENDANCE_STATUS.Worked);
 
-        const hours = worksFullDay
-          ? sheet.dailyWorkHours
-          : status === ATTENDANCE_STATUS.HalfDay
-            ? sheet.dailyWorkHours / 2
-            : 0;
+      const worksFullDay = status === ATTENDANCE_STATUS.Worked ||
+        status === ATTENDANCE_STATUS.RemoteWork;
 
-        return {
-          personnelId,
-          workDate: date.slice(0, 10),
-          status,
-          normalHours: hours,
-          // Mevcut değerler aynen geri gönderiliyor: sıfır göndermek,
-          // günlük puantajdan ya da onaylı mesaiden gelen tatil
-          // saatlerini silmek demekti.
-          overtimeHours: cell?.overtimeHours ?? 0,
-          sundayHours: cell?.sundayHours ?? 0,
-          publicHolidayHours: cell?.publicHolidayHours ?? 0,
-          description: null,
-        };
+      const hours = worksFullDay
+        ? sheet.dailyWorkHours
+        : status === ATTENDANCE_STATUS.HalfDay
+          ? sheet.dailyWorkHours / 2
+          : 0;
+
+      // Mevcut değerler aynen geri gönderiliyor: sıfır göndermek,
+      // günlük puantajdan ya da onaylı mesaiden gelen tatil
+      // saatlerini silmek demekti.
+      const overtime = {
+        overtimeHours: cell?.overtimeHours ?? 0,
+        sundayHours: cell?.sundayHours ?? 0,
+        publicHolidayHours: cell?.publicHolidayHours ?? 0,
+      };
+
+      // Mesai girildiyse günün türüne göre TEK kovaya yazılır,
+      // diğerleri sıfırlanır — aynı saat iki kovada duramaz.
+      if (key in overtimeDraft && cell) {
+        const value = Number(overtimeDraft[key]) || 0;
+
+        overtime.overtimeHours = 0;
+        overtime.sundayHours = 0;
+        overtime.publicHolidayHours = 0;
+        overtime[overtimeKindOf(cell)] = value;
       }
-    );
+
+      return {
+        personnelId,
+        workDate: date.slice(0, 10),
+        status,
+        normalHours: hours,
+        ...overtime,
+        description: null,
+      };
+    });
 
     await run(async () => {
       const result = await attendanceSheetService.save(companyId, entries);
@@ -251,10 +366,79 @@ export default function AttendanceSheetPage() {
           />
         </div>
 
+        <div className="w-44">
+          <Select
+            label="Görev yeri"
+            value={scope}
+            onChange={(event) => {
+              const next = event.target.value as typeof scope;
+
+              setScope(next);
+
+              if (next !== "project") {
+                setProjectId("");
+                setProjectSiteId("");
+              }
+            }}
+            options={[
+              { value: "", label: "Tümü" },
+              { value: "office", label: "Merkez" },
+              { value: "site", label: "Şantiyeler" },
+              { value: "project", label: "Belirli proje" },
+            ]}
+          />
+        </div>
+
+        {scope === "project" && (
+          <div className="w-56">
+            <Select
+              label="Proje"
+              value={projectId}
+              onChange={(event) => {
+                setProjectId(event.target.value);
+                setProjectSiteId("");
+              }}
+              options={[
+                { value: "", label: "Proje seçin" },
+                ...projects.map((project) => ({
+                  value: project.id,
+                  label: `${project.code} · ${project.name}`,
+                })),
+              ]}
+            />
+          </div>
+        )}
+
+        {scope === "project" && projectId && (
+          <div className="w-52">
+            <Select
+              label="Şantiye"
+              value={projectSiteId}
+              onChange={(event) => setProjectSiteId(event.target.value)}
+              options={[
+                { value: "", label: "Projenin tamamı" },
+                ...sites.map((site) => ({
+                  value: site.id,
+                  label: site.name,
+                })),
+              ]}
+            />
+          </div>
+        )}
+
         <Link href="/insan-kaynaklari/tatil-takvimi">
           <Button variant="secondary">Tatil Takvimi</Button>
         </Link>
       </div>
+
+      {scope === "project" && (
+        <p className="mb-4 text-xs text-slate-500">
+          Proje kapsamında kadrolu atananlar ve o döneme denk gelen
+          onaylı çalışma görevlendirmesiyle GEÇİCİ gelenler birlikte
+          listelenir; ikisi de gün maliyeti bu projeye yazıldığı için
+          puantajı buradan girilmeli.
+        </p>
+      )}
 
       {sheet && !sheet.holidayCalendarVerified && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -285,6 +469,14 @@ export default function AttendanceSheetPage() {
             }
           >
             Takvimden Doldur
+          </Button>
+
+          <Button
+            variant={overtimeMode ? "primary" : "secondary"}
+            disabled={busy}
+            onClick={() => setOvertimeMode((current) => !current)}
+          >
+            {overtimeMode ? "Mesai Girişini Kapat" : "Mesai Girişi"}
           </Button>
 
           <Button
@@ -394,8 +586,16 @@ export default function AttendanceSheetPage() {
                       const status = draft[key] ?? currentStatus(cell);
                       const dirty = key in draft;
 
+                      const overtimeValue =
+                        overtimeDraft[key] ??
+                        (currentOvertime(cell) > 0
+                          ? String(currentOvertime(cell))
+                          : "");
+
+                      const overtimeDirty = key in overtimeDraft;
+
                       return (
-                        <td key={cell.date} className="p-0.5 text-center">
+                        <td key={cell.date} className="p-0.5 text-center align-top">
                           <button
                             type="button"
                             disabled={cell.isApproved || busy}
@@ -417,6 +617,43 @@ export default function AttendanceSheetPage() {
                           >
                             {ATTENDANCE_STATUS_SHORT[status] ?? "?"}
                           </button>
+
+                          {overtimeMode && (
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              inputMode="decimal"
+                              value={overtimeValue}
+                              disabled={
+                                cell.isApproved || cell.overtimeLocked || busy
+                              }
+                              onChange={(event) =>
+                                setOvertimeDraft((state) => ({
+                                  ...state,
+                                  [key]: event.target.value,
+                                }))
+                              }
+                              title={
+                                cell.overtimeLocked
+                                  ? "Bu günün mesaisi onaylı fazla mesai " +
+                                    "talebinden geliyor; düzeltme talep " +
+                                    "ekranından yapılır."
+                                  : `Mesai saati · ${KIND_LABEL[overtimeKindOf(cell)]}`
+                              }
+                              className={`mt-0.5 h-6 w-7 rounded border text-center text-[10px] ${
+                                cell.overtimeLocked
+                                  ? "border-slate-200 bg-slate-100 text-slate-500"
+                                  : overtimeDirty
+                                    ? "border-brand-600 ring-1 ring-brand-400"
+                                    : "border-slate-200"
+                              } ${
+                                cell.isApproved
+                                  ? "cursor-not-allowed opacity-70"
+                                  : ""
+                              }`}
+                            />
+                          )}
                         </td>
                       );
                     })}
@@ -445,6 +682,17 @@ export default function AttendanceSheetPage() {
             Hücreye tıklayınca durum sıradakine geçer. Onaylı günler
             değiştirilemez.
           </p>
+
+          {overtimeMode && (
+            <p className="mt-1 text-xs text-slate-500">
+              Alt kutuya o günün mesai saati girilir. Saat günün türüne
+              göre ayrılır: normal günde fazla çalışma (×1,5), hafta
+              tatilinde ×2, genel tatilde ×2 — ayrı bir onay yok,{" "}
+              <strong>Ayı Onayla</strong> ile kesinleşir. Gri kutular o
+              gün için onaylı fazla mesai talebi olduğunu gösterir;
+              düzeltme talep ekranından yapılır.
+            </p>
+          )}
         </>
       )}
     </ErpShell>

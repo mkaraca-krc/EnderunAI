@@ -1,3 +1,4 @@
+using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
@@ -55,7 +56,8 @@ public sealed record ApproveAttendanceSheetRequest(
 [ApiController]
 [Authorize]
 [Route("api/hr/attendance/cetvel")]
-public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
+public sealed class AttendanceSheetController(
+    AppDbContext db, HrDbContext hrDb) : ControllerBase
 {
     /// <summary>Cetvel görünümü: günler, personel satırları ve mevcut kayıtlar.</summary>
     [HttpGet]
@@ -64,6 +66,9 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
         [FromQuery] Guid companyId,
         [FromQuery] int year,
         [FromQuery] int month,
+        [FromQuery] int? workLocation,
+        [FromQuery] Guid? projectId,
+        [FromQuery] Guid? projectSiteId,
         CancellationToken cancellationToken)
     {
         if (month is < 1 or > 12)
@@ -71,10 +76,13 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
 
         var context = await LoadContextAsync(companyId, year, cancellationToken);
 
-        var personnel = await LoadPersonnelAsync(
-            companyId, null, cancellationToken);
-
         var (periodStart, periodEnd) = Period(year, month);
+
+        var personnel = await LoadPersonnelAsync(
+            companyId, null,
+            new SheetScope(workLocation, projectId, projectSiteId,
+                periodStart, periodEnd),
+            cancellationToken);
 
         var records = await db.AttendanceRecords
             .AsNoTracking()
@@ -100,6 +108,10 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
             .ToDictionary(
                 g => g.Key,
                 g => g.ToDictionary(x => DateOnly.FromDateTime(x.WorkDate)));
+
+        var lockedDays = await LoadRequestOwnedDaysAsync(
+            personnel.Select(x => x.Id).ToList(), periodStart, periodEnd,
+            cancellationToken);
 
         var rows = personnel.Select(person =>
         {
@@ -146,7 +158,14 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
                         // sırasında sıfırlanıp siliniyorlardı.
                         sundayHours = saved?.SundayHours,
                         publicHolidayHours = saved?.PublicHolidayHours,
-                        isApproved = saved?.IsApproved ?? false
+                        isApproved = saved?.IsApproved ?? false,
+
+                        // O günün mesai saatini fazla mesai TALEBİ
+                        // yazdıysa cetvel o hücreye dokunamaz: tek
+                        // alana iki yazıcı olsaydı son kaydeden
+                        // diğerinin saatini sessizce silerdi.
+                        overtimeLocked = lockedDays.Contains(
+                            (person.Id, day.Date))
                     };
                 })
             };
@@ -202,7 +221,7 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
         }
 
         var personnel = await LoadPersonnelAsync(
-            request.CompanyId, request.PersonnelIds, cancellationToken);
+            request.CompanyId, request.PersonnelIds, null, cancellationToken);
 
         if (personnel.Count == 0)
             return BadRequest(new { message = "Cetvele girecek aktif personel yok." });
@@ -325,8 +344,16 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
         var index = existing.ToDictionary(
             x => (x.PersonnelId, DateOnly.FromDateTime(x.WorkDate)));
 
+        // Mesai saatini talebin yazdığı günler: cetvel bu hücrelere
+        // dokunmaz. Ekran zaten kilitli gösteriyor ama kapı BURADA —
+        // eski bir sekme ya da doğrudan istek talebin saatini
+        // ezmemeli.
+        var lockedDays = await LoadRequestOwnedDaysAsync(
+            personnelIds, minDate, maxDate, cancellationToken);
+
         var saved = 0;
         var skippedApproved = 0;
+        var keptRequestHours = 0;
 
         foreach (var entry in request.Entries)
         {
@@ -352,11 +379,28 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
 
             record.Status = entry.Status;
             record.NormalHours = entry.NormalHours;
-            record.OvertimeHours = entry.OvertimeHours;
-            record.SundayHours = entry.SundayHours;
-            record.PublicHolidayHours = entry.PublicHolidayHours;
-            record.TotalHours = entry.NormalHours + entry.OvertimeHours +
-                                entry.SundayHours + entry.PublicHolidayHours;
+
+            // Talebin sahiplendiği günde mesai saatleri OLDUĞU GİBİ
+            // kalır; normal çalışma saati ve durum yine cetvelden
+            // güncellenir.
+            if (lockedDays.Contains((entry.PersonnelId, entry.WorkDate)))
+            {
+                if (entry.OvertimeHours != record.OvertimeHours ||
+                    entry.SundayHours != record.SundayHours ||
+                    entry.PublicHolidayHours != record.PublicHolidayHours)
+                {
+                    keptRequestHours++;
+                }
+            }
+            else
+            {
+                record.OvertimeHours = entry.OvertimeHours;
+                record.SundayHours = entry.SundayHours;
+                record.PublicHolidayHours = entry.PublicHolidayHours;
+            }
+
+            record.TotalHours = record.NormalHours + record.OvertimeHours +
+                                record.SundayHours + record.PublicHolidayHours;
             record.Description = entry.Description?.Trim();
             record.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -369,9 +413,14 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
         {
             savedCount = saved,
             skippedApprovedCount = skippedApproved,
+            keptRequestHoursCount = keptRequestHours,
             message = $"{saved} gün kaydedildi" +
                       (skippedApproved > 0
                           ? $", {skippedApproved} onaylı gün korundu"
+                          : "") +
+                      (keptRequestHours > 0
+                          ? $", {keptRequestHours} günde mesai saati onaylı " +
+                            "fazla mesai talebinden geldiği için korundu"
                           : "") + "."
         });
     }
@@ -473,9 +522,104 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
             Holidays: holidays);
     }
 
+    /// <summary>
+    /// Cetvelin kapsamı: görev yeri ekseni ve/veya belirli bir
+    /// proje/şantiye. Dönem, görevlendirmeyle GEÇİCİ gelen personeli
+    /// bulmak için gerekiyor.
+    /// </summary>
+    private sealed record SheetScope(
+        int? WorkLocation,
+        Guid? ProjectId,
+        Guid? ProjectSiteId,
+        DateTime PeriodStart,
+        DateTime PeriodEnd);
+
+    /// <summary>
+    /// Bir proje ya da şantiyede o dönem çalışan personel.
+    ///
+    /// İKİ KAYNAĞIN BİRLEŞİMİ: kadrolu atama (ProjectSiteAssignment)
+    /// ve o döneme denk gelen onaylı ÇALIŞMA görevlendirmesi. Yalnız
+    /// atamaya bakılsaydı, görevlendirmeyle gelen personel gittiği
+    /// şantiyenin cetvelinde hiç görünmez ve puantajı girilemezdi —
+    /// oysa gün maliyeti o projeye yazılıyor.
+    /// </summary>
+    private async Task<HashSet<Guid>> LoadScopePersonnelAsync(
+        SheetScope scope, CancellationToken cancellationToken)
+    {
+        var assignments = db.ProjectSiteAssignments
+            .AsNoTracking()
+            // Dönem içinde açık olan atama: dönem bitmeden başlamış ve
+            // dönem başlamadan kapanmamış.
+            .Where(x => x.StartDate <= scope.PeriodEnd &&
+                        (x.EndDate == null || x.EndDate >= scope.PeriodStart));
+
+        assignments = scope.ProjectSiteId is Guid site
+            ? assignments.Where(x => x.ProjectSiteId == site)
+            : assignments.Where(x => x.ProjectSite.ProjectId == scope.ProjectId);
+
+        var result = (await assignments
+            .Select(x => x.PersonnelId)
+            .Distinct()
+            .ToListAsync(cancellationToken))
+            .ToHashSet();
+
+        var duties = db.PersonnelDuties
+            .AsNoTracking()
+            .Where(x => x.DutyType == PersonnelDutyType.Work &&
+                        x.Status == PersonnelDutyStatus.Approved &&
+                        x.StartDate <= scope.PeriodEnd &&
+                        x.EndDate >= scope.PeriodStart);
+
+        duties = scope.ProjectSiteId is Guid dutySite
+            ? duties.Where(x => x.TargetProjectSiteId == dutySite)
+            : duties.Where(x => x.TargetProjectId == scope.ProjectId);
+
+        foreach (var id in await duties
+                     .Select(x => x.PersonnelId)
+                     .Distinct()
+                     .ToListAsync(cancellationToken))
+        {
+            result.Add(id);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Mesai saatini fazla mesai TALEBİNİN yazdığı günler.
+    ///
+    /// Bu günlerde cetvel mesai hücresine dokunmaz. Onaylı talep
+    /// puantaja kendi saatini yazıyor; cetvel de yazsaydı iki yazıcı
+    /// aynı alanda çarpışır, hangi rakamın bordroya gittiği son
+    /// kaydedene bağlı kalırdı.
+    /// </summary>
+    private async Task<HashSet<(Guid, DateOnly)>> LoadRequestOwnedDaysAsync(
+        List<Guid> personnelIds,
+        DateTime periodStart,
+        DateTime periodEnd,
+        CancellationToken cancellationToken)
+    {
+        if (personnelIds.Count == 0)
+            return [];
+
+        var rows = await hrDb.OvertimeRequests
+            .AsNoTracking()
+            .Where(x => personnelIds.Contains(x.PersonnelId) &&
+                        x.Status == Models.HumanResources.HrApprovalStatus.Approved &&
+                        x.ApprovedHours > 0m &&
+                        x.WorkDate >= periodStart && x.WorkDate <= periodEnd)
+            .Select(x => new { x.PersonnelId, x.WorkDate })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(x => (x.PersonnelId, DateOnly.FromDateTime(x.WorkDate)))
+            .ToHashSet();
+    }
+
     private async Task<List<SheetPersonnel>> LoadPersonnelAsync(
         Guid companyId,
         IReadOnlyCollection<Guid>? personnelIds,
+        SheetScope? scope,
         CancellationToken cancellationToken)
     {
         var query = db.Personnel
@@ -486,6 +630,20 @@ public sealed class AttendanceSheetController(AppDbContext db) : ControllerBase
 
         if (personnelIds is { Count: > 0 })
             query = query.Where(x => personnelIds.Contains(x.Id));
+
+        if (scope?.WorkLocation is int location &&
+            Enum.IsDefined(typeof(WorkLocationType), location))
+        {
+            query = query.Where(x => (int)x.WorkLocationType == location);
+        }
+
+        if (scope is { } filter &&
+            (filter.ProjectId is not null || filter.ProjectSiteId is not null))
+        {
+            var scoped = await LoadScopePersonnelAsync(filter, cancellationToken);
+
+            query = query.Where(x => scoped.Contains(x.Id));
+        }
 
         return await query
             .OrderBy(x => x.FirstName).ThenBy(x => x.LastName)

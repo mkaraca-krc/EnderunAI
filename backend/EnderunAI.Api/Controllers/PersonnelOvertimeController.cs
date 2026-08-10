@@ -108,23 +108,64 @@ public sealed class PersonnelOvertimeController(
         static int KindOf(bool sunday, bool holiday) =>
             holiday ? 2 : sunday ? 1 : 0;
 
+        // --- Cetvelden girilen mesai ---
+        //
+        // Mesai iki yoldan girilebiliyor: fazla mesai TALEBİ ve
+        // puantaj CETVELİ. Sınır ve muvafakat sayımı yalnız talepleri
+        // saysaydı, cetvelden girilen saat yasal sınıra hiç
+        // görünmezdi — bordro o saati ödediği halde.
+        //
+        // ÇİFT SAYIM YOK: talebin sahiplendiği gün cetvelde kilitli
+        // olduğu için bir gün ya talepten ya cetvelden gelir, ikisi
+        // birden olmaz. Yine de burada açıkça eleniyor: onaylı talebi
+        // olan gün cetvel tarafından atlanıyor.
+        var requestDays = approved.Select(x => x.WorkDate.Date).ToHashSet();
+
+        var sheetDays = (await db.AttendanceRecords
+            .AsNoTracking()
+            .Where(x => x.PersonnelId == personnelId &&
+                        x.WorkDate >= yearStart && x.WorkDate <= yearEnd &&
+                        (x.OvertimeHours > 0m || x.SundayHours > 0m ||
+                         x.PublicHolidayHours > 0m))
+            .Select(x => new
+            {
+                x.Id,
+                x.WorkDate,
+                x.OvertimeHours,
+                x.SundayHours,
+                x.PublicHolidayHours
+            })
+            .ToListAsync(cancellationToken))
+            .Where(x => !requestDays.Contains(x.WorkDate.Date))
+            .ToList();
+
+        // Cetvel satırları talep satırlarıyla aynı biçime çevriliyor
+        // ki sınır, tutar ve liste hesabı tek koddan geçsin.
+        var sheetLines = sheetDays
+            .SelectMany(x => new[]
+            {
+                (Record: x.Id, x.WorkDate, Hours: x.OvertimeHours, Kind: 0),
+                (Record: x.Id, x.WorkDate, Hours: x.SundayHours, Kind: 1),
+                (Record: x.Id, x.WorkDate, Hours: x.PublicHolidayHours, Kind: 2)
+            })
+            .Where(x => x.Hours > 0m)
+            .ToList();
+
         var limit = await db.CompanyPayrollSettings
             .AsNoTracking()
             .Where(x => x.CompanyId == personnel.CompanyId && x.Year == targetYear)
             .Select(x => x.AnnualOvertimeHourLimit)
             .SingleOrDefaultAsync(cancellationToken);
 
-        var overtimeHours = approved
-            .Where(x => KindOf(x.IsSundayWork, x.IsPublicHolidayWork) == 0)
-            .Sum(x => x.ApprovedHours);
+        decimal HoursOfKind(int kind) =>
+            approved
+                .Where(x => KindOf(x.IsSundayWork, x.IsPublicHolidayWork) == kind)
+                .Sum(x => x.ApprovedHours) +
+            sheetLines.Where(x => x.Kind == kind).Sum(x => x.Hours);
 
-        var sundayHours = approved
-            .Where(x => KindOf(x.IsSundayWork, x.IsPublicHolidayWork) == 1)
-            .Sum(x => x.ApprovedHours);
-
-        var publicHolidayHours = approved
-            .Where(x => KindOf(x.IsSundayWork, x.IsPublicHolidayWork) == 2)
-            .Sum(x => x.ApprovedHours);
+        var overtimeHours = HoursOfKind(0);
+        var sundayHours = HoursOfKind(1);
+        var publicHolidayHours = HoursOfKind(2);
 
         var (limitStatus, limitStatusName) = ResolveLimitStatus(limit, overtimeHours);
 
@@ -223,9 +264,42 @@ public sealed class PersonnelOvertimeController(
                     : null,
                 x.Reason,
                 x.ApprovedAtUtc,
-                amount = AmountOf(kind, x.ApprovedHours)
+                amount = AmountOf(kind, x.ApprovedHours),
+                source = "request"
             };
-        }).ToList();
+        })
+        .Concat(sheetLines.Select(x => new
+        {
+            x.Record,
+            x.WorkDate,
+            hours = x.Hours,
+            kind = x.Kind,
+            kindName = KindName(x.Kind),
+            multiplier = MultiplierOf(x.Kind),
+            // Cetvelden girilen saat zaten puantajın kendisi.
+            landedOnAttendance = true,
+            attendanceMonth = (string?)x.WorkDate.ToString("yyyy-MM"),
+            Reason = (string?)null,
+            ApprovedAtUtc = (DateTime?)null,
+            amount = AmountOf(x.Kind, x.Hours),
+            source = "sheet"
+        }).Select(x => new
+        {
+            Id = x.Record,
+            x.WorkDate,
+            x.hours,
+            x.kind,
+            x.kindName,
+            x.multiplier,
+            x.landedOnAttendance,
+            x.attendanceMonth,
+            x.Reason,
+            x.ApprovedAtUtc,
+            x.amount,
+            x.source
+        }))
+        .OrderByDescending(x => x.WorkDate)
+        .ToList();
 
         // "Bu ay": mesai tutarı aylık ele geçene girdiği için ay
         // kırılımı gerekiyor.

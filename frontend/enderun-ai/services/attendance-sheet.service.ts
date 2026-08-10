@@ -69,6 +69,14 @@ export type AttendanceCell = {
   sundayHours?: number | null;
   publicHolidayHours?: number | null;
   isApproved: boolean;
+
+  /**
+   * Mesai saatini o gün için ONAYLI FAZLA MESAİ TALEBİ yazdıysa
+   * cetvel hücresi kilitlidir. Tek alana iki yazıcı olsaydı son
+   * kaydeden diğerinin saatini sessizce silerdi; gün başına tek
+   * sahip kuralı bunu engelliyor.
+   */
+  overtimeLocked: boolean;
 };
 
 export type AttendanceRow = {
@@ -133,10 +141,33 @@ export type HolidayCalendar = {
 };
 
 export const attendanceSheetService = {
-  get: (companyId: string, year: number, month: number) =>
-    apiClient<AttendanceSheet>(
-      `hr/attendance/cetvel?companyId=${companyId}&year=${year}&month=${month}`
-    ),
+  get: (
+    companyId: string,
+    year: number,
+    month: number,
+    scope?: {
+      /** 1 merkez · 2 şantiye. Görev yeri ekseni. */
+      workLocation?: number;
+      projectId?: string;
+      projectSiteId?: string;
+    }
+  ) => {
+    const query = new URLSearchParams({
+      companyId,
+      year: String(year),
+      month: String(month),
+    });
+
+    if (scope?.workLocation) {
+      query.set("workLocation", String(scope.workLocation));
+    }
+    if (scope?.projectId) query.set("projectId", scope.projectId);
+    if (scope?.projectSiteId) query.set("projectSiteId", scope.projectSiteId);
+
+    return apiClient<AttendanceSheet>(
+      `hr/attendance/cetvel?${query.toString()}`
+    );
+  },
 
   generate: (body: {
     companyId: string;
@@ -157,6 +188,8 @@ export const attendanceSheetService = {
     apiClient<{
       savedCount: number;
       skippedApprovedCount: number;
+      /** Mesai saati onaylı talepten geldiği için korunan gün sayısı. */
+      keptRequestHoursCount: number;
       message: string;
     }>("hr/attendance/cetvel/kaydet", {
       method: "POST",
