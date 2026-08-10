@@ -8,6 +8,10 @@ const actions = [
   { label: "Fiyat Farkı", href: "/fiyat-farki" },
   { label: "Satın Alma", href: "/satin-alma" },
   { label: "Depo & Stok", href: "/depo-stok" },
+  // Çek listesi tek ekran; yön adresten geliyor ki kullanıcı açılışta
+  // doğru defteri görsün.
+  { label: "Verilen Çek", href: "/finans/cekler?yon=verilen" },
+  { label: "Alınan Çek", href: "/finans/cekler?yon=alinan" },
   { label: "AI Merkezi", href: "/ai-asistan" },
 ];
 

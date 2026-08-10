@@ -675,4 +675,160 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
             response.GetProperty("outflows").EnumerateArray(),
             x => x.GetProperty("kind").GetString() == "IssuedCheque");
     }
+
+    // ---------------- Proje bağı ----------------
+
+    /// <summary>
+    /// Her çek bir yere yazılmalı: proje ya da masraf merkezi. İkisi de
+    /// boş kalabildiği sürece çek hiçbir kırılıma düşmüyordu ve proje
+    /// bazlı nakit akışında hiç görünmüyordu.
+    /// </summary>
+    [Fact]
+    public async Task Cheque_WithoutProjectOrCostCenter_IsRejected()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var payload = BuildChequePayload(context, ChequeDirection.Issued);
+
+        var body = payload.GetType().GetProperties()
+            .ToDictionary(x => x.Name, x => x.GetValue(payload));
+
+        body["projectId"] = null;
+        body["costCenterCode"] = null;
+
+        var response = await client.PostAsJsonAsync("/api/cheques", body);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("masraf merkezine",
+            await response.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// MERKEZ YOLU KORUNUYOR: ofis kirası gibi projesi olmayan çek
+    /// masraf merkeziyle açılabiliyor. Proje tek başına zorunlu
+    /// tutulsaydı kullanıcı rastgele bir proje seçer ve tam da kurmak
+    /// istediğimiz kırılım bozulurdu.
+    /// </summary>
+    [Fact]
+    public async Task Cheque_WithOnlyCostCenter_IsAccepted()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var payload = BuildChequePayload(context, ChequeDirection.Issued);
+
+        var body = payload.GetType().GetProperties()
+            .ToDictionary(x => x.Name, x => x.GetValue(payload));
+
+        body["projectId"] = null;
+        body["costCenterCode"] = "MERKEZ";
+
+        var response = await client.PostAsJsonAsync("/api/cheques", body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Proje filtresi yalnız o projenin çeklerini döndürüyor; ay
+    /// gruplaması bunun üzerine kuruluyor ("bu projeye bu ay ne kadar
+    /// çek verilmiş").
+    /// </summary>
+    [Fact]
+    public async Task ChequeList_FiltersByProject()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        Guid otherProjectId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var other = new Project
+            {
+                CompanyId = context.CompanyId,
+                BranchId = await db.Projects
+                    .Where(x => x.Id == context.ProjectId)
+                    .Select(x => x.BranchId)
+                    .SingleAsync(),
+                Code = $"PRJ2-{suffix}",
+                Name = $"İkinci Proje {suffix}",
+                CurrencyCode = "TRY",
+                Status = ProjectStatus.Active
+            };
+
+            db.Projects.Add(other);
+            await db.SaveChangesAsync();
+
+            otherProjectId = other.Id;
+        }
+
+        await client.PostAsJsonAsync("/api/cheques",
+            BuildChequePayload(context, ChequeDirection.Issued));
+
+        var second = BuildChequePayload(context, ChequeDirection.Issued);
+
+        var secondBody = second.GetType().GetProperties()
+            .ToDictionary(x => x.Name, x => x.GetValue(second));
+
+        secondBody["projectId"] = otherProjectId;
+
+        await client.PostAsJsonAsync("/api/cheques", secondBody);
+
+        var filtered = await (await client.GetAsync(
+            $"/api/cheques?companyId={context.CompanyId}" +
+            $"&direction={(int)ChequeDirection.Issued}" +
+            $"&projectId={context.ProjectId}"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        var rows = filtered.EnumerateArray().ToList();
+
+        Assert.NotEmpty(rows);
+        Assert.All(rows, row =>
+            Assert.Equal(context.ProjectId,
+                row.GetProperty("projectId").GetGuid()));
+
+        // Filtresiz listede ikisi de var: filtre kayıt gizlemiyor,
+        // yalnızca daraltıyor.
+        var all = await (await client.GetAsync(
+            $"/api/cheques?companyId={context.CompanyId}" +
+            $"&direction={(int)ChequeDirection.Issued}"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(2, all.EnumerateArray().Count());
+    }
+
+    /// <summary>
+    /// Liste VADEYE göre sıralı geliyor: ay gruplaması ekranda buna
+    /// dayanıyor, ayrı bir sıralama yapılmıyor.
+    /// </summary>
+    [Fact]
+    public async Task ChequeList_IsOrderedByDueDate()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        await client.PostAsJsonAsync("/api/cheques",
+            BuildChequePayload(context, ChequeDirection.Issued, dueInDays: 90));
+
+        await client.PostAsJsonAsync("/api/cheques",
+            BuildChequePayload(context, ChequeDirection.Issued, dueInDays: 15));
+
+        var list = await (await client.GetAsync(
+            $"/api/cheques?companyId={context.CompanyId}" +
+            $"&direction={(int)ChequeDirection.Issued}"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        var dueDates = list.EnumerateArray()
+            .Select(x => x.GetProperty("dueDate").GetDateTime())
+            .ToList();
+
+        Assert.Equal(dueDates.OrderBy(x => x), dueDates);
+    }
 }

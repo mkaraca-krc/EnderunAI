@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { branchService, type BranchListItem } from "@/services/branch.service";
@@ -40,6 +40,11 @@ const money = new Intl.NumberFormat("tr-TR", {
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+const MONTH_NAMES = [
+  "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+  "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
+];
 
 const emptyChequeForm = {
   chequeNumber: "",
@@ -88,6 +93,7 @@ export default function ChequeRegisterPage() {
 
   const [direction, setDirection] = useState<number>(ChequeDirection.Received);
   const [statusFilter, setStatusFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
   const [search, setSearch] = useState("");
 
   const [items, setItems] = useState<ChequeListItem[]>([]);
@@ -160,6 +166,7 @@ export default function ChequeRegisterPage() {
           companyId,
           direction,
           status: statusFilter === "" ? undefined : Number(statusFilter),
+          projectId: projectFilter || undefined,
           search: search.trim() || undefined,
         }),
         chequeService.getSummary(companyId),
@@ -173,7 +180,7 @@ export default function ChequeRegisterPage() {
     } finally {
       setLoading(false);
     }
-  }, [companyId, direction, statusFilter, search]);
+  }, [companyId, direction, statusFilter, projectFilter, search]);
 
   const loadLookups = useCallback(async () => {
     if (!companyId) return;
@@ -205,7 +212,16 @@ export default function ChequeRegisterPage() {
   }, [companyId]);
 
   useEffect(() => {
-    void loadCompanies();
+    void (async () => {
+      // Ana ekrandaki "Verilen Çek" / "Alınan Çek" kısayolları buraya
+      // yönü adresle taşıyor; kullanıcı listeyi ayrıca çevirmesin.
+      const requested = new URLSearchParams(window.location.search).get("yon");
+
+      if (requested === "verilen") setDirection(ChequeDirection.Issued);
+      if (requested === "alinan") setDirection(ChequeDirection.Received);
+
+      await loadCompanies();
+    })();
   }, [loadCompanies]);
 
   useEffect(() => {
@@ -216,6 +232,50 @@ export default function ChequeRegisterPage() {
   useEffect(() => {
     void loadLookups();
   }, [loadLookups]);
+
+  /**
+   * Çekler VADE AYINA göre gruplanır.
+   *
+   * Proje filtresiyle birlikte "bu projeye bu ay ne kadar çek
+   * verilmiş/alınmış" sorusunu cevaplıyor. Gruplama listeden
+   * türetiliyor: uç zaten vadeye göre sıralı döndürdüğü için ayrı bir
+   * özet ucu ve ikinci bir toplama mantığı gerekmedi.
+   */
+  const monthGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { key: string; label: string; total: number; rows: ChequeListItem[] }
+    >();
+
+    for (const item of items) {
+      const key = item.dueDate.slice(0, 7);
+
+      let group = groups.get(key);
+
+      if (!group) {
+        const [year, month] = key.split("-");
+
+        group = {
+          key,
+          label: `${MONTH_NAMES[Number(month) - 1]} ${year}`,
+          total: 0,
+          rows: [],
+        };
+
+        groups.set(key, group);
+      }
+
+      group.rows.push(item);
+
+      // Dövizli çekte TL karşılığı yoksa toplama katılmaz: farklı para
+      // birimlerini toplamak yanlış bir rakam üretirdi.
+      // Defter değeri (keşide kurundaki TL karşılığı): farklı para
+      // birimlerini ham tutarla toplamak yanlış rakam üretirdi.
+      group.total += item.amountTry;
+    }
+
+    return [...groups.values()];
+  }, [items]);
 
   const statusOptions = useMemo(
     () =>
@@ -641,7 +701,7 @@ export default function ChequeRegisterPage() {
               </label>
 
               <label>
-                Proje (opsiyonel)
+                Proje
                 <select
                   value={chequeForm.projectId}
                   onChange={(e) => setChequeForm({ ...chequeForm, projectId: e.target.value })}
@@ -671,7 +731,10 @@ export default function ChequeRegisterPage() {
                   ))}
                 </select>
                 <small>
-                  Ofis kirası gibi projesi olmayan çekler Merkez&apos;e yazılır.
+                  Proje ya da masraf merkezinden BİRİ zorunlu: her çek bir
+                  yere yazılmalı, yoksa proje bazlı nakit akışında hiç
+                  görünmez. Ofis kirası gibi projesi olmayan çekler
+                  Merkez&apos;e yazılır.
                 </small>
               </label>
 
@@ -971,6 +1034,18 @@ export default function ChequeRegisterPage() {
               ))}
             </select>
 
+            <select
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+            >
+              <option value="">Tüm projeler</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.code} — {project.name}
+                </option>
+              ))}
+            </select>
+
             <input
               type="text"
               placeholder="Çek no / banka / keşideci ara..."
@@ -1002,7 +1077,31 @@ export default function ChequeRegisterPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
+                {monthGroups.map((group) => (
+                  <Fragment key={group.key}>
+                    {/* AY BAŞLIĞI: proje filtresiyle birlikte
+                        "bu projeye bu ay ne kadar" sorusunu
+                        cevaplıyor. */}
+                    <tr className="erp-group-row">
+                      <td colSpan={5} style={{ fontWeight: 700 }}>
+                        {group.label}
+                        <small style={{ display: "block", color: "#64748b" }}>
+                          {group.rows.length} çek
+                          {projectFilter
+                            ? ` · ${
+                                projects.find((x) => x.id === projectFilter)?.code ??
+                                "seçili proje"
+                              }`
+                            : ""}
+                        </small>
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 700 }}>
+                        {money.format(group.total)}
+                      </td>
+                      <td />
+                    </tr>
+
+                    {group.rows.map((item) => (
                   <tr
                     key={item.id}
                     onClick={() => void openDetail(item.id)}
@@ -1056,6 +1155,8 @@ export default function ChequeRegisterPage() {
                       </span>
                     </td>
                   </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

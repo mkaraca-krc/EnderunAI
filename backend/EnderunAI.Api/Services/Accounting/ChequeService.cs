@@ -421,6 +421,9 @@ public sealed class ChequeService(
             throw new ArgumentException("Proje bulunamadı.");
         }
 
+        RequireAttribution(request.ProjectId, request.CostCenterCode,
+            request.Allocations is { Count: > 0 });
+
         if (await db.Cheques.AnyAsync(
                 x => x.CompanyId == request.CompanyId
                     && x.Direction == direction
@@ -574,6 +577,10 @@ public sealed class ChequeService(
             : request.BankName.Trim();
         cheque.BankBranch = Normalize(request.BankBranch);
         cheque.Drawer = Normalize(request.Drawer);
+        RequireAttribution(request.ProjectId, request.CostCenterCode,
+            await db.ChequeAllocations.AnyAsync(
+                x => x.ChequeId == cheque.Id, cancellationToken));
+
         cheque.ProjectId = request.ProjectId;
         cheque.CostCenterCode = Normalize(request.CostCenterCode);
         cheque.IssueDate = AsUtc(request.IssueDate);
@@ -1186,6 +1193,36 @@ public sealed class ChequeService(
             throw new ArgumentException(
                 $"Dağılım {lineNumber}: {invoiceNumber} numaralı faturaya bağlanan toplam " +
                 $"({TurkishFormat.Amount(otherCheques + thisRequest)}) fatura tutarını ({TurkishFormat.Amount(invoiceTotal)}) aşıyor.");
+        }
+    }
+
+    /// <summary>
+    /// Her çek bir yere yazılmalı: PROJE ya da MASRAF MERKEZİ.
+    ///
+    /// İkisi de boş bırakılabildiği sürece çek hiçbir kırılıma
+    /// düşmüyordu; proje bazlı nakit akışı ve "bu projeye bu ay ne
+    /// kadar çek verildi" sorusu o çekleri hiç görmezdi.
+    ///
+    /// Proje TEK BAŞINA zorunlu tutulmadı: ofis kirası gibi projesi
+    /// olmayan çekler Merkez'e yazılıyor. Zorunlu tutulsaydı kullanıcı
+    /// rastgele bir proje seçerdi ve tam da kurmaya çalıştığımız
+    /// kırılım bozulurdu.
+    /// </summary>
+    private static void RequireAttribution(
+        Guid? projectId, string? costCenterCode, bool hasAllocations)
+    {
+        // DAĞILIM DA SAYILIR: birden çok faturayı ödeyen çekte proje
+        // başlıkta değil dağılım satırlarında durur ve faturadan
+        // türetilir. Başlık zorunlu tutulsaydı bu tercih edilen
+        // kullanım engellenirdi.
+        if (hasAllocations)
+            return;
+
+        if (projectId is null && string.IsNullOrWhiteSpace(costCenterCode))
+        {
+            throw new ArgumentException(
+                "Çek bir projeye ya da masraf merkezine bağlanmalıdır. " +
+                "Projesi olmayan çekler için masraf merkezi seçin.");
         }
     }
 
