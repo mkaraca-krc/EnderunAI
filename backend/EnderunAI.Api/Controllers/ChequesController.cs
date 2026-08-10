@@ -1,5 +1,6 @@
 using EnderunAI.Api.Contracts.Accounting;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Accounting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,7 +15,9 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/cheques")]
-public sealed class ChequesController(IChequeService service) : ControllerBase
+public sealed class ChequesController(
+    IChequeService service,
+    ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.FinanceView)]
@@ -81,6 +84,67 @@ public sealed class ChequesController(IChequeService service) : ControllerBase
         try
         {
             return Ok(await service.UpdateAsync(id, request, cancellationToken));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
+
+    /// <summary>
+    /// Son durum değişikliğini geri alır — yanlış işaretlenen "Ödendi"
+    /// için.
+    ///
+    /// YETKİ FinanceApprove: geri alma banka bakiyesini ve muhasebe
+    /// defterini değiştiriyor; durum değiştirmeye yeten yetki (edit)
+    /// bunun için yeterli değil.
+    /// </summary>
+    [HttpPost("{id:guid}/durum-geri-al")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceApprove)]
+    public async Task<IActionResult> ReverseStatus(
+        Guid id, ChequeReversalRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await service.ReverseLastMovementAsync(
+                id, request, currentUser.UserId, cancellationToken));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
+    /// <summary>
+    /// Çeki iptale çeker ve ürettiği bütün mali etkileri geri alır.
+    /// Silme değil: mali kayıt olduğu için geçmiş defterde kalıyor.
+    /// </summary>
+    [HttpPost("{id:guid}/iptal")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceApprove)]
+    public async Task<IActionResult> Void(
+        Guid id, ChequeReversalRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await service.VoidAsync(
+                id, request, currentUser.UserId, cancellationToken));
         }
         catch (KeyNotFoundException exception)
         {

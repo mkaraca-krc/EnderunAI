@@ -41,7 +41,15 @@ public enum ChequeStatus
     /// değiştirildi" farklı olaylardır ve erteleme sayısı bir risk
     /// sinyalidir — ikisi tek durumda toplanırsa o sinyal kaybolur.
     /// </summary>
-    Replaced = 20
+    Replaced = 20,
+
+    /// <summary>
+    /// İPTAL EDİLDİ (void). Yanlış girilen çek defterden SİLİNMEZ,
+    /// iptale çekilir: mali kayıt olduğu için geçmişin kaybolmaması
+    /// gerekiyor. İptal, çekin ürettiği bütün muhasebe ve banka
+    /// etkilerini ters kayıtla geri alır — çek kapanır ama izi durur.
+    /// </summary>
+    Voided = 90
 }
 
 /// <summary>
@@ -129,6 +137,14 @@ public sealed class Cheque : BaseEntity
     public Guid? CashAccountId { get; set; }
     public CashAccount? CashAccount { get; set; }
 
+    // --- İptal izi ---
+
+    public DateTime? VoidedAtUtc { get; set; }
+    public Guid? VoidedByUserId { get; set; }
+
+    /// <summary>İptal gerekçesi; gerekçesiz iptal denetlenemez.</summary>
+    public string? VoidReason { get; set; }
+
     public string? Description { get; set; }
 
     /// <summary>
@@ -180,4 +196,20 @@ public sealed class ChequeMovement : BaseEntity
     /// <summary>Geçişte üretilen (Posted) muhasebe fişi; etkisiz geçişlerde null.</summary>
     public Guid? AccountingVoucherId { get; set; }
     public AccountingVoucher? AccountingVoucher { get; set; }
+
+    // --- Geri alma izi ---
+    //
+    // Geri alınan hareket SİLİNMEZ, damgalanır: "bu geçiş yapıldı ve
+    // sonra geri alındı" ile "bu geçiş hiç olmadı" farklı olaylardır
+    // ve yanlış ödeme sayısı denetimde aranan bir sinyaldir.
+
+    public DateTime? ReversedAtUtc { get; set; }
+    public Guid? ReversedByUserId { get; set; }
+    public string? ReversalReason { get; set; }
+
+    /// <summary>Bu geçişin fişini kapatan ters kayıt.</summary>
+    public Guid? ReversalVoucherId { get; set; }
+
+    /// <summary>Geri alındı mı — sorgularda tek yerden okunuyor.</summary>
+    public bool IsReversed => ReversedAtUtc is not null;
 }

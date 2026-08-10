@@ -86,6 +86,9 @@ public sealed record UpdateChequeRequest(
 /// Durum geçişi. CashAccountId yalnızca para hareketi doğuran
 /// geçişlerde zorunlu (bankaya verme, tahsil, ödeme, rücu).
 /// </summary>
+/// <summary>Geri alma / iptal isteği — gerekçe her ikisinde de zorunlu.</summary>
+public sealed record ChequeReversalRequest(string? Reason);
+
 public sealed record ChequeStatusChangeRequest(
     int ToStatus,
     DateTime MovementDate,

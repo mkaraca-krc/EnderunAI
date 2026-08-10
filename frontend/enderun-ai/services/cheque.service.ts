@@ -16,6 +16,8 @@ export const ChequeStatus = {
   Returned: 12,
   /** Ertelendi: yerine yeni vadeli çek verildi. */
   Replaced: 20,
+  /** İptal edildi: mali etkileri ters kayıtla geri alındı, kayıt durur. */
+  Voided: 90,
 } as const;
 
 export const CHEQUE_STATUS_LABELS: Record<number, string> = {
@@ -28,6 +30,7 @@ export const CHEQUE_STATUS_LABELS: Record<number, string> = {
   11: "Ödendi",
   12: "İade alındı",
   20: "Ertelendi (değiştirildi)",
+  90: "İptal edildi",
 };
 
 /** erp-status.{renk} sınıfıyla eşleşir. */
@@ -41,6 +44,7 @@ export const CHEQUE_STATUS_COLORS: Record<number, string> = {
   11: "green",
   12: "gray",
   20: "yellow",
+  90: "gray",
 };
 
 /** Bu geçişler için kasa/banka hesabı seçimi zorunlu. */
@@ -255,6 +259,30 @@ export const chequeService = {
     return apiClient<ChequeDetail>(`cheques/${id}/status`, {
       method: "POST",
       body: payload,
+    });
+  },
+
+  /**
+   * Son durum değişikliğini geri alır (yanlış "Ödendi" gibi).
+   * Silmez: fişi ters kayıtla kapatır, banka hareketini karşıt bir
+   * hareketle dengeler ve iz bırakır.
+   */
+  reverseStatus(id: string, reason: string) {
+    return apiClient<ChequeDetail>(`cheques/${id}/durum-geri-al`, {
+      method: "POST",
+      body: { reason },
+    });
+  },
+
+  /**
+   * Çeki iptale çeker ve ürettiği bütün mali etkileri aynı işlemde
+   * geri alır. Mali kayıt olduğu için silme yok — geçmiş defterde
+   * kalıyor.
+   */
+  void(id: string, reason: string) {
+    return apiClient<ChequeDetail>(`cheques/${id}/iptal`, {
+      method: "POST",
+      body: { reason },
     });
   },
 };

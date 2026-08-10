@@ -467,6 +467,63 @@ export default function ChequeRegisterPage() {
     }
   }
 
+  /**
+   * Son durum değişikliğini geri alır. Gerekçe zorunlu: uç da
+   * gerekçesiz isteği reddediyor, buradaki sorma yalnızca kullanıcıyı
+   * sunucu hatasıyla karşılaştırmamak için.
+   */
+  async function reverseStatus() {
+    if (!detail) return;
+
+    const reason = window
+      .prompt("Son durum değişikliği geri alınacak. Gerekçe (zorunlu):")
+      ?.trim();
+
+    if (!reason) return;
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const updated = await chequeService.reverseStatus(detail.id, reason);
+
+      setDetail(updated);
+      setNotice("Durum geri alındı; banka hareketi ve fiş ters kayıtla dengelendi.");
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Geri alma başarısız.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function voidCheque() {
+    if (!detail) return;
+
+    const reason = window
+      .prompt("Çek iptal edilecek ve mali etkileri geri alınacak. Gerekçe (zorunlu):")
+      ?.trim();
+
+    if (!reason) return;
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const updated = await chequeService.void(detail.id, reason);
+
+      setDetail(updated);
+      setNotice("Çek iptal edildi; banka hareketi ve fişler ters kayıtla geri alındı.");
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "İptal başarısız.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function submitStatus(event: React.FormEvent) {
     event.preventDefault();
     if (!detail || statusForm.toStatus === "") return;
@@ -1481,6 +1538,54 @@ export default function ChequeRegisterPage() {
             ) : (
               <div className="erp-alert">
                 Bu çek nihai durumda; başka bir duruma geçirilemez.
+              </div>
+            )}
+
+            {/* DÜZELTME YOLU: yanlış işaretlenen bir durum ya da baştan
+                yanlış girilmiş bir çek için. İkisi de SİLMEZ — fişi ters
+                kayıtla kapatır, banka hareketini karşıt bir hareketle
+                dengeler ve iz bırakır. */}
+            {detail.status !== ChequeStatus.Voided ? (
+              <div
+                style={{
+                  marginTop: "16px",
+                  paddingTop: "16px",
+                  borderTop: "1px solid var(--erp-border)",
+                  display: "grid",
+                  gap: "8px",
+                }}
+              >
+                <strong style={{ fontSize: "13px" }}>Düzeltme</strong>
+                <small style={{ color: "#64748b" }}>
+                  Yanlış durum geri alınır, baştan hatalı çek iptal
+                  edilir. Çek silinmez; banka hareketi ve muhasebe fişi
+                  ters kayıtla dengelenir.
+                </small>
+
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="erp-secondary-button"
+                    disabled={saving}
+                    onClick={() => void reverseStatus()}
+                  >
+                    Son Durumu Geri Al
+                  </button>
+
+                  <button
+                    type="button"
+                    className="erp-secondary-button"
+                    disabled={saving}
+                    onClick={() => void voidCheque()}
+                  >
+                    Çeki İptal Et
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="erp-alert" style={{ marginTop: "16px" }}>
+                Bu çek iptal edilmiş. Mali etkileri ters kayıtla geri
+                alındı; kayıt geçmiş için defterde duruyor.
               </div>
             )}
 
