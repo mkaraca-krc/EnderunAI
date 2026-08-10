@@ -151,6 +151,19 @@ public sealed class HrPayrollRecord : BaseEntity
     public decimal OtherDeductionAmount { get; set; }
     public decimal TotalDeductions { get; set; }
     public decimal OfficialNetPayableAmount { get; set; }
+
+    /// <summary>
+    /// ELDEN ÖDEMEYİ İÇERMEZ. Adı "fiili ödenecek" izlenimi verse de
+    /// hesaplama sırasında <see cref="OfficialNetPayableAmount"/>
+    /// değerine birebir eşitlenir; resmî netin eşdeğeridir.
+    ///
+    /// Personelin gerçekten ELE GEÇEN tutarı için bunu okuma —
+    /// resmî net + elden ödeme + mesai eldenini birleştiren
+    /// TotalTakeHome (SalaryTakeHomeService) kullanılır.
+    ///
+    /// Elden ödeme bilinçli olarak ayrı tabloda (PersonnelExtraPayment)
+    /// tutuluyor; bordro kaydına hiç girmiyor.
+    /// </summary>
     public decimal ActualPayableAmount { get; set; }
     public decimal NetPayableAmount { get; set; }
     public string CurrencyCode { get; set; } = "TRY";

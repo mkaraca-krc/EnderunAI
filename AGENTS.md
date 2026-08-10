@@ -46,3 +46,5 @@ Kılavuz dosyası değiştiğinde ayrıca `HizirPermissionTests` içindeki
   uygulanır (safe-deploy bilinçli olarak otomatik uygulamıyor).
 - Yayın yalnızca `deploy/scripts/safe-deploy.sh` ile yapılır.
 - Commit mesajları, kod yorumları ve arayüz metinleri Türkçe; emoji yok.
+- Acil olmayan ama biriken düzeltme adayları `TEMIZLIK-TARAMASI.md`
+  dosyasına yazılır; tek tek değil, temizlik turunda ele alınır.
