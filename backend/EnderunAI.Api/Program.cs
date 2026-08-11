@@ -240,6 +240,23 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Notifications.NotificationScan
 builder.Services.AddHostedService<
     EnderunAI.Api.Services.Notifications.NotificationScanBackgroundService>();
 
+// Finans tetikleyicileri.
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.INotificationSource,
+    EnderunAI.Api.Services.Notifications.Sources.ChequeDueNotificationSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.INotificationSource,
+    EnderunAI.Api.Services.Notifications.Sources.InvoiceDueNotificationSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.INotificationSource,
+    EnderunAI.Api.Services.Notifications.Sources.LoanInstallmentNotificationSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.INotificationSource,
+    EnderunAI.Api.Services.Notifications.Sources.CreditCardStatementNotificationSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.INotificationSource,
+    EnderunAI.Api.Services.Notifications.Sources.DutySettlementNotificationSource>();
+
 // Finansal araçlar ortak sözleşmeyi uyguluyor; nakit akış hepsini
 // IEnumerable<IFinancialInstrumentSource> olarak okuyor. Yeni bir
 // araç eklemek, projeksiyonu değiştirmeden bu listeye kayıt olmak.
