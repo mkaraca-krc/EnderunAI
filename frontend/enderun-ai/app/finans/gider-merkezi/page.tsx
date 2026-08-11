@@ -17,6 +17,7 @@ import {
   type ExpenseDuplicateHint,
   type ExpenseEntryList,
   type ExpenseReport,
+  type PartnerAccountBalance,
   type RecurringExpenseList,
   type SaveExpenseEntryPayload,
 } from "@/services/expense.service";
@@ -67,9 +68,10 @@ const emptyEntryForm = {
   expenseDate: iso(new Date()),
   amount: "",
   description: "",
-  paymentMethod: "Bank" as "Bank" | "Cash",
+  paymentMethod: "Bank" as "Bank" | "Cash" | "PartnerAccount",
   documentType: "Receipt" as "None" | "Receipt" | "Invoice",
   documentNumber: "",
+  partnerAccountId: "",
 };
 
 const emptyTemplateForm = {
@@ -100,8 +102,11 @@ export default function ExpenseCentrePage() {
   const [report, setReport] = useState<ExpenseReport | null>(null);
   const [entries, setEntries] = useState<ExpenseEntryList | null>(null);
   const [recurring, setRecurring] = useState<RecurringExpenseList | null>(null);
+  const [partners, setPartners] = useState<PartnerAccountBalance[]>([]);
 
-  const [view, setView] = useState<"report" | "entries" | "recurring">("report");
+  const [view, setView] = useState<
+    "report" | "entries" | "recurring" | "partners"
+  >("report");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -172,6 +177,16 @@ export default function ExpenseCentrePage() {
 
       setCategories(categoryList);
       setCenters(centerList);
+
+      // Şahıs carisi extra_payment.view istiyor; yetki yoksa uç 403
+      // döner ve sekme boş kalır — sayfanın geri kalanı çalışmaya
+      // devam etmeli.
+      try {
+        setPartners(await expenseService.listPartners(companyId));
+      } catch {
+        setPartners([]);
+      }
+
       setReport(reportData);
       setEntries(entryData);
       setRecurring(recurringData);
@@ -205,6 +220,10 @@ export default function ExpenseCentrePage() {
       documentType: EXPENSE_DOCUMENT_TYPE_VALUE[entryForm.documentType],
       documentNumber: entryForm.documentNumber || null,
       supplierCurrentAccountId: null,
+      partnerAccountId:
+        entryForm.paymentMethod === "PartnerAccount"
+          ? entryForm.partnerAccountId || null
+          : null,
     };
   }
 
@@ -396,6 +415,7 @@ export default function ExpenseCentrePage() {
               ["report", "Rapor"],
               ["entries", "Gider Kayıtları"],
               ["recurring", "Tekrarlayan"],
+              ["partners", "Şahıs Carisi"],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -476,6 +496,8 @@ export default function ExpenseCentrePage() {
             canManage={canManage}
             onDelete={(id, label) => setDeleteTarget({ id, label })}
           />
+        ) : view === "partners" ? (
+          <PartnersView data={partners} canSeeCash={canSeeCash} />
         ) : (
           <RecurringView
             data={recurring}
@@ -580,7 +602,10 @@ export default function ExpenseCentrePage() {
                 onChange={(event) =>
                   setEntryForm({
                     ...entryForm,
-                    paymentMethod: event.target.value as "Bank" | "Cash",
+                    paymentMethod: event.target.value as
+                      | "Bank"
+                      | "Cash"
+                      | "PartnerAccount",
                   })
                 }
                 className="mt-1 w-full"
@@ -589,6 +614,10 @@ export default function ExpenseCentrePage() {
                     ? [
                         { value: "Bank", label: "Banka" },
                         { value: "Cash", label: "Elden" },
+                        {
+                          value: "PartnerAccount",
+                          label: "Faturasız — şahıs carisinden mahsup",
+                        },
                       ]
                     : [{ value: "Bank", label: "Banka" }]
                 }
@@ -614,6 +643,31 @@ export default function ExpenseCentrePage() {
               />
             </label>
           </div>
+
+          {entryForm.paymentMethod === "PartnerAccount" ? (
+            <label className="block text-xs text-slate-600">
+              Mahsup edilecek kişi
+              <Select
+                value={entryForm.partnerAccountId}
+                onChange={(event) =>
+                  setEntryForm({
+                    ...entryForm,
+                    partnerAccountId: event.target.value,
+                  })
+                }
+                className="mt-1 w-full"
+                placeholder="Seçiniz"
+                options={partners.map((partner) => ({
+                  value: partner.id,
+                  label: partner.fullName,
+                }))}
+              />
+              <span className="mt-1 block text-[11px] text-slate-400">
+                Bu gider kişinin borcundan düşer. Şirket nakdini tekrar
+                etkilemez — para avans olarak zaten çıktı.
+              </span>
+            </label>
+          ) : null}
 
           <label className="block text-xs text-slate-600">
             Belge no
@@ -1042,6 +1096,10 @@ function EntriesView({
                   <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[11px] text-violet-800">
                     elden
                   </span>
+                ) : item.paymentMethod === "PartnerAccount" ? (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+                    faturasız · {item.partnerName ?? "şahıs"}
+                  </span>
                 ) : (
                   "Banka"
                 )}
@@ -1176,6 +1234,79 @@ function RecurringView({
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function PartnersView({
+  data,
+  canSeeCash,
+}: {
+  data: PartnerAccountBalance[];
+  canSeeCash: boolean;
+}) {
+  if (!canSeeCash) {
+    return (
+      <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        Şahıs carisi faturasız kalemler taşıyor; görmek için{" "}
+        <strong>extra_payment.view</strong> yetkisi gerekiyor.
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="rounded-lg border border-slate-200 p-6 text-sm text-slate-500">
+        Tanımlı şahıs carisi yok. Şirketten bir kişiye para çıkıyor ve o
+        para faturasız giderlerle kapanıyorsa buradan takip edilir.
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200">
+      <table className="min-w-full text-sm">
+        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+          <tr>
+            <th className="px-3 py-2">Kişi</th>
+            <th className="px-3 py-2">Ünvan</th>
+            <th className="px-3 py-2 text-right">Verilen (avans)</th>
+            <th className="px-3 py-2 text-right">Mahsup (faturasız gider)</th>
+            <th className="px-3 py-2 text-right">Geri ödeme</th>
+            <th className="px-3 py-2 text-right">Bakiye</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((partner) => (
+            <tr key={partner.id} className="border-t border-slate-100">
+              <td className="px-3 py-2">{partner.fullName}</td>
+              <td className="px-3 py-2 text-slate-500">{partner.title ?? "—"}</td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {moneyExact.format(partner.advanceTotal)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {moneyExact.format(partner.settlementTotal)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {moneyExact.format(partner.repaymentTotal)}
+              </td>
+              <td
+                className={
+                  partner.balance > 0
+                    ? "px-3 py-2 text-right font-medium tabular-nums text-rose-700"
+                    : "px-3 py-2 text-right font-medium tabular-nums text-slate-900"
+                }
+              >
+                {moneyExact.format(partner.balance)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
+        Bakiye = verilen − (mahsup + geri ödeme). Pozitif bakiye, kişinin
+        şirkete olan borcudur.
+      </p>
     </div>
   );
 }

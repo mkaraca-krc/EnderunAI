@@ -16,7 +16,8 @@ public sealed record ExpenseEntryInput(
     ExpensePaymentMethod PaymentMethod,
     ExpenseDocumentType DocumentType,
     string? DocumentNumber,
-    Guid? SupplierCurrentAccountId);
+    Guid? SupplierCurrentAccountId,
+    Guid? PartnerAccountId);
 
 /// <summary>Doğrulama sonucu — hata varsa Türkçe mesajla.</summary>
 public sealed record ExpenseValidationResult(string? Error, ExpenseCenterRef? Center);
@@ -98,6 +99,23 @@ public sealed class ExpenseEntryService(AppDbContext db, ExpenseCenterResolver c
                 $"\"{category.Name}\" kategorisi satın alma, görevlendirme ve " +
                 "puantaj kayıtlarından otomatik geliyor; elle girilirse aynı " +
                 "gider iki kez sayılır. Bu kalem kaynağından düzeltilir.", null);
+
+        // Faturasız gider bir şahsın carisinden mahsup ediliyorsa
+        // sahibi ZORUNLU: sahibi belli olmayan bir mahsup hiçbir
+        // bakiyeyi düşürmez, defteri sessizce şişirir.
+        if (input.PaymentMethod == ExpensePaymentMethod.PartnerAccount)
+        {
+            if (input.PartnerAccountId is not Guid partnerId)
+                return new ExpenseValidationResult(
+                    "Şahıs carisinden mahsup için kişi seçilmelidir.", null);
+
+            var partnerExists = await db.PartnerAccounts
+                .AnyAsync(x => x.Id == partnerId && x.CompanyId == input.CompanyId,
+                    cancellationToken);
+
+            if (!partnerExists)
+                return new ExpenseValidationResult("Şahıs carisi bulunamadı.", null);
+        }
 
         if (input.SupplierCurrentAccountId is Guid supplierId)
         {

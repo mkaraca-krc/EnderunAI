@@ -11,7 +11,19 @@ public enum ExpensePaymentMethod
     /// yetkisiz kullanıcıya satır HİÇ GELMEZ ve toplam yalnızca
     /// görünen kalemlerden oluşur.
     /// </summary>
-    Cash = 1
+    Cash = 1,
+
+    /// <summary>
+    /// ŞAHIS CARİSİNDEN MAHSUP — faturasız gider.
+    ///
+    /// Para şirketten şahsa avans olarak zaten çıktı; bu kalem o
+    /// borcu düşürüyor. Gider merkezinde SAYILIR (gerçek bir
+    /// giderdir) ama nakit akışta ÇIKIŞ ÜRETMEZ: aynı para iki kez
+    /// çıkmış görünürdü.
+    ///
+    /// Elden kalemlerle aynı maskeye tabi.
+    /// </summary>
+    PartnerAccount = 2
 }
 
 /// <summary>Gideri belgeleyen kâğıt.</summary>
@@ -84,6 +96,15 @@ public sealed class ExpenseEntry : BaseEntity
     /// <summary>Tedarikçi — opsiyonel; her giderin carisi olmuyor.</summary>
     public Guid? SupplierCurrentAccountId { get; set; }
     public CurrentAccount? SupplierCurrentAccount { get; set; }
+
+    /// <summary>
+    /// Faturasız gider hangi şahsın carisinden mahsup ediliyor.
+    /// <see cref="ExpensePaymentMethod.PartnerAccount"/> seçildiğinde
+    /// ZORUNLU: mahsubun sahibi belli olmayan bir gider, hiçbir
+    /// bakiyeyi düşürmez ve defteri sessizce şişirir.
+    /// </summary>
+    public Guid? PartnerAccountId { get; set; }
+    public PartnerAccount? PartnerAccount { get; set; }
 
     /// <summary>
     /// Bu kaydı üreten tekrarlayan şablon (varsa) ve hangi döneme

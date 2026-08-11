@@ -19,7 +19,8 @@ public sealed record SaveExpenseEntryRequest(
     ExpensePaymentMethod PaymentMethod,
     ExpenseDocumentType DocumentType,
     string? DocumentNumber,
-    Guid? SupplierCurrentAccountId);
+    Guid? SupplierCurrentAccountId,
+    Guid? PartnerAccountId);
 
 /// <summary>
 /// Elle girilen gider kayıtları.
@@ -37,6 +38,7 @@ public sealed record SaveExpenseEntryRequest(
 public sealed class ExpenseEntriesController(
     AppDbContext db,
     ExpenseEntryService service,
+    PartnerAccountService partners,
     IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
 {
     [HttpGet]
@@ -89,14 +91,16 @@ public sealed class ExpenseEntriesController(
 
         // Gizlenen kalem SAYISI toplam için değil, kullanıcıya "eksik
         // bakıyorsun" diyebilmek için okunuyor; tutarı taşımıyor.
+        // Elden VE şahıs carisinden mahsup edilen kalemler aynı
+        // maskede: ikisi de faturasız, ikisi de extra_payment.view.
         var hiddenCount = canSeeCash
             ? 0
             : await query.CountAsync(
-                x => x.PaymentMethod == ExpensePaymentMethod.Cash,
+                x => x.PaymentMethod != ExpensePaymentMethod.Bank,
                 cancellationToken);
 
         if (!canSeeCash)
-            query = query.Where(x => x.PaymentMethod != ExpensePaymentMethod.Cash);
+            query = query.Where(x => x.PaymentMethod == ExpensePaymentMethod.Bank);
 
         var rows = await query
             .OrderByDescending(x => x.ExpenseDate).ThenByDescending(x => x.CreatedAtUtc)
@@ -114,6 +118,7 @@ public sealed class ExpenseEntriesController(
                     : x.ProjectId != null ? x.Project!.Name
                     : x.Branch!.Name,
                 paymentMethod = x.PaymentMethod.ToString(),
+                partnerName = x.PartnerAccount != null ? x.PartnerAccount.FullName : null,
                 documentType = x.DocumentType.ToString(),
                 documentNumber = x.DocumentNumber,
                 supplierName = x.SupplierCurrentAccount != null
@@ -189,12 +194,20 @@ public sealed class ExpenseEntriesController(
             DocumentNumber = string.IsNullOrWhiteSpace(input.DocumentNumber)
                 ? null
                 : input.DocumentNumber.Trim(),
-            SupplierCurrentAccountId = input.SupplierCurrentAccountId
+            SupplierCurrentAccountId = input.SupplierCurrentAccountId,
+            PartnerAccountId = input.PaymentMethod == ExpensePaymentMethod.PartnerAccount
+                ? input.PartnerAccountId
+                : null
         };
 
         ExpenseEntryService.ApplyCenter(entry, validation.Center!);
 
         db.ExpenseEntries.Add(entry);
+        await db.SaveChangesAsync(cancellationToken);
+
+        // Mahsup gider kaydından DOĞAR: elle girilseydi gider
+        // merkezinde görünmeyen bir kalem bakiyeyi düşürürdü.
+        await partners.SyncSettlementAsync(entry, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new { id = entry.Id });
@@ -237,9 +250,17 @@ public sealed class ExpenseEntriesController(
             ? null
             : input.DocumentNumber.Trim();
         entry.SupplierCurrentAccountId = input.SupplierCurrentAccountId;
+        entry.PartnerAccountId =
+            input.PaymentMethod == ExpensePaymentMethod.PartnerAccount
+                ? input.PartnerAccountId
+                : null;
         entry.UpdatedAtUtc = DateTime.UtcNow;
 
         ExpenseEntryService.ApplyCenter(entry, validation.Center!);
+
+        // Ödeme şekli değiştiyse mahsup da takip eder: banka'ya
+        // çevrilen bir gider şahsın borcunu düşürmeye devam edemez.
+        await partners.SyncSettlementAsync(entry, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
 
@@ -260,6 +281,9 @@ public sealed class ExpenseEntriesController(
         if (await CashWriteForbiddenAsync(entry.PaymentMethod, cancellationToken))
             return Forbid();
 
+        // Sahipsiz mahsup satırı bakiyeyi olduğundan düşük gösterirdi.
+        await partners.RemoveSettlementAsync(entry.Id, cancellationToken);
+
         db.ExpenseEntries.Remove(entry);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -275,7 +299,7 @@ public sealed class ExpenseEntriesController(
     private async Task<bool> CashWriteForbiddenAsync(
         ExpensePaymentMethod method, CancellationToken cancellationToken)
     {
-        if (method != ExpensePaymentMethod.Cash)
+        if (method == ExpensePaymentMethod.Bank)
             return false;
 
         return !await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken);
@@ -292,5 +316,6 @@ public sealed class ExpenseEntriesController(
             request.PaymentMethod,
             request.DocumentType,
             request.DocumentNumber,
-            request.SupplierCurrentAccountId);
+            request.SupplierCurrentAccountId,
+            request.PartnerAccountId);
 }

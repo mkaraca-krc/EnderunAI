@@ -486,4 +486,178 @@ public sealed class RecurringExpenseTests(DatabaseFixture fixture)
             "/api/expenses/tekrarlayan",
             TemplatePayload(context, rent, 1_000m, 2026, 3))).StatusCode);
     }
+
+    // ---------------- Nakit akış stopgap devri ----------------
+
+    /// <summary>
+    /// DEVİR: eski "tahmini gider" satırı gider merkezine taşınıyor
+    /// ve ESKİSİ SİLİNİYOR.
+    ///
+    /// Tek işlemde olması şart: taşıma ile silme ayrı adımlar
+    /// olsaydı, aradaki pencerede aynı kira hem eski tabloda hem
+    /// şablonda durur ve nakit akışta iki kez çıkardı (R6).
+    /// </summary>
+    [Fact]
+    public async Task LegacyEstimatedExpense_IsAdoptedAndTheOldRowIsRemoved()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientWithAsync(FullPermissions);
+
+        var rent = await CategoryIdAsync(context.CompanyId, ExpenseCategoryCatalog.Rent);
+        var today = DateTime.UtcNow.Date;
+
+        Guid legacyId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var legacy = new EnderunAI.Api.Models.CashFlowEstimatedExpense
+            {
+                CompanyId = context.CompanyId,
+                Description = $"Eski kira {suffix}",
+                Amount = 25_000m,
+                StartYear = today.Year,
+                StartMonth = today.Month,
+                RecurrenceCount = 6,
+                PaymentDay = 10
+            };
+
+            db.CashFlowEstimatedExpenses.Add(legacy);
+            await db.SaveChangesAsync();
+
+            legacyId = legacy.Id;
+        }
+
+        var adopted = await ReadAsync(await client.PostAsJsonAsync(
+            "/api/expenses/tekrarlayan/devral", new
+            {
+                estimatedExpenseId = legacyId,
+                centerType = (int)ExpenseCenterType.Branch,
+                centerId = context.BranchId,
+                expenseCategoryId = rent,
+                paymentMethod = (int)ExpensePaymentMethod.Bank
+            }));
+
+        var templateId = adopted.GetProperty("id").GetGuid();
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // Eski satır gitti.
+            Assert.False(await db.CashFlowEstimatedExpenses
+                .AnyAsync(x => x.Id == legacyId));
+
+            var template = await db.RecurringExpenseTemplates
+                .SingleAsync(x => x.Id == templateId);
+
+            Assert.Equal(25_000m, template.EstimatedAmount);
+            Assert.Equal(10, template.PaymentDay);
+            Assert.Equal($"Eski kira {suffix}", template.Description);
+
+            // TEKRAR SAYISI BİTİŞ DÖNEMİNE ÇEVRİLDİ: 6 tekrar =
+            // başlangıç + 5 ay. Süresiz akan bir tahmin, kimsenin
+            // gözden geçirmediği bir varsayıma dönüşürdü.
+            var expectedEnd = new DateTime(today.Year, today.Month, 1, 0, 0, 0,
+                DateTimeKind.Utc).AddMonths(5);
+
+            Assert.Equal(expectedEnd.Year, template.EndYear);
+            Assert.Equal(expectedEnd.Month, template.EndMonth);
+        }
+    }
+
+    /// <summary>
+    /// Devirde de aynı doğrulama: otomatik kategoriye taşınamaz.
+    /// Taşınabilseydi eski kira satırı "işçilik" olarak akar ve
+    /// puantajdan gelenle çakışırdı.
+    /// </summary>
+    [Fact]
+    public async Task Adoption_RejectsAnAutomaticCategory()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientWithAsync(FullPermissions);
+
+        var labor = await CategoryIdAsync(context.CompanyId, ExpenseCategoryCatalog.Labor);
+        var today = DateTime.UtcNow.Date;
+
+        Guid legacyId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var legacy = new EnderunAI.Api.Models.CashFlowEstimatedExpense
+            {
+                CompanyId = context.CompanyId,
+                Description = $"Eski gider {suffix}",
+                Amount = 1_000m,
+                StartYear = today.Year,
+                StartMonth = today.Month,
+                RecurrenceCount = 2,
+                PaymentDay = 1
+            };
+
+            db.CashFlowEstimatedExpenses.Add(legacy);
+            await db.SaveChangesAsync();
+
+            legacyId = legacy.Id;
+        }
+
+        var response = await client.PostAsJsonAsync(
+            "/api/expenses/tekrarlayan/devral", new
+            {
+                estimatedExpenseId = legacyId,
+                centerType = (int)ExpenseCenterType.Branch,
+                centerId = context.BranchId,
+                expenseCategoryId = labor,
+                paymentMethod = (int)ExpensePaymentMethod.Bank
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        // Başarısız devir eski satırı SİLMEDİ.
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            Assert.True(await db.CashFlowEstimatedExpenses.AnyAsync(x => x.Id == legacyId));
+        }
+    }
+
+    /// <summary>
+    /// G2 DERSİ: dönem parametresi GERÇEK değerle sınanıyor. Boş
+    /// çağrı, dönem hesabındaki bir hatayı göstermezdi.
+    /// </summary>
+    [Fact]
+    public async Task PeriodQuery_WorksWithRealYearAndMonth()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await ClientWithAsync(FullPermissions);
+
+        var rent = await CategoryIdAsync(context.CompanyId, ExpenseCategoryCatalog.Rent);
+
+        await ReadAsync(await client.PostAsJsonAsync(
+            "/api/expenses/tekrarlayan",
+            TemplatePayload(context, rent, 12_000m, 2026, 4,
+                description: "Nisan-Haziran kirası",
+                endYear: 2026, endMonth: 6)));
+
+        // Kapsam İÇİ ay: dönem var.
+        var inside = await ReadAsync(await client.GetAsync(
+            $"/api/expenses/tekrarlayan?companyId={context.CompanyId}&year=2026&month=5"));
+
+        Assert.Equal(1, inside.GetProperty("periods").GetArrayLength());
+        Assert.Equal(12_000m, inside.GetProperty("periods")[0]
+            .GetProperty("estimatedAmount").GetDecimal());
+
+        // Kapsam DIŞI ay: dönem yok ama şablon listede duruyor.
+        var outside = await ReadAsync(await client.GetAsync(
+            $"/api/expenses/tekrarlayan?companyId={context.CompanyId}&year=2026&month=9"));
+
+        Assert.Equal(0, outside.GetProperty("periods").GetArrayLength());
+        Assert.Equal(1, outside.GetProperty("templates").GetArrayLength());
+    }
 }

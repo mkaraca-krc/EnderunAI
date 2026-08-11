@@ -83,3 +83,30 @@ yazılması: Esc kapatıyor, odak modalın içinde kalıyor, kapanınca
 tetikleyen düğmeye dönüyor, gerekçe boşken onay verilemiyor,
 `busy` sırasında çift gönderim engelleniyor. Sıra: altyapı →
 modal testleri → standardın app-wide yayılması.
+
+## Paylaşılan dosya-ek altyapısı
+
+**Ne:** Bugün üç ayrı yerde "belgeyi ekle" ihtiyacı var ve hiçbirinde
+dosya eki yok:
+- özlük belgeleri (İK),
+- günlük saha raporu fotoğrafı,
+- gider fişi/faturası (Gider Merkezi — belge türü ve numarası
+  tutuluyor, dosya tutulmuyor).
+
+Var olan tek yükleme yolu proje dosyaları (`ProjectDocument`, diske
+yazıyor) ve bu yol projeye bağlı; şantiye fotoğrafı ya da bir gider
+fişi oraya iliştirilemiyor.
+
+**Neden riskli:** Her modül kendi yükleme ucunu yazarsa boyut sınırı,
+izin kontrolü, virüs/uzantı denetimi, saklama yolu ve silme davranışı
+üç kez ayrı ayrı kurulur — biri eksik kalır ve fark edilmez. Yükleme
+uçları güvenlik açısından en pahalı yerdir; üç kopya, üç ayrı risk
+demektir.
+
+**O turda değerlendirilecek:** tek bir `Attachment` varlığı +
+sahiplik alanı (modül + kayıt kimliği) + ortak yükleme/indirme ucu;
+izin kontrolü sahibinden türesin (gider fişi `expense.view`, özlük
+belgesi `personnel.view` gibi). Elden/maskeli kayıtların eki de aynı
+maskeye tabi olmalı — bir gider fişinin fotoğrafı, giderin kendisi
+gizliyken görünmemeli.
+

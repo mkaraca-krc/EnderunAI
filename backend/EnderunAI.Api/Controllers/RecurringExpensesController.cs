@@ -23,6 +23,18 @@ public sealed record SaveRecurringExpenseRequest(
     int? EndMonth,
     int PaymentDay);
 
+/// <summary>
+/// Nakit akıştaki eski "tahmini gider" satırını gider merkezine
+/// taşıma isteği. Eski satır merkez ve kategori taşımıyor; ikisi
+/// burada veriliyor.
+/// </summary>
+public sealed record AdoptEstimatedExpenseRequest(
+    Guid EstimatedExpenseId,
+    ExpenseCenterType CenterType,
+    Guid CenterId,
+    Guid ExpenseCategoryId,
+    ExpensePaymentMethod PaymentMethod);
+
 public sealed record ConfirmRecurringPeriodRequest(
     int Year,
     int Month,
@@ -178,6 +190,86 @@ public sealed class RecurringExpensesController(
     }
 
     /// <summary>
+    /// DEVİR: nakit akıştaki eski tahmini gider satırını gider
+    /// merkezine taşır ve eskisini SİLER.
+    ///
+    /// TEK İŞLEMDE: taşıma ile silme ayrı adımlar olsaydı, aradaki
+    /// pencerede aynı kira hem eski tabloda hem şablonda durur ve
+    /// nakit akışta iki kez çıkardı (R6). Silme başarısız olursa
+    /// şablon da açılmaz.
+    /// </summary>
+    [HttpPost("devral")]
+    [RequirePermission(PermissionCatalog.Keys.ExpenseManage)]
+    public async Task<IActionResult> Adopt(
+        [FromBody] AdoptEstimatedExpenseRequest request,
+        CancellationToken cancellationToken)
+    {
+        var legacy = await db.CashFlowEstimatedExpenses
+            .SingleOrDefaultAsync(x => x.Id == request.EstimatedExpenseId,
+                cancellationToken);
+
+        if (legacy is null)
+            return NotFound(new { message = "Eski tahmini gider bulunamadı." });
+
+        if (request.PaymentMethod == ExpensePaymentMethod.Cash &&
+            !await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken))
+            return Forbid();
+
+        var save = new SaveRecurringExpenseRequest(
+            legacy.CompanyId,
+            request.CenterType,
+            request.CenterId,
+            request.ExpenseCategoryId,
+            legacy.Description,
+            legacy.Amount,
+            request.PaymentMethod,
+            null,
+            legacy.StartYear,
+            legacy.StartMonth,
+            // Eski satırın tekrar sayısı bitiş dönemine çevriliyor:
+            // ufuk boyunca sonsuza akan bir tahmin, kimsenin gözden
+            // geçirmediği bir varsayıma dönüşürdü.
+            null,
+            null,
+            legacy.PaymentDay);
+
+        var validation = await ValidateAsync(save, cancellationToken);
+
+        if (validation.Error is string error)
+            return BadRequest(new { message = error });
+
+        var end = new DateTime(legacy.StartYear, legacy.StartMonth, 1, 0, 0, 0,
+            DateTimeKind.Utc).AddMonths(Math.Max(legacy.RecurrenceCount - 1, 0));
+
+        var template = new RecurringExpenseTemplate
+        {
+            CompanyId = legacy.CompanyId,
+            ExpenseCategoryId = request.ExpenseCategoryId,
+            Description = legacy.Description,
+            EstimatedAmount = legacy.Amount,
+            PaymentMethod = request.PaymentMethod,
+            StartYear = legacy.StartYear,
+            StartMonth = legacy.StartMonth,
+            EndYear = end.Year,
+            EndMonth = end.Month,
+            PaymentDay = Math.Clamp(legacy.PaymentDay, 1, 31)
+        };
+
+        ApplyCenter(template, validation.Center!);
+
+        db.RecurringExpenseTemplates.Add(template);
+        db.CashFlowEstimatedExpenses.Remove(legacy);
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            id = template.Id,
+            message = "Tahmini gider Gider Merkezi'ne taşındı; eski satır silindi."
+        });
+    }
+
+    /// <summary>
     /// Şablonu durdurur. SİLMEZ: bu şablondan doğmuş gerçekleşen
     /// kayıtlar kaynaklarını kaybetmemeli.
     /// </summary>
@@ -260,7 +352,7 @@ public sealed class RecurringExpensesController(
                 0, 0, 0, DateTimeKind.Utc),
             request.EstimatedAmount, request.Description ?? string.Empty,
             request.PaymentMethod, ExpenseDocumentType.None, null,
-            request.SupplierCurrentAccountId);
+            request.SupplierCurrentAccountId, null);
 
         return await entries.ValidateAsync(input, cancellationToken);
     }

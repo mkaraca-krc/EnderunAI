@@ -1,5 +1,6 @@
 using EnderunAI.Api.Contracts.Accounting;
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Models.Expenses;
 using EnderunAI.Api.Data.HumanResources;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.HumanResources;
@@ -931,6 +932,11 @@ public sealed class CashFlowProjectionService(
     ///
     /// Gider kaydı muhasebeye ve kasaya yazmıyor; burada OKUNUYOR.
     /// Okuma, resmî deftere postalama değil.
+    ///
+    /// ŞAHIS CARİSİNDEN MAHSUP EDİLEN GİDER SAYILMAZ: o para
+    /// şirketten avans olarak ZATEN çıktı. Buraya da yazılsaydı aynı
+    /// para iki kez çıkmış görünürdü. Gider merkezinde ise sayılır —
+    /// orası tahakkuk, burası nakit.
     /// </summary>
     private async Task<List<Movement>> GetExpenseEntryMovementsAsync(
         Guid companyId, DateTime today, DateTime until,
@@ -940,7 +946,8 @@ public sealed class CashFlowProjectionService(
             .AsNoTracking()
             .Where(x => x.CompanyId == companyId &&
                         x.ExpenseDate >= today && x.ExpenseDate <= until &&
-                        x.Amount > 0m)
+                        x.Amount > 0m &&
+                        x.PaymentMethod != ExpensePaymentMethod.PartnerAccount)
             .Select(x => new
             {
                 x.ExpenseDate,

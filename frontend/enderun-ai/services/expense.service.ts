@@ -10,12 +10,43 @@ export const EXPENSE_CENTER_TYPE_VALUE: Record<ExpenseCenterType, number> = {
   ProjectSite: 2,
 };
 
-export type ExpensePaymentMethod = "Bank" | "Cash";
+export type ExpensePaymentMethod = "Bank" | "Cash" | "PartnerAccount";
 
 export const EXPENSE_PAYMENT_METHOD_VALUE: Record<ExpensePaymentMethod, number> = {
   Bank: 0,
   Cash: 1,
+  /** Faturasız gider — şahıs carisinden mahsup. */
+  PartnerAccount: 2,
 };
+
+export type PartnerEntryKind = "Advance" | "ExpenseSettlement" | "Repayment";
+
+export const PARTNER_ENTRY_KIND_VALUE: Record<PartnerEntryKind, number> = {
+  Advance: 0,
+  ExpenseSettlement: 1,
+  Repayment: 2,
+};
+
+export interface PartnerAccountBalance {
+  id: string;
+  fullName: string;
+  title?: string | null;
+  advanceTotal: number;
+  settlementTotal: number;
+  repaymentTotal: number;
+  /** Şahsın şirkete borcu: avans − (mahsup + geri ödeme). */
+  balance: number;
+}
+
+export interface PartnerAccountEntry {
+  id: string;
+  kind: PartnerEntryKind;
+  entryDate: string;
+  amount: number;
+  description: string;
+  expenseEntryId?: string | null;
+  categoryName?: string | null;
+}
 
 export type ExpenseDocumentType = "None" | "Receipt" | "Invoice";
 
@@ -61,6 +92,7 @@ export interface ExpenseEntry {
   documentType: ExpenseDocumentType;
   documentNumber?: string | null;
   supplierName?: string | null;
+  partnerName?: string | null;
   isRecurring: boolean;
 }
 
@@ -91,6 +123,7 @@ export interface SaveExpenseEntryPayload {
   documentType: number;
   documentNumber?: string | null;
   supplierCurrentAccountId?: string | null;
+  partnerAccountId?: string | null;
 }
 
 export interface RecurringExpenseTemplate {
@@ -279,6 +312,65 @@ export const expenseService = {
       method: "POST",
       body: payload,
     });
+  },
+
+  listPartners(companyId: string) {
+    return apiClient<PartnerAccountBalance[]>(
+      `expenses/sahis-cari?companyId=${companyId}`,
+    );
+  },
+
+  listPartnerEntries(id: string, from?: string, to?: string) {
+    const query = new URLSearchParams();
+    if (from) query.set("from", from);
+    if (to) query.set("to", to);
+
+    const suffix = query.toString();
+
+    return apiClient<PartnerAccountEntry[]>(
+      `expenses/sahis-cari/${id}/hareketler${suffix ? `?${suffix}` : ""}`,
+    );
+  },
+
+  createPartner(payload: {
+    companyId: string;
+    fullName: string;
+    title?: string | null;
+    notes?: string | null;
+  }) {
+    return apiClient<{ id: string }>("expenses/sahis-cari", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  addPartnerEntry(
+    id: string,
+    payload: {
+      kind: number;
+      entryDate: string;
+      amount: number;
+      description: string;
+    },
+  ) {
+    return apiClient<{ id: string }>(`expenses/sahis-cari/${id}/hareketler`, {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  /** Nakit akıştaki eski tahmini gideri gider merkezine taşır. */
+  adoptEstimatedExpense(payload: {
+    estimatedExpenseId: string;
+    centerType: number;
+    centerId: string;
+    expenseCategoryId: string;
+    paymentMethod: number;
+  }) {
+    return apiClient<{ id: string; message: string }>(
+      "expenses/tekrarlayan/devral",
+      { method: "POST", body: payload },
+    );
   },
 
   getReport(companyId: string, from: string, to: string) {

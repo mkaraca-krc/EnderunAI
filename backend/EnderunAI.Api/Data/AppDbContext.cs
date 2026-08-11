@@ -40,6 +40,12 @@ public sealed class AppDbContext(
 
     public DbSet<Models.Expenses.RecurringExpenseTemplate> RecurringExpenseTemplates =>
         Set<Models.Expenses.RecurringExpenseTemplate>();
+
+    public DbSet<Models.Expenses.PartnerAccount> PartnerAccounts =>
+        Set<Models.Expenses.PartnerAccount>();
+
+    public DbSet<Models.Expenses.PartnerAccountEntry> PartnerAccountEntries =>
+        Set<Models.Expenses.PartnerAccountEntry>();
     public DbSet<DutySurveyReport> DutySurveyReports => Set<DutySurveyReport>();
     public DbSet<DutySurveyMeasurement> DutySurveyMeasurements => Set<DutySurveyMeasurement>();
     public DbSet<DutySurveyPhoto> DutySurveyPhotos => Set<DutySurveyPhoto>();
@@ -289,6 +295,7 @@ public sealed class AppDbContext(
         ConfigureExpenseCategories(modelBuilder);
         ConfigureExpenseEntries(modelBuilder);
         ConfigureRecurringExpenseTemplates(modelBuilder);
+        ConfigurePartnerAccounts(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -1110,6 +1117,11 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.SupplierCurrentAccountId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(x => x.PartnerAccount)
+                .WithMany()
+                .HasForeignKey(x => x.PartnerAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
@@ -1154,6 +1166,57 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.SupplierCurrentAccount)
                 .WithMany()
                 .HasForeignKey(x => x.SupplierCurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigurePartnerAccounts(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Models.Expenses.PartnerAccount>(entity =>
+        {
+            entity.ToTable("partner_accounts");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.CompanyId);
+
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(120);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.Expenses.PartnerAccountEntry>(entity =>
+        {
+            entity.ToTable("partner_account_entries");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.PartnerAccountId, x.EntryDate });
+
+            // Bir gider kaydının EN FAZLA bir mahsubu olur; ikincisi
+            // aynı gideri iki kez düşerdi.
+            entity.HasIndex(x => x.ExpenseEntryId)
+                .IsUnique()
+                .HasFilter("\"ExpenseEntryId\" IS NOT NULL AND \"IsDeleted\" = false");
+
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.PartnerAccount)
+                .WithMany()
+                .HasForeignKey(x => x.PartnerAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ExpenseEntry)
+                .WithMany()
+                .HasForeignKey(x => x.ExpenseEntryId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

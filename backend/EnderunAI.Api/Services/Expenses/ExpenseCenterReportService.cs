@@ -115,11 +115,13 @@ public sealed class ExpenseCenterReportService(
 
         if (!canSeeCash)
         {
+            // Elden VE şahıs carisinden mahsup: ikisi de faturasız,
+            // ikisi de aynı maskede.
             hiddenCount += await manualQuery.CountAsync(
-                x => x.PaymentMethod == ExpensePaymentMethod.Cash, cancellationToken);
+                x => x.PaymentMethod != ExpensePaymentMethod.Bank, cancellationToken);
 
             manualQuery = manualQuery.Where(
-                x => x.PaymentMethod != ExpensePaymentMethod.Cash);
+                x => x.PaymentMethod == ExpensePaymentMethod.Bank);
         }
 
         var manual = await manualQuery
