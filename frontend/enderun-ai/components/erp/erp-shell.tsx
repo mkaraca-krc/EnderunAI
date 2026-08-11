@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { apiClient } from "@/lib/api/api-client";
 import { LogoutButton } from "@/components/logout-button";
 import WorkHourSessionWatcher from "@/components/work-hour-session-watcher";
+import NotificationBell from "@/components/notifications/notification-bell";
 
 type ErpShellProps = {
   title: string;
@@ -1052,7 +1053,7 @@ export default function ErpShell({
 
           <div className="erp-topbar-actions">
             <button type="button" title="Ara">⌕</button>
-            <button type="button" title="Bildirimler">♢</button>
+            <NotificationBell />
             <button type="button" title="Yardım">?</button>
             <button type="button" className="erp-company-switcher">
               ▦ Enderun Enerji A.Ş.⌄
