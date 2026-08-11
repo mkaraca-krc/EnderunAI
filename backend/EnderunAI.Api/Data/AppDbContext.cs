@@ -55,6 +55,9 @@ public sealed class AppDbContext(
 
     public DbSet<Models.FinancialInstruments.CreditCard> CreditCards =>
         Set<Models.FinancialInstruments.CreditCard>();
+
+    public DbSet<Models.Notifications.Notification> Notifications =>
+        Set<Models.Notifications.Notification>();
     public DbSet<DutySurveyReport> DutySurveyReports => Set<DutySurveyReport>();
     public DbSet<DutySurveyMeasurement> DutySurveyMeasurements => Set<DutySurveyMeasurement>();
     public DbSet<DutySurveyPhoto> DutySurveyPhotos => Set<DutySurveyPhoto>();
@@ -306,6 +309,7 @@ public sealed class AppDbContext(
         ConfigureRecurringExpenseTemplates(modelBuilder);
         ConfigurePartnerAccounts(modelBuilder);
         ConfigureFinancialInstruments(modelBuilder);
+        ConfigureNotifications(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -1326,6 +1330,44 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.CashAccountId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureNotifications(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Models.Notifications.Notification>(entity =>
+        {
+            entity.ToTable("notifications");
+            entity.HasKey(x => x.Id);
+
+            // TEKİLLEŞTİRME ANAHTARI: aynı kaynağın aynı dönemi için
+            // tek satır. Filtre şart — soft-delete edilmiş bir kayıt
+            // aynı anahtarı kalıcı olarak kilitlerdi.
+            entity.HasIndex(x => new
+                {
+                    x.CompanyId, x.Type, x.SourceId, x.PeriodKey
+                })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            // Çan, açık bildirimleri şirket + durum üzerinden okuyor.
+            entity.HasIndex(x => new { x.CompanyId, x.Status });
+
+            entity.Property(x => x.Type).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.PeriodKey).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Detail).HasMaxLength(1000);
+            entity.Property(x => x.AmountDetail).HasMaxLength(1000);
+            entity.Property(x => x.AmountPermission).HasMaxLength(80);
+            entity.Property(x => x.RequiredPermission).HasMaxLength(80);
+            entity.Property(x => x.TargetPath).HasMaxLength(300);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

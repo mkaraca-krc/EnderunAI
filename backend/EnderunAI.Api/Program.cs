@@ -230,6 +230,7 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseEntryService>(
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.RecurringExpenseService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseCenterReportService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.PartnerAccountService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Notifications.NotificationStore>();
 
 // Finansal araçlar ortak sözleşmeyi uyguluyor; nakit akış hepsini
 // IEnumerable<IFinancialInstrumentSource> olarak okuyor. Yeni bir
