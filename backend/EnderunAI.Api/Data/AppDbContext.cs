@@ -34,6 +34,9 @@ public sealed class AppDbContext(
 
     public DbSet<Models.Expenses.ExpenseCategory> ExpenseCategories =>
         Set<Models.Expenses.ExpenseCategory>();
+
+    public DbSet<Models.Expenses.ExpenseEntry> ExpenseEntries =>
+        Set<Models.Expenses.ExpenseEntry>();
     public DbSet<DutySurveyReport> DutySurveyReports => Set<DutySurveyReport>();
     public DbSet<DutySurveyMeasurement> DutySurveyMeasurements => Set<DutySurveyMeasurement>();
     public DbSet<DutySurveyPhoto> DutySurveyPhotos => Set<DutySurveyPhoto>();
@@ -281,6 +284,7 @@ public sealed class AppDbContext(
         ConfigureDutySurveyReports(modelBuilder);
         ConfigureCashFlowEstimatedExpenses(modelBuilder);
         ConfigureExpenseCategories(modelBuilder);
+        ConfigureExpenseEntries(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -1048,6 +1052,59 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureExpenseEntries(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Models.Expenses.ExpenseEntry>(entity =>
+        {
+            entity.ToTable("expense_entries");
+            entity.HasKey(x => x.Id);
+
+            // Rapor dönem üzerinden okuyor.
+            entity.HasIndex(x => new { x.CompanyId, x.ExpenseDate });
+
+            // Merkez kırılımı: proje ve şantiye ayrı ayrı sorgulanıyor.
+            entity.HasIndex(x => x.ProjectId);
+            entity.HasIndex(x => x.ProjectSiteId);
+            entity.HasIndex(x => x.BranchId);
+
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.DocumentNumber).HasMaxLength(60);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ExpenseCategory)
+                .WithMany()
+                .HasForeignKey(x => x.ExpenseCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Branch)
+                .WithMany()
+                .HasForeignKey(x => x.BranchId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectSite)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SupplierCurrentAccount)
+                .WithMany()
+                .HasForeignKey(x => x.SupplierCurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

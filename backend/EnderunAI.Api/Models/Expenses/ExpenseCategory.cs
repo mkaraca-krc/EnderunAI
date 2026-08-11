@@ -42,5 +42,8 @@ public sealed class ExpenseCategory : BaseEntity
     /// </summary>
     public bool IsAutomaticOnly { get; set; }
 
-    public bool IsActive { get; set; } = true;
+    // Aktiflik BaseEntity.IsActive üzerinden yürüyor. Burada yeniden
+    // tanımlanmıştı; taban özelliği GÖLGELİYORDU: BaseEntity
+    // referansıyla yapılan bir atama tabanı yazar, sorgu türetilmişi
+    // okurdu. Tek kolon olduğu için veri bozulmadı, tuzak kaldırıldı.
 }
