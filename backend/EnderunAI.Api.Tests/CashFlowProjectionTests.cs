@@ -616,35 +616,41 @@ public sealed class CashFlowProjectionTests(DatabaseFixture fixture)
     // ---------------- Tahmini gider uçları ----------------
 
     /// <summary>
-    /// Tahmini gider ucundan eklenince takvime düşüyor ve
-    /// kaldırılınca çıkıyor: satır doğrudan bakiyeyi etkiliyor.
+    /// Eski stopgap satırı (artık yalnızca veritabanından doğuyor)
+    /// takvime düşüyor ve silinince çıkıyor. Uç kapatıldı ama
+    /// KALAN SATIRLAR sayılmaya devam ediyor: okunmasaydı taşınmamış
+    /// bir kira sessizce takvimden düşerdi.
     /// </summary>
     [Fact]
-    public async Task EstimatedExpenseEndpoints_AffectTheProjection()
+    public async Task LegacyEstimatedExpenseRows_AffectTheProjection()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var context = await CreateContextAsync(suffix, openingBalance: 500_000m);
 
-        var client = await ClientWithAsync(CashFlowPermissions);
+        Guid expenseId;
 
-        var created = await client.PostAsJsonAsync(
-            "/api/cash-flow/tahmini-giderler", new
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var expense = new CashFlowEstimatedExpense
             {
-                companyId = context.CompanyId,
-                description = $"Kira {suffix}",
-                amount = 40_000m,
-                startYear = Today.Year,
-                startMonth = Today.Month,
-                recurrenceCount = 2,
-                paymentDay = 28,
-                projectId = (Guid?)null
-            });
+                CompanyId = context.CompanyId,
+                Description = $"Kira {suffix}",
+                Amount = 40_000m,
+                StartYear = Today.Year,
+                StartMonth = Today.Month,
+                RecurrenceCount = 2,
+                PaymentDay = 28
+            };
 
-        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+            db.CashFlowEstimatedExpenses.Add(expense);
+            await db.SaveChangesAsync();
 
-        var expenseId = JsonDocument
-            .Parse(await created.Content.ReadAsStringAsync())
-            .RootElement.GetProperty("id").GetGuid();
+            expenseId = expense.Id;
+        }
+
+        var client = await ClientWithAsync(CashFlowPermissions);
 
         var withExpense = await ProjectionAsync(client, context);
 
@@ -666,36 +672,10 @@ public sealed class CashFlowProjectionTests(DatabaseFixture fixture)
     }
 
     /// <summary>
-    /// SÜRESİZ TEKRAR YOK: gözden geçirilmeyen bir varsayıma
-    /// dönüşürdü. Üst sınır en uzun ufkun iki katı.
-    /// </summary>
-    [Fact]
-    public async Task EstimatedExpense_RejectsUnboundedRecurrence()
-    {
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-        var context = await CreateContextAsync(suffix);
-
-        var client = await ClientWithAsync(CashFlowPermissions);
-
-        var response = await client.PostAsJsonAsync(
-            "/api/cash-flow/tahmini-giderler", new
-            {
-                companyId = context.CompanyId,
-                description = "Süresiz kira",
-                amount = 10_000m,
-                startYear = Today.Year,
-                startMonth = Today.Month,
-                recurrenceCount = 120,
-                paymentDay = 1,
-                projectId = (Guid?)null
-            });
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    /// <summary>
     /// NEGATİF TEST: tahmini gider uçları da dar kapıda — satırlar
-    /// likidite tablosunu doğrudan değiştiriyor.
+    /// likidite tablosunu doğrudan değiştiriyor. POST kapatılmış
+    /// olsa da yetki filtresi uçtan ÖNCE çalışıyor: yetkisiz
+    /// kullanıcı 410 değil 403 görür.
     /// </summary>
     [Fact]
     public async Task EstimatedExpenseEndpoints_RequireCashFlowPermission()
@@ -721,5 +701,247 @@ public sealed class CashFlowProjectionTests(DatabaseFixture fixture)
                 paymentDay = 1,
                 projectId = (Guid?)null
             })).StatusCode);
+    }
+
+    // ---------------- Gider merkezi devri ----------------
+
+    /// <summary>
+    /// DEVİR: tekrarlayan gider artık Gider Merkezi'nden geliyor ve
+    /// takvimde ÇIKIŞ olarak görünüyor.
+    ///
+    /// Gider kaydı muhasebeye/kasaya yazmıyor ama projeksiyon onu
+    /// OKUYOR — okuma, resmî deftere postalama değil.
+    /// </summary>
+    [Fact]
+    public async Task RecurringExpense_FromTheExpenseCentreFlowsIntoTheProjection()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix, openingBalance: 200_000m);
+
+        var client = await ClientWithAsync(CashFlowPermissions);
+
+        Guid branchId, categoryId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            branchId = await db.Projects
+                .Where(x => x.Id == context.ProjectId)
+                .Select(x => x.BranchId)
+                .SingleAsync();
+
+            await EnderunAI.Api.Services.Expenses.ExpenseCategoryProvisioner
+                .EnsureAsync(db, context.CompanyId, CancellationToken.None);
+
+            categoryId = await db.ExpenseCategories
+                .Where(x => x.CompanyId == context.CompanyId &&
+                            x.Code == EnderunAI.Api.Services.Expenses
+                                .ExpenseCategoryCatalog.Rent)
+                .Select(x => x.Id)
+                .SingleAsync();
+
+            // Gelecek ayın 15'inde 30.000 kira.
+            var next = new DateTime(Today.Year, Today.Month, 1, 0, 0, 0,
+                DateTimeKind.Utc).AddMonths(1);
+
+            db.RecurringExpenseTemplates.Add(
+                new EnderunAI.Api.Models.Expenses.RecurringExpenseTemplate
+                {
+                    CompanyId = context.CompanyId,
+                    CenterType = EnderunAI.Api.Models.Expenses.ExpenseCenterType.Branch,
+                    BranchId = branchId,
+                    ExpenseCategoryId = categoryId,
+                    Description = $"Ofis kirası {suffix}",
+                    EstimatedAmount = 30_000m,
+                    PaymentMethod = EnderunAI.Api.Models.Expenses
+                        .ExpensePaymentMethod.Bank,
+                    StartYear = next.Year,
+                    StartMonth = next.Month,
+                    PaymentDay = 15
+                });
+
+            await db.SaveChangesAsync();
+        }
+
+        var payload = await ProjectionAsync(client, context);
+
+        var items = payload.GetProperty("days").EnumerateArray()
+            .SelectMany(x => x.GetProperty("items").EnumerateArray())
+            .Where(x => x.GetProperty("kind").GetString() == "RecurringExpense")
+            .ToList();
+
+        Assert.NotEmpty(items);
+        Assert.All(items, x =>
+            Assert.Equal("Tahmini", x.GetProperty("certaintyName").GetString()));
+    }
+
+    /// <summary>
+    /// R6 ÇİFT SAYIM: bir dönemin gerçekleşeni girilmişse o ay
+    /// tahmini olarak TEKRAR akmıyor. Aksi halde aynı kira takvimde
+    /// iki kez çıkardı.
+    /// </summary>
+    [Fact]
+    public async Task ConfirmedMonth_DoesNotFlowTwiceIntoTheProjection()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix, openingBalance: 200_000m);
+
+        var client = await ClientWithAsync(CashFlowPermissions);
+
+        var next = new DateTime(Today.Year, Today.Month, 1, 0, 0, 0,
+            DateTimeKind.Utc).AddMonths(1);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var branchId = await db.Projects
+                .Where(x => x.Id == context.ProjectId)
+                .Select(x => x.BranchId)
+                .SingleAsync();
+
+            await EnderunAI.Api.Services.Expenses.ExpenseCategoryProvisioner
+                .EnsureAsync(db, context.CompanyId, CancellationToken.None);
+
+            var categoryId = await db.ExpenseCategories
+                .Where(x => x.CompanyId == context.CompanyId &&
+                            x.Code == EnderunAI.Api.Services.Expenses
+                                .ExpenseCategoryCatalog.Utilities)
+                .Select(x => x.Id)
+                .SingleAsync();
+
+            var template = new EnderunAI.Api.Models.Expenses.RecurringExpenseTemplate
+            {
+                CompanyId = context.CompanyId,
+                CenterType = EnderunAI.Api.Models.Expenses.ExpenseCenterType.Branch,
+                BranchId = branchId,
+                ExpenseCategoryId = categoryId,
+                Description = $"Elektrik {suffix}",
+                EstimatedAmount = 5_000m,
+                PaymentMethod = EnderunAI.Api.Models.Expenses
+                    .ExpensePaymentMethod.Bank,
+                StartYear = next.Year,
+                StartMonth = next.Month,
+                PaymentDay = 15
+            };
+
+            db.RecurringExpenseTemplates.Add(template);
+            await db.SaveChangesAsync();
+
+            // Aynı ayın gerçekleşeni girildi: 6.240.
+            db.ExpenseEntries.Add(new EnderunAI.Api.Models.Expenses.ExpenseEntry
+            {
+                CompanyId = context.CompanyId,
+                CenterType = EnderunAI.Api.Models.Expenses.ExpenseCenterType.Branch,
+                BranchId = branchId,
+                ExpenseCategoryId = categoryId,
+                ExpenseDate = new DateTime(next.Year, next.Month, 15, 0, 0, 0,
+                    DateTimeKind.Utc),
+                Amount = 6_240m,
+                Description = $"Elektrik {suffix}",
+                PaymentMethod = EnderunAI.Api.Models.Expenses
+                    .ExpensePaymentMethod.Bank,
+                DocumentType = EnderunAI.Api.Models.Expenses
+                    .ExpenseDocumentType.Invoice,
+                RecurringTemplateId = template.Id,
+                PeriodYear = next.Year,
+                PeriodMonth = next.Month
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var payload = await ProjectionAsync(client, context);
+
+        // Yalnız KESİNLEŞEN AY'a bakılıyor: bitişsiz şablon ufuk
+        // boyunca her ay için dönem üretiyor, diğer aylar hâlâ
+        // tahmini olarak akmalı — devrin kuralı "kesinleşen ay iki
+        // kez akmasın", "şablon sussun" değil.
+        var confirmedDay = new DateTime(next.Year, next.Month, 15, 0, 0, 0,
+            DateTimeKind.Utc);
+
+        var expenseItems = payload.GetProperty("days").EnumerateArray()
+            .Where(x => x.GetProperty("date").GetDateTime().Date == confirmedDay.Date)
+            .SelectMany(x => x.GetProperty("items").EnumerateArray())
+            .Where(x => x.GetProperty("kind").GetString() is
+                            "RecurringExpense" or "ExpenseEntry")
+            .ToList();
+
+        // TEK kalem: gerçekleşen. O ayın tahminisi akmıyor.
+        Assert.Single(expenseItems);
+        Assert.Equal("ExpenseEntry", expenseItems[0].GetProperty("kind").GetString());
+        Assert.Equal(6_240m, expenseItems[0].GetProperty("amount").GetDecimal());
+    }
+
+    /// <summary>
+    /// Eski stopgap ucu KAPALI: yeni satır açılamıyor, 410 ile
+    /// nereye gidileceğini söylüyor. Açılabilseydi aynı kira iki
+    /// yerde durur ve çift sayılırdı.
+    /// </summary>
+    [Fact]
+    public async Task LegacyEstimatedExpenseEndpoint_IsClosed()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        var client = await ClientWithAsync(CashFlowPermissions);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/cash-flow/tahmini-giderler", new
+            {
+                companyId = context.CompanyId,
+                description = "Eski yöntemle kira",
+                amount = 10_000m,
+                startYear = Today.Year,
+                startMonth = Today.Month,
+                recurrenceCount = 3,
+                paymentDay = 1,
+                projectId = (Guid?)null
+            });
+
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
+        Assert.Contains("Gider Merkezi", await response.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// Taşınmamış eski satırlar SESSİZCE DÜŞMÜYOR: sayılmaya devam
+    /// ediyor ve uyarı çıkıyor. Okunmasaydı taşınmamış bir kira
+    /// takvimden kaybolur, tablo yeniden iyimser olurdu.
+    /// </summary>
+    [Fact]
+    public async Task LegacyEstimatedExpenses_AreStillCountedWithAWarning()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix, openingBalance: 100_000m);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            db.CashFlowEstimatedExpenses.Add(new CashFlowEstimatedExpense
+            {
+                CompanyId = context.CompanyId,
+                Description = $"Eski kira {suffix}",
+                Amount = 12_000m,
+                StartYear = Today.Year,
+                StartMonth = Today.Month,
+                RecurrenceCount = 2,
+                PaymentDay = Math.Min(28, Today.Day)
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var client = await ClientWithAsync(CashFlowPermissions);
+        var payload = await ProjectionAsync(client, context);
+
+        Assert.Contains(
+            payload.GetProperty("days").EnumerateArray()
+                .SelectMany(x => x.GetProperty("items").EnumerateArray()),
+            x => x.GetProperty("kind").GetString() == "EstimatedExpense");
+
+        Assert.Contains(payload.GetProperty("notes").EnumerateArray(),
+            x => x.GetString()!.Contains("çift sayılırlar"));
     }
 }

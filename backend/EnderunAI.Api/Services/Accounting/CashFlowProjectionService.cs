@@ -43,7 +43,9 @@ public sealed class CashFlowProjectionService(
     AppDbContext db,
     HrDbContext hrDb,
     SalaryTakeHomeService takeHome,
-    Tax.ITaxObligationService taxObligations) : ICashFlowProjectionService
+    Tax.ITaxObligationService taxObligations,
+    Expenses.RecurringExpenseService recurringExpenses)
+    : ICashFlowProjectionService
 {
     private static readonly string[] MonthNames =
     [
@@ -102,16 +104,39 @@ public sealed class CashFlowProjectionService(
         movements.AddRange(await GetPayrollMovementsAsync(
             companyId, today, until, horizon, notes, cancellationToken));
 
-        movements.AddRange(await GetEstimatedExpenseMovementsAsync(
+        // GİDER MERKEZİ DEVRALDI: tekrarlayan giderler ve elle
+        // girilen gider kayıtları artık oradan geliyor.
+        movements.AddRange(await GetRecurringExpenseMovementsAsync(
             companyId, today, until, cancellationToken));
 
-        if (!await db.CashFlowEstimatedExpenses
-                .AnyAsync(x => x.CompanyId == companyId, cancellationToken))
+        movements.AddRange(await GetExpenseEntryMovementsAsync(
+            companyId, today, until, cancellationToken));
+
+        // Stopgap tablosunda kalan satırlar SAYILMAYA DEVAM EDİYOR:
+        // okunmasaydı, taşınmamış bir kira sessizce takvimden düşer ve
+        // tablo yeniden iyimser olurdu. Ama artık yeni satır
+        // açılamıyor (uç 410 dönüyor), yani R6 çift sayımı ancak eski
+        // satırlar taşınırken doğabilir — bu yüzden uyarı düşüyor.
+        var legacy = await GetEstimatedExpenseMovementsAsync(
+            companyId, today, until, cancellationToken);
+
+        movements.AddRange(legacy);
+
+        if (legacy.Count > 0)
+            notes.Add(
+                "Nakit akışın eski \"tahmini gider\" satırları hâlâ sayılıyor. " +
+                "Bunları Gider Merkezi'nde tekrarlayan gider olarak tanımlayıp " +
+                "eskilerini silin; iki yerde birden dururlarsa çift sayılırlar.");
+
+        if (!await db.RecurringExpenseTemplates
+                .AnyAsync(x => x.CompanyId == companyId && !x.IsStopped,
+                    cancellationToken) &&
+            legacy.Count == 0)
         {
             notes.Add(
-                "Genel gider (kira, elektrik, sigorta) takvimde yok: gider " +
-                "merkezi modülü kurulmadı. Tekrarlayan tahmini gider satırı " +
-                "ekleyerek tabloyu tamamlayabilirsiniz.");
+                "Genel gider (kira, elektrik, sigorta) takvimde yok: Gider " +
+                "Merkezi'nde tekrarlayan gider tanımlanmamış. Tanımlayana " +
+                "kadar bakiye olduğundan iyimser.");
         }
 
         return Build(companyId, today, until, horizon, opening,
@@ -841,8 +866,103 @@ public sealed class CashFlowProjectionService(
     }
 
     /// <summary>
-    /// Gider merkezi gelene kadar elle girilen tekrarlayan gider.
-    /// Her tekrar ayında bir çıkış üretir.
+    /// Gider merkezindeki tekrarlayan giderler.
+    ///
+    /// YALNIZ GERÇEKLEŞMEMİŞ DÖNEMLER: bir ayın gerçekleşeni
+    /// girilmişse o ay gider kaydı olarak zaten akıyor; tahmini de
+    /// eklenseydi aynı kira iki kez çıkardı (R5/R6). Kural
+    /// RecurringExpenseService'te tek yerde duruyor, burada
+    /// tekrarlanmıyor.
+    ///
+    /// ELDEN MASKESİ YOK: projeksiyon zaten cashflow.view kapısında
+    /// ve tablo tek/eksiksiz olmak zorunda — gerçek nakit ihtiyacı
+    /// elden kalemleri de içerir.
+    /// </summary>
+    private async Task<List<Movement>> GetRecurringExpenseMovementsAsync(
+        Guid companyId, DateTime today, DateTime until,
+        CancellationToken cancellationToken)
+    {
+        var states = await recurringExpenses.GetPeriodStatesAsync(
+            companyId, today, until, cancellationToken);
+
+        var pending = states
+            .Where(x => x.ActualEntryId is null &&
+                        x.DueDate >= today && x.DueDate <= until &&
+                        x.EstimatedAmount > 0m)
+            .ToList();
+
+        if (pending.Count == 0)
+            return [];
+
+        var templateIds = pending.Select(x => x.TemplateId).Distinct().ToList();
+
+        var templates = await db.RecurringExpenseTemplates
+            .AsNoTracking()
+            .Where(x => templateIds.Contains(x.Id))
+            .Select(x => new
+            {
+                x.Id,
+                x.Description,
+                x.ProjectId,
+                ProjectCode = x.Project != null ? x.Project.Code : null
+            })
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        return pending
+            .Select(x =>
+            {
+                var template = templates[x.TemplateId];
+
+                return new Movement(
+                    x.DueDate, "RecurringExpense", "Tekrarlayan gider",
+                    template.Description, null,
+                    template.ProjectId, template.ProjectCode,
+                    x.EstimatedAmount, false, CashFlowCertainty.Estimated);
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Elle girilen gider kayıtlarının GELECEK tarihli olanları.
+    ///
+    /// Geçmiş tarihli gider zaten ödenmiş kabul ediliyor ve açılış
+    /// bakiyesinin içinde: yeniden çıkış yazılsaydı aynı para iki kez
+    /// düşerdi.
+    ///
+    /// Gider kaydı muhasebeye ve kasaya yazmıyor; burada OKUNUYOR.
+    /// Okuma, resmî deftere postalama değil.
+    /// </summary>
+    private async Task<List<Movement>> GetExpenseEntryMovementsAsync(
+        Guid companyId, DateTime today, DateTime until,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.ExpenseEntries
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId &&
+                        x.ExpenseDate >= today && x.ExpenseDate <= until &&
+                        x.Amount > 0m)
+            .Select(x => new
+            {
+                x.ExpenseDate,
+                x.Description,
+                x.Amount,
+                x.ProjectId,
+                ProjectCode = x.Project != null ? x.Project.Code : null
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(x => new Movement(
+                x.ExpenseDate, "ExpenseEntry", "Gider kaydı",
+                x.Description, null, x.ProjectId, x.ProjectCode,
+                x.Amount, false, CashFlowCertainty.Confirmed))
+            .ToList();
+    }
+
+    /// <summary>
+    /// ESKİ STOPGAP: gider merkezi gelmeden önce elle girilen
+    /// tekrarlayan tahmini gider. Yeni satır açılamıyor; kalanlar
+    /// taşınana kadar sayılmaya devam ediyor.
     /// </summary>
     private async Task<List<Movement>> GetEstimatedExpenseMovementsAsync(
         Guid companyId, DateTime today, DateTime until,

@@ -96,52 +96,25 @@ public sealed class CashFlowController(
         return Ok(rows);
     }
 
+    /// <summary>
+    /// KAPATILDI: tekrarlayan giderler Gider Merkezi'ne taşındı.
+    ///
+    /// Uç silinmedi, 410 dönüyor: eski bir istemci sessizce
+    /// başarısız olmak yerine nereye gideceğini öğrenmeli. Yeni satır
+    /// açılabilseydi aynı kira hem burada hem gider merkezinde
+    /// durur ve nakit akışta iki kez çıkardı (R6).
+    /// </summary>
     [HttpPost("tahmini-giderler")]
     [RequirePermission(PermissionCatalog.Keys.CashFlowView)]
-    public async Task<IActionResult> CreateEstimatedExpense(
-        SaveEstimatedExpenseRequest request, CancellationToken cancellationToken)
+    public IActionResult CreateEstimatedExpense(SaveEstimatedExpenseRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Description))
-            return BadRequest(new { message = "Gider açıklaması zorunludur." });
+        _ = request;
 
-        if (request.Amount <= 0m)
-            return BadRequest(new { message = "Tutar sıfırdan büyük olmalıdır." });
-
-        if (request.StartMonth is < 1 or > 12)
-            return BadRequest(new { message = "Geçersiz başlangıç ayı." });
-
-        if (request.PaymentDay is < 1 or > 31)
-            return BadRequest(new { message = "Ödeme günü 1-31 arasında olmalıdır." });
-
-        // Süresiz tekrar yok: gözden geçirilmeyen bir varsayıma
-        // dönüşürdü. Üst sınır en uzun ufkun (12 ay) iki katı.
-        if (request.RecurrenceCount is < 1 or > 24)
+        return StatusCode(StatusCodes.Status410Gone, new
         {
-            return BadRequest(new
-            {
-                message = "Tekrar sayısı 1-24 ay arasında olmalıdır."
-            });
-        }
-
-        var expense = new CashFlowEstimatedExpense
-        {
-            CompanyId = request.CompanyId,
-            ProjectId = request.ProjectId,
-            Description = request.Description.Trim(),
-            Amount = request.Amount,
-            StartYear = request.StartYear,
-            StartMonth = request.StartMonth,
-            RecurrenceCount = request.RecurrenceCount,
-            PaymentDay = request.PaymentDay
-        };
-
-        db.CashFlowEstimatedExpenses.Add(expense);
-        await db.SaveChangesAsync(cancellationToken);
-
-        return Ok(new
-        {
-            expense.Id,
-            message = "Tahmini gider eklendi; takvimde tahmini olarak görünecek."
+            message = "Tekrarlayan giderler artık Gider Merkezi'nden tanımlanıyor. " +
+                      "Buradaki eski satırlar taşınana kadar takvimde sayılmaya " +
+                      "devam eder; taşıdıktan sonra silin."
         });
     }
 
