@@ -14,7 +14,17 @@ public enum CashFlowCertainty
     Confirmed = 0,
 
     /// <summary>Vadeden hesaplanan hakediş, bordro, tekrarlayan gider.</summary>
-    Estimated = 1
+    Estimated = 1,
+
+    /// <summary>
+    /// NAKİT DEĞİL — barter alacağı gibi, nakde dönmeyecek kalem.
+    ///
+    /// Yürüyen bakiyeye GİRMEZ; ayrı gösterilir. Nakit sayılsaydı
+    /// tablo, eline hiç geçmeyecek bir parayı likidite gibi okurdu.
+    /// Hiç gösterilmeseydi de "hakedişin bu kısmı nereye gitti"
+    /// sorusu cevapsız kalırdı.
+    /// </summary>
+    NonCash = 2
 }
 
 public sealed record CashFlowProjectionItem(

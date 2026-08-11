@@ -17,7 +17,8 @@ public sealed record ExpenseEntryInput(
     ExpenseDocumentType DocumentType,
     string? DocumentNumber,
     Guid? SupplierCurrentAccountId,
-    Guid? PartnerAccountId);
+    Guid? PartnerAccountId,
+    Guid? CreditCardId);
 
 /// <summary>Doğrulama sonucu — hata varsa Türkçe mesajla.</summary>
 public sealed record ExpenseValidationResult(string? Error, ExpenseCenterRef? Center);
@@ -115,6 +116,37 @@ public sealed class ExpenseEntryService(AppDbContext db, ExpenseCenterResolver c
 
             if (!partnerExists)
                 return new ExpenseValidationResult("Şahıs carisi bulunamadı.", null);
+        }
+
+        // Kartla yapılan harcamada kart ZORUNLU: kartı belli
+        // olmayan bir harcama hiçbir ekstreye düşmez ve nakit çıkışı
+        // hiç görünmez.
+        if (input.PaymentMethod == ExpensePaymentMethod.CreditCard)
+        {
+            if (input.CreditCardId is not Guid cardId)
+                return new ExpenseValidationResult(
+                    "Kredi kartı harcaması için kart seçilmelidir.", null);
+
+            var card = await db.CreditCards
+                .AsNoTracking()
+                .Where(x => x.Id == cardId && x.CompanyId == input.CompanyId)
+                .Select(x => new { x.IsActive, x.Ownership, x.PartnerAccountId })
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (card is null)
+                return new ExpenseValidationResult("Kredi kartı bulunamadı.", null);
+
+            if (!card.IsActive)
+                return new ExpenseValidationResult(
+                    "Pasif karta harcama kaydedilemez.", null);
+
+            // Şahıs kartıysa harcama o kişinin carisine yazılacak;
+            // kart kime ait bilinmiyorsa hiçbir bakiyeye düşmez.
+            if (card.Ownership == Models.FinancialInstruments.CreditCardOwnership.Personal &&
+                card.PartnerAccountId is null)
+                return new ExpenseValidationResult(
+                    "Şahıs kartına bir kişi bağlı değil; kartı düzenleyip " +
+                    "sahibini seçin.", null);
         }
 
         if (input.SupplierCurrentAccountId is Guid supplierId)

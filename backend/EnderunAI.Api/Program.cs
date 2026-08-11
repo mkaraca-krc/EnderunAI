@@ -230,6 +230,18 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseEntryService>(
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.RecurringExpenseService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseCenterReportService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.PartnerAccountService>();
+
+// Finansal araçlar ortak sözleşmeyi uyguluyor; nakit akış hepsini
+// IEnumerable<IFinancialInstrumentSource> olarak okuyor. Yeni bir
+// araç eklemek, projeksiyonu değiştirmeden bu listeye kayıt olmak.
+builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.BankLoanService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.CreditCardService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.IFinancialInstrumentSource>(
+    x => x.GetRequiredService<EnderunAI.Api.Services.FinancialInstruments.BankLoanService>());
+builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.IFinancialInstrumentSource>(
+    x => x.GetRequiredService<EnderunAI.Api.Services.FinancialInstruments.CreditCardService>());
+builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.IFinancialInstrumentSource,
+    EnderunAI.Api.Services.FinancialInstruments.BarterInstrumentService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hakedis.IProgressTrackingService,

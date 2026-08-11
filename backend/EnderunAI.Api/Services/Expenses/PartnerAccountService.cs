@@ -41,9 +41,15 @@ public sealed class PartnerAccountService(AppDbContext db)
         var existing = await db.PartnerAccountEntries
             .SingleOrDefaultAsync(x => x.ExpenseEntryId == entry.Id, cancellationToken);
 
-        // Gider artık şahıs carisinden karşılanmıyorsa mahsup kalkar.
-        if (entry.PaymentMethod != ExpensePaymentMethod.PartnerAccount ||
-            entry.PartnerAccountId is not Guid partnerId)
+        // İKİ YOLDAN da şahsın carisine yazılabilir: doğrudan
+        // faturasız mahsup ya da ŞAHIS KARTIYLA yapılan şirket
+        // harcaması. İkincisinde de şirketin nakdi çıkmıyor, kişi
+        // ödüyor — defter aynı satırı taşımalı.
+        var settles =
+            entry.PaymentMethod == ExpensePaymentMethod.PartnerAccount ||
+            entry.PaymentMethod == ExpensePaymentMethod.CreditCard;
+
+        if (!settles || entry.PartnerAccountId is not Guid partnerId)
         {
             if (existing is not null)
                 db.PartnerAccountEntries.Remove(existing);

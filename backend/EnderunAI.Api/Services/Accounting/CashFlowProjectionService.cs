@@ -45,7 +45,8 @@ public sealed class CashFlowProjectionService(
     HrDbContext hrDb,
     SalaryTakeHomeService takeHome,
     Tax.ITaxObligationService taxObligations,
-    Expenses.RecurringExpenseService recurringExpenses)
+    Expenses.RecurringExpenseService recurringExpenses,
+    IEnumerable<FinancialInstruments.IFinancialInstrumentSource> instruments)
     : ICashFlowProjectionService
 {
     private static readonly string[] MonthNames =
@@ -140,6 +141,19 @@ public sealed class CashFlowProjectionService(
                 "kadar bakiye olduğundan iyimser.");
         }
 
+        // FİNANSAL ARAÇLAR: kredi, kredi kartı ve barter aynı
+        // sözleşmeyi uyguluyor; projeksiyon hepsini AYNI okuyor ve
+        // her yeni araç için buraya bir dal eklemek gerekmiyor.
+        foreach (var source in instruments)
+        {
+            var lines = await source.GetCashLinesAsync(
+                companyId, today, until, cancellationToken);
+
+            movements.AddRange(lines.Select(x => new Movement(
+                x.CashDate, x.Kind, x.KindName, x.Title, x.Reference,
+                x.ProjectId, x.ProjectCode, x.Amount, x.IsInflow, x.Certainty)));
+        }
+
         return Build(companyId, today, until, horizon, opening,
             movements, targetDate, notes);
     }
@@ -170,8 +184,13 @@ public sealed class CashFlowProjectionService(
                      .GroupBy(x => x.Date.Date)
                      .OrderBy(x => x.Key))
         {
-            var inflow = group.Where(x => x.IsInflow).Sum(x => x.Amount);
-            var outflow = group.Where(x => !x.IsInflow).Sum(x => x.Amount);
+            // NAKİT DEĞİL kalemler (barter alacağı) bakiyeye GİRMEZ
+            // ama satır olarak görünür: nakit sayılsaydı tablo, eline
+            // hiç geçmeyecek bir parayı likidite gibi okurdu.
+            var cash = group.Where(x => x.Certainty != CashFlowCertainty.NonCash).ToList();
+
+            var inflow = cash.Where(x => x.IsInflow).Sum(x => x.Amount);
+            var outflow = cash.Where(x => !x.IsInflow).Sum(x => x.Amount);
 
             running += inflow - outflow;
 
@@ -277,8 +296,12 @@ public sealed class CashFlowProjectionService(
             notes);
     }
 
-    private static string CertaintyName(CashFlowCertainty certainty) =>
-        certainty == CashFlowCertainty.Confirmed ? "Kesin" : "Tahmini";
+    private static string CertaintyName(CashFlowCertainty certainty) => certainty switch
+    {
+        CashFlowCertainty.Confirmed => "Kesin",
+        CashFlowCertainty.NonCash => "Nakit değil",
+        _ => "Tahmini"
+    };
 
     private async Task<decimal> GetOpeningBalanceAsync(
         Guid companyId, CancellationToken cancellationToken)
@@ -937,6 +960,11 @@ public sealed class CashFlowProjectionService(
     /// şirketten avans olarak ZATEN çıktı. Buraya da yazılsaydı aynı
     /// para iki kez çıkmış görünürdü. Gider merkezinde ise sayılır —
     /// orası tahakkuk, burası nakit.
+    ///
+    /// KREDİ KARTI HARCAMASI DA SAYILMAZ: kartla yapılan harcamada
+    /// para harcama günü çıkmaz, ekstrenin son ödeme gününde çıkar.
+    /// Nakit çıkışını CreditCardService veriyor; ikisi birden
+    /// sayılsaydı aynı harcama iki kez düşerdi.
     /// </summary>
     private async Task<List<Movement>> GetExpenseEntryMovementsAsync(
         Guid companyId, DateTime today, DateTime until,
@@ -947,7 +975,8 @@ public sealed class CashFlowProjectionService(
             .Where(x => x.CompanyId == companyId &&
                         x.ExpenseDate >= today && x.ExpenseDate <= until &&
                         x.Amount > 0m &&
-                        x.PaymentMethod != ExpensePaymentMethod.PartnerAccount)
+                        x.PaymentMethod != ExpensePaymentMethod.PartnerAccount &&
+                        x.PaymentMethod != ExpensePaymentMethod.CreditCard)
             .Select(x => new
             {
                 x.ExpenseDate,

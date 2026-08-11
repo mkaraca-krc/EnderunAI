@@ -46,6 +46,15 @@ public sealed class AppDbContext(
 
     public DbSet<Models.Expenses.PartnerAccountEntry> PartnerAccountEntries =>
         Set<Models.Expenses.PartnerAccountEntry>();
+
+    public DbSet<Models.FinancialInstruments.BankLoan> BankLoans =>
+        Set<Models.FinancialInstruments.BankLoan>();
+
+    public DbSet<Models.FinancialInstruments.BankLoanInstallment> BankLoanInstallments =>
+        Set<Models.FinancialInstruments.BankLoanInstallment>();
+
+    public DbSet<Models.FinancialInstruments.CreditCard> CreditCards =>
+        Set<Models.FinancialInstruments.CreditCard>();
     public DbSet<DutySurveyReport> DutySurveyReports => Set<DutySurveyReport>();
     public DbSet<DutySurveyMeasurement> DutySurveyMeasurements => Set<DutySurveyMeasurement>();
     public DbSet<DutySurveyPhoto> DutySurveyPhotos => Set<DutySurveyPhoto>();
@@ -296,6 +305,7 @@ public sealed class AppDbContext(
         ConfigureExpenseEntries(modelBuilder);
         ConfigureRecurringExpenseTemplates(modelBuilder);
         ConfigurePartnerAccounts(modelBuilder);
+        ConfigureFinancialInstruments(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -1122,6 +1132,13 @@ public sealed class AppDbContext(
                 .HasForeignKey(x => x.PartnerAccountId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(x => x.CreditCard)
+                .WithMany()
+                .HasForeignKey(x => x.CreditCardId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.CreditCardId);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
@@ -1217,6 +1234,97 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.ExpenseEntry)
                 .WithMany()
                 .HasForeignKey(x => x.ExpenseEntryId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureFinancialInstruments(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Models.FinancialInstruments.BankLoan>(entity =>
+        {
+            entity.ToTable("bank_loans");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.Status });
+
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ContractNumber).HasMaxLength(80);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.PrincipalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.MonthlyInterestRate).HasPrecision(9, 4);
+            entity.Property(x => x.CurrencyCode).HasMaxLength(3);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.BankCurrentAccount)
+                .WithMany()
+                .HasForeignKey(x => x.BankCurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CashAccount)
+                .WithMany()
+                .HasForeignKey(x => x.CashAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.FinancialInstruments.BankLoanInstallment>(entity =>
+        {
+            entity.ToTable("bank_loan_installments");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.BankLoanId, x.DueDate });
+
+            entity.Property(x => x.PrincipalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.InterestAmount).HasPrecision(18, 2);
+
+            // Hesaplanan alan kolona yazılmıyor: iki yerde tutulsaydı
+            // taksit düzeltilince toplam eskirdi.
+            entity.Ignore(x => x.TotalAmount);
+
+            entity.HasOne(x => x.BankLoan)
+                .WithMany(x => x.Installments)
+                .HasForeignKey(x => x.BankLoanId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.FinancialInstruments.CreditCard>(entity =>
+        {
+            entity.ToTable("credit_cards");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.CompanyId);
+
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.BankName).HasMaxLength(120);
+            entity.Property(x => x.LastFourDigits).HasMaxLength(4);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.PartnerAccount)
+                .WithMany()
+                .HasForeignKey(x => x.PartnerAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CashAccount)
+                .WithMany()
+                .HasForeignKey(x => x.CashAccountId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

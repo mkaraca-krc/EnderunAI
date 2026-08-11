@@ -69,6 +69,7 @@ public sealed class ExpenseCenterReportService(
     AppDbContext db,
     ExpenseCenterResolver centers,
     RecurringExpenseService recurring,
+    FinancialInstruments.BankLoanService loans,
     IExtraPaymentVisibilityService extraPaymentVisibility)
 {
     public async Task<ExpenseCenterReport> BuildAsync(
@@ -326,6 +327,27 @@ public sealed class ExpenseCenterReportService(
                         CategoryName(ExpenseCategoryCatalog.Other),
                         "Gider faturası", decimal.Round(amount, 2), false, false));
             }
+        }
+
+        // ---------- 6) Kredi faizi ----------
+        //
+        // FAİZ GİDERDİR, ANAPARA DEĞİLDİR: anapara geri ödemesi
+        // borcun kapanmasıdır, gider değil. Taksitin tamamı gider
+        // sayılsaydı merkez toplamı kredinin kendisi kadar şişerdi.
+        var interest = await loans.GetInterestExpenseAsync(
+            companyId, start, end, cancellationToken);
+
+        if (interest > 0m && headOffice is not null)
+        {
+            rows.Add(new ExpenseReportRow(
+                ExpenseCenterType.Branch, headOffice.Id, headOffice.Name,
+                ExpenseCategoryCatalog.Financing,
+                CategoryName(ExpenseCategoryCatalog.Financing),
+                "Kredi faizi", decimal.Round(interest, 2), false, false));
+
+            notes.Add(
+                "Kredi faizi merkez ofise yazıldı; anapara geri ödemesi " +
+                "gider değildir ve bu toplamda yok.");
         }
 
         // ---------- Toplamlar ----------

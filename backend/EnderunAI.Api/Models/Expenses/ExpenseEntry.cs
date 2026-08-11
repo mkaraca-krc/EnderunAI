@@ -23,7 +23,18 @@ public enum ExpensePaymentMethod
     ///
     /// Elden kalemlerle aynı maskeye tabi.
     /// </summary>
-    PartnerAccount = 2
+    PartnerAccount = 2,
+
+    /// <summary>
+    /// KREDİ KARTI. Gider harcama tarihinde sayılır (tahakkuk) ama
+    /// NAKİT bu tarihte çıkmaz — para ekstrenin son ödeme gününde
+    /// çıkar. Nakit akış bu kalemi gider kaydından DEĞİL, ekstreden
+    /// okur; iki yerden okunsaydı aynı harcama iki kez düşerdi.
+    ///
+    /// Şahıs kartıysa şirketin nakdi hiç çıkmaz: harcama şahsın
+    /// carisine yazılır.
+    /// </summary>
+    CreditCard = 3
 }
 
 /// <summary>Gideri belgeleyen kâğıt.</summary>
@@ -105,6 +116,15 @@ public sealed class ExpenseEntry : BaseEntity
     /// </summary>
     public Guid? PartnerAccountId { get; set; }
     public PartnerAccount? PartnerAccount { get; set; }
+
+    /// <summary>
+    /// Hangi kredi kartıyla yapıldığı.
+    /// <see cref="ExpensePaymentMethod.CreditCard"/> seçildiğinde
+    /// ZORUNLU: kartı belli olmayan bir harcama hiçbir ekstreye
+    /// düşmez ve nakit çıkışı hiç görünmez.
+    /// </summary>
+    public Guid? CreditCardId { get; set; }
+    public FinancialInstruments.CreditCard? CreditCard { get; set; }
 
     /// <summary>
     /// Bu kaydı üreten tekrarlayan şablon (varsa) ve hangi döneme

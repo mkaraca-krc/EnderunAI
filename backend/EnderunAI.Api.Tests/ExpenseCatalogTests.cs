@@ -201,11 +201,14 @@ public sealed class ExpenseCatalogTests(DatabaseFixture fixture)
             .Select(x => x.GetProperty("code").GetString())
             .ToList();
 
-        Assert.Equal(4, automatic.Count);
+        Assert.Equal(5, automatic.Count);
         Assert.Contains(ExpenseCategoryCatalog.Material, automatic);
         Assert.Contains(ExpenseCategoryCatalog.Labor, automatic);
         Assert.Contains(ExpenseCategoryCatalog.Subcontractor, automatic);
         Assert.Contains(ExpenseCategoryCatalog.Travel, automatic);
+        // Kredi faizi de otomatik: taksit planından geliyor, elle
+        // girilseydi aynı faiz iki kez sayılırdı.
+        Assert.Contains(ExpenseCategoryCatalog.Financing, automatic);
 
         // Kira gibi elle girilen kategoriler işaretli DEĞİL.
         var rent = payload.EnumerateArray()

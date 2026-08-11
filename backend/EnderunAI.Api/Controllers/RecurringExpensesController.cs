@@ -352,7 +352,7 @@ public sealed class RecurringExpensesController(
                 0, 0, 0, DateTimeKind.Utc),
             request.EstimatedAmount, request.Description ?? string.Empty,
             request.PaymentMethod, ExpenseDocumentType.None, null,
-            request.SupplierCurrentAccountId, null);
+            request.SupplierCurrentAccountId, null, null);
 
         return await entries.ValidateAsync(input, cancellationToken);
     }

@@ -371,10 +371,19 @@ public sealed class PersonnelOvertimePanelTests(DatabaseFixture fixture)
         Assert.Contains("\"overtimeHours\":15", raw);
 
         // Hiçbir tutar gelmiyor — resmî net ve elden dahil.
+        //
+        // DEĞER KONUMUNDA aranıyor, ham alt dize olarak değil:
+        // "240" gibi kısa bir sayı rastgele bir GUID'in içinde de
+        // geçebiliyor ve test hiçbir şey bozulmadan, koşuların
+        // küçük bir kısmında düşüyordu. Aradığımız şey bir JSON
+        // DEĞERİ olarak tutarın dönmesi.
         foreach (var amount in new[]
                  { "3600", "3840", "1800", "9000", "45000", "54000", "240" })
         {
-            Assert.DoesNotContain(amount, raw);
+            Assert.False(
+                System.Text.RegularExpressions.Regex.IsMatch(
+                    raw, $@":\s*{amount}(\.0+)?\s*[,}}\]]"),
+                $"Tutar yanıtta değer olarak dönüyor: {amount}");
         }
 
         var payload = JsonDocument.Parse(raw).RootElement;

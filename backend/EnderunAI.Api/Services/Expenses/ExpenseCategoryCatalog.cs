@@ -32,6 +32,9 @@ public static class ExpenseCategoryCatalog
     public const string Subcontractor = "taseron";
     public const string Travel = "yol";
 
+    /// <summary>Kredi faizi, kart komisyonu — finansman gideri.</summary>
+    public const string Financing = "finansman";
+
     /// <summary>
     /// Başlangıç seti. Sıra ekranda göründüğü sıradır; otomatik
     /// kategoriler sona alınmıştır çünkü elle giriş listesinde hiç
@@ -53,6 +56,7 @@ public static class ExpenseCategoryCatalog
         new(Material, "Malzeme", 110, AutomaticOnly: true),
         new(Labor, "İşçilik", 120, AutomaticOnly: true),
         new(Subcontractor, "Taşeron", 130, AutomaticOnly: true),
-        new(Travel, "Yol", 140, AutomaticOnly: true)
+        new(Travel, "Yol", 140, AutomaticOnly: true),
+        new(Financing, "Finansman gideri (faiz/komisyon)", 150, AutomaticOnly: true)
     ];
 }

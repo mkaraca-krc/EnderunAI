@@ -20,7 +20,8 @@ public sealed record SaveExpenseEntryRequest(
     ExpenseDocumentType DocumentType,
     string? DocumentNumber,
     Guid? SupplierCurrentAccountId,
-    Guid? PartnerAccountId);
+    Guid? PartnerAccountId,
+    Guid? CreditCardId);
 
 /// <summary>
 /// Elle girilen gider kayıtları.
@@ -119,6 +120,7 @@ public sealed class ExpenseEntriesController(
                     : x.Branch!.Name,
                 paymentMethod = x.PaymentMethod.ToString(),
                 partnerName = x.PartnerAccount != null ? x.PartnerAccount.FullName : null,
+                cardName = x.CreditCard != null ? x.CreditCard.Name : null,
                 documentType = x.DocumentType.ToString(),
                 documentNumber = x.DocumentNumber,
                 supplierName = x.SupplierCurrentAccount != null
@@ -195,8 +197,9 @@ public sealed class ExpenseEntriesController(
                 ? null
                 : input.DocumentNumber.Trim(),
             SupplierCurrentAccountId = input.SupplierCurrentAccountId,
-            PartnerAccountId = input.PaymentMethod == ExpensePaymentMethod.PartnerAccount
-                ? input.PartnerAccountId
+            PartnerAccountId = await ResolvePartnerAsync(input, cancellationToken),
+            CreditCardId = input.PaymentMethod == ExpensePaymentMethod.CreditCard
+                ? input.CreditCardId
                 : null
         };
 
@@ -250,10 +253,10 @@ public sealed class ExpenseEntriesController(
             ? null
             : input.DocumentNumber.Trim();
         entry.SupplierCurrentAccountId = input.SupplierCurrentAccountId;
-        entry.PartnerAccountId =
-            input.PaymentMethod == ExpensePaymentMethod.PartnerAccount
-                ? input.PartnerAccountId
-                : null;
+        entry.PartnerAccountId = await ResolvePartnerAsync(input, cancellationToken);
+        entry.CreditCardId = input.PaymentMethod == ExpensePaymentMethod.CreditCard
+            ? input.CreditCardId
+            : null;
         entry.UpdatedAtUtc = DateTime.UtcNow;
 
         ExpenseEntryService.ApplyCenter(entry, validation.Center!);
@@ -305,6 +308,33 @@ public sealed class ExpenseEntriesController(
         return !await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken);
     }
 
+
+    /// <summary>
+    /// Kaydın hangi şahsın carisine yazılacağı.
+    ///
+    /// ŞAHIS KARTI: kişi kartın kendisinden geliyor, kullanıcı ayrıca
+    /// seçmiyor — seçseydi kartın sahibi ile mahsubun sahibi
+    /// ayrışabilir ve bakiye yanlış kişide birikirdi.
+    /// </summary>
+    private async Task<Guid?> ResolvePartnerAsync(
+        ExpenseEntryInput input, CancellationToken cancellationToken)
+    {
+        if (input.PaymentMethod == ExpensePaymentMethod.PartnerAccount)
+            return input.PartnerAccountId;
+
+        if (input.PaymentMethod != ExpensePaymentMethod.CreditCard ||
+            input.CreditCardId is not Guid cardId)
+            return null;
+
+        return await db.CreditCards
+            .AsNoTracking()
+            .Where(x => x.Id == cardId &&
+                        x.Ownership == Models.FinancialInstruments
+                            .CreditCardOwnership.Personal)
+            .Select(x => x.PartnerAccountId)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     private static ExpenseEntryInput ToInput(SaveExpenseEntryRequest request) =>
         new(request.CompanyId,
             request.CenterType,
@@ -317,5 +347,6 @@ public sealed class ExpenseEntriesController(
             request.DocumentType,
             request.DocumentNumber,
             request.SupplierCurrentAccountId,
-            request.PartnerAccountId);
+            request.PartnerAccountId,
+            request.CreditCardId);
 }
