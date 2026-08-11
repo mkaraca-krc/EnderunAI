@@ -231,6 +231,14 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.RecurringExpenseServi
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseCenterReportService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.PartnerAccountService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Notifications.NotificationStore>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Notifications.NotificationScanner>();
+
+// Bildirim taraması günde bir koşuyor; desen
+// MarketDataBackgroundService ile aynı (açılışta gecikme, hata yutup
+// devam). Yeni tetikleyici eklemek için tek yapılacak şey
+// INotificationSource uygulayan bir sınıf yazıp buraya kaydetmek.
+builder.Services.AddHostedService<
+    EnderunAI.Api.Services.Notifications.NotificationScanBackgroundService>();
 
 // Finansal araçlar ortak sözleşmeyi uyguluyor; nakit akış hepsini
 // IEnumerable<IFinancialInstrumentSource> olarak okuyor. Yeni bir

@@ -50,6 +50,16 @@ public interface INotificationSource
     /// <summary>Kaynağın anahtarı — günlükte ve testte bununla anılır.</summary>
     string Key { get; }
 
+    /// <summary>
+    /// Bu kaynağın ürettiği bildirim türleri.
+    ///
+    /// ADAYLARDAN TÜRETİLMİYOR: kaynak bu turda hiç aday üretmese
+    /// bile kendi türlerini KAPATABİLMELİ. Adaylardan çıkarılsaydı,
+    /// çözülen son iş (ödenen son çek) kapanmaz ve bildirim ilelebet
+    /// açık kalırdı.
+    /// </summary>
+    IReadOnlyCollection<string> OwnedTypes { get; }
+
     Task<IReadOnlyList<NotificationCandidate>> BuildAsync(
         NotificationScanContext context,
         CancellationToken cancellationToken);
