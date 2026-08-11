@@ -69,10 +69,14 @@ public sealed class NotificationScannerTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
 
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var store = scope.ServiceProvider.GetRequiredService<NotificationStore>();
+
+        // Tarayıcı yazma için her turda taze bir depo çözüyor; fabrika
+        // doğrudan uygulamanın kapsayıcısından geliyor.
+        var scopeFactory = fixture.Factory.Services
+            .GetRequiredService<IServiceScopeFactory>();
 
         var scanner = new NotificationScanner(
-            db, store, sources, NullLogger<NotificationScanner>.Instance);
+            db, scopeFactory, sources, NullLogger<NotificationScanner>.Instance);
 
         return await scanner.RunAsync(Now, CancellationToken.None);
     }

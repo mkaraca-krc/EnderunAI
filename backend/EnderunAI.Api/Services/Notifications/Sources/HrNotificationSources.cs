@@ -97,7 +97,7 @@ public sealed class DocumentExpiryNotificationSource(AppDbContext db)
 
             items.Add(Build(
                 HealthReportTypeKey, row.Id,
-                expiry.ToDateTime(TimeOnly.MinValue), days,
+                DateTime.SpecifyKind(expiry.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc), days,
                 $"Sağlık raporu {ExpiryLabel(days)}",
                 row.PersonnelName,
                 "/isg",
@@ -124,7 +124,7 @@ public sealed class DocumentExpiryNotificationSource(AppDbContext db)
 
             items.Add(Build(
                 TrainingTypeKey, row.Id,
-                expiry.ToDateTime(TimeOnly.MinValue), days,
+                DateTime.SpecifyKind(expiry.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc), days,
                 $"İSG eğitimi {ExpiryLabel(days)}",
                 row.PersonnelName,
                 "/isg",
@@ -151,7 +151,7 @@ public sealed class DocumentExpiryNotificationSource(AppDbContext db)
 
             items.Add(Build(
                 CertificateTypeKey, row.Id,
-                expiry.ToDateTime(TimeOnly.MinValue), days,
+                DateTime.SpecifyKind(expiry.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc), days,
                 $"Sertifika {ExpiryLabel(days)}",
                 row.PersonnelName,
                 "/isg",

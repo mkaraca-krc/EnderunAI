@@ -5,6 +5,7 @@ using System.Text.Json;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Notifications;
 using EnderunAI.Api.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -196,11 +197,32 @@ public sealed class IsgDashboardTests(DatabaseFixture fixture)
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+
+    /// <summary>
+    /// Bildirim taramasını koşturur.
+    ///
+    /// İSG GEÇERLİLİK UYARISI ARTIK MOTORDAN GELİYOR: brifing kendi
+    /// sorgusunu yazmayı bıraktı (B6 devri), bu yüzden brifingde
+    /// görünmesi için önce taramanın koşmuş olması gerekiyor.
+    /// Canlıda tarama açılışta ve günde bir koşuyor; testte elle
+    /// tetikleniyor.
+    /// </summary>
+    private async Task RunNotificationScanAsync()
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+
+        var scanner = scope.ServiceProvider.GetRequiredService<NotificationScanner>();
+
+        await scanner.RunAsync(DateTime.UtcNow, CancellationToken.None);
+    }
+
     [Fact]
     public async Task Briefing_ProducesIsgItemsWhenDataExists()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         await CreateContextAsync(suffix);
+        await RunNotificationScanAsync();
+
         var client = await CreateClientForRoleAsync("İSG Sorumlusu");
 
         var briefing = await client.GetFromJsonAsync<JsonElement>("/api/hizir/briefing");
@@ -209,7 +231,7 @@ public sealed class IsgDashboardTests(DatabaseFixture fixture)
             .Select(x => x.GetProperty("title").GetString() ?? string.Empty)
             .ToList();
 
-        Assert.Contains(titles, x => x.Contains("sağlık raporu"));
+        Assert.Contains(titles, x => x.Contains("ağlık raporu"));
         Assert.Contains(titles, x => x.Contains("SGK"));
     }
 
@@ -218,6 +240,7 @@ public sealed class IsgDashboardTests(DatabaseFixture fixture)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         await CreateContextAsync(suffix);
+        await RunNotificationScanAsync();
 
         var client = await CreateClientForRoleAsync("Teknik Koordinatör");
 
@@ -228,7 +251,7 @@ public sealed class IsgDashboardTests(DatabaseFixture fixture)
             .ToList();
 
         // Süre uyarısını görür...
-        Assert.Contains(titles, x => x.Contains("sağlık raporu"));
+        Assert.Contains(titles, x => x.Contains("ağlık raporu"));
         // ...ama kaza maddesini görmez; kaynak hiç çalıştırılmaz.
         Assert.DoesNotContain(titles, x => x.Contains("SGK"));
         Assert.DoesNotContain(titles, x => x.Contains("ramak kala"));

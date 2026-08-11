@@ -132,72 +132,15 @@ public sealed class ProgressDeviationBriefingSource(
     }
 }
 
-/// <summary>Yaklaşan ve geçmiş çek vadeleri.</summary>
-public sealed class ChequeDueBriefingSource(AppDbContext db) : IHizirBriefingSource
-{
-    private const int Horizon = 7;
-
-    private static readonly ChequeStatus[] OpenStatuses =
-    [
-        ChequeStatus.Portfolio, ChequeStatus.AtBank,
-        ChequeStatus.AtFactoring, ChequeStatus.Issued
-    ];
-
-    public string Key => "cek_vadeleri";
-    public string? RequiredPermission => PermissionCatalog.Keys.FinanceView;
-
-    public async Task<IReadOnlyList<BriefingItem>> BuildAsync(
-        HizirToolContext context, CancellationToken cancellationToken)
-    {
-        var today = DateTime.UtcNow.Date;
-        var until = today.AddDays(Horizon);
-
-        var rows = await db.Cheques
-            .AsNoTracking()
-            .Where(x => OpenStatuses.Contains(x.Status) && x.DueDate <= until)
-            .Select(x => new { x.Direction, x.Amount, x.DueDate })
-            .ToListAsync(cancellationToken);
-
-        var items = new List<BriefingItem>();
-
-        // Vadesi geçmiş ama hâlâ açık çek en kritik uyarı.
-        var overdue = rows.Where(x => x.DueDate.Date < today).ToList();
-
-        if (overdue.Count > 0)
-        {
-            items.Add(new BriefingItem(
-                $"{overdue.Count} çekin vadesi geçmiş, hâlâ açık",
-                $"Toplam {BriefingFormat.Money(overdue.Sum(x => x.Amount))}",
-                BriefingSeverity.Critical, "/finans/cekler"));
-        }
-
-        var issued = rows
-            .Where(x => x.DueDate.Date >= today && x.Direction == ChequeDirection.Issued)
-            .ToList();
-
-        if (issued.Count > 0)
-        {
-            items.Add(new BriefingItem(
-                $"{Horizon} gün içinde {issued.Count} verilen çekin vadesi geliyor",
-                $"Ödenecek toplam {BriefingFormat.Money(issued.Sum(x => x.Amount))}",
-                BriefingSeverity.Warning, "/finans/cekler"));
-        }
-
-        var received = rows
-            .Where(x => x.DueDate.Date >= today && x.Direction == ChequeDirection.Received)
-            .ToList();
-
-        if (received.Count > 0)
-        {
-            items.Add(new BriefingItem(
-                $"{Horizon} gün içinde {received.Count} alınan çekin vadesi geliyor",
-                $"Tahsil edilecek toplam {BriefingFormat.Money(received.Sum(x => x.Amount))}",
-                BriefingSeverity.Info, "/finans/cekler"));
-        }
-
-        return items;
-    }
-}
+// ÇEK VADESİ KAYNAĞI KALDIRILDI (bildirim motoru devraldı).
+//
+// Aynı hesap iki yerde durursa eşikler zamanla ayrışır: brifing "7
+// gün" derken bildirim "3 gün" der ve kullanıcı hangisine
+// inanacağını bilemez. Hesap artık ChequeDueNotificationSource'ta;
+// brifing sonucu NotificationBriefingSource üzerinden OKUYOR.
+//
+// Eski sorguda ŞİRKET FİLTRESİ DE YOKTU (bütün şirketlerin çekleri
+// sayılıyordu); yeni kaynak şirket bazlı ve bu bir testle sabit.
 
 /// <summary>Dün girilmemiş günlük saha raporları.</summary>
 public sealed class MissingSiteReportBriefingSource(AppDbContext db)

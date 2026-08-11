@@ -63,6 +63,16 @@ public sealed class NotificationStore(AppDbContext db)
                 ? "-"
                 : candidate.PeriodKey;
 
+            // VADE UTC'YE ÇEKİLİYOR — TEK YERDE.
+            //
+            // DateOnly.ToDateTime() Kind=Unspecified üretiyor ve Npgsql
+            // bunu timestamptz kolonuna yazmayı reddediyor. Dönüşüm
+            // kaynakların her birine bırakılsaydı biri unutur ve o
+            // kaynak sessizce hiç bildirim üretemezdi.
+            var dueDate = candidate.DueDate is DateTime due
+                ? DateTime.SpecifyKind(due, DateTimeKind.Utc)
+                : (DateTime?)null;
+
             var key = (candidate.Type, candidate.SourceId, period);
             seen.Add(key);
 
@@ -77,7 +87,7 @@ public sealed class NotificationStore(AppDbContext db)
                 row.Severity = candidate.Severity;
                 row.TargetPath = candidate.TargetPath;
                 row.RequiredPermission = candidate.RequiredPermission;
-                row.DueDate = candidate.DueDate;
+                row.DueDate = dueDate;
                 row.LastSeenAtUtc = scanTimeUtc;
                 row.UpdatedAtUtc = scanTimeUtc;
 
@@ -116,7 +126,7 @@ public sealed class NotificationStore(AppDbContext db)
                 Severity = candidate.Severity,
                 TargetPath = candidate.TargetPath,
                 RequiredPermission = candidate.RequiredPermission,
-                DueDate = candidate.DueDate,
+                DueDate = dueDate,
                 Status = NotificationStatus.Open,
                 FirstSeenAtUtc = scanTimeUtc,
                 LastSeenAtUtc = scanTimeUtc

@@ -34,7 +34,9 @@ public sealed class HizirBriefingTests(DatabaseFixture fixture)
     public static TheoryData<string, string> FinancialSources =>
         new()
         {
-            { "cek_vadeleri", PermissionCatalog.Keys.FinanceView },
+            // "cek_vadeleri" KALDIRILDI: çek vadesi artık bildirim
+            // motorunda hesaplanıyor ve brifinge köprüden geliyor.
+            // Yetki orada bildirim bazında süzülüyor.
             { "teklif_gecerliligi", PermissionCatalog.Keys.EngineeringView }
         };
 
@@ -126,9 +128,14 @@ public sealed class HizirBriefingTests(DatabaseFixture fixture)
     {
         using var scope = fixture.Factory.Services.CreateScope();
 
-        // İçeride izin izin kontrol ettiği için bilinçli olarak izin
-        // beyan etmeyen tek kaynak.
-        var permissionlessByDesign = new[] { "bekleyen_onaylar" };
+        // İçeride izin kontrol ettiği için bilinçli olarak izin beyan
+        // etmeyen kaynaklar.
+        //
+        // "bildirimler": bildirim motoru köprüsü. Her bildirim kendi
+        // RequiredPermission'ını taşıyor ve okuma anında süzülüyor;
+        // köprüye tek bir izin verilseydi, o izni olmayan kullanıcı
+        // kendi modülünün bildirimini de göremezdi.
+        var permissionlessByDesign = new[] { "bekleyen_onaylar", "bildirimler" };
 
         var offending = Sources(scope)
             .Where(x => x.RequiredPermission is null &&

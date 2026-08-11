@@ -37,7 +37,7 @@ public sealed record NotificationScanReport(
 /// </summary>
 public sealed class NotificationScanner(
     AppDbContext db,
-    NotificationStore store,
+    IServiceScopeFactory scopeFactory,
     IEnumerable<INotificationSource> sources,
     ILogger<NotificationScanner> logger)
 {
@@ -62,9 +62,23 @@ public sealed class NotificationScanner(
             {
                 try
                 {
+                    // YAZMA HER TURDA TAZE BİR BAĞLAMDA.
+                    //
+                    // Kaynaklar tek bir DbContext'i paylaşsaydı, birinin
+                    // yazamadığı bozuk kayıt izleyicide asılı kalır ve
+                    // SONRAKİ kaynakların SaveChanges'i de düşerdi —
+                    // tek bir hatalı kaynak bütün turu sessizce
+                    // sakatlardı. Kaynaklar yalnız OKUYOR, o yüzden
+                    // tazelenen tek şey depo.
+                    using var scope = scopeFactory.CreateScope();
+
+                    var store = scope.ServiceProvider
+                        .GetRequiredService<NotificationStore>();
+
                     var context = new NotificationScanContext(companyId, nowUtc.Date);
 
-                    var candidates = await source.BuildAsync(context, cancellationToken);
+                    var candidates = await source.BuildAsync(
+                        context, cancellationToken);
 
                     // Türler ADAYLARDAN çıkarılmıyor: kaynak bu turda
                     // hiç aday üretmese bile kendi türlerini kapatmalı.

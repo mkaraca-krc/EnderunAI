@@ -321,21 +321,22 @@ builder.Services.AddScoped<
 // IHizirBriefingSource uygulayan bir sınıf yazıp buraya eklemektir;
 // brifing servisi değişmez.
 builder.Services.AddMemoryCache();
+// Bildirim motoru köprüsü: çek vadesi ve İSG geçerliliği artık
+// motorda hesaplanıyor, brifing buradan okuyor. Eski kaynaklar
+// kaldırıldı; motorun kapsamadığı kalemler kendi yollarından
+// gelmeye devam ediyor (regresyon-güvenli devir).
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
+    EnderunAI.Api.Services.Hizir.Briefing.NotificationBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Hizir.Briefing.PendingApprovalsBriefingSource>();
-builder.Services.AddScoped<
-    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
-    EnderunAI.Api.Services.Hizir.Briefing.ChequeDueBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Hizir.Briefing.MissingSiteReportBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Hizir.Briefing.CriticalStockBriefingSource>();
-builder.Services.AddScoped<
-    EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
-    EnderunAI.Api.Services.Isg.IsgExpiryBriefingSource>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hizir.Briefing.IHizirBriefingSource,
     EnderunAI.Api.Services.Isg.IsgIncidentBriefingSource>();
