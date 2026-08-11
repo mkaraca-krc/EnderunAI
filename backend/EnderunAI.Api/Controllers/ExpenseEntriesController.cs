@@ -61,10 +61,16 @@ public sealed class ExpenseEntriesController(
             .Where(x => x.CompanyId == companyId);
 
         if (from is DateTime start)
-            query = query.Where(x => x.ExpenseDate >= start.Date);
+        {
+            var fromUtc = ExpenseEntryService.AsUtcDate(start);
+            query = query.Where(x => x.ExpenseDate >= fromUtc);
+        }
 
         if (to is DateTime end)
-            query = query.Where(x => x.ExpenseDate <= end.Date);
+        {
+            var toUtc = ExpenseEntryService.AsUtcDate(end);
+            query = query.Where(x => x.ExpenseDate <= toUtc);
+        }
 
         if (categoryId is Guid category)
             query = query.Where(x => x.ExpenseCategoryId == category);
@@ -175,7 +181,7 @@ public sealed class ExpenseEntriesController(
         {
             CompanyId = input.CompanyId,
             ExpenseCategoryId = input.ExpenseCategoryId,
-            ExpenseDate = input.ExpenseDate.Date,
+            ExpenseDate = ExpenseEntryService.AsUtcDate(input.ExpenseDate),
             Amount = decimal.Round(input.Amount, 2),
             Description = input.Description.Trim(),
             PaymentMethod = input.PaymentMethod,
@@ -222,7 +228,7 @@ public sealed class ExpenseEntriesController(
             return Forbid();
 
         entry.ExpenseCategoryId = input.ExpenseCategoryId;
-        entry.ExpenseDate = input.ExpenseDate.Date;
+        entry.ExpenseDate = ExpenseEntryService.AsUtcDate(input.ExpenseDate);
         entry.Amount = decimal.Round(input.Amount, 2);
         entry.Description = input.Description.Trim();
         entry.PaymentMethod = input.PaymentMethod;
@@ -280,7 +286,7 @@ public sealed class ExpenseEntriesController(
             request.CenterType,
             request.CenterId,
             request.ExpenseCategoryId,
-            request.ExpenseDate,
+            ExpenseEntryService.AsUtcDate(request.ExpenseDate),
             request.Amount,
             request.Description ?? string.Empty,
             request.PaymentMethod,

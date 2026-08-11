@@ -228,6 +228,7 @@ builder.Services.AddScoped<ICashFlowProjectionService, CashFlowProjectionService
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseCenterResolver>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseEntryService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.RecurringExpenseService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseCenterReportService>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hakedis.IProgressTrackingService,

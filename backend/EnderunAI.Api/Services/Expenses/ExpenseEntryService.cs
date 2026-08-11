@@ -40,6 +40,18 @@ public sealed record ExpenseDuplicateHint(
 public sealed class ExpenseEntryService(AppDbContext db, ExpenseCenterResolver centers)
 {
     /// <summary>
+    /// Tarihi UTC gününe sabitler.
+    ///
+    /// ZORUNLU: query string'den ya da Z taşımayan bir gövdeden gelen
+    /// tarih Kind=Unspecified oluyor ve Npgsql bunu timestamptz
+    /// kolonuna yazmayı/karşılaştırmayı reddediyor. Dönüşüm tek
+    /// yerde; her çağıranın hatırlamasına bırakılırsa bir uçta
+    /// çalışıp diğerinde 500 verir.
+    /// </summary>
+    public static DateTime AsUtcDate(DateTime value) =>
+        DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
+
+    /// <summary>
     /// R4 UYARI EŞİĞİ: aynı merkez + kategori + ay içinde tutarı
     /// %5'ten yakın bir kayıt varsa kullanıcı uyarılır. SERT ENGEL
     /// DEĞİL — iki ayrı kira ödemesi ya da iki ayrı yakıt fişi meşru;
