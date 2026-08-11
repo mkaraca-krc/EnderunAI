@@ -64,6 +64,10 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
   if (pathname.startsWith("/isg/benim")) return null;
   if (pathname.startsWith("/isg")) return "isg.view";
   if (pathname.startsWith("/muhasebe")) return "accounting.view";
+  // Nakit akış ve gider merkezi kendi dar izinlerinde: ikisi de şirket
+  // geneli tabloyu tek ekranda topluyor, finance.view kadar geniş bir
+  // kapıya bırakılamaz.
+  if (pathname.startsWith("/finans/gider-merkezi")) return "expense.view";
   if (pathname.startsWith("/finans")) return "finance.view";
   if (
     pathname.startsWith("/hakedis") ||
@@ -224,6 +228,11 @@ const groups: MenuGroup[] = [
         label: "Nakit Akışı",
         href: "/finans/nakit-akis",
         icon: "≈",
+      },
+      {
+        label: "Gider Merkezi",
+        href: "/finans/gider-merkezi",
+        icon: "◫",
       },
       {
         label: "Vergi Yükü",
