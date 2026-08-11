@@ -63,6 +63,7 @@ public static class DatabaseSeeder
         await SeedRoleWorkHourWindowsAsync(db);
         await SeedCompanyFinanceSettingsAsync(db);
         await SeedCompanyPayrollSettingsAsync(db);
+        await SeedExpenseCategoriesAsync(db);
     }
 
     /// <summary>
@@ -366,6 +367,22 @@ public static class DatabaseSeeder
     /// Hesap planı henüz yüklenmemişse eşleşmeyen alanlar null kalır ve
     /// sonraki boot'ta yeniden denenir; admin ekrandan da seçebilir.
     /// </summary>
+    /// <summary>
+    /// Gider kategorilerinin başlangıç seti. Asıl mantık
+    /// <see cref="Services.Expenses.ExpenseCategoryProvisioner"/>
+    /// içinde: aynı tamamlama, sonradan açılan şirketler için kategori
+    /// listesi okunurken de çalışıyor. İki yere kopyalansaydı biri
+    /// güncellenip diğeri unutulurdu.
+    /// </summary>
+    private static async Task SeedExpenseCategoriesAsync(AppDbContext db)
+    {
+        var companyIds = await db.Companies.Select(company => company.Id).ToListAsync();
+
+        foreach (var companyId in companyIds)
+            await Services.Expenses.ExpenseCategoryProvisioner.EnsureAsync(
+                db, companyId, CancellationToken.None);
+    }
+
     private static async Task SeedCompanyFinanceSettingsAsync(AppDbContext db)
     {
         var companyIds = await db.Companies.Select(company => company.Id).ToListAsync();

@@ -40,6 +40,10 @@ public static class RoleCatalog
             // taşıdığı için ayrı anahtar. Admin ve Genel Müdür bütün
             // anahtarları aldığı için burada tekrar listelenmiyor.
             PermissionCatalog.Keys.CashFlowView,
+            // Gider merkezi: "ofise ne harcadık, şantiyeye ne harcadık"
+            // finansın raporu. Elden ödenen gider kalemleri ayrıca
+            // extra_payment.view'a tabi, o izin de bu rolde var.
+            PermissionCatalog.Keys.ExpenseView, PermissionCatalog.Keys.ExpenseManage,
             PermissionCatalog.Keys.CurrentAccountsView, PermissionCatalog.Keys.CurrentAccountsCreate,
             PermissionCatalog.Keys.CurrentAccountsEdit, PermissionCatalog.Keys.CurrentAccountsDelete,
             PermissionCatalog.Keys.CurrentAccountsApprove,

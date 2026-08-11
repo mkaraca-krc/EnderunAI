@@ -31,6 +31,9 @@ public sealed class AppDbContext(
     public DbSet<PersonnelDuty> PersonnelDuties => Set<PersonnelDuty>();
     public DbSet<CashFlowEstimatedExpense> CashFlowEstimatedExpenses =>
         Set<CashFlowEstimatedExpense>();
+
+    public DbSet<Models.Expenses.ExpenseCategory> ExpenseCategories =>
+        Set<Models.Expenses.ExpenseCategory>();
     public DbSet<DutySurveyReport> DutySurveyReports => Set<DutySurveyReport>();
     public DbSet<DutySurveyMeasurement> DutySurveyMeasurements => Set<DutySurveyMeasurement>();
     public DbSet<DutySurveyPhoto> DutySurveyPhotos => Set<DutySurveyPhoto>();
@@ -277,6 +280,7 @@ public sealed class AppDbContext(
         ConfigurePersonnelDuties(modelBuilder);
         ConfigureDutySurveyReports(modelBuilder);
         ConfigureCashFlowEstimatedExpenses(modelBuilder);
+        ConfigureExpenseCategories(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -1018,6 +1022,32 @@ public sealed class AppDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureExpenseCategories(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Models.Expenses.ExpenseCategory>(entity =>
+        {
+            entity.ToTable("expense_categories");
+            entity.HasKey(x => x.Id);
+
+            // Şirket içinde tekil kod. Filtre şart: soft-delete edilmiş
+            // bir kategorinin kodu yeniden kullanılabilmeli, aksi halde
+            // silinen "kira" kategorisi o kodu kalıcı olarak kilitler.
+            entity.HasIndex(x => new { x.CompanyId, x.Code })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

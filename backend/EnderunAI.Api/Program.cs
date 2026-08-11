@@ -225,6 +225,7 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<IFactoringService, FactoringService>();
 builder.Services.AddScoped<ICashFlowService, CashFlowService>();
 builder.Services.AddScoped<ICashFlowProjectionService, CashFlowProjectionService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseCenterResolver>();
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hakedis.IProgressTrackingService,

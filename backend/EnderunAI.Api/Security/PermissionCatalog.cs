@@ -144,6 +144,17 @@ public static class PermissionCatalog
         /// Koordinatör'de de var ve ikisinde ek ödeme yetkisi yok.
         /// </summary>
         public const string CashFlowView = "cashflow.view";
+
+        /// <summary>
+        /// Gider merkezi raporu ve gider kayıtları. AYRI ANAHTAR:
+        /// rapor merkez × kategori kırılımında şirketin bütün
+        /// giderlerini tek ekranda topluyor; proje bazlı maliyet
+        /// yetkisi (projects.view) olan biri buradan şirket geneline
+        /// bakamamalı.
+        /// </summary>
+        public const string ExpenseView = "expense.view";
+        public const string ExpenseManage = "expense.manage";
+
         public const string FinanceEdit = "finance.edit";
         public const string FinanceDelete = "finance.delete";
 
@@ -348,6 +359,8 @@ public static class PermissionCatalog
         new(Keys.FinanceApprove, "Finans", "Finans onayı", "Ödeme ve finans işlemlerini onaylar."),
         new(Keys.FinanceCreate, "Finans", "Finans kaydı oluşturma", "Tahsilat, ödeme ve finans kaydı oluşturur."),
         new(Keys.CashFlowView, "Finans", "Nakit akış projeksiyonu", "Likidite takvimini görüntüler; bordro çıkışı elden dahil tam tutarla görünür."),
+        new(Keys.ExpenseView, "Finans", "Gider merkezi raporu", "Merkez ve kategori kırılımında giderleri görüntüler."),
+        new(Keys.ExpenseManage, "Finans", "Gider kaydı yönetimi", "Elle gider kaydı, kategori ve tekrarlayan gider şablonu yönetir."),
         new(Keys.FinanceEdit, "Finans", "Finans kaydı düzenleme", "Finans kaydını günceller."),
         new(Keys.FinanceDelete, "Finans", "Finans kaydı silme", "Finans kaydını siler."),
 
