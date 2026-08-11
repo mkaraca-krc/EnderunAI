@@ -37,6 +37,9 @@ public sealed class AppDbContext(
 
     public DbSet<Models.Expenses.ExpenseEntry> ExpenseEntries =>
         Set<Models.Expenses.ExpenseEntry>();
+
+    public DbSet<Models.Expenses.RecurringExpenseTemplate> RecurringExpenseTemplates =>
+        Set<Models.Expenses.RecurringExpenseTemplate>();
     public DbSet<DutySurveyReport> DutySurveyReports => Set<DutySurveyReport>();
     public DbSet<DutySurveyMeasurement> DutySurveyMeasurements => Set<DutySurveyMeasurement>();
     public DbSet<DutySurveyPhoto> DutySurveyPhotos => Set<DutySurveyPhoto>();
@@ -285,6 +288,7 @@ public sealed class AppDbContext(
         ConfigureCashFlowEstimatedExpenses(modelBuilder);
         ConfigureExpenseCategories(modelBuilder);
         ConfigureExpenseEntries(modelBuilder);
+        ConfigureRecurringExpenseTemplates(modelBuilder);
         ConfigureCurrencyValuation(modelBuilder);
         ConfigureCashAccounts(modelBuilder);
         ConfigurePayrollSettings(modelBuilder);
@@ -1075,6 +1079,52 @@ public sealed class AppDbContext(
             entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
             entity.Property(x => x.DocumentNumber).HasMaxLength(60);
             entity.Property(x => x.Amount).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ExpenseCategory)
+                .WithMany()
+                .HasForeignKey(x => x.ExpenseCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Branch)
+                .WithMany()
+                .HasForeignKey(x => x.BranchId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectSite)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SupplierCurrentAccount)
+                .WithMany()
+                .HasForeignKey(x => x.SupplierCurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureRecurringExpenseTemplates(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Models.Expenses.RecurringExpenseTemplate>(entity =>
+        {
+            entity.ToTable("recurring_expense_templates");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.IsStopped });
+
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.EstimatedAmount).HasPrecision(18, 2);
 
             entity.HasOne(x => x.Company)
                 .WithMany()
