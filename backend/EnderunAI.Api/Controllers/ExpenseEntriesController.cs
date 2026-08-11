@@ -92,16 +92,17 @@ public sealed class ExpenseEntriesController(
 
         // Gizlenen kalem SAYISI toplam için değil, kullanıcıya "eksik
         // bakıyorsun" diyebilmek için okunuyor; tutarı taşımıyor.
-        // Elden VE şahıs carisinden mahsup edilen kalemler aynı
-        // maskede: ikisi de faturasız, ikisi de extra_payment.view.
+        // Maske TEK YÜKLEMDEN geliyor (ExpenseEntryService):
+        // elden, şahıs carisi, şahıs kartı ve belgesiz kart
+        // harcaması. Faturalı şirket kartı harcaması sıradan bir
+        // giderdir, gizlenmez.
         var hiddenCount = canSeeCash
             ? 0
             : await query.CountAsync(
-                x => x.PaymentMethod != ExpensePaymentMethod.Bank,
-                cancellationToken);
+                ExpenseEntryService.IsMaskedExpense, cancellationToken);
 
         if (!canSeeCash)
-            query = query.Where(x => x.PaymentMethod == ExpensePaymentMethod.Bank);
+            query = query.Where(ExpenseEntryService.IsVisibleExpense);
 
         var rows = await query
             .OrderByDescending(x => x.ExpenseDate).ThenByDescending(x => x.CreatedAtUtc)
@@ -302,7 +303,11 @@ public sealed class ExpenseEntriesController(
     private async Task<bool> CashWriteForbiddenAsync(
         ExpensePaymentMethod method, CancellationToken cancellationToken)
     {
-        if (method == ExpensePaymentMethod.Bank)
+        // Banka ve kart ödemeleri sıradan giderdir. Kart harcamasının
+        // maskesi kalemin KENDİSİNDE (şahıs kartı / belgesiz) çözülüyor;
+        // yazma kapısını kartın tamamına kapamak, faturalı şirket kartı
+        // harcamasını da yetkili olmayan kullanıcıya yasaklardı.
+        if (method is ExpensePaymentMethod.Bank or ExpensePaymentMethod.CreditCard)
             return false;
 
         return !await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken);

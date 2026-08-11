@@ -464,7 +464,13 @@ public sealed class FinancialInstrumentTests(DatabaseFixture fixture)
         return created.GetProperty("id").GetGuid();
     }
 
-    private async Task AddCardExpenseAsync(
+    private Task AddCardExpenseAsync(
+        HttpClient client, Context context, Guid cardId, Guid categoryId,
+        decimal amount, DateTime date, string description) =>
+        AddCardExpenseAsync(client, context, cardId, categoryId, amount, date,
+            description, ExpenseDocumentType.Receipt);
+
+    private async Task AddCardExpenseLegacyAsync(
         HttpClient client, Context context, Guid cardId, Guid categoryId,
         decimal amount, DateTime date, string description)
     {
@@ -794,5 +800,295 @@ public sealed class FinancialInstrumentTests(DatabaseFixture fixture)
                 firstInstallmentDate = Today.AddDays(30),
                 notes = (string?)null
             })).StatusCode);
+    }
+
+    // ---------------- Maske ayrımı (gider detayı düzeyinde) ----------------
+
+    /// <summary>
+    /// Gider merkezini görebilen ama ek ödeme yetkisi OLMAYAN
+    /// kullanıcı.
+    /// </summary>
+    private static readonly string[] WithoutExtraPayment =
+    [
+        PermissionCatalog.Keys.ExpenseView,
+        PermissionCatalog.Keys.ExpenseManage,
+        PermissionCatalog.Keys.FinanceView,
+        PermissionCatalog.Keys.FinanceEdit
+    ];
+
+    private async Task AddCardExpenseAsync(
+        HttpClient client, Context context, Guid cardId, Guid categoryId,
+        decimal amount, DateTime date, string description,
+        ExpenseDocumentType documentType)
+    {
+        var response = await client.PostAsJsonAsync("/api/expenses/kayitlar", new
+        {
+            companyId = context.CompanyId,
+            centerType = (int)ExpenseCenterType.Branch,
+            centerId = context.BranchId,
+            expenseCategoryId = categoryId,
+            expenseDate = date,
+            amount,
+            description,
+            paymentMethod = (int)ExpensePaymentMethod.CreditCard,
+            documentType = (int)documentType,
+            documentNumber = documentType == ExpenseDocumentType.None ? null : "BLG-1",
+            supplierCurrentAccountId = (Guid?)null,
+            partnerAccountId = (Guid?)null,
+            creditCardId = cardId
+        });
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>
+    /// MASKE GİDER DETAYI DÜZEYİNDE: faturalı ŞİRKET kartı harcaması
+    /// sıradan bir giderdir ve yetkisiz kullanıcıya GÖRÜNÜR.
+    ///
+    /// Kartın tamamı maskelenseydi, gider merkezini görebilen ama ek
+    /// ödeme yetkisi olmayan kullanıcı normal kart harcamalarını da
+    /// göremez ve toplam sürekli eksik çıkardı.
+    /// </summary>
+    [Fact]
+    public async Task InvoicedCompanyCardExpense_StaysVisibleWithoutExtraPaymentView()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        var privileged = await ClientWithAsync(FinancePermissions);
+
+        var cardId = await CreateCardAsync(privileged, context, 1, 15);
+
+        var supplies = await CategoryIdAsync(
+            context.CompanyId, ExpenseCategoryCatalog.Supplies);
+
+        await AddCardExpenseAsync(
+            privileged, context, cardId, supplies, 8_000m, Today,
+            "Faturalı şirket kartı harcaması", ExpenseDocumentType.Invoice);
+
+        var limited = await ClientWithAsync(WithoutExtraPayment);
+
+        var list = await ReadAsync(await limited.GetAsync(
+            $"/api/expenses/kayitlar?companyId={context.CompanyId}"));
+
+        Assert.Equal(1, list.GetProperty("items").GetArrayLength());
+        Assert.Equal(8_000m, list.GetProperty("total").GetDecimal());
+        Assert.Equal(0, list.GetProperty("hiddenCount").GetInt32());
+
+        // Raporda da görünüyor.
+        var report = await ReadAsync(await limited.GetAsync(
+            $"/api/expenses/rapor?companyId={context.CompanyId}" +
+            $"&from={Today.AddDays(-1):yyyy-MM-dd}&to={Today.AddDays(1):yyyy-MM-dd}"));
+
+        Assert.Equal(8_000m, report.GetProperty("total").GetDecimal());
+    }
+
+    /// <summary>
+    /// BELGESİZ kart harcaması maskeleniyor: faturasız bir kalem,
+    /// hangi kartla yapıldığından bağımsız olarak dar yetkiye tabi.
+    /// </summary>
+    [Fact]
+    public async Task UndocumentedCardExpense_IsMasked()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        var privileged = await ClientWithAsync(FinancePermissions);
+
+        var cardId = await CreateCardAsync(privileged, context, 1, 15);
+
+        var supplies = await CategoryIdAsync(
+            context.CompanyId, ExpenseCategoryCatalog.Supplies);
+
+        await AddCardExpenseAsync(
+            privileged, context, cardId, supplies, 3_000m, Today,
+            "Belgesiz kart harcaması", ExpenseDocumentType.None);
+
+        var limited = await ClientWithAsync(WithoutExtraPayment);
+
+        var list = await ReadAsync(await limited.GetAsync(
+            $"/api/expenses/kayitlar?companyId={context.CompanyId}"));
+
+        Assert.Equal(0, list.GetProperty("items").GetArrayLength());
+        Assert.Equal(0m, list.GetProperty("total").GetDecimal());
+        Assert.Equal(1, list.GetProperty("hiddenCount").GetInt32());
+    }
+
+    /// <summary>
+    /// ŞAHIS KARTI harcaması maskeleniyor: kişinin carisine yazılan
+    /// bir kalem, faturalı olsa bile dar yetkiye tabi.
+    /// </summary>
+    [Fact]
+    public async Task PersonalCardExpense_IsMaskedEvenWhenInvoiced()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        var privileged = await ClientWithAsync(FinancePermissions);
+
+        var partner = await ReadAsync(await privileged.PostAsJsonAsync(
+            "/api/expenses/sahis-cari", new
+            {
+                companyId = context.CompanyId,
+                fullName = "Maskeli Ortak",
+                title = (string?)null,
+                notes = (string?)null
+            }));
+
+        var cardId = await CreateCardAsync(
+            privileged, context, 1, 15, CreditCardOwnership.Personal,
+            partner.GetProperty("id").GetGuid());
+
+        var supplies = await CategoryIdAsync(
+            context.CompanyId, ExpenseCategoryCatalog.Supplies);
+
+        await AddCardExpenseAsync(
+            privileged, context, cardId, supplies, 6_000m, Today,
+            "Şahıs kartı — faturalı", ExpenseDocumentType.Invoice);
+
+        var limited = await ClientWithAsync(WithoutExtraPayment);
+
+        var list = await ReadAsync(await limited.GetAsync(
+            $"/api/expenses/kayitlar?companyId={context.CompanyId}"));
+
+        Assert.Equal(0, list.GetProperty("items").GetArrayLength());
+        Assert.Equal(1, list.GetProperty("hiddenCount").GetInt32());
+    }
+
+    /// <summary>
+    /// Faturalı şirket kartı harcamasını YAZMAK da ek ödeme yetkisi
+    /// istemiyor; şahıs kartına yazmak istiyor.
+    /// </summary>
+    [Fact]
+    public async Task WritingAnInvoicedCompanyCardExpense_NeedsNoExtraPaymentView()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        var privileged = await ClientWithAsync(FinancePermissions);
+        var companyCard = await CreateCardAsync(privileged, context, 1, 15);
+
+        var supplies = await CategoryIdAsync(
+            context.CompanyId, ExpenseCategoryCatalog.Supplies);
+
+        var limited = await ClientWithAsync(WithoutExtraPayment);
+
+        var allowed = await limited.PostAsJsonAsync("/api/expenses/kayitlar", new
+        {
+            companyId = context.CompanyId,
+            centerType = (int)ExpenseCenterType.Branch,
+            centerId = context.BranchId,
+            expenseCategoryId = supplies,
+            expenseDate = Today,
+            amount = 1_500m,
+            description = "Şirket kartı faturalı",
+            paymentMethod = (int)ExpensePaymentMethod.CreditCard,
+            documentType = (int)ExpenseDocumentType.Invoice,
+            documentNumber = "FTR-9",
+            supplierCurrentAccountId = (Guid?)null,
+            partnerAccountId = (Guid?)null,
+            creditCardId = companyCard
+        });
+
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+    }
+
+    // ---------------- Barter yetkisi ----------------
+
+    /// <summary>
+    /// NEGATİF TEST: barter kendi yerinde kaldı — okuma hakedis.view,
+    /// teslim alma hakedis.edit. Yeni bir anahtar açılmadı.
+    /// </summary>
+    [Fact]
+    public async Task BarterEndpoints_StayOnTheHakedisPermissions()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        var outsider = await ClientWithAsync([PermissionCatalog.Keys.FinanceView]);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await outsider.GetAsync(
+            $"/api/barter-ledger?projectId={context.ProjectId}")).StatusCode);
+
+        // hakedis.view okuyor ama teslim alma giremiyor.
+        var reader = await ClientWithAsync([PermissionCatalog.Keys.HakedisView]);
+
+        Assert.Equal(HttpStatusCode.OK, (await reader.GetAsync(
+            $"/api/barter-ledger?projectId={context.ProjectId}")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.PostAsJsonAsync(
+            "/api/barter-ledger/receipts", new
+            {
+                projectId = context.ProjectId,
+                projectSiteId = (Guid?)null,
+                entryDate = Today,
+                amount = 1_000m,
+                description = "Yetkisiz teslim alma",
+                notes = (string?)null
+            })).StatusCode);
+    }
+
+    /// <summary>
+    /// Teslim alma açık bakiyeyi aşamıyor ve bakiyeyi düşürüyor —
+    /// ekrandaki mahsuplaşmanın sözleşmesi.
+    /// </summary>
+    [Fact]
+    public async Task BarterReceipt_ReducesTheBalanceAndCannotExceedIt()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            db.BarterLedgerEntries.Add(new BarterLedgerEntry
+            {
+                ProjectId = context.ProjectId,
+                EntryType = BarterEntryType.Deduction,
+                EntryDate = Today,
+                Amount = 100_000m,
+                Description = "Kesinti"
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var client = await ClientWithAsync(
+        [
+            PermissionCatalog.Keys.HakedisView,
+            PermissionCatalog.Keys.HakedisEdit
+        ]);
+
+        // Bakiyeyi aşan teslim alma reddediliyor.
+        var tooMuch = await client.PostAsJsonAsync(
+            "/api/barter-ledger/receipts", new
+            {
+                projectId = context.ProjectId,
+                projectSiteId = (Guid?)null,
+                entryDate = Today,
+                amount = 150_000m,
+                description = "Fazla teslim",
+                notes = (string?)null
+            });
+
+        Assert.Equal(HttpStatusCode.Conflict, tooMuch.StatusCode);
+
+        // Bakiye içinde kalan teslim alma kabul ediliyor ve düşüyor.
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
+            "/api/barter-ledger/receipts", new
+            {
+                projectId = context.ProjectId,
+                projectSiteId = (Guid?)null,
+                entryDate = Today,
+                amount = 40_000m,
+                description = "Daire teslim alındı",
+                notes = (string?)null
+            })).StatusCode);
+
+        var ledger = await ReadAsync(await client.GetAsync(
+            $"/api/barter-ledger?projectId={context.ProjectId}"));
+
+        Assert.Equal(60_000m, ledger.GetProperty("openBalance").GetDecimal());
     }
 }

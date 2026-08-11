@@ -54,6 +54,46 @@ public sealed class ExpenseEntryService(AppDbContext db, ExpenseCenterResolver c
         DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
 
     /// <summary>
+    /// Kalem elden/faturasız mı — yani <c>extra_payment.view</c>
+    /// maskesine tabi mi.
+    ///
+    /// TEK YÜKLEM: liste, rapor ve nakit akış aynı kuralı kullanıyor.
+    /// Üç yere ayrı yazılsaydı biri gizlerken diğeri gösterir ve
+    /// maske delinirdi.
+    ///
+    /// Maskelenenler:
+    /// - ELDEN ödeme,
+    /// - ŞAHIS CARİSİNDEN mahsup (faturasız gider),
+    /// - ŞAHIS KARTIYLA yapılan harcama (kişinin carisine yazılıyor),
+    /// - BELGESİZ kart harcaması.
+    ///
+    /// Maskelenmeyen: faturalı ya da fişli ŞİRKET KARTI harcaması.
+    /// Bu sıradan bir şirket gideridir; gizlenseydi gider merkezini
+    /// görebilen ama ek ödeme yetkisi olmayan kullanıcı normal kart
+    /// harcamalarını da göremez ve toplam sürekli eksik çıkardı.
+    /// </summary>
+    public static readonly System.Linq.Expressions.Expression<Func<ExpenseEntry, bool>>
+        IsMaskedExpense =
+            x => x.PaymentMethod == ExpensePaymentMethod.Cash ||
+                 x.PaymentMethod == ExpensePaymentMethod.PartnerAccount ||
+                 (x.PaymentMethod == ExpensePaymentMethod.CreditCard &&
+                  (x.PartnerAccountId != null ||
+                   x.DocumentType == ExpenseDocumentType.None));
+
+    /// <summary>
+    /// <see cref="IsMaskedExpense"/>'in tersi. Ayrı yazılıyor çünkü
+    /// EF sorgusunda bir ifadeyi çalışma anında değillemek, ifade
+    /// ağacını elle kurmayı gerektirir ve okunmaz hale gelir. İkisi
+    /// yan yana durduğu için birlikte güncelleniyor.
+    /// </summary>
+    public static readonly System.Linq.Expressions.Expression<Func<ExpenseEntry, bool>>
+        IsVisibleExpense =
+            x => x.PaymentMethod == ExpensePaymentMethod.Bank ||
+                 (x.PaymentMethod == ExpensePaymentMethod.CreditCard &&
+                  x.PartnerAccountId == null &&
+                  x.DocumentType != ExpenseDocumentType.None);
+
+    /// <summary>
     /// R4 UYARI EŞİĞİ: aynı merkez + kategori + ay içinde tutarı
     /// %5'ten yakın bir kayıt varsa kullanıcı uyarılır. SERT ENGEL
     /// DEĞİL — iki ayrı kira ödemesi ya da iki ayrı yakıt fişi meşru;

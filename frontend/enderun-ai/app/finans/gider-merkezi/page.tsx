@@ -7,6 +7,10 @@ import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
+  financialInstrumentService,
+  type CreditCard,
+} from "@/services/financial-instrument.service";
+import {
   EXPENSE_CENTER_TYPE_VALUE,
   EXPENSE_DOCUMENT_TYPE_VALUE,
   EXPENSE_PAYMENT_METHOD_VALUE,
@@ -68,10 +72,11 @@ const emptyEntryForm = {
   expenseDate: iso(new Date()),
   amount: "",
   description: "",
-  paymentMethod: "Bank" as "Bank" | "Cash" | "PartnerAccount",
+  paymentMethod: "Bank" as "Bank" | "Cash" | "PartnerAccount" | "CreditCard",
   documentType: "Receipt" as "None" | "Receipt" | "Invoice",
   documentNumber: "",
   partnerAccountId: "",
+  creditCardId: "",
 };
 
 const emptyTemplateForm = {
@@ -103,6 +108,7 @@ export default function ExpenseCentrePage() {
   const [entries, setEntries] = useState<ExpenseEntryList | null>(null);
   const [recurring, setRecurring] = useState<RecurringExpenseList | null>(null);
   const [partners, setPartners] = useState<PartnerAccountBalance[]>([]);
+  const [cards, setCards] = useState<CreditCard[]>([]);
 
   const [view, setView] = useState<
     "report" | "entries" | "recurring" | "partners"
@@ -187,6 +193,14 @@ export default function ExpenseCentrePage() {
         setPartners([]);
       }
 
+      // Kart listesi finance.view istiyor; gider merkezini görüp
+      // finansı görmeyen kullanıcıda kart seçeneği boş kalır.
+      try {
+        setCards(await financialInstrumentService.listCards(companyId));
+      } catch {
+        setCards([]);
+      }
+
       setReport(reportData);
       setEntries(entryData);
       setRecurring(recurringData);
@@ -223,6 +237,10 @@ export default function ExpenseCentrePage() {
       partnerAccountId:
         entryForm.paymentMethod === "PartnerAccount"
           ? entryForm.partnerAccountId || null
+          : null,
+      creditCardId:
+        entryForm.paymentMethod === "CreditCard"
+          ? entryForm.creditCardId || null
           : null,
     };
   }
@@ -605,7 +623,8 @@ export default function ExpenseCentrePage() {
                     paymentMethod: event.target.value as
                       | "Bank"
                       | "Cash"
-                      | "PartnerAccount",
+                      | "PartnerAccount"
+                      | "CreditCard",
                   })
                 }
                 className="mt-1 w-full"
@@ -613,13 +632,17 @@ export default function ExpenseCentrePage() {
                   canSeeCash
                     ? [
                         { value: "Bank", label: "Banka" },
+                        { value: "CreditCard", label: "Kredi kartı" },
                         { value: "Cash", label: "Elden" },
                         {
                           value: "PartnerAccount",
                           label: "Faturasız — şahıs carisinden mahsup",
                         },
                       ]
-                    : [{ value: "Bank", label: "Banka" }]
+                    : [
+                        { value: "Bank", label: "Banka" },
+                        { value: "CreditCard", label: "Kredi kartı" },
+                      ]
                 }
               />
             </label>
@@ -643,6 +666,32 @@ export default function ExpenseCentrePage() {
               />
             </label>
           </div>
+
+          {entryForm.paymentMethod === "CreditCard" ? (
+            <label className="block text-xs text-slate-600">
+              Kart
+              <Select
+                value={entryForm.creditCardId}
+                onChange={(event) =>
+                  setEntryForm({ ...entryForm, creditCardId: event.target.value })
+                }
+                className="mt-1 w-full"
+                placeholder="Seçiniz"
+                options={cards.map((card) => ({
+                  value: card.id,
+                  label:
+                    card.ownership === "Personal"
+                      ? `${card.name} (şahıs — ${card.partnerName ?? "?"})`
+                      : card.name,
+                }))}
+              />
+              <span className="mt-1 block text-[11px] text-slate-400">
+                Gider bugün sayılır, nakit ekstrenin son ödeme gününde çıkar.
+                Şahıs kartında şirket nakdi hiç çıkmaz; harcama kart sahibinin
+                carisine yazılır.
+              </span>
+            </label>
+          ) : null}
 
           {entryForm.paymentMethod === "PartnerAccount" ? (
             <label className="block text-xs text-slate-600">
@@ -1099,6 +1148,10 @@ function EntriesView({
                 ) : item.paymentMethod === "PartnerAccount" ? (
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
                     faturasız · {item.partnerName ?? "şahıs"}
+                  </span>
+                ) : item.paymentMethod === "CreditCard" ? (
+                  <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[11px] text-sky-800">
+                    kart · {item.cardName ?? "—"}
                   </span>
                 ) : (
                   "Banka"

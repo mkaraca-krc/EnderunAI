@@ -116,13 +116,13 @@ public sealed class ExpenseCenterReportService(
 
         if (!canSeeCash)
         {
-            // Elden VE şahıs carisinden mahsup: ikisi de faturasız,
-            // ikisi de aynı maskede.
+            // Maske liste ucuyla AYNI yüklemden: elden, şahıs
+            // carisi, şahıs kartı ve belgesiz kart harcaması.
+            // Faturalı şirket kartı harcaması gizlenmez.
             hiddenCount += await manualQuery.CountAsync(
-                x => x.PaymentMethod != ExpensePaymentMethod.Bank, cancellationToken);
+                ExpenseEntryService.IsMaskedExpense, cancellationToken);
 
-            manualQuery = manualQuery.Where(
-                x => x.PaymentMethod == ExpensePaymentMethod.Bank);
+            manualQuery = manualQuery.Where(ExpenseEntryService.IsVisibleExpense);
         }
 
         var manual = await manualQuery

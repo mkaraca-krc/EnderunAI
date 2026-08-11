@@ -10,13 +10,22 @@ export const EXPENSE_CENTER_TYPE_VALUE: Record<ExpenseCenterType, number> = {
   ProjectSite: 2,
 };
 
-export type ExpensePaymentMethod = "Bank" | "Cash" | "PartnerAccount";
+export type ExpensePaymentMethod =
+  | "Bank"
+  | "Cash"
+  | "PartnerAccount"
+  | "CreditCard";
 
 export const EXPENSE_PAYMENT_METHOD_VALUE: Record<ExpensePaymentMethod, number> = {
   Bank: 0,
   Cash: 1,
   /** Faturasız gider — şahıs carisinden mahsup. */
   PartnerAccount: 2,
+  /**
+   * Kredi kartı: gider harcama tarihinde sayılır, nakit ekstrenin
+   * son ödeme gününde çıkar.
+   */
+  CreditCard: 3,
 };
 
 export type PartnerEntryKind = "Advance" | "ExpenseSettlement" | "Repayment";
@@ -93,6 +102,7 @@ export interface ExpenseEntry {
   documentNumber?: string | null;
   supplierName?: string | null;
   partnerName?: string | null;
+  cardName?: string | null;
   isRecurring: boolean;
 }
 
@@ -124,6 +134,7 @@ export interface SaveExpenseEntryPayload {
   documentNumber?: string | null;
   supplierCurrentAccountId?: string | null;
   partnerAccountId?: string | null;
+  creditCardId?: string | null;
 }
 
 export interface RecurringExpenseTemplate {

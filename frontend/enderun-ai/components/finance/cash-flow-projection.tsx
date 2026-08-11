@@ -399,11 +399,17 @@ export default function CashFlowProjectionPanel({
                               key={`${item.kind}-${index}`}
                               className="flex flex-wrap items-center gap-2 text-xs"
                             >
+                              {/* Üç durum: Kesin / Tahmini / Nakit değil.
+                                  Nakit-dışı kalem (barter alacağı) bakiyeye
+                                  girmiyor; aynı renkte gösterilseydi nakit
+                                  sanılırdı. */}
                               <span
                                 className={`rounded-full border px-2 py-0.5 font-semibold ${
                                   item.certainty === 0
                                     ? "border-slate-300 bg-slate-50 text-slate-700"
-                                    : "border-amber-300 bg-amber-50 text-amber-800"
+                                    : item.certainty === 2
+                                      ? "border-violet-300 bg-violet-50 text-violet-800"
+                                      : "border-amber-300 bg-amber-50 text-amber-800"
                                 }`}
                               >
                                 {item.certaintyName}
