@@ -257,6 +257,17 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Notifications.INotificationSource,
     EnderunAI.Api.Services.Notifications.Sources.DutySettlementNotificationSource>();
 
+// İK ve yönetim tetikleyicileri.
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.INotificationSource,
+    EnderunAI.Api.Services.Notifications.Sources.DocumentExpiryNotificationSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.INotificationSource,
+    EnderunAI.Api.Services.Notifications.Sources.PendingApprovalNotificationSource>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.INotificationSource,
+    EnderunAI.Api.Services.Notifications.Sources.ManagementNotificationSource>();
+
 // Finansal araçlar ortak sözleşmeyi uyguluyor; nakit akış hepsini
 // IEnumerable<IFinancialInstrumentSource> olarak okuyor. Yeni bir
 // araç eklemek, projeksiyonu değiştirmeden bu listeye kayıt olmak.
