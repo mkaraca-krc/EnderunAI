@@ -2,8 +2,9 @@
 #
 # EnderunAI güvenli yayın (safe deploy) scripti.
 #
-# Akış: git pull -> backend testleri (geçmezse DUR) -> dotnet publish ->
-#       npm run build -> veritabanı yedeği -> servisleri restart ->
+# Akış: git pull -> backend testleri (geçmezse DUR) -> frontend testleri
+#       (geçmezse DUR) -> dotnet publish -> npm run build ->
+#       veritabanı yedeği -> servisleri restart ->
 #       30 sn içinde sağlık kontrolü -> sağlıksızsa ÖNCEKİ sürüme otomatik
 #       geri dön.
 #
@@ -91,6 +92,19 @@ run_backend_tests() {
     else
         fail "Backend testleri BAŞARISIZ. Yayın DURDURULDU, hiçbir servise dokunulmadı."
     fi
+}
+
+run_frontend_tests() {
+    log "INFO" "Frontend testleri çalıştırılıyor..."
+
+    # Test betiği yoksa DUR: harness kurulduktan sonra sessizce
+    # kaybolması, kapının açık kaldığını kimseye söylemeden değeri
+    # yarıya indirirdi.
+    if ! (cd "$FRONTEND_DIR" && npm run --silent test) 2>&1 | tee -a "$LOG_FILE"; then
+        fail "Frontend testleri BAŞARISIZ. Yayın DURDURULDU, hiçbir servise dokunulmadı."
+    fi
+
+    log "INFO" "Frontend testleri geçti."
 }
 
 backup_current_release() {
@@ -203,6 +217,7 @@ main() {
     fi
 
     run_backend_tests
+    run_frontend_tests
     backup_current_release
     publish_backend
     build_frontend

@@ -64,25 +64,37 @@ yanlış anlatanları (fiili/gerçek/toplam gibi sözler taşıyıp
 kapsamı dar olanlar) ayrı listelemek. Her kalem için: doldur,
 yeniden adlandır, ya da kaldır.
 
-## Frontend test altyapısı — Vitest + Testing Library
+## ~~Frontend test altyapısı — Vitest + Testing Library~~ (KAPANDI)
 
-**Ne:** Frontend'de otomatik test yok. Bugün tek güvence
-`tsc --noEmit`, eslint ve `npm run build`; davranış test edilmiyor.
+**Kapanış:** 2026-08-11. Vitest 3 + @testing-library/react +
+user-event + jsdom kuruldu (`vitest.config.mts`, `tests/setup.ts`),
+`npm test` scripti açıldı ve **safe-deploy'a kapı olarak bağlandı** —
+kırmızı frontend testi yayını durduruyor (kasten düşen bir testle
+doğrulandı).
 
-**Neden riskli ve neden ŞİMDİ sıraya giriyor:** Modal standardı
-(`components/ui/modal.tsx`, `confirm-dialog.tsx`) app-wide
-yayılmadan önce kurulmalı. Bileşen bir kez onlarca ekrana
-dağıldıktan sonra Esc davranışı, odak tuzağı, odağın geri
-verilmesi, gövde kaydırma kilidi ve "gerekçe zorunlu → onay
-düğmesi kapalı" kuralı elle doğrulanamaz hale gelir; bir
-regresyon sessizce her ekrana birden yayılır.
+İlk testler en yüksek riskten seçildi:
+- Modal (8 test): Esc kapatıyor, `busy` iken kapatmıyor, zemin
+  tıklaması kapatıyor ama panel içi kapatmıyor, Tab odağı panelde
+  döndürüyor, kapanınca odak çağıran düğmeye dönüyor, aria bağları,
+  gövde kaydırma kilidi.
+- ConfirmDialog (8 test): gerekçe boşken onay kapalı, yalnız boşluk
+  gerekçe sayılmıyor, kırpılmış metin gönderiliyor, yazılan
+  kaybolmuyor, `busy` iken çift gönderim engelli, sunucu hatası
+  diyalogda kalıyor.
+- Tutar maskelemesi (3 test): yetki yokken saat görünüyor, hiçbir
+  tutar ÇİZİLMİYOR ve ekranda para biçimli metin kalmıyor.
 
-**O turda değerlendirilecek:** Vitest + @testing-library/react +
-jsdom kurulumu ve ilk testlerin modal/ConfirmDialog üzerine
-yazılması: Esc kapatıyor, odak modalın içinde kalıyor, kapanınca
-tetikleyen düğmeye dönüyor, gerekçe boşken onay verilemiyor,
-`busy` sırasında çift gönderim engelleniyor. Sıra: altyapı →
-modal testleri → standardın app-wide yayılması.
+**Kurulumda çıkan iki tuzak, notta kalsın:**
+- jsdom düzen hesaplamıyor, `offsetParent` hep null. Modal'ın odak
+  tuzağı görünürlüğü bununla süzdüğü için test, bileşen doğru
+  çalışırken düşüyordu. Bileşeni test ortamına uydurmak yerine
+  ORTAMIN eksiği `tests/setup.ts` içinde tamamlandı.
+- İki ayrı vite kopyası (kökte 8.x, vitest içinde 7.x) `tsc`'de tip
+  çakışması üretiyordu. Kastla örtmek yerine `vite@^7` doğrudan
+  bağımlılık yapılıp sürümler hizalandı.
+
+**Sırada (organik büyüsün):** ekran ekran test yazmak yerine, bir
+regresyon her yakalandığında o davranışın testini eklemek.
 
 ## Paylaşılan dosya-ek altyapısı
 
