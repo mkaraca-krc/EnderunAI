@@ -283,6 +283,11 @@ const groups: MenuGroup[] = [
         icon: "≡",
       },
       {
+        label: "Hakediş Dosyaları",
+        href: "/hakedis/dosyalar",
+        icon: "⎙",
+      },
+      {
         label: "Fiyat Farkı",
         href: "/fiyat-farki",
         icon: "∆",
@@ -737,6 +742,11 @@ const groups: MenuGroup[] = [
         label: "Yetki Matrisi",
         href: "/sistem-yonetimi/yetki-matrisi",
         icon: "▦",
+      },
+      {
+        label: "Denetim Kayıtları",
+        href: "/sistem-yonetimi/denetim-kayitlari",
+        icon: "⚑",
       },
       {
         label: "Şirket Ayarları",
