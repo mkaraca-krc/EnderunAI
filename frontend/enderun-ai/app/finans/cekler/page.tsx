@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { summarizeCheques } from "@/lib/cheques/totals";
 import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
 import { branchService, type BranchListItem } from "@/services/branch.service";
 import {
@@ -41,11 +42,6 @@ const money = new Intl.NumberFormat("tr-TR", {
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 const today = () => new Date().toISOString().slice(0, 10);
-
-const MONTH_NAMES = [
-  "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
-  "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
-];
 
 const emptyChequeForm = {
   chequeNumber: "",
@@ -250,62 +246,18 @@ export default function ChequeRegisterPage() {
   }, [loadLookups]);
 
   /**
-   * Çekler VADE AYINA göre gruplanır.
+   * Çekler VADE AYINA göre gruplanır ve toplamlar çıkarılır.
    *
-   * Proje filtresiyle birlikte "bu projeye bu ay ne kadar çek
-   * verilmiş/alınmış" sorusunu cevaplıyor. Gruplama listeden
-   * türetiliyor: uç zaten vadeye göre sıralı döndürdüğü için ayrı bir
-   * özet ucu ve ikinci bir toplama mantığı gerekmedi.
+   * Hesap `lib/cheques/totals.ts` içinde: üst satırdaki toplam ile ay
+   * alt toplamları eskiden AYRI hesaplanıyordu ve kuralları farklıydı
+   * — üst toplam iptal edilmiş çekleri sayıyordu. Tek kaynağa
+   * alındı; artık üst toplam grupların toplamından türüyor ve
+   * ayrışmaları yapısal olarak imkânsız.
    */
-  const monthGroups = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        key: string;
-        label: string;
-        total: number;
-        /** Toplama giren çek sayısı — iptaller hariç. */
-        count: number;
-        rows: ChequeListItem[];
-      }
-    >();
-
-    for (const item of items) {
-      const key = item.dueDate.slice(0, 7);
-
-      let group = groups.get(key);
-
-      if (!group) {
-        const [year, month] = key.split("-");
-
-        group = {
-          key,
-          label: `${MONTH_NAMES[Number(month) - 1]} ${year}`,
-          total: 0,
-          count: 0,
-          rows: [],
-        };
-
-        groups.set(key, group);
-      }
-
-      // İPTAL EDİLEN ÇEK LİSTEDE KALIR (denetim izi) ama TOPLAMA
-      // GİRMEZ: mali etkileri ters kayıtla geri alındı, ne giriş ne
-      // çıkış sayılıyor. Sayıya da girmiyor — "3 çek" yazıp ikisinin
-      // tutarını toplamak okuyanı yanıltırdı.
-      group.rows.push(item);
-
-      if (item.status === ChequeStatus.Voided) continue;
-
-      group.count += 1;
-
-      // Defter değeri (keşide kurundaki TL karşılığı): farklı para
-      // birimlerini ham tutarla toplamak yanlış rakam üretirdi.
-      group.total += item.amountTry;
-    }
-
-    return [...groups.values()];
-  }, [items]);
+  const { listTotal, groups: monthGroups } = useMemo(
+    () => summarizeCheques(items),
+    [items]
+  );
 
   const statusOptions = useMemo(
     () =>
@@ -319,14 +271,6 @@ export default function ChequeRegisterPage() {
           ]
         : [ChequeStatus.Issued, ChequeStatus.Paid, ChequeStatus.Returned],
     [direction]
-  );
-
-  // Toplam TL KARŞILIĞI üzerinden: farklı para birimlerindeki ham
-  // tutarları toplamak (10.000 USD + 5.000 TRY = 15.000) anlamsız bir
-  // sayı üretirdi.
-  const listTotal = useMemo(
-    () => items.reduce((sum, item) => sum + (item.amountTry || item.amount), 0),
-    [items]
   );
 
   /**
