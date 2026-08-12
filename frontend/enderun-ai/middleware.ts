@@ -64,7 +64,9 @@ function requiredPermission(pathname: string): string | null {
   // da uyuyor ve payroll.view'a düşseydi kullanıcı ekranı açar,
   // sonra uçtan 403 yerdi.
   if (
-    /^\/insan-kaynaklari\/(bordro-on-kontrol|sgk-bildirim)/.test(pathname)
+    /^\/insan-kaynaklari\/(bordro-on-kontrol|sgk-bildirim|izin-bakiye)/.test(
+      pathname
+    )
   )
     return "attendance-payroll.view";
   if (

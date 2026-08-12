@@ -50,7 +50,11 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
   // genel "bordro" kalıbından ÖNCE gelmeli: "bordro-on-kontrol" o
   // kalıba da uyuyor ve payroll.view'a düşseydi, uca yetkisi olmayan
   // kullanıcı ekranı açıp 403 yerdi.
-  if (/^\/insan-kaynaklari\/(bordro-on-kontrol|sgk-bildirim)/.test(pathname)) {
+  if (
+    /^\/insan-kaynaklari\/(bordro-on-kontrol|sgk-bildirim|izin-bakiye)/.test(
+      pathname
+    )
+  ) {
     return "attendance-payroll.view";
   }
   if (/^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|cikis-tazminat|avanslar)/.test(pathname)) {
@@ -513,6 +517,11 @@ const groups: MenuGroup[] = [
         label: "İzin Yönetimi",
         href: "/insan-kaynaklari/izinler",
         icon: "○",
+      },
+      {
+        label: "İzin Bakiyesi",
+        href: "/insan-kaynaklari/izin-bakiye",
+        icon: "◔",
       },
       {
         label: "Fazla Mesai",

@@ -67,8 +67,26 @@ gizlerdi:
   sonraki çağrının metodunu yapıştırıyordu. Yükleme yardımcıları
   metodu kendi gövdesinde kuruyor, o da ayrıca çözülüyor.
 
-**Sırada — her kalem için karar (ekran aç / ucu kaldır / iç uç diye
-işaretle).** Kesin listedeki 18 kalem gözle doğrulandı, hepsi gerçek:
+**Kararlar (2026-08-12):**
+
+| Uç | Karar |
+| --- | --- |
+| `GET api/hr/bordro-on-kontrol` | Ekran açıldı (`21d8ea01`) |
+| `GET api/hr/sgk-bildirim` | Ekran açıldı (`21d8ea01`) |
+| `POST api/bildirimler/tara` | **İÇ UÇ — KAPANDI.** Ekran gerekmez |
+| `GET api/hr/izin-bakiye` | Ekran açılıyor (sırada 1) |
+| `GET/PUT api/hakedis-deduction-accounts` | Ekran açılacak (sırada 2) |
+| `api/project-extra-works` devri | Ekran açılacak (sırada 3) |
+| `api/secretariat/correspondence` akış+ek | Ekran açılacak (sırada 4) |
+| Orta grup (6 uç) | Mevcut ekranlara kart/sekme olarak sonra |
+
+**`POST api/bildirimler/tara` neden iç uç:** bildirim taramasını elle
+tetikler. `NotificationScanBackgroundService` taramayı 24 saatte bir
+zaten koşturuyor; uç yalnızca hata ayıklama ve ops içindir. Kullanıcı
+akışında karşılığı yok, o yüzden ekranı olmaması bir eksiklik değil.
+Bu satır kalsın ki bir sonraki taramada yeniden "bulgu" sayılmasın.
+
+**Kesin listedeki 18 kalem gözle doğrulandı, hepsi gerçekti:**
 İK bordro ön kontrol ve SGK bildirim, izin bakiyesi, üretici fiyat
 listesi (liste + oluşturma), hakediş kesinti önerisi, teklif
 fiyatlama, ek iş devri, sekreterya evrak akışı ve ekleri, güvenlik
