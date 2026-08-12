@@ -132,6 +132,17 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
 
 const groups: MenuGroup[] = [
   {
+    key: "management",
+    label: "YÖNETİM",
+    items: [
+      {
+        label: "Göstergeler",
+        href: "/yonetim",
+        icon: "◈",
+      },
+    ],
+  },
+  {
     key: "organization",
     label: "ORGANİZASYON",
     items: [
