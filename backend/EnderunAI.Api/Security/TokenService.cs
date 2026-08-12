@@ -35,9 +35,38 @@ public sealed class TokenService(IConfiguration configuration)
             claims.Add(new Claim("roles", roleName));
         }
 
-        foreach (var permission in permissions)
+        // ÇEREZ SINIRI (4096 BAYT) — bu token çereze yazılıyor ve
+        // tarayıcılar ad+değer toplamı 4096 baytı aşan çerezi
+        // SESSİZCE atıyor. Hiçbir hata çıkmıyor: giriş 200 dönüyor,
+        // Set-Cookie gidiyor, tarayıcı çerezi yok sayıyor, sonraki
+        // istekte oturum görünmediği için kullanıcı login ekranına
+        // geri düşüyor.
+        //
+        // Kataloğun TAMAMINA sahip kullanıcıda (Admin, Genel Müdür)
+        // 129 izin anahtarı tek tek yazılınca token 5391 bayta
+        // çıkıyordu; canlıda tam olarak bu yaşandı. Tam yetkide
+        // listeyi yazmak zaten gereksiz: tüketici tarafta "hepsi
+        // var" demekle aynı anlama geliyor.
+        //
+        // Kısmi yetkideki kullanıcılarda liste aynen yazılıyor —
+        // en geniş özel rol 44 izinde ve sınırın çok altında.
+        var permissionList = permissions
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var hasEveryPermission = PermissionCatalog.Permissions.All(definition =>
+            permissionList.Contains(definition.Key, StringComparer.OrdinalIgnoreCase));
+
+        if (hasEveryPermission)
         {
-            claims.Add(new Claim("permissions", permission));
+            claims.Add(new Claim("all_permissions", "true"));
+        }
+        else
+        {
+            foreach (var permission in permissionList)
+            {
+                claims.Add(new Claim("permissions", permission));
+            }
         }
 
         var credentials = new SigningCredentials(

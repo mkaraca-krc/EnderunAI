@@ -34,9 +34,26 @@ function tokenAccess(token: string) {
       ...values(payload.permissions),
       ...values(payload.permission),
     ];
-    return { roles: new Set(roles), permissions: new Set(permissions) };
+    // Kataloğun tamamına sahip kullanıcıda backend izin listesini
+    // TEK TEK yazmıyor, tek bir bayrak koyuyor: 129 anahtar token'ı
+    // 4096 baytlık çerez sınırının üstüne çıkarıyor ve tarayıcı
+    // çerezi sessizce atıyordu (giriş 200 dönüyor ama oturum
+    // açılmıyordu). Bayrak varsa her izin verilmiş sayılır.
+    const all =
+      payload.all_permissions === true ||
+      payload.all_permissions === "true";
+
+    return {
+      roles: new Set(roles),
+      permissions: new Set(permissions),
+      all,
+    };
   } catch {
-    return { roles: new Set<string>(), permissions: new Set<string>() };
+    return {
+      roles: new Set<string>(),
+      permissions: new Set<string>(),
+      all: false,
+    };
   }
 }
 
@@ -108,6 +125,7 @@ export function middleware(request: NextRequest) {
   if (permission) {
     const access = tokenAccess(token);
     if (
+      !access.all &&
       !access.roles.has("Admin") &&
       !access.roles.has("Genel Müdür") &&
       !access.permissions.has(permission)
