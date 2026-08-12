@@ -167,6 +167,11 @@ const groups: MenuGroup[] = [
         icon: "○",
       },
       {
+        label: "Kesinti Hesapları",
+        href: "/muhasebe/kesinti-hesaplari",
+        icon: "⊟",
+      },
+      {
         label: "Tedarikçi Faturaları",
         href: "/muhasebe/faturalar",
         icon: "○",
