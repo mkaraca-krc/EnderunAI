@@ -45,13 +45,34 @@ public sealed class CurrentUserService(
             .ToArray()
         ?? [];
 
+    /// <summary>
+    /// Token'daki izinler.
+    ///
+    /// TAM YETKİ BAYRAĞI: kataloğun tamamına sahip kullanıcıda
+    /// <see cref="TokenService"/> izinleri tek tek yazmıyor, tek bir
+    /// <c>all_permissions</c> claim'i koyuyor — 129 anahtar token'ı
+    /// 4096 baytlık çerez sınırının üstüne çıkarıyor ve tarayıcı
+    /// çerezi sessizce atıyordu. Bayrak burada da açılmazsa tam
+    /// yetkili kullanıcı izinsiz görünür: elden tutar maskesi gibi
+    /// <c>HasPermission</c>'a dayanan her yer sessizce kapanırdı.
+    /// </summary>
     public IReadOnlyCollection<string> Permissions =>
-        Principal?
-            .FindAll("permissions")
-            .Select(claim => claim.Value)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray()
-        ?? [];
+        HasAllPermissions
+            ? PermissionCatalog.Permissions
+                .Select(definition => definition.Key)
+                .ToArray()
+            : Principal?
+                .FindAll("permissions")
+                .Select(claim => claim.Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+              ?? [];
+
+    private bool HasAllPermissions =>
+        string.Equals(
+            Principal?.FindFirstValue("all_permissions"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
 
     public bool IsInRole(string role) =>
         !string.IsNullOrWhiteSpace(role) &&
