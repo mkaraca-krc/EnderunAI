@@ -66,9 +66,20 @@ export function guessMapping(
     // "Malzeme Birim Fiyatı" da "birim" içeriyor; fiyat sütunları elenir.
     unitColumn: guessColumn(headers, ["birim", "ölçü", "olcu"], ["fiyat"]),
     quantityColumn: guessColumn(headers, ["miktar", "keşif", "kesif", "metraj"]),
-    materialColumn: guessColumn(headers, ["malzeme"]),
-    laborColumn: guessColumn(headers, ["işçilik", "iscilik", "montaj"]),
-    overheadColumn: guessColumn(headers, ["g.g", "genel", "kar", "kâr"]),
+    // "KAPSAM" SÜTUNLARI ELENİR. Gerçek icmallerde fiyat sütunlarından
+    // önce "Ana Malzeme Kapsamı" / "İşçilik Kapsamı" gibi METİN
+    // sütunları geliyor ("Yüklenici" yazar). Bunlar da "malzeme" ve
+    // "işçilik" kelimesini içerdiği için ilk eşleşmeyi kapıyor ve
+    // tahmin fiyat yerine metin sütununu seçiyordu; onaylanırsa
+    // dosyadaki HER satır "birim fiyat okunamadı" hatası veriyordu.
+    // NATURA icmalinde ölçüldü: düzeltmeden önce 2/9 sütun yanlış.
+    materialColumn: guessColumn(headers, ["malzeme"], ["kapsam"]),
+    laborColumn: guessColumn(headers, ["işçilik", "iscilik", "montaj"], ["kapsam"]),
+    // "gg" da aranıyor: ENDERUN'un KENDİ şablonu "GG&K B.F." yazıyor
+    // ve nokta içermediği için "g.g" kalıbına takılmıyordu — kendi
+    // şablonumuzda bile genel gider sütunu eşlenmemiş geliyordu.
+    // Regresyon testinde yakalandı.
+    overheadColumn: guessColumn(headers, ["g.g", "gg", "genel", "kar", "kâr"]),
     sectionColumn: guessColumn(headers, ["kısım", "kisim"]) || null,
     totalColumn: guessColumn(headers, ["tutar"]) || null,
     sectionRule: BoqSectionRule.EmptyUnit,
