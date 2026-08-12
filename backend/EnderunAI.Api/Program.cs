@@ -229,6 +229,8 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseCenterResolver
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseEntryService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.RecurringExpenseService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseCenterReportService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Procurement.ProcurementDashboardService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Projects.ProjectProfitabilitySummaryService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.PartnerAccountService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Notifications.NotificationStore>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Notifications.NotificationScanner>();

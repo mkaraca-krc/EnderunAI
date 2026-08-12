@@ -26,10 +26,8 @@ namespace EnderunAI.Api.Controllers;
 [Authorize]
 [Route("api/projects")]
 public sealed class ProjectCostAnalysisController(
-    AppDbContext db,
     IProjectCostAnalysisService analysisService,
-    SubcontractorLedgerService subcontractorLedger,
-    IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
+    ProjectProfitabilitySummaryService profitability) : ControllerBase
 {
     [HttpGet("{id:guid}/cost-analysis")]
     [RequirePermission(PermissionCatalog.Keys.HakedisView)]
@@ -48,107 +46,22 @@ public sealed class ProjectCostAnalysisController(
     public async Task<IActionResult> GetProfitability(
         Guid id, CancellationToken cancellationToken)
     {
-        var result = await analysisService.AnalyzeAsync(id, cancellationToken);
+        var result = await profitability.GetAsync(id, cancellationToken);
 
-        if (result is null)
-            return NotFound(new { message = "Proje bulunamadı." });
-
-        return Ok(ToProfitability(
-            result, await GetCashCostAsync(id, cancellationToken)));
+        return result is null
+            ? NotFound(new { message = "Proje bulunamadı." })
+            : Ok(result);
     }
 
     /// <summary>
-    /// Projenin elden taşeron maliyeti. Yetkisiz kullanıcıya SIFIR
-    /// döner ve bu "gizlendi" diye işaretlenmez: toplamın eksik
-    /// olduğunu bilmek, elden ödeme yapıldığı bilgisini sızdırmak
-    /// demektir.
-    /// </summary>
-    private async Task<decimal> GetCashCostAsync(
-        Guid projectId, CancellationToken cancellationToken)
-    {
-        var canViewCash = await extraPaymentVisibility
-            .CanViewExtraPaymentAsync(cancellationToken);
-
-        return await subcontractorLedger.GetProjectCashCostAsync(
-            projectId, canViewCash, cancellationToken);
-    }
-
-    /// <summary>
-    /// Tüm aktif projelerin kârlılık özeti. Her proje için analiz ayrı
-    /// çalışır; proje sayısı arttığında bu uç sayfalanmalı.
+    /// Tüm aktif projelerin kârlılık özeti. Hesap
+    /// <see cref="ProjectProfitabilitySummaryService"/> içinde; yönetim
+    /// KPI'ı da oradan okuyor ki iki ekranda iki farklı marj çıkmasın.
     /// </summary>
     [HttpGet("profitability-summary")]
     [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetProfitabilitySummary(
         [FromQuery] Guid? companyId,
-        CancellationToken cancellationToken)
-    {
-        var query = db.Projects.AsNoTracking().Where(x => x.Status != ProjectStatus.Cancelled);
-
-        if (companyId is Guid company)
-            query = query.Where(x => x.CompanyId == company);
-
-        var projectIds = await query
-            .OrderBy(x => x.Code)
-            .Select(x => x.Id)
-            .ToListAsync(cancellationToken);
-
-        var results = new List<object>(projectIds.Count);
-
-        foreach (var projectId in projectIds)
-        {
-            var analysis = await analysisService.AnalyzeAsync(projectId, cancellationToken);
-
-            if (analysis is not null)
-            {
-                results.Add(ToProfitability(
-                    analysis,
-                    await GetCashCostAsync(projectId, cancellationToken)));
-            }
-        }
-
-        return Ok(results);
-    }
-
-    /// <summary>
-    /// Analiz sonucunu mevcut kârlılık ekranının beklediği biçime
-    /// çevirir. Sınıflar dörde indiği için "otherCost" her zaman sıfır;
-    /// alan arayüz sözleşmesi bozulmasın diye duruyor.
-    /// </summary>
-    private static object ToProfitability(
-        ProjectCostAnalysisResult analysis, decimal subcontractorCashCost)
-    {
-        decimal ByClass(ProjectCostClass costClass) =>
-            analysis.Components
-                .Where(x => x.CostClass == (int)costClass)
-                .Select(x => x.Actual)
-                .FirstOrDefault();
-
-        // İşçilik bileşeni taşeronu da içeriyor; ekranda ayrı satır
-        // olduğu için burada tekrar toplanmamalı.
-        var labor = ByClass(ProjectCostClass.Labor) -
-                    ByClass(ProjectCostClass.SubcontractorLabor);
-
-        return new
-        {
-            projectId = analysis.ProjectId,
-            projectName = analysis.ProjectName,
-            revenue = analysis.RevenueAmount,
-            materialCost = ByClass(ProjectCostClass.Material),
-            laborCost = decimal.Round(labor, 2),
-            // Elden taşeron ödemesi maliyet defterinde durmuyor; yetkisi
-            // olana okuma anında ekleniyor, olmayana sıfır geliyor.
-            subcontractorCost = decimal.Round(
-                ByClass(ProjectCostClass.SubcontractorLabor) + subcontractorCashCost, 2),
-            generalExpenseCost = ByClass(ProjectCostClass.Overhead),
-            otherCost = 0m,
-            totalCost = decimal.Round(analysis.TotalCost + subcontractorCashCost, 2),
-            profit = decimal.Round(analysis.Profit - subcontractorCashCost, 2),
-            profitMargin = analysis.RevenueAmount > 0m
-                ? decimal.Round(
-                    (analysis.Profit - subcontractorCashCost) /
-                    analysis.RevenueAmount * 100m, 2)
-                : 0m
-        };
-    }
+        CancellationToken cancellationToken) =>
+        Ok(await profitability.GetSummaryAsync(companyId, cancellationToken));
 }
