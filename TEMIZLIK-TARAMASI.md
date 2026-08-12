@@ -123,6 +123,40 @@ doğrulandı).
 **Sırada (organik büyüsün):** ekran ekran test yazmak yerine, bir
 regresyon her yakalandığında o davranışın testini eklemek.
 
+## Giriş arızası teşhizinde çıkan üç yan bulgu (2026-08-12)
+
+Token/çerez arızası kapatıldı (`635f43ba`, `e77a4eeb`). Ararken
+çıkan, bugünkü sorunla ilgisi olmayan ama gerçek olan üç kalem:
+
+**1. Denetim izi istemci IP'sini kaybediyor.**
+`app/api/backend/[...path]/route.ts` backend'e giderken sıfırdan bir
+`Headers()` kuruyor ve `X-Forwarded-For`'u iletmiyor. Sonuç: login
+DIŞINDAKİ her işlem `security_audit_events` tablosuna `127.0.0.1`
+olarak yazılıyor. Canlıda doğrulandı — tablodaki tüm "Updated"
+kayıtları 127.0.0.1. Login route'u (`app/api/auth/login/route.ts`)
+başlığı doğru iletiyor, sorun yalnız genel proxy'de. Güvenlik
+denetiminin değerini büyük ölçüde düşürüyor.
+
+**2. Service worker oturum açmış sayfaları önbelleğe yazıyor.**
+`public/sw.js` ağ-öncelikli ve bilinçli olarak agresif değil, ama
+başarılı HER GET yanıtını `caches.put` ile saklıyor — yetkiye bağlı
+sayfa gövdeleri dahil. Aynı cihazı paylaşan ikinci bir kullanıcı
+çevrimdışıyken bunlara ulaşabilir. Değerlendirilecek: yalnız statik
+varlıkları önbelleğe almak, gezinme yanıtlarını dışarıda bırakmak.
+
+**3. HTTPS'siz vhost'ta giriş yapısal olarak imkânsız.**
+`/etc/nginx/sites-enabled/enderun-ai` yalnız `listen 80` ile
+`enderun-ai.com` ve `www.enderun-ai.com`'u servis ediyor. Çerez
+`secure` işaretli olduğu için düz HTTP'de tarayıcı onu ASLA
+saklamaz; o adresten giren herkes bugünkü belirtiyi yaşar — giriş
+200 döner, oturum açılmaz, hiçbir hata görünmez. Değerlendirilecek:
+ya 301 ile HTTPS'e yönlendirmek ya da vhost'u kaldırmak.
+
+**Ayrıca:** `frontend/enderun-ai/.next/dev` 1 Ağustos'tan kalma bir
+dev artığı; `tsc --noEmit` çalıştırınca artık var olmayan sayfalar
+için dört sahte hata üretiyor. Yayını etkilemiyor, ama tip
+kontrolünü kirletiyor.
+
 ## Paylaşılan dosya-ek altyapısı
 
 **Ne:** Bugün üç ayrı yerde "belgeyi ekle" ihtiyacı var ve hiçbirinde
