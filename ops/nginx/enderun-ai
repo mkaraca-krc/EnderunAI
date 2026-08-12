@@ -1,0 +1,24 @@
+# enderun-ai.com — KULLANILMIYOR, yalnızca kalıcı yönlendirme.
+#
+# NEDEN PROXY DEĞİL YÖNLENDİRME: bu vhost daha önce port 80'de
+# doğrudan uygulamaya proxy'liyordu. Giriş çerezi `secure` işaretli
+# olduğu için düz HTTP'de tarayıcı onu ASLA saklamaz — o adresten
+# giren herkes "giriş 200 dönüyor ama oturum açılmıyor" arızasını
+# yaşardı ve hiçbir katmanda hata görünmezdi. 2026-08-12'de canlıda
+# yaşanan giriş arızasının ikinci, o gün hâlâ açık olan yolu buydu.
+#
+# Alan adı DNS'te çözülmüyor; bu yüzden sertifika alınmadı ve
+# kanonik adrese (enderunai.com.tr) yönlendiriliyor. İleride
+# enderun-ai.com gerçekten kullanılacaksa: önce DNS'i bu sunucuya
+# yönlendir, sonra `certbot --nginx -d enderun-ai.com -d
+# www.enderun-ai.com` ile sertifika al ve bu dosyayı normal bir
+# HTTPS vhost'una çevir. Düz HTTP'de proxy'e ASLA geri dönme.
+
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name enderun-ai.com www.enderun-ai.com;
+
+    return 301 https://enderunai.com.tr$request_uri;
+}

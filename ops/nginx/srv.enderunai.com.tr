@@ -63,6 +63,12 @@ server {
         proxy_send_timeout 300s;
     }
 
+    # HSTS — gerekçesi enderunai.com.tr vhost'undaki notla aynı:
+    # düz HTTP'de `secure` giriş çerezi saklanmıyor ve oturum
+    # sessizce açılmıyor. includeSubDomains/preload bilinçli olarak
+    # kapalı.
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
     listen [::]:443 ssl ipv6only=on; # managed by Certbot
     listen 443 ssl; # managed by Certbot
     ssl_certificate /etc/letsencrypt/live/srv.enderunai.com.tr/fullchain.pem; # managed by Certbot
