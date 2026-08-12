@@ -1,0 +1,9 @@
+/var/log/enderun-bellek.log {
+    su root syslog
+    monthly
+    rotate 12
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

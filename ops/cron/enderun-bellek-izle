@@ -1,0 +1,7 @@
+# Backend surecinin RSS'ini 30 dakikada bir kaydeder.
+# Gerekce: sar surec basina RSS tutmuyor; OOM killer dotnet'i iki kez
+# oldurdu (7 Agu 4,6 GB / 10 Agu 3,96 GB). Swap cokusu engeller ama
+# sizintiyi gizler, o yuzden egri izleniyor.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+*/30 * * * * root /var/www/enderun-ai/scripts/bellek-izle.sh
