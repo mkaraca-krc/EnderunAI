@@ -8,6 +8,32 @@ public sealed class PurchaseRequestItem : BaseEntity
     public int LineNumber { get; set; }
 
     /// <summary>
+    /// TALEP EDENİN istediği marka. Tedarikçinin teklif ettiği
+    /// markadan (<c>RfqSupplierQuotation.Brand</c>) AYRIDIR ve onunla
+    /// karıştırılmaz: biri "ne istendi", diğeri "ne verildi". İkisi
+    /// siparişte yan yana durur ki istenen mi geldi, muadil mi
+    /// karşılaştırılabilsin.
+    ///
+    /// <see cref="BrandIrrelevant"/> ile birlikte ÜÇ durum anlatır:
+    ///   - marka dolu + bayrak false → ZORUNLU marka
+    ///   - marka dolu + bayrak true  → TERCİH, muadil kabul
+    ///   - marka boş  + bayrak true  → farketmez
+    /// Marka boş + bayrak false geçersizdir; talep kaydedilmez.
+    /// </summary>
+    public string? RequestedBrand { get; set; }
+
+    /// <summary>
+    /// Muadil kabul ediliyor mu. İşaretliyse tedarikçi serbesttir;
+    /// <see cref="RequestedBrand"/> doluysa bu bir TERCİHTİR, şart
+    /// değil.
+    ///
+    /// MEVCUT KAYITLARDA VARSAYILAN TRUE: marka alanı eklenmeden önce
+    /// açılmış talepler zorunluluk ihlali sayılmamalı. Geçmişe dönük
+    /// bir kural, kimsenin bilmediği bir kararı geriye yüklerdi.
+    /// </summary>
+    public bool BrandIrrelevant { get; set; }
+
+    /// <summary>
     /// Talep edilen stok kartı. OPSİYONEL: katalogda olmayan malzeme de
     /// talep edilebilmeli, aksi halde talep hiç açılamaz ve süreç kartın
     /// tanımlanmasını beklerdi. Seçilirse ad ve birim karttan gelir,

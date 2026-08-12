@@ -137,6 +137,10 @@ public sealed class PurchaseRequestsController(
                         i.MaterialDescription,
                         i.Quantity,
                         i.Unit,
+                        // İstenen marka: düzenleme formu üç durumu da
+                        // geri yükleyebilsin diye ikisi birden dönüyor.
+                        i.RequestedBrand,
+                        i.BrandIrrelevant,
                         i.RequestedDeliveryDate,
                         i.Notes,
                         i.IsActive
@@ -218,7 +222,14 @@ public sealed class PurchaseRequestsController(
                 Quantity = item.Quantity,
                 Unit = item.Unit.Trim(),
                 RequestedDeliveryDate = item.RequestedDeliveryDate,
-                Notes = item.Notes?.Trim()
+                Notes = item.Notes?.Trim(),
+                // Marka boşsa null saklanıyor: boş dizgi ile null
+                // ayrımı raporlarda "marka girilmiş ama boş" gibi
+                // yanıltıcı bir üçüncü durum üretirdi.
+                RequestedBrand = string.IsNullOrWhiteSpace(item.RequestedBrand)
+                    ? null
+                    : item.RequestedBrand.Trim(),
+                BrandIrrelevant = item.BrandIrrelevant
             });
         }
 
@@ -330,6 +341,10 @@ public sealed class PurchaseRequestsController(
             target.Unit = source.Unit.Trim();
             target.RequestedDeliveryDate = source.RequestedDeliveryDate;
             target.Notes = source.Notes?.Trim();
+            target.RequestedBrand = string.IsNullOrWhiteSpace(source.RequestedBrand)
+                ? null
+                : source.RequestedBrand.Trim();
+            target.BrandIrrelevant = source.BrandIrrelevant;
         }
 
         // Fazla kalemler AÇIKÇA yumuşak siliniyor; DbSet.Remove
@@ -801,6 +816,20 @@ public sealed class PurchaseRequestsController(
                 x.Quantity <= 0))
         {
             return "Malzeme açıklaması, birim ve sıfırdan büyük miktar zorunludur.";
+        }
+
+        // MARKA BİLİNÇLİ BİR SEÇİM OLMALI: ya bir marka istenir ya da
+        // "muadil kabul" işaretlenir. Boş bırakılabilseydi tedarikçi
+        // neyin kabul edileceğini bilemez, teklifler karşılaştırılamaz
+        // ve yanlış malzeme geldiğinde kimsenin dayanacağı bir kayıt
+        // olmazdı. Marka DOLU + muadil kabul = tercih; ikisi bir arada
+        // geçerlidir ve bilgi atılmaz.
+        if (items.Any(x =>
+                string.IsNullOrWhiteSpace(x.RequestedBrand) &&
+                !x.BrandIrrelevant))
+        {
+            return "Her kalemde marka belirtilmeli ya da " +
+                   "\"marka farketmez / muadil kabul\" işaretlenmelidir.";
         }
 
         return null;

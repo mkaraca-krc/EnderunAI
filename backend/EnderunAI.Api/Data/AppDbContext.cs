@@ -3024,6 +3024,13 @@ public sealed class AppDbContext(
                 .HasMaxLength(500)
                 .IsRequired();
 
+            entity.Property(x => x.RequestedBrand).HasMaxLength(200);
+
+            // MEVCUT SATIRLAR İÇİN TRUE: marka alanı eklenmeden önce
+            // açılmış talepler zorunluluk ihlali sayılmamalı. Yeni
+            // kayıtlarda değeri istek gövdesi belirler.
+            entity.Property(x => x.BrandIrrelevant).HasDefaultValue(true);
+
             entity.Property(x => x.Quantity).HasPrecision(18, 4);
 
             entity.Property(x => x.Unit)

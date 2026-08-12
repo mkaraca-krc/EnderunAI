@@ -16,7 +16,22 @@ public sealed record CreatePurchaseRequestItemRequest(
     /// Talebin dayandığı poz. Seçilirse ad ve birim pozdan kopyalanır;
     /// stok kartından bağımsızdır, ikisi bir arada da verilebilir.
     /// </summary>
-    Guid? EngineeringPositionId = null);
+    Guid? EngineeringPositionId = null,
+    /// <summary>
+    /// Talep edenin istediği marka. Tedarikçinin teklif ettiği
+    /// markadan ayrıdır.
+    /// </summary>
+    string? RequestedBrand = null,
+    /// <summary>
+    /// Muadil kabul ediliyor mu.
+    ///
+    /// VARSAYILAN TRUE, çünkü bu alan sonradan eklendi ve varsayılanı
+    /// false yapmak, alanı hiç göndermeyen eski çağıranların
+    /// taleplerini bir anda geçersiz kılardı. Arayüz üç durumu da
+    /// açıkça gönderiyor; boş geçme yalnızca eski çağıranlar için
+    /// güvenli taraf.
+    /// </summary>
+    bool BrandIrrelevant = true);
 
 public sealed record CreatePurchaseRequestRequest(
     Guid CompanyId,
