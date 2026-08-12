@@ -2,11 +2,18 @@
 #
 # EnderunAI güvenli yayın (safe deploy) scripti.
 #
-# Akış: git pull -> backend testleri (geçmezse DUR) -> frontend testleri
-#       (geçmezse DUR) -> dotnet publish -> npm run build ->
-#       veritabanı yedeği -> servisleri restart ->
+# Akış: git pull -> test kapsamı tespiti -> backend testleri (geçmezse
+#       DUR) -> frontend testleri (geçmezse DUR) -> dotnet publish ->
+#       npm run build -> veritabanı yedeği -> servisleri restart ->
 #       30 sn içinde sağlık kontrolü -> sağlıksızsa ÖNCEKİ sürüme otomatik
 #       geri dön.
+#
+# HIZLI YOL: son başarılı yayından bu yana değişen dosyaların TAMAMI
+# frontend/enderun-ai/ altındaysa backend xUnit turu atlanır. Frontend
+# testleri, build ve sağlık kontrolü her durumda koşar. Kapı
+# zayıflamıyor: yalnızca değişmediği KANITLANMIŞ katmanın testi
+# atlanıyor. Herhangi bir backend/migration/script/belge dosyası
+# değiştiyse ya da tespit belirsizse TAM tur koşar.
 #
 # Testler geçmeden hiçbir servise dokunulmaz; testler geçmezse repo'daki
 # yeni kod bile publish edilmez, canlı sürüm olduğu gibi çalışmaya devam
@@ -30,6 +37,28 @@ FRONTEND_NEXT_ROLLBACK_DIR="${REPO_ROOT}/frontend-next-rollback"
 ENV_FILE="/etc/enderunai/backend.env"
 LOG_FILE="/var/log/enderun-deploy.log"
 
+# Son BAŞARIYLA yayınlanan commit. Hızlı yolun tabanı budur.
+#
+# NEDEN "pull öncesi HEAD" DEĞİL: bu depoda değişiklik çoğu zaman
+# yerelde commit edilip sonra deploy ediliyor, yani `git pull` no-op
+# oluyor. Pull öncesi/sonrası farkına bakan bir tespit BOŞ diff görür
+# ve backend değişmiş olsa bile "frontend-only" der — kapıyı tam da
+# önemli olduğu anda açardı.
+#
+# Git ağacının DIŞINDA tutuluyor: içeride olsaydı her yayından sonra
+# ağaç kirlenir ve require_clean_git_tree bir sonraki yayını
+# reddederdi.
+DEPLOY_STATE_DIR="/var/lib/enderun-ai"
+LAST_DEPLOYED_COMMIT_FILE="${DEPLOY_STATE_DIR}/last-deployed-commit"
+
+# Yalnızca bu önekin altındaki dosyalar backend testlerinden
+# provably bağımsız sayılır. Bilerek DAR: her istisna, ileride
+# birinin yanlış yere koyduğu bir dosyanın kapıyı sessizce
+# atlatacağı bir yer açar. Depo kökündeki .md dosyaları bile tam tur
+# tetikler — belge değişikliğini ayrı commit'lemek, listeyi
+# genişletmekten ucuzdur.
+FRONTEND_PATH_PREFIX="frontend/enderun-ai/"
+
 HEALTH_CHECK_TIMEOUT_SECONDS=30
 HEALTH_CHECK_INTERVAL_SECONDS=2
 
@@ -51,6 +80,7 @@ print_summary() {
     echo ""
     echo "================= SAFE-DEPLOY ÖZET ================="
     echo "Sonuç       : ${DEPLOY_OUTCOME}"
+    echo "Test turu   : ${TEST_SCOPE:-full} (${TEST_SCOPE_REASON:-belirlenmedi})"
     echo "Süre        : ${elapsed}s"
     echo "Git commit  : $(cd "$REPO_ROOT" && git rev-parse --short HEAD 2>/dev/null || echo '-')"
     echo "Log dosyası : ${LOG_FILE}"
@@ -83,7 +113,125 @@ resolve_test_db_connection() {
     export JWT_SECRET="deploy-script-test-jwt-secret-0123456789"
 }
 
+#
+# Değişen yol listesini sınıflandırır.
+#
+# stdin: satır başına bir yol. Çıktı: "frontend-only" ya da "full".
+#
+# BOŞ GİRDİ "full" DÖNER. Boş bir liste "değişiklik yok" da olabilir,
+# "tabanı bulamadım" da; ikisini burada ayırt edemeyiz ve belirsizlik
+# tam tur demektir.
+#
+# Ayrı bir fonksiyon çünkü tek başına test edilebilir olması gerekiyor;
+# kapıyı gevşeten bir mantığın doğruluğu "okuyunca mantıklı görünüyor"
+# ile bırakılamaz.
+classify_changed_paths() {
+    local path
+    local saw_any=0
+
+    # `|| [ -n "$path" ]`: son satırın sonunda yeni satır yoksa `read`
+    # hata döner ama değişkeni DOLDURUR. Bu olmadan girdinin son satırı
+    # sessizce düşüyordu — testte yakalandı: frontend+backend karışık
+    # bir commit'te backend satırı son sıradaysa sonuç "frontend-only"
+    # çıkıyor ve backend testleri hiç koşmadan yayın yapılıyordu.
+    while IFS= read -r path || [ -n "$path" ]; do
+        [ -z "$path" ] && continue
+        saw_any=1
+
+        case "$path" in
+            "${FRONTEND_PATH_PREFIX}"*) ;;
+            *)
+                echo "full"
+                return 0
+                ;;
+        esac
+    done
+
+    if [ "$saw_any" -eq 0 ]; then
+        echo "full"
+        return 0
+    fi
+
+    echo "frontend-only"
+}
+
+#
+# Bu yayında backend testlerinin atlanıp atlanamayacağını belirler.
+# Sonucu global TEST_SCOPE değişkenine yazar: "full" | "frontend-only".
+#
+# Her belirsizlikte "full": taban dosyası yok, taban commit'i bu
+# depoda tanınmıyor, git komutu hata verdi, ya da diff boş.
+resolve_test_scope() {
+    TEST_SCOPE="full"
+    TEST_SCOPE_REASON="varsayılan: tam tur"
+
+    if [ ! -f "$LAST_DEPLOYED_COMMIT_FILE" ]; then
+        TEST_SCOPE_REASON="son yayın kaydı yok (ilk çalıştırma)"
+        return
+    fi
+
+    local baseline
+    baseline="$(tr -d '[:space:]' < "$LAST_DEPLOYED_COMMIT_FILE")"
+
+    if [ -z "$baseline" ]; then
+        TEST_SCOPE_REASON="son yayın kaydı boş"
+        return
+    fi
+
+    # Taban commit bu depoda gerçekten var mı? Force-push ya da
+    # rebase sonrası olmayabilir; yoksa diff anlamsızdır.
+    if ! git cat-file -e "${baseline}^{commit}" 2>/dev/null; then
+        TEST_SCOPE_REASON="son yayın commit'i (${baseline:0:8}) depoda bulunamadı"
+        return
+    fi
+
+    local changed
+    if ! changed="$(git diff --name-only --no-renames "$baseline" HEAD 2>/dev/null)"; then
+        TEST_SCOPE_REASON="git diff başarısız"
+        return
+    fi
+
+    local verdict
+    verdict="$(printf '%s\n' "$changed" | classify_changed_paths)"
+
+    local count
+    count="$(printf '%s\n' "$changed" | grep -c . || true)"
+
+    if [ "$verdict" = "frontend-only" ]; then
+        TEST_SCOPE="frontend-only"
+        TEST_SCOPE_REASON="${count} dosyanın tamamı ${FRONTEND_PATH_PREFIX} altında"
+    elif [ "$count" -eq 0 ]; then
+        # Diff boş: ya gerçekten değişiklik yok ya da taban beklediğimiz
+        # yerde değil. İkisini ayırt edemiyoruz, o yüzden tam tur.
+        TEST_SCOPE_REASON="taban ile HEAD arasında değişiklik görünmüyor"
+    else
+        TEST_SCOPE_REASON="${count} değişen dosyadan en az biri frontend dışında"
+    fi
+
+    # Karar denetlenebilir olsun: hangi dosyalara bakılarak verildiği
+    # günlükte dursun.
+    log "INFO" "Değişen dosyalar (${baseline:0:8}..HEAD):"
+    printf '%s\n' "$changed" | sed 's/^/    /' | tee -a "$LOG_FILE"
+}
+
+record_successful_deploy() {
+    mkdir -p "$DEPLOY_STATE_DIR" 2>/dev/null
+    if git rev-parse HEAD > "$LAST_DEPLOYED_COMMIT_FILE" 2>/dev/null; then
+        log "INFO" "Son yayın kaydı güncellendi: $(git rev-parse --short HEAD)"
+    else
+        # Kayıt yazılamazsa bir sonraki yayın tam tur koşar; bu
+        # güvenli taraf, o yüzden yayını düşürmüyoruz.
+        log "WARN" "Son yayın kaydı yazılamadı; sonraki yayın TAM tur koşacak."
+    fi
+}
+
 run_backend_tests() {
+    if [ "${TEST_SCOPE:-full}" = "frontend-only" ]; then
+        log "INFO" "Backend testleri ATLANDI — ${TEST_SCOPE_REASON}."
+        log "INFO" "Frontend testleri, build ve sağlık kontrolü yine koşuyor."
+        return
+    fi
+
     log "INFO" "Backend testleri çalıştırılıyor..."
     resolve_test_db_connection
 
@@ -216,6 +364,10 @@ main() {
         fail "git pull başarısız oldu."
     fi
 
+    # Kapsam pull'DAN SONRA belirleniyor: HEAD ancak o noktada kesin.
+    resolve_test_scope
+    log "INFO" "Test kapsamı: ${TEST_SCOPE} (${TEST_SCOPE_REASON})"
+
     run_backend_tests
     run_frontend_tests
     backup_current_release
@@ -227,6 +379,12 @@ main() {
     if wait_for_health; then
         DEPLOY_OUTCOME="SUCCESS"
         log "INFO" "Yayın BAŞARILI."
+
+        # Kayıt YALNIZCA başarıda güncelleniyor. Başarısız ya da geri
+        # alınmış bir yayından sonra taban eski commit'te kalmalı;
+        # yoksa bir sonraki denemede o değişiklikler diff'ten düşer ve
+        # backend testleri hiç koşmadan yayınlanabilirdi.
+        record_successful_deploy
     else
         rollback
     fi
@@ -240,4 +398,9 @@ main() {
     fi
 }
 
-main "$@"
+# Doğrudan çalıştırıldığında yayın yapar; source edildiğinde yalnızca
+# fonksiyonları tanımlar. Sınıflandırma mantığının testten koşulabilmesi
+# için gerekli — yoksa test betiği gerçek bir yayın tetiklerdi.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    main "$@"
+fi
