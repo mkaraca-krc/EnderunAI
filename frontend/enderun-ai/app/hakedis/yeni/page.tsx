@@ -579,6 +579,7 @@ export default function NewProgressPaymentPage() {
 
         <HakedisEditor
           projectId={projectId}
+          companyId={companyId}
           periodNumber={periodNumber}
           progressPaymentDate={progressPaymentDate}
           priceDifferenceAmount={priceDifferenceAmount}

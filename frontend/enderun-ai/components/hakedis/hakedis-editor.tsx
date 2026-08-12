@@ -80,6 +80,10 @@ export type OffsetForm = {
   amount: number;
 };
 
+import {
+  isgDeductionSuggestionService,
+} from "@/services/isg-deduction-suggestion.service";
+
 export type DeductionLineForm = {
   key: string;
   name: string;
@@ -188,6 +192,8 @@ type Props = {
   /** İcmalden ön doldurma bu döneme göre hesaplanır. */
   periodNumber: number;
   progressPaymentDate: string;
+  /** İSG kesinti önerisi için gerekli; öneri ucu şirket bazlı. */
+  companyId?: string;
   priceDifferenceAmount: number;
   vatRate: number;
   withholdingNumerator: number;
@@ -214,6 +220,7 @@ export default function HakedisEditor({
   progressPaymentId,
   periodNumber,
   progressPaymentDate,
+  companyId,
   priceDifferenceAmount,
   vatRate,
   withholdingNumerator,
@@ -227,6 +234,13 @@ export default function HakedisEditor({
   const [sections, setSections] = useState<ProjectHakedisSection[]>([]);
   const [openAdvances, setOpenAdvances] = useState<OpenAdvanceMaterial[]>([]);
   const [sectionNotice, setSectionNotice] = useState("");
+
+  // İSG kesinti önerisi. Öneri ÜRETİLEMEDİĞİNDE de bir şey söylemek
+  // gerekiyor: uç sebebi döndürüyor ve kullanıcı onu görmeli. Sessiz
+  // kalıp sıfır tutarlı satır eklemek, ön muhasebenin fark etmediği
+  // yanlış bir kesinti bırakırdı.
+  const [isgNotice, setIsgNotice] = useState("");
+  const [isgBusy, setIsgBusy] = useState(false);
 
   // İcmalden ön doldurma
   const [summaryDraft, setSummaryDraft] = useState<HakedisSummaryDraft | null>(
@@ -435,6 +449,75 @@ export default function HakedisEditor({
   }, [openAdvances, value.advanceMaterials, value.offsets]);
 
   const cumulativeBase = round2(cumulativeWorkAmount + openAdvanceTotal);
+
+  /**
+   * OSGB sözleşmesinden İSG katılım payı kesintisini getirir.
+   *
+   * TUTAR UÇTAN GELİR. Kişi başı bedel × çalışan sayısı hesabı
+   * burada tekrarlanmıyor: sözleşmenin dönemi, kişi başı mı sabit mi
+   * olduğu ve o ay kaç çalışan bulunduğu backend'de. İkinci bir
+   * hesap, hakedişte ve İSG ekranında farklı iki rakam üretirdi.
+   *
+   * Öneri üretilemezse SATIR EKLENMİYOR; uçtan gelen sebep
+   * gösteriliyor ve kullanıcı kendi giriyor.
+   */
+  async function suggestIsgDeduction() {
+    if (!companyId || !projectId || isgBusy) return;
+
+    setIsgBusy(true);
+    setIsgNotice("");
+
+    try {
+      const suggestion = await isgDeductionSuggestionService.get(
+        companyId,
+        projectId,
+        progressPaymentDate || undefined
+      );
+
+      if (!suggestion.hasSuggestion) {
+        setIsgNotice(
+          suggestion.reason ??
+            "OSGB sözleşmesinden öneri üretilemedi; kesintiyi elle girin."
+        );
+        return;
+      }
+
+      const line = newDeduction(suggestion.deductionType);
+
+      patch({
+        deductions: [
+          ...value.deductions,
+          {
+            ...line,
+            description: suggestion.description,
+            // Alt kalem hesabı yerine doğrudan tutar: uç kesin
+            // rakamı veriyor, kalemlere bölmek onu bozardı.
+            manualAmount: suggestion.manualAmount,
+            lines: [],
+            notes: suggestion.contractNumber
+              ? `OSGB sözleşmesi ${suggestion.contractNumber}` +
+                (suggestion.personCount !== null
+                  ? ` · ${suggestion.personCount} kişi`
+                  : "")
+              : line.notes,
+          },
+        ],
+      });
+
+      setIsgNotice(
+        `İSG katılım payı eklendi: ${money.format(suggestion.manualAmount)}` +
+          (suggestion.personCount !== null
+            ? ` (${suggestion.personCount} kişi)`
+            : "")
+      );
+    } catch (error) {
+      setIsgNotice(
+        error instanceof Error ? error.message : "Öneri alınamadı."
+      );
+    } finally {
+      setIsgBusy(false);
+    }
+  }
 
   const deductionResults = useMemo(
     () =>
@@ -1387,7 +1470,27 @@ export default function HakedisEditor({
               + {option.label}
             </button>
           ))}
+
+          {/* OSGB sözleşmesinden İSG katılım payını hazır getirir.
+              Tutarı UÇ hesaplıyor; burada kişi başı bedel × çalışan
+              gibi bir hesap yapılmıyor. */}
+          {companyId && projectId && (
+            <button
+              type="button"
+              disabled={isgBusy}
+              onClick={() => void suggestIsgDeduction()}
+              title="OSGB sözleşmesinden İSG katılım payı kesintisini getirir"
+            >
+              {isgBusy ? "Öneri alınıyor..." : "⚕ İSG katılımını öner"}
+            </button>
+          )}
         </div>
+
+        {isgNotice && (
+          <div style={{ padding: "0 22px 14px", color: "#b45309", fontSize: 13 }}>
+            {isgNotice}
+          </div>
+        )}
       </div>
 
       {/* ---------- ÖDEME DAĞILIMI ---------- */}

@@ -442,6 +442,7 @@ export default function EditProgressPaymentPage() {
 
         <HakedisEditor
           projectId={detail.projectId}
+          companyId={detail.companyId}
           progressPaymentId={detail.id}
           periodNumber={detail.periodNumber}
           progressPaymentDate={progressPaymentDate}
