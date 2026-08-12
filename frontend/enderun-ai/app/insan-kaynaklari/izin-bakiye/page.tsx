@@ -222,13 +222,19 @@ export default function LeaveBalancePage() {
                 value={`${days(data.totalRemainingDays)} gün`}
                 description="Şirketin izin yükümlülüğü"
               />
+              {/* İKİ SAYAÇ TOPLANMIYOR: kesişiyorlar. İşe giriş tarihi
+                  olmayan personelin hak edişi 0 sayıldığı için
+                  kullandığı her gün eksi bakiye üretiyor
+                  (LeaveBalanceCalculator.Empty → RemainingDays =
+                  −UsedDays); yani aynı kişi hem "hak edişini aşan"
+                  hem "tarihi eksik" sayısına giriyor. Toplamak onu
+                  iki kez sayıp olduğundan büyük bir uyarı gösteriyordu.
+                  Tarihi eksik olanlar zaten tablonun üstündeki uyarı
+                  şeridinde ayrıca duruyor. */}
               <StatCard
-                title="Dikkat gerektiren"
-                value={data.overdraftCount + data.withoutStartDateCount}
-                description={
-                  `${data.overdraftCount} hak edişi aşan, ` +
-                  `${data.withoutStartDateCount} tarihi eksik`
-                }
+                title="Hak edişini aşan"
+                value={data.overdraftCount}
+                description="Avans izin ya da hatalı veri"
               />
             </div>
 
