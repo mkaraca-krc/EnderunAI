@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
+import CostBreakdownModal from "@/components/offers/cost-breakdown-modal";
 import {
   Button,
   Card,
@@ -148,6 +149,20 @@ export default function NewOfferPage() {
   const [machineHourRate, setMachineHourRate] = useState("750");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Maliyet kirilimi paneli: hangi satirin kirilimi aciliyor.
+  const [breakdown, setBreakdown] = useState<{
+    request: {
+      listPrice: number;
+      discountRate: number;
+      freightRate: number;
+      wasteRate: number;
+      financeRate: number;
+      generalExpenseRate: number;
+      profitRate: number;
+    };
+    localSalesPrice: number;
+  } | null>(null);
 
   const [form, setForm] = useState({
     companyId: "",
@@ -1062,15 +1077,42 @@ export default function NewOfferPage() {
                             {money(result.salesTotal, form.currency)}
                           </td>
                           <td className="border-b p-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              disabled={form.items.length === 1}
-                              onClick={() => removeLine(index)}
-                            >
-                              Sil
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              {/* Kirilim UCTAN gelir; ekranin canli
+                                  hesabi maliyeti tek rakama katliyor. */}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setBreakdown({
+                                    request: {
+                                      listPrice: Number(line.listPrice) || 0,
+                                      discountRate: Number(line.discountRate) || 0,
+                                      freightRate: Number(line.freightRate) || 0,
+                                      wasteRate: Number(line.wasteRate) || 0,
+                                      financeRate: Number(line.financeRate) || 0,
+                                      generalExpenseRate:
+                                        Number(line.generalExpenseRate) || 0,
+                                      profitRate: Number(line.profitRate) || 0,
+                                    },
+                                    localSalesPrice: result.unitSalesPrice,
+                                  })
+                                }
+                              >
+                                Kırılım
+                              </Button>
+
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                disabled={form.items.length === 1}
+                                onClick={() => removeLine(index)}
+                              >
+                                Sil
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1141,6 +1183,14 @@ export default function NewOfferPage() {
           </Button>
         </div>
       </form>
+
+      <CostBreakdownModal
+        open={breakdown !== null}
+        request={breakdown?.request ?? null}
+        currency={form.currency}
+        localSalesPrice={breakdown?.localSalesPrice ?? 0}
+        onClose={() => setBreakdown(null)}
+      />
     </ErpShell>
   );
 }
