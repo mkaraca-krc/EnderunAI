@@ -21,6 +21,20 @@ public sealed class RfqItem : BaseEntity
     public Guid? EngineeringPositionId { get; set; }
     public global::EnderunAI.Api.Models.EngineeringPosition? EngineeringPosition { get; set; }
 
+    /// <summary>
+    /// Talep edenin istediği marka; talepten kopyalanır.
+    /// Tedarikçinin teklifte verdiği markadan
+    /// (<c>RfqSupplierQuotation.Brand</c>) AYRIDIR: biri "ne istendi",
+    /// diğeri "ne teklif edildi".
+    /// </summary>
+    public string? RequestedBrand { get; set; }
+
+    /// <summary>
+    /// Muadil kabul ediliyor mu. True ise tedarikçi serbesttir;
+    /// <see cref="RequestedBrand"/> doluysa bu bir tercihtir.
+    /// </summary>
+    public bool BrandIrrelevant { get; set; }
+
     public string MaterialDescription { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public string Unit { get; set; } = string.Empty;

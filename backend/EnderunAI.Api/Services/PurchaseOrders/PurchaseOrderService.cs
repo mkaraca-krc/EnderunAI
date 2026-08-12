@@ -230,7 +230,14 @@ public sealed class PurchaseOrderService(
                         : null,
                     EngineeringPositionId = x.RfqItem.EngineeringPositionId,
                     MaterialDescription = x.RfqItem.MaterialDescription,
+                    // İKİ MARKA YAN YANA: Brand tedarikçinin VERDİĞİ
+                    // (tekliften), RequestedBrand talep edenin
+                    // İSTEDİĞİ (RFQ üzerinden talepten). Tek alanda
+                    // birleştirilseydi "istenen mi geldi, muadil mi"
+                    // sorusu bir daha cevaplanamazdı.
                     Brand = x.Brand,
+                    RequestedBrand = x.RfqItem.RequestedBrand,
+                    BrandIrrelevant = x.RfqItem.BrandIrrelevant,
                     Model = x.Model,
                     Quantity = x.Quantity,
                     ReceivedQuantity = 0m,

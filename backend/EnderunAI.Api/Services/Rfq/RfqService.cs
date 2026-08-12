@@ -212,6 +212,11 @@ public sealed class RfqService(
                     // aynı mantık.
                     EngineeringPositionId = x.EngineeringPositionId,
                     MaterialDescription = x.MaterialDescription,
+                    // İSTENEN marka talepten taşınır. Tedarikçinin
+                    // teklifte vereceği marka ayrı bir alan; ikisi
+                    // karıştırılmaz.
+                    RequestedBrand = x.RequestedBrand,
+                    BrandIrrelevant = x.BrandIrrelevant,
                     Quantity = x.Quantity,
                     Unit = x.Unit,
                     RequestedDeliveryDate = x.RequestedDeliveryDate.AsUtc(),

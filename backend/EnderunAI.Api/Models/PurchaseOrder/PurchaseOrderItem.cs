@@ -34,7 +34,18 @@ public sealed class PurchaseOrderItem : BaseEntity
     public global::EnderunAI.Api.Models.EngineeringPosition? EngineeringPosition { get; set; }
 
     public string MaterialDescription { get; set; } = string.Empty;
+    /// <summary>
+    /// Tedarikçinin VERDİĞİ marka (tekliften gelir).
+    /// <see cref="RequestedBrand"/> ile karıştırılmaz; ikisi yan yana
+    /// durur ki istenen mi geldi, muadil mi görülebilsin.
+    /// </summary>
     public string? Brand { get; set; }
+
+    /// <summary>Talep edenin İSTEDİĞİ marka; RFQ üzerinden talepten gelir.</summary>
+    public string? RequestedBrand { get; set; }
+
+    /// <summary>Muadil kabul ediliyor muydu; talepten gelir.</summary>
+    public bool BrandIrrelevant { get; set; }
     public string? Model { get; set; }
     public decimal Quantity { get; set; }
     public decimal ReceivedQuantity { get; set; }

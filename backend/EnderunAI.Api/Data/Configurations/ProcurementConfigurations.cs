@@ -54,6 +54,8 @@ public sealed class RfqItemConfiguration : IEntityTypeConfiguration<RfqItem>
         entity.HasIndex(x => new { x.RfqId, x.LineNumber }).IsUnique();
         entity.HasIndex(x => x.PurchaseRequestItemId);
         entity.Property(x => x.MaterialDescription).HasMaxLength(500).IsRequired();
+        entity.Property(x => x.RequestedBrand).HasMaxLength(200);
+        entity.Property(x => x.BrandIrrelevant).HasDefaultValue(true);
         entity.Property(x => x.Quantity).HasPrecision(18, 4);
         entity.Property(x => x.Unit).HasMaxLength(40).IsRequired();
         entity.Property(x => x.Notes).HasMaxLength(1000);
@@ -186,6 +188,10 @@ public sealed class PurchaseOrderItemConfiguration :
         entity.HasIndex(x => x.RfqSupplierQuotationItemId);
         entity.Property(x => x.MaterialDescription).HasMaxLength(500).IsRequired();
         entity.Property(x => x.Brand).HasMaxLength(150);
+
+        // İSTENEN marka ayrı alan: Brand tedarikçinin verdiği.
+        entity.Property(x => x.RequestedBrand).HasMaxLength(200);
+        entity.Property(x => x.BrandIrrelevant).HasDefaultValue(true);
         entity.Property(x => x.Model).HasMaxLength(150);
         entity.Property(x => x.Quantity).HasPrecision(18, 4);
         entity.Property(x => x.ReceivedQuantity).HasPrecision(18, 4);
