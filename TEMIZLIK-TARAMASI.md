@@ -29,7 +29,7 @@ tek başına değil temizlik turunda.
 
 **Şimdilik:** XML doc yorumuyla tuzak yazıldı, kod değişmedi.
 
-## "Uç var, ekran yok" taraması
+## "Uç var, ekran yok" taraması — BETİK KURULDU, KARARLAR BEKLİYOR
 
 **Ne:** Backend'de yazılıp frontend'den hiç çağrılmayan uçlar. Bu
 oturumda üç tanesi tek tek, tesadüfen çıktı: özlük belge uçları, çek
@@ -40,13 +40,40 @@ hiçbirine ulaşamıyordu.
 ama bitmiş görünüyor — paket "kapandı" diye kapanıyor, özellik
 kullanılamıyor. Tek tek fark edilmesi şansa kalıyor.
 
-**O turda değerlendirilecek:** Toplu sweep — controller route
-listesini çıkarıp (`[Http*]` öznitelikleri) frontend `services/`
-altındaki `apiClient` çağrılarıyla karşılaştırmak, eşleşmeyenleri
-listelemek. Çıkan listede her kalem için karar: ekran aç, ucu kaldır,
-ya da bilinçli olarak iç/otomasyon ucu diye işaretle. Sweep'i
-tekrarlanabilir bir betiğe bağlamak, tek seferlik elle taramaya
-tercih edilir.
+**Yapıldı (2026-08-12):** `scripts/uc-ekran-taramasi.mjs`.
+`node scripts/uc-ekran-taramasi.mjs [--json]` ile her an
+tekrarlanabilir. 701 ucun tamamını üç kademede raporluyor:
+
+| Kademe | Sayı | Anlamı |
+| --- | --- | --- |
+| Kesin | 18 | Hiçbir frontend referansıyla eşleşmiyor |
+| Şüpheli | 36 | Yalnız değişken yollu bir referansla eşleşiyor |
+| Metot | 14 | Yol çağrılıyor ama o HTTP metodu çağrılmıyor |
+
+**Betiği yazarken çıkan ve rapora hâlâ etki eden tuzaklar** — biri
+düzeltilmeseydi liste ya yanlış alarmla dolar ya da gerçek boşlukları
+gizlerdi:
+- Metot düzeyi `[Route("/api/...")]` sınıfın taban yolunu EZER;
+  birleştirilince olmayan bir yol üretiliyordu.
+- Servislerin `const root = "..."` deseni ve kök üreten fonksiyonlar
+  çözülmezse yol segment sayısını tutmuyor (47 sahte kalem).
+- Uzun çağrılarda şablon dizgisi satır ortasında bölünüyor; satır
+  bazlı tarama böyle bir çağrıyı hiç görmüyor.
+- `${query({ companyId })}` iç içe süslü parantez içeriyor; naif
+  temizlik segmenti bozup `isg/dashboard`'ı listeye düşürüyordu.
+- Yıldızın gerçek segmentleri karşılaması hiç çağrılmayan
+  `hakedis/upload`'ı örtüyordu — bu yüzden kesin/şüpheli ayrımı var.
+- Metot, çağrının parantez aralığından okunmalı; satır penceresi bir
+  sonraki çağrının metodunu yapıştırıyordu. Yükleme yardımcıları
+  metodu kendi gövdesinde kuruyor, o da ayrıca çözülüyor.
+
+**Sırada — her kalem için karar (ekran aç / ucu kaldır / iç uç diye
+işaretle).** Kesin listedeki 18 kalem gözle doğrulandı, hepsi gerçek:
+İK bordro ön kontrol ve SGK bildirim, izin bakiyesi, üretici fiyat
+listesi (liste + oluşturma), hakediş kesinti önerisi, teklif
+fiyatlama, ek iş devri, sekreterya evrak akışı ve ekleri, güvenlik
+denetim kayıtları, tedarikçi kalite, bildirim taraması (bu sonuncusu
+muhtemelen bilinçli bir ops ucu).
 
 ## Hayalet alan taraması (2. tur)
 
