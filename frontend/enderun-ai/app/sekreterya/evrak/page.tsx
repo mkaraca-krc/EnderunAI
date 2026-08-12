@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import CorrespondenceDetailModal from "@/components/secretariat/correspondence-detail-modal";
 
 import {
   companyService,
@@ -95,6 +96,13 @@ export default function CorrespondencePage() {
   const [processingId, setProcessingId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Detay panelinde açık evrak. Yön de tutuluyor: uçlar evrakı
+  // yön parametresiyle ayırıyor, id tek başına yetmiyor.
+  const [detailTarget, setDetailTarget] = useState<{
+    id: string;
+    direction: CorrespondenceDirection;
+  } | null>(null);
 
   const formProjects = useMemo(
     () =>
@@ -672,16 +680,33 @@ export default function CorrespondencePage() {
                       </td>
 
                       <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          disabled={processingId === item.id}
-                          onClick={() => void deleteDocument(item.id, item.direction)}
-                          className="text-sm font-medium text-red-600 disabled:opacity-50"
-                        >
-                          {processingId === item.id
-                            ? "Siliniyor..."
-                            : "Sil"}
-                        </button>
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDetailTarget({
+                                id: item.id,
+                                direction: item.direction,
+                              })
+                            }
+                            className="text-sm font-medium text-brand-700 underline"
+                          >
+                            Detay
+                            {item.attachmentCount > 0 &&
+                              ` (${item.attachmentCount} ek)`}
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={processingId === item.id}
+                            onClick={() => void deleteDocument(item.id, item.direction)}
+                            className="text-sm font-medium text-red-600 disabled:opacity-50"
+                          >
+                            {processingId === item.id
+                              ? "Siliniyor..."
+                              : "Sil"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -691,6 +716,15 @@ export default function CorrespondencePage() {
           </div>
         </section>
       </div>
+
+      <CorrespondenceDetailModal
+        documentId={detailTarget?.id ?? null}
+        direction={
+          detailTarget?.direction ?? CorrespondenceDirection.Incoming
+        }
+        onClose={() => setDetailTarget(null)}
+        onChanged={() => void load()}
+      />
     </ErpShell>
   );
 }

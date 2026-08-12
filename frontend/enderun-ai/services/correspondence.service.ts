@@ -101,6 +101,63 @@ function directionQuery(direction: CorrespondenceDirection) {
   return `?direction=${direction}`;
 }
 
+/** Evrak akışındaki bir adım. */
+export type CorrespondenceWorkflowStep = {
+  id: string;
+  action: number;
+  actionName: string;
+  fromUserName?: string | null;
+  toUserName?: string | null;
+  description?: string | null;
+  actionAtUtc: string;
+};
+
+export type CorrespondenceAttachment = {
+  id: string;
+  direction: CorrespondenceDirection;
+  documentId: string;
+  fileName: string;
+  storedFileName: string;
+  filePath: string;
+  contentType?: string | null;
+  fileSize: number;
+  description?: string | null;
+  createdAtUtc: string;
+};
+
+/** Evrakın kendisi + ekleri + akış geçmişi. */
+export type CorrespondenceDetail = {
+  document: CorrespondenceItem;
+  attachments: CorrespondenceAttachment[];
+  workflow: CorrespondenceWorkflowStep[];
+};
+
+/**
+ * Akış eylemleri — `SecretariatWorkflowAction` ile birebir.
+ *
+ * Created ve Archived ELLE seçilemez: birincisi kayıt açılırken,
+ * ikincisi arşivleme ucundan otomatik yazılıyor. Listeye konsaydı
+ * kullanıcı elle "oluşturuldu" adımı ekleyip geçmişi bozabilirdi.
+ */
+export const CORRESPONDENCE_WORKFLOW_ACTIONS: {
+  value: number;
+  label: string;
+}[] = [
+  { value: 1, label: "Kaydedildi" },
+  { value: 2, label: "Havale edildi" },
+  { value: 3, label: "Okundu" },
+  { value: 4, label: "Görüş yazıldı" },
+  { value: 5, label: "Cevaplandı" },
+  { value: 6, label: "Tamamlandı" },
+  { value: 8, label: "Yeniden açıldı" },
+  { value: 9, label: "İptal edildi" },
+];
+
+/** Ek dosya indirme adresi — tarayıcı doğrudan açar. */
+export function correspondenceAttachmentUrl(attachmentId: string) {
+  return `/api/backend/secretariat/attachments/${attachmentId}/download`;
+}
+
 export const correspondenceService = {
   getAll(filters?: CorrespondenceFilters) {
     return apiClient<CorrespondenceItem[]>(
@@ -128,6 +185,80 @@ export const correspondenceService = {
   delete(id: string, direction: CorrespondenceDirection) {
     return apiClient<{ message: string }>(
       `secretariat/correspondence/${id}${directionQuery(direction)}`,
+      { method: "DELETE" }
+    );
+  },
+
+  /** Evrak detayı: ekler ve akış geçmişi birlikte gelir. */
+  getById(id: string, direction: CorrespondenceDirection) {
+    return apiClient<CorrespondenceDetail>(
+      `secretariat/correspondence/${id}${directionQuery(direction)}`
+    );
+  },
+
+  /** Akışa bir adım ekler; güncel detayı geri döner. */
+  addWorkflow(
+    id: string,
+    direction: CorrespondenceDirection,
+    request: {
+      action: number;
+      toUserId?: string | null;
+      toUserName?: string | null;
+      description?: string | null;
+    }
+  ) {
+    return apiClient<CorrespondenceDetail>(
+      `secretariat/correspondence/${id}/workflow${directionQuery(direction)}`,
+      {
+        method: "POST",
+        body: {
+          action: request.action,
+          toUserId: request.toUserId ?? null,
+          toUserName: request.toUserName?.trim() || null,
+          description: request.description?.trim() || null,
+        },
+      }
+    );
+  },
+
+  /**
+   * Ek dosya yükler.
+   *
+   * apiClient KULLANILMIYOR: gövdeyi JSON'a çeviriyor ve
+   * Content-Type'ı kendisi koyuyor. Dosya yüklemede gövde FormData
+   * olmalı ve sınırı (boundary) tarayıcı yazmalı — elle
+   * Content-Type verilirse sunucu form alanlarını ayrıştıramaz.
+   */
+  async addAttachment(
+    id: string,
+    direction: CorrespondenceDirection,
+    file: File,
+    description?: string | null
+  ) {
+    const form = new FormData();
+    form.append("file", file);
+    if (description?.trim()) form.append("description", description.trim());
+
+    const response = await fetch(
+      `/api/backend/secretariat/correspondence/${id}/attachments${directionQuery(direction)}`,
+      { method: "POST", body: form, cache: "no-store" }
+    );
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        (payload as { message?: string } | null)?.message ??
+          `Ek dosya yüklenemedi: ${response.status}`
+      );
+    }
+
+    return payload as CorrespondenceAttachment;
+  },
+
+  deleteAttachment(attachmentId: string) {
+    return apiClient<{ message: string }>(
+      `secretariat/attachments/${attachmentId}`,
       { method: "DELETE" }
     );
   },
