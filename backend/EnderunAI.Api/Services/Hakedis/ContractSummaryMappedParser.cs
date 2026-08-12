@@ -229,7 +229,12 @@ public static class ContractSummaryMappedParser
                     row,
                     $"Dosyadaki tutar {TurkishFormat.Amount(expected)} ile miktar × birim fiyattan " +
                     $"hesaplanan {TurkishFormat.Amount(computed)} uyuşmuyor. Satır aktarılmadı; " +
-                    "kaynak dosyadaki değeri kontrol edin."));
+                    "kaynak dosyadaki değeri kontrol edin.",
+                    ContractSummaryErrorKind.Checksum,
+                    code,
+                    description,
+                    expected,
+                    computed));
 
                 continue;
             }

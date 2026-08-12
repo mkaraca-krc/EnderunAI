@@ -13,6 +13,7 @@ import BoqImportMatchTable, {
 import ErpShell from "@/components/erp/erp-shell";
 import { usePermissions } from "@/lib/use-permissions";
 import {
+  BoqImportErrorKind,
   projectBoqService,
   ProjectBoqItemType,
   ProjectBoqStatus,
@@ -70,6 +71,16 @@ export default function ContractSummaryDetailPage() {
   // Excel aktarma: önce önizleme, sonra kullanıcının onayıyla yazma.
   const [importFile, setImportFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<BoqImportPreview | null>(null);
+
+  // Hata iki sınıfa ayrılıyor: tutar uyuşmazlığı kaynak dosyanın
+  // sorunu, kalanı eşleme/eksik alan sorunu. Kullanıcının yapacağı
+  // iş farklı olduğu için ekranda da ayrı duruyorlar.
+  const checksumErrors = (preview?.errors ?? []).filter(
+    (x) => x.kind === BoqImportErrorKind.Checksum
+  );
+  const mappingErrors = (preview?.errors ?? []).filter(
+    (x) => x.kind !== BoqImportErrorKind.Checksum
+  );
   const [importing, setImporting] = useState(false);
 
   // Satır bazında poz kararı: seçilen poz ya da null (bilerek atla).
@@ -510,19 +521,65 @@ export default function ContractSummaryDetailPage() {
                 </div>
               </div>
 
-              {preview.errors.length > 0 && (
+              {/* TUTAR UYUŞMAZLIĞI AYRI GÖSTERİLİYOR: eşleme
+                  düzeltilerek çözülmez, kaynak Excel düzeltilerek
+                  çözülür. Aynı listede vermek kullanıcıyı yanlış işe
+                  yönlendirirdi. Hiçbiri sessizce düşürülmüyor. */}
+              {checksumErrors.length > 0 && (
+                <div className="erp-alert danger erp-mt">
+                  <strong>
+                    Tutarı tutmayan {checksumErrors.length} satır — kaynak
+                    dosyada düzeltilmeli:
+                  </strong>
+                  <ul>
+                    {checksumErrors.map((problem) => (
+                      <li key={problem.rowNumber}>
+                        <strong>Satır {problem.rowNumber}</strong>
+                        {problem.positionCode ? ` · ${problem.positionCode}` : ""}
+                        {problem.description ? ` · ${problem.description}` : ""}
+                        {problem.fileTotal != null &&
+                        problem.computedTotal != null ? (
+                          <>
+                            {" "}— dosyadaki tutar{" "}
+                            <strong>
+                              {problem.fileTotal.toLocaleString("tr-TR", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </strong>
+                            , miktar × birim fiyattan hesaplanan{" "}
+                            <strong>
+                              {problem.computedTotal.toLocaleString("tr-TR", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </strong>
+                          </>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                  <span>
+                    Bu satırlar aktarılmayacak. Otomatik düzeltme yapılmıyor:
+                    doğru miktarı yalnızca kaynak dosyayı bilen kişi
+                    söyleyebilir.
+                  </span>
+                </div>
+              )}
+
+              {mappingErrors.length > 0 && (
                 <div className="erp-alert warning erp-mt">
                   <strong>Okunamayan satırlar:</strong>
                   <ul>
-                    {preview.errors.slice(0, 20).map((problem) => (
+                    {mappingErrors.slice(0, 20).map((problem) => (
                       <li key={problem.rowNumber}>
                         Satır {problem.rowNumber}: {problem.message}
                       </li>
                     ))}
                   </ul>
-                  {preview.errors.length > 20 && (
+                  {mappingErrors.length > 20 && (
                     <span>
-                      ve {preview.errors.length - 20} satır daha. Bu satırlar
+                      ve {mappingErrors.length - 20} satır daha. Bu satırlar
                       aktarılmayacak; kalanlar aktarılacak.
                     </span>
                   )}

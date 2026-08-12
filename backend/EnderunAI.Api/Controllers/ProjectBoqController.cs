@@ -952,7 +952,24 @@ public sealed class ProjectBoqController(
             Sections = sections,
             UnsectionedItemCount = parsed.Lines
                 .Count(x => !x.IsSectionHeader && x.SectionName is null),
-            Errors = parsed.Errors.Select(x => new { x.RowNumber, x.Message }).ToList(),
+            // Hata türü ve bağlam taşınıyor: tutar uyuşmazlığı eşleme
+            // düzeltilerek çözülmez, kaynak dosya düzeltilerek çözülür.
+            // İkisini aynı listede aynı görünümde vermek, kullanıcıyı
+            // yanlış işe yönlendirirdi.
+            Errors = parsed.Errors
+                .Select(x => new
+                {
+                    x.RowNumber,
+                    x.Message,
+                    Kind = (int)x.Kind,
+                    x.PositionCode,
+                    x.Description,
+                    x.FileTotal,
+                    x.ComputedTotal
+                })
+                .ToList(),
+            ChecksumErrorCount = parsed.Errors
+                .Count(x => x.Kind == ContractSummaryErrorKind.Checksum),
             Items = previewLines
                 .Select(x => new
                 {

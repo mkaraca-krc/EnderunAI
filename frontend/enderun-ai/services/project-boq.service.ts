@@ -120,6 +120,32 @@ export interface CreateBoqRevisionRequest {
   reason?: string | null;
 }
 
+/**
+ * Aktarılamayan satır.
+ *
+ * `kind` AYRIMI ÖNEMLİ: eksik alan hatası eşleme düzeltilerek
+ * çözülür, tutar uyuşmazlığı çözülmez — o kaynak Excel'deki bozuk
+ * değerdir. İkisini aynı listede göstermek kullanıcıyı yanlış işe
+ * yönlendirir.
+ */
+export const BoqImportErrorKind = {
+  /** Zorunlu alan boş ya da okunamadı. */
+  Missing: 0,
+  /** Miktar x birim fiyat, dosyanın kendi tutarını tutmuyor. */
+  Checksum: 1,
+} as const;
+
+export interface BoqImportError {
+  rowNumber: number;
+  message: string;
+  kind: number;
+  /** Yalnızca tutar uyuşmazlığında dolu. */
+  positionCode?: string | null;
+  description?: string | null;
+  fileTotal?: number | null;
+  computedTotal?: number | null;
+}
+
 /** Dosyadaki sayfa adları, başlıklar ve örnek satırlar. */
 export interface BoqSpreadsheetInspection {
   sheetNames: string[];
@@ -174,7 +200,9 @@ export interface BoqImportPreview {
     itemCount: number;
     totalAmount: number;
   }[];
-  errors: { rowNumber: number; message: string }[];
+  errors: BoqImportError[];
+  /** Tutarı tutmayan satır sayısı — kaynak dosya sorunu. */
+  checksumErrorCount?: number;
   items: BoqImportPreviewItem[];
 }
 

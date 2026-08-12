@@ -30,8 +30,41 @@ public sealed record ContractSummaryParsedLine(
         decimal.Round(ContractQuantity * UnitPrice, 2);
 }
 
-/// <summary>Okunamayan satır ve nedeni.</summary>
-public sealed record ContractSummaryParseError(int RowNumber, string Message);
+/// <summary>Satırın neden aktarılamadığı — sunumda ayrıştırmak için.</summary>
+public enum ContractSummaryErrorKind
+{
+    /// <summary>
+    /// Zorunlu alan boş ya da okunamadı. Genellikle sütun eşlemesi
+    /// yanlış ya da kaynak satır eksik; kullanıcı eşlemeyi düzeltip
+    /// yeniden deneyebilir.
+    /// </summary>
+    Missing = 0,
+
+    /// <summary>
+    /// Miktar × birim fiyat, dosyanın KENDİ tutar sütununu tutmuyor.
+    /// Eşlemeyle düzelmez — kaynak dosyadaki değer bozuk. Ayrı
+    /// gösteriliyor çünkü kullanıcının yapması gereken şey farklı:
+    /// eşlemeyi değil, Excel'i düzeltmek.
+    /// </summary>
+    Checksum = 1
+}
+
+/// <summary>
+/// Okunamayan satır ve nedeni.
+///
+/// Bağlam alanları (poz, açıklama, tutarlar) yalnızca tutar
+/// uyuşmazlığında doldurulur: kullanıcı "satır 276 hatalı" değil,
+/// HANGİ kalemin ne kadar saptığını görmeli, yoksa 389 satırlık
+/// dosyada aramak zorunda kalır.
+/// </summary>
+public sealed record ContractSummaryParseError(
+    int RowNumber,
+    string Message,
+    ContractSummaryErrorKind Kind = ContractSummaryErrorKind.Missing,
+    string? PositionCode = null,
+    string? Description = null,
+    decimal? FileTotal = null,
+    decimal? ComputedTotal = null);
 
 public sealed record ContractSummaryParseResult(
     IReadOnlyList<ContractSummaryParsedLine> Lines,
