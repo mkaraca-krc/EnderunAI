@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
+import PriceListManager from "@/components/pricing/price-list-manager";
 import {
   Badge,
   Button,
@@ -109,6 +110,10 @@ export default function PriceSearchPage() {
           {error}
         </div>
       )}
+
+      {/* Fiyat listeleri: uclari vardi, ekrani yoktu. Aramanin
+          hangi listelerden beslendigi burada gorunuyor. */}
+      <PriceListManager companyId={companyId} />
 
       <Card className="mb-6">
         <CardHeader>
