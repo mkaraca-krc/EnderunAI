@@ -73,12 +73,12 @@ gizlerdi:
 | --- | --- |
 | `GET api/hr/bordro-on-kontrol` | Ekran açıldı (`21d8ea01`) |
 | `GET api/hr/sgk-bildirim` | Ekran açıldı (`21d8ea01`) |
-| `POST api/bildirimler/tara` | **İÇ UÇ — KAPANDI.** Ekran gerekmez |
-| `GET api/hr/izin-bakiye` | Ekran açılıyor (sırada 1) |
-| `GET/PUT api/hakedis-deduction-accounts` | Ekran açılacak (sırada 2) |
-| `api/project-extra-works` devri | Ekran açılacak (sırada 3) |
-| `api/secretariat/correspondence` akış+ek | Ekran açılacak (sırada 4) |
-| Orta grup (6 uç) | Mevcut ekranlara kart/sekme olarak sonra |
+| `POST api/bildirimler/tara` | **KAPANDI (iç uç)** — ekran gerekmez |
+| `GET api/hr/izin-bakiye` | Ekran açıldı (`3fbac3b8`) |
+| `GET/PUT api/hakedis-deduction-accounts` | Ekran açıldı (`b83e6962`) |
+| `api/project-extra-works` devri | Ekran açıldı (`d6ab3c21`) |
+| `api/secretariat/correspondence` akış+ek | Ekran açıldı (`6ba757b7`) |
+| Orta grup (6 uç) | Mevcut ekranlara kart/sekme olarak ekleniyor |
 
 **`POST api/bildirimler/tara` neden iç uç:** bildirim taramasını elle
 tetikler. `NotificationScanBackgroundService` taramayı 24 saatte bir
@@ -174,6 +174,36 @@ ya 301 ile HTTPS'e yönlendirmek ya da vhost'u kaldırmak.
 dev artığı; `tsc --noEmit` çalıştırınca artık var olmayan sayfalar
 için dört sahte hata üretiyor. Yayını etkilemiyor, ama tip
 kontrolünü kirletiyor.
+
+## `react-hooks/set-state-in-effect` — dört dosyada duran lint hatası
+
+**Ne:** Şu dört yerde eslint hata veriyor ve hepsi HEAD'de zaten
+vardı (yeni ekranlar eklenirken `git stash` ile tek tek doğrulandı):
+
+| Dosya | Ne yapıyor |
+| --- | --- |
+| `components/erp/erp-shell.tsx` | Menü grubu açılma durumunu effect içinde kuruyor |
+| `app/projeler/[id]/metraj-takip/page.tsx` | Açılışta veriyi effect içinde yüklüyor |
+| `app/sekreterya/evrak/page.tsx` | Üç ayrı effect: yükleme + şirket değişince proje seçimini sıfırlama |
+
+**Neden riskli — ve neden hemen düzeltilmedi:** üçü de DAVRANIŞ
+TAŞIYOR. `erp-shell` menünün hangi grubunun açık olduğunu, `evrak`
+şirket değiştiğinde seçili projeyi temizlemeyi bu effect'lerle
+yapıyor. Kuralı susturmak kolay ama davranışı bozmadan yeniden
+yazmak dikkat istiyor; ekran eklerken yol üstünde düzeltilecek bir
+şey değil. Bu yüzden dokunulmadı.
+
+**Yayını durdurmuyor:** `npm run build` bu kuralı hata saymıyor, o
+yüzden safe-deploy geçiyor. Yani acil değil ama biriktiği için
+`npx eslint` çıktısı gürültülü — gerçek yeni hatalar bunların
+arasında kaybolabilir. Asıl risk bu.
+
+**O turda değerlendirilecek:** her effect için ya türetilmiş
+duruma çevirmek (`useMemo`/render sırasında hesaplama), ya olayı
+tetikleyen yere taşımak (şirket seçimi `onChange`'i projeyi orada
+sıfırlasın), ya da gerekçeli `eslint-disable` ile bilinçli olduğunu
+kayda geçirmek. Üçü de tek tek karar ister; toplu bir düzeltme
+davranış değiştirir.
 
 ## Paylaşılan dosya-ek altyapısı
 
