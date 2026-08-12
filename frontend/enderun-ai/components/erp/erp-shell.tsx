@@ -45,6 +45,14 @@ function requiredPermissionForPath(pathname: string): string | string[] | null {
   if (pathname.startsWith("/insan-kaynaklari/ek-odemeler")) {
     return "extra_payment.view";
   }
+  // Bordro ön kontrolü ve SGK dökümü puantaj+bordro kesişimindeki
+  // kendi anahtarıyla korunuyor (attendance-payroll.view). Aşağıdaki
+  // genel "bordro" kalıbından ÖNCE gelmeli: "bordro-on-kontrol" o
+  // kalıba da uyuyor ve payroll.view'a düşseydi, uca yetkisi olmayan
+  // kullanıcı ekranı açıp 403 yerdi.
+  if (/^\/insan-kaynaklari\/(bordro-on-kontrol|sgk-bildirim)/.test(pathname)) {
+    return "attendance-payroll.view";
+  }
   if (/^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|cikis-tazminat|avanslar)/.test(pathname)) {
     return "payroll.view";
   }
@@ -450,6 +458,16 @@ const groups: MenuGroup[] = [
         label: "Maaş Kartları",
         href: "/insan-kaynaklari/ucret-kartlari",
         icon: "₺",
+      },
+      {
+        label: "Bordro Ön Kontrol",
+        href: "/insan-kaynaklari/bordro-on-kontrol",
+        icon: "✓",
+      },
+      {
+        label: "SGK Bildirim",
+        href: "/insan-kaynaklari/sgk-bildirim",
+        icon: "⇄",
       },
       {
         label: "Ek Ücretler",

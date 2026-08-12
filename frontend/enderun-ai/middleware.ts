@@ -59,6 +59,14 @@ function tokenAccess(token: string) {
 
 function requiredPermission(pathname: string): string | null {
   if (pathname.startsWith("/sistem-yonetimi")) return "system.users.manage";
+  // Bordro ön kontrolü ve SGK dökümü kendi anahtarını istiyor.
+  // Genel "bordro" kalıbından ÖNCE gelmeli: "bordro-on-kontrol" ona
+  // da uyuyor ve payroll.view'a düşseydi kullanıcı ekranı açar,
+  // sonra uçtan 403 yerdi.
+  if (
+    /^\/insan-kaynaklari\/(bordro-on-kontrol|sgk-bildirim)/.test(pathname)
+  )
+    return "attendance-payroll.view";
   if (
     /^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|avanslar)/.test(
       pathname
