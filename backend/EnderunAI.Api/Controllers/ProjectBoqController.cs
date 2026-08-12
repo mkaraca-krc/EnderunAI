@@ -531,6 +531,12 @@ public sealed class ProjectBoqController(
         IFormFile file,
         [FromForm] string? matches,
         [FromForm] string? mapping,
+        /// <summary>
+        /// Adı özet sayfasındakiyle TUTMAYAN kısımlardan, kullanıcının
+        /// "evet bu aynı kısım" dediklerinin adları. Onaylanmayan
+        /// çiftin alias'ı yazılmaz.
+        /// </summary>
+        [FromForm] string? confirmedAliases,
         [FromServices] Services.Engineering.IPositionMatchService matcher,
         CancellationToken cancellationToken)
     {
@@ -585,6 +591,7 @@ public sealed class ProjectBoqController(
             return BadRequest(new { message = decisionError });
 
         var sectionMap = await EnsureSectionsAsync(
+            ParseConfirmedAliases(confirmedAliases),
             boq.ProjectId, parsed, cancellationToken);
 
         var lineNumber = 1;
@@ -844,15 +851,39 @@ public sealed class ProjectBoqController(
     /// kısımlarla kalırdı. Id'ler BaseEntity'de istemci tarafında
     /// üretildiği için eşleme kaydetmeden de kurulabiliyor.
     /// </summary>
+    /// <summary>
+    /// Kullanıcının "bu ikisi aynı kısım" dediği kısım adları.
+    /// Okunamayan içerik BOŞ küme döner — hatalı bir gövde yüzünden
+    /// doğrulanmamış bir alias yazmaktansa hiç yazmamak doğrusu.
+    /// </summary>
+    private static HashSet<string> ParseConfirmedAliases(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var names = JsonSerializer.Deserialize<List<string>>(
+                payload,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            return new HashSet<string>(
+                names ?? [], StringComparer.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
     private async Task<Dictionary<string, Guid>> EnsureSectionsAsync(
+        HashSet<string> confirmedAliases,
         Guid projectId,
         ContractSummaryParseResult parsed,
         CancellationToken cancellationToken)
     {
         var existing = await db.ProjectHakedisSections
-            .AsNoTracking()
             .Where(x => x.ProjectId == projectId)
-            .Select(x => new { x.Id, x.Name, x.Order })
             .ToListAsync(cancellationToken);
 
         var map = existing.ToDictionary(
@@ -864,19 +895,41 @@ public sealed class ProjectBoqController(
         {
             var name = header.SectionName!;
 
-            if (map.ContainsKey(name))
-                continue;
+            // ALIAS YALNIZCA GÜVENLİYSE YAZILIR: ya iki ad zaten aynı
+            // şeyi söylüyor, ya da kullanıcı bu çifti tek tek
+            // onaylamış. Onaylanmamış bir çifti yazmak, sıraya göre
+            // kurulmuş bir tahmini kalıcı bir gerçek gibi kaydederdi.
+            var alias = header.AliasName is null
+                ? null
+                : (ContractSummaryMappedParser.NamesMatch(name, header.AliasName) ||
+                   confirmedAliases.Contains(name))
+                    ? header.AliasName
+                    : null;
 
-            var section = new ProjectHakedisSection
+            if (map.TryGetValue(name, out var existingId))
+            {
+                // Var olan kısmın alias'ı yalnızca BOŞSA dolduruluyor;
+                // elle girilmiş bir adı aktarımın ezmesi, kullanıcının
+                // düzeltmesini sessizce geri alırdı.
+                var section = existing.Single(x => x.Id == existingId);
+
+                if (alias is not null && string.IsNullOrWhiteSpace(section.AliasName))
+                    section.AliasName = alias;
+
+                continue;
+            }
+
+            var created = new ProjectHakedisSection
             {
                 ProjectId = projectId,
                 Order = nextOrder++,
                 Name = name,
+                AliasName = alias,
                 IsActive = true
             };
 
-            db.ProjectHakedisSections.Add(section);
-            map[name] = section.Id;
+            db.ProjectHakedisSections.Add(created);
+            map[name] = created.Id;
         }
 
         return map;
@@ -909,6 +962,14 @@ public sealed class ProjectBoqController(
                 header.RowNumber,
                 Name = header.SectionName!,
                 IsNew = !known.Contains(header.SectionName!),
+                // Özet sayfasındaki adı ve tutup tutmadığı. Tutmayan
+                // çift KULLANICI ONAYLAMADAN yazılmaz: yanlış eşlenmiş
+                // bir kısım, hakedişin yanlış satıra yazılması demek.
+                header.AliasName,
+                AliasMatches = header.AliasName is null
+                    ? (bool?)null
+                    : Services.Hakedis.ContractSummaryMappedParser.NamesMatch(
+                        header.SectionName, header.AliasName),
                 ItemCount = parsed.Lines.Count(x =>
                     !x.IsSectionHeader && x.SectionName == header.SectionName),
                 TotalAmount = parsed.Lines
@@ -970,6 +1031,8 @@ public sealed class ProjectBoqController(
                 .ToList(),
             ChecksumErrorCount = parsed.Errors
                 .Count(x => x.Kind == ContractSummaryErrorKind.Checksum),
+            // Alias okunamadıysa sebebi; okunduysa null.
+            parsed.AliasNote,
             Items = previewLines
                 .Select(x => new
                 {

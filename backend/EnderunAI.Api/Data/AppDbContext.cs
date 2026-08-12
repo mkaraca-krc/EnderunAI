@@ -3976,6 +3976,7 @@ public sealed class AppDbContext(
 
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Code).HasMaxLength(50);
+            entity.Property(x => x.AliasName).HasMaxLength(200);
             entity.Property(x => x.ContractType).HasConversion<int>();
 
             entity.HasIndex(x => new { x.ProjectId, x.Order });

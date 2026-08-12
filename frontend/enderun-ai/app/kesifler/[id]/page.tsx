@@ -81,6 +81,10 @@ export default function ContractSummaryDetailPage() {
   const mappingErrors = (preview?.errors ?? []).filter(
     (x) => x.kind !== BoqImportErrorKind.Checksum
   );
+  // Adı özet sayfasındakiyle tutmayan kısımlardan kullanıcının
+  // "evet aynı kısım" dedikleri. Onaylanmayanın alias'ı yazılmaz.
+  const [confirmedAliases, setConfirmedAliases] = useState<string[]>([]);
+
   const [importing, setImporting] = useState(false);
 
   // Satır bazında poz kararı: seçilen poz ya da null (bilerek atla).
@@ -129,6 +133,7 @@ export default function ContractSummaryDetailPage() {
     setImportFile(null);
     setPreview(null);
     setMatchDecisions({});
+    setConfirmedAliases([]);
     setInspection(null);
     setMapping(null);
 
@@ -223,7 +228,8 @@ export default function ContractSummaryDetailPage() {
         params.id,
         importFile,
         toDecisions(matchDecisions),
-        mapping ?? undefined
+        mapping ?? undefined,
+        confirmedAliases
       );
       setNotice(result.message);
       clearImport();
@@ -586,12 +592,20 @@ export default function ContractSummaryDetailPage() {
                 </div>
               )}
 
+              {preview.aliasNote && (
+                <div className="erp-alert erp-mt">
+                  <strong>Özet sayfası okunamadı:</strong> {preview.aliasNote}
+                  {" "}Kısım adları yalnız detay sayfasından yazılacak.
+                </div>
+              )}
+
               {preview.sections.length > 0 && (
                 <div className="erp-table-wrap erp-mt">
                   <table className="erp-table">
                     <thead>
                       <tr>
                         <th>Kısım</th>
+                        <th>Özet sayfasındaki adı</th>
                         <th>Durum</th>
                         <th style={{ textAlign: "right" }}>Poz</th>
                         <th style={{ textAlign: "right" }}>Tutar</th>
@@ -602,6 +616,48 @@ export default function ContractSummaryDetailPage() {
                         <tr key={section.rowNumber}>
                           <td>
                             <strong>{section.name}</strong>
+                          </td>
+                          {/* ADLAR TUTMUYORSA ONAY İSTENİR: sıraya
+                              göre kurulmuş bir eşleştirme tahmindir;
+                              onaysız yazmak tahmini kalıcı gerçek gibi
+                              kaydederdi. Tutuyorsa onaya gerek yok. */}
+                          <td>
+                            {section.aliasName ? (
+                              section.aliasMatches ? (
+                                <span style={{ color: "#64748b" }}>
+                                  {section.aliasName}
+                                </span>
+                              ) : (
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={confirmedAliases.includes(
+                                      section.name
+                                    )}
+                                    onChange={(event) =>
+                                      setConfirmedAliases((current) =>
+                                        event.target.checked
+                                          ? [...current, section.name]
+                                          : current.filter(
+                                              (x) => x !== section.name
+                                            )
+                                      )
+                                    }
+                                  />
+                                  <span style={{ color: "#b45309" }}>
+                                    {section.aliasName}
+                                  </span>
+                                </label>
+                              )
+                            ) : (
+                              <span style={{ color: "#94a3b8" }}>—</span>
+                            )}
                           </td>
                           <td>
                             <span

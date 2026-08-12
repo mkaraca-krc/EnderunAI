@@ -21,7 +21,13 @@ public sealed record ContractSummaryParsedLine(
     /// hiyerarşisi tek seviyeli olduğu için alt grup ayrı kısım açmaz;
     /// adı burada saklanır ki bilgi kaybolmasın.
     /// </summary>
-    string? Category = null)
+    string? Category = null,
+    /// <summary>
+    /// Yalnızca kısım başlığında: aynı kısmın özet (icmal) sayfasındaki
+    /// adı. Detay adı birincildir; bu, özet sayfasıyla karşılaştırma
+    /// yapan kişi kısmı bulabilsin diye taşınır.
+    /// </summary>
+    string? AliasName = null)
 {
     public decimal UnitPrice =>
         MaterialUnitPrice + LaborUnitPrice + OverheadUnitPrice;
@@ -68,7 +74,13 @@ public sealed record ContractSummaryParseError(
 
 public sealed record ContractSummaryParseResult(
     IReadOnlyList<ContractSummaryParsedLine> Lines,
-    IReadOnlyList<ContractSummaryParseError> Errors)
+    IReadOnlyList<ContractSummaryParseError> Errors,
+    /// <summary>
+    /// Özet sayfası adları neden eşlenemedi. Eşleşme yapıldıysa null.
+    /// Sessiz kalmak yerine sebebi söylüyor: kullanıcı "alias nerede"
+    /// diye sormadan önce cevabı görmeli.
+    /// </summary>
+    string? AliasNote = null)
 {
     public int SectionCount => Lines.Count(x => x.IsSectionHeader);
     public int ItemCount => Lines.Count(x => !x.IsSectionHeader);

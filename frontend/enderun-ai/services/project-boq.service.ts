@@ -185,6 +185,13 @@ export interface BoqImportMapping {
   sectionColumn?: number | null;
   totalColumn?: number | null;
   sectionRule: number;
+  /**
+   * Özet (icmal) sayfası. Verilirse kısımların özetteki adları alias
+   * olarak okunur. Detay adı birincil kalır.
+   */
+  aliasSheetName?: string | null;
+  aliasCodeColumn?: number | null;
+  aliasNameColumn?: number | null;
 }
 
 /** Excel içe aktarma önizlemesi — hiçbir şey yazılmadan önce. */
@@ -199,7 +206,16 @@ export interface BoqImportPreview {
     isNew: boolean;
     itemCount: number;
     totalAmount: number;
+    /** Özet sayfasındaki adı; okunmadıysa null. */
+    aliasName?: string | null;
+    /**
+     * Adlar aynı şeyi mi söylüyor. false ise KULLANICI ONAYLAMADAN
+     * alias yazılmaz.
+     */
+    aliasMatches?: boolean | null;
   }[];
+  /** Alias okunamadıysa sebebi. */
+  aliasNote?: string | null;
   errors: BoqImportError[];
   /** Tutarı tutmayan satır sayısı — kaynak dosya sorunu. */
   checksumErrorCount?: number;
@@ -407,7 +423,9 @@ export const projectBoqService = {
     id: string,
     file: File,
     decisions?: BoqImportMatchDecision[],
-    mapping?: BoqImportMapping
+    mapping?: BoqImportMapping,
+    /** Adı tutmayan kısımlardan kullanıcının onayladıkları. */
+    confirmedAliases?: string[]
   ) {
     const fields: Record<string, string> = {};
 
@@ -415,6 +433,9 @@ export const projectBoqService = {
       fields.matches = JSON.stringify(decisions);
 
     if (mapping) fields.mapping = JSON.stringify(mapping);
+
+    if (confirmedAliases && confirmedAliases.length > 0)
+      fields.confirmedAliases = JSON.stringify(confirmedAliases);
 
     return uploadExcel<{
       message: string;

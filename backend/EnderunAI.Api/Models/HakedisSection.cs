@@ -24,6 +24,21 @@ public sealed class ProjectHakedisSection : BaseEntity
     public string? Code { get; set; }
 
     /// <summary>
+    /// Aynı kısmın icmal özetindeki adı.
+    ///
+    /// NEDEN VAR: gerçek icmallerde detay sayfası ile özet sayfası aynı
+    /// kısma farklı ad veriyor ("KABLO TAVASI" ↔ "KABLO KANAL SİSTEMİ").
+    /// Detay adı birincildir — kalemler oradan geliyor — ama özet adı
+    /// atılırsa özet sayfasıyla karşılaştırma yapan kişi kısmı
+    /// bulamıyor. İkisi de saklanıyor.
+    ///
+    /// Yalnızca KULLANICI DOĞRULADIĞINDA yazılır. Adlar birbirini
+    /// tutmuyorsa aktarım bunu kendiliğinden eşleştirmez: yanlış
+    /// eşlenmiş bir kısım, hakedişin yanlış satıra yazılması demektir.
+    /// </summary>
+    public string? AliasName { get; set; }
+
+    /// <summary>
     /// Bölümün sözleşme tipi. Yalnızca KARMA projede anlamlıdır; boşsa
     /// projenin tipi geçerlidir. Karma olmayan projede bu alanın
     /// doldurulması sapma yorumunu değiştirmez.

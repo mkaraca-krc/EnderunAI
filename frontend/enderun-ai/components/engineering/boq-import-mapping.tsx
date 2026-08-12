@@ -83,6 +83,43 @@ export function guessMapping(
     sectionColumn: guessColumn(headers, ["kısım", "kisim"]) || null,
     totalColumn: guessColumn(headers, ["tutar"]) || null,
     sectionRule: BoqSectionRule.EmptyUnit,
+
+    // ÖZET SAYFASI: gerçek icmallerde detay sayfasının yanında bir de
+    // "İcmal" özeti oluyor ve aynı kısma FARKLI ad veriyor. Özet adı
+    // atılırsa, özetle karşılaştırma yapan kişi kısmı bulamıyor.
+    // Sayfa adı tahmin ediliyor, sütunlar ilk iki sütun varsayılıyor
+    // (özet sayfalarında poz ve ad hep başta). Kullanıcı sayfayı
+    // değiştirebilir ya da "Kullanma" der; sütunları elle seçmek
+    // gerekmiyor çünkü tahmin tutmazsa kısım sayıları uyuşmaz ve
+    // aktarım alias'ı HİÇ yazmaz, sebebini de söyler.
+    ...guessAlias(inspection),
+  };
+}
+
+/**
+ * Özet sayfası tahmini. Adında "icmal" geçen VE seçili detay sayfası
+ * OLMAYAN ilk sayfa. Bulunamazsa alias okunmaz — uydurma bir sayfa
+ * seçmektense hiç okumamak doğru.
+ */
+function guessAlias(inspection: BoqSpreadsheetInspection) {
+  const candidate = inspection.sheetNames.find(
+    (name) =>
+      name !== inspection.sheetName &&
+      name.toLocaleLowerCase("tr-TR").includes("icmal")
+  );
+
+  if (!candidate) {
+    return {
+      aliasSheetName: null,
+      aliasCodeColumn: null,
+      aliasNameColumn: null,
+    };
+  }
+
+  return {
+    aliasSheetName: candidate,
+    aliasCodeColumn: 1,
+    aliasNameColumn: 2,
   };
 }
 
@@ -171,6 +208,44 @@ export default function BoqImportMappingPanel({
                   {name}
                 </option>
               ))}
+            </select>
+          </label>
+        )}
+
+        {/* Özet sayfası: kısımların ikinci adı buradan okunur.
+            "Kullanma" seçilirse alias hiç okunmaz — yanlış bir sayfayı
+            zorla okutmaktansa hiç okumamak doğru. */}
+        {inspection.sheetNames.length > 1 && (
+          <label>
+            <span>Özet (icmal) sayfası</span>
+            <select
+              className="erp-input"
+              value={mapping.aliasSheetName ?? ""}
+              disabled={disabled}
+              onChange={(event) =>
+                set(
+                  event.target.value
+                    ? {
+                        aliasSheetName: event.target.value,
+                        aliasCodeColumn: 1,
+                        aliasNameColumn: 2,
+                      }
+                    : {
+                        aliasSheetName: null,
+                        aliasCodeColumn: null,
+                        aliasNameColumn: null,
+                      }
+                )
+              }
+            >
+              <option value="">Kullanma</option>
+              {inspection.sheetNames
+                .filter((name) => name !== inspection.sheetName)
+                .map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
             </select>
           </label>
         )}

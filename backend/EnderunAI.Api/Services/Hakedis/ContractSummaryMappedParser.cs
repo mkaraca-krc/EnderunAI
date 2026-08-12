@@ -42,7 +42,16 @@ public sealed record ContractSummaryMapping(
     /// işaretlenir ve belirsiz sayılar bununla çözülür.
     /// </summary>
     int? TotalColumn = null,
-    ContractSummarySectionRule SectionRule = ContractSummarySectionRule.EmptyUnit);
+    ContractSummarySectionRule SectionRule = ContractSummarySectionRule.EmptyUnit,
+    /// <summary>
+    /// Özet (icmal) sayfasının adı. Verilirse kısımların özetteki
+    /// adları okunup alias olarak taşınır. Boşsa alias okunmaz.
+    /// </summary>
+    string? AliasSheetName = null,
+    /// <summary>Özet sayfasında kısım kodunun bulunduğu sütun.</summary>
+    int? AliasCodeColumn = null,
+    /// <summary>Özet sayfasında kısım adının bulunduğu sütun.</summary>
+    int? AliasNameColumn = null);
 
 /// <summary>
 /// Sözleşme icmalini KULLANICININ EŞLEDİĞİ sütunlardan okur.
@@ -246,7 +255,103 @@ public static class ContractSummaryMappedParser
                 currentGroup));
         }
 
-        return new ContractSummaryParseResult(lines, errors);
+        var aliasNote = ApplyAliases(workbook, mapping, lines);
+
+        return new ContractSummaryParseResult(lines, errors, aliasNote);
+    }
+
+    /// <summary>
+    /// Özet (icmal) sayfasındaki kısım adlarını okuyup detay
+    /// kısımlarına alias olarak bağlar.
+    ///
+    /// EŞLEŞTİRME SIRAYA GÖRE, çünkü adlar zaten tutmuyor — tutsalardı
+    /// alias'a gerek olmazdı. Sıra dışında ortak bir anahtar yok.
+    ///
+    /// SAYILAR TUTMUYORSA HİÇ EŞLEŞTİRİLMEZ. Sıra eşleştirmesi ancak
+    /// iki listenin aynı şeyi aynı sırada anlattığı varsayımıyla
+    /// doğrudur; sayı farklıysa varsayım çökmüştür ve kaydırılmış bir
+    /// eşleştirme, kısımları birbirine karıştırıp hakedişi yanlış
+    /// satıra yazardı. Sebebi not olarak dönüyor.
+    /// </summary>
+    private static string? ApplyAliases(
+        XLWorkbook workbook,
+        ContractSummaryMapping mapping,
+        List<ContractSummaryParsedLine> lines)
+    {
+        if (mapping.AliasSheetName is null ||
+            mapping.AliasCodeColumn is not int codeColumn ||
+            mapping.AliasNameColumn is not int nameColumn)
+        {
+            return null;
+        }
+
+        var sheet = workbook.Worksheets
+            .FirstOrDefault(x => x.Name == mapping.AliasSheetName);
+
+        if (sheet is null)
+            return $"Özet sayfası \"{mapping.AliasSheetName}\" dosyada bulunamadı.";
+
+        var aliases = new List<string>();
+        var lastRow = sheet.LastRowUsed()?.RowNumber() ?? 0;
+
+        for (var row = 1; row <= lastRow; row++)
+        {
+            var code = Text(sheet, row, codeColumn);
+            var name = Text(sheet, row, nameColumn);
+
+            // Kısım satırının işareti: kodu RAKAMLA başlıyor. Başlık
+            // satırı ("Poz"), genel toplam ve imza blokları böylece
+            // kendiliğinden eleniyor; ayrı bir "ilk satır" ayarı
+            // istemeye gerek kalmıyor.
+            if (name.Length == 0 || code.Length == 0 || !char.IsDigit(code[0]))
+                continue;
+
+            aliases.Add(name);
+        }
+
+        var sections = lines.Where(x => x.IsSectionHeader).ToList();
+
+        if (aliases.Count == 0)
+            return $"Özet sayfasında kısım satırı bulunamadı.";
+
+        if (aliases.Count != sections.Count)
+        {
+            return $"Özet sayfasında {aliases.Count} kısım var, detayda " +
+                   $"{sections.Count}. Sayılar tutmadığı için adlar " +
+                   "eşleştirilmedi.";
+        }
+
+        for (var index = 0; index < sections.Count; index++)
+        {
+            var position = lines.IndexOf(sections[index]);
+            lines[position] = sections[index] with { AliasName = aliases[index] };
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// İki kısım adının aynı şeyi anlatıp anlatmadığı.
+    ///
+    /// Boşluk ve "&" farkları gerçek fark değil ("PANOLAR &TABLOLAR"
+    /// ile "PANOLAR & TABLOLAR" aynı kısım). Bunları eşit saymazsak
+    /// kullanıcı, hiçbir bilgi taşımayan onaylarla boğulur ve gerçek
+    /// farkı gözden kaçırır. NATURA icmalinde ölçüldü: normalize
+    /// edilmeden 7, edilerek 5 çift farklı çıkıyor.
+    /// </summary>
+    public static bool NamesMatch(string? left, string? right)
+    {
+        static string Normalize(string? value) =>
+            System.Text.RegularExpressions.Regex.Replace(
+                (value ?? string.Empty)
+                    .ToUpperInvariant()
+                    .Replace("&", " VE ")
+                    .Replace("(", " ")
+                    .Replace(")", " "),
+                @"\s+",
+                " ").Trim();
+
+        return Normalize(left) == Normalize(right);
     }
 
     /// <summary>
