@@ -3,6 +3,7 @@ using EnderunAI.Api.Security;
 using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Accounting;
 using EnderunAI.Api.Services.Expenses;
+using EnderunAI.Api.Services.FinancialInstruments;
 using EnderunAI.Api.Services.HumanResources;
 using EnderunAI.Api.Services.Procurement;
 using EnderunAI.Api.Services.Projects;
@@ -77,6 +78,7 @@ public sealed class ManagementKpiService(
     IHrApprovalService payroll,
     ProcurementDashboardService procurement,
     IChequeService cheques,
+    FinancialInstrumentSummaryService instruments,
     ILogger<ManagementKpiService> logger)
 {
     public async Task<ManagementKpiResponse> GetAsync(
@@ -213,6 +215,39 @@ public sealed class ManagementKpiService(
                     $"{summary.IssuedOpenCount} keşide · " +
                     $"portföyde {TurkishFormat.Amount(summary.ReceivedPortfolioAmount)}",
                     null, null, "/finans/cekler");
+            });
+
+        await AddAsync(kpis, unavailable,
+            PermissionCatalog.Keys.FinanceView, "instrument.outflow", "Finansal araç yükü",
+            async () =>
+            {
+                // Pencere nakit projeksiyonuyla aynı: iki kart aynı
+                // dönemi anlatmalı, yoksa "neden tutmuyor" sorusu çıkar.
+                var window = await instruments.GetAsync(
+                    companyId,
+                    DateTime.UtcNow.Date,
+                    DateTime.UtcNow.Date.AddMonths(6),
+                    cancellationToken);
+
+                var detail = window.NextOutflowDate is DateTime next
+                    ? $"En yakın: {next:dd.MM.yyyy} · " +
+                      $"{TurkishFormat.Amount(window.NextOutflowAmount)}" +
+                      (window.NextOutflowTitle is null ? "" : $" ({window.NextOutflowTitle})")
+                    : "Önümüzdeki 6 ayda nakit çıkışı yok.";
+
+                // Barter NAKİT DIŞI, toplama girmiyor; ayrı satırda
+                // duruyor ki likidite olduğundan iyi görünmesin.
+                var note = window.BarterReceivable > 0m
+                    ? $"Ayrıca {TurkishFormat.Amount(window.BarterReceivable)} barter " +
+                      "alacağı var — nakit değil, mal/hizmetle kapanır."
+                    : null;
+
+                return new ManagementKpi(
+                    "instrument.outflow", "Finansal araç yükü (6 ay)",
+                    window.TotalCashOutflow, KpiValueKind.Money,
+                    $"{window.LoanInstallmentCount} taksit · " +
+                    $"{window.CardStatementCount} ekstre · {detail}",
+                    note, null, "/finans/finansal-araclar");
             });
 
         return new ManagementKpiResponse(

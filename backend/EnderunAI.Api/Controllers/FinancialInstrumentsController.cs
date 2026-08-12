@@ -54,8 +54,44 @@ public sealed record SaveCreditCardRequest(
 public sealed class FinancialInstrumentsController(
     AppDbContext db,
     BankLoanService loans,
-    CreditCardService cards) : ControllerBase
+    CreditCardService cards,
+    FinancialInstrumentSummaryService summary) : ControllerBase
 {
+    /// <summary>
+    /// Kredi, kart ve barter özeti.
+    ///
+    /// Rakamlar araçların nakit akışa verdiği satırlardan OKUNUYOR;
+    /// taksit planı, ekstre dönemi ve barter mahsubu kuralları burada
+    /// tekrarlanmıyor. Aksi hâlde aynı taksit nakit akış takviminde
+    /// bir tutarla, özette başkasıyla görünebilirdi.
+    /// </summary>
+    [HttpGet("ozet")]
+    [RequirePermission(PermissionCatalog.Keys.FinanceView)]
+    public async Task<IActionResult> GetSummary(
+        [FromQuery] Guid companyId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken)
+    {
+        if (companyId == Guid.Empty)
+            return BadRequest(new { message = "Şirket seçimi zorunludur." });
+
+        // Varsayılan pencere: bugünden altı ay. Nakit akış
+        // projeksiyonunun varsayılanıyla aynı ki iki ekran aynı
+        // dönemi anlatsın.
+        var start = from ?? DateTime.UtcNow.Date;
+        var end = to ?? start.AddMonths(6);
+
+        if (end < start)
+            return BadRequest(new { message = "Bitiş tarihi başlangıçtan önce olamaz." });
+
+        return Ok(await summary.GetAsync(
+            companyId,
+            DateTime.SpecifyKind(start, DateTimeKind.Utc),
+            DateTime.SpecifyKind(end, DateTimeKind.Utc),
+            cancellationToken));
+    }
+
     // ---------------- Banka kredisi ----------------
 
     [HttpGet("krediler")]

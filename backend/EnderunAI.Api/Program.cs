@@ -231,6 +231,7 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.RecurringExpenseServi
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.ExpenseCenterReportService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Procurement.ProcurementDashboardService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Projects.ProjectProfitabilitySummaryService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.FinancialInstrumentSummaryService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Management.ManagementKpiService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Expenses.PartnerAccountService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Notifications.NotificationStore>();
@@ -280,8 +281,12 @@ builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.IFinancia
     x => x.GetRequiredService<EnderunAI.Api.Services.FinancialInstruments.BankLoanService>());
 builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.IFinancialInstrumentSource>(
     x => x.GetRequiredService<EnderunAI.Api.Services.FinancialInstruments.CreditCardService>());
-builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.IFinancialInstrumentSource,
-    EnderunAI.Api.Services.FinancialInstruments.BarterInstrumentService>();
+// Barter da diğer ikisi gibi ÖNCE somut tip olarak kaydediliyor:
+// özet servisi üçünü de somut tipiyle istiyor. Yalnız arayüz olarak
+// kayıtlı kalsaydı uygulama açılışta DI doğrulamasında düşerdi.
+builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.BarterInstrumentService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.FinancialInstruments.IFinancialInstrumentSource>(
+    x => x.GetRequiredService<EnderunAI.Api.Services.FinancialInstruments.BarterInstrumentService>());
 builder.Services.AddScoped<IHakedisAnalysisService, HakedisAnalysisService>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Hakedis.IProgressTrackingService,

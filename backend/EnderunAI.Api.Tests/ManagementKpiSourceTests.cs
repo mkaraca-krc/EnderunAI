@@ -246,6 +246,48 @@ public sealed class ManagementKpiSourceTests(DatabaseFixture fixture)
         Assert.Equal(expected, kpi!.Value.GetProperty("value").GetDecimal());
     }
 
+    [Fact]
+    public async Task FinansalAracKpisi_AracOzetiIleAyniTutariVerir()
+    {
+        var companyId = await EnsureCompanyAsync(fixture);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var kpiResponse = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/yonetim/kpi?companyId={companyId}");
+
+        var summary = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/finansal-araclar/ozet?companyId={companyId}");
+
+        var kpi = FindKpi(kpiResponse, "instrument.outflow");
+        Assert.NotNull(kpi);
+
+        Assert.Equal(
+            summary.GetProperty("totalCashOutflow").GetDecimal(),
+            kpi!.Value.GetProperty("value").GetDecimal());
+    }
+
+    /// <summary>
+    /// Barter NAKİT DEĞİLDİR: mal/hizmetle kapanır, kasaya para
+    /// girmez. Nakit çıkış toplamına karışsaydı likidite olduğundan
+    /// iyi ya da kötü görünürdü.
+    /// </summary>
+    [Fact]
+    public async Task AracOzeti_BarterAlacaginiNakitToplamaKatmaz()
+    {
+        var companyId = await EnsureCompanyAsync(fixture);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var summary = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/finansal-araclar/ozet?companyId={companyId}");
+
+        var installments = summary.GetProperty("loanInstallmentOutflow").GetDecimal();
+        var statements = summary.GetProperty("cardStatementOutflow").GetDecimal();
+        var total = summary.GetProperty("totalCashOutflow").GetDecimal();
+
+        // Toplam yalnızca taksit + ekstredir; barter ayrı alanda durur.
+        Assert.Equal(installments + statements, total);
+    }
+
     /// <summary>
     /// Yetkisi olmayan KPI yanıta HİÇ girmemeli — "unavailable"
     /// listesine bile. Kilitli bir kart, o göstergenin var olduğunu
