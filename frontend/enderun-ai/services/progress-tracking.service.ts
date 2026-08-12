@@ -146,6 +146,18 @@ export const progressTrackingService = {
   },
 };
 
+/** Hakedişe aktarılmaya uygun ilave iş — uçtan süzülmüş hâli. */
+export type TransferableExtraWork = {
+  id: string;
+  projectHakedisSectionId?: string | null;
+  positionCode: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+};
+
 export const extraWorkService = {
   list(projectId: string) {
     return apiClient<ProjectExtraWork[]>(
@@ -182,6 +194,29 @@ export const extraWorkService = {
     return apiClient<{ message: string }>(
       `project-extra-works/${id}/reject`,
       { method: "POST", body: { approvalDocumentId: null, notes: notes ?? null } }
+    );
+  },
+
+  /**
+   * Hakedişe aktarılabilecek ilave işler.
+   *
+   * KURAL BURADA TEKRARLANMIYOR: reddedilenleri ve zaten aktarılmış
+   * olanları uç eliyor, anahtar teslim sözleşmede yalnızca işveren
+   * onaylı olanı veriyor. Ekran "onaylı ve hakedişsiz" diye kendi
+   * süzgecini kursaydı, sözleşme türü kuralını ikinci kez yazmış
+   * olurdu — anahtar teslimde onaysız ek iş devredilebilir görünürdü.
+   */
+  transferable(projectId: string) {
+    return apiClient<TransferableExtraWork[]>(
+      `project-extra-works/transferable?projectId=${projectId}`
+    );
+  },
+
+  /** İlave işi bir hakedişe bağlar; uç tekrar aktarımı engeller. */
+  transfer(id: string, progressPaymentId: string) {
+    return apiClient<{ message: string }>(
+      `project-extra-works/${id}/transfer/${progressPaymentId}`,
+      { method: "POST" }
     );
   },
 };

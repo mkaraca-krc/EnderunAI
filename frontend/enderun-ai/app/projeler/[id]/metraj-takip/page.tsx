@@ -5,9 +5,11 @@ import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { Modal, Select } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
 import {
   progressPaymentService,
+  type ProgressPaymentListItem,
   type ProjectHakedisSection,
 } from "@/services/progress-payment.service";
 import {
@@ -23,6 +25,7 @@ import {
   type ProgressTracking,
   type ProjectExtraWork,
   type TrackingItem,
+  type TransferableExtraWork,
 } from "@/services/progress-tracking.service";
 
 const money = new Intl.NumberFormat("tr-TR", {
@@ -88,6 +91,16 @@ export default function MetrajTakipPage() {
   const [extraWorks, setExtraWorks] = useState<ProjectExtraWork[]>([]);
   const [sections, setSections] = useState<ProjectHakedisSection[]>([]);
   const [documents, setDocuments] = useState<ProjectDocumentListItem[]>([]);
+
+  // Hakedişe aktarım: hangi ilave işlerin aktarılabileceğini UÇ
+  // söylüyor (sözleşme türü kuralı orada), hedef hakediş listesi de
+  // projeye ait hakedişlerden geliyor.
+  const [transferable, setTransferable] = useState<TransferableExtraWork[]>([]);
+  const [payments, setPayments] = useState<ProgressPaymentListItem[]>([]);
+  const [transferTarget, setTransferTarget] =
+    useState<ProjectExtraWork | null>(null);
+  const [transferPaymentId, setTransferPaymentId] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -112,17 +125,30 @@ export default function MetrajTakipPage() {
     setError("");
 
     try {
-      const [tracking, works, sectionRows, documentRows] = await Promise.all([
+      const [
+        tracking,
+        works,
+        sectionRows,
+        documentRows,
+        transferableRows,
+        paymentRows,
+      ] = await Promise.all([
         progressTrackingService.get(params.id),
         extraWorkService.list(params.id).catch(() => []),
         progressPaymentService.getProjectSections(params.id).catch(() => []),
         projectDocumentService.getAll(params.id).catch(() => []),
+        extraWorkService.transferable(params.id).catch(() => []),
+        progressPaymentService
+          .getAll({ projectId: params.id })
+          .catch(() => []),
       ]);
 
       setData(tracking);
       setExtraWorks(works);
       setSections(sectionRows.filter((x) => x.isActive));
       setDocuments(documentRows);
+      setTransferable(transferableRows);
+      setPayments(paymentRows);
     } catch (loadError) {
       setError(getErrorMessage(loadError));
     } finally {
@@ -212,6 +238,42 @@ export default function MetrajTakipPage() {
       await load();
     } catch (rejectError) {
       setError(getErrorMessage(rejectError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openTransfer(work: ProjectExtraWork) {
+    setTransferTarget(work);
+
+    // Tek hakediş varsa önceden seç; birden fazlaysa seçim zorunlu
+    // kalsın — yanlış hakedişe aktarım uçta geri alınamıyor.
+    setTransferPaymentId(payments.length === 1 ? payments[0].id : "");
+    setError("");
+    setNotice("");
+  }
+
+  async function confirmTransfer() {
+    if (!transferTarget || !transferPaymentId || busy) return;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const result = await extraWorkService.transfer(
+        transferTarget.id,
+        transferPaymentId
+      );
+
+      setNotice(result.message);
+      setTransferTarget(null);
+      setTransferPaymentId("");
+      await load();
+    } catch (transferError) {
+      // Hata modalda kalıyor: kullanıcı neyi aktarmaya çalıştığını
+      // görürken mesajı okumalı.
+      setError(getErrorMessage(transferError));
     } finally {
       setBusy(false);
     }
@@ -506,8 +568,11 @@ export default function MetrajTakipPage() {
                       data.contractType === ProjectContractType.LumpSum
                     }
                     busy={busy}
+                    canTransfer={transferable.some((x) => x.id === work.id)}
+                    hasPayments={payments.length > 0}
                     onApprove={approve}
                     onReject={reject}
+                    onTransfer={openTransfer}
                   />
                 ))}
               </tbody>
@@ -575,6 +640,74 @@ export default function MetrajTakipPage() {
           </table>
         </div>
       </div>
+
+      <Modal
+        open={transferTarget !== null}
+        title="İlave işi hakedişe aktar"
+        description="Aktarılan ilave iş o hakedişe bağlanır ve bir daha aktarılamaz."
+        busy={busy}
+        onClose={() => {
+          setTransferTarget(null);
+          setTransferPaymentId("");
+        }}
+        footer={
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setTransferTarget(null);
+                setTransferPaymentId("");
+              }}
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              disabled={busy || !transferPaymentId}
+              onClick={() => void confirmTransfer()}
+            >
+              {busy ? "Aktarılıyor..." : "Aktar"}
+            </button>
+          </div>
+        }
+      >
+        {transferTarget && (
+          <div style={{ display: "grid", gap: 14 }}>
+            <div>
+              <strong>{transferTarget.positionCode}</strong> —{" "}
+              {transferTarget.description}
+              <div style={{ marginTop: 4, color: "#64748b" }}>
+                {quantity.format(transferTarget.quantity)} {transferTarget.unit}{" "}
+                × {money.format(transferTarget.unitPrice)} ={" "}
+                <strong>{money.format(transferTarget.amount)}</strong>
+              </div>
+            </div>
+
+            <Select
+              label="Hedef hakediş"
+              value={transferPaymentId}
+              onChange={(event) => setTransferPaymentId(event.target.value)}
+              placeholder="Hakediş seçin"
+              options={payments.map((payment) => ({
+                label:
+                  `${payment.progressPaymentNumber} · ` +
+                  `${payment.periodNumber}. dönem · ` +
+                  new Date(payment.progressPaymentDate).toLocaleDateString(
+                    "tr-TR"
+                  ),
+                value: payment.id,
+              }))}
+            />
+
+            {/* Geri alınamaz bir işlem; kullanıcı onaydan önce bilmeli. */}
+            <p style={{ color: "#b45309", margin: 0 }}>
+              Bu işlem geri alınamaz. Yanlış hakedişe aktarılan ilave iş
+              yalnızca kaynağından düzeltilebilir.
+            </p>
+          </div>
+        )}
+      </Modal>
     </ErpShell>
   );
 }
@@ -592,15 +725,22 @@ function ExtraWorkRow({
   documents,
   requiresDocument,
   busy,
+  canTransfer,
+  hasPayments,
   onApprove,
   onReject,
+  onTransfer,
 }: {
   work: ProjectExtraWork;
   documents: ProjectDocumentListItem[];
   requiresDocument: boolean;
   busy: boolean;
+  /** Uç bu işi aktarılabilir saydı mı — kural burada tekrarlanmıyor. */
+  canTransfer: boolean;
+  hasPayments: boolean;
   onApprove: (work: ProjectExtraWork, documentId: string) => void;
   onReject: (work: ProjectExtraWork) => void;
+  onTransfer: (work: ProjectExtraWork) => void;
 }) {
   const [documentId, setDocumentId] = useState("");
 
@@ -675,6 +815,21 @@ function ExtraWorkRow({
               Reddet
             </button>
           </div>
+        )}
+
+        {canTransfer && (
+          <button
+            type="button"
+            disabled={busy || !hasPayments}
+            title={
+              hasPayments
+                ? undefined
+                : "Bu projede henüz hakediş yok; önce hakediş oluşturun."
+            }
+            onClick={() => onTransfer(work)}
+          >
+            Hakedişe aktar
+          </button>
         )}
       </td>
     </tr>
