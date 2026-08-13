@@ -2,6 +2,7 @@ using EnderunAI.Api.Contracts.Purchasing;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.DocumentNumbers;
+using EnderunAI.Api.Services.Engineering;
 using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Services.Purchasing.Automation;
@@ -156,6 +157,7 @@ public sealed class PurchaseRequestGenerator(
                     .OrderBy(y => y.MaterialName)
                     .Select(y => new
                     {
+                        y.InventoryItemId,
                         y.MaterialCode,
                         y.MaterialName,
                         y.Quantity,
@@ -166,94 +168,56 @@ public sealed class PurchaseRequestGenerator(
             })
             .ToListAsync(cancellationToken);
 
-        var consolidatedMaterials =
-            new Dictionary<string, ConsolidatedMaterial>(
-                StringComparer.OrdinalIgnoreCase);
-
-        var missingRecipeLines = new List<int>();
-
-        foreach (var offerItem in sourceItems)
-        {
-            var positionId = ResolvePositionId(
-                offerItem,
-                positionIds,
-                positionIdByCode);
-
-            var recipe = offerItem.EngineeringRecipeId.HasValue
-                ? recipes.FirstOrDefault(
-                    x => x.Id ==
-                         offerItem.EngineeringRecipeId.Value)
-                : recipes
-                    .Where(x =>
-                        x.EngineeringPositionId == positionId)
-                    .OrderByDescending(x => x.IsDefault)
-                    .ThenByDescending(x => x.Version)
-                    .FirstOrDefault();
-
-            if (recipe is null)
+        // HESAP BURADA YAPILMIYOR: malzeme ihtiyacı ortak motordan
+        // (MaterialRequirementCalculator) okunuyor. Aynı hesap proje
+        // malzeme tedarikinde de kullanılıyor; iki kopya zamanla
+        // ayrışır ve aynı iş için iki farklı miktar üretirdi.
+        var sources = sourceItems
+            .Select(offerItem =>
             {
-                missingRecipeLines.Add(offerItem.LineNumber);
-                continue;
-            }
+                var positionId = ResolvePositionId(
+                    offerItem,
+                    positionIds,
+                    positionIdByCode);
 
-            foreach (var material in recipe.Materials)
-            {
-                var materialCode =
-                    material.MaterialCode?.Trim() ?? string.Empty;
+                var recipe = offerItem.EngineeringRecipeId.HasValue
+                    ? recipes.FirstOrDefault(
+                        x => x.Id == offerItem.EngineeringRecipeId.Value)
+                    : recipes
+                        .Where(x => x.EngineeringPositionId == positionId)
+                        .OrderByDescending(x => x.IsDefault)
+                        .ThenByDescending(x => x.Version)
+                        .FirstOrDefault();
 
-                var materialName =
-                    material.MaterialName.Trim();
+                return new MaterialRequirementSource(
+                    offerItem.LineNumber,
+                    offerItem.PositionNumber,
+                    null,
+                    offerItem.Quantity,
+                    recipe?.Materials
+                        .Select(y => new MaterialRequirementRecipeLine(
+                            y.InventoryItemId,
+                            y.MaterialCode,
+                            y.MaterialName,
+                            y.Unit,
+                            y.Quantity,
+                            y.WastePercent))
+                        .ToList());
+            })
+            .ToList();
 
-                var unit = material.Unit.Trim();
+        var requirement = MaterialRequirementCalculator.Calculate(sources);
 
-                var effectiveRecipeQuantity = decimal.Round(
-                    material.Quantity *
-                    (1m + material.WastePercent / 100m),
-                    6);
-
-                var requiredQuantity = decimal.Round(
-                    offerItem.Quantity *
-                    effectiveRecipeQuantity,
-                    4);
-
-                if (requiredQuantity <= 0)
-                    continue;
-
-                var groupingIdentity =
-                    !string.IsNullOrWhiteSpace(materialCode)
-                        ? $"CODE:{materialCode}|UNIT:{unit}"
-                        : $"NAME:{materialName}|UNIT:{unit}";
-
-                if (!consolidatedMaterials.TryGetValue(
-                        groupingIdentity,
-                        out var consolidated))
-                {
-                    consolidated =
-                        new ConsolidatedMaterial(
-                            materialCode,
-                            materialName,
-                            unit);
-
-                    consolidatedMaterials.Add(
-                        groupingIdentity,
-                        consolidated);
-                }
-
-                consolidated.Quantity += requiredQuantity;
-                consolidated.SourceOfferLines.Add(
-                    offerItem.LineNumber);
-            }
-        }
-
-        if (consolidatedMaterials.Count == 0)
+        if (requirement.Materials.Count == 0)
         {
-            var missingText = missingRecipeLines.Count > 0
-                ? $" Reçetesi bulunamayan teklif satırları: {string.Join(", ", missingRecipeLines)}."
+            var missingText = requirement.MissingRecipes.Count > 0
+                ? " Reçetesi bulunamayan teklif satırları: " +
+                  string.Join(", ", requirement.MissingRecipes.Select(x => x.LineNumber))
                 : string.Empty;
 
             throw new InvalidOperationException(
                 "Teklif reçetelerinden satın alma malzemesi üretilemedi." +
-                missingText);
+                missingText + ".");
         }
 
         var requestNumber =
@@ -280,9 +244,7 @@ public sealed class PurchaseRequestGenerator(
 
         var lineNumber = 1;
 
-        foreach (var material in consolidatedMaterials.Values
-                     .OrderBy(x => x.MaterialName)
-                     .ThenBy(x => x.Unit))
+        foreach (var material in requirement.Materials)
         {
             var description =
                 string.IsNullOrWhiteSpace(material.MaterialCode)
@@ -292,16 +254,19 @@ public sealed class PurchaseRequestGenerator(
             entity.Items.Add(new PurchaseRequestItem
             {
                 LineNumber = lineNumber++,
+
+                // Stok kartı bağı taşınıyor: talep kalemi hangi
+                // malzemeye ait, sonradan sorulabilsin. Reçete kartsız
+                // kurulmuşsa null kalır.
+                InventoryItemId = material.InventoryItemId,
+
                 MaterialDescription = description,
-                Quantity = decimal.Round(
-                    material.Quantity,
-                    4),
+                Quantity = material.Quantity,
                 Unit = material.Unit,
-                RequestedDeliveryDate =
-                    request.NeededByDate?.Date,
+                RequestedDeliveryDate = request.NeededByDate?.Date,
                 Notes =
                     $"Kaynak teklif: {offer.OfferNumber}. " +
-                    $"Teklif satırları: {string.Join(", ", material.SourceOfferLines.OrderBy(x => x))}."
+                    $"Teklif satırları: {string.Join(", ", material.SourceLineNumbers)}."
             });
         }
 
@@ -368,25 +333,5 @@ public sealed class PurchaseRequestGenerator(
             throw new ArgumentException(
                 "Geçersiz satın alma talebi önceliği.");
         }
-    }
-
-    private sealed class ConsolidatedMaterial(
-        string materialCode,
-        string materialName,
-        string unit)
-    {
-        public string MaterialCode { get; } =
-            materialCode;
-
-        public string MaterialName { get; } =
-            materialName;
-
-        public string Unit { get; } =
-            unit;
-
-        public decimal Quantity { get; set; }
-
-        public HashSet<int> SourceOfferLines { get; } =
-            [];
     }
 }
