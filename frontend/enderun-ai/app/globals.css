@@ -56,9 +56,51 @@
   --color-brand-800: #115f62;
   --color-brand-900: #0f4648;
   --color-brand-950: #0b2c2d;
+
+  /*
+   * SEMANTİK TOKENLAR — Redwood esinli arayüzün tek kaynağı.
+   *
+   * Bunlar Tailwind theme'e bağlı olduğu için sınıf olarak da
+   * kullanılabilir (bg-surface-card, text-brand-primary…). Bileşenler
+   * HAM HEX YAZMAZ, bu tokenları tüketir: marka rengi değiştiğinde tek
+   * satır değişir, 175 sayfa değil.
+   *
+   * BU ADIMDA HİÇBİR EKRAN BU TOKENLARA GEÇİRİLMEDİ. Tokenlar tanımlı
+   * ama tüketilmiyor; görünüm birebir aynı kalıyor. Sonraki adımlar
+   * (shell, referans ekranlar, yayma) bunları kullanacak.
+   *
+   * Marka teali (#165C5C) mevcut brand-900 (#0f4648) ailesiyle akraba
+   * ama aynı değil: gerçek kurumsal hex geldiğinde burada tek satır
+   * güncellenir.
+   */
+
+  /* Marka — tek vurgu */
+  --color-brand-primary: #165c5c;
+  --color-brand-primary-hover: #114a4a;
+  --color-brand-primary-tint: #e6f0f0;
+  --color-brand-on-primary: #ffffff;
+  /* Koyu temada vurgu: koyu zeminde #165C5C kontrastı düşük kalıyor. */
+  --color-brand-primary-dark: #4fb0ae;
+
+  /* Anlamsal — marka tealiyle uyumlu, doygunluğu ölçülü */
+  --color-semantic-success: #2e7d5b;
+  --color-semantic-warning: #b7791f;
+  --color-semantic-danger: #b23a3a;
+  --color-semantic-info: #165c5c;
+
+  /* Nötr yüzeyler */
+  --color-surface-bg: #f4f6f6;
+  --color-surface-card: #ffffff;
+  --color-border-subtle: #e2e8e8;
 }
 
 :root {
+  /*
+   * Gölge Tailwind renk tokenı değil; @theme dışında tanımlanıyor.
+   * Redwood imzası: ölçülü, iki katmanlı yumuşak gölge.
+   */
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+
   --background: #021617;
   --foreground: #f8fcfc;
 }
@@ -2795,4 +2837,22 @@ body {
 .erp-status.red {
   background: #fdecea;
   color: #b3261e;
+}
+
+
+/*
+ * Sağdan kayan panelin açılış hareketi. Tek yerde tanımlı; bileşen
+ * kendi animasyonunu yazmıyor. motion-safe ile sarılı olduğu için
+ * hareket azaltma tercihi olan kullanıcıda çalışmaz.
+ */
+@keyframes drawer-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }

@@ -1,12 +1,8 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  type ReactNode,
-} from "react";
+import { useCallback, useId, useRef, type ReactNode } from "react";
+
+import { useDialogBehavior } from "./use-dialog-behavior";
 
 type ModalSize = "sm" | "md" | "lg";
 
@@ -33,16 +29,6 @@ const WIDTHS: Record<ModalSize, string> = {
   lg: "max-w-4xl",
 };
 
-/** Odak tuzağının döneceği elemanlar. */
-const FOCUSABLE = [
-  "a[href]",
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  '[tabindex]:not([tabindex="-1"])',
-].join(",");
-
 /**
  * Uygulama içi diyalog — TARAYICI PENCERESİ DEĞİL.
  *
@@ -67,7 +53,6 @@ export function Modal({
   busy = false,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const restoreRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
   const descriptionId = useId();
 
@@ -75,68 +60,11 @@ export function Modal({
     if (!busy) onClose();
   }, [busy, onClose]);
 
-  useEffect(() => {
-    if (!open) return;
-
-    restoreRef.current = document.activeElement as HTMLElement | null;
-
-    const { overflow } = document.body.style;
-    document.body.style.overflow = "hidden";
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        requestClose();
-        return;
-      }
-
-      if (event.key !== "Tab") return;
-
-      const panel = panelRef.current;
-      if (!panel) return;
-
-      const focusable = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)]
-        .filter((element) => element.offsetParent !== null);
-
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-
-      // Odak tuzağı: son elemandan sonra başa, ilkinden geriye sona.
-      // Olmadan Tab kullanıcıyı arkadaki listeye düşürür ve diyalog
-      // klavyeyle kullanılamaz hale gelir.
-      if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first.focus();
-      } else if (event.shiftKey && active === first) {
-        event.preventDefault();
-        last.focus();
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown, true);
-
-    const timer = window.setTimeout(() => {
-      const panel = panelRef.current;
-      if (!panel) return;
-
-      const focusable = panel.querySelector<HTMLElement>(FOCUSABLE);
-
-      (focusable ?? panel).focus();
-    }, 0);
-
-    return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
-      document.body.style.overflow = overflow;
-      window.clearTimeout(timer);
-      restoreRef.current?.focus?.();
-    };
-  }, [open, requestClose]);
+  // ORTAK DAVRANIŞ: Esc, odak tuzağı, ilk alana odak, kapanışta odağın
+  // geri dönmesi ve arkadaki sayfanın kilitlenmesi drawer ile AYNI
+  // kancadan geliyor. İki bileşende ayrı yazılsaydı biri düzeltilip
+  // diğeri unutulurdu.
+  useDialogBehavior({ open, panelRef, onRequestClose: requestClose });
 
   if (!open) return null;
 
