@@ -1,5 +1,6 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Models.Expenses;
 using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,6 +22,7 @@ namespace EnderunAI.Api.Controllers;
 public sealed class FinanceDashboardController(
     AppDbContext db,
     Services.Projects.IProjectRealizedCostReader realizedCosts,
+    Services.Expenses.ExpenseCenterReportService expenseCenterReport,
     IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
 {
     private static readonly ProgressPaymentStatus[] RealizedProgressPaymentStatuses =
@@ -105,18 +107,64 @@ public sealed class FinanceDashboardController(
 
         var periodRevenue = await paymentQuery.SumAsync(x => x.CurrentAmount, cancellationToken);
 
-        // DÖNEM GİDERİ ORTAK OKUYUCUDAN: maliyet defteri + projelere
+        var canSeeCash =
+            await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken);
+
+        // PROJE GİDERİ ORTAK OKUYUCUDAN: maliyet defteri + projelere
         // yazılmış elle gider kayıtları. Pano kendi sorgusunu tutsaydı,
         // proje maliyet analizi kirayı sayarken pano saymaz ve iki ekran
         // aynı dönem için farklı gider gösterirdi.
+        var projectExpense = await realizedCosts.ReadProjectCostTotalAsync(
+            companyId, rangeStart, rangeEndExclusive, canSeeCash, cancellationToken);
+
+        // MERKEZ/ŞUBE GİDERİ GİDER MERKEZİ RAPORUNDAN OKUNUYOR — burada
+        // yeniden toplanmıyor. İkinci bir sorgu yazılsaydı rapor ile
+        // pano zamanla ayrışır ve aynı ay için iki farklı merkez gideri
+        // çıkardı.
         //
-        // Elden kalemler yalnız yetkili kullanıcının rakamına girer.
-        var periodExpense = await realizedCosts.ReadProjectCostTotalAsync(
-            companyId,
-            rangeStart,
-            rangeEndExclusive,
-            await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken),
-            cancellationToken);
+        // TAHMİNİ SATIRLAR HARİÇ: tekrarlayan giderin henüz
+        // gerçekleşmemiş dönemleri raporda tahmini olarak duruyor.
+        // Panonun dönem gideri ve net kâr/zararı gerçekleşen rakamdır;
+        // tahmin karıştırmak ikisini de belirsizleştirirdi.
+        //
+        // FİNANSMAN AYRI SATIR: kredi faizi gerçekleşen bir giderdir ama
+        // faaliyet gideri değildir. Dönem giderine gömülseydi proje ve
+        // merkez maliyet karşılaştırması finansman yapısıyla bulanırdı;
+        // dışarıda bırakmak da sessiz dışlama olurdu — bu yüzden ayrı
+        // gösteriliyor.
+        var reportCompanyIds = await db.Companies
+            .AsNoTracking()
+            .Where(x => companyId == null || x.Id == companyId)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var centralExpense = 0m;
+        var financingExpense = 0m;
+
+        foreach (var reportCompanyId in reportCompanyIds)
+        {
+            var report = await expenseCenterReport.BuildAsync(
+                reportCompanyId,
+                rangeStart,
+                // Rapor bitiş tarihini DAHİL alıyor, pano aralığı hariç
+                // tutuyor; sınır burada bir kez çevriliyor.
+                rangeEndExclusive.AddDays(-1),
+                cancellationToken);
+
+            foreach (var row in report.Rows.Where(x =>
+                         x.CenterType == ExpenseCenterType.Branch && !x.IsEstimated))
+            {
+                if (row.CategoryCode == Services.Expenses.ExpenseCategoryCatalog.Financing)
+                    financingExpense += row.Amount;
+                else
+                    centralExpense += row.Amount;
+            }
+        }
+
+        centralExpense = decimal.Round(centralExpense, 2);
+        financingExpense = decimal.Round(financingExpense, 2);
+
+        var periodExpense = decimal.Round(projectExpense + centralExpense, 2);
         var netResult = decimal.Round(periodRevenue - periodExpense, 2);
 
         // Kasa/banka hareketi ve cari tahsilat/ödeme defteri koda hiç
@@ -155,6 +203,12 @@ public sealed class FinanceDashboardController(
                 todayPayments = 0m,
                 periodRevenue,
                 periodExpense,
+
+                // Kırılım ekranda da görünsün: toplam tam kapansın ve
+                // rakamın nereden geldiği okunabilsin.
+                projectExpense,
+                centralExpense,
+                financingExpense,
                 netProfit = netResult > 0 ? netResult : 0m,
                 netLoss = netResult < 0 ? -netResult : 0m,
                 cashInflow = 0m,
