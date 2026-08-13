@@ -55,17 +55,12 @@ public sealed class ProjectCostClassificationTests(DatabaseFixture fixture)
             ProjectCostClassifier.ForSupplierInvoice(SupplierInvoiceType.Stock, "740.03.11"));
     }
 
-    [Theory]
-    [InlineData(ProjectCostType.Material, ProjectCostClass.Material)]
-    [InlineData(ProjectCostType.Labor, ProjectCostClass.Labor)]
-    [InlineData(ProjectCostType.Subcontractor, ProjectCostClass.SubcontractorLabor)]
-    [InlineData(ProjectCostType.Equipment, ProjectCostClass.Overhead)]
-    [InlineData(ProjectCostType.Overhead, ProjectCostClass.Overhead)]
-    [InlineData(ProjectCostType.Other, ProjectCostClass.Overhead)]
-    public void ManualCostType_MapsToClass(ProjectCostType type, ProjectCostClass expected)
-    {
-        Assert.Equal(expected, ProjectCostClassifier.ForCostType(type));
-    }
+    // ELLE MALİYET TÜRÜ EŞLEMESİNİN TESTİ KALDIRILDI: eşlemenin tek
+    // çağıranı, elle maliyet kaydı ucuydu ve o uç kapandı (tek kaynak
+    // ilkesi — elle girilen maliyet artık gider kaydından geçiyor).
+    // Kullanılmayan kodun testini tutmak, ölü kodu canlı sanmaktır;
+    // gider kategorisi → maliyet sınıfı eşlemesi ise
+    // ProjectRealizedCostTests içinde sınanıyor.
 
     private sealed record TestContext(
         Guid CompanyId,

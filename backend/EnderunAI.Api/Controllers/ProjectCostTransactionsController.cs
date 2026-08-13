@@ -55,61 +55,27 @@ public sealed class ProjectCostTransactionsController(AppDbContext db) : Control
         return Ok(items);
     }
 
-    [HttpPost("cost-transactions")]
-    [RequirePermission(PermissionCatalog.Keys.ProjectsCreate)]
-    public async Task<IActionResult> Create(
-        Guid projectId,
-        CreateProjectCostTransactionRequest request,
-        CancellationToken cancellationToken)
-    {
-        var projectExists = await db.Projects.AsNoTracking()
-            .AnyAsync(x => x.Id == projectId, cancellationToken);
-
-        if (!projectExists)
-            return NotFound(new { message = "Proje bulunamadı." });
-
-        if (request.Amount <= 0)
-            return BadRequest(new { message = "Tutar sıfırdan büyük olmalıdır." });
-
-        if (string.IsNullOrWhiteSpace(request.Description))
-            return BadRequest(new { message = "Açıklama zorunludur." });
-
-        if (request.ProjectSiteId.HasValue)
-        {
-            var siteBelongsToProject = await db.ProjectSites.AsNoTracking().AnyAsync(
-                x => x.Id == request.ProjectSiteId.Value && x.ProjectId == projectId,
-                cancellationToken);
-
-            if (!siteBelongsToProject)
-            {
-                return BadRequest(new
-                {
-                    message = "Seçilen şantiye bu projeye ait değil."
-                });
-            }
-        }
-
-        var item = new ProjectCostTransaction
-        {
-            ProjectId = projectId,
-            ProjectSiteId = request.ProjectSiteId,
-            CostType = request.CostType,
-            // Sınıf kullanıcıya sorulmaz; seçtiği türden eşlenir.
-            CostClass = Services.Projects.ProjectCostClassifier.ForCostType(request.CostType),
-            CostDate = DateTime.SpecifyKind(request.CostDate.Date, DateTimeKind.Utc),
-            Amount = request.Amount,
-            Description = request.Description.Trim()
-        };
-
-        db.ProjectCostTransactions.Add(item);
-        await db.SaveChangesAsync(cancellationToken);
-
-        return Ok(new
-        {
-            message = "Maliyet kaydı oluşturuldu.",
-            item.Id
-        });
-    }
+    // ELLE MALİYET KAYDI UCU KALDIRILDI (POST cost-transactions).
+    //
+    // NEDENİ TEK KAYNAK: aynı maliyeti iki ayrı yoldan sisteme sokabilen
+    // bir uç, tanımı gereği ayrışma üretir. Proje maliyet defteri
+    // TÜRETİLMİŞ bir katman — otomatik kaynaklar (fatura, depo sarfı,
+    // taşeron, görevlendirme, alet servisi) yazar; buraya elle yazmak
+    // kaynağı baypas etmek demekti.
+    //
+    // Elle girilen maliyet artık GİDER KAYDINDAN geçiyor
+    // (POST /api/expenses). Orada ödeme yöntemi, elden maskesi, belge
+    // türü, kredi kartı bağı ve nakit akış da var; maliyet kaydında
+    // bunların hiçbiri yoktu. Proje maliyeti bu kayıtları
+    // ProjectRealizedCostReader üzerinden zaten okuyor.
+    //
+    // DAVRANIŞ DEĞİŞİKLİĞİ: gider modülü malzeme/işçilik/taşeron
+    // kategorilerini elle girişte reddediyor (o kalemler kaynağından
+    // gelir). Yani artık "elle malzeme maliyeti" yazılamaz — istenen
+    // budur, ama sessiz bir kayıp olmasın diye burada yazılı duruyor.
+    //
+    // Okuma uçları (liste, kırılım, mutabakat) yerinde: defterin
+    // kendisi kaldırılmadı, yalnız ona elle yazan kapı kapandı.
 
     [HttpGet("cost-breakdown")]
     [RequirePermission(PermissionCatalog.Keys.ProjectsView)]

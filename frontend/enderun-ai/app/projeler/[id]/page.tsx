@@ -42,8 +42,6 @@ import {
 
 import {
   projectCostService,
-  ProjectCostType,
-  projectCostTypeLabels,
   type ProjectCostBreakdown,
 } from "@/services/project-cost.service";
 
@@ -56,6 +54,10 @@ import {
   personnelService,
   type PersonnelListItem,
 } from "@/services/personnel.service";
+import {
+  expenseService,
+  type ExpenseCategory,
+} from "@/services/expense.service";
 
 
 
@@ -70,6 +72,8 @@ type Warehouse = {
 
 type ProjectDetail = {
   id: string;
+  /** Uç zaten döndürüyordu; tipte eksikti. Gider kaydı şirket ister. */
+  companyId: string;
   companyName: string;
   branchName: string;
   employerName: string;
@@ -162,6 +166,11 @@ function formatPercentage(value?: number | null) {
 export default function ProjectCenterPage() {
   const { has } = usePermissions();
 
+  // Gider kategorileri: elle girilebilenler (otomatik kategoriler uçtan
+  // zaten gelmiyor). Kategori listesi gelmezse form kaydedemez ve
+  // kullanıcı bunu boş açılan listeden görür.
+  const canManageExpense = has("expense.manage");
+
   // İzin isteyen kartlar yalnızca yetkiliye görünür; izin alanı boş
   // olan kartlar herkeste durur.
   const visibleModules = useMemo(
@@ -197,13 +206,28 @@ export default function ProjectCenterPage() {
 
   const [costSaving, setCostSaving] = useState(false);
   const [costError, setCostError] = useState("");
+  /**
+   * ELLE MALİYET ARTIK GİDER KAYDIDIR.
+   *
+   * Proje maliyet defterine doğrudan yazan uç kaldırıldı: aynı maliyeti
+   * iki yoldan sisteme sokabilmek ayrışma üretiyordu. Bu form gider
+   * kaydı açıyor; proje maliyeti o kaydı zaten okuyor. Kazanç yalnız
+   * tek kaynak değil — ödeme yöntemi, elden maskesi, belge ve nakit
+   * akış da bu yoldan geliyor.
+   */
   const [costForm, setCostForm] = useState({
     projectSiteId: "",
-    costType: ProjectCostType.Material,
+    expenseCategoryId: "",
     costDate: new Date().toISOString().slice(0, 10),
     amount: 0,
     description: "",
+    paymentMethod: 0,
+    documentType: 2,
   });
+
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(
+    []
+  );
 
   const [projectPersonnel, setProjectPersonnel] = useState<PersonnelListItem[]>([]);
   const [laborBreakdown, setLaborBreakdown] =
@@ -231,8 +255,24 @@ export default function ProjectCenterPage() {
       setError("");
 
       try {
-        const result = await projectService.getById(params.id);
-        setProject(result as ProjectDetail);
+        const result = (await projectService.getById(
+          params.id
+        )) as ProjectDetail;
+
+        setProject(result);
+
+        // Gider kategorileri şirkete bağlı; proje gelmeden şirket
+        // bilinmiyor. Yetki yoksa hiç istenmiyor — yetkisiz kullanıcıya
+        // form da render edilmeyecek.
+        if (canManageExpense && result?.companyId) {
+          try {
+            setExpenseCategories(
+              await expenseService.listCategories(result.companyId)
+            );
+          } catch {
+            setExpenseCategories([]);
+          }
+        }
       } catch (err) {
         setProject(null);
         setError(
@@ -525,26 +565,41 @@ export default function ProjectCenterPage() {
     setCostError("");
 
     try {
-      await projectCostService.create(params.id, {
-        projectSiteId: costForm.projectSiteId || null,
-        costType: costForm.costType,
-        costDate: costForm.costDate,
+      if (!costForm.expenseCategoryId) {
+        setCostError("Gider kategorisi seçilmelidir.");
+        setCostSaving(false);
+        return;
+      }
+
+      // Merkez formdan türetiliyor: şantiye seçilmişse şantiye,
+      // seçilmemişse projenin kendisi. Kullanıcı "hangi merkez"
+      // sorusunu ikinci kez cevaplamaz.
+      await expenseService.createEntry({
+        companyId: project!.companyId,
+        centerType: costForm.projectSiteId ? 2 : 1,
+        centerId: costForm.projectSiteId || params.id,
+        expenseCategoryId: costForm.expenseCategoryId,
+        expenseDate: costForm.costDate,
         amount: costForm.amount,
         description: costForm.description,
+        paymentMethod: costForm.paymentMethod,
+        documentType: costForm.documentType,
       });
 
       setCostForm({
         projectSiteId: "",
-        costType: ProjectCostType.Material,
+        expenseCategoryId: "",
         costDate: new Date().toISOString().slice(0, 10),
         amount: 0,
         description: "",
+        paymentMethod: 0,
+        documentType: 2,
       });
 
       await reloadBreakdown();
     } catch (err) {
       setCostError(
-        err instanceof Error ? err.message : "Maliyet kaydı oluşturulamadı."
+        err instanceof Error ? err.message : "Gider kaydı oluşturulamadı."
       );
     } finally {
       setCostSaving(false);
@@ -908,12 +963,24 @@ export default function ProjectCenterPage() {
             <div className="erp-panel-header">
               <div>
                 <h2>Maliyet Dağılımı</h2>
-                <p>Şantiye harcamaları, ortak giderler ve proje toplamı</p>
+                <p>
+                  Şantiye harcamaları, ortak giderler ve proje toplamı.
+                  Buradan girilen kalem GİDER KAYDI olarak açılır ve proje
+                  maliyetine oradan yansır; malzeme, işçilik ve taşeron
+                  kalemleri kendi kaynaklarından (satın alma, puantaj,
+                  taşeron hakedişi) gelir, elle girilmez.
+                </p>
               </div>
             </div>
 
             {costError && <div className="erp-alert error">{costError}</div>}
 
+            {/* YETKİSİZE FORM HİÇ RENDER EDİLMEZ: uç expense.manage
+                istiyor, göstermek çalışmayan düğme bırakmak olurdu.
+                projects.create olup gider yetkisi olmayan roller
+                (Teknik Ofis, Teknik Koordinatör) burada yalnız dağılımı
+                okur. */}
+            {canManageExpense ? (
             <form className="erp-form-card" onSubmit={createCostTransaction}>
               <div className="erp-form-grid">
                 <label>
@@ -934,23 +1001,48 @@ export default function ProjectCenterPage() {
                 </label>
 
                 <label>
-                  <span>Maliyet Tipi</span>
+                  <span>Gider Kategorisi *</span>
                   <select
-                    value={costForm.costType}
+                    value={costForm.expenseCategoryId}
                     onChange={(e) =>
-                      updateCostForm(
-                        "costType",
-                        Number(e.target.value) as ProjectCostType
-                      )
+                      updateCostForm("expenseCategoryId", e.target.value)
                     }
                   >
-                    {Object.entries(projectCostTypeLabels).map(
-                      ([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      )
-                    )}
+                    <option value="">Seçin</option>
+                    {expenseCategories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Ödeme Şekli</span>
+                  <select
+                    value={costForm.paymentMethod}
+                    onChange={(e) =>
+                      updateCostForm("paymentMethod", Number(e.target.value))
+                    }
+                  >
+                    <option value={0}>Banka / kasa</option>
+                    <option value={1}>Elden</option>
+                    <option value={2}>Şahıs carisinden mahsup</option>
+                    <option value={3}>Kredi kartı</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Belge</span>
+                  <select
+                    value={costForm.documentType}
+                    onChange={(e) =>
+                      updateCostForm("documentType", Number(e.target.value))
+                    }
+                  >
+                    <option value={2}>Fatura</option>
+                    <option value={1}>Fiş</option>
+                    <option value={0}>Belgesiz</option>
                   </select>
                 </label>
 
@@ -997,10 +1089,16 @@ export default function ProjectCenterPage() {
 
               <div className="erp-actions">
                 <button type="submit" disabled={costSaving}>
-                  {costSaving ? "Kaydediliyor..." : "Maliyet Kaydını Ekle"}
+                  {costSaving ? "Kaydediliyor..." : "Gider Kaydını Ekle"}
                 </button>
               </div>
             </form>
+            ) : (
+              <p className="erp-muted">
+                Gider kaydı açma yetkiniz yok; bu bölümde yalnız maliyet
+                dağılımını görüyorsunuz.
+              </p>
+            )}
 
             {!breakdown ? (
               <div className="erp-empty-state">

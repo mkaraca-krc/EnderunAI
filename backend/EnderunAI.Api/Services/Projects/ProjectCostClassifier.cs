@@ -80,18 +80,6 @@ public static class ProjectCostClassifier
         return ProjectCostClass.Overhead;
     }
 
-    /// <summary>
-    /// Elle girilen maliyette kullanıcının seçtiği türden eşleme.
-    /// Ekipman kiralama ve "diğer" imalata doğrudan girmediği için
-    /// genel giderdir.
-    /// </summary>
-    public static ProjectCostClass ForCostType(ProjectCostType costType) => costType switch
-    {
-        ProjectCostType.Material => ProjectCostClass.Material,
-        ProjectCostType.Labor => ProjectCostClass.Labor,
-        ProjectCostType.Subcontractor => ProjectCostClass.SubcontractorLabor,
-        _ => ProjectCostClass.Overhead
-    };
 
     public static string Name(ProjectCostClass costClass) => costClass switch
     {
