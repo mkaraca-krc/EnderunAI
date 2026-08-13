@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models.Fleet;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Expenses;
 using EnderunAI.Api.Services.Fleet;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,7 +22,9 @@ namespace EnderunAI.Api.Controllers;
 [Authorize]
 public sealed class VehiclesController(
     AppDbContext db,
-    IVehicleService vehicles) : ControllerBase
+    IVehicleService vehicles,
+    IVehicleExpenseService vehicleExpenses,
+    IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
 {
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.VehicleView)]
@@ -193,6 +196,139 @@ public sealed class VehiclesController(
                 assignment.StartDate
             });
         });
+
+    /// <summary>
+    /// TARİHLİ TEKİL MASRAF için önerilen gider merkezi: masraf
+    /// tarihinde araç neredeydi. ÖNERİdir — kayıt normal gider ucundan
+    /// açılır ve kullanıcı merkezi değiştirebilir.
+    /// </summary>
+    [HttpGet("{id:guid}/expense-center")]
+    [RequirePermission(PermissionCatalog.Keys.VehicleView)]
+    public Task<IActionResult> SuggestCenter(
+        Guid id, [FromQuery] DateTime date, CancellationToken cancellationToken) =>
+        RunAsync(async () =>
+        {
+            var suggestion = await vehicleExpenses.SuggestCenterAsync(
+                id, date, cancellationToken);
+
+            return suggestion is null
+                ? Ok(new
+                {
+                    suggestion = (object?)null,
+                    message =
+                        "Araç bir projeye atanmamış ve şirketin merkez şubesi " +
+                        "tanımlı değil; gider merkezini elle seçin."
+                })
+                : Ok(new { suggestion });
+        });
+
+    /// <summary>
+    /// DÖNEMSEL MASRAF ÖNİZLEMESİ (kira, sigorta, kasko, MTV): gün
+    /// oranına göre dağıtım. Hiçbir şey yazmaz.
+    /// </summary>
+    [HttpGet("{id:guid}/periodic-cost/preview")]
+    [RequirePermission(PermissionCatalog.Keys.VehicleView)]
+    public Task<IActionResult> PreviewPeriodic(
+        Guid id,
+        [FromQuery] DateTime periodStart,
+        [FromQuery] DateTime periodEnd,
+        [FromQuery] decimal amount,
+        CancellationToken cancellationToken) =>
+        RunAsync(async () => Ok(await vehicleExpenses.PreviewPeriodicAsync(
+            id, periodStart, periodEnd, amount, cancellationToken)));
+
+    /// <summary>
+    /// Dönemsel masrafı yazar: her pay için AYRI gider kaydı açılır.
+    /// Tek kayıt açıp payları başka bir tabloda tutmak, gider merkezi
+    /// raporunun okumadığı ikinci bir defter demek olurdu.
+    /// </summary>
+    [HttpPost("{id:guid}/periodic-cost")]
+    [RequirePermission(PermissionCatalog.Keys.ExpenseManage)]
+    public Task<IActionResult> CreatePeriodic(
+        Guid id,
+        VehiclePeriodicCostRequest request,
+        CancellationToken cancellationToken) =>
+        RunAsync(async () => Ok(await vehicleExpenses.CreatePeriodicAsync(
+            id, request, cancellationToken)));
+
+    /// <summary>
+    /// Araç masraf dökümü — gider kayıtlarının FİLTRELENMİŞ görünümü.
+    /// Ayrı bir toplama kaynağı değil: aynı satırlar gider merkezi
+    /// raporunda da bir kez sayılıyor.
+    /// </summary>
+    [HttpGet("{id:guid}/expenses")]
+    [RequirePermission(PermissionCatalog.Keys.VehicleView)]
+    public async Task<IActionResult> GetExpenses(
+        Guid id,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken)
+    {
+        var query = db.ExpenseEntries.AsNoTracking().Where(x => x.VehicleId == id);
+
+        if (from.HasValue)
+        {
+            var start = Services.Fleet.VehicleService.AsUtcDate(from.Value);
+            query = query.Where(x => x.ExpenseDate >= start);
+        }
+
+        if (to.HasValue)
+        {
+            var end = Services.Fleet.VehicleService.AsUtcDate(to.Value);
+            query = query.Where(x => x.ExpenseDate <= end);
+        }
+
+        // ELDEN İZOLASYONU: maskeli kalemler yetkisiz kullanıcıya HİÇ
+        // gelmez ve toplam yalnız görünenlerden oluşur.
+        //
+        // Hem yetki kapısı hem yüklem gider modülünün kendi
+        // parçalarından okunuyor (IExtraPaymentVisibilityService +
+        // IsVisibleExpense). Burada yeniden yazılsaydı iki maske
+        // zamanla ayrışır ve biri delinirdi — gider listesi gizlerken
+        // araç kartı gösterirdi.
+        var canSeeCash = await extraPaymentVisibility
+            .CanViewExtraPaymentAsync(cancellationToken);
+
+        var hiddenCount = canSeeCash
+            ? 0
+            : await query.CountAsync(
+                Services.Expenses.ExpenseEntryService.IsMaskedExpense,
+                cancellationToken);
+
+        if (!canSeeCash)
+        {
+            query = query.Where(
+                Services.Expenses.ExpenseEntryService.IsVisibleExpense);
+        }
+
+        var items = await query
+            .OrderByDescending(x => x.ExpenseDate)
+            .Select(x => new
+            {
+                x.Id,
+                x.ExpenseDate,
+                x.Amount,
+                x.Description,
+                CategoryName = x.ExpenseCategory.Name,
+                CenterType = (int)x.CenterType,
+                x.ProjectId,
+                ProjectCode = x.Project != null ? x.Project.Code : null,
+                x.BranchId,
+                BranchName = x.Branch != null ? x.Branch.Name : null,
+                PaymentMethod = (int)x.PaymentMethod
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new
+        {
+            items,
+            total = items.Sum(x => x.Amount),
+
+            // Gizlenen kalem SAYISI söyleniyor, tutarı değil: toplamın
+            // neden eksik göründüğü anlaşılsın ama tutar sızmasın.
+            hiddenCount
+        });
+    }
 
     private static async Task<IActionResult> RunAsync(Func<Task<IActionResult>> action)
     {

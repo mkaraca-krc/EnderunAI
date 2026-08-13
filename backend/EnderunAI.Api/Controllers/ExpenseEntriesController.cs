@@ -21,7 +21,12 @@ public sealed record SaveExpenseEntryRequest(
     string? DocumentNumber,
     Guid? SupplierCurrentAccountId,
     Guid? PartnerAccountId,
-    Guid? CreditCardId);
+    Guid? CreditCardId,
+    /// <summary>
+    /// Gider bir ARACA aitse aracın kimliği. Araç kartındaki masraf
+    /// dökümü bu bağdan okunur; ayrı bir araç masraf tablosu yok.
+    /// </summary>
+    Guid? VehicleId = null);
 
 /// <summary>
 /// Elle girilen gider kayıtları.
@@ -201,7 +206,8 @@ public sealed class ExpenseEntriesController(
             PartnerAccountId = await ResolvePartnerAsync(input, cancellationToken),
             CreditCardId = input.PaymentMethod == ExpensePaymentMethod.CreditCard
                 ? input.CreditCardId
-                : null
+                : null,
+            VehicleId = input.VehicleId
         };
 
         ExpenseEntryService.ApplyCenter(entry, validation.Center!);
@@ -258,6 +264,7 @@ public sealed class ExpenseEntriesController(
         entry.CreditCardId = input.PaymentMethod == ExpensePaymentMethod.CreditCard
             ? input.CreditCardId
             : null;
+        entry.VehicleId = input.VehicleId;
         entry.UpdatedAtUtc = DateTime.UtcNow;
 
         ExpenseEntryService.ApplyCenter(entry, validation.Center!);
@@ -353,5 +360,6 @@ public sealed class ExpenseEntriesController(
             request.DocumentNumber,
             request.SupplierCurrentAccountId,
             request.PartnerAccountId,
-            request.CreditCardId);
+            request.CreditCardId,
+            request.VehicleId);
 }

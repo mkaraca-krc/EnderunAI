@@ -209,6 +209,10 @@ public static class RoleCatalog
             // görmeden çalışamaz. Veri kapsamı zaten kendi şantiyesiyle
             // sınırlı; düzenleme yetkisi yok.
             PermissionCatalog.Keys.ScheduleView,
+            // Şantiyedeki aracı GÖRÜR (hangi araç bende, muayenesi ne
+            // zaman) ama atamasını değiştiremez. Elden kalemler ayrıca
+            // extra_payment.view maskesinde kalır.
+            PermissionCatalog.Keys.VehicleView,
             PermissionCatalog.Keys.AiUse
         ], RoleDataScopePolicy.SiteOnly),
 
@@ -237,9 +241,16 @@ public static class RoleCatalog
             PermissionCatalog.Keys.AiUse
         ]),
 
-        new("Araç Sorumlusu", "Filo modülü devreye girene kadar görüntüleme ağırlıklı dar kapsamlı rol.",
+        // Filo modülü geldi: bu rol tam da onu bekliyordu. Araç kartı,
+        // atama ve araç masraf dökümü artık bu rolün işi; masrafın
+        // kendisi gider modülünden girildiği için gider yetkisi de
+        // veriliyor. Elden kalemler yine extra_payment.view maskesinde
+        // — bu rolde o anahtar yok.
+        new("Araç Sorumlusu", "Filo: araç kartları, atamalar ve araç masrafları.",
         [
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView,
+            PermissionCatalog.Keys.VehicleView, PermissionCatalog.Keys.VehicleManage,
+            PermissionCatalog.Keys.ExpenseView, PermissionCatalog.Keys.ExpenseManage,
             PermissionCatalog.Keys.AiUse
         ]),
 

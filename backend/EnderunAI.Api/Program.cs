@@ -143,6 +143,9 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Fleet.IVehicleService,
     EnderunAI.Api.Services.Fleet.VehicleService>();
 builder.Services.AddScoped<
+    EnderunAI.Api.Services.Fleet.IVehicleExpenseService,
+    EnderunAI.Api.Services.Fleet.VehicleExpenseService>();
+builder.Services.AddScoped<
     EnderunAI.Api.Services.Engineering.IPositionMatchService,
     EnderunAI.Api.Services.Engineering.PositionMatchService>();
 builder.Services.AddScoped<

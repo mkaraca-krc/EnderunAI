@@ -18,7 +18,9 @@ public sealed record ExpenseEntryInput(
     string? DocumentNumber,
     Guid? SupplierCurrentAccountId,
     Guid? PartnerAccountId,
-    Guid? CreditCardId);
+    Guid? CreditCardId,
+    /// <summary>Gider bir araca aitse aracın kimliği.</summary>
+    Guid? VehicleId = null);
 
 /// <summary>Doğrulama sonucu — hata varsa Türkçe mesajla.</summary>
 public sealed record ExpenseValidationResult(string? Error, ExpenseCenterRef? Center);
