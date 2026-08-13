@@ -8,6 +8,10 @@ import {
   RecipeMaterial,
   engineeringRecipeService,
 } from "@/services/engineering-recipe.service";
+import {
+  inventoryService,
+  type InventoryItemListItem,
+} from "@/services/inventory.service";
 
 const laborTypes: Record<number, string> = {
   0: "Usta",
@@ -52,6 +56,18 @@ export default function RecipeEditor({ positionId }: Props) {
   const [description, setDescription] = useState("");
   const [isDefault, setIsDefault] = useState(true);
   const [materials, setMaterials] = useState<RecipeMaterial[]>([]);
+
+  /**
+   * Stok kartları. Reçete malzemesi karta BAĞLANMALI: proje malzeme
+   * ihtiyacında depo mevcudu ve açık talep yalnız stok kartı üzerinden
+   * düşülebiliyor — kartsız malzeme "eksik" hesabına hiç giremez.
+   * Serbest metin alanları kaldırılmadı, çünkü katalogda olmayan
+   * malzeme de yazılabilmeli; ama kart seçilince kod/ad/birim karttan
+   * doldurulur ve ikisi ayrışmaz.
+   */
+  const [inventoryItems, setInventoryItems] = useState<InventoryItemListItem[]>(
+    []
+  );
   const [labors, setLabors] = useState<RecipeLabor[]>([]);
   const [machines, setMachines] = useState<RecipeMachine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,6 +118,18 @@ export default function RecipeEditor({ positionId }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setInventoryItems(await inventoryService.getItems());
+      } catch {
+        // Kart listesi gelmezse malzeme yine serbest metinle girilebilir;
+        // reçete düzenleme kart listesi yüzünden kilitlenmemeli.
+        setInventoryItems([]);
+      }
+    })();
+  }, []);
 
   const totals = useMemo(() => {
     const laborHours = labors.reduce(
@@ -304,6 +332,7 @@ export default function RecipeEditor({ positionId }: Props) {
             <table className="erp-table">
               <thead>
                 <tr>
+                  <th>Stok Kartı</th>
                   <th>Kod</th>
                   <th>Malzeme</th>
                   <th>Miktar</th>
@@ -317,6 +346,42 @@ export default function RecipeEditor({ positionId }: Props) {
               <tbody>
                 {materials.map((item, index) => (
                   <tr key={index}>
+                    <td>
+                      <select
+                        className="erp-input"
+                        value={item.inventoryItemId ?? ""}
+                        onChange={(event) => {
+                          const selected = inventoryItems.find(
+                            (card) => card.id === event.target.value
+                          );
+
+                          // Kart seçilince kod/ad/birim KARTTAN gelir.
+                          // Elle yazılmaya devam edilseydi reçete ile
+                          // stok kartı zamanla ayrışır, ihtiyaç yanlış
+                          // malzemeye yazılırdı.
+                          setMaterials((current) =>
+                            current.map((row, rowIndex) =>
+                              rowIndex === index
+                                ? {
+                                    ...row,
+                                    inventoryItemId: selected?.id ?? null,
+                                    materialCode: selected?.code ?? row.materialCode,
+                                    materialName: selected?.name ?? row.materialName,
+                                    unit: selected?.unit ?? row.unit,
+                                  }
+                                : row
+                            )
+                          );
+                        }}
+                      >
+                        <option value="">— kart yok —</option>
+                        {inventoryItems.map((card) => (
+                          <option key={card.id} value={card.id}>
+                            {card.code} · {card.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td>
                       <input
                         className="erp-input"

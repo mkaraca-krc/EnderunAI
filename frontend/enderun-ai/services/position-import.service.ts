@@ -73,7 +73,12 @@ export type PositionImportCommitResult = {
  * tutulmuyor. FormData gönderildiği için apiClient yerine doğrudan
  * fetch: tarayıcının kendi content-type sınırını koruması gerekiyor.
  */
-async function upload<T>(
+/**
+ * Dosya yükleyen aktarım uçları için ortak çağrı. Reçete aktarımı da
+ * bunu kullanır — oturum sonu ve hata mesajı yorumlama kuralı tek
+ * yerde kalsın diye ikinci bir kopya yazılmadı.
+ */
+export async function uploadImportFile<T>(
   path: string,
   file: File,
   extra?: Record<string, string>
@@ -147,7 +152,7 @@ export const bookImportService = {
   },
 
   preview(file: File, fields: BookImportFields) {
-    return upload<BookImportSummary>(
+    return uploadImportFile<BookImportSummary>(
       "engineering-positions/import/profile/preview",
       file,
       toFormFields(fields)
@@ -155,7 +160,7 @@ export const bookImportService = {
   },
 
   commit(file: File, fields: BookImportFields) {
-    return upload<BookImportSummary>(
+    return uploadImportFile<BookImportSummary>(
       "engineering-positions/import/profile/commit",
       file,
       toFormFields(fields)
@@ -193,7 +198,7 @@ export const positionImportService = {
 
     const suffix = query.toString() ? `?${query.toString()}` : "";
 
-    return upload<SpreadsheetInspection>(
+    return uploadImportFile<SpreadsheetInspection>(
       `engineering-positions/import/inspect${suffix}`,
       file
     );
@@ -204,7 +209,7 @@ export const positionImportService = {
     mapping: PositionImportMapping,
     options: PositionImportOptions
   ) {
-    return upload<PositionImportPreview>(
+    return uploadImportFile<PositionImportPreview>(
       "engineering-positions/import/preview",
       file,
       { mapping: JSON.stringify(mapping), options: JSON.stringify(options) }
@@ -216,7 +221,7 @@ export const positionImportService = {
     mapping: PositionImportMapping,
     options: PositionImportOptions
   ) {
-    return upload<PositionImportCommitResult>(
+    return uploadImportFile<PositionImportCommitResult>(
       "engineering-positions/import/commit",
       file,
       { mapping: JSON.stringify(mapping), options: JSON.stringify(options) }

@@ -672,6 +672,11 @@ const groups: MenuGroup[] = [
         icon: "⚙",
       },
       {
+        label: "Reçete İçe Aktar",
+        href: "/muhendislik/receteler/ice-aktar",
+        icon: "⇪",
+      },
+      {
         label: "Fiyat Listeleri",
         href: "/teklifler/fiyatlar",
         icon: "₺",

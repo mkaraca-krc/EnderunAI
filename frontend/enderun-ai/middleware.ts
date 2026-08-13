@@ -92,6 +92,12 @@ function requiredPermission(pathname: string): string | null {
     return "hakedis.view";
   if (pathname.startsWith("/satin-alma")) return "purchasing.view";
   if (pathname.startsWith("/depo")) return "inventory.view";
+  // SPESİFİK KALIP GENELDEN ÖNCE: içe aktarma ekranları yazma yetkisi
+  // ister (uçlar engineering.manage istiyor). Genel kural önce
+  // gelseydi, yalnız görüntüleme yetkisi olan kullanıcı ekranı açar,
+  // "Aktar" düğmesine basınca 403 yerdi — çalışmayan düğme.
+  if (/^\/muhendislik\/(pozlar|receteler)\/ice-aktar/.test(pathname))
+    return "engineering.manage";
   if (
     pathname.startsWith("/muhendislik") ||
     pathname.startsWith("/kesifler")

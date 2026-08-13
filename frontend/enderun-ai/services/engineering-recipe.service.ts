@@ -35,6 +35,8 @@ export type EngineeringRecipeListItem = {
   engineeringPositionId: string;
   positionCode: string;
   positionName: string;
+  unit?: string;
+  discipline?: number;
   version: number;
   description?: string | null;
   isDefault: boolean;
@@ -67,7 +69,50 @@ export type SaveEngineeringRecipeRequest = {
   machines: RecipeMachine[];
 };
 
+/** Poz kitabının ne kadarının reçetesi var — sayı veritabanından gelir. */
+export type EngineeringRecipeCoverage = {
+  positionCount: number;
+  positionsWithRecipe: number;
+  positionsWithoutRecipe: number;
+};
+
+export type EngineeringRecipeFilters = {
+  search?: string;
+  discipline?: number;
+  onlyDefault?: boolean;
+  take?: number;
+};
+
 export const engineeringRecipeService = {
+  /**
+   * Reçete listesi — TEK çağrı.
+   *
+   * Liste ekranı eskiden pozları çekip her poz için ayrı reçete isteği
+   * atıyordu; poz ucu 100 kayıt döndürdüğü için 23.500 pozun ancak ilk
+   * yüzünü tarayabiliyordu. Liste artık reçeteden başlıyor.
+   */
+  getAll(filters: EngineeringRecipeFilters = {}) {
+    const params = new URLSearchParams();
+
+    if (filters.search?.trim()) params.set("search", filters.search.trim());
+    if (filters.discipline !== undefined)
+      params.set("discipline", String(filters.discipline));
+    if (filters.onlyDefault) params.set("onlyDefault", "true");
+    if (filters.take) params.set("take", String(filters.take));
+
+    const query = params.toString();
+
+    return apiClient<EngineeringRecipeListItem[]>(
+      `engineering-recipes${query ? `?${query}` : ""}`
+    );
+  },
+
+  getCoverage(companyId?: string) {
+    return apiClient<EngineeringRecipeCoverage>(
+      `engineering-recipes/coverage${companyId ? `?companyId=${companyId}` : ""}`
+    );
+  },
+
   getByPosition(positionId: string) {
     return apiClient<EngineeringRecipeListItem[]>(
       `engineering-recipes/position/${positionId}`

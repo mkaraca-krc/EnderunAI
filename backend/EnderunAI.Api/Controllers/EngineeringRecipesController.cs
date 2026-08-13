@@ -14,6 +14,110 @@ namespace EnderunAI.Api.Controllers;
 public sealed class EngineeringRecipesController(
     AppDbContext db) : ControllerBase
 {
+    /// <summary>
+    /// Reçete listesi — tek çağrı.
+    ///
+    /// Liste ekranı eskiden önce pozları çekip HER POZ İÇİN ayrı reçete
+    /// isteği atıyordu. Poz ucu varsayılan 100 kayıt döndürdüğü için
+    /// ekran 23.500 pozun ancak ilk yüzünü tarayabiliyor, buna karşılık
+    /// 100 istek yapıyordu: hem yavaş hem eksik. Liste artık reçeteden
+    /// başlar; poz bilgisi aynı sorguda gelir.
+    /// </summary>
+    [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? search,
+        [FromQuery] int? discipline,
+        [FromQuery] bool? onlyDefault,
+        [FromQuery] int? take,
+        CancellationToken cancellationToken)
+    {
+        var limit = take is > 0 and <= 500 ? take.Value : 200;
+
+        var query = db.EngineeringRecipes
+            .AsNoTracking()
+            .AsQueryable();
+
+        if (onlyDefault == true)
+            query = query.Where(x => x.IsDefault);
+
+        if (discipline.HasValue)
+        {
+            query = query.Where(x =>
+                (int)x.EngineeringPosition.Discipline == discipline.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+
+            query = query.Where(x =>
+                EF.Functions.ILike(x.EngineeringPosition.Code, $"%{term}%") ||
+                EF.Functions.ILike(x.EngineeringPosition.Name, $"%{term}%"));
+        }
+
+        var items = await query
+            .OrderBy(x => x.EngineeringPosition.Code)
+            .ThenByDescending(x => x.Version)
+            .Take(limit)
+            .Select(x => new
+            {
+                x.Id,
+                x.EngineeringPositionId,
+                PositionCode = x.EngineeringPosition.Code,
+                PositionName = x.EngineeringPosition.Name,
+                Unit = x.EngineeringPosition.Unit,
+                Discipline = (int)x.EngineeringPosition.Discipline,
+                x.Version,
+                x.Description,
+                x.IsDefault,
+                MaterialCount = x.Materials.Count,
+                LaborCount = x.Labors.Count,
+                MachineCount = x.Machines.Count,
+                TotalLaborHours = x.Labors.Sum(y => y.PersonCount * y.Hours),
+                x.CreatedAtUtc,
+                x.UpdatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(items);
+    }
+
+    /// <summary>
+    /// Reçete kapsamı: kaç pozun reçetesi var, kaçının yok.
+    ///
+    /// Liste ekranı bu sayıyı eskiden ELİNDEKİ SAYFADAN çıkarıyordu —
+    /// yalnız ilk 100 poza bakıp "reçetesiz poz" diye bir sayı
+    /// gösteriyordu. Sayı veritabanından gelmeli; yoksa 23.500 pozluk
+    /// kitapta anlamsız bir rakam okunur.
+    /// </summary>
+    [HttpGet("coverage")]
+    [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
+    public async Task<IActionResult> GetCoverage(
+        [FromQuery] Guid? companyId,
+        CancellationToken cancellationToken)
+    {
+        var positions = db.EngineeringPositions.AsNoTracking();
+
+        if (companyId.HasValue)
+            positions = positions.Where(x => x.CompanyId == companyId.Value);
+
+        var positionCount = await positions.CountAsync(cancellationToken);
+
+        var withRecipe = await positions
+            .CountAsync(
+                x => db.EngineeringRecipes.Any(r =>
+                    r.EngineeringPositionId == x.Id && r.IsDefault),
+                cancellationToken);
+
+        return Ok(new
+        {
+            positionCount,
+            positionsWithRecipe = withRecipe,
+            positionsWithoutRecipe = positionCount - withRecipe
+        });
+    }
+
     [HttpGet("position/{positionId:guid}")]
     [RequirePermission(PermissionCatalog.Keys.EngineeringView)]
     public async Task<IActionResult> GetByPosition(

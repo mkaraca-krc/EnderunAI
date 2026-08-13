@@ -4,10 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import {
-  EngineeringPositionListItem,
-  engineeringPositionService,
-} from "@/services/engineering-position.service";
-import {
+  EngineeringRecipeCoverage,
   EngineeringRecipeListItem,
   engineeringRecipeService,
 } from "@/services/engineering-recipe.service";
@@ -29,8 +26,10 @@ const disciplineLabels: Record<number, string> = {
 };
 
 export default function EngineeringRecipesPage() {
-  const [positions, setPositions] = useState<EngineeringPositionListItem[]>([]);
   const [recipes, setRecipes] = useState<RecipeRow[]>([]);
+  const [coverage, setCoverage] = useState<EngineeringRecipeCoverage | null>(
+    null
+  );
   const [search, setSearch] = useState("");
   const [discipline, setDiscipline] = useState("");
   const [onlyDefault, setOnlyDefault] = useState(false);
@@ -42,27 +41,29 @@ export default function EngineeringRecipesPage() {
     setError("");
 
     try {
-      const positionItems = await engineeringPositionService.getAll();
-      setPositions(positionItems);
+      // TEK ÇAĞRI: eskiden önce pozlar çekilip HER POZ İÇİN ayrı reçete
+      // isteği atılıyordu. Poz ucu 100 kayıt döndürdüğü için ekran
+      // 23.500 pozun ancak ilk yüzünü tarıyor, buna karşılık 100 istek
+      // yapıyordu — hem yavaş hem eksik.
+      const [recipeItems, coverageResult] = await Promise.all([
+        engineeringRecipeService.getAll({
+          search: search.trim() || undefined,
+          discipline: discipline === "" ? undefined : Number(discipline),
+          onlyDefault: onlyDefault || undefined,
+          take: 500,
+        }),
+        engineeringRecipeService.getCoverage(),
+      ]);
 
-      const recipeResults = await Promise.all(
-        positionItems.map(async (position) => {
-          try {
-            const items =
-              await engineeringRecipeService.getByPosition(position.id);
-
-            return items.map((recipe) => ({
-              ...recipe,
-              discipline: position.discipline,
-              unit: position.unit,
-            }));
-          } catch {
-            return [];
-          }
-        })
+      setRecipes(
+        recipeItems.map((recipe) => ({
+          ...recipe,
+          discipline: recipe.discipline ?? 0,
+          unit: recipe.unit ?? "",
+        }))
       );
 
-      setRecipes(recipeResults.flat());
+      setCoverage(coverageResult);
     } catch (err) {
       setError(
         err instanceof Error
@@ -72,40 +73,17 @@ export default function EngineeringRecipesPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [search, discipline, onlyDefault]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const filteredRecipes = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
-
-    return recipes.filter((item) => {
-      const matchesSearch =
-        !term ||
-        item.positionCode.toLocaleLowerCase("tr-TR").includes(term) ||
-        item.positionName.toLocaleLowerCase("tr-TR").includes(term) ||
-        (item.description ?? "")
-          .toLocaleLowerCase("tr-TR")
-          .includes(term);
-
-      const matchesDiscipline =
-        discipline === "" || item.discipline === Number(discipline);
-
-      const matchesDefault = !onlyDefault || item.isDefault;
-
-      return matchesSearch && matchesDiscipline && matchesDefault;
-    });
-  }, [recipes, search, discipline, onlyDefault]);
-
-  const positionsWithoutRecipe = useMemo(() => {
-    const positionIds = new Set(
-      recipes.map((recipe) => recipe.engineeringPositionId)
-    );
-
-    return positions.filter((position) => !positionIds.has(position.id));
-  }, [positions, recipes]);
+  // Filtreleme SUNUCUDA yapılıyor (arama, disiplin, yalnız varsayılan).
+  // İkinci bir istemci filtresi, sunucunun döndürmediği kayıtları
+  // süzüyormuş gibi görünür ve kullanıcıya eksik listeyi tam sanki
+  // gösterirdi.
+  const filteredRecipes = recipes;
 
   const totalLaborHours = useMemo(
     () =>
@@ -179,7 +157,9 @@ export default function EngineeringRecipesPage() {
           <div>
             <span>Reçetesiz Poz</span>
             <strong>
-              {loading ? "…" : positionsWithoutRecipe.length}
+              {loading || !coverage
+                ? "…"
+                : coverage.positionsWithoutRecipe.toLocaleString("tr-TR")}
             </strong>
             <small>Analizi henüz oluşturulmayan pozlar</small>
           </div>
@@ -373,41 +353,26 @@ export default function EngineeringRecipesPage() {
         )}
       </section>
 
-      {positionsWithoutRecipe.length > 0 && (
+      {coverage && coverage.positionsWithoutRecipe > 0 && (
         <section className="erp-panel" style={{ marginTop: 20 }}>
           <div className="erp-panel-header">
             <div>
               <h2>Reçetesi Olmayan Pozlar</h2>
-              <p>Teklif motorunda kullanılmadan önce analiz oluşturulmalı</p>
+              <p>
+                {coverage.positionsWithoutRecipe.toLocaleString("tr-TR")} pozun
+                varsayılan reçetesi yok — bu pozlar proje malzeme ihtiyacına
+                sıfır katkı verir, ihtiyaç listesinde ayrıca uyarı olarak
+                görünür.
+              </p>
             </div>
-          </div>
 
-          <div className="enderun-project-cards">
-            {positionsWithoutRecipe.slice(0, 12).map((position) => (
-              <Link
-                key={position.id}
-                href={`/muhendislik/pozlar/${position.id}`}
-                className="enderun-project-card"
-              >
-                <div className="enderun-project-card-top">
-                  <span className="erp-status">Eksik</span>
-                  <span>{position.unit}</span>
-                </div>
-
-                <h3>{position.code}</h3>
-                <p>{position.name}</p>
-
-                <div className="enderun-project-card-meta">
-                  <span>
-                    {disciplineLabels[position.discipline] ?? "Genel"}
-                  </span>
-                  <span>Reçete oluştur →</span>
-                </div>
-              </Link>
-            ))}
+            <Link href="/muhendislik/receteler/ice-aktar" className="erp-button">
+              Toplu Reçete Aktar
+            </Link>
           </div>
         </section>
       )}
+
     </ErpShell>
   );
 }
