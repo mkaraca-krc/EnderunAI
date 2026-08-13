@@ -3856,7 +3856,15 @@ public sealed class AppDbContext(
             entity.Property(x => x.Amount).HasPrecision(18, 2);
             entity.Property(x => x.Description).HasMaxLength(500);
 
-            entity.HasIndex(x => new { x.ProgressPaymentId, x.LineNumber }).IsUnique();
+            // KISMİ BENZERSİZLİK: kural yalnız SİLİNMEMİŞ satırlar için
+            // geçerli. Güncelleme eski satırları yumuşak silip yenilerini
+            // 1'den başlayarak yeniden yazıyor; silinen satır tabloda
+            // kaldığı için koşulsuz kısıt ikinci güncellemeyi patlatıyordu.
+            // Kısıt kaldırılmadı — aynı üst kayıtta iki kez aynı satır
+            // numarası geçerli olamaz; denetim izi kısıt dışında kalır.
+            entity.HasIndex(x => new { x.ProgressPaymentId, x.LineNumber })
+                .IsUnique()
+                .HasFilter("NOT \"IsDeleted\"");
 
             entity.HasOne(x => x.ProgressPayment).WithMany(x => x.PaymentPlans)
                 .HasForeignKey(x => x.ProgressPaymentId)
@@ -3885,11 +3893,17 @@ public sealed class AppDbContext(
             entity.Property(x => x.VatAmount).HasPrecision(18, 2);
             entity.Property(x => x.GrossAmount).HasPrecision(18, 2);
 
+            // KISMİ BENZERSİZLİK: kural yalnız SİLİNMEMİŞ satırlar için
+            // geçerli. Güncelleme eski satırları yumuşak silip yenilerini
+            // 1'den başlayarak yeniden yazıyor; silinen satır tabloda
+            // kaldığı için koşulsuz kısıt ikinci güncellemeyi patlatıyordu.
+            // Kısıt kaldırılmadı — aynı üst kayıtta iki kez aynı satır
+            // numarası geçerli olamaz; denetim izi kısıt dışında kalır.
             entity.HasIndex(x => new
             {
                 x.ProgressPaymentDeductionId,
                 x.LineNumber
-            }).IsUnique();
+            }).IsUnique().HasFilter("NOT \"IsDeleted\"");
 
             entity.HasOne(x => x.ProgressPaymentDeduction).WithMany(x => x.Lines)
                 .HasForeignKey(x => x.ProgressPaymentDeductionId)
@@ -3944,7 +3958,15 @@ public sealed class AppDbContext(
             // OpenAmount hesaplanmış bir özellik; kolona yazılmaz.
             entity.Ignore(x => x.OpenAmount);
 
-            entity.HasIndex(x => new { x.ProgressPaymentId, x.LineNumber }).IsUnique();
+            // KISMİ BENZERSİZLİK: kural yalnız SİLİNMEMİŞ satırlar için
+            // geçerli. Güncelleme eski satırları yumuşak silip yenilerini
+            // 1'den başlayarak yeniden yazıyor; silinen satır tabloda
+            // kaldığı için koşulsuz kısıt ikinci güncellemeyi patlatıyordu.
+            // Kısıt kaldırılmadı — aynı üst kayıtta iki kez aynı satır
+            // numarası geçerli olamaz; denetim izi kısıt dışında kalır.
+            entity.HasIndex(x => new { x.ProgressPaymentId, x.LineNumber })
+                .IsUnique()
+                .HasFilter("NOT \"IsDeleted\"");
 
             entity.HasOne(x => x.ProgressPayment).WithMany(x => x.AdvanceMaterials)
                 .HasForeignKey(x => x.ProgressPaymentId)
@@ -4030,11 +4052,17 @@ public sealed class AppDbContext(
             entity.ToTable("progress_payment_items");
             entity.HasKey(x => x.Id);
 
+            // KISMİ BENZERSİZLİK: kural yalnız SİLİNMEMİŞ satırlar için
+            // geçerli. Güncelleme eski satırları yumuşak silip yenilerini
+            // 1'den başlayarak yeniden yazıyor; silinen satır tabloda
+            // kaldığı için koşulsuz kısıt ikinci güncellemeyi patlatıyordu.
+            // Kısıt kaldırılmadı — aynı üst kayıtta iki kez aynı satır
+            // numarası geçerli olamaz; denetim izi kısıt dışında kalır.
             entity.HasIndex(x => new
             {
                 x.ProgressPaymentId,
                 x.LineNumber
-            }).IsUnique();
+            }).IsUnique().HasFilter("NOT \"IsDeleted\"");
 
             entity.Property(x => x.PositionCode)
                 .HasMaxLength(100)
@@ -4111,11 +4139,17 @@ public sealed class AppDbContext(
             entity.ToTable("progress_payment_deductions");
             entity.HasKey(x => x.Id);
 
+            // KISMİ BENZERSİZLİK: kural yalnız SİLİNMEMİŞ satırlar için
+            // geçerli. Güncelleme eski satırları yumuşak silip yenilerini
+            // 1'den başlayarak yeniden yazıyor; silinen satır tabloda
+            // kaldığı için koşulsuz kısıt ikinci güncellemeyi patlatıyordu.
+            // Kısıt kaldırılmadı — aynı üst kayıtta iki kez aynı satır
+            // numarası geçerli olamaz; denetim izi kısıt dışında kalır.
             entity.HasIndex(x => new
             {
                 x.ProgressPaymentId,
                 x.LineNumber
-            }).IsUnique();
+            }).IsUnique().HasFilter("NOT \"IsDeleted\"");
 
             entity.Property(x => x.Description)
                 .HasMaxLength(500)
@@ -4778,8 +4812,18 @@ public sealed class AppDbContext(
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.EngineeringPositionId);
             entity.HasIndex(x => x.ProjectBoqItemId);
-            entity.HasIndex(x => new { x.ProjectMeasurementId, x.LineNumber }).IsUnique();
-            entity.HasIndex(x => new { x.ProjectMeasurementId, x.ProjectBoqItemId }).IsUnique();
+            // KISMİ BENZERSİZLİK: kural yalnız SİLİNMEMİŞ satırlar için
+            // geçerli. Güncelleme eski satırları yumuşak silip yenilerini
+            // 1'den başlayarak yeniden yazıyor; silinen satır tabloda
+            // kaldığı için koşulsuz kısıt ikinci güncellemeyi patlatıyordu.
+            // Kısıt kaldırılmadı — aynı üst kayıtta iki kez aynı satır
+            // numarası geçerli olamaz; denetim izi kısıt dışında kalır.
+            entity.HasIndex(x => new { x.ProjectMeasurementId, x.LineNumber })
+                .IsUnique()
+                .HasFilter("NOT \"IsDeleted\"");
+            entity.HasIndex(x => new { x.ProjectMeasurementId, x.ProjectBoqItemId })
+                .IsUnique()
+                .HasFilter("NOT \"IsDeleted\"");
             entity.Property(x => x.PositionCode).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
             entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();

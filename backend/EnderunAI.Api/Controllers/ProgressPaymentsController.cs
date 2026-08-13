@@ -659,6 +659,22 @@ public sealed class ProgressPaymentsController(
         if (planError is not null)
             return BadRequest(new { message = planError });
 
+        // YUKARIDA HER ALT KOLEKSİYON TEMİZLENİP YENİDEN KURULDU; içindeki
+        // her satır yepyeni. EF bunları anahtarları dolu geldiği için VAR
+        // OLAN satır sanıp Modified işaretliyor ve kayıt "beklenen 1 satır,
+        // etkilenen 0" ile düşüyordu — taslak hakediş hiç düzenlenemiyordu.
+        // Durumları burada, tek yerde düzeltiliyor.
+        db.MarkRebuiltAsNew(entity.Items);
+        db.MarkRebuiltAsNew(entity.Sections);
+        db.MarkRebuiltAsNew(entity.Deductions);
+
+        foreach (var deduction in entity.Deductions)
+            db.MarkRebuiltAsNew(deduction.Lines);
+
+        db.MarkRebuiltAsNew(entity.AdvanceMaterials);
+        db.MarkRebuiltAsNew(entity.AdvanceMaterialOffsets);
+        db.MarkRebuiltAsNew(entity.PaymentPlans);
+
         await db.SaveChangesAsync(cancellationToken);
 
         await SyncBarterLedgerAsync(entity, cancellationToken);

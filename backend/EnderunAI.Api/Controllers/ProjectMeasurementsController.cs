@@ -327,6 +327,12 @@ public sealed class ProjectMeasurementsController(
         measurement.TotalAmount = measurement.Items.Sum(x => x.CurrentAmount);
         measurement.UpdatedAtUtc = DateTime.UtcNow;
 
+        // Satırlar yukarıda temizlenip yeniden kuruldu; hepsi yeni. EF
+        // anahtarları dolu geldiği için bunları var olan satır sanıp
+        // Modified işaretliyor ve kayıt "beklenen 1 satır, etkilenen 0"
+        // ile düşüyordu — metraj hiç güncellenemiyordu.
+        db.MarkRebuiltAsNew(measurement.Items);
+
         await db.SaveChangesAsync(cancellationToken);
 
         return await GetById(id, cancellationToken);
