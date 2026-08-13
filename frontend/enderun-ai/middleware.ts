@@ -92,6 +92,9 @@ function requiredPermission(pathname: string): string | null {
     return "hakedis.view";
   if (pathname.startsWith("/satin-alma")) return "purchasing.view";
   if (pathname.startsWith("/depo")) return "inventory.view";
+  // Filo: araç kartı yetkisiz kullanıcıya HİÇ render edilmemeli;
+  // kapı burada, uçlar da aynı anahtarı istiyor.
+  if (pathname.startsWith("/filo")) return "vehicle.view";
   // SPESİFİK KALIP GENELDEN ÖNCE: içe aktarma ekranları yazma yetkisi
   // ister (uçlar engineering.manage istiyor). Genel kural önce
   // gelseydi, yalnız görüntüleme yetkisi olan kullanıcı ekranı açar,

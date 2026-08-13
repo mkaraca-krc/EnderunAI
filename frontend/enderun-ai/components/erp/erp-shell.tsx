@@ -352,6 +352,17 @@ const groups: MenuGroup[] = [
     ],
   },
   {
+    key: "fleet",
+    label: "FİLO",
+    items: [
+      {
+        label: "Araçlar",
+        href: "/filo",
+        icon: "⛟",
+      },
+    ],
+  },
+  {
     key: "inventory",
     label: "DEPO VE STOK",
     items: [

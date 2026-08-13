@@ -34,6 +34,11 @@ public sealed class VehiclesController(
         [FromQuery] string? search,
         CancellationToken cancellationToken)
     {
+        var dueLimit = DateTime.SpecifyKind(
+            DateTime.UtcNow.Date.AddDays(
+                Services.Notifications.NotificationWindow.DueEarlyDays),
+            DateTimeKind.Utc);
+
         var query = db.Vehicles.AsNoTracking();
 
         if (companyId.HasValue)
@@ -69,6 +74,18 @@ public sealed class VehiclesController(
                 x.CascoRenewalDate,
                 x.MotorTaxDueDate,
                 x.NextMaintenanceDate,
+
+                // YAKLAŞAN YENİLEME SAYISI SUNUCUDA hesaplanıyor ve
+                // eşik bildirim motorunun kendi sabitinden geliyor
+                // (NotificationWindow.DueEarlyDays). İstemcide
+                // hesaplansaydı ikinci bir eşik doğar ve liste rozeti
+                // "yaklaşıyor" derken bildirim merkezi susardı.
+                DueSoonCount =
+                    (x.InspectionDueDate != null && x.InspectionDueDate <= dueLimit ? 1 : 0) +
+                    (x.InsuranceRenewalDate != null && x.InsuranceRenewalDate <= dueLimit ? 1 : 0) +
+                    (x.CascoRenewalDate != null && x.CascoRenewalDate <= dueLimit ? 1 : 0) +
+                    (x.MotorTaxDueDate != null && x.MotorTaxDueDate <= dueLimit ? 1 : 0) +
+                    (x.NextMaintenanceDate != null && x.NextMaintenanceDate <= dueLimit ? 1 : 0),
 
                 // GÜNCEL KONUM: açık atama. Yoksa araç merkez havuzunda
                 // ya da hiç atanmamıştır; ikisi ekranda ayrışsın diye

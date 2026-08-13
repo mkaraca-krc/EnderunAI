@@ -287,6 +287,11 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Notifications.INotificationSource,
     EnderunAI.Api.Services.Notifications.Sources.ManagementNotificationSource>();
 
+// Filo tetikleyicileri: muayene, sigorta, kasko, MTV, periyodik bakım.
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.INotificationSource,
+    EnderunAI.Api.Services.Notifications.Sources.VehicleRenewalNotificationSource>();
+
 // Finansal araçlar ortak sözleşmeyi uyguluyor; nakit akış hepsini
 // IEnumerable<IFinancialInstrumentSource> olarak okuyor. Yeni bir
 // araç eklemek, projeksiyonu değiştirmeden bu listeye kayıt olmak.
