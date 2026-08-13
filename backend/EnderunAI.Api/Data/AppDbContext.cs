@@ -240,6 +240,11 @@ public sealed class AppDbContext(
     public DbSet<HrShiftAssignment> HrShiftAssignments => Set<HrShiftAssignment>();
     public DbSet<HrAssetAssignment> HrAssetAssignments => Set<HrAssetAssignment>();
     public DbSet<ToolAsset> ToolAssets => Set<ToolAsset>();
+
+    public DbSet<Models.Fleet.Vehicle> Vehicles => Set<Models.Fleet.Vehicle>();
+
+    public DbSet<Models.Fleet.VehicleAssignment> VehicleAssignments =>
+        Set<Models.Fleet.VehicleAssignment>();
     public DbSet<ToolServiceRequest> ToolServiceRequests =>
         Set<ToolServiceRequest>();
     public DbSet<Models.Schedule.ProjectSchedule> ProjectSchedules =>
@@ -306,6 +311,7 @@ public sealed class AppDbContext(
         ConfigureCashFlowEstimatedExpenses(modelBuilder);
         ConfigureExpenseCategories(modelBuilder);
         ConfigureExpenseEntries(modelBuilder);
+        ConfigureFleet(modelBuilder);
         ConfigureRecurringExpenseTemplates(modelBuilder);
         ConfigurePartnerAccounts(modelBuilder);
         ConfigureFinancialInstruments(modelBuilder);
@@ -1142,6 +1148,99 @@ public sealed class AppDbContext(
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(x => x.CreditCardId);
+
+            entity.HasOne(x => x.Vehicle)
+                .WithMany()
+                .HasForeignKey(x => x.VehicleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Araç kartındaki masraf dökümü bu index üzerinden okunur.
+            entity.HasIndex(x => x.VehicleId);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    /// <summary>Filo: araç kartı ve atamaları.</summary>
+    private static void ConfigureFleet(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Models.Fleet.Vehicle>(entity =>
+        {
+            entity.ToTable("vehicles");
+            entity.HasKey(x => x.Id);
+
+            // PLAKA BENZERSİZ — ama yalnız silinmemişler arasında.
+            // Koşulsuz olsaydı satılan aracın kaydı, aynı plakanın
+            // yeniden alınmasını ilelebet engellerdi; kaydı silmek de
+            // masraf geçmişini koparırdı.
+            entity.HasIndex(x => new { x.CompanyId, x.PlateNumber })
+                .IsUnique()
+                .HasFilter("NOT \"IsDeleted\"");
+
+            entity.Property(x => x.PlateNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Brand).HasMaxLength(100);
+            entity.Property(x => x.Model).HasMaxLength(100);
+            entity.Property(x => x.ChassisNumber).HasMaxLength(50);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.RentAmount).HasPrecision(18, 2);
+            entity.Property(x => x.PurchaseCost).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.LessorCurrentAccount)
+                .WithMany()
+                .HasForeignKey(x => x.LessorCurrentAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.Fleet.VehicleAssignment>(entity =>
+        {
+            entity.ToTable("vehicle_assignments");
+            entity.HasKey(x => x.Id);
+
+            // AYNI ANDA TEK AÇIK ATAMA — veritabanı garantisi.
+            // Yalnız uygulama katmanında kalsaydı iki eşzamanlı istek
+            // aracı iki projede açık gösterebilirdi.
+            entity.HasIndex(x => x.VehicleId)
+                .IsUnique()
+                .HasFilter("\"EndDate\" IS NULL AND NOT \"IsDeleted\"")
+                .HasDatabaseName("IX_vehicle_assignments_open_per_vehicle");
+
+            // Tekrar anahtarı: aynı anahtarla ikinci atama açılmaz.
+            entity.HasIndex(x => new { x.VehicleId, x.ReferenceKey })
+                .IsUnique()
+                .HasFilter("\"ReferenceKey\" IS NOT NULL AND NOT \"IsDeleted\"");
+
+            entity.HasIndex(x => x.ProjectId);
+            entity.HasIndex(x => new { x.VehicleId, x.StartDate });
+
+            entity.Property(x => x.ReferenceKey).HasMaxLength(100);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+
+            entity.HasOne(x => x.Vehicle)
+                .WithMany(x => x.Assignments)
+                .HasForeignKey(x => x.VehicleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProjectSite)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.DriverPersonnel)
+                .WithMany()
+                .HasForeignKey(x => x.DriverPersonnelId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

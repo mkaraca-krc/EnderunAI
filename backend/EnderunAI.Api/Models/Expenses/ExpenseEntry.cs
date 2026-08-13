@@ -123,6 +123,17 @@ public sealed class ExpenseEntry : BaseEntity
     /// ZORUNLU: kartı belli olmayan bir harcama hiçbir ekstreye
     /// düşmez ve nakit çıkışı hiç görünmez.
     /// </summary>
+    /// <summary>
+    /// Gider bir ARACA aitse aracın kimliği.
+    ///
+    /// Araç masrafı AYRI DEFTERDE tutulmaz; bu bağ sayesinde araç
+    /// kartındaki masraf dökümü bu kayıtların filtrelenmiş görünümü
+    /// olur. Ayrı tablo açılsaydı aynı masraf hem gider merkezi
+    /// raporunda hem araç defterinde sayılırdı.
+    /// </summary>
+    public Guid? VehicleId { get; set; }
+    public Fleet.Vehicle? Vehicle { get; set; }
+
     public Guid? CreditCardId { get; set; }
     public FinancialInstruments.CreditCard? CreditCard { get; set; }
 

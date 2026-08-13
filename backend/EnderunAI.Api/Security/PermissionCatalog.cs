@@ -155,6 +155,12 @@ public static class PermissionCatalog
         public const string ExpenseView = "expense.view";
         public const string ExpenseManage = "expense.manage";
 
+        /// <summary>Araç (filo) kartlarını görüntüleme.</summary>
+        public const string VehicleView = "vehicle.view";
+
+        /// <summary>Araç kartı ve atama yönetimi.</summary>
+        public const string VehicleManage = "vehicle.manage";
+
         public const string FinanceEdit = "finance.edit";
         public const string FinanceDelete = "finance.delete";
 
@@ -361,6 +367,8 @@ public static class PermissionCatalog
         new(Keys.CashFlowView, "Finans", "Nakit akış projeksiyonu", "Likidite takvimini görüntüler; bordro çıkışı elden dahil tam tutarla görünür."),
         new(Keys.ExpenseView, "Finans", "Gider merkezi raporu", "Merkez ve kategori kırılımında giderleri görüntüler."),
         new(Keys.ExpenseManage, "Finans", "Gider kaydı yönetimi", "Elle gider kaydı, kategori ve tekrarlayan gider şablonu yönetir."),
+        new(Keys.VehicleView, "Filo", "Araç görüntüleme", "Araç kartlarını, atamalarını ve araç masraf dökümünü görüntüler."),
+        new(Keys.VehicleManage, "Filo", "Araç yönetimi", "Araç kartı açar, günceller ve araçları projelere atar."),
         new(Keys.FinanceEdit, "Finans", "Finans kaydı düzenleme", "Finans kaydını günceller."),
         new(Keys.FinanceDelete, "Finans", "Finans kaydı silme", "Finans kaydını siler."),
 

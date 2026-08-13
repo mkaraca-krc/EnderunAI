@@ -140,6 +140,9 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Purchasing.IProjectMaterialRequestBridge,
     EnderunAI.Api.Services.Purchasing.ProjectMaterialRequestBridge>();
 builder.Services.AddScoped<
+    EnderunAI.Api.Services.Fleet.IVehicleService,
+    EnderunAI.Api.Services.Fleet.VehicleService>();
+builder.Services.AddScoped<
     EnderunAI.Api.Services.Engineering.IPositionMatchService,
     EnderunAI.Api.Services.Engineering.PositionMatchService>();
 builder.Services.AddScoped<

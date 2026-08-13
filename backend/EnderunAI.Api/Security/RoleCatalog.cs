@@ -44,6 +44,9 @@ public static class RoleCatalog
             // finansın raporu. Elden ödenen gider kalemleri ayrıca
             // extra_payment.view'a tabi, o izin de bu rolde var.
             PermissionCatalog.Keys.ExpenseView, PermissionCatalog.Keys.ExpenseManage,
+            // Araç masrafı gider merkezine düşüyor; filoyu yöneten ve
+            // kira/sigorta/MTV ödemesini yapan rol finans.
+            PermissionCatalog.Keys.VehicleView, PermissionCatalog.Keys.VehicleManage,
             PermissionCatalog.Keys.CurrentAccountsView, PermissionCatalog.Keys.CurrentAccountsCreate,
             PermissionCatalog.Keys.CurrentAccountsEdit, PermissionCatalog.Keys.CurrentAccountsDelete,
             PermissionCatalog.Keys.CurrentAccountsApprove,
