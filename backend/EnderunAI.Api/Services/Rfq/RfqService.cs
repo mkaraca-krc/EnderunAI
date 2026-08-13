@@ -8,6 +8,7 @@ using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.DocumentNumbers;
 using EnderunAI.Api.Services.Procurement;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using RfqEntity = EnderunAI.Api.Models.Rfq.Rfq;
 
 namespace EnderunAI.Api.Services.Rfq;
@@ -366,8 +367,22 @@ public sealed class RfqService(
             MidpointRounding.AwayFromZero);
         var grandTotal = quotationItems.Sum(x => x.TotalPrice);
 
-        supplier.Quotations.Add(new RfqSupplierQuotation
+        // YENİ TEKLİF DbSet ÜZERİNDEN EKLENİR, izlenen tedarikçinin
+        // Quotations koleksiyonuna DEĞİL.
+        //
+        // NEDENİ: BaseEntity.Id kurulumda Guid.NewGuid() ile dolar, yani
+        // anahtar "dolu" gelir. EF, izlenen bir kökün navigation'ında
+        // bulduğu anahtarı dolu varlığı VAR OLAN satır sayar ve Added
+        // yerine Modified işaretler; sonuçta olmayan satıra UPDATE atıp
+        // "beklenen 1 satır, etkilenen 0" ile patlar. Teklif kaydetme
+        // ucu tam olarak bu yüzden 500 dönüyordu.
+        //
+        // db.Add grafiği (teklif + kalemleri) açıkça Added işaretler.
+        // Yukarıdaki eski teklifleri işaretleyen döngü ise gerçekten
+        // var olan satırlara dokunduğu için Modified olarak doğrudur.
+        var quotation = new RfqSupplierQuotation
         {
+            RfqSupplierId = supplier.Id,
             SupplierQuotationNumber = request.SupplierQuotationNumber?.Trim(),
             QuotationDate = request.QuotationDate.AsUtc(),
             ValidUntil = request.ValidUntil.AsUtc(),
@@ -380,12 +395,34 @@ public sealed class RfqService(
             GrandTotal = grandTotal,
             Notes = request.Notes?.Trim(),
             Items = quotationItems
-        });
+        };
+
+        db.RfqSupplierQuotations.Add(quotation);
 
         supplier.Status = RfqSupplierStatus.Responded;
         supplier.RespondedAtUtc = DateTime.UtcNow;
         supplier.Rfq.Status = RfqStatus.ResponsesReceived;
-        await db.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException is PostgresException
+                  {
+                      SqlState: PostgresErrorCodes.UniqueViolation,
+                      ConstraintName: "IX_rfq_supplier_quotations_RfqSupplierId"
+                  })
+        {
+            // İki kullanıcı (ya da iki sekme) aynı tedarikçinin teklifini
+            // aynı anda kaydetti: biri kazandı, diğerinin eklemesi
+            // veritabanı kısıtına takıldı. Bu bir sunucu arızası değil,
+            // sıradan bir çakışma — kullanıcıya ne yapacağını söyleyen
+            // bir mesaj döner, "beklenmeyen hata" değil.
+            throw new ProcurementValidationException(
+                "Bu tedarikçinin teklifi aynı anda başka bir yerden " +
+                "kaydedildi. Sayfayı yenileyip tekrar deneyin.");
+        }
     }
 
     public async Task<RfqComparisonResponse> GetComparisonAsync(

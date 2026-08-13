@@ -95,7 +95,23 @@ public sealed class RfqSupplierQuotationConfiguration :
     {
         entity.ToTable("rfq_supplier_quotations");
         entity.HasKey(x => x.Id);
-        entity.HasIndex(x => x.RfqSupplierId);
+
+        // TEDARİKÇİ BAŞINA TEK GEÇERLİ TEKLİF — ama yalnız silinmemişler
+        // arasında.
+        //
+        // Kısıt başlangıçta koşulsuz UNIQUE kurulmuştu; teklif kaydetme
+        // ise eskiyi YUMUŞAK silip yenisini ekliyor. Silinen satır
+        // tabloda kaldığı için ikinci kayıt kısıtı ihlal ediyor ve uç
+        // 500 dönüyordu. Ayrıca model tarafında index unique değildi:
+        // şema ile model ayrışmıştı, bu düzeltme ikisini de hizalıyor.
+        //
+        // Kısıt KALDIRILMADI: kural gerçek. Aynı tedarikçinin aynı RFQ
+        // için iki geçerli teklifi olsaydı hangi fiyata karar verildiği
+        // belirsizleşirdi. Denetim izi (silinmiş eski teklifler) ise
+        // kısıt dışında kalarak korunuyor.
+        entity.HasIndex(x => x.RfqSupplierId)
+            .IsUnique()
+            .HasFilter("NOT \"IsDeleted\"");
         entity.Property(x => x.SupplierQuotationNumber).HasMaxLength(100);
         entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
         entity.Property(x => x.ExchangeRate).HasPrecision(18, 6);
