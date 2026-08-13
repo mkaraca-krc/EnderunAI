@@ -47,6 +47,32 @@ public static class ExpenseSourceCategoryMap
         _ => ExpenseCategoryCatalog.Other
     };
 
+    /// <summary>
+    /// Gider kategorisinin MALİYET SINIFI — elle gider kaydı proje
+    /// maliyetine girerken hangi bileşene sayılacağı.
+    ///
+    /// TERS EŞLEMENİN YANINDA DURUYOR: <see cref="ForCostClass"/> sınıftan
+    /// kategoriye, bu kategoriden sınıfa çevirir. İkisi ayrı dosyalara
+    /// dağılsaydı biri değişip diğeri unutulur ve aynı gider raporda
+    /// başka, maliyet analizinde başka bileşende görünürdü.
+    ///
+    /// ELLE GİRİLEBİLEN KATEGORİLERİN HEPSİ GENEL GİDERDİR: kira,
+    /// faturalar, kırtasiye, araç/yakıt, bakım, yemek, konaklama,
+    /// harcırah, diğer — hiçbiri imalata doğrudan girmez. Malzeme,
+    /// işçilik ve taşeron zaten elle girilemiyor (otomatik kaynaklardan
+    /// gelir); yine de savunma amaçlı eşlenmiş durumdalar, çünkü bir
+    /// kategori sonradan elle girişe açılırsa yanlış bileşende sessizce
+    /// toplanması bu eşlemenin eksikliğinden olurdu.
+    /// </summary>
+    public static ProjectCostClass CostClassForCategory(string? categoryCode) =>
+        categoryCode switch
+        {
+            ExpenseCategoryCatalog.Material => ProjectCostClass.Material,
+            ExpenseCategoryCatalog.Labor => ProjectCostClass.Labor,
+            ExpenseCategoryCatalog.Subcontractor => ProjectCostClass.SubcontractorLabor,
+            _ => ProjectCostClass.Overhead
+        };
+
     /// <summary>Kaynağın ekranda görünen adı.</summary>
     public static string SourceLabel(string? referenceType) => referenceType switch
     {

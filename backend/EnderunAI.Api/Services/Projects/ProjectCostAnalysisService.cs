@@ -107,6 +107,7 @@ public interface IProjectCostAnalysisService
 public sealed class ProjectCostAnalysisService(
     AppDbContext db,
     IExtraPaymentVisibilityService extraPaymentVisibility,
+    IProjectRealizedCostReader realizedCosts,
     EnderunAI.Api.Services.HumanResources.ExtraPaymentAllocationService
         extraPaymentAllocation) : IProjectCostAnalysisService
 {
@@ -186,18 +187,29 @@ public sealed class ProjectCostAnalysisService(
             ? decimal.Round(revenue / contractForecastTotal, 6)
             : 1m;
 
-        // --- Gerçekleşen: maliyet defteri ---
-        var ledger = await db.ProjectCostTransactions
-            .AsNoTracking()
-            .Where(x => x.ProjectId == projectId)
-            .Select(x => new
-            {
-                x.CostClass,
-                x.Amount,
-                x.CostDate,
-                x.ProjectHakedisSectionId
-            })
-            .ToListAsync(cancellationToken);
+        // --- Elden görünürlüğü: maliyet okunmadan ÖNCE ---
+        // Maskeli gider kalemlerinin toplama girip girmeyeceğini
+        // belirlediği için okumadan önce bilinmesi gerekiyor.
+        var canSeeExtraPayments =
+            await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken);
+
+        // --- Gerçekleşen: maliyet defteri + elle gider kayıtları ---
+        //
+        // TEK OKUMA NOKTASI: hakediş kârı ve finans panosu da aynı
+        // okuyucudan besleniyor. Burada kendi sorgum olsaydı biri gider
+        // kayıtlarını sayarken diğeri saymaz ve aynı proje için iki
+        // farklı maliyet çıkardı.
+        var ledger = await realizedCosts.ReadAsync(
+            projectId, null, null, canSeeExtraPayments, cancellationToken);
+
+        if (ledger.Any(x => x.Source == RealizedCostSource.ManualExpense))
+        {
+            assumptions.Add(
+                "Elle girilen gider kayıtları (kira, faturalar, araç masrafı " +
+                "gibi) genel gider bileşenine dahil edildi; bu kalemlerde " +
+                "icmal kısmı bulunmadığı için kırılımda \"Genel\" satırında " +
+                "toplanırlar.");
+        }
 
         // --- Gerçekleşen: işçilik (puantaj/bordro) ---
         var employerFactor = await ResolveEmployerCostFactorAsync(
@@ -223,9 +235,6 @@ public sealed class ProjectCostAnalysisService(
             laborRows.Sum(x => x.TotalLaborCost) * employerFactor, 2);
 
         // --- Elden ödeme payı (yetkiye bağlı) ---
-        var canSeeExtraPayments =
-            await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken);
-
         decimal? extraPaymentLabor = null;
 
         if (canSeeExtraPayments)
@@ -287,7 +296,7 @@ public sealed class ProjectCostAnalysisService(
             .Where(x => x.ProjectId == projectId)
             .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
 
-        var sectionKeys = ledger.Select(x => x.ProjectHakedisSectionId)
+        var sectionKeys = ledger.Select(x => x.SectionId)
             .Concat(laborRows.Select(x => x.ProjectHakedisSectionId))
             .Distinct()
             .ToList();
@@ -295,7 +304,7 @@ public sealed class ProjectCostAnalysisService(
         var sections = sectionKeys
             .Select(sectionId =>
             {
-                var ledgerRows = ledger.Where(x => x.ProjectHakedisSectionId == sectionId).ToList();
+                var ledgerRows = ledger.Where(x => x.SectionId == sectionId).ToList();
 
                 var sectionLabor = decimal.Round(
                     laborRows.Where(x => x.ProjectHakedisSectionId == sectionId)

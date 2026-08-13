@@ -149,6 +149,9 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Engineering.IPositionMatchService,
     EnderunAI.Api.Services.Engineering.PositionMatchService>();
 builder.Services.AddScoped<
+    EnderunAI.Api.Services.Projects.IProjectRealizedCostReader,
+    EnderunAI.Api.Services.Projects.ProjectRealizedCostReader>();
+builder.Services.AddScoped<
     EnderunAI.Api.Services.Projects.IProjectCostAnalysisService,
     EnderunAI.Api.Services.Projects.ProjectCostAnalysisService>();
 builder.Services.AddScoped<
