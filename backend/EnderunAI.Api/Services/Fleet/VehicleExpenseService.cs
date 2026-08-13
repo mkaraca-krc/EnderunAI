@@ -1,4 +1,5 @@
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Formatting;
 using EnderunAI.Api.Models.Expenses;
 using Microsoft.EntityFrameworkCore;
 
@@ -344,7 +345,8 @@ public sealed class VehicleExpenseService(AppDbContext db) : IVehicleExpenseServ
         if (decimal.Round(total, 2) != decimal.Round(amount, 2))
         {
             throw new FleetValidationException(
-                $"Elle girilen payların toplamı {total:N2}, tutar {amount:N2}. " +
+                $"Elle girilen payların toplamı {TurkishFormat.Amount(total)}, " +
+                $"tutar {TurkishFormat.Amount(amount)}. " +
                 "Dağıtım tutarı birebir karşılamalıdır.");
         }
 
