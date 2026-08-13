@@ -386,6 +386,78 @@ export default function ProjectCostAnalysisPage() {
           <section className="erp-panel erp-mt">
             <div className="erp-panel-header">
               <div>
+                <h2>Maliyet Nereden Geldi</h2>
+                <p>
+                  Gerçekleşen maliyetin kaynak kırılımı — toplamı yukarıdaki
+                  gerçekleşen maliyete eşittir.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: "16px" }}>
+              {analysis.costSources.length === 0 ? (
+                <div className="erp-empty-state">
+                  Bu projede henüz gerçekleşen maliyet kaydı yok.
+                </div>
+              ) : (
+                <table className="erp-table">
+                  <thead>
+                    <tr>
+                      <th>Kaynak</th>
+                      <th style={{ textAlign: "right" }}>Tutar</th>
+                      <th style={{ textAlign: "right" }}>Pay</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analysis.costSources.map((source) => (
+                      <tr key={source.source}>
+                        <td>{source.sourceName}</td>
+                        <td style={{ textAlign: "right" }}>
+                          {moneyDetailed.format(source.amount)}
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          {percent(
+                            analysis.totalCost === 0
+                              ? 0
+                              : (source.amount / analysis.totalCost) * 100
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {analysis.unlinkedToBoqItemAmount > 0 && (
+                <p style={{ marginTop: "12px" }}>
+                  <small>
+                    <strong>
+                      {moneyDetailed.format(analysis.unlinkedToBoqItemAmount)}
+                    </strong>{" "}
+                    tutarındaki maliyet bir POZA bağlı değil; poz kâr
+                    analizinde ölçülmüş maliyet olarak görünmez.
+                    {analysis.unlinkedToSectionAmount > 0 && (
+                      <>
+                        {" "}
+                        Bunun{" "}
+                        <strong>
+                          {moneyDetailed.format(
+                            analysis.unlinkedToSectionAmount
+                          )}
+                        </strong>{" "}
+                        kadarı bir KISMA da bağlı değil — kısımdaki pozlara
+                        dağıtılamaz, proje geneli maliyet olarak kalır.
+                      </>
+                    )}
+                  </small>
+                </p>
+              )}
+            </div>
+          </section>
+
+          <section className="erp-panel erp-mt">
+            <div className="erp-panel-header">
+              <div>
                 <h2>Hesap Varsayımları</h2>
                 <p>Rakamların neye dayandığı — okurken bilinmesi gerekenler.</p>
               </div>

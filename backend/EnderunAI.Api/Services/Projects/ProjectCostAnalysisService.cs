@@ -43,6 +43,18 @@ public sealed record CostMonthlyPoint(
     decimal TotalAmount,
     decimal RevenueAmount);
 
+/// <summary>
+/// Gerçekleşen maliyetin KAYNAK kırılımı — rakam nereden geldi.
+///
+/// Toplamları <c>TotalCost</c>'a eşittir; ekranda kullanıcı "bu tutar
+/// nereden çıktı" sorusunu tabloya bakarak cevaplayabilsin diye ayrıca
+/// veriliyor.
+/// </summary>
+public sealed record CostSourceBreakdown(
+    string Source,
+    string SourceName,
+    decimal Amount);
+
 public sealed record ProjectCostAnalysisResult(
     Guid ProjectId,
     string ProjectCode,
@@ -83,6 +95,18 @@ public sealed record ProjectCostAnalysisResult(
     decimal? ExtraPaymentLaborCost,
     /// <summary>Yetkisiz kullanıcıya toplamın resmi kısmı gösterilir.</summary>
     bool IncludesExtraPayments,
+    /// <summary>Gerçekleşen maliyetin kaynak kırılımı; toplamı TotalCost.</summary>
+    IReadOnlyList<CostSourceBreakdown> CostSources,
+    /// <summary>
+    /// Poza BAĞLANMAMIŞ gerçekleşen tutar. Poz kâr analizi bu tutarı
+    /// ölçülmüş maliyet olarak göremez — kısmı olanlar kısımdaki pozlara
+    /// sözleşme oranında DAĞITILIR, kısmı da olmayanlar hiç dağıtılamaz.
+    /// Ekranda ayrıca gösterilir ki poz kârı ile proje kârı arasındaki
+    /// fark sessiz kalmasın.
+    /// </summary>
+    decimal UnlinkedToBoqItemAmount,
+    /// <summary>Bunun içinde KISMA da bağlanmamış olan kısım.</summary>
+    decimal UnlinkedToSectionAmount,
     IReadOnlyList<string> Assumptions);
 
 public interface IProjectCostAnalysisService
@@ -364,6 +388,60 @@ public sealed class ProjectCostAnalysisService(
               "tüm projelerin ve merkez giderlerinin toplamı üzerinden hesaplanır; " +
               "kesin hesap müşavirdedir.");
 
+        // --- Kaynak kırılımı ---
+        //
+        // Toplamı TotalCost'a EŞİT olmalı: kullanıcı ekranda "bu rakam
+        // nereden çıktı" sorusunu tabloya bakarak cevaplayabilmeli.
+        // İşçilik ayrı bir kaynak çünkü defterde değil, puantaj/bordro
+        // köprüsünde duruyor.
+        var costSources = new List<CostSourceBreakdown>();
+
+        var ledgerTotal = decimal.Round(
+            ledger.Where(x => x.Source == RealizedCostSource.CostLedger)
+                  .Sum(x => x.Amount), 2);
+
+        var manualExpenseTotal = decimal.Round(
+            ledger.Where(x => x.Source == RealizedCostSource.ManualExpense)
+                  .Sum(x => x.Amount), 2);
+
+        if (ledgerTotal != 0m)
+        {
+            costSources.Add(new CostSourceBreakdown(
+                "CostLedger",
+                "Maliyet defteri (fatura, sarf, taşeron, görev)",
+                ledgerTotal));
+        }
+
+        if (manualExpenseTotal != 0m)
+        {
+            costSources.Add(new CostSourceBreakdown(
+                "ManualExpense",
+                "Elle gider kaydı (kira, faturalar, araç…)",
+                manualExpenseTotal));
+        }
+
+        if (officialLabor != 0m)
+        {
+            costSources.Add(new CostSourceBreakdown(
+                "Labor", "Puantaj / bordro", officialLabor));
+        }
+
+        if (extraPaymentLabor is decimal extra && extra != 0m)
+        {
+            costSources.Add(new CostSourceBreakdown(
+                "ExtraPayment", "Elden ödeme payı", decimal.Round(extra, 2)));
+        }
+
+        // Poza bağlanmamış tutar: poz kâr analizi bunu ÖLÇÜLMÜŞ maliyet
+        // olarak göremez. Kısmı olanlar kısımdaki pozlara dağıtılır,
+        // kısmı da olmayanlar hiç dağıtılamaz — ikisi ayrı ayrı veriliyor.
+        var unlinkedToBoq = decimal.Round(
+            ledger.Where(x => x.BoqItemId is null).Sum(x => x.Amount), 2);
+
+        var unlinkedToSection = decimal.Round(
+            ledger.Where(x => x.BoqItemId is null && x.SectionId is null)
+                  .Sum(x => x.Amount), 2);
+
         // --- Aylık trend ---
         var monthly = BuildMonthly(
             ledger.Select(x => (x.CostDate, x.CostClass, x.Amount)),
@@ -393,6 +471,9 @@ public sealed class ProjectCostAnalysisService(
             employerFactor,
             extraPaymentLabor,
             canSeeExtraPayments,
+            costSources,
+            unlinkedToBoq,
+            unlinkedToSection,
             assumptions);
     }
 

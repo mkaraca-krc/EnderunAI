@@ -65,7 +65,26 @@ export type ProjectCostAnalysis = {
   /** Yalnızca elden ödeme yetkisi olan kullanıcıda dolu. */
   extraPaymentLaborCost?: number | null;
   includesExtraPayments: boolean;
+
+  /** Gerçekleşen maliyetin kaynak kırılımı; toplamı totalCost. */
+  costSources: CostSourceBreakdown[];
+
+  /**
+   * Poza bağlanmamış gerçekleşen tutar — poz kâr analizi bunu ölçülmüş
+   * maliyet olarak göremez.
+   */
+  unlinkedToBoqItemAmount: number;
+
+  /** Bunun içinde kısma da bağlanmamış olan kısım. */
+  unlinkedToSectionAmount: number;
+
   assumptions: string[];
+};
+
+export type CostSourceBreakdown = {
+  source: string;
+  sourceName: string;
+  amount: number;
 };
 
 export const projectCostAnalysisService = {

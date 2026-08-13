@@ -405,4 +405,78 @@ public sealed class ProjectRealizedCostTests(DatabaseFixture fixture)
         Assert.Equal(4_000m, masked);
         Assert.Equal(5_500m, full);
     }
+
+    /// <summary>
+    /// KAYNAK KIRILIMININ TOPLAMI = GERÇEKLEŞEN MALİYET.
+    ///
+    /// Ekranda "bu rakam nereden geldi" tablosu duruyor; toplamı
+    /// tutmasaydı kullanıcı tabloya değil, tabloya olan güvenini
+    /// kaybederdi.
+    /// </summary>
+    [Fact]
+    public async Task KaynakKirilimi_ToplamiMaliyeteEsit()
+    {
+        var context = await CreateContextAsync();
+
+        await AddLedgerRowAsync(context, 5_000m);
+        await AddExpenseAsync(context, 3_000m);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+
+        var analysis = await scope.ServiceProvider
+            .GetRequiredService<IProjectCostAnalysisService>()
+            .AnalyzeAsync(context.ProjectId, CancellationToken.None);
+
+        Assert.Equal(analysis!.TotalCost, analysis.CostSources.Sum(x => x.Amount));
+
+        Assert.Equal(
+            5_000m,
+            analysis.CostSources.Single(x => x.Source == "CostLedger").Amount);
+
+        Assert.Equal(
+            3_000m,
+            analysis.CostSources.Single(x => x.Source == "ManualExpense").Amount);
+    }
+
+    /// <summary>
+    /// POZA BAĞLANMAMIŞ TUTAR AYRICA GÖSTERİLİR: poz kâr analizi bunu
+    /// ölçülmüş maliyet olarak göremiyor, fark sessiz kalmamalı.
+    /// Elle gider kaydı ne poza ne kısma bağlı olduğu için iki sayıya
+    /// da girer.
+    /// </summary>
+    [Fact]
+    public async Task PozaBaglanmamisTutar_AyricaBildirilir()
+    {
+        var context = await CreateContextAsync();
+
+        await AddExpenseAsync(context, 2_500m);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+
+        var analysis = await scope.ServiceProvider
+            .GetRequiredService<IProjectCostAnalysisService>()
+            .AnalyzeAsync(context.ProjectId, CancellationToken.None);
+
+        Assert.Equal(2_500m, analysis!.UnlinkedToBoqItemAmount);
+        Assert.Equal(2_500m, analysis.UnlinkedToSectionAmount);
+    }
+
+    /// <summary>
+    /// Maliyeti hiç olmayan projede kaynak tablosu BOŞ döner — sıfır
+    /// satırlarla dolu bir tablo, veri varmış gibi görünürdü.
+    /// </summary>
+    [Fact]
+    public async Task MaliyetYoksa_KaynakTablosuBos()
+    {
+        var context = await CreateContextAsync();
+
+        using var scope = fixture.Factory.Services.CreateScope();
+
+        var analysis = await scope.ServiceProvider
+            .GetRequiredService<IProjectCostAnalysisService>()
+            .AnalyzeAsync(context.ProjectId, CancellationToken.None);
+
+        Assert.Empty(analysis!.CostSources);
+        Assert.Equal(0m, analysis.UnlinkedToBoqItemAmount);
+    }
 }
