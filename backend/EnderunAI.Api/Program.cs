@@ -134,6 +134,12 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Engineering.IRecipeImportService,
     EnderunAI.Api.Services.Engineering.RecipeImportService>();
 builder.Services.AddScoped<
+    EnderunAI.Api.Services.Purchasing.IProjectMaterialRequirementService,
+    EnderunAI.Api.Services.Purchasing.ProjectMaterialRequirementService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Purchasing.IProjectMaterialRequestBridge,
+    EnderunAI.Api.Services.Purchasing.ProjectMaterialRequestBridge>();
+builder.Services.AddScoped<
     EnderunAI.Api.Services.Engineering.IPositionMatchService,
     EnderunAI.Api.Services.Engineering.PositionMatchService>();
 builder.Services.AddScoped<
