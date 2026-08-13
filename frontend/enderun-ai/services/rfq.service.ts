@@ -26,6 +26,10 @@ export type RfqItem = {
   unit: string;
   requestedDeliveryDate?: string | null;
   notes?: string | null;
+
+  /** Talepten taşınan istenen marka — tedarikçiye beklentiyi söyler. */
+  requestedBrand?: string | null;
+  brandIrrelevant?: boolean;
 };
 
 export type RfqSupplier = {
@@ -122,10 +126,14 @@ export type RfqComparisonSupplier = {
     unitPrice: number;
     netUnitPrice: number;
     totalPrice: number;
+    /** Tedarikçinin TEKLİF ETTİĞİ marka. */
     brand?: string | null;
     model?: string | null;
     deliveryDays?: number | null;
     normalizedTotalPrice: number;
+    /** Talep edenin İSTEDİĞİ marka — karşılaştırmanın asıl sorusu. */
+    requestedBrand?: string | null;
+    brandIrrelevant?: boolean;
   }[];
 };
 

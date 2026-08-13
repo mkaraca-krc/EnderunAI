@@ -89,7 +89,9 @@ public sealed class RfqService(
                         i.Quantity,
                         i.Unit,
                         i.RequestedDeliveryDate,
-                        i.Notes))
+                        i.Notes,
+                        i.RequestedBrand,
+                        i.BrandIrrelevant))
                     .ToList(),
                 x.Suppliers
                     .OrderBy(s => s.SupplierCurrentAccount.Title)
@@ -446,6 +448,8 @@ public sealed class RfqService(
                 x.RfqItem.MaterialDescription,
                 RequestedQuantity = x.RfqItem.Quantity,
                 x.RfqItem.Unit,
+                x.RfqItem.RequestedBrand,
+                x.RfqItem.BrandIrrelevant,
                 x.UnitPrice,
                 x.NetUnitPrice,
                 x.TotalPrice,
@@ -483,7 +487,9 @@ public sealed class RfqService(
                         i.DeliveryDays,
                         ProcurementDecisionScoring.Normalize(
                             i.TotalPrice,
-                            i.ExchangeRate)))
+                            i.ExchangeRate),
+                        i.RequestedBrand,
+                        i.BrandIrrelevant))
                     .ToList());
 
         var candidates = supplierRows.Select(s =>

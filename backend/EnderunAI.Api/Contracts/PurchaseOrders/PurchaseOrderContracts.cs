@@ -25,6 +25,7 @@ public sealed record PurchaseOrderItemResponse(
     Guid? RfqSupplierQuotationItemId,
     int LineNumber,
     string MaterialDescription,
+    /// <summary>Tedarikçinin VERDİĞİ marka (kabul edilen tekliften).</summary>
     string? Brand,
     string? Model,
     decimal Quantity,
@@ -36,7 +37,16 @@ public sealed record PurchaseOrderItemResponse(
     decimal TotalPrice,
     int? DeliveryDays,
     DateTime? ExpectedDeliveryDate,
-    string? Notes);
+    string? Notes,
+    /// <summary>
+    /// Talep edenin İSTEDİĞİ marka — talepten RFQ üzerinden taşındı.
+    /// <see cref="Brand"/> ile YAN YANA durur: "Schneider istendi,
+    /// ABB alındı" farkı sipariş kaydında görünsün diye.
+    /// Talepsiz doğrudan açılan siparişte boştur.
+    /// </summary>
+    string? RequestedBrand = null,
+    /// <summary>Muadil kabul edildiyse marka farkı beklenen bir sonuçtur.</summary>
+    bool BrandIrrelevant = true);
 
 public sealed record PurchaseOrderDetailResponse(
     Guid Id,

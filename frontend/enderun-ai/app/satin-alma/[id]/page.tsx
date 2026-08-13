@@ -29,6 +29,10 @@ import {
   type CurrentAccountListItem,
 } from "@/services/current-account.service";
 import { rfqService } from "@/services/rfq.service";
+import {
+  requestedBrandBadgeVariant,
+  requestedBrandLabel,
+} from "@/lib/purchasing/requested-brand";
 
 // Durum adları servisle aynı kaynaktan; iki ekranın aynı duruma
 // farklı isim vermesi yanıltırdı.
@@ -637,6 +641,17 @@ export default function PurchaseRequestDetailPage() {
                         <strong className="text-slate-900">
                           {line.materialDescription}
                         </strong>
+
+                        {/* İstenen marka: zorunlu / tercih / farketmez
+                            ayrımı lib/purchasing/requested-brand'dan
+                            gelir; ekran kuralı yeniden yorumlamaz. */}
+                        <div className="mt-1">
+                          <Badge
+                            variant={requestedBrandBadgeVariant(line)}
+                          >
+                            {requestedBrandLabel(line)}
+                          </Badge>
+                        </div>
                       </TableCell>
                       <TableCell>
                         {line.quantity.toLocaleString("tr-TR")}

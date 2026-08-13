@@ -64,6 +64,12 @@ export type PurchaseRequestItem = {
   unit: string;
   requestedDeliveryDate?: string | null;
   notes?: string | null;
+
+  /** Talep edenin istediği marka; tedarikçinin teklif ettiğinden ayrıdır. */
+  requestedBrand?: string | null;
+  /** Muadil kabul ediliyor mu. Üç durum için lib/purchasing/requested-brand. */
+  brandIrrelevant?: boolean;
+
   isActive: boolean;
 };
 
@@ -123,6 +129,8 @@ export type PurchaseRequestItemPayload = {
   unit: string;
   requestedDeliveryDate?: string | null;
   notes?: string | null;
+  requestedBrand?: string | null;
+  brandIrrelevant?: boolean;
 };
 
 export type CreatePurchaseRequestPayload = {

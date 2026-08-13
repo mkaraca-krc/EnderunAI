@@ -22,7 +22,14 @@ public sealed record RfqItemResponse(
     decimal Quantity,
     string Unit,
     DateTime? RequestedDeliveryDate,
-    string? Notes);
+    string? Notes,
+    /// <summary>
+    /// Talep edenin istediği marka — talepten kopyalanır. Teklif
+    /// isteyen tedarikçiye neyin beklendiğini bu alan söyler.
+    /// </summary>
+    string? RequestedBrand = null,
+    /// <summary>Muadil kabul ediliyor mu.</summary>
+    bool BrandIrrelevant = true);
 
 public sealed record RfqSupplierResponse(
     Guid Id,
@@ -98,10 +105,19 @@ public sealed record RfqComparisonItemResponse(
     decimal UnitPrice,
     decimal NetUnitPrice,
     decimal TotalPrice,
+    /// <summary>Tedarikçinin TEKLİF ETTİĞİ marka.</summary>
     string? Brand,
     string? Model,
     int? DeliveryDays,
-    decimal NormalizedTotalPrice);
+    decimal NormalizedTotalPrice,
+    /// <summary>
+    /// Talep edenin İSTEDİĞİ marka. Karşılaştırma ekranının asıl
+    /// sorusu budur: teklif edilen marka istenen markayla uyuyor mu.
+    /// Tek alan olsaydı bu karşılaştırma yapılamazdı.
+    /// </summary>
+    string? RequestedBrand = null,
+    /// <summary>Muadil kabul ediliyorsa marka farkı sorun değildir.</summary>
+    bool BrandIrrelevant = true);
 
 public sealed record RfqComparisonSupplierResponse(
     Guid RfqSupplierId,

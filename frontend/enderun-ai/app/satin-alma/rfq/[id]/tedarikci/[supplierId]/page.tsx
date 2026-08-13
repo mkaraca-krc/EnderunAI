@@ -25,10 +25,19 @@ import {
   type RfqSupplier,
   type SaveQuotationItemPayload,
 } from "@/services/rfq.service";
+import { requestedBrandLabel } from "@/lib/purchasing/requested-brand";
 
 type QuotationLine = SaveQuotationItemPayload & {
   materialDescription: string;
   unit: string;
+
+  /**
+   * Talep edenin istediği marka — yalnız GÖSTERİM için. Tekliflenen
+   * markaya (brand) kopyalanmaz: tedarikçinin ne verdiğini tedarikçi
+   * söyler, sistem onun yerine doldurmaz.
+   */
+  requestedBrand?: string | null;
+  brandIrrelevant?: boolean;
 };
 
 function today() {
@@ -99,6 +108,8 @@ export default function SupplierQuotationPage() {
           rfqItemId: item.id,
           materialDescription: item.materialDescription,
           unit: item.unit,
+          requestedBrand: item.requestedBrand,
+          brandIrrelevant: item.brandIrrelevant,
           quantity: item.quantity,
           unitPrice: 0,
           discountRate: 0,
@@ -504,6 +515,13 @@ export default function SupplierQuotationPage() {
                             <strong className="block min-w-56 text-slate-900">
                               {line.materialDescription}
                             </strong>
+
+                            {/* İstenen marka teklifi girenin gözü
+                                önünde dursun; teklif markası ayrı
+                                sütunda serbestçe girilir. */}
+                            <span className="mt-1 block text-xs text-slate-500">
+                              İstenen: {requestedBrandLabel(line)}
+                            </span>
                           </TableCell>
 
                           <TableCell>

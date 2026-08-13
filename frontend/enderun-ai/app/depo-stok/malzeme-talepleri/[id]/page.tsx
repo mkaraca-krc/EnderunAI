@@ -14,6 +14,7 @@ import {
   purchaseRequestService,
   type PurchaseRequestDetail,
 } from "@/services/purchase-request.service";
+import { requestedBrandLabel } from "@/lib/purchasing/requested-brand";
 
 const statusLabels: Record<number, string> = {
   0: "Taslak",
@@ -476,6 +477,13 @@ export default function MaterialRequestDetailPage() {
                                 {item.inventoryItemCode}
                               </div>
                             ) : null}
+
+                            {/* İstenen marka — üç durumun metni tek
+                                yerden (lib/purchasing/requested-brand)
+                                gelir, ekran kuralı tekrar yazmaz. */}
+                            <div className="mt-1 text-xs text-slate-600">
+                              Marka: {requestedBrandLabel(item)}
+                            </div>
                           </td>
 
                           <td className="px-4 py-3 text-right tabular-nums text-slate-900">

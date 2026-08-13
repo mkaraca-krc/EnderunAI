@@ -23,6 +23,10 @@ import {
   rfqService,
   type RfqDetail,
 } from "@/services/rfq.service";
+import {
+  requestedBrandBadgeVariant,
+  requestedBrandLabel,
+} from "@/lib/purchasing/requested-brand";
 
 const statusLabels: Record<number, string> = {
   0: "Taslak",
@@ -443,6 +447,15 @@ export default function RfqDetailPage() {
                           <strong className="text-slate-900">
                             {line.materialDescription}
                           </strong>
+
+                          {/* Talepten taşınan istenen marka. Tedarikçiye
+                              neyin beklendiğini söyleyen alan budur;
+                              teklifte verilen markadan ayrıdır. */}
+                          <div className="mt-1">
+                            <Badge variant={requestedBrandBadgeVariant(line)}>
+                              {requestedBrandLabel(line)}
+                            </Badge>
+                          </div>
                         </TableCell>
 
                         <TableCell className="text-right font-medium">

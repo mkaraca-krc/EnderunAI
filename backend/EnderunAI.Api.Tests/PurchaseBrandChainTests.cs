@@ -324,4 +324,80 @@ public sealed class PurchaseBrandChainTests(DatabaseFixture fixture)
         Assert.Equal("Siemens", item.RequestedBrand);
         Assert.True(item.BrandIrrelevant);
     }
+
+    /// <summary>
+    /// EKRANLARIN GÖRDÜĞÜ VERİ: marka veritabanında durmakla kalmaz,
+    /// RFQ ve sipariş uçlarından da döner. Yalnız modeli sınasaydık
+    /// alan dolu ama ekran boş olabilirdi — "uç var, ekran yok"un
+    /// tersi: veri var, uç göstermiyor.
+    /// </summary>
+    [Fact]
+    public async Task Uclar_IstenenMarkayiDondurur()
+    {
+        var context = await CreateContextAsync();
+        var client = await ClientAsync();
+
+        var (rfqId, rfqSupplierId, rfqItemId) = await BuildRfqAsync(
+            client, context, "Schneider", brandIrrelevant: false);
+
+        var rfqDetail = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/rfq/{rfqId}");
+
+        var rfqItem = rfqDetail.GetProperty("items").EnumerateArray().Single();
+
+        Assert.Equal("Schneider", rfqItem.GetProperty("requestedBrand").GetString());
+        Assert.False(rfqItem.GetProperty("brandIrrelevant").GetBoolean());
+
+        await SeedQuotationAsync(rfqSupplierId, rfqItemId, "ABB");
+
+        await AssertOkAsync(
+            await client.PostAsJsonAsync(
+                $"/api/rfq/{rfqId}/award/{rfqSupplierId}", new { }),
+            "RFQ sonuçlandırma");
+
+        var orderResponse = await client.PostAsJsonAsync(
+            $"/api/purchase-orders/create-from-rfq/{rfqId}", new { });
+
+        await AssertOkAsync(orderResponse, "sipariş oluşturma");
+
+        var orderId = (await orderResponse.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var orderDetail = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/purchase-orders/{orderId}");
+
+        var orderItem = orderDetail.GetProperty("items").EnumerateArray().Single();
+
+        // İKİ MARKA AYNI ANDA UÇTAN DÖNER — ekran ikisini yan yana
+        // gösterebilsin diye.
+        Assert.Equal("Schneider", orderItem.GetProperty("requestedBrand").GetString());
+        Assert.Equal("ABB", orderItem.GetProperty("brand").GetString());
+    }
+
+    /// <summary>
+    /// Teklif karşılaştırma ucu da istenen markayı taşır: ekranın
+    /// sorduğu asıl soru "teklif edilen marka istenenle uyuyor mu".
+    /// </summary>
+    [Fact]
+    public async Task Karsilastirma_IstenenMarkayiTasir()
+    {
+        var context = await CreateContextAsync();
+        var client = await ClientAsync();
+
+        var (rfqId, rfqSupplierId, rfqItemId) = await BuildRfqAsync(
+            client, context, "Schneider", brandIrrelevant: false);
+
+        await SeedQuotationAsync(rfqSupplierId, rfqItemId, "ABB");
+
+        var comparison = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/rfq/{rfqId}/comparison");
+
+        var item = comparison
+            .GetProperty("suppliers").EnumerateArray().First()
+            .GetProperty("items").EnumerateArray().Single();
+
+        Assert.Equal("Schneider", item.GetProperty("requestedBrand").GetString());
+        Assert.Equal("ABB", item.GetProperty("brand").GetString());
+        Assert.False(item.GetProperty("brandIrrelevant").GetBoolean());
+    }
 }

@@ -132,7 +132,9 @@ public sealed class PurchaseOrderService(
                         i.TotalPrice,
                         i.DeliveryDays,
                         i.ExpectedDeliveryDate,
-                        i.Notes))
+                        i.Notes,
+                        i.RequestedBrand,
+                        i.BrandIrrelevant))
                     .ToList()))
             .SingleOrDefaultAsync(cancellationToken);
 

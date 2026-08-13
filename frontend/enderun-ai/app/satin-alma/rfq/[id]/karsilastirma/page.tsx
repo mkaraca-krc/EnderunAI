@@ -31,6 +31,7 @@ import {
   purchaseOrderService,
   type CreatePurchaseOrderFromRfqResponse,
 } from "@/services/purchase-order.service";
+import { brandMismatch } from "@/lib/purchasing/requested-brand";
 
 function formatMoney(value: number, currency = "TRY") {
   return new Intl.NumberFormat("tr-TR", {
@@ -844,6 +845,18 @@ export default function RfqComparisonPage() {
                                           ? " · "
                                           : ""}
                                         {supplierItem.model || ""}
+                                      </span>
+                                    )}
+
+                                    {/* Karşılaştırmanın asıl sorusu:
+                                        teklif edilen marka istenenle
+                                        uyuyor mu. Muadil kabul edilen
+                                        kalemde sapma zaten beklenendir,
+                                        orada uyarı çıkmaz. */}
+                                    {brandMismatch(supplierItem) && (
+                                      <span className="mt-1 block text-xs font-medium text-amber-700">
+                                        İstenen marka:{" "}
+                                        {supplierItem.requestedBrand}
                                       </span>
                                     )}
                                   </div>

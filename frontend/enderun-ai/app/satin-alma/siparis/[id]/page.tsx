@@ -31,6 +31,10 @@ import {
 import {
   reportService,
 } from "@/services/report.service";
+import {
+  brandMismatch,
+  requestedBrandLabel,
+} from "@/lib/purchasing/requested-brand";
 
 const statusLabels: Record<number, string> = {
   0: "Taslak",
@@ -823,7 +827,7 @@ export default function PurchaseOrderDetailPage() {
                         <TableHead className="min-w-64">
                           Malzeme
                         </TableHead>
-                        <TableHead>Marka / Model</TableHead>
+                        <TableHead>Marka (istenen / verilen)</TableHead>
                         <TableHead className="text-right">
                           Miktar
                         </TableHead>
@@ -868,12 +872,26 @@ export default function PurchaseOrderDetailPage() {
                           </TableCell>
 
                           <TableCell>
-                            <span className="block text-slate-900">
+                            {/* İKİ MARKA YAN YANA: üstte talep edenin
+                                istediği, altta tedarikçinin verdiği.
+                                Tek alan olsaydı "Schneider istendi,
+                                ABB geldi" farkı kayıtta görünmezdi. */}
+                            <span className="block text-xs text-slate-500">
+                              İstenen: {requestedBrandLabel(item)}
+                            </span>
+
+                            <span className="mt-1 block text-slate-900">
                               {item.brand || "—"}
+                              {item.model ? ` · ${item.model}` : ""}
                             </span>
-                            <span className="mt-1 block text-xs text-slate-500">
-                              {item.model || "—"}
-                            </span>
+
+                            {brandMismatch(item) && (
+                              <span className="mt-1 block">
+                                <Badge variant="warning">
+                                  İstenen markadan farklı
+                                </Badge>
+                              </span>
+                            )}
                           </TableCell>
 
                           <TableCell className="text-right font-medium">

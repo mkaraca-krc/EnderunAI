@@ -27,10 +27,11 @@ function cheque(
     chequeNumber: `CEK-${counter}`,
     direction: 1,
     status: ChequeStatus.Issued,
+    // amountTry ve dueDate zaten overrides'ta zorunlu; aşağıdaki
+    // yayılma onları getirir. amount ise yalnız varsayılan olarak
+    // TRY tutarına eşitlenir, istenirse override edilebilir.
     amount: overrides.amountTry,
-    amountTry: overrides.amountTry,
     currencyCode: "TRY",
-    dueDate: overrides.dueDate,
     ...overrides,
   } as ChequeListItem;
 }

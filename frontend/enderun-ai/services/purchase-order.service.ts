@@ -35,6 +35,7 @@ export type PurchaseOrderItem = {
   rfqSupplierQuotationItemId?: string | null;
   lineNumber: number;
   materialDescription: string;
+  /** Tedarikçinin VERDİĞİ marka (kabul edilen tekliften). */
   brand?: string | null;
   model?: string | null;
   quantity: number;
@@ -47,6 +48,10 @@ export type PurchaseOrderItem = {
   deliveryDays?: number | null;
   expectedDeliveryDate?: string | null;
   notes?: string | null;
+
+  /** Talep edenin İSTEDİĞİ marka; brand ile yan yana gösterilir. */
+  requestedBrand?: string | null;
+  brandIrrelevant?: boolean;
 };
 
 export type PurchaseOrderDetail = {

@@ -26,6 +26,9 @@ import {
   type PurchaseRequestPriority,
 } from "@/services/purchase-request.service";
 
+import RequestedBrandField from "@/components/purchasing/requested-brand-field";
+import { requestedBrandError } from "@/lib/purchasing/requested-brand";
+
 const today = new Date().toISOString().slice(0, 10);
 
 type MaterialRequestLine = {
@@ -35,6 +38,10 @@ type MaterialRequestLine = {
   unit: string;
   requestedDeliveryDate: string;
   notes: string;
+
+  /** İstenen marka; boşsa muadil kabul işaretli olmalıdır. */
+  requestedBrand: string;
+  brandIrrelevant: boolean;
 };
 
 type MaterialRequestForm = {
@@ -56,6 +63,11 @@ function emptyLine(): MaterialRequestLine {
     unit: "Adet",
     requestedDeliveryDate: "",
     notes: "",
+
+    // Varsayılan "muadil kabul": marka yazmadan da geçerli bir talep
+    // kurulabilir; işaret kaldırıldığında marka zorunlu olur.
+    requestedBrand: "",
+    brandIrrelevant: true,
   };
 }
 
@@ -280,6 +292,16 @@ export default function NewMaterialRequestPage() {
       ) {
         return `${index + 1}. kalemde miktar sıfırdan büyük olmalıdır.`;
       }
+
+      // Sunucudaki kuralın erken gösterilen hâli; sunucu kuralı yerinde.
+      const brandError = requestedBrandError({
+        requestedBrand: line.requestedBrand,
+        brandIrrelevant: line.brandIrrelevant,
+      });
+
+      if (brandError) {
+        return `${index + 1}. kalemde ${brandError}.`;
+      }
     }
 
     return null;
@@ -326,6 +348,9 @@ export default function NewMaterialRequestPage() {
           requestedDeliveryDate:
             line.requestedDeliveryDate || null,
           notes: line.notes.trim() || null,
+          requestedBrand:
+            line.requestedBrand.trim() || null,
+          brandIrrelevant: line.brandIrrelevant,
         })),
       });
 
@@ -653,6 +678,27 @@ export default function NewMaterialRequestPage() {
                         className="input"
                       />
                     </Field>
+
+                    <div className="md:col-span-2 xl:col-span-3">
+                      <RequestedBrandField
+                        brand={line.requestedBrand}
+                        irrelevant={line.brandIrrelevant}
+                        onBrandChange={(value) =>
+                          updateLine(
+                            index,
+                            "requestedBrand",
+                            value,
+                          )
+                        }
+                        onIrrelevantChange={(value) =>
+                          updateLine(
+                            index,
+                            "brandIrrelevant",
+                            value,
+                          )
+                        }
+                      />
+                    </div>
 
                     <div className="md:col-span-2 xl:col-span-6">
                       <Field label="Kalem Notu">
