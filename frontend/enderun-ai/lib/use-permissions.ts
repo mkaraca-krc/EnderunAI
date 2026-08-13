@@ -7,9 +7,11 @@ import { useCurrentUser } from "@/lib/use-current-user";
 /**
  * Oturumdaki kullanıcının izin kontrolü.
  *
- * Admin ve Genel Müdür her izne sahip sayılır — menü filtresi
- * (erp-shell.tsx) da aynı kuralı uyguluyor; iki yerde farklı davranırsa
- * menüde görünen ekranda buton kaybolur.
+ * SÜPER KULLANICI ROL ADINDAN DEĞİL, backend'in hasAllPermissions
+ * bayrağından anlaşılır. Önce "Admin" / "Genel Müdür" adına
+ * bakılıyordu; rol yeniden adlandırılsa ya da başka bir role tüm
+ * izinler verilse arayüz yanlış davranırdı. Menü filtresi ve sayfa
+ * kapısı da aynı bayrağı kullanıyor.
  *
  * Bu yalnızca ARAYÜZ kolaylığı: gerçek yetki kontrolü uçlarda
  * RequirePermission ile yapılır. Buradaki bir hata veriyi açığa
@@ -20,13 +22,7 @@ export function usePermissions() {
 
   const granted = useMemo(() => new Set(user?.permissions ?? []), [user]);
 
-  const isSuperUser = useMemo(
-    () =>
-      Boolean(
-        user?.roles?.includes("Admin") || user?.roles?.includes("Genel Müdür")
-      ),
-    [user]
-  );
+  const isSuperUser = user?.hasAllPermissions === true;
 
   const has = useCallback(
     (permission: string) => isSuperUser || granted.has(permission),

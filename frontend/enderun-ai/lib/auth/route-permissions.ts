@@ -1,0 +1,205 @@
+/**
+ * YOL → İZİN HARİTASI: TEK KAYNAK.
+ *
+ * Bu harita üç yerden okunuyor:
+ *   1. middleware.ts — sayfa kapısı (URL elle yazılsa da geçilemez)
+ *   2. erp-shell.tsx — menü filtresi (yetkisiz öğe hiç render edilmez)
+ *   3. gerekirse ekran içi bağlantılar
+ *
+ * ÖNCEDEN İKİ KOPYAYDI VE AYRIŞMIŞTI. Menüde gizlenen dokuz ekran
+ * (elden ödemeler ve gider merkezi dahil) adres çubuğuna yazan
+ * kullanıcıya açılıyordu; filo ise menüde herkese görünüp tıklanınca
+ * yetkisiz sayfasına düşüyordu. Ayrışmanın sebebi kopyanın kendisiydi:
+ * biri güncellenip diğeri unutuluyordu.
+ *
+ * ARAYÜZ GÜVENLİK SINIRI DEĞİLDİR. Buradaki her kural yalnızca
+ * GÖRÜNÜRLÜK içindir; gerçek yetki kontrolü uçlarda
+ * <c>RequirePermission</c> ile yapılır ve bu dosyadaki bir hata veriyi
+ * açığa çıkarmaz, yalnızca kullanıcıya işe yaramayan bir ekran ya da
+ * gereksiz bir "yetkiniz yok" gösterir.
+ *
+ * SIRA ÖNEMLİ: spesifik kalıp genelden ÖNCE gelir. Örneğin
+ * "bordro-on-kontrol" hem kendi kalıbına hem genel "bordro" kalıbına
+ * uyuyor; genel kural önce gelseydi kullanıcı ekranı açar, sonra uçtan
+ * 403 yerdi.
+ */
+
+export type RoutePermission = string | string[] | null;
+
+type Rule = {
+  /** Yol öneki ya da düzenli ifade. */
+  match: string | RegExp;
+  /**
+   * Gereken izin. Dizi ise HERHANGİ BİRİ yeter (VEYA). Null ise ekran
+   * bilinçli olarak açıktır — gerekçesi yorumda yazar.
+   */
+  permission: RoutePermission;
+};
+
+const RULES: Rule[] = [
+  // --- Sistem yönetimi ---
+  {
+    // Şirket ayarları hem ayar hem kullanıcı yönetimi tarafından
+    // kullanılıyor; ikisinden biri yeter.
+    match: "/sistem-yonetimi/sirket-ayarlari",
+    permission: ["company-settings.view", "system.users.manage"],
+  },
+  { match: "/sistem-yonetimi", permission: "system.users.manage" },
+
+  // --- İnsan kaynakları ---
+  //
+  // Elden ödemeler kendi dar izniyle korunur; bordroyu yöneten herkese
+  // görünmez.
+  { match: "/insan-kaynaklari/ek-odemeler", permission: "extra_payment.view" },
+  {
+    // Bordro ön kontrolü ve SGK dökümü puantaj+bordro kesişiminde;
+    // genel "bordro" kalıbından ÖNCE.
+    match: /^\/insan-kaynaklari\/(bordro-on-kontrol|sgk-bildirim|izin-bakiye)/,
+    permission: "attendance-payroll.view",
+  },
+  {
+    match:
+      /^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|cikis-tazminat|avanslar)/,
+    permission: "payroll.view",
+  },
+  {
+    // Puantaj cetveli tatil takviminden dolduğu için ikisi aynı yetkiyle.
+    match:
+      /^\/insan-kaynaklari\/(puantaj|gunluk-puantaj|izinler|fazla-mesai|tatil-takvimi)/,
+    permission: "attendance.view",
+  },
+  { match: "/insan-kaynaklari", permission: "personnel.view" },
+
+  // --- Taşeron ---
+  //
+  // Sözleşme birim fiyat ve bedel taşır; saha ve ofis rollerine
+  // görünmez.
+  { match: "/taseronlar", permission: "subcontractor.view" },
+
+  // --- İSG ---
+  { match: "/isg/kazalar", permission: "isg.incident.view" },
+  {
+    // Personelin KENDİ belgeleri: izin gerekmez, uç zaten yalnız kendi
+    // kaydını döndürüyor. Bilinçli olarak açık.
+    match: "/isg/benim",
+    permission: null,
+  },
+  { match: "/isg", permission: "isg.view" },
+
+  // --- Muhasebe ve finans ---
+  { match: "/muhasebe", permission: "accounting.view" },
+  {
+    // Gider merkezi şirket geneli tabloyu tek ekranda topluyor;
+    // finance.view kadar geniş bir kapıya bırakılamaz.
+    match: "/finans/gider-merkezi",
+    permission: "expense.view",
+  },
+  { match: "/finans", permission: "finance.view" },
+
+  // --- Hakediş ---
+  { match: "/hakedis", permission: "hakedis.view" },
+  { match: "/fiyat-farki", permission: "hakedis.view" },
+  { match: "/metrajlar", permission: "hakedis.view" },
+
+  // --- Satın alma ---
+  {
+    match: "/satin-alma/butce-onay",
+    permission: ["purchasing.view", "finance.view"],
+  },
+  { match: "/satin-alma", permission: "purchasing.view" },
+
+  // --- Depo ---
+  { match: "/depo", permission: "inventory.view" },
+
+  // --- Filo ---
+  { match: "/filo", permission: "vehicle.view" },
+
+  // --- Mühendislik ---
+  {
+    // İçe aktarma ekranları YAZMA yetkisi ister (uçlar
+    // engineering.manage istiyor); genel kuraldan önce.
+    match: /^\/muhendislik\/(pozlar|receteler)\/ice-aktar/,
+    permission: "engineering.manage",
+  },
+  { match: "/muhendislik", permission: "engineering.view" },
+  { match: "/kesifler", permission: "engineering.view" },
+
+  // --- Proje alt ekranları (spesifik → genel) ---
+  {
+    // Tutar ve kâr marjı taşıyan ekranlar hakediş iznine bağlı.
+    match: /^\/projeler\/[^/]+\/(kar-analizi|icmal-ilerleme|maliyet-analizi)/,
+    permission: "hakedis.view",
+  },
+  {
+    // Malzeme ihtiyacı ekranının ucu satın alma talebi görüntüleme
+    // izni istiyor.
+    match: /^\/projeler\/[^/]+\/malzeme-ihtiyaci/,
+    permission: "purchasing-requests.view",
+  },
+  {
+    match: /^\/projeler\/[^/]+\/is-programi/,
+    permission: ["projects.view", "schedule.view"],
+  },
+
+  // İş programını okuma bilinçli olarak geniş: planı uygulayan saha
+  // (Şantiye Şefi, Formen) proje listesini görmez ama kendi terminini
+  // görmeden çalışamaz. Veri kapsamı zaten şantiyeleriyle sınırlı.
+  { match: "/is-programi", permission: "schedule.view" },
+
+  { match: "/projeler", permission: "projects.view" },
+  { match: "/teklifler", permission: "projects.view" },
+
+  // --- Sekreterya ---
+  { match: "/sekreterya", permission: "secretariat.view" },
+  { match: "/dokumanlar", permission: "secretariat.view" },
+
+  // --- Diğer ---
+  { match: "/gorevler", permission: "tasks.view" },
+  { match: "/raporlar", permission: "reports.view" },
+  { match: "/ai-asistan", permission: "ai.use" },
+
+  { match: "/sirketler", permission: "companies.view" },
+  { match: "/subeler", permission: "companies.view" },
+  { match: "/cariler", permission: "companies.view" },
+];
+
+/** Yolun gerektirdiği izin; kural yoksa null (açık ekran). */
+export function routePermission(pathname: string): RoutePermission {
+  for (const rule of RULES) {
+    const matched =
+      typeof rule.match === "string"
+        ? pathname === rule.match || pathname.startsWith(`${rule.match}/`) ||
+          pathname.startsWith(rule.match)
+        : rule.match.test(pathname);
+
+    if (matched) return rule.permission;
+  }
+
+  return null;
+}
+
+/**
+ * Kullanıcı bu yolu görebilir mi.
+ *
+ * @param hasAllPermissions Backend'in "bu kullanıcı katalogdaki her
+ * izne sahip" bayrağı. ROL ADINA BAKILMAZ: rol yeniden adlandırılırsa
+ * ya da başka bir role tüm izinler verilirse ad kontrolü yanlış cevap
+ * verirdi.
+ */
+export function canAccessRoute(
+  pathname: string,
+  permissions: Iterable<string>,
+  hasAllPermissions: boolean,
+): boolean {
+  if (hasAllPermissions) return true;
+
+  const required = routePermission(pathname);
+
+  if (!required) return true;
+
+  const granted = permissions instanceof Set ? permissions : new Set(permissions);
+
+  return Array.isArray(required)
+    ? required.some((permission) => granted.has(permission))
+    : granted.has(required);
+}

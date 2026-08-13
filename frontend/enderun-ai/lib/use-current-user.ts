@@ -12,6 +12,12 @@ export type CurrentUser = {
   honorific?: string | null;
   roles: string[];
   permissions: string[];
+
+  /**
+   * Katalogdaki her izne sahip mi. Backend'den gelir (/auth/me);
+   * arayüz süper kullanıcıyı ROL ADINDAN değil bu bayraktan tanır.
+   */
+  hasAllPermissions?: boolean;
 };
 
 /**

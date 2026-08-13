@@ -8,6 +8,25 @@ public sealed record PermissionDefinition(
 
 public static class PermissionCatalog
 {
+    /// <summary>
+    /// Kullanıcı KATALOGDAKİ HER İZNE sahip mi.
+    ///
+    /// TEK KURAL: hem token üretimi (all_permissions talebi) hem oturum
+    /// ucu (/auth/me) buradan okuyor. İki yerde ayrı hesaplansaydı biri
+    /// "tam yetkili" derken diğeri demezdi ve arayüz ile token farklı
+    /// davranırdı.
+    ///
+    /// ROL ADINA BAKILMAZ: "Admin" ya da "Genel Müdür" adı yeniden
+    /// adlandırılabilir, başka bir role de tüm izinler verilebilir.
+    /// Doğru soru "her izne sahip mi", "adı ne" değil.
+    /// </summary>
+    public static bool HasEveryPermission(IEnumerable<string> permissions)
+    {
+        var granted = permissions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return Permissions.All(definition => granted.Contains(definition.Key));
+    }
+
     public static class Keys
     {
         // Genel

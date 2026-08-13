@@ -9,6 +9,11 @@ import { LogoutButton } from "@/components/logout-button";
 import WorkHourSessionWatcher from "@/components/work-hour-session-watcher";
 import NotificationBell from "@/components/notifications/notification-bell";
 
+// YOL → İZİN HARİTASI TEK KAYNAKTAN: aynı harita middleware'de de
+// kullanılıyor. Menüde gizleyip sayfayı açık bırakmak (ya da tersi)
+// artık mümkün değil.
+import { canAccessRoute } from "@/lib/auth/route-permissions";
+
 type ErpShellProps = {
   title: string;
   description?: string;
@@ -33,102 +38,10 @@ type CurrentSession = {
   fullName?: string | null;
   roles: string[];
   permissions: string[];
+  /** Katalogdaki her izne sahip mi — backend'den gelir, rol adı DEĞİL. */
+  hasAllPermissions?: boolean;
 };
 
-function requiredPermissionForPath(pathname: string): string | string[] | null {
-  if (pathname.startsWith("/sistem-yonetimi/sirket-ayarlari")) {
-    return ["company-settings.view", "system.users.manage"];
-  }
-  if (pathname.startsWith("/sistem-yonetimi")) return "system.users.manage";
-  // Elden ödemeler kendi dar izniyle korunur; bordroyu yöneten herkese
-  // görünmez (menüde de çıkmaz).
-  if (pathname.startsWith("/insan-kaynaklari/ek-odemeler")) {
-    return "extra_payment.view";
-  }
-  // Bordro ön kontrolü ve SGK dökümü puantaj+bordro kesişimindeki
-  // kendi anahtarıyla korunuyor (attendance-payroll.view). Aşağıdaki
-  // genel "bordro" kalıbından ÖNCE gelmeli: "bordro-on-kontrol" o
-  // kalıba da uyuyor ve payroll.view'a düşseydi, uca yetkisi olmayan
-  // kullanıcı ekranı açıp 403 yerdi.
-  if (
-    /^\/insan-kaynaklari\/(bordro-on-kontrol|sgk-bildirim|izin-bakiye)/.test(
-      pathname
-    )
-  ) {
-    return "attendance-payroll.view";
-  }
-  if (/^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|cikis-tazminat|avanslar)/.test(pathname)) {
-    return "payroll.view";
-  }
-  // puantaj-cetveli ve tatil-takvimi de puantaj alanına ait: cetvel
-  // takvimden dolduğu için ikisi aynı yetkiyle yürüyor.
-  if (/^\/insan-kaynaklari\/(puantaj|gunluk-puantaj|izinler|fazla-mesai|tatil-takvimi)/.test(pathname)) {
-    return "attendance.view";
-  }
-  if (pathname.startsWith("/insan-kaynaklari")) return "personnel.view";
-  // Kaza defteri kendi dar izniyle korunur; İSG kaydı girebilen herkese
-  // görünmez.
-  // Taşeron sözleşmesi birim fiyat ve bedel taşır; saha ve ofis
-  // rollerine menüde de çıkmaz.
-  if (pathname.startsWith("/taseronlar")) return "subcontractor.view";
-  if (pathname.startsWith("/isg/kazalar")) return "isg.incident.view";
-  // Personelin kendi belgeleri: izin gerekmez, uç zaten yalnız kendi
-  // kaydını döndürür.
-  if (pathname.startsWith("/isg/benim")) return null;
-  if (pathname.startsWith("/isg")) return "isg.view";
-  if (pathname.startsWith("/muhasebe")) return "accounting.view";
-  // Nakit akış ve gider merkezi kendi dar izinlerinde: ikisi de şirket
-  // geneli tabloyu tek ekranda topluyor, finance.view kadar geniş bir
-  // kapıya bırakılamaz.
-  if (pathname.startsWith("/finans/gider-merkezi")) return "expense.view";
-  if (pathname.startsWith("/finans")) return "finance.view";
-  if (
-    pathname.startsWith("/hakedis") ||
-    pathname.startsWith("/fiyat-farki") ||
-    pathname.startsWith("/metrajlar")
-  ) return "hakedis.view";
-  if (pathname.startsWith("/satin-alma/butce-onay")) {
-    return ["purchasing.view", "finance.view"];
-  }
-  if (pathname.startsWith("/satin-alma")) return "purchasing.view";
-  if (pathname.startsWith("/depo")) return "inventory.view";
-  if (
-    pathname.startsWith("/muhendislik") ||
-    pathname.startsWith("/kesifler")
-  ) return "engineering.view";
-  // Tutar ve kâr marjı taşıyan proje alt ekranları: uçları hakediş
-  // görüntüleme iznine bağlı, menü/bağlantı da aynı kapıda olmalı ki
-  // kullanıcı göremeyeceği bir ekrana tıklamasın.
-  if (/^\/projeler\/[^/]+\/(kar-analizi|icmal-ilerleme|maliyet-analizi)/.test(pathname)) {
-    return "hakedis.view";
-  }
-  // İş programını okuma bilinçli olarak geniş: planı uygulayan saha
-  // (Şantiye Şefi, Formen) proje listesini görmez ama kendi terminini
-  // görmeden çalışamaz. Veri kapsamı zaten şantiyeleriyle sınırlı —
-  // liste ucu yalnızca kullanıcının projelerini döndürüyor.
-  if (pathname.startsWith("/is-programi")) return "schedule.view";
-  if (/^\/projeler\/[^/]+\/is-programi/.test(pathname)) {
-    return ["projects.view", "schedule.view"];
-  }
-  if (
-    pathname.startsWith("/projeler") ||
-    pathname.startsWith("/taseronlar") ||
-    pathname.startsWith("/teklifler")
-  ) return "projects.view";
-  if (
-    pathname.startsWith("/sekreterya") ||
-    pathname.startsWith("/dokumanlar")
-  ) return "secretariat.view";
-  if (pathname.startsWith("/gorevler")) return "tasks.view";
-  if (pathname.startsWith("/raporlar")) return "reports.view";
-  if (pathname.startsWith("/ai-asistan")) return "ai.use";
-  if (
-    pathname.startsWith("/sirketler") ||
-    pathname.startsWith("/subeler") ||
-    pathname.startsWith("/cariler")
-  ) return "companies.view";
-  return null;
-}
 
 const groups: MenuGroup[] = [
   {
@@ -837,28 +750,24 @@ export default function ErpShell({
   }, []);
 
   const visibleGroups = useMemo(() => {
-    if (
-      !currentUser ||
-      currentUser.roles.includes("Admin") ||
-      currentUser.roles.includes("Genel Müdür")
-    ) {
-      return groups;
-    }
+    // Oturum henüz gelmediyse menü GÖSTERİLMEZ: dolu menüyü gösterip
+    // sonra öğeleri kaybetmek, kullanıcıya olmayan yetkiyi bir an için
+    // göstermek demek.
+    if (!currentUser) return [];
 
     const permissions = new Set(currentUser.permissions);
+    const all = currentUser.hasAllPermissions === true;
+
     return groups
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => {
-          const required = requiredPermissionForPath(item.href);
-          return (
-            !required ||
-            (Array.isArray(required)
-              ? required.some((permission) => permissions.has(permission))
-              : permissions.has(required))
-          );
-        }),
+        items: group.items.filter((item) =>
+          canAccessRoute(pathOnly(item.href), permissions, all)
+        ),
       }))
+      // Bir bölümde görünür öğe kalmadıysa BAŞLIK DA ÇIKMAZ: boş
+      // kabuk, kullanıcıya erişemeyeceği bir alan varmış izlenimi
+      // verirdi.
       .filter((group) => group.items.length > 0);
   }, [currentUser]);
 

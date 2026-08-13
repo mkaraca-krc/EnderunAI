@@ -108,7 +108,12 @@ public sealed class AuthController(
                 user.FullName,
                 user.Email,
                 roles = roleNames,
-                permissions
+                permissions,
+
+                // Giriş yanıtı da bayrağı taşıyor: arayüz oturumu
+                // /auth/me'yi beklemeden şekillendirebilsin ve iki uç
+                // aynı sinyali versin.
+                hasAllPermissions = PermissionCatalog.HasEveryPermission(permissions)
             }
         });
     }
@@ -240,7 +245,14 @@ public sealed class AuthController(
             user.FullName,
             user.Honorific,
             roles,
-            permissions
+            permissions,
+
+            // ARAYÜZÜN SÜPER KULLANICI SİNYALİ. Arayüz bugüne kadar rol
+            // ADINA bakıyordu ("Admin" / "Genel Müdür"); rol yeniden
+            // adlandırılsa ya da başka bir role tüm izinler verilse
+            // yanlış cevap verirdi. Kural token üretimiyle aynı yerden
+            // (PermissionCatalog.HasEveryPermission) geliyor.
+            hasAllPermissions = PermissionCatalog.HasEveryPermission(permissions)
         });
     }
 

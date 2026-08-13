@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// YOL → İZİN HARİTASI TEK KAYNAKTAN. Burada ikinci bir kopya
+// tutuluyordu ve menüdeki haritayla ayrışmıştı: menüde gizlenen dokuz
+// ekran (elden ödemeler, gider merkezi dahil) adres çubuğuna yazan
+// kullanıcıya açılıyordu.
+import { canAccessRoute } from "@/lib/auth/route-permissions";
+
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
@@ -57,82 +63,6 @@ function tokenAccess(token: string) {
   }
 }
 
-function requiredPermission(pathname: string): string | null {
-  if (pathname.startsWith("/sistem-yonetimi")) return "system.users.manage";
-  // Bordro ön kontrolü ve SGK dökümü kendi anahtarını istiyor.
-  // Genel "bordro" kalıbından ÖNCE gelmeli: "bordro-on-kontrol" ona
-  // da uyuyor ve payroll.view'a düşseydi kullanıcı ekranı açar,
-  // sonra uçtan 403 yerdi.
-  if (
-    /^\/insan-kaynaklari\/(bordro-on-kontrol|sgk-bildirim|izin-bakiye)/.test(
-      pathname
-    )
-  )
-    return "attendance-payroll.view";
-  if (
-    /^\/insan-kaynaklari\/(bordro|ucret-kartlari|ek-ucretler|avanslar)/.test(
-      pathname
-    )
-  )
-    return "payroll.view";
-  if (
-    /^\/insan-kaynaklari\/(puantaj|gunluk-puantaj|izinler|fazla-mesai)/.test(
-      pathname
-    )
-  )
-    return "attendance.view";
-  if (pathname.startsWith("/insan-kaynaklari")) return "personnel.view";
-  if (pathname.startsWith("/muhasebe")) return "accounting.view";
-  if (pathname.startsWith("/finans")) return "finance.view";
-  if (
-    pathname.startsWith("/hakedis") ||
-    pathname.startsWith("/fiyat-farki") ||
-    pathname.startsWith("/metrajlar")
-  )
-    return "hakedis.view";
-  if (pathname.startsWith("/satin-alma")) return "purchasing.view";
-  if (pathname.startsWith("/depo")) return "inventory.view";
-  // Filo: araç kartı yetkisiz kullanıcıya HİÇ render edilmemeli;
-  // kapı burada, uçlar da aynı anahtarı istiyor.
-  if (pathname.startsWith("/filo")) return "vehicle.view";
-  // SPESİFİK KALIP GENELDEN ÖNCE: içe aktarma ekranları yazma yetkisi
-  // ister (uçlar engineering.manage istiyor). Genel kural önce
-  // gelseydi, yalnız görüntüleme yetkisi olan kullanıcı ekranı açar,
-  // "Aktar" düğmesine basınca 403 yerdi — çalışmayan düğme.
-  if (/^\/muhendislik\/(pozlar|receteler)\/ice-aktar/.test(pathname))
-    return "engineering.manage";
-  if (
-    pathname.startsWith("/muhendislik") ||
-    pathname.startsWith("/kesifler")
-  )
-    return "engineering.view";
-  // Aynı kalıp: proje malzeme ihtiyacı ekranının ucu satın alma talebi
-  // görüntüleme izni istiyor. Genel proje kuralı önce gelseydi, projeyi
-  // görebilen ama satın almayı göremeyen kullanıcı ekranı açıp boş
-  // hata alırdı.
-  if (/^\/projeler\/[^/]+\/malzeme-ihtiyaci/.test(pathname))
-    return "purchasing-requests.view";
-  if (
-    pathname.startsWith("/projeler") ||
-    pathname.startsWith("/teklifler")
-  )
-    return "projects.view";
-  if (
-    pathname.startsWith("/sekreterya") ||
-    pathname.startsWith("/dokumanlar")
-  )
-    return "secretariat.view";
-  if (pathname.startsWith("/gorevler")) return "tasks.view";
-  if (pathname.startsWith("/raporlar")) return "reports.view";
-  if (pathname.startsWith("/ai-asistan")) return "ai.use";
-  if (
-    pathname.startsWith("/sirketler") ||
-    pathname.startsWith("/subeler") ||
-    pathname.startsWith("/cariler")
-  )
-    return "companies.view";
-  return null;
-}
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -146,17 +76,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const permission = requiredPermission(pathname);
-  if (permission) {
-    const access = tokenAccess(token);
-    if (
-      !access.all &&
-      !access.roles.has("Admin") &&
-      !access.roles.has("Genel Müdür") &&
-      !access.permissions.has(permission)
-    ) {
-      return NextResponse.redirect(new URL("/yetkisiz", request.url));
-    }
+  // SÜPER KULLANICI ROL ADINDAN DEĞİL, all_permissions BAYRAĞINDAN
+  // anlaşılıyor: rol yeniden adlandırılırsa ya da başka bir role tüm
+  // izinler verilirse ad kontrolü yanlış cevap verirdi.
+  const access = tokenAccess(token);
+
+  if (!canAccessRoute(pathname, access.permissions, access.all)) {
+    return NextResponse.redirect(new URL("/yetkisiz", request.url));
   }
 
   return NextResponse.next();

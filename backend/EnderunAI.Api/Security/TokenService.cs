@@ -54,8 +54,7 @@ public sealed class TokenService(IConfiguration configuration)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var hasEveryPermission = PermissionCatalog.Permissions.All(definition =>
-            permissionList.Contains(definition.Key, StringComparer.OrdinalIgnoreCase));
+        var hasEveryPermission = PermissionCatalog.HasEveryPermission(permissionList);
 
         if (hasEveryPermission)
         {
