@@ -48,6 +48,22 @@ public interface IProjectRealizedCostReader
         DateTime? toExclusive,
         bool includeMaskedExpenses,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Şirket genelinde PROJELERE düşmüş gerçekleşen maliyet toplamı —
+    /// finans panosunun dönem gideri.
+    ///
+    /// MERKEZ/ŞUBE GİDERLERİ DAHİL DEĞİL: bu rakam bugüne kadar "proje
+    /// maliyeti" anlamına geliyordu; ofis kirasını da katmak panonun
+    /// anlamını sessizce değiştirirdi. Merkez giderleri gider merkezi
+    /// raporunda görünüyor.
+    /// </summary>
+    Task<decimal> ReadProjectCostTotalAsync(
+        Guid? companyId,
+        DateTime from,
+        DateTime toExclusive,
+        bool includeMaskedExpenses,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -163,5 +179,43 @@ public sealed class ProjectRealizedCostReader(AppDbContext db)
             RealizedCostSource.ManualExpense)));
 
         return rows;
+    }
+
+    public async Task<decimal> ReadProjectCostTotalAsync(
+        Guid? companyId,
+        DateTime from,
+        DateTime toExclusive,
+        bool includeMaskedExpenses,
+        CancellationToken cancellationToken)
+    {
+        var ledgerQuery = db.ProjectCostTransactions
+            .AsNoTracking()
+            .Where(x => x.CostDate >= from && x.CostDate < toExclusive);
+
+        // Yalnız PROJEYE yazılmış gider kayıtları: merkez/şube gideri
+        // proje maliyeti değildir.
+        var expenseQuery = db.ExpenseEntries
+            .AsNoTracking()
+            .Where(x =>
+                x.ProjectId != null &&
+                x.ExpenseDate >= from &&
+                x.ExpenseDate < toExclusive);
+
+        if (companyId is Guid company)
+        {
+            ledgerQuery = ledgerQuery.Where(x => x.Project.CompanyId == company);
+            expenseQuery = expenseQuery.Where(x => x.CompanyId == company);
+        }
+
+        if (!includeMaskedExpenses)
+            expenseQuery = expenseQuery.Where(ExpenseEntryService.IsVisibleExpense);
+
+        var ledgerTotal = await ledgerQuery
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+
+        var expenseTotal = await expenseQuery
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+
+        return decimal.Round(ledgerTotal + expenseTotal, 2);
     }
 }

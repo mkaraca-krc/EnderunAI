@@ -295,4 +295,114 @@ public sealed class ProjectRealizedCostTests(DatabaseFixture fixture)
         Assert.Null(section.SectionId);
         Assert.Equal(2_500m, section.OverheadAmount);
     }
+
+    /// <summary>
+    /// M2'NİN ASIL GÜVENCESİ: proje maliyet analizi ile finans panosu
+    /// AYNI dönem için AYNI gideri sayıyor.
+    ///
+    /// Pano kendi sorgusunu tutsaydı, analiz kirayı sayarken pano
+    /// saymaz ve iki ekran aynı proje için farklı rakam gösterirdi —
+    /// hangisinin doğru olduğu da anlaşılamazdı.
+    /// </summary>
+    [Fact]
+    public async Task Analiz_VePano_AyniToplamiVerir()
+    {
+        var context = await CreateContextAsync();
+
+        await AddLedgerRowAsync(context, 5_000m, day: 12);
+        await AddExpenseAsync(context, 3_000m, day: 10);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+
+        var analysis = await scope.ServiceProvider
+            .GetRequiredService<IProjectCostAnalysisService>()
+            .AnalyzeAsync(context.ProjectId, CancellationToken.None);
+
+        var dashboardTotal = await scope.ServiceProvider
+            .GetRequiredService<IProjectRealizedCostReader>()
+            .ReadProjectCostTotalAsync(
+                context.CompanyId, D(1), D(28), true, CancellationToken.None);
+
+        Assert.Equal(8_000m, analysis!.TotalCost);
+        Assert.Equal(analysis.TotalCost, dashboardTotal);
+    }
+
+    /// <summary>
+    /// Şirket geneli toplam MERKEZ/ŞUBE giderini saymaz: o rakam
+    /// "proje maliyeti" anlamına geliyor ve ofis kirasını katmak
+    /// panonun anlamını sessizce değiştirirdi.
+    /// </summary>
+    [Fact]
+    public async Task SirketGeneli_MerkezGiderisniSaymaz()
+    {
+        var context = await CreateContextAsync();
+
+        await AddExpenseAsync(context, 3_000m);
+
+        var categoryId = await CategoryIdAsync(
+            context.CompanyId, ExpenseCategoryCatalog.Rent);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var branchId = await db.Projects
+                .Where(x => x.Id == context.ProjectId)
+                .Select(x => x.BranchId)
+                .SingleAsync();
+
+            db.ExpenseEntries.Add(new ExpenseEntry
+            {
+                CompanyId = context.CompanyId,
+                CenterType = ExpenseCenterType.Branch,
+                BranchId = branchId,
+                ExpenseCategoryId = categoryId,
+                ExpenseDate = D(10),
+                Amount = 9_000m,
+                Description = "Ofis kirası",
+                PaymentMethod = ExpensePaymentMethod.Bank,
+                DocumentType = ExpenseDocumentType.Invoice
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        using var readScope = fixture.Factory.Services.CreateScope();
+
+        var total = await readScope.ServiceProvider
+            .GetRequiredService<IProjectRealizedCostReader>()
+            .ReadProjectCostTotalAsync(
+                context.CompanyId, D(1), D(28), true, CancellationToken.None);
+
+        Assert.Equal(3_000m, total);
+    }
+
+    /// <summary>
+    /// Şirket geneli toplamda da elden maskesi işler: yetkisiz okumada
+    /// maskeli kalem toplama girmez.
+    /// </summary>
+    [Fact]
+    public async Task SirketGeneli_EldenMaskesiIsler()
+    {
+        var context = await CreateContextAsync();
+
+        await AddExpenseAsync(context, 4_000m);
+        await AddExpenseAsync(
+            context, 1_500m,
+            method: ExpensePaymentMethod.Cash,
+            document: ExpenseDocumentType.None,
+            day: 11);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var reader = scope.ServiceProvider.GetRequiredService<IProjectRealizedCostReader>();
+
+        var masked = await reader.ReadProjectCostTotalAsync(
+            context.CompanyId, D(1), D(28), false, CancellationToken.None);
+
+        var full = await reader.ReadProjectCostTotalAsync(
+            context.CompanyId, D(1), D(28), true, CancellationToken.None);
+
+        Assert.Equal(4_000m, masked);
+        Assert.Equal(5_500m, full);
+    }
 }

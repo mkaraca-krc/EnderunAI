@@ -94,6 +94,7 @@ public interface IHakedisProfitService
 public sealed class HakedisProfitService(
     AppDbContext db,
     IBoqItemCostService costs,
+    Projects.IProjectRealizedCostReader realizedCosts,
     IExtraPaymentVisibilityService extraPaymentVisibility) : IHakedisProfitService
 {
     public async Task<HakedisProfit?> GetAsync(
@@ -316,11 +317,18 @@ public sealed class HakedisProfitService(
         var from = DateTime.SpecifyKind(start.Value.Date, DateTimeKind.Utc);
         var to = DateTime.SpecifyKind(end.Value.Date, DateTimeKind.Utc).AddDays(1);
 
-        var material = await db.ProjectCostTransactions
-            .AsNoTracking()
-            .Where(x => x.ProjectId == projectId
-                        && x.CostDate >= from && x.CostDate < to)
-            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+        // MALİYET ORTAK OKUYUCUDAN: maliyet defteri + elle gider
+        // kayıtları. Burada yalnız defter okunsaydı, proje maliyet
+        // analizi kirayı sayarken hakediş kârı saymaz ve aynı proje
+        // için iki farklı maliyet çıkardı.
+        //
+        // ELDEN AYRIMI: maskeli gider kalemleri yalnız yetkili
+        // kullanıcının rakamına giriyor — işçilikteki elden ayrımıyla
+        // aynı kapı.
+        var ledgerAndExpenses = await realizedCosts.ReadAsync(
+            projectId, from, to, includesExtraPayments, cancellationToken);
+
+        var material = decimal.Round(ledgerAndExpenses.Sum(x => x.Amount), 2);
 
         var laborRows = await db.HrProjectLaborCosts
             .AsNoTracking()

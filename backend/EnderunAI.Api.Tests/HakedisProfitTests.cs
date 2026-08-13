@@ -48,6 +48,9 @@ public sealed class HakedisProfitTests(DatabaseFixture fixture)
         => new(
             db,
             new BoqItemCostService(db, new FixedVisibility(canSeeExtraPayments)),
+            // Maliyet ortak okuyucudan geliyor: hakediş kârı ile proje
+            // maliyet analizi aynı kaynağı okuyor.
+            new EnderunAI.Api.Services.Projects.ProjectRealizedCostReader(db),
             new FixedVisibility(canSeeExtraPayments));
 
     /// <summary>

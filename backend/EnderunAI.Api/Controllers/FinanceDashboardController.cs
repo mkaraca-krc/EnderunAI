@@ -18,7 +18,10 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/finance")]
-public sealed class FinanceDashboardController(AppDbContext db) : ControllerBase
+public sealed class FinanceDashboardController(
+    AppDbContext db,
+    Services.Projects.IProjectRealizedCostReader realizedCosts,
+    IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
 {
     private static readonly ProgressPaymentStatus[] RealizedProgressPaymentStatuses =
     [
@@ -97,21 +100,23 @@ public sealed class FinanceDashboardController(AppDbContext db) : ControllerBase
                 x.ProgressPaymentDate >= rangeStart &&
                 x.ProgressPaymentDate < rangeEndExclusive);
 
-        var costQuery = db.ProjectCostTransactions
-            .AsNoTracking()
-            .Where(x =>
-                !x.IsDeleted &&
-                x.CostDate >= rangeStart &&
-                x.CostDate < rangeEndExclusive);
-
         if (companyId.HasValue)
-        {
             paymentQuery = paymentQuery.Where(x => x.CompanyId == companyId.Value);
-            costQuery = costQuery.Where(x => x.Project.CompanyId == companyId.Value);
-        }
 
         var periodRevenue = await paymentQuery.SumAsync(x => x.CurrentAmount, cancellationToken);
-        var periodExpense = await costQuery.SumAsync(x => x.Amount, cancellationToken);
+
+        // DÖNEM GİDERİ ORTAK OKUYUCUDAN: maliyet defteri + projelere
+        // yazılmış elle gider kayıtları. Pano kendi sorgusunu tutsaydı,
+        // proje maliyet analizi kirayı sayarken pano saymaz ve iki ekran
+        // aynı dönem için farklı gider gösterirdi.
+        //
+        // Elden kalemler yalnız yetkili kullanıcının rakamına girer.
+        var periodExpense = await realizedCosts.ReadProjectCostTotalAsync(
+            companyId,
+            rangeStart,
+            rangeEndExclusive,
+            await extraPaymentVisibility.CanViewExtraPaymentAsync(cancellationToken),
+            cancellationToken);
         var netResult = decimal.Round(periodRevenue - periodExpense, 2);
 
         // Kasa/banka hareketi ve cari tahsilat/ödeme defteri koda hiç
