@@ -103,6 +103,12 @@ function requiredPermission(pathname: string): string | null {
     pathname.startsWith("/kesifler")
   )
     return "engineering.view";
+  // Aynı kalıp: proje malzeme ihtiyacı ekranının ucu satın alma talebi
+  // görüntüleme izni istiyor. Genel proje kuralı önce gelseydi, projeyi
+  // görebilen ama satın almayı göremeyen kullanıcı ekranı açıp boş
+  // hata alırdı.
+  if (/^\/projeler\/[^/]+\/malzeme-ihtiyaci/.test(pathname))
+    return "purchasing-requests.view";
   if (
     pathname.startsWith("/projeler") ||
     pathname.startsWith("/teklifler")

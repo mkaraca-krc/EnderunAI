@@ -129,6 +129,7 @@ const modules: ProjectModule[] = [
   { permission: "hakedis.view", label: "Maliyet Analizi", href: "maliyet-analizi", icon: "₸", text: "İcmal öngörüsü, gerçekleşen maliyet ve kâr" },
   { permission: "hakedis.view", label: "Poz Kâr Analizi", href: "kar-analizi", icon: "◈", text: "Poz bazında dört fiyat ve kâr" },
   { label: "Hakedişler", href: "/hakedis", icon: "▧", text: "Hakediş kayıtları ve kontrolleri" },
+  { permission: "purchasing-requests.view", label: "Malzeme İhtiyacı", href: "malzeme-ihtiyaci", icon: "⊞", text: "İcmal + reçeteden ihtiyaç, depo mevcudu ve eksik" },
   { label: "Satın Alma", href: "/satin-alma", icon: "⌑", text: "Malzeme talepleri ve teklifler" },
   { label: "Personel", href: "/personel", icon: "♙", text: "Projeye bağlı personel" },
   { label: "Depo & Stok", href: "/depo-stok", icon: "⌂", text: "Şantiye deposu ve stoklar" },
