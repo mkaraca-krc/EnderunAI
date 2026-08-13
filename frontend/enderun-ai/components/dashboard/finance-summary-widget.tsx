@@ -147,7 +147,7 @@ export default function FinanceSummaryWidget({
             </p>
           )}
 
-          <div className="mt-5 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-3">
+          <div className="mt-5 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-2 xl:grid-cols-4">
             <div>
               <span className="text-xs text-slate-400">
                 Hazır Değerler
@@ -170,6 +170,24 @@ export default function FinanceSummaryWidget({
 
             <div>
               <span className="text-xs text-slate-400">
+                Dönem Gideri
+              </span>
+              <strong className="mt-1 block">
+                {money.format(finance.periodExpense)}
+              </strong>
+
+              {/* KIRILIM: dönem gideri proje + merkez/şube toplamıdır.
+                  Yalnız toplam gösterilseydi merkez giderinin dahil
+                  olduğu görünmez, rakam yine "eksik mi" diye
+                  sorgulanırdı. */}
+              <span className="mt-1 block text-xs text-slate-400">
+                Proje {money.format(finance.projectExpense)} · Merkez{" "}
+                {money.format(finance.centralExpense)}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-xs text-slate-400">
                 Net Kâr / Zarar
               </span>
               <strong className="mt-1 block">
@@ -179,6 +197,16 @@ export default function FinanceSummaryWidget({
                     : -finance.netLoss
                 )}
               </strong>
+
+              {/* Kredi faizi dönem giderine DAHİL DEĞİL; gerçekleşen
+                  ama faaliyet gideri değil. Sıfırsa satır hiç
+                  çıkmıyor — sıfır göstermek boş gürültü olurdu. */}
+              {finance.financingExpense > 0 && (
+                <span className="mt-1 block text-xs text-slate-400">
+                  Finansman gideri {money.format(finance.financingExpense)}{" "}
+                  (dönem giderine dahil değil)
+                </span>
+              )}
             </div>
           </div>
         </>

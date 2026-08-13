@@ -17,6 +17,18 @@ type FinancialDashboardSummary = {
   todayPayments: number;
   periodRevenue: number;
   periodExpense: number;
+
+  /** Dönem giderinin kırılımı; ikisinin toplamı periodExpense'tir. */
+  projectExpense: number;
+  centralExpense: number;
+
+  /**
+   * Kredi faizi. Dönem giderine DAHİL DEĞİL: gerçekleşen bir giderdir
+   * ama faaliyet gideri değildir. Ayrı gösteriliyor ki dışarıda
+   * bırakılması sessiz kalmasın.
+   */
+  financingExpense: number;
+
   netProfit: number;
   netLoss: number;
   cashInflow: number;
@@ -53,6 +65,13 @@ export interface FinanceDashboard {
 
   periodRevenue: number;
   periodExpense: number;
+
+  /** Dönem giderinin kırılımı; toplamı periodExpense. */
+  projectExpense: number;
+  centralExpense: number;
+
+  /** Kredi faizi — dönem giderine dahil değil, ayrı gösterilir. */
+  financingExpense: number;
 
   netProfit: number;
   netLoss: number;
@@ -140,6 +159,9 @@ export const financeDashboardService = {
 
       periodRevenue: summary.periodRevenue,
       periodExpense: summary.periodExpense,
+      projectExpense: summary.projectExpense,
+      centralExpense: summary.centralExpense,
+      financingExpense: summary.financingExpense,
 
       netProfit: summary.netProfit,
       netLoss: summary.netLoss,
