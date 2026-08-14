@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import ErpSearchSelect, {
   type SearchSelectOption,
 } from "@/components/erp/erp-search-select";
@@ -31,7 +32,6 @@ import {
   type ImportPreviewResult,
 } from "@/services/e-invoice.service";
 
-const money = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" });
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 /** Her önizleme satırı için kullanıcının verdiği kararlar. */
@@ -322,6 +322,7 @@ export default function EInvoiceImportPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="E-Fatura İçe Aktar"
       description="UBL-TR 2.1 XML veya ZIP yükleyin; yön VKN'den belirlenir, gelen fatura alışa, giden fatura satışa düşer"
     >
@@ -453,7 +454,7 @@ export default function EInvoiceImportPage() {
                           {row.currentAccountTitle}
                           {row.currentAccountCreated && <small>Yeni cari açıldı</small>}
                         </td>
-                        <td>{money.format(row.grandTotal)}</td>
+                        <td>{money(row.grandTotal)}</td>
                         <td>
                           <Link
                             href={
@@ -829,10 +830,10 @@ function PreviewRow({
         </td>
 
         <td>
-          <strong>{money.format(item.grandTotal)}</strong>
-          <small>KDV: {money.format(item.vatTotal)}</small>
+          <strong>{money(item.grandTotal)}</strong>
+          <small>KDV: {money(item.vatTotal)}</small>
           {item.withholdingAmount > 0 && (
-            <small>Tevkifat: {money.format(item.withholdingAmount)}</small>
+            <small>Tevkifat: {money(item.withholdingAmount)}</small>
           )}
         </td>
 
@@ -888,9 +889,9 @@ function PreviewRow({
                     <td>
                       {line.quantity} {line.unit}
                     </td>
-                    <td>{money.format(line.unitPrice)}</td>
+                    <td>{money(line.unitPrice)}</td>
                     <td>{line.vatRate}</td>
-                    <td>{money.format(line.lineSubtotal)}</td>
+                    <td>{money(line.lineSubtotal)}</td>
                   </tr>
                 ))}
               </tbody>

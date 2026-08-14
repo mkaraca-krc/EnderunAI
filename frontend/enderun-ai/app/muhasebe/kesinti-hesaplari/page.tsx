@@ -205,6 +205,7 @@ export default function DeductionAccountsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Hakediş Kesinti Hesapları"
       description="Kesinti türlerini muhasebe hesaplarına eşler; eşlenmeyen tür genel kesinti hesabına düşer."
     >

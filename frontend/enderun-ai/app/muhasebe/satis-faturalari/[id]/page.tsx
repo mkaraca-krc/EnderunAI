@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { money } from "@/lib/format/turkish";
 import {
   salesInvoiceService,
   PARSE_SOURCE_LABELS,
@@ -14,7 +16,6 @@ import {
   type SalesInvoiceDetail,
 } from "@/services/sales-invoice.service";
 
-const money = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" });
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 export default function SalesInvoiceDetailPage() {
@@ -26,6 +27,7 @@ export default function SalesInvoiceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
   const [notice, setNotice] = useState("");
 
   const [showReturnForm, setShowReturnForm] = useState(false);
@@ -111,7 +113,7 @@ export default function SalesInvoiceDetailPage() {
 
   if (loading) {
     return (
-      <ErpShell title="Satış Faturası" description="Yükleniyor">
+      <ErpShell design="redwood" title="Satış Faturası" description="Yükleniyor">
         <div className="erp-loading">Fatura yükleniyor...</div>
       </ErpShell>
     );
@@ -119,7 +121,7 @@ export default function SalesInvoiceDetailPage() {
 
   if (!invoice) {
     return (
-      <ErpShell title="Satış Faturası" description="Bulunamadı">
+      <ErpShell design="redwood" title="Satış Faturası" description="Bulunamadı">
         <div className="erp-alert error">{error || "Fatura bulunamadı."}</div>
         <Link className="erp-secondary-button" href="/muhasebe/satis-faturalari">
           Listeye dön
@@ -132,6 +134,7 @@ export default function SalesInvoiceDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`Satış Faturası ${invoice.officialInvoiceNumber ?? invoice.internalNumber}`}
       description={`${invoice.customerTitle} — ${dateFormat.format(new Date(invoice.invoiceDate))}`}
     >
@@ -179,15 +182,7 @@ export default function SalesInvoiceDetailPage() {
             type="button"
             className="erp-secondary-button"
             disabled={processing || invoice.status === 2}
-            onClick={() => {
-              const reason = window.prompt(
-                invoice.status === 1
-                  ? "İptal gerekçesi (ters fişte görünecek):"
-                  : "İptal gerekçesi:"
-              );
-              if (!reason) return;
-              void runAction(() => salesInvoiceService.cancel(invoice.id, reason));
-            }}
+            onClick={() => setCancelling(true)}
           >
             İptal Et
           </button>
@@ -390,23 +385,23 @@ export default function SalesInvoiceDetailPage() {
                   <td>
                     {item.quantity} {item.unit}
                   </td>
-                  <td>{money.format(item.unitPrice)}</td>
+                  <td>{money(item.unitPrice)}</td>
                   <td>{item.vatRate}</td>
-                  <td>{money.format(item.lineSubtotal)}</td>
-                  <td>{money.format(item.vatAmount)}</td>
+                  <td>{money(item.lineSubtotal)}</td>
+                  <td>{money(item.vatAmount)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        <div style={{ padding: "16px", textAlign: "right" }}>
-          <div>Ara toplam: {money.format(invoice.subtotal)}</div>
-          <div>KDV: {money.format(invoice.vatTotal)}</div>
+        <div className="rw-totals" style={{ padding: "16px" }}>
+          <div>Ara toplam: {money(invoice.subtotal)}</div>
+          <div>KDV: {money(invoice.vatTotal)}</div>
           {invoice.withholdingAmount > 0 && (
-            <div>Tevkifat: -{money.format(invoice.withholdingAmount)}</div>
+            <div>Tevkifat: -{money(invoice.withholdingAmount)}</div>
           )}
-          <strong>Tahsil edilecek: {money.format(invoice.netReceivableAmount)}</strong>
+          <strong>Tahsil edilecek: {money(invoice.netReceivableAmount)}</strong>
         </div>
       </div>
 
@@ -415,6 +410,27 @@ export default function SalesInvoiceDetailPage() {
           İptal gerekçesi: {invoice.cancellationReason}
         </div>
       )}
+      {invoice && (
+        <ConfirmDialog
+          open={cancelling}
+          title="Satış faturası iptal edilsin mi?"
+          description={
+            invoice.status === 1
+              ? "Kesilmiş faturanın iptali muhasebeye ters fişle yansır; gerekçe fişte görünür."
+              : "Fatura iptal edilir."
+          }
+          confirmLabel="İptal Et"
+          requireReason
+          reasonLabel="İptal gerekçesi (zorunlu)"
+          busy={processing}
+          onCancel={() => setCancelling(false)}
+          onConfirm={(reason) => {
+            setCancelling(false);
+            void runAction(() => salesInvoiceService.cancel(invoice.id, reason));
+          }}
+        />
+      )}
+
     </ErpShell>
   );
 }

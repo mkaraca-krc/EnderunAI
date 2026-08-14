@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 
 import {
   accountingAccountService,
@@ -90,6 +91,9 @@ export default function AccountingAccountsPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [seedOpen, setSeedOpen] = useState(false);
+  const [deactivating, setDeactivating] =
+    useState<AccountingAccountListItem | null>(null);
 
   const loadCompanies = useCallback(async () => {
     try {
@@ -373,19 +377,7 @@ export default function AccountingAccountsPage() {
       return;
     }
 
-    const company = companies.find(
-      (item) => item.id === companyId
-    );
-
-    const confirmed = window.confirm(
-      `${
-        company?.name ?? "Seçili şirket"
-      } için Enderun hesap planı kurulsun mu?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
+    setSeedOpen(false);
 
     setSeeding(true);
     setMessage("");
@@ -412,13 +404,7 @@ export default function AccountingAccountsPage() {
   async function deactivateAccount(
     account: AccountingAccountListItem
   ) {
-    const confirmed = window.confirm(
-      `${account.code} - ${account.name} hesabı pasife alınsın mı?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
+    setDeactivating(null);
 
     setMessage("");
     setError("");
@@ -441,35 +427,18 @@ export default function AccountingAccountsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Hesap Planı"
       description="Enderun hesap planını ağaç yapısında yönetin."
     >
       {message && (
-        <div
-          style={{
-            marginBottom: 14,
-            padding: 13,
-            border: "1px solid #bbf7d0",
-            borderRadius: 8,
-            background: "#dcfce7",
-            color: "#166534",
-          }}
-        >
+        <div className="erp-alert success">
           {message}
         </div>
       )}
 
       {error && (
-        <div
-          style={{
-            marginBottom: 14,
-            padding: 13,
-            border: "1px solid #fecaca",
-            borderRadius: 8,
-            background: "#fee2e2",
-            color: "#991b1b",
-          }}
-        >
+        <div className="erp-alert error">
           {error}
         </div>
       )}
@@ -505,7 +474,7 @@ export default function AccountingAccountsPage() {
               className="erp-secondary-button"
               disabled={seeding || !companyId}
               onClick={() =>
-                void seedStandardPlan()
+                setSeedOpen(true)
               }
             >
               {seeding
@@ -706,13 +675,13 @@ export default function AccountingAccountsPage() {
                   return (
                     <tr
                       key={item.id}
-                      style={{
-                        background: isMatch
-                          ? "#fff7d6"
+                      className={
+                        isMatch
+                          ? "rw-row-match"
                           : item.isPostingAllowed
-                            ? "#ffffff"
-                            : "#f8fafc",
-                      }}
+                            ? ""
+                            : "rw-row-passive"
+                      }
                     >
                       <td>
                         <div
@@ -735,19 +704,7 @@ export default function AccountingAccountsPage() {
                                 ? "Alt hesapları kapat"
                                 : "Alt hesapları aç"
                             }
-                            style={{
-                              width: 24,
-                              height: 24,
-                              padding: 0,
-                              border: "none",
-                              background:
-                                "transparent",
-                              cursor: hasChildren
-                                ? "pointer"
-                                : "default",
-                              color: "#475569",
-                              fontSize: 16,
-                            }}
+                            className="rw-icon-button"
                           >
                             {hasChildren
                               ? isExpanded
@@ -860,9 +817,7 @@ export default function AccountingAccountsPage() {
                               type="button"
                               className="erp-secondary-button"
                               onClick={() =>
-                                void deactivateAccount(
-                                  item
-                                )
+setDeactivating(item)
                               }
                             >
                               Pasife Al
@@ -877,6 +832,34 @@ export default function AccountingAccountsPage() {
           </tbody>
         </table>
       </div>
+      <ConfirmDialog
+        open={seedOpen}
+        title="Enderun hesap planı kurulsun mu?"
+        description={`${
+          companies.find((item) => item.id === companyId)?.name ??
+          "Seçili şirket"
+        } için standart hesap planı oluşturulur. Var olan hesaplar korunur.`}
+        confirmLabel="Kur"
+        busy={seeding}
+        onCancel={() => setSeedOpen(false)}
+        onConfirm={() => void seedStandardPlan()}
+      />
+
+      <ConfirmDialog
+        open={deactivating !== null}
+        title="Hesap pasife alınsın mı?"
+        description={
+          deactivating
+            ? `${deactivating.code} — ${deactivating.name} yeni fişlerde seçilemez. Geçmiş kayıtlar defterde kalır.`
+            : ""
+        }
+        confirmLabel="Pasife Al"
+        onCancel={() => setDeactivating(null)}
+        onConfirm={() => {
+          if (deactivating) void deactivateAccount(deactivating);
+        }}
+      />
+
     </ErpShell>
   );
 }

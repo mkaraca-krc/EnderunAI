@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
   salesInvoiceService,
@@ -12,7 +13,6 @@ import {
   type SalesInvoiceListItem,
 } from "@/services/sales-invoice.service";
 
-const money = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" });
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 export default function SalesInvoicesPage() {
@@ -80,6 +80,7 @@ export default function SalesInvoicesPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Satış Faturaları"
       description="Hakediş dışı satışlar; kesinleştiğinde 120/600/391 gelir fişi otomatik oluşur"
     >
@@ -97,7 +98,7 @@ export default function SalesInvoicesPage() {
             </span>
           )}
           <small style={{ display: "block", marginTop: "4px" }}>
-            Toplam: {money.format(summary.total)}
+            Toplam: {money(summary.total)}
           </small>
         </div>
 
@@ -185,13 +186,13 @@ export default function SalesInvoicesPage() {
                     </td>
                     <td>{dateFormat.format(new Date(item.invoiceDate))}</td>
                     <td>
-                      <strong>{money.format(item.grandTotal)}</strong>
-                      <small>KDV: {money.format(item.vatTotal)}</small>
+                      <strong>{money(item.grandTotal)}</strong>
+                      <small>KDV: {money(item.vatTotal)}</small>
                     </td>
                     <td>
-                      {money.format(item.netReceivableAmount)}
+                      {money(item.netReceivableAmount)}
                       {item.withholdingAmount > 0 && (
-                        <small>Tevkifat: {money.format(item.withholdingAmount)}</small>
+                        <small>Tevkifat: {money(item.withholdingAmount)}</small>
                       )}
                     </td>
                     <td>

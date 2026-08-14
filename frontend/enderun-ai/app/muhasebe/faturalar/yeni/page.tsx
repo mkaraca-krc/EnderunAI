@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import CurrencyRateFields from "@/components/accounting/currency-rate-fields";
 import ErpSearchSelect, {
   type SearchSelectOption,
@@ -37,11 +38,6 @@ import {
   warehouseService,
   type WarehouseListItem,
 } from "@/services/warehouse.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 /** CurrentAccountStatus.Approved */
 const APPROVED_STATUS = 2;
@@ -553,6 +549,7 @@ export default function NewSupplierInvoicePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Tedarikçi Faturası"
       description="Alış faturası stoğa girer, gider faturası doğrudan gider hesabına yazılır"
     >
@@ -694,7 +691,7 @@ export default function NewSupplierInvoicePage() {
                   <option value="">Siparişsiz (doğrudan fatura)</option>
                   {filteredOrders.map((order) => (
                     <option key={order.id} value={order.id}>
-                      {order.orderNumber} — {money.format(order.grandTotal)}
+                      {order.orderNumber} — {money(order.grandTotal)}
                     </option>
                   ))}
                 </select>
@@ -927,7 +924,7 @@ export default function NewSupplierInvoicePage() {
                         </select>
                       )}
                     </td>
-                    <td>{money.format(lineSubtotal)}</td>
+                    <td>{money(lineSubtotal)}</td>
                     <td>
                       {items.length > 1 && (
                         <button
@@ -959,10 +956,10 @@ export default function NewSupplierInvoicePage() {
             + Kalem Ekle
           </button>
 
-          <div style={{ textAlign: "right" }}>
-            <div>Ara toplam: {money.format(totals.subtotal)}</div>
-            <div>KDV: {money.format(totals.vat)}</div>
-            <strong>Genel toplam: {money.format(totals.grandTotal)}</strong>
+          <div className="num">
+            <div>Ara toplam: {money(totals.subtotal)}</div>
+            <div>KDV: {money(totals.vat)}</div>
+            <strong>Genel toplam: {money(totals.grandTotal)}</strong>
           </div>
         </div>
 

@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 
 type Company = {
   id: string;
@@ -70,6 +71,7 @@ export default function AccountingAccountImportPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [confirmingImport, setConfirmingImport] = useState(false);
 
   useEffect(() => {
     void loadCompanies();
@@ -157,14 +159,7 @@ export default function AccountingAccountImportPage() {
       return;
     }
 
-    if (
-      !preview &&
-      !window.confirm(
-        "Hesap planı seçilen şirkete aktarılacak. Devam edilsin mi?"
-      )
-    ) {
-      return;
-    }
+    setConfirmingImport(false);
 
     const formData = new FormData();
 
@@ -225,6 +220,7 @@ export default function AccountingAccountImportPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Hesap Planı Aktar"
       description="Excel hesap planını ön izleyin ve seçilen şirkete aktarın."
     >
@@ -236,29 +232,13 @@ export default function AccountingAccountImportPage() {
         }}
       >
         {error && (
-          <div
-            style={{
-              padding: 14,
-              borderRadius: 8,
-              background: "#fee2e2",
-              color: "#991b1b",
-              border: "1px solid #fecaca",
-            }}
-          >
+          <div className="erp-alert error">
             {error}
           </div>
         )}
 
         {success && (
-          <div
-            style={{
-              padding: 14,
-              borderRadius: 8,
-              background: "#dcfce7",
-              color: "#166534",
-              border: "1px solid #bbf7d0",
-            }}
-          >
+          <div className="erp-alert success">
             {success}
           </div>
         )}
@@ -325,13 +305,8 @@ export default function AccountingAccountImportPage() {
 
           {file && (
             <div
-              style={{
-                marginTop: 16,
-                padding: 12,
-                borderRadius: 8,
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
-              }}
+              className="rw-subtle-panel"
+              style={{ marginTop: 16 }}
             >
               <strong>Seçilen dosya:</strong>{" "}
               {file.name}
@@ -363,7 +338,7 @@ export default function AccountingAccountImportPage() {
                 !canImport ||
                 !previewSuccessful
               }
-              onClick={() => void runImport(false)}
+              onClick={() => setConfirmingImport(true)}
             >
               Gerçek Aktarımı Başlat
             </button>
@@ -413,21 +388,8 @@ export default function AccountingAccountImportPage() {
                   ["Atlanan", result.skippedCount],
                   ["Hatalı", result.errorCount],
                 ].map(([label, value]) => (
-                  <div
-                    key={String(label)}
-                    style={{
-                      padding: 16,
-                      borderRadius: 8,
-                      background: "#f8fafc",
-                      border: "1px solid #e2e8f0",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#64748b",
-                      }}
-                    >
+                  <div key={String(label)} className="rw-subtle-panel">
+                    <div className="rw-value-muted" style={{ fontSize: 13 }}>
                       {label}
                     </div>
 
@@ -460,43 +422,20 @@ export default function AccountingAccountImportPage() {
                     overflowX: "auto",
                   }}
                 >
-                  <table
-                    style={{
-                      width: "100%",
-                      borderCollapse: "collapse",
-                    }}
-                  >
+                  <table className="rw-plain-table">
                     <thead>
                       <tr>
                         <th
-                          style={{
-                            textAlign: "left",
-                            padding: 10,
-                            borderBottom:
-                              "1px solid #e2e8f0",
-                          }}
                         >
                           Satır
                         </th>
 
                         <th
-                          style={{
-                            textAlign: "left",
-                            padding: 10,
-                            borderBottom:
-                              "1px solid #e2e8f0",
-                          }}
                         >
                           Hesap Kodu
                         </th>
 
                         <th
-                          style={{
-                            textAlign: "left",
-                            padding: 10,
-                            borderBottom:
-                              "1px solid #e2e8f0",
-                          }}
                         >
                           Hata
                         </th>
@@ -510,31 +449,16 @@ export default function AccountingAccountImportPage() {
                             key={`${item.rowNumber}-${index}`}
                           >
                             <td
-                              style={{
-                                padding: 10,
-                                borderBottom:
-                                  "1px solid #f1f5f9",
-                              }}
                             >
                               {item.rowNumber}
                             </td>
 
                             <td
-                              style={{
-                                padding: 10,
-                                borderBottom:
-                                  "1px solid #f1f5f9",
-                              }}
                             >
                               {item.accountCode ?? "-"}
                             </td>
 
                             <td
-                              style={{
-                                padding: 10,
-                                borderBottom:
-                                  "1px solid #f1f5f9",
-                              }}
                             >
                               {item.message}
                             </td>
@@ -549,6 +473,20 @@ export default function AccountingAccountImportPage() {
           </>
         )}
       </div>
+      {/*
+        Önizleme onay istemez, GERÇEK AKTARIM ister: önizleme hiçbir
+        şey yazmıyor, aktarım hesap planını değiştiriyor.
+      */}
+      <ConfirmDialog
+        open={confirmingImport}
+        title="Hesap planı aktarılsın mı?"
+        description="Dosyadaki hesaplar seçilen şirkete yazılır. Önce önizleme almanız önerilir."
+        confirmLabel="Aktar"
+        busy={processing}
+        onCancel={() => setConfirmingImport(false)}
+        onConfirm={() => void runImport(false)}
+      />
+
     </ErpShell>
   );
 }

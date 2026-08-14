@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 
 import {
   accountingVoucherService,
@@ -21,11 +22,6 @@ import {
   companyService,
   type CompanyListItem,
 } from "@/services/company.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const date = new Intl.DateTimeFormat("tr-TR");
 
@@ -137,6 +133,7 @@ export default function AccountingVouchersPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Muhasebe Fişleri"
       description="Mahsup, tahsil, tediye, açılış ve kapanış fişleri"
     >
@@ -247,15 +244,15 @@ export default function AccountingVouchersPage() {
         <Summary label="Toplam Fiş" value={summary.count} />
         <Summary
           label="Toplam Borç"
-          value={money.format(summary.debit)}
+          value={money(summary.debit)}
         />
         <Summary
           label="Toplam Alacak"
-          value={money.format(summary.credit)}
+          value={money(summary.credit)}
         />
         <Summary
           label="Denge"
-          value={money.format(
+          value={money(
             summary.debit - summary.credit
           )}
         />
@@ -316,9 +313,9 @@ export default function AccountingVouchersPage() {
 
                   <td>{item.lineCount}</td>
 
-                  <td>{money.format(item.totalDebit)}</td>
+                  <td>{money(item.totalDebit)}</td>
 
-                  <td>{money.format(item.totalCredit)}</td>
+                  <td>{money(item.totalCredit)}</td>
 
                   <td>
                     <span

@@ -174,6 +174,7 @@ export default function NewAccountingAccountPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Muhasebe Hesabı"
       description="Hesap planına ana hesap veya alt hesap ekleyin"
     >
@@ -454,13 +455,8 @@ export default function NewAccountingAccountPage() {
         </section>
 
         <section
-          style={{
-            marginTop: 16,
-            padding: 14,
-            border: "1px solid var(--erp-border)",
-            borderRadius: 10,
-            background: "#f8fafc",
-          }}
+          className="rw-subtle-panel"
+          style={{ marginTop: 16 }}
         >
           <strong>Hesap Yapısı Özeti</strong>
 

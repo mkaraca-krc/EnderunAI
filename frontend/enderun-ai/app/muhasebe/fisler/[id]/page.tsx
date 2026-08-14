@@ -10,6 +10,8 @@ import {
 import { useParams } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { amount, money } from "@/lib/format/turkish";
 
 import {
   accountingVoucherService,
@@ -44,16 +46,6 @@ const statusClasses: Record<
   2: "red",
 };
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
-
-const number = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 const date = new Intl.DateTimeFormat("tr-TR");
 
 export default function AccountingVoucherDetailPage() {
@@ -68,6 +60,8 @@ export default function AccountingVoucherDetailPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [confirming, setConfirming] =
+    useState<"kesinlestir" | "iptal" | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,14 +102,6 @@ export default function AccountingVoucherDetailPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `${item.voucherNumber} numaralı muhasebe fişi kesinleştirilsin mi?\n\nKesinleşen fiş artık düzenlenemez.`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     setWorking(true);
     setMessage("");
     setError("");
@@ -124,6 +110,7 @@ export default function AccountingVoucherDetailPage() {
       const result =
         await accountingVoucherService.post(item.id);
 
+      setConfirming(null);
       setMessage(result.message);
       await load();
     } catch (err) {
@@ -137,24 +124,8 @@ export default function AccountingVoucherDetailPage() {
     }
   }
 
-  async function cancelVoucher() {
+  async function cancelVoucher(reason: string) {
     if (!item) {
-      return;
-    }
-
-    const reason = window.prompt(
-      "Muhasebe fişi iptal gerekçesini yazın:"
-    );
-
-    if (!reason?.trim()) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `${item.voucherNumber} numaralı muhasebe fişi iptal edilsin mi?`
-    );
-
-    if (!confirmed) {
       return;
     }
 
@@ -166,9 +137,10 @@ export default function AccountingVoucherDetailPage() {
       const result =
         await accountingVoucherService.cancel(
           item.id,
-          reason.trim()
+          reason
         );
 
+      setConfirming(null);
       setMessage(result.message);
       await load();
     } catch (err) {
@@ -185,6 +157,7 @@ export default function AccountingVoucherDetailPage() {
   if (loading) {
     return (
       <ErpShell
+      design="redwood"
         title="Muhasebe Fişi"
         description="Fiş bilgileri yükleniyor"
       >
@@ -198,6 +171,7 @@ export default function AccountingVoucherDetailPage() {
   if (!item) {
     return (
       <ErpShell
+      design="redwood"
         title="Muhasebe Fişi"
         description="Kayıt bulunamadı"
       >
@@ -220,6 +194,7 @@ export default function AccountingVoucherDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={item.voucherNumber}
       description="Muhasebe fişi detay ve işlem ekranı"
     >
@@ -260,7 +235,7 @@ export default function AccountingVoucherDetailPage() {
               className="erp-primary-button"
               disabled={working}
               onClick={() =>
-                void postVoucher()
+                setConfirming("kesinlestir")
               }
             >
               {working
@@ -275,7 +250,7 @@ export default function AccountingVoucherDetailPage() {
               className="erp-secondary-button"
               disabled={working}
               onClick={() =>
-                void cancelVoucher()
+                setConfirming("iptal")
               }
             >
               Fişi İptal Et
@@ -348,7 +323,7 @@ export default function AccountingVoucherDetailPage() {
 
           <Info
             label="Döviz Kuru"
-            value={number.format(item.exchangeRate)}
+            value={amount(item.exchangeRate)}
           />
 
           <Info
@@ -387,17 +362,17 @@ export default function AccountingVoucherDetailPage() {
       >
         <Summary
           label="Toplam Borç"
-          value={money.format(item.totalDebit)}
+          value={money(item.totalDebit)}
         />
 
         <Summary
           label="Toplam Alacak"
-          value={money.format(item.totalCredit)}
+          value={money(item.totalCredit)}
         />
 
         <Summary
           label="Fark"
-          value={money.format(difference)}
+          value={money(difference)}
         />
 
         <Summary
@@ -505,13 +480,13 @@ export default function AccountingVoucherDetailPage() {
                   </td>
 
                   <td>
-                    {money.format(
+                    {money(
                       line.debitAmountLocal
                     )}
                   </td>
 
                   <td>
-                    {money.format(
+                    {money(
                       line.creditAmountLocal
                     )}
                   </td>
@@ -587,6 +562,41 @@ export default function AccountingVoucherDetailPage() {
           </div>
         </section>
       )}
+      {/*
+        KESİNLEŞTİRME GERİ ALINAMAZ. Tarayıcı penceresi bu uyarıyı
+        satır arası "\n\n" ile vermeye çalışıyordu; biçimlendirilemediği
+        için kullanıcı çoğu zaman tek satır görüp geçiyordu.
+      */}
+      <ConfirmDialog
+        open={confirming === "kesinlestir"}
+        title="Muhasebe fişi kesinleştirilsin mi?"
+        description={
+          item
+            ? `${item.voucherNumber} numaralı fiş kesinleşir ve bir daha düzenlenemez.`
+            : ""
+        }
+        confirmLabel="Kesinleştir"
+        busy={working}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void postVoucher()}
+      />
+
+      <ConfirmDialog
+        open={confirming === "iptal"}
+        title="Muhasebe fişi iptal edilsin mi?"
+        description={
+          item
+            ? `${item.voucherNumber} numaralı fiş iptal edilir; gerekçe denetim izinde kalır.`
+            : ""
+        }
+        confirmLabel="İptal Et"
+        requireReason
+        reasonLabel="İptal gerekçesi (zorunlu)"
+        busy={working}
+        onCancel={() => setConfirming(null)}
+        onConfirm={(reason) => void cancelVoucher(reason)}
+      />
+
     </ErpShell>
   );
 }

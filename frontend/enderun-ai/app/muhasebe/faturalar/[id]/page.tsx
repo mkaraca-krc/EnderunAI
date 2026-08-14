@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { money } from "@/lib/format/turkish";
 import {
   supplierInvoiceService,
   MATCH_STATUS_COLORS,
@@ -13,11 +15,6 @@ import {
   SUPPLIER_INVOICE_STATUS_LABELS,
   type SupplierInvoiceDetail,
 } from "@/services/supplier-invoice.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -30,6 +27,7 @@ export default function SupplierInvoiceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
+  const [confirming, setConfirming] = useState<"ret" | "iptal" | null>(null);
   const [notice, setNotice] = useState("");
 
   const [showReturnForm, setShowReturnForm] = useState(false);
@@ -76,28 +74,24 @@ export default function SupplierInvoiceDetailPage() {
     }
   }
 
-  async function reject() {
-    const reason = window.prompt("Ret gerekçesi:");
-    if (!reason?.trim()) return;
-    await runAction(() => supplierInvoiceService.reject(invoiceId, reason.trim()));
+  async function reject(reason: string) {
+    setConfirming(null);
+    await runAction(() => supplierInvoiceService.reject(invoiceId, reason));
   }
 
-  async function cancel() {
-    // Onaylanmış faturada iptal muhasebeye ters fişle yansır; gerekçe
-    // hem fişte hem denetim izinde görünür, bu yüzden zorunlu.
-    if (invoice?.status === 2) {
-      const reason = window.prompt(
-        "İptal gerekçesi (ters fişte ve denetim izinde görünecek):"
-      );
+  /**
+   * Onaylanmış faturada iptal muhasebeye TERS FİŞLE yansır; gerekçe
+   * hem fişte hem denetim izinde görünür, bu yüzden zorunlu.
+   * Onaylanmamış faturada böyle bir iz doğmaz, gerekçe isteğe bağlı.
+   */
+  async function cancel(reason: string) {
+    setConfirming(null);
 
-      if (!reason?.trim()) return;
-
-      await runAction(() => supplierInvoiceService.cancel(invoiceId, reason.trim()));
-      return;
-    }
-
-    if (!window.confirm("Bu faturayı iptal etmek istediğinize emin misiniz?")) return;
-    await runAction(() => supplierInvoiceService.cancel(invoiceId));
+    await runAction(() =>
+      invoice?.status === 2
+        ? supplierInvoiceService.cancel(invoiceId, reason)
+        : supplierInvoiceService.cancel(invoiceId),
+    );
   }
 
   async function createReturn(event: React.FormEvent) {
@@ -144,6 +138,7 @@ export default function SupplierInvoiceDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={invoice ? `Fatura ${invoice.invoiceNumber}` : "Tedarikçi Faturası"}
       description={invoice?.internalNumber ?? "Fatura detayı"}
     >
@@ -211,7 +206,7 @@ export default function SupplierInvoiceDetailPage() {
                       type="button"
                       className="erp-secondary-button"
                       disabled={processing}
-                      onClick={() => void reject()}
+                      onClick={() => setConfirming("ret")}
                     >
                       Reddet
                     </button>
@@ -223,7 +218,7 @@ export default function SupplierInvoiceDetailPage() {
                     type="button"
                     className="erp-secondary-button"
                     disabled={processing}
-                    onClick={() => void cancel()}
+                    onClick={() => setConfirming("iptal")}
                   >
                     İptal Et
                   </button>
@@ -451,7 +446,7 @@ export default function SupplierInvoiceDetailPage() {
               </label>
               <label>
                 <span>3 Yönlü Fark</span>
-                <input readOnly value={money.format(invoice.matchDifferenceAmount)} />
+                <input readOnly value={money(invoice.matchDifferenceAmount)} />
               </label>
               {invoice.description && (
                 <label className="span-2">
@@ -530,12 +525,12 @@ export default function SupplierInvoiceDetailPage() {
                       <td>
                         {item.quantity} {item.unit}
                       </td>
-                      <td>{money.format(item.unitPrice)}</td>
+                      <td>{money(item.unitPrice)}</td>
                       <td>%{item.vatRate}</td>
-                      <td>{money.format(item.lineSubtotal)}</td>
-                      <td>{money.format(item.vatAmount)}</td>
+                      <td>{money(item.lineSubtotal)}</td>
+                      <td>{money(item.vatAmount)}</td>
                       <td>
-                        <strong>{money.format(item.lineTotal)}</strong>
+                        <strong>{money(item.lineTotal)}</strong>
                       </td>
                     </tr>
                   ))}
@@ -544,13 +539,13 @@ export default function SupplierInvoiceDetailPage() {
             </div>
 
             <div
-              className="erp-form-actions"
-              style={{ justifyContent: "flex-end", textAlign: "right" }}
+              className="erp-form-actions rw-totals"
+              style={{ justifyContent: "flex-end" }}
             >
               <div>
-                <div>Ara toplam: {money.format(invoice.subtotal)}</div>
-                <div>KDV: {money.format(invoice.vatTotal)}</div>
-                <strong>Genel toplam: {money.format(invoice.grandTotal)}</strong>
+                <div>Ara toplam: {money(invoice.subtotal)}</div>
+                <div>KDV: {money(invoice.vatTotal)}</div>
+                <strong>Genel toplam: {money(invoice.grandTotal)}</strong>
               </div>
             </div>
           </section>
@@ -562,8 +557,8 @@ export default function SupplierInvoiceDetailPage() {
                   <h2>Bu Faturayı Ödeyen Çekler</h2>
                   <p>
                     Çek dağılımından gelir; ayrı bir ödeme defteri
-                    tutulmuyor. Karşılanan: {money.format(invoice.chequeAllocatedAmount)}{" "}
-                    · Kalan: {money.format(invoice.chequeRemainingAmount)}
+                    tutulmuyor. Karşılanan: {money(invoice.chequeAllocatedAmount)}{" "}
+                    · Kalan: {money(invoice.chequeRemainingAmount)}
                   </p>
                 </div>
               </div>
@@ -587,7 +582,7 @@ export default function SupplierInvoiceDetailPage() {
                         </td>
                         <td>{dateFormat.format(new Date(payment.dueDate))}</td>
                         <td>{payment.statusName}</td>
-                        <td>{money.format(payment.allocatedAmount)}</td>
+                        <td>{money(payment.allocatedAmount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -615,6 +610,34 @@ export default function SupplierInvoiceDetailPage() {
           )}
         </>
       )}
+      <ConfirmDialog
+        open={confirming === "ret"}
+        title="Fatura reddedilsin mi?"
+        description="Gerekçe tedarikçi faturasının geçmişinde kalır."
+        confirmLabel="Reddet"
+        requireReason
+        reasonLabel="Ret gerekçesi (zorunlu)"
+        busy={processing}
+        onCancel={() => setConfirming(null)}
+        onConfirm={(reason) => void reject(reason)}
+      />
+
+      <ConfirmDialog
+        open={confirming === "iptal"}
+        title="Fatura iptal edilsin mi?"
+        description={
+          invoice?.status === 2
+            ? "Onaylanmış fatura iptal edilince muhasebeye ters fiş kesilir; gerekçe hem fişte hem denetim izinde görünür."
+            : "Fatura iptal edilir; muhasebe kaydı doğmadığı için ters fiş kesilmez."
+        }
+        confirmLabel="İptal Et"
+        requireReason={invoice?.status === 2}
+        showReason
+        busy={processing}
+        onCancel={() => setConfirming(null)}
+        onConfirm={(reason) => void cancel(reason)}
+      />
+
     </ErpShell>
   );
 }

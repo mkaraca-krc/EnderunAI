@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import CurrencyRateFields from "@/components/accounting/currency-rate-fields";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
@@ -16,8 +17,6 @@ import {
   salesInvoiceService,
   type SalesInvoiceItemPayload,
 } from "@/services/sales-invoice.service";
-
-const money = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" });
 
 type DraftItem = {
   description: string;
@@ -188,6 +187,7 @@ export default function NewSalesInvoicePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Satış Faturası"
       description="Hakediş dışı satış; kesinleştirildiğinde gelir fişi otomatik oluşur"
     >
@@ -366,7 +366,7 @@ export default function NewSalesInvoicePage() {
                         onChange={(e) => updateItem(index, { vatRate: e.target.value })}
                       />
                     </td>
-                    <td>{money.format(lineSubtotal)}</td>
+                    <td>{money(lineSubtotal)}</td>
                     <td>
                       {items.length > 1 && (
                         <button
@@ -389,8 +389,8 @@ export default function NewSalesInvoicePage() {
 
         {withholdingTooHigh && (
           <div className="erp-alert error">
-            Tevkifat ({money.format(totals.withholding)}) hesaplanan KDV&apos;den
-            ({money.format(totals.vat)}) büyük olamaz.
+            Tevkifat ({money(totals.withholding)}) hesaplanan KDV&apos;den
+            ({money(totals.vat)}) büyük olamaz.
           </div>
         )}
 
@@ -403,13 +403,13 @@ export default function NewSalesInvoicePage() {
             + Kalem Ekle
           </button>
 
-          <div style={{ textAlign: "right" }}>
-            <div>Ara toplam: {money.format(totals.subtotal)}</div>
-            <div>KDV: {money.format(totals.vat)}</div>
+          <div className="num">
+            <div>Ara toplam: {money(totals.subtotal)}</div>
+            <div>KDV: {money(totals.vat)}</div>
             {totals.withholding > 0 && (
-              <div>Tevkifat: -{money.format(totals.withholding)}</div>
+              <div>Tevkifat: -{money(totals.withholding)}</div>
             )}
-            <strong>Tahsil edilecek: {money.format(totals.netReceivable)}</strong>
+            <strong>Tahsil edilecek: {money(totals.netReceivable)}</strong>
           </div>
         </div>
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount, money, number as formatNumber } from "@/lib/format/turkish";
 import {
   currencyValuationService,
   type CurrencyValuationPreview,
@@ -11,21 +12,6 @@ import {
   companyService,
   type CompanyListItem,
 } from "@/services/company.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
-
-const rateFormat = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 4,
-  maximumFractionDigits: 4,
-});
-
-const amountFormat = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -121,7 +107,7 @@ export default function CurrencyValuationPage() {
 
       setMessage(
         `Değerleme fişi kesildi. Deftere yazılan net fark: ` +
-          `${money.format(result.postedDifference)} (${result.lineCount} satır).`
+          `${money(result.postedDifference)} (${result.lineCount} satır).`
       );
 
       await loadPreview();
@@ -143,6 +129,7 @@ export default function CurrencyValuationPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Kur Değerlemesi"
       description="Dövizli cari bakiyelerinin dönem sonu değerlemesi (646/656)"
     >
@@ -225,17 +212,17 @@ export default function CurrencyValuationPage() {
           <small style={{ display: "block", marginBottom: 4 }}>
             Kambiyo Kârı (646)
           </small>
-          <strong>{money.format(preview?.totalGain ?? 0)}</strong>
+          <strong>{money(preview?.totalGain ?? 0)}</strong>
         </div>
         <div className="erp-panel">
           <small style={{ display: "block", marginBottom: 4 }}>
             Kambiyo Zararı (656)
           </small>
-          <strong>{money.format(preview?.totalLoss ?? 0)}</strong>
+          <strong>{money(preview?.totalLoss ?? 0)}</strong>
         </div>
         <div className="erp-panel">
           <small style={{ display: "block", marginBottom: 4 }}>Net Fark</small>
-          <strong>{money.format(preview?.netDifference ?? 0)}</strong>
+          <strong>{money(preview?.netDifference ?? 0)}</strong>
         </div>
         <div className="erp-panel">
           <small style={{ display: "block", marginBottom: 4 }}>
@@ -287,12 +274,12 @@ export default function CurrencyValuationPage() {
                     <td>
                       <strong>{line.currencyCode}</strong>
                     </td>
-                    <td>{amountFormat.format(line.balance)}</td>
-                    <td>{money.format(line.bookValueLocal)}</td>
+                    <td>{amount(line.balance)}</td>
+                    <td>{money(line.bookValueLocal)}</td>
                     <td>
                       {line.rateAvailable && line.valuationRate != null ? (
                         <>
-                          {rateFormat.format(line.valuationRate)}
+                          {formatNumber(line.valuationRate, 4)}
                           <small>{line.rateSource}</small>
                         </>
                       ) : (
@@ -301,19 +288,19 @@ export default function CurrencyValuationPage() {
                     </td>
                     <td>
                       {line.valuedLocal != null
-                        ? money.format(line.valuedLocal)
+                        ? money(line.valuedLocal)
                         : "—"}
                     </td>
                     <td>
                       {line.totalDifference != null
-                        ? money.format(line.totalDifference)
+                        ? money(line.totalDifference)
                         : "—"}
                     </td>
-                    <td>{money.format(line.previouslyPosted)}</td>
+                    <td>{money(line.previouslyPosted)}</td>
                     <td>
                       {line.postableDifference !== 0 ? (
                         <strong>
-                          {money.format(line.postableDifference)}
+                          {money(line.postableDifference)}
                           <small>
                             {line.postableDifference > 0 ? "646" : "656"}
                           </small>

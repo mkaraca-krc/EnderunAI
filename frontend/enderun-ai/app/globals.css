@@ -3642,3 +3642,80 @@ body {
   border-color: var(--color-semantic-warning);
   background: #fdf8ee;
 }
+
+/* ---- Elle kurulmuş bloklar için ortak sınıflar ----
+   Muhasebe ekranlarında panel, uyarı ve tablo satırları satır içi
+   ham hex ile yazılmıştı. Aynı görevi tokenlardan okuyan sınıflar. */
+
+.rw-subtle-panel {
+  padding: 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-surface-bg);
+}
+
+.rw-plain-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.rw-plain-table th,
+.rw-plain-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  text-align: left;
+}
+
+.rw-plain-table th {
+  color: var(--erp-muted);
+  font-weight: 700;
+}
+
+/* Aramada eşleşen satır: sarı vurgu, seçili satırla karışmasın diye
+   marka tonundan uzak. */
+.rw .erp-table tr.rw-row-match > td,
+.rw-row-match > td {
+  background: #fdf6e3;
+}
+
+/* Ağaç açma/kapama gibi çerçevesiz küçük düğmeler. */
+.rw-icon-button {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--erp-muted);
+  font: inherit;
+  line-height: 1;
+}
+
+.rw-icon-button:hover:not(:disabled) {
+  background: var(--color-brand-primary-tint);
+  color: var(--color-brand-primary);
+}
+
+.rw-icon-button:disabled {
+  color: transparent;
+  cursor: default;
+}
+
+/* Fiş kesilemeyen (yalnızca üst) hesap satırı sönük durur: tıklanacak
+   bir şey olmadığı satırdan anlaşılsın. */
+.rw .erp-table tr.rw-row-passive > td,
+.rw-row-passive > td {
+  background: var(--color-surface-bg);
+  color: var(--erp-muted);
+}
+
+/* Fatura alt toplamları: sağa hizalı ve eş genişlikli rakam. Blok
+   halinde alt alta duran tutarların basamakları hizalanmazsa
+   "ara toplam + KDV = genel toplam" gözle doğrulanamıyor. */
+.rw-totals {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

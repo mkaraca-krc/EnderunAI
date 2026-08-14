@@ -10,6 +10,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 
 import {
   accountingVoucherService,
@@ -89,11 +90,6 @@ function createBlankLine(): VoucherLineForm {
     dueDate: "",
   };
 }
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 export default function NewAccountingVoucherPage() {
   const router = useRouter();
@@ -379,6 +375,7 @@ export default function NewAccountingVoucherPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Muhasebe Fişi"
       description="Borç ve alacak satırlarıyla taslak muhasebe fişi oluşturun"
     >
@@ -814,17 +811,17 @@ export default function NewAccountingVoucherPage() {
         >
           <Summary
             label="Toplam Borç"
-            value={money.format(totals.debit)}
+            value={money(totals.debit)}
           />
 
           <Summary
             label="Toplam Alacak"
-            value={money.format(totals.credit)}
+            value={money(totals.credit)}
           />
 
           <Summary
             label="Fark"
-            value={money.format(totals.difference)}
+            value={money(totals.difference)}
           />
 
           <div className="erp-form-card">

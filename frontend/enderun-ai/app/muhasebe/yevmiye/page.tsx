@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount, money } from "@/lib/format/turkish";
 
 import {
   accountingReportService,
@@ -38,18 +39,6 @@ const initialFilters: FilterForm = {
   accountCode: "",
   search: "",
 };
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const number = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const date = new Intl.DateTimeFormat("tr-TR");
 
@@ -189,6 +178,7 @@ export default function JournalPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yevmiye Defteri"
       description="Kesinleşmiş muhasebe fişlerinin tarih ve hesap bazlı dökümü"
     >
@@ -373,17 +363,17 @@ export default function JournalPage() {
 
         <Summary
           label="Toplam Borç"
-          value={money.format(summary.totalDebit)}
+          value={money(summary.totalDebit)}
         />
 
         <Summary
           label="Toplam Alacak"
-          value={money.format(summary.totalCredit)}
+          value={money(summary.totalCredit)}
         />
 
         <Summary
           label="Fark"
-          value={money.format(summary.difference)}
+          value={money(summary.difference)}
         />
       </section>
 
@@ -417,9 +407,9 @@ export default function JournalPage() {
                 <th>Belge No</th>
                 <th>Belge Tarihi</th>
                 <th>Kaynak</th>
-                <th>Kur</th>
-                <th>Borç</th>
-                <th>Alacak</th>
+                <th className="num">Kur</th>
+                <th className="num">Borç</th>
+                <th className="num">Alacak</th>
               </tr>
             </thead>
 
@@ -555,38 +545,28 @@ export default function JournalPage() {
 
                   <td>
                     {line.currencyCode} /{" "}
-                    {number.format(
+                    {amount(
                       line.exchangeRate
                     )}
                   </td>
 
                   <td
-                    style={{
-                      textAlign: "right",
-                      fontWeight:
-                        line.debitAmountLocal > 0
-                          ? 700
-                          : 400,
-                    }}
+                    className="num"
+                    style={{ fontWeight: line.debitAmountLocal > 0 ? 700 : 400, }}
                   >
                     {line.debitAmountLocal > 0
-                      ? money.format(
+                      ? money(
                           line.debitAmountLocal
                         )
                       : "—"}
                   </td>
 
                   <td
-                    style={{
-                      textAlign: "right",
-                      fontWeight:
-                        line.creditAmountLocal > 0
-                          ? 700
-                          : 400,
-                    }}
+                    className="num"
+                    style={{ fontWeight: line.creditAmountLocal > 0 ? 700 : 400, }}
                   >
                     {line.creditAmountLocal > 0
-                      ? money.format(
+                      ? money(
                           line.creditAmountLocal
                         )
                       : "—"}
@@ -604,24 +584,20 @@ export default function JournalPage() {
                     </td>
 
                     <td
-                      style={{
-                        textAlign: "right",
-                      }}
+                      className="num"
                     >
                       <strong>
-                        {money.format(
+                        {money(
                           summary.totalDebit
                         )}
                       </strong>
                     </td>
 
                     <td
-                      style={{
-                        textAlign: "right",
-                      }}
+                      className="num"
                     >
                       <strong>
-                        {money.format(
+                        {money(
                           summary.totalCredit
                         )}
                       </strong>

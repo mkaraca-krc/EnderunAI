@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 
 import {
   accountingReportService,
@@ -38,13 +39,6 @@ const initialFilters: FilterForm = {
   search: "",
 };
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 const date = new Intl.DateTimeFormat("tr-TR");
 
 const voucherTypeLabels: Record<number, string> = {
@@ -60,7 +54,7 @@ function balanceLabel(value: number) {
     return "0,00";
   }
 
-  return `${money.format(Math.abs(value))} ${
+  return `${money(Math.abs(value))} ${
     value > 0 ? "Borç" : "Alacak"
   }`;
 }
@@ -216,6 +210,7 @@ export default function GeneralLedgerPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Büyük Defter"
       description="Kesinleşmiş muhasebe hareketlerini hesap bazında inceleyin"
     >
@@ -407,17 +402,17 @@ export default function GeneralLedgerPage() {
 
         <Summary
           label="Toplam Borç"
-          value={money.format(summary.totalDebit)}
+          value={money(summary.totalDebit)}
         />
 
         <Summary
           label="Toplam Alacak"
-          value={money.format(summary.totalCredit)}
+          value={money(summary.totalCredit)}
         />
 
         <Summary
           label="Fark"
-          value={money.format(summary.difference)}
+          value={money(summary.difference)}
         />
       </section>
 
@@ -509,14 +504,14 @@ export default function GeneralLedgerPage() {
 
                     <MiniSummary
                       label="Dönem Borç"
-                      value={money.format(
+                      value={money(
                         account.periodDebit
                       )}
                     />
 
                     <MiniSummary
                       label="Dönem Alacak"
-                      value={money.format(
+                      value={money(
                         account.periodCredit
                       )}
                     />
@@ -545,9 +540,9 @@ export default function GeneralLedgerPage() {
                           <th>Masraf Merkezi</th>
                           <th>Belge No</th>
                           <th>Kaynak</th>
-                          <th>Borç</th>
-                          <th>Alacak</th>
-                          <th>Bakiye</th>
+                          <th className="num">Borç</th>
+                          <th className="num">Alacak</th>
+                          <th className="num">Bakiye</th>
                         </tr>
                       </thead>
 
@@ -639,34 +634,28 @@ export default function GeneralLedgerPage() {
                             </td>
 
                             <td
-                              style={{
-                                textAlign: "right",
-                              }}
+                              className="num"
                             >
                               {line.debitAmount > 0
-                                ? money.format(
+                                ? money(
                                     line.debitAmount
                                   )
                                 : "—"}
                             </td>
 
                             <td
-                              style={{
-                                textAlign: "right",
-                              }}
+                              className="num"
                             >
                               {line.creditAmount > 0
-                                ? money.format(
+                                ? money(
                                     line.creditAmount
                                   )
                                 : "—"}
                             </td>
 
                             <td
-                              style={{
-                                textAlign: "right",
-                                fontWeight: 700,
-                              }}
+                              className="num"
+                              style={{ fontWeight: 700, }}
                             >
                               {balanceLabel(
                                 line.balance

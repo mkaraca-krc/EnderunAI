@@ -51,6 +51,7 @@ const modules = [
 export default function AccountingPage() {
   return (
     <ErpShell
+      design="redwood"
       title="Muhasebe Merkezi"
       description="Enderun AI finansal kayıt ve raporlama altyapısı"
     >
@@ -78,12 +79,7 @@ export default function AccountingPage() {
             return (
               <article
                 key={module.title}
-                style={{
-                  border: "1px solid var(--erp-border)",
-                  borderRadius: 12,
-                  padding: 18,
-                  background: "#fff",
-                }}
+                className="erp-panel"
               >
                 <div
                   style={{

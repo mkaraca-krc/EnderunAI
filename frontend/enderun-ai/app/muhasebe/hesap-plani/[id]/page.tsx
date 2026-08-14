@@ -10,6 +10,7 @@ import {
 import { useParams, useRouter } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 
 import {
   accountingAccountService,
@@ -75,6 +76,7 @@ export default function AccountingAccountDetailPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [deactivateOpen, setDeactivateOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -193,14 +195,6 @@ export default function AccountingAccountDetailPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `${item.code} - ${item.name} hesabı pasife alınsın mı?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     setDeactivating(true);
     setMessage("");
     setError("");
@@ -211,6 +205,7 @@ export default function AccountingAccountDetailPage() {
           item.id
         );
 
+      setDeactivateOpen(false);
       setMessage(result.message);
 
       setForm((current) => ({
@@ -240,6 +235,7 @@ export default function AccountingAccountDetailPage() {
   if (loading) {
     return (
       <ErpShell
+      design="redwood"
         title="Muhasebe Hesabı"
         description="Hesap bilgileri yükleniyor"
       >
@@ -253,6 +249,7 @@ export default function AccountingAccountDetailPage() {
   if (!item) {
     return (
       <ErpShell
+      design="redwood"
         title="Muhasebe Hesabı"
         description="Kayıt bulunamadı"
       >
@@ -275,6 +272,7 @@ export default function AccountingAccountDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`${item.code} - ${item.name}`}
       description="Muhasebe hesabı detay ve düzenleme ekranı"
     >
@@ -302,7 +300,7 @@ export default function AccountingAccountDetailPage() {
               className="erp-secondary-button"
               disabled={deactivating}
               onClick={() =>
-                void deactivate()
+                setDeactivateOpen(true)
               }
             >
               {deactivating
@@ -516,16 +514,7 @@ export default function AccountingAccountDetailPage() {
           />
         </section>
 
-        <section
-          style={{
-            marginTop: 16,
-            padding: 14,
-            border:
-              "1px solid var(--erp-border)",
-            borderRadius: 10,
-            background: "#f8fafc",
-          }}
-        >
+        <section className="rw-subtle-panel" style={{ marginTop: 16 }}>
           <strong>Hesap Bilgileri</strong>
 
           <div
@@ -590,6 +579,20 @@ export default function AccountingAccountDetailPage() {
           </button>
         </div>
       </form>
+      <ConfirmDialog
+        open={deactivateOpen}
+        title="Hesap pasife alınsın mı?"
+        description={
+          item
+            ? `${item.code} — ${item.name} yeni fişlerde seçilemez. Geçmiş kayıtlar defterde kalır.`
+            : ""
+        }
+        confirmLabel="Pasife Al"
+        busy={deactivating}
+        onCancel={() => setDeactivateOpen(false)}
+        onConfirm={() => void deactivate()}
+      />
+
     </ErpShell>
   );
 }
