@@ -151,6 +151,7 @@ export default function NewIndexPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Endeks Dönemi"
       description="Fiyat farkı hesaplaması için aylık endeks girişi"
     >

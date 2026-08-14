@@ -11,6 +11,8 @@ import {
 } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { currencyMoney, quantity } from "@/lib/format/turkish";
 
 import {
   projectMeasurementService,
@@ -42,19 +44,11 @@ function formatMoney(
   amount: number,
   currencyCode: string
 ) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: currencyCode || "TRY",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  return currencyMoney(amount, currencyCode);
 }
 
 function formatQuantity(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  }).format(value);
+  return quantity(value);
 }
 
 function formatDate(
@@ -72,6 +66,54 @@ function formatDate(
     }
   ).format(new Date(value));
 }
+
+/**
+ * Metraj üzerinde yapılabilen geri alınamaz işlemler.
+ *
+ * Soru metni, düğme etiketi ve gerekçe kuralı TEK YERDE duruyor:
+ * dört ayrı işlevde dağınık dururken iptal gerekçesi zorunluyken
+ * silme gerekçesiz gidiyordu ve bunu görmek için dört gövdeyi birden
+ * okumak gerekiyordu.
+ */
+type MeasurementAction = "submit" | "approve" | "cancel" | "remove";
+
+const ACTIONS: Record<
+  MeasurementAction,
+  {
+    title: string;
+    confirmLabel: string;
+    description: (measurementNumber: string) => string;
+    requireReason?: boolean;
+  }
+> = {
+  submit: {
+    title: "Metrajı Onaya Gönder",
+    confirmLabel: "Onaya Gönder",
+    description: (no) =>
+      `${no} numaralı metraj onaya gönderilecek. Onaya giden metraj artık düzenlenemez.`,
+  },
+  approve: {
+    title: "Metrajı Onayla",
+    confirmLabel: "Metrajı Onayla",
+    description: (no) =>
+      `${no} numaralı metraj onaylanacak. Onaylanan metraj hakedişe aktarılabilir hâle gelir.`,
+  },
+  cancel: {
+    title: "Metrajı İptal Et",
+    confirmLabel: "Metrajı İptal Et",
+    description: (no) =>
+      `${no} numaralı metraj iptal edilecek. İptal geri alınamaz.`,
+    // Gerekçe ZORUNLU: iptal edilmiş bir metrajın nedeni aylar sonra
+    // hakediş uyuşmazlığında sorulan ilk şey.
+    requireReason: true,
+  },
+  remove: {
+    title: "Taslak Metrajı Sil",
+    confirmLabel: "Taslağı Sil",
+    description: (no) =>
+      `${no} numaralı taslak metraj kalıcı olarak silinecek. Bu işlem geri alınamaz.`,
+  },
+};
 
 export default function ProjectMeasurementDetailPage() {
   const params = useParams();
@@ -95,6 +137,18 @@ export default function ProjectMeasurementDetailPage() {
 
   const [message, setMessage] =
     useState("");
+
+  /**
+   * Onay bekleyen işlem.
+   *
+   * Dört eylemin dördü de tarayıcı diyaloğuyla soruluyordu; iptal
+   * ayrıca `prompt` + `confirm` diye ÜST ÜSTE İKİ pencere açıyordu.
+   * Tarayıcı penceresi gerekçeyi zorunlu tutamıyor, boş metni kabul
+   * ediyor ve hata mesajını kendi içinde gösteremiyor: iptal gerekçesi
+   * boş bırakılabiliyordu.
+   */
+  const [pendingAction, setPendingAction] =
+    useState<MeasurementAction | null>(null);
 
   async function load() {
     if (!id) {
@@ -126,16 +180,8 @@ export default function ProjectMeasurementDetailPage() {
     void load();
   }, [id]);
 
-  async function submitForApproval() {
-    if (!item) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `${item.measurementNumber} numaralı metraj onaya gönderilsin mi?`
-    );
-
-    if (!confirmed) {
+  async function runPendingAction(reason: string) {
+    if (!item || !pendingAction) {
       return;
     }
 
@@ -144,142 +190,42 @@ export default function ProjectMeasurementDetailPage() {
     setMessage("");
 
     try {
+      if (pendingAction === "remove") {
+        await projectMeasurementService.remove(item.id);
+
+        // Kayıt artık yok: listeye dönülür, bu sayfada kalınmaz.
+        router.push("/metrajlar");
+        router.refresh();
+        return;
+      }
+
       const result =
-        await projectMeasurementService.submit(
-          item.id
-        );
+        pendingAction === "submit"
+          ? await projectMeasurementService.submit(item.id)
+          : pendingAction === "approve"
+            ? await projectMeasurementService.approve(item.id)
+            : await projectMeasurementService.cancel(item.id, reason);
 
       setMessage(result.message);
+
+      // Diyalog BAŞARIDA kapanır, hatada açık kalır: hata mesajı
+      // diyaloğun içinde görünür ve kullanıcı tekrar deneyebilir.
+      setPendingAction(null);
       await load();
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Metraj onaya gönderilemedi."
+          : "İşlem tamamlanamadı."
       );
     } finally {
-      setProcessing(false);
-    }
-  }
-
-  async function approve() {
-    if (!item) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `${item.measurementNumber} numaralı metraj onaylansın mı?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setProcessing(true);
-    setError("");
-    setMessage("");
-
-    try {
-      const result =
-        await projectMeasurementService.approve(
-          item.id
-        );
-
-      setMessage(result.message);
-      await load();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Metraj onaylanamadı."
-      );
-    } finally {
-      setProcessing(false);
-    }
-  }
-
-  async function cancelMeasurement() {
-    if (!item) {
-      return;
-    }
-
-    const reason = window.prompt(
-      "Metraj iptal gerekçesini yazın:"
-    );
-
-    if (!reason?.trim()) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `${item.measurementNumber} numaralı metraj iptal edilsin mi?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setProcessing(true);
-    setError("");
-    setMessage("");
-
-    try {
-      const result =
-        await projectMeasurementService.cancel(
-          item.id,
-          reason.trim()
-        );
-
-      setMessage(result.message);
-      await load();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Metraj iptal edilemedi."
-      );
-    } finally {
-      setProcessing(false);
-    }
-  }
-
-  async function remove() {
-    if (!item) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `${item.measurementNumber} numaralı taslak metraj kalıcı olarak silinsin mi?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setProcessing(true);
-    setError("");
-
-    try {
-      await projectMeasurementService.remove(
-        item.id
-      );
-
-      router.push("/metrajlar");
-      router.refresh();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Metraj silinemedi."
-      );
-
       setProcessing(false);
     }
   }
 
   if (loading) {
     return (
-      <ErpShell title="Metraj Detayı">
+      <ErpShell design="redwood" title="Metraj Detayı">
         <div className="erp-form-card">
           Metraj yükleniyor...
         </div>
@@ -289,7 +235,7 @@ export default function ProjectMeasurementDetailPage() {
 
   if (!item) {
     return (
-      <ErpShell title="Metraj Detayı">
+      <ErpShell design="redwood" title="Metraj Detayı">
         {error && (
           <div className="erp-alert error">
             {error}
@@ -305,6 +251,7 @@ export default function ProjectMeasurementDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`Metraj ${item.measurementNumber}`}
       description={`${item.projectCode} — ${item.projectName}`}
     >
@@ -438,7 +385,7 @@ export default function ProjectMeasurementDetailPage() {
               type="button"
               disabled={processing}
               onClick={() =>
-                void submitForApproval()
+                setPendingAction("submit")
               }
             >
               Onaya Gönder
@@ -448,7 +395,7 @@ export default function ProjectMeasurementDetailPage() {
               type="button"
               disabled={processing}
               onClick={() =>
-                void remove()
+                setPendingAction("remove")
               }
             >
               Taslağı Sil
@@ -463,7 +410,7 @@ export default function ProjectMeasurementDetailPage() {
               type="button"
               disabled={processing}
               onClick={() =>
-                void approve()
+                setPendingAction("approve")
               }
             >
               Metrajı Onayla
@@ -473,7 +420,7 @@ export default function ProjectMeasurementDetailPage() {
               type="button"
               disabled={processing}
               onClick={() =>
-                void cancelMeasurement()
+                setPendingAction("cancel")
               }
             >
               Metrajı İptal Et
@@ -494,7 +441,7 @@ export default function ProjectMeasurementDetailPage() {
               type="button"
               disabled={processing}
               onClick={() =>
-                void cancelMeasurement()
+                setPendingAction("cancel")
               }
             >
               Metrajı İptal Et
@@ -683,6 +630,25 @@ export default function ProjectMeasurementDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* key: her açılışta gerekçe alanı temiz başlasın — bileşen
+          yeniden kurulur, önceki işlemin metni taşınmaz. */}
+      {pendingAction && (
+        <ConfirmDialog
+          key={pendingAction}
+          open
+          title={ACTIONS[pendingAction].title}
+          description={ACTIONS[pendingAction].description(
+            item.measurementNumber
+          )}
+          confirmLabel={ACTIONS[pendingAction].confirmLabel}
+          requireReason={ACTIONS[pendingAction].requireReason}
+          busy={processing}
+          error={error}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={(reason) => void runPendingAction(reason)}
+        />
+      )}
     </ErpShell>
   );
 }

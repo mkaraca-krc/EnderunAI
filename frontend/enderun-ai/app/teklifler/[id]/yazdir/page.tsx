@@ -3,27 +3,31 @@
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { currencyMoney, decimalRange } from "@/lib/format/turkish";
 import { offerService, type OfferPrintData } from "@/services/offer.service";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
-const quantityFormat = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 4,
-});
+/**
+ * Miktar sütunu: EN AZ iki hane, gerekirse dörde kadar.
+ *
+ * Alt sınır basılı belge için: "2" ile "2,00" alt alta geldiğinde
+ * sütun kayıyor. Üst sınır ise metrajlı kalemler için — 0,3125 m³
+ * kırpılırsa çıktı işverene yanlış miktar gösterir.
+ */
+function quantityFormat(value: number) {
+  return decimalRange(value, 2, 4);
+}
 
+/**
+ * Tutar — teklifin para biriminde, iki hane.
+ *
+ * Eskiden burada try/catch vardı: `style: "currency"` tanımadığı bir
+ * para kodunda istisna fırlatıyordu. Paylaşılan biçimleyici
+ * fırlatmadığı için yedek dala gerek kalmadı.
+ */
 function money(value: number, currency: string) {
-  try {
-    return new Intl.NumberFormat("tr-TR", {
-      style: "currency",
-      currency,
-    }).format(value);
-  } catch {
-    return `${new Intl.NumberFormat("tr-TR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value)} ${currency}`;
-  }
+  return currencyMoney(value, currency);
 }
 
 /**
@@ -196,7 +200,7 @@ export default function OfferPrintPage() {
                 )}
               </td>
               <td>{item.unit}</td>
-              <td className="num">{quantityFormat.format(item.quantity)}</td>
+              <td className="num">{quantityFormat(item.quantity)}</td>
               <td className="num">{money(item.unitSalesPrice, currency)}</td>
               <td className="num">{money(item.salesTotal, currency)}</td>
             </tr>

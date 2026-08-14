@@ -4,6 +4,14 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  currencyMoney,
+  decimal,
+  percent,
+  // `calculate` icinde ayni adda yerel bir degisken var; takma ad
+  // olmasaydi okuyan hangisinin kastedildigini ayirt edemezdi.
+  quantity as formatQuantity,
+} from "@/lib/format/turkish";
 import CostBreakdownModal from "@/components/offers/cost-breakdown-modal";
 import {
   Button,
@@ -131,11 +139,7 @@ function calculate(line: Line) {
 }
 
 function money(value: number, currency: string) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 export default function NewOfferPage() {
@@ -324,12 +328,8 @@ export default function NewOfferPage() {
           `${detail.materials.length} malzeme`,
           `${detail.labors.length} işçilik`,
           `${detail.machines.length} makine`,
-          `${laborHours.toLocaleString("tr-TR", {
-            maximumFractionDigits: 2,
-          })} adam/saat`,
-          `${machineHours.toLocaleString("tr-TR", {
-            maximumFractionDigits: 2,
-          })} makine/saat`,
+          `${decimal(laborHours, 2)} adam/saat`,
+          `${decimal(machineHours, 2)} makine/saat`,
         ].join(" · ");
       }
 
@@ -543,6 +543,7 @@ export default function NewOfferPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Teklif"
       description="İskonto ve kâr oranına göre canlı maliyet hesabı"
     >
@@ -937,11 +938,11 @@ export default function NewOfferPage() {
                                                 </td>
 
                                                 <td className="px-2 py-2 text-right">
-                                                  {Number(
-                                                    material.effectiveQuantity
-                                                  ).toLocaleString("tr-TR", {
-                                                    maximumFractionDigits: 4,
-                                                  })}
+                                                  {formatQuantity(
+                                                    Number(
+                                                      material.effectiveQuantity
+                                                    )
+                                                  )}
                                                 </td>
 
                                                 <td className="px-2 py-2 text-right">
@@ -971,20 +972,15 @@ export default function NewOfferPage() {
 
                           <td className="border-b px-3 py-3 text-right">
                             <strong className="text-slate-900">
-                              {(
+                              {decimal(
                                 Number(line.estimatedLaborHours || 0) *
-                                Number(line.quantity || 0)
-                              ).toLocaleString("tr-TR", {
-                                maximumFractionDigits: 2,
-                              })}
+                                  Number(line.quantity || 0),
+                                2
+                              )}
                             </strong>
                             <small className="mt-1 block text-slate-500">
                               Birim:{" "}
-                              {Number(
-                                line.estimatedLaborHours || 0
-                              ).toLocaleString("tr-TR", {
-                                maximumFractionDigits: 2,
-                              })}
+                              {decimal(Number(line.estimatedLaborHours || 0), 2)}
                             </small>
                           </td>
                           <td className="border-b p-2">
@@ -1157,14 +1153,12 @@ export default function NewOfferPage() {
                 <div className="rounded-lg bg-slate-50 p-3">
                   <span className="text-xs text-slate-500">Ortalama Kâr Oranı</span>
                   <strong className="mt-1 block text-xl text-slate-900">
-                    %
-                    {(
+                    {percent(
                       totals.costTotal > 0
                         ? (totals.profitTotal / totals.costTotal) * 100
-                        : 0
-                    ).toLocaleString("tr-TR", {
-                      maximumFractionDigits: 2,
-                    })}
+                        : 0,
+                      2
+                    )}
                   </strong>
                 </div>
               </div>

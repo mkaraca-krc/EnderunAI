@@ -11,6 +11,7 @@ import BoqImportMatchTable, {
   toDecisions,
 } from "@/components/engineering/boq-import-match-table";
 import ErpShell from "@/components/erp/erp-shell";
+import { amount, currencyMoney, quantity } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
 import {
   BoqImportErrorKind,
@@ -44,11 +45,8 @@ const itemTypeLabels: Record<ProjectBoqItemType, string> = {
 };
 
 function money(value: number, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", { style: "currency", currency })
-    .format(value);
+  return currencyMoney(value, currency);
 }
-
-const number = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
 
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
@@ -264,7 +262,7 @@ export default function ContractSummaryDetailPage() {
 
   if (loading) {
     return (
-      <ErpShell title="Sözleşme İcmali" description="Yükleniyor">
+      <ErpShell design="redwood" title="Sözleşme İcmali" description="Yükleniyor">
         <div className="erp-loading">İcmal yükleniyor...</div>
       </ErpShell>
     );
@@ -272,7 +270,7 @@ export default function ContractSummaryDetailPage() {
 
   if (!item) {
     return (
-      <ErpShell title="Sözleşme İcmali" description="Kayıt bulunamadı">
+      <ErpShell design="redwood" title="Sözleşme İcmali" description="Kayıt bulunamadı">
         <div className="erp-alert error">{error || "İcmal bulunamadı."}</div>
         <Link className="erp-secondary-button" href="/kesifler">
           ← İcmal listesi
@@ -285,6 +283,7 @@ export default function ContractSummaryDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`${item.boqNumber} · ${item.name}`}
       description={`${item.projectCode} — ${item.projectName}`}
     >
@@ -548,17 +547,11 @@ export default function ContractSummaryDetailPage() {
                           <>
                             {" "}— dosyadaki tutar{" "}
                             <strong>
-                              {problem.fileTotal.toLocaleString("tr-TR", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
+                              {amount(problem.fileTotal)}
                             </strong>
                             , miktar × birim fiyattan hesaplanan{" "}
                             <strong>
-                              {problem.computedTotal.toLocaleString("tr-TR", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
+                              {amount(problem.computedTotal)}
                             </strong>
                           </>
                         ) : null}
@@ -624,7 +617,7 @@ export default function ContractSummaryDetailPage() {
                           <td>
                             {section.aliasName ? (
                               section.aliasMatches ? (
-                                <span style={{ color: "#64748b" }}>
+                                <span className="rw-value-muted">
                                   {section.aliasName}
                                 </span>
                               ) : (
@@ -650,13 +643,13 @@ export default function ContractSummaryDetailPage() {
                                       )
                                     }
                                   />
-                                  <span style={{ color: "#b45309" }}>
+                                  <span className="rw-value-warning">
                                     {section.aliasName}
                                   </span>
                                 </label>
                               )
                             ) : (
-                              <span style={{ color: "#94a3b8" }}>—</span>
+                              <span className="rw-value-muted">—</span>
                             )}
                           </td>
                           <td>
@@ -885,7 +878,7 @@ export default function ContractSummaryDetailPage() {
                     </td>
                     <td>{line.unit}</td>
                     <td style={{ textAlign: "right" }}>
-                      {number.format(line.contractQuantity)}
+                      {quantity(line.contractQuantity)}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       {money(line.materialUnitPrice, item.currencyCode)}

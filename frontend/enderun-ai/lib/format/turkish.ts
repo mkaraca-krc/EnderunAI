@@ -181,6 +181,54 @@ export function decimal(
   }).format(value);
 }
 
+/**
+ * Alt ve üst ondalık sınırı ayrı verilen sayı — "2,00" ve "0,3125".
+ *
+ * `decimal` alt sınırı sıfır kabul eder, `number` alt ve üst sınırı
+ * eşitler; ikisinin de karşılamadığı bir aralık var: EN AZ iki hane
+ * yazılsın ama gerekirse dörde kadar çıksın. Antetli teklif çıktısında
+ * miktar sütunu böyle: "2,00" hizada durur, "0,3125" ise kırpılmaz.
+ * `quantity` ile yazılsaydı "2,00" ekranda "2" olurdu ve basılı
+ * belgede sütun bozulurdu.
+ */
+export function decimalRange(
+  value: number | null | undefined,
+  minDecimals: number,
+  maxDecimals: number,
+): string {
+  if (isMissing(value)) return EMPTY_VALUE;
+
+  return formatter({
+    minimumFractionDigits: minDecimals,
+    maximumFractionDigits: maxDecimals,
+  }).format(value);
+}
+
+/**
+ * Birim fiyat — "12,4567 ₺", "8,50 ₺".
+ *
+ * TUTAR DEĞİLDİR, bu yüzden iki hane kuralının dışındadır. Üretici
+ * fiyat listesinde birim fiyat veritabanında `numeric(18,6)` olarak
+ * duruyor: metrelik bir kablo 12,4567 ₺ olabiliyor. İki haneye
+ * yuvarlansaydı ekranda 12,46 ₺ görünür, kullanıcı o rakamla miktarı
+ * çarptığında toplam tutmazdı.
+ *
+ * Dört hane sınırı bilinçli: altıncı haneye kadar yazmak sütunu
+ * okunmaz yapıyor, dördüncü haneden sonrası fiyat listelerinde
+ * pratikte kullanılmıyor.
+ *
+ * TOPLAM VE ARA TOPLAM İÇİN KULLANILMAZ — onlar tutardır, `money` /
+ * `currencyMoney` ile iki hane yazılır.
+ */
+export function unitPrice(
+  value: number | null | undefined,
+  code = "TRY",
+): string {
+  if (isMissing(value)) return EMPTY_VALUE;
+
+  return `${decimalRange(value, 2, 4)} ${CURRENCY_LABELS[code] ?? code}`;
+}
+
 /** Ondalıksız sayı — "320". */
 export function whole(value: number | null | undefined): string {
   if (isMissing(value)) return EMPTY_VALUE;
@@ -232,9 +280,11 @@ export function dateTime(value: string | Date | null | undefined): string {
 export const turkishFormat = {
   amount,
   decimal,
+  decimalRange,
   money,
   currencyMoney,
   moneyWhole,
+  unitPrice,
   rate,
   percent,
   quantity,

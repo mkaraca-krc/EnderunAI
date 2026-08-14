@@ -215,6 +215,7 @@ export default function NewPriceProfilePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Fiyat Farkı Profili"
       description="Proje bazlı fiyat farkı katsayı tanımı"
     >

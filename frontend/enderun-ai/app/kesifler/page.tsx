@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import {
   projectBoqService,
   ProjectBoqStatus,
@@ -16,12 +17,6 @@ const statusLabels: Record<ProjectBoqStatus, string> = {
   [ProjectBoqStatus.Superseded]: "Eski Revizyon",
   [ProjectBoqStatus.Archived]: "Arşivlendi",
 };
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 2,
-});
 
 export default function ProjectBoqListPage() {
   const [items, setItems] = useState<ProjectBoqListItem[]>([]);
@@ -60,6 +55,7 @@ export default function ProjectBoqListPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Keşifler"
       description="Proje keşifleri, revizyonları ve sözleşme kalemleri"
     >
@@ -67,13 +63,25 @@ export default function ProjectBoqListPage() {
         <div>
           <strong>Keşif Yönetimi</strong>
           <small>
-            {items.length} kayıt · {money.format(totalAmount)}
+            {items.length} kayıt · {money(totalAmount)}
           </small>
         </div>
 
-        <Link href="/kesifler/yeni">
-          + Yeni Keşif
-        </Link>
+        <div className="erp-actions">
+          {/* Keşif listesi başka kullanıcının onayıyla değişiyor;
+              sayfayı yeniden yüklemeden görebilmek gerekiyor. */}
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            Yenile
+          </button>
+
+          <Link href="/kesifler/yeni">
+            + Yeni Keşif
+          </Link>
+        </div>
       </div>
 
       {error && (
@@ -133,7 +141,7 @@ export default function ProjectBoqListPage() {
                 <td>{item.itemCount}</td>
                 <td>
                   <strong>
-                    {money.format(item.totalAmount)}
+                    {money(item.totalAmount)}
                   </strong>
                 </td>
                 <td>

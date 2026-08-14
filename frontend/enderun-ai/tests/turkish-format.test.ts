@@ -3,9 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   EMPTY_VALUE,
   amount,
+  decimal,
+  decimalRange,
   money,
+  moneyWhole,
   percent,
   quantity,
+  unitPrice,
   whole,
 } from "@/lib/format/turkish";
 
@@ -84,5 +88,85 @@ describe("tam sayı", () => {
   it("ondalık göstermez", () => {
     expect(whole(320)).toBe("320");
     expect(whole(1500)).toBe("1.500");
+  });
+});
+
+describe("alt-üst sınırlı ondalık", () => {
+  /**
+   * Alt sınır basılı belge için: "2" ile "2,00" alt alta gelince
+   * miktar sütunu kayıyor.
+   */
+  it("alt sınıra kadar sıfır yazar", () => {
+    expect(decimalRange(2, 2, 4)).toBe("2,00");
+    expect(decimalRange(1250.5, 2, 4)).toBe("1.250,50");
+  });
+
+  it("alt sınırın üstünde gereksiz sıfır yazmaz", () => {
+    expect(decimalRange(0.3125, 2, 4)).toBe("0,3125");
+    expect(decimalRange(0.5, 2, 4)).toBe("0,50");
+  });
+});
+
+describe("birim fiyat", () => {
+  /**
+   * BİRİM FİYAT TUTAR DEĞİLDİR. Üretici fiyatı veritabanında
+   * `numeric(18,6)`; iki haneye yuvarlansaydı kullanıcı o rakamla
+   * miktarı çarptığında toplam tutmazdı.
+   */
+  it("kuruş altı haneleri korur", () => {
+    expect(unitPrice(12.4567)).toBe("12,4567 ₺");
+  });
+
+  it("en az iki hane yazar", () => {
+    expect(unitPrice(8.5)).toBe("8,50 ₺");
+    expect(unitPrice(8)).toBe("8,00 ₺");
+  });
+
+  it("para birimi kodunu yazar", () => {
+    expect(unitPrice(12.4567, "USD")).toBe("12,4567 USD");
+  });
+});
+
+/**
+ * GUARDRAIL: tutar biçimi SABİT iki hanedir.
+ *
+ * `quantity` ve `decimal` sondaki sıfırları atıyor; o davranış tutara
+ * sızarsa 1.250,00 ₺ ekranda "1.250 ₺" görünür ve kuruşu olan bir
+ * bakiye kuruşsuzmuş gibi okunur.
+ */
+describe("tutarda sıfır kırpılmaz", () => {
+  it("tam sayı tutar da iki hane yazar", () => {
+    expect(amount(1250)).toBe("1.250,00");
+    expect(money(1250)).toBe("1.250,00 ₺");
+  });
+
+  it("tek ondalıklı tutar ikinci haneyi yazar", () => {
+    expect(money(1250.5)).toBe("1.250,50 ₺");
+  });
+
+  /** Kuruşsuz biçim yalnızca başlık rakamı için ve AYRI bir işlev. */
+  it("kuruşsuz biçim ayrı işlevdedir", () => {
+    expect(moneyWhole(1250.5)).toBe("1.251 ₺");
+    expect(moneyWhole(1250.5)).not.toBe(money(1250.5));
+  });
+});
+
+/**
+ * GUARDRAIL: endeks katsayısı sekiz haneye kadar, YALNIZCA gösterim.
+ */
+describe("endeks katsayısı", () => {
+  it("sekiz haneye kadar iner", () => {
+    expect(decimal(0.00012345, 8)).toBe("0,00012345");
+  });
+
+  it("kısa katsayıyı sıfırla şişirmez", () => {
+    expect(decimal(1.5, 8)).toBe("1,5");
+  });
+
+  /** Boş değer sıfır sayılmaz: "veri yok" ile "sıfır" farklı şeyler. */
+  it("boş değeri sıfır saymaz", () => {
+    expect(decimal(null, 8)).toBe(EMPTY_VALUE);
+    expect(unitPrice(null)).toBe(EMPTY_VALUE);
+    expect(decimalRange(undefined, 2, 4)).toBe(EMPTY_VALUE);
   });
 });

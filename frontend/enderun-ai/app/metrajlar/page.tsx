@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { currencyMoney } from "@/lib/format/turkish";
 
 import {
   projectMeasurementService,
@@ -30,12 +31,7 @@ function formatMoney(
   amount: number,
   currencyCode: string
 ) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: currencyCode || "TRY",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  return currencyMoney(amount, currencyCode);
 }
 
 function formatDate(value: string) {
@@ -86,6 +82,7 @@ export default function ProjectMeasurementListPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Metrajlar"
       description="Saha ilerlemeleri, keşif kalemleri ve dönemsel miktarlar"
     >
@@ -98,9 +95,21 @@ export default function ProjectMeasurementListPage() {
           </small>
         </div>
 
-        <Link href="/metrajlar/yeni">
-          + Yeni Metraj
-        </Link>
+        <div className="erp-actions">
+          {/* Metrajın durumu onaycı tarafında değişiyor; listeyi
+              tazelemeden "onay bekliyor" satırı öylece kalıyordu. */}
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            Yenile
+          </button>
+
+          <Link href="/metrajlar/yeni">
+            + Yeni Metraj
+          </Link>
+        </div>
       </div>
 
       {error && (

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { currencyMoney, moneyWhole, percent } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { branchService, type BranchListItem } from "@/services/branch.service";
 import {
@@ -27,16 +28,20 @@ import {
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
-function money(value: number, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function percent(value: number) {
-  return `%${value.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`;
+/**
+ * Huni başlıklarındaki toplamlar — kuruşsuz.
+ *
+ * Bu rakamlar okunmak için değil, büyüklüğü görülmek için var
+ * ("42.500.000 ₺ beklemede"); kuruş burada gürültü.
+ *
+ * TEKLİF SATIRINDA KULLANILMAZ: aşağıdaki tabloda tek bir teklifin
+ * kendi tutarı yazıyor ve o rakam sözleşmeye giren rakamla birebir
+ * aynı görünmeli. Bu ayrım daha önce yoktu — tek bir `maximumFractionDigits: 0`
+ * biçimleyici hem panelleri hem tablo satırını basıyordu, yani teklif
+ * listesindeki tutarlar yuvarlanmış gösteriliyordu.
+ */
+function summaryMoney(value: number) {
+  return moneyWhole(value);
 }
 
 function labelOf(list: [number, string][], value: number) {
@@ -349,6 +354,7 @@ export default function OfferTrackingPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="İş / Teklif Takibi"
       description="Verdiğimiz her teklif, akıbeti ve kazanma oranımız"
     >
@@ -356,6 +362,16 @@ export default function OfferTrackingPage() {
       {notice && <div className="erp-alert success">{notice}</div>}
 
       <div className="erp-page-toolbar">
+        {/* Huni rakamları ve teklif durumları ekip içinde
+            değişiyor; tazeleme olmadan ekran eskiyordu. */}
+        <button
+          type="button"
+          disabled={loading || busy}
+          onClick={() => void loadOffers()}
+        >
+          Yenile
+        </button>
+
         <select
           value={companyId}
           onChange={(event) => setCompanyId(event.target.value)}
@@ -390,7 +406,7 @@ export default function OfferTrackingPage() {
               {percent(winRate.amountWinRate)}
             </strong>
             <small style={{ display: "block" }}>
-              {money(winRate.wonAmount)} / {money(winRate.lostAmount)}
+              {summaryMoney(winRate.wonAmount)} / {summaryMoney(winRate.lostAmount)}
             </small>
           </div>
 
@@ -398,7 +414,7 @@ export default function OfferTrackingPage() {
             <small style={{ display: "block" }}>Açık Huni</small>
             <strong style={{ fontSize: 22 }}>{winRate.openCount}</strong>
             <small style={{ display: "block" }}>
-              {money(winRate.openAmount)} beklemede
+              {summaryMoney(winRate.openAmount)} beklemede
             </small>
           </div>
 
@@ -419,7 +435,7 @@ export default function OfferTrackingPage() {
             {winRate.lostReasons.map((row) => (
               <li key={row.reason} style={{ marginBottom: 4 }}>
                 {row.reasonName}: <strong>{row.count} teklif</strong> ·{" "}
-                {money(row.amount)}
+                {summaryMoney(row.amount)}
               </li>
             ))}
           </ul>
@@ -486,7 +502,7 @@ export default function OfferTrackingPage() {
                       </td>
                       <td>
                         {item.counterpartyName ?? (
-                          <em style={{ color: "#b45309" }}>Belirtilmedi</em>
+                          <em className="rw-value-warning">Belirtilmedi</em>
                         )}
                         {item.counterpartyName && (
                           <small style={{ display: "block" }}>
@@ -499,7 +515,7 @@ export default function OfferTrackingPage() {
                       </td>
                       <td>{labelOf(OFFER_KINDS, item.kind)}</td>
                       <td>{dateFormat.format(new Date(item.offerDate))}</td>
-                      <td>{money(item.grandTotal, item.currency)}</td>
+                      <td className="num">{currencyMoney(item.grandTotal, item.currency)}</td>
                       <td>
                         <span className={statusClass(item.status)}>
                           {OFFER_STATUS_LABELS[item.status]}
@@ -510,7 +526,7 @@ export default function OfferTrackingPage() {
                           </small>
                         )}
                         {item.status === OFFER_STATUS.Won && !item.projectId && (
-                          <small style={{ display: "block", color: "#b45309" }}>
+                          <small className="rw-value-warning" style={{ display: "block" }}>
                             sözleşme bekliyor
                           </small>
                         )}

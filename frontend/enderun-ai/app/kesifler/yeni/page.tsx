@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 
 import {
   companyService,
@@ -38,13 +39,6 @@ type BoqLine = ProjectBoqItemRequest & {
   /** Fiyatın nereden geldiği ya da neden boş olduğu; sunucuya gitmez. */
   priceNote?: string;
 };
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 function newLine(): BoqLine {
   return {
@@ -332,6 +326,7 @@ export default function NewProjectBoqPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Keşif"
       description="Proje sözleşme keşfini ve keşif kalemlerini oluşturun."
     >
@@ -508,7 +503,7 @@ export default function NewProjectBoqPage() {
               <strong>Keşif Kalemleri</strong>
               <small>
                 {lines.length} kalem ·{" "}
-                {money.format(totalAmount)}
+                {money(totalAmount)}
               </small>
               <small style={{ display: "block" }}>
                 Kalemleri Excel&apos;den aktaracaksanız burayı boş
@@ -662,7 +657,7 @@ export default function NewProjectBoqPage() {
 
                     <td>
                       <strong>
-                        {money.format(
+                        {money(
                           Number(
                             line.contractQuantity || 0
                           ) *
@@ -718,7 +713,7 @@ export default function NewProjectBoqPage() {
                   fontWeight: 800,
                 }}
               >
-                {money.format(totalAmount)}
+                {money(totalAmount)}
               </div>
             </div>
           </div>

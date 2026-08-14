@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { decimal } from "@/lib/format/turkish";
 
 import {
   priceDifferenceService,
@@ -12,10 +13,19 @@ import {
   type PriceDifferenceProfile,
 } from "@/services/price-difference.service";
 
-const number = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 8,
-});
+/**
+ * Endeks katsayısı — sekiz haneye kadar, sondaki sıfırlar yazılmadan.
+ *
+ * SEKİZ HANE YALNIZCA GÖSTERİM İÇİN. Fiyat farkı hesabı backend'de
+ * tam hassasiyette yapılıyor; burada kırpılan tek şey ekrandaki
+ * basamak sayısı, hesaba giren değer değil.
+ *
+ * Sabit haneli biçim kullanılamaz: katsayıların çoğu 1,5 gibi kısa
+ * sayılar ve "1,50000000" diye yazılsalardı tablo okunmaz olurdu.
+ */
+function decimal8(value: number) {
+  return decimal(value, 8);
+}
 
 const calculationTypeLabels: Record<
   PriceDifferenceCalculationType,
@@ -89,6 +99,7 @@ export default function PriceDifferencePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Fiyat Farkı"
       description="Profil, endeks ve hakediş fiyat farkı yönetimi"
     >
@@ -242,7 +253,7 @@ export default function PriceDifferencePage() {
                         </td>
 
                         <td>
-                          {number.format(
+                          {decimal8(
                             profile.coefficient.total
                           )}
                         </td>
@@ -317,37 +328,37 @@ export default function PriceDifferencePage() {
                         <td>{period.sourceName}</td>
 
                         <td>
-                          {number.format(
+                          {decimal8(
                             period.laborIndex
                           )}
                         </td>
 
                         <td>
-                          {number.format(
+                          {decimal8(
                             period.fuelIndex
                           )}
                         </td>
 
                         <td>
-                          {number.format(
+                          {decimal8(
                             period.materialIndex
                           )}
                         </td>
 
                         <td>
-                          {number.format(
+                          {decimal8(
                             period.machineryIndex
                           )}
                         </td>
 
                         <td>
-                          {number.format(
+                          {decimal8(
                             period.cementIndex
                           )}
                         </td>
 
                         <td>
-                          {number.format(
+                          {decimal8(
                             period.otherIndex
                           )}
                         </td>

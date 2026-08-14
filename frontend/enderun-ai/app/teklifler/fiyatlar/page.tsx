@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
+import { unitPrice } from "@/lib/format/turkish";
 import PriceListManager from "@/components/pricing/price-list-manager";
 import {
   Badge,
@@ -26,12 +27,13 @@ import {
 } from "@/services/manufacturer-price-list.service";
 import { useEffect } from "react";
 
+// BİRİM FİYAT, TUTAR DEĞİL: üretici fiyatı veritabanında
+// `numeric(18,6)` duruyor ve kablo/profil gibi metrajlı malzemede
+// kuruş altı haneler gerçekten kullanılıyor. Tutarlara uygulanan iki
+// hane kuralı buraya uygulansaydı 12,4567 ₺ ekranda 12,46 ₺ görünür,
+// kullanıcı o rakamı miktarla çarptığında toplam tutmazdı.
 function money(value: number, currency: string) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 4,
-  }).format(value);
+  return unitPrice(value, currency);
 }
 
 export default function PriceSearchPage() {
@@ -94,6 +96,7 @@ export default function PriceSearchPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Üretici Fiyat Karşılaştırma"
       description="Aynı ürünün farklı üretici listelerini iskonto sonrası karşılaştırın"
     >

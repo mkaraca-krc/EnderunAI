@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { currencyMoney, percent } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -33,11 +34,7 @@ import {
 const statusLabels = OFFER_STATUS_LABELS;
 
 function money(value: number, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 function statusVariant(status: number) {
@@ -105,6 +102,7 @@ export default function OffersPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Teklif Merkezi"
       description="Teklifleri, maliyetleri, iskontoları ve kârlılığı yönetin"
     >
@@ -155,6 +153,16 @@ export default function OffersPage() {
         </form>
 
         <div className="flex gap-3">
+          {/* Teklif durumları takip ekranından değiştiriliyor;
+              buraya dönünce liste kendiliğinden tazelenmiyordu. */}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            Yenile
+          </Button>
           <Link href="/teklifler/takip">
             <Button variant="secondary">İş / Teklif Takibi</Button>
           </Link>
@@ -243,9 +251,7 @@ export default function OffersPage() {
                       <TableCell>
                         <strong>{money(item.profitTotal, item.currency)}</strong>
                         <span className="mt-1 block text-xs text-slate-500">
-                          %{profitRate.toLocaleString("tr-TR", {
-                            maximumFractionDigits: 2,
-                          })}
+                          {percent(profitRate, 2)}
                         </span>
                       </TableCell>
                       <TableCell>

@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { currencyMoney, quantity } from "@/lib/format/turkish";
 
 import {
   companyService,
@@ -62,19 +63,11 @@ function formatMoney(
   amount: number,
   currencyCode: string
 ) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: currencyCode || "TRY",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  return currencyMoney(amount, currencyCode);
 }
 
 function formatQuantity(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  }).format(value);
+  return quantity(value);
 }
 
 export default function NewProjectMeasurementPage() {
@@ -450,6 +443,7 @@ export default function NewProjectMeasurementPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Metraj"
       description="Onaylı keşif üzerinden dönemsel saha metrajı oluşturun."
     >

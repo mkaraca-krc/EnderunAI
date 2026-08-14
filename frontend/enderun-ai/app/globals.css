@@ -3612,6 +3612,12 @@ body {
   color: var(--erp-muted);
 }
 
+/* "Dikkat et ama hata değil": eşleşmeyen keşif bölümü adı, sözleşmesi
+   açılmamış kazanılmış teklif. Sayfalar bunu #b45309 ile yazıyordu. */
+.rw .rw-value-warning {
+  color: var(--color-semantic-warning);
+}
+
 /* Diyalog içindeki tek alanlı form. */
 .rw-modal-field {
   display: grid;

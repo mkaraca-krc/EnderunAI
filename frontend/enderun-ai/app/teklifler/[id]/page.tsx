@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { currencyMoney, percent } from "@/lib/format/turkish";
 import {
   Badge,
   Card,
@@ -37,11 +38,7 @@ function statusVariant(status: number) {
 }
 
 function money(value: number, currency: string) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 function date(value?: string | null) {
@@ -109,6 +106,7 @@ export default function OfferDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={item?.offerNumber ?? "Teklif"}
       description={item?.title ?? "Teklif detayları"}
     >
@@ -261,9 +259,7 @@ export default function OfferDetailPage() {
                   />
                   <Info
                     label="Kâr Oranı"
-                    value={`%${profitRate.toLocaleString("tr-TR", {
-                      maximumFractionDigits: 2,
-                    })}`}
+                    value={percent(profitRate, 2)}
                   />
                 </div>
               </CardContent>
