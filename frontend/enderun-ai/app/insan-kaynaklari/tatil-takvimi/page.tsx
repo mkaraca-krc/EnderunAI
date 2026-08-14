@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import {
   Badge,
   Button,
@@ -62,6 +63,17 @@ export default function HolidayCalendarPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  /**
+   * Takvim doğrulama onayı.
+   *
+   * Eskiden window.prompt ile sorulup dönen değer null kontrolü
+   * YAPILMADAN servise geçiliyordu: kullanıcı "Vazgeç"e bassa
+   * bile takvim doğrulanmış işaretleniyordu. Doğrulama damgası
+   * anlamlı — sayfanın kendi metnine göre sonraki her değişiklik
+   * onu düşürüyor.
+   */
+  const [verifyOpen, setVerifyOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
@@ -120,9 +132,22 @@ export default function HolidayCalendarPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Resmî Tatil Takvimi"
       description="Puantaj cetveli bu takvimden dolar; doğrulanmadan kullanılmaz"
     >
+      {/* Takvim başka yöneticinin düzenlemesiyle değişiyor ve doğrulama düşüyor. */}
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          disabled={busy}
+          onClick={() => void load()}
+        >
+          Yenile
+        </button>
+      </div>
+
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {error}
@@ -426,22 +451,7 @@ export default function HolidayCalendarPage() {
           <div className="mt-4 flex items-center gap-3">
             <Button
               disabled={busy || data?.isVerified}
-              onClick={() =>
-                run(async () => {
-                  const note = window.prompt(
-                    "Doğrulama notu (isteğe bağlı):",
-                    "Resmî ilanla karşılaştırıldı."
-                  );
-
-                  const result = await holidayCalendarService.verify(
-                    companyId,
-                    year,
-                    note
-                  );
-
-                  return result.message;
-                })
-              }
+              onClick={() => setVerifyOpen(true)}
             >
               {data?.isVerified ? "Doğrulandı" : "Takvimi Doğrula"}
             </Button>
@@ -452,6 +462,29 @@ export default function HolidayCalendarPage() {
           </div>
         </>
       )}
+      <ConfirmDialog
+        open={verifyOpen}
+        title="Takvimi Doğrula"
+        description={`${year} resmî tatil takvimi doğrulanmış olarak işaretlenecek. Doğrulamadan sonra yapılan her değişiklik doğrulamayı düşürür.`}
+        confirmLabel="Takvimi Doğrula"
+        showReason
+        reasonLabel="Doğrulama notu (isteğe bağlı)"
+        busy={busy}
+        error={error}
+        onCancel={() => setVerifyOpen(false)}
+        onConfirm={(note) => {
+          setVerifyOpen(false);
+          void run(async () => {
+            const result = await holidayCalendarService.verify(
+              companyId,
+              year,
+              note.trim() || null
+            );
+
+            return result.message;
+          });
+        }}
+      />
     </ErpShell>
   );
 }

@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 
 import {
   hrLeaveService,
@@ -159,6 +160,12 @@ export default function HrLeaveManagementPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** Onay bekleyen izin işlemi. */
+  const [pending, setPending] = useState<{
+    kind: "approve" | "reject" | "delete";
+    item: HrLeaveListItem;
+  } | null>(null);
+
   const [actionId, setActionId] = useState<string | null>(
     null
   );
@@ -473,14 +480,7 @@ export default function HrLeaveManagementPage() {
   }
 
   async function handleApprove(item: HrLeaveListItem) {
-    const confirmed = window.confirm(
-      `${personnelById.get(item.personnelId)?.fullName ?? "Personel"} için izin talebi onaylansın mı?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setPending(null);
     setActionId(item.id);
     setError("");
     setSuccess("");
@@ -500,20 +500,16 @@ export default function HrLeaveManagementPage() {
     }
   }
 
-  async function handleReject(item: HrLeaveListItem) {
-    const note = window.prompt(
-      "Reddetme gerekçesini yazın:"
-    );
-
-    if (note === null) {
-      return;
-    }
-
-    if (!note.trim()) {
-      setError("Reddetme gerekçesi zorunludur.");
-      return;
-    }
-
+  /**
+   * İzin talebini reddet.
+   *
+   * Gerekçe ZORUNLU ve artık onay düğmesi gerekçe yazılmadan
+   * AÇILMIYOR. Eskiden window.prompt boş metni kabul ediyor, kod
+   * bunu sonradan yakalayıp hata basıyordu: kullanıcı diyaloğu
+   * kapatıp kırmızı bir mesajla karşılaşıyordu.
+   */
+  async function handleReject(item: HrLeaveListItem, note: string) {
+    setPending(null);
     setActionId(item.id);
     setError("");
     setSuccess("");
@@ -545,16 +541,7 @@ export default function HrLeaveManagementPage() {
   }
 
   async function handleDelete(item: HrLeaveListItem) {
-    const person = personnelById.get(item.personnelId);
-
-    const confirmed = window.confirm(
-      `${person?.fullName ?? "Personel"} için izin kaydı silinsin mi?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setPending(null);
     setActionId(item.id);
     setError("");
     setSuccess("");
@@ -601,6 +588,7 @@ export default function HrLeaveManagementPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="İzin Yönetimi"
       description="Personel izin talepleri, onayları ve izin geçmişi"
     >
@@ -1251,7 +1239,7 @@ export default function HrLeaveManagementPage() {
                                 type="button"
                                 disabled={busy}
                                 onClick={() =>
-                                  handleApprove(item)
+                                  setPending({ kind: "approve", item })
                                 }
                                 className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                               >
@@ -1262,7 +1250,7 @@ export default function HrLeaveManagementPage() {
                                 type="button"
                                 disabled={busy}
                                 onClick={() =>
-                                  handleReject(item)
+                                  setPending({ kind: "reject", item })
                                 }
                                 className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
                               >
@@ -1275,7 +1263,7 @@ export default function HrLeaveManagementPage() {
                             type="button"
                             disabled={busy}
                             onClick={() =>
-                              handleDelete(item)
+                              setPending({ kind: "delete", item })
                             }
                             className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
                           >
@@ -1290,6 +1278,59 @@ export default function HrLeaveManagementPage() {
           </table>
         </div>
       </section>
+      {pending && (
+        <ConfirmDialog
+          key={`${pending.kind}-${pending.item.id}`}
+          open
+          title={
+            pending.kind === "approve"
+              ? "İzin Talebini Onayla"
+              : pending.kind === "reject"
+                ? "İzin Talebini Reddet"
+                : "İzin Kaydını Sil"
+          }
+          description={(() => {
+            const name =
+              personnelById.get(pending.item.personnelId)?.fullName ??
+              "Personel";
+
+            if (pending.kind === "approve") {
+              return `${name} için ${pending.item.totalDays} günlük izin talebi onaylanacak; izin bakiyesinden düşülür.`;
+            }
+
+            if (pending.kind === "reject") {
+              return `${name} için izin talebi reddedilecek. Gerekçe zorunlu ve talebi açan kişiye gider.`;
+            }
+
+            return `${name} için izin kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz.`;
+          })()}
+          confirmLabel={
+            pending.kind === "approve"
+              ? "İzni Onayla"
+              : pending.kind === "reject"
+                ? "Talebi Reddet"
+                : "Kaydı Sil"
+          }
+          requireReason={pending.kind === "reject"}
+          reasonLabel="Reddetme gerekçesi (zorunlu)"
+          busy={actionId === pending.item.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={(note) => {
+            if (pending.kind === "approve") {
+              void handleApprove(pending.item);
+              return;
+            }
+
+            if (pending.kind === "reject") {
+              void handleReject(pending.item, note);
+              return;
+            }
+
+            void handleDelete(pending.item);
+          }}
+        />
+      )}
     </ErpShell>
   );
 }

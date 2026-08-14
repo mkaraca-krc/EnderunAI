@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import { Button, EmptyState, Select } from "@/components/ui";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
@@ -132,6 +133,16 @@ export default function AttendanceSheetPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  /**
+   * Ay onayı — geri alınamaz ve bordroya girer.
+   *
+   * Eskiden onay `run()` içindeki window.confirm ile soruluyordu
+   * ve VAZGEÇEN kullanıcıya "Onay iptal edildi." mesajı BAŞARI
+   * bildirimi olarak gösteriliyordu — hiçbir şey olmamışken
+   * yeşil bir kutu çıkıyordu.
+   */
+  const [approveOpen, setApproveOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
@@ -328,9 +339,22 @@ export default function AttendanceSheetPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Puantaj Cetveli"
       description="Aylık personel × gün ızgarası; takvimden dolar, istisnalar düzeltilir"
     >
+      {/* Cetvel saha girişleriyle ve takvim değişikliğiyle güncelleniyor. */}
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          disabled={busy}
+          onClick={() => void load()}
+        >
+          Yenile
+        </button>
+      </div>
+
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {error}
@@ -505,26 +529,7 @@ export default function AttendanceSheetPage() {
           <Button
             variant="secondary"
             disabled={busy || sheet.recordCount === 0}
-            onClick={() =>
-              run(async () => {
-                if (
-                  !window.confirm(
-                    "Ayın tamamı onaylanacak. Onaylanan günler artık " +
-                      "değiştirilemez ve bordroya girer. Devam edilsin mi?"
-                  )
-                ) {
-                  return "Onay iptal edildi.";
-                }
-
-                const result = await attendanceSheetService.approve({
-                  companyId,
-                  year,
-                  month,
-                });
-
-                return result.message;
-              })
-            }
+            onClick={() => setApproveOpen(true)}
           >
             Ayı Onayla
           </Button>
@@ -714,6 +719,30 @@ export default function AttendanceSheetPage() {
           )}
         </>
       )}
+      <ConfirmDialog
+        open={approveOpen}
+        title="Ayın Tamamını Onayla"
+        description={
+          `${sheet?.recordCount ?? 0} gün kaydı onaylanacak. Onaylanan günler ` +
+          "artık DEĞİŞTİRİLEMEZ ve bordroya girer. Bu işlem geri alınamaz."
+        }
+        confirmLabel="Ayı Onayla"
+        busy={busy}
+        error={error}
+        onCancel={() => setApproveOpen(false)}
+        onConfirm={() => {
+          setApproveOpen(false);
+          void run(async () => {
+            const result = await attendanceSheetService.approve({
+              companyId,
+              year,
+              month,
+            });
+
+            return result.message;
+          });
+        }}
+      />
     </ErpShell>
   );
 }

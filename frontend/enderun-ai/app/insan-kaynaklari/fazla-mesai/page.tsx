@@ -8,6 +8,8 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { decimal } from "@/lib/format/turkish";
 import {
   hrOvertimeService,
   HrOvertimeItem,
@@ -93,6 +95,12 @@ export default function OvertimePage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** Onay bekleyen fazla mesai işlemi. */
+  const [pending, setPending] = useState<{
+    kind: "approve" | "delete";
+    item: HrOvertimeItem;
+  } | null>(null);
+
   const [actionId, setActionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -293,8 +301,7 @@ export default function OvertimePage() {
   }
 
   async function approve(item: HrOvertimeItem) {
-    if (!window.confirm("Fazla mesai talebi onaylansın mı?")) return;
-
+    setPending(null);
     setActionId(item.id);
 
     try {
@@ -311,8 +318,7 @@ export default function OvertimePage() {
   }
 
   async function remove(item: HrOvertimeItem) {
-    if (!window.confirm("Fazla mesai kaydı silinsin mi?")) return;
-
+    setPending(null);
     setActionId(item.id);
 
     try {
@@ -330,6 +336,7 @@ export default function OvertimePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Fazla Mesai Yönetimi"
       description="Fazla mesai talepleri, onayları ve çalışma türleri"
     >
@@ -349,8 +356,8 @@ export default function OvertimePage() {
         {[
           ["Toplam Talep", items.length],
           ["Onay Bekleyen", pendingCount],
-          ["Talep Edilen Saat", requestedTotal.toLocaleString("tr-TR")],
-          ["Onaylanan Saat", approvedTotal.toLocaleString("tr-TR")],
+          ["Talep Edilen Saat", decimal(requestedTotal, 2)],
+          ["Onaylanan Saat", decimal(approvedTotal, 2)],
         ].map(([title, value]) => (
           <article
             key={String(title)}
@@ -710,7 +717,7 @@ export default function OvertimePage() {
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => approve(item)}
+                            onClick={() => setPending({ kind: "approve", item })}
                             className="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white"
                           >
                             Onayla
@@ -720,7 +727,7 @@ export default function OvertimePage() {
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={() => remove(item)}
+                          onClick={() => setPending({ kind: "delete", item })}
                           className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
                         >
                           Sil
@@ -742,6 +749,30 @@ export default function OvertimePage() {
           </table>
         </div>
       </section>
+      {pending && (
+        <ConfirmDialog
+          open
+          title={
+            pending.kind === "approve"
+              ? "Fazla Mesaiyi Onayla"
+              : "Fazla Mesai Kaydını Sil"
+          }
+          description={
+            pending.kind === "approve"
+              ? "Fazla mesai talebi onaylanacak ve puantaja işlenecek."
+              : "Fazla mesai kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz."
+          }
+          confirmLabel={pending.kind === "approve" ? "Onayla" : "Kaydı Sil"}
+          busy={actionId === pending.item.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() =>
+            pending.kind === "approve"
+              ? void approve(pending.item)
+              : void remove(pending.item)
+          }
+        />
+      )}
     </ErpShell>
   );
 }

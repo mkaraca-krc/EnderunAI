@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { decimal } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -53,9 +54,9 @@ function messageOf(error: unknown) {
 
 /** Gün sayısı — tam sayıysa ondalık gösterme, yarım günler korunur. */
 function days(value: number) {
-  return Number.isInteger(value)
-    ? String(value)
-    : value.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+  // `decimal` sondaki sıfırı zaten atıyor: 12 -> "12", 12,5 -> "12,5".
+  // Ayrı bir tam sayı dalı gerekmiyordu.
+  return decimal(value, 1);
 }
 
 function formatDate(value: string | null) {
@@ -154,6 +155,7 @@ export default function LeaveBalancePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yıllık İzin Bakiyesi"
       description="Hak ediş, kullanılan ve kalan izin günleri; hak ediş kademesi çıkış tazminatıyla aynı kaynaktan gelir."
     >

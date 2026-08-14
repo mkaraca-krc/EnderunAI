@@ -8,6 +8,8 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { decimal } from "@/lib/format/turkish";
 import DailyWageBadge from "@/components/hr/daily-wage-badge";
 
 import {
@@ -238,6 +240,19 @@ export default function DailyAttendancePage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /**
+   * Onay bekleyen puantaj işlemi.
+   *
+   * Toplu onayın kendi dalı var: kaç kaydın onaylanacağı ve
+   * onayın geri alınamazlığı tek satırlık bir tarayıcı
+   * penceresinde vurgulanamıyordu.
+   */
+  const [pending, setPending] = useState<
+    | { kind: "approve-one" | "delete"; item: AttendanceItem }
+    | { kind: "approve-selected" }
+    | null
+  >(null);
+
   const [actionId, setActionId] = useState<string | null>(null);
 
   const [error, setError] = useState("");
@@ -820,14 +835,7 @@ export default function DailyAttendancePage() {
   }
 
   async function approveOne(item: AttendanceItem) {
-    if (
-      !window.confirm(
-        "Bu puantaj kaydı onaylansın mı? Onaydan sonra düzenlenemez."
-      )
-    ) {
-      return;
-    }
-
+    setPending(null);
     setActionId(item.id);
     setError("");
     setSuccess("");
@@ -853,14 +861,7 @@ export default function DailyAttendancePage() {
       return;
     }
 
-    if (
-      !window.confirm(
-        `${selectedRecordIds.length} puantaj kaydı onaylansın mı?`
-      )
-    ) {
-      return;
-    }
-
+    setPending(null);
     setSaving(true);
     setError("");
     setSuccess("");
@@ -901,10 +902,7 @@ export default function DailyAttendancePage() {
       return;
     }
 
-    if (!window.confirm("Puantaj kaydı silinsin mi?")) {
-      return;
-    }
-
+    setPending(null);
     setActionId(item.id);
     setError("");
     setSuccess("");
@@ -1019,6 +1017,7 @@ export default function DailyAttendancePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Günlük Puantaj"
       description="Şantiye personeli günlük çalışma, fazla mesai ve adam/saat yönetimi"
     >
@@ -1054,9 +1053,7 @@ export default function DailyAttendancePage() {
             <strong className="mt-3 block text-2xl text-slate-800">
               {loading
                 ? "…"
-                : Number(value).toLocaleString("tr-TR", {
-                    maximumFractionDigits: 2,
-                  })}
+                : decimal(Number(value), 2)}
             </strong>
           </article>
         ))}
@@ -1071,7 +1068,7 @@ export default function DailyAttendancePage() {
 
             <p className="mt-1 text-sm text-slate-500">
               Resmî tatil saati:{" "}
-              {totalHoliday.toLocaleString("tr-TR")}
+              {decimal(totalHoliday, 2)}
             </p>
           </div>
 
@@ -1103,7 +1100,7 @@ export default function DailyAttendancePage() {
 
             <button
               type="button"
-              onClick={approveSelected}
+              onClick={() => setPending({ kind: "approve-selected" })}
               disabled={
                 selectedRecordIds.length === 0 || saving
               }
@@ -2026,7 +2023,7 @@ export default function DailyAttendancePage() {
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => approveOne(item)}
+                              onClick={() => setPending({ kind: "approve-one", item })}
                               className="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white"
                             >
                               Onayla
@@ -2035,7 +2032,7 @@ export default function DailyAttendancePage() {
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => remove(item)}
+                              onClick={() => setPending({ kind: "delete", item })}
                               className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
                             >
                               Sil
@@ -2062,6 +2059,52 @@ export default function DailyAttendancePage() {
           </table>
         </div>
       </section>
+      {pending && (
+        <ConfirmDialog
+          open
+          title={
+            pending.kind === "delete"
+              ? "Puantaj Kaydını Sil"
+              : pending.kind === "approve-selected"
+                ? "Seçili Kayıtları Onayla"
+                : "Puantaj Kaydını Onayla"
+          }
+          description={
+            pending.kind === "delete"
+              ? "Puantaj kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz."
+              : pending.kind === "approve-selected"
+                ? `${selectedRecordIds.length} puantaj kaydı onaylanacak. Onaylanan kayıtlar artık DÜZENLENEMEZ ve bordroya girer.`
+                : "Puantaj kaydı onaylanacak. Onaydan sonra kayıt DÜZENLENEMEZ ve bordroya girer."
+          }
+          confirmLabel={
+            pending.kind === "delete"
+              ? "Kaydı Sil"
+              : pending.kind === "approve-selected"
+                ? `${selectedRecordIds.length} Kaydı Onayla`
+                : "Kaydı Onayla"
+          }
+          busy={
+            pending.kind === "approve-selected"
+              ? saving
+              : actionId === pending.item.id
+          }
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() => {
+            if (pending.kind === "approve-selected") {
+              void approveSelected();
+              return;
+            }
+
+            if (pending.kind === "delete") {
+              void remove(pending.item);
+              return;
+            }
+
+            void approveOne(pending.item);
+          }}
+        />
+      )}
     </ErpShell>
   );
 }

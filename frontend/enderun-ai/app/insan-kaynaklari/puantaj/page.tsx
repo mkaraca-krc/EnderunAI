@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 
 import {
   hrShiftService,
@@ -124,6 +125,13 @@ export default function WorkforceShiftPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** Silinmek üzere onay bekleyen vardiya ya da atama. */
+  const [pending, setPending] = useState<
+    | { kind: "shift"; item: HrShiftItem }
+    | { kind: "assignment"; item: HrShiftAssignmentItem }
+    | null
+  >(null);
+
   const [actionId, setActionId] = useState<string | null>(null);
 
   const [error, setError] = useState("");
@@ -479,14 +487,7 @@ export default function WorkforceShiftPage() {
   }
 
   async function deleteShift(item: HrShiftItem) {
-    if (
-      !window.confirm(
-        `${item.name} vardiyası silinsin mi?`
-      )
-    ) {
-      return;
-    }
-
+    setPending(null);
     setActionId(item.id);
 
     try {
@@ -507,10 +508,7 @@ export default function WorkforceShiftPage() {
   async function deleteAssignment(
     item: HrShiftAssignmentItem
   ) {
-    if (!window.confirm("Vardiya ataması silinsin mi?")) {
-      return;
-    }
-
+    setPending(null);
     setActionId(item.id);
 
     try {
@@ -530,6 +528,7 @@ export default function WorkforceShiftPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Vardiya ve Puantaj Merkezi"
       description="Vardiya tanımları, personel vardiya atamaları ve çalışma planları"
     >
@@ -1046,7 +1045,7 @@ export default function WorkforceShiftPage() {
                         <button
                           type="button"
                           disabled={actionId === item.id}
-                          onClick={() => deleteShift(item)}
+                          onClick={() => setPending({ kind: "shift", item })}
                           className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
                         >
                           Sil
@@ -1146,7 +1145,10 @@ export default function WorkforceShiftPage() {
                           type="button"
                           disabled={actionId === item.id}
                           onClick={() =>
-                            deleteAssignment(item)
+                            setPending({
+                              kind: "assignment",
+                              item,
+                            })
                           }
                           className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
                         >
@@ -1172,6 +1174,28 @@ export default function WorkforceShiftPage() {
             </table>
           </div>
         </section>
+      )}
+      {pending && (
+        <ConfirmDialog
+          open
+          title={
+            pending.kind === "shift" ? "Vardiyayı Sil" : "Vardiya Atamasını Sil"
+          }
+          description={
+            pending.kind === "shift"
+              ? `"${pending.item.name}" vardiyası silinecek. Bu vardiyaya bağlı atamalar da geçersiz kalır.`
+              : "Vardiya ataması silinecek; personel bu vardiyada görünmez olur."
+          }
+          confirmLabel="Sil"
+          busy={actionId === pending.item.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() =>
+            pending.kind === "shift"
+              ? void deleteShift(pending.item)
+              : void deleteAssignment(pending.item)
+          }
+        />
       )}
     </ErpShell>
   );
