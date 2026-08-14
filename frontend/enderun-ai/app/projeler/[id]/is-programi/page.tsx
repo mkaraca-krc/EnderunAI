@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { dateTime, money, percent } from "@/lib/format/turkish";
 import GanttChart from "@/components/schedule/gantt-chart";
 import { usePermissions } from "@/lib/use-permissions";
 import {
@@ -24,16 +26,10 @@ import {
   type ScheduleActivity,
 } from "@/services/project-schedule.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 2,
-});
-
 function rate(value?: number | null) {
   return value == null
     ? "—"
-    : `%${value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`;
+    : percent(value, 2);
 }
 
 function formatDate(iso?: string | null) {
@@ -105,6 +101,7 @@ export default function WorkSchedulePage() {
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [baselineOpen, setBaselineOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -247,22 +244,22 @@ export default function WorkSchedulePage() {
     });
   }
 
-  async function saveBaseline() {
+  /**
+   * Baseline kaydetme.
+   *
+   * İLK KAYITTA gerekçe istenmez — referans yoktan var ediliyor.
+   * SONRAKİ REVİZYONLARDA zorunlu: referans tarih değişince tüm
+   * gecikme ölçüsü değişiyor ve bunun nedeni aylar sonra sorulacak.
+   *
+   * Eskiden window.prompt ile soruluyordu; metinde "(zorunlu)" yazsa
+   * da tarayıcı boş metni kabul ediyordu, kod da bunu ancak sonradan
+   * yakalayıp hata basıyordu. ConfirmDialog'da onay düğmesi gerekçe
+   * yazılmadan zaten açılmıyor.
+   */
+  async function saveBaseline(reason: string | null) {
     if (!schedule) return;
 
-    let reason: string | null = null;
-
-    if (schedule.baselineRevisionNumber > 0) {
-      reason = (window.prompt("Baseline revizyon gerekçesi (zorunlu):") ?? "").trim();
-
-      if (!reason) {
-        setError(
-          "Baseline'ı yeniden kaydetmek için gerekçe zorunludur; referans " +
-            "tarih değiştiğinde gecikme ölçüsü de değişir."
-        );
-        return;
-      }
-    }
+    setBaselineOpen(false);
 
     await run(async () => {
       const result = await projectScheduleService.saveBaseline(schedule.id, reason);
@@ -272,7 +269,7 @@ export default function WorkSchedulePage() {
 
   if (loading) {
     return (
-      <ErpShell title="İş Programı" description="Gantt, kritik yol ve gecikme takibi">
+      <ErpShell design="redwood" title="İş Programı" description="Gantt, kritik yol ve gecikme takibi">
         <div className="erp-panel erp-loading">Yükleniyor...</div>
       </ErpShell>
     );
@@ -280,7 +277,7 @@ export default function WorkSchedulePage() {
 
   if (!hasSchedule) {
     return (
-      <ErpShell title="İş Programı" description="Gantt, kritik yol ve gecikme takibi">
+      <ErpShell design="redwood" title="İş Programı" description="Gantt, kritik yol ve gecikme takibi">
         {error && <div className="erp-alert error">{error}</div>}
 
         <div className="erp-page-toolbar">
@@ -335,6 +332,7 @@ export default function WorkSchedulePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`İş Programı · ${schedule.projectCode}`}
       description={`${schedule.projectName} — Gantt, kritik yol ve gecikme takibi`}
     >
@@ -383,7 +381,11 @@ export default function WorkSchedulePage() {
               type="button"
               className="erp-primary-button"
               disabled={busy}
-              onClick={saveBaseline}
+              onClick={() =>
+                schedule.baselineRevisionNumber > 0
+                  ? setBaselineOpen(true)
+                  : void saveBaseline(null)
+              }
             >
               {schedule.baselineRevisionNumber === 0
                 ? "Baseline Kaydet"
@@ -426,11 +428,16 @@ export default function WorkSchedulePage() {
 
         <div
           className="erp-panel"
-          style={delayed ? { borderColor: "#bb2d3b" } : undefined}
+          style={
+            delayed
+              ? { borderColor: "var(--color-semantic-danger)" }
+              : undefined
+          }
         >
           <small style={{ display: "block" }}>Tahmini Bitiş</small>
           <strong
-            style={{ fontSize: 18, color: delayed ? "#bb2d3b" : undefined }}
+            className={delayed ? "rw-value-danger" : undefined}
+            style={{ fontSize: 18 }}
           >
             {formatDate(schedule.forecastFinish)}
           </strong>
@@ -474,10 +481,10 @@ export default function WorkSchedulePage() {
       {penalty?.penalty.applicable && (
         <div className="erp-alert warning">
           <strong>Tahmini gecikme cezası: </strong>
-          {money.format(penalty.penalty.amount)}
+          {money(penalty.penalty.amount)}
           {penalty.penalty.capApplied && " (tavana dayandı)"} —{" "}
           {penalty.delayCalendarDays} takvim günü × günlük{" "}
-          {money.format(penalty.penalty.dailyAmount)}. {penalty.disclaimer}
+          {money(penalty.penalty.dailyAmount)}. {penalty.disclaimer}
         </div>
       )}
 
@@ -557,6 +564,23 @@ export default function WorkSchedulePage() {
       {conflicts.length > 0 && <ConflictList conflicts={conflicts} />}
 
       {revisions.length > 0 && <BaselineHistory revisions={revisions} />}
+
+      <ConfirmDialog
+        open={baselineOpen}
+        title="Baseline'ı Yeniden Kaydet"
+        description={
+          `Bu ${schedule.baselineRevisionNumber}. revizyon olacak. ` +
+          "Referans tarih değiştiğinde tüm gecikme ölçüsü de değişir; " +
+          "eski baseline geçmişte kalır ama karşılaştırma bundan sonra " +
+          "yeni tarihe göre yapılır."
+        }
+        confirmLabel="Baseline'ı Kaydet"
+        requireReason
+        busy={busy}
+        error={error}
+        onCancel={() => setBaselineOpen(false)}
+        onConfirm={(reason) => void saveBaseline(reason)}
+      />
     </ErpShell>
   );
 }
@@ -763,7 +787,7 @@ function ActivityPanel({
         </div>
         <div>
           <span>Beklenen (plana göre)</span>
-          <strong style={activity.isBehind ? { color: "#bb2d3b" } : undefined}>
+          <strong className={activity.isBehind ? "rw-value-danger" : undefined}>
             {rate(activity.expectedRate)}
             {activity.isBehind && " — geride"}
           </strong>
@@ -1062,7 +1086,7 @@ function SectionProgressTable({ activities }: { activities: ScheduleActivity[] }
                   <strong>{rate(activity.progressRate)}</strong>
                 </td>
                 <td
-                  style={activity.isBehind ? { color: "#bb2d3b" } : undefined}
+                  className={activity.isBehind ? "rw-value-danger" : undefined}
                 >
                   {rate(activity.expectedRate)}
                 </td>
@@ -1073,7 +1097,7 @@ function SectionProgressTable({ activities }: { activities: ScheduleActivity[] }
                 <td>
                   {formatDate(activity.forecastFinish)}
                   {activity.slipWorkDays > 0 && (
-                    <small style={{ display: "block", color: "#bb2d3b" }}>
+                    <small className="rw-value-danger" style={{ display: "block" }}>
                       +{activity.slipWorkDays} iş günü
                     </small>
                   )}
@@ -1250,7 +1274,7 @@ function BaselineHistory({ revisions }: { revisions: BaselineRevision[] }) {
                 <td>
                   <strong>{revision.revisionNumber}</strong>
                 </td>
-                <td>{new Date(revision.setAtUtc).toLocaleString("tr-TR")}</td>
+                <td>{dateTime(revision.setAtUtc)}</td>
                 <td>{revision.activityCount}</td>
                 <td>
                   {formatDate(revision.plannedStartDate)} –{" "}

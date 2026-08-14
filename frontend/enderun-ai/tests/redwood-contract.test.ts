@@ -171,15 +171,30 @@ describe("Redwood ekranları", () => {
   });
 
   /**
-   * Satır içi ham hex, tokendan kaçan renktir: marka rengi
-   * değiştiğinde o hücre geride kalır. Anlam taşıyan renk için
-   * `rw-value-danger` / `rw-value-success` gibi sınıflar var.
+   * HİÇBİR YERDE ham hex renk yok — yalnızca `style={{ }}` içinde
+   * değil.
+   *
+   * Kural eskiden sadece satır içi stil özniteliğini tarıyordu ve
+   * bunu kaçırdı: renkler `varianceColor()` / `profitColor()` gibi
+   * yardımcı işlevlerden dönüyordu, grafik serileri de bir dizi
+   * sabitinde duruyordu. Dört sayfada on üç hex bu boşluktan geçmişti.
+   * Renk nerede yazılırsa yazılsın tokendan kaçmış olur: marka rengi
+   * değiştiğinde o hücre geride kalır, koyu temada ise ya okunmaz ya
+   * da yanlış anlam taşır.
+   *
+   * Anlam taşıyan renk için `rw-value-danger` / `rw-value-success` /
+   * `rw-value-warning` sınıfları, grafik serileri için
+   * `--color-chart-*` değişkenleri var.
    */
-  it("satır içi stilde ham hex renk taşımıyor", () => {
+  it("ham hex renk taşımıyor", () => {
     const offenders = redwoodPages
-      .filter((page) => /style=\{\{[^}]*#[0-9a-fA-F]{3,8}/.test(page.code))
+      .filter((page) => /#[0-9a-fA-F]{3,8}\b/.test(page.code))
       .map((page) => page.path);
 
-    expect(offenders).toEqual([]);
+    expect(
+      offenders,
+      "Ham hex renk kaldı. Anlamsal renk için rw-value-* sınıflarını, " +
+        "grafik serisi için --color-chart-* değişkenlerini kullanın.",
+    ).toEqual([]);
   });
 });

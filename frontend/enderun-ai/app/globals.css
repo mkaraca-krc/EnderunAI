@@ -92,6 +92,30 @@
   --color-surface-bg: #f4f6f6;
   --color-surface-card: #ffffff;
   --color-border-subtle: #e2e8e8;
+
+  /*
+   * GRAFİK SERİ RENKLERİ.
+   *
+   * Anlamsal renklerden AYRI: burada "iyi/kötü" yok, birbirinden
+   * ayırt edilebilir kategoriler var (malzeme, işçilik, taşeron,
+   * genel gider). Anlamsal tokenlar kullanılsaydı maliyet kırılımında
+   * "işçilik" yeşil diye iyi, "taşeron" kırmızı diye kötü okunurdu.
+   *
+   * Sıralama marka tealinden açığa doğru gidiyor, dördüncüsü
+   * kasıtlı olarak sıcak: dört dilimli bir yığın grafikte yalnız
+   * teal tonlarıyla sınır seçilemiyor.
+   *
+   * Sayfalar bu renkleri ham hex yazıyordu; tek yerde durunca koyu
+   * tema turunda hepsi birden dönebilecek.
+   */
+  --color-chart-1: #18797c;
+  --color-chart-2: #2db9be;
+  --color-chart-3: #7fd4d6;
+  --color-chart-4: #f1a522;
+
+  /* Grafik zemini ve referans çizgisi. */
+  --color-chart-track: #e4ebec;
+  --color-chart-axis: #0f4648;
 }
 
 :root {
@@ -3441,6 +3465,24 @@ body {
   gap: 10px;
 }
 
+/* Kırıntı yolu + sağda tek eylem (tazeleme). `rw-toolbar-end`
+   kullanılamıyor: o kural `erp-toolbar` için yazılmış, kırıntı yolu
+   ise ayrı bir bileşen ve kendi hizalamasını taşıyor. */
+.rw .erp-project-breadcrumb.rw-breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rw .erp-project-breadcrumb.rw-breadcrumb-bar > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 /* Tablo içindeki boş durum kartın tamamını kaplasın; hücre
    dolgusuyla üst üste binmesin. */
 .rw .erp-table td > .erp-empty-state {
@@ -3724,6 +3766,18 @@ body {
 .rw-totals {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* Toplam çizgisi: üstündeki kalemleri sonuçtan ayırır. Sayfalar bunu
+   `2px solid #0f2f38` diye yazıyordu — koyu, dikkat çeken bir çizgi.
+   İnce kenarlık tokeni (--erp-border) buranın karşılığı DEĞİL: o ayraç
+   değil, kutu kenarı; 2px kalınlıkta bile sonucu ayırdığı fark
+   edilmiyor. Metin rengi orijinalin kastettiği tona en yakın olan ve
+   temaya bağlı tek token. */
+.rw-totals-rule {
+  border-top: 2px solid var(--erp-text);
+  margin-top: 8px;
+  padding-top: 8px;
 }
 
 /* Hesaplama sonucu gibi "dikkat buraya" diyen panel: marka tonunun

@@ -5,6 +5,13 @@ import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  amount,
+  decimal,
+  percent,
+  quantity,
+  unitPrice,
+} from "@/lib/format/turkish";
 import { Modal, Select } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
 import {
@@ -28,15 +35,7 @@ import {
   type TransferableExtraWork,
 } from "@/services/progress-tracking.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
-const quantity = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -281,7 +280,7 @@ export default function MetrajTakipPage() {
 
   if (loading) {
     return (
-      <ErpShell title="Metraj Takip" description="">
+      <ErpShell design="redwood" title="Metraj Takip" description="">
         <div className="erp-loading">Keşif–gerçekleşen karşılaştırması hazırlanıyor...</div>
       </ErpShell>
     );
@@ -289,7 +288,7 @@ export default function MetrajTakipPage() {
 
   if (!data) {
     return (
-      <ErpShell title="Metraj Takip" description="">
+      <ErpShell design="redwood" title="Metraj Takip" description="">
         <div className="erp-alert error">{error || "Proje bulunamadı."}</div>
       </ErpShell>
     );
@@ -299,6 +298,7 @@ export default function MetrajTakipPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`Metraj Takip — ${data.projectCode}`}
       description={`${data.projectName} · ${data.contractTypeName}`}
     >
@@ -307,6 +307,12 @@ export default function MetrajTakipPage() {
           <strong>Keşif vs Gerçekleşen</strong>
           <small>Sözleşme metrajı kaynağı: {data.baselineSource}</small>
         </div>
+
+        {/* Metraj ve ek iş kayıtları sahadan giriliyor; bu ekran
+            onların özeti ve tazelenmeden eskiyordu. */}
+        <button type="button" disabled={loading} onClick={() => void load()}>
+          Yenile
+        </button>
 
         <Link href={`/projeler/${data.projectId}`}>Proje Kartına Dön</Link>
       </div>
@@ -324,33 +330,34 @@ export default function MetrajTakipPage() {
       <div className="erp-form-grid" style={{ marginTop: 18 }}>
         <Stat
           label="Sözleşme Tutarı (metraj)"
-          value={money.format(data.totals.contractAmount)}
+          value={amount(data.totals.contractAmount)}
         />
         <Stat
           label="Gerçekleşen"
-          value={money.format(data.totals.realizedAmount)}
-          hint={`Fiziksel gerçekleşme %${quantity.format(
-            data.totals.physicalCompletionRate
+          value={amount(data.totals.realizedAmount)}
+          hint={`Fiziksel gerçekleşme ${percent(
+            data.totals.physicalCompletionRate,
+            2
           )}`}
         />
         <Stat
           label="Keşif Üstü"
-          value={money.format(data.totals.overrunAmount)}
+          value={amount(data.totals.overrunAmount)}
           tone={data.totals.overrunAmount > 0 ? "warn" : undefined}
         />
         <Stat
           label="Keşif Altı"
-          value={money.format(data.totals.underrunAmount)}
+          value={amount(data.totals.underrunAmount)}
         />
         <Stat
           label="Net Sapma"
-          value={money.format(data.totals.netDeviationAmount)}
+          value={amount(data.totals.netDeviationAmount)}
           hint={`${data.totals.warningItemCount} kalem eşiği aştı`}
         />
         {data.contractType === ProjectContractType.LumpSum && (
           <Stat
             label="Kâr Erozyonu"
-            value={money.format(data.netErosionAmount)}
+            value={amount(data.netErosionAmount)}
             tone={data.erosionAlarm ? "bad" : undefined}
             hint="Onaylı ek iş düşülmüş hali"
           />
@@ -363,39 +370,42 @@ export default function MetrajTakipPage() {
 
         {profit.isReliable ? (
           <div style={{ maxWidth: 520 }}>
-            <Row label="Sözleşme bedeli" value={money.format(profit.contractAmount)} />
-            <Row label="Fiili maliyet" value={money.format(profit.actualCost)} />
+            <Row label="Sözleşme bedeli" value={amount(profit.contractAmount)} />
+            <Row label="Fiili maliyet" value={amount(profit.actualCost)} />
             <Row
               label={`Fiziksel gerçekleşme`}
-              value={`%${quantity.format(profit.physicalCompletionRate)}`}
+              value={percent(profit.physicalCompletionRate, 2)}
             />
             <Row
               label="Tahmini toplam maliyet"
-              value={money.format(profit.estimatedTotalCost)}
+              value={amount(profit.estimatedTotalCost)}
             />
-            <div style={{ borderTop: "2px solid #0f2f38", marginTop: 8, paddingTop: 8 }}>
+            <div className="rw-totals-rule">
               <Row
                 label="TAHMİNİ KÂR"
-                value={`${money.format(profit.estimatedProfit)}  (%${quantity.format(
-                  profit.estimatedProfitRate
+                value={`${amount(profit.estimatedProfit)}  (${percent(
+                  profit.estimatedProfitRate,
+                  2
                 )})`}
                 bold
               />
             </div>
-            <p style={{ marginTop: 10, fontSize: 12, color: "#5f6874" }}>
+            <p className="rw-value-muted" style={{ marginTop: 10, fontSize: 12 }}>
               Tahmin, fiili maliyetin gerçekleşme oranına bölünmesiyle
               bulunur; gerçekleşme arttıkça isabet artar.
             </p>
           </div>
         ) : (
-          <p style={{ fontSize: 13, color: "#5f6874" }}>{profit.unreliableReason}</p>
+          <p className="rw-value-muted" style={{ fontSize: 13 }}>
+            {profit.unreliableReason}
+          </p>
         )}
       </div>
 
       {/* --- İLAVE İŞ GİRİŞİ --- */}
       <div className="erp-form-card" style={{ marginTop: 18, padding: 22 }}>
         <h2 style={{ marginBottom: 6 }}>İlave İş Ekle</h2>
-        <p style={{ marginBottom: 14, fontSize: 13, color: "#5f6874" }}>
+        <p className="rw-value-muted" style={{ marginBottom: 14, fontSize: 13 }}>
           {data.contractType === ProjectContractType.LumpSum
             ? "Anahtar teslim: kayıt onay bekleyerek açılır ve işveren onay belgesi iliştirilmeden tahsil edilebilir sayılmaz."
             : data.contractType === ProjectContractType.UnitPrice
@@ -514,10 +524,10 @@ export default function MetrajTakipPage() {
             </button>
 
             {Number(form.quantity) > 0 && Number(form.unitPrice) > 0 && (
-              <span style={{ fontSize: 13, color: "#5f6874" }}>
+              <span className="rw-value-muted" style={{ fontSize: 13 }}>
                 Tutar:{" "}
                 <strong>
-                  {money.format(Number(form.quantity) * Number(form.unitPrice))}
+                  {amount(Number(form.quantity) * Number(form.unitPrice))}
                 </strong>
               </span>
             )}
@@ -582,7 +592,7 @@ export default function MetrajTakipPage() {
                     <strong>Tahsil edilebilir (onaylı)</strong>
                   </td>
                   <td className="tabular">
-                    <strong>{money.format(data.collectibleExtraWorkAmount)}</strong>
+                    <strong>{amount(data.collectibleExtraWorkAmount)}</strong>
                   </td>
                   <td colSpan={4}></td>
                 </tr>
@@ -590,7 +600,7 @@ export default function MetrajTakipPage() {
                   <tr>
                     <td colSpan={4}>Onay bekleyen (erozyondan düşülmez)</td>
                     <td className="tabular">
-                      {money.format(data.pendingExtraWorkAmount)}
+                      {amount(data.pendingExtraWorkAmount)}
                     </td>
                     <td colSpan={4}></td>
                   </tr>
@@ -677,10 +687,10 @@ export default function MetrajTakipPage() {
             <div>
               <strong>{transferTarget.positionCode}</strong> —{" "}
               {transferTarget.description}
-              <div style={{ marginTop: 4, color: "#64748b" }}>
-                {quantity.format(transferTarget.quantity)} {transferTarget.unit}{" "}
-                × {money.format(transferTarget.unitPrice)} ={" "}
-                <strong>{money.format(transferTarget.amount)}</strong>
+              <div className="rw-value-muted" style={{ marginTop: 4 }}>
+                {quantity(transferTarget.quantity)} {transferTarget.unit}{" "}
+                × {unitPrice(transferTarget.unitPrice)} ={" "}
+                <strong>{amount(transferTarget.amount)}</strong>
               </div>
             </div>
 
@@ -701,7 +711,7 @@ export default function MetrajTakipPage() {
             />
 
             {/* Geri alınamaz bir işlem; kullanıcı onaydan önce bilmeli. */}
-            <p style={{ color: "#b45309", margin: 0 }}>
+            <p className="rw-value-warning" style={{ margin: 0 }}>
               Bu işlem geri alınamaz. Yanlış hakedişe aktarılan ilave iş
               yalnızca kaynağından düzeltilebilir.
             </p>
@@ -767,10 +777,10 @@ function ExtraWorkRow({
         {work.description}
         {work.sectionName && <small>{work.sectionName}</small>}
       </td>
-      <td className="tabular">{quantity.format(work.quantity)}</td>
-      <td className="tabular">{money.format(work.unitPrice)}</td>
+      <td className="tabular">{quantity(work.quantity)}</td>
+      <td className="tabular">{unitPrice(work.unitPrice)}</td>
       <td className="tabular">
-        <strong>{money.format(work.amount)}</strong>
+        <strong>{amount(work.amount)}</strong>
       </td>
       <td>
         <span className={`erp-status ${statusClass}`}>{statusLabel}</span>
@@ -846,35 +856,35 @@ function ItemRow({ item }: { item: TrackingItem }) {
       <td>
         {item.description}
         {item.exceedsWarningThreshold && (
-          <small style={{ color: "#b3261e" }}>
+          <small className="rw-value-danger">
             Keşfin %110&apos;unu aştı
           </small>
         )}
       </td>
       <td>{item.unit}</td>
-      <td className="tabular">{quantity.format(item.contractQuantity)}</td>
+      <td className="tabular">{quantity(item.contractQuantity)}</td>
       <td className="tabular">
-        <strong>{quantity.format(item.realizedQuantity)}</strong>
+        <strong>{quantity(item.realizedQuantity)}</strong>
       </td>
-      <td className="tabular">{quantity.format(item.remainingQuantity)}</td>
+      <td className="tabular">{quantity(item.remainingQuantity)}</td>
       <td className="tabular">
         {item.deviationQuantity > 0 ? "+" : ""}
-        {quantity.format(item.deviationQuantity)}
+        {quantity(item.deviationQuantity)}
       </td>
       <td className="tabular">
         {item.contractQuantity > 0
-          ? `${item.deviationRate > 0 ? "+" : ""}${quantity.format(item.deviationRate)}`
+          ? `${item.deviationRate > 0 ? "+" : ""}${decimal(item.deviationRate, 2)}`
           : "-"}
       </td>
       <td className="tabular">
         <strong>
           {item.deviationAmount > 0 ? "+" : ""}
-          {money.format(item.deviationAmount)}
+          {amount(item.deviationAmount)}
         </strong>
       </td>
       <td className="tabular">
         {item.issuedStockQuantity !== null && item.issuedStockQuantity !== undefined
-          ? quantity.format(item.issuedStockQuantity)
+          ? quantity(item.issuedStockQuantity)
           : "-"}
       </td>
       <td>
@@ -896,16 +906,27 @@ function Stat({
   hint?: string;
   tone?: "warn" | "bad";
 }) {
-  const color = tone === "bad" ? "#b3261e" : tone === "warn" ? "#8a6d00" : undefined;
+  // Renk tokendan: ham hex marka rengi değiştiğinde geride kalıyordu.
+  const toneClass =
+    tone === "bad"
+      ? "rw-value-danger"
+      : tone === "warn"
+        ? "rw-value-warning"
+        : undefined;
 
   return (
     <div>
       <span>{label}</span>
-      <div style={{ marginTop: 6, fontSize: 20, fontWeight: 700, color }}>
+      <div
+        className={toneClass}
+        style={{ marginTop: 6, fontSize: 20, fontWeight: 700 }}
+      >
         {value}
       </div>
       {hint && (
-        <div style={{ marginTop: 2, fontSize: 12, color: "#5f6874" }}>{hint}</div>
+        <div className="rw-value-muted" style={{ marginTop: 2, fontSize: 12 }}>
+          {hint}
+        </div>
       )}
     </div>
   );

@@ -176,6 +176,7 @@ export default function ProjectSectionsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Sözleşme İcmali Kısımları"
       description="Projenin imalat kırılımı — her iş için farklıdır, serbestçe tanımlanır"
     >
@@ -189,6 +190,15 @@ export default function ProjectSectionsPage() {
         </div>
 
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {/* Kısımlar keşif tarafından da güncelleniyor. */}
+          <button
+            type="button"
+            className="erp-secondary-button"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            Yenile
+          </button>
           <Link className="erp-secondary-button" href={`/projeler/${params.id}`}>
             ← Proje
           </Link>

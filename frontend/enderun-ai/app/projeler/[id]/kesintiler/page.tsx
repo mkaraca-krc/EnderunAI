@@ -192,6 +192,7 @@ export default function ProjectDeductionsPage(){
   return (
 
     <ErpShell
+      design="redwood"
       title="Kesinti Politikası"
       description={
         project
@@ -199,6 +200,19 @@ export default function ProjectDeductionsPage(){
           : "Proje kesinti yönetimi"
       }
     >
+
+      <div className="erp-page-toolbar">
+        {/* Kesinti kuralları hakediş tarafında da değiştirilebiliyor;
+            listeyi tazelemenin yolu yoktu. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          Yenile
+        </button>
+      </div>
 
       <div className="erp-form-card">
 

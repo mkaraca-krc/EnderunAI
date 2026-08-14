@@ -171,6 +171,7 @@ export default function ProjectSitesPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Şantiyeler"
       description="Projenin lokasyon kırılımı, personel atamaları ve depoları"
     >
@@ -189,6 +190,17 @@ export default function ProjectSitesPage() {
         <div className="erp-toolbar-group">
           <strong>{sites.length} şantiye</strong>
         </div>
+
+        {/* reloadToken vardı ama yalnızca bu sayfanın kendi
+            işlemlerinden sonra artıyordu. */}
+        <button
+          type="button"
+          className="erp-btn"
+          disabled={loading}
+          onClick={() => setReloadToken((value) => value + 1)}
+        >
+          Yenile
+        </button>
 
         {canCreate && (
           <button

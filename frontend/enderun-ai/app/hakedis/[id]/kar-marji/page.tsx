@@ -19,8 +19,8 @@ function percent(value?: number | null) {
 /** Kâr tarafında artı iyi, eksi kötü. */
 function profitColor(value?: number | null) {
   if (value === null || value === undefined) return "inherit";
-  if (value > 0) return "#15803d";
-  if (value < 0) return "#b91c1c";
+  if (value > 0) return "var(--color-semantic-success)";
+  if (value < 0) return "var(--color-semantic-danger)";
   return "inherit";
 }
 

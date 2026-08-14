@@ -4,6 +4,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import {
+  EMPTY_VALUE,
+  currencyMoney,
+  date,
+  dateTime,
+  decimal,
+} from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
 import ProjectDocumentsSection from "@/components/projects/project-documents-section";
 import ProjectDangerZone from "@/components/projects/project-danger-zone";
@@ -144,23 +152,23 @@ const modules: ProjectModule[] = [
 ];
 
 function formatDate(value?: string | null) {
-  return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
+  return date(value);
 }
 
 function formatMoney(value?: number | null, currency = "TRY") {
-  return value == null
-    ? "—"
-    : new Intl.NumberFormat("tr-TR", {
-        style: "currency",
-        currency,
-      }).format(value);
+  return currencyMoney(value, currency);
 }
 
+/**
+ * Sözleşme oranları — dört haneye kadar, sondaki sıfırlar yazılmadan.
+ *
+ * Sabit hane olamaz: stopaj %0, teminat %5, artış %12,3456 olabiliyor
+ * ve hepsi "%5,0000" gibi yazılsaydı sözleşme künyesi okunmazdı.
+ * Kırpma da olamaz: %12,3456 sözleşmede yazan rakam.
+ */
 function formatPercentage(value?: number | null) {
-  return `%${new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  }).format(value ?? 0)}`;
+  if (value === null || value === undefined) return EMPTY_VALUE;
+  return `%${decimal(value, 4)}`;
 }
 
 export default function ProjectCenterPage() {
@@ -189,6 +197,7 @@ export default function ProjectCenterPage() {
   const [portalLink, setPortalLink] = useState<EmployerPortalLink>(null);
   const [emailConfigured, setEmailConfigured] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [revokeOpen, setRevokeOpen] = useState(false);
   const [portalError, setPortalError] = useState("");
   const [portalCopied, setPortalCopied] = useState(false);
 
@@ -248,6 +257,12 @@ export default function ProjectCenterPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Yükleme işlevi effect'in İÇİNDE tanımlı (on küsur uç birden
+  // çağrılıyor ve hepsi params.id'ye bağlı). Dışarı çıkarmak yerine
+  // effect'i bir sayaçla yeniden tetikliyoruz: tazeleme düğmesinin
+  // ihtiyacı olan tek şey bu.
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -401,7 +416,7 @@ export default function ProjectCenterPage() {
     if (params.id) {
       load();
     }
-  }, [params.id]);
+  }, [params.id, reloadToken]);
 
   async function createPortalLink() {
     setPortalLoading(true);
@@ -422,11 +437,14 @@ export default function ProjectCenterPage() {
     }
   }
 
+  /**
+   * İşveren portal linkini iptal et.
+   *
+   * YIKICI: iptal edilen link geri gelmiyor, işveren erişimini anında
+   * kaybediyor ve yeni link üretilip yeniden gönderilmesi gerekiyor.
+   */
   async function revokePortalLink() {
-    if (!window.confirm("Bu linki iptal etmek istediğinize emin misiniz? İşveren artık bu linkle erişemeyecek.")) {
-      return;
-    }
-
+    setRevokeOpen(false);
     setPortalLoading(true);
     setPortalError("");
 
@@ -608,6 +626,7 @@ export default function ProjectCenterPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={project?.name ?? "Proje Merkezi"}
       description={
         project
@@ -615,10 +634,24 @@ export default function ProjectCenterPage() {
           : "Proje bilgileri yükleniyor"
       }
     >
-      <div className="erp-project-breadcrumb">
-        <Link href="/projeler">Projeler</Link>
-        <span>›</span>
-        <strong>{project?.name ?? "Proje Merkezi"}</strong>
+      <div className="erp-project-breadcrumb rw-breadcrumb-bar">
+        <div>
+          <Link href="/projeler">Projeler</Link>
+          <span>›</span>
+          <strong>{project?.name ?? "Proje Merkezi"}</strong>
+        </div>
+
+        {/* Proje merkezi on küsur uçtan besleniyor (hakediş, günlük
+            rapor, maliyet, portal); hepsi başka kullanıcıların işiyle
+            değişiyor ve tazelemenin yolu sayfayı yeniden yüklemekti. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={loading}
+          onClick={() => setReloadToken((value) => value + 1)}
+        >
+          Yenile
+        </button>
       </div>
 
       {error && <div className="erp-alert error">{error}</div>}
@@ -654,7 +687,7 @@ export default function ProjectCenterPage() {
               <p>{project.employerName}</p>
 
               {project.contractType === 0 && (
-                <p style={{ fontSize: 12, color: "#896500" }}>
+                <p className="rw-value-warning" style={{ fontSize: 12 }}>
                   Sözleşme tipi belirlenmedi — keşif–gerçekleşen sapması
                   yorumlanamaz. Proje düzenleme ekranından seçin.
                 </p>
@@ -671,7 +704,7 @@ export default function ProjectCenterPage() {
               )}
 
               {project.paymentTerms && (
-                <p style={{ marginTop: 6, fontSize: 13, color: "#475569" }}>
+                <p className="rw-value-muted" style={{ marginTop: 6, fontSize: 13 }}>
                   Ödeme koşulları: {project.paymentTerms}
                 </p>
               )}
@@ -878,7 +911,7 @@ export default function ProjectCenterPage() {
                   <button
                     type="button"
                     className="erp-button secondary"
-                    onClick={() => void revokePortalLink()}
+                    onClick={() => setRevokeOpen(true)}
                     disabled={portalLoading}
                   >
                     İptal Et
@@ -942,7 +975,7 @@ export default function ProjectCenterPage() {
                               {entry.recipientName || entry.recipientEmail}
                             </strong>
                             <span>{entry.recipientEmail}</span>
-                            <span>{new Date(entry.sentAtUtc).toLocaleString("tr-TR")}</span>
+                            <span>{dateTime(entry.sentAtUtc)}</span>
                             {!entry.isSuccess && entry.errorMessage && (
                               <span>{entry.errorMessage}</span>
                             )}
@@ -1670,6 +1703,21 @@ export default function ProjectCenterPage() {
           />
         </>
       )}
+
+      <ConfirmDialog
+        open={revokeOpen}
+        title="İşveren Portal Linkini İptal Et"
+        description={
+          "Link iptal edilecek ve işveren bu adresten projeye ERİŞEMEYECEK. " +
+          "İptal geri alınamaz; erişimi geri vermek için yeni link üretip " +
+          "yeniden göndermek gerekir."
+        }
+        confirmLabel="Linki İptal Et"
+        busy={portalLoading}
+        error={portalError}
+        onCancel={() => setRevokeOpen(false)}
+        onConfirm={() => void revokePortalLink()}
+      />
     </ErpShell>
   );
 }

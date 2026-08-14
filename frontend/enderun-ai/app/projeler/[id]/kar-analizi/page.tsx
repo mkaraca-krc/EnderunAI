@@ -6,36 +6,37 @@ import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import {
+  money,
+  moneyWhole,
+  percent,
+  quantity,
+  unitPrice,
+} from "@/lib/format/turkish";
+import {
   projectProfitService,
   type BoqLineProfit,
   type ProjectProfitBreakdown,
 } from "@/services/project-profit.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 0,
-});
+/**
+ * Sayfa başındaki toplu bakış — kuruşsuz.
+ *
+ * Proje geneli için büyüklük okunur, kuruş okunmaz. SATIR TABLOSUNDA
+ * KULLANILMAZ: orada tek bir pozun sözleşme tutarı ve kârı yazıyor ve
+ * o rakamlar sözleşmeyle karşılaştırılıyor.
+ */
+const summaryMoney = moneyWhole;
 
-const unitMoney = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const quantity = new Intl.NumberFormat("tr-TR", {
-  maximumFractionDigits: 3,
-});
-
-function percent(value?: number | null) {
-  if (value === null || value === undefined) return "—";
-  return `%${value.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`;
-}
-
-/** Kâr tarafında artı iyi, eksi kötü — maliyet tablosunun tersi. */
-function profitColor(value: number) {
-  if (value > 0) return "#15803d";
-  if (value < 0) return "#b91c1c";
-  return "inherit";
+/**
+ * Kâr tarafında artı iyi, eksi kötü — maliyet tablosunun tersi.
+ *
+ * Renk artık tokendan geliyor: sayfa ham hex yazdığında marka rengi
+ * değiştiğinde bu hücreler geride kalıyordu.
+ */
+function profitClass(value: number) {
+  if (value > 0) return "rw-value-success";
+  if (value < 0) return "rw-value-danger";
+  return undefined;
 }
 
 /**
@@ -55,7 +56,7 @@ function ReferenceCell({ line }: { line: BoqLineProfit }) {
           {reference.year ? ` ${reference.year}` : ""}:{" "}
           {reference.unitPrice == null
             ? "—"
-            : `${unitMoney.format(reference.unitPrice)} TL`}
+            : unitPrice(reference.unitPrice)}
         </small>
       ))}
     </>
@@ -72,7 +73,7 @@ function CompanyAverageCell({ line }: { line: BoqLineProfit }) {
 
   if (!average.hasEnoughData) {
     return (
-      <small style={{ color: "#6b7280" }} title={average.explanation}>
+      <small className="rw-value-muted" title={average.explanation}>
         Ölçüm yetersiz
       </small>
     );
@@ -80,10 +81,10 @@ function CompanyAverageCell({ line }: { line: BoqLineProfit }) {
 
   return (
     <>
-      <strong>{unitMoney.format(average.averageUnitCost ?? 0)} TL</strong>
+      <strong>{unitPrice(average.averageUnitCost)}</strong>
       <small style={{ display: "block" }}>
-        {average.projectCount} proje · {unitMoney.format(average.minUnitCost ?? 0)}{" "}
-        – {unitMoney.format(average.maxUnitCost ?? 0)}
+        {average.projectCount} proje · {unitPrice(average.minUnitCost)}{" "}
+        – {unitPrice(average.maxUnitCost)}
       </small>
     </>
   );
@@ -94,6 +95,7 @@ export default function ProjectProfitPage() {
   const projectId = params.id;
 
   const [breakdown, setBreakdown] = useState<ProjectProfitBreakdown | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [referenceYear, setReferenceYear] = useState<number | undefined>(
     new Date().getFullYear()
   );
@@ -126,13 +128,14 @@ export default function ProjectProfitPage() {
     return () => {
       cancelled = true;
     };
-  }, [fetchBreakdown]);
+  }, [fetchBreakdown, reloadToken]);
 
   const currentYear = new Date().getFullYear();
   const years = [currentYear, currentYear - 1, currentYear - 2];
 
   return (
     <ErpShell
+      design="redwood"
       title="Poz Kâr Analizi"
       description="İcmal satırında dört fiyat: sözleşme, referans, şirket gerçekleşmesi ve anlık maliyet"
     >
@@ -143,19 +146,19 @@ export default function ProjectProfitPage() {
           {breakdown && (
             <>
               <strong>
-                Sözleşme {money.format(breakdown.contractTotal)} · Maliyet{" "}
-                {money.format(breakdown.actualCostTotal)}
+                Sözleşme {summaryMoney(breakdown.contractTotal)} · Maliyet{" "}
+                {summaryMoney(breakdown.actualCostTotal)}
               </strong>
               <small style={{ display: "block", marginTop: "4px" }}>
                 Kâr{" "}
-                <strong style={{ color: profitColor(breakdown.profit) }}>
-                  {money.format(breakdown.profit)}
+                <strong className={profitClass(breakdown.profit)}>
+                  {summaryMoney(breakdown.profit)}
                 </strong>{" "}
                 · Marj {percent(breakdown.profitMarginPercent)}
               </small>
               <small style={{ display: "block", marginTop: "2px" }}>
-                Maliyetin {money.format(breakdown.measuredCostTotal)} tutarı
-                ölçülmüş, {money.format(breakdown.allocatedCostTotal)} tutarı
+                Maliyetin {summaryMoney(breakdown.measuredCostTotal)} tutarı
+                ölçülmüş, {summaryMoney(breakdown.allocatedCostTotal)} tutarı
                 dağıtılmış (tahmin).
               </small>
             </>
@@ -163,6 +166,17 @@ export default function ProjectProfitPage() {
         </div>
 
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          {/* Maliyet fişleri ve referans fiyatlar dışarıdan
+              güncelleniyor; yılı değiştirmeden tazelemek gerekiyor. */}
+          <button
+            type="button"
+            className="erp-secondary-button"
+            disabled={loading}
+            onClick={() => setReloadToken((value) => value + 1)}
+          >
+            Yenile
+          </button>
+
           <label htmlFor="referenceYear">
             <small>Referans yılı</small>
           </label>
@@ -199,7 +213,7 @@ export default function ProjectProfitPage() {
         <>
           {breakdown.unassignedCost > 0 && (
             <div className="erp-alert warning">
-              {money.format(breakdown.unassignedCost)} tutarındaki maliyet hiçbir
+              {summaryMoney(breakdown.unassignedCost)} tutarındaki maliyet hiçbir
               kısma ya da poza bağlanamadı; satır kârlarına yansımıyor. Proje kârı
               bu tutar kadar iyimser görünüyor.
             </div>
@@ -259,19 +273,19 @@ export default function ProjectProfitPage() {
                           </small>
                         </td>
                         <td>
-                          {quantity.format(line.contractQuantity)} {line.unit}
+                          {quantity(line.contractQuantity)} {line.unit}
                         </td>
                         <td>
                           <strong>
-                            {unitMoney.format(line.contractUnitPrice)} TL
+                            {unitPrice(line.contractUnitPrice)} TL
                           </strong>
                           {(line.contractMaterialUnitPrice > 0 ||
                             line.contractLaborUnitPrice > 0) && (
                             <small style={{ display: "block" }}>
                               malzeme{" "}
-                              {unitMoney.format(line.contractMaterialUnitPrice)} ·
+                              {unitPrice(line.contractMaterialUnitPrice)} ·
                               montaj{" "}
-                              {unitMoney.format(line.contractLaborUnitPrice)}
+                              {unitPrice(line.contractLaborUnitPrice)}
                             </small>
                           )}
                         </td>
@@ -281,18 +295,18 @@ export default function ProjectProfitPage() {
                         <td>
                           <CompanyAverageCell line={line} />
                         </td>
-                        <td>{money.format(line.contractTotal)}</td>
+                        <td>{money(line.contractTotal)}</td>
                         <td>
-                          <strong>{money.format(line.actualCost)}</strong>
+                          <strong>{money(line.actualCost)}</strong>
                           <small style={{ display: "block" }}>
-                            ölçülmüş {money.format(line.measuredCost)} · dağıtılmış{" "}
-                            {money.format(line.allocatedCost)}
+                            ölçülmüş {money(line.measuredCost)} · dağıtılmış{" "}
+                            {money(line.allocatedCost)}
                           </small>
                         </td>
-                        <td style={{ color: profitColor(line.profit) }}>
-                          <strong>{money.format(line.profit)}</strong>
+                        <td className={profitClass(line.profit)}>
+                          <strong>{money(line.profit)}</strong>
                         </td>
-                        <td style={{ color: profitColor(line.profit) }}>
+                        <td className={profitClass(line.profit)}>
                           {percent(line.profitMarginPercent)}
                         </td>
                       </tr>

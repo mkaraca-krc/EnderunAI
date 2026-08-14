@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { quantity } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -24,10 +25,6 @@ import {
   type ProjectMaterialRequirement,
   type ProjectMaterialRequirementLine,
 } from "@/services/project-material-requirement.service";
-
-const number = new Intl.NumberFormat("tr-TR", {
-  maximumFractionDigits: 4,
-});
 
 /**
  * PROJE MALZEME İHTİYACI
@@ -151,6 +148,7 @@ export default function ProjectMaterialRequirementPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Proje Malzeme İhtiyacı"
       description="İcmal ve reçetelerden çıkan ihtiyaç, depo mevcudu ve eksik"
     >
@@ -161,6 +159,17 @@ export default function ProjectMaterialRequirementPage() {
         >
           ← Proje
         </Link>
+
+        {/* Depo mevcudu ve icmal dışarıdan değişiyor; eksik listesi
+            tazelenmeden eskiyordu. */}
+        <button
+          type="button"
+          className="text-sm text-brand-700 hover:underline"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          Yenile
+        </button>
 
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input
@@ -299,13 +308,13 @@ export default function ProjectMaterialRequirementPage() {
                         </td>
 
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {number.format(line.requiredQuantity)}
+                          {quantity(line.requiredQuantity)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                          {number.format(line.stockQuantity)}
+                          {quantity(line.stockQuantity)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                          {number.format(line.openRequestedQuantity)}
+                          {quantity(line.openRequestedQuantity)}
                         </td>
 
                         <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-900">
@@ -321,7 +330,7 @@ export default function ProjectMaterialRequirementPage() {
                               }
                             />
                           ) : (
-                            number.format(line.shortageQuantity)
+                            quantity(line.shortageQuantity)
                           )}
                         </td>
 

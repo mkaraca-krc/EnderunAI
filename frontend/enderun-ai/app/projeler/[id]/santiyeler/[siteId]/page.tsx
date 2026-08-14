@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import {
   projectSiteService,
   type AssignablePersonnelItem,
@@ -55,6 +56,7 @@ function DailyReportTab({ siteId }: { siteId: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [approveOpen, setApproveOpen] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoVisible, setPhotoVisible] = useState(false);
   const [photoCaption, setPhotoCaption] = useState("");
@@ -241,12 +243,17 @@ function DailyReportTab({ siteId }: { siteId: string }) {
     }
   }
 
+  /**
+   * Günlük raporu onayla.
+   *
+   * GERİ ALINAMAZ ve rapor işverene açılıyor; onay bu yüzden ayrı bir
+   * adım. Tarayıcı diyaloğu bu sonucu okunur biçimde anlatamıyordu —
+   * tek satır düz metin, vurgu yok, iptal ile onay aynı görünüyordu.
+   */
   async function approveReport() {
     if (!detail) return;
-    if (!window.confirm("Rapor onaylandıktan sonra düzenlenemez ve işveren portalına düşer. Devam edilsin mi?")) {
-      return;
-    }
 
+    setApproveOpen(false);
     setSaving(true);
     setError("");
     setNotice("");
@@ -279,6 +286,20 @@ function DailyReportTab({ siteId }: { siteId: string }) {
               {isApproved ? "Onaylandı" : "Taslak"}
             </span>
           )}
+          {/* Günlük rapor sahadan giriliyor; ekranı açık bırakan
+              kullanıcı yeni girilen raporu göremiyordu. */}
+          <button
+            type="button"
+            className="erp-button secondary"
+            disabled={detailLoading || listLoading}
+            onClick={() => {
+              void loadList();
+              void loadDetailForDate(selectedDate);
+            }}
+          >
+            Yenile
+          </button>
+
           <input
             className="erp-input"
             type="date"
@@ -290,7 +311,7 @@ function DailyReportTab({ siteId }: { siteId: string }) {
               type="button"
               className="erp-button"
               disabled={saving}
-              onClick={() => void approveReport()}
+              onClick={() => setApproveOpen(true)}
             >
               Onayla
             </button>
@@ -638,6 +659,21 @@ function DailyReportTab({ siteId }: { siteId: string }) {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={approveOpen}
+        title="Günlük Raporu Onayla"
+        description={
+          `${selectedDate} tarihli rapor onaylanacak. Onaydan sonra ` +
+          "rapor DÜZENLENEMEZ ve işveren portalında görünür hâle gelir. " +
+          "Bu işlem geri alınamaz."
+        }
+        confirmLabel="Raporu Onayla"
+        busy={saving}
+        error={error}
+        onCancel={() => setApproveOpen(false)}
+        onConfirm={() => void approveReport()}
+      />
     </section>
   );
 }
@@ -773,6 +809,7 @@ export default function ProjectSiteDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={site?.name ?? "Şantiye Detayı"}
       description={
         site ? `${site.projectCode} · ${site.projectName}` : "Şantiye bilgileri yükleniyor"

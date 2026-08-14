@@ -50,6 +50,7 @@ export default function NewProjectSitePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Şantiye"
       description="Proje altına yeni bir şantiye (lokasyon) ekleyin"
     >

@@ -5,35 +5,31 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money, moneyWhole, percent } from "@/lib/format/turkish";
 import {
   projectCostAnalysisService,
   ProjectCostClass,
   type ProjectCostAnalysis,
 } from "@/services/project-cost-analysis.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 0,
-});
-
-const moneyDetailed = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
-
-function percent(value?: number | null) {
-  if (value === null || value === undefined) return "—";
-  return `%${value.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`;
-}
+/**
+ * Proje geneli toplu bakış — kuruşsuz.
+ *
+ * TABLO HÜCRESİNDE KULLANILMAZ. Bu ayrım daha önce yanlış tarafta
+ * duruyordu: bileşen tahmin/gerçekleşme/sapma sütunları ve bölüm
+ * malzeme/işçilik/taşeron/genel gider tutarları da kuruşsuz
+ * basılıyordu, yani yuvarlanmış satırların toplamı gösterilen
+ * toplamla tutmuyordu.
+ */
+const summaryMoney = moneyWhole;
 
 /**
  * Aşım kırmızı, tasarruf yeşil. Maliyet tarafında "fazla" her zaman kötü
  * olduğu için işaret doğrudan renge çevrilebiliyor.
  */
 function varianceColor(variance: number) {
-  if (variance > 0) return "#b91c1c";
-  if (variance < 0) return "#15803d";
+  if (variance > 0) return "var(--color-semantic-danger)";
+  if (variance < 0) return "var(--color-semantic-success)";
   return "inherit";
 }
 
@@ -67,10 +63,14 @@ function MonthlyTrend({ analysis }: { analysis: ProjectCostAnalysis }) {
     label: string;
     color: string;
   }[] = [
-    { key: "materialAmount", label: "Malzeme", color: "#18797c" },
-    { key: "laborAmount", label: "İşçilik", color: "#2db9be" },
-    { key: "subcontractorLaborAmount", label: "Taşeron", color: "#7fd4d6" },
-    { key: "overheadAmount", label: "Genel gider", color: "#f1a522" },
+    { key: "materialAmount", label: "Malzeme", color: "var(--color-chart-1)" },
+    { key: "laborAmount", label: "İşçilik", color: "var(--color-chart-2)" },
+    {
+      key: "subcontractorLaborAmount",
+      label: "Taşeron",
+      color: "var(--color-chart-3)",
+    },
+    { key: "overheadAmount", label: "Genel gider", color: "var(--color-chart-4)" },
   ];
 
   return (
@@ -97,7 +97,7 @@ function MonthlyTrend({ analysis }: { analysis: ProjectCostAnalysis }) {
               display: "inline-block",
               width: "10px",
               height: "2px",
-              background: "#0f4648",
+              background: "var(--color-chart-axis)",
               marginRight: "5px",
               verticalAlign: "middle",
             }}
@@ -121,8 +121,8 @@ function MonthlyTrend({ analysis }: { analysis: ProjectCostAnalysis }) {
             key={point.label}
             style={{ minWidth: "56px", textAlign: "center" }}
             title={
-              `${point.label} — maliyet ${moneyDetailed.format(point.totalAmount)}, ` +
-              `gelir ${moneyDetailed.format(point.revenueAmount)}`
+              `${point.label} — maliyet ${money(point.totalAmount)}, ` +
+              `gelir ${money(point.revenueAmount)}`
             }
           >
             <div
@@ -155,7 +155,7 @@ function MonthlyTrend({ analysis }: { analysis: ProjectCostAnalysis }) {
                     left: 0,
                     right: 0,
                     bottom: `${max > 0 ? (point.revenueAmount / max) * 100 : 0}%`,
-                    borderTop: "2px solid #0f4648",
+                    borderTop: "2px solid var(--color-chart-axis)",
                   }}
                 />
               )}
@@ -215,6 +215,7 @@ export default function ProjectCostAnalysisPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Maliyet Analizi"
       description={
         analysis
@@ -235,26 +236,36 @@ export default function ProjectCostAnalysisPage() {
           <div className="erp-page-toolbar">
             <div>
               <strong>
-                Gelir {money.format(analysis.revenueAmount)} · Maliyet{" "}
-                {money.format(analysis.totalCost)}
+                Gelir {summaryMoney(analysis.revenueAmount)} · Maliyet{" "}
+                {summaryMoney(analysis.totalCost)}
               </strong>
               <small style={{ display: "block", marginTop: "4px" }}>
                 Vergi öncesi kâr{" "}
                 <strong style={{ color: varianceColor(-analysis.profit) }}>
-                  {money.format(analysis.profit)}
+                  {summaryMoney(analysis.profit)}
                 </strong>{" "}
                 · Marj {percent(analysis.profitMarginPercent)} · İlerleme{" "}
                 {percent(analysis.progressRatio * 100)}
               </small>
               <small style={{ display: "block", marginTop: "2px" }}>
                 Tahmini vergi (%{analysis.taxRate}){" "}
-                {money.format(analysis.estimatedTax)} · Net kâr{" "}
+                {summaryMoney(analysis.estimatedTax)} · Net kâr{" "}
                 <strong style={{ color: varianceColor(-analysis.netProfitAfterTax) }}>
-                  {money.format(analysis.netProfitAfterTax)}
+                  {summaryMoney(analysis.netProfitAfterTax)}
                 </strong>
               </small>
             </div>
 
+            {/* Maliyet fişleri ve hakediş ilerlemesi bu analizi
+                dışarıdan besliyor; tazelemeden rakamlar eskiyordu. */}
+            <button
+              type="button"
+              className="erp-secondary-button"
+              disabled={loading}
+              onClick={() => void load()}
+            >
+              Yenile
+            </button>
             <Link className="erp-secondary-button" href={`/projeler/${projectId}`}>
               Projeye Dön
             </Link>
@@ -302,15 +313,15 @@ export default function ProjectCostAnalysisPage() {
                           subcontractor.actual > 0 && (
                             <small>
                               içinde taşeron:{" "}
-                              {moneyDetailed.format(subcontractor.actual)}
+                              {money(subcontractor.actual)}
                             </small>
                           )}
                       </td>
-                      <td>{money.format(component.forecastContract)}</td>
-                      <td>{money.format(component.forecastEarned)}</td>
-                      <td>{money.format(component.actual)}</td>
+                      <td>{money(component.forecastContract)}</td>
+                      <td>{money(component.forecastEarned)}</td>
+                      <td>{money(component.actual)}</td>
                       <td style={{ color: varianceColor(component.variance) }}>
-                        <strong>{money.format(component.variance)}</strong>
+                        <strong>{money(component.variance)}</strong>
                       </td>
                       <td style={{ color: varianceColor(component.variance) }}>
                         {percent(component.variancePercent)}
@@ -355,12 +366,12 @@ export default function ProjectCostAnalysisPage() {
                     {analysis.sections.map((section) => (
                       <tr key={section.sectionId ?? "genel"}>
                         <td>{section.sectionName}</td>
-                        <td>{money.format(section.materialAmount)}</td>
-                        <td>{money.format(section.laborAmount)}</td>
-                        <td>{money.format(section.subcontractorLaborAmount)}</td>
-                        <td>{money.format(section.overheadAmount)}</td>
+                        <td>{money(section.materialAmount)}</td>
+                        <td>{money(section.laborAmount)}</td>
+                        <td>{money(section.subcontractorLaborAmount)}</td>
+                        <td>{money(section.overheadAmount)}</td>
                         <td>
-                          <strong>{money.format(section.totalAmount)}</strong>
+                          <strong>{money(section.totalAmount)}</strong>
                         </td>
                       </tr>
                     ))}
@@ -413,7 +424,7 @@ export default function ProjectCostAnalysisPage() {
                       <tr key={source.source}>
                         <td>{source.sourceName}</td>
                         <td style={{ textAlign: "right" }}>
-                          {moneyDetailed.format(source.amount)}
+                          {money(source.amount)}
                         </td>
                         <td style={{ textAlign: "right" }}>
                           {percent(
@@ -432,7 +443,7 @@ export default function ProjectCostAnalysisPage() {
                 <p style={{ marginTop: "12px" }}>
                   <small>
                     <strong>
-                      {moneyDetailed.format(analysis.unlinkedToBoqItemAmount)}
+                      {money(analysis.unlinkedToBoqItemAmount)}
                     </strong>{" "}
                     tutarındaki maliyet bir POZA bağlı değil; poz kâr
                     analizinde ölçülmüş maliyet olarak görünmez.
@@ -441,7 +452,7 @@ export default function ProjectCostAnalysisPage() {
                         {" "}
                         Bunun{" "}
                         <strong>
-                          {moneyDetailed.format(
+                          {money(
                             analysis.unlinkedToSectionAmount
                           )}
                         </strong>{" "}
@@ -475,7 +486,7 @@ export default function ProjectCostAnalysisPage() {
                   <li>
                     <small>
                       İşçiliğe elden ödeme payı dahil:{" "}
-                      {moneyDetailed.format(analysis.extraPaymentLaborCost ?? 0)}.
+                      {money(analysis.extraPaymentLaborCost ?? 0)}.
                       Bu tutar resmi bordroya ve muhasebeye yansımaz.
                     </small>
                   </li>

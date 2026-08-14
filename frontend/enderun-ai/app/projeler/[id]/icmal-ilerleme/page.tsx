@@ -5,20 +5,16 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money, percent, quantity } from "@/lib/format/turkish";
 import {
   contractSummaryProgressService,
   type ContractSummaryProgress,
   type FieldEmployerDifference,
 } from "@/services/contract-summary-progress.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
-const number = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
-
+/** İlerleme oranı — iki ondalık. */
 function rate(value: number) {
-  return `%${value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`;
+  return percent(value, 2);
 }
 
 /** Yüzde çubuğu — saha ve işveren kabulü üst üste. */
@@ -29,7 +25,7 @@ function ProgressBar({ field, employer }: { field: number; employer: number }) {
         position: "relative",
         height: "16px",
         borderRadius: "999px",
-        background: "#e4ebec",
+        background: "var(--color-chart-track)",
         overflow: "hidden",
       }}
       title={`Saha ${rate(field)} · İşveren kabulü ${rate(employer)}`}
@@ -39,7 +35,7 @@ function ProgressBar({ field, employer }: { field: number; employer: number }) {
           position: "absolute",
           inset: 0,
           width: `${Math.min(100, field)}%`,
-          background: "#a4e7ea",
+          background: "var(--color-chart-3)",
         }}
       />
       <div
@@ -47,7 +43,7 @@ function ProgressBar({ field, employer }: { field: number; employer: number }) {
           position: "absolute",
           inset: 0,
           width: `${Math.min(100, employer)}%`,
-          background: "#18797c",
+          background: "var(--color-chart-1)",
         }}
       />
     </div>
@@ -96,7 +92,7 @@ export default function ContractSummaryProgressPage() {
 
   if (loading) {
     return (
-      <ErpShell title="İcmal İlerlemesi" description="Yükleniyor">
+      <ErpShell design="redwood" title="İcmal İlerlemesi" description="Yükleniyor">
         <div className="erp-loading">İlerleme hesaplanıyor...</div>
       </ErpShell>
     );
@@ -104,7 +100,7 @@ export default function ContractSummaryProgressPage() {
 
   if (error) {
     return (
-      <ErpShell title="İcmal İlerlemesi" description="Hata">
+      <ErpShell design="redwood" title="İcmal İlerlemesi" description="Hata">
         <div className="erp-alert error">{error}</div>
       </ErpShell>
     );
@@ -113,6 +109,7 @@ export default function ContractSummaryProgressPage() {
   if (!progress?.hasContractSummary) {
     return (
       <ErpShell
+      design="redwood"
         title="İcmal İlerlemesi"
         description="Sözleşme icmali tanımlı değil"
       >
@@ -122,6 +119,15 @@ export default function ContractSummaryProgressPage() {
         </div>
 
         <div className="erp-row-actions">
+          {/* Saha raporu ve hakediş onayı bu oranları dışarıdan değiştiriyor. */}
+          <button
+            type="button"
+            className="erp-secondary-button"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            Yenile
+          </button>
           <Link className="erp-secondary-button" href={`/projeler/${params.id}`}>
             ← Proje
           </Link>
@@ -141,12 +147,13 @@ export default function ContractSummaryProgressPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="İcmal İlerlemesi"
       description={`${progress.boqNumber} — sözleşme, saha gerçekleşmesi ve işveren kabulü`}
     >
       <div className="erp-page-toolbar">
         <div>
-          <strong>{money.format(progress.contractAmount)}</strong>
+          <strong>{money(progress.contractAmount)}</strong>
           <small style={{ display: "block", marginTop: "4px" }}>
             sözleşme bedeli · saha {rate(progress.fieldRate)} · işveren kabulü{" "}
             {rate(progress.employerRate)}
@@ -157,6 +164,16 @@ export default function ContractSummaryProgressPage() {
           <Link className="erp-secondary-button" href={`/projeler/${params.id}`}>
             ← Proje
           </Link>
+          {/* Saha raporu ve hakediş onayı bu oranları dışarıdan
+              değiştiriyor; tazelemeden ekran eskiyordu. */}
+          <button
+            type="button"
+            className="erp-secondary-button"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            Yenile
+          </button>
           <Link
             className="erp-secondary-button"
             href={`/kesifler/${progress.boqId}`}
@@ -169,27 +186,27 @@ export default function ContractSummaryProgressPage() {
       <div className="erp-stat-grid">
         <div className="erp-stat-card">
           <span className="erp-stat-label">Sözleşme Bedeli</span>
-          <strong>{money.format(progress.contractAmount)}</strong>
+          <strong>{money(progress.contractAmount)}</strong>
           <small>icmal genel toplamı</small>
         </div>
 
         <div className="erp-stat-card">
           <span className="erp-stat-label">Saha Gerçekleşmesi</span>
           <strong>{rate(progress.fieldRate)}</strong>
-          <small>{money.format(progress.fieldAmount)} — onaylı günlük rapor</small>
+          <small>{money(progress.fieldAmount)} — onaylı günlük rapor</small>
         </div>
 
         <div className="erp-stat-card">
           <span className="erp-stat-label">İşveren Kabulü</span>
           <strong>{rate(progress.employerRate)}</strong>
-          <small>{money.format(progress.employerAmount)} — hakedişler</small>
+          <small>{money(progress.employerAmount)} — hakedişler</small>
         </div>
 
         <div className="erp-stat-card">
           <span className="erp-stat-label">Devreden İş</span>
           <strong>
             {difference?.hasContractSummary
-              ? money.format(difference.totalPendingAmount)
+              ? money(difference.totalPendingAmount)
               : "—"}
           </strong>
           <small>
@@ -231,7 +248,7 @@ export default function ContractSummaryProgressPage() {
                 <div>
                   <h2>{section.name}</h2>
                   <p>
-                    {money.format(section.contractAmount)} · saha{" "}
+                    {money(section.contractAmount)} · saha{" "}
                     {rate(section.fieldRate)} · işveren{" "}
                     {rate(section.employerRate)}
                   </p>
@@ -270,18 +287,18 @@ export default function ContractSummaryProgressPage() {
                         <td>{line.description}</td>
                         <td>{line.unit}</td>
                         <td style={{ textAlign: "right" }}>
-                          {number.format(line.contractQuantity)}
+                          {quantity(line.contractQuantity)}
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          {number.format(line.fieldQuantity)}
+                          {quantity(line.fieldQuantity)}
                           <small>{rate(line.fieldRate)}</small>
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          {number.format(line.employerQuantity)}
+                          {quantity(line.employerQuantity)}
                           <small>{rate(line.employerRate)}</small>
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          {number.format(line.remainingQuantity)}
+                          {quantity(line.remainingQuantity)}
                         </td>
                         <td style={{ textAlign: "right" }}>
                           {line.pendingQuantity === 0 ? (
@@ -292,12 +309,12 @@ export default function ContractSummaryProgressPage() {
                                 line.pendingQuantity > 0 ? "yellow" : "blue"
                               }`}
                             >
-                              {number.format(line.pendingQuantity)}
+                              {quantity(line.pendingQuantity)}
                             </span>
                           )}
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          {money.format(line.employerAmount)}
+                          {money(line.employerAmount)}
                         </td>
                         <td>
                           <ProgressBar
@@ -357,10 +374,10 @@ export default function ContractSummaryProgressPage() {
                         </td>
                         <td>{line.description}</td>
                         <td style={{ textAlign: "right" }}>
-                          {number.format(line.fieldQuantity)} {line.unit}
+                          {quantity(line.fieldQuantity)} {line.unit}
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          {number.format(line.employerQuantity)} {line.unit}
+                          {quantity(line.employerQuantity)} {line.unit}
                         </td>
                         <td style={{ textAlign: "right" }}>
                           <span
@@ -368,11 +385,11 @@ export default function ContractSummaryProgressPage() {
                               line.pendingQuantity > 0 ? "yellow" : "blue"
                             }`}
                           >
-                            {number.format(line.pendingQuantity)}
+                            {quantity(line.pendingQuantity)}
                           </span>
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          <strong>{money.format(line.pendingAmount)}</strong>
+                          <strong>{money(line.pendingAmount)}</strong>
                         </td>
                       </tr>
                     ))}
@@ -383,7 +400,7 @@ export default function ContractSummaryProgressPage() {
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <strong>
-                        {money.format(difference.totalPendingAmount)}
+                        {money(difference.totalPendingAmount)}
                       </strong>
                     </td>
                   </tr>
