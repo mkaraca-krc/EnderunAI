@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+
+import { number as sharedNumber } from "@/lib/format/turkish";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import {
@@ -19,10 +21,9 @@ function formatDate(value?: string | null) {
 }
 
 function formatNumber(value: number, digits = 2) {
-  return new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(value);
+  // Yazdırma çıktısı kabuğun dışında ama sayı biçimi aynı olmalı:
+  // işverene giden hakediş ekranda görünenden farklı yazılamaz.
+  return sharedNumber(value, digits);
 }
 
 /**

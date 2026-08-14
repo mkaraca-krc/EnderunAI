@@ -5,27 +5,15 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount, decimal, money } from "@/lib/format/turkish";
 import {
   progressPaymentService,
   type HakedisProfit,
 } from "@/services/progress-payment.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 0,
-});
-
-const detailed = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const quantity = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 3 });
-
 function percent(value?: number | null) {
   if (value === null || value === undefined) return "—";
-  return `%${value.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`;
+  return `%${decimal(value, 1)}`;
 }
 
 /** Kâr tarafında artı iyi, eksi kötü. */
@@ -77,6 +65,7 @@ export default function HakedisProfitPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Hakediş Kâr Marjı"
       description={
         profit
@@ -101,12 +90,12 @@ export default function HakedisProfitPage() {
                 {formatDate(profit.periodEndDate)}
               </strong>
               <small style={{ display: "block", marginTop: "4px" }}>
-                Hakediş tutarı {money.format(profit.hakedisAmount)} · imalat{" "}
-                {money.format(profit.productionRevenue)}
+                Hakediş tutarı {money(profit.hakedisAmount)} · imalat{" "}
+                {money(profit.productionRevenue)}
                 {profit.priceDifferenceAmount !== 0 &&
-                  ` · fiyat farkı ${money.format(profit.priceDifferenceAmount)}`}
+                  ` · fiyat farkı ${money(profit.priceDifferenceAmount)}`}
                 {profit.advanceMaterialMovement !== 0 &&
-                  ` · ihzarat ${money.format(profit.advanceMaterialMovement)}`}
+                  ` · ihzarat ${money(profit.advanceMaterialMovement)}`}
               </small>
             </div>
 
@@ -118,7 +107,7 @@ export default function HakedisProfitPage() {
           {profit.advanceMaterialMovement !== 0 && (
             <div className="erp-alert warning">
               Hakediş tutarının{" "}
-              {money.format(profit.advanceMaterialMovement)} kadarı ihzarat
+              {money(profit.advanceMaterialMovement)} kadarı ihzarat
               hareketidir. Henüz yapılmamış imalatın malzeme bedeli olduğu için
               kâr hesabına girmez; imalata döndüğü dönemde geliri o dönemde
               görünür.
@@ -135,7 +124,7 @@ export default function HakedisProfitPage() {
 
           {profit.revenueWithoutCost > 0 && (
             <div className="erp-alert warning">
-              {money.format(profit.revenueWithoutCost)} tutarındaki gelirin
+              {money(profit.revenueWithoutCost)} tutarındaki gelirin
               maliyeti hesaplanamadı. İmalata düşen maliyet bu kadar eksik, kâr
               o oranda iyimser görünüyor.
             </div>
@@ -175,13 +164,13 @@ export default function HakedisProfitPage() {
                       </small>
                     </td>
                     <td>
-                      {money.format(
+                      {money(
                         profit.productionRevenue + profit.priceDifferenceAmount
                       )}
                     </td>
-                    <td>{money.format(profit.costByProduction)}</td>
+                    <td>{money(profit.costByProduction)}</td>
                     <td style={{ color: profitColor(profit.profitByProduction) }}>
-                      <strong>{money.format(profit.profitByProduction)}</strong>
+                      <strong>{money(profit.profitByProduction)}</strong>
                     </td>
                     <td style={{ color: profitColor(profit.profitByProduction) }}>
                       {percent(profit.marginByProductionPercent)}
@@ -196,20 +185,20 @@ export default function HakedisProfitPage() {
                       </small>
                     </td>
                     <td>
-                      {money.format(
+                      {money(
                         profit.productionRevenue + profit.priceDifferenceAmount
                       )}
                     </td>
                     <td>
                       {profit.costByDate == null
                         ? "—"
-                        : money.format(profit.costByDate)}
+                        : money(profit.costByDate)}
                     </td>
                     <td style={{ color: profitColor(profit.profitByDate) }}>
                       <strong>
                         {profit.profitByDate == null
                           ? "—"
-                          : money.format(profit.profitByDate)}
+                          : money(profit.profitByDate)}
                       </strong>
                     </td>
                     <td style={{ color: profitColor(profit.profitByDate) }}>
@@ -225,10 +214,10 @@ export default function HakedisProfitPage() {
                         maliyeti
                       </small>
                     </td>
-                    <td>{money.format(profit.cumulativeRevenue)}</td>
-                    <td>{money.format(profit.cumulativeCost)}</td>
+                    <td>{money(profit.cumulativeRevenue)}</td>
+                    <td>{money(profit.cumulativeCost)}</td>
                     <td style={{ color: profitColor(profit.cumulativeProfit) }}>
-                      <strong>{money.format(profit.cumulativeProfit)}</strong>
+                      <strong>{money(profit.cumulativeProfit)}</strong>
                     </td>
                     <td style={{ color: profitColor(profit.cumulativeProfit) }}>
                       {percent(profit.cumulativeMarginPercent)}
@@ -279,21 +268,21 @@ export default function HakedisProfitPage() {
                           </small>
                         </td>
                         <td>
-                          {quantity.format(line.currentQuantity)} {line.unit}
+                          {decimal(line.currentQuantity, 3)} {line.unit}
                         </td>
-                        <td>{detailed.format(line.unitPrice)}</td>
-                        <td>{money.format(line.currentAmount)}</td>
+                        <td>{amount(line.unitPrice)}</td>
+                        <td>{money(line.currentAmount)}</td>
                         <td>
                           {line.unitCost == null ? (
                             <small
-                              style={{ color: "#6b7280" }}
+                              className="rw-value-muted"
                               title={line.costBasis}
                             >
                               hesaplanamadı
                             </small>
                           ) : (
                             <>
-                              {detailed.format(line.unitCost)}
+                              {amount(line.unitCost)}
                               {line.measuredRatio < 1 && (
                                 <small style={{ display: "block" }}>
                                   ölçüm payı {percent(line.measuredRatio * 100)}
@@ -305,13 +294,13 @@ export default function HakedisProfitPage() {
                         <td>
                           {line.periodCost == null
                             ? "—"
-                            : money.format(line.periodCost)}
+                            : money(line.periodCost)}
                         </td>
                         <td style={{ color: profitColor(line.profit) }}>
                           <strong>
                             {line.profit == null
                               ? "—"
-                              : money.format(line.profit)}
+                              : money(line.profit)}
                           </strong>
                         </td>
                         <td style={{ color: profitColor(line.profit) }}>

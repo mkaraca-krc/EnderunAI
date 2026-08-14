@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -69,10 +70,7 @@ function formatDateTime(value: string) {
 function money(value: number | null) {
   if (value === null) return "—";
 
-  return value.toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return amount(value);
 }
 
 export default function HakedisFilesPage() {
@@ -164,6 +162,7 @@ export default function HakedisFilesPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Hakediş Dosyaları"
       description="Yüklenen hakediş dosyaları ve otomatik okuma sonuçları."
     >

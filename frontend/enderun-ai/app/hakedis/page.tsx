@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import {
@@ -26,13 +27,6 @@ const statusClasses: Record<ProgressPaymentStatus, string> = {
   [ProgressPaymentStatus.Posted]: "green",
   [ProgressPaymentStatus.Cancelled]: "red",
 };
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const dateFormatter = new Intl.DateTimeFormat("tr-TR");
 
@@ -103,7 +97,7 @@ export default function ProgressPaymentsPage() {
   }, [filteredProjects, projectId]);
 
   return (
-    <ErpShell title="Hakediş Yönetimi">
+    <ErpShell design="redwood" title="Hakediş Yönetimi">
       <div className="erp-toolbar">
         <div>
           <strong>{loading ? "…" : items.length} hakediş</strong>
@@ -222,12 +216,12 @@ export default function ProgressPaymentsPage() {
                   )}
                 </td>
 
-                <td>{money.format(item.currentAmount)}</td>
+                <td>{money(item.currentAmount)}</td>
 
-                <td>{money.format(item.cumulativeAmount)}</td>
+                <td>{money(item.cumulativeAmount)}</td>
 
                 <td>
-                  <strong>{money.format(item.netPayableAmount)}</strong>
+                  <strong>{money(item.netPayableAmount)}</strong>
                 </td>
 
                 <td>

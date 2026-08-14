@@ -359,6 +359,7 @@ export default function NewProgressPaymentPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Hakediş"
       description="İmalat, ihzarat, kesintiler ve ödeme dağılımı — üst hesap girdikçe hesaplanır."
     >

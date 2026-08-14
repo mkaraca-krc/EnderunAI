@@ -159,6 +159,28 @@ export function quantity(value: number | null | undefined): string {
   }).format(value);
 }
 
+/**
+ * En çok N ondalık; SONDAKİ SIFIRLAR YAZILMAZ — "1,5" ve "0,00012345".
+ *
+ * `quantity` bunun 4 haneli hâli. Ayrı bir işlev gerekti çünkü bazı
+ * alanlar dört haneden fazlasını taşıyor: fiyat farkı endeks
+ * katsayıları sekiz haneye kadar iniyor ve sabit haneli biçimle
+ * yazılsaydı "1,5" ekranda "1,50000000" görünürdü.
+ *
+ * Sabit hane isteniyorsa `number` kullanılır (kur gibi).
+ */
+export function decimal(
+  value: number | null | undefined,
+  maxDecimals: number,
+): string {
+  if (isMissing(value)) return EMPTY_VALUE;
+
+  return formatter({
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxDecimals,
+  }).format(value);
+}
+
 /** Ondalıksız sayı — "320". */
 export function whole(value: number | null | undefined): string {
   if (isMissing(value)) return EMPTY_VALUE;
@@ -209,6 +231,7 @@ export function dateTime(value: string | Date | null | undefined): string {
 
 export const turkishFormat = {
   amount,
+  decimal,
   money,
   currencyMoney,
   moneyWhole,

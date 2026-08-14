@@ -275,7 +275,7 @@ export default function EditProgressPaymentPage() {
 
   if (loading) {
     return (
-      <ErpShell title="Hakediş Düzenle" description="">
+      <ErpShell design="redwood" title="Hakediş Düzenle" description="">
         <div className="erp-loading">Hakediş yükleniyor...</div>
       </ErpShell>
     );
@@ -283,7 +283,7 @@ export default function EditProgressPaymentPage() {
 
   if (!detail) {
     return (
-      <ErpShell title="Hakediş Düzenle" description="">
+      <ErpShell design="redwood" title="Hakediş Düzenle" description="">
         <div className="erp-alert error">{error || "Hakediş bulunamadı."}</div>
       </ErpShell>
     );
@@ -292,6 +292,7 @@ export default function EditProgressPaymentPage() {
   if (detail.status !== ProgressPaymentStatus.Draft) {
     return (
       <ErpShell
+      design="redwood"
         title={`Hakediş ${detail.progressPaymentNumber}`}
         description=""
       >
@@ -306,6 +307,7 @@ export default function EditProgressPaymentPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`Hakediş Düzenle — ${detail.progressPaymentNumber}`}
       description={`${detail.projectCode} · ${detail.projectName} · ${detail.periodNumber}. dönem`}
     >

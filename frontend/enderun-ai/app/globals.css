@@ -3719,3 +3719,11 @@ body {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* Hesaplama sonucu gibi "dikkat buraya" diyen panel: marka tonunun
+   en açık hâli, uyarı değil vurgu. */
+.rw .erp-form-card.rw-panel-highlight,
+.rw .erp-panel.rw-panel-highlight {
+  border-color: var(--color-brand-primary);
+  background: var(--color-brand-primary-tint);
+}

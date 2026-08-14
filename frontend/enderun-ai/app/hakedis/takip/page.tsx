@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount } from "@/lib/format/turkish";
 import { Button, Input, Modal } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
 import { usePermissions } from "@/lib/use-permissions";
@@ -18,10 +19,7 @@ import {
 } from "@/services/progress-payment.service";
 
 function money(value: number) {
-  return value.toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return amount(value);
 }
 
 function getErrorMessage(error: unknown) {
@@ -136,6 +134,7 @@ export default function HakedisTrackingPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Hakediş Takip"
       description="Projenin tüm hakedişleri, kesinti geçmişi ve açık bakiyeler"
     >

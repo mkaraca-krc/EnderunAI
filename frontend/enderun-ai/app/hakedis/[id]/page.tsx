@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { money, quantity } from "@/lib/format/turkish";
 
 import {
   progressPaymentService,
@@ -39,18 +41,6 @@ const statusClasses: Record<ProgressPaymentStatus, string> = {
   [ProgressPaymentStatus.Cancelled]: "red",
 };
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const number = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 4,
-});
-
 const date = new Intl.DateTimeFormat("tr-TR");
 
 export default function ProgressPaymentDetailPage() {
@@ -65,6 +55,7 @@ export default function ProgressPaymentDetailPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [confirming, setConfirming] = useState<"sil" | "iptal" | null>(null);
 
   const [priceProfiles, setPriceProfiles] =
     useState<PriceDifferenceProfile[]>([]);
@@ -337,14 +328,6 @@ export default function ProgressPaymentDetailPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `${item.progressPaymentNumber} numaralı taslak hakediş silinsin mi?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     setWorking(true);
     setMessage("");
     setError("");
@@ -363,29 +346,8 @@ export default function ProgressPaymentDetailPage() {
     }
   }
 
-  async function cancelProgressPayment() {
+  async function cancelProgressPayment(reason: string) {
     if (!item) {
-      return;
-    }
-
-    const reason = window.prompt(
-      "Hakediş iptal gerekçesini yazın:"
-    );
-
-    if (reason === null) {
-      return;
-    }
-
-    if (!reason.trim()) {
-      setError("İptal gerekçesi zorunludur.");
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `${item.progressPaymentNumber} numaralı hakediş iptal edilsin mi?`
-    );
-
-    if (!confirmed) {
       return;
     }
 
@@ -394,10 +356,12 @@ export default function ProgressPaymentDetailPage() {
     setError("");
 
     try {
+      setConfirming(null);
+
       const result =
         await progressPaymentService.cancel(
           item.id,
-          reason.trim()
+          reason
         );
 
       setMessage(result.message);
@@ -447,7 +411,7 @@ export default function ProgressPaymentDetailPage() {
 
   if (loading) {
     return (
-      <ErpShell title="Hakediş Detayı">
+      <ErpShell design="redwood" title="Hakediş Detayı">
         <div className="erp-form-card">
           Hakediş yükleniyor...
         </div>
@@ -457,7 +421,7 @@ export default function ProgressPaymentDetailPage() {
 
   if (!item) {
     return (
-      <ErpShell title="Hakediş Detayı">
+      <ErpShell design="redwood" title="Hakediş Detayı">
         {error && (
           <div className="erp-alert error">
             {error}
@@ -473,6 +437,7 @@ export default function ProgressPaymentDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`Hakediş ${item.progressPaymentNumber}`}
       description={`${item.projectCode} · ${item.projectName}`}
     >
@@ -532,7 +497,7 @@ export default function ProgressPaymentDetailPage() {
               <button
                 type="button"
                 disabled={working}
-                onClick={() => void remove()}
+                onClick={() => setConfirming("sil")}
               >
                 Sil
               </button>
@@ -584,7 +549,7 @@ export default function ProgressPaymentDetailPage() {
                 type="button"
                 disabled={working}
                 onClick={() =>
-                  void cancelProgressPayment()
+                  setConfirming("iptal")
                 }
               >
                 Hakedişi İptal Et
@@ -671,12 +636,12 @@ export default function ProgressPaymentDetailPage() {
 
           <Info
             label="Sözleşme Bedeli"
-            value={money.format(item.contractAmount)}
+            value={money(item.contractAmount)}
           />
 
           <Info
             label="KDV Oranı"
-            value={`%${number.format(item.vatRate)}`}
+            value={`%${quantity(item.vatRate)}`}
           />
 
           <Info
@@ -894,11 +859,8 @@ export default function ProgressPaymentDetailPage() {
 
         {priceCalculation && (
           <div
-            className="erp-form-card"
-            style={{
-              marginTop: 16,
-              background: "#f8fbff"
-            }}
+            className="erp-form-card rw-panel-highlight"
+            style={{ marginTop: 16 }}
           >
 
             <div className="erp-form-grid">
@@ -907,7 +869,7 @@ export default function ProgressPaymentDetailPage() {
                 <span>Pn</span>
 
                 <strong>
-                  {number.format(
+                  {quantity(
                     priceCalculation.pn
                   )}
                 </strong>
@@ -918,7 +880,7 @@ export default function ProgressPaymentDetailPage() {
                 <span>Delta</span>
 
                 <strong>
-                  {number.format(
+                  {quantity(
                     priceCalculation.delta
                   )}
                 </strong>
@@ -929,7 +891,7 @@ export default function ProgressPaymentDetailPage() {
                 <span>Esas Tutar</span>
 
                 <strong>
-                  {money.format(
+                  {money(
                     priceCalculation.baseAmount
                   )}
                 </strong>
@@ -940,7 +902,7 @@ export default function ProgressPaymentDetailPage() {
                 <span>Fiyat Farkı</span>
 
                 <strong>
-                  {money.format(
+                  {money(
                     priceCalculation
                       .priceDifferenceAmount
                   )}
@@ -1008,13 +970,13 @@ export default function ProgressPaymentDetailPage() {
                   <td>{line.unit}</td>
 
                   <td>
-                    {number.format(
+                    {quantity(
                       line.contractQuantity
                     )}
                   </td>
 
                   <td>
-                    {number.format(
+                    {quantity(
                       line.previousQuantity
                     )}
                   </td>
@@ -1026,12 +988,12 @@ export default function ProgressPaymentDetailPage() {
                   */}
                   <td>
                     {line.projectBoqItemId
-                      ? number.format(line.fieldQuantity)
+                      ? quantity(line.fieldQuantity)
                       : "—"}
                   </td>
 
                   <td>
-                    {number.format(
+                    {quantity(
                       line.currentQuantity
                     )}
                   </td>
@@ -1053,33 +1015,33 @@ export default function ProgressPaymentDetailPage() {
                         }
                       >
                         {line.fieldDifference > 0 ? "+" : ""}
-                        {number.format(line.fieldDifference)}
+                        {quantity(line.fieldDifference)}
                       </span>
                     )}
                   </td>
 
                   <td>
-                    {number.format(
+                    {quantity(
                       line.cumulativeQuantity
                     )}
                   </td>
 
                   <td>
-                    {money.format(
+                    {money(
                       line.unitPrice
                     )}
                   </td>
 
                   <td>
                     <strong>
-                      {money.format(
+                      {money(
                         line.currentAmount
                       )}
                     </strong>
                   </td>
 
                   <td>
-                    %{number.format(
+                    %{quantity(
                       line.completionRate
                     )}
                   </td>
@@ -1129,16 +1091,16 @@ export default function ProgressPaymentDetailPage() {
                 <td>{deduction.lineNumber}</td>
                 <td>{deduction.description}</td>
                 <td>
-                  %{number.format(deduction.rate)}
+                  %{quantity(deduction.rate)}
                 </td>
                 <td>
-                  {money.format(
+                  {money(
                     deduction.baseAmount
                   )}
                 </td>
                 <td>
                   <strong>
-                    {money.format(
+                    {money(
                       deduction.amount
                     )}
                   </strong>
@@ -1153,6 +1115,40 @@ export default function ProgressPaymentDetailPage() {
           </tbody>
         </table>
       </div>
+      <ConfirmDialog
+        open={confirming === "sil"}
+        title="Taslak hakediş silinsin mi?"
+        description={
+          item
+            ? `${item.progressPaymentNumber} numaralı taslak kalıcı olarak silinir.`
+            : ""
+        }
+        confirmLabel="Sil"
+        busy={working}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void remove()}
+      />
+
+      {/*
+        İPTAL GEREKÇESİ ZORUNLU: eskiden prompt boş geçilebiliyor ve
+        hata ancak iki pencere kapandıktan sonra yazılıyordu.
+      */}
+      <ConfirmDialog
+        open={confirming === "iptal"}
+        title="Hakediş iptal edilsin mi?"
+        description={
+          item
+            ? `${item.progressPaymentNumber} numaralı hakediş iptal edilir; gerekçe kayda geçer.`
+            : ""
+        }
+        confirmLabel="İptal Et"
+        requireReason
+        reasonLabel="İptal gerekçesi (zorunlu)"
+        busy={working}
+        onCancel={() => setConfirming(null)}
+        onConfirm={(reason) => void cancelProgressPayment(reason)}
+      />
+
     </ErpShell>
   );
 }
@@ -1201,7 +1197,7 @@ function Summary({
           fontWeight: strong ? 800 : 600,
         }}
       >
-        {money.format(value)}
+        {money(value)}
       </div>
     </div>
   );
