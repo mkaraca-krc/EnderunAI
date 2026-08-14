@@ -69,6 +69,7 @@ export default function ScheduleListPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="İş Programı"
       description="Projelerin Gantt planı, kritik yolu ve gecikme durumu"
     >

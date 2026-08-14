@@ -9,6 +9,8 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { dateTime } from "@/lib/format/turkish";
 
 import {
   companyService,
@@ -51,7 +53,7 @@ function formatDateTime(value?: string | null) {
     return "—";
   }
 
-  return new Date(value).toLocaleString("tr-TR");
+  return dateTime(value);
 }
 
 const initialForm = {
@@ -114,6 +116,12 @@ export default function VisitorsPage() {
 
   const [processingId, setProcessingId] =
     useState("");
+
+  /** Onay bekleyen ziyaretçi işlemi. */
+  const [pending, setPending] = useState<{
+    kind: "check-in" | "check-out" | "delete";
+    item: VisitorItem;
+  } | null>(null);
 
   const [error, setError] =
     useState("");
@@ -295,16 +303,8 @@ export default function VisitorsPage() {
     }
   }
 
-  async function checkIn(item: VisitorItem) {
-    const receivedByName = window.prompt(
-      "Ziyaretçiyi karşılayan kişi:",
-      item.receivedByName || ""
-    );
-
-    if (receivedByName === null) {
-      return;
-    }
-
+  async function checkIn(item: VisitorItem, receivedByName: string) {
+    setPending(null);
     setProcessingId(item.id);
     setError("");
     setSuccess("");
@@ -332,14 +332,7 @@ export default function VisitorsPage() {
   }
 
   async function checkOut(item: VisitorItem) {
-    const confirmed = window.confirm(
-      `${item.fullName} için çıkış işlemi yapılsın mı?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setPending(null);
     setProcessingId(item.id);
     setError("");
     setSuccess("");
@@ -364,14 +357,7 @@ export default function VisitorsPage() {
   }
 
   async function deleteVisitor(id: string) {
-    const confirmed = window.confirm(
-      "Bu ziyaretçi kaydını silmek istediğinize emin misiniz?"
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setPending(null);
     setProcessingId(id);
     setError("");
     setSuccess("");
@@ -397,10 +383,22 @@ export default function VisitorsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Sekreterya"
       description="Ziyaretçi giriş ve çıkış yönetimi"
     >
       <div className="space-y-6">
+        {/* Ziyaretçi giriş/çıkışı güvenlik tarafından da işleniyor. */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            onClick={() => void load()}
+          >
+            Yenile
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">
@@ -966,7 +964,7 @@ export default function VisitorsPage() {
                                 processingId === item.id
                               }
                               onClick={() =>
-                                void checkIn(item)
+                                setPending({ kind: "check-in", item })
                               }
                               className="font-medium text-green-700 disabled:opacity-50"
                             >
@@ -982,7 +980,7 @@ export default function VisitorsPage() {
                                 processingId === item.id
                               }
                               onClick={() =>
-                                void checkOut(item)
+                                setPending({ kind: "check-out", item })
                               }
                               className="font-medium text-blue-700 disabled:opacity-50"
                             >
@@ -996,7 +994,7 @@ export default function VisitorsPage() {
                               processingId === item.id
                             }
                             onClick={() =>
-                              void deleteVisitor(item.id)
+                              setPending({ kind: "delete", item })
                             }
                             className="font-medium text-red-600 disabled:opacity-50"
                           >
@@ -1014,6 +1012,51 @@ export default function VisitorsPage() {
           </div>
         </section>
       </div>
+      {pending && (
+        <ConfirmDialog
+          key={`${pending.kind}-${pending.item.id}`}
+          open
+          title={
+            pending.kind === "check-in"
+              ? "Ziyaretçi Girişi"
+              : pending.kind === "check-out"
+                ? "Ziyaretçi Çıkışı"
+                : "Ziyaretçi Kaydını Sil"
+          }
+          description={
+            pending.kind === "check-in"
+              ? `${pending.item.fullName} için giriş kaydedilecek. Karşılayan kişiyi yazarsanız kayda geçer.`
+              : pending.kind === "check-out"
+                ? `${pending.item.fullName} için çıkış saati kaydedilecek.`
+                : `${pending.item.fullName} kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz.`
+          }
+          confirmLabel={
+            pending.kind === "check-in"
+              ? "Girişi Kaydet"
+              : pending.kind === "check-out"
+                ? "Çıkışı Kaydet"
+                : "Kaydı Sil"
+          }
+          showReason={pending.kind === "check-in"}
+          reasonLabel="Karşılayan kişi (isteğe bağlı)"
+          busy={processingId === pending.item.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={(text) => {
+            if (pending.kind === "check-in") {
+              void checkIn(pending.item, text);
+              return;
+            }
+
+            if (pending.kind === "check-out") {
+              void checkOut(pending.item);
+              return;
+            }
+
+            void deleteVisitor(pending.item.id);
+          }}
+        />
+      )}
     </ErpShell>
   );
 }

@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import CorrespondenceDetailModal from "@/components/secretariat/correspondence-detail-modal";
 
 import {
@@ -95,6 +96,13 @@ export default function CorrespondencePage() {
   const [saving, setSaving] = useState(false);
   const [processingId, setProcessingId] = useState("");
   const [error, setError] = useState("");
+
+  /** Silinmek üzere onay bekleyen evrak. */
+  const [pending, setPending] = useState<{
+    id: string;
+    direction: CorrespondenceDirection;
+    subject: string;
+  } | null>(null);
   const [success, setSuccess] = useState("");
 
   // Detay panelinde açık evrak. Yön de tutuluyor: uçlar evrakı
@@ -257,14 +265,7 @@ export default function CorrespondencePage() {
   }
 
   async function deleteDocument(id: string, direction: CorrespondenceDirection) {
-    const confirmed = window.confirm(
-      "Bu evrak kaydını silmek istediğinize emin misiniz?"
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setPending(null);
     setProcessingId(id);
     setError("");
     setSuccess("");
@@ -285,8 +286,19 @@ export default function CorrespondencePage() {
   }
 
   return (
-    <ErpShell title="Sekreterya">
+    <ErpShell design="redwood" title="Sekreterya">
       <div className="space-y-6">
+        {/* Evrak kaydı başka kullanıcılarca giriliyor. */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            onClick={() => void load()}
+          >
+            Yenile
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">
@@ -699,7 +711,13 @@ export default function CorrespondencePage() {
                           <button
                             type="button"
                             disabled={processingId === item.id}
-                            onClick={() => void deleteDocument(item.id, item.direction)}
+                            onClick={() =>
+                              setPending({
+                                id: item.id,
+                                direction: item.direction,
+                                subject: item.subject,
+                              })
+                            }
                             className="text-sm font-medium text-red-600 disabled:opacity-50"
                           >
                             {processingId === item.id
@@ -725,6 +743,18 @@ export default function CorrespondencePage() {
         onClose={() => setDetailTarget(null)}
         onChanged={() => void load()}
       />
+      {pending && (
+        <ConfirmDialog
+          open
+          title="Evrak Kaydını Sil"
+          description={`"${pending.subject}" kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz.`}
+          confirmLabel="Evrakı Sil"
+          busy={processingId === pending.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() => void deleteDocument(pending.id, pending.direction)}
+        />
+      )}
     </ErpShell>
   );
 }

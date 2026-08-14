@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { moneyWhole } from "@/lib/format/turkish";
 import DashboardStat from "@/components/dashboard/dashboard-stat";
 import RecentProgressPayments from "@/components/dashboard/recent-progress-payments";
 import AiManagementWidget from "@/components/dashboard/ai-management-widget";
@@ -91,13 +92,6 @@ import {
   personnelService,
   type PersonnelListItem,
 } from "@/services/personnel.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 const date = new Intl.DateTimeFormat("tr-TR");
 
@@ -679,6 +673,7 @@ export default function DashboardPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yönetici Dashboard"
       description="Enderun AI operasyon ve finans yönetim merkezi"
     >
@@ -757,7 +752,7 @@ export default function DashboardPage() {
         <DashboardStat
           icon="₺"
           label="Toplam Sözleşme"
-          value={money.format(
+          value={moneyWhole(
             metrics.contractTotal
           )}
           note="Kayıtlı proje sözleşmeleri"
@@ -767,7 +762,7 @@ export default function DashboardPage() {
         <DashboardStat
           icon="▧"
           label="Toplam Hakediş"
-          value={money.format(
+          value={moneyWhole(
             metrics.currentProgressTotal
           )}
           note={`${progressPayments.length} hakediş kaydı`}
@@ -777,7 +772,7 @@ export default function DashboardPage() {
         <DashboardStat
           icon="∆"
           label="Fiyat Farkı"
-          value={money.format(
+          value={moneyWhole(
             metrics.priceDifferenceTotal
           )}
           note="İptal olmayan hakedişler"
@@ -787,7 +782,7 @@ export default function DashboardPage() {
         <DashboardStat
           icon="✓"
           label="Net Ödenecek"
-          value={money.format(
+          value={moneyWhole(
             metrics.netPayableTotal
           )}
           note="Hakediş net toplamı"
@@ -835,7 +830,7 @@ export default function DashboardPage() {
         <DashboardStat
           icon="★"
           label="Proje Kârlılık"
-          value={money.format(
+          value={moneyWhole(
             bestProfitProject?.profit ?? 0
           )}
           note={
@@ -861,7 +856,7 @@ export default function DashboardPage() {
         <DashboardStat
           icon="₺"
           label="Tedarikçi Borcu"
-          value={money.format(
+          value={moneyWhole(
             finance?.supplierDebt ?? 0
           )}
           note="Fatura/cari modülü devreye girince dolacak"
@@ -874,7 +869,7 @@ export default function DashboardPage() {
         <DashboardStat
           icon="🏦"
           label="Banka Bakiyesi"
-          value={money.format(
+          value={moneyWhole(
             finance?.bankBalance ?? 0
           )}
           note="Kasa/banka modülü devreye girince dolacak"
@@ -887,7 +882,7 @@ export default function DashboardPage() {
         <DashboardStat
           icon="⌛"
           label="Bekleyen Ödeme"
-          value={money.format(
+          value={moneyWhole(
             finance?.pendingPayments ?? 0
           )}
           note="Kasa/banka modülü devreye girince dolacak"
@@ -900,7 +895,7 @@ export default function DashboardPage() {
         <DashboardStat
           icon="₿"
           label="Net Nakit"
-          value={money.format(
+          value={moneyWhole(
             finance?.netCash ?? 0
           )}
           note="Kasa/banka modülü devreye girince dolacak"

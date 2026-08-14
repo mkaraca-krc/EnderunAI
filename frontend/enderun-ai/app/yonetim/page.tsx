@@ -5,6 +5,14 @@ import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import {
+  dateTime,
+  money,
+  // Yerel `percent` DEĞİŞKENİ var (trend yüzdesi); takma ad
+  // olmasaydı ikisi çakışırdı.
+  percent as sharedPercent,
+  whole,
+} from "@/lib/format/turkish";
+import {
   Badge,
   Button,
   Card,
@@ -49,17 +57,21 @@ const MONTHS = [
 ];
 
 /** Değeri türüne göre biçimler; biçim dışında hiçbir işlem yapmaz. */
+/**
+ * KPI değeri — TÜRÜNE göre biçimlenir.
+ *
+ * Üç tür üç ayrı sayı tipi: adet tam sayıdır, oran yüzdedir,
+ * geri kalanı tutardır. Tek bir biçim hepsine uygulansaydı ya
+ * "42,00 proje" ya da "1.250 ₺" (kuruşsuz tutar) çıkardı.
+ */
 function formatValue(kpi: ManagementKpi) {
   if (kpi.kind === KpiValueKind.Count) {
-    return kpi.value.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+    return whole(kpi.value);
   }
 
-  const formatted = kpi.value.toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
-  return kpi.kind === KpiValueKind.Percent ? `%${formatted}` : `${formatted} ₺`;
+  return kpi.kind === KpiValueKind.Percent
+    ? sharedPercent(kpi.value, 2)
+    : money(kpi.value);
 }
 
 /**
@@ -87,7 +99,7 @@ function trendOf(kpi: ManagementKpi) {
   const size =
     percent === null
       ? ""
-      : ` (%${percent.toLocaleString("tr-TR", { maximumFractionDigits: 1 })})`;
+      : ` (${sharedPercent(percent, 1)})`;
 
   return diff > 0
     ? { symbol: "▲", label: `önceki döneme göre arttı${size}` }
@@ -146,6 +158,7 @@ export default function ManagementDashboardPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yönetim Göstergeleri"
       description="Her gösterge kendi alanının kaynağından okunur; bu ekranda hesap yapılmaz."
     >
@@ -241,7 +254,7 @@ export default function ManagementDashboardPage() {
         {data && (
           <p className="text-xs text-slate-400">
             {MONTHS[data.month - 1]} {data.year} ·{" "}
-            {new Date(data.generatedAtUtc).toLocaleString("tr-TR")} itibarıyla
+            {dateTime(data.generatedAtUtc)} itibarıyla
           </p>
         )}
       </div>

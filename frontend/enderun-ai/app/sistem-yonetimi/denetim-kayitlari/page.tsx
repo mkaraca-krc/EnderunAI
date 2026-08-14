@@ -48,6 +48,9 @@ function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
 
+  // SANİYE DAHİL: denetim kaydında iki işlemin sırası saniyeyle
+  // ayrılabiliyor. Paylaşılan `dateTime` dakika bazlı olduğu için
+  // burada kullanılmıyor — biçim bilinçli olarak farklı.
   return date.toLocaleString("tr-TR", {
     day: "2-digit",
     month: "2-digit",
@@ -100,6 +103,7 @@ export default function SecurityAuditPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Güvenlik Denetim Kayıtları"
       description="Kimin neyi ne zaman değiştirdiği; salt okunur."
     >

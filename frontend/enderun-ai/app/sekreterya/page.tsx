@@ -54,6 +54,7 @@ export default function SecretariatDashboardPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Sekreterya Merkezi"
       description="Evrak, kargo, ziyaretçi ve yönetim takvimini tek merkezden yönetin."
     >

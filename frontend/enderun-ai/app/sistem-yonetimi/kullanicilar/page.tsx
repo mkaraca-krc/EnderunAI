@@ -10,6 +10,8 @@ import {
 } from "react";
 import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { dateTime } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -91,10 +93,7 @@ function displayDate(value?: string | null) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleString("tr-TR", {
-        dateStyle: "short",
-        timeStyle: "short",
-      });
+    : dateTime(date);
 }
 
 function initials(fullName: string) {
@@ -131,6 +130,9 @@ export default function UserManagementPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pendingToggle, setPendingToggle] = useState<ManagedUser | null>(
+    null
+  );
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
@@ -369,16 +371,15 @@ export default function UserManagementPage() {
     }
   }
 
+  /**
+   * Kullanıcıyı aktif/pasif yap.
+   *
+   * PASİFE ALMA ERİŞİMİ ANINDA KESER; onay bu yüzden ayrı bir adım.
+   * Tarayıcı diyaloğu kullanıcı adını düz metin içinde gösteriyordu
+   * ve yanlış satıra tıklandığı fark edilmiyordu.
+   */
   async function toggleUserStatus(user: ManagedUser) {
-    const action = user.isActive ? "pasife almak" : "aktifleştirmek";
-    if (
-      !window.confirm(
-        `${user.fullName} kullanıcısını ${action} istediğinize emin misiniz?`
-      )
-    ) {
-      return;
-    }
-
+    setPendingToggle(null);
     setSaving(true);
     setError("");
 
@@ -447,10 +448,22 @@ export default function UserManagementPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Kullanıcılar ve Yetkiler"
       description="Kullanıcı hesabı, görev rolleri, şantiye ataması ve şifre yönetimi"
     >
       <div className="space-y-6">
+        {/* Rol ve yetki değişiklikleri başka yöneticiler tarafından da yapılıyor. */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            onClick={() => void loadData()}
+          >
+            Yenile
+          </button>
+        </div>
+
         {error && !editorOpen && !resetUser && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -689,7 +702,7 @@ export default function UserManagementPage() {
                                   ? "text-red-600 hover:bg-red-50"
                                   : "text-emerald-700 hover:bg-emerald-50"
                               }
-                              onClick={() => void toggleUserStatus(user)}
+                              onClick={() => setPendingToggle(user)}
                             >
                               {user.isActive ? "Pasife al" : "Aktifleştir"}
                             </Button>
@@ -1163,6 +1176,28 @@ export default function UserManagementPage() {
             </form>
           </div>
         </div>
+      )}
+      {pendingToggle && (
+        <ConfirmDialog
+          open
+          title={
+            pendingToggle.isActive
+              ? "Kullanıcıyı Pasife Al"
+              : "Kullanıcıyı Aktifleştir"
+          }
+          description={
+            pendingToggle.isActive
+              ? `${pendingToggle.fullName} (${pendingToggle.username}) pasife alınacak ve sisteme GİRİŞ YAPAMAYACAK. Açık oturumu varsa bir sonraki istekte kesilir.`
+              : `${pendingToggle.fullName} (${pendingToggle.username}) aktifleştirilecek ve mevcut rolleriyle sisteme girebilecek.`
+          }
+          confirmLabel={
+            pendingToggle.isActive ? "Pasife Al" : "Aktifleştir"
+          }
+          busy={saving}
+          error={error}
+          onCancel={() => setPendingToggle(null)}
+          onConfirm={() => void toggleUserStatus(pendingToggle)}
+        />
       )}
     </ErpShell>
   );

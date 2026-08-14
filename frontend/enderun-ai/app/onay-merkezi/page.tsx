@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { money } from "@/lib/format/turkish";
 
 import {
   progressPaymentService,
@@ -31,19 +33,42 @@ import {
   type PendingApprovalReport,
 } from "@/services/daily-report.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
-
+/*
+ * ONAY EKRANINDA TUTAR YUVARLANMAZ.
+ *
+ * Burada gösterilen rakam kullanıcının üzerine "Onayla" bastığı
+ * rakam. Kuruşsuz biçim özet kartı içindir; onay anında
+ * 1.234.567,89 ₺ tutarındaki bir hakedişi "1.234.568 ₺" diye
+ * göstermek, onaylanan tutarla gösterilen tutarı ayırır.
+ */
 const date = new Intl.DateTimeFormat("tr-TR");
 
 type ProcessingState = {
   type: string;
   id: string;
 } | null;
+
+const REJECTION_TEXT = {
+  "progress-cancel": {
+    title: "Hakedişi İptal Et",
+    description:
+      "Hakediş iptal edilecek. İptal geri alınamaz ve gerekçe kayda geçer; " +
+      "aylar sonra sorulan ilk şey bu olur.",
+    confirmLabel: "Hakedişi İptal Et",
+  },
+  "order-reject": {
+    title: "Siparişi Reddet",
+    description:
+      "Satın alma siparişi reddedilecek. Gerekçe talebi açan kişiye gider.",
+    confirmLabel: "Siparişi Reddet",
+  },
+  "request-cancel": {
+    title: "Satın Alma Talebini İptal Et",
+    description:
+      "Talep iptal edilecek. Gerekçe talebi açan kişiye gider.",
+    confirmLabel: "Talebi İptal Et",
+  },
+} as const;
 
 export default function ApprovalCenterPage() {
   const [progressPayments, setProgressPayments] =
@@ -61,6 +86,12 @@ export default function ApprovalCenterPage() {
     useState<PendingApprovalReport[]>([]);
 
   const [loading, setLoading] = useState(true);
+  /** Gerekçe bekleyen reddetme/iptal işlemi. */
+  const [rejection, setRejection] = useState<{
+    kind: "progress-cancel" | "order-reject" | "request-cancel";
+    id: string;
+  } | null>(null);
+
   const [processing, setProcessing] =
     useState<ProcessingState>(null);
 
@@ -181,53 +212,49 @@ export default function ApprovalCenterPage() {
     }
   }
 
-  async function cancelProgressPayment(id: string) {
-    const reason = window.prompt(
-      "Hakediş iptal gerekçesini yazın:"
-    );
+  /**
+   * Reddetme/iptal işlemleri — üçü de gerekçe İSTER.
+   *
+   * Eskiden üçü de window.prompt kullanıyordu ve İKİSİ boş gerekçeyi
+   * kabul ediyordu: `reason === null` yalnızca "Vazgeç"i yakalıyor,
+   * boş kutuya OK denince metin "" olarak geçiyordu. Yani bir hakediş
+   * gerekçesiz iptal edilebiliyordu. Üçüncüsü (sipariş reddi)
+   * `!reason?.trim()` ile doğru kontrol ediyordu — aynı ekranda üç
+   * farklı davranış vardı.
+   *
+   * ConfirmDialog'da onay düğmesi gerekçe yazılmadan açılmıyor;
+   * kural artık üçünde de aynı ve tek yerde.
+   */
+  async function runRejection(reason: string) {
+    if (!rejection) return;
 
-    if (reason === null) {
+    const trimmed = reason.trim();
+    setRejection(null);
+
+    if (rejection.kind === "progress-cancel") {
+      await runAction(
+        "progress-cancel",
+        rejection.id,
+        () => progressPaymentService.cancel(rejection.id, trimmed),
+        "Hakediş iptal edildi."
+      );
       return;
     }
 
-    await runAction(
-      "progress-cancel",
-      id,
-      () => progressPaymentService.cancel(id, reason),
-      "Hakediş iptal edildi."
-    );
-  }
-
-  async function rejectPurchaseOrder(id: string) {
-    const reason = window.prompt(
-      "Sipariş ret gerekçesini yazın:"
-    );
-
-    if (!reason?.trim()) {
-      return;
-    }
-
-    await runAction(
-      "order-reject",
-      id,
-      () => purchaseOrderService.reject(id, reason.trim()),
-      "Satın alma siparişi reddedildi."
-    );
-  }
-
-  async function cancelPurchaseRequest(id: string) {
-    const reason = window.prompt(
-      "Satın alma talebi iptal gerekçesini yazın:"
-    );
-
-    if (reason === null) {
+    if (rejection.kind === "order-reject") {
+      await runAction(
+        "order-reject",
+        rejection.id,
+        () => purchaseOrderService.reject(rejection.id, trimmed),
+        "Satın alma siparişi reddedildi."
+      );
       return;
     }
 
     await runAction(
       "request-cancel",
-      id,
-      () => purchaseRequestService.cancel(id, reason),
+      rejection.id,
+      () => purchaseRequestService.cancel(rejection.id, trimmed),
       "Satın alma talebi iptal edildi."
     );
   }
@@ -250,6 +277,7 @@ export default function ApprovalCenterPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Onay Merkezi"
       description="Hakediş, satın alma ve RFQ süreçlerini tek merkezden yönetin"
     >
@@ -351,7 +379,7 @@ export default function ApprovalCenterPage() {
                 <div className="approval-item-value">
                   <span>Net Ödenecek</span>
                   <strong>
-                    {money.format(item.netPayableAmount)}
+                    {money(item.netPayableAmount)}
                   </strong>
                 </div>
 
@@ -392,7 +420,7 @@ export default function ApprovalCenterPage() {
                     className="approval-danger-button"
                     disabled={processing !== null}
                     onClick={() =>
-                      void cancelProgressPayment(item.id)
+                      setRejection({ kind: "progress-cancel", id: item.id })
                     }
                   >
                     İptal
@@ -429,7 +457,7 @@ export default function ApprovalCenterPage() {
                 <div className="approval-item-value">
                   <span>Sipariş Toplamı</span>
                   <strong>
-                    {money.format(item.grandTotal)}
+                    {money(item.grandTotal)}
                   </strong>
                 </div>
 
@@ -470,7 +498,7 @@ export default function ApprovalCenterPage() {
                     className="approval-danger-button"
                     disabled={processing !== null}
                     onClick={() =>
-                      void rejectPurchaseOrder(item.id)
+                      setRejection({ kind: "order-reject", id: item.id })
                     }
                   >
                     Reddet
@@ -549,7 +577,7 @@ export default function ApprovalCenterPage() {
                     className="approval-danger-button"
                     disabled={processing !== null}
                     onClick={() =>
-                      void cancelPurchaseRequest(item.id)
+                      setRejection({ kind: "request-cancel", id: item.id })
                     }
                   >
                     İptal
@@ -664,6 +692,20 @@ export default function ApprovalCenterPage() {
             ))}
           </ApprovalSection>
         </div>
+      )}
+      {rejection && (
+        <ConfirmDialog
+          key={`${rejection.kind}-${rejection.id}`}
+          open
+          title={REJECTION_TEXT[rejection.kind].title}
+          description={REJECTION_TEXT[rejection.kind].description}
+          confirmLabel={REJECTION_TEXT[rejection.kind].confirmLabel}
+          requireReason
+          busy={processing !== null}
+          error={error}
+          onCancel={() => setRejection(null)}
+          onConfirm={(reason) => void runRejection(reason)}
+        />
       )}
     </ErpShell>
   );

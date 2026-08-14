@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 
 import {
   companyService,
@@ -115,6 +116,12 @@ export default function WorkTasksPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** Onay bekleyen görev işlemi. */
+  const [pending, setPending] = useState<{
+    kind: "complete" | "cancel";
+    id: string;
+  } | null>(null);
+
   const [processingId, setProcessingId] =
     useState("");
 
@@ -307,12 +314,15 @@ export default function WorkTasksPage() {
     }
   }
 
-  async function completeTask(id: string) {
-    const note =
-      window.prompt(
-        "Tamamlama notunu yazın:"
-      ) ?? "";
-
+  /**
+   * Görevi tamamla — not isteğe bağlı.
+   *
+   * Eskiden window.prompt sonucu `?? ""` ile karşılanıyordu: kullanıcı
+   * "Vazgeç"e bassa bile null boş metne dönüşüyor ve GÖREV YİNE
+   * TAMAMLANIYORDU. Diyalogdan çıkış yolu yoktu.
+   */
+  async function completeTask(id: string, note: string) {
+    setPending(null);
     setProcessingId(id);
     setError("");
     setSuccess("");
@@ -320,7 +330,7 @@ export default function WorkTasksPage() {
     try {
       await workTaskService.complete(
         id,
-        note || null
+        note.trim() || null
       );
 
       setSuccess("Görev tamamlandı.");
@@ -336,15 +346,8 @@ export default function WorkTasksPage() {
     }
   }
 
-  async function cancelTask(id: string) {
-    const reason = window.prompt(
-      "İptal nedenini yazın:"
-    );
-
-    if (!reason?.trim()) {
-      return;
-    }
-
+  async function cancelTask(id: string, reason: string) {
+    setPending(null);
     setProcessingId(id);
     setError("");
     setSuccess("");
@@ -370,6 +373,7 @@ export default function WorkTasksPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Görev Yönetimi"
       description="Şirket, proje ve ERP süreçlerine bağlı görevleri yönetin"
     >
@@ -416,6 +420,16 @@ export default function WorkTasksPage() {
       </div>
 
       <div className="erp-page-toolbar">
+        {/* Görev ataması ve durum değişikliği ekip içinde yapılıyor. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          Yenile
+        </button>
+
         <div>
           <strong>
             {loading ? "…" : items.length} görev
@@ -923,9 +937,10 @@ export default function WorkTasksPage() {
                             item.id
                           }
                           onClick={() =>
-                            void completeTask(
-                              item.id
-                            )
+                            setPending({
+                              kind: "complete",
+                              id: item.id,
+                            })
                           }
                         >
                           Tamamla
@@ -940,9 +955,10 @@ export default function WorkTasksPage() {
                             item.id
                           }
                           onClick={() =>
-                            void cancelTask(
-                              item.id
-                            )
+                            setPending({
+                              kind: "cancel",
+                              id: item.id,
+                            })
                           }
                         >
                           İptal
@@ -956,6 +972,38 @@ export default function WorkTasksPage() {
           </tbody>
         </table>
       </div>
+      {pending && (
+        <ConfirmDialog
+          key={`${pending.kind}-${pending.id}`}
+          open
+          title={
+            pending.kind === "complete" ? "Görevi Tamamla" : "Görevi İptal Et"
+          }
+          description={
+            pending.kind === "complete"
+              ? "Görev tamamlandı olarak işaretlenecek. Tamamlama notu isteğe bağlı ama kayda geçer."
+              : "Görev iptal edilecek. İptal nedeni zorunlu; görevi açan kişi bunu görecek."
+          }
+          confirmLabel={
+            pending.kind === "complete" ? "Görevi Tamamla" : "Görevi İptal Et"
+          }
+          requireReason={pending.kind === "cancel"}
+          showReason
+          reasonLabel={
+            pending.kind === "complete"
+              ? "Tamamlama notu (isteğe bağlı)"
+              : "İptal nedeni (zorunlu)"
+          }
+          busy={processingId === pending.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={(text) =>
+            pending.kind === "complete"
+              ? void completeTask(pending.id, text)
+              : void cancelTask(pending.id, text)
+          }
+        />
+      )}
     </ErpShell>
   );
 }

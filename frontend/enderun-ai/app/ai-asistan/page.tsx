@@ -34,6 +34,7 @@ export default function AiAssistantPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Hızır"
       description="Şirket verilerinize göre cevap veren, yetkilerinize saygı gösteren asistan"
     >

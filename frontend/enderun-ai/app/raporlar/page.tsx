@@ -49,6 +49,7 @@ export default function ReportsPage() {
   return (
 
     <ErpShell
+      design="redwood"
       title="Rapor Merkezi"
       description="Enderun AI raporlama ve analiz merkezi"
     >

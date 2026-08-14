@@ -184,10 +184,22 @@ export default function PermissionMatrixPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yetki Matrisi"
       description="Rol × izin tablosu — bir hücreye tıklayın, anında kaydedilir"
     >
       <div className="space-y-4">
+        {/* Matris hücreleri anında kaydediliyor; başka yöneticinin değişikliği tazelenmeden görünmüyordu. */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            onClick={() => void load()}
+          >
+            Yenile
+          </button>
+        </div>
+
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}

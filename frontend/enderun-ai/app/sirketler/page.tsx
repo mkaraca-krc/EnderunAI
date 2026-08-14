@@ -9,7 +9,7 @@ export default function Page(){
   const load=useCallback(async()=>{try{setItems(await api("companies"));}catch(e){setErr(e instanceof Error?e.message:"Liste alınamadı.");}},[]);
   useEffect(()=>{load();},[load]);
   async function save(e:FormEvent){e.preventDefault();setMsg("");setErr("");try{await api("companies",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(form)});setForm(blank);setShow(false);setMsg("Şirket oluşturuldu.");await load();}catch(x){setErr(x instanceof Error?x.message:"Kayıt başarısız.");}}
-  return <ErpShell title="Şirket Yönetimi"><div className="erp-toolbar"><strong>{items.length} şirket</strong><button onClick={()=>setShow(!show)}>+ Yeni Şirket</button></div>{msg&&<div className="erp-alert success">{msg}</div>}{err&&<div className="erp-alert error">{err}</div>}
+  return <ErpShell design="redwood" title="Şirket Yönetimi"><div className="erp-toolbar"><strong>{items.length} şirket</strong><div className="erp-actions"><button type="button" onClick={()=>void load()}>Yenile</button><button onClick={()=>setShow(!show)}>+ Yeni Şirket</button></div></div>{msg&&<div className="erp-alert success">{msg}</div>}{err&&<div className="erp-alert error">{err}</div>}
   {show&&<form className="erp-form-card" onSubmit={save}><div className="erp-form-grid">
     <label><span>Kod *</span><input required value={form.code} onChange={e=>setForm({...form,code:e.target.value.toUpperCase()})}/></label>
     <label><span>Ad *</span><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label>

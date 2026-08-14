@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 
 import {
   companyService,
@@ -105,6 +106,13 @@ export default function CargoPage() {
 
   const [processingId, setProcessingId] =
     useState("");
+
+  /** Teslim alındı işaretlenirken adı sorulacak kargo. */
+  const [delivery, setDelivery] = useState<CargoItem | null>(null);
+  const [handoverName, setHandoverName] = useState("");
+
+  /** Silinmek üzere onay bekleyen kargo kaydı. */
+  const [pending, setPending] = useState<string | null>(null);
 
   const [error, setError] =
     useState("");
@@ -283,19 +291,11 @@ export default function CargoPage() {
       item.deliveredToName || null;
 
     if (status === CargoStatus.Delivered) {
-      const value = window.prompt(
-        "Kargoyu teslim alan kişinin adı:",
-        item.deliveredToName || ""
-      );
-
-      if (value === null) {
-        return;
-      }
-
-      deliveredToName =
-        value.trim() || null;
+      deliveredToName = handoverName.trim() || null;
     }
 
+    setDelivery(null);
+    setPending(null);
     setProcessingId(item.id);
     setError("");
     setSuccess("");
@@ -341,14 +341,7 @@ export default function CargoPage() {
   }
 
   async function deleteCargo(id: string) {
-    const confirmed = window.confirm(
-      "Bu kargo kaydını silmek istediğinize emin misiniz?"
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setPending(null);
     setProcessingId(id);
     setError("");
     setSuccess("");
@@ -372,10 +365,22 @@ export default function CargoPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Sekreterya"
       description="Kargo ve teslimat süreçleri"
     >
       <div className="space-y-6">
+        {/* Kargo durumu gün içinde değişiyor. */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            onClick={() => void load()}
+          >
+            Yenile
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">
@@ -875,14 +880,23 @@ export default function CargoPage() {
                           }
                           className="rounded-lg border px-2 py-1 text-sm"
                           value={item.status}
-                          onChange={(event) =>
-                            void changeStatus(
-                              item,
-                              Number(
-                                event.target.value
-                              ) as CargoStatus
-                            )
-                          }
+                          onChange={(event) => {
+                            const next = Number(
+                              event.target.value
+                            ) as CargoStatus;
+
+                            // "Teslim edildi" kimin aldığını sorar;
+                            // diğer geçişler doğrudan uygulanır.
+                            if (next === CargoStatus.Delivered) {
+                              setHandoverName(
+                                item.deliveredToName || ""
+                              );
+                              setDelivery(item);
+                              return;
+                            }
+
+                            void changeStatus(item, next);
+                          }}
                         >
                           {Object.entries(
                             statusLabels
@@ -913,7 +927,7 @@ export default function CargoPage() {
                             processingId === item.id
                           }
                           onClick={() =>
-                            void deleteCargo(item.id)
+                            setPending(item.id)
                           }
                           className="text-sm font-medium text-red-600 disabled:opacity-50"
                         >
@@ -930,6 +944,37 @@ export default function CargoPage() {
           </div>
         </section>
       </div>
+      {delivery && (
+        <ConfirmDialog
+          key={delivery.id}
+          open
+          title="Kargoyu Teslim Edildi İşaretle"
+          description={`${delivery.trackingNumber || delivery.cargoCompany} teslim edildi olarak işaretlenecek. Teslim alan kişinin adı isteğe bağlı ama kayda geçer.`}
+          confirmLabel="Teslim Edildi"
+          showReason
+          reasonLabel="Teslim alan kişi (isteğe bağlı)"
+          busy={processingId === delivery.id}
+          error={error}
+          onCancel={() => setDelivery(null)}
+          onConfirm={(name) => {
+            setHandoverName(name);
+            void changeStatus(delivery, CargoStatus.Delivered);
+          }}
+        />
+      )}
+
+      {pending && (
+        <ConfirmDialog
+          open
+          title="Kargo Kaydını Sil"
+          description="Kargo kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz."
+          confirmLabel="Kaydı Sil"
+          busy={processingId === pending}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() => void deleteCargo(pending)}
+        />
+      )}
     </ErpShell>
   );
 }

@@ -14,6 +14,7 @@ import ErpShell from "@/components/erp/erp-shell";
 export default function Page() {
   return (
     <ErpShell
+      design="redwood"
       title="Dokümanlar"
       description="Merkezi doküman arşivi henüz devrede değil"
     >

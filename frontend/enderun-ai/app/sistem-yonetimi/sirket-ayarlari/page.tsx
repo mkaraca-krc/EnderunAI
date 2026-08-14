@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import PayrollSettingsCard from "@/components/hr/payroll-settings-card";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
@@ -166,6 +167,9 @@ export default function CompanySettingsPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [error, setError] = useState("");
+
+  /** Silinmek üzere onay bekleyen IBAN kaydı. */
+  const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
   const [newBank, setNewBank] = useState({
@@ -322,10 +326,7 @@ export default function CompanySettingsPage() {
   }
 
   async function removeBankAccount(id: string) {
-    if (!window.confirm("Bu IBAN kaydını silmek istediğinize emin misiniz?")) {
-      return;
-    }
-
+    setPending(null);
     setError("");
     try {
       await companySettingsService.deleteBankAccount(id);
@@ -386,10 +387,22 @@ export default function CompanySettingsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Şirket Ayarları"
       description="Kurumsal kimlik: unvan, vergi bilgileri, IBAN listesi ve logo"
     >
       <div className="space-y-6">
+        {/* IBAN ve kurumsal bilgiler başka yöneticilerce güncelleniyor. */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            onClick={() => void load()}
+          >
+            Yenile
+          </button>
+        </div>
+
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -564,7 +577,7 @@ export default function CompanySettingsPage() {
                         <button
                           type="button"
                           className="text-xs text-red-600 hover:underline"
-                          onClick={() => void removeBankAccount(account.id)}
+                          onClick={() => setPending(account.id)}
                         >
                           Sil
                         </button>
@@ -815,6 +828,18 @@ export default function CompanySettingsPage() {
           </div>
         )}
       </div>
+      {pending && (
+        <ConfirmDialog
+          open
+          title="IBAN Kaydını Sil"
+          description={"Şirketin banka hesabı kayıtlardan kalıcı olarak silinecek. Bu işlem geri alınamaz."}
+          confirmLabel="IBAN'ı Sil"
+          busy={false}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() => void removeBankAccount(pending)}
+        />
+      )}
     </ErpShell>
   );
 }
