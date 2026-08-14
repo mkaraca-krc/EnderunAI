@@ -143,6 +143,7 @@ export default function EngineeringPositionDetailPage() {
   if (loading) {
     return (
       <ErpShell
+      design="redwood"
         title="Poz Detayı"
         description="Mühendislik pozu yükleniyor"
       >
@@ -153,7 +154,7 @@ export default function EngineeringPositionDetailPage() {
 
   if (!item) {
     return (
-      <ErpShell title="Poz Detayı" description="Poz bulunamadı">
+      <ErpShell design="redwood" title="Poz Detayı" description="Poz bulunamadı">
         <div className="erp-alert error">
           {error || "İstenen poz bulunamadı."}
         </div>
@@ -180,6 +181,7 @@ export default function EngineeringPositionDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`${item.code} · ${item.name}`}
       description="Poz detayları, reçete ve teknik analiz"
     >

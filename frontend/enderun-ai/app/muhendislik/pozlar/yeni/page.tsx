@@ -120,6 +120,7 @@ export default function NewEngineeringPositionPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Mühendislik Pozu"
       description="Poz kütüphanesine yeni teknik kayıt oluşturun"
     >

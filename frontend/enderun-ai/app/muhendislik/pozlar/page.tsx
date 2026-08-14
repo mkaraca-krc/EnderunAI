@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { decimal } from "@/lib/format/turkish";
 import {
   EngineeringPositionListItem,
   EngineeringPositionSource,
@@ -28,11 +29,16 @@ const statusLabels: Record<number, string> = {
   3: "Arşiv",
 };
 
-function formatHours(value: number | null | undefined) {
-  return new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(value ?? 0);
+/**
+ * İşçilik saati — iki ondalık.
+ *
+ * Sözleşmeye giren bir rakam değil, planlama miktarı; uygulamanın
+ * her yerinde adam/saat iki hane yazılıyor (bkz. teklif hazırlama).
+ * Alan veritabanında dört hane tutuyor ama saatin dördüncü hanesi
+ * (0,36 saniye) ekranda gürültü.
+ */
+function formatHours(value: number) {
+  return decimal(value, 2);
 }
 
 export default function EngineeringPositionsPage() {
@@ -92,6 +98,7 @@ export default function EngineeringPositionsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Poz Kütüphanesi"
       description="Mühendislik pozları, adam/saat değerleri ve reçete altyapısı"
     >
@@ -110,6 +117,17 @@ export default function EngineeringPositionsPage() {
         </div>
 
         <div className="enderun-dashboard-hero-actions">
+          {/* Poz kütüphanesi içe aktarmayla ve başka kullanıcının
+              poz eklemesiyle değişiyor; filtreye dokunmadan listeyi
+              tazelemenin yolu yoktu. */}
+          <button
+            type="button"
+            className="erp-secondary-button"
+            disabled={loading}
+            onClick={() => void loadPositions()}
+          >
+            Yenile
+          </button>
           <Link href="/muhendislik" className="erp-secondary-button">
             Mühendislik Merkezi
           </Link>

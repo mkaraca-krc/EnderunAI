@@ -78,6 +78,7 @@ const workflow = [
 export default function EngineeringCenterPage() {
   return (
     <ErpShell
+      design="redwood"
       title="Mühendislik Merkezi"
       description="Poz, reçete, teknik analiz ve maliyet yönetim merkezi"
     >

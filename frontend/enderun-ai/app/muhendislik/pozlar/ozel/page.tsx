@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { unitPrice } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import {
   companyService,
@@ -37,13 +38,12 @@ const statusLabels: Record<number, string> = {
   3: "Arşiv",
 };
 
+// BİRİM FİYAT: PositionUnitPrice.UnitPrice veritabanında
+// numeric(18,4). Buradaki biçim iki haneye zorluyordu, yani
+// girilen 12,4567 ekranda 12,46 görünüyordu; kullanıcı o rakamı
+// metrajla çarptığında toplam tutmuyordu.
 function money(value?: number | null) {
-  if (value == null) return "—";
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(value);
+  return unitPrice(value);
 }
 
 function errorMessage(error: unknown) {
@@ -270,6 +270,7 @@ export default function CustomPositionsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Özel Pozlar"
       description="Resmî kitaplarda karşılığı olmayan, şirkete özel imalat pozları"
     >
@@ -329,6 +330,18 @@ export default function CustomPositionsPage() {
                   </option>
                 ))}
               </select>
+
+              {/* refreshKey zaten vardı ama yalnızca bu sayfanın kendi
+                  işlemlerinden sonra artıyordu; başka kullanıcının
+                  eklediği pozu görmenin yolu sayfayı yeniden yüklemekti. */}
+              <button
+                type="button"
+                className="erp-secondary-button"
+                disabled={loading}
+                onClick={() => setRefreshKey((current) => current + 1)}
+              >
+                Yenile
+              </button>
 
               <button
                 type="button"

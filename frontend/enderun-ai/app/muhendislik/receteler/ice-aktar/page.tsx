@@ -202,6 +202,7 @@ export default function RecipeImportPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Reçete İçe Aktarma"
       description="Excel'den toplu poz reçetesi (poz → malzeme + miktar) aktarımı"
     >

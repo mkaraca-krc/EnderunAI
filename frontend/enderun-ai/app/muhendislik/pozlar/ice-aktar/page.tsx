@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { unitPrice } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
   POSITION_PRICE_INSTITUTION_LABELS,
@@ -27,11 +28,6 @@ const DISCIPLINES: Record<number, string> = {
   3: "Mekanik",
   4: "İnşaat",
 };
-
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 4,
-});
 
 /** Sütun seçici — 0 "eşlenmedi" demek. */
 function ColumnSelect({
@@ -293,6 +289,7 @@ export default function PositionImportPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Poz Kitabı İçe Aktarma"
       description="Excel'den toplu poz ve yıllık birim fiyat aktarımı"
     >
@@ -800,7 +797,7 @@ export default function PositionImportPage() {
                     </td>
                     <td>{row.unit || "AD"}</td>
                     <td>
-                      {row.unitPrice != null ? money.format(row.unitPrice) : "—"}
+                      {unitPrice(row.unitPrice)}
                     </td>
                     <td>
                       <span
