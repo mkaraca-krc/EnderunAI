@@ -168,9 +168,20 @@ export default function SgkNotificationsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="SGK Bildirim Dökümü"
       description="İşe giriş ve çıkış bildirimleri için SGK ekranına girilecek alanlar."
     >
+      {/* Bildirim durumu SGK tarafında değişiyor. */}
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          onClick={() => void load()}
+        >
+          Yenile
+        </button>
+      </div>
       <div className="space-y-6">
         <Card>
           <CardContent className="flex flex-wrap items-end gap-4">

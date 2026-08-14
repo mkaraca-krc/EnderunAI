@@ -8,6 +8,8 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { currencyMoney } from "@/lib/format/turkish";
 import {
   cashAccountService,
   type CashAccount,
@@ -66,14 +68,13 @@ function formatMoney(
   value: number,
   currencyCode = "TRY"
 ): string {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency:
-      currencyCode === "MIXED"
-        ? "TRY"
-        : currencyCode || "TRY",
-    maximumFractionDigits: 2,
-  }).format(value ?? 0);
+  // "MIXED": dönemde birden fazla para birimi var demek; toplam
+  // TL cinsinden gösteriliyor. Bu eşleme korunuyor — kod olarak
+  // yazılsaydı ekranda "1.250,00 MIXED" çıkardı.
+  return currencyMoney(
+    value ?? 0,
+    currencyCode === "MIXED" ? "TRY" : currencyCode || "TRY"
+  );
 }
 
 function getErrorMessage(error: unknown): string {
@@ -84,35 +85,32 @@ function getErrorMessage(error: unknown): string {
   return "İşlem sırasında beklenmeyen bir hata oluştu.";
 }
 
-function statusStyle(status: PayrollStatus) {
+/**
+ * Bordro durumunun rozet varyantı.
+ *
+ * Eskiden burada bir STİL NESNESİ üretiliyordu (zemin, yazı ve
+ * kenarlık için üçer ham hex) ve satır içinde yayılıyordu. Rozetin
+ * kendisi zaten paylaşılan bir bileşen: `erp-status` yuvarlak köşeyi,
+ * dolguyu ve tipografiyi veriyor, Redwood katmanı da renkleri
+ * tokendan okuyor. Sınıfa bağlanınca sekiz hex birden kalktı ve
+ * koyu tema turunda bu rozet ayrıca ele alınmayacak.
+ *
+ * Renk sırası ilerlemeyi anlatıyor: taslak gri, hesaplandı sarı
+ * (bekliyor), onaylandı mavi (karar verildi), ödendi yeşil (bitti).
+ */
+function statusVariant(status: PayrollStatus): string {
   switch (status) {
     case PayrollStatus.Paid:
-      return {
-        background: "#dcfce7",
-        color: "#166534",
-        border: "1px solid #86efac",
-      };
+      return "green";
 
     case PayrollStatus.Approved:
-      return {
-        background: "#dbeafe",
-        color: "#1d4ed8",
-        border: "1px solid #93c5fd",
-      };
+      return "blue";
 
     case PayrollStatus.Calculated:
-      return {
-        background: "#fef3c7",
-        color: "#92400e",
-        border: "1px solid #fcd34d",
-      };
+      return "yellow";
 
     default:
-      return {
-        background: "#f3f4f6",
-        color: "#374151",
-        border: "1px solid #d1d5db",
-      };
+      return "gray";
   }
 }
 
@@ -145,8 +143,8 @@ function statusLabel(record: PayrollRecord): string {
 }
 
 const panelStyle = {
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
+  background: "var(--erp-panel)",
+  border: "1px solid var(--erp-border)",
   borderRadius: "16px",
   boxShadow: "0 8px 24px rgba(15, 23, 42, 0.05)",
 };
@@ -154,11 +152,11 @@ const panelStyle = {
 const inputStyle = {
   width: "100%",
   minHeight: "42px",
-  border: "1px solid #d1d5db",
+  border: "1px solid var(--erp-border)",
   borderRadius: "10px",
   padding: "8px 12px",
-  background: "#ffffff",
-  color: "#111827",
+  background: "var(--erp-panel)",
+  color: "var(--erp-text)",
 };
 
 export default function PayrollManagementPage() {
@@ -220,6 +218,23 @@ export default function PayrollManagementPage() {
 
   const [selectedRecord, setSelectedRecord] =
     useState<PayrollRecord | null>(null);
+
+  /**
+   * Onay bekleyen bordro işlemi.
+   *
+   * Dönem işlemleri (hesapla / muhasebeleştir / öde) tüm şirketi
+   * birden etkiliyor; kayıt işlemleri (onayla / sil) tek personeli.
+   * Ayrımı tipte tutmak, onay metninin hangisinden bahsettiğini
+   * karıştırmayı imkânsız kılıyor.
+   */
+  const [pending, setPending] = useState<
+    | { kind: "calculate" }
+    | { kind: "post" }
+    | { kind: "pay" }
+    | { kind: "approve"; record: PayrollRecord }
+    | { kind: "delete"; record: PayrollRecord }
+    | null
+  >(null);
 
   const [actionRecordId, setActionRecordId] =
     useState<string | null>(null);
@@ -462,15 +477,7 @@ export default function PayrollManagementPage() {
       return;
     }
 
-    if (
-      !window.confirm(
-        `${selectedMonthName} ${year} dönemi bordrosu muhasebeleştirilecek. ` +
-          "Tek bir tahakkuk fişi üretilir ve bu işlem geri alınamaz. Devam edilsin mi?"
-      )
-    ) {
-      return;
-    }
-
+    setPending(null);
     setPeriodBusy(true);
     setError("");
     setMessage("");
@@ -502,15 +509,7 @@ export default function PayrollManagementPage() {
       return;
     }
 
-    if (
-      !window.confirm(
-        `${selectedMonthName} ${year} dönemi net ücretleri seçilen hesaptan ödenecek. ` +
-          "Devam edilsin mi?"
-      )
-    ) {
-      return;
-    }
-
+    setPending(null);
     setPeriodBusy(true);
     setError("");
     setMessage("");
@@ -546,16 +545,7 @@ export default function PayrollManagementPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `${selectedCompanyName} için ` +
-      `${selectedMonthName} ${year} ` +
-      `bordroları hesaplansın mı?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setPending(null);
     setCalculating(true);
     setError("");
     setMessage("");
@@ -594,15 +584,7 @@ export default function PayrollManagementPage() {
     const employee =
       personnelMap.get(record.personnelId);
 
-    const confirmed = window.confirm(
-      `${employee?.fullName ?? "Personel"} bordrosu ` +
-      `onaylansın mı?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setPending(null);
     setActionRecordId(record.id);
     setError("");
     setMessage("");
@@ -816,15 +798,7 @@ export default function PayrollManagementPage() {
     const employee =
       personnelMap.get(record.personnelId);
 
-    const confirmed = window.confirm(
-      `${employee?.fullName ?? "Personel"} bordrosu silinsin mi?\n\n` +
-      "Bu işlem geri alınamaz."
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setPending(null);
     setActionRecordId(record.id);
     setError("");
     setMessage("");
@@ -906,7 +880,7 @@ export default function PayrollManagementPage() {
           body {
             margin: 0;
             padding: 32px;
-            color: #0f172a;
+            color: var(--erp-text);
             font-family: Arial, Helvetica, sans-serif;
           }
 
@@ -914,7 +888,7 @@ export default function PayrollManagementPage() {
             display: flex;
             justify-content: space-between;
             gap: 24px;
-            border-bottom: 3px solid #0f172a;
+            border-bottom: 3px solid var(--erp-text);
             padding-bottom: 18px;
             margin-bottom: 22px;
           }
@@ -926,7 +900,7 @@ export default function PayrollManagementPage() {
 
           .header p {
             margin: 3px 0;
-            color: #475569;
+            color: var(--erp-muted);
           }
 
           .period {
@@ -940,7 +914,7 @@ export default function PayrollManagementPage() {
           }
 
           .panel {
-            border: 1px solid #cbd5e1;
+            border: 1px solid var(--erp-border);
             border-radius: 10px;
             overflow: hidden;
           }
@@ -949,7 +923,7 @@ export default function PayrollManagementPage() {
             margin: 0;
             padding: 11px 14px;
             font-size: 14px;
-            background: #f1f5f9;
+            background: var(--erp-bg);
           }
 
           .row {
@@ -957,7 +931,7 @@ export default function PayrollManagementPage() {
             justify-content: space-between;
             gap: 16px;
             padding: 9px 14px;
-            border-top: 1px solid #e2e8f0;
+            border-top: 1px solid var(--erp-border);
           }
 
           .row strong {
@@ -966,7 +940,7 @@ export default function PayrollManagementPage() {
 
           .summary {
             margin-top: 22px;
-            border: 2px solid #0f172a;
+            border: 2px solid var(--erp-text);
             border-radius: 12px;
             padding: 18px;
           }
@@ -981,7 +955,7 @@ export default function PayrollManagementPage() {
           .actual {
             margin-top: 12px;
             padding-top: 12px;
-            border-top: 2px solid #0f172a;
+            border-top: 2px solid var(--erp-text);
             font-size: 20px;
             font-weight: 800;
           }
@@ -996,7 +970,7 @@ export default function PayrollManagementPage() {
 
           .signature {
             padding-top: 55px;
-            border-bottom: 1px solid #64748b;
+            border-bottom: 1px solid var(--erp-muted);
           }
 
           @media print {
@@ -1250,8 +1224,75 @@ export default function PayrollManagementPage() {
     },
   ];
 
+  /**
+   * Onay diyaloğunun metni ve eylemi.
+   *
+   * JSX içinde üçlü zincirle yazılamıyor: TypeScript `pending.kind`
+   * ayrımını ifade zincirinde daraltamadığı için kayıt işlemlerinde
+   * `record` alanına erişemiyordu. Deyim bazlı if/else doğru daraltıyor
+   * ve her dalın metni tek yerde okunuyor.
+   */
+  const dialogProps = (() => {
+    if (!pending) return null;
+
+    const period = `${selectedMonthName} ${year}`;
+
+    if (pending.kind === "calculate") {
+      return {
+        title: "Dönem Bordrosunu Hesapla",
+        description: `${selectedCompanyName} için ${period} dönemi bordroları hesaplanacak. Mevcut hesaplamalar yeniden üretilir; onaylanmış bordrolar etkilenmez.`,
+        confirmLabel: "Hesapla",
+        busy: calculating,
+        onConfirm: () => void calculateCompanyPayroll(),
+      };
+    }
+
+    if (pending.kind === "post") {
+      return {
+        title: "Bordroyu Muhasebeleştir",
+        description: `${period} dönemi bordrosu muhasebeleştirilecek. TEK BİR TAHAKKUK FİŞİ üretilir ve bu işlem GERİ ALINAMAZ.`,
+        confirmLabel: "Muhasebeleştir",
+        busy: periodBusy,
+        onConfirm: () => void postPeriod(),
+      };
+    }
+
+    if (pending.kind === "pay") {
+      return {
+        title: "Net Ücretleri Öde",
+        description: `${period} dönemi net ücretleri seçilen kasa/banka hesabından ödenecek. Ödeme kaydı oluşur ve hesap bakiyesi düşer.`,
+        confirmLabel: "Ödemeyi Yap",
+        busy: periodBusy,
+        onConfirm: () => void payPeriod(),
+      };
+    }
+
+    const record = pending.record;
+    const name =
+      personnelMap.get(record.personnelId)?.fullName ?? "Personel";
+
+    if (pending.kind === "approve") {
+      return {
+        title: "Bordroyu Onayla",
+        description: `${name} bordrosu onaylanacak. Onaylanan bordro artık yeniden hesaplanmaz.`,
+        confirmLabel: "Bordroyu Onayla",
+        busy: actionRecordId === record.id,
+        onConfirm: () => void approvePayroll(record),
+      };
+    }
+
+    return {
+      title: "Bordroyu Sil",
+      description: `${name} bordrosu kalıcı olarak silinecek. Bu işlem GERİ ALINAMAZ.`,
+      confirmLabel: "Bordroyu Sil",
+      busy: actionRecordId === record.id,
+      onConfirm: () => void deletePayroll(record),
+    };
+  })();
+
   return (
     <ErpShell
+      design="redwood"
       title="Bordro Yönetim Merkezi"
       description={
         "Resmî bordro, ek ücret, kesinti ve gerçek ödeme yönetimi"
@@ -1280,7 +1321,7 @@ export default function PayrollManagementPage() {
                 marginBottom: "6px",
                 fontSize: "12px",
                 fontWeight: 700,
-                color: "#475569",
+                color: "var(--erp-muted)",
               }}
             >
               ŞİRKET
@@ -1317,7 +1358,7 @@ export default function PayrollManagementPage() {
                 marginBottom: "6px",
                 fontSize: "12px",
                 fontWeight: 700,
-                color: "#475569",
+                color: "var(--erp-muted)",
               }}
             >
               YIL
@@ -1348,7 +1389,7 @@ export default function PayrollManagementPage() {
                 marginBottom: "6px",
                 fontSize: "12px",
                 fontWeight: 700,
-                color: "#475569",
+                color: "var(--erp-muted)",
               }}
             >
               AY
@@ -1379,7 +1420,7 @@ export default function PayrollManagementPage() {
                 marginBottom: "6px",
                 fontSize: "12px",
                 fontWeight: 700,
-                color: "#475569",
+                color: "var(--erp-muted)",
               }}
             >
               DURUM
@@ -1408,10 +1449,10 @@ export default function PayrollManagementPage() {
             disabled={loading}
             style={{
               minHeight: "42px",
-              border: "1px solid #cbd5e1",
+              border: "1px solid var(--erp-border)",
               borderRadius: "10px",
               padding: "0 16px",
-              background: "#ffffff",
+              background: "var(--erp-panel)",
               fontWeight: 700,
               cursor: "pointer",
             }}
@@ -1424,7 +1465,7 @@ export default function PayrollManagementPage() {
           <button
             type="button"
             onClick={() =>
-              void calculateCompanyPayroll()
+              setPending({ kind: "calculate" })
             }
             disabled={
               calculating || !companyId
@@ -1434,8 +1475,8 @@ export default function PayrollManagementPage() {
               border: "none",
               borderRadius: "10px",
               padding: "0 18px",
-              background: "#0f172a",
-              color: "#ffffff",
+              background: "var(--erp-text)",
+              color: "var(--color-on-brand)",
               fontWeight: 800,
               cursor:
                 calculating
@@ -1454,15 +1495,15 @@ export default function PayrollManagementPage() {
 
           <button
             type="button"
-            onClick={() => void postPeriod()}
+            onClick={() => setPending({ kind: "post" })}
             disabled={periodBusy || !companyId}
             style={{
               minHeight: "42px",
-              border: "1px solid #0f172a",
+              border: "1px solid var(--erp-text)",
               borderRadius: "10px",
               padding: "0 18px",
-              background: "#ffffff",
-              color: "#0f172a",
+              background: "var(--erp-panel)",
+              color: "var(--erp-text)",
               fontWeight: 800,
               cursor: periodBusy ? "wait" : "pointer",
               opacity: periodBusy || !companyId ? 0.65 : 1,
@@ -1479,7 +1520,7 @@ export default function PayrollManagementPage() {
             style={{
               minHeight: "42px",
               borderRadius: "10px",
-              border: "1px solid #cbd5f5",
+              border: "1px solid var(--erp-border)",
               padding: "0 12px",
             }}
           >
@@ -1498,22 +1539,22 @@ export default function PayrollManagementPage() {
             style={{
               minHeight: "42px",
               borderRadius: "10px",
-              border: "1px solid #cbd5f5",
+              border: "1px solid var(--erp-border)",
               padding: "0 12px",
             }}
           />
 
           <button
             type="button"
-            onClick={() => void payPeriod()}
+            onClick={() => setPending({ kind: "pay" })}
             disabled={periodBusy || !companyId || !periodCashAccountId}
             style={{
               minHeight: "42px",
               border: "none",
               borderRadius: "10px",
               padding: "0 18px",
-              background: "#065f46",
-              color: "#ffffff",
+              background: "var(--color-semantic-success)",
+              color: "var(--color-on-brand)",
               fontWeight: 800,
               cursor: periodBusy ? "wait" : "pointer",
               opacity:
@@ -1530,9 +1571,9 @@ export default function PayrollManagementPage() {
               marginTop: "14px",
               padding: "12px 14px",
               borderRadius: "10px",
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              color: "#b91c1c",
+              background: "var(--color-semantic-danger-tint)",
+              border: "1px solid var(--color-semantic-danger-border)",
+              color: "var(--color-semantic-danger)",
             }}
           >
             {error}
@@ -1545,9 +1586,9 @@ export default function PayrollManagementPage() {
               marginTop: "14px",
               padding: "12px 14px",
               borderRadius: "10px",
-              background: "#f0fdf4",
-              border: "1px solid #bbf7d0",
-              color: "#166534",
+              background: "var(--color-semantic-success-tint)",
+              border: "1px solid var(--color-semantic-success-border)",
+              color: "var(--color-semantic-success)",
             }}
           >
             {message}
@@ -1559,7 +1600,7 @@ export default function PayrollManagementPage() {
             style={{
               marginTop: "12px",
               fontSize: "13px",
-              color: "#475569",
+              color: "var(--erp-muted)",
             }}
           >
             Toplam gerçek ödeme:{" "}
@@ -1581,10 +1622,10 @@ export default function PayrollManagementPage() {
                 style={{
                   marginTop: "10px",
                   padding: "10px 12px 10px 28px",
-                  border: "1px solid #fcd34d",
-                  background: "#fffbeb",
+                  border: "1px solid var(--color-semantic-warning-border)",
+                  background: "var(--color-semantic-warning-tint)",
                   borderRadius: "8px",
-                  color: "#78350f",
+                  color: "var(--color-semantic-warning)",
                 }}
               >
                 {calculationResult.warnings?.map((warning) => (
@@ -1619,7 +1660,7 @@ export default function PayrollManagementPage() {
                 fontSize: "11px",
                 fontWeight: 800,
                 letterSpacing: "0.08em",
-                color: "#64748b",
+                color: "var(--erp-muted)",
                 marginBottom: "10px",
               }}
             >
@@ -1632,7 +1673,7 @@ export default function PayrollManagementPage() {
               style={{
                 display: "block",
                 fontSize: "22px",
-                color: "#0f172a",
+                color: "var(--erp-text)",
                 marginBottom: "6px",
               }}
             >
@@ -1641,7 +1682,7 @@ export default function PayrollManagementPage() {
 
             <small
               style={{
-                color: "#64748b",
+                color: "var(--erp-muted)",
                 lineHeight: 1.4,
               }}
             >
@@ -1660,7 +1701,7 @@ export default function PayrollManagementPage() {
         <div
           style={{
             padding: "18px 20px",
-            borderBottom: "1px solid #e5e7eb",
+            borderBottom: "1px solid var(--erp-border)",
             display: "flex",
             gap: "16px",
             justifyContent: "space-between",
@@ -1674,7 +1715,7 @@ export default function PayrollManagementPage() {
                 fontSize: "11px",
                 fontWeight: 800,
                 letterSpacing: "0.08em",
-                color: "#64748b",
+                color: "var(--erp-muted)",
               }}
             >
               {selectedMonthName.toLocaleUpperCase(
@@ -1687,7 +1728,7 @@ export default function PayrollManagementPage() {
               style={{
                 margin: "5px 0 0",
                 fontSize: "19px",
-                color: "#0f172a",
+                color: "var(--erp-text)",
               }}
             >
               Personel bordroları
@@ -1724,8 +1765,8 @@ export default function PayrollManagementPage() {
             <thead>
               <tr
                 style={{
-                  background: "#f8fafc",
-                  color: "#475569",
+                  background: "var(--erp-bg)",
+                  color: "var(--erp-muted)",
                   textAlign: "left",
                 }}
               >
@@ -1747,7 +1788,7 @@ export default function PayrollManagementPage() {
                     style={{
                       padding: "13px 14px",
                       borderBottom:
-                        "1px solid #e5e7eb",
+                        "1px solid var(--erp-border)",
                       fontSize: "12px",
                       whiteSpace: "nowrap",
                     }}
@@ -1767,7 +1808,7 @@ export default function PayrollManagementPage() {
                       style={{
                         padding: "44px",
                         textAlign: "center",
-                        color: "#64748b",
+                        color: "var(--erp-muted)",
                       }}
                     >
                       Bu dönem için bordro kaydı
@@ -1787,7 +1828,7 @@ export default function PayrollManagementPage() {
                     key={record.id}
                     style={{
                       borderBottom:
-                        "1px solid #eef2f7",
+                        "1px solid var(--erp-border)",
                     }}
                   >
                     <td
@@ -1798,7 +1839,7 @@ export default function PayrollManagementPage() {
                       <strong
                         style={{
                           display: "block",
-                          color: "#0f172a",
+                          color: "var(--erp-text)",
                         }}
                       >
                         {employee?.fullName ??
@@ -1807,7 +1848,7 @@ export default function PayrollManagementPage() {
 
                       <small
                         style={{
-                          color: "#64748b",
+                          color: "var(--erp-muted)",
                         }}
                       >
                         {employee?.employeeNumber ??
@@ -1840,8 +1881,8 @@ export default function PayrollManagementPage() {
                               : 500,
                           color:
                             index === 7
-                              ? "#0f766e"
-                              : "#334155",
+                              ? "var(--erp-primary)"
+                              : "var(--erp-muted)",
                         }}
                       >
                         {formatMoney(
@@ -1857,18 +1898,9 @@ export default function PayrollManagementPage() {
                       }}
                     >
                       <span
-                        style={{
-                          ...statusStyle(
-                            record.status
-                          ),
-                          display: "inline-flex",
-                          alignItems: "center",
-                          borderRadius: "999px",
-                          padding: "5px 10px",
-                          fontSize: "12px",
-                          fontWeight: 800,
-                          whiteSpace: "nowrap",
-                        }}
+                        className={`erp-status ${statusVariant(
+                          record.status
+                        )}`}
                       >
                         {statusLabel(record)}
                       </span>
@@ -1894,9 +1926,9 @@ export default function PayrollManagementPage() {
                           }
                           style={{
                             border:
-                              "1px solid #cbd5e1",
+                              "1px solid var(--erp-border)",
                             borderRadius: "8px",
-                            background: "#ffffff",
+                            background: "var(--erp-panel)",
                             padding: "7px 10px",
                             cursor: "pointer",
                             fontWeight: 700,
@@ -1914,16 +1946,14 @@ export default function PayrollManagementPage() {
                               record.id
                             }
                             onClick={() =>
-                              void approvePayroll(
-                                record
-                              )
+                              setPending({ kind: "approve", record })
                             }
                             style={{
                               border:
-                                "1px solid #93c5fd",
+                                "1px solid var(--color-semantic-info-border)",
                               borderRadius: "8px",
-                              background: "#eff6ff",
-                              color: "#1d4ed8",
+                              background: "var(--color-semantic-info-tint)",
+                              color: "var(--color-semantic-info)",
                               padding: "7px 10px",
                               cursor: "pointer",
                               fontWeight: 700,
@@ -1948,10 +1978,10 @@ export default function PayrollManagementPage() {
                             }
                             style={{
                               border:
-                                "1px solid #86efac",
+                                "1px solid var(--color-semantic-success-border)",
                               borderRadius: "8px",
-                              background: "#f0fdf4",
-                              color: "#166534",
+                              background: "var(--color-semantic-success-tint)",
+                              color: "var(--color-semantic-success)",
                               padding: "7px 10px",
                               cursor: "pointer",
                               fontWeight: 700,
@@ -1968,9 +1998,9 @@ export default function PayrollManagementPage() {
                           }
                           style={{
                             border:
-                              "1px solid #cbd5e1",
+                              "1px solid var(--erp-border)",
                             borderRadius: "8px",
-                            background: "#f8fafc",
+                            background: "var(--erp-bg)",
                             padding: "7px 10px",
                             cursor: "pointer",
                             fontWeight: 700,
@@ -1988,16 +2018,14 @@ export default function PayrollManagementPage() {
                               record.id
                             }
                             onClick={() =>
-                              void deletePayroll(
-                                record
-                              )
+                              setPending({ kind: "delete", record })
                             }
                             style={{
                               border:
-                                "1px solid #fecaca",
+                                "1px solid var(--color-semantic-danger-border)",
                               borderRadius: "8px",
-                              background: "#fef2f2",
-                              color: "#b91c1c",
+                              background: "var(--color-semantic-danger-tint)",
+                              color: "var(--color-semantic-danger)",
                               padding: "7px 10px",
                               cursor: "pointer",
                               fontWeight: 700,
@@ -2041,7 +2069,7 @@ export default function PayrollManagementPage() {
               width: "min(720px, 100%)",
               height: "100%",
               overflowY: "auto",
-              background: "#ffffff",
+              background: "var(--erp-panel)",
               boxShadow:
                 "-18px 0 40px rgba(15, 23, 42, 0.22)",
             }}
@@ -2057,9 +2085,9 @@ export default function PayrollManagementPage() {
                 gap: "20px",
                 alignItems: "flex-start",
                 padding: "22px",
-                background: "#ffffff",
+                background: "var(--erp-panel)",
                 borderBottom:
-                  "1px solid #e2e8f0",
+                  "1px solid var(--erp-border)",
               }}
             >
               <div>
@@ -2069,7 +2097,7 @@ export default function PayrollManagementPage() {
                     fontSize: "11px",
                     fontWeight: 800,
                     letterSpacing: "0.08em",
-                    color: "#64748b",
+                    color: "var(--erp-muted)",
                     marginBottom: "6px",
                   }}
                 >
@@ -2080,7 +2108,7 @@ export default function PayrollManagementPage() {
                   style={{
                     margin: 0,
                     fontSize: "22px",
-                    color: "#0f172a",
+                    color: "var(--erp-text)",
                   }}
                 >
                   {personnelMap.get(
@@ -2091,7 +2119,7 @@ export default function PayrollManagementPage() {
                 <p
                   style={{
                     margin: "6px 0 0",
-                    color: "#64748b",
+                    color: "var(--erp-muted)",
                   }}
                 >
                   {
@@ -2118,9 +2146,9 @@ export default function PayrollManagementPage() {
                   width: "38px",
                   height: "38px",
                   border:
-                    "1px solid #cbd5e1",
+                    "1px solid var(--erp-border)",
                   borderRadius: "10px",
-                  background: "#ffffff",
+                  background: "var(--erp-panel)",
                   cursor: "pointer",
                   fontSize: "20px",
                 }}
@@ -2152,7 +2180,7 @@ export default function PayrollManagementPage() {
                   <span
                     style={{
                       display: "block",
-                      color: "#64748b",
+                      color: "var(--erp-muted)",
                       fontSize: "12px",
                       marginBottom: "8px",
                     }}
@@ -2186,7 +2214,7 @@ export default function PayrollManagementPage() {
                   <span
                     style={{
                       display: "block",
-                      color: "#64748b",
+                      color: "var(--erp-muted)",
                       fontSize: "12px",
                       marginBottom: "8px",
                     }}
@@ -2208,7 +2236,7 @@ export default function PayrollManagementPage() {
                     <small
                       style={{
                         display: "block",
-                        color: "#64748b",
+                        color: "var(--erp-muted)",
                       }}
                     >
                       Görme yetkiniz yok
@@ -2225,7 +2253,7 @@ export default function PayrollManagementPage() {
                   <span
                     style={{
                       display: "block",
-                      color: "#64748b",
+                      color: "var(--erp-muted)",
                       fontSize: "12px",
                       marginBottom: "8px",
                     }}
@@ -2236,7 +2264,7 @@ export default function PayrollManagementPage() {
                   <strong
                     style={{
                       fontSize: "22px",
-                      color: "#0f766e",
+                      color: "var(--erp-primary)",
                     }}
                   >
                     {formatMoney(
@@ -2251,7 +2279,7 @@ export default function PayrollManagementPage() {
                     <small
                       style={{
                         display: "block",
-                        color: "#64748b",
+                        color: "var(--erp-muted)",
                       }}
                     >
                       Elden kısım dahil değil
@@ -2363,7 +2391,7 @@ export default function PayrollManagementPage() {
                   ...panelStyle,
                   marginTop: "18px",
                   padding: "20px",
-                  border: "2px solid #0f172a",
+                  border: "2px solid var(--erp-text)",
                 }}
               >
                 <div
@@ -2393,7 +2421,7 @@ export default function PayrollManagementPage() {
                     justifyContent:
                       "space-between",
                     marginBottom: "14px",
-                    color: "#0f766e",
+                    color: "var(--erp-primary)",
                   }}
                 >
                   <span>
@@ -2417,7 +2445,7 @@ export default function PayrollManagementPage() {
                       "space-between",
                     paddingTop: "14px",
                     borderTop:
-                      "2px solid #0f172a",
+                      "2px solid var(--erp-text)",
                     fontSize: "20px",
                   }}
                 >
@@ -2427,7 +2455,7 @@ export default function PayrollManagementPage() {
 
                   <strong
                     style={{
-                      color: "#0f766e",
+                      color: "var(--erp-primary)",
                     }}
                   >
                     {formatMoney(
@@ -2447,8 +2475,8 @@ export default function PayrollManagementPage() {
                     marginTop: "16px",
                     padding: "14px",
                     borderRadius: "10px",
-                    background: "#f8fafc",
-                    color: "#334155",
+                    background: "var(--erp-bg)",
+                    color: "var(--erp-muted)",
                   }}
                 >
                   <strong>
@@ -2485,8 +2513,8 @@ export default function PayrollManagementPage() {
                     style={{
                       border: "none",
                       borderRadius: "10px",
-                      background: "#1d4ed8",
-                      color: "#ffffff",
+                      background: "var(--color-semantic-info)",
+                      color: "var(--color-on-brand)",
                       padding: "11px 16px",
                       fontWeight: 800,
                       cursor: "pointer",
@@ -2512,8 +2540,8 @@ export default function PayrollManagementPage() {
                     style={{
                       border: "none",
                       borderRadius: "10px",
-                      background: "#15803d",
-                      color: "#ffffff",
+                      background: "var(--color-semantic-success)",
+                      color: "var(--color-on-brand)",
                       padding: "11px 16px",
                       fontWeight: 800,
                       cursor: "pointer",
@@ -2532,9 +2560,9 @@ export default function PayrollManagementPage() {
                   }
                   style={{
                     border:
-                      "1px solid #cbd5e1",
+                      "1px solid var(--erp-border)",
                     borderRadius: "10px",
-                    background: "#ffffff",
+                    background: "var(--erp-panel)",
                     padding: "11px 16px",
                     fontWeight: 800,
                     cursor: "pointer",
@@ -2558,10 +2586,10 @@ export default function PayrollManagementPage() {
                     }
                     style={{
                       border:
-                        "1px solid #fecaca",
+                        "1px solid var(--color-semantic-danger-border)",
                       borderRadius: "10px",
-                      background: "#fef2f2",
-                      color: "#b91c1c",
+                      background: "var(--color-semantic-danger-tint)",
+                      color: "var(--color-semantic-danger)",
                       padding: "11px 16px",
                       fontWeight: 800,
                       cursor: "pointer",
@@ -2610,7 +2638,7 @@ export default function PayrollManagementPage() {
               maxHeight: "92vh",
               overflowY: "auto",
               borderRadius: "20px",
-              background: "#ffffff",
+              background: "var(--erp-panel)",
               boxShadow:
                 "0 24px 80px rgba(15, 23, 42, 0.3)",
             }}
@@ -2624,7 +2652,7 @@ export default function PayrollManagementPage() {
                 gap: "16px",
                 padding: "22px 24px",
                 borderBottom:
-                  "1px solid #e2e8f0",
+                  "1px solid var(--erp-border)",
               }}
             >
               <div>
@@ -2632,7 +2660,7 @@ export default function PayrollManagementPage() {
                   id="payroll-payment-title"
                   style={{
                     margin: 0,
-                    color: "#0f172a",
+                    color: "var(--erp-text)",
                     fontSize: "21px",
                   }}
                 >
@@ -2642,7 +2670,7 @@ export default function PayrollManagementPage() {
                 <p
                   style={{
                     margin: "7px 0 0",
-                    color: "#64748b",
+                    color: "var(--erp-muted)",
                     lineHeight: 1.5,
                   }}
                 >
@@ -2677,10 +2705,10 @@ export default function PayrollManagementPage() {
                   width: "38px",
                   height: "38px",
                   border:
-                    "1px solid #e2e8f0",
+                    "1px solid var(--erp-border)",
                   borderRadius: "10px",
-                  background: "#ffffff",
-                  color: "#475569",
+                  background: "var(--erp-panel)",
+                  color: "var(--erp-muted)",
                   cursor: paymentSubmitting
                     ? "not-allowed"
                     : "pointer",
@@ -2704,7 +2732,7 @@ export default function PayrollManagementPage() {
                   style={{
                     display: "block",
                     marginBottom: "9px",
-                    color: "#334155",
+                    color: "var(--erp-muted)",
                     fontWeight: 800,
                   }}
                 >
@@ -2728,17 +2756,17 @@ export default function PayrollManagementPage() {
                       minHeight: "50px",
                       border:
                         paymentMethod === 0
-                          ? "2px solid #2563eb"
-                          : "1px solid #cbd5e1",
+                          ? "2px solid var(--color-semantic-info)"
+                          : "1px solid var(--erp-border)",
                       borderRadius: "12px",
                       background:
                         paymentMethod === 0
-                          ? "#eff6ff"
-                          : "#ffffff",
+                          ? "var(--color-semantic-info-tint)"
+                          : "var(--erp-panel)",
                       color:
                         paymentMethod === 0
-                          ? "#1d4ed8"
-                          : "#334155",
+                          ? "var(--color-semantic-info)"
+                          : "var(--erp-muted)",
                       fontWeight: 800,
                       cursor: "pointer",
                     }}
@@ -2755,17 +2783,17 @@ export default function PayrollManagementPage() {
                       minHeight: "50px",
                       border:
                         paymentMethod === 1
-                          ? "2px solid #15803d"
-                          : "1px solid #cbd5e1",
+                          ? "2px solid var(--color-semantic-success)"
+                          : "1px solid var(--erp-border)",
                       borderRadius: "12px",
                       background:
                         paymentMethod === 1
-                          ? "#f0fdf4"
-                          : "#ffffff",
+                          ? "var(--color-semantic-success-tint)"
+                          : "var(--erp-panel)",
                       color:
                         paymentMethod === 1
-                          ? "#166534"
-                          : "#334155",
+                          ? "var(--color-semantic-success)"
+                          : "var(--erp-muted)",
                       fontWeight: 800,
                       cursor: "pointer",
                     }}
@@ -2782,7 +2810,7 @@ export default function PayrollManagementPage() {
                     style={{
                       display: "block",
                       marginBottom: "8px",
-                      color: "#334155",
+                      color: "var(--erp-muted)",
                       fontWeight: 800,
                     }}
                   >
@@ -2836,7 +2864,7 @@ export default function PayrollManagementPage() {
                         style={{
                           margin:
                             "8px 0 0",
-                          color: "#b91c1c",
+                          color: "var(--color-semantic-danger)",
                           fontSize: "13px",
                           fontWeight: 700,
                         }}
@@ -2854,7 +2882,7 @@ export default function PayrollManagementPage() {
                     style={{
                       display: "block",
                       marginBottom: "8px",
-                      color: "#334155",
+                      color: "var(--erp-muted)",
                       fontWeight: 800,
                     }}
                   >
@@ -2905,7 +2933,7 @@ export default function PayrollManagementPage() {
                         style={{
                           margin:
                             "8px 0 0",
-                          color: "#b91c1c",
+                          color: "var(--color-semantic-danger)",
                           fontSize: "13px",
                           fontWeight: 700,
                         }}
@@ -2932,7 +2960,7 @@ export default function PayrollManagementPage() {
                     style={{
                       display: "block",
                       marginBottom: "8px",
-                      color: "#334155",
+                      color: "var(--erp-muted)",
                       fontWeight: 800,
                     }}
                   >
@@ -2958,7 +2986,7 @@ export default function PayrollManagementPage() {
                     style={{
                       display: "block",
                       marginBottom: "8px",
-                      color: "#334155",
+                      color: "var(--erp-muted)",
                       fontWeight: 800,
                     }}
                   >
@@ -2990,10 +3018,10 @@ export default function PayrollManagementPage() {
                 style={{
                   padding: "14px 16px",
                   border:
-                    "1px solid #bfdbfe",
+                    "1px solid var(--color-semantic-info-border)",
                   borderRadius: "12px",
-                  background: "#eff6ff",
-                  color: "#1e3a8a",
+                  background: "var(--color-semantic-info-tint)",
+                  color: "var(--color-semantic-info)",
                   fontSize: "14px",
                   lineHeight: 1.55,
                 }}
@@ -3015,8 +3043,8 @@ export default function PayrollManagementPage() {
                 gap: "12px",
                 padding: "18px 24px",
                 borderTop:
-                  "1px solid #e2e8f0",
-                background: "#f8fafc",
+                  "1px solid var(--erp-border)",
+                background: "var(--erp-bg)",
                 borderRadius:
                   "0 0 20px 20px",
               }}
@@ -3033,10 +3061,10 @@ export default function PayrollManagementPage() {
                   minWidth: "110px",
                   minHeight: "44px",
                   border:
-                    "1px solid #cbd5e1",
+                    "1px solid var(--erp-border)",
                   borderRadius: "10px",
-                  background: "#ffffff",
-                  color: "#334155",
+                  background: "var(--erp-panel)",
+                  color: "var(--erp-muted)",
                   fontWeight: 800,
                   cursor: paymentSubmitting
                     ? "not-allowed"
@@ -3071,9 +3099,9 @@ export default function PayrollManagementPage() {
                       !paymentBankAccountId) ||
                     (paymentMethod === 1 &&
                       !paymentCashAccountId)
-                      ? "#94a3b8"
-                      : "#15803d",
-                  color: "#ffffff",
+                      ? "var(--erp-muted)"
+                      : "var(--color-semantic-success)",
+                  color: "var(--color-on-brand)",
                   fontWeight: 900,
                   cursor:
                     paymentSubmitting ||
@@ -3093,6 +3121,18 @@ export default function PayrollManagementPage() {
         </div>
       )}
 
+      {pending && dialogProps && (
+        <ConfirmDialog
+          open
+          title={dialogProps.title}
+          description={dialogProps.description}
+          confirmLabel={dialogProps.confirmLabel}
+          busy={dialogProps.busy}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={dialogProps.onConfirm}
+        />
+      )}
     </ErpShell>
   );
 }
@@ -3118,9 +3158,9 @@ function PayrollDetailSection({
         style={{
           margin: 0,
           padding: "14px 16px",
-          background: "#f8fafc",
+          background: "var(--erp-bg)",
           borderBottom:
-            "1px solid #e2e8f0",
+            "1px solid var(--erp-border)",
           fontSize: "15px",
         }}
       >
@@ -3137,12 +3177,12 @@ function PayrollDetailSection({
             gap: "20px",
             padding: "11px 16px",
             borderBottom:
-              "1px solid #eef2f7",
+              "1px solid var(--erp-border)",
           }}
         >
           <span
             style={{
-              color: "#475569",
+              color: "var(--erp-muted)",
             }}
           >
             {label}

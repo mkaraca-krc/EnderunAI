@@ -4,6 +4,7 @@ import RehireAssessmentPanel from "@/components/hr/rehire-assessment-panel";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 
 import {
@@ -26,10 +27,7 @@ function getErrorMessage(error: unknown) {
 }
 
 function money(value: number) {
-  return value.toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return amount(value);
 }
 
 function today() {
@@ -164,9 +162,20 @@ export default function TerminationPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Çıkış ve Tazminat"
       description="Personel çıkış kaydı, kıdem/ihbar/izin hesabı ve çıkış simülasyonu"
     >
+      {/* Çıkış kayıtları İK tarafından işleniyor. */}
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          onClick={() => void refreshList()}
+        >
+          Yenile
+        </button>
+      </div>
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-bold text-slate-900">Hesaplama</h2>
         <p className="mt-1 text-xs text-slate-500">

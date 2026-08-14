@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 
 import {
@@ -19,10 +20,7 @@ function getErrorMessage(error: unknown) {
 }
 
 function money(value: number) {
-  return value.toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return amount(value);
 }
 
 /**
@@ -101,7 +99,7 @@ export default function ExtraPaymentsPage() {
 
   if (denied) {
     return (
-      <ErpShell title="Ek Ödemeler" description="Elden ödenen aylık tutarlar">
+      <ErpShell design="redwood" title="Ek Ödemeler" description="Elden ödenen aylık tutarlar">
         <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Bu sayfayı görüntüleme yetkiniz yok. Ek ödeme bilgileri yalnızca
           Genel Müdür, Finans ve Muhasebe rollerine açıktır.
@@ -112,9 +110,20 @@ export default function ExtraPaymentsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Ek Ödemeler"
       description="Elden ödenen aylık tutarlar — resmi bordroda görünmez"
     >
+      {/* Elden ödeme kayıtları başka kullanıcılarca giriliyor. */}
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          onClick={() => void refresh()}
+        >
+          Yenile
+        </button>
+      </div>
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           Buradaki tutarlar resmi kasa, banka ve muhasebe defterinden

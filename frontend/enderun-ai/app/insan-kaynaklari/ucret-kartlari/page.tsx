@@ -9,6 +9,8 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { currencyMoney } from "@/lib/format/turkish";
 
 import {
   CompanyListItem,
@@ -71,8 +73,8 @@ const emptyForm: SalaryForm = {
 };
 
 const panelStyle = {
-  background: "#ffffff",
-  border: "1px solid #e2e8f0",
+  background: "var(--erp-panel)",
+  border: "1px solid var(--erp-border)",
   borderRadius: "16px",
   boxShadow:
     "0 8px 24px rgba(15, 23, 42, 0.05)",
@@ -81,25 +83,18 @@ const panelStyle = {
 const inputStyle = {
   width: "100%",
   minHeight: "42px",
-  border: "1px solid #cbd5e1",
+  border: "1px solid var(--erp-border)",
   borderRadius: "10px",
   padding: "8px 11px",
-  background: "#ffffff",
-  color: "#0f172a",
+  background: "var(--erp-panel)",
+  color: "var(--erp-text)",
 };
 
 function money(
   value: number,
   currencyCode = "TRY"
 ) {
-  return new Intl.NumberFormat(
-    "tr-TR",
-    {
-      style: "currency",
-      currency: currencyCode || "TRY",
-      maximumFractionDigits: 2,
-    }
-  ).format(value ?? 0);
+  return currencyMoney(value ?? 0, currencyCode || "TRY");
 }
 
 function dateValue(
@@ -224,6 +219,9 @@ export default function SalaryCardsPage() {
     saving,
     setSaving,
   ] = useState(false);
+
+  /** Silinmek üzere onay bekleyen maaş kartı. */
+  const [pending, setPending] = useState<SalaryDefinition | null>(null);
 
   const [
     actionId,
@@ -735,20 +733,7 @@ export default function SalaryCardsPage() {
   async function deleteRecord(
     record: SalaryDefinition
   ) {
-    const employee =
-      personnelMap.get(
-        record.personnelId
-      );
-
-    const confirmed =
-      window.confirm(
-        `${employee?.fullName ?? "Personel"} maaş kartı silinsin mi?`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setPending(null);
     setActionId(record.id);
     setError("");
     setSuccess("");
@@ -776,9 +761,20 @@ export default function SalaryCardsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Maaş Kartları"
       description="Resmî net, elden ödeme ve toplam ele geçen tek ekranda; günlük/saatlik ücret ve mesai katsayıları dahil."
     >
+      {/* Maaş kartları başka İK kullanıcısınca da düzenleniyor. */}
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          onClick={() => void loadRecords()}
+        >
+          Yenile
+        </button>
+      </div>
       <div
         style={{
           display: "grid",
@@ -791,14 +787,14 @@ export default function SalaryCardsPage() {
               ...panelStyle,
               padding: "14px 16px",
               color: error
-                ? "#b91c1c"
-                : "#166534",
+                ? "var(--color-semantic-danger)"
+                : "var(--color-semantic-success)",
               background: error
-                ? "#fef2f2"
-                : "#f0fdf4",
+                ? "var(--color-semantic-danger-tint)"
+                : "var(--color-semantic-success-tint)",
               borderColor: error
-                ? "#fecaca"
-                : "#bbf7d0",
+                ? "var(--color-semantic-danger-border)"
+                : "var(--color-semantic-success-border)",
               fontWeight: 700,
             }}
           >
@@ -846,7 +842,7 @@ export default function SalaryCardsPage() {
               >
                 <div
                   style={{
-                    color: "#64748b",
+                    color: "var(--erp-muted)",
                     fontSize: "13px",
                     fontWeight: 700,
                   }}
@@ -858,7 +854,7 @@ export default function SalaryCardsPage() {
                   style={{
                     display: "block",
                     marginTop: "8px",
-                    color: "#0f172a",
+                    color: "var(--erp-text)",
                     fontSize: "23px",
                   }}
                 >
@@ -1015,8 +1011,8 @@ export default function SalaryCardsPage() {
                 border: "none",
                 borderRadius: "10px",
                 padding: "0 18px",
-                background: "#0f766e",
-                color: "#ffffff",
+                background: "var(--erp-primary)",
+                color: "var(--color-on-brand)",
                 fontWeight: 800,
                 cursor: "pointer",
               }}
@@ -1049,7 +1045,7 @@ export default function SalaryCardsPage() {
                 <tr
                   style={{
                     background:
-                      "#f8fafc",
+                      "var(--erp-bg)",
                   }}
                 >
                   {[
@@ -1074,11 +1070,11 @@ export default function SalaryCardsPage() {
                         textAlign:
                           "left",
                         color:
-                          "#475569",
+                          "var(--erp-muted)",
                         fontSize:
                           "13px",
                         borderBottom:
-                          "1px solid #e2e8f0",
+                          "1px solid var(--erp-border)",
                       }}
                     >
                       {title}
@@ -1100,7 +1096,7 @@ export default function SalaryCardsPage() {
                           textAlign:
                             "center",
                           color:
-                            "#64748b",
+                            "var(--erp-muted)",
                         }}
                       >
                         Maaş kartı
@@ -1152,7 +1148,7 @@ export default function SalaryCardsPage() {
                             padding:
                               "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                           }}
                         >
                           <strong>
@@ -1164,7 +1160,7 @@ export default function SalaryCardsPage() {
                           <div
                             style={{
                               color:
-                                "#64748b",
+                                "var(--erp-muted)",
                               fontSize:
                                 "12px",
                               marginTop:
@@ -1182,7 +1178,7 @@ export default function SalaryCardsPage() {
                             padding:
                               "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                           }}
                         >
                           {dateValue(
@@ -1198,7 +1194,7 @@ export default function SalaryCardsPage() {
                             padding:
                               "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                           }}
                         >
                           {dateValue(
@@ -1220,7 +1216,7 @@ export default function SalaryCardsPage() {
                             padding:
                               "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                           }}
                         >
                           {money(
@@ -1232,7 +1228,7 @@ export default function SalaryCardsPage() {
                             <small
                               style={{
                                 display: "block",
-                                color: "#64748b",
+                                color: "var(--erp-muted)",
                               }}
                             >
                               netten hesaplandı
@@ -1245,7 +1241,7 @@ export default function SalaryCardsPage() {
                             padding:
                               "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                           }}
                         >
                           {money(
@@ -1259,11 +1255,11 @@ export default function SalaryCardsPage() {
                           style={{
                             padding: "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                           }}
                         >
                           {record.extraPaymentHidden ? (
-                            <span style={{ color: "#94a3b8" }}>
+                            <span style={{ color: "var(--erp-muted)" }}>
                               gizli
                             </span>
                           ) : record.extraPaymentMonthlyAmount ? (
@@ -1280,7 +1276,7 @@ export default function SalaryCardsPage() {
                           style={{
                             padding: "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                             fontWeight: 700,
                           }}
                         >
@@ -1297,7 +1293,7 @@ export default function SalaryCardsPage() {
                             padding:
                               "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                           }}
                         >
                           {money(
@@ -1311,7 +1307,7 @@ export default function SalaryCardsPage() {
                             padding:
                               "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                           }}
                         >
                           {money(
@@ -1325,7 +1321,7 @@ export default function SalaryCardsPage() {
                             padding:
                               "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                             fontSize:
                               "12px",
                             lineHeight:
@@ -1356,7 +1352,7 @@ export default function SalaryCardsPage() {
                             padding:
                               "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                           }}
                         >
                           <span
@@ -1369,12 +1365,12 @@ export default function SalaryCardsPage() {
                                 "5px 9px",
                               background:
                                 active
-                                  ? "#dcfce7"
-                                  : "#f1f5f9",
+                                  ? "var(--color-semantic-success-tint)"
+                                  : "var(--erp-bg)",
                               color:
                                 active
-                                  ? "#166534"
-                                  : "#475569",
+                                  ? "var(--color-semantic-success)"
+                                  : "var(--erp-muted)",
                               fontSize:
                                 "12px",
                               fontWeight:
@@ -1392,7 +1388,7 @@ export default function SalaryCardsPage() {
                             padding:
                               "13px 14px",
                             borderBottom:
-                              "1px solid #eef2f7",
+                              "1px solid var(--erp-border)",
                           }}
                         >
                           <div
@@ -1411,11 +1407,11 @@ export default function SalaryCardsPage() {
                               }
                               style={{
                                 border:
-                                  "1px solid #cbd5e1",
+                                  "1px solid var(--erp-border)",
                                 borderRadius:
                                   "8px",
                                 background:
-                                  "#ffffff",
+                                  "var(--erp-panel)",
                                 padding:
                                   "7px 10px",
                                 cursor:
@@ -1434,19 +1430,17 @@ export default function SalaryCardsPage() {
                                 record.id
                               }
                               onClick={() =>
-                                void deleteRecord(
-                                  record
-                                )
+                                setPending(record)
                               }
                               style={{
                                 border:
-                                  "1px solid #fecaca",
+                                  "1px solid var(--color-semantic-danger-border)",
                                 borderRadius:
                                   "8px",
                                 background:
-                                  "#fef2f2",
+                                  "var(--color-semantic-danger-tint)",
                                 color:
-                                  "#b91c1c",
+                                  "var(--color-semantic-danger)",
                                 padding:
                                   "7px 10px",
                                 cursor:
@@ -1491,7 +1485,7 @@ export default function SalaryCardsPage() {
               maxHeight: "92vh",
               overflowY: "auto",
               borderRadius: "18px",
-              background: "#ffffff",
+              background: "var(--erp-panel)",
               boxShadow:
                 "0 24px 80px rgba(15, 23, 42, 0.3)",
             }}
@@ -1505,14 +1499,14 @@ export default function SalaryCardsPage() {
                 gap: "15px",
                 padding: "20px 22px",
                 borderBottom:
-                  "1px solid #e2e8f0",
+                  "1px solid var(--erp-border)",
               }}
             >
               <div>
                 <h2
                   style={{
                     margin: 0,
-                    color: "#0f172a",
+                    color: "var(--erp-text)",
                   }}
                 >
                   {editingId
@@ -1525,7 +1519,7 @@ export default function SalaryCardsPage() {
                     margin:
                       "5px 0 0",
                     color:
-                      "#64748b",
+                      "var(--erp-muted)",
                   }}
                 >
                   Bordro ve işçilik
@@ -1543,11 +1537,11 @@ export default function SalaryCardsPage() {
                   width: "38px",
                   height: "38px",
                   border:
-                    "1px solid #e2e8f0",
+                    "1px solid var(--erp-border)",
                   borderRadius:
                     "10px",
                   background:
-                    "#ffffff",
+                    "var(--erp-panel)",
                   fontSize: "22px",
                   cursor:
                     "pointer",
@@ -1740,9 +1734,9 @@ export default function SalaryCardsPage() {
                   style={{
                     ...inputStyle,
                     background:
-                      "#f1f5f9",
+                      "var(--erp-bg)",
                     color:
-                      "#475569",
+                      "var(--erp-muted)",
                     cursor:
                       "not-allowed",
                   }}
@@ -1852,7 +1846,7 @@ export default function SalaryCardsPage() {
                   style={{
                     display: "block",
                     marginTop: "6px",
-                    color: "#64748b",
+                    color: "var(--erp-muted)",
                   }}
                 >
                   {form.salaryBasis === "1"
@@ -2075,9 +2069,9 @@ export default function SalaryCardsPage() {
                 gap: "12px",
                 padding: "18px 22px",
                 borderTop:
-                  "1px solid #e2e8f0",
+                  "1px solid var(--erp-border)",
                 background:
-                  "#f8fafc",
+                  "var(--erp-bg)",
               }}
             >
               <button
@@ -2087,11 +2081,11 @@ export default function SalaryCardsPage() {
                 style={{
                   minHeight: "43px",
                   border:
-                    "1px solid #cbd5e1",
+                    "1px solid var(--erp-border)",
                   borderRadius:
                     "10px",
                   background:
-                    "#ffffff",
+                    "var(--erp-panel)",
                   padding:
                     "0 17px",
                   fontWeight: 800,
@@ -2112,9 +2106,9 @@ export default function SalaryCardsPage() {
                     "10px",
                   background:
                     saving
-                      ? "#94a3b8"
-                      : "#0f766e",
-                  color: "#ffffff",
+                      ? "var(--erp-muted)"
+                      : "var(--erp-primary)",
+                  color: "var(--color-on-brand)",
                   padding:
                     "0 20px",
                   fontWeight: 900,
@@ -2134,14 +2128,23 @@ export default function SalaryCardsPage() {
           </form>
         </div>
       )}
+      {pending && (
+        <ConfirmDialog
+          open
+          title="Maaş Kartını Sil"
+          description={`${
+            personnelMap.get(pending.personnelId)?.fullName ?? "Personel"
+          } maaş kartı kalıcı olarak silinecek. Bu kart bordroya girdiyse geçmiş bordrolar etkilenmez, ama yeni dönemde ücret bilgisi kalmaz.`}
+          confirmLabel="Kartı Sil"
+          busy={actionId === pending.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() => void deleteRecord(pending)}
+        />
+      )}
     </ErpShell>
   );
 }
-
-const moneyFormat = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 /**
  * Girilen nete karşılık gelen brütü ve kesinti kırılımını canlı
@@ -2216,7 +2219,7 @@ function NetToGrossPreview({
 
   if (loading && !result) {
     return (
-      <small style={{ display: "block", marginTop: "8px", color: "#64748b" }}>
+      <small style={{ display: "block", marginTop: "8px", color: "var(--erp-muted)" }}>
         Brüt hesaplanıyor...
       </small>
     );
@@ -2224,7 +2227,7 @@ function NetToGrossPreview({
 
   if (error) {
     return (
-      <small style={{ display: "block", marginTop: "8px", color: "#b91c1c" }}>
+      <small style={{ display: "block", marginTop: "8px", color: "var(--color-semantic-danger)" }}>
         {error}
       </small>
     );
@@ -2238,36 +2241,36 @@ function NetToGrossPreview({
         marginTop: "10px",
         padding: "12px 14px",
         borderRadius: "10px",
-        background: "#f8fafc",
-        border: "1px solid #e2e8f0",
+        background: "var(--erp-bg)",
+        border: "1px solid var(--erp-border)",
         fontSize: "13px",
       }}
     >
       <strong style={{ display: "block", marginBottom: "6px" }}>
-        Hesaplanan brüt: {moneyFormat.format(result.grossSalary)}
+        Hesaplanan brüt: {money(result.grossSalary)}
       </strong>
 
-      <div style={{ color: "#475569", lineHeight: 1.7 }}>
-        SGK işçi: {moneyFormat.format(result.sgkEmployee)} · İşsizlik:{" "}
-        {moneyFormat.format(result.unemploymentEmployee)} · Gelir vergisi:{" "}
-        {moneyFormat.format(result.incomeTax)} · Damga:{" "}
-        {moneyFormat.format(result.stampTax)}
+      <div style={{ color: "var(--erp-muted)", lineHeight: 1.7 }}>
+        SGK işçi: {money(result.sgkEmployee)} · İşsizlik:{" "}
+        {money(result.unemploymentEmployee)} · Gelir vergisi:{" "}
+        {money(result.incomeTax)} · Damga:{" "}
+        {money(result.stampTax)}
         <br />
-        Toplam kesinti: {moneyFormat.format(result.totalDeductions)} · İşverene
-        maliyeti: {moneyFormat.format(result.totalEmployerCost)}
+        Toplam kesinti: {money(result.totalDeductions)} · İşverene
+        maliyeti: {money(result.totalEmployerCost)}
       </div>
 
       {!result.isExact && (
-        <div style={{ marginTop: "8px", color: "#b45309" }}>
+        <div style={{ marginTop: "8px", color: "var(--color-semantic-warning)" }}>
           Yuvarlama nedeniyle tam olarak bu net yakalanamıyor; en yakın brütle
-          ele geçen {moneyFormat.format(result.achievedNet)} (
+          ele geçen {money(result.achievedNet)} (
           {result.difference > 0 ? "+" : ""}
-          {moneyFormat.format(result.difference)}).
+          {money(result.difference)}).
         </div>
       )}
 
       <small
-        style={{ display: "block", marginTop: "8px", color: "#64748b" }}
+        style={{ display: "block", marginTop: "8px", color: "var(--erp-muted)" }}
       >
         Ocak esaslı referans. Bordroda her ayın kümülatif vergi matrahıyla
         yeniden hesaplanır; ele geçen net her ay aynı kalır.

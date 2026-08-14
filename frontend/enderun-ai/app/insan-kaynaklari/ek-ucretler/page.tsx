@@ -8,6 +8,8 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { currencyMoney } from "@/lib/format/turkish";
 
 import {
   CompensationComponent,
@@ -114,14 +116,10 @@ function money(
   value: number,
   currencyCode = "TRY"
 ) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency:
-      currencyCode === "MIXED"
-        ? "TRY"
-        : currencyCode,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(
+    value,
+    currencyCode === "MIXED" ? "TRY" : currencyCode
+  );
 }
 
 function dateValue(value?: string | null) {
@@ -197,6 +195,11 @@ export default function AdditionalCompensationPage() {
 
   const [saving, setSaving] =
     useState(false);
+
+  /** Silinmek üzere onay bekleyen ücret bileşeni. */
+  const [pending, setPending] = useState<CompensationComponent | null>(
+    null
+  );
 
   const [actionId, setActionId] =
     useState<string | null>(null);
@@ -586,16 +589,7 @@ export default function AdditionalCompensationPage() {
   async function remove(
     item: CompensationComponent
   ) {
-    const person =
-      personnelById.get(item.personnelId);
-
-    const confirmed = window.confirm(
-      `${person?.fullName ?? "Personel"} için ` +
-      `"${item.name}" ücret bileşeni silinsin mi?`
-    );
-
-    if (!confirmed) return;
-
+    setPending(null);
     setActionId(item.id);
     setError("");
     setSuccess("");
@@ -623,9 +617,20 @@ export default function AdditionalCompensationPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Personel Ücret Kartları"
       description="Resmî maaş, düzenli ek ödemeler ve puantaja bağlı ücret bileşenleri"
     >
+      {/* Ücret bileşenleri bordro döneminde sık değişiyor. */}
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          onClick={() => void loadData()}
+        >
+          Yenile
+        </button>
+      </div>
       {error && (
         <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error}
@@ -1456,9 +1461,7 @@ export default function AdditionalCompensationPage() {
                           disabled={
                             actionId === item.id
                           }
-                          onClick={() =>
-                            remove(item)
-                          }
+                          onClick={() => setPending(item)}
                           className="rounded border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-50"
                         >
                           Sil
@@ -1484,6 +1487,20 @@ export default function AdditionalCompensationPage() {
           </table>
         </div>
       </section>
+      {pending && (
+        <ConfirmDialog
+          open
+          title="Ücret Bileşenini Sil"
+          description={`${
+            personnelById.get(pending.personnelId)?.fullName ?? "Personel"
+          } için "${pending.name}" bileşeni kalıcı olarak silinecek. Bileşen bundan sonraki bordrolara girmez.`}
+          confirmLabel="Bileşeni Sil"
+          busy={actionId === pending.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() => void remove(pending)}
+        />
+      )}
     </ErpShell>
   );
 }

@@ -8,6 +8,8 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { currencyMoney } from "@/lib/format/turkish";
 import {
   hrAdvanceService,
   HrAdvanceItem,
@@ -62,10 +64,7 @@ function statusLabel(value: number) {
 }
 
 function money(value: number, currency: string) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: currency || "TRY",
-  }).format(value);
+  return currencyMoney(value, currency || "TRY");
 }
 
 function formatDate(value?: string | null) {
@@ -88,6 +87,14 @@ export default function AdvancePage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** Onay bekleyen avans işlemi. */
+  const [pending, setPending] = useState<
+    | { kind: "approve"; item: HrAdvanceItem }
+    | { kind: "pay"; item: HrAdvanceItem }
+    | { kind: "delete"; item: HrAdvanceItem }
+    | null
+  >(null);
+
   const [actionId, setActionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -289,8 +296,7 @@ export default function AdvancePage() {
   }
 
   async function approve(item: HrAdvanceItem) {
-    if (!window.confirm("Avans talebi onaylansın mı?")) return;
-
+    setPending(null);
     setActionId(item.id);
 
     try {
@@ -306,14 +312,8 @@ export default function AdvancePage() {
     }
   }
 
-  async function markPaid(item: HrAdvanceItem) {
-    const reference = window.prompt(
-      "Ödeme referansı / dekont numarası:",
-      item.paymentReference ?? ""
-    );
-
-    if (reference === null) return;
-
+  async function markPaid(item: HrAdvanceItem, reference: string) {
+    setPending(null);
     setActionId(item.id);
 
     try {
@@ -330,8 +330,7 @@ export default function AdvancePage() {
   }
 
   async function remove(item: HrAdvanceItem) {
-    if (!window.confirm("Avans kaydı silinsin mi?")) return;
-
+    setPending(null);
     setActionId(item.id);
 
     try {
@@ -349,6 +348,7 @@ export default function AdvancePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Personel Avansları"
       description="Avans talep, onay, ödeme ve bordro mahsup süreçleri"
     >
@@ -738,7 +738,7 @@ export default function AdvancePage() {
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => approve(item)}
+                            onClick={() => setPending({ kind: "approve", item })}
                             className="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white"
                           >
                             Onayla
@@ -749,7 +749,7 @@ export default function AdvancePage() {
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => markPaid(item)}
+                            onClick={() => setPending({ kind: "pay", item })}
                             className="rounded bg-blue-700 px-3 py-1.5 text-xs text-white"
                           >
                             Ödendi
@@ -759,7 +759,7 @@ export default function AdvancePage() {
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={() => remove(item)}
+                          onClick={() => setPending({ kind: "delete", item })}
                           className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
                         >
                           Sil
@@ -781,6 +781,51 @@ export default function AdvancePage() {
           </table>
         </div>
       </section>
+      {pending && (
+        <ConfirmDialog
+          key={`${pending.kind}-${pending.item.id}`}
+          open
+          title={
+            pending.kind === "approve"
+              ? "Avans Talebini Onayla"
+              : pending.kind === "pay"
+                ? "Avansı Ödenmiş İşaretle"
+                : "Avans Kaydını Sil"
+          }
+          description={
+            pending.kind === "approve"
+              ? "Avans talebi onaylanacak ve ödemeye hazır hâle gelecek."
+              : pending.kind === "pay"
+                ? "Avans ödenmiş olarak işaretlenecek ve taksitleri bordrodan kesilmeye başlayacak. Dekont numarasını yazarsanız kayda geçer."
+                : "Avans kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz."
+          }
+          confirmLabel={
+            pending.kind === "approve"
+              ? "Talebi Onayla"
+              : pending.kind === "pay"
+                ? "Ödenmiş İşaretle"
+                : "Kaydı Sil"
+          }
+          showReason={pending.kind === "pay"}
+          reasonLabel="Ödeme referansı / dekont numarası (isteğe bağlı)"
+          busy={actionId === pending.item.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={(reference) => {
+            if (pending.kind === "approve") {
+              void approve(pending.item);
+              return;
+            }
+
+            if (pending.kind === "pay") {
+              void markPaid(pending.item, reference);
+              return;
+            }
+
+            void remove(pending.item);
+          }}
+        />
+      )}
     </ErpShell>
   );
 }

@@ -3,16 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
   hrPayrollService,
   type PayrollCostReport,
 } from "@/services/hr-payroll.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const MONTHS = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -51,12 +47,12 @@ function Row({
         {strong ? (
           <strong>
             {negative ? "−" : ""}
-            {money.format(value)}
+            {money(value)}
           </strong>
         ) : (
           <>
             {negative ? "−" : ""}
-            {money.format(value)}
+            {money(value)}
           </>
         )}
       </td>
@@ -118,16 +114,27 @@ export default function PayrollCostReportPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Bordro Maliyet Raporu"
       description="Aylık brütten işverene toplam maliyete kadar kırılım ve proje/şantiye dağılımı"
     >
+      {/* Rapor bordro muhasebeleştirildikçe değişiyor. */}
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          onClick={() => void loadReport()}
+        >
+          Yenile
+        </button>
+      </div>
       <div className="erp-page-toolbar">
         <div>
           {report && (
             <>
               <strong>
                 {report.personnelCount} personel · toplam işveren maliyeti{" "}
-                {money.format(report.totals.totalEmployerCost)}
+                {money(report.totals.totalEmployerCost)}
               </strong>
               <small style={{ display: "block", marginTop: "4px" }}>
                 {report.paidCount} bordro ödenmiş
@@ -232,8 +239,8 @@ export default function PayrollCostReportPage() {
               <div style={{ padding: "0 16px 16px" }}>
                 <small>
                   Asgari ücret istisnası sayesinde kesilmeyen vergi:{" "}
-                  {money.format(totals.incomeTaxExemption)} gelir,{" "}
-                  {money.format(totals.stampTaxExemption)} damga.
+                  {money(totals.incomeTaxExemption)} gelir,{" "}
+                  {money(totals.stampTaxExemption)} damga.
                 </small>
               </div>
             )}
@@ -267,21 +274,21 @@ export default function PayrollCostReportPage() {
                       </td>
                       <td>{person.jobTitle ?? "—"}</td>
                       <td style={{ textAlign: "right" }}>
-                        {money.format(person.grossSalary)}
+                        {money(person.grossSalary)}
                       </td>
                       <td style={{ textAlign: "right" }}>
                         {person.overtimeAmount > 0
-                          ? money.format(person.overtimeAmount)
+                          ? money(person.overtimeAmount)
                           : "—"}
                       </td>
                       <td style={{ textAlign: "right" }}>
-                        {money.format(person.totalDeductions)}
+                        {money(person.totalDeductions)}
                       </td>
                       <td style={{ textAlign: "right" }}>
-                        <strong>{money.format(person.officialNetPayableAmount)}</strong>
+                        <strong>{money(person.officialNetPayableAmount)}</strong>
                       </td>
                       <td style={{ textAlign: "right" }}>
-                        {money.format(person.totalEmployerCost)}
+                        {money(person.totalEmployerCost)}
                       </td>
                       <td>
                         <span
@@ -345,16 +352,16 @@ export default function PayrollCostReportPage() {
                         </td>
                         <td style={{ textAlign: "right" }}>{row.dayCount}</td>
                         <td style={{ textAlign: "right" }}>
-                          {money.format(row.normalCost)}
+                          {money(row.normalCost)}
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          {money.format(row.overtimeCost)}
+                          {money(row.overtimeCost)}
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          {money.format(row.holidayCost)}
+                          {money(row.holidayCost)}
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          <strong>{money.format(row.totalCost)}</strong>
+                          <strong>{money(row.totalCost)}</strong>
                         </td>
                       </tr>
                     ))}

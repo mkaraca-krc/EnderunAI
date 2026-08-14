@@ -109,6 +109,8 @@
   --color-semantic-warning-border: #ecd9a6;
   --color-semantic-danger-tint: #fbeeee;
   --color-semantic-danger-border: #eec4c4;
+  --color-semantic-info-tint: #e8f1f1;
+  --color-semantic-info-border: #b6d2d2;
 
   /* Nötr yüzeyler */
   --color-surface-bg: #f4f6f6;
