@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
 import { branchService, type BranchListItem } from "@/services/branch.service";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -16,11 +17,6 @@ import {
   WAREHOUSE_TYPES,
   type WarehouseListItem,
 } from "@/services/warehouse.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 function typeLabel(type: number) {
   return WAREHOUSE_TYPES.find((option) => option.value === type)?.label ?? "—";
@@ -202,6 +198,7 @@ export default function WarehousesPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Depolar"
       description="Merkez, şantiye, araç ve geçici depoların tanımı"
     >
@@ -209,7 +206,7 @@ export default function WarehousesPage() {
         <div>
           <strong>{warehouses.length} depo</strong>
           <small style={{ display: "block", marginTop: "4px" }}>
-            Toplam stok değeri: {money.format(totalValue)}
+            Toplam stok değeri: {money(totalValue)}
           </small>
         </div>
 
@@ -407,8 +404,8 @@ export default function WarehousesPage() {
                   <th>Depo</th>
                   <th>Tip</th>
                   <th>Proje / Şantiye</th>
-                  <th style={{ textAlign: "right" }}>Kalem</th>
-                  <th style={{ textAlign: "right" }}>Stok Değeri</th>
+                  <th className="num">Kalem</th>
+                  <th className="num">Stok Değeri</th>
                   <th>Durum</th>
                   {canManage && <th></th>}
                 </tr>
@@ -428,11 +425,11 @@ export default function WarehousesPage() {
                       {warehouse.projectCode ?? "Merkez"}
                       {warehouse.siteName && <small>{warehouse.siteName}</small>}
                     </td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className="num">
                       {warehouse.stockLineCount}
                     </td>
-                    <td style={{ textAlign: "right" }}>
-                      {money.format(warehouse.stockValue)}
+                    <td className="num">
+                      {money(warehouse.stockValue)}
                     </td>
                     <td>
                       <span

@@ -170,6 +170,7 @@ function NewGoodsReceiptContent() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Mal Kabul Oluştur"
       description="Teslimat belgesini taslak olarak açın; miktar ve stok kartları sonraki ekranda doğrulanır"
     >

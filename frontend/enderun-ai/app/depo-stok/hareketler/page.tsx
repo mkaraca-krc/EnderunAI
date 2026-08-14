@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount } from "@/lib/format/turkish";
 import {
   inventoryMovementService,
   type InventoryMovement,
@@ -20,11 +21,6 @@ const MOVEMENT_LABELS: Record<number, string> = {
 };
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 /** Giriş yeşil, çıkış sarı, düzeltme mavi — rozet tek bakışta okunur. */
 function movementColor(type: number) {
   if (type === 0 || type === 3 || type === 4) return "green";
@@ -49,6 +45,7 @@ export default function StockMovementsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Stok Hareketleri"
       description="Giriş, çıkış, transfer ve sayım hareketlerinin tek defteri"
     >
@@ -100,8 +97,8 @@ export default function StockMovementsPage() {
                   <th>Malzeme</th>
                   <th>Depo</th>
                   <th>Proje / Şantiye</th>
-                  <th style={{ textAlign: "right" }}>Miktar</th>
-                  <th style={{ textAlign: "right" }}>Tutar (TRY)</th>
+                  <th className="num">Miktar</th>
+                  <th className="num">Tutar (TRY)</th>
                   <th>Belge No</th>
                 </tr>
               </thead>
@@ -128,10 +125,10 @@ export default function StockMovementsPage() {
                         <small>{movement.projectSiteName}</small>
                       )}
                     </td>
-                    <td style={{ textAlign: "right" }}>{movement.quantity}</td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className="num">{movement.quantity}</td>
+                    <td className="num">
                       {movement.totalCost != null
-                        ? money.format(movement.totalCost)
+                        ? amount(movement.totalCost)
                         : "—"}
                     </td>
                     <td>

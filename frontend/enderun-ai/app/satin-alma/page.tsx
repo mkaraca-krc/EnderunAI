@@ -64,7 +64,7 @@ export default function PurchasingPage(){
     catch(e){setError(e instanceof Error?e.message:"Talep oluşturulamadı.");}finally{setSaving(false);}
   }
 
-  return <ErpShell title="Satın Alma Talepleri" description="Proje bazlı talep ve onay süreçleri">
+  return <ErpShell design="redwood" title="Satın Alma Talepleri" description="Proje bazlı talep ve onay süreçleri">
     {error&&<div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
     {success&&<div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
     <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4"><StatCard title="Toplam Talep" value={loading?"…":items.length} icon="⌑"/><StatCard title="Açık Talep" value={loading?"…":pending} icon="◷"/><StatCard title="Onay Bekleyen" value={loading?"…":approval} icon="✓"/><StatCard title="Kritik" value={loading?"…":critical} icon="!"/></div>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { currencyMoney } from "@/lib/format/turkish";
 import {
   Badge,
   Card,
@@ -47,11 +48,7 @@ function formatDate(value?: string | null) {
 }
 
 function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 export default function PurchaseOrderListPage() {
@@ -158,6 +155,7 @@ export default function PurchaseOrderListPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Satın Alma Siparişleri"
       description="Kazanan tedarikçi tekliflerinden oluşturulan siparişler"
     >

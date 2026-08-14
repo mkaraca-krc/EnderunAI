@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money, quantity } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
 import {
   currentAccountService,
@@ -16,12 +17,7 @@ import {
   type InventoryItemType,
 } from "@/services/inventory.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
-const number = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
 
 const UNITS = ["Adet", "Metre", "Kg", "Takım", "Kutu", "Paket", "Rulo"];
 
@@ -182,7 +178,7 @@ export default function InventoryItemDetailPage() {
 
   if (loading) {
     return (
-      <ErpShell title="Malzeme Kartı" description="Kart yükleniyor">
+      <ErpShell design="redwood" title="Malzeme Kartı" description="Kart yükleniyor">
         <div className="erp-loading">Yükleniyor...</div>
       </ErpShell>
     );
@@ -190,7 +186,7 @@ export default function InventoryItemDetailPage() {
 
   if (!item) {
     return (
-      <ErpShell title="Malzeme Kartı" description="Kart bulunamadı">
+      <ErpShell design="redwood" title="Malzeme Kartı" description="Kart bulunamadı">
         <div className="erp-alert error">
           {error || "Malzeme kartı bulunamadı."}
         </div>
@@ -205,6 +201,7 @@ export default function InventoryItemDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`${item.code} — ${item.name}`}
       description={`${TYPE_LABELS[item.type] ?? "Malzeme"} · ${item.companyName}`}
     >
@@ -214,12 +211,12 @@ export default function InventoryItemDetailPage() {
       <div className="erp-page-toolbar">
         <div>
           <strong>
-            {number.format(item.totalStock)} {item.unit}
+            {quantity(item.totalStock)} {item.unit}
           </strong>
           <small style={{ display: "block", marginTop: "4px" }}>
-            Stok: {number.format(item.totalStock)} {item.unit}
+            Stok: {quantity(item.totalStock)} {item.unit}
             {" · "}
-            Stok değeri: {money.format(item.stockValue)}
+            Stok değeri: {money(item.stockValue)}
           </small>
         </div>
 
@@ -240,14 +237,14 @@ export default function InventoryItemDetailPage() {
         <div className="erp-detail-grid">
           <div>
             <span className="erp-stat-label">Ağırlıklı ortalama maliyet</span>
-            <strong>{money.format(item.averageUnitCost)}</strong>
+            <strong>{money(item.averageUnitCost)}</strong>
           </div>
           <div>
             <span className="erp-stat-label">Son alış fiyatı</span>
             <strong>
               {item.lastPurchasePrice == null
                 ? "—"
-                : money.format(item.lastPurchasePrice)}
+                : money(item.lastPurchasePrice)}
             </strong>
             {item.lastPurchaseDate && (
               <small>{dateFormat.format(new Date(item.lastPurchaseDate))}</small>
@@ -285,9 +282,9 @@ export default function InventoryItemDetailPage() {
               <thead>
                 <tr>
                   <th>Depo</th>
-                  <th style={{ textAlign: "right" }}>Miktar</th>
-                  <th style={{ textAlign: "right" }}>Kullanılabilir</th>
-                  <th style={{ textAlign: "right" }}>Değer</th>
+                  <th className="num">Miktar</th>
+                  <th className="num">Kullanılabilir</th>
+                  <th className="num">Değer</th>
                 </tr>
               </thead>
               <tbody>
@@ -297,15 +294,15 @@ export default function InventoryItemDetailPage() {
                       <strong>{warehouse.warehouseName}</strong>
                       <small>{warehouse.warehouseCode}</small>
                     </td>
-                    <td style={{ textAlign: "right" }}>
-                      {number.format(warehouse.quantity)} {item.unit}
+                    <td className="num">
+                      {quantity(warehouse.quantity)} {item.unit}
                     </td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className="num">
                     </td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className="num">
                     </td>
-                    <td style={{ textAlign: "right" }}>
-                      {money.format(warehouse.quantity * item.averageUnitCost)}
+                    <td className="num">
+                      {money(warehouse.quantity * item.averageUnitCost)}
                     </td>
                   </tr>
                 ))}

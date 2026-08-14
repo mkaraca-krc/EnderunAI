@@ -9,6 +9,8 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { quantity } from "@/lib/format/turkish";
 
 import {
   purchaseRequestService,
@@ -35,9 +37,7 @@ const priorityLabels: Record<number, string> = {
 };
 
 function formatNumber(value?: number | null) {
-  return new Intl.NumberFormat("tr-TR", {
-    maximumFractionDigits: 4,
-  }).format(value ?? 0);
+  return quantity(value ?? 0);
 }
 
 function formatDate(value?: string | null) {
@@ -79,6 +79,35 @@ function priorityClass(priority: number) {
 }
 
 
+/**
+ * Malzeme talebi kararları. Eskiden iptal, prompt + confirm ikilisiyle
+ * alınıyordu; gerekçe boş bırakılabiliyor ve kayda boş geçiyordu.
+ * Onaya gönderme ile onaylama ise hiç onay sormuyordu.
+ */
+type RequestAction = "submit" | "approve" | "cancel";
+
+const ACTION_DIALOGS: Record<
+  RequestAction,
+  { title: string; description: string; confirmLabel: string; showReason?: boolean }
+> = {
+  submit: {
+    title: "Talep onaya gönderilsin mi?",
+    description: "Talep onaycıya düşer; onaylanana kadar kalemler değiştirilemez.",
+    confirmLabel: "Onaya Gönder",
+  },
+  approve: {
+    title: "Talep onaylansın mı?",
+    description: "Onaylanan talep için depodan çıkış ya da satın alma başlatılabilir.",
+    confirmLabel: "Onayla",
+  },
+  cancel: {
+    title: "Talep iptal edilsin mi?",
+    description: "İptal edilen talep yeniden açılamaz; gerekçe kayda geçer.",
+    confirmLabel: "İptal Et",
+    showReason: true,
+  },
+};
+
 export default function MaterialRequestDetailPage() {
   const params = useParams<{ id: string }>();
   const requestId = params.id;
@@ -91,6 +120,7 @@ export default function MaterialRequestDetailPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [pendingAction, setPendingAction] = useState<RequestAction | null>(null);
 
   const loadRequest = useCallback(async () => {
     if (!requestId) return;
@@ -141,27 +171,8 @@ export default function MaterialRequestDetailPage() {
   }
 
 
-  async function runRequestAction(
-    action: "submit" | "approve" | "cancel",
-  ) {
+  async function runRequestAction(action: RequestAction, reason: string) {
     if (!request) return;
-
-    let reason = "";
-
-    if (action === "cancel") {
-      reason =
-        window.prompt(
-          "Talep iptal gerekçesini yazın:",
-        ) ?? "";
-
-      if (
-        !window.confirm(
-          "Bu malzeme talebi iptal edilsin mi?",
-        )
-      ) {
-        return;
-      }
-    }
 
     try {
       setProcessing(true);
@@ -182,6 +193,7 @@ export default function MaterialRequestDetailPage() {
                 reason,
               );
 
+      setPendingAction(null);
       setSuccess(result.message);
       await refreshOperationalData();
     } catch (err) {
@@ -204,6 +216,7 @@ export default function MaterialRequestDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={
         request?.requestNumber ??
         "Malzeme Talebi"
@@ -313,11 +326,7 @@ export default function MaterialRequestDetailPage() {
                     <button
                       type="button"
                       disabled={processing}
-                      onClick={() =>
-                        void runRequestAction(
-                          "submit",
-                        )
-                      }
+                      onClick={() => setPendingAction("submit")}
                       className="button-primary"
                     >
                       Onaya Gönder
@@ -328,11 +337,7 @@ export default function MaterialRequestDetailPage() {
                     <button
                       type="button"
                       disabled={processing}
-                      onClick={() =>
-                        void runRequestAction(
-                          "approve",
-                        )
-                      }
+                      onClick={() => setPendingAction("approve")}
                       className="button-primary"
                     >
                       Talebi Onayla
@@ -345,11 +350,7 @@ export default function MaterialRequestDetailPage() {
                     <button
                       type="button"
                       disabled={processing}
-                      onClick={() =>
-                        void runRequestAction(
-                          "cancel",
-                        )
-                      }
+                      onClick={() => setPendingAction("cancel")}
                       className="button-danger"
                     >
                       Talebi İptal Et
@@ -605,6 +606,20 @@ export default function MaterialRequestDetailPage() {
           color: rgb(153 27 27);
         }
       `}</style>
+      {pendingAction && (
+        <ConfirmDialog
+          key={pendingAction}
+          open
+          title={ACTION_DIALOGS[pendingAction].title}
+          description={ACTION_DIALOGS[pendingAction].description}
+          confirmLabel={ACTION_DIALOGS[pendingAction].confirmLabel}
+          showReason={ACTION_DIALOGS[pendingAction].showReason}
+          busy={processing}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={(reason) => void runRequestAction(pendingAction, reason)}
+        />
+      )}
+
     </ErpShell>
   );
 }

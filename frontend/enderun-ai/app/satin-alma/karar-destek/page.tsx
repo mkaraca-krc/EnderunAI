@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount, currencyMoney, percent } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -35,23 +36,11 @@ import {
 } from "@/services/project.service";
 
 function formatMoney(value: number, currency = "TRY") {
-  try {
-    return new Intl.NumberFormat("tr-TR", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return `${value.toLocaleString("tr-TR", {
-      maximumFractionDigits: 2,
-    })} ${currency}`;
-  }
+  return currencyMoney(value, currency);
 }
 
 function formatPercent(value: number) {
-  return `%${value.toLocaleString("tr-TR", {
-    maximumFractionDigits: 1,
-  })}`;
+  return percent(value);
 }
 
 function formatDate(value?: string | null) {
@@ -172,6 +161,7 @@ export default function ProcurementDecisionSupportPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Satın Alma Karar Destek"
       description="Tedarikçi performansı, kur normalize teklif karşılaştırması ve yönetici önerileri"
     >

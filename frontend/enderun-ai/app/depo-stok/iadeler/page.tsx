@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { amount, currencyMoney } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
   PURCHASE_RETURN_STATUS,
@@ -14,17 +16,11 @@ import {
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 function money(value: number, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 function number(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    maximumFractionDigits: 2,
-  }).format(value);
+  return amount(value);
 }
 
 function statusClass(status: number) {
@@ -56,6 +52,10 @@ export default function PurchaseReturnsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [pending, setPending] = useState<{
+    row: PurchaseReturnListItem;
+    status: number;
+  } | null>(null);
 
   const load = useCallback(async () => {
     if (!companyId) return;
@@ -99,26 +99,22 @@ export default function PurchaseReturnsPage() {
     })();
   }, [load]);
 
-  async function advance(row: PurchaseReturnListItem, status: number) {
-    let note: string | null = null;
-
-    if (status === PURCHASE_RETURN_STATUS.Cancelled) {
-      note = (window.prompt("İptal gerekçesi (zorunlu):") ?? "").trim();
-
-      if (!note) {
-        setError(
-          "İptal gerekçesi zorunludur; reddedilmiş mal sessizce kaybolmamalı."
-        );
-        return;
-      }
-    }
-
+  async function advance(
+    row: PurchaseReturnListItem,
+    status: number,
+    note: string,
+  ) {
     setBusy(true);
     setError("");
     setNotice("");
 
     try {
-      const result = await purchaseReturnService.advance(row.id, status, note);
+      const result = await purchaseReturnService.advance(
+        row.id,
+        status,
+        note.trim() || null,
+      );
+      setPending(null);
       setNotice(result.message);
       await load();
     } catch (err) {
@@ -144,6 +140,7 @@ export default function PurchaseReturnsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Alış İadeleri"
       description="Mal kabulde reddedilen ve hasarlı gelen malın tedarikçiye iadesi"
     >
@@ -281,7 +278,7 @@ export default function PurchaseReturnsPage() {
                             className="erp-primary-button"
                             disabled={busy}
                             onClick={() =>
-                              advance(row, PURCHASE_RETURN_STATUS.Sent)
+                              setPending({ row, status: PURCHASE_RETURN_STATUS.Sent })
                             }
                           >
                             Tedarikçiye Gönderildi
@@ -294,7 +291,7 @@ export default function PurchaseReturnsPage() {
                             className="erp-primary-button"
                             disabled={busy}
                             onClick={() =>
-                              advance(row, PURCHASE_RETURN_STATUS.Completed)
+                              setPending({ row, status: PURCHASE_RETURN_STATUS.Completed })
                             }
                           >
                             Kapat
@@ -308,7 +305,7 @@ export default function PurchaseReturnsPage() {
                             className="erp-secondary-button"
                             disabled={busy}
                             onClick={() =>
-                              advance(row, PURCHASE_RETURN_STATUS.Cancelled)
+                              setPending({ row, status: PURCHASE_RETURN_STATUS.Cancelled })
                             }
                           >
                             İptal
@@ -323,6 +320,42 @@ export default function PurchaseReturnsPage() {
           </div>
         )}
       </section>
+      {/*
+        Eskiden yalnızca İPTAL gerekçe soruyordu; "Gönderildi" ve
+        "Tamamlandı" tek tıkla, onaysız işleniyordu. Üçü de tedarikçiyle
+        yapılan mutabakatı değiştiriyor, üçü de onay istiyor.
+      */}
+      {pending && (
+        <ConfirmDialog
+          key={`${pending.row.id}-${pending.status}`}
+          open
+          title={
+            pending.status === PURCHASE_RETURN_STATUS.Cancelled
+              ? "İade iptal edilsin mi?"
+              : pending.status === PURCHASE_RETURN_STATUS.Sent
+                ? "İade gönderildi olarak işaretlensin mi?"
+                : "İade tamamlandı olarak kapatılsın mı?"
+          }
+          description={
+            pending.status === PURCHASE_RETURN_STATUS.Cancelled
+              ? "Reddedilmiş mal sessizce kaybolmamalı: iptal gerekçesi zorunlu."
+              : `${pending.row.returnNumber} numaralı iade için bu adım kaydedilir.`
+          }
+          confirmLabel={
+            pending.status === PURCHASE_RETURN_STATUS.Cancelled
+              ? "İptal Et"
+              : "Onayla"
+          }
+          requireReason={pending.status === PURCHASE_RETURN_STATUS.Cancelled}
+          showReason
+          busy={busy}
+          onCancel={() => setPending(null)}
+          onConfirm={(reason) =>
+            void advance(pending.row, pending.status, reason)
+          }
+        />
+      )}
+
     </ErpShell>
   );
 }

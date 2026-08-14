@@ -371,6 +371,7 @@ export default function NewMaterialRequestPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Malzeme Talebi"
       description="Şantiye veya proje için depodan karşılanacak malzemeleri talep edin."
     >

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { currencyMoney } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -50,11 +51,7 @@ function numberValue(value: string) {
 }
 
 function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 export default function SupplierQuotationPage() {
@@ -269,6 +266,7 @@ export default function SupplierQuotationPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={supplier?.supplierTitle ?? "Tedarikçi Teklifi"}
       description={
         rfq

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount, currencyMoney } from "@/lib/format/turkish";
 import {
   PURCHASE_RETURN_STATUS,
   purchaseReturnService,
@@ -14,17 +15,11 @@ import {
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 function money(value: number, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 function number(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    maximumFractionDigits: 2,
-  }).format(value);
+  return amount(value);
 }
 
 function statusClass(status: number) {
@@ -67,6 +62,7 @@ export default function PurchaseReturnDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={item ? `Alış İadesi ${item.returnNumber}` : "Alış İadesi"}
       description="Reddedilen ve hasarlı malın tedarikçiye iadesi"
     >

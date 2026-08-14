@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { quantity } from "@/lib/format/turkish";
 import {
   goodsReceiptService,
   type GoodsReceiptListItem,
@@ -16,10 +17,7 @@ const statusLabels: Record<number, string> = {
 };
 
 function formatNumber(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  }).format(value);
+  return quantity(value);
 }
 
 function formatDate(value: string) {
@@ -116,6 +114,7 @@ export default function GoodsReceiptListPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Mal Kabul"
       description="Satın alma siparişlerinden oluşturulan teslimat ve depo girişleri"
     >

@@ -117,6 +117,7 @@ export default function StockCountPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Stok Sayımı / Düzeltme"
       description="Fiziksel sayım sonucunu girin; fark otomatik hesaplanıp düzeltme hareketi olarak kaydedilir"
     >

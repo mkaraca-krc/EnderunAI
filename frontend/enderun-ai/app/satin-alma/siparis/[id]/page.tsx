@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { currencyMoney, percent, quantity } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -66,18 +68,57 @@ function formatDateTime(value?: string | null) {
 }
 
 function formatNumber(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    maximumFractionDigits: 4,
-  }).format(value);
+  return quantity(value);
 }
 
 function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
+
+/**
+ * Onay/red/iptal akışı prompt + confirm ikilisiyle yürüyordu:
+ * önce gerekçe soruluyor, sonra ayrı bir pencerede onay isteniyordu.
+ * Gerekçe zorunlu olduğu halde prompt boş geçilebiliyor, kod bunu
+ * ancak sonradan yakalayıp hata yazıyordu — kullanıcı iki pencere
+ * kapattıktan sonra baştan başlıyordu. ConfirmDialog gerekçe
+ * yazılmadan onay düğmesini açmıyor.
+ */
+type OrderAction = "submit" | "approve" | "reject" | "cancel";
+
+const ACTION_DIALOGS: Record<
+  OrderAction,
+  { title: string; description: string; confirmLabel: string; reason: boolean }
+> = {
+  submit: {
+    title: "Sipariş onaya gönderilsin mi?",
+    description:
+      "Sipariş onaycıya düşer ve onaylanana kadar üzerinde değişiklik yapılamaz.",
+    confirmLabel: "Onaya Gönder",
+    reason: false,
+  },
+  approve: {
+    title: "Sipariş onaylansın mı?",
+    description:
+      "Onaydan sonra sipariş tedarikçiye gönderilebilir ve bütçeye işlenir.",
+    confirmLabel: "Onayla",
+    reason: false,
+  },
+  reject: {
+    title: "Sipariş reddedilsin mi?",
+    description:
+      "Gerekçe talep sahibine gider; neyin yanlış olduğunu buradan öğrenir.",
+    confirmLabel: "Reddet",
+    reason: true,
+  },
+  cancel: {
+    title: "Sipariş iptal edilsin mi?",
+    description:
+      "İptal edilen sipariş yeniden açılamaz; gerekçe kayda geçer.",
+    confirmLabel: "İptal Et",
+    reason: true,
+  },
+};
+
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -92,6 +133,7 @@ export default function PurchaseOrderDetailPage() {
     useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [pendingAction, setPendingAction] = useState<OrderAction | null>(null);
 
   const load = useCallback(async () => {
     if (!params.id) return;
@@ -173,66 +215,8 @@ export default function PurchaseOrderDetailPage() {
   }
 
 
-  async function runAction(
-    action: "submit" | "approve" | "reject" | "cancel"
-  ) {
+  async function runAction(action: OrderAction, reason: string) {
     if (!order) return;
-
-    let reason = "";
-
-    if (action === "reject") {
-      reason =
-        window.prompt("Red gerekçesini yazın:")?.trim() ?? "";
-
-      if (!reason) {
-        setError("Red gerekçesi zorunludur.");
-        return;
-      }
-
-      if (
-        !window.confirm(
-          "Bu satın alma siparişi reddedilsin mi?"
-        )
-      ) {
-        return;
-      }
-    }
-
-    if (action === "cancel") {
-      reason =
-        window.prompt("İptal gerekçesini yazın:")?.trim() ?? "";
-
-      if (!reason) {
-        setError("İptal gerekçesi zorunludur.");
-        return;
-      }
-
-      if (
-        !window.confirm(
-          "Bu satın alma siparişi iptal edilsin mi?"
-        )
-      ) {
-        return;
-      }
-    }
-
-    if (
-      action === "submit" &&
-      !window.confirm(
-        "Satın alma siparişi onaya gönderilsin mi?"
-      )
-    ) {
-      return;
-    }
-
-    if (
-      action === "approve" &&
-      !window.confirm(
-        "Satın alma siparişi onaylansın mı?"
-      )
-    ) {
-      return;
-    }
 
     setProcessing(true);
     setError("");
@@ -245,15 +229,10 @@ export default function PurchaseOrderDetailPage() {
           : action === "approve"
             ? await purchaseOrderService.approve(order.id)
             : action === "reject"
-              ? await purchaseOrderService.reject(
-                  order.id,
-                  reason
-                )
-              : await purchaseOrderService.cancel(
-                  order.id,
-                  reason
-                );
+              ? await purchaseOrderService.reject(order.id, reason)
+              : await purchaseOrderService.cancel(order.id, reason);
 
+      setPendingAction(null);
       setSuccess(result.message);
       await load();
     } catch (err) {
@@ -269,6 +248,7 @@ export default function PurchaseOrderDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={order?.orderNumber ?? "Satın Alma Siparişi"}
       description={
         order
@@ -343,7 +323,7 @@ export default function PurchaseOrderDetailPage() {
                   {order.status === 0 && (
                     <Button
                       loading={processing}
-                      onClick={() => runAction("submit")}
+                      onClick={() => setPendingAction("submit")}
                     >
                       Onaya Gönder
                     </Button>
@@ -354,7 +334,7 @@ export default function PurchaseOrderDetailPage() {
                     <>
                       <Button
                         loading={processing}
-                        onClick={() => runAction("approve")}
+                        onClick={() => setPendingAction("approve")}
                       >
                         Onayla
                       </Button>
@@ -362,7 +342,7 @@ export default function PurchaseOrderDetailPage() {
                       <Button
                         variant="danger"
                         loading={processing}
-                        onClick={() => runAction("reject")}
+                        onClick={() => setPendingAction("reject")}
                       >
                         Reddet
                       </Button>
@@ -383,7 +363,7 @@ export default function PurchaseOrderDetailPage() {
                     <Button
                       variant="danger"
                       loading={processing}
-                      onClick={() => runAction("cancel")}
+                      onClick={() => setPendingAction("cancel")}
                     >
                       İptal Et
                     </Button>
@@ -457,9 +437,7 @@ export default function PurchaseOrderDetailPage() {
 
             <StatCard
               title="Teslim Oranı"
-              value={`%${deliveryRate.toLocaleString("tr-TR", {
-                maximumFractionDigits: 2,
-              })}`}
+              value={percent(deliveryRate)}
               icon="%"
             />
           </div>
@@ -1003,6 +981,21 @@ export default function PurchaseOrderDetailPage() {
           </Card>
         </>
       )}
+      {pendingAction && (
+        <ConfirmDialog
+          /* key: her açılışta gerekçe alanı temiz başlasın. */
+          key={pendingAction}
+          open
+          title={ACTION_DIALOGS[pendingAction].title}
+          description={ACTION_DIALOGS[pendingAction].description}
+          confirmLabel={ACTION_DIALOGS[pendingAction].confirmLabel}
+          requireReason={ACTION_DIALOGS[pendingAction].reason}
+          busy={processing}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={(reason) => void runAction(pendingAction, reason)}
+        />
+      )}
+
     </ErpShell>
   );
 }

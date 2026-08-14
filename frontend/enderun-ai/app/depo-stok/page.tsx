@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount, money } from "@/lib/format/turkish";
 
 import {
   inventoryService,
@@ -32,16 +33,8 @@ import {
 } from "@/services/inventory-movement.service";
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat("tr-TR", {
-    maximumFractionDigits: 2,
-  }).format(value);
+  return amount(value);
 }
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 2,
-});
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString("tr-TR");
@@ -350,6 +343,7 @@ export default function InventoryOperationsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Depo & Stok"
       description="Malzeme taleplerini, stok seviyelerini ve depo hareketlerini tek merkezden yönetin."
     >
@@ -945,9 +939,9 @@ export default function InventoryOperationsPage() {
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
-                          {money.format(item.stockValue)}
+                          {money(item.stockValue)}
                           <div className="text-xs text-slate-500">
-                            birim {money.format(item.averageUnitCost)}
+                            birim {money(item.averageUnitCost)}
                           </div>
                         </td>
 
@@ -986,7 +980,7 @@ export default function InventoryOperationsPage() {
               <span>
                 {Math.min(visibleCount, items.length)} / {items.length} malzeme
                 {" · "}
-                Toplam stok değeri: {money.format(
+                Toplam stok değeri: {money(
                   items.reduce((sum, item) => sum + item.stockValue, 0),
                 )}
               </span>

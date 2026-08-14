@@ -7,6 +7,8 @@ import {
 } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { currencyMoney, percent, quantity } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -34,23 +36,15 @@ import {
 import { brandMismatch } from "@/lib/purchasing/requested-brand";
 
 function formatMoney(value: number, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 function formatNumber(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    maximumFractionDigits: 4,
-  }).format(value);
+  return quantity(value);
 }
 
 function formatPercent(value: number) {
-  return `%${value.toLocaleString("tr-TR", {
-    maximumFractionDigits: 1,
-  })}`;
+  return percent(value);
 }
 
 function scoreLabel(score: number) {
@@ -92,6 +86,8 @@ export default function RfqComparisonPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [confirming, setConfirming] =
+    useState<"kazanan" | "siparis" | "kapat" | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -146,12 +142,6 @@ export default function RfqComparisonPage() {
   async function awardSupplier() {
     if (!comparison || !selectedSupplier) return;
 
-    const confirmed = window.confirm(
-      `${selectedSupplier.supplierTitle} kazanan tedarikçi olarak seçilsin mi?`
-    );
-
-    if (!confirmed) return;
-
     setAwarding(true);
     setError("");
     setSuccess("");
@@ -164,6 +154,7 @@ export default function RfqComparisonPage() {
       );
 
       setAwardedSupplierId(result.rfqSupplierId);
+      setConfirming(null);
       setSuccess(
         `${result.supplierTitle} kazanan tedarikçi olarak seçildi.`
       );
@@ -188,14 +179,6 @@ export default function RfqComparisonPage() {
       return;
     }
 
-    if (
-      !window.confirm(
-        "Kazanan tekliften satın alma siparişi oluşturulsun mu?",
-      )
-    ) {
-      return;
-    }
-
     setCreatingOrder(true);
     setError("");
     setSuccess("");
@@ -207,6 +190,7 @@ export default function RfqComparisonPage() {
         );
 
       setCreatedOrder(result);
+      setConfirming(null);
 
       setSuccess(
         `${result.orderNumber} numaralı satın alma siparişi oluşturuldu.`,
@@ -237,20 +221,13 @@ export default function RfqComparisonPage() {
   async function closeRfq() {
     if (!comparison) return;
 
-    if (
-      !window.confirm(
-        "RFQ kapatılsın mı? Kapatıldıktan sonra yeni teklif girişi yapılamaz."
-      )
-    ) {
-      return;
-    }
-
     setClosing(true);
     setError("");
     setSuccess("");
 
     try {
       const result = await rfqService.close(comparison.rfqId);
+      setConfirming(null);
       setSuccess(result.message);
     } catch (err) {
       setError(
@@ -265,6 +242,7 @@ export default function RfqComparisonPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={
         comparison
           ? `${comparison.rfqNumber} Karşılaştırma`
@@ -360,7 +338,7 @@ export default function RfqComparisonPage() {
                   <Button
                     variant="danger"
                     loading={closing}
-                    onClick={closeRfq}
+                    onClick={() => setConfirming("kapat")}
                   >
                     RFQ Kapat
                   </Button>
@@ -669,7 +647,7 @@ export default function RfqComparisonPage() {
                           <Button
                             loading={creatingOrder}
                             disabled={creatingOrder}
-                            onClick={createPurchaseOrder}
+                            onClick={() => setConfirming("siparis")}
                             className="w-full"
                           >
                             Satın Alma Siparişi Oluştur
@@ -688,7 +666,7 @@ export default function RfqComparisonPage() {
                         <Button
                           loading={awarding}
                           disabled={!selectedSupplier.hasQuotation}
-                          onClick={awardSupplier}
+                          onClick={() => setConfirming("kazanan")}
                           className="w-full"
                         >
                           Kazanan Tedarikçi Seç
@@ -904,6 +882,45 @@ export default function RfqComparisonPage() {
           </Card>
         </>
       )}
+      {/*
+        Üçü de geri dönüşü olan ya da olmayan kararlar; tarayıcı
+        penceresi hangi tedarikçinin seçildiğini vurgulayamıyor ve
+        işlem sürerken kilitleniyordu.
+      */}
+      <ConfirmDialog
+        open={confirming === "kazanan"}
+        title="Kazanan tedarikçi seçilsin mi?"
+        description={
+          selectedSupplier
+            ? `${selectedSupplier.supplierTitle} kazanan olarak işaretlenir; diğer teklifler kapanır.`
+            : ""
+        }
+        confirmLabel="Kazanan Seç"
+        busy={awarding}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void awardSupplier()}
+      />
+
+      <ConfirmDialog
+        open={confirming === "siparis"}
+        title="Kazanan tekliften sipariş oluşturulsun mu?"
+        description="Teklif kalemleri satın alma siparişine aktarılır; sipariş taslak olarak açılır."
+        confirmLabel="Sipariş Oluştur"
+        busy={creatingOrder}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void createPurchaseOrder()}
+      />
+
+      <ConfirmDialog
+        open={confirming === "kapat"}
+        title="RFQ kapatılsın mı?"
+        description="Kapatıldıktan sonra yeni teklif girişi yapılamaz."
+        confirmLabel="Kapat"
+        busy={closing}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void closeRfq()}
+      />
+
     </ErpShell>
   );
 }

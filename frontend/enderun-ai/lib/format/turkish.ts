@@ -76,6 +76,35 @@ export function money(
 }
 
 /**
+ * ISO para kodları için ekranda yazılan gösterge.
+ *
+ * TL'de simge (₺) kullanılır — herkesin tanıdığı tek simge odur.
+ * DİĞERLERİNDE ISO KODU yazılır: "$" tek başına ABD, Kanada ve
+ * Avustralya dolarını birden gösteriyor; bir tedarikçi teklifinde
+ * hangisi olduğu belirsiz kalamaz.
+ */
+const CURRENCY_LABELS: Record<string, string> = {
+  TRY: "₺",
+};
+
+/**
+ * Tutar + para birimi — "1.250,00 ₺", "1.250,00 USD".
+ *
+ * NEDEN AYRI İŞLEV: ekranların çoğu para birimini kayıttan alıyor ve
+ * her biri kendi `Intl.NumberFormat({ style: "currency" })`'ini
+ * kuruyordu. O biçim simgeyi çoğu kodda BAŞA koyuyor, sağa hizalı
+ * sütunda basamakları kaydırıyordu; üstelik tanımadığı bir kodda
+ * istisna fırlattığı için her sayfa ayrıca try/catch yedeği yazmak
+ * zorunda kalmıştı. Burada ne istisna var ne de yedek gerekiyor.
+ */
+export function currencyMoney(
+  value: number | null | undefined,
+  code = "TRY",
+): string {
+  return money(value, CURRENCY_LABELS[code] ?? code);
+}
+
+/**
  * Ondalıksız para — "1.234.568 ₺".
  *
  * YALNIZCA BAŞLIK RAKAMI İÇİN: özet kartı, gösterge paneli, grafik
@@ -181,6 +210,7 @@ export function dateTime(value: string | Date | null | undefined): string {
 export const turkishFormat = {
   amount,
   money,
+  currencyMoney,
   moneyWhole,
   rate,
   percent,

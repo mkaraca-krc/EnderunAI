@@ -130,6 +130,7 @@ export default function MaterialRequestsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Şantiye Malzeme Talepleri"
       description="Projelerin depo ve şantiye malzeme taleplerini yönetin."
     >

@@ -17,6 +17,17 @@ interface ConfirmDialogProps {
    * açıklayamadığı bir kayıt bırakır.
    */
   requireReason?: boolean;
+
+  /**
+   * Gerekçe alanı GÖRÜNSÜN ama zorunlu olmasın.
+   *
+   * Verilmezse `requireReason` neyse odur. Ayrı bir seçenek olmasının
+   * sebebi: satın alma iptali gibi işlemlerde gerekçe isteğe bağlı
+   * ama kayda geçmesi değerli. Yalnızca `requireReason` olsaydı
+   * seçenek "ya zorla ya da hiç sorma" olurdu ve o bilgi kaybolurdu.
+   */
+  showReason?: boolean;
+
   reasonLabel?: string;
   busy?: boolean;
   error?: string;
@@ -38,7 +49,8 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   requireReason = false,
-  reasonLabel = "Gerekçe (zorunlu)",
+  showReason,
+  reasonLabel,
   busy = false,
   error,
   onCancel,
@@ -51,6 +63,9 @@ export function ConfirmDialog({
   const [reason, setReason] = useState("");
 
   const blocked = requireReason && reason.trim().length === 0;
+  const fieldVisible = showReason ?? requireReason;
+  const label =
+    reasonLabel ?? (requireReason ? "Gerekçe (zorunlu)" : "Gerekçe");
 
   return (
     <Modal
@@ -81,9 +96,9 @@ export function ConfirmDialog({
         </>
       }
     >
-      {requireReason && (
+      {fieldVisible && (
         <label className="block text-sm font-medium text-slate-700">
-          {reasonLabel}
+          {label}
           <textarea
             value={reason}
             onChange={(event) => setReason(event.target.value)}

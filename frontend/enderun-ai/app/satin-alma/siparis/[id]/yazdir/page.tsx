@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+
+import { currencyMoney, quantity } from "@/lib/format/turkish";
 import { useCallback, useEffect, useState } from "react";
 import {
   purchaseOrderService,
@@ -18,21 +20,15 @@ function formatDate(value?: string | null) {
     : "-";
 }
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  }).format(value);
-}
+/*
+ * YAZDIRMA EKRANI KABUĞUN DIŞINDA ama sayı biçimi aynı olmalı:
+ * tedarikçiye gönderilen çıktıdaki tutar, ekranda görünen tutardan
+ * farklı yazılamaz.
+ */
+const formatNumber = (value: number) => quantity(value);
 
-function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
+const formatMoney = (value: number, currency: string) =>
+  currencyMoney(value, currency);
 
 export default function PurchaseOrderPrintPage() {
   const params = useParams<{ id: string }>();

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import {
   Badge,
   Button,
@@ -65,6 +66,58 @@ function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
 }
 
+/**
+ * Satın alma talebi kararları.
+ *
+ * Eskiden prompt + confirm ikilisiyle yürüyordu: gerekçe ayrı bir
+ * pencerede soruluyor, boş bırakılabiliyor ve hata ancak iki pencere
+ * kapandıktan sonra yazılıyordu. İptalde gerekçe isteğe bağlı ama
+ * kayda değer olduğu için alan görünür, zorunlu değil.
+ */
+type RequestAction = "submit" | "approve" | "reject" | "return" | "cancel";
+
+const ACTION_DIALOGS: Record<
+  RequestAction,
+  {
+    title: string;
+    description: string;
+    confirmLabel: string;
+    requireReason?: boolean;
+    showReason?: boolean;
+  }
+> = {
+  submit: {
+    title: "Talep onaya gönderilsin mi?",
+    description: "Talep onaycıya düşer; onaylanana kadar düzenlenemez.",
+    confirmLabel: "Onaya Gönder",
+  },
+  approve: {
+    title: "Talep onaylansın mı?",
+    description: "Onaylanan talep için teklif toplanabilir ve sipariş açılabilir.",
+    confirmLabel: "Onayla",
+  },
+  reject: {
+    title: "Talep reddedilsin mi?",
+    description:
+      "Bu karar geri alınamaz. Gerekçe talep sahibine gider; neyi yanlış yaptığını buradan öğrenir.",
+    confirmLabel: "Reddet",
+    requireReason: true,
+  },
+  return: {
+    title: "Talep düzeltmeye iade edilsin mi?",
+    description:
+      "Talep sahibine geri döner. Neyin düzeltilmesi gerektiğini yazmazsanız talep ne yapılacağı belli olmadan bekler.",
+    confirmLabel: "Düzeltmeye İade Et",
+    requireReason: true,
+  },
+  cancel: {
+    title: "Talep iptal edilsin mi?",
+    description: "İptal edilen talep yeniden açılamaz.",
+    confirmLabel: "İptal Et",
+    showReason: true,
+  },
+};
+
 export default function PurchaseRequestDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -80,6 +133,7 @@ export default function PurchaseRequestDetailPage() {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [pendingAction, setPendingAction] = useState<RequestAction | null>(null);
 
   const load = useCallback(async () => {
     if (!params.id) return;
@@ -119,48 +173,8 @@ export default function PurchaseRequestDetailPage() {
     load();
   }, [load]);
 
-  async function runAction(
-    action: "submit" | "approve" | "cancel" | "reject" | "return"
-  ) {
+  async function runAction(action: RequestAction, reason: string) {
     if (!item) return;
-
-    let reason = "";
-
-    if (action === "cancel") {
-      reason = window.prompt("İptal gerekçesini yazın:") ?? "";
-      if (!window.confirm("Bu satın alma talebi iptal edilsin mi?")) {
-        return;
-      }
-    }
-
-    // Red ve iade GEREKÇESİZ yapılamaz: gerekçesiz red talep sahibine
-    // neyi yanlış yaptığını söylemez, gerekçesiz iade ise talebi ne
-    // yapacağı belli olmadan bekletir. Uç da boş gerekçeyi reddediyor;
-    // burada kullanıcıyı sunucuya gitmeden uyarıyoruz.
-    if (action === "reject" || action === "return") {
-      const prompt =
-        action === "reject"
-          ? "Red gerekçesini yazın (zorunlu):"
-          : "Neyin düzeltilmesi gerektiğini yazın (zorunlu):";
-
-      reason = (window.prompt(prompt) ?? "").trim();
-
-      if (!reason) {
-        setError(
-          action === "reject"
-            ? "Red gerekçesi zorunludur."
-            : "İade gerekçesi zorunludur."
-        );
-        return;
-      }
-
-      if (
-        action === "reject" &&
-        !window.confirm("Talep reddedilsin mi? Bu karar geri alınamaz.")
-      ) {
-        return;
-      }
-    }
 
     setProcessing(true);
     setError("");
@@ -178,6 +192,7 @@ export default function PurchaseRequestDetailPage() {
                 ? await purchaseRequestService.returnForRevision(item.id, reason)
                 : await purchaseRequestService.cancel(item.id, reason);
 
+      setPendingAction(null);
       setSuccess(result.message);
       await load();
     } catch (err) {
@@ -237,6 +252,7 @@ export default function PurchaseRequestDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={item?.requestNumber ?? "Satın Alma Talebi"}
       description={
         item
@@ -331,7 +347,7 @@ export default function PurchaseRequestDetailPage() {
                   {(item.status === 0 || item.status === 8) && (
                     <Button
                       loading={processing}
-                      onClick={() => runAction("submit")}
+                      onClick={() => setPendingAction("submit")}
                     >
                       {item.status === 8
                         ? "Düzeltildi, Yeniden Gönder"
@@ -343,7 +359,7 @@ export default function PurchaseRequestDetailPage() {
                     <>
                       <Button
                         loading={processing}
-                        onClick={() => runAction("approve")}
+                        onClick={() => setPendingAction("approve")}
                       >
                         Onayla
                       </Button>
@@ -351,7 +367,7 @@ export default function PurchaseRequestDetailPage() {
                       <Button
                         variant="secondary"
                         loading={processing}
-                        onClick={() => runAction("return")}
+                        onClick={() => setPendingAction("return")}
                       >
                         Düzeltmeye İade Et
                       </Button>
@@ -359,7 +375,7 @@ export default function PurchaseRequestDetailPage() {
                       <Button
                         variant="danger"
                         loading={processing}
-                        onClick={() => runAction("reject")}
+                        onClick={() => setPendingAction("reject")}
                       >
                         Reddet
                       </Button>
@@ -392,7 +408,7 @@ export default function PurchaseRequestDetailPage() {
                     <Button
                       variant="danger"
                       loading={processing}
-                      onClick={() => runAction("cancel")}
+                      onClick={() => setPendingAction("cancel")}
                     >
                       İptal Et
                     </Button>
@@ -669,6 +685,21 @@ export default function PurchaseRequestDetailPage() {
           </Card>
         </>
       )}
+      {pendingAction && (
+        <ConfirmDialog
+          key={pendingAction}
+          open
+          title={ACTION_DIALOGS[pendingAction].title}
+          description={ACTION_DIALOGS[pendingAction].description}
+          confirmLabel={ACTION_DIALOGS[pendingAction].confirmLabel}
+          requireReason={ACTION_DIALOGS[pendingAction].requireReason}
+          showReason={ACTION_DIALOGS[pendingAction].showReason}
+          busy={processing}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={(reason) => void runAction(pendingAction, reason)}
+        />
+      )}
+
     </ErpShell>
   );
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -93,11 +94,7 @@ function formatDateTime(value?: string | null) {
 }
 
 function formatTry(value?: number | null) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(value ?? 0);
+  return money(value ?? 0);
 }
 
 function hasPermission(session: CurrentSession | null, permission: string) {
@@ -328,6 +325,7 @@ export default function ProcurementBudgetApprovalPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Bütçe ve Onay Merkezi"
       description="Proje satın alma bütçeleri, yetki limitleri ve çok kademeli sipariş onayları"
     >

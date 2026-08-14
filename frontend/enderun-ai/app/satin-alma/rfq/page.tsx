@@ -95,6 +95,7 @@ export default function RfqListPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="RFQ Yönetimi"
       description="Tedarikçi teklif talepleri ve karşılaştırmaları"
     >

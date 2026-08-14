@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { currencyMoney } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -77,11 +79,7 @@ function formatMoney(
 ) {
   if (value === null || value === undefined) return "—";
 
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 export default function RfqDetailPage() {
@@ -92,6 +90,7 @@ export default function RfqDetailPage() {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [confirming, setConfirming] = useState<"gonder" | "kapat" | null>(null);
 
   const load = useCallback(async () => {
     if (!params.id) return;
@@ -120,20 +119,13 @@ export default function RfqDetailPage() {
   async function sendRfq() {
     if (!item) return;
 
-    if (
-      !window.confirm(
-        "RFQ seçili tedarikçilere gönderilmiş olarak işaretlensin mi?"
-      )
-    ) {
-      return;
-    }
-
     setProcessing(true);
     setError("");
     setSuccess("");
 
     try {
       const result = await rfqService.send(item.id);
+      setConfirming(null);
       setSuccess(result.message);
       await load();
     } catch (err) {
@@ -150,20 +142,13 @@ export default function RfqDetailPage() {
   async function closeRfq() {
     if (!item) return;
 
-    if (
-      !window.confirm(
-        "RFQ kapatılsın mı? Kapatıldıktan sonra teklif girişi yapılamaz."
-      )
-    ) {
-      return;
-    }
-
     setProcessing(true);
     setError("");
     setSuccess("");
 
     try {
       const result = await rfqService.close(item.id);
+      setConfirming(null);
       setSuccess(result.message);
       await load();
     } catch (err) {
@@ -191,6 +176,7 @@ export default function RfqDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={item?.rfqNumber ?? "RFQ Detayı"}
       description={
         item?.title ?? "Teklif talebi bilgileri yükleniyor"
@@ -270,7 +256,7 @@ export default function RfqDetailPage() {
                   {item.status === 0 && (
                     <Button
                       loading={processing}
-                      onClick={sendRfq}
+                      onClick={() => setConfirming("gonder")}
                     >
                       RFQ Gönder
                     </Button>
@@ -289,7 +275,7 @@ export default function RfqDetailPage() {
                     <Button
                       variant="danger"
                       loading={processing}
-                      onClick={closeRfq}
+                      onClick={() => setConfirming("kapat")}
                     >
                       RFQ Kapat
                     </Button>
@@ -599,6 +585,31 @@ export default function RfqDetailPage() {
           </Card>
         </>
       )}
+      {/*
+        window.confirm YERİNE: tarayıcı penceresi işlem sürerken
+        kilitleniyor, "kapatıldıktan sonra teklif girişi yapılamaz"
+        gibi sonucu vurgulayamıyor ve hatayı aynı yerde gösteremiyordu.
+      */}
+      <ConfirmDialog
+        open={confirming === "gonder"}
+        title="RFQ tedarikçilere gönderilsin mi?"
+        description="Seçili tedarikçilere gönderilmiş olarak işaretlenir; teklif girişi açılır."
+        confirmLabel="Gönderildi İşaretle"
+        busy={processing}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void sendRfq()}
+      />
+
+      <ConfirmDialog
+        open={confirming === "kapat"}
+        title="RFQ kapatılsın mı?"
+        description="Kapatıldıktan sonra bu RFQ'ya teklif girişi yapılamaz."
+        confirmLabel="Kapat"
+        busy={processing}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void closeRfq()}
+      />
+
     </ErpShell>
   );
 }

@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { money, quantity } from "@/lib/format/turkish";
 import {
   goodsReceiptService,
   purchaseReturnService,
@@ -34,10 +36,7 @@ function statusClass(status: number) {
 }
 
 function formatNumber(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  }).format(value);
+  return quantity(value);
 }
 
 function formatDate(value?: string | null) {
@@ -57,12 +56,7 @@ function formatDateTime(value?: string | null) {
 }
 
 function formatMoney(value?: number | null) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value ?? 0);
+  return money(value ?? 0);
 }
 
 export default function GoodsReceiptDetailPage() {
@@ -84,6 +78,7 @@ export default function GoodsReceiptDetailPage() {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [confirming, setConfirming] = useState<"isle" | "iptal" | null>(null);
 
   const id = params?.id;
 
@@ -305,20 +300,13 @@ export default function GoodsReceiptDetailPage() {
       return;
     }
 
-    if (
-      !window.confirm(
-        "Kabul edilen miktarlar depo stoklarına işlensin mi? Bu işlem geri alınamaz.",
-      )
-    ) {
-      return;
-    }
-
     try {
       setProcessing(true);
       setError("");
       setSuccess("");
       await goodsReceiptService.updateDraft(receipt.id, draftItems);
       const result = await goodsReceiptService.post(receipt.id);
+      setConfirming(null);
       setSuccess(result.message);
       await loadReceipt();
     } catch (err) {
@@ -332,21 +320,14 @@ export default function GoodsReceiptDetailPage() {
     }
   }
 
-  async function cancelReceipt() {
+  async function cancelReceipt(reason: string) {
     if (!receipt) return;
-    const reason = window.prompt("İptal nedenini yazın:")?.trim() ?? "";
-    if (!reason) {
-      setError("İptal nedeni zorunludur.");
-      return;
-    }
-
-    if (!window.confirm("Mal kabul taslağı iptal edilsin mi?")) return;
-
     try {
       setProcessing(true);
       setError("");
       setSuccess("");
       const result = await goodsReceiptService.cancel(receipt.id, reason);
+      setConfirming(null);
       setSuccess(result.message);
       await loadReceipt();
     } catch (err) {
@@ -362,7 +343,7 @@ export default function GoodsReceiptDetailPage() {
 
   if (loading) {
     return (
-      <ErpShell title="Mal Kabul" description="Kayıt yükleniyor">
+      <ErpShell design="redwood" title="Mal Kabul" description="Kayıt yükleniyor">
         <div className="erp-loading">Mal Kabul kaydı yükleniyor...</div>
       </ErpShell>
     );
@@ -370,7 +351,7 @@ export default function GoodsReceiptDetailPage() {
 
   if (!receipt) {
     return (
-      <ErpShell title="Mal Kabul" description="Kayıt bulunamadı">
+      <ErpShell design="redwood" title="Mal Kabul" description="Kayıt bulunamadı">
         <div className="erp-alert error">
           {error || "Mal Kabul kaydı bulunamadı."}
         </div>
@@ -394,6 +375,7 @@ export default function GoodsReceiptDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={`Mal Kabul — ${receipt.receiptNumber}`}
       description="Teslim alınan miktarlar, stok kartı eşleşmesi ve depo girişi"
     >
@@ -459,7 +441,7 @@ export default function GoodsReceiptDetailPage() {
               </button>
               <button
                 type="button"
-                onClick={() => void postReceipt()}
+                onClick={() => setConfirming("isle")}
                 disabled={processing}
                 className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -467,7 +449,7 @@ export default function GoodsReceiptDetailPage() {
               </button>
               <button
                 type="button"
-                onClick={() => void cancelReceipt()}
+                onClick={() => setConfirming("iptal")}
                 disabled={processing}
                 className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -843,6 +825,32 @@ export default function GoodsReceiptDetailPage() {
         </div>
       </section>
       </div>
+      {/*
+        Stoklara işleme GERİ ALINAMAZ: tarayıcı penceresi bu uyarıyı
+        vurgulayamıyor, tek satır düz metin olarak gösteriyordu.
+      */}
+      <ConfirmDialog
+        open={confirming === "isle"}
+        title="Miktarlar depo stoklarına işlensin mi?"
+        description="Kabul edilen miktarlar stoğa girer ve muhasebe kaydı oluşur. Bu işlem geri alınamaz."
+        confirmLabel="Stoklara İşle"
+        busy={processing}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void postReceipt()}
+      />
+
+      <ConfirmDialog
+        open={confirming === "iptal"}
+        title="Mal kabul taslağı iptal edilsin mi?"
+        description="Taslak kapanır ve stoklara işlenmez."
+        confirmLabel="İptal Et"
+        requireReason
+        reasonLabel="İptal nedeni (zorunlu)"
+        busy={processing}
+        onCancel={() => setConfirming(null)}
+        onConfirm={(reason) => void cancelReceipt(reason)}
+      />
+
     </ErpShell>
   );
 }

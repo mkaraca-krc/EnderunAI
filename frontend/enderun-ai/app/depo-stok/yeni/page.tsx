@@ -117,6 +117,7 @@ export default function CreateInventoryItemPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Yeni Malzeme Kartı"
       description="Şirket genelinde kullanılacak malzeme veya demirbaş kartı"
     >
