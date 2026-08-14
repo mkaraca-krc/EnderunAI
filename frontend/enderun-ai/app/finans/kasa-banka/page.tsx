@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { Button, Drawer } from "@/components/ui";
+import { date as formatDate, money } from "@/lib/format/turkish";
 import {
   accountingAccountService,
   type AccountingAccountListItem,
@@ -22,13 +24,12 @@ import {
 } from "@/services/current-account.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
-
-const dateFormat = new Intl.DateTimeFormat("tr-TR");
-
+/*
+ * Sayı ve tarih biçimi paylaşılan `lib/format/turkish`'ten geliyor.
+ * Bu ekran kendi Intl biçimleyicisini kuruyordu ve para birimi simgesi
+ * BAŞA geliyordu ("₺1.250,00"); sağa hizalı sütunda öne gelen simge
+ * basamakları kaydırıyor, iki satırın rakamları hizalanmıyordu.
+ */
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function CashAccountsPage() {
@@ -260,144 +261,185 @@ export default function CashAccountsPage() {
     <ErpShell
       title="Kasa / Banka"
       description="Kasa ve banka hesapları, hareketleri ve otomatik muhasebe fişleri"
+      design="redwood"
     >
-      <div className="erp-page-toolbar">
-        <div>
-          <strong>{accounts.length} hesap</strong>
-          <small style={{ display: "block", marginTop: "4px" }}>
-            Kasa: {money.format(totals.cash)} · Banka: {money.format(totals.bank)}
-          </small>
-        </div>
-
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+      <div className="erp-toolbar">
+        <label className="rw-inline-field">
+          <span>Şirket</span>
+          <select
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            aria-label="Şirket seç"
+          >
             {companies.map((company) => (
               <option key={company.id} value={company.id}>
                 {company.name}
               </option>
             ))}
           </select>
+        </label>
 
+        <div className="erp-actions">
           <button
             type="button"
             className="erp-primary-button"
-            onClick={() => setShowAccountForm((value) => !value)}
+            onClick={() => setShowAccountForm(true)}
           >
             + Yeni Hesap
           </button>
         </div>
       </div>
 
+      {/*
+        TOPLAM NAKİT AYRI BİR KART: kasa ve banka toplamları küçük
+        yazıyla yan yanaydı, ikisinin toplamı hiç yazmıyordu — şirketin
+        elindeki nakit, ekrandaki iki sayıyı kafadan toplayarak
+        bulunuyordu.
+      */}
+      <div className="rw-stats">
+        <div className="erp-stat-card">
+          <span className="erp-stat-label">Kasa</span>
+          <strong className="rw-num">{money(totals.cash)}</strong>
+          <small>
+            {accounts.filter((x) => x.type === CashAccountType.Cash).length} hesap
+          </small>
+        </div>
+
+        <div className="erp-stat-card">
+          <span className="erp-stat-label">Banka</span>
+          <strong className="rw-num">{money(totals.bank)}</strong>
+          <small>
+            {accounts.filter((x) => x.type === CashAccountType.Bank).length} hesap
+          </small>
+        </div>
+
+        <div className="erp-stat-card rw-stat-accent">
+          <span className="erp-stat-label">Toplam nakit</span>
+          <strong className="rw-num">{money(totals.cash + totals.bank)}</strong>
+          <small>{accounts.length} hesabın güncel bakiyesi</small>
+        </div>
+      </div>
+
       {error && <div className="erp-alert error">{error}</div>}
       {notice && <div className="erp-alert success">{notice}</div>}
 
-      {showAccountForm && (
-        <div className="erp-table-card" style={{ marginBottom: "16px" }}>
-          <div className="erp-table-header">
-            <h2>Yeni Kasa / Banka Hesabı</h2>
+      {/*
+        Hesap açma formu artık listenin üstünü kaplamıyor: açıldığında
+        tablo aşağı kayıyor ve kullanıcı hangi hesapların var olduğunu
+        göremeden yeni kod uydurmak zorunda kalıyordu. Panelde liste
+        arkada görünür kalıyor.
+      */}
+      <Drawer
+        open={showAccountForm}
+        title="Yeni Kasa / Banka Hesabı"
+        description="Hesap bir muhasebe hesabına (100 kasa / 102 banka) bağlanır; hareketler oraya işlenir."
+        onClose={() => setShowAccountForm(false)}
+        busy={saving}
+        size="lg"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowAccountForm(false)}
+              disabled={saving}
+            >
+              Vazgeç
+            </Button>
+
+            <Button type="submit" form="kasa-hesap-formu" loading={saving}>
+              Kaydet
+            </Button>
           </div>
-
-          <form onSubmit={submitAccount} style={{ padding: "16px", display: "grid", gap: "12px" }}>
-            <div className="erp-form-grid">
-              <label>
-                Tür
-                <select
-                  value={accountForm.type}
-                  onChange={(e) => setAccountForm({ ...accountForm, type: e.target.value })}
-                >
-                  <option value={String(CashAccountType.Cash)}>Kasa</option>
-                  <option value={String(CashAccountType.Bank)}>Banka</option>
-                </select>
-              </label>
-
-              <label>
-                Kod
-                <input
-                  required
-                  value={accountForm.code}
-                  onChange={(e) => setAccountForm({ ...accountForm, code: e.target.value })}
-                  placeholder="KASA-001"
-                />
-              </label>
-
-              <label>
-                Ad
-                <input
-                  required
-                  value={accountForm.name}
-                  onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })}
-                  placeholder="Merkez Kasa"
-                />
-              </label>
-
-              <label>
-                Muhasebe hesabı (100 / 102)
-                <select
-                  required
-                  value={accountForm.accountingAccountId}
-                  onChange={(e) =>
-                    setAccountForm({ ...accountForm, accountingAccountId: e.target.value })
-                  }
-                >
-                  <option value="">Seçin...</option>
-                  {ledgerAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.code} — {account.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {accountForm.type === String(CashAccountType.Bank) && (
-                <>
-                  <label>
-                    Banka
-                    <input
-                      value={accountForm.bankName}
-                      onChange={(e) =>
-                        setAccountForm({ ...accountForm, bankName: e.target.value })
-                      }
-                    />
-                  </label>
-
-                  <label>
-                    IBAN
-                    <input
-                      value={accountForm.iban}
-                      onChange={(e) => setAccountForm({ ...accountForm, iban: e.target.value })}
-                    />
-                  </label>
-                </>
-              )}
-
-              <label>
-                Açılış bakiyesi
-                <input
-                  type="number"
-                  step="0.01"
-                  value={accountForm.openingBalance}
-                  onChange={(e) =>
-                    setAccountForm({ ...accountForm, openingBalance: e.target.value })
-                  }
-                />
-              </label>
-            </div>
-
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button type="submit" className="erp-primary-button" disabled={saving}>
-                {saving ? "Kaydediliyor..." : "Kaydet"}
-              </button>
-              <button
-                type="button"
-                className="erp-secondary-button"
-                onClick={() => setShowAccountForm(false)}
+        }
+      >
+        <form id="kasa-hesap-formu" onSubmit={submitAccount}>
+          <div className="erp-form-grid">
+            <label>
+              <span>Tür</span>
+              <select
+                value={accountForm.type}
+                onChange={(e) => setAccountForm({ ...accountForm, type: e.target.value })}
               >
-                Vazgeç
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+                <option value={String(CashAccountType.Cash)}>Kasa</option>
+                <option value={String(CashAccountType.Bank)}>Banka</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Kod</span>
+              <input
+                required
+                value={accountForm.code}
+                onChange={(e) => setAccountForm({ ...accountForm, code: e.target.value })}
+                placeholder="KASA-001"
+              />
+            </label>
+
+            <label>
+              <span>Ad</span>
+              <input
+                required
+                value={accountForm.name}
+                onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })}
+                placeholder="Merkez Kasa"
+              />
+            </label>
+
+            <label>
+              <span>Muhasebe hesabı (100 / 102)</span>
+              <select
+                required
+                value={accountForm.accountingAccountId}
+                onChange={(e) =>
+                  setAccountForm({ ...accountForm, accountingAccountId: e.target.value })
+                }
+              >
+                <option value="">Seçin...</option>
+                {ledgerAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.code} — {account.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {accountForm.type === String(CashAccountType.Bank) && (
+              <>
+                <label>
+                  <span>Banka</span>
+                  <input
+                    value={accountForm.bankName}
+                    onChange={(e) =>
+                      setAccountForm({ ...accountForm, bankName: e.target.value })
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>IBAN</span>
+                  <input
+                    value={accountForm.iban}
+                    onChange={(e) => setAccountForm({ ...accountForm, iban: e.target.value })}
+                  />
+                </label>
+              </>
+            )}
+
+            <label>
+              <span>Açılış bakiyesi</span>
+              <input
+                type="number"
+                step="0.01"
+                value={accountForm.openingBalance}
+                onChange={(e) =>
+                  setAccountForm({ ...accountForm, openingBalance: e.target.value })
+                }
+              />
+            </label>
+          </div>
+        </form>
+      </Drawer>
 
       <div className="erp-table-card">
         <div className="erp-table-header">
@@ -408,6 +450,7 @@ export default function CashAccountsPage() {
           <div className="erp-loading">Hesaplar yükleniyor...</div>
         ) : accounts.length === 0 ? (
           <div className="erp-empty-state">
+            <div className="erp-empty-icon">₺</div>
             <strong>Kasa/banka hesabı yok</strong>
             <p>İlk kasa ya da banka hesabını oluşturarak başlayın.</p>
           </div>
@@ -420,19 +463,34 @@ export default function CashAccountsPage() {
                   <th>Ad</th>
                   <th>Tür</th>
                   <th>Muhasebe Hesabı</th>
-                  <th style={{ textAlign: "right" }}>Giren</th>
-                  <th style={{ textAlign: "right" }}>Çıkan</th>
-                  <th style={{ textAlign: "right" }}>Bakiye</th>
+                  <th className="num">Giren</th>
+                  <th className="num">Çıkan</th>
+                  <th className="num">Bakiye</th>
                 </tr>
               </thead>
               <tbody>
                 {accounts.map((account) => (
+                  /*
+                    SATIR SEÇİLEBİLİR VE KLAVYEYLE ULAŞILABİLİR:
+                    yalnızca onClick vardı; klavyeyle gezen kullanıcı
+                    hiçbir hesabı seçemiyor, dolayısıyla ekstreyi hiç
+                    göremiyordu. Seçili satır artık kalın yazıyla değil,
+                    marka rengi şeritle işaretleniyor — kalınlık iki
+                    satır arasında fark edilmiyordu.
+                  */
                   <tr
                     key={account.id}
+                    tabIndex={0}
+                    aria-current={account.id === selectedId}
+                    className={`rw-selectable ${
+                      account.id === selectedId ? "selected" : ""
+                    }`}
                     onClick={() => setSelectedId(account.id)}
-                    style={{
-                      cursor: "pointer",
-                      fontWeight: account.id === selectedId ? 600 : undefined,
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedId(account.id);
+                      }
                     }}
                   >
                     <td>{account.code}</td>
@@ -449,10 +507,10 @@ export default function CashAccountsPage() {
                       {account.accountingAccountCode}
                       <small>{account.accountingAccountName}</small>
                     </td>
-                    <td style={{ textAlign: "right" }}>{money.format(account.totalIn)}</td>
-                    <td style={{ textAlign: "right" }}>{money.format(account.totalOut)}</td>
-                    <td style={{ textAlign: "right" }}>
-                      <strong>{money.format(account.balance)}</strong>
+                    <td className="num">{money(account.totalIn)}</td>
+                    <td className="num">{money(account.totalOut)}</td>
+                    <td className="num">
+                      <strong>{money(account.balance)}</strong>
                     </td>
                   </tr>
                 ))}
@@ -472,20 +530,40 @@ export default function CashAccountsPage() {
             <button
               type="button"
               className="erp-primary-button"
-              onClick={() => setShowTransactionForm((value) => !value)}
+              onClick={() => setShowTransactionForm(true)}
             >
               + Tahsilat / Ödeme
             </button>
           </div>
 
-          {showTransactionForm && (
-            <form
-              onSubmit={submitTransaction}
-              style={{ padding: "16px", display: "grid", gap: "12px" }}
-            >
+          <Drawer
+            open={showTransactionForm}
+            title="Tahsilat / Ödeme"
+            description={`${selectedAccount.code} — ${selectedAccount.name}. Kayıt muhasebe fişini de üretir.`}
+            onClose={() => setShowTransactionForm(false)}
+            busy={saving}
+            size="lg"
+            footer={
+              <div className="flex justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowTransactionForm(false)}
+                  disabled={saving}
+                >
+                  Vazgeç
+                </Button>
+
+                <Button type="submit" form="kasa-hareket-formu" loading={saving}>
+                  Kaydet
+                </Button>
+              </div>
+            }
+          >
+            <form id="kasa-hareket-formu" onSubmit={submitTransaction}>
               <div className="erp-form-grid">
                 <label>
-                  Tarih
+                  <span>Tarih</span>
                   <input
                     type="date"
                     required
@@ -500,7 +578,7 @@ export default function CashAccountsPage() {
                 </label>
 
                 <label>
-                  İşlem
+                  <span>İşlem</span>
                   <select
                     value={transactionForm.transactionType}
                     onChange={(e) =>
@@ -520,7 +598,7 @@ export default function CashAccountsPage() {
                 </label>
 
                 <label>
-                  Tutar
+                  <span>Tutar</span>
                   <input
                     type="number"
                     step="0.01"
@@ -534,7 +612,7 @@ export default function CashAccountsPage() {
                 </label>
 
                 <label>
-                  Cari
+                  <span>Cari</span>
                   <select
                     required
                     value={transactionForm.currentAccountId}
@@ -555,7 +633,7 @@ export default function CashAccountsPage() {
                 </label>
 
                 <label>
-                  Proje (opsiyonel)
+                  <span>Proje (opsiyonel)</span>
                   <select
                     value={transactionForm.projectId}
                     onChange={(e) =>
@@ -572,7 +650,7 @@ export default function CashAccountsPage() {
                 </label>
 
                 <label>
-                  Belge no
+                  <span>Belge no</span>
                   <input
                     value={transactionForm.documentNumber}
                     onChange={(e) =>
@@ -595,24 +673,12 @@ export default function CashAccountsPage() {
                   />
                 </label>
               </div>
-
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button type="submit" className="erp-primary-button" disabled={saving}>
-                  {saving ? "Kaydediliyor..." : "Kaydet"}
-                </button>
-                <button
-                  type="button"
-                  className="erp-secondary-button"
-                  onClick={() => setShowTransactionForm(false)}
-                >
-                  Vazgeç
-                </button>
-              </div>
             </form>
-          )}
+          </Drawer>
 
           {!statement || statement.transactions.length === 0 ? (
             <div className="erp-empty-state">
+              <div className="erp-empty-icon">⇄</div>
               <strong>Hareket yok</strong>
               <p>Bu hesapta henüz kayıtlı bir hareket bulunmuyor.</p>
             </div>
@@ -626,15 +692,15 @@ export default function CashAccountsPage() {
                     <th>Açıklama</th>
                     <th>Cari</th>
                     <th>Fiş</th>
-                    <th style={{ textAlign: "right" }}>Giren</th>
-                    <th style={{ textAlign: "right" }}>Çıkan</th>
-                    <th style={{ textAlign: "right" }}>Bakiye</th>
+                    <th className="num">Giren</th>
+                    <th className="num">Çıkan</th>
+                    <th className="num">Bakiye</th>
                   </tr>
                 </thead>
                 <tbody>
                   {statement.transactions.map((row) => (
                     <tr key={row.id}>
-                      <td>{dateFormat.format(new Date(row.transactionDate))}</td>
+                      <td>{formatDate(row.transactionDate)}</td>
                       <td>{row.transactionTypeName}</td>
                       <td>
                         {row.description}
@@ -642,14 +708,14 @@ export default function CashAccountsPage() {
                       </td>
                       <td>{row.currentAccountTitle ?? "—"}</td>
                       <td>{row.accountingVoucherNumber ?? "—"}</td>
-                      <td style={{ textAlign: "right" }}>
-                        {row.direction === 0 ? money.format(row.amount) : "—"}
+                      <td className="num">
+                        {row.direction === 0 ? money(row.amount) : "—"}
                       </td>
-                      <td style={{ textAlign: "right" }}>
-                        {row.direction === 1 ? money.format(row.amount) : "—"}
+                      <td className="num">
+                        {row.direction === 1 ? money(row.amount) : "—"}
                       </td>
-                      <td style={{ textAlign: "right" }}>
-                        {money.format(row.runningBalance)}
+                      <td className="num">
+                        {money(row.runningBalance)}
                       </td>
                     </tr>
                   ))}
@@ -659,14 +725,14 @@ export default function CashAccountsPage() {
                     <td colSpan={5}>
                       <strong>Dönem toplamı</strong>
                     </td>
-                    <td style={{ textAlign: "right" }}>
-                      <strong>{money.format(statement.totalIn)}</strong>
+                    <td className="num">
+                      <strong>{money(statement.totalIn)}</strong>
                     </td>
-                    <td style={{ textAlign: "right" }}>
-                      <strong>{money.format(statement.totalOut)}</strong>
+                    <td className="num">
+                      <strong>{money(statement.totalOut)}</strong>
                     </td>
-                    <td style={{ textAlign: "right" }}>
-                      <strong>{money.format(statement.closingBalance)}</strong>
+                    <td className="num">
+                      <strong>{money(statement.closingBalance)}</strong>
                     </td>
                   </tr>
                 </tfoot>

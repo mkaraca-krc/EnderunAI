@@ -4,10 +4,14 @@ import {
   FormEvent,
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
+import { Button, ConfirmDialog, Drawer } from "@/components/ui";
+import { amount, money } from "@/lib/format/turkish";
+import { matchesSearch } from "@/lib/search/fold";
 
 type Company = {
   id: string;
@@ -53,40 +57,17 @@ type BalanceRow = {
   }[];
 };
 
-const tryMoney = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
-
-const currencyFormatters = new Map<string, Intl.NumberFormat>();
-
 /**
- * Tutarı kendi para biriminde biçimler. Bilinmeyen bir ISO kodunda
- * Intl hata fırlatır; o durumda sayı + kod yazılır, hücre boş kalmaz.
+ * Tutarı kendi para biriminde yazar.
+ *
+ * SİMGE/KOD SONDA: `Intl` para biçimi Türkçede bile bazı kodları başa
+ * koyuyordu ("$1.250,00"). Sağa hizalı bir sütunda öne gelen simge
+ * rakamları kaydırır ve iki satırın basamakları hizalanmaz. Sayı
+ * biçimi paylaşılan `turkishFormat`'tan geliyor; bu ekran kendi
+ * biçimleyicisini kurmuyor.
  */
 function formatCurrency(value: number, code: string) {
-  if (code === "TRY") return tryMoney.format(value);
-
-  let formatter = currencyFormatters.get(code);
-
-  if (!formatter) {
-    try {
-      formatter = new Intl.NumberFormat("tr-TR", {
-        style: "currency",
-        currency: code,
-      });
-    } catch {
-      formatter = new Intl.NumberFormat("tr-TR", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-    }
-    currencyFormatters.set(code, formatter);
-  }
-
-  return formatter.resolvedOptions().style === "currency"
-    ? formatter.format(value)
-    : `${formatter.format(value)} ${code}`;
+  return code === "TRY" ? money(value) : `${amount(value)} ${code}`;
 }
 
 type FormState = {
@@ -115,6 +96,31 @@ const roleOptions = [
   [64, "Kiralama"],
   [128, "Diğer"],
 ] as const;
+
+const STATUS_LABELS = [
+  "Taslak",
+  "Onay Bekliyor",
+  "Onaylandı",
+  "Askıda",
+  "Pasif",
+] as const;
+
+/**
+ * Durum rengi ANLAMA bağlı, sıraya değil: onaylı yeşil, bekleyen
+ * sarı (bir işlem gerektiriyor), askıda kırmızı, kalanı nötr.
+ */
+function statusTone(status: number) {
+  if (status === 2) return "green";
+  if (status === 1) return "yellow";
+  if (status === 3) return "red";
+  return "gray";
+}
+
+function roleLabels(roles: number) {
+  return roleOptions
+    .filter(([value]) => (roles & value) === value)
+    .map(([, label]) => label);
+}
 
 const blank: FormState = {
   companyId: "",
@@ -181,10 +187,16 @@ export default function Page() {
   const [form, setForm] = useState<FormState>(blank);
   const [show, setShow] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [confirmingSync, setConfirmingSync] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("0");
+  const [statusFilter, setStatusFilter] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -223,7 +235,41 @@ export default function Page() {
     void load();
   }, [load]);
 
+  /**
+   * Süzgeç. ARAMA KUTUSU EKLENDİ: bu ekranda hiç yoktu ve liste
+   * kayıt sayısı kadar uzuyordu — yüzlerce cari arasında bir tanesini
+   * bulmanın tek yolu tarayıcının Ctrl+F'iydi, o da sayfalanmamış
+   * listenin tamamı yüklüyse çalışıyordu.
+   *
+   * Kod, ünvan, kısa ad, vergi no ve yetkili birlikte aranır: kullanıcı
+   * hangisini hatırlıyorsa onu yazar.
+   */
+  const visible = useMemo(() => {
+    const role = Number(roleFilter);
+
+    return items.filter((account) => {
+      if (role && (account.roles & role) !== role) return false;
+
+      if (statusFilter !== "" && account.status !== Number(statusFilter)) {
+        return false;
+      }
+
+      return matchesSearch(
+        search,
+        account.code,
+        account.title,
+        account.shortName,
+        account.taxNumber,
+        account.authorizedPerson,
+        account.companyName,
+      );
+    });
+  }, [items, search, roleFilter, statusFilter]);
+
+  const filtered = visible.length !== items.length;
+
   function toggleRole(value: number) {
+    setDirty(true);
     setForm((current) => ({
       ...current,
       roles:
@@ -233,12 +279,18 @@ export default function Page() {
     }));
   }
 
+  function update(patch: Partial<FormState>) {
+    setDirty(true);
+    setForm((current) => ({ ...current, ...patch }));
+  }
+
   function startCreate() {
     setEditingId(null);
     setForm({
       ...blank,
       companyId: form.companyId || companies[0]?.id || "",
     });
+    setDirty(false);
     setMsg("");
     setErr("");
     setShow(true);
@@ -247,15 +299,16 @@ export default function Page() {
   function startEdit(account: Account) {
     setEditingId(account.id);
     setForm(toForm(account));
+    setDirty(false);
     setMsg("");
     setErr("");
     setShow(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function cancelForm() {
     setEditingId(null);
     setShow(false);
+    setDirty(false);
     setForm({
       ...blank,
       companyId: form.companyId || companies[0]?.id || "",
@@ -304,6 +357,7 @@ export default function Page() {
 
       setEditingId(null);
       setShow(false);
+      setDirty(false);
       setForm({
         ...blank,
         companyId: preservedCompanyId,
@@ -345,26 +399,16 @@ export default function Page() {
     }
   }
 
+  const syncCompany = companies.find(
+    (item) => item.id === (form.companyId || companies[0]?.id)
+  );
+
   async function synchronizeAccounting() {
-    const companyId =
-      form.companyId || companies[0]?.id;
+    const companyId = form.companyId || companies[0]?.id;
 
     if (!companyId) {
-      setErr(
-        "Muhasebe eşleştirmesi için şirket bulunamadı."
-      );
-      return;
-    }
-
-    const company = companies.find(
-      (item) => item.id === companyId
-    );
-
-    if (
-      !window.confirm(
-        `${company?.name ?? "Seçili şirket"} için cari muhasebe hesapları eşleştirilsin mi?`
-      )
-    ) {
+      setConfirmingSync(false);
+      setErr("Muhasebe eşleştirmesi için şirket bulunamadı.");
       return;
     }
 
@@ -383,6 +427,7 @@ export default function Page() {
           "Muhasebe hesapları eşleştirildi."
       );
 
+      setConfirmingSync(false);
       await load();
     } catch (error) {
       setErr(
@@ -396,22 +441,27 @@ export default function Page() {
   }
 
   return (
-    <ErpShell title="Cari Kartlar">
-      <div className="erp-toolbar">
-        <strong>{items.length} cari kart</strong>
-
+    <ErpShell
+      title="Cari Kartlar"
+      description="Müşteri, tedarikçi ve alt yüklenici kartları ile muhasebe bağlantıları."
+      design="redwood"
+    >
+      <div className="erp-toolbar rw-toolbar-end">
         <div className="erp-actions">
           <button
             type="button"
-            disabled={syncing || !form.companyId}
-            onClick={synchronizeAccounting}
+            className="erp-secondary-button"
+            disabled={syncing || companies.length === 0}
+            onClick={() => setConfirmingSync(true)}
           >
-            {syncing
-              ? "Eşleştiriliyor..."
-              : "Muhasebe Hesaplarını Eşleştir"}
+            Muhasebe Hesaplarını Eşleştir
           </button>
 
-          <button type="button" onClick={startCreate}>
+          <button
+            type="button"
+            className="erp-primary-button"
+            onClick={startCreate}
+          >
             + Yeni Cari Kart
           </button>
         </div>
@@ -425,14 +475,269 @@ export default function Page() {
         <div className="erp-alert error">{err}</div>
       )}
 
-      {show && (
-        <form className="erp-form-card" onSubmit={save}>
-          <h3>
-            {editingId
-              ? "Cari Kart Düzenle"
-              : "Yeni Cari Kart"}
-          </h3>
+      <div className="erp-table-card">
+        <div className="rw-filters">
+          <label className="rw-filter-search">
+            <span>Ara</span>
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Kod, ünvan, kısa ad, vergi no veya yetkili"
+              aria-label="Cari kart ara"
+            />
+          </label>
 
+          <label>
+            <span>Rol</span>
+            <select
+              value={roleFilter}
+              onChange={(event) => setRoleFilter(event.target.value)}
+              aria-label="Role göre süz"
+            >
+              <option value="0">Tümü</option>
+              {roleOptions.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>Durum</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              aria-label="Duruma göre süz"
+            >
+              <option value="">Tümü</option>
+              {STATUS_LABELS.map((label, index) => (
+                <option key={label} value={index}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/*
+            Kullanıcı "hepsi bu kadar mı, yoksa süzgeç mi kesti"
+            sorusunu ekrandan yanıtlayabilmeli.
+          */}
+          <span className="rw-filter-summary" data-testid="cari-sayisi">
+            {filtered
+              ? `${visible.length} / ${items.length} cari kart`
+              : `${items.length} cari kart`}
+          </span>
+        </div>
+
+        <div className="erp-table-wrap">
+          <table className="erp-table">
+            <thead>
+              <tr>
+                <th>Kod</th>
+                <th>Ünvan</th>
+                <th>Şirket</th>
+                <th>120 Alıcı</th>
+                <th>320 Satıcı</th>
+                <th className="num">Bakiye</th>
+                <th>Durum</th>
+                <th>İşlemler</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {visible.map((account) => (
+                <tr key={account.id}>
+                  <td>{account.code}</td>
+
+                  <td>
+                    <strong>{account.title}</strong>
+                    {/* Roller kartın en ayırt edici bilgisi ama tabloda
+                        hiç görünmüyordu: aynı ünvanlı bir cari hem
+                        müşteri hem tedarikçi olabiliyor. */}
+                    <small>{roleLabels(account.roles).join(" · ")}</small>
+                  </td>
+
+                  <td>{account.companyName}</td>
+
+                  <td>
+                    <span
+                      className={
+                        account.receivableAccountingAccountId
+                          ? "erp-status green"
+                          : "erp-status gray"
+                      }
+                    >
+                      {account.receivableAccountingAccountId
+                        ? "Bağlı"
+                        : "Bağlı Değil"}
+                    </span>
+                  </td>
+
+                  <td>
+                    <span
+                      className={
+                        account.payableAccountingAccountId
+                          ? "erp-status green"
+                          : "erp-status gray"
+                      }
+                    >
+                      {account.payableAccountingAccountId
+                        ? "Bağlı"
+                        : "Bağlı Değil"}
+                    </span>
+                  </td>
+
+                  <td className="num">
+                    {balances[account.id] === undefined ? (
+                      <span className="erp-status gray">Hareket yok</span>
+                    ) : (
+                      <>
+                        <strong>
+                          {money(Math.abs(balances[account.id].balance))}
+                        </strong>
+                        <small>
+                          {balances[account.id].balance === 0
+                            ? "Kapalı"
+                            : balances[account.id].balance > 0
+                              ? "Borç"
+                              : "Alacak"}
+                        </small>
+                        {/* Dövizli caride TL toplam kurla oynadığı için tek
+                            başına yanıltıcı; dövizin kendi tutarı da yazılır. */}
+                        {balances[account.id].hasForeignCurrency &&
+                          (balances[account.id].currencyBalances ?? [])
+                            .filter((row) => row.currencyCode !== "TRY")
+                            .map((row) => (
+                              <small key={row.currencyCode}>
+                                {formatCurrency(
+                                  Math.abs(row.balance),
+                                  row.currencyCode
+                                )}{" "}
+                                {row.balance >= 0 ? "borç" : "alacak"}
+                              </small>
+                            ))}
+                      </>
+                    )}
+                  </td>
+
+                  <td>
+                    <span className={`erp-status ${statusTone(account.status)}`}>
+                      {STATUS_LABELS[account.status] ?? "Bilinmiyor"}
+                    </span>
+                  </td>
+
+                  <td>
+                    <div className="erp-actions">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(account)}
+                      >
+                        Düzenle
+                      </button>
+
+                      {account.status === 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            act(account.id, "submit")
+                          }
+                        >
+                          Onaya Gönder
+                        </button>
+                      )}
+
+                      {account.status === 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            act(account.id, "approve")
+                          }
+                        >
+                          Onayla
+                        </button>
+                      )}
+
+                      <Link
+                        className="erp-secondary-button"
+                        href={`/cariler/${account.id}/ekstre`}
+                      >
+                        Ekstre
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {visible.length === 0 && (
+                <tr>
+                  {/*
+                    SÜTUN SAYISI 8: burada 7 yazıyordu, yani boş satır
+                    tabloyu tam kaplamıyor, son sütunun altında kopuk
+                    bir hücre kalıyordu.
+                  */}
+                  <td colSpan={8}>
+                    <div className="erp-empty-state">
+                      <div className="erp-empty-icon">☰</div>
+                      <strong>
+                        {items.length === 0
+                          ? "Henüz cari kart yok"
+                          : "Süzgece uyan cari kart yok"}
+                      </strong>
+                      <p>
+                        {items.length === 0
+                          ? "İlk müşteri, tedarikçi veya alt yüklenici kartını oluşturarak başlayın."
+                          : "Arama metnini kısaltın ya da rol ve durum süzgecini temizleyin."}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/*
+        Form artık tablonun ÜSTÜNDE değil, sağdan kayan panelde.
+        Eskiden form açılınca sayfa yukarı kaydırılıyordu (scrollTo) ve
+        kullanıcı düzenlediği satırı gözden kaybediyordu; panelde liste
+        arkada duruyor.
+      */}
+      <Drawer
+        open={show}
+        title={editingId ? "Cari Kart Düzenle" : "Yeni Cari Kart"}
+        description={
+          editingId
+            ? "Şirket ve kod değiştirilemez; kart oluşturulduktan sonra muhasebe bağlantısı bunlara dayanır."
+            : "Kart taslak olarak kaydedilir, onaya gönderildikten sonra kullanılabilir."
+        }
+        onClose={cancelForm}
+        busy={saving}
+        dirty={dirty}
+        size="xl"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={cancelForm}
+              disabled={saving}
+            >
+              Vazgeç
+            </Button>
+
+            {/* Düğme panelin altında, form ise içeriğinde: `form`
+                özniteliği ikisini bağlar, ayrı bir gönderim yolu
+                yazmaya gerek kalmaz. */}
+            <Button type="submit" form="cari-form" loading={saving}>
+              {editingId ? "Değişiklikleri Kaydet" : "Taslak Kaydet"}
+            </Button>
+          </div>
+        }
+      >
+        <form id="cari-form" onSubmit={save}>
           <div className="erp-form-grid">
             <label className="span-2">
               <span>Şirket *</span>
@@ -441,17 +746,11 @@ export default function Page() {
                 disabled={Boolean(editingId)}
                 value={form.companyId}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    companyId: event.target.value,
-                  })
+                  update({ companyId: event.target.value })
                 }
               >
                 {companies.map((company) => (
-                  <option
-                    key={company.id}
-                    value={company.id}
-                  >
+                  <option key={company.id} value={company.id}>
                     {company.code} — {company.name}
                   </option>
                 ))}
@@ -465,10 +764,7 @@ export default function Page() {
                 disabled={Boolean(editingId)}
                 value={form.code}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    code: event.target.value.toUpperCase(),
-                  })
+                  update({ code: event.target.value.toUpperCase() })
                 }
               />
             </label>
@@ -478,10 +774,7 @@ export default function Page() {
               <input
                 value={form.shortName}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    shortName: event.target.value,
-                  })
+                  update({ shortName: event.target.value })
                 }
               />
             </label>
@@ -492,10 +785,7 @@ export default function Page() {
                 required
                 value={form.title}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    title: event.target.value,
-                  })
+                  update({ title: event.target.value })
                 }
               />
             </label>
@@ -505,9 +795,7 @@ export default function Page() {
                 <label key={value}>
                   <input
                     type="checkbox"
-                    checked={
-                      (form.roles & value) === value
-                    }
+                    checked={(form.roles & value) === value}
                     onChange={() => toggleRole(value)}
                   />
                   {label}
@@ -520,10 +808,7 @@ export default function Page() {
               <input
                 value={form.taxOffice}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    taxOffice: event.target.value,
-                  })
+                  update({ taxOffice: event.target.value })
                 }
               />
             </label>
@@ -533,10 +818,7 @@ export default function Page() {
               <input
                 value={form.taxNumber}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    taxNumber: event.target.value,
-                  })
+                  update({ taxNumber: event.target.value })
                 }
               />
             </label>
@@ -546,10 +828,7 @@ export default function Page() {
               <input
                 value={form.authorizedPerson}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    authorizedPerson: event.target.value,
-                  })
+                  update({ authorizedPerson: event.target.value })
                 }
               />
             </label>
@@ -559,10 +838,7 @@ export default function Page() {
               <input
                 value={form.phone}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    phone: event.target.value,
-                  })
+                  update({ phone: event.target.value })
                 }
               />
             </label>
@@ -573,10 +849,7 @@ export default function Page() {
                 type="email"
                 value={form.email}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    email: event.target.value,
-                  })
+                  update({ email: event.target.value })
                 }
               />
             </label>
@@ -586,10 +859,7 @@ export default function Page() {
               <input
                 value={form.paymentTerm}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    paymentTerm: event.target.value,
-                  })
+                  update({ paymentTerm: event.target.value })
                 }
               />
             </label>
@@ -602,10 +872,7 @@ export default function Page() {
                 step="0.01"
                 value={form.creditLimit}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    creditLimit: event.target.value,
-                  })
+                  update({ creditLimit: event.target.value })
                 }
               />
             </label>
@@ -615,196 +882,28 @@ export default function Page() {
               <textarea
                 value={form.address}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
-                    address: event.target.value,
-                  })
+                  update({ address: event.target.value })
                 }
               />
             </label>
           </div>
-
-          <div className="erp-actions">
-            <button
-              type="button"
-              onClick={cancelForm}
-              disabled={saving}
-            >
-              İptal
-            </button>
-
-            <button type="submit" disabled={saving}>
-              {saving
-                ? "Kaydediliyor..."
-                : editingId
-                  ? "Değişiklikleri Kaydet"
-                  : "Taslak Kaydet"}
-            </button>
-          </div>
         </form>
-      )}
+      </Drawer>
 
-      <div className="erp-table-card">
-        <table className="erp-table">
-          <thead>
-            <tr>
-              <th>Kod</th>
-              <th>Ünvan</th>
-              <th>Şirket</th>
-              <th>120 Alıcı</th>
-              <th>320 Satıcı</th>
-              <th>Bakiye</th>
-              <th>Durum</th>
-              <th>İşlemler</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {items.map((account) => (
-              <tr key={account.id}>
-                <td>{account.code}</td>
-                <td>{account.title}</td>
-                <td>{account.companyName}</td>
-
-                <td>
-                  <span
-                    className={
-                      account.receivableAccountingAccountId
-                        ? "erp-status green"
-                        : "erp-status gray"
-                    }
-                  >
-                    {account.receivableAccountingAccountId
-                      ? "Bağlı"
-                      : "Bağlı Değil"}
-                  </span>
-                </td>
-
-                <td>
-                  <span
-                    className={
-                      account.payableAccountingAccountId
-                        ? "erp-status green"
-                        : "erp-status gray"
-                    }
-                  >
-                    {account.payableAccountingAccountId
-                      ? "Bağlı"
-                      : "Bağlı Değil"}
-                  </span>
-                </td>
-
-                <td>
-                  {balances[account.id] === undefined ? (
-                    <span className="erp-status gray">Hareket yok</span>
-                  ) : (
-                    <>
-                      <strong>
-                        {tryMoney.format(Math.abs(balances[account.id].balance))}
-                      </strong>
-                      <small>
-                        {balances[account.id].balance === 0
-                          ? "Kapalı"
-                          : balances[account.id].balance > 0
-                            ? "Borç"
-                            : "Alacak"}
-                      </small>
-                      {/* Dövizli caride TL toplam kurla oynadığı için tek
-                          başına yanıltıcı; dövizin kendi tutarı da yazılır. */}
-                      {balances[account.id].hasForeignCurrency &&
-                        (balances[account.id].currencyBalances ?? [])
-                          .filter((row) => row.currencyCode !== "TRY")
-                          .map((row) => (
-                            <small key={row.currencyCode}>
-                              {formatCurrency(
-                                Math.abs(row.balance),
-                                row.currencyCode
-                              )}{" "}
-                              {row.balance >= 0 ? "borç" : "alacak"}
-                            </small>
-                          ))}
-                    </>
-                  )}
-                </td>
-
-                <td>
-                  <span
-                    className={
-                      account.status === 2
-                        ? "erp-status green"
-                        : account.status === 1
-                          ? "erp-status yellow"
-                          : "erp-status gray"
-                    }
-                  >
-                    {[
-                      "Taslak",
-                      "Onay Bekliyor",
-                      "Onaylandı",
-                      "Askıda",
-                      "Pasif",
-                    ][account.status] ?? "Bilinmiyor"}
-                  </span>
-                </td>
-
-                <td>
-                  <div className="erp-actions">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(account)}
-                    >
-                      Düzenle
-                    </button>
-
-                    {account.status === 0 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          act(account.id, "submit")
-                        }
-                      >
-                        Onaya Gönder
-                      </button>
-                    )}
-
-                    {account.status === 1 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          act(account.id, "approve")
-                        }
-                      >
-                        Onayla
-                      </button>
-                    )}
-
-                    {account.status === 2 && (
-                      <span className="erp-status green">
-                        Kullanılabilir
-                      </span>
-                    )}
-
-                    <Link
-                      className="erp-secondary-button"
-                      href={`/cariler/${account.id}/ekstre`}
-                    >
-                      Ekstre
-                    </Link>
-                  </div>
-                </td>
-              </tr>
-            ))}
-
-            {items.length === 0 && (
-              <tr>
-                <td colSpan={7}>
-                  Henüz cari kart bulunmuyor.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/*
+        window.confirm YERİNE: tarayıcı diyaloğu hangi şirket için
+        çalışacağını biçimlendirilmiş şekilde gösteremiyor, işlem
+        sürerken kilitleniyor ve hata mesajını aynı yerde veremiyordu.
+      */}
+      <ConfirmDialog
+        open={confirmingSync}
+        title="Muhasebe hesapları eşleştirilsin mi?"
+        description={`${syncCompany?.name ?? "Seçili şirket"} için cari kartların 120/320 muhasebe hesapları oluşturulur ve eksik bağlantılar tamamlanır. Var olan bağlantılar korunur.`}
+        confirmLabel="Eşleştir"
+        busy={syncing}
+        onCancel={() => setConfirmingSync(false)}
+        onConfirm={() => void synchronizeAccounting()}
+      />
     </ErpShell>
   );
 }

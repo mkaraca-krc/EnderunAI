@@ -21,7 +21,6 @@ import {
   findMenuEntry,
   pathOnly,
   visibleMenuGroups,
-  type MenuGroup,
 } from "@/lib/navigation/menu";
 import CommandPalette from "@/components/erp/command-palette";
 
@@ -29,6 +28,20 @@ type ErpShellProps = {
   title: string;
   description?: string;
   children: ReactNode;
+
+  /**
+   * Sayfanın tasarım dili.
+   *
+   * "klasik" (varsayılan) bugünkü görünümdür — hiçbir sayfa istemeden
+   * değişmez. "redwood" A1'de tanımlanan semantik tokenları devreye
+   * sokar; ekranlar tek tek geçirilir.
+   *
+   * NEDEN OPT-IN: tokenlar tek hamlede tüm `erp-*` sınıflarına
+   * bağlansaydı 175 sayfanın görünümü aynı anda değişir, hiçbiri tek
+   * tek gözden geçirilmemiş olurdu. Böyle referans ekranlar önce
+   * onaylanır, yayma sonra gelir.
+   */
+  design?: "klasik" | "redwood";
 };
 
 
@@ -48,6 +61,7 @@ export default function ErpShell({
   title,
   description,
   children,
+  design = "klasik",
 }: ErpShellProps) {
   const pathname = usePathname();
 
@@ -500,7 +514,7 @@ export default function ErpShell({
         </div>
       </aside>
 
-      <main className="erp-main">
+      <main className={`erp-main ${design === "redwood" ? "rw" : ""}`}>
         <header className="erp-topbar">
           <button
             type="button"

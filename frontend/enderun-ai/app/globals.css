@@ -3049,3 +3049,550 @@ body {
     display: none;
   }
 }
+
+
+/* ============================================================
+   EKSİK DURUM RENGİ — "orange" 11 dosyada kullanılıyor ama hiç
+   tanımlanmamış. Tanımsız olduğu için o rozetler bugün hap değil,
+   biçimsiz düz yazı olarak çıkıyor (iş programı gecikmesi, iade
+   bekliyor, demirbaş serviste, teklif beklemede...).
+
+   .rw dışında, KLASİK ekranlar için de geçerli: bu bir hata
+   düzeltmesi, tasarım tercihi değil. Sarıyla aynı aileden ama daha
+   uyarıcı — "yaklaşan" değil "takıldı" anlamında.
+   ============================================================ */
+.erp-status.orange {
+  background: #fdeedd;
+  color: #9a5410;
+}
+
+
+/* ============================================================
+   REDWOOD TASARIM KATMANI (A3)
+
+   Sayfa <ErpShell design="redwood"> derse kabuk `.rw` sınıfını
+   basar ve bu blok devreye girer. Yaptığı iş, mevcut `erp-*`
+   sınıflarının okuduğu ESKİ değişkenleri A1 tokenlarına yeniden
+   bağlamak: böylece tek satır markup değiştirmeden sayfanın tamamı
+   yeni dile geçiyor, sonra ekrana özgü rötuşlar üstüne biniyor.
+
+   BURADA HAM HEX YAZILMAZ. Tek istisna gölge/odak halkasının
+   alfa değerleridir; onlar renk değil derinlik.
+
+   .rw YAZMAYAN HİÇBİR SAYFA ETKİLENMEZ — seçicilerin hepsi `.rw`
+   ile başlıyor.
+   ============================================================ */
+
+.rw {
+  /* Eski değişkenler yeni tokenlara bağlanıyor: `erp-*` sınıfları
+     kod değişmeden yeni paleti okur. */
+  --erp-bg: var(--color-surface-bg);
+  --erp-panel: var(--color-surface-card);
+  --erp-border: var(--color-border-subtle);
+  --erp-primary: var(--color-brand-primary);
+  --erp-primary-hover: var(--color-brand-primary-hover);
+  --erp-success: var(--color-semantic-success);
+  --erp-danger: var(--color-semantic-danger);
+
+  /* Redwood ölçeği: yumuşak köşe, ölçülü gölge, görünür odak. */
+  --rw-radius: 12px;
+  --rw-radius-sm: 8px;
+  --rw-focus-ring: 0 0 0 3px rgba(22, 92, 92, 0.16);
+
+  background: var(--color-surface-bg);
+}
+
+/* ---- Sayfa başlığı ---- */
+
+.rw .erp-page-header {
+  background: var(--color-surface-card);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.rw .erp-content {
+  padding: 24px 30px 56px;
+}
+
+/* ---- Kartlar ---- */
+
+.rw .erp-panel,
+.rw .erp-form-card,
+.rw .erp-table-card,
+.rw .erp-stat-card {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--rw-radius);
+  background: var(--color-surface-card);
+  box-shadow: var(--shadow-soft);
+}
+
+.rw .erp-panel-header h2,
+.rw .erp-form-header h2,
+.rw .erp-table-header h2 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ---- Tablo ----
+   Uzun listelerde en sık kaybedilen şey sütun başlıklarıdır:
+   kullanıcı 40. satırda hangi sütuna baktığını bilmez. Başlık
+   yapışkan. */
+
+.rw .erp-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 11px 18px;
+  border-top: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-bg);
+  color: var(--erp-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.rw .erp-table td {
+  padding: 12px 18px;
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: 13px;
+}
+
+.rw .erp-table tbody tr:hover {
+  background: var(--color-brand-primary-tint);
+}
+
+/*
+   PARASAL VE SAYISAL SÜTUN: sağa hizalı ve eş genişlikli rakam.
+   Orantılı rakamla "1.111,00" ile "8.888,00" farklı genişlikte
+   çıkar ve sütun içinde basamaklar kayar; büyüklük karşılaştırması
+   göz kararı yapılamaz hale gelir.
+*/
+.rw .erp-table th.num,
+.rw .erp-table td.num,
+.rw .rw-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rw .erp-table td.num strong {
+  font-weight: 700;
+}
+
+.rw .erp-table-wrap {
+  max-height: calc(100vh - 330px);
+  overflow: auto;
+}
+
+/* ---- Araç çubuğu ve süzgeçler ---- */
+
+.rw .erp-toolbar {
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.rw-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.rw-filters label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--erp-muted);
+}
+
+.rw-filters input,
+.rw-filters select {
+  min-width: 190px;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--rw-radius-sm);
+  background: var(--color-surface-card);
+  color: var(--erp-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.rw-filters .rw-filter-search {
+  min-width: 280px;
+  flex: 1;
+}
+
+/* Süzgeç sonucu sayısı: kullanıcı "hepsi bu kadar mı, yoksa
+   süzgeç mi kesti" sorusunu ekrandan yanıtlayabilmeli. */
+.rw-filter-summary {
+  margin-left: auto;
+  color: var(--erp-muted);
+  font-size: 12px;
+}
+
+/* ---- Düğmeler ---- */
+
+.rw .erp-primary-button,
+.rw .erp-create-button,
+.rw .erp-secondary-button,
+.rw .erp-toolbar button,
+.rw .erp-actions button {
+  border-radius: var(--rw-radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rw .erp-toolbar button,
+.rw .erp-actions button {
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+/*
+   TABLO İÇİNDEKİ İŞLEM DÜĞMELERİ: bugün hepsi dolu marka rengi.
+   Sekiz satırda üç düğme varsa ekran 24 tane koyu blokla dolar ve
+   hiçbiri diğerinden önemli görünmez. Satır içi eylem sessiz olur,
+   sayfanın asıl eylemi (yeni kayıt) dolu kalır.
+*/
+.rw .erp-table .erp-actions button,
+.rw .erp-table .erp-actions .erp-secondary-button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-card);
+  color: var(--erp-text);
+  font-size: 12px;
+}
+
+.rw .erp-table .erp-actions button:hover {
+  border-color: var(--color-brand-primary);
+  background: var(--color-brand-primary-tint);
+  color: var(--color-brand-primary);
+}
+
+.rw .erp-table .erp-actions {
+  justify-content: flex-start;
+  gap: 6px;
+  margin-top: 0;
+}
+
+/* ---- Odak: klavyeyle gezen kullanıcı nerede olduğunu görmeli ---- */
+
+.rw button:focus-visible,
+.rw a:focus-visible,
+.rw input:focus-visible,
+.rw select:focus-visible,
+.rw textarea:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 1px;
+  box-shadow: var(--rw-focus-ring);
+}
+
+/* ---- Form alanları ---- */
+
+.rw .erp-form-grid input,
+.rw .erp-form-grid select,
+.rw .erp-form-grid textarea {
+  border-color: var(--color-border-subtle);
+  border-radius: var(--rw-radius-sm);
+  font-size: 13px;
+}
+
+.rw .erp-form-grid label > span {
+  color: var(--erp-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---- Durum hapları: anlamsal tokenlara bağlı ---- */
+
+.rw .erp-status {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.rw .erp-status.green,
+.rw .erp-status.success {
+  background: #e8f2ec;
+  color: var(--color-semantic-success);
+}
+
+.rw .erp-status.yellow,
+.rw .erp-status.orange,
+.rw .erp-status.warning {
+  background: #f7efdf;
+  color: var(--color-semantic-warning);
+}
+
+.rw .erp-status.red,
+.rw .erp-status.danger {
+  background: #f6e7e7;
+  color: var(--color-semantic-danger);
+}
+
+.rw .erp-status.blue,
+.rw .erp-status.info {
+  background: var(--color-brand-primary-tint);
+  color: var(--color-brand-primary);
+}
+
+.rw .erp-status.gray,
+.rw .erp-status.neutral {
+  background: var(--color-surface-bg);
+  color: var(--erp-muted);
+}
+
+/* ---- Uyarı şeritleri ---- */
+
+.rw .erp-alert {
+  border-radius: var(--rw-radius-sm);
+  border-left: 3px solid transparent;
+  font-size: 13px;
+}
+
+.rw .erp-alert.success {
+  border-left-color: var(--color-semantic-success);
+  background: #e8f2ec;
+  color: var(--color-semantic-success);
+}
+
+.rw .erp-alert.error {
+  border-left-color: var(--color-semantic-danger);
+  background: #f6e7e7;
+  color: var(--color-semantic-danger);
+}
+
+.rw .erp-alert.warning {
+  border-left-color: var(--color-semantic-warning);
+  background: #f7efdf;
+  color: var(--color-semantic-warning);
+}
+
+/* ---- Boş durum ---- */
+
+.rw .erp-empty-icon {
+  background: var(--color-brand-primary-tint);
+  color: var(--color-brand-primary);
+}
+
+@media (max-width: 900px) {
+  .rw-filters .rw-filter-search,
+  .rw-filters input,
+  .rw-filters select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .rw .erp-table-wrap {
+    max-height: none;
+  }
+}
+
+/* ---- Paylaşılan Button bileşeni Redwood içinde ----
+   Bileşen Tailwind sınıflarıyla geliyor ve marka rengi olarak eski
+   brand-700'ü kullanıyor. Aynı ekranda `erp-primary-button` yeni
+   tokenı, panel altındaki KAYDET düğmesi eskisini kullansaydı iki
+   farklı teal yan yana dururdu. Kanca `data-variant`; sınıf adları
+   Tailwind üretimi olduğu için kararlı değil. */
+
+.rw button[data-variant="primary"] {
+  background: var(--color-brand-primary);
+  color: var(--color-brand-on-primary);
+}
+
+.rw button[data-variant="primary"]:hover:not(:disabled) {
+  background: var(--color-brand-primary-hover);
+}
+
+.rw button[data-variant="secondary"] {
+  border-color: var(--color-border-subtle);
+  color: var(--color-brand-primary);
+}
+
+.rw button[data-variant="secondary"]:hover:not(:disabled) {
+  background: var(--color-brand-primary-tint);
+}
+
+.rw button[data-variant="danger"] {
+  background: var(--color-semantic-danger);
+}
+
+.rw button[data-variant="danger"]:hover:not(:disabled) {
+  background: #9c3030;
+}
+
+/* Sayfa eylemleri sağda tek başına duruyorsa: `erp-toolbar`
+   space-between olduğu için tek çocuk sola yapışırdı. */
+.rw .erp-toolbar.rw-toolbar-end {
+  justify-content: flex-end;
+}
+
+.rw .erp-toolbar .erp-actions {
+  margin-top: 0;
+  gap: 10px;
+}
+
+/* Tablo içindeki boş durum kartın tamamını kaplasın; hücre
+   dolgusuyla üst üste binmesin. */
+.rw .erp-table td > .erp-empty-state {
+  min-height: 220px;
+}
+
+.rw .erp-table td > .erp-empty-state strong {
+  font-size: 15px;
+}
+
+/* ---- Özet kartları ----
+   `erp-stat-grid` beşe sabit; iki ya da üç göstergede kartlar
+   gereksiz daralıyordu. Bu ızgara içeriğe göre sarar. */
+
+.rw-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.rw .rw-stats .erp-stat-card {
+  min-height: 0;
+  gap: 6px;
+  padding: 16px 18px;
+}
+
+.rw .rw-stats .erp-stat-card strong {
+  /* 32px para tutarında taşıyor: "1.234.567,89 ₺" kartı aşıyordu. */
+  margin: 0;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+}
+
+.rw .rw-stats .erp-stat-label {
+  color: var(--erp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Toplam gibi "asıl sayı" olan kart vurgulanır; diğerleri sessiz
+   kalır ki gözün gideceği yer belli olsun. */
+.rw .rw-stats .rw-stat-accent {
+  border-color: var(--color-brand-primary);
+  background: var(--color-brand-primary-tint);
+}
+
+.rw .rw-stats .rw-stat-accent strong {
+  color: var(--color-brand-primary);
+}
+
+/* ---- Araç çubuğundaki etiketli alan ---- */
+
+.rw-inline-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--erp-muted);
+}
+
+.rw-inline-field select,
+.rw-inline-field input {
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--rw-radius-sm);
+  background: var(--color-surface-card);
+  color: var(--erp-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* ---- Seçilebilir tablo satırı ---- */
+
+.rw .erp-table tr.rw-selectable {
+  cursor: pointer;
+}
+
+.rw .erp-table tr.rw-selectable.selected {
+  background: var(--color-brand-primary-tint);
+}
+
+/* Seçili satır SOL ŞERİTLE işaretleniyor: yalnız arka plan tonu,
+   fare satırın üstündeyken beliren vurguyla karışıyordu. */
+.rw .erp-table tr.rw-selectable.selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-brand-primary);
+}
+
+.rw .erp-table tr.rw-selectable:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: -2px;
+}
+
+/* ---- Başlığında eylem olan kart başlığı ---- */
+
+.rw .erp-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 0;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.rw .erp-table-card + .erp-table-card {
+  margin-top: 16px;
+}
+
+/* ---- Tablo alt toplam satırı ---- */
+
+.rw .erp-table tfoot td {
+  border-top: 2px solid var(--color-border-subtle);
+  background: var(--color-surface-bg);
+  font-weight: 700;
+}
+
+/* Süzgeç çubuğundaki onay kutusu: `rw-filters label` ızgara olduğu
+   için kutu ile metin alt alta düşerdi. */
+.rw-filters .rw-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  color: var(--erp-text);
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.rw-filters .rw-check input {
+  min-width: 0;
+  width: 16px;
+  height: 16px;
+}
+
+/* Satır içi bağlantı eylemi düğmelerle aynı yükseklikte dursun. */
+.rw .erp-table .erp-actions .erp-row-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--color-brand-primary);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.rw .erp-table .erp-actions .erp-row-link:hover {
+  text-decoration: underline;
+}

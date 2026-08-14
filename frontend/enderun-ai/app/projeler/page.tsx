@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { Button, Drawer } from "@/components/ui";
+import { amount } from "@/lib/format/turkish";
+import { matchesSearch } from "@/lib/search/fold";
 import { companyService, CompanyListItem } from "@/services/company.service";
 import { branchService, BranchListItem } from "@/services/branch.service";
 import {
@@ -55,13 +58,30 @@ export default function ProjectsPage() {
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [search, setSearch] = useState("");
 
+  /**
+   * ARAMA EKLENDİ: bu listede yalnızca statü süzgeci vardı. Proje adı
+   * ya da kodu bilinen bir kaydı bulmanın yolu, listeyi gözle taramaktı.
+   * Kod, ad, işveren, şube ve sözleşme no birlikte aranıyor.
+   */
   const visibleProjects = useMemo(
     () =>
-      statusFilter === ""
-        ? projects
-        : projects.filter((project) => String(project.status) === statusFilter),
-    [projects, statusFilter]
+      projects.filter((project) => {
+        if (statusFilter !== "" && String(project.status) !== statusFilter) {
+          return false;
+        }
+
+        return matchesSearch(
+          search,
+          project.code,
+          project.name,
+          project.employerName,
+          project.branchName,
+          project.contractNumber,
+        );
+      }),
+    [projects, statusFilter, search]
   );
 
   const loadData = useCallback(async () => {
@@ -130,6 +150,13 @@ export default function ProjectsPage() {
         : approvedCustomers[0]?.id || "",
     }));
   }, [filteredBranches, approvedCustomers]);
+
+  /** Paneli kapatır ve formu boşaltır; seçili şirket korunur. */
+  function closeForm() {
+    setShowForm(false);
+    setEditingProjectId(null);
+    setForm({ ...initialForm, companyId: form.companyId });
+  }
 
   async function saveProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -282,34 +309,60 @@ export default function ProjectsPage() {
     <ErpShell
       title="Projeler"
       description="Onaylı cari ve şube üzerinden proje açın"
+      design="redwood"
     >
-      <div className="erp-page-toolbar">
-        <div>
-          <strong>{projects.length} proje</strong>
-          <span> kayıtlı</span>
+      <div className="erp-toolbar rw-toolbar-end">
+        <div className="erp-actions">
+          <button
+            type="button"
+            className="erp-primary-button"
+            onClick={() => setShowForm(true)}
+          >
+            + Yeni Proje
+          </button>
         </div>
-
-        <button
-          type="button"
-          className="erp-primary-button"
-          onClick={() => setShowForm((value) => !value)}
-        >
-          {showForm ? "Formu Kapat" : "+ Yeni Proje"}
-        </button>
       </div>
 
       {message && <div className="erp-alert success">{message}</div>}
       {error && <div className="erp-alert error">{error}</div>}
 
-      {showForm && (
-        <form className="erp-form-card" onSubmit={saveProject}>
-          <div className="erp-form-header">
-            <h2>{editingProjectId ? "Projeyi Düzenle" : "Yeni Proje"}</h2>
-            <p>
-              İşveren yalnızca onaylanmış müşteri cari kartından seçilebilir.
-            </p>
-          </div>
+      <Drawer
+        open={showForm}
+        title={editingProjectId ? "Projeyi Düzenle" : "Yeni Proje"}
+        description="İşveren yalnızca onaylanmış müşteri cari kartından seçilebilir."
+        onClose={closeForm}
+        busy={saving}
+        size="xl"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={closeForm}
+              disabled={saving}
+            >
+              Vazgeç
+            </Button>
 
+            <Button
+              type="submit"
+              form="proje-formu"
+              loading={saving}
+              disabled={
+                !form.companyId ||
+                !form.branchId ||
+                (Number(form.status) !== ProjectStatus.Kesif &&
+                  !form.employerCurrentAccountId)
+              }
+            >
+              {editingProjectId
+                ? "Değişiklikleri Kaydet"
+                : "Projeyi ve Depoyu Oluştur"}
+            </Button>
+          </div>
+        }
+      >
+        <form id="proje-formu" onSubmit={saveProject}>
           <div className="erp-form-grid">
             <label>
               <span>Şirket *</span>
@@ -630,82 +683,68 @@ export default function ProjectsPage() {
               Bu şirkette onaylanmış müşteri rolünde cari kart bulunmuyor.
             </div>
           )}
-
-          <div className="erp-form-actions">
-            <button
-              type="button"
-              className="erp-secondary-button"
-              onClick={() => {
-                setShowForm(false);
-                setEditingProjectId(null);
-                setForm({
-                  ...initialForm,
-                  companyId: form.companyId,
-                });
-              }}
-            >
-              Vazgeç
-            </button>
-
-            <button
-              type="submit"
-              className="erp-primary-button"
-              disabled={
-                saving ||
-                !form.companyId ||
-                !form.branchId ||
-                (Number(form.status) !== ProjectStatus.Kesif &&
-                  !form.employerCurrentAccountId)
-              }
-            >
-              {saving
-                ? "Kaydediliyor..."
-                : editingProjectId
-                  ? "Değişiklikleri Kaydet"
-                  : "Projeyi ve Depoyu Oluştur"}
-            </button>
-          </div>
         </form>
-      )}
+      </Drawer>
 
       <div className="erp-table-card">
-        <div className="erp-table-header">
-          <h2>Proje Listesi</h2>
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-            style={{ maxWidth: "220px" }}
-          >
-            <option value="">Tüm statüler</option>
-            {Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+        <div className="rw-filters">
+          <label className="rw-filter-search">
+            <span>Ara</span>
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Proje kodu, adı, işveren, şube veya sözleşme no"
+              aria-label="Proje ara"
+            />
+          </label>
+
+          <label>
+            <span>Statü</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              aria-label="Statüye göre süz"
+            >
+              <option value="">Tümü</option>
+              {Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           {/* Arşivli proje aktif listeden düşer; buradan geri getirilebilir. */}
-          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <label className="rw-check">
             <input
               type="checkbox"
               checked={includeArchived}
               onChange={(event) => setIncludeArchived(event.target.checked)}
             />
-            Arşiv dahil
+            <span>Arşiv dahil</span>
           </label>
+
+          <span className="rw-filter-summary" data-testid="proje-sayisi">
+            {visibleProjects.length !== projects.length
+              ? `${visibleProjects.length} / ${projects.length} proje`
+              : `${projects.length} proje`}
+          </span>
         </div>
 
         {loading ? (
           <div className="erp-loading">Projeler yükleniyor...</div>
         ) : projects.length === 0 ? (
           <div className="erp-empty-state">
+            <div className="erp-empty-icon">◈</div>
             <strong>Henüz proje bulunmuyor</strong>
             <p>Onaylı müşteri cari kartı üzerinden ilk projeyi açın.</p>
           </div>
         ) : visibleProjects.length === 0 ? (
           <div className="erp-empty-state">
-            <strong>Bu statüde proje yok</strong>
-            <p>Farklı bir statü filtresi seçin.</p>
+            <div className="erp-empty-icon">◈</div>
+            <strong>Süzgece uyan proje yok</strong>
+            <p>Arama metnini kısaltın ya da statü süzgecini temizleyin.</p>
           </div>
         ) : (
           <div className="erp-table-wrap">
@@ -717,7 +756,7 @@ export default function ProjectsPage() {
                   <th>Statü</th>
                   <th>İşveren</th>
                   <th>Şube</th>
-                  <th>Sözleşme</th>
+                  <th className="num">Sözleşme</th>
                   <th>Depo</th>
                   <th>İşlem</th>
                 </tr>
@@ -748,11 +787,17 @@ export default function ProjectsPage() {
                     </td>
                     <td>{project.employerName || "—"}</td>
                     <td>{project.branchName}</td>
-                    <td>
+                    <td className="num">
+                      {/*
+                        toLocaleString ondalık hane sayısını sabitlemiyordu:
+                        1.500.000 ile 1.500.000,5 aynı sütunda yan yana
+                        çıkıyordu. Paylaşılan biçimleyici iki hane yazar.
+                      */}
                       <span>
-                        {project.contractAmount?.toLocaleString("tr-TR") ??
-                          "—"}{" "}
-                        {project.currencyCode}
+                        {project.contractAmount === null ||
+                        project.contractAmount === undefined
+                          ? "—"
+                          : `${amount(project.contractAmount)} ${project.currencyCode}`}
                       </span>
                       <small>{project.contractNumber || "—"}</small>
                     </td>
@@ -762,17 +807,9 @@ export default function ProjectsPage() {
                       </span>
                     </td>
                     <td>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "8px",
-                          alignItems: "center",
-                          flexWrap: "wrap",
-                        }}
-                      >
+                      <div className="erp-actions">
                         <button
                           type="button"
-                          className="erp-secondary-button"
                           onClick={() => editProject(project.id)}
                         >
                           Düzenle

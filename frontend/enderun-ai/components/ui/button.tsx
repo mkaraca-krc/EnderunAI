@@ -49,6 +49,14 @@ export function Button({
   return (
     <button
       type={type}
+      /*
+       * Türü DOM'a yazıyoruz ki CSS onu yakalayabilsin. Redwood
+       * ekranları (.rw) buradan tutunup düğmeyi semantik tokenlara
+       * bağlıyor; sınıflar Tailwind tarafından üretildiği için
+       * tutunacak başka kararlı bir kanca yok. Klasik ekranlarda
+       * hiçbir şey değişmez.
+       */
+      data-variant={variant}
       disabled={disabled || loading}
       className={[
         "inline-flex items-center justify-center rounded-lg font-medium transition",
