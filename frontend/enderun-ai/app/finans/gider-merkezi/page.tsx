@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money, moneyWhole } from "@/lib/format/turkish";
 import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -26,16 +27,7 @@ import {
   type SaveExpenseEntryPayload,
 } from "@/services/expense.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 0,
-});
 
-const moneyExact = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -365,7 +357,7 @@ export default function ExpenseCentrePage() {
 
   if (permissionsLoading) {
     return (
-      <ErpShell title="Gider Merkezi">
+      <ErpShell design="redwood" title="Gider Merkezi">
         <div className="p-6 text-sm text-slate-500">Yükleniyor…</div>
       </ErpShell>
     );
@@ -373,7 +365,7 @@ export default function ExpenseCentrePage() {
 
   if (!has("expense.view")) {
     return (
-      <ErpShell title="Gider Merkezi">
+      <ErpShell design="redwood" title="Gider Merkezi">
         <div className="p-6">
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
             Gider merkezi raporu için <strong>expense.view</strong> yetkisi
@@ -386,6 +378,7 @@ export default function ExpenseCentrePage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Gider Merkezi"
       description="Merkez ve kategori kırılımında giderler — ofise ne harcadık, şantiyeye ne harcadık."
     >
@@ -736,7 +729,7 @@ export default function ExpenseCentrePage() {
                 {duplicates.map((hint) => (
                   <li key={hint.id}>
                     {dateFormat.format(new Date(hint.expenseDate))} ·{" "}
-                    {moneyExact.format(hint.amount)} · {hint.description}
+                    {money(hint.amount)} · {hint.description}
                   </li>
                 ))}
               </ul>
@@ -922,7 +915,7 @@ export default function ExpenseCentrePage() {
               {MONTHS[confirmPeriod.month - 1]} {confirmPeriod.year}
             </p>
             <p className="text-xs text-slate-500">
-              Tahmini: {moneyExact.format(confirmPeriod.estimated)}. Gerçekleşen
+              Tahmini: {money(confirmPeriod.estimated)}. Gerçekleşen
               girildiğinde bu ayın tahminisi düşer; ikisi birden sayılmaz.
             </p>
 
@@ -986,7 +979,7 @@ function ReportView({ report }: { report: ExpenseReport | null }) {
           Dönem toplamı
         </p>
         <p className="mt-1 text-2xl font-semibold text-slate-900">
-          {moneyExact.format(report.total)}
+          {money(report.total)}
         </p>
       </div>
 
@@ -1045,7 +1038,7 @@ function ReportView({ report }: { report: ExpenseReport | null }) {
                   ) : null}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">
-                  {moneyExact.format(row.amount)}
+                  {money(row.amount)}
                 </td>
               </tr>
             ))}
@@ -1082,7 +1075,7 @@ function TotalsTable({
                   %{share}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">
-                  {money.format(row.amount)}
+                  {moneyWhole(row.amount)}
                 </td>
               </tr>
             );
@@ -1158,7 +1151,7 @@ function EntriesView({
                 )}
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
-                {moneyExact.format(item.amount)}
+                {money(item.amount)}
               </td>
               {canManage ? (
                 <td className="px-3 py-2 text-right">
@@ -1180,7 +1173,7 @@ function EntriesView({
               Toplam {data.hiddenCount > 0 ? "(yalnız görünen kalemler)" : ""}
             </td>
             <td className="px-3 py-2 text-right tabular-nums">
-              {moneyExact.format(data.total)}
+              {money(data.total)}
             </td>
             {canManage ? <td /> : null}
           </tr>
@@ -1246,14 +1239,14 @@ function RecurringView({
                 <td className="px-3 py-2">{template.centerName}</td>
                 <td className="px-3 py-2">{template.categoryName}</td>
                 <td className="px-3 py-2 text-right tabular-nums">
-                  {moneyExact.format(template.estimatedAmount)}
+                  {money(template.estimatedAmount)}
                 </td>
                 <td className="px-3 py-2">
                   {!period ? (
                     <span className="text-xs text-slate-400">kapsam dışı</span>
                   ) : period.isConfirmed ? (
                     <span className="text-xs text-emerald-700">
-                      kesinleşti · {moneyExact.format(period.actualAmount ?? 0)}
+                      kesinleşti · {money(period.actualAmount ?? 0)}
                     </span>
                   ) : (
                     <span className="text-xs text-amber-700">
@@ -1335,13 +1328,13 @@ function PartnersView({
               <td className="px-3 py-2">{partner.fullName}</td>
               <td className="px-3 py-2 text-slate-500">{partner.title ?? "—"}</td>
               <td className="px-3 py-2 text-right tabular-nums">
-                {moneyExact.format(partner.advanceTotal)}
+                {money(partner.advanceTotal)}
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
-                {moneyExact.format(partner.settlementTotal)}
+                {money(partner.settlementTotal)}
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
-                {moneyExact.format(partner.repaymentTotal)}
+                {money(partner.repaymentTotal)}
               </td>
               <td
                 className={
@@ -1350,7 +1343,7 @@ function PartnersView({
                     : "px-3 py-2 text-right font-medium tabular-nums text-slate-900"
                 }
               >
-                {moneyExact.format(partner.balance)}
+                {money(partner.balance)}
               </td>
             </tr>
           ))}

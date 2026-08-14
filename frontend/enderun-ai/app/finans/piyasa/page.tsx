@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { moneyWhole, number as formatNumber, percent } from "@/lib/format/turkish";
 import CopperAlertPanel from "@/components/market/copper-alert-panel";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -16,22 +17,14 @@ import {
   type ProjectCopperImpact,
 } from "@/services/market.service";
 
-const usd = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-
-const tl = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 0,
-});
-
-const rate = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 4,
-  maximumFractionDigits: 4,
-});
+/*
+ * Para ve oran biçimi paylaşılan formatlayıcıdan. Bu sayfa üç ayrı
+ * Intl biçimleyici kuruyordu; USD tutarında simge başa geliyordu
+ * ("$9.400") ve tabloda TL sütunuyla hizalanmıyordu.
+ */
+const usd = (value: number | null | undefined) => moneyWhole(value, "$");
+const tl = (value: number | null | undefined) => moneyWhole(value);
+const rate = (value: number | null | undefined) => formatNumber(value, 4);
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -40,11 +33,9 @@ const WINDOWS = [7, 30, 90] as const;
 function formatPercent(value?: number | null) {
   if (value === null || value === undefined) return "—";
 
+  // Artı işareti elle: yüzdenin yönü rakamdan önce okunmalı.
   const sign = value > 0 ? "+" : "";
-  return `${sign}${value.toLocaleString("tr-TR", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 2,
-  })}%`;
+  return `${sign}${percent(value)}`;
 }
 
 function toneOf(value?: number | null) {
@@ -250,6 +241,7 @@ export default function MarketPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Piyasa"
       description="Bakır fiyatı ve TCMB günlük kurları"
     >
@@ -297,7 +289,7 @@ export default function MarketPage() {
             <div className="erp-stat-card">
               <span>Bakır (USD/ton)</span>
               <strong>
-                {copper?.latestUsdPerTon ? usd.format(copper.latestUsdPerTon) : "—"}
+                {copper?.latestUsdPerTon ? usd(copper.latestUsdPerTon) : "—"}
               </strong>
               <small className={`erp-status ${toneOf(copper?.changePercentUsd)}`}>
                 {formatPercent(copper?.changePercentUsd)} · {days} gün
@@ -308,7 +300,7 @@ export default function MarketPage() {
             <div className="erp-stat-card">
               <span>Bakır (TL/ton)</span>
               <strong>
-                {copper?.latestTryPerTon ? tl.format(copper.latestTryPerTon) : "—"}
+                {copper?.latestTryPerTon ? tl(copper.latestTryPerTon) : "—"}
               </strong>
               <small className={`erp-status ${toneOf(copper?.changePercentTry)}`}>
                 {formatPercent(copper?.changePercentTry)} · emtia + kur
@@ -323,7 +315,7 @@ export default function MarketPage() {
             <div className="erp-stat-card">
               <span>USD (TCMB döviz alış)</span>
               <strong>
-                {latestUsd ? rate.format(latestUsd.forexBuying) : "—"}
+                {latestUsd ? rate(latestUsd.forexBuying) : "—"}
               </strong>
               <small className={`erp-status ${toneOf(usdChange)}`}>
                 {formatPercent(usdChange)} · {days} gün
@@ -338,7 +330,7 @@ export default function MarketPage() {
             <div className="erp-stat-card">
               <span>EUR (TCMB döviz alış)</span>
               <strong>
-                {latestEur ? rate.format(latestEur.forexBuying) : "—"}
+                {latestEur ? rate(latestEur.forexBuying) : "—"}
               </strong>
               <small className={`erp-status ${toneOf(eurChange)}`}>
                 {formatPercent(eurChange)} · {days} gün
@@ -395,8 +387,8 @@ export default function MarketPage() {
                       fontSize: 12,
                     }}
                   >
-                    <span>En düşük: {usd.format(chart.min)}</span>
-                    <span>En yüksek: {usd.format(chart.max)}</span>
+                    <span>En düşük: {usd(chart.min)}</span>
+                    <span>En yüksek: {usd(chart.max)}</span>
                   </div>
                 </>
               ) : (
@@ -494,7 +486,7 @@ export default function MarketPage() {
                               {impact.remainingTons === null ||
                               impact.remainingTons === undefined
                                 ? "Bilinmiyor — gir"
-                                : `${impact.remainingTons.toLocaleString("tr-TR")} ton`}
+                                : `${formatNumber(impact.remainingTons, 0)} ton`}
                             </button>
                           )}
                           <small>{impact.tonnageSourceName}</small>
@@ -503,20 +495,20 @@ export default function MarketPage() {
                           {impact.copperEffect === null ||
                           impact.copperEffect === undefined
                             ? "—"
-                            : tl.format(impact.copperEffect)}
+                            : tl(impact.copperEffect)}
                           <small>{formatPercent(impact.copperChangePercent)}</small>
                         </td>
                         <td>
                           {impact.fxEffect === null || impact.fxEffect === undefined
                             ? "—"
-                            : tl.format(impact.fxEffect)}
+                            : tl(impact.fxEffect)}
                           <small>{formatPercent(impact.fxChangePercent)}</small>
                         </td>
                         <td>
                           {impact.combinedEffect === null ||
                           impact.combinedEffect === undefined
                             ? "—"
-                            : tl.format(impact.combinedEffect)}
+                            : tl(impact.combinedEffect)}
                         </td>
                         <td>
                           <strong
@@ -525,7 +517,7 @@ export default function MarketPage() {
                             {impact.totalEffect === null ||
                             impact.totalEffect === undefined
                               ? "hesaplanamadı"
-                              : tl.format(impact.totalEffect)}
+                              : tl(impact.totalEffect)}
                           </strong>
                           {impact.baselineDate && (
                             <small>
@@ -606,11 +598,11 @@ export default function MarketPage() {
                   {[...(copper?.trend ?? [])].reverse().map((point) => (
                     <tr key={point.priceDate}>
                       <td>{dateFormat.format(new Date(point.priceDate))}</td>
-                      <td>{usd.format(point.priceUsdPerTon)}</td>
-                      <td>{point.usdRate ? rate.format(point.usdRate) : "—"}</td>
+                      <td>{usd(point.priceUsdPerTon)}</td>
+                      <td>{point.usdRate ? rate(point.usdRate) : "—"}</td>
                       <td>
                         {point.priceTryPerTon
-                          ? tl.format(point.priceTryPerTon)
+                          ? tl(point.priceTryPerTon)
                           : "kur yok"}
                       </td>
                     </tr>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import CashFlowProjectionPanel from "@/components/finance/cash-flow-projection";
 import { usePermissions } from "@/lib/use-permissions";
 import {
@@ -13,10 +14,6 @@ import {
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -33,7 +30,7 @@ function ItemTable({
     <div className="erp-table-card">
       <div className="erp-table-header">
         <h2>{title}</h2>
-        <strong>{money.format(items.reduce((sum, item) => sum + item.amount, 0))}</strong>
+        <strong>{money(items.reduce((sum, item) => sum + item.amount, 0))}</strong>
       </div>
 
       {items.length === 0 ? (
@@ -51,7 +48,7 @@ function ItemTable({
                 <th>Referans</th>
                 <th>Cari</th>
                 <th>Proje</th>
-                <th style={{ textAlign: "right" }}>Tutar</th>
+                <th className="num">Tutar</th>
               </tr>
             </thead>
             <tbody>
@@ -76,8 +73,8 @@ function ItemTable({
                   </td>
                   <td>{item.currentAccountTitle ?? "—"}</td>
                   <td>{item.projectCode ?? "—"}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <strong>{money.format(item.amount)}</strong>
+                  <td className="num">
+                    <strong>{money(item.amount)}</strong>
                   </td>
                 </tr>
               ))}
@@ -169,6 +166,7 @@ export default function CashFlowPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Nakit Akışı"
       description="Likidite takvimi ve vade bazlı beklenen tahsilat/ödemeler"
     >
@@ -210,7 +208,7 @@ export default function CashFlowPage() {
         <div>
           {forecast && (
             <>
-              <strong>Mevcut kasa/banka: {money.format(forecast.currentCashBalance)}</strong>
+              <strong>Mevcut kasa/banka: {money(forecast.currentCashBalance)}</strong>
               <small style={{ display: "block", marginTop: "4px" }}>
                 {dateFormat.format(new Date(forecast.asOfDate))} itibarıyla
               </small>
@@ -251,8 +249,8 @@ export default function CashFlowPage() {
         <>
           {(forecast.overdueInflowAmount > 0 || forecast.overdueOutflowAmount > 0) && (
             <div className="erp-alert">
-              Vadesi geçmiş: {money.format(forecast.overdueInflowAmount)} beklenen tahsilat,{" "}
-              {money.format(forecast.overdueOutflowAmount)} beklenen ödeme. Bu tutarlar
+              Vadesi geçmiş: {money(forecast.overdueInflowAmount)} beklenen tahsilat,{" "}
+              {money(forecast.overdueOutflowAmount)} beklenen ödeme. Bu tutarlar
               aşağıdaki 30/60/90 gün projeksiyonuna dahil edilmedi.
             </div>
           )}
@@ -267,10 +265,10 @@ export default function CashFlowPage() {
                 <thead>
                   <tr>
                     <th>Dönem</th>
-                    <th style={{ textAlign: "right" }}>Girecek</th>
-                    <th style={{ textAlign: "right" }}>Çıkacak</th>
-                    <th style={{ textAlign: "right" }}>Net</th>
-                    <th style={{ textAlign: "right" }}>Tahmini Bakiye</th>
+                    <th className="num">Girecek</th>
+                    <th className="num">Çıkacak</th>
+                    <th className="num">Net</th>
+                    <th className="num">Tahmini Bakiye</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -278,11 +276,11 @@ export default function CashFlowPage() {
                     <td>
                       <strong>Bugün</strong>
                     </td>
-                    <td style={{ textAlign: "right" }}>—</td>
-                    <td style={{ textAlign: "right" }}>—</td>
-                    <td style={{ textAlign: "right" }}>—</td>
-                    <td style={{ textAlign: "right" }}>
-                      <strong>{money.format(forecast.currentCashBalance)}</strong>
+                    <td className="num">—</td>
+                    <td className="num">—</td>
+                    <td className="num">—</td>
+                    <td className="num">
+                      <strong>{money(forecast.currentCashBalance)}</strong>
                     </td>
                   </tr>
                   {forecast.buckets.map((bucket) => (
@@ -290,21 +288,21 @@ export default function CashFlowPage() {
                       <td>
                         <strong>{bucket.label}</strong>
                       </td>
-                      <td style={{ textAlign: "right" }}>
-                        {money.format(bucket.inflowAmount)}
+                      <td className="num">
+                        {money(bucket.inflowAmount)}
                       </td>
-                      <td style={{ textAlign: "right" }}>
-                        {money.format(bucket.outflowAmount)}
+                      <td className="num">
+                        {money(bucket.outflowAmount)}
                       </td>
-                      <td style={{ textAlign: "right" }}>
+                      <td className="num">
                         <span
                           className={`erp-status ${bucket.netAmount >= 0 ? "green" : "red"}`}
                         >
-                          {money.format(bucket.netAmount)}
+                          {money(bucket.netAmount)}
                         </span>
                       </td>
-                      <td style={{ textAlign: "right" }}>
-                        <strong>{money.format(bucket.projectedBalance)}</strong>
+                      <td className="num">
+                        <strong>{money(bucket.projectedBalance)}</strong>
                       </td>
                     </tr>
                   ))}

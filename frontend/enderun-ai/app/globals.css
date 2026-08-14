@@ -3596,3 +3596,49 @@ body {
 .rw .erp-table .erp-actions .erp-row-link:hover {
   text-decoration: underline;
 }
+
+/* Tablo hücresinde anlam taşıyan sayı rengi. Sayfalar bunu ham hex
+   ile yazıyordu (#b91c1c, #15803d); tokena bağlanınca marka rengi
+   değiştiğinde geride kalmıyor. */
+.rw .rw-value-danger {
+  color: var(--color-semantic-danger);
+}
+
+.rw .rw-value-success {
+  color: var(--color-semantic-success);
+}
+
+.rw .rw-value-muted {
+  color: var(--erp-muted);
+}
+
+/* Diyalog içindeki tek alanlı form. */
+.rw-modal-field {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--erp-muted);
+}
+
+.rw-modal-field input,
+.rw-modal-field select,
+.rw-modal-field textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-surface-card);
+  color: var(--erp-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* Uyarı taşıyan panel — sayfalar bunu ham amber hex'le yazıyordu. */
+.rw .erp-panel.rw-panel-warning {
+  margin-bottom: 14px;
+  border-color: var(--color-semantic-warning);
+  background: #fdf8ee;
+}

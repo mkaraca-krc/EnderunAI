@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { Button, ConfirmDialog, Modal } from "@/components/ui";
+import { money, moneyWhole } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
   corporateTaxRateService,
@@ -11,16 +13,7 @@ import {
   type TaxOverview,
 } from "@/services/tax.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 0,
-});
 
-const moneyDetailed = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -41,6 +34,11 @@ export default function TaxPage() {
   const [savingRate, setSavingRate] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  const [payingItem, setPayingItem] = useState<TaxObligation | null>(null);
+  const [paidAmount, setPaidAmount] = useState("");
+  const [undoingItem, setUndoingItem] = useState<TaxObligation | null>(null);
+  const [showPaid, setShowPaid] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -128,6 +126,17 @@ export default function TaxPage() {
     [calendar]
   );
 
+  /**
+   * ÖDENENLER LİSTESİ YOKTU. Ödendi işaretlenen dönem listeden
+   * tamamen düşüyordu; yanlışlıkla işaretlenen bir vergi ekrandan
+   * geri alınamıyordu. Geri alma ucu ve servis çağrısı zaten vardı,
+   * yalnızca hiçbir düğmeye bağlı değildi.
+   */
+  const paid = useMemo(
+    () => calendar.filter((item) => item.isPaid),
+    [calendar]
+  );
+
   async function accrue(month: number) {
     if (!companyId) return;
 
@@ -145,18 +154,27 @@ export default function TaxPage() {
     }
   }
 
-  async function markPaid(item: TaxObligation) {
-    if (!companyId) return;
+  /**
+   * ÖDEME İŞARETLEME window.prompt İLE YAPILIYORDU.
+   *
+   * Tarayıcı penceresi tutarı biçimlendiremiyor, hangi vergiye ait
+   * olduğunu tek satır düz metinle söylüyor, tahmini tutarı
+   * gösteremiyor ve "boş bırakırsanız tahmin kullanılır" kuralını
+   * ancak metin içinde anlatabiliyordu. Girilen değer de doğrudan
+   * uca gidiyordu: yalnızca virgül noktaya çevriliyor, "1.250,50"
+   * gibi binlik ayıraçlı bir giriş sessizce 1.25 oluyordu.
+   */
+  function requestMarkPaid(item: TaxObligation) {
+    setPayingItem(item);
+    setPaidAmount("");
+    setError("");
+  }
 
-    const input = window.prompt(
-      `${item.kindName} — ${item.periodLabel}\n` +
-        "Ödenen tutar (tahmini tutarı kullanmak için boş bırakın):",
-      ""
-    );
+  async function confirmMarkPaid() {
+    if (!companyId || !payingItem) return;
 
-    if (input === null) return;
-
-    const amount = input.trim() === "" ? null : Number(input.replace(",", "."));
+    const raw = paidAmount.trim();
+    const amount = raw === "" ? null : Number(raw);
 
     if (amount !== null && !(amount > 0)) {
       setError("Ödenen tutar sıfırdan büyük olmalıdır.");
@@ -169,13 +187,16 @@ export default function TaxPage() {
     try {
       await taxService.markPaid({
         companyId,
-        kind: item.kind,
-        periodYear: item.periodYear,
-        periodNumber: item.periodNumber,
+        kind: payingItem.kind,
+        periodYear: payingItem.periodYear,
+        periodNumber: payingItem.periodNumber,
         amount,
       });
 
-      setNotice(`${item.kindName} ${item.periodLabel} ödendi olarak işaretlendi.`);
+      setNotice(
+        `${payingItem.kindName} ${payingItem.periodLabel} ödendi olarak işaretlendi.`,
+      );
+      setPayingItem(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "İşaretlenemedi.");
@@ -184,23 +205,21 @@ export default function TaxPage() {
     }
   }
 
-  async function undoPayment(item: TaxObligation) {
-    if (!companyId) return;
-
-    if (!window.confirm(`${item.kindName} ${item.periodLabel} ödemesi geri alınsın mı?`))
-      return;
+  async function confirmUndoPayment() {
+    if (!companyId || !undoingItem) return;
 
     setSaving(true);
 
     try {
       await taxService.undoPayment(
         companyId,
-        item.kind,
-        item.periodYear,
-        item.periodNumber
+        undoingItem.kind,
+        undoingItem.periodYear,
+        undoingItem.periodNumber
       );
 
       setNotice("Ödeme işareti geri alındı.");
+      setUndoingItem(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Geri alınamadı.");
@@ -211,6 +230,7 @@ export default function TaxPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Vergi Yükü"
       description="KDV, SGK, muhtasar ve geçici vergi — yönetim görünümü"
     >
@@ -247,10 +267,10 @@ export default function TaxPage() {
         </div>
 
         {overview && (
-          <div style={{ textAlign: "right" }}>
+          <div className="num">
             <strong>
               Yıllık tahmini kurumlar vergisi:{" "}
-              {money.format(overview.estimatedAnnualCorporateTax)}
+              {moneyWhole(overview.estimatedAnnualCorporateTax)}
             </strong>
             <small style={{ display: "block" }}>
               {overview.corporateTaxRate === null
@@ -262,14 +282,7 @@ export default function TaxPage() {
       </div>
 
       {overview && overview.corporateTaxRate === null && (
-        <div
-          className="erp-panel"
-          style={{
-            border: "1px solid #fcd34d",
-            background: "#fffbeb",
-            marginBottom: "14px",
-          }}
-        >
+        <div className="erp-panel rw-panel-warning">
           <strong>{year} kurumlar vergisi oranı tanımlanmadı</strong>
           <p style={{ margin: "6px 0 10px" }}>
             Oran girilmediği için geçici ve kurumlar vergisi tahmini
@@ -317,6 +330,17 @@ export default function TaxPage() {
                   işaretlerseniz listeden ve nakit akıştan düşer.
                 </p>
               </div>
+
+              {paid.length > 0 && (
+                <label className="rw-check">
+                  <input
+                    type="checkbox"
+                    checked={showPaid}
+                    onChange={(event) => setShowPaid(event.target.checked)}
+                  />
+                  <span>Ödenenleri göster ({paid.length})</span>
+                </label>
+              )}
             </div>
 
             {upcoming.length === 0 ? (
@@ -331,7 +355,7 @@ export default function TaxPage() {
                       <th>Tür</th>
                       <th>Dönem</th>
                       <th>Vade</th>
-                      <th>Tahmini tutar</th>
+                      <th className="num">Tahmini tutar</th>
                       <th>Durum</th>
                       <th></th>
                     </tr>
@@ -342,8 +366,8 @@ export default function TaxPage() {
                         <td>{item.kindName}</td>
                         <td>{item.periodLabel}</td>
                         <td>{dateFormat.format(new Date(item.dueDate))}</td>
-                        <td>
-                          <strong>{moneyDetailed.format(item.estimatedAmount)}</strong>
+                        <td className="num">
+                          <strong>{money(item.estimatedAmount)}</strong>
                         </td>
                         <td>
                           <span
@@ -353,17 +377,46 @@ export default function TaxPage() {
                           </span>
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="erp-secondary-button"
-                            disabled={saving}
-                            onClick={() => void markPaid(item)}
-                          >
-                            Ödendi
-                          </button>
+                          <div className="erp-actions">
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => requestMarkPaid(item)}
+                            >
+                              Ödendi
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
+
+                    {showPaid &&
+                      paid.map((item) => (
+                        <tr
+                          key={`odendi-${item.kind}-${item.periodYear}-${item.periodNumber}`}
+                        >
+                          <td>{item.kindName}</td>
+                          <td>{item.periodLabel}</td>
+                          <td>{dateFormat.format(new Date(item.dueDate))}</td>
+                          <td className="num">
+                            <strong>{money(item.estimatedAmount)}</strong>
+                          </td>
+                          <td>
+                            <span className="erp-status green">Ödendi</span>
+                          </td>
+                          <td>
+                            <div className="erp-actions">
+                              <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => setUndoingItem(item)}
+                              >
+                                Geri Al
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -404,22 +457,32 @@ export default function TaxPage() {
                     {vatRows.map((row) => (
                       <tr key={row.month}>
                         <td>{row.label}</td>
-                        <td>{money.format(row.outputVat)}</td>
-                        <td>{money.format(row.inputVat)}</td>
-                        <td>{money.format(row.carryForwardIn)}</td>
-                        <td>
+                        <td>{moneyWhole(row.outputVat)}</td>
+                        <td>{moneyWhole(row.inputVat)}</td>
+                        <td>{moneyWhole(row.carryForwardIn)}</td>
+                        {/*
+                          Ham hex yerine anlamsal sınıf: ödenecek KDV
+                          "dikkat", devreden KDV "iyi haber". Renk
+                          tokenlardan geliyor ki marka rengi
+                          değiştiğinde bu iki hücre geride kalmasın.
+                        */}
+                        <td className="num">
                           <strong
-                            style={{ color: row.payableVat > 0 ? "#b91c1c" : "inherit" }}
+                            className={row.payableVat > 0 ? "rw-value-danger" : ""}
                           >
-                            {money.format(row.payableVat)}
+                            {moneyWhole(row.payableVat)}
                           </strong>
                         </td>
-                        <td style={{ color: row.carryForwardOut > 0 ? "#15803d" : "inherit" }}>
-                          {money.format(row.carryForwardOut)}
+                        <td
+                          className={`num ${
+                            row.carryForwardOut > 0 ? "rw-value-success" : ""
+                          }`}
+                        >
+                          {moneyWhole(row.carryForwardOut)}
                         </td>
                         <td>
                           {row.reverseChargeVat > 0
-                            ? money.format(row.reverseChargeVat)
+                            ? moneyWhole(row.reverseChargeVat)
                             : "—"}
                         </td>
                         <td>
@@ -480,11 +543,11 @@ export default function TaxPage() {
                       <tr key={row.month}>
                         <td>{row.label}</td>
                         <td>{row.personnelCount}</td>
-                        <td>{money.format(row.incomeTaxWithholding)}</td>
-                        <td>{money.format(row.stampTax)}</td>
-                        <td>{money.format(row.sgkTotal)}</td>
+                        <td>{moneyWhole(row.incomeTaxWithholding)}</td>
+                        <td>{moneyWhole(row.stampTax)}</td>
+                        <td>{moneyWhole(row.sgkTotal)}</td>
                         <td>
-                          <strong>{money.format(row.totalBurden)}</strong>
+                          <strong>{moneyWhole(row.totalBurden)}</strong>
                         </td>
                         <td>
                           <span
@@ -528,17 +591,17 @@ export default function TaxPage() {
                   {overview.advanceTax.map((row) => (
                     <tr key={row.quarter}>
                       <td>{row.label}</td>
-                      <td>{money.format(row.revenue)}</td>
-                      <td>{money.format(row.expense)}</td>
+                      <td className="num">{moneyWhole(row.revenue)}</td>
+                      <td className="num">{moneyWhole(row.expense)}</td>
                       <td
-                        style={{
-                          color: row.profitBeforeTax < 0 ? "#b91c1c" : "inherit",
-                        }}
+                        className={`num ${
+                          row.profitBeforeTax < 0 ? "rw-value-danger" : ""
+                        }`}
                       >
-                        {money.format(row.profitBeforeTax)}
+                        {moneyWhole(row.profitBeforeTax)}
                       </td>
-                      <td>
-                        <strong>{money.format(row.estimatedTax)}</strong>
+                      <td className="num">
+                        <strong>{moneyWhole(row.estimatedTax)}</strong>
                       </td>
                       <td>{dateFormat.format(new Date(row.dueDate))}</td>
                     </tr>
@@ -568,6 +631,65 @@ export default function TaxPage() {
           </section>
         </>
       )}
+
+      <Modal
+        open={payingItem !== null}
+        title={
+          payingItem
+            ? `${payingItem.kindName} — ${payingItem.periodLabel}`
+            : "Ödeme işaretle"
+        }
+        description="Ödenen tutarı yazın. Boş bırakırsanız tahmini tutar kullanılır."
+        onClose={() => setPayingItem(null)}
+        busy={saving}
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setPayingItem(null)}
+              disabled={saving}
+            >
+              Vazgeç
+            </Button>
+
+            <Button onClick={() => void confirmMarkPaid()} loading={saving}>
+              Ödendi olarak işaretle
+            </Button>
+          </div>
+        }
+      >
+        <label className="rw-modal-field">
+          <span>Ödenen tutar (₺)</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={paidAmount}
+            onChange={(event) => setPaidAmount(event.target.value)}
+            placeholder={
+              payingItem ? `Tahmini: ${money(payingItem.estimatedAmount)}` : ""
+            }
+          />
+        </label>
+
+        {error && <div className="erp-alert error">{error}</div>}
+      </Modal>
+
+      <ConfirmDialog
+        open={undoingItem !== null}
+        title="Ödeme işareti geri alınsın mı?"
+        description={
+          undoingItem
+            ? `${undoingItem.kindName} ${undoingItem.periodLabel} yeniden bekleyen ödemeler arasına döner ve nakit akışta tekrar görünür.`
+            : ""
+        }
+        confirmLabel="Geri Al"
+        busy={saving}
+        onCancel={() => setUndoingItem(null)}
+        onConfirm={() => void confirmUndoPayment()}
+      />
     </ErpShell>
   );
 }

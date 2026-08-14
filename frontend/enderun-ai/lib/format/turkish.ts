@@ -75,6 +75,29 @@ export function money(
   return `${amount(value)} ${currency}`;
 }
 
+/**
+ * Ondalıksız para — "1.234.568 ₺".
+ *
+ * YALNIZCA BAŞLIK RAKAMI İÇİN: özet kartı, gösterge paneli, grafik
+ * ekseni. Oralarda kuruş okunmaz, sayının büyüklüğü okunur ve iki
+ * hane gürültüdür.
+ *
+ * TABLODA VE DEFTERDE KULLANILMAZ: yuvarlanmış satırların toplamı
+ * gösterilen toplamla tutmaz, kullanıcı da hangisinin doğru olduğunu
+ * bilemez. Orada `money` kullanılır.
+ *
+ * Bu işlev, sayfaların tek tek kurduğu `maximumFractionDigits: 0`
+ * biçimleyicilerinin yerine geçiyor; kural burada bir kez yazılır.
+ */
+export function moneyWhole(
+  value: number | null | undefined,
+  currency = "₺",
+): string {
+  if (isMissing(value)) return EMPTY_VALUE;
+
+  return `${whole(value)} ${currency}`;
+}
+
 /** Oran değeri; yüzde işaretini çağıran koyar — "5,50". */
 export function rate(value: number | null | undefined): string {
   return amount(value);
@@ -158,6 +181,7 @@ export function dateTime(value: string | Date | null | undefined): string {
 export const turkishFormat = {
   amount,
   money,
+  moneyWhole,
   rate,
   percent,
   quantity,

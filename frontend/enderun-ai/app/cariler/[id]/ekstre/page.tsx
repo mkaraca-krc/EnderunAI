@@ -5,56 +5,29 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount as formatAmount, money, number as formatNumber } from "@/lib/format/turkish";
 import {
   currentAccountService,
   type CurrentAccountStatement,
   type CurrentAccountValuation,
 } from "@/services/current-account.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
-
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
-const rateFormat = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 4,
-  maximumFractionDigits: 4,
-});
+const rateFormat = (value: number | null | undefined) =>
+  formatNumber(value, 4);
 
 /**
- * Döviz tutarını kendi para biriminde biçimler. Bilinmeyen bir kod
- * gelirse Intl hata fırlatır; o durumda sayı + kod olarak yazılır,
- * ekran boş kalmaz.
+ * Döviz tutarı kendi para biriminde: kod SONDA.
+ *
+ * Eskiden `Intl` para biçimi kullanılıyordu ve bilinen kodlarda simge
+ * başa geçiyordu ("$1.250,00"). Ekstre sağa hizalı bir defterdir;
+ * öne gelen simge basamakları kaydırıp satırların hizasını bozuyordu.
+ * Ayrıca bilinmeyen kod için ayrı bir yedek biçimleyici ve önbellek
+ * tutmak gerekiyordu — kod sonda yazılınca ikisi de gereksiz.
  */
-const currencyFormatters = new Map<string, Intl.NumberFormat>();
-
 function formatCurrency(value: number, code: string) {
-  if (code === "TRY") return money.format(value);
-
-  let formatter = currencyFormatters.get(code);
-
-  if (!formatter) {
-    try {
-      formatter = new Intl.NumberFormat("tr-TR", {
-        style: "currency",
-        currency: code,
-      });
-    } catch {
-      formatter = new Intl.NumberFormat("tr-TR", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-    }
-    currencyFormatters.set(code, formatter);
-  }
-
-  const text = formatter.format(value);
-
-  return text.includes(code) || formatter.resolvedOptions().style === "currency"
-    ? text
-    : `${text} ${code}`;
+  return code === "TRY" ? money(value) : `${formatAmount(value)} ${code}`;
 }
 
 /** Bakiye yönü: pozitif borç (bize borçlu), negatif alacak (biz borçluyuz). */
@@ -166,6 +139,7 @@ export default function CurrentAccountStatementPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={
         statement
           ? `Cari Ekstresi — ${statement.currentAccount.title}`
@@ -240,20 +214,20 @@ export default function CurrentAccountStatementPage() {
           <div className="erp-quick-grid">
             <div className="erp-panel">
               <small style={{ display: "block", marginBottom: 4 }}>Devir Bakiyesi</small>
-              <strong>{money.format(statement.openingBalance)}</strong>
+              <strong>{money(statement.openingBalance)}</strong>
             </div>
             <div className="erp-panel">
               <small style={{ display: "block", marginBottom: 4 }}>Dönem Borç</small>
-              <strong>{money.format(statement.periodDebit)}</strong>
+              <strong>{money(statement.periodDebit)}</strong>
             </div>
             <div className="erp-panel">
               <small style={{ display: "block", marginBottom: 4 }}>Dönem Alacak</small>
-              <strong>{money.format(statement.periodCredit)}</strong>
+              <strong>{money(statement.periodCredit)}</strong>
             </div>
             <div className="erp-panel">
               <small style={{ display: "block", marginBottom: 4 }}>Kapanış Bakiyesi</small>
               <strong>
-                {money.format(Math.abs(statement.closingBalance))}{" "}
+                {money(Math.abs(statement.closingBalance))}{" "}
                 <span className="erp-status blue">
                   {balanceLabel(statement.closingBalance)}
                 </span>
@@ -306,7 +280,7 @@ export default function CurrentAccountStatementPage() {
                           </strong>
                           <small>{balanceLabel(row.closingBalance)}</small>
                         </td>
-                        <td>{money.format(row.closingBalanceLocal)}</td>
+                        <td>{money(row.closingBalanceLocal)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -360,11 +334,11 @@ export default function CurrentAccountStatementPage() {
                             <td>
                               {formatCurrency(row.balance, row.currencyCode)}
                             </td>
-                            <td>{money.format(row.bookValueLocal)}</td>
+                            <td>{money(row.bookValueLocal)}</td>
                             <td>
                               {row.rateAvailable && row.valuationRate != null ? (
                                 <>
-                                  {rateFormat.format(row.valuationRate)}
+                                  {rateFormat(row.valuationRate)}
                                   <small>{row.rateSource}</small>
                                 </>
                               ) : (
@@ -373,12 +347,12 @@ export default function CurrentAccountStatementPage() {
                             </td>
                             <td>
                               {row.valuedLocal != null
-                                ? money.format(row.valuedLocal)
+                                ? money(row.valuedLocal)
                                 : "—"}
                             </td>
                             <td>
                               {row.difference != null ? (
-                                <strong>{money.format(row.difference)}</strong>
+                                <strong>{money(row.difference)}</strong>
                               ) : (
                                 <small>{row.message}</small>
                               )}
@@ -391,7 +365,7 @@ export default function CurrentAccountStatementPage() {
 
                   <div style={{ padding: "12px 16px" }}>
                     <strong>
-                      Toplam kur farkı: {money.format(valuation.totalDifference)}
+                      Toplam kur farkı: {money(valuation.totalDifference)}
                     </strong>
                     {valuation.hasMissingRate && (
                       <div className="erp-alert warning" style={{ marginTop: 8 }}>
@@ -473,7 +447,7 @@ export default function CurrentAccountStatementPage() {
                                     code
                                   )}
                                   <small>
-                                    kur {rateFormat.format(line.exchangeRate ?? 1)}
+                                    kur {rateFormat(line.exchangeRate ?? 1)}
                                     {" · bakiye "}
                                     {formatCurrency(
                                       line.runningBalanceOriginal ?? 0,
@@ -486,11 +460,11 @@ export default function CurrentAccountStatementPage() {
                               )}
                             </td>
                           )}
-                          <td>{line.debit ? money.format(line.debit) : "—"}</td>
-                          <td>{line.credit ? money.format(line.credit) : "—"}</td>
+                          <td>{line.debit ? money(line.debit) : "—"}</td>
+                          <td>{line.credit ? money(line.credit) : "—"}</td>
                           <td>
                             <strong>
-                              {money.format(Math.abs(line.runningBalance))}
+                              {money(Math.abs(line.runningBalance))}
                             </strong>
                             <small>{balanceLabel(line.runningBalance)}</small>
                           </td>

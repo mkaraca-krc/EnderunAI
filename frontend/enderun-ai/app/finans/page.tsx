@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { moneyWhole } from "@/lib/format/turkish";
 
 import {
   financeService,
@@ -35,14 +36,6 @@ import {
 } from "@/services/current-account.service";
 
 
-const money = new Intl.NumberFormat(
-  "tr-TR",
-  {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }
-);
 
 const DATA_PENDING_LABEL = "Veri henüz yok";
 
@@ -140,7 +133,7 @@ export default function FinancePage() {
 
     {
       title:"Toplam Sözleşme",
-      value:money.format(
+      value:moneyWhole(
         data.totalContractAmount
       ),
       pending: false
@@ -148,7 +141,7 @@ export default function FinancePage() {
 
     {
       title:"Toplam Hakediş",
-      value:money.format(
+      value:moneyWhole(
         data.totalProgressPaymentAmount
       ),
       pending: false
@@ -156,7 +149,7 @@ export default function FinancePage() {
 
     {
       title:"Fiyat Farkı",
-      value:money.format(
+      value:moneyWhole(
         data.totalPriceDifferenceAmount
       ),
       pending: false
@@ -164,7 +157,7 @@ export default function FinancePage() {
 
     {
       title:"Toplam Kesinti",
-      value:money.format(
+      value:moneyWhole(
         data.totalDeductionAmount
       ),
       pending: false
@@ -172,7 +165,7 @@ export default function FinancePage() {
 
     {
       title:"Net Ödeme",
-      value:money.format(
+      value:moneyWhole(
         data.totalNetPayableAmount
       ),
       pending: false
@@ -196,7 +189,7 @@ export default function FinancePage() {
     {
       title:"Toplam Alacak",
       value:
-        money.format(
+        moneyWhole(
           cari?.totalReceivable ?? 0
         ),
       pending: cari ? !cari.balancesAvailable : false
@@ -206,7 +199,7 @@ export default function FinancePage() {
     {
       title:"Toplam Borç",
       value:
-        money.format(
+        moneyWhole(
           cari?.totalPayable ?? 0
         ),
       pending: cari ? !cari.balancesAvailable : false
@@ -216,7 +209,7 @@ export default function FinancePage() {
     {
       title:"Net Cari Pozisyon",
       value:
-        money.format(
+        moneyWhole(
           cari?.netBalance ?? 0
         ),
       pending: cari ? !cari.balancesAvailable : false
@@ -239,6 +232,7 @@ export default function FinancePage() {
   return (
 
     <ErpShell
+      design="redwood"
       title="Finans Merkezi"
       description="Hakediş, fiyat farkı ve nakit görünümü"
     >
@@ -329,7 +323,7 @@ export default function FinancePage() {
               </span>
 
               <strong>
-                {money.format(
+                {moneyWhole(
                   data?.totalContractAmount ?? 0
                 )}
               </strong>
@@ -342,7 +336,7 @@ export default function FinancePage() {
               </span>
 
               <strong>
-                {money.format(
+                {moneyWhole(
                   data?.totalProgressPaymentAmount ?? 0
                 )}
               </strong>
@@ -355,7 +349,7 @@ export default function FinancePage() {
               </span>
 
               <strong>
-                {money.format(
+                {moneyWhole(
                   data?.totalPriceDifferenceAmount ?? 0
                 )}
               </strong>
@@ -368,7 +362,7 @@ export default function FinancePage() {
               </span>
 
               <strong>
-                {money.format(
+                {moneyWhole(
                   data?.totalNetPayableAmount ?? 0
                 )}
               </strong>
@@ -424,7 +418,7 @@ export default function FinancePage() {
                   </span>
 
                   <strong>
-                    {money.format(
+                    {moneyWhole(
                       project.contractAmount
                     )}
                   </strong>
@@ -437,7 +431,7 @@ export default function FinancePage() {
                   </span>
 
                   <strong>
-                    {money.format(
+                    {moneyWhole(
                       project.progressPaymentAmount
                     )}
                   </strong>
@@ -450,7 +444,7 @@ export default function FinancePage() {
                   </span>
 
                   <strong>
-                    {money.format(
+                    {moneyWhole(
                       project.remainingAmount
                     )}
                   </strong>
@@ -501,7 +495,7 @@ export default function FinancePage() {
               </span>
 
               <strong>
-                {money.format(
+                {moneyWhole(
                   cashFlow?.totalIncome ?? 0
                 )}
               </strong>
@@ -514,7 +508,7 @@ export default function FinancePage() {
               </span>
 
               <strong>
-                {money.format(
+                {moneyWhole(
                   cashFlow?.totalExpense ?? 0
                 )}
               </strong>
@@ -527,7 +521,7 @@ export default function FinancePage() {
               </span>
 
               <strong>
-                {money.format(
+                {moneyWhole(
                   cashFlow?.netCash ?? 0
                 )}
               </strong>
@@ -596,7 +590,7 @@ export default function FinancePage() {
                   </span>
 
                   <strong>
-                    {money.format(
+                    {moneyWhole(
                       supplier.totalDebt
                     )}
                   </strong>
@@ -609,7 +603,7 @@ export default function FinancePage() {
                   </span>
 
                   <strong>
-                    {money.format(
+                    {moneyWhole(
                       supplier.totalPaid
                     )}
                   </strong>
@@ -622,7 +616,7 @@ export default function FinancePage() {
                   </span>
 
                   <strong>
-                    {money.format(
+                    {moneyWhole(
                       supplier.balance
                     )}
                   </strong>

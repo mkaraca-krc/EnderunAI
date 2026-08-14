@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -19,10 +20,6 @@ import {
   type CreditCardStatement,
 } from "@/services/financial-instrument.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -291,7 +288,7 @@ export default function FinancialInstrumentsPage() {
 
   if (permissionsLoading) {
     return (
-      <ErpShell title="Finansal Araçlar">
+      <ErpShell design="redwood" title="Finansal Araçlar">
         <div className="p-6 text-sm text-slate-500">Yükleniyor…</div>
       </ErpShell>
     );
@@ -299,7 +296,7 @@ export default function FinancialInstrumentsPage() {
 
   if (!has("finance.view")) {
     return (
-      <ErpShell title="Finansal Araçlar">
+      <ErpShell design="redwood" title="Finansal Araçlar">
         <div className="p-6">
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
             Bu ekran <strong>finance.view</strong> yetkisi istiyor.
@@ -311,6 +308,7 @@ export default function FinancialInstrumentsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Finansal Araçlar"
       description="Banka kredileri ve kredi kartları — ikisi de nakit akış takvimine besleniyor."
     >
@@ -829,7 +827,7 @@ function LoansView({
                 ) : null}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {money.format(loan.principalAmount)} · aylık %
+                {money(loan.principalAmount)} · aylık %
                 {loan.monthlyInterestRate} · {loan.installmentCount} taksit ·
                 çekiliş {dateFormat.format(new Date(loan.drawdownDate))}
               </p>
@@ -839,7 +837,7 @@ function LoansView({
               <div className="text-right">
                 <p className="text-[11px] uppercase text-slate-400">Kalan anapara</p>
                 <p className="font-medium tabular-nums text-slate-900">
-                  {money.format(loan.remainingPrincipal)}
+                  {money(loan.remainingPrincipal)}
                 </p>
               </div>
 
@@ -896,13 +894,13 @@ function LoansView({
                         {dateFormat.format(new Date(installment.dueDate))}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {money.format(installment.principalAmount)}
+                        {money(installment.principalAmount)}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {money.format(installment.interestAmount)}
+                        {money(installment.interestAmount)}
                       </td>
                       <td className="px-3 py-2 text-right font-medium tabular-nums">
-                        {money.format(installment.totalAmount)}
+                        {money(installment.totalAmount)}
                       </td>
                       <td className="px-3 py-2">
                         {installment.isPaid ? (
@@ -1034,7 +1032,7 @@ function CardsView({
                     {dateFormat.format(new Date(statement.dueDate))}
                   </td>
                   <td className="px-3 py-2 text-right font-medium tabular-nums">
-                    {money.format(statement.amount)}
+                    {money(statement.amount)}
                   </td>
                   <td className="px-3 py-2">
                     {statement.producesCashOutflow ? (

@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount as formatAmount, money, number as formatNumber } from "@/lib/format/turkish";
 import { summarizeCheques } from "@/lib/cheques/totals";
 import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
 import { branchService, type BranchListItem } from "@/services/branch.service";
@@ -33,11 +34,6 @@ import {
   supplierInvoiceService,
   type SupplierInvoiceListItem,
 } from "@/services/supplier-invoice.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -631,8 +627,8 @@ export default function ChequeRegisterPage() {
       });
 
       setNotice(
-        `Çek kırdırıldı (${result.internalNumber}). Net ${money.format(result.netAmount)} ` +
-          `banka hesabına girdi, ${money.format(result.totalDeductionAmount)} finansman gideri yazıldı.`
+        `Çek kırdırıldı (${result.internalNumber}). Net ${money(result.netAmount)} ` +
+          `banka hesabına girdi, ${money(result.totalDeductionAmount)} finansman gideri yazıldı.`
       );
       setShowFactoringForm(false);
       setPreview(null);
@@ -656,6 +652,7 @@ export default function ChequeRegisterPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Çek Defteri"
       description="Alınan ve verilen çekler, durum geçişleri ve otomatik muhasebe fişleri"
     >
@@ -663,7 +660,7 @@ export default function ChequeRegisterPage() {
         <div>
           <strong>{items.length} çek</strong>
           <small style={{ display: "block", marginTop: "4px" }}>
-            Listelenen toplam: {money.format(listTotal)}
+            Listelenen toplam: {money(listTotal)}
           </small>
         </div>
 
@@ -690,23 +687,23 @@ export default function ChequeRegisterPage() {
         <div className="erp-stat-grid" style={{ marginBottom: "16px" }}>
           <div className="erp-stat-card">
             <span>Portföyde</span>
-            <strong>{money.format(summary.receivedPortfolioAmount)}</strong>
+            <strong>{money(summary.receivedPortfolioAmount)}</strong>
           </div>
           <div className="erp-stat-card">
             <span>Bankada (tahsilde)</span>
-            <strong>{money.format(summary.receivedAtBankAmount)}</strong>
+            <strong>{money(summary.receivedAtBankAmount)}</strong>
           </div>
           <div className="erp-stat-card">
             <span>Faktoringde</span>
-            <strong>{money.format(summary.receivedAtFactoringAmount)}</strong>
+            <strong>{money(summary.receivedAtFactoringAmount)}</strong>
           </div>
           <div className="erp-stat-card">
             <span>Verilen (açık)</span>
-            <strong>{money.format(summary.issuedOpenAmount)}</strong>
+            <strong>{money(summary.issuedOpenAmount)}</strong>
           </div>
           <div className="erp-stat-card">
             <span>Karşılıksız</span>
-            <strong>{money.format(summary.receivedBouncedAmount)}</strong>
+            <strong>{money(summary.receivedBouncedAmount)}</strong>
           </div>
         </div>
       )}
@@ -961,7 +958,7 @@ export default function ChequeRegisterPage() {
                                 <option value="">Fatura seçilmedi</option>
                                 {allocatableInvoices.map((invoice) => (
                                   <option key={invoice.id} value={invoice.id}>
-                                    {invoice.invoiceNumber} — {money.format(invoice.grandTotal)}
+                                    {invoice.invoiceNumber} — {money(invoice.grandTotal)}
                                   </option>
                                 ))}
                               </select>
@@ -1057,11 +1054,11 @@ export default function ChequeRegisterPage() {
 
               {allocationRows.length > 0 && (
                 <span>
-                  Dağılım toplamı: {money.format(allocationTotal)}
+                  Dağılım toplamı: {money(allocationTotal)}
                   {allocationDifference !== 0 && (
-                    <strong style={{ color: "#b91c1c" }}>
+                    <strong className="rw-value-danger">
                       {" "}
-                      · {money.format(Math.abs(allocationDifference))}{" "}
+                      · {money(Math.abs(allocationDifference))}{" "}
                       {allocationDifference > 0 ? "eksik" : "fazla"}
                     </strong>
                   )}
@@ -1197,7 +1194,7 @@ export default function ChequeRegisterPage() {
                   <th>Cari</th>
                   <th>Proje</th>
                   <th>Vade</th>
-                  <th style={{ textAlign: "right" }}>Tutar</th>
+                  <th className="num">Tutar</th>
                   <th>Durum</th>
                 </tr>
               </thead>
@@ -1231,7 +1228,7 @@ export default function ChequeRegisterPage() {
                         </small>
                       </td>
                       <td className="border-t-2 border-brand-200 !py-2 text-right font-bold tabular-nums text-brand-900">
-                        {money.format(group.total)}
+                        {money(group.total)}
                       </td>
                       <td className="border-t-2 border-brand-200 !py-2" />
                     </tr>
@@ -1270,24 +1267,19 @@ export default function ChequeRegisterPage() {
                           : `${item.daysToDue} gün`}
                       </small>
                     </td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className="num">
                       <strong>
                         {item.currencyCode === "TRY"
-                          ? money.format(item.amount)
-                          : item.amount.toLocaleString("tr-TR", {
-                              style: "currency",
-                              currency: item.currencyCode,
-                            })}
+                          ? money(item.amount)
+                          : `${formatAmount(item.amount)} ${item.currencyCode}`}
                       </strong>
                       {/* Dövizli çekte defter değeri de görünmeli:
                           yalnızca döviz tutarı gösterilseydi liste
                           toplamıyla satırlar tutmazdı. */}
                       {item.currencyCode !== "TRY" && (
-                        <small style={{ display: "block", color: "#64748b" }}>
-                          {money.format(item.amountTry)} · kur{" "}
-                          {item.exchangeRate.toLocaleString("tr-TR", {
-                            maximumFractionDigits: 4,
-                          })}
+                        <small className="rw-value-muted">
+                          {money(item.amountTry)} · kur{" "}
+                          {formatNumber(item.exchangeRate, 4)}
                         </small>
                       )}
                     </td>
@@ -1310,7 +1302,7 @@ export default function ChequeRegisterPage() {
         <div className="erp-table-card" style={{ marginTop: "16px" }}>
           <div className="erp-table-header">
             <h2>
-              {detail.internalNumber} — {detail.chequeNumber} ({money.format(detail.amount)})
+              {detail.internalNumber} — {detail.chequeNumber} ({money(detail.amount)})
             </h2>
 
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -1392,7 +1384,7 @@ export default function ChequeRegisterPage() {
                     <tbody>
                       {detail.allocations.map((allocation) => (
                         <tr key={allocation.id}>
-                          <td>{money.format(allocation.amount)}</td>
+                          <td>{money(allocation.amount)}</td>
                           <td>
                             {allocation.projectCode ?? allocation.costCenterCode ?? "—"}
                           </td>
@@ -1414,7 +1406,7 @@ export default function ChequeRegisterPage() {
                 <h3>Çek Erteleme / Değişim</h3>
 
                 <div className="erp-alert">
-                  Yeni çek eski çekle aynı tutarda olur ({money.format(detail.amount)}).
+                  Yeni çek eski çekle aynı tutarda olur ({money(detail.amount)}).
                   Vade farkı varsa ayrı bir fatura/dekont ile kaydedilmelidir.
                 </div>
 
@@ -1588,7 +1580,7 @@ export default function ChequeRegisterPage() {
                 }}
               >
                 <strong style={{ fontSize: "13px" }}>Düzeltme</strong>
-                <small style={{ color: "#64748b" }}>
+                <small className="rw-value-muted">
                   Yanlış durum geri alınır, baştan hatalı çek iptal
                   edilir. Çek silinmez; banka hareketi ve muhasebe fişi
                   ters kayıtla dengelenir.
@@ -1788,34 +1780,34 @@ export default function ChequeRegisterPage() {
                       <tbody>
                         <tr>
                           <td>Çek tutarı</td>
-                          <td style={{ textAlign: "right" }}>
-                            {money.format(preview.chequeAmount)}
+                          <td className="num">
+                            {money(preview.chequeAmount)}
                           </td>
                         </tr>
                         <tr>
                           <td>Komisyon (%{preview.commissionRate})</td>
-                          <td style={{ textAlign: "right" }}>
-                            −{money.format(preview.commissionAmount)}
+                          <td className="num">
+                            −{money(preview.commissionAmount)}
                           </td>
                         </tr>
                         <tr>
                           <td>BSMV (%{preview.bsmvRate})</td>
-                          <td style={{ textAlign: "right" }}>
-                            −{money.format(preview.bsmvAmount)}
+                          <td className="num">
+                            −{money(preview.bsmvAmount)}
                           </td>
                         </tr>
                         <tr>
                           <td>Masraf</td>
-                          <td style={{ textAlign: "right" }}>
-                            −{money.format(preview.expenseAmount)}
+                          <td className="num">
+                            −{money(preview.expenseAmount)}
                           </td>
                         </tr>
                         <tr>
                           <td>
                             <strong>Net eldeki para</strong>
                           </td>
-                          <td style={{ textAlign: "right" }}>
-                            <strong>{money.format(preview.netAmount)}</strong>
+                          <td className="num">
+                            <strong>{money(preview.netAmount)}</strong>
                           </td>
                         </tr>
                       </tbody>
