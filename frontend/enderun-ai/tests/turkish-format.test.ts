@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   EMPTY_VALUE,
   amount,
+  coefficient,
   decimal,
   decimalRange,
   money,
@@ -153,19 +154,26 @@ describe("tutarda sıfır kırpılmaz", () => {
 
 /**
  * GUARDRAIL: endeks katsayısı sekiz haneye kadar, YALNIZCA gösterim.
+ *
+ * Hane sayısı çağrı yerinde değil burada duruyor; ekranlar
+ * `coefficient` çağırıyor.
  */
 describe("endeks katsayısı", () => {
   it("sekiz haneye kadar iner", () => {
-    expect(decimal(0.00012345, 8)).toBe("0,00012345");
+    expect(coefficient(0.00012345)).toBe("0,00012345");
   });
 
   it("kısa katsayıyı sıfırla şişirmez", () => {
-    expect(decimal(1.5, 8)).toBe("1,5");
+    expect(coefficient(1.5)).toBe("1,5");
+  });
+
+  it("serbest ondalıkla aynı kuralı uygular", () => {
+    expect(coefficient(0.00012345)).toBe(decimal(0.00012345, 8));
   });
 
   /** Boş değer sıfır sayılmaz: "veri yok" ile "sıfır" farklı şeyler. */
   it("boş değeri sıfır saymaz", () => {
-    expect(decimal(null, 8)).toBe(EMPTY_VALUE);
+    expect(coefficient(null)).toBe(EMPTY_VALUE);
     expect(unitPrice(null)).toBe(EMPTY_VALUE);
     expect(decimalRange(undefined, 2, 4)).toBe(EMPTY_VALUE);
   });

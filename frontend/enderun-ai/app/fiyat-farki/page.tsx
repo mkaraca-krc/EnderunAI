@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { decimal } from "@/lib/format/turkish";
+import { coefficient } from "@/lib/format/turkish";
 
 import {
   priceDifferenceService,
@@ -12,20 +12,6 @@ import {
   type PriceDifferenceIndexPeriod,
   type PriceDifferenceProfile,
 } from "@/services/price-difference.service";
-
-/**
- * Endeks katsayısı — sekiz haneye kadar, sondaki sıfırlar yazılmadan.
- *
- * SEKİZ HANE YALNIZCA GÖSTERİM İÇİN. Fiyat farkı hesabı backend'de
- * tam hassasiyette yapılıyor; burada kırpılan tek şey ekrandaki
- * basamak sayısı, hesaba giren değer değil.
- *
- * Sabit haneli biçim kullanılamaz: katsayıların çoğu 1,5 gibi kısa
- * sayılar ve "1,50000000" diye yazılsalardı tablo okunmaz olurdu.
- */
-function decimal8(value: number) {
-  return decimal(value, 8);
-}
 
 const calculationTypeLabels: Record<
   PriceDifferenceCalculationType,
@@ -253,7 +239,7 @@ export default function PriceDifferencePage() {
                         </td>
 
                         <td>
-                          {decimal8(
+                          {coefficient(
                             profile.coefficient.total
                           )}
                         </td>
@@ -328,37 +314,37 @@ export default function PriceDifferencePage() {
                         <td>{period.sourceName}</td>
 
                         <td>
-                          {decimal8(
+                          {coefficient(
                             period.laborIndex
                           )}
                         </td>
 
                         <td>
-                          {decimal8(
+                          {coefficient(
                             period.fuelIndex
                           )}
                         </td>
 
                         <td>
-                          {decimal8(
+                          {coefficient(
                             period.materialIndex
                           )}
                         </td>
 
                         <td>
-                          {decimal8(
+                          {coefficient(
                             period.machineryIndex
                           )}
                         </td>
 
                         <td>
-                          {decimal8(
+                          {coefficient(
                             period.cementIndex
                           )}
                         </td>
 
                         <td>
-                          {decimal8(
+                          {coefficient(
                             period.otherIndex
                           )}
                         </td>

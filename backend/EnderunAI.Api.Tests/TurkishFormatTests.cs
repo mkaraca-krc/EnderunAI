@@ -95,21 +95,41 @@ public sealed class TurkishFormatTests
     /// <summary>
     /// Kod tabanında Türkçe metin içinde ham sayı biçimi kalmamalı.
     ///
+    /// İKİ BİÇİM DE TARANIR:
+    /// <c>$"{tutar:N2}"</c> (metin içine gömülü) ve
+    /// <c>tutar.ToString("N2", …)</c> (çağrı yerinde).
+    ///
+    /// İkincisi eklendi çünkü ilk hâli onu kaçırıyordu ve Hızır'ın
+    /// araç çıktısında dört yer bu şekilde biçimleniyordu — üçü BİRİM
+    /// FİYAT'tı. Birim fiyat kolonları <c>numeric(18,4)</c> /
+    /// <c>numeric(18,6)</c>; iki haneye zorlanınca gerçek hassasiyet
+    /// kırpılıyor ve Hızır kullanıcıya yanlış fiyat söylüyordu.
+    /// Kültür doğru verilse bile hane kuralı çağrı yerinde seçilmiş
+    /// oluyor, yani sayının TİPİ değil o an uygun görünen bir rakam.
+    ///
     /// Tarama <c>:N&lt;rakam&gt;</c> arıyor; rakamsız <c>:N</c> Guid'in
     /// tiresiz biçimidir (dosya adı, poz kodu) ve sayı değildir, o
     /// yüzden kapsam dışında.
+    ///
+    /// <see cref="TurkishFormat"/> kendisi muaf: kuralın yazıldığı
+    /// yer orası.
     /// </summary>
     [Fact]
     public void NoRawNumberFormatRemainsInApplicationCode()
     {
         var root = FindApiProjectRoot();
-        var pattern = new Regex(@":N\d\}");
+        var pattern = new Regex(@":N\d\}|ToString\(""[NCF]\d");
 
         var offenders = new List<string>();
 
         foreach (var file in Directory.EnumerateFiles(
                      root, "*.cs", SearchOption.AllDirectories))
         {
+            // TurkishFormat kuralın TANIMLANDIĞI yer; kendi kuralını
+            // ihlal ediyor sayılamaz.
+            if (Path.GetFileName(file) == "TurkishFormat.cs")
+                continue;
+
             // Migration'lar üretilmiş kod; obj/bin derleme çıktısı.
             if (file.Contains("Migrations") ||
                 file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
@@ -140,6 +160,57 @@ public sealed class TurkishFormatTests
         Assert.True(offenders.Count == 0,
             "Türkçe metinde ham sayı biçimi kaldı; TurkishFormat " +
             "kullanılmalı:\n" + string.Join("\n", offenders));
+    }
+
+    /// <summary>
+    /// Birim fiyat TUTAR DEĞİLDİR: kuruş altı haneler korunur.
+    ///
+    /// Birim fiyat kolonları numeric(18,4) / numeric(18,6). İki haneye
+    /// yuvarlansaydı kullanıcı gösterilen fiyatı miktarla çarptığında
+    /// toplam tutmazdı.
+    /// </summary>
+    [Fact]
+    public void UnitPrice_KeepsSubKurusDigits()
+    {
+        Assert.Equal("12,4567", UnderInvariantCulture(
+            () => TurkishFormat.UnitPrice(12.4567m)));
+    }
+
+    /// <summary>
+    /// Alt sınır iki hane: "8" ile "8,50" alt alta gelince fiyat
+    /// listesi sütunu kayıyor.
+    /// </summary>
+    [Fact]
+    public void UnitPrice_AlwaysWritesAtLeastTwoDecimals()
+    {
+        Assert.Equal("8,50", UnderInvariantCulture(
+            () => TurkishFormat.UnitPrice(8.5m)));
+
+        Assert.Equal("8,00", UnderInvariantCulture(
+            () => TurkishFormat.UnitPrice(8m)));
+    }
+
+    /// <summary>Binlik ayıracı burada da nokta.</summary>
+    [Fact]
+    public void UnitPrice_UsesTurkishSeparators()
+    {
+        Assert.Equal("1.250,75", UnderInvariantCulture(
+            () => TurkishFormat.UnitPrice(1250.75m)));
+    }
+
+    /// <summary>
+    /// GUARDRAIL: tutar biçimi SABİT iki hane. Birim fiyatın sondaki
+    /// sıfırı kırpan davranışı tutara sızarsa 1.250,00 ekranda "1.250"
+    /// görünür ve kuruşu olan bakiye kuruşsuz okunur.
+    /// </summary>
+    [Fact]
+    public void Amount_DoesNotTrimTrailingZeros()
+    {
+        Assert.Equal("1.250,00", UnderInvariantCulture(
+            () => TurkishFormat.Amount(1250m)));
+
+        Assert.Equal("1.250,50", UnderInvariantCulture(
+            () => TurkishFormat.Amount(1250.5m)));
     }
 
     private static string FindApiProjectRoot()

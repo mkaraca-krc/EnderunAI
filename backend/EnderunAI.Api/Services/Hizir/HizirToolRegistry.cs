@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
@@ -37,8 +36,6 @@ public sealed class HizirToolRegistry : IHizirToolRegistry
 
     /// <summary>Modele verilecek aday poz sayısı.</summary>
     private const int PositionMatcherLimit = 8;
-
-    private static readonly CultureInfo Tr = new("tr-TR");
 
     private readonly AppDbContext _db;
     private readonly IHizirKnowledgeBase _knowledgeBase;
@@ -105,7 +102,7 @@ public sealed class HizirToolRegistry : IHizirToolRegistry
             : null;
 
     private static string Money(decimal value) =>
-        value.ToString("N2", Tr) + " TL";
+        TurkishFormat.Amount(value) + " TL";
 
     private static HizirToolOutcome NoData(string what) =>
         new($"KAYIT YOK: {what} için sistemde veri bulunamadı. " +
@@ -393,15 +390,15 @@ public sealed class HizirToolRegistry : IHizirToolRegistry
 
             if (suggestion.UnitPrice is { } price)
             {
-                builder.Append($" | birim fiyat: {price.ToString("N2", Tr)} TL");
+                builder.Append($" | birim fiyat: {TurkishFormat.UnitPrice(price)} TL");
 
                 if (suggestion.MaterialPrice is { } material)
-                    builder.Append($" (malzeme {material.ToString("N2", Tr)}");
+                    builder.Append($" (malzeme {TurkishFormat.UnitPrice(material)}");
 
                 if (suggestion.LaborPrice is { } labor)
                 {
                     builder.Append(suggestion.MaterialPrice is null ? " (" : " + ");
-                    builder.Append($"montaj {labor.ToString("N2", Tr)}");
+                    builder.Append($"montaj {TurkishFormat.UnitPrice(labor)}");
                 }
 
                 if (suggestion.MaterialPrice is not null || suggestion.LaborPrice is not null)

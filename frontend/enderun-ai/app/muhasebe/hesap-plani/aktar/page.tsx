@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { decimal } from "@/lib/format/turkish";
 import { ConfirmDialog } from "@/components/ui";
 
 type Company = {
@@ -313,9 +314,7 @@ export default function AccountingAccountImportPage() {
               <br />
               <span>
                 Boyut:{" "}
-                {(file.size / 1024).toLocaleString("tr-TR", {
-                  maximumFractionDigits: 1,
-                })}{" "}
+                {decimal(file.size / 1024, 1)}{" "}
                 KB
               </span>
             </div>

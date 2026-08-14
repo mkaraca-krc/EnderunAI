@@ -38,6 +38,24 @@ public static class TurkishFormat
     /// <summary>Miktar: dört ondalık — "1.250,7500".</summary>
     public static string Quantity(decimal value) => value.ToString("N4", Turkish);
 
+    /// <summary>
+    /// Birim fiyat — "12,4567" ve "8,50".
+    ///
+    /// TUTAR DEĞİLDİR, bu yüzden iki hane kuralının dışında. Birim
+    /// fiyat kolonları veritabanında <c>numeric(18,4)</c> ve
+    /// <c>numeric(18,6)</c>; iki haneye yuvarlanırsa 12,4567 ekranda
+    /// 12,46 görünür ve kullanıcı o rakamı miktarla çarptığında toplam
+    /// tutmaz.
+    ///
+    /// Alt sınır iki hane: "8" ile "8,50" alt alta gelince fiyat
+    /// listesi sütunu kayıyor. Üst sınır dört hane: altıncı haneye
+    /// kadar yazmak sütunu okunmaz yapıyor.
+    ///
+    /// Arayüzdeki <c>unitPrice</c> ile aynı kural.
+    /// </summary>
+    public static string UnitPrice(decimal value) =>
+        value.ToString("#,##0.00##", Turkish);
+
     /// <summary>Ondalıksız sayı — "320".</summary>
     public static string Whole(decimal value) => value.ToString("N0", Turkish);
 

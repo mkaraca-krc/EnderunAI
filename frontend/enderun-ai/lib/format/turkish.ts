@@ -14,6 +14,40 @@
  * YALNIZCA GÖSTERİM İÇİNDİR. Makineye giden hiçbir yerde (dosya adı,
  * CSV, API gövdesi, kod üretimi) kullanılmamalı — oralarda ham sayı
  * doğrudur.
+ *
+ * ---------------------------------------------------------------
+ * SAYI TİPİ → İŞLEV
+ *
+ *   Tutar (para)          → money / currencyMoney
+ *                           sabit 2 hane, simge sonda
+ *   Kuruşsuz özet/başlık  → moneyWhole
+ *                           0 hane; YALNIZ özet kartı, huni, grafik
+ *   Birim fiyat           → unitPrice
+ *                           min 2 / max 4 — tutar DEĞİLDİR
+ *   Katsayı / endeks      → coefficient
+ *                           max 8, sondaki sıfır yazılmaz
+ *   Oran (yüzde)          → percent
+ *   Miktar                → quantity (max 4, trim)
+ *                           decimalRange (belge sütunu, alt sınırlı)
+ *   Serbest ondalık       → decimal(değer, hane)
+ *   Tam sayı              → whole
+ *
+ * ÇAĞRI YERİNDE `maximumFractionDigits`, `style: "currency"` ya da
+ * elle `toLocaleString` YAZILMAZ — hepsi buradaki adlandırılmış
+ * işlevlerden geçer. `tests/redwood-contract.test.ts` bunu koruma
+ * altına alıyor.
+ *
+ * NEDEN BU KADAR KESKİN: aynı biçimleyiciyi yanlış sayı tipine
+ * uygulamak sessizce yanlış rakam gösteriyor ve iki kez oldu —
+ * teklif listesinde `grandTotal` kuruşsuz basılıyordu (sözleşmeye
+ * giren rakam yuvarlanmış görünüyordu), üretici birim fiyatı ise
+ * iki haneye kırpılacaktı (veritabanında `numeric(18,6)`).
+ *
+ * ŞÜPHEDEYSEN VERİTABANI TİPİNE BAK: kuruş altı hane taşıyan bir
+ * kolon tutar değildir — birim fiyat ya da katsayıdır. Sözleşmeye
+ * ve belgeye giren rakamlar (toplam tutar, birim fiyat, hakediş
+ * tutarı, katsayı) asla yuvarlanarak gösterilmez.
+ * ---------------------------------------------------------------
  */
 
 const TURKISH_LOCALE = "tr-TR";
@@ -205,6 +239,22 @@ export function decimalRange(
 }
 
 /**
+ * Katsayı / endeks — "1,5" ve "0,00012345".
+ *
+ * SEKİZ HANE YALNIZCA GÖSTERİM İÇİN: fiyat farkı hesabı sunucuda tam
+ * hassasiyette yapılıyor, burada kırpılan tek şey ekrandaki basamak
+ * sayısı. Hesaba giren değere dokunulmuyor.
+ *
+ * Sabit haneli biçim kullanılamaz: katsayıların çoğu 1,5 gibi kısa
+ * sayılar ve "1,50000000" diye yazılsalardı tablo okunmaz olurdu.
+ *
+ * TUTAR DEĞİLDİR — para sütununda kullanılmaz.
+ */
+export function coefficient(value: number | null | undefined): string {
+  return decimal(value, 8);
+}
+
+/**
  * Birim fiyat — "12,4567 ₺", "8,50 ₺".
  *
  * TUTAR DEĞİLDİR, bu yüzden iki hane kuralının dışındadır. Üretici
@@ -279,6 +329,7 @@ export function dateTime(value: string | Date | null | undefined): string {
 
 export const turkishFormat = {
   amount,
+  coefficient,
   decimal,
   decimalRange,
   money,
