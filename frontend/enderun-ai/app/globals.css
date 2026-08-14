@@ -2856,3 +2856,196 @@ body {
     opacity: 1;
   }
 }
+
+
+/* ============================================================
+   KABUK — kırıntı yolu, kısayollar ve komut paleti (A2).
+   Renkler A1'de tanımlanan semantik tokenlardan geliyor; burada
+   ham hex yazılmıyor ki marka rengi tek satırda değişebilsin.
+   ============================================================ */
+
+.erp-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  color: #659091;
+}
+
+.erp-breadcrumb a {
+  color: var(--color-brand-primary);
+  text-decoration: none;
+}
+
+.erp-breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.erp-breadcrumb [aria-current="page"] {
+  color: #104143;
+  font-weight: 600;
+}
+
+.erp-breadcrumb-separator {
+  margin: 0 6px;
+  color: #9fb9ba;
+}
+
+.erp-favorite-toggle.on {
+  color: var(--color-semantic-warning);
+}
+
+.erp-nav-favorites .erp-nav-group-title {
+  padding: 10px 12px 4px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #8fb4b5;
+}
+
+/* --- Komut paleti --- */
+
+.erp-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+  background: rgba(2, 22, 23, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.erp-palette {
+  width: 100%;
+  max-width: 620px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 14px;
+  background: var(--color-surface-card);
+  box-shadow: var(--shadow-soft), 0 18px 40px rgba(2, 22, 23, 0.18);
+  outline: none;
+}
+
+.erp-palette-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-brand-primary);
+}
+
+.erp-palette-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  font-size: 15px;
+  color: #104143;
+  background: transparent;
+}
+
+.erp-palette-results {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+
+.erp-palette-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 8px;
+}
+
+.erp-palette-row.highlighted {
+  background: var(--color-brand-primary-tint);
+}
+
+.erp-palette-go {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: #104143;
+  font-size: 14px;
+}
+
+.erp-palette-icon {
+  width: 18px;
+  color: var(--color-brand-primary);
+}
+
+.erp-palette-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.erp-palette-group {
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #8fb4b5;
+}
+
+.erp-palette-star {
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: #b6cccd;
+  font-size: 14px;
+}
+
+.erp-palette-star.on {
+  color: var(--color-semantic-warning);
+}
+
+.erp-palette-empty {
+  padding: 22px 14px;
+  text-align: center;
+  font-size: 13px;
+  color: #659091;
+}
+
+.erp-palette-footer {
+  display: flex;
+  gap: 16px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-bg);
+  font-size: 11px;
+  color: #659091;
+}
+
+.erp-palette kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  background: var(--color-surface-card);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+@media (max-width: 800px) {
+  .erp-breadcrumb {
+    display: none;
+  }
+}

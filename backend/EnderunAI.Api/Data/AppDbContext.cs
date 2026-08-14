@@ -290,6 +290,7 @@ public sealed class AppDbContext(
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserPermissionOverride> UserPermissionOverrides => Set<UserPermissionOverride>();
     public DbSet<UserDataScope> UserDataScopes => Set<UserDataScope>();
+    public DbSet<UserUiPreference> UserUiPreferences => Set<UserUiPreference>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -633,6 +634,26 @@ public sealed class AppDbContext(
             entity.HasOne(x => x.ProjectSite)
                 .WithMany()
                 .HasForeignKey(x => x.ProjectSiteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<UserUiPreference>(entity =>
+        {
+            entity.ToTable("user_ui_preferences");
+            entity.HasKey(x => x.Id);
+
+            // KULLANICI BAŞINA TEK SATIR. Filtre soft-delete ile uyumlu:
+            // silinmiş bir tercih satırı yenisinin açılmasını
+            // engellememeli.
+            entity.HasIndex(x => x.UserId).IsUnique().HasFilter("NOT \"IsDeleted\"");
+
+            entity.Property(x => x.FavoritePaths).IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);

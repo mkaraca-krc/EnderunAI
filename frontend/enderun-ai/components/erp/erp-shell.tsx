@@ -14,23 +14,23 @@ import NotificationBell from "@/components/notifications/notification-bell";
 // artık mümkün değil.
 import { canAccessRoute } from "@/lib/auth/route-permissions";
 
+// MENÜ AĞACI TEK KAYNAKTAN: aynı ağaç komut paletini ve kırıntı yolunu
+// da besliyor. Kabuk kendi listesini tutsaydı, palete eklenmeyen bir
+// sayfa aramada bulunamazdı.
+import {
+  findMenuEntry,
+  pathOnly,
+  visibleMenuGroups,
+  type MenuGroup,
+} from "@/lib/navigation/menu";
+import CommandPalette from "@/components/erp/command-palette";
+
 type ErpShellProps = {
   title: string;
   description?: string;
   children: ReactNode;
 };
 
-type MenuItem = {
-  label: string;
-  href: string;
-  icon?: string;
-};
-
-type MenuGroup = {
-  key: string;
-  label: string;
-  items: MenuItem[];
-};
 
 type CurrentSession = {
   id?: string | null;
@@ -43,679 +43,6 @@ type CurrentSession = {
 };
 
 
-const groups: MenuGroup[] = [
-  {
-    key: "management",
-    label: "YÖNETİM",
-    items: [
-      {
-        label: "Göstergeler",
-        href: "/yonetim",
-        icon: "◈",
-      },
-    ],
-  },
-  {
-    key: "organization",
-    label: "ORGANİZASYON",
-    items: [
-      {
-        label: "Şirketler",
-        href: "/sirketler",
-        icon: "▦",
-      },
-      {
-        label: "Şubeler",
-        href: "/subeler",
-        icon: "▤",
-      },
-    ],
-  },
-  {
-    key: "accounting",
-    label: "MUHASEBE",
-    items: [
-      {
-        label: "Muhasebe Merkezi",
-        href: "/muhasebe",
-        icon: "▦",
-      },
-      {
-        label: "Hesap Planı",
-        href: "/muhasebe/hesap-plani",
-        icon: "○",
-      },
-      {
-        label: "Hesap Planı Aktar",
-        href: "/muhasebe/hesap-plani/aktar",
-        icon: "○",
-      },
-      {
-        label: "Kesinti Hesapları",
-        href: "/muhasebe/kesinti-hesaplari",
-        icon: "⊟",
-      },
-      {
-        label: "Tedarikçi Faturaları",
-        href: "/muhasebe/faturalar",
-        icon: "○",
-      },
-      {
-        label: "Satış Faturaları",
-        href: "/muhasebe/satis-faturalari",
-        icon: "○",
-      },
-      {
-        label: "E-Fatura İçe Aktar",
-        href: "/muhasebe/e-fatura-ice-aktar",
-        icon: "○",
-      },
-      {
-        label: "Muhasebe Fişleri",
-        href: "/muhasebe/fisler",
-        icon: "○",
-      },
-      {
-        label: "Yeni Muhasebe Fişi",
-        href: "/muhasebe/fisler/yeni",
-        icon: "○",
-      },
-      {
-        label: "Yevmiye Defteri",
-        href: "/muhasebe/yevmiye",
-        icon: "○",
-      },
-      {
-        label: "Büyük Defter",
-        href: "/muhasebe/buyuk-defter",
-        icon: "○",
-      },
-      {
-        label: "Kur Değerlemesi",
-        href: "/muhasebe/kur-degerlemesi",
-        icon: "○",
-      },
-      {
-        label: "Rapor Merkezi",
-        href: "/raporlar",
-        icon: "▤",
-      },
-    ],
-  },
-  {
-    key: "finance",
-    label: "FİNANS",
-    items: [
-      {
-        label: "Finans Merkezi",
-        href: "/finans",
-        icon: "▨",
-      },
-      {
-        label: "Cari Kartlar",
-        href: "/cariler",
-        icon: "○",
-      },
-      {
-        label: "Kasa / Banka",
-        href: "/finans/kasa-banka",
-        icon: "▣",
-      },
-      {
-        label: "Çek Defteri",
-        href: "/finans/cekler",
-        icon: "▩",
-      },
-      {
-        label: "Nakit Akışı",
-        href: "/finans/nakit-akis",
-        icon: "≈",
-      },
-      {
-        label: "Gider Merkezi",
-        href: "/finans/gider-merkezi",
-        icon: "◫",
-      },
-      {
-        label: "Finansal Araçlar",
-        href: "/finans/finansal-araclar",
-        icon: "◈",
-      },
-      {
-        label: "Vergi Yükü",
-        href: "/finans/vergi",
-        icon: "⚖",
-      },
-      {
-        label: "Piyasa (Bakır/Kur)",
-        href: "/finans/piyasa",
-        icon: "◭",
-      },
-      {
-        label: "Hakedişler",
-        href: "/hakedis",
-        icon: "▧",
-      },
-      {
-        label: "Yeni Hakediş",
-        href: "/hakedis/yeni",
-        icon: "○",
-      },
-      {
-        label: "Hakediş Takip",
-        href: "/hakedis/takip",
-        icon: "≡",
-      },
-      {
-        label: "Hakediş Dosyaları",
-        href: "/hakedis/dosyalar",
-        icon: "⎙",
-      },
-      {
-        label: "Fiyat Farkı",
-        href: "/fiyat-farki",
-        icon: "∆",
-      },
-    ],
-  },
-  {
-    key: "purchasing",
-    label: "SATIN ALMA",
-    items: [
-      {
-        label: "Satın Alma Talepleri",
-        href: "/satin-alma",
-        icon: "⌑",
-      },
-      {
-        label: "RFQ Süreçleri",
-        href: "/satin-alma/rfq",
-        icon: "≋",
-      },
-      {
-        label: "Siparişler",
-        href: "/satin-alma/siparis",
-        icon: "▤",
-      },
-      {
-        label: "Satın Alma Raporları",
-        href: "/satin-alma/raporlar",
-        icon: "▦",
-      },
-      {
-        label: "Karar Destek",
-        href: "/satin-alma/karar-destek",
-        icon: "★",
-      },
-      {
-        label: "Bütçe ve Onay",
-        href: "/satin-alma/butce-onay",
-        icon: "✓",
-      },
-      {
-        label: "Alış İadeleri",
-        href: "/depo-stok/iadeler",
-        icon: "○",
-      },
-      {
-        label: "Mal Kabul",
-        href: "/depo-stok/mal-kabul",
-        icon: "○",
-      },
-    ],
-  },
-  {
-    key: "fleet",
-    label: "FİLO",
-    items: [
-      {
-        label: "Araçlar",
-        href: "/filo",
-        icon: "⛟",
-      },
-    ],
-  },
-  {
-    key: "inventory",
-    label: "DEPO VE STOK",
-    items: [
-      {
-        label: "Depo Merkezi",
-        href: "/depo-stok",
-        icon: "⌂",
-      },
-      {
-        label: "Depolar",
-        href: "/depo-stok/depolar",
-        icon: "▤",
-      },
-      {
-        // Etiket "Yeni Depo" idi ama bağlantı MALZEME KARTI formuna
-        // gidiyordu; depo açan kullanıcı yanlış ekrana düşüyordu.
-        label: "Yeni Malzeme Kartı",
-        href: "/depo-stok/yeni",
-        icon: "○",
-      },
-      {
-        label: "Stok Giriş",
-        href: "/depo-stok/giris",
-        icon: "○",
-      },
-      {
-        label: "Stok Çıkış",
-        href: "/depo-stok/cikis",
-        icon: "○",
-      },
-      {
-        label: "Stok Hareketleri",
-        href: "/depo-stok/hareketler",
-        icon: "○",
-      },
-      {
-        label: "Depo Transferi",
-        href: "/depo-stok/transfer",
-        icon: "○",
-      },
-      {
-        // Sayfa vardı ama menüde hiç yoktu; kimse ulaşamıyordu.
-        label: "Stok Sayımı",
-        href: "/depo-stok/sayim",
-        icon: "○",
-      },
-      {
-        label: "Mal Kabul",
-        href: "/depo-stok/mal-kabul",
-        icon: "○",
-      },
-      {
-        label: "Malzeme Talepleri",
-        href: "/depo-stok/malzeme-talepleri",
-        icon: "○",
-      },
-    ],
-  },
-  {
-    key: "projects",
-    label: "PROJE VE OPERASYON",
-    items: [
-      {
-        label: "Projeler",
-        href: "/projeler",
-        icon: "▣",
-      },
-      {
-        // Proje listesine giremeyen saha (Şantiye Şefi, Formen) kendi
-        // şantiyelerinin iş programına buradan ulaşır.
-        label: "İş Programı",
-        href: "/is-programi",
-        icon: "▰",
-      },
-      {
-        // Aynı kayıt: projenin sözleşme icmali. "Keşif" adı kodda
-        // (ProjectBoq) duruyor, kullanıcı tarafında icmal deniyor.
-        label: "Sözleşme İcmali",
-        href: "/kesifler",
-        icon: "▤",
-      },
-      {
-        label: "Taşeronlar",
-        href: "/taseronlar",
-        icon: "▦",
-      },
-      {
-        label: "Metrajlar",
-        href: "/metrajlar",
-        icon: "▥",
-      },
-      {
-        label: "İş / Teklif Takibi",
-        href: "/teklifler/takip",
-        icon: "◷",
-      },
-      {
-        label: "Teklifler",
-        href: "/teklifler",
-        icon: "₺",
-      },
-    ],
-  },
-  {
-    key: "human-resources",
-    label: "İNSAN KAYNAKLARI",
-    items: [
-      {
-        label: "İK Dashboard",
-        href: "/insan-kaynaklari",
-        icon: "▦",
-      },
-      {
-        label: "Personeller",
-        href: "/insan-kaynaklari/personeller",
-        icon: "♙",
-      },
-      {
-        label: "Veri Eksikleri",
-        href: "/insan-kaynaklari/veri-eksikleri",
-        icon: "!",
-      },
-      {
-        label: "Personel 360°",
-        href: "/insan-kaynaklari/personel-360",
-        icon: "◎",
-      },
-      {
-        label: "Maaş Kartları",
-        href: "/insan-kaynaklari/ucret-kartlari",
-        icon: "₺",
-      },
-      {
-        label: "Bordro Ön Kontrol",
-        href: "/insan-kaynaklari/bordro-on-kontrol",
-        icon: "✓",
-      },
-      {
-        label: "SGK Bildirim",
-        href: "/insan-kaynaklari/sgk-bildirim",
-        icon: "⇄",
-      },
-      {
-        label: "Ek Ücretler",
-        href: "/insan-kaynaklari/ek-ucretler",
-        icon: "+",
-      },
-      {
-        label: "Ek Ödemeler",
-        href: "/insan-kaynaklari/ek-odemeler",
-        icon: "◆",
-      },
-      {
-        label: "Çıkış ve Tazminat",
-        href: "/insan-kaynaklari/cikis-tazminat",
-        icon: "⇥",
-      },
-      {
-        label: "Organizasyon",
-        href: "/insan-kaynaklari/organizasyon",
-        icon: "▤",
-      },
-      {
-        label: "İşe Alım",
-        href: "/insan-kaynaklari/ise-alim",
-        icon: "+",
-      },
-      {
-        label: "Puantaj Cetveli",
-        href: "/insan-kaynaklari/puantaj-cetveli",
-        icon: "▦",
-      },
-      {
-        label: "Tatil Takvimi",
-        href: "/insan-kaynaklari/tatil-takvimi",
-        icon: "◵",
-      },
-      {
-        label: "Puantaj",
-        href: "/insan-kaynaklari/puantaj",
-        icon: "◷",
-      },
-      {
-        label: "İzin Yönetimi",
-        href: "/insan-kaynaklari/izinler",
-        icon: "○",
-      },
-      {
-        label: "İzin Bakiyesi",
-        href: "/insan-kaynaklari/izin-bakiye",
-        icon: "◔",
-      },
-      {
-        label: "Fazla Mesai",
-        href: "/insan-kaynaklari/fazla-mesai",
-        icon: "○",
-      },
-      {
-        label: "Görevlendirmeler",
-        href: "/insan-kaynaklari/gorevlendirmeler",
-        icon: "➤",
-      },
-      {
-        label: "Avanslar",
-        href: "/insan-kaynaklari/avanslar",
-        icon: "₺",
-      },
-      {
-        label: "Bordro",
-        href: "/insan-kaynaklari/bordro",
-        icon: "▧",
-      },
-      {
-        label: "Bordro Maliyet Raporu",
-        href: "/insan-kaynaklari/maliyet-raporu",
-        icon: "₼",
-      },
-      {
-        label: "İK Raporları",
-        href: "/insan-kaynaklari/raporlar",
-        icon: "▤",
-      },
-      {
-        label: "Onay Merkezi",
-        href: "/insan-kaynaklari/onay-merkezi",
-        icon: "✓",
-      },
-      // Eğitim ve sertifika takibi İSG menüsündeki "Personel Kayıtları"
-      // ekranına taşındı; buradaki iki bağlantı var olmayan bir uca
-      // bağlı taslak sayfaya gidiyordu. Eski adresler yönlendiriliyor.
-      //
-      // Yetkinlikler, Performans ve Disiplin de aynı durumdaydı: üçünün
-      // de arkasında model, tablo ve uç YOKTU; ekran yalnızca "yakında"
-      // plakası gösteriyordu. Gidecek bir yerleri olmadığı için
-      // yönlendirilmediler, menüden kaldırıldılar. Modül gerçekten
-      // geldiğinde menü satırı geri eklenir.
-      {
-        label: "Demirbaş / Aletler",
-        href: "/demirbas",
-        icon: "○",
-      },
-      {
-        label: "Alet Servisi",
-        href: "/demirbas/servis",
-        icon: "○",
-      },
-      {
-        label: "Zimmetler",
-        href: "/insan-kaynaklari/zimmetler",
-        icon: "▣",
-      },
-      {
-        label: "Kariyer",
-        href: "/insan-kaynaklari/kariyer",
-        icon: "↑",
-      },
-    ],
-  },
-  {
-    key: "isg",
-    label: "İSG",
-    items: [
-      {
-        label: "İSG Paneli",
-        href: "/isg",
-        icon: "▦",
-      },
-      {
-        label: "Personel Kayıtları",
-        href: "/isg/personel",
-        icon: "♙",
-      },
-      {
-        label: "Kaza / Ramak Kala",
-        href: "/isg/kazalar",
-        icon: "!",
-      },
-      {
-        label: "Saha Belgeleri",
-        href: "/isg/belgeler",
-        icon: "□",
-      },
-      {
-        label: "OSGB Sözleşmeleri",
-        href: "/isg/osgb",
-        icon: "▤",
-      },
-      {
-        // İzin gerekmez: uç yalnızca çağıranın kendi kaydını döndürür.
-        label: "İSG Belgelerim",
-        href: "/isg/benim",
-        icon: "○",
-      },
-    ],
-  },
-  {
-    key: "engineering",
-    label: "MÜHENDİSLİK",
-    items: [
-      {
-        label: "Mühendislik Merkezi",
-        href: "/muhendislik",
-        icon: "◇",
-      },
-      {
-        label: "Poz Kütüphanesi",
-        href: "/muhendislik/pozlar",
-        icon: "▦",
-      },
-      {
-        label: "Özel Pozlar",
-        href: "/muhendislik/pozlar/ozel",
-        icon: "Ö",
-      },
-      {
-        label: "Reçeteler",
-        href: "/muhendislik/receteler",
-        icon: "⚙",
-      },
-      {
-        label: "Reçete İçe Aktar",
-        href: "/muhendislik/receteler/ice-aktar",
-        icon: "⇪",
-      },
-      {
-        label: "Fiyat Listeleri",
-        href: "/teklifler/fiyatlar",
-        icon: "₺",
-      },
-    ],
-  },
-  {
-    key: "secretariat",
-    label: "SEKRETERYA",
-    items: [
-      {
-        label: "Gelen / Giden Evrak",
-        href: "/sekreterya/evrak",
-        icon: "✉",
-      },
-      {
-        label: "Kargo Takibi",
-        href: "/sekreterya/kargo",
-        icon: "□",
-      },
-      {
-        label: "Ziyaretçiler",
-        href: "/sekreterya/ziyaretciler",
-        icon: "♙",
-      },
-      {
-        label: "Telefon Notları",
-        href: "/sekreterya/telefon-notlari",
-        icon: "☎",
-      },
-      {
-        label: "Toplantılar",
-        href: "/sekreterya/toplantilar",
-        icon: "▤",
-      },
-      {
-        label: "Randevular",
-        href: "/sekreterya/randevular",
-        icon: "◷",
-      },
-    ],
-  },
-  {
-    key: "management",
-    label: "YÖNETİM",
-    items: [
-      {
-        label: "Onay Merkezi",
-        href: "/onay-merkezi",
-        icon: "✓",
-      },
-      {
-        label: "Görevler",
-        href: "/gorevler",
-        icon: "☑",
-      },
-      {
-        label: "Dokümanlar",
-        href: "/dokumanlar",
-        icon: "□",
-      },
-      {
-        label: "Raporlar",
-        href: "/raporlar",
-        icon: "▤",
-      },
-    ],
-  },
-  {
-    key: "system",
-    label: "SİSTEM YÖNETİMİ",
-    items: [
-      {
-        label: "Kullanıcılar ve Yetkiler",
-        href: "/sistem-yonetimi/kullanicilar",
-        icon: "⚿",
-      },
-      {
-        label: "Yetki Matrisi",
-        href: "/sistem-yonetimi/yetki-matrisi",
-        icon: "▦",
-      },
-      {
-        label: "Denetim Kayıtları",
-        href: "/sistem-yonetimi/denetim-kayitlari",
-        icon: "⚑",
-      },
-      {
-        label: "Şirket Ayarları",
-        href: "/sistem-yonetimi/sirket-ayarlari",
-        icon: "⚙",
-      },
-      {
-        label: "Erişim Talepleri",
-        href: "/sistem-yonetimi/erisim-talepleri",
-        icon: "⏱",
-      },
-    ],
-  },
-  {
-    key: "ai",
-    label: "ENDERUN AI",
-    items: [
-      {
-        label: "AI Asistan",
-        href: "/ai-asistan",
-        icon: "⌘",
-      },
-    ],
-  },
-];
-
-function pathOnly(href: string) {
-  return href.split("?")[0];
-}
 
 export default function ErpShell({
   title,
@@ -732,6 +59,13 @@ export default function ErpShell({
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const navRef = useRef<HTMLElement | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentSession | null>(null);
+  const [favoritePaths, setFavoritePaths] = useState<string[]>([]);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Tercihler gelmeden yazma yapılmaz: ilk render'daki varsayılan
+  // (daraltılmış değil, favori yok) kullanıcının gerçek tercihinin
+  // üzerine yazılırdı.
+  const preferencesLoaded = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -749,26 +83,56 @@ export default function ErpShell({
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    void apiClient<{ sidebarCollapsed: boolean; favoritePaths: string[] }>(
+      "user-preferences"
+    )
+      .then((preference) => {
+        if (!active) return;
+
+        setCollapsed(preference.sidebarCollapsed);
+        setFavoritePaths(preference.favoritePaths ?? []);
+        preferencesLoaded.current = true;
+      })
+      .catch(() => {
+        // TERCİH OKUNAMAZSA ARAYÜZ ÇALIŞMAYA DEVAM EDER: menü tercihi
+        // uygulamayı durdurmaya değmez. Yalnızca yazma kapalı kalır ki
+        // varsayılanlar kullanıcının kaydını ezmesin.
+        if (active) preferencesLoaded.current = false;
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  function persistPreferences(next: {
+    sidebarCollapsed: boolean;
+    favoritePaths: string[];
+  }) {
+    if (!preferencesLoaded.current) return;
+
+    void apiClient("user-preferences", {
+      method: "PUT",
+      body: next,
+    }).catch(() => {
+      // Sessiz geçilir: kaydedilemeyen bir menü tercihi için
+      // kullanıcının önüne hata çıkarmak, yaptığı işi böler.
+    });
+  }
+
   const visibleGroups = useMemo(() => {
     // Oturum henüz gelmediyse menü GÖSTERİLMEZ: dolu menüyü gösterip
     // sonra öğeleri kaybetmek, kullanıcıya olmayan yetkiyi bir an için
     // göstermek demek.
     if (!currentUser) return [];
 
-    const permissions = new Set(currentUser.permissions);
-    const all = currentUser.hasAllPermissions === true;
-
-    return groups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) =>
-          canAccessRoute(pathOnly(item.href), permissions, all)
-        ),
-      }))
-      // Bir bölümde görünür öğe kalmadıysa BAŞLIK DA ÇIKMAZ: boş
-      // kabuk, kullanıcıya erişemeyeceği bir alan varmış izlenimi
-      // verirdi.
-      .filter((group) => group.items.length > 0);
+    return visibleMenuGroups(
+      new Set(currentUser.permissions),
+      currentUser.hasAllPermissions === true
+    );
   }, [currentUser]);
 
   const sessionInitials = (currentUser?.fullName || currentUser?.username || "K")
@@ -894,6 +258,92 @@ export default function ErpShell({
     };
   }, [pathname, openGroups]);
 
+  /**
+   * FAVORİLER GÖRÜNÜRLÜK SÜZGECİNDEN GEÇER. Kullanıcı bir sayfayı
+   * favoriye alıp sonra o yetkisini kaybederse kısayol da düşer;
+   * favori listesi bir yan kapı olamaz. Menüde karşılığı kalmayan
+   * (yeniden adlandırılmış) yol da sessizce elenir.
+   */
+  const favorites = useMemo(() => {
+    if (!currentUser) return [];
+
+    const permissions = new Set(currentUser.permissions);
+    const all = currentUser.hasAllPermissions === true;
+
+    return favoritePaths
+      .filter((path) => canAccessRoute(path, permissions, all))
+      .map((path) => ({ path, entry: findMenuEntry(path, visibleGroups) }))
+      .filter(
+        (favorite): favorite is { path: string; entry: NonNullable<ReturnType<typeof findMenuEntry>> } =>
+          favorite.entry !== null
+      );
+  }, [favoritePaths, currentUser, visibleGroups]);
+
+  const currentPath = pathOnly(pathname);
+  const currentEntry = useMemo(
+    () => findMenuEntry(currentPath, visibleGroups),
+    [currentPath, visibleGroups]
+  );
+
+  // Kırıntı yolu MENÜDEN türer, URL parçalarından değil: "/muhasebe/
+  // hesap-plani/aktar" parçalanınca kullanıcıya "hesap-plani" diye
+  // teknik bir metin gösterilirdi. Menüde karşılığı yoksa yalnızca
+  // sayfa başlığı kalır — uydurma bir üst seviye gösterilmez.
+  const breadcrumb = useMemo(() => {
+    const trail: { label: string; href?: string }[] = [
+      { label: "Ana Sayfa", href: "/dashboard" },
+    ];
+
+    if (currentEntry) {
+      trail.push({ label: currentEntry.group.label });
+
+      if (currentEntry.item.label !== title) {
+        trail.push({ label: currentEntry.item.label, href: currentEntry.item.href });
+      }
+    }
+
+    trail.push({ label: title });
+
+    return trail;
+  }, [currentEntry, title]);
+
+  const canFavoriteCurrent = currentEntry !== null;
+  const currentIsFavorite = favoritePaths.includes(currentPath);
+
+  // YAN ETKİ setState GÜNCELLEYİCİSİNİN İÇİNDE DEĞİL: React
+  // güncelleyiciyi saf sayar ve geliştirme kipinde iki kez çağırabilir;
+  // sunucuya yazma oraya konsaydı her tıklama iki istek atardı.
+  function toggleFavorite(path: string) {
+    const next = favoritePaths.includes(path)
+      ? favoritePaths.filter((value) => value !== path)
+      : [...favoritePaths, path];
+
+    setFavoritePaths(next);
+    persistPreferences({ sidebarCollapsed: collapsed, favoritePaths: next });
+  }
+
+  function toggleCollapsed() {
+    const next = !collapsed;
+
+    setCollapsed(next);
+    persistPreferences({ sidebarCollapsed: next, favoritePaths });
+  }
+
+  // CTRL+K HER SAYFADA: palet yalnızca fare ile açılabilseydi, klavyede
+  // çalışan kullanıcı için hiçbir hız kazancı olmazdı. ⌘K macOS için.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen(true);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   function toggleGroup(key: string) {
     if (collapsed) {
       setCollapsed(false);
@@ -950,6 +400,38 @@ export default function ErpShell({
             <span className="erp-nav-icon">✓</span>
             {!collapsed && <span>Onay Merkezi</span>}
           </Link>
+
+          {/*
+            KISAYOLLAR EN ÜSTTE: favori, "her gün açtığım sayfa" demek;
+            listenin ortasında olsaydı yine aramak gerekirdi.
+          */}
+          {favorites.length > 0 && (
+            <section className="erp-nav-group erp-nav-favorites">
+              {!collapsed && (
+                <div className="erp-nav-group-title">KISAYOLLARIM</div>
+              )}
+
+              <div className="erp-nav-group-items">
+                {favorites.map((favorite) => {
+                  const active =
+                    currentPath === favorite.path ||
+                    currentPath.startsWith(`${favorite.path}/`);
+
+                  return (
+                    <Link
+                      key={favorite.path}
+                      className={`erp-nav-link ${active ? "active" : ""}`}
+                      href={favorite.entry.item.href}
+                      title={favorite.entry.item.label}
+                    >
+                      <span className="erp-nav-icon">★</span>
+                      {!collapsed && <span>{favorite.entry.item.label}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {visibleGroups.map((group) => {
             const isOpen = openGroups[group.key];
@@ -1010,7 +492,7 @@ export default function ErpShell({
           <button
             type="button"
             className="erp-collapse-button"
-            onClick={() => setCollapsed((value) => !value)}
+            onClick={toggleCollapsed}
             title={collapsed ? "Menüyü aç" : "Menüyü daralt"}
           >
             {collapsed ? "›" : "‹"}
@@ -1023,14 +505,74 @@ export default function ErpShell({
           <button
             type="button"
             className="erp-mobile-menu-button"
-            onClick={() => setCollapsed((value) => !value)}
+            onClick={toggleCollapsed}
             aria-label="Menüyü aç/kapat"
           >
             ☰
           </button>
 
+          {/*
+            KIRINTI YOLU üst çubukta: kullanıcı derin bir sayfada
+            "buraya nereden geldim" sorusuna cevap bulabilmeli.
+          */}
+          <nav className="erp-breadcrumb" aria-label="Sayfa yolu">
+            {breadcrumb.map((crumb, index) => {
+              const last = index === breadcrumb.length - 1;
+
+              return (
+                <span key={`${crumb.label}-${index}`}>
+                  {index > 0 && (
+                    <span className="erp-breadcrumb-separator" aria-hidden="true">
+                      ›
+                    </span>
+                  )}
+
+                  {crumb.href && !last ? (
+                    <Link href={crumb.href}>{crumb.label}</Link>
+                  ) : (
+                    <span aria-current={last ? "page" : undefined}>
+                      {crumb.label}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </nav>
+
           <div className="erp-topbar-actions">
-            <button type="button" title="Ara">⌕</button>
+            {/*
+              ARAMA DÜĞMESİ ARTIK ÇALIŞIYOR: bugüne kadar üst çubukta
+              duran ⌕ hiçbir şey yapmıyordu.
+            */}
+            <button
+              type="button"
+              title="Sayfa ara (Ctrl+K)"
+              onClick={() => setPaletteOpen(true)}
+              aria-label="Sayfa ara"
+            >
+              ⌕
+            </button>
+
+            {canFavoriteCurrent && (
+              <button
+                type="button"
+                className={`erp-favorite-toggle ${currentIsFavorite ? "on" : ""}`}
+                onClick={() => toggleFavorite(currentPath)}
+                aria-pressed={currentIsFavorite}
+                title={
+                  currentIsFavorite
+                    ? "Kısayollardan çıkar"
+                    : "Kısayollara ekle"
+                }
+                aria-label={
+                  currentIsFavorite
+                    ? "Bu sayfayı kısayollardan çıkar"
+                    : "Bu sayfayı kısayollara ekle"
+                }
+              >
+                {currentIsFavorite ? "★" : "☆"}
+              </button>
+            )}
             <NotificationBell />
             <button type="button" title="Yardım">?</button>
             <button type="button" className="erp-company-switcher">
@@ -1048,6 +590,14 @@ export default function ErpShell({
 
         <div className="erp-content">{children}</div>
       </main>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        groups={visibleGroups}
+        favoritePaths={favoritePaths}
+        onToggleFavorite={toggleFavorite}
+      />
 
       {/* Kullanıcı hangi sayfada olursa olsun Hızır'a ulaşabilsin. */}
       <HizirBubble />
