@@ -3,6 +3,8 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { decimal } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
@@ -26,9 +28,7 @@ function formatSize(bytes: number) {
   if (bytes <= 0) return "—";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toLocaleString("tr-TR", {
-    maximumFractionDigits: 1,
-  })} MB`;
+  return `${decimal(bytes / (1024 * 1024), 1)} MB`;
 }
 
 export default function IsgSiteDocumentsPage() {
@@ -45,6 +45,8 @@ export default function IsgSiteDocumentsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pendingDelete, setPendingDelete] =
+    useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
@@ -195,7 +197,7 @@ export default function IsgSiteDocumentsPage() {
   }
 
   async function remove(id: string) {
-    if (!window.confirm("Belge kaydı silinsin mi?")) return;
+    setPendingDelete(null);
 
     setError("");
 
@@ -214,10 +216,21 @@ export default function IsgSiteDocumentsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Saha İSG Belgeleri"
       description="Risk değerlendirmesi, acil durum planı, kurul tutanağı, denetim ve KKD zimmet formları"
     >
       <div className="erp-page-toolbar">
+        {/* Belgeler saha tarafından yükleniyor. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          Yenile
+        </button>
+
         <div>
           <strong>{documents.length} belge</strong>
           {expiredCount > 0 && (
@@ -490,7 +503,7 @@ export default function IsgSiteDocumentsPage() {
                         <button
                           type="button"
                           className="erp-secondary-button"
-                          onClick={() => void remove(document.id)}
+                          onClick={() => setPendingDelete(document.id)}
                         >
                           Sil
                         </button>
@@ -503,6 +516,15 @@ export default function IsgSiteDocumentsPage() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Belge Kaydını Sil"
+        description={"Şantiye belgesi kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz."}
+        confirmLabel="Belgeyi Sil"
+        error={error}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void remove(pendingDelete!)}
+      />
     </ErpShell>
   );
 }

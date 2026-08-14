@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { currencyMoney } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import {
   companyService,
@@ -136,11 +137,7 @@ const emptyForm: FormState = {
 };
 
 function money(value: number, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 function errorMessage(error: unknown) {
@@ -417,7 +414,7 @@ export default function SubcontractorsPage() {
 
   if (denied) {
     return (
-      <ErpShell title="Taşeronlar">
+      <ErpShell design="redwood" title="Taşeronlar">
         <main style={{ padding: 24 }}>
           <div style={box}>
             Taşeron sözleşmelerini görme yetkiniz yok.
@@ -428,12 +425,12 @@ export default function SubcontractorsPage() {
   }
 
   return (
-    <ErpShell title="Taşeronlar">
+    <ErpShell design="redwood" title="Taşeronlar">
       <main style={{ padding: 24, display: "grid", gap: 18 }}>
         <section style={topBar}>
           <div>
             <h1 style={{ margin: 0, fontSize: 28 }}>Taşeron Sözleşmeleri</h1>
-            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+            <p style={{ margin: "6px 0 0", color: "var(--erp-muted)" }}>
               Kapsam tikleri hakedişin kesinti kalemlerini belirler; hakediş
               bunları sözleşmeden okur.
             </p>
@@ -453,19 +450,30 @@ export default function SubcontractorsPage() {
               ))}
             </select>
 
+            {/* Sözleşme kapsamı ve hakediş durumu başka kullanıcılarca
+                değiştiriliyor; refreshKey vardı ama düğmesi yoktu. */}
+            <button
+              type="button"
+              onClick={() => setRefreshKey((value) => value + 1)}
+              style={smallButton}
+              disabled={loading}
+            >
+              Yenile
+            </button>
+
             <button type="button" onClick={openCreate} style={primaryButton}>
               Yeni Sözleşme
             </button>
           </div>
         </section>
 
-        {error && <div style={{ ...box, color: "#b91c1c" }}>{error}</div>}
-        {notice && <div style={{ ...box, color: "#047857" }}>{notice}</div>}
+        {error && <div style={{ ...box, color: "var(--color-semantic-danger)" }}>{error}</div>}
+        {notice && <div style={{ ...box, color: "var(--color-semantic-success)" }}>{notice}</div>}
 
         <section style={{ ...card, padding: 0, overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
             <thead>
-              <tr style={{ background: "#f8fafc" }}>
+              <tr style={{ background: "var(--erp-bg)" }}>
                 {[
                   "Sözleşme No",
                   "Taşeron",
@@ -486,7 +494,7 @@ export default function SubcontractorsPage() {
             <tbody>
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ ...td, textAlign: "center", color: "#64748b" }}>
+                  <td colSpan={9} style={{ ...td, textAlign: "center", color: "var(--erp-muted)" }}>
                     Taşeron sözleşmesi bulunamadı.
                   </td>
                 </tr>
@@ -509,7 +517,7 @@ export default function SubcontractorsPage() {
                     <td style={td}>
                       {item.projectName}
                       {item.projectSiteName && (
-                        <div style={{ fontSize: 12, color: "#64748b" }}>
+                        <div style={{ fontSize: 12, color: "var(--erp-muted)" }}>
                           {item.projectSiteName}
                         </div>
                       )}
@@ -521,7 +529,7 @@ export default function SubcontractorsPage() {
                     </td>
                     <td style={td}>
                       {ours.length === 0 ? (
-                        <span style={{ color: "#94a3b8" }}>tamamı taşeronda</span>
+                        <span style={{ color: "var(--erp-muted)" }}>tamamı taşeronda</span>
                       ) : (
                         <span>bizde: {ours.join(", ")}</span>
                       )}
@@ -592,7 +600,7 @@ export default function SubcontractorsPage() {
                   ))}
                 </select>
                 {projectAccounts.length === 0 && form.companyId && (
-                  <small style={{ color: "#b45309" }}>
+                  <small style={{ color: "var(--color-semantic-warning)" }}>
                     Bu şirkette &quot;taşeron&quot; işaretli cari yok. Cari kartında
                     Taşeron rolünü işaretleyin.
                   </small>
@@ -734,7 +742,7 @@ export default function SubcontractorsPage() {
                   inputMode="numeric"
                   style={input}
                 />
-                <small style={{ color: "#64748b" }}>
+                <small style={{ color: "var(--erp-muted)" }}>
                   Yapım işleri KDV tevkifatı; 0/0 girilirse tevkifat yok.
                 </small>
               </label>
@@ -754,7 +762,7 @@ export default function SubcontractorsPage() {
 
             <div>
               <h3 style={{ margin: "0 0 4px", fontSize: 16 }}>Sözleşme Kapsamı</h3>
-              <p style={{ margin: "0 0 12px", color: "#64748b", fontSize: 13 }}>
+              <p style={{ margin: "0 0 12px", color: "var(--erp-muted)", fontSize: 13 }}>
                 Bir kalem bizdeyse masrafı biz yaptığımız için taşeron
                 hakedişinden kesilir; taşerondaysa hakedişte hiç görünmez.
               </p>
@@ -777,7 +785,7 @@ export default function SubcontractorsPage() {
                         {field.subcontractorLabel}
                       </option>
                     </select>
-                    <small style={{ color: "#94a3b8", fontSize: 12 }}>
+                    <small style={{ color: "var(--erp-muted)", fontSize: 12 }}>
                       {field.hint}
                     </small>
                   </label>
@@ -787,14 +795,14 @@ export default function SubcontractorsPage() {
 
             <div>
               <h3 style={{ margin: "0 0 4px", fontSize: 16 }}>İcmal Kısımları</h3>
-              <p style={{ margin: "0 0 12px", color: "#64748b", fontSize: 13 }}>
+              <p style={{ margin: "0 0 12px", color: "var(--erp-muted)", fontSize: 13 }}>
                 {isLumpSum
                   ? "Götürü sözleşmede ilerleme kısım bazında girilir; en az bir kısım seçilmelidir."
                   : "Maliyet ve kâr analizi bu kısımlar üzerinden yürür."}
               </p>
 
               {sections.length === 0 ? (
-                <div style={{ color: "#94a3b8" }}>
+                <div style={{ color: "var(--erp-muted)" }}>
                   {form.projectId
                     ? "Bu projede tanımlı icmal kısmı yok."
                     : "Önce proje seçin."}
@@ -836,11 +844,11 @@ export default function SubcontractorsPage() {
                     );
                   })}
 
-                  <div style={{ color: "#475569", fontSize: 13 }}>
+                  <div style={{ color: "var(--erp-muted)", fontSize: 13 }}>
                     Kısım bedelleri toplamı: <strong>{money(sectionTotal)}</strong>
                     {sectionTotal >
                       (Number(form.contractAmount.replace(",", ".")) || 0) && (
-                      <span style={{ color: "#b91c1c" }}>
+                      <span style={{ color: "var(--color-semantic-danger)" }}>
                         {" "}
                         — sözleşme bedelini aşıyor
                       </span>
@@ -878,14 +886,14 @@ export default function SubcontractorsPage() {
   );
 }
 
-const card = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 18, boxShadow: "0 8px 24px rgba(15,23,42,.05)" } as const;
-const topBar = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18, flexWrap: "wrap", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 18 } as const;
-const box = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 } as const;
-const input = { minHeight: 42, border: "1px solid #cbd5e1", borderRadius: 10, padding: "8px 11px", background: "#fff", color: "#0f172a" } as const;
-const fieldLabel = { display: "grid", gap: 6, fontSize: 13, color: "#475569" } as const;
+const card = { background: "var(--erp-panel)", border: "1px solid var(--erp-border)", borderRadius: 16, padding: 18, boxShadow: "0 8px 24px rgba(15,23,42,.05)" } as const;
+const topBar = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18, flexWrap: "wrap", background: "var(--erp-panel)", border: "1px solid var(--erp-border)", borderRadius: 16, padding: 18 } as const;
+const box = { background: "var(--erp-panel)", border: "1px solid var(--erp-border)", borderRadius: 12, padding: 14 } as const;
+const input = { minHeight: 42, border: "1px solid var(--erp-border)", borderRadius: 10, padding: "8px 11px", background: "var(--erp-panel)", color: "var(--erp-text)" } as const;
+const fieldLabel = { display: "grid", gap: 6, fontSize: 13, color: "var(--erp-muted)" } as const;
 const grid3 = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 12 } as const;
-const th = { padding: "13px 14px", textAlign: "left", color: "#475569", fontSize: 13, borderBottom: "1px solid #e2e8f0" } as const;
-const td = { padding: "13px 14px", borderBottom: "1px solid #eef2f7" } as const;
-const primaryButton = { height: 42, padding: "0 18px", borderRadius: 10, border: "none", background: "#0f766e", color: "#fff", fontWeight: 600, cursor: "pointer" } as const;
-const linkButton = { display: "inline-flex", alignItems: "center", height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, textDecoration: "none" } as const;
-const smallButton = { height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, cursor: "pointer" } as const;
+const th = { padding: "13px 14px", textAlign: "left", color: "var(--erp-muted)", fontSize: 13, borderBottom: "1px solid var(--erp-border)" } as const;
+const td = { padding: "13px 14px", borderBottom: "1px solid var(--erp-border)" } as const;
+const primaryButton = { height: 42, padding: "0 18px", borderRadius: 10, border: "none", background: "var(--erp-primary)", color: "var(--color-on-brand)", fontWeight: 600, cursor: "pointer" } as const;
+const linkButton = { display: "inline-flex", alignItems: "center", height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid var(--erp-border)", background: "var(--erp-panel)", color: "var(--erp-text)", fontWeight: 600, textDecoration: "none" } as const;
+const smallButton = { height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid var(--erp-border)", background: "var(--erp-panel)", color: "var(--erp-text)", fontWeight: 600, cursor: "pointer" } as const;

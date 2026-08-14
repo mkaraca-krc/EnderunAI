@@ -56,6 +56,7 @@ export default function MyIsgRecordsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="İSG Belgelerim"
       description="Sağlık raporu, eğitim ve yetki belgelerinizin geçerlilik durumu"
     >

@@ -3,6 +3,8 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { money } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
@@ -19,10 +21,6 @@ import {
   type IsgOsgbExpertPayload,
 } from "@/services/isg.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 /** CurrentAccountStatus.Approved */
@@ -66,6 +64,8 @@ export default function IsgOsgbPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pendingDelete, setPendingDelete] =
+    useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
@@ -279,7 +279,7 @@ export default function IsgOsgbPage() {
   }
 
   async function remove(id: string) {
-    if (!window.confirm("Sözleşme silinsin mi?")) return;
+    setPendingDelete(null);
 
     setError("");
 
@@ -295,10 +295,21 @@ export default function IsgOsgbPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="OSGB Sözleşmeleri"
       description="Dış İSG hizmeti sözleşmesi, atanan uzman ve hekim, OSGB faturaları"
     >
       <div className="erp-page-toolbar">
+        {/* Sözleşme ve uzman atamaları başka kullanıcı tarafından değiştiriliyor. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          Yenile
+        </button>
+
         <div>
           <strong>{contracts.length} sözleşme</strong>
           <small style={{ display: "block", marginTop: "4px" }}>
@@ -643,8 +654,8 @@ export default function IsgOsgbPage() {
                       {contract.billingTypeName}
                       <small>
                         {contract.billingType === 0
-                          ? money.format(contract.monthlyFee)
-                          : `${money.format(contract.perPersonFee)} / kişi`}
+                          ? money(contract.monthlyFee)
+                          : `${money(contract.perPersonFee)} / kişi`}
                       </small>
                     </td>
                     <td>{contract.expertCount}</td>
@@ -680,7 +691,7 @@ export default function IsgOsgbPage() {
                           <button
                             type="button"
                             className="erp-secondary-button"
-                            onClick={() => void remove(contract.id)}
+                            onClick={() => setPendingDelete(contract.id)}
                           >
                             Sil
                           </button>
@@ -723,8 +734,8 @@ export default function IsgOsgbPage() {
               <span className="erp-stat-label">Ücretlendirme</span>
               <strong>
                 {selected.billingType === 0
-                  ? money.format(selected.monthlyFee)
-                  : `${money.format(selected.perPersonFee)} / kişi`}
+                  ? money(selected.monthlyFee)
+                  : `${money(selected.perPersonFee)} / kişi`}
               </strong>
             </div>
             <div>
@@ -818,7 +829,7 @@ export default function IsgOsgbPage() {
                       <td>{invoice.internalNumber}</td>
                       <td>{invoice.invoiceNumber}</td>
                       <td>{formatDate(invoice.invoiceDate)}</td>
-                      <td>{money.format(invoice.grandTotal)}</td>
+                      <td>{money(invoice.grandTotal)}</td>
                       <td>
                         <span className="erp-status gray">{invoice.statusName}</span>
                       </td>
@@ -830,6 +841,15 @@ export default function IsgOsgbPage() {
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="OSGB Sözleşmesini Sil"
+        description={"Sözleşme kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz."}
+        confirmLabel="Sözleşmeyi Sil"
+        error={error}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void remove(pendingDelete!)}
+      />
     </ErpShell>
   );
 }

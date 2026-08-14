@@ -273,6 +273,7 @@ export default function PersonnelPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Personel Yönetimi"
       description="Personel kayıtları, proje görevlendirmeleri ve ekip dağılımı"
     >
@@ -356,6 +357,17 @@ export default function PersonnelPage() {
             </Button>
           </div>
         </form>
+
+        {/* İşe giriş/çıkış İK tarafında işleniyor; liste filtreye
+            dokunmadan tazelenemiyordu. */}
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={loading}
+          onClick={() => void loadPersonnel(companyFilter, search)}
+        >
+          Yenile
+        </Button>
 
         <Button
           type="button"

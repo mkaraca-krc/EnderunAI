@@ -4,6 +4,11 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  currencyMoney,
+  date as sharedDate,
+  quantity as sharedQuantity,
+} from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import {
   personnelService,
@@ -32,21 +37,15 @@ import {
 } from "@/services/subcontractor-progress-payment.service";
 
 function money(value: number, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return currencyMoney(value, currency);
 }
 
 function quantity(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    maximumFractionDigits: 4,
-  }).format(value);
+  return sharedQuantity(value);
 }
 
 function date(value?: string | null) {
-  return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
+  return sharedDate(value);
 }
 
 function errorMessage(error: unknown) {
@@ -322,29 +321,40 @@ export default function SubcontractorDetailPage({
   }
 
   return (
-    <ErpShell title="Taşeron Sözleşmesi">
+    <ErpShell design="redwood" title="Taşeron Sözleşmesi">
       <main style={{ padding: 24, display: "grid", gap: 18 }}>
         <section style={topBar}>
           <div>
-            <Link href="/taseronlar" style={{ color: "#0f766e", fontSize: 13 }}>
+            <Link href="/taseronlar" style={{ color: "var(--erp-primary)", fontSize: 13 }}>
               ← Taşeronlar
             </Link>
             <h1 style={{ margin: "6px 0 0", fontSize: 26 }}>
               {contract?.contractNumber ?? "Yükleniyor..."}
             </h1>
-            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+            <p style={{ margin: "6px 0 0", color: "var(--erp-muted)" }}>
               {contract?.workDescription} · {contract?.contractTypeName} ·{" "}
               {contract ? money(contract.contractAmount, contract.currencyCode) : ""}
             </p>
           </div>
+
+          {/* Hakediş ve kesinti kayıtları başka kullanıcılarca
+              giriliyor; refreshKey vardı ama düğmesi yoktu. */}
+          <button
+            type="button"
+            onClick={() => setRefreshKey((value) => value + 1)}
+            style={smallButton}
+            disabled={saving}
+          >
+            Yenile
+          </button>
         </section>
 
-        {error && <div style={{ ...box, color: "#b91c1c" }}>{error}</div>}
-        {notice && <div style={{ ...box, color: "#047857" }}>{notice}</div>}
+        {error && <div style={{ ...box, color: "var(--color-semantic-danger)" }}>{error}</div>}
+        {notice && <div style={{ ...box, color: "var(--color-semantic-success)" }}>{notice}</div>}
 
         <section style={{ ...card, display: "grid", gap: 10 }}>
           <h2 style={{ margin: 0, fontSize: 18 }}>Sözleşme Kapsamı</h2>
-          <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+          <p style={{ margin: 0, color: "var(--erp-muted)", fontSize: 13 }}>
             Bizde olan kalemler hakedişte kesinti satırı açar; taşeronda
             olanlar hakedişte hiç görünmez.
           </p>
@@ -359,9 +369,9 @@ export default function SubcontractorDetailPage({
                     borderRadius: 999,
                     fontSize: 13,
                     fontWeight: 600,
-                    background: ours ? "#ecfdf5" : "#f1f5f9",
-                    color: ours ? "#047857" : "#64748b",
-                    border: `1px solid ${ours ? "#a7f3d0" : "#e2e8f0"}`,
+                    background: ours ? "var(--color-semantic-success-tint)" : "var(--erp-bg)",
+                    color: ours ? "var(--color-semantic-success)" : "var(--erp-muted)",
+                    border: `1px solid ${ours ? "var(--color-semantic-success-border)" : "var(--erp-border)"}`,
                   }}
                 >
                   {label}: {ours ? "bizde" : "taşeronda"}
@@ -375,14 +385,14 @@ export default function SubcontractorDetailPage({
         {socialSecurityWithUs && (
           <section style={{ ...card, display: "grid", gap: 12 }}>
             <h2 style={{ margin: 0, fontSize: 18 }}>Taşeron Ekibi</h2>
-            <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+            <p style={{ margin: 0, color: "var(--erp-muted)", fontSize: 13 }}>
               SGK bizde olduğu için bu işçiler bizim bordromuzda. Bordro
               maliyetleri taşeron hakedişinde SGK / işçilik kesintisi olarak
               birikir.
             </p>
 
             {team.length === 0 ? (
-              <div style={{ color: "#94a3b8" }}>Ekibe personel eklenmemiş.</div>
+              <div style={{ color: "var(--erp-muted)" }}>Ekibe personel eklenmemiş.</div>
             ) : (
               <div style={{ display: "grid", gap: 6 }}>
                 {team.map((member) => (
@@ -393,14 +403,14 @@ export default function SubcontractorDetailPage({
                       justifyContent: "space-between",
                       alignItems: "center",
                       padding: "8px 12px",
-                      border: "1px solid #e2e8f0",
+                      border: "1px solid var(--erp-border)",
                       borderRadius: 10,
                     }}
                   >
                     <span>
                       {member.employeeNumber} · {member.fullName}
                       {member.jobTitle && (
-                        <span style={{ color: "#64748b" }}> · {member.jobTitle}</span>
+                        <span style={{ color: "var(--erp-muted)" }}> · {member.jobTitle}</span>
                       )}
                     </span>
                     <button
@@ -450,22 +460,22 @@ export default function SubcontractorDetailPage({
 
         <section style={{ ...card, display: "grid", gap: 14 }}>
           <h2 style={{ margin: 0, fontSize: 18 }}>Evraklar</h2>
-          <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+          <p style={{ margin: 0, color: "var(--erp-muted)", fontSize: 13 }}>
             SGK borcu yoktur yazısı kanunen üç ay geçerlidir; bitiş tarihi
             girilmese bile buna göre takip edilir.
           </p>
 
           {documents.length === 0 ? (
-            <div style={{ color: "#94a3b8" }}>Evrak yüklenmemiş.</div>
+            <div style={{ color: "var(--erp-muted)" }}>Evrak yüklenmemiş.</div>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
               {documents.map((document) => {
                 const tone =
                   document.status === SubcontractorDocumentStatus.Expired
-                    ? { bg: "#fef2f2", border: "#fecaca", text: "#b91c1c" }
+                    ? { bg: "var(--color-semantic-danger-tint)", border: "var(--color-semantic-danger-border)", text: "var(--color-semantic-danger)" }
                     : document.status === SubcontractorDocumentStatus.ExpiringSoon
-                      ? { bg: "#fffbeb", border: "#fde68a", text: "#b45309" }
-                      : { bg: "#fff", border: "#e2e8f0", text: "#0f172a" };
+                      ? { bg: "var(--color-semantic-warning-tint)", border: "var(--color-semantic-warning-border)", text: "var(--color-semantic-warning)" }
+                      : { bg: "var(--erp-panel)", border: "var(--erp-border)", text: "var(--erp-text)" };
 
                 return (
                   <div
@@ -485,7 +495,7 @@ export default function SubcontractorDetailPage({
                     <div>
                       <strong>{document.documentTypeName}</strong> ·{" "}
                       {document.title}
-                      <div style={{ marginTop: 4, fontSize: 12, color: "#64748b" }}>
+                      <div style={{ marginTop: 4, fontSize: 12, color: "var(--erp-muted)" }}>
                         Düzenlenme: {date(document.issueDate)}
                         {document.effectiveValidUntil && (
                           <>
@@ -627,9 +637,9 @@ export default function SubcontractorDetailPage({
                 style={{
                   padding: 12,
                   borderRadius: 10,
-                  background: "#fffbeb",
-                  border: "1px solid #fde68a",
-                  color: "#b45309",
+                  background: "var(--color-semantic-warning-tint)",
+                  border: "1px solid var(--color-semantic-warning-border)",
+                  color: "var(--color-semantic-warning)",
                 }}
               >
                 {ledger.overAdvanceWarning}
@@ -656,11 +666,11 @@ export default function SubcontractorDetailPage({
               {/* Elden tutarlar yetki yoksa sunucudan hiç gelmiyor. */}
               {ledger.cashHidden ? (
                 <div style={hiddenTile}>
-                  <div style={{ fontSize: 12, color: "#64748b" }}>Elden</div>
-                  <div style={{ marginTop: 6, fontSize: 18, color: "#94a3b8" }}>
+                  <div style={{ fontSize: 12, color: "var(--erp-muted)" }}>Elden</div>
+                  <div style={{ marginTop: 6, fontSize: 18, color: "var(--erp-muted)" }}>
                     gizli
                   </div>
-                  <div style={{ marginTop: 4, fontSize: 12, color: "#94a3b8" }}>
+                  <div style={{ marginTop: 4, fontSize: 12, color: "var(--erp-muted)" }}>
                     Görme yetkiniz yok
                   </div>
                 </div>
@@ -772,7 +782,7 @@ export default function SubcontractorDetailPage({
               </button>
             </div>
 
-            <div style={{ fontSize: 12, color: "#64748b" }}>
+            <div style={{ fontSize: 12, color: "var(--erp-muted)" }}>
               {entryIsCash
                 ? "Elden kayıt resmî muhasebeye fiş yazmaz ve proje maliyeti defterine satır açmaz."
                 : "Tevkifat oranı sözleşmeden alınır; faturalı ödeme proje maliyetine taşeron işçiliği olarak yazılır."}
@@ -785,7 +795,7 @@ export default function SubcontractorDetailPage({
                   style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}
                 >
                   <thead>
-                    <tr style={{ background: "#f8fafc" }}>
+                    <tr style={{ background: "var(--erp-bg)" }}>
                       {["Tarih", "Tür", "Şekil", "Tutar", "Tevkifat", "Açıklama"].map(
                         (title) => (
                           <th key={title} style={th}>
@@ -804,7 +814,7 @@ export default function SubcontractorDetailPage({
                           <td style={td}>{entry.kindName}</td>
                           <td style={td}>
                             {entry.isCash ? (
-                              <span style={{ color: "#b45309" }}>Elden</span>
+                              <span style={{ color: "var(--color-semantic-warning)" }}>Elden</span>
                             ) : (
                               "Faturalı"
                             )}
@@ -869,12 +879,12 @@ export default function SubcontractorDetailPage({
           </div>
 
           {payments.length === 0 ? (
-            <div style={{ color: "#94a3b8" }}>Henüz hakediş açılmamış.</div>
+            <div style={{ color: "var(--erp-muted)" }}>Henüz hakediş açılmamış.</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
                 <thead>
-                  <tr style={{ background: "#f8fafc" }}>
+                  <tr style={{ background: "var(--erp-bg)" }}>
                     {[
                       "No",
                       "Dönem",
@@ -955,7 +965,7 @@ export default function SubcontractorDetailPage({
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 820 }}>
                   <thead>
-                    <tr style={{ background: "#f8fafc" }}>
+                    <tr style={{ background: "var(--erp-bg)" }}>
                       {[
                         "Kısım",
                         "Kısım Bedeli",
@@ -978,7 +988,7 @@ export default function SubcontractorDetailPage({
                           {money(section.sectionAmount, detail.currencyCode)}
                         </td>
                         <td style={td}>%{section.previousProgressRate}</td>
-                        <td style={{ ...td, color: "#64748b" }}>
+                        <td style={{ ...td, color: "var(--erp-muted)" }}>
                           %{section.suggestedProgressRate}
                         </td>
                         <td style={{ ...td, fontWeight: 600 }}>
@@ -996,7 +1006,7 @@ export default function SubcontractorDetailPage({
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
                   <thead>
-                    <tr style={{ background: "#f8fafc" }}>
+                    <tr style={{ background: "var(--erp-bg)" }}>
                       {[
                         "Poz",
                         "Açıklama",
@@ -1017,7 +1027,7 @@ export default function SubcontractorDetailPage({
                   <tbody>
                     {detail.items.length === 0 && (
                       <tr>
-                        <td colSpan={9} style={{ ...td, color: "#94a3b8" }}>
+                        <td colSpan={9} style={{ ...td, color: "var(--erp-muted)" }}>
                           Bu hakedişe henüz kalem girilmemiş.
                         </td>
                       </tr>
@@ -1028,7 +1038,7 @@ export default function SubcontractorDetailPage({
                         <td style={td}>{line.description}</td>
                         <td style={td}>{line.unit}</td>
                         <td style={td}>{quantity(line.previousQuantity)}</td>
-                        <td style={{ ...td, color: "#64748b" }}>
+                        <td style={{ ...td, color: "var(--erp-muted)" }}>
                           {quantity(line.suggestedQuantity)}
                         </td>
                         <td style={{ ...td, fontWeight: 600 }}>
@@ -1050,13 +1060,13 @@ export default function SubcontractorDetailPage({
 
             <div>
               <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Kesintiler</h3>
-              <p style={{ margin: "0 0 10px", color: "#64748b", fontSize: 13 }}>
+              <p style={{ margin: "0 0 10px", color: "var(--erp-muted)", fontSize: 13 }}>
                 Kalemler sözleşmenin kapsam tiklerinden gelir; tutarlar
                 öneridir ve mutabakata göre düzeltilebilir.
               </p>
 
               {detail.deductions.length === 0 ? (
-                <div style={{ color: "#94a3b8" }}>
+                <div style={{ color: "var(--erp-muted)" }}>
                   Bu sözleşmede kesinti üreten bir kapsam yok.
                 </div>
               ) : (
@@ -1065,7 +1075,7 @@ export default function SubcontractorDetailPage({
                     <div
                       key={deduction.id}
                       style={{
-                        border: "1px solid #e2e8f0",
+                        border: "1px solid var(--erp-border)",
                         borderRadius: 10,
                         padding: 12,
                       }}
@@ -1084,7 +1094,7 @@ export default function SubcontractorDetailPage({
                       </div>
                       {deduction.suggestionBasis && (
                         <div
-                          style={{ marginTop: 4, fontSize: 12, color: "#64748b" }}
+                          style={{ marginTop: 4, fontSize: 12, color: "var(--erp-muted)" }}
                         >
                           {deduction.suggestionBasis}
                         </div>
@@ -1128,13 +1138,13 @@ function Total({
   return (
     <div
       style={{
-        border: "1px solid #e2e8f0",
+        border: "1px solid var(--erp-border)",
         borderRadius: 12,
         padding: 14,
-        background: strong ? "#f8fafc" : "#fff",
+        background: strong ? "var(--erp-bg)" : "var(--erp-panel)",
       }}
     >
-      <div style={{ fontSize: 12, color: "#64748b" }}>{label}</div>
+      <div style={{ fontSize: 12, color: "var(--erp-muted)" }}>{label}</div>
       <div
         style={{
           marginTop: 6,
@@ -1149,14 +1159,14 @@ function Total({
   );
 }
 
-const card = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 18, boxShadow: "0 8px 24px rgba(15,23,42,.05)" } as const;
-const topBar = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18, flexWrap: "wrap", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 18 } as const;
-const box = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 } as const;
-const input = { minHeight: 42, border: "1px solid #cbd5e1", borderRadius: 10, padding: "8px 11px", background: "#fff", color: "#0f172a" } as const;
-const fieldLabel = { display: "grid", gap: 6, fontSize: 13, color: "#475569" } as const;
-const th = { padding: "13px 14px", textAlign: "left", color: "#475569", fontSize: 13, borderBottom: "1px solid #e2e8f0" } as const;
-const td = { padding: "13px 14px", borderBottom: "1px solid #eef2f7" } as const;
-const primaryButton = { height: 42, padding: "0 18px", borderRadius: 10, border: "none", background: "#0f766e", color: "#fff", fontWeight: 600, cursor: "pointer" } as const;
-const linkButton = { display: "inline-flex", alignItems: "center", height: 34, padding: "0 12px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, textDecoration: "none" } as const;
-const hiddenTile = { border: "1px dashed #cbd5e1", borderRadius: 12, padding: 14, background: "#f8fafc" } as const;
-const smallButton = { height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, cursor: "pointer" } as const;
+const card = { background: "var(--erp-panel)", border: "1px solid var(--erp-border)", borderRadius: 16, padding: 18, boxShadow: "0 8px 24px rgba(15,23,42,.05)" } as const;
+const topBar = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18, flexWrap: "wrap", background: "var(--erp-panel)", border: "1px solid var(--erp-border)", borderRadius: 16, padding: 18 } as const;
+const box = { background: "var(--erp-panel)", border: "1px solid var(--erp-border)", borderRadius: 12, padding: 14 } as const;
+const input = { minHeight: 42, border: "1px solid var(--erp-border)", borderRadius: 10, padding: "8px 11px", background: "var(--erp-panel)", color: "var(--erp-text)" } as const;
+const fieldLabel = { display: "grid", gap: 6, fontSize: 13, color: "var(--erp-muted)" } as const;
+const th = { padding: "13px 14px", textAlign: "left", color: "var(--erp-muted)", fontSize: 13, borderBottom: "1px solid var(--erp-border)" } as const;
+const td = { padding: "13px 14px", borderBottom: "1px solid var(--erp-border)" } as const;
+const primaryButton = { height: 42, padding: "0 18px", borderRadius: 10, border: "none", background: "var(--erp-primary)", color: "var(--color-on-brand)", fontWeight: 600, cursor: "pointer" } as const;
+const linkButton = { display: "inline-flex", alignItems: "center", height: 34, padding: "0 12px", borderRadius: 10, border: "1px solid var(--erp-border)", background: "var(--erp-panel)", color: "var(--erp-text)", fontWeight: 600, textDecoration: "none" } as const;
+const hiddenTile = { border: "1px dashed var(--erp-border)", borderRadius: 12, padding: 14, background: "var(--erp-bg)" } as const;
+const smallButton = { height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid var(--erp-border)", background: "var(--erp-panel)", color: "var(--erp-text)", fontWeight: 600, cursor: "pointer" } as const;

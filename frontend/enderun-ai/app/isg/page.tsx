@@ -86,10 +86,21 @@ export default function IsgDashboardPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="İSG Paneli"
       description="Sağlık raporu, eğitim, sertifika ve saha belgesi geçerlilik takibi"
     >
       <div className="erp-page-toolbar">
+        {/* Sertifika ve rapor süreleri gün geçtikçe doluyor; panel tazelenmeden eskiyordu. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          Yenile
+        </button>
+
         <div>
           <strong>{panel?.aktifPersonel ?? 0} aktif personel</strong>
           <small style={{ display: "block", marginTop: "4px" }}>

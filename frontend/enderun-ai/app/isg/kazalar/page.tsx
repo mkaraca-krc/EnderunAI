@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
@@ -57,6 +58,8 @@ export default function IsgIncidentsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pendingDelete, setPendingDelete] =
+    useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
@@ -289,7 +292,7 @@ export default function IsgIncidentsPage() {
   }
 
   async function remove(id: string) {
-    if (!window.confirm("Kayıt silinsin mi?")) return;
+    setPendingDelete(null);
 
     setError("");
 
@@ -309,10 +312,21 @@ export default function IsgIncidentsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Kaza ve Ramak Kala Defteri"
       description="İş kazası, ramak kala ve meslek hastalığı kayıtları; SGK bildirim takibi"
     >
       <div className="erp-page-toolbar">
+        {/* Olay kaydı sahadan giriliyor. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          Yenile
+        </button>
+
         <div>
           <strong>{incidents.length} kayıt</strong>
           {overdueCount > 0 && (
@@ -713,7 +727,7 @@ export default function IsgIncidentsPage() {
                             <button
                               type="button"
                               className="erp-secondary-button"
-                              onClick={() => void remove(incident.id)}
+                              onClick={() => setPendingDelete(incident.id)}
                             >
                               Sil
                             </button>
@@ -805,6 +819,15 @@ export default function IsgIncidentsPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Kaza Kaydını Sil"
+        description={"Olay kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz; İSG kayıtları denetimde istenebiliyor."}
+        confirmLabel="Kaydı Sil"
+        error={error}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void remove(pendingDelete!)}
+      />
     </ErpShell>
   );
 }

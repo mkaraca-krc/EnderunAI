@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import {
   personnelService,
   type PersonnelDetail,
@@ -25,10 +26,7 @@ function formatDate(value?: string | null) {
 function formatMoney(value?: number | null) {
   return value == null
     ? "—"
-    : new Intl.NumberFormat("tr-TR", {
-        style: "currency",
-        currency: "TRY",
-      }).format(value);
+    : money(value);
 }
 
 export default function PersonnelDetailPage() {
@@ -37,6 +35,10 @@ export default function PersonnelDetailPage() {
   const [person, setPerson] = useState<PersonnelDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Yükleme effect'in içinde; tazeleme için effect'i sayaçla yeniden
+  // tetiklemek yeterli.
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -57,17 +59,30 @@ export default function PersonnelDetailPage() {
     if (params.id) {
       void load();
     }
-  }, [params.id]);
+  }, [params.id, reloadToken]);
 
   return (
     <ErpShell
+      design="redwood"
       title={person?.fullName ?? "Personel Detayı"}
       description={person ? person.employeeNumber : "Personel bilgileri yükleniyor"}
     >
-      <div className="erp-project-breadcrumb">
-        <Link href="/personel">Personel</Link>
-        <span>›</span>
-        <strong>{person?.fullName ?? "Detay"}</strong>
+      <div className="erp-project-breadcrumb rw-breadcrumb-bar">
+        <div>
+          <Link href="/personel">Personel</Link>
+          <span>›</span>
+          <strong>{person?.fullName ?? "Detay"}</strong>
+        </div>
+
+        {/* İK kartı başka kullanıcı tarafından güncelleniyor. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={loading}
+          onClick={() => setReloadToken((value) => value + 1)}
+        >
+          Yenile
+        </button>
       </div>
 
       {error && <div className="erp-alert error">{error}</div>}

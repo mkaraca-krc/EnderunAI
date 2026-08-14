@@ -88,6 +88,28 @@
   --color-semantic-danger: #b23a3a;
   --color-semantic-info: #165c5c;
 
+  /*
+   * Anlamsal panel tonları: uyarı/hata/başarı kutusunun zemini ve
+   * kenarlığı. Metin rengiyle AYNI DEĞİL — aynı olsaydı kutu ya
+   * okunmaz ya da bağırıyor olurdu.
+   *
+   * Sayfalar bu altı değeri ham hex yazıyordu (#fffbeb/#fde68a,
+   * #fef2f7/#fecaca, #ecfdf5/#a7f3d0). Koyu temada zeminin
+   * açılması değil KOYULAŞMASI gerekiyor; tek yerde durunca o tur
+   * bir noktadan yapılabilir.
+   */
+  /* Marka rengi üzerindeki yazı — kart zeminiyle aynı DEĞİL.
+     Bugün ikisi de beyaz ama koyu temada kart koyulaşırken
+     teal düğmenin üzerindeki yazı açık kalmak zorunda. */
+  --color-on-brand: #ffffff;
+
+  --color-semantic-success-tint: #ecf7f1;
+  --color-semantic-success-border: #b8dfcc;
+  --color-semantic-warning-tint: #fdf6e7;
+  --color-semantic-warning-border: #ecd9a6;
+  --color-semantic-danger-tint: #fbeeee;
+  --color-semantic-danger-border: #eec4c4;
+
   /* Nötr yüzeyler */
   --color-surface-bg: #f4f6f6;
   --color-surface-card: #ffffff;

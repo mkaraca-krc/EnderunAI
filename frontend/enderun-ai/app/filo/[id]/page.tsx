@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -26,11 +27,6 @@ import {
   type VehicleDetail,
   type VehicleExpenseList,
 } from "@/services/vehicle.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
@@ -143,6 +139,7 @@ export default function VehicleDetailPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={vehicle ? vehicle.plateNumber : "Araç"}
       description="Araç bilgileri, atama geçmişi ve masraf dökümü"
     >
@@ -151,9 +148,20 @@ export default function VehicleDetailPage() {
           ← Filo
         </Link>
 
-        <Button onClick={() => setAssignOpen(true)} disabled={!vehicle}>
-          Atama Yap
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* Masraf kalemleri ve atamalar başka ekranlardan işleniyor. */}
+          <Button
+            variant="secondary"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            Yenile
+          </Button>
+
+          <Button onClick={() => setAssignOpen(true)} disabled={!vehicle}>
+            Atama Yap
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -215,7 +223,7 @@ export default function VehicleDetailPage() {
                     <div>
                       <dt className="text-xs text-slate-500">Kira</dt>
                       <dd className="text-sm text-slate-900">
-                        {vehicle.rentAmount ? money.format(vehicle.rentAmount) : "—"}
+                        {vehicle.rentAmount ? money(vehicle.rentAmount) : "—"}
                         {vehicle.rentPeriod !== null &&
                         vehicle.rentPeriod !== undefined
                           ? ` · ${VEHICLE_RENT_PERIOD_LABELS[vehicle.rentPeriod]}`
@@ -230,7 +238,7 @@ export default function VehicleDetailPage() {
                   <div>
                     <dt className="text-xs text-slate-500">Alış</dt>
                     <dd className="text-sm text-slate-900">
-                      {money.format(vehicle.purchaseCost)} ·{" "}
+                      {money(vehicle.purchaseCost)} ·{" "}
                       {formatDate(vehicle.purchaseDate)}
                       <span className="mt-1 block text-xs text-slate-500">
                         Amortisman hesaplanmaz; yalnız cari masraflar yansır.
@@ -274,7 +282,7 @@ export default function VehicleDetailPage() {
                 </h2>
                 {expenses && (
                   <span className="text-sm font-semibold text-slate-900">
-                    {money.format(expenses.total)}
+                    {money(expenses.total)}
                   </span>
                 )}
               </div>
@@ -315,7 +323,7 @@ export default function VehicleDetailPage() {
                             {item.projectCode ?? item.branchName ?? "—"}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {money.format(item.amount)}
+                            {money(item.amount)}
                           </td>
                         </tr>
                       ))}

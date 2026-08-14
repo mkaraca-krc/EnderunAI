@@ -142,6 +142,7 @@ export default function FleetPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Filo"
       description="Araç kartları, projelere atama ve yenileme takibi"
     >

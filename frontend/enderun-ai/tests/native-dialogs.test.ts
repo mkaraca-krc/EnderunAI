@@ -28,7 +28,7 @@ const ROOTS = ["app", "components", "lib", "services"];
  * Bugünkü sayım. Yayma adımlarında DÜŞECEK; hiçbir zaman artmamalı.
  * Sayı düştüğünde bu tavan da düşürülür (test bunu ayrıca söylüyor).
  */
-const CURRENT_CEILING = 52;
+const CURRENT_CEILING = 46;
 
 const PATTERN = /(?<![.\w])(?:window\.)?(confirm|prompt|alert)\s*\(/g;
 

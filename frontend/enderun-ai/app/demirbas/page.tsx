@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { amount } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
@@ -14,11 +15,6 @@ import {
   type SaveToolAssetPayload,
   type ToolAsset,
 } from "@/services/tool-asset.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -186,6 +182,7 @@ export default function ToolAssetsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Demirbaş / El Aletleri"
       description="Alet kartları, zimmet durumu ve servis geçmişi"
     >
@@ -193,6 +190,16 @@ export default function ToolAssetsPage() {
       {notice && <div className="erp-alert success">{notice}</div>}
 
       <div className="erp-page-toolbar">
+        {/* Zimmet ve iade işlemleri başka kullanıcılarca yapılıyor. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={saving}
+          onClick={() => setReloadToken((value) => value + 1)}
+        >
+          Yenile
+        </button>
+
         <div
           style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}
         >
@@ -299,7 +306,7 @@ export default function ToolAssetsPage() {
                 value={form.serialNumber ?? ""}
                 onChange={(e) => setForm({ ...form, serialNumber: e.target.value })}
               />
-              <small style={{ display: "block", color: "#64748b" }}>
+              <small className="rw-value-muted" style={{ display: "block" }}>
                 Girilirse benzersiz olmalı
               </small>
             </label>
@@ -426,7 +433,7 @@ export default function ToolAssetsPage() {
                       </td>
                       <td>
                         {asset.purchaseCost != null
-                          ? money.format(asset.purchaseCost)
+                          ? amount(asset.purchaseCost)
                           : "—"}
                       </td>
                       <td>

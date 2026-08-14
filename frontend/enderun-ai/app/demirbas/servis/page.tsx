@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import {
@@ -19,11 +20,6 @@ import {
   type ToolAsset,
   type ToolServiceRequest,
 } from "@/services/tool-asset.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -270,6 +266,7 @@ function ServiceRequestsContent() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Alet Servis Talepleri"
       description="Şantiyeden talep, merkez kararı, servis takibi"
     >
@@ -277,6 +274,16 @@ function ServiceRequestsContent() {
       {notice && <div className="erp-alert success">{notice}</div>}
 
       <div className="erp-page-toolbar">
+        {/* Servis talepleri sahadan açılıyor. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={saving}
+          onClick={() => setReloadToken((value) => value + 1)}
+        >
+          Yenile
+        </button>
+
         <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <input
             type="checkbox"
@@ -320,7 +327,7 @@ function ServiceRequestsContent() {
                 </option>
               ))}
             </select>
-            <small style={{ display: "block", color: "#64748b" }}>
+            <small className="rw-value-muted" style={{ display: "block" }}>
               Ücretli servis bu projeye yazılır
             </small>
           </label>
@@ -398,7 +405,7 @@ function ServiceRequestsContent() {
                 onChange={(e) => setServiceCost(e.target.value)}
               />
               {decision === ToolServiceDecision.ExternalWarranty && (
-                <small style={{ display: "block", color: "#64748b" }}>
+                <small className="rw-value-muted" style={{ display: "block" }}>
                   Garantide bedel olmaz
                 </small>
               )}
@@ -481,7 +488,7 @@ function ServiceRequestsContent() {
                     </td>
                     <td>
                       {request.serviceCost > 0
-                        ? money.format(request.serviceCost)
+                        ? money(request.serviceCost)
                         : "—"}
                     </td>
                     <td>

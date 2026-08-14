@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
@@ -40,6 +41,19 @@ export default function IsgPersonnelPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  /**
+   * Silinecek kayıt: türü ve kimliği birlikte.
+   *
+   * Tür de tutuluyor çünkü üç ayrı defter (sağlık raporu,
+   * eğitim, sertifika) aynı düğmeyi paylaşıyor ve onay
+   * metninin hangisinden bahsettiğini söylemesi gerekiyor —
+   * "Kayıt silinsin mi?" üçünde de aynıydı.
+   */
+  const [pendingDelete, setPendingDelete] = useState<{
+    kind: Tab;
+    id: string;
+  } | null>(null);
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -239,7 +253,7 @@ export default function IsgPersonnelPage() {
 
   async function removeRecord(kind: Tab, id: string) {
     if (!card) return;
-    if (!window.confirm("Kayıt silinsin mi?")) return;
+    setPendingDelete(null);
 
     setError("");
 
@@ -258,10 +272,21 @@ export default function IsgPersonnelPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Personel İSG Kayıtları"
       description="Sağlık raporu, İSG eğitimi ve yetki belgesi geçerlilik takibi"
     >
       <div className="erp-page-toolbar">
+        {/* Sağlık raporu ve eğitim kayıtları başka kullanıcılarca
+            giriliyor; geçerlilik rozetleri tazelenmeden eskiyordu. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          onClick={() => void loadPeople()}
+        >
+          Yenile
+        </button>
+
         <div>
           <strong>{people.length} personel</strong>
           <small style={{ display: "block", marginTop: "4px" }}>
@@ -780,7 +805,7 @@ export default function IsgPersonnelPage() {
                           <button
                             type="button"
                             className="erp-secondary-button"
-                            onClick={() => void removeRecord("saglik", report.id)}
+                            onClick={() => setPendingDelete({ kind: "saglik", id: report.id })}
                           >
                             Sil
                           </button>
@@ -836,7 +861,7 @@ export default function IsgPersonnelPage() {
                             type="button"
                             className="erp-secondary-button"
                             onClick={() =>
-                              void removeRecord("egitim", training.id)
+                              setPendingDelete({ kind: "egitim", id: training.id })
                             }
                           >
                             Sil
@@ -891,7 +916,7 @@ export default function IsgPersonnelPage() {
                             type="button"
                             className="erp-secondary-button"
                             onClick={() =>
-                              void removeRecord("sertifika", certificate.id)
+                              setPendingDelete({ kind: "sertifika", id: certificate.id })
                             }
                           >
                             Sil
@@ -906,6 +931,26 @@ export default function IsgPersonnelPage() {
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={
+          pendingDelete?.kind === "saglik"
+            ? "Sağlık Raporunu Sil"
+            : pendingDelete?.kind === "egitim"
+              ? "Eğitim Kaydını Sil"
+              : "Sertifikayı Sil"
+        }
+        description={
+          "Kayıt kalıcı olarak silinecek. Bu işlem geri alınamaz; " +
+          "İSG kayıtları denetimde istenebiliyor."
+        }
+        confirmLabel="Kaydı Sil"
+        error={error}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() =>
+          void removeRecord(pendingDelete!.kind, pendingDelete!.id)
+        }
+      />
     </ErpShell>
   );
 }

@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { money } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import {
   TOOL_SERVICE_DECISIONS,
@@ -15,11 +17,6 @@ import {
 } from "@/services/tool-asset.service";
 import { personnelService, type PersonnelListItem } from "@/services/personnel.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -64,6 +61,7 @@ export default function ToolAssetCardPage() {
 
   const [assignOpen, setAssignOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
   const [assignForm, setAssignForm] = useState({
     personnelId: "",
     projectId: "",
@@ -151,11 +149,16 @@ export default function ToolAssetCardPage() {
     }
   }
 
-  async function submitReturn() {
-    if (!window.confirm("Zimmet kapatılsın ve alet depoya alınsın mı?")) return;
-
-    const condition = window.prompt("İade anındaki durum (boş bırakılabilir):") ?? "";
-
+  /**
+   * Zimmeti kapat, aleti depoya al.
+   *
+   * Durum notu İSTEĞE BAĞLI ama kayda değer: hasarlı dönen bir alet
+   * için "hangi durumda geldi" sorusunun tek cevabı bu alan.
+   * `showReason` tam bunun için var — window.prompt ile sorulduğunda
+   * seçenek "ya zorla ya hiç sorma" idi ve iki ayrı pencere açıyordu.
+   */
+  async function submitReturn(condition: string) {
+    setReturnOpen(false);
     setSaving(true);
     setError("");
     setSuccess("");
@@ -183,6 +186,7 @@ export default function ToolAssetCardPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title={asset ? `${asset.code} — ${asset.name}` : "Alet Kartı"}
       description="Künye, zimmet ve servis geçmişi"
     >
@@ -190,6 +194,16 @@ export default function ToolAssetCardPage() {
       {success && <div className="erp-alert success">{success}</div>}
 
       <div className="erp-page-toolbar">
+        {/* Zimmet ve servis hareketleri başka ekranlardan işleniyor. */}
+        <button
+          type="button"
+          className="erp-secondary-button"
+          disabled={saving}
+          onClick={() => setReloadKey((key) => key + 1)}
+        >
+          Yenile
+        </button>
+
         <Link className="erp-secondary-button" href="/demirbas">
           Demirbaş Listesi
         </Link>
@@ -239,7 +253,7 @@ export default function ToolAssetCardPage() {
               <small style={{ display: "block", marginBottom: 4 }}>
                 Toplam Servis Masrafı
               </small>
-              <strong>{money.format(card.serviceTotalCost)}</strong>
+              <strong>{money(card.serviceTotalCost)}</strong>
               {asset!.purchaseCost != null && asset!.purchaseCost > 0 && (
                 <small style={{ display: "block" }}>
                   alım bedelinin %
@@ -294,7 +308,7 @@ export default function ToolAssetCardPage() {
                     <button
                       type="button"
                       className="erp-secondary-button"
-                      onClick={submitReturn}
+                      onClick={() => setReturnOpen(true)}
                       disabled={saving}
                     >
                       İade Al
@@ -488,7 +502,7 @@ export default function ToolAssetCardPage() {
                 <span>Alım Bedeli</span>
                 <strong>
                   {asset!.purchaseCost != null
-                    ? money.format(asset!.purchaseCost)
+                    ? money(asset!.purchaseCost)
                     : "—"}
                 </strong>
               </div>
@@ -533,7 +547,7 @@ export default function ToolAssetCardPage() {
                         <td>{row.projectCode ?? "Merkez"}</td>
                         <td>
                           {row.serviceCost > 0
-                            ? money.format(row.serviceCost)
+                            ? money(row.serviceCost)
                             : "—"}
                         </td>
                       </tr>
@@ -545,6 +559,21 @@ export default function ToolAssetCardPage() {
           </section>
         </>
       )}
+      <ConfirmDialog
+        open={returnOpen}
+        title="Zimmeti Kapat"
+        description={
+          "Alet depoya alınacak ve zimmet kapanacak. İade anındaki " +
+          "durumu yazarsanız kayda geçer."
+        }
+        confirmLabel="Zimmeti Kapat"
+        showReason
+        reasonLabel="İade anındaki durum (isteğe bağlı)"
+        busy={saving}
+        error={error}
+        onCancel={() => setReturnOpen(false)}
+        onConfirm={(condition) => void submitReturn(condition)}
+      />
     </ErpShell>
   );
 }
