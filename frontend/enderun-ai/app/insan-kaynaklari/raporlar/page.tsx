@@ -6,6 +6,7 @@ import ErpShell from "../../../components/erp/erp-shell";
 export default function HrReportsRecoveryPage() {
   return (
     <ErpShell
+      design="redwood"
       title="İK Rapor Merkezi"
       description="Rapor ekranı bakım çalışması sonrasında yeniden devreye alınacaktır."
     >
@@ -13,16 +14,16 @@ export default function HrReportsRecoveryPage() {
         style={{
           maxWidth: "760px",
           padding: "28px",
-          border: "1px solid #e2e8f0",
+          border: "1px solid var(--erp-border)",
           borderRadius: "14px",
-          background: "#ffffff",
+          background: "var(--erp-panel)",
           boxShadow: "0 4px 18px rgba(15, 23, 42, 0.06)",
         }}
       >
         <h2
           style={{
             margin: 0,
-            color: "#0f172a",
+            color: "var(--erp-text)",
             fontSize: "22px",
           }}
         >
@@ -32,7 +33,7 @@ export default function HrReportsRecoveryPage() {
         <p
           style={{
             marginTop: "12px",
-            color: "#64748b",
+            color: "var(--erp-muted)",
             lineHeight: 1.7,
           }}
         >
@@ -54,8 +55,8 @@ export default function HrReportsRecoveryPage() {
             style={{
               padding: "11px 16px",
               borderRadius: "9px",
-              background: "#0f766e",
-              color: "#ffffff",
+              background: "var(--erp-primary)",
+              color: "var(--color-on-brand)",
               fontWeight: 700,
               textDecoration: "none",
             }}
@@ -67,9 +68,9 @@ export default function HrReportsRecoveryPage() {
             href="/insan-kaynaklari/onay-merkezi"
             style={{
               padding: "11px 16px",
-              border: "1px solid #cbd5e1",
+              border: "1px solid var(--erp-border)",
               borderRadius: "9px",
-              color: "#334155",
+              color: "var(--erp-muted)",
               fontWeight: 700,
               textDecoration: "none",
             }}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import HrAssetInventoryDialog from "@/components/hr/hr-asset-inventory-dialog";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { personnelService, type PersonnelListItem } from "@/services/personnel.service";
@@ -63,8 +64,8 @@ const emptyForm = (): FormState => ({
 });
 
 const panel = {
-  background: "#fff",
-  border: "1px solid #e2e8f0",
+  background: "var(--erp-panel)",
+  border: "1px solid var(--erp-border)",
   borderRadius: 16,
   boxShadow: "0 8px 24px rgba(15,23,42,.05)",
 } as const;
@@ -72,11 +73,11 @@ const panel = {
 const input = {
   width: "100%",
   minHeight: 42,
-  border: "1px solid #cbd5e1",
+  border: "1px solid var(--erp-border)",
   borderRadius: 10,
   padding: "8px 11px",
-  background: "#fff",
-  color: "#0f172a",
+  background: "var(--erp-panel)",
+  color: "var(--erp-text)",
   boxSizing: "border-box",
 } as const;
 
@@ -89,11 +90,11 @@ const statusNames: Record<number, string> = {
 };
 
 const statusColors: Record<number, { bg: string; fg: string }> = {
-  0: { bg: "#dcfce7", fg: "#166534" },
-  1: { bg: "#dbeafe", fg: "#1d4ed8" },
-  2: { bg: "#fee2e2", fg: "#b91c1c" },
-  3: { bg: "#ffedd5", fg: "#c2410c" },
-  4: { bg: "#e2e8f0", fg: "#475569" },
+  0: { bg: "var(--color-semantic-success-tint)", fg: "var(--color-semantic-success)" },
+  1: { bg: "var(--color-semantic-info-tint)", fg: "var(--color-semantic-info)" },
+  2: { bg: "var(--color-semantic-danger-tint)", fg: "var(--color-semantic-danger)" },
+  3: { bg: "var(--color-semantic-warning-tint)", fg: "var(--color-semantic-warning)" },
+  4: { bg: "var(--erp-border)", fg: "var(--erp-muted)" },
 };
 
 function formatDate(value?: string | null) {
@@ -117,7 +118,7 @@ function Field({
 }) {
   return (
     <label style={{ display: "grid", gap: 7 }}>
-      <span style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>
+      <span style={{ fontSize: 13, fontWeight: 800, color: "var(--erp-muted)" }}>
         {label}{required ? " *" : ""}
       </span>
       {children}
@@ -133,8 +134,8 @@ function StatusBadge({ item }: { item: AssetAssignment }) {
         display: "inline-flex",
         padding: "5px 9px",
         borderRadius: 999,
-        background: item.isOverdue ? "#fef3c7" : color.bg,
-        color: item.isOverdue ? "#92400e" : color.fg,
+        background: item.isOverdue ? "var(--color-semantic-warning-tint)" : color.bg,
+        color: item.isOverdue ? "var(--color-semantic-warning)" : color.fg,
         fontWeight: 800,
         fontSize: 12,
       }}
@@ -162,6 +163,9 @@ export default function HrAssetsPage() {
   const [overdueOnly, setOverdueOnly] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  /** Silinmek üzere onay bekleyen zimmet kaydı. */
+  const [pending, setPending] = useState<AssetAssignment | null>(null);
+
   const [busyId, setBusyId] = useState("");
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
@@ -483,7 +487,7 @@ export default function HrAssetsPage() {
 
 
   async function deleteItem(item: AssetAssignment) {
-    if (!window.confirm(`${item.assetCode} zimmet kaydı kalıcı olarak silinsin mi?`)) return;
+    setPending(null);
     setBusyId(item.id);
     setError("");
     try {
@@ -498,36 +502,37 @@ export default function HrAssetsPage() {
   }
 
   const cards = [
-    ["Toplam", dashboard?.totalCount ?? 0, "#0f172a"],
-    ["Aktif", dashboard?.assignedCount ?? 0, "#166534"],
-    ["İade", dashboard?.returnedCount ?? 0, "#1d4ed8"],
-    ["Kayıp", dashboard?.lostCount ?? 0, "#b91c1c"],
-    ["Hasarlı", dashboard?.damagedCount ?? 0, "#c2410c"],
-    ["Geciken", dashboard?.overdueCount ?? 0, "#92400e"],
+    ["Toplam", dashboard?.totalCount ?? 0, "var(--erp-text)"],
+    ["Aktif", dashboard?.assignedCount ?? 0, "var(--color-semantic-success)"],
+    ["İade", dashboard?.returnedCount ?? 0, "var(--color-semantic-info)"],
+    ["Kayıp", dashboard?.lostCount ?? 0, "var(--color-semantic-danger)"],
+    ["Hasarlı", dashboard?.damagedCount ?? 0, "var(--color-semantic-warning)"],
+    ["Geciken", dashboard?.overdueCount ?? 0, "var(--color-semantic-warning)"],
   ] as const;
 
   return (
     <ErpShell
+      design="redwood"
       title="Zimmet Yönetim Merkezi"
       description="Personel ve proje ekipmanlarının teslim, iade, devir ve risk takibi"
     >
       <div style={{ display: "grid", gap: 18 }}>
         {success && (
-          <section style={{ ...panel, padding: 14, background: "#f0fdf4", color: "#166534", fontWeight: 800 }}>
+          <section style={{ ...panel, padding: 14, background: "var(--color-semantic-success-tint)", color: "var(--color-semantic-success)", fontWeight: 800 }}>
             {success}
           </section>
         )}
         {error && (
-          <section style={{ ...panel, padding: 14, background: "#fef2f2", color: "#b91c1c", fontWeight: 800 }}>
+          <section style={{ ...panel, padding: 14, background: "var(--color-semantic-danger-tint)", color: "var(--color-semantic-danger)", fontWeight: 800 }}>
             {error}
           </section>
         )}
 
         <section style={{ ...panel, padding: 18, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
           <div>
-            <span style={{ color: "#0f766e", fontWeight: 900, fontSize: 12 }}>ENDERUN AI · İNSAN KAYNAKLARI</span>
-            <h2 style={{ margin: "6px 0 3px", color: "#0f172a" }}>Zimmet ve Ekipman Takibi</h2>
-            <p style={{ margin: 0, color: "#64748b" }}>Aktif zimmetleri ve riskli ekipmanları tek merkezden yönetin.</p>
+            <span style={{ color: "var(--erp-primary)", fontWeight: 900, fontSize: 12 }}>ENDERUN AI · İNSAN KAYNAKLARI</span>
+            <h2 style={{ margin: "6px 0 3px", color: "var(--erp-text)" }}>Zimmet ve Ekipman Takibi</h2>
+            <p style={{ margin: 0, color: "var(--erp-muted)" }}>Aktif zimmetleri ve riskli ekipmanları tek merkezden yönetin.</p>
           </div>
           <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
             <button
@@ -536,11 +541,11 @@ export default function HrAssetsPage() {
               disabled={!personnelId}
               style={{
                 minHeight: 42,
-                border: "1px solid #7c3aed",
+                border: "1px solid var(--erp-muted)",
                 borderRadius: 10,
                 padding: "0 16px",
-                background: "#fff",
-                color: "#6d28d9",
+                background: "var(--erp-panel)",
+                color: "var(--erp-muted)",
                 fontWeight: 900,
                 cursor: personnelId ? "pointer" : "not-allowed",
                 opacity: personnelId ? 1 : .5,
@@ -551,11 +556,11 @@ export default function HrAssetsPage() {
             <button
               type="button"
               onClick={() => setInventoryDialogOpen(true)}
-              style={{ minHeight: 42, border: 0, borderRadius: 10, padding: "0 18px", background: "#0369a1", color: "#fff", fontWeight: 900, cursor: "pointer" }}
+              style={{ minHeight: 42, border: 0, borderRadius: 10, padding: "0 18px", background: "var(--erp-primary)", color: "var(--color-on-brand)", fontWeight: 900, cursor: "pointer" }}
             >
               + Depodan Zimmet
             </button>
-            <button type="button" onClick={openCreate} style={{ minHeight: 42, border: 0, borderRadius: 10, padding: "0 18px", background: "#0f766e", color: "#fff", fontWeight: 900, cursor: "pointer" }}>
+            <button type="button" onClick={openCreate} style={{ minHeight: 42, border: 0, borderRadius: 10, padding: "0 18px", background: "var(--erp-primary)", color: "var(--color-on-brand)", fontWeight: 900, cursor: "pointer" }}>
               + Manuel Zimmet
             </button>
           </div>
@@ -564,7 +569,7 @@ export default function HrAssetsPage() {
         <section style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 12 }}>
           {cards.map(([label, value, color]) => (
             <article key={label} style={{ ...panel, padding: 16 }}>
-              <span style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{label}</span>
+              <span style={{ color: "var(--erp-muted)", fontSize: 12, fontWeight: 800 }}>{label}</span>
               <strong style={{ display: "block", marginTop: 8, fontSize: 28, color }}>{value}</strong>
             </article>
           ))}
@@ -604,12 +609,12 @@ export default function HrAssetsPage() {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Kod, ad, seri no..." style={input} />
           </Field>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, color: "#334155" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, color: "var(--erp-muted)" }}>
             <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
             Sadece gecikenler
           </label>
 
-          <button type="button" onClick={() => void loadData()} disabled={loading} style={{ minHeight: 42, border: 0, borderRadius: 10, padding: "0 16px", background: "#334155", color: "#fff", fontWeight: 800, cursor: "pointer" }}>
+          <button type="button" onClick={() => void loadData()} disabled={loading} style={{ minHeight: 42, border: 0, borderRadius: 10, padding: "0 16px", background: "var(--erp-muted)", color: "var(--color-on-brand)", fontWeight: 800, cursor: "pointer" }}>
             {loading ? "Yükleniyor..." : "Yenile"}
           </button>
         </section>
@@ -619,7 +624,7 @@ export default function HrAssetsPage() {
             <h3 style={{ margin: "0 0 12px" }}>Ekipman Türü Dağılımı</h3>
             <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
               {dashboard.assetTypes.map((x) => (
-                <button key={x.assetType} type="button" onClick={() => setAssetType(x.assetType)} style={{ border: "1px solid #cbd5e1", borderRadius: 999, padding: "8px 11px", background: "#f8fafc", cursor: "pointer" }}>
+                <button key={x.assetType} type="button" onClick={() => setAssetType(x.assetType)} style={{ border: "1px solid var(--erp-border)", borderRadius: 999, padding: "8px 11px", background: "var(--erp-bg)", cursor: "pointer" }}>
                   <strong>{x.assetType}</strong> · {x.totalCount} kayıt · {x.overdueCount} geciken
                 </button>
               ))}
@@ -630,9 +635,9 @@ export default function HrAssetsPage() {
         <section style={{ ...panel, overflow: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1350 }}>
             <thead>
-              <tr style={{ background: "#f8fafc" }}>
+              <tr style={{ background: "var(--erp-bg)" }}>
                 {["Personel","Proje","Tür","Kod / Ekipman","Seri No","Teslim","Planlanan İade","Durum","İşlemler"].map((h) => (
-                  <th key={h} style={{ padding: 13, textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>{h}</th>
+                  <th key={h} style={{ padding: 13, textAlign: "left", borderBottom: "1px solid var(--erp-border)" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -641,43 +646,43 @@ export default function HrAssetsPage() {
                 const active = item.status === HrAssetAssignmentStatus.Assigned;
                 return (
                   <tr key={item.id}>
-                    <td style={{ padding: 13, borderBottom: "1px solid #eef2f7", fontWeight: 800 }}>
+                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)", fontWeight: 800 }}>
                       {personnelMap.get(item.personnelId)?.fullName ?? "Personel"}
                     </td>
-                    <td style={{ padding: 13, borderBottom: "1px solid #eef2f7" }}>
+                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>
                       {item.projectId ? projectMap.get(item.projectId)?.name ?? "Proje" : "-"}
                     </td>
-                    <td style={{ padding: 13, borderBottom: "1px solid #eef2f7" }}>{item.assetType}</td>
-                    <td style={{ padding: 13, borderBottom: "1px solid #eef2f7" }}>
-                      <strong>{item.assetCode}</strong><br/><span style={{ color: "#64748b", fontSize: 12 }}>{item.assetName}</span>
+                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>{item.assetType}</td>
+                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>
+                      <strong>{item.assetCode}</strong><br/><span style={{ color: "var(--erp-muted)", fontSize: 12 }}>{item.assetName}</span>
                     </td>
-                    <td style={{ padding: 13, borderBottom: "1px solid #eef2f7" }}>{item.serialNumber || "-"}</td>
-                    <td style={{ padding: 13, borderBottom: "1px solid #eef2f7" }}>{formatDate(item.assignmentDate)}</td>
-                    <td style={{ padding: 13, borderBottom: "1px solid #eef2f7" }}>{formatDate(item.plannedReturnDate)}</td>
-                    <td style={{ padding: 13, borderBottom: "1px solid #eef2f7" }}><StatusBadge item={item}/></td>
-                    <td style={{ padding: 13, borderBottom: "1px solid #eef2f7" }}>
+                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>{item.serialNumber || "-"}</td>
+                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>{formatDate(item.assignmentDate)}</td>
+                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>{formatDate(item.plannedReturnDate)}</td>
+                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}><StatusBadge item={item}/></td>
+                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button onClick={() => openEdit(item)} disabled={busyId === item.id} style={actionButton("#334155")}>Düzenle</button>
+                        <button onClick={() => openEdit(item)} disabled={busyId === item.id} style={actionButton("var(--erp-muted)")}>Düzenle</button>
                         <a
                           href={`/insan-kaynaklari/zimmetler/${item.id}/tutanak`}
                           target="_blank"
                           rel="noreferrer"
-                          style={{ ...actionButton("#0369a1"), display: "inline-flex", alignItems: "center", textDecoration: "none" }}
+                          style={{ ...actionButton("var(--erp-primary)"), display: "inline-flex", alignItems: "center", textDecoration: "none" }}
                         >
                           Tutanak
                         </a>
-                        <button onClick={() => void openQr(item)} style={actionButton("#6d28d9")}>QR</button>
-                        <button onClick={() => void openPersonnelAnalysis(item.personnelId)} style={actionButton("#9333ea")}>Risk</button>
+                        <button onClick={() => void openQr(item)} style={actionButton("var(--erp-muted)")}>QR</button>
+                        <button onClick={() => void openPersonnelAnalysis(item.personnelId)} style={actionButton("var(--erp-muted)")}>Risk</button>
                         {active && <>
-                          <button onClick={() => openAction("return", item)} style={actionButton("#1d4ed8")}>İade</button>
-                          <button onClick={() => openAction("transfer", item)} style={actionButton("#7c3aed")}>Personel Devri</button>
-                          <button onClick={() => openAction("project", item)} style={actionButton("#0f766e")}>Proje</button>
-                          <button onClick={() => openAction("damaged", item)} style={actionButton("#c2410c")}>Hasarlı</button>
-                          <button onClick={() => openAction("lost", item)} style={actionButton("#b91c1c")}>Kayıp</button>
-                          <button onClick={() => openAction("cancel", item)} style={actionButton("#475569")}>İptal</button>
+                          <button onClick={() => openAction("return", item)} style={actionButton("var(--color-semantic-info)")}>İade</button>
+                          <button onClick={() => openAction("transfer", item)} style={actionButton("var(--erp-muted)")}>Personel Devri</button>
+                          <button onClick={() => openAction("project", item)} style={actionButton("var(--erp-primary)")}>Proje</button>
+                          <button onClick={() => openAction("damaged", item)} style={actionButton("var(--color-semantic-warning)")}>Hasarlı</button>
+                          <button onClick={() => openAction("lost", item)} style={actionButton("var(--color-semantic-danger)")}>Kayıp</button>
+                          <button onClick={() => openAction("cancel", item)} style={actionButton("var(--erp-muted)")}>İptal</button>
                         </>}
                         {item.status === HrAssetAssignmentStatus.Cancelled && (
-                          <button onClick={() => void deleteItem(item)} style={actionButton("#7f1d1d")}>Sil</button>
+                          <button onClick={() => setPending(item)} style={actionButton("var(--color-semantic-danger)")}>Sil</button>
                         )}
                       </div>
                     </td>
@@ -685,7 +690,7 @@ export default function HrAssetsPage() {
                 );
               })}
               {!loading && items.length === 0 && (
-                <tr><td colSpan={9} style={{ padding: 36, textAlign: "center", color: "#64748b" }}>Filtrelere uygun zimmet kaydı bulunmuyor.</td></tr>
+                <tr><td colSpan={9} style={{ padding: 36, textAlign: "center", color: "var(--erp-muted)" }}>Filtrelere uygun zimmet kaydı bulunmuyor.</td></tr>
               )}
             </tbody>
           </table>
@@ -712,7 +717,7 @@ export default function HrAssetsPage() {
             <header style={modalHeader}>
               <div>
                 <h2 style={{ margin: 0 }}>Personel Zimmet Risk Analizi</h2>
-                <p style={{ margin: "5px 0 0", color: "#64748b" }}>
+                <p style={{ margin: "5px 0 0", color: "var(--erp-muted)" }}>
                   Kayıp, hasar, gecikme ve aktif zimmet yoğunluğu analizi
                 </p>
               </div>
@@ -727,15 +732,15 @@ export default function HrAssetsPage() {
                   <section style={{ ...panel, padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
                     <div>
                       <h3 style={{ margin: 0 }}>{analysis.fullName}</h3>
-                      <p style={{ margin: "7px 0 0", color: "#64748b" }}>{analysis.summary}</p>
+                      <p style={{ margin: "7px 0 0", color: "var(--erp-muted)" }}>{analysis.summary}</p>
                     </div>
                     <div style={{
                       minWidth: 130,
                       textAlign: "center",
                       padding: 14,
                       borderRadius: 14,
-                      background: analysis.riskLevel === "High" ? "#fee2e2" : analysis.riskLevel === "Medium" ? "#fef3c7" : "#dcfce7",
-                      color: analysis.riskLevel === "High" ? "#b91c1c" : analysis.riskLevel === "Medium" ? "#92400e" : "#166534",
+                      background: analysis.riskLevel === "High" ? "var(--color-semantic-danger-tint)" : analysis.riskLevel === "Medium" ? "var(--color-semantic-warning-tint)" : "var(--color-semantic-success-tint)",
+                      color: analysis.riskLevel === "High" ? "var(--color-semantic-danger)" : analysis.riskLevel === "Medium" ? "var(--color-semantic-warning)" : "var(--color-semantic-success)",
                     }}>
                       <strong style={{ display: "block", fontSize: 30 }}>{analysis.riskScore}</strong>
                       <span style={{ fontWeight: 900 }}>
@@ -754,7 +759,7 @@ export default function HrAssetsPage() {
                       ["Geciken", analysis.overdueCount],
                     ].map(([label, value]) => (
                       <article key={String(label)} style={{ ...panel, padding: 13 }}>
-                        <span style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{label}</span>
+                        <span style={{ color: "var(--erp-muted)", fontSize: 12, fontWeight: 800 }}>{label}</span>
                         <strong style={{ display: "block", marginTop: 6, fontSize: 24 }}>{value}</strong>
                       </article>
                     ))}
@@ -779,17 +784,17 @@ export default function HrAssetsPage() {
                     <h3 style={{ marginTop: 0 }}>Zimmet Geçmişi</h3>
                     <div style={{ overflow: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
-                        <thead><tr style={{ background: "#f8fafc" }}>
+                        <thead><tr style={{ background: "var(--erp-bg)" }}>
                           {["Kod","Ekipman","Teslim","İade","Durum"].map((x) => <th key={x} style={{ padding: 10, textAlign: "left" }}>{x}</th>)}
                         </tr></thead>
                         <tbody>
                           {analysis.assets.map((x) => (
                             <tr key={x.id}>
-                              <td style={{ padding: 10, borderTop: "1px solid #e2e8f0" }}>{x.assetCode}</td>
-                              <td style={{ padding: 10, borderTop: "1px solid #e2e8f0" }}>{x.assetName}</td>
-                              <td style={{ padding: 10, borderTop: "1px solid #e2e8f0" }}>{formatDate(x.assignmentDate)}</td>
-                              <td style={{ padding: 10, borderTop: "1px solid #e2e8f0" }}>{formatDate(x.actualReturnDate)}</td>
-                              <td style={{ padding: 10, borderTop: "1px solid #e2e8f0" }}><StatusBadge item={x}/></td>
+                              <td style={{ padding: 10, borderTop: "1px solid var(--erp-border)" }}>{x.assetCode}</td>
+                              <td style={{ padding: 10, borderTop: "1px solid var(--erp-border)" }}>{x.assetName}</td>
+                              <td style={{ padding: 10, borderTop: "1px solid var(--erp-border)" }}>{formatDate(x.assignmentDate)}</td>
+                              <td style={{ padding: 10, borderTop: "1px solid var(--erp-border)" }}>{formatDate(x.actualReturnDate)}</td>
+                              <td style={{ padding: 10, borderTop: "1px solid var(--erp-border)" }}><StatusBadge item={x}/></td>
                             </tr>
                           ))}
                         </tbody>
@@ -809,7 +814,7 @@ export default function HrAssetsPage() {
             <header style={modalHeader}>
               <div>
                 <h2 style={{ margin: 0 }}>QR Kodlu Ekipman Kartı</h2>
-                <p style={{ margin: "5px 0 0", color: "#64748b" }}>{qrItem.assetCode} · {qrItem.assetName}</p>
+                <p style={{ margin: "5px 0 0", color: "var(--erp-muted)" }}>{qrItem.assetCode} · {qrItem.assetName}</p>
               </div>
               <button type="button" onClick={() => setQrItem(null)} style={closeButton}>×</button>
             </header>
@@ -818,7 +823,7 @@ export default function HrAssetsPage() {
                 <>
                   <img src={qrDataUrl} alt="Ekipman QR kodu" width={300} height={300} style={{ maxWidth: "100%", height: "auto" }}/>
                   <h3 style={{ marginBottom: 5 }}>{qrItem.assetCode}</h3>
-                  <p style={{ margin: 0, color: "#64748b" }}>{qrItem.serialNumber || "Seri numarası yok"}</p>
+                  <p style={{ margin: 0, color: "var(--erp-muted)" }}>{qrItem.serialNumber || "Seri numarası yok"}</p>
                 </>
               ) : <p>QR kod oluşturuluyor...</p>}
             </div>
@@ -836,7 +841,7 @@ export default function HrAssetsPage() {
             <header style={modalHeader}>
               <div>
                 <h2 style={{ margin: 0 }}>{editing ? "Zimmet Kaydını Düzenle" : "Yeni Zimmet Kaydı"}</h2>
-                <p style={{ margin: "5px 0 0", color: "#64748b" }}>Ekipman, personel ve teslim bilgilerini girin.</p>
+                <p style={{ margin: "5px 0 0", color: "var(--erp-muted)" }}>Ekipman, personel ve teslim bilgilerini girin.</p>
               </div>
               <button type="button" onClick={() => setFormOpen(false)} style={closeButton}>×</button>
             </header>
@@ -877,7 +882,7 @@ export default function HrAssetsPage() {
             <header style={modalHeader}>
               <div>
                 <h2 style={{ margin: 0 }}>{actionTitle(actionMode)}</h2>
-                <p style={{ margin: "5px 0 0", color: "#64748b" }}>{actionItem.assetCode} · {actionItem.assetName}</p>
+                <p style={{ margin: "5px 0 0", color: "var(--erp-muted)" }}>{actionItem.assetCode} · {actionItem.assetName}</p>
               </div>
               <button type="button" onClick={() => setActionMode(null)} style={closeButton}>×</button>
             </header>
@@ -909,12 +914,24 @@ export default function HrAssetsPage() {
             </div>
             <footer style={modalFooter}>
               <button type="button" onClick={() => setActionMode(null)} style={secondaryButton}>Vazgeç</button>
-              <button type="button" onClick={() => void submitAction()} disabled={busyId === actionItem.id} style={{ ...primaryButton, background: actionMode === "lost" || actionMode === "cancel" ? "#b91c1c" : "#0f766e" }}>
+              <button type="button" onClick={() => void submitAction()} disabled={busyId === actionItem.id} style={{ ...primaryButton, background: actionMode === "lost" || actionMode === "cancel" ? "var(--color-semantic-danger)" : "var(--erp-primary)" }}>
                 {busyId ? "İşleniyor..." : "İşlemi Tamamla"}
               </button>
             </footer>
           </section>
         </div>
+      )}
+      {pending && (
+        <ConfirmDialog
+          open
+          title="Zimmet Kaydını Sil"
+          description={`${pending.assetCode} zimmet kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz; imzalı tutanak varsa arşivde kalır ama sistemdeki iz silinir.`}
+          confirmLabel="Kaydı Sil"
+          busy={busyId === pending.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() => void deleteItem(pending)}
+        />
       )}
     </ErpShell>
   );
@@ -927,7 +944,8 @@ function actionButton(background: string) {
     borderRadius: 8,
     padding: "0 10px",
     background,
-    color: "#fff",
+    // Renkli zemin üzerindeki yazı — kart yüzeyi değil.
+    color: "var(--color-on-brand)",
     fontSize: 11,
     fontWeight: 800,
     cursor: "pointer",
@@ -971,8 +989,8 @@ const modal = {
   maxHeight: "92vh",
   overflow: "hidden",
   borderRadius: 18,
-  background: "#fff",
-  border: "1px solid #e2e8f0",
+  background: "var(--erp-panel)",
+  border: "1px solid var(--erp-border)",
   boxShadow: "0 24px 70px rgba(15,23,42,.3)",
 } as const;
 
@@ -982,7 +1000,7 @@ const modalHeader = {
   alignItems: "flex-start",
   gap: 12,
   padding: "18px 20px",
-  borderBottom: "1px solid #e2e8f0",
+  borderBottom: "1px solid var(--erp-border)",
 } as const;
 
 const modalFooter = {
@@ -990,7 +1008,7 @@ const modalFooter = {
   justifyContent: "flex-end",
   gap: 10,
   padding: "16px 20px",
-  borderTop: "1px solid #e2e8f0",
+  borderTop: "1px solid var(--erp-border)",
 } as const;
 
 const closeButton = {
@@ -998,8 +1016,8 @@ const closeButton = {
   height: 34,
   border: 0,
   borderRadius: 9,
-  background: "#f1f5f9",
-  color: "#334155",
+  background: "var(--erp-bg)",
+  color: "var(--erp-muted)",
   fontSize: 22,
   cursor: "pointer",
 } as const;
@@ -1009,19 +1027,19 @@ const primaryButton = {
   border: 0,
   borderRadius: 10,
   padding: "0 18px",
-  background: "#0f766e",
-  color: "#fff",
+  background: "var(--erp-primary)",
+  color: "var(--color-on-brand)",
   fontWeight: 900,
   cursor: "pointer",
 } as const;
 
 const secondaryButton = {
   minHeight: 40,
-  border: "1px solid #cbd5e1",
+  border: "1px solid var(--erp-border)",
   borderRadius: 10,
   padding: "0 18px",
-  background: "#fff",
-  color: "#334155",
+  background: "var(--erp-panel)",
+  color: "var(--erp-muted)",
   fontWeight: 900,
   cursor: "pointer",
 } as const;

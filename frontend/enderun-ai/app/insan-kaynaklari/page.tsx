@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { currencyMoney, decimal, whole } from "@/lib/format/turkish";
 
 import {
   CompanyListItem,
@@ -75,8 +76,8 @@ const MONTHS = [
 ];
 
 const panelStyle = {
-  background: "#ffffff",
-  border: "1px solid #e2e8f0",
+  background: "var(--erp-panel)",
+  border: "1px solid var(--erp-border)",
   borderRadius: "16px",
   boxShadow:
     "0 8px 24px rgba(15, 23, 42, 0.05)",
@@ -86,25 +87,28 @@ function money(
   value: number,
   currencyCode = "TRY"
 ) {
-  return new Intl.NumberFormat(
-    "tr-TR",
-    {
-      style: "currency",
-      currency:
-        currencyCode === "MIXED"
-          ? "TRY"
-          : currencyCode || "TRY",
-      maximumFractionDigits: 2,
-    }
-  ).format(value ?? 0);
+  // "MIXED": dönemde birden fazla para birimi var; toplam TL cinsinden
+  // gösteriliyor. Kod olarak geçirilseydi "1.250,00 MIXED" çıkardı.
+  return currencyMoney(
+    value ?? 0,
+    currencyCode === "MIXED" ? "TRY" : currencyCode || "TRY"
+  );
 }
 
-function number(
-  value: number
-) {
-  return new Intl.NumberFormat(
-    "tr-TR"
-  ).format(value ?? 0);
+/** Kart sayısı, personel sayısı — tam sayı. */
+function count(value: number) {
+  return whole(value ?? 0);
+}
+
+/**
+ * Fazla mesai saati — iki ondalık.
+ *
+ * Adet ile saat aynı biçimleyiciyi paylaşıyordu; alt sınırsız
+ * `Intl.NumberFormat` saati üç haneye kadar yazıyor, adet zaten tam
+ * sayı olduğu için fark görünmüyordu. İki sayı tipi ayrıldı.
+ */
+function hours(value: number) {
+  return decimal(value ?? 0, 2);
 }
 
 function date(
@@ -251,7 +255,7 @@ function KpiCard({
       >
         <div
           style={{
-            color: "#64748b",
+            color: "var(--erp-muted)",
             fontSize: "13px",
             fontWeight: 800,
           }}
@@ -266,8 +270,8 @@ function KpiCard({
             display: "grid",
             placeItems: "center",
             borderRadius: "11px",
-            background: "#f1f5f9",
-            color: "#0f766e",
+            background: "var(--erp-bg)",
+            color: "var(--erp-primary)",
             fontSize: "18px",
             fontWeight: 900,
           }}
@@ -280,7 +284,7 @@ function KpiCard({
         <strong
           style={{
             display: "block",
-            color: "#0f172a",
+            color: "var(--erp-text)",
             fontSize: "25px",
             lineHeight: 1.2,
           }}
@@ -291,7 +295,7 @@ function KpiCard({
         <div
           style={{
             marginTop: "7px",
-            color: "#64748b",
+            color: "var(--erp-muted)",
             fontSize: "12px",
           }}
         >
@@ -1202,6 +1206,7 @@ export default function HumanResourcesDashboardPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="İK Dashboard"
       description="Personel, maaş kartı, bordro ve maliyet göstergelerini tek ekrandan yönetin."
     >
@@ -1227,7 +1232,7 @@ export default function HumanResourcesDashboardPage() {
             <strong
               style={{
                 display: "block",
-                color: "#0f172a",
+                color: "var(--erp-text)",
                 fontSize: "17px",
               }}
             >
@@ -1243,7 +1248,7 @@ export default function HumanResourcesDashboardPage() {
               style={{
                 display: "block",
                 marginTop: "4px",
-                color: "#64748b",
+                color: "var(--erp-muted)",
                 fontSize: "13px",
               }}
             >
@@ -1269,11 +1274,11 @@ export default function HumanResourcesDashboardPage() {
                 minWidth: "220px",
                 minHeight: "42px",
                 border:
-                  "1px solid #cbd5e1",
+                  "1px solid var(--erp-border)",
                 borderRadius: "10px",
                 padding: "7px 10px",
-                background: "#ffffff",
-                color: "#0f172a",
+                background: "var(--erp-panel)",
+                color: "var(--erp-text)",
                 fontWeight: 700,
               }}
             >
@@ -1300,8 +1305,8 @@ export default function HumanResourcesDashboardPage() {
                 border: "none",
                 borderRadius: "10px",
                 padding: "0 16px",
-                background: "#0f766e",
-                color: "#ffffff",
+                background: "var(--erp-primary)",
+                color: "var(--color-on-brand)",
                 fontWeight: 800,
                 cursor: loading
                   ? "wait"
@@ -1320,9 +1325,9 @@ export default function HumanResourcesDashboardPage() {
             style={{
               ...panelStyle,
               padding: "14px 16px",
-              borderColor: "#fecaca",
-              background: "#fef2f2",
-              color: "#b91c1c",
+              borderColor: "var(--color-semantic-danger-border)",
+              background: "var(--color-semantic-danger-tint)",
+              color: "var(--color-semantic-danger)",
               fontWeight: 700,
             }}
           >
@@ -1340,7 +1345,7 @@ export default function HumanResourcesDashboardPage() {
         >
           <KpiCard
             title="Toplam Personel"
-            value={number(
+            value={count(
               personnel.length
             )}
             detail={`${activePersonnel.length} aktif personel`}
@@ -1349,7 +1354,7 @@ export default function HumanResourcesDashboardPage() {
 
           <KpiCard
             title="Maaş Kartı"
-            value={number(
+            value={count(
               salaryPersonnelIds.size
             )}
             detail={`${Math.max(
@@ -1362,7 +1367,7 @@ export default function HumanResourcesDashboardPage() {
 
           <KpiCard
             title="Bu Ay Bordro"
-            value={number(
+            value={count(
               payrolls.length
             )}
             detail={`${paidPayrolls.length} ödendi · ${approvedPayrolls.length} ödeme bekliyor`}
@@ -1371,7 +1376,7 @@ export default function HumanResourcesDashboardPage() {
 
           <KpiCard
             title="Bu Ay İşe Giriş"
-            value={number(
+            value={count(
               startedThisMonth.length
             )}
             detail={`Aktif personelin %${percentage(
@@ -1453,7 +1458,7 @@ export default function HumanResourcesDashboardPage() {
                 <h2
                   style={{
                     margin: 0,
-                    color: "#0f172a",
+                    color: "var(--erp-text)",
                     fontSize: "18px",
                   }}
                 >
@@ -1463,7 +1468,7 @@ export default function HumanResourcesDashboardPage() {
                 <p
                   style={{
                     margin: "5px 0 0",
-                    color: "#64748b",
+                    color: "var(--erp-muted)",
                     fontSize: "13px",
                   }}
                 >
@@ -1481,7 +1486,7 @@ export default function HumanResourcesDashboardPage() {
                 marginTop: "24px",
                 paddingTop: "20px",
                 borderBottom:
-                  "1px solid #cbd5e1",
+                  "1px solid var(--erp-border)",
               }}
             >
               {payrollTrend.map(
@@ -1507,7 +1512,7 @@ export default function HumanResourcesDashboardPage() {
                   >
                     <span
                       style={{
-                        color: "#64748b",
+                        color: "var(--erp-muted)",
                         fontSize: "10px",
                         fontWeight: 700,
                       }}
@@ -1537,15 +1542,15 @@ export default function HumanResourcesDashboardPage() {
                           "7px 7px 0 0",
                         background:
                           item.net > 0
-                            ? "#0f766e"
-                            : "#e2e8f0",
+                            ? "var(--erp-primary)"
+                            : "var(--erp-border)",
                       }}
                     />
 
                     <span
                       style={{
                         minHeight: "25px",
-                        color: "#64748b",
+                        color: "var(--erp-muted)",
                         fontSize: "10px",
                         fontWeight: 700,
                         writingMode:
@@ -1571,7 +1576,7 @@ export default function HumanResourcesDashboardPage() {
             <h2
               style={{
                 margin: 0,
-                color: "#0f172a",
+                color: "var(--erp-text)",
                 fontSize: "18px",
               }}
             >
@@ -1581,7 +1586,7 @@ export default function HumanResourcesDashboardPage() {
             <p
               style={{
                 margin: "5px 0 18px",
-                color: "#64748b",
+                color: "var(--erp-muted)",
                 fontSize: "13px",
               }}
             >
@@ -1600,8 +1605,8 @@ export default function HumanResourcesDashboardPage() {
                   style={{
                     padding: "20px",
                     borderRadius: "12px",
-                    background: "#f8fafc",
-                    color: "#64748b",
+                    background: "var(--erp-bg)",
+                    color: "var(--erp-muted)",
                     textAlign: "center",
                   }}
                 >
@@ -1620,7 +1625,7 @@ export default function HumanResourcesDashboardPage() {
                         justifyContent:
                           "space-between",
                         marginBottom: "7px",
-                        color: "#334155",
+                        color: "var(--erp-muted)",
                         fontSize: "13px",
                         fontWeight: 800,
                       }}
@@ -1638,7 +1643,7 @@ export default function HumanResourcesDashboardPage() {
                         height: "9px",
                         overflow: "hidden",
                         borderRadius: "999px",
-                        background: "#e2e8f0",
+                        background: "var(--erp-border)",
                       }}
                     >
                       <div
@@ -1649,7 +1654,7 @@ export default function HumanResourcesDashboardPage() {
                           )}%`,
                           height: "100%",
                           borderRadius: "999px",
-                          background: "#2563eb",
+                          background: "var(--color-semantic-info)",
                         }}
                       />
                     </div>
@@ -1670,7 +1675,7 @@ export default function HumanResourcesDashboardPage() {
         >
           <KpiCard
             title="İzinli Personel"
-            value={number(
+            value={count(
               personnelOnLeave.length
             )}
             detail={`${pendingLeaves.length} izin talebi bekliyor`}
@@ -1679,10 +1684,10 @@ export default function HumanResourcesDashboardPage() {
 
           <KpiCard
             title="Fazla Mesai"
-            value={`${number(
+            value={`${hours(
               overtimeSummary.approved
             )} saat`}
-            detail={`${number(
+            detail={`${hours(
               overtimeSummary.requested
             )} saat talep edildi`}
             icon="◷"
@@ -1690,7 +1695,7 @@ export default function HumanResourcesDashboardPage() {
 
           <KpiCard
             title="Avans Talepleri"
-            value={number(
+            value={count(
               advances.length
             )}
             detail={`${advanceSummary.pending} bekliyor · ${advanceSummary.paid} ödendi`}
@@ -1732,7 +1737,7 @@ export default function HumanResourcesDashboardPage() {
             <h2
               style={{
                 margin: 0,
-                color: "#0f172a",
+                color: "var(--erp-text)",
                 fontSize: "18px",
               }}
             >
@@ -1742,7 +1747,7 @@ export default function HumanResourcesDashboardPage() {
             <p
               style={{
                 margin: "5px 0 18px",
-                color: "#64748b",
+                color: "var(--erp-muted)",
                 fontSize: "13px",
               }}
             >
@@ -1761,8 +1766,8 @@ export default function HumanResourcesDashboardPage() {
                   style={{
                     padding: "18px",
                     borderRadius: "12px",
-                    background: "#f8fafc",
-                    color: "#64748b",
+                    background: "var(--erp-bg)",
+                    color: "var(--erp-muted)",
                     textAlign: "center",
                   }}
                 >
@@ -1781,7 +1786,7 @@ export default function HumanResourcesDashboardPage() {
                         justifyContent:
                           "space-between",
                         marginBottom: "7px",
-                        color: "#334155",
+                        color: "var(--erp-muted)",
                         fontSize: "13px",
                         fontWeight: 800,
                       }}
@@ -1800,7 +1805,7 @@ export default function HumanResourcesDashboardPage() {
                         height: "9px",
                         overflow: "hidden",
                         borderRadius: "999px",
-                        background: "#e2e8f0",
+                        background: "var(--erp-border)",
                       }}
                     >
                       <div
@@ -1811,7 +1816,7 @@ export default function HumanResourcesDashboardPage() {
                           )}%`,
                           height: "100%",
                           borderRadius: "999px",
-                          background: "#7c3aed",
+                          background: "var(--erp-muted)",
                         }}
                       />
                     </div>
@@ -1830,7 +1835,7 @@ export default function HumanResourcesDashboardPage() {
             <h2
               style={{
                 margin: 0,
-                color: "#0f172a",
+                color: "var(--erp-text)",
                 fontSize: "18px",
               }}
             >
@@ -1840,7 +1845,7 @@ export default function HumanResourcesDashboardPage() {
             <p
               style={{
                 margin: "5px 0 18px",
-                color: "#64748b",
+                color: "var(--erp-muted)",
                 fontSize: "13px",
               }}
             >
@@ -1853,8 +1858,8 @@ export default function HumanResourcesDashboardPage() {
                 style={{
                   padding: "22px",
                   borderRadius: "12px",
-                  background: "#f0fdf4",
-                  color: "#166534",
+                  background: "var(--color-semantic-success-tint)",
+                  color: "var(--color-semantic-success)",
                   textAlign: "center",
                   fontWeight: 800,
                 }}
@@ -1881,10 +1886,10 @@ export default function HumanResourcesDashboardPage() {
                         gap: "12px",
                         padding: "12px 14px",
                         border:
-                          "1px solid #fed7aa",
+                          "1px solid var(--color-semantic-warning-border)",
                         borderRadius: "11px",
-                        background: "#fff7ed",
-                        color: "#9a3412",
+                        background: "var(--color-semantic-warning-tint)",
+                        color: "var(--color-semantic-warning)",
                         textDecoration: "none",
                         fontWeight: 800,
                       }}
@@ -1901,7 +1906,7 @@ export default function HumanResourcesDashboardPage() {
                           placeItems: "center",
                           borderRadius:
                             "999px",
-                          background: "#ffedd5",
+                          background: "var(--color-semantic-warning-tint)",
                         }}
                       >
                         {item.count}
@@ -1922,7 +1927,7 @@ export default function HumanResourcesDashboardPage() {
             <h2
               style={{
                 margin: 0,
-                color: "#0f172a",
+                color: "var(--erp-text)",
                 fontSize: "18px",
               }}
             >
@@ -1932,7 +1937,7 @@ export default function HumanResourcesDashboardPage() {
             <p
               style={{
                 margin: "5px 0 18px",
-                color: "#64748b",
+                color: "var(--erp-muted)",
                 fontSize: "13px",
               }}
             >
@@ -1982,10 +1987,10 @@ export default function HumanResourcesDashboardPage() {
                       display: "grid",
                       placeItems: "center",
                       border:
-                        "1px solid #cbd5e1",
+                        "1px solid var(--erp-border)",
                       borderRadius: "11px",
-                      background: "#f8fafc",
-                      color: "#0f172a",
+                      background: "var(--erp-bg)",
+                      color: "var(--erp-text)",
                       textDecoration: "none",
                       textAlign: "center",
                       fontSize: "13px",
@@ -2017,7 +2022,7 @@ export default function HumanResourcesDashboardPage() {
             <h2
               style={{
                 margin: 0,
-                color: "#0f172a",
+                color: "var(--erp-text)",
                 fontSize: "18px",
               }}
             >
@@ -2027,7 +2032,7 @@ export default function HumanResourcesDashboardPage() {
             <p
               style={{
                 margin: "5px 0 18px",
-                color: "#64748b",
+                color: "var(--erp-muted)",
                 fontSize: "13px",
               }}
             >
@@ -2051,7 +2056,7 @@ export default function HumanResourcesDashboardPage() {
                         justifyContent:
                           "space-between",
                         marginBottom: "7px",
-                        color: "#334155",
+                        color: "var(--erp-muted)",
                         fontSize: "13px",
                         fontWeight: 800,
                       }}
@@ -2069,7 +2074,7 @@ export default function HumanResourcesDashboardPage() {
                         height: "9px",
                         overflow: "hidden",
                         borderRadius: "999px",
-                        background: "#e2e8f0",
+                        background: "var(--erp-border)",
                       }}
                     >
                       <div
@@ -2080,7 +2085,7 @@ export default function HumanResourcesDashboardPage() {
                           )}%`,
                           height: "100%",
                           borderRadius: "999px",
-                          background: "#0f766e",
+                          background: "var(--erp-primary)",
                         }}
                       />
                     </div>
@@ -2100,13 +2105,13 @@ export default function HumanResourcesDashboardPage() {
               style={{
                 padding: "20px",
                 borderBottom:
-                  "1px solid #e2e8f0",
+                  "1px solid var(--erp-border)",
               }}
             >
               <h2
                 style={{
                   margin: 0,
-                  color: "#0f172a",
+                  color: "var(--erp-text)",
                   fontSize: "18px",
                 }}
               >
@@ -2116,7 +2121,7 @@ export default function HumanResourcesDashboardPage() {
               <p
                 style={{
                   margin: "5px 0 0",
-                  color: "#64748b",
+                  color: "var(--erp-muted)",
                   fontSize: "13px",
                 }}
               >
@@ -2129,7 +2134,7 @@ export default function HumanResourcesDashboardPage() {
               <div
                 style={{
                   padding: "30px",
-                  color: "#64748b",
+                  color: "var(--erp-muted)",
                   textAlign: "center",
                 }}
               >
@@ -2148,14 +2153,14 @@ export default function HumanResourcesDashboardPage() {
                     gap: "16px",
                     padding: "14px 20px",
                     borderBottom:
-                      "1px solid #eef2f7",
+                      "1px solid var(--erp-border)",
                   }}
                 >
                   <div>
                     <strong
                       style={{
                         display: "block",
-                        color: "#0f172a",
+                        color: "var(--erp-text)",
                       }}
                     >
                       {personnelName(
@@ -2167,7 +2172,7 @@ export default function HumanResourcesDashboardPage() {
                       style={{
                         display: "block",
                         marginTop: "4px",
-                        color: "#64748b",
+                        color: "var(--erp-muted)",
                         fontSize: "12px",
                       }}
                     >
@@ -2192,8 +2197,8 @@ export default function HumanResourcesDashboardPage() {
                         borderRadius:
                           "999px",
                         padding: "4px 8px",
-                        background: "#dcfce7",
-                        color: "#166534",
+                        background: "var(--color-semantic-success-tint)",
+                        color: "var(--color-semantic-success)",
                         fontSize: "11px",
                         fontWeight: 800,
                       }}
@@ -2207,7 +2212,7 @@ export default function HumanResourcesDashboardPage() {
                       style={{
                         display: "block",
                         marginTop: "5px",
-                        color: "#64748b",
+                        color: "var(--erp-muted)",
                         fontSize: "11px",
                       }}
                     >

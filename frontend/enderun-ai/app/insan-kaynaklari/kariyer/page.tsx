@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -179,16 +180,15 @@ function displayDate(value?: string | null) {
     : date.toLocaleDateString("tr-TR");
 }
 
+/**
+ * Kariyer hareketindeki ücret — TAM TUTAR.
+ *
+ * Kuruşsuz biçimleniyordu: 42.750,50 ₺ olan bir maaş "42.751 ₺"
+ * görünüyordu. Bu rakam özet değil, personelin gerçek ücreti ve
+ * zam geçmişinde eski/yeni ücret yan yana okunuyor.
+ */
 function currency(value?: number | null) {
-  if (value === undefined || value === null) {
-    return "—";
-  }
-
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return money(value);
 }
 
 function movementDate(movement: CareerMovement) {
@@ -809,6 +809,7 @@ export default function CareerPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Kariyer Yönetimi"
       description="Personel hareketleri, terfi geçmişi ve kariyer analizleri"
     >

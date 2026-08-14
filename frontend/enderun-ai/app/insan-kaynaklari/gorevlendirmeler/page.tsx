@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import { ConfirmDialog } from "@/components/ui";
 import DutyDetailPanel from "@/components/hr/duty-detail-panel";
 import { usePermissions } from "@/lib/use-permissions";
@@ -70,12 +71,6 @@ function dutyTypeClass(value: DutyType) {
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
-const currency = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 2,
-});
-
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
 }
@@ -135,6 +130,9 @@ export default function PersonnelDutiesPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** Onay bekleyen görevlendirme. */
+  const [pending, setPending] = useState<PersonnelDutyItem | null>(null);
+
   const [actionId, setActionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -299,8 +297,7 @@ export default function PersonnelDutiesPage() {
   }
 
   async function approve(item: PersonnelDutyItem) {
-    if (!window.confirm("Görevlendirme onaylansın mı?")) return;
-
+    setPending(null);
     setActionId(item.id);
     setError("");
     setSuccess("");
@@ -359,6 +356,7 @@ export default function PersonnelDutiesPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Görevlendirmeler"
       description="Talep, onay, harcırah ve keşif sonucu tek akışta"
     >
@@ -748,7 +746,7 @@ export default function PersonnelDutiesPage() {
                     {item.totalAllowance === null ||
                     item.totalAllowance === undefined
                       ? "—"
-                      : currency.format(item.totalAllowance)}
+                      : money(item.totalAllowance)}
                     {item.settlementPending && (
                       <span className="mt-1 block text-xs font-semibold text-amber-700">
                         Mahsup bekliyor
@@ -792,7 +790,7 @@ export default function PersonnelDutiesPage() {
                           <button
                             type="button"
                             disabled={actionId === item.id}
-                            onClick={() => approve(item)}
+                            onClick={() => setPending(item)}
                             className="rounded-lg bg-emerald-700 px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
                           >
                             Onayla
@@ -863,6 +861,18 @@ export default function PersonnelDutiesPage() {
         }}
         onConfirm={(reason) => void runConfirmedAction(reason)}
       />
+      {pending && (
+        <ConfirmDialog
+          open
+          title="Görevlendirmeyi Onayla"
+          description="Görevlendirme onaylanacak. Onaylı görevlendirme masraf ve puantaj hesabına girer."
+          confirmLabel="Onayla"
+          busy={actionId === pending.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() => void approve(pending)}
+        />
+      )}
     </ErpShell>
   );
 }

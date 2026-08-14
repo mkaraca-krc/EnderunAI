@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import {
@@ -123,6 +124,9 @@ export default function SecretariatRegistryPage({ mode }: Props) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** Silinmek üzere onay bekleyen kayıt. */
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
   const [processingId, setProcessingId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -328,7 +332,7 @@ export default function SecretariatRegistryPage({ mode }: Props) {
   }
 
   async function deleteRecord(id: string) {
-    if (!window.confirm("Bu kaydı silmek istediğinize emin misiniz?")) return;
+    setPendingDelete(null);
     setProcessingId(id);
     setError("");
     try {
@@ -554,18 +558,28 @@ export default function SecretariatRegistryPage({ mode }: Props) {
               items={phoneItems}
               processingId={processingId}
               onStatus={setPhoneStatus}
-              onDelete={deleteRecord}
+              onDelete={setPendingDelete}
             />
           ) : (
             <ScheduleTable
               items={scheduleItems}
               processingId={processingId}
               onStatus={setScheduleStatus}
-              onDelete={deleteRecord}
+              onDelete={setPendingDelete}
             />
           )}
         </section>
       </div>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Kaydı Sil"
+        description="Kayıt kalıcı olarak silinecek. Bu işlem geri alınamaz."
+        confirmLabel="Kaydı Sil"
+        busy={processingId === pendingDelete}
+        error={error}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void deleteRecord(pendingDelete!)}
+      />
     </ErpShell>
   );
 }

@@ -182,6 +182,7 @@ export default function PersonnelDataGapsPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Personel Veri Eksikleri"
       description="Eksik alanlar, engelledikleri sürece göre ve toplu tamamlama"
     >

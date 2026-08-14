@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ConfirmDialog } from "@/components/ui";
 
 import { usePermissions } from "@/lib/use-permissions";
 import {
@@ -35,6 +36,19 @@ export default function PersonnelDocumentsPanel({
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
   const [uploading, setUploading] = useState(false);
+
+  /**
+   * Onay bekleyen belge işlemi.
+   *
+   * "Aslı görüldü" işaretini KALDIRMAK denetim izini siler; işareti
+   * koymak zararsız. Bu yüzden onay yalnızca kaldırma yönünde
+   * isteniyor — koyarken kullanıcı gereksiz bir adıma takılmıyor.
+   */
+  const [pending, setPending] = useState<
+    | { kind: "unverify"; document: PersonnelDocumentListItem }
+    | { kind: "delete"; document: PersonnelDocumentListItem }
+    | null
+  >(null);
 
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -141,15 +155,7 @@ export default function PersonnelDocumentsPanel({
   }
 
   async function toggleVerification(document: PersonnelDocumentListItem) {
-    // İşareti kaldırmak denetim izini siler; onay isteniyor.
-    if (
-      document.isVerified &&
-      !window.confirm(
-        `"${document.title}" için aslı görüldü işareti kaldırılsın mı?`
-      )
-    ) {
-      return;
-    }
+    setPending(null);
 
     try {
       setBusyId(document.id);
@@ -171,13 +177,7 @@ export default function PersonnelDocumentsPanel({
   }
 
   async function remove(document: PersonnelDocumentListItem) {
-    if (
-      !window.confirm(
-        `"${document.title}" silinsin mi? Dosya da depodan kaldırılır.`
-      )
-    ) {
-      return;
-    }
+    setPending(null);
 
     try {
       setBusyId(document.id);
@@ -465,7 +465,11 @@ export default function PersonnelDocumentsPanel({
                       type="button"
                       style={smallButton}
                       disabled={busyId === document.id}
-                      onClick={() => void toggleVerification(document)}
+                      onClick={() =>
+                        document.isVerified
+                          ? setPending({ kind: "unverify", document })
+                          : void toggleVerification(document)
+                      }
                     >
                       {document.isVerified
                         ? "İşareti Kaldır"
@@ -476,7 +480,7 @@ export default function PersonnelDocumentsPanel({
                       type="button"
                       style={dangerButton}
                       disabled={busyId === document.id}
-                      onClick={() => void remove(document)}
+                      onClick={() => setPending({ kind: "delete", document })}
                     >
                       Sil
                     </button>
@@ -486,6 +490,34 @@ export default function PersonnelDocumentsPanel({
             </div>
           ))}
         </div>
+      )}
+
+      {pending && (
+        <ConfirmDialog
+          key={`${pending.kind}-${pending.document.id}`}
+          open
+          title={
+            pending.kind === "unverify"
+              ? "Aslı Görüldü İşaretini Kaldır"
+              : "Belgeyi Sil"
+          }
+          description={
+            pending.kind === "unverify"
+              ? `"${pending.document.title}" için aslı görüldü işareti kaldırılacak. Bu işaret denetim izidir; kaldırıldığında kimin ne zaman doğruladığı bilgisi de düşer.`
+              : `"${pending.document.title}" silinecek ve dosya depodan da kaldırılacak. Bu işlem geri alınamaz.`
+          }
+          confirmLabel={
+            pending.kind === "unverify" ? "İşareti Kaldır" : "Belgeyi Sil"
+          }
+          busy={busyId === pending.document.id}
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() =>
+            pending.kind === "unverify"
+              ? void toggleVerification(pending.document)
+              : void remove(pending.document)
+          }
+        />
       )}
     </div>
   );

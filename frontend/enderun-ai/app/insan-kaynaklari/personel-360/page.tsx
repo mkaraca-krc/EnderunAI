@@ -4,6 +4,7 @@ import PersonnelDocumentsPanel from "@/components/hr/personnel-documents-panel";
 import PersonnelOvertimePanel from "@/components/hr/personnel-overtime-panel";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { currencyMoney } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { personnelService } from "@/services/personnel.service";
 import {
@@ -50,23 +51,19 @@ function date(value?: string | null) {
 }
 
 function money(value?: number | null, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(Number(value ?? 0));
+  return currencyMoney(Number(value ?? 0), currency);
 }
 
 function riskTone(level: string) {
-  if (level === "High") return { bg: "#fef2f2", border: "#fecaca", text: "#b91c1c", label: "Yüksek" };
-  if (level === "Medium") return { bg: "#fffbeb", border: "#fde68a", text: "#b45309", label: "Orta" };
-  return { bg: "#ecfdf5", border: "#a7f3d0", text: "#047857", label: "Düşük" };
+  if (level === "High") return { bg: "var(--color-semantic-danger-tint)", border: "var(--color-semantic-danger-border)", text: "var(--color-semantic-danger)", label: "Yüksek" };
+  if (level === "Medium") return { bg: "var(--color-semantic-warning-tint)", border: "var(--color-semantic-warning-border)", text: "var(--color-semantic-warning)", label: "Orta" };
+  return { bg: "var(--color-semantic-success-tint)", border: "var(--color-semantic-success-border)", text: "var(--color-semantic-success)", label: "Düşük" };
 }
 
 function alertTone(severity: string) {
-  if (severity === "High") return { bg: "#fef2f2", border: "#fecaca", text: "#b91c1c" };
-  if (severity === "Medium") return { bg: "#fffbeb", border: "#fde68a", text: "#b45309" };
-  return { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8" };
+  if (severity === "High") return { bg: "var(--color-semantic-danger-tint)", border: "var(--color-semantic-danger-border)", text: "var(--color-semantic-danger)" };
+  if (severity === "Medium") return { bg: "var(--color-semantic-warning-tint)", border: "var(--color-semantic-warning-border)", text: "var(--color-semantic-warning)" };
+  return { bg: "var(--color-semantic-info-tint)", border: "var(--color-semantic-info-border)", text: "var(--color-semantic-info)" };
 }
 
 export default function Personnel360Page() {
@@ -174,12 +171,12 @@ export default function Personnel360Page() {
   }, [data]);
 
   return (
-    <ErpShell title="Personel 360°">
+    <ErpShell design="redwood" title="Personel 360°">
       <main style={{ padding: 24, display: "grid", gap: 18 }}>
         <section style={topBar}>
           <div>
             <h1 style={{ margin: 0, fontSize: 28 }}>Personel 360°</h1>
-            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+            <p style={{ margin: "6px 0 0", color: "var(--erp-muted)" }}>
               Personelin tüm İK, performans, zimmet ve risk bilgileri tek ekranda.
             </p>
           </div>
@@ -222,7 +219,7 @@ export default function Personnel360Page() {
                 <h2 style={{ margin: "14px 0 4px", textAlign: "center" }}>
                   {data.profile.fullName}
                 </h2>
-                <div style={{ textAlign: "center", color: "#64748b" }}>
+                <div style={{ textAlign: "center", color: "var(--erp-muted)" }}>
                   {data.profile.jobTitle || data.profile.profession || "Görev belirtilmemiş"}
                 </div>
 
@@ -292,11 +289,11 @@ export default function Personnel360Page() {
                       <div key={`${x.type}-${x.date}-${index}`} style={timelineRow}>
                         <div style={timelineDot} />
                         <div>
-                          <div style={{ fontSize: 12, color: "#64748b" }}>
+                          <div style={{ fontSize: 12, color: "var(--erp-muted)" }}>
                             {date(x.date)} · {x.type}
                           </div>
                           <strong>{x.title}</strong>
-                          <div style={{ marginTop: 3, color: "#475569" }}>{x.detail}</div>
+                          <div style={{ marginTop: 3, color: "var(--erp-muted)" }}>{x.detail}</div>
                         </div>
                       </div>
                     ))}
@@ -318,7 +315,7 @@ export default function Personnel360Page() {
                       {riskTone(data.analysis.riskLevel).label} Risk
                     </strong>
                   </div>
-                  <p style={{ color: "#334155", lineHeight: 1.55 }}>
+                  <p style={{ color: "var(--erp-muted)", lineHeight: 1.55 }}>
                     {data.analysis.summary}
                   </p>
 
@@ -456,7 +453,7 @@ function SalaryPanel({
     return (
       <section style={card}>
         <h3 style={{ marginTop: 0 }}>Ücret</h3>
-        <div style={{ color: "#64748b" }}>
+        <div style={{ color: "var(--erp-muted)" }}>
           Ücret rakamlarını görme yetkiniz yok.
         </div>
       </section>
@@ -524,10 +521,10 @@ function SalaryPanel({
       </div>
 
       {message && (
-        <div style={{ marginTop: 12, color: "#047857" }}>{message}</div>
+        <div style={{ marginTop: 12, color: "var(--color-semantic-success)" }}>{message}</div>
       )}
       {failure && (
-        <div style={{ marginTop: 12, color: "#b91c1c" }}>{failure}</div>
+        <div style={{ marginTop: 12, color: "var(--color-semantic-danger)" }}>{failure}</div>
       )}
 
       {open && !financial.extraPaymentHidden && (
@@ -594,13 +591,13 @@ function MoneyTile({
   return (
     <div
       style={{
-        border: "1px solid #e2e8f0",
+        border: "1px solid var(--erp-border)",
         borderRadius: 12,
         padding: 14,
-        background: strong ? "#f8fafc" : "#fff",
+        background: strong ? "var(--erp-bg)" : "var(--erp-panel)",
       }}
     >
-      <div style={{ fontSize: 12, color: "#64748b" }}>{label}</div>
+      <div style={{ fontSize: 12, color: "var(--erp-muted)" }}>{label}</div>
       <div
         style={{
           marginTop: 6,
@@ -611,13 +608,13 @@ function MoneyTile({
       >
         {value}
       </div>
-      <div style={{ marginTop: 4, fontSize: 12, color: "#94a3b8" }}>{hint}</div>
+      <div style={{ marginTop: 4, fontSize: 12, color: "var(--erp-muted)" }}>{hint}</div>
     </div>
   );
 }
 
-const fieldLabel = { display: "grid", gap: 6, fontSize: 12, color: "#475569" } as const;
-const smallButton = { height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontWeight: 600, cursor: "pointer" } as const;
+const fieldLabel = { display: "grid", gap: 6, fontSize: 12, color: "var(--erp-muted)" } as const;
+const smallButton = { height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid var(--erp-border)", background: "var(--erp-panel)", color: "var(--erp-text)", fontWeight: 600, cursor: "pointer" } as const;
 
 function TabContent({
   tab,
@@ -749,9 +746,9 @@ function SimpleRows({
         <div key={`${x.title}-${i}`} style={listRow}>
           <div>
             <strong>{x.title}</strong>
-            <div style={{ marginTop: 4, color: "#64748b" }}>{x.detail}</div>
+            <div style={{ marginTop: 4, color: "var(--erp-muted)" }}>{x.detail}</div>
           </div>
-          <span style={{ color: "#64748b", whiteSpace: "nowrap" }}>{date(x.date)}</span>
+          <span style={{ color: "var(--erp-muted)", whiteSpace: "nowrap" }}>{date(x.date)}</span>
         </div>
       ))}
     </div>
@@ -761,9 +758,9 @@ function SimpleRows({
 function Kpi({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <div style={kpi}>
-      <div style={{ color: "#64748b", fontSize: 13, fontWeight: 800 }}>{label}</div>
-      <div style={{ marginTop: 7, fontSize: 25, fontWeight: 900, color: "#0f172a" }}>{value}</div>
-      <div style={{ marginTop: 4, color: "#64748b", fontSize: 12 }}>{sub}</div>
+      <div style={{ color: "var(--erp-muted)", fontSize: 13, fontWeight: 800 }}>{label}</div>
+      <div style={{ marginTop: 7, fontSize: 25, fontWeight: 900, color: "var(--erp-text)" }}>{value}</div>
+      <div style={{ marginTop: 4, color: "var(--erp-muted)", fontSize: 12 }}>{sub}</div>
     </div>
   );
 }
@@ -771,29 +768,29 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub: string 
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "grid", gap: 3 }}>
-      <span style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{label}</span>
-      <strong style={{ color: "#0f172a" }}>{value}</strong>
+      <span style={{ color: "var(--erp-muted)", fontSize: 12, fontWeight: 800 }}>{label}</span>
+      <strong style={{ color: "var(--erp-text)" }}>{value}</strong>
     </div>
   );
 }
 
 function Empty({ text }: { text: string }) {
-  return <div style={{ padding: 22, textAlign: "center", color: "#64748b" }}>{text}</div>;
+  return <div style={{ padding: 22, textAlign: "center", color: "var(--erp-muted)" }}>{text}</div>;
 }
 
-const input = { minHeight: 42, border: "1px solid #cbd5e1", borderRadius: 10, padding: "8px 11px", background: "#fff", color: "#0f172a" } as const;
-const card = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 18, boxShadow: "0 8px 24px rgba(15,23,42,.05)" } as const;
-const topBar = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18, flexWrap: "wrap", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 18 } as const;
-const avatar = { width: 92, height: 92, margin: "0 auto", borderRadius: "50%", display: "grid", placeItems: "center", background: "#0f766e", color: "#fff", fontSize: 30, fontWeight: 900 } as const;
-const kpi = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 15, boxShadow: "0 5px 18px rgba(15,23,42,.04)" } as const;
-const tabBar = { display: "flex", gap: 2, padding: 8, overflowX: "auto", borderBottom: "1px solid #e2e8f0", background: "#f8fafc" } as const;
-const tabButton = { minHeight: 38, border: 0, borderRadius: 9, padding: "0 13px", background: "transparent", color: "#475569", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" } as const;
-const activeTabButton = { background: "#0f766e", color: "#fff" } as const;
+const input = { minHeight: 42, border: "1px solid var(--erp-border)", borderRadius: 10, padding: "8px 11px", background: "var(--erp-panel)", color: "var(--erp-text)" } as const;
+const card = { background: "var(--erp-panel)", border: "1px solid var(--erp-border)", borderRadius: 16, padding: 18, boxShadow: "0 8px 24px rgba(15,23,42,.05)" } as const;
+const topBar = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18, flexWrap: "wrap", background: "var(--erp-panel)", border: "1px solid var(--erp-border)", borderRadius: 16, padding: 18 } as const;
+const avatar = { width: 92, height: 92, margin: "0 auto", borderRadius: "50%", display: "grid", placeItems: "center", background: "var(--erp-primary)", color: "var(--color-on-brand)", fontSize: 30, fontWeight: 900 } as const;
+const kpi = { background: "var(--erp-panel)", border: "1px solid var(--erp-border)", borderRadius: 14, padding: 15, boxShadow: "0 5px 18px rgba(15,23,42,.04)" } as const;
+const tabBar = { display: "flex", gap: 2, padding: 8, overflowX: "auto", borderBottom: "1px solid var(--erp-border)", background: "var(--erp-bg)" } as const;
+const tabButton = { minHeight: 38, border: 0, borderRadius: 9, padding: "0 13px", background: "transparent", color: "var(--erp-muted)", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" } as const;
+const activeTabButton = { background: "var(--erp-primary)", color: "var(--color-on-brand)" } as const;
 const grid2 = { display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 16 } as const;
-const listRow = { display: "flex", justifyContent: "space-between", gap: 16, padding: 13, border: "1px solid #e2e8f0", borderRadius: 11, background: "#f8fafc" } as const;
+const listRow = { display: "flex", justifyContent: "space-between", gap: 16, padding: 13, border: "1px solid var(--erp-border)", borderRadius: 11, background: "var(--erp-bg)" } as const;
 const timelineRow = { position: "relative", display: "grid", gridTemplateColumns: "14px minmax(0,1fr)", gap: 12, paddingBottom: 12 } as const;
-const timelineDot = { width: 12, height: 12, marginTop: 5, borderRadius: "50%", background: "#0f766e", boxShadow: "0 0 0 4px #ccfbf1" } as const;
-const finding = { marginTop: 7, padding: 9, borderRadius: 9, background: "rgba(255,255,255,.7)", color: "#166534" } as const;
-const attention = { marginTop: 7, padding: 9, borderRadius: 9, background: "rgba(255,255,255,.7)", color: "#9a3412" } as const;
-const errorBox = { padding: 14, borderRadius: 12, background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", fontWeight: 800 } as const;
-const loadingBox = { padding: 28, textAlign: "center", borderRadius: 14, background: "#fff", border: "1px solid #e2e8f0", color: "#64748b" } as const;
+const timelineDot = { width: 12, height: 12, marginTop: 5, borderRadius: "50%", background: "var(--erp-primary)", boxShadow: "0 0 0 4px var(--color-brand-primary-tint)" } as const;
+const finding = { marginTop: 7, padding: 9, borderRadius: 9, background: "rgba(255,255,255,.7)", color: "var(--color-semantic-success)" } as const;
+const attention = { marginTop: 7, padding: 9, borderRadius: 9, background: "rgba(255,255,255,.7)", color: "var(--color-semantic-warning)" } as const;
+const errorBox = { padding: 14, borderRadius: 12, background: "var(--color-semantic-danger-tint)", border: "1px solid var(--color-semantic-danger-border)", color: "var(--color-semantic-danger)", fontWeight: 800 } as const;
+const loadingBox = { padding: 28, textAlign: "center", borderRadius: 14, background: "var(--erp-panel)", border: "1px solid var(--erp-border)", color: "var(--erp-muted)" } as const;

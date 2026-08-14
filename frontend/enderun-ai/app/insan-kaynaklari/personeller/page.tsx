@@ -7,6 +7,7 @@ import {
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -124,11 +125,7 @@ function badgeVariant(status: number): "default" | "success" | "warning" | "dang
 }
 
 function moneyFormat(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 2,
-  }).format(value);
+  return money(value);
 }
 
 function dateValue(value?: string | null) {
@@ -820,6 +817,7 @@ export default function HrPersonnelPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Personeller"
       description="Çalışan kartları, organizasyon bilgileri ve İK işlemleri"
     >

@@ -8,6 +8,8 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { currencyMoney } from "@/lib/format/turkish";
 
 import {
   CompanyListItem,
@@ -66,8 +68,8 @@ const CURRENT_MONTH =
   CURRENT_DATE.getMonth() + 1;
 
 const panelStyle = {
-  background: "#ffffff",
-  border: "1px solid #e2e8f0",
+  background: "var(--erp-panel)",
+  border: "1px solid var(--erp-border)",
   borderRadius: "16px",
   boxShadow:
     "0 8px 24px rgba(15, 23, 42, 0.05)",
@@ -76,11 +78,11 @@ const panelStyle = {
 const inputStyle = {
   width: "100%",
   minHeight: "42px",
-  border: "1px solid #cbd5e1",
+  border: "1px solid var(--erp-border)",
   borderRadius: "10px",
   padding: "8px 11px",
-  background: "#ffffff",
-  color: "#0f172a",
+  background: "var(--erp-panel)",
+  color: "var(--erp-text)",
 };
 
 function formatDate(
@@ -99,15 +101,7 @@ function money(
   value: number,
   currencyCode = "TRY"
 ) {
-  return new Intl.NumberFormat(
-    "tr-TR",
-    {
-      style: "currency",
-      currency:
-        currencyCode || "TRY",
-      maximumFractionDigits: 2,
-    }
-  ).format(value ?? 0);
+  return currencyMoney(value ?? 0, currencyCode || "TRY");
 }
 
 function errorMessage(
@@ -141,16 +135,16 @@ function KpiCard({
         textAlign: "left",
         cursor: "pointer",
         borderColor: active
-          ? "#0f766e"
-          : "#e2e8f0",
+          ? "var(--erp-primary)"
+          : "var(--erp-border)",
         background: active
-          ? "#f0fdfa"
-          : "#ffffff",
+          ? "var(--color-brand-primary-tint)"
+          : "var(--erp-panel)",
       }}
     >
       <div
         style={{
-          color: "#64748b",
+          color: "var(--erp-muted)",
           fontSize: "13px",
           fontWeight: 700,
         }}
@@ -162,8 +156,8 @@ function KpiCard({
         style={{
           marginTop: "10px",
           color: active
-            ? "#0f766e"
-            : "#0f172a",
+            ? "var(--erp-primary)"
+            : "var(--erp-text)",
           fontSize: "30px",
           fontWeight: 900,
         }}
@@ -174,7 +168,7 @@ function KpiCard({
       <div
         style={{
           marginTop: "5px",
-          color: "#64748b",
+          color: "var(--erp-muted)",
           fontSize: "12px",
         }}
       >
@@ -194,7 +188,7 @@ function EmptyState({
       style={{
         padding: "36px 20px",
         textAlign: "center",
-        color: "#64748b",
+        color: "var(--erp-muted)",
       }}
     >
       {text}
@@ -213,8 +207,8 @@ function StatusBadge({
         display: "inline-flex",
         padding: "5px 9px",
         borderRadius: "999px",
-        background: "#fef3c7",
-        color: "#92400e",
+        background: "var(--color-semantic-warning-tint)",
+        color: "var(--color-semantic-warning)",
         fontSize: "12px",
         fontWeight: 800,
       }}
@@ -297,6 +291,9 @@ export default function HrApprovalCenterPage() {
   ] = useState<Set<string>>(
     new Set()
   );
+
+  /** Toplu onay için açılan doğrulama. */
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const [
     processingIds,
@@ -918,15 +915,7 @@ export default function HrApprovalCenterPage() {
       return;
     }
 
-    const confirmed =
-      window.confirm(
-        `${ids.length} kayıt onaylanacak. Devam edilsin mi?`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
+    setBulkOpen(false);
     setActionMessage("");
     setActionError("");
     setProcessingIds(
@@ -977,6 +966,7 @@ export default function HrApprovalCenterPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="İK Onay Merkezi"
       description="İzin, fazla mesai, avans ve bordro onaylarını tek merkezden yönetin."
     >
@@ -992,10 +982,10 @@ export default function HrApprovalCenterPage() {
               ...panelStyle,
               padding: "14px 16px",
               borderColor:
-                "#bbf7d0",
+                "var(--color-semantic-success-border)",
               background:
-                "#f0fdf4",
-              color: "#166534",
+                "var(--color-semantic-success-tint)",
+              color: "var(--color-semantic-success)",
               fontWeight: 800,
             }}
           >
@@ -1009,10 +999,10 @@ export default function HrApprovalCenterPage() {
               ...panelStyle,
               padding: "14px 16px",
               borderColor:
-                "#fecaca",
+                "var(--color-semantic-danger-border)",
               background:
-                "#fef2f2",
-              color: "#b91c1c",
+                "var(--color-semantic-danger-tint)",
+              color: "var(--color-semantic-danger)",
               fontWeight: 800,
             }}
           >
@@ -1027,10 +1017,10 @@ export default function HrApprovalCenterPage() {
               ...panelStyle,
               padding: "14px 16px",
               borderColor:
-                "#fed7aa",
+                "var(--color-semantic-warning-border)",
               background:
-                "#fff7ed",
-              color: "#9a3412",
+                "var(--color-semantic-warning-tint)",
+              color: "var(--color-semantic-warning)",
             }}
           >
             <strong>
@@ -1107,14 +1097,14 @@ export default function HrApprovalCenterPage() {
               minWidth: "150px",
               padding: "9px 14px",
               borderRadius: "10px",
-              background: "#f8fafc",
+              background: "var(--erp-bg)",
               border:
-                "1px solid #e2e8f0",
+                "1px solid var(--erp-border)",
             }}
           >
             <div
               style={{
-                color: "#64748b",
+                color: "var(--erp-muted)",
                 fontSize: "12px",
               }}
             >
@@ -1146,8 +1136,8 @@ export default function HrApprovalCenterPage() {
               border: "none",
               borderRadius: "10px",
               padding: "0 18px",
-              background: "#0f766e",
-              color: "#ffffff",
+              background: "var(--erp-primary)",
+              color: "var(--color-on-brand)",
               fontWeight: 800,
               cursor: "pointer",
             }}
@@ -1239,7 +1229,7 @@ export default function HrApprovalCenterPage() {
             <strong
               style={{
                 display: "block",
-                color: "#0f172a",
+                color: "var(--erp-text)",
               }}
             >
               Toplu İşlemler
@@ -1249,7 +1239,7 @@ export default function HrApprovalCenterPage() {
               style={{
                 display: "block",
                 marginTop: "4px",
-                color: "#64748b",
+                color: "var(--erp-muted)",
                 fontSize: "13px",
               }}
             >
@@ -1274,11 +1264,11 @@ export default function HrApprovalCenterPage() {
               style={{
                 minHeight: "40px",
                 border:
-                  "1px solid #cbd5e1",
+                  "1px solid var(--erp-border)",
                 borderRadius: "10px",
                 padding: "0 15px",
-                background: "#ffffff",
-                color: "#334155",
+                background: "var(--erp-panel)",
+                color: "var(--erp-muted)",
                 fontWeight: 800,
                 cursor: "pointer",
               }}
@@ -1291,7 +1281,7 @@ export default function HrApprovalCenterPage() {
             <button
               type="button"
               onClick={() =>
-                void approveSelected()
+                setBulkOpen(true)
               }
               disabled={
                 selectedVisibleCount ===
@@ -1305,9 +1295,9 @@ export default function HrApprovalCenterPage() {
                 padding: "0 17px",
                 background:
                   selectedVisibleCount > 0
-                    ? "#15803d"
-                    : "#94a3b8",
-                color: "#ffffff",
+                    ? "var(--color-semantic-success)"
+                    : "var(--erp-muted)",
+                color: "var(--color-on-brand)",
                 fontWeight: 800,
                 cursor:
                   selectedVisibleCount > 0
@@ -1337,9 +1327,9 @@ export default function HrApprovalCenterPage() {
                 padding: "0 17px",
                 background:
                   selectedVisibleCount > 0
-                    ? "#b91c1c"
-                    : "#94a3b8",
-                color: "#ffffff",
+                    ? "var(--color-semantic-danger)"
+                    : "var(--erp-muted)",
+                color: "var(--color-on-brand)",
                 fontWeight: 800,
                 cursor:
                   selectedVisibleCount > 0
@@ -1366,8 +1356,8 @@ export default function HrApprovalCenterPage() {
               gap: "6px",
               padding: "12px",
               borderBottom:
-                "1px solid #e2e8f0",
-              background: "#f8fafc",
+                "1px solid var(--erp-border)",
+              background: "var(--erp-bg)",
             }}
           >
             {[
@@ -1401,7 +1391,7 @@ export default function HrApprovalCenterPage() {
                     minHeight: "38px",
                     border:
                       activeTab === key
-                        ? "1px solid #0f766e"
+                        ? "1px solid var(--erp-primary)"
                         : "1px solid transparent",
                     borderRadius:
                       "9px",
@@ -1409,12 +1399,12 @@ export default function HrApprovalCenterPage() {
                       "0 14px",
                     background:
                       activeTab === key
-                        ? "#f0fdfa"
+                        ? "var(--color-brand-primary-tint)"
                         : "transparent",
                     color:
                       activeTab === key
-                        ? "#0f766e"
-                        : "#475569",
+                        ? "var(--erp-primary)"
+                        : "var(--erp-muted)",
                     fontWeight: 800,
                     cursor: "pointer",
                   }}
@@ -1439,7 +1429,7 @@ export default function HrApprovalCenterPage() {
                 <tr
                   style={{
                     background:
-                      "#ffffff",
+                      "var(--erp-panel)",
                   }}
                 >
                   {[
@@ -1461,7 +1451,7 @@ export default function HrApprovalCenterPage() {
                         textAlign:
                           "left",
                         borderBottom:
-                          "1px solid #e2e8f0",
+                          "1px solid var(--erp-border)",
                       }}
                     >
                       {header}
@@ -1480,7 +1470,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           textAlign:
                             "center",
                         }}
@@ -1515,7 +1505,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           fontWeight:
                             700,
                         }}
@@ -1531,7 +1521,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {
@@ -1544,7 +1534,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {formatDate(
@@ -1557,7 +1547,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {formatDate(
@@ -1570,7 +1560,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           fontWeight:
                             800,
                         }}
@@ -1583,7 +1573,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {item.reason ||
@@ -1595,7 +1585,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         <StatusBadge
@@ -1610,7 +1600,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         <div
@@ -1645,9 +1635,9 @@ export default function HrApprovalCenterPage() {
                               padding:
                                 "0 13px",
                               background:
-                                "#15803d",
+                                "var(--color-semantic-success)",
                               color:
-                                "#ffffff",
+                                "var(--erp-panel)",
                               fontSize:
                                 "12px",
                               fontWeight:
@@ -1695,9 +1685,9 @@ export default function HrApprovalCenterPage() {
                               padding:
                                 "0 13px",
                               background:
-                                "#b91c1c",
+                                "var(--color-semantic-danger)",
                               color:
-                                "#ffffff",
+                                "var(--erp-panel)",
                               fontSize:
                                 "12px",
                               fontWeight:
@@ -1768,7 +1758,7 @@ export default function HrApprovalCenterPage() {
                         textAlign:
                           "left",
                         borderBottom:
-                          "1px solid #e2e8f0",
+                          "1px solid var(--erp-border)",
                       }}
                     >
                       {header}
@@ -1787,7 +1777,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           textAlign:
                             "center",
                         }}
@@ -1822,7 +1812,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           fontWeight:
                             700,
                         }}
@@ -1838,7 +1828,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {formatDate(
@@ -1851,7 +1841,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {item.requestedHours} saat
@@ -1862,7 +1852,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {item.approvedHours} saat
@@ -1873,7 +1863,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {item.isSundayWork
@@ -1886,7 +1876,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {item
@@ -1900,7 +1890,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                       </td>
@@ -1910,7 +1900,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {item.reason ||
@@ -1922,7 +1912,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         <StatusBadge
@@ -1937,7 +1927,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         <div
@@ -1972,9 +1962,9 @@ export default function HrApprovalCenterPage() {
                               padding:
                                 "0 13px",
                               background:
-                                "#15803d",
+                                "var(--color-semantic-success)",
                               color:
-                                "#ffffff",
+                                "var(--erp-panel)",
                               fontSize:
                                 "12px",
                               fontWeight:
@@ -2022,9 +2012,9 @@ export default function HrApprovalCenterPage() {
                               padding:
                                 "0 13px",
                               background:
-                                "#b91c1c",
+                                "var(--color-semantic-danger)",
                               color:
-                                "#ffffff",
+                                "var(--erp-panel)",
                               fontSize:
                                 "12px",
                               fontWeight:
@@ -2094,7 +2084,7 @@ export default function HrApprovalCenterPage() {
                         textAlign:
                           "left",
                         borderBottom:
-                          "1px solid #e2e8f0",
+                          "1px solid var(--erp-border)",
                       }}
                     >
                       {header}
@@ -2113,7 +2103,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           textAlign:
                             "center",
                         }}
@@ -2148,7 +2138,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           fontWeight:
                             700,
                         }}
@@ -2164,7 +2154,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {formatDate(
@@ -2177,7 +2167,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           fontWeight:
                             800,
                         }}
@@ -2193,7 +2183,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {money(
@@ -2207,7 +2197,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {
@@ -2220,7 +2210,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {item.reason ||
@@ -2232,7 +2222,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         <StatusBadge
@@ -2247,7 +2237,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         <div
@@ -2282,9 +2272,9 @@ export default function HrApprovalCenterPage() {
                               padding:
                                 "0 13px",
                               background:
-                                "#15803d",
+                                "var(--color-semantic-success)",
                               color:
-                                "#ffffff",
+                                "var(--erp-panel)",
                               fontSize:
                                 "12px",
                               fontWeight:
@@ -2332,9 +2322,9 @@ export default function HrApprovalCenterPage() {
                               padding:
                                 "0 13px",
                               background:
-                                "#b91c1c",
+                                "var(--color-semantic-danger)",
                               color:
-                                "#ffffff",
+                                "var(--erp-panel)",
                               fontSize:
                                 "12px",
                               fontWeight:
@@ -2404,7 +2394,7 @@ export default function HrApprovalCenterPage() {
                         textAlign:
                           "left",
                         borderBottom:
-                          "1px solid #e2e8f0",
+                          "1px solid var(--erp-border)",
                       }}
                     >
                       {header}
@@ -2423,7 +2413,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           textAlign:
                             "center",
                         }}
@@ -2458,7 +2448,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           fontWeight:
                             700,
                         }}
@@ -2474,7 +2464,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {item.month}/
@@ -2486,7 +2476,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {money(
@@ -2500,7 +2490,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {money(
@@ -2514,7 +2504,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         {money(
@@ -2528,7 +2518,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                           fontWeight:
                             900,
                         }}
@@ -2545,7 +2535,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         <StatusBadge
@@ -2560,7 +2550,7 @@ export default function HrApprovalCenterPage() {
                           padding:
                             "12px 13px",
                           borderBottom:
-                            "1px solid #eef2f7",
+                            "1px solid var(--erp-border)",
                         }}
                       >
                         <div
@@ -2595,9 +2585,9 @@ export default function HrApprovalCenterPage() {
                               padding:
                                 "0 13px",
                               background:
-                                "#15803d",
+                                "var(--color-semantic-success)",
                               color:
-                                "#ffffff",
+                                "var(--erp-panel)",
                               fontSize:
                                 "12px",
                               fontWeight:
@@ -2645,9 +2635,9 @@ export default function HrApprovalCenterPage() {
                               padding:
                                 "0 13px",
                               background:
-                                "#b91c1c",
+                                "var(--color-semantic-danger)",
                               color:
-                                "#ffffff",
+                                "var(--erp-panel)",
                               fontSize:
                                 "12px",
                               fontWeight:
@@ -2716,8 +2706,8 @@ export default function HrApprovalCenterPage() {
               width: "min(560px, 100%)",
               borderRadius: "18px",
               border:
-                "1px solid #e2e8f0",
-              background: "#ffffff",
+                "1px solid var(--erp-border)",
+              background: "var(--erp-panel)",
               boxShadow:
                 "0 24px 70px rgba(15, 23, 42, 0.28)",
               overflow: "hidden",
@@ -2728,14 +2718,14 @@ export default function HrApprovalCenterPage() {
                 padding:
                   "20px 22px 16px",
                 borderBottom:
-                  "1px solid #e2e8f0",
+                  "1px solid var(--erp-border)",
               }}
             >
               <h2
                 id="hr-reason-dialog-title"
                 style={{
                   margin: 0,
-                  color: "#0f172a",
+                  color: "var(--erp-text)",
                   fontSize: "20px",
                 }}
               >
@@ -2748,7 +2738,7 @@ export default function HrApprovalCenterPage() {
                 style={{
                   margin:
                     "7px 0 0",
-                  color: "#64748b",
+                  color: "var(--erp-muted)",
                   fontSize: "13px",
                   lineHeight: 1.5,
                 }}
@@ -2771,7 +2761,7 @@ export default function HrApprovalCenterPage() {
                     display: "block",
                     marginBottom:
                       "8px",
-                    color: "#334155",
+                    color: "var(--erp-muted)",
                     fontWeight:
                       800,
                   }}
@@ -2804,14 +2794,14 @@ export default function HrApprovalCenterPage() {
                     minHeight:
                       "130px",
                     border:
-                      "1px solid #cbd5e1",
+                      "1px solid var(--erp-border)",
                     borderRadius:
                       "12px",
                     padding:
                       "12px 13px",
-                    color: "#0f172a",
+                    color: "var(--erp-text)",
                     background:
-                      "#ffffff",
+                      "var(--erp-panel)",
                     fontFamily:
                       "inherit",
                     fontSize:
@@ -2825,7 +2815,7 @@ export default function HrApprovalCenterPage() {
                 <div
                   style={{
                     marginTop: "6px",
-                    color: "#64748b",
+                    color: "var(--erp-muted)",
                     fontSize: "12px",
                     textAlign:
                       "right",
@@ -2845,7 +2835,7 @@ export default function HrApprovalCenterPage() {
                 padding:
                   "16px 22px 20px",
                 borderTop:
-                  "1px solid #e2e8f0",
+                  "1px solid var(--erp-border)",
               }}
             >
               <button
@@ -2860,14 +2850,14 @@ export default function HrApprovalCenterPage() {
                   minHeight:
                     "40px",
                   border:
-                    "1px solid #cbd5e1",
+                    "1px solid var(--erp-border)",
                   borderRadius:
                     "10px",
                   padding:
                     "0 17px",
                   background:
-                    "#ffffff",
-                  color: "#334155",
+                    "var(--erp-panel)",
+                  color: "var(--erp-muted)",
                   fontWeight:
                     800,
                   cursor:
@@ -2898,9 +2888,9 @@ export default function HrApprovalCenterPage() {
                     "0 18px",
                   background:
                     reasonText.trim()
-                      ? "#b91c1c"
-                      : "#94a3b8",
-                  color: "#ffffff",
+                      ? "var(--color-semantic-danger)"
+                      : "var(--erp-muted)",
+                  color: "var(--color-on-brand)",
                   fontWeight:
                     800,
                   cursor:
@@ -2918,6 +2908,16 @@ export default function HrApprovalCenterPage() {
           </section>
         </div>
       )}
+      <ConfirmDialog
+        open={bulkOpen}
+        title="Seçili Kayıtları Onayla"
+        description={`${selectedVisibleCount} kayıt onaylanacak. Onaylanan kayıtlar ilgili modüllerde işleme girer ve geri alınması tek tek yapılır.`}
+        confirmLabel={`${selectedVisibleCount} Kaydı Onayla`}
+        busy={processingIds.size > 0}
+        error={actionError}
+        onCancel={() => setBulkOpen(false)}
+        onConfirm={() => void approveSelected()}
+      />
     </ErpShell>
   );
 }

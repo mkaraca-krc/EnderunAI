@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ConfirmDialog } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
 import type { ProjectSiteListItem } from "@/services/project-site.service";
 import {
@@ -35,6 +36,9 @@ export default function ProjectDocumentsSection({
   const [documents, setDocuments] = useState<ProjectDocumentListItem[]>([]);
   const [folders, setFolders] = useState<string[]>(SUGGESTED_DOCUMENT_FOLDERS);
   const [loading, setLoading] = useState(true);
+  /** Silinmek üzere onay bekleyen dosya. */
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -157,8 +161,7 @@ export default function ProjectDocumentsSection({
   }
 
   async function removeDocument(documentId: string) {
-    if (!window.confirm("Bu dosyayı silmek istediğinize emin misiniz?")) return;
-
+    setPendingDelete(null);
     setError("");
     try {
       await projectDocumentService.delete(projectId, documentId);
@@ -359,7 +362,7 @@ export default function ProjectDocumentsSection({
                   <button
                     type="button"
                     className="erp-secondary-button"
-                    onClick={() => void removeDocument(doc.id)}
+                    onClick={() => setPendingDelete(doc.id)}
                   >
                     Sil
                   </button>
@@ -394,6 +397,16 @@ export default function ProjectDocumentsSection({
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Dosyayı Sil"
+        description="Dosya projeden kaldırılacak ve depodan silinecek. Bu işlem geri alınamaz."
+        confirmLabel="Dosyayı Sil"
+        error={error}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void removeDocument(pendingDelete!)}
+      />
     </section>
   );
 }

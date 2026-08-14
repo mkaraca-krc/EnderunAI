@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
 import {
   Badge,
   Button,
@@ -281,6 +282,13 @@ export default function OrganizationPage() {
     useState<PositionForm>(emptyPositionForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** Silinmek üzere onay bekleyen organizasyon kaydı. */
+  const [pending, setPending] = useState<
+    | { kind: "department"; record: HrDepartment }
+    | { kind: "position"; record: HrPosition }
+    | null
+  >(null);
+
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -634,14 +642,7 @@ export default function OrganizationPage() {
   }
 
   async function deleteDepartment(record: HrDepartment) {
-    if (
-      !window.confirm(
-        `${record.name} departmanını silmek istediğinize emin misiniz? Alt birimler veya pozisyonlar varsa backend işlemi engelleyebilir.`
-      )
-    ) {
-      return;
-    }
-
+    setPending(null);
     setError("");
     try {
       await hrOrganizationService.deleteDepartment(record.id);
@@ -654,14 +655,7 @@ export default function OrganizationPage() {
   }
 
   async function deletePosition(record: HrPosition) {
-    if (
-      !window.confirm(
-        `${positionTitle(record)} pozisyonunu silmek istediğinize emin misiniz?`
-      )
-    ) {
-      return;
-    }
-
+    setPending(null);
     setError("");
     try {
       await hrOrganizationService.deletePosition(record.id);
@@ -710,6 +704,7 @@ export default function OrganizationPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="Organizasyon Yönetimi"
       description="Şirket yapısını, departman hiyerarşisini, yöneticileri ve pozisyonları tek merkezden yönetin."
     >
@@ -1000,7 +995,7 @@ export default function OrganizationPage() {
                               size="sm"
                               variant="ghost"
                               className="text-red-600 hover:bg-red-50"
-                              onClick={() => void deleteDepartment(department)}
+                              onClick={() => setPending({ kind: "department", record: department })}
                             >
                               Sil
                             </Button>
@@ -1116,7 +1111,7 @@ export default function OrganizationPage() {
                               size="sm"
                               variant="ghost"
                               className="text-red-600 hover:bg-red-50"
-                              onClick={() => void deletePosition(position)}
+                              onClick={() => setPending({ kind: "position", record: position })}
                             >
                               Sil
                             </Button>
@@ -1291,7 +1286,12 @@ export default function OrganizationPage() {
                       variant="danger"
                       className="mr-auto"
                       disabled={saving}
-                      onClick={() => void deleteDepartment(dialog.record!)}
+                      onClick={() =>
+                        setPending({
+                          kind: "department",
+                          record: dialog.record!,
+                        })
+                      }
                     >
                       Sil
                     </Button>
@@ -1426,7 +1426,12 @@ export default function OrganizationPage() {
                       variant="danger"
                       className="mr-auto"
                       disabled={saving}
-                      onClick={() => void deletePosition(dialog.record!)}
+                      onClick={() =>
+                        setPending({
+                          kind: "position",
+                          record: dialog.record!,
+                        })
+                      }
                     >
                       Sil
                     </Button>
@@ -1447,6 +1452,29 @@ export default function OrganizationPage() {
             )}
           </div>
         </div>
+      )}
+      {pending && (
+        <ConfirmDialog
+          open
+          title={
+            pending.kind === "department"
+              ? "Departmanı Sil"
+              : "Pozisyonu Sil"
+          }
+          description={
+            pending.kind === "department"
+              ? `${pending.record.name} departmanı silinecek. Alt birimi veya bağlı pozisyonu varsa sunucu işlemi reddeder.`
+              : `${positionTitle(pending.record)} pozisyonu silinecek. Bu pozisyona bağlı personel varsa sunucu işlemi reddeder.`
+          }
+          confirmLabel="Sil"
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() =>
+            pending.kind === "department"
+              ? void deleteDepartment(pending.record)
+              : void deletePosition(pending.record)
+          }
+        />
       )}
     </ErpShell>
   );

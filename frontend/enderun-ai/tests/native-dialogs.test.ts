@@ -4,31 +4,40 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * TARAYICI DİYALOGLARI — ŞİMDİLİK SAYIM MODUNDA.
+ * TARAYICI DİYALOGLARI YASAK.
  *
- * window.confirm / window.prompt / window.alert uygulama içi diyalogla
- * değiştirilecek: tarayıcı penceresi biçimlendirilemiyor, gerekçeyi
+ * window.confirm / window.prompt / window.alert uygulamada
+ * kullanılmaz. Tarayıcı penceresi biçimlendirilemiyor, gerekçeyi
  * zorunlu tutamıyor, hata mesajını aynı yerde gösteremiyor ve
- * erişilebilir değil. Uygulamada bunların yerine Modal, ConfirmDialog
- * ve Drawer var.
+ * erişilebilir değil. Yerine Modal, ConfirmDialog ve Drawer var.
  *
- * BU TEST HENÜZ YASAK KOYMUYOR. Bugün 50 dosyada 98 kullanım var
- * (72 confirm, 26 prompt); hepsini tek pakette değiştirmek uygulamanın
- * yarısına aynı anda dokunmak olurdu. Test şimdilik sayıyor ve sayının
- * ARTMAMASINI garanti ediyor: yeni kod eklerken tarayıcı diyaloğu
- * kullanılırsa tavan aşılır ve test kırmızıya döner.
+ * BU TEST ÖNCE SAYIYORDU. Yayma başladığında 50 dosyada 98 kullanım
+ * vardı (72 confirm, 26 prompt); hepsini tek pakette değiştirmek
+ * uygulamanın yarısına aynı anda dokunmak olurdu. O yüzden test bir
+ * TAVAN tutuyor ve sayının artmamasını garanti ediyordu; her modül
+ * geçtikçe tavan düşürüldü:
+ * 98 -> 97 -> 95 -> 74 -> 63 -> 60 -> 55 -> 52 -> 46 -> 33 -> 21 ->
+ * 11 -> 0.
  *
- * Yayma adımları bittiğinde tavan sıfıra çekilecek ve bu test gerçek
- * bir yasağa dönüşecek.
+ * Sayı sıfıra indi; tavan kalktı, yerine yasak geldi. GERİ DÖNÜŞ YOK:
+ * bundan sonra eklenen her kullanım testi kırar.
+ *
+ * YAYMA SIRASINDA BULUNANLAR — bu diyalogların neden kaldırıldığını
+ * anlatan gerçek örnekler:
+ *
+ * - VAZGEÇİLEMEYEN DİYALOG: `prompt` sonucu `?? ""` ile karşılanınca
+ *   "Vazgeç" boş metne dönüşüyor ve işlem YİNE yapılıyordu (görev
+ *   tamamlama, tatil takvimi doğrulama).
+ * - BOŞ GEREKÇE: `reason === null` yalnızca "Vazgeç"i yakalıyor; boş
+ *   kutuya OK denince metin "" olarak geçiyordu. Hakediş gerekçesiz
+ *   iptal edilebiliyordu.
+ * - İPTAL BAŞARI GİBİ GÖRÜNÜYORDU: ay onayından vazgeçen kullanıcıya
+ *   yeşil "Onay iptal edildi." bildirimi çıkıyordu.
+ * - SESSİZ SAYI HATASI: `prompt` ile alınan "1.250,50" metni 1.25
+ *   olarak okunuyordu.
  */
 
 const ROOTS = ["app", "components", "lib", "services"];
-
-/**
- * Bugünkü sayım. Yayma adımlarında DÜŞECEK; hiçbir zaman artmamalı.
- * Sayı düştüğünde bu tavan da düşürülür (test bunu ayrıca söylüyor).
- */
-const CURRENT_CEILING = 11;
 
 const PATTERN = /(?<![.\w])(?:window\.)?(confirm|prompt|alert)\s*\(/g;
 
@@ -70,31 +79,15 @@ function scan() {
 }
 
 describe("tarayıcı diyalogları", () => {
-  it("kullanım sayısı tavanı aşmıyor", () => {
+  it("hiç kullanılmıyor", () => {
     const hits = scan();
-    const total = hits.reduce((sum, hit) => sum + hit.count, 0);
 
     expect(
-      total,
-      `Tarayıcı diyaloğu kullanımı arttı (${total} > ${CURRENT_CEILING}). ` +
-        "Yeni kodda window.confirm/prompt/alert yerine ConfirmDialog, " +
-        "Modal ya da Drawer kullanın.",
-    ).toBeLessThanOrEqual(CURRENT_CEILING);
-  });
-
-  /**
-   * Sayı düştüğünde tavanı da düşürmeyi hatırlatır: tavan gerçek
-   * sayının çok üstünde kalırsa koruma gevşer ve yeni kullanımlar
-   * sessizce sızar.
-   */
-  it("tavan gerçek sayıya yakın kalıyor", () => {
-    const hits = scan();
-    const total = hits.reduce((sum, hit) => sum + hit.count, 0);
-
-    expect(
-      CURRENT_CEILING - total,
-      `Tavan (${CURRENT_CEILING}) gerçek sayının (${total}) çok üstünde; ` +
-        "CURRENT_CEILING değerini güncel sayıya çekin.",
-    ).toBeLessThanOrEqual(10);
+      hits.map((hit) => `${hit.file} (${hit.count})`),
+      "Tarayıcı diyaloğu yasak. Onay için ConfirmDialog, form için " +
+        "Modal, yan panel için Drawer kullanın. ConfirmDialog gerekçeyi " +
+        "zorunlu tutabiliyor (requireReason), hatayı diyaloğun içinde " +
+        "gösteriyor ve vazgeçme yolu bırakıyor.",
+    ).toEqual([]);
   });
 });

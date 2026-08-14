@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { ConfirmDialog } from "@/components/ui";
+import { date, dateTime } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -96,10 +98,7 @@ function dateTimeValue(value?: string | null) {
 
 function displayDate(value?: string | null, includeTime = false) {
   if (!value) return "—";
-  return new Date(value).toLocaleString("tr-TR", {
-    dateStyle: "short",
-    ...(includeTime ? { timeStyle: "short" as const } : {}),
-  });
+  return includeTime ? dateTime(value) : date(value);
 }
 
 function fullName(candidate?: JobCandidate) {
@@ -232,6 +231,13 @@ export default function HrRecruitmentPage() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** Onay bekleyen işe alım işlemi. */
+  const [pending, setPending] = useState<
+    | { kind: "publish"; item: JobPosting }
+    | { kind: "delete"; tab: Tab; id: string; label: string }
+    | null
+  >(null);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [editor, setEditor] = useState<EditorState>(null);
@@ -568,7 +574,7 @@ export default function HrRecruitmentPage() {
   }
 
   async function publishPosting(item: JobPosting) {
-    if (!window.confirm(`“${item.title}” ilanı yayınlansın mı?`)) return;
+    setPending(null);
     setError("");
     try {
       await hrRecruitmentService.publishPosting(item.id);
@@ -579,8 +585,10 @@ export default function HrRecruitmentPage() {
     }
   }
 
-  async function remove(kind: Tab, id: string, label: string) {
-    if (!window.confirm(`“${label}” kaydı silinsin mi?`)) return;
+  // `label` artık parametre değil: silme metnini ConfirmDialog
+  // kuruyor, bu işlev yalnızca isteği gönderiyor.
+  async function remove(kind: Tab, id: string) {
+    setPending(null);
     setError("");
     try {
       if (kind === "postings") await hrRecruitmentService.deletePosting(id);
@@ -605,6 +613,7 @@ export default function HrRecruitmentPage() {
 
   return (
     <ErpShell
+      design="redwood"
       title="İşe Alım"
       description="İlan, aday, başvuru ve mülakat süreçlerini tek merkezden yönetin"
     >
@@ -725,10 +734,17 @@ export default function HrRecruitmentPage() {
                     <TableCell>
                       <div className="flex justify-end gap-2">
                         {item.status === 0 && (
-                          <Button size="sm" onClick={() => void publishPosting(item)}>Yayınla</Button>
+                          <Button size="sm" onClick={() => setPending({ kind: "publish", item })}>Yayınla</Button>
                         )}
                         <Button size="sm" variant="secondary" onClick={() => openPosting(item)}>Düzenle</Button>
-                        <Button size="sm" variant="ghost" onClick={() => void remove("postings", item.id, item.title)}>Sil</Button>
+                        <Button size="sm" variant="ghost" onClick={() =>
+                            setPending({
+                              kind: "delete",
+                              tab: "postings",
+                              id: item.id,
+                              label: item.title,
+                            })
+                          }>Sil</Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -770,7 +786,14 @@ export default function HrRecruitmentPage() {
                     <TableCell>
                       <div className="flex justify-end gap-2">
                         <Button size="sm" variant="secondary" onClick={() => openCandidate(item)}>Düzenle</Button>
-                        <Button size="sm" variant="ghost" onClick={() => void remove("candidates", item.id, fullName(item))}>Sil</Button>
+                        <Button size="sm" variant="ghost" onClick={() =>
+                            setPending({
+                              kind: "delete",
+                              tab: "candidates",
+                              id: item.id,
+                              label: fullName(item),
+                            })
+                          }>Sil</Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -804,7 +827,14 @@ export default function HrRecruitmentPage() {
                     <TableCell>
                       <div className="flex justify-end gap-2">
                         <Button size="sm" variant="secondary" onClick={() => openApplication(item)}>Düzenle</Button>
-                        <Button size="sm" variant="ghost" onClick={() => void remove("applications", item.id, applicationCandidate(item, candidates))}>Sil</Button>
+                        <Button size="sm" variant="ghost" onClick={() =>
+                            setPending({
+                              kind: "delete",
+                              tab: "applications",
+                              id: item.id,
+                              label: applicationCandidate(item, candidates),
+                            })
+                          }>Sil</Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -854,7 +884,14 @@ export default function HrRecruitmentPage() {
                       <TableCell>
                         <div className="flex justify-end gap-2">
                           <Button size="sm" variant="secondary" onClick={() => openInterview(item)}>Düzenle</Button>
-                          <Button size="sm" variant="ghost" onClick={() => void remove("interviews", item.id, candidateName)}>Sil</Button>
+                          <Button size="sm" variant="ghost" onClick={() =>
+                            setPending({
+                              kind: "delete",
+                              tab: "interviews",
+                              id: item.id,
+                              label: candidateName,
+                            })
+                          }>Sil</Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1060,6 +1097,29 @@ export default function HrRecruitmentPage() {
             </form>
           </aside>
         </div>
+      )}
+      {pending && (
+        <ConfirmDialog
+          open
+          title={
+            pending.kind === "publish" ? "İlanı Yayınla" : "Kaydı Sil"
+          }
+          description={
+            pending.kind === "publish"
+              ? `“${pending.item.title}” ilanı yayınlanacak ve başvuruya açılacak.`
+              : `“${pending.label}” kaydı kalıcı olarak silinecek. Bu işlem geri alınamaz.`
+          }
+          confirmLabel={
+            pending.kind === "publish" ? "Yayınla" : "Kaydı Sil"
+          }
+          error={error}
+          onCancel={() => setPending(null)}
+          onConfirm={() =>
+            pending.kind === "publish"
+              ? void publishPosting(pending.item)
+              : void remove(pending.tab, pending.id)
+          }
+        />
       )}
     </ErpShell>
   );
