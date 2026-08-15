@@ -1,4 +1,8 @@
+using System.Net;
+using System.Net.Http.Json;
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Security;
+
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.Retail;
 using EnderunAI.Api.Tests.Infrastructure;
@@ -432,4 +436,136 @@ public sealed class RetailSaleTests(DatabaseFixture fixture)
         Assert.Equal(180m, sale.Subtotal);
         Assert.Equal(216m, sale.GrandTotal);
     }
+    /// <summary>
+    /// FİYAT EKRANINDA MALİYET YETKİYE BAĞLI.
+    ///
+    /// Maliyeti gören izin `inventory.view` — stok maliyetini bugün
+    /// fiilen koruyan anahtar o, yenisi açılmadı. Bu izni kapatılan
+    /// kullanıcı fiyat düzenleyebiliyor ama maliyeti göremiyor;
+    /// null geliyor ve kaç kalemde gizlendiği bildiriliyor.
+    ///
+    /// Maskeleme projeksiyon seviyesinde: arayüzde gizlemek yetmez,
+    /// uç doğrudan çağrılabiliyor.
+    /// </summary>
+    [Fact]
+    public async Task PricingScreen_HidesCost_WhenInventoryViewDenied()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+
+        using var admin = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var visible = await admin.GetFromJsonAsync<PricingResponse>(
+            $"/api/perakende/fiyatlar?search=URN-");
+
+        Assert.NotNull(visible);
+        Assert.Equal(0, visible!.HiddenCount);
+        Assert.All(visible.Items, item => Assert.NotNull(item.AverageUnitCost));
+
+        using var restricted = await CreateClientWithoutInventoryViewAsync();
+
+        var masked = await restricted.GetFromJsonAsync<PricingResponse>(
+            $"/api/perakende/fiyatlar?search=URN-");
+
+        Assert.NotNull(masked);
+        Assert.True(masked!.HiddenCount > 0);
+        Assert.All(masked.Items, item => Assert.Null(item.AverageUnitCost));
+
+        // Maliyet gizliyken bile fiyat ve tavan görünüyor: ekranın asıl
+        // işi o, yalnız marj hesabı yapılamıyor.
+        Assert.Contains(masked.Items, item => item.MaxDiscountRate >= 0);
+        Assert.NotEqual(Guid.Empty, context.ItemId);
+    }
+
+    /// <summary>Toplu güncelleme fiyatı ve tavanı yazıyor.</summary>
+    [Fact]
+    public async Task PricingUpdate_WritesPriceAndCap()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+
+        using var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var response = await client.PutAsJsonAsync("/api/perakende/fiyatlar", new[]
+        {
+            new { inventoryItemId = context.ItemId, salesPrice = 250.5m, maxDiscountRate = 15m }
+        });
+
+        response.EnsureSuccessStatusCode();
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var card = await db.InventoryItems.SingleAsync(x => x.Id == context.ItemId);
+
+        Assert.Equal(250.5m, card.SalesPrice);
+        Assert.Equal(15m, card.MaxDiscountRate);
+    }
+
+    /// <summary>Tavan 0-100 dışında kabul edilmiyor.</summary>
+    [Fact]
+    public async Task PricingUpdate_RejectsCapOutsideRange()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+
+        using var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var response = await client.PutAsJsonAsync("/api/perakende/fiyatlar", new[]
+        {
+            new { inventoryItemId = context.ItemId, salesPrice = 100m, maxDiscountRate = 140m }
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    private async Task<HttpClient> CreateClientWithoutInventoryViewAsync()
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var passwordService = scope.ServiceProvider.GetRequiredService<PasswordService>();
+
+        const string password = "RetailPricing!2026";
+        var username = $"test-pricing-{Guid.NewGuid():N}"[..40];
+        var hash = passwordService.Hash(password);
+
+        var user = new AppUser
+        {
+            Username = username,
+            FullName = "Fiyatlandırma Kullanıcısı",
+            PasswordHash = hash.Hash,
+            PasswordSalt = hash.Salt,
+            IsActive = true,
+            WorkHoursExempt = true
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var role = await db.Roles.SingleAsync(x => x.Name == "Admin");
+        db.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+        db.UserDataScopes.Add(new UserDataScope { UserId = user.Id, ScopeType = DataScopeType.All });
+
+        // Rol izni verse bile bu kullanıcıya kapatılıyor: maskenin role
+        // değil İZNE bağlı olduğunu doğrulamak için.
+        var permission = await db.Permissions
+            .SingleAsync(x => x.Key == PermissionCatalog.Keys.InventoryView);
+
+        db.UserPermissionOverrides.Add(new UserPermissionOverride
+        {
+            UserId = user.Id,
+            PermissionId = permission.Id,
+            Effect = PermissionOverrideEffect.Deny
+        });
+
+        await db.SaveChangesAsync();
+
+        var client = fixture.Factory.CreateClient();
+        var token = await AuthHelper.LoginAsync(client, username, password);
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        return client;
+    }
+
+    private sealed record PricingItem(
+        Guid Id, string Code, string Name, string Unit,
+        decimal? SalesPrice, decimal MaxDiscountRate, decimal? AverageUnitCost);
+
+    private sealed record PricingResponse(List<PricingItem> Items, int HiddenCount);
 }

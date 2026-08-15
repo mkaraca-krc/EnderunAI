@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Retail;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -41,8 +42,27 @@ public sealed record RejectRetailSaleRequest(string Reason);
 public sealed class RetailSalesController(
     AppDbContext db,
     IRetailSaleService sales,
-    IExtraPaymentVisibilityService cashVisibility) : ControllerBase
+    IExtraPaymentVisibilityService cashVisibility,
+    ICurrentUserService currentUser,
+    IUserAuthorizationService authorization) : ControllerBase
 {
+    /// <summary>
+    /// Kullanıcının izni var mı. Görünürlük servisleriyle aynı desen:
+    /// karar rolden değil İZİNDEN türetiliyor, böylece kullanıcı bazlı
+    /// kısıtlama (UserPermissionOverride) da geçerli oluyor.
+    /// </summary>
+    private async Task<bool> HasAsync(string permission, CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid userId)
+            return false;
+
+        var snapshot = await authorization.GetAsync(userId, cancellationToken);
+
+        return snapshot is not null
+            && snapshot.IsActive
+            && snapshot.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// Satış ekranının ürün araması. Kod, ad ve barkodla arar.
     ///
@@ -310,6 +330,76 @@ public sealed class RetailSalesController(
         {
             return BadRequest(new { message = exception.Message });
         }
+    }
+
+    /// <summary>
+    /// FİYATLANDIRMA EKRANININ VERİSİ — MALİYET DAHİL.
+    ///
+    /// Satış ekranı maliyeti görmez; BU EKRAN GÖRÜR ve görmesi şart:
+    /// satış fiyatını ve iskonto tavanını maliyetten habersiz koymak,
+    /// tavana kadar iskonto yapan personelin farkında olmadan maliyet
+    /// altına satmasına yol açar. Tavanı koyan kişi marjı görmeli.
+    ///
+    /// MALİYET GÖRÜNÜRLÜĞÜ MEVCUT İZNE BAĞLI, yeni anahtar açılmadı:
+    /// stok maliyetini bugün fiilen `inventory.view` koruyor
+    /// (InventoryController AverageUnitCost'u o izinle döndürüyor).
+    /// Tek kaynak o. Ekran `inventory.edit` ile açılıyor; maliyet
+    /// ayrıca `inventory.view` isteyip yoksa null dönüyor ve kaç
+    /// kalemde gizlendiği hiddenCount ile bildiriliyor.
+    ///
+    /// Satış personelinde ikisi de yok — ekrana giremiyor, girse de
+    /// maliyet maskeli gelirdi.
+    /// </summary>
+    [HttpGet("fiyatlar")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryEdit)]
+    public async Task<IActionResult> GetPricing(
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
+    {
+        var canSeeCost = await HasAsync(
+            PermissionCatalog.Keys.InventoryView, cancellationToken);
+
+        var term = search?.Trim();
+
+        var query = db.InventoryItems.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            query = query.Where(x =>
+                EF.Functions.ILike(x.Code, $"%{term}%")
+                || EF.Functions.ILike(x.Name, $"%{term}%")
+                || (x.Barcode != null && EF.Functions.ILike(x.Barcode, $"%{term}%")));
+        }
+
+        var rows = await query
+            .OrderBy(x => x.Name)
+            .Take(200)
+            .Select(x => new
+            {
+                x.Id,
+                x.Code,
+                x.Name,
+                x.Unit,
+                x.SalesPrice,
+                x.MaxDiscountRate,
+                x.AverageUnitCost
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new
+        {
+            items = rows.Select(x => new
+            {
+                x.Id,
+                x.Code,
+                x.Name,
+                x.Unit,
+                x.SalesPrice,
+                x.MaxDiscountRate,
+                AverageUnitCost = canSeeCost ? x.AverageUnitCost : (decimal?)null
+            }),
+            hiddenCount = canSeeCost ? 0 : rows.Count
+        });
     }
 
     /// <summary>

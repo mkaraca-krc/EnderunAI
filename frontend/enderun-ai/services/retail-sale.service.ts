@@ -136,3 +136,34 @@ export const retailSaleService = {
     });
   },
 };
+
+export interface RetailPricingRow {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  salesPrice?: number | null;
+  maxDiscountRate: number;
+  /** `inventory.view` yoksa null gelir — maskelenmiştir, sıfır değildir. */
+  averageUnitCost?: number | null;
+}
+
+export interface RetailPricingResponse {
+  items: RetailPricingRow[];
+  /** Maliyeti gizlenen kalem sayısı. */
+  hiddenCount: number;
+}
+
+export const retailPricingService = {
+  list(search: string) {
+    const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
+    return request<RetailPricingResponse>(`/api/perakende/fiyatlar${query}`);
+  },
+
+  save(rows: { inventoryItemId: string; salesPrice: number | null; maxDiscountRate: number }[]) {
+    return request<{ updated: number }>("/api/perakende/fiyatlar", {
+      method: "PUT",
+      body: JSON.stringify(rows),
+    });
+  },
+};

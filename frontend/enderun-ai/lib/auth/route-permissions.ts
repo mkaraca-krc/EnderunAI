@@ -160,6 +160,10 @@ const RULES: Rule[] = [
 
   { match: "/sirketler", permission: "companies.view" },
   { match: "/subeler", permission: "companies.view" },
+  // Fiyat/tavan belirleme YÖNETİM ekranı: maliyet ve marj taşıyor.
+  // Satış ekranından ÖNCE gelmeli — "/perakende" kalıbı bu yolu da
+  // yakalar ve satış izniyle açılmasına yol açardı.
+  { match: "/perakende/fiyatlar", permission: "inventory.edit" },
   { match: "/perakende", permission: "sales.view" },
   { match: "/cariler", permission: "companies.view" },
 ];
