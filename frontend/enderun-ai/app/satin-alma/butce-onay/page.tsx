@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { money } from "@/lib/format/turkish";
+import { money, percent } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -93,8 +93,13 @@ function formatDateTime(value?: string | null) {
   return value ? new Date(value).toLocaleString("tr-TR") : "—";
 }
 
+/**
+ * `?? 0` KALDIRILDI: eksik/gizlenmiş tutarı "0,00 ₺" yapıyordu, yani
+ * "veri yok" ile "sıfır bütçe" ekranda aynı görünüyordu. `money` boş
+ * değeri zaten çizgiyle basar.
+ */
 function formatTry(value?: number | null) {
-  return money(value ?? 0);
+  return money(value);
 }
 
 function hasPermission(session: CurrentSession | null, permission: string) {
@@ -651,7 +656,7 @@ export default function ProcurementBudgetApprovalPage() {
                         <TableCell>{formatTry(budget.amountTry)}</TableCell>
                         <TableCell>{formatTry(budget.committedAmountTry)}</TableCell>
                         <TableCell className={budget.remainingAmountTry < 0 ? "text-red-700" : ""}>{formatTry(budget.remainingAmountTry)}</TableCell>
-                        <TableCell>%{budget.utilizationPercent.toLocaleString("tr-TR")}</TableCell>
+                        <TableCell>{percent(budget.utilizationPercent)}</TableCell>
                         <TableCell>
                           <Badge variant={budget.isExceeded ? "danger" : budget.isWarning ? "warning" : budget.isActive ? "success" : "default"}>
                             {budget.isExceeded ? "Aşıldı" : budget.isWarning ? "Uyarı" : budget.isActive ? "Aktif" : "Pasif"}

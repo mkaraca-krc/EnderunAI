@@ -71,6 +71,44 @@ function code(text: string): string {
     .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 }
 
+/**
+ * `new Date( … )` bölgelerini tek bir `D` ile değiştirir.
+ *
+ * Parantez sayarak yürüyor, çünkü çağrı çok satıra yayılabiliyor:
+ * muhasebe fişinde `new Date(\n item.postedAtUtc\n ).toLocaleString(…)`
+ * böyle yazılı. Düz bir düzenli ifade bunu tarih olarak tanıyamaz ve
+ * meşru bir tarih biçimini sayı ihlali sanardı.
+ */
+function maskDateExpressions(source: string): string {
+  const parts: string[] = [];
+  let index = 0;
+
+  for (;;) {
+    const start = source.indexOf("new Date(", index);
+
+    if (start === -1) {
+      parts.push(source.slice(index));
+      break;
+    }
+
+    parts.push(source.slice(index, start));
+
+    let depth = 1;
+    let cursor = start + "new Date(".length;
+
+    while (cursor < source.length && depth > 0) {
+      if (source[cursor] === "(") depth += 1;
+      else if (source[cursor] === ")") depth -= 1;
+      cursor += 1;
+    }
+
+    parts.push("D");
+    index = cursor;
+  }
+
+  return parts.join("");
+}
+
 function read(path: string) {
   const text = readFileSync(path, "utf8");
   return { path: path.slice(ROOT.length + 1), text, code: code(text) };
@@ -227,6 +265,46 @@ describe("Redwood ekranları", () => {
       .map((page) => page.path);
 
     expect(offenders).toEqual([]);
+  });
+
+  /**
+   * SEÇENEKSİZ `toLocaleString("tr-TR")` DE YASAK — SAYIDA.
+   *
+   * Yukarıdaki kural seçenek nesnesi arıyordu ve bu yüzden en sessiz
+   * hâli kaçırdı: seçeneksiz çağrının varsayılanı EN ÇOK 3 hane ve
+   * ALT SINIRI YOK. Yani 1250.5 ekranda "1.250,5", 1250 ise "1.250"
+   * oluyordu — teklif maliyet kırılımı böyle basılıyordu, kuruş
+   * hanesi olmadan. Hane sayısı yazılmadığı için de "çağrı yerinde
+   * hane belirlenmiş" gibi görünmüyordu.
+   *
+   * TARİH SERBEST. `new Date(x).toLocaleString("tr-TR")` meşru bir
+   * tarih-saat biçimi ve uygulamada on bir yerde kullanılıyor. Ayrımı
+   * yapabilmek için önce `new Date( … )` bölgeleri parantez sayarak
+   * maskeleniyor; geriye kalan alıcı bir sayıdır.
+   */
+  it("seçeneksiz toLocaleString ile sayı basmıyor", () => {
+    // Alıcı parantezli de olabiliyor: `(Number(a) * Number(b)).toLocaleString(…)`
+    // reçete editöründe tam olarak böyle yazılıydı. Sadece tanımlayıcı
+    // arayan bir desen bu biçimi görmez.
+    const call = /([\w.[\]?!()]*)\.toLocaleString\(\s*["']tr-TR["']\s*\)/g;
+
+    const offenders = numberSurface
+      .filter((page) => {
+        const masked = maskDateExpressions(page.code);
+
+        return [...masked.matchAll(call)].some(
+          // Maskeleme sonrası alıcı yalnızca `D` ise o bir tarihtir.
+          (match) => match[1].replace(/[()]/g, "") !== "D",
+        );
+      })
+      .map((page) => page.path);
+
+    expect(
+      offenders,
+      "Seçeneksiz toLocaleString bir sayıya uygulanmış. Varsayılanı " +
+        "en çok 3 hane ve alt sınırı yok; para '1.250,5' diye çıkar. " +
+        "Sayı tipine göre money / quantity / percent / decimal kullanın.",
+    ).toEqual([]);
   });
 
   /**

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
-import { currencyMoney, percent } from "@/lib/format/turkish";
+import { currencyMoney, decimalRange, percent, quantity } from "@/lib/format/turkish";
 import {
   Badge,
   Card,
@@ -232,7 +232,7 @@ export default function OfferDetailPage() {
                   <Info label="Para Birimi" value={item.currency} />
                   <Info
                     label="Kur"
-                    value={item.exchangeRate.toLocaleString("tr-TR")}
+                    value={decimalRange(item.exchangeRate, 4, 4)}
                   />
                   <div className="md:col-span-2">
                     <Info label="Açıklama" value={item.description || "—"} />
@@ -316,7 +316,7 @@ export default function OfferDetailPage() {
                           {line.manufacturerName || line.brand || "—"}
                         </TableCell>
                         <TableCell>
-                          {line.quantity.toLocaleString("tr-TR")} {line.unit}
+                          {quantity(line.quantity)} {line.unit}
                         </TableCell>
                         <TableCell>
                           {money(line.listPrice, item.currency)}

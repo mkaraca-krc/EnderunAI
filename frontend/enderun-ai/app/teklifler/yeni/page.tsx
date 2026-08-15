@@ -4,14 +4,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
-import {
-  currencyMoney,
-  decimal,
-  percent,
-  // `calculate` icinde ayni adda yerel bir degisken var; takma ad
+import { // `calculate` icinde ayni adda yerel bir degisken var; takma ad
   // olmasaydi okuyan hangisinin kastedildigini ayirt edemezdi.
-  quantity as formatQuantity,
-} from "@/lib/format/turkish";
+  quantity as formatQuantity, currencyMoney, decimal, percent } from "@/lib/format/turkish";
 import CostBreakdownModal from "@/components/offers/cost-breakdown-modal";
 import {
   Button,
@@ -445,9 +440,9 @@ export default function NewOfferPage() {
                 notes: costing
                   ? [
                       recipeSummary,
-                      `Malzeme: ${costing.materialCost.toLocaleString("tr-TR")}`,
-                      `İşçilik: ${costing.laborCost.toLocaleString("tr-TR")}`,
-                      `Makine: ${costing.machineCost.toLocaleString("tr-TR")}`,
+                      `Malzeme: ${money(costing.materialCost, form.currency)}`,
+                      `İşçilik: ${money(costing.laborCost, form.currency)}`,
+                      `Makine: ${money(costing.machineCost, form.currency)}`,
                       `Fiyatlanan: ${costing.pricedMaterialCount}`,
                       `Eksik fiyat: ${costing.unpricedMaterialCount}`,
                     ].join(" · ")

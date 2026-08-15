@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
-import { currencyMoney } from "@/lib/format/turkish";
+import { currencyMoney, quantity } from "@/lib/format/turkish";
 import {
   Badge,
   Button,
@@ -445,7 +445,7 @@ export default function RfqDetailPage() {
                         </TableCell>
 
                         <TableCell className="text-right font-medium">
-                          {line.quantity.toLocaleString("tr-TR")}
+                          {quantity(line.quantity)}
                         </TableCell>
 
                         <TableCell>{line.unit}</TableCell>

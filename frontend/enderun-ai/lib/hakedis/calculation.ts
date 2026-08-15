@@ -8,6 +8,8 @@
  * Yuvarlama sunucudaki gibi 2 hane ve yarımlar yukarı (AwayFromZero).
  */
 
+import { percent } from "@/lib/format/turkish";
+
 export function round2(value: number) {
   const scaled = value * 100;
   // JavaScript'in Math.round'u -0.5'i yukarı yuvarlar; sunucudaki
@@ -283,9 +285,7 @@ export function validatePaymentPlan(parts: PaymentPlanInput[]) {
   const total = round2(parts.reduce((sum, x) => sum + (x.rate || 0), 0));
 
   if (total !== 100) {
-    return `Ödeme dağılım oranlarının toplamı %100 olmalıdır (şu an %${total.toLocaleString(
-      "tr-TR"
-    )}).`;
+    return `Ödeme dağılım oranlarının toplamı %100 olmalıdır (şu an ${percent(total)}).`;
   }
 
   if (

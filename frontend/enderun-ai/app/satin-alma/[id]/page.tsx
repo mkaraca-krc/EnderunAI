@@ -30,6 +30,7 @@ import {
   type CurrentAccountListItem,
 } from "@/services/current-account.service";
 import { rfqService } from "@/services/rfq.service";
+import { quantity } from "@/lib/format/turkish";
 import {
   requestedBrandBadgeVariant,
   requestedBrandLabel,
@@ -670,7 +671,7 @@ export default function PurchaseRequestDetailPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {line.quantity.toLocaleString("tr-TR")}
+                        {quantity(line.quantity)}
                       </TableCell>
                       <TableCell>{line.unit}</TableCell>
                       <TableCell>

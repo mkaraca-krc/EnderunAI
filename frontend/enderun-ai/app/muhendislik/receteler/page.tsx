@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
-import { decimal } from "@/lib/format/turkish";
+import { decimal, whole } from "@/lib/format/turkish";
 import {
   EngineeringRecipeCoverage,
   EngineeringRecipeListItem,
@@ -161,7 +161,7 @@ export default function EngineeringRecipesPage() {
             <strong>
               {loading || !coverage
                 ? "…"
-                : coverage.positionsWithoutRecipe.toLocaleString("tr-TR")}
+                : whole(coverage.positionsWithoutRecipe)}
             </strong>
             <small>Analizi henüz oluşturulmayan pozlar</small>
           </div>
@@ -356,7 +356,7 @@ export default function EngineeringRecipesPage() {
             <div>
               <h2>Reçetesi Olmayan Pozlar</h2>
               <p>
-                {coverage.positionsWithoutRecipe.toLocaleString("tr-TR")} pozun
+                {whole(coverage.positionsWithoutRecipe)} pozun
                 varsayılan reçetesi yok — bu pozlar proje malzeme ihtiyacına
                 sıfır katkı verir, ihtiyaç listesinde ayrıca uyarı olarak
                 görünür.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { quantity } from "@/lib/format/turkish";
+import { decimal, quantity } from "@/lib/format/turkish";
 import {
   EngineeringRecipeDetail,
   RecipeLabor,
@@ -266,7 +266,7 @@ export default function RecipeEditor({ positionId }: Props) {
           <div className="enderun-dashboard-stat-icon">◷</div>
           <div>
             <span>İşçilik</span>
-            <strong>{totals.laborHours.toLocaleString("tr-TR")}</strong>
+            <strong>{decimal(totals.laborHours, 2)}</strong>
             <small>Toplam adam/saat</small>
           </div>
         </div>
@@ -275,7 +275,7 @@ export default function RecipeEditor({ positionId }: Props) {
           <div className="enderun-dashboard-stat-icon">⚙</div>
           <div>
             <span>Makine</span>
-            <strong>{totals.machineHours.toLocaleString("tr-TR")}</strong>
+            <strong>{decimal(totals.machineHours, 2)}</strong>
             <small>Toplam makine/saat</small>
           </div>
         </div>
@@ -541,9 +541,7 @@ export default function RecipeEditor({ positionId }: Props) {
                     />
                   </td>
                   <td>
-                    {(
-                      Number(item.personCount) * Number(item.hours)
-                    ).toLocaleString("tr-TR")}
+                    {decimal(Number(item.personCount) * Number(item.hours), 2)}
                   </td>
                   <td>
                     <input
@@ -637,9 +635,7 @@ export default function RecipeEditor({ positionId }: Props) {
                     />
                   </td>
                   <td>
-                    {(
-                      Number(item.quantity) * Number(item.hours)
-                    ).toLocaleString("tr-TR")}
+                    {decimal(Number(item.quantity) * Number(item.hours), 2)}
                   </td>
                   <td>
                     <input

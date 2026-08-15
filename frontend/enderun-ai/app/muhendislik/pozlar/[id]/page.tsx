@@ -7,6 +7,7 @@ import ErpShell from "@/components/erp/erp-shell";
 import RecipeEditor from "@/components/engineering/recipe-editor";
 import PositionPriceHistory from "@/components/engineering/position-price-history";
 import PositionPurchaseIntelligence from "@/components/engineering/position-purchase-intelligence";
+import { decimal } from "@/lib/format/turkish";
 import {
   EngineeringPositionDetail,
   engineeringPositionDetailService,
@@ -232,7 +233,7 @@ export default function EngineeringPositionDetailPage() {
           <div className="enderun-dashboard-stat-icon">◷</div>
           <div>
             <span>Toplam Adam/Saat</span>
-            <strong>{totalLabor.toLocaleString("tr-TR")}</strong>
+            <strong>{decimal(totalLabor, 2)}</strong>
             <small>Usta ve yardımcı toplamı</small>
           </div>
         </div>

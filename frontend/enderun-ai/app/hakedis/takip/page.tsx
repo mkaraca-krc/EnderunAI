@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { amount } from "@/lib/format/turkish";
+import { amount, percent } from "@/lib/format/turkish";
 import { Button, Input, Modal } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
 import { usePermissions } from "@/lib/use-permissions";
@@ -174,7 +174,7 @@ export default function HakedisTrackingPage() {
               value={money(tracking.totals.cumulativeTotalAmount)}
               hint={
                 tracking.project.contractAmount
-                  ? `Sözleşmenin %${tracking.totals.completionRate.toLocaleString("tr-TR")}'i`
+                  ? `Sözleşmenin ${percent(tracking.totals.completionRate)}'i`
                   : undefined
               }
             />
