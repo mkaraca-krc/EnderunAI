@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
-import { money, quantity } from "@/lib/format/turkish";
+import { money, quantity, unitPrice } from "@/lib/format/turkish";
 
 import {
   progressPaymentService,
@@ -1027,9 +1027,7 @@ export default function ProgressPaymentDetailPage() {
                   </td>
 
                   <td>
-                    {money(
-                      line.unitPrice
-                    )}
+                    {unitPrice(line.unitPrice)}
                   </td>
 
                   <td>

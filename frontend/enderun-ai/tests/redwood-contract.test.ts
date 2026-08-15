@@ -354,6 +354,55 @@ describe("Redwood ekranları", () => {
    * kaçırmıştım. Sayım o soruyu hiç sormuyordu.
    */
   /**
+   * BİRİM FİYAT ALANI `money`DEN GEÇMEZ.
+   *
+   * `money` SABİT iki hane; birim fiyat kolonları veritabanında dört
+   * ya da altı ondalık taşıyor. Aradaki fark ekranda görünmüyor —
+   * "1.250,00 ₺" gayet doğru bir tutar gibi duruyor — ama kullanıcı
+   * o rakamla miktarı çarptığında toplam tutmuyor.
+   *
+   * Yakalanma biçimi öğreticiydi: `unitPrice` max 4'ten 6'ya
+   * çıkarılırken tarandığında, birim fiyat alanlarının hâlâ `money`ye
+   * bağlı olduğu yerler bulundu — yani biçimleyiciyi düzeltmek tek
+   * başına yetmiyordu, çağıranın doğru işlevi seçmesi gerekiyordu.
+   *
+   * KAPSAM DIŞI TUTULANLAR: ölçeği zaten iki olan kolonlar
+   * (subcontractor_progress_payment_items.UnitPrice) — orada `money`
+   * doğru işlev.
+   */
+  it("birim fiyat alanını money ile basmıyor", () => {
+    const call = /\b(?:money|currencyMoney|moneyWhole|amount)\(\s*[\w.]*\b(\w*(?:[Uu]nitPrice|[Ll]istPrice))\b/g;
+
+    /*
+     * Ölçeği ZATEN İKİ olan kolon: taşeron hakedişi
+     * (`subcontractor_progress_payment_items.UnitPrice` = numeric(_,2)).
+     * Orada `money` DOĞRU işlev — ilke "kolonun ölçeğini karşıla"
+     * diyor, "her yerde altı hane yaz" demiyor.
+     */
+    const scaleTwoScreens = [join("taseronlar", "[id]", "page.tsx")];
+
+    const offenders: string[] = [];
+
+    for (const page of numberSurface) {
+      // Yerel `money` sarmalayıcısı `unitPrice`e gidiyorsa sorun yok;
+      // birkaç ekran biçimleyiciyi böyle adlandırmış.
+      if (/(?:function|const)\s+money[^\n]*\n?[^\n]*unitPrice\(/.test(page.code)) continue;
+
+      if (scaleTwoScreens.some((screen) => page.path.includes(screen))) continue;
+
+      for (const match of page.code.matchAll(call)) {
+        offenders.push(`${page.path} (${match[1]})`);
+      }
+    }
+
+    expect(
+      offenders,
+      "Birim fiyat `money` ile basılmış; money sabit 2 hane, kolon 4-6 " +
+        "ondalık taşıyor. `unitPrice` kullanın.",
+    ).toEqual([]);
+  });
+
+  /**
    * YÜZDE İŞARETİ İKİ KEZ YAZILMAZ.
    *
    * `percent()` işareti KENDİSİ koyuyor ("%5,5") — Türkçe yazımda

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
-import { money } from "@/lib/format/turkish";
+import { money, unitPrice } from "@/lib/format/turkish";
 import {
   salesInvoiceService,
   PARSE_SOURCE_LABELS,
@@ -385,7 +385,7 @@ export default function SalesInvoiceDetailPage() {
                   <td>
                     {item.quantity} {item.unit}
                   </td>
-                  <td>{money(item.unitPrice)}</td>
+                  <td>{unitPrice(item.unitPrice)}</td>
                   <td>{item.vatRate}</td>
                   <td>{money(item.lineSubtotal)}</td>
                   <td>{money(item.vatAmount)}</td>

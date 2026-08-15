@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { currencyMoney, decimalRange } from "@/lib/format/turkish";
+import { currencyMoney, decimalRange, unitPrice } from "@/lib/format/turkish";
 import { offerService, type OfferPrintData } from "@/services/offer.service";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
@@ -192,10 +192,10 @@ export default function OfferPrintPage() {
                     işveren çoğu zaman bu kırılımı ister. */}
                 {item.laborUnitPrice > 0 && (
                   <div style={{ fontSize: 10, color: "#555" }}>
-                    Malzeme {money(item.materialUnitPrice, currency)} · Montaj{" "}
-                    {money(item.laborUnitPrice, currency)}
+                    Malzeme {unitPrice(item.materialUnitPrice, currency)} · Montaj{" "}
+                    {unitPrice(item.laborUnitPrice, currency)}
                     {item.overheadUnitPrice > 0 &&
-                      ` · GG ${money(item.overheadUnitPrice, currency)}`}
+                      ` · GG ${unitPrice(item.overheadUnitPrice, currency)}`}
                   </div>
                 )}
               </td>

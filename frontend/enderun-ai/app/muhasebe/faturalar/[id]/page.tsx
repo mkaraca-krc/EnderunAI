@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
-import { money } from "@/lib/format/turkish";
+import { money, unitPrice } from "@/lib/format/turkish";
 import {
   supplierInvoiceService,
   MATCH_STATUS_COLORS,
@@ -525,7 +525,7 @@ export default function SupplierInvoiceDetailPage() {
                       <td>
                         {item.quantity} {item.unit}
                       </td>
-                      <td>{money(item.unitPrice)}</td>
+                      <td>{unitPrice(item.unitPrice)}</td>
                       <td>%{item.vatRate}</td>
                       <td>{money(item.lineSubtotal)}</td>
                       <td>{money(item.vatAmount)}</td>

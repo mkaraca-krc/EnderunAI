@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
-import { currencyMoney, decimalRange, percent, quantity } from "@/lib/format/turkish";
+import { currencyMoney, decimalRange, percent, quantity, unitPrice } from "@/lib/format/turkish";
 import {
   Badge,
   Card,
@@ -319,7 +319,7 @@ export default function OfferDetailPage() {
                           {quantity(line.quantity)} {line.unit}
                         </TableCell>
                         <TableCell>
-                          {money(line.listPrice, item.currency)}
+                          {unitPrice(line.listPrice, item.currency)}
                         </TableCell>
                         <TableCell>%{line.discountRate}</TableCell>
                         <TableCell>

@@ -11,7 +11,7 @@ import BoqImportMatchTable, {
   toDecisions,
 } from "@/components/engineering/boq-import-match-table";
 import ErpShell from "@/components/erp/erp-shell";
-import { amount, currencyMoney, quantity } from "@/lib/format/turkish";
+import { amount, currencyMoney, quantity, unitPrice } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
 import {
   BoqImportErrorKind,
@@ -881,16 +881,16 @@ export default function ContractSummaryDetailPage() {
                       {quantity(line.contractQuantity)}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {money(line.materialUnitPrice, item.currencyCode)}
+                      {unitPrice(line.materialUnitPrice, item.currencyCode)}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {money(line.laborUnitPrice, item.currencyCode)}
+                      {unitPrice(line.laborUnitPrice, item.currencyCode)}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {money(line.overheadUnitPrice, item.currencyCode)}
+                      {unitPrice(line.overheadUnitPrice, item.currencyCode)}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {money(line.unitPrice, item.currencyCode)}
+                      {unitPrice(line.unitPrice, item.currencyCode)}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <strong>

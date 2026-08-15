@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { money } from "@/lib/format/turkish";
+import { money, unitPrice } from "@/lib/format/turkish";
 import ErpSearchSelect, {
   type SearchSelectOption,
 } from "@/components/erp/erp-search-select";
@@ -889,7 +889,7 @@ function PreviewRow({
                     <td>
                       {line.quantity} {line.unit}
                     </td>
-                    <td>{money(line.unitPrice)}</td>
+                    <td>{unitPrice(line.unitPrice)}</td>
                     <td>{line.vatRate}</td>
                     <td>{money(line.lineSubtotal)}</td>
                   </tr>

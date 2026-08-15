@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { amount, decimal, money } from "@/lib/format/turkish";
+import { amount, decimal, money, unitPrice } from "@/lib/format/turkish";
 import {
   progressPaymentService,
   type HakedisProfit,
@@ -270,7 +270,7 @@ export default function HakedisProfitPage() {
                         <td>
                           {decimal(line.currentQuantity, 3)} {line.unit}
                         </td>
-                        <td>{amount(line.unitPrice)}</td>
+                        <td>{unitPrice(line.unitPrice)}</td>
                         <td>{money(line.currentAmount)}</td>
                         <td>
                           {line.unitCost == null ? (

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { amount, currencyMoney } from "@/lib/format/turkish";
+import { amount, currencyMoney, unitPrice } from "@/lib/format/turkish";
 import {
   PURCHASE_RETURN_STATUS,
   purchaseReturnService,
@@ -201,7 +201,7 @@ export default function PurchaseReturnDetailPage() {
                       <td>
                         {number(line.quantity)} {line.unit}
                       </td>
-                      <td>{money(line.unitPrice, item.currencyCode)}</td>
+                      <td>{unitPrice(line.unitPrice, item.currencyCode)}</td>
                       <td>
                         <strong>
                           {money(line.lineTotal, item.currencyCode)}

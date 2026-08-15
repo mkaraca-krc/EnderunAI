@@ -126,6 +126,34 @@ describe("birim fiyat", () => {
   it("para birimi kodunu yazar", () => {
     expect(unitPrice(12.4567, "USD")).toBe("12,4567 USD");
   });
+
+  /**
+   * ÖLÇEK KOLONUN ÖLÇEĞİNİ KARŞILAR — ALTI HANE KIRPILMAZ.
+   *
+   * Bu işlev önce max 4 basıyordu ve gerekçesi "dörtten fazlası
+   * pratikte kullanılmıyor" idi. Ölçüt yanlıştı: `numeric(_,6)` olan
+   * bir kolona (project_boq_items.UnitPrice,
+   * ManufacturerPriceListItem.ListPrice, offer_items.*UnitPrice,
+   * sales_invoice_items.UnitPrice) altı haneli bir fiyat girildiği gün
+   * ekran onu sessizce kırpardı — ve o rakam sözleşmeye giriyor.
+   *
+   * Bugün canlıda altı haneli kayıt yok; kusur bu yüzden GÖRÜNMÜYORDU,
+   * yok olduğu için değil.
+   */
+  it("altı haneyi kırpmaz", () => {
+    expect(unitPrice(1.523456)).toBe("1,523456 ₺");
+  });
+
+  /**
+   * Alt sınır iki, üst sınır altı: tipik fiyat kompakt kalır, hassas
+   * fiyat tam yazılır. Sondaki sıfırlar İKİNCİ HANEDEN SONRA atılır.
+   */
+  it("ikinci haneden sonra sondaki sıfırı yazmaz", () => {
+    expect(unitPrice(1.5)).toBe("1,50 ₺");
+    expect(unitPrice(1.5)).toBe(unitPrice(1.5000));
+    expect(unitPrice(1.5234)).toBe("1,5234 ₺");
+    expect(unitPrice(1250)).toBe("1.250,00 ₺");
+  });
 });
 
 /**
@@ -136,6 +164,23 @@ describe("birim fiyat", () => {
  * bakiye kuruşsuzmuş gibi okunur.
  */
 describe("tutarda sıfır kırpılmaz", () => {
+  /**
+   * BİRİM FİYATIN ALTI HANESİ VE TRIM'İ TUTARA SIZMAZ.
+   *
+   * İkisi ayrı işlev olmasının sebebi tam olarak bu: `unitPrice`
+   * altıncı haneye kadar açılıp sondaki sıfırı atarken, aynı sayı
+   * `money`den geçtiğinde SABİT iki hane kalır. Tek bir işleve
+   * indirgenselerdi teklif toplamı "1.250 ₺" ya da "1,523456 ₺"
+   * görünürdü.
+   */
+  it("birim fiyat kuralı tutara geçmiyor", () => {
+    expect(unitPrice(1.523456)).toBe("1,523456 ₺");
+    expect(money(1.523456)).toBe("1,52 ₺");
+
+    expect(unitPrice(1250)).toBe("1.250,00 ₺");
+    expect(money(1250)).toBe("1.250,00 ₺");
+  });
+
   it("tam sayı tutar da iki hane yazar", () => {
     expect(amount(1250)).toBe("1.250,00");
     expect(money(1250)).toBe("1.250,00 ₺");

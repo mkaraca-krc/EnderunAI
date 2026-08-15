@@ -23,7 +23,7 @@
  *   Kuruşsuz özet/başlık  → moneyWhole
  *                           0 hane; YALNIZ özet kartı, huni, grafik
  *   Birim fiyat           → unitPrice
- *                           min 2 / max 4 — tutar DEĞİLDİR
+ *                           min 2 / max 6 — tutar DEĞİLDİR
  *   Katsayı / endeks      → coefficient
  *                           max 8, sondaki sıfır yazılmaz
  *   Oran (yüzde)          → percent
@@ -36,6 +36,27 @@
  * elle `toLocaleString` YAZILMAZ — hepsi buradaki adlandırılmış
  * işlevlerden geçer. `tests/redwood-contract.test.ts` bunu koruma
  * altına alıyor.
+ *
+ * ---------------------------------------------------------------
+ * ÖLÇEK İLKESİ — BİRİM FİYAT
+ *
+ * Birim fiyatın GÖSTERİM ölçeği, ilgili kolonun VERİTABANI ondalık
+ * ölçeğini karşılamak zorundadır. Gösterim ölçeği sütunun
+ * okunurluğuna göre değil, verinin taşıdığı hassasiyete göre
+ * seçilir; çünkü o rakam sözleşmeye ve belgeye giriyor ve kırpılmış
+ * gösterilen bir fiyat, kullanıcı miktarla çarptığında tutmayan bir
+ * toplam üretiyor.
+ *
+ * Bugünkü en geniş ölçek 6: `project_boq_items.UnitPrice`,
+ * `ManufacturerPriceListItem.ListPrice`, `offer_items.*UnitPrice`,
+ * `sales_invoice_items.UnitPrice`. Bu yüzden `unitPrice` max 6.
+ * (Önce max 4'tü ve gerekçesi "dörtten fazlası pratikte
+ * kullanılmıyor" idi — ölçüt yanlıştı: kolon altı hane taşıyabildiği
+ * sürece dördüncüde kesmek gizli bir kırpmadır.)
+ *
+ * İLERİDE ALTIDAN BÜYÜK ÖLÇEKLİ BİR BİRİM-FİYAT KOLONU ÇIKARSA
+ * `unitPrice` aynı kuralla yükseltilir. Alt sınır 2 kalır: tipik
+ * fiyat kompakt görünsün.
  *
  * NEDEN BU KADAR KESKİN: aynı biçimleyiciyi yanlış sayı tipine
  * uygulamak sessizce yanlış rakam gösteriyor ve iki kez oldu —
@@ -255,20 +276,34 @@ export function coefficient(value: number | null | undefined): string {
 }
 
 /**
- * Birim fiyat — "12,4567 ₺", "8,50 ₺".
+ * Birim fiyat — "8,50 ₺", "1,5234 ₺", "1,523456 ₺".
  *
- * TUTAR DEĞİLDİR, bu yüzden iki hane kuralının dışındadır. Üretici
- * fiyat listesinde birim fiyat veritabanında `numeric(18,6)` olarak
- * duruyor: metrelik bir kablo 12,4567 ₺ olabiliyor. İki haneye
- * yuvarlansaydı ekranda 12,46 ₺ görünür, kullanıcı o rakamla miktarı
- * çarptığında toplam tutmazdı.
+ * TUTAR DEĞİLDİR, bu yüzden iki hane kuralının dışındadır. Birim fiyat
+ * veritabanında `numeric(_,6)` olarak duruyor
+ * (`project_boq_items.UnitPrice`, `ManufacturerPriceListItem.ListPrice`):
+ * metrelik bir kablo 12,4567 ₺ olabiliyor. İki haneye yuvarlansaydı
+ * ekranda 12,46 ₺ görünür, kullanıcı o rakamla miktarı çarptığında
+ * toplam tutmazdı.
  *
- * Dört hane sınırı bilinçli: altıncı haneye kadar yazmak sütunu
- * okunmaz yapıyor, dördüncü haneden sonrası fiyat listelerinde
- * pratikte kullanılmıyor.
+ * ÖLÇEK ALTI HANE, ÇÜNKÜ KOLONUN ÖLÇEĞİ ALTI. Burada önce dört hane
+ * yazıyordu ve "altıncı haneye kadar yazmak sütunu okunmaz yapar,
+ * dördünden fazlası pratikte kullanılmıyor" diye gerekçelendirilmişti.
+ * Gerekçe yanlıştı: ölçeği belirleyen şey sütunun okunurluğu değil,
+ * VERİTABANININ TAŞIDIĞI HASSASİYET. Dört hanede kalsaydı altı haneli
+ * bir fiyat girildiği gün ekran onu sessizce kırpardı — ve o rakam
+ * sözleşmeye/belgeye giriyor.
+ *
+ * İLKE: birim fiyat gösterim ölçeği, ilgili kolonun DB ondalık
+ * ölçeğini KARŞILAMALI. İleride altıdan büyük ölçekli bir birim-fiyat
+ * kolonu çıkarsa bu işlev aynı kuralla yükseltilir.
+ *
+ * Alt sınır iki, üst sınır altı: tipik fiyat kompakt kalıyor
+ * (1,5000 -> "1,50"), hassas fiyat kırpılmıyor (1,523456 ->
+ * "1,523456"). Sondaki sıfırlar ikinci haneden sonra yazılmaz.
  *
  * TOPLAM VE ARA TOPLAM İÇİN KULLANILMAZ — onlar tutardır, `money` /
- * `currencyMoney` ile iki hane yazılır.
+ * `currencyMoney` ile SABİT iki hane yazılır. Buradaki trim tutara
+ * sızmaz; ikisi ayrı işlev olmasının sebebi tam olarak budur.
  */
 export function unitPrice(
   value: number | null | undefined,
@@ -276,7 +311,7 @@ export function unitPrice(
 ): string {
   if (isMissing(value)) return EMPTY_VALUE;
 
-  return `${decimalRange(value, 2, 4)} ${CURRENCY_LABELS[code] ?? code}`;
+  return `${decimalRange(value, 2, 6)} ${CURRENCY_LABELS[code] ?? code}`;
 }
 
 /** Ondalıksız sayı — "320". */
