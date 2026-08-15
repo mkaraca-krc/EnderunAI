@@ -1,16 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { money } from "@/lib/format/turkish";
 
 import {
   hrAttendanceService,
   type ActualDailyWage,
 } from "@/services/hr-attendance.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 /**
  * Seçili personelin o günkü yevmiyesi.
@@ -84,10 +81,10 @@ export default function DailyWageBadge({
     >
       <span>
         Resmî yevmiye:{" "}
-        <strong>{money.format(wage.officialDailyRate)}</strong>
+        <strong>{money(wage.officialDailyRate)}</strong>
         <small style={{ display: "block", color: "#64748b" }}>
-          saatlik {money.format(wage.officialHourlyRate)} ·{" "}
-          {money.format(wage.dailyWorkHours)} saat/gün
+          saatlik {money(wage.officialHourlyRate)} ·{" "}
+          {money(wage.dailyWorkHours)} saat/gün
         </small>
       </span>
 
@@ -102,11 +99,11 @@ export default function DailyWageBadge({
         <span>
           Gerçek yevmiye:{" "}
           <strong style={{ color: "#0f766e" }}>
-            {money.format(wage.actualDailyRate ?? 0)}
+            {money(wage.actualDailyRate ?? 0)}
           </strong>
           <small style={{ display: "block", color: "#64748b" }}>
-            elden payı {money.format(wage.extraDailyRate ?? 0)}/gün ·
-            saatlik {money.format(wage.actualHourlyRate ?? 0)}
+            elden payı {money(wage.extraDailyRate ?? 0)}/gün ·
+            saatlik {money(wage.actualHourlyRate ?? 0)}
           </small>
         </span>
       )}

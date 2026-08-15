@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { decimalRange } from "@/lib/format/turkish";
 
 import {
   marketService,
@@ -17,11 +18,9 @@ type Props = {
   disabled?: boolean;
 };
 
+/** Döviz kuru: dört hane SABİT — sondaki sıfır kırpılmaz. */
 function formatRate(value: number) {
-  return value.toLocaleString("tr-TR", {
-    minimumFractionDigits: 4,
-    maximumFractionDigits: 4,
-  });
+  return decimalRange(value, 4, 4);
 }
 
 /**

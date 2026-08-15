@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { quantity } from "@/lib/format/turkish";
 
 import {
   Badge,
@@ -52,9 +53,7 @@ function messageOf(error: unknown) {
   return error instanceof Error ? error.message : "Karne yüklenemedi.";
 }
 
-function formatQuantity(value: number) {
-  return value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
-}
+
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -219,17 +218,17 @@ function QualityRow({
       </TableCell>
 
       <TableCell className="text-right tabular-nums">
-        {formatQuantity(row.deliveredQuantity)}
+        {quantity(row.deliveredQuantity)}
       </TableCell>
 
       <TableCell className="text-right tabular-nums">
-        {formatQuantity(row.rejectedQuantity + row.damagedQuantity)}
+        {quantity(row.rejectedQuantity + row.damagedQuantity)}
       </TableCell>
 
       <TableCell className="text-right tabular-nums font-semibold">
         {row.rejectionRatePercent > 0 ? (
           <Badge variant={isProblem ? "danger" : "warning"}>
-            %{formatQuantity(row.rejectionRatePercent)}
+            %{quantity(row.rejectionRatePercent)}
           </Badge>
         ) : (
           <span className="text-slate-400">%0</span>

@@ -4,16 +4,17 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { offerService, type OfferChain } from "@/services/offer.service";
+import { currencyMoney } from "@/lib/format/turkish";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
-function money(value: number, currency = "TRY") {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+/**
+ * Zincirdeki her rakam SÖZLEŞMEYE GİREN rakam: teklif bedeli, icmal
+ * toplamı, hakediş tutarı. Buradaki eski biçim hepsini kuruşsuz
+ * basıyordu; kullanıcı aynı tutarı hakediş ekranında kuruşlu görüp
+ * ikisinin tutmadığını sanıyordu.
+ */
+const money = currencyMoney;
 
 /**
  * Teklifin iş zinciri: teklif → proje → icmal → hakediş.

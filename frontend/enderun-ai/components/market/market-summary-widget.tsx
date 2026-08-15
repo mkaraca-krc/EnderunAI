@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { companyService } from "@/services/company.service";
+import { percent, whole } from "@/lib/format/turkish";
 import {
   CommodityAlertDirection,
   commodityService,
@@ -11,15 +12,7 @@ import {
   type CommoditySummary,
 } from "@/services/market.service";
 
-const usd = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
-const percent = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -96,7 +89,7 @@ export default function MarketSummaryWidget() {
         <>
           <div style={{ marginBottom: 8 }}>
             <strong style={{ fontSize: 20 }}>
-              {usd.format(copper.latestUsdPerTon)} USD/ton
+              {whole(copper.latestUsdPerTon)} USD/ton
             </strong>
             <small style={{ display: "block" }}>
               {copper.sourceLabel}
@@ -110,7 +103,7 @@ export default function MarketSummaryWidget() {
               30g USD:{" "}
               <strong>
                 {copper.changePercentUsd != null
-                  ? `%${percent.format(copper.changePercentUsd)}`
+                  ? percent(copper.changePercentUsd)
                   : "—"}
               </strong>
             </span>
@@ -118,7 +111,7 @@ export default function MarketSummaryWidget() {
               30g TL:{" "}
               <strong>
                 {copper.changePercentTry != null
-                  ? `%${percent.format(copper.changePercentTry)}`
+                  ? percent(copper.changePercentTry)
                   : "—"}
               </strong>
             </span>
@@ -135,7 +128,7 @@ export default function MarketSummaryWidget() {
             <p style={{ marginTop: 8, fontSize: 13 }}>
               <span className="erp-status green">Alım bölgesinde</span> — eşik{" "}
               {alert?.buyBelowUsdPerTon != null
-                ? `${usd.format(alert.buyBelowUsdPerTon)} USD/ton`
+                ? `${whole(alert.buyBelowUsdPerTon)} USD/ton`
                 : "tanımlı"}
             </p>
           )}

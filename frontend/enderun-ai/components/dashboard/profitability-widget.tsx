@@ -1,27 +1,22 @@
 import Link from "next/link";
 
 import type { ProjectProfitability } from "@/services/project-profitability.service";
+import { decimal, EMPTY_VALUE, moneyWhole } from "@/lib/format/turkish";
 
 type ProfitabilityWidgetProps = {
   projects: ProjectProfitability[];
 };
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
+/**
+ * Kâr marjı — işareti çağıran koyuyor, burada yalnız sayı üretiliyor.
+ *
+ * SONSUZ DEĞER "0,0" DEĞİL "—": ciro sıfırken marj hesabı sonsuza
+ * gidiyor ve eski karşılık bunu "%0,0" diye basıyordu; yani "veri yok"
+ * ile "kâr yok" ekranda aynı görünüyordu. İkisi aynı şey değil.
+ */
 function percent(value: number) {
-  if (!Number.isFinite(value)) {
-    return "0,0";
-  }
-
-  return value.toLocaleString("tr-TR", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  });
+  return Number.isFinite(value) ? decimal(value, 1) : EMPTY_VALUE;
 }
 
 function boundedWidth(value: number) {
@@ -118,14 +113,14 @@ export default function ProfitabilityWidget({
         <div>
           <span>Toplam Gelir</span>
           <strong>
-            {money.format(totals.revenue)}
+            {moneyWhole(totals.revenue)}
           </strong>
         </div>
 
         <div>
           <span>Toplam Maliyet</span>
           <strong>
-            {money.format(totals.totalCost)}
+            {moneyWhole(totals.totalCost)}
           </strong>
         </div>
 
@@ -138,7 +133,7 @@ export default function ProfitabilityWidget({
                 : ""
             }
           >
-            {money.format(totals.profit)}
+            {moneyWhole(totals.profit)}
           </strong>
         </div>
 
@@ -273,7 +268,7 @@ export default function ProfitabilityWidget({
           <span>En yüksek kâr sağlayan proje</span>
           <strong>
             {bestProject
-              ? `${bestProject.projectName} — ${money.format(
+              ? `${bestProject.projectName} — ${moneyWhole(
                   bestProject.profit
                 )}`
               : "Henüz kârlılık verisi bulunmuyor"}

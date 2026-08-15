@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Badge, Button, Modal } from "@/components/ui";
+import { unitPrice } from "@/lib/format/turkish";
 import {
   pricingService,
   type CalculateOfferPriceRequest,
@@ -45,12 +46,14 @@ export default function CostBreakdownModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  /**
+   * Kırılımın tamamı BİRİM ölçeğinde: liste fiyatı → iskonto → net alış
+   * → nakliye/fire/finansman/genel gider → maliyet → kâr → satış. Eski
+   * biçim hepsini iki haneye kırpıyordu; oysa liste ve net alış fiyatı
+   * veritabanında numeric(18,6) ve teklif bu rakamdan türüyor.
+   */
   const money = useCallback(
-    (value: number) =>
-      value.toLocaleString("tr-TR", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }) + ` ${currency}`,
+    (value: number) => unitPrice(value, currency),
     [currency]
   );
 

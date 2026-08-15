@@ -1,17 +1,12 @@
 import Link from "next/link";
 
 import type { FinanceDashboard } from "@/services/finance-dashboard.service";
+import { moneyWhole } from "@/lib/format/turkish";
 
 type FinanceSummaryWidgetProps = {
   finance: FinanceDashboard | null;
 };
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 function barWidth(value: number, maximum: number) {
   if (maximum <= 0 || value === 0) {
@@ -121,7 +116,7 @@ export default function FinanceSummaryWidget({
                   <strong>
                     {row.isPending
                       ? "Veri henüz yok"
-                      : money.format(row.value)}
+                      : moneyWhole(row.value)}
                   </strong>
                 </div>
 
@@ -155,7 +150,7 @@ export default function FinanceSummaryWidget({
               <strong className="mt-1 block">
                 {unavailable.includes("totalLiquidAssets")
                   ? "Veri henüz yok"
-                  : money.format(finance.totalLiquidAssets)}
+                  : moneyWhole(finance.totalLiquidAssets)}
               </strong>
             </div>
 
@@ -164,7 +159,7 @@ export default function FinanceSummaryWidget({
                 Dönem Geliri
               </span>
               <strong className="mt-1 block">
-                {money.format(finance.periodRevenue)}
+                {moneyWhole(finance.periodRevenue)}
               </strong>
             </div>
 
@@ -173,7 +168,7 @@ export default function FinanceSummaryWidget({
                 Dönem Gideri
               </span>
               <strong className="mt-1 block">
-                {money.format(finance.periodExpense)}
+                {moneyWhole(finance.periodExpense)}
               </strong>
 
               {/* KIRILIM: dönem gideri proje + merkez/şube toplamıdır.
@@ -181,8 +176,8 @@ export default function FinanceSummaryWidget({
                   olduğu görünmez, rakam yine "eksik mi" diye
                   sorgulanırdı. */}
               <span className="mt-1 block text-xs text-slate-400">
-                Proje {money.format(finance.projectExpense)} · Merkez{" "}
-                {money.format(finance.centralExpense)}
+                Proje {moneyWhole(finance.projectExpense)} · Merkez{" "}
+                {moneyWhole(finance.centralExpense)}
               </span>
             </div>
 
@@ -191,7 +186,7 @@ export default function FinanceSummaryWidget({
                 Net Kâr / Zarar
               </span>
               <strong className="mt-1 block">
-                {money.format(
+                {moneyWhole(
                   finance.netProfit > 0
                     ? finance.netProfit
                     : -finance.netLoss
@@ -203,7 +198,7 @@ export default function FinanceSummaryWidget({
                   çıkmıyor — sıfır göstermek boş gürültü olurdu. */}
               {finance.financingExpense > 0 && (
                 <span className="mt-1 block text-xs text-slate-400">
-                  Finansman gideri {money.format(finance.financingExpense)}{" "}
+                  Finansman gideri {moneyWhole(finance.financingExpense)}{" "}
                   (dönem giderine dahil değil)
                 </span>
               )}

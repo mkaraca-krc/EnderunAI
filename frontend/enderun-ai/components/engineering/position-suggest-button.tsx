@@ -7,6 +7,7 @@ import {
   type PositionSuggestion,
 } from "@/services/engineering-position.service";
 import type { PickedPosition } from "@/components/engineering/position-picker";
+import { unitPrice } from "@/lib/format/turkish";
 
 type Props = {
   companyId?: string | null;
@@ -17,10 +18,6 @@ type Props = {
   onPick: (position: PickedPosition) => void;
 };
 
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 function toPicked(suggestion: PositionSuggestion): PickedPosition {
   return {
@@ -148,7 +145,7 @@ export default function PositionSuggestButton({
                   {candidate.unit}
                   {candidate.institution ? ` · ${candidate.institution}` : ""}
                   {candidate.unitPrice != null
-                    ? ` · ${money.format(candidate.unitPrice)} TL`
+                    ? ` · ${unitPrice(candidate.unitPrice)} TL`
                     : " · fiyat yok"}
                   {candidate.aiReason ? ` · ${candidate.aiReason}` : ""}
                 </small>

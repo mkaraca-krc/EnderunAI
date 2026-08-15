@@ -10,11 +10,8 @@ import {
   type PersonnelCashPayment,
 } from "@/services/personnel-cash-payment.service";
 import type { PersonnelListItem } from "@/services/personnel.service";
+import { money } from "@/lib/format/turkish";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -205,13 +202,13 @@ export default function CashPaymentLedger({
             <small style={{ display: "block", marginBottom: 4 }}>
               Tanımlı Toplam
             </small>
-            <strong>{money.format(summary.definedTotal)}</strong>
+            <strong>{money(summary.definedTotal)}</strong>
           </div>
           <div className="erp-panel">
             <small style={{ display: "block", marginBottom: 4 }}>
               Fiilen Ödenen
             </small>
-            <strong>{money.format(summary.paidTotal)}</strong>
+            <strong>{money(summary.paidTotal)}</strong>
           </div>
           <div className="erp-panel">
             <small style={{ display: "block", marginBottom: 4 }}>
@@ -305,13 +302,13 @@ export default function CashPaymentLedger({
               {summary.rows.map((row) => (
                 <tr key={row.personnelId}>
                   <td>{row.personnelFullName}</td>
-                  <td>{money.format(row.definedAmount)}</td>
-                  <td>{money.format(row.paidAmount)}</td>
+                  <td>{money(row.definedAmount)}</td>
+                  <td>{money(row.paidAmount)}</td>
                   <td>
                     {row.difference === 0 ? (
                       <span className="erp-status green">Tam</span>
                     ) : (
-                      <strong>{money.format(row.difference)}</strong>
+                      <strong>{money(row.difference)}</strong>
                     )}
                   </td>
                 </tr>
@@ -349,7 +346,7 @@ export default function CashPaymentLedger({
                   <td>{dateFormat.format(new Date(entry.paymentDate))}</td>
                   <td>{entry.personnelFullName}</td>
                   <td>{entry.kindName}</td>
-                  <td>{money.format(entry.amount)}</td>
+                  <td>{money(entry.amount)}</td>
                   <td>{entry.note ?? "—"}</td>
                   <td>
                     <button

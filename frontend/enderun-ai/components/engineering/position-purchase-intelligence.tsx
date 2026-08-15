@@ -1,26 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { percent, quantity, unitPrice } from "@/lib/format/turkish";
 
 import {
   positionPurchaseIntelligenceService,
   type PositionPurchaseIntelligence,
 } from "@/services/engineering-position.service";
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
-
-const quantityFormat = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 4,
-});
-
-const percentFormat = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -126,7 +112,7 @@ export default function PositionPurchaseIntelligence({
           </small>
           <strong>
             {data.officialUnitPrice != null
-              ? money.format(data.officialUnitPrice)
+              ? unitPrice(data.officialUnitPrice)
               : "—"}
           </strong>
         </div>
@@ -137,12 +123,12 @@ export default function PositionPurchaseIntelligence({
           </small>
           <strong>
             {data.lastPurchaseMaterialCost != null
-              ? money.format(data.lastPurchaseMaterialCost)
+              ? unitPrice(data.lastPurchaseMaterialCost)
               : "hesaplanamadı"}
           </strong>
           {lastDelta != null && (
             <small>
-              resmî fiyata göre %{percentFormat.format(lastDelta)}
+              resmî fiyata göre %{percent(lastDelta)}
             </small>
           )}
         </div>
@@ -153,12 +139,12 @@ export default function PositionPurchaseIntelligence({
           </small>
           <strong>
             {data.weightedAverageMaterialCost != null
-              ? money.format(data.weightedAverageMaterialCost)
+              ? unitPrice(data.weightedAverageMaterialCost)
               : "hesaplanamadı"}
           </strong>
           {averageDelta != null && (
             <small>
-              resmî fiyata göre %{percentFormat.format(averageDelta)}
+              resmî fiyata göre %{percent(averageDelta)}
             </small>
           )}
         </div>
@@ -195,13 +181,13 @@ export default function PositionPurchaseIntelligence({
                     <small>{material.materialCode}</small>
                   </td>
                   <td>
-                    {quantityFormat.format(material.effectiveQuantity)}{" "}
+                    {quantity(material.effectiveQuantity)}{" "}
                     {material.unit}
                   </td>
                   <td>
                     {material.lastPurchaseUnitPrice != null ? (
                       <>
-                        {money.format(material.lastPurchaseUnitPrice)}
+                        {unitPrice(material.lastPurchaseUnitPrice)}
                         {material.lastPurchaseDate && (
                           <small>
                             {dateFormat.format(
@@ -217,7 +203,7 @@ export default function PositionPurchaseIntelligence({
                   <td>{material.lastSupplierTitle ?? "—"}</td>
                   <td>
                     {material.weightedAverageUnitPrice != null
-                      ? money.format(material.weightedAverageUnitPrice)
+                      ? unitPrice(material.weightedAverageUnitPrice)
                       : "—"}
                   </td>
                   <td>{material.invoiceCount || "—"}</td>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { quantity } from "@/lib/format/turkish";
 import {
   EngineeringRecipeDetail,
   RecipeLabor,
@@ -436,12 +437,10 @@ export default function RecipeEditor({ positionId }: Props) {
                       />
                     </td>
                     <td>
-                      {(
+                      {quantity(
                         Number(item.quantity) *
-                        (1 + Number(item.wastePercent) / 100)
-                      ).toLocaleString("tr-TR", {
-                        maximumFractionDigits: 4,
-                      })}
+                          (1 + Number(item.wastePercent) / 100),
+                      )}
                     </td>
                     <td>
                       <input

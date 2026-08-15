@@ -2,17 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { money, percent } from "@/lib/format/turkish";
 
 import {
   projectScheduleService,
   type ScheduleAlertResponse,
 } from "@/services/project-schedule.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 0,
-});
 
 /**
  * Dashboard iş programı uyarı kartı.
@@ -86,12 +82,7 @@ export default function ScheduleAlertWidget() {
                   </Link>
                   <small style={{ display: "block" }}>{alert.projectName}</small>
                 </td>
-                <td>
-                  %
-                  {alert.progressRate.toLocaleString("tr-TR", {
-                    maximumFractionDigits: 1,
-                  })}
-                </td>
+                <td>{percent(alert.progressRate)}</td>
                 <td>
                   {alert.deadline
                     ? alert.deadline.slice(0, 10).split("-").reverse().join(".")
@@ -131,7 +122,7 @@ export default function ScheduleAlertWidget() {
                 {data.showsPenalty && (
                   <td>
                     {alert.penalty?.applicable
-                      ? money.format(alert.penalty.amount)
+                      ? money(alert.penalty.amount)
                       : "—"}
                     {alert.penalty?.capApplied && (
                       <small style={{ display: "block" }}>tavana dayandı</small>

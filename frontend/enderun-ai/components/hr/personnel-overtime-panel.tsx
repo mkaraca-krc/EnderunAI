@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { coefficient, decimal, money } from "@/lib/format/turkish";
 
 import {
   personnelOvertimeService,
@@ -236,7 +237,7 @@ export default function PersonnelOvertimePanel({
                 <strong>{date(line.workDate)}</strong>
 
                 <div style={{ marginTop: 4, fontSize: 13, color: "#64748b" }}>
-                  {line.kindName} · {format(line.multiplier)}×
+                  {line.kindName} · {coefficient(line.multiplier)}×
                   {line.reason ? ` · ${line.reason}` : ""}
                 </div>
 
@@ -277,17 +278,13 @@ export default function PersonnelOvertimePanel({
   );
 }
 
+/**
+ * SAAT ile ÇARPAN aynı işlevden geçiyordu; ikisi ayrı sayı tipi.
+ * Saat iki hane yeter (7,50); çarpan katsayıdır ve sondaki sıfırı
+ * yazılmaz — "1,50" değil "1,5".
+ */
 function format(value: number) {
-  return value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
-}
-
-function money(value?: number | null) {
-  if (value === null || value === undefined) return "—";
-
-  return value.toLocaleString("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-  });
+  return decimal(value, 2);
 }
 
 function date(value?: string | null) {

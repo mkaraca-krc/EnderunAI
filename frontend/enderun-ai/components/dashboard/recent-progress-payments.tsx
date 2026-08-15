@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { money } from "@/lib/format/turkish";
 
 import {
   ProgressPaymentStatus,
@@ -9,12 +10,6 @@ type RecentProgressPaymentsProps = {
   items: ProgressPaymentListItem[];
 };
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 const date = new Intl.DateTimeFormat("tr-TR");
 
@@ -93,17 +88,17 @@ export default function RecentProgressPayments({
                     )}
                   </td>
 
-                  <td>{money.format(item.currentAmount)}</td>
+                  <td>{money(item.currentAmount)}</td>
 
                   <td>
-                    {money.format(
+                    {money(
                       item.priceDifferenceAmount
                     )}
                   </td>
 
                   <td>
                     <strong>
-                      {money.format(item.netPayableAmount)}
+                      {money(item.netPayableAmount)}
                     </strong>
                   </td>
 

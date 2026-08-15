@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { money, percent, quantity, unitPrice } from "@/lib/format/turkish";
 
 import {
   calculateAdvanceMaterial,
@@ -25,10 +26,6 @@ import {
   type HakedisSummaryDraft,
 } from "@/services/contract-summary-progress.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 function num(value: string) {
   const parsed = Number(value.replace(",", "."));
@@ -505,7 +502,7 @@ export default function HakedisEditor({
       });
 
       setIsgNotice(
-        `İSG katılım payı eklendi: ${money.format(suggestion.manualAmount)}` +
+        `İSG katılım payı eklendi: ${money(suggestion.manualAmount)}` +
           (suggestion.personCount !== null
             ? ` (${suggestion.personCount} kişi)`
             : "")
@@ -821,7 +818,7 @@ export default function HakedisEditor({
                   {/* Önceki miktar sunucudan gelir; kullanıcı değiştiremez. */}
                   <td>
                     <span className="tabular">
-                      {money.format(item.previousQuantity)}
+                      {quantity(item.previousQuantity)}
                     </span>
                   </td>
 
@@ -839,7 +836,7 @@ export default function HakedisEditor({
                           })
                         }
                       >
-                        {money.format(item.fieldSuggestion)}
+                        {quantity(item.fieldSuggestion)}
                       </button>
                     )}
                   </td>
@@ -887,7 +884,7 @@ export default function HakedisEditor({
                             }
                           >
                             {difference > 0 ? "+" : ""}
-                            {money.format(difference)}
+                            {quantity(difference)}
                           </span>
                         );
                       })()
@@ -895,12 +892,12 @@ export default function HakedisEditor({
                   </td>
                   <td>
                     <strong className="tabular">
-                      {money.format(result.cumulativeQuantity)}
+                      {quantity(result.cumulativeQuantity)}
                     </strong>
                     <small>
                       {result.exceedsContractQuantity
                         ? "Sözleşme miktarı aşıldı"
-                        : `%${money.format(result.completionRate)}`}
+                        : `%${percent(result.completionRate)}`}
                     </small>
                   </td>
                   <td>
@@ -944,9 +941,9 @@ export default function HakedisEditor({
                   </td>
                   <td>
                     <strong className="tabular">
-                      {money.format(result.currentAmount)}
+                      {money(result.currentAmount)}
                     </strong>
-                    <small>BF {money.format(result.unitPrice)}</small>
+                    <small>BF {unitPrice(result.unitPrice)}</small>
                   </td>
                   <td>
                     <button
@@ -998,11 +995,11 @@ export default function HakedisEditor({
                 {sectionSummary.map((section) => (
                   <tr key={section.name}>
                     <td>{section.name}</td>
-                    <td className="tabular">{money.format(section.material)}</td>
-                    <td className="tabular">{money.format(section.labor)}</td>
-                    <td className="tabular">{money.format(section.overhead)}</td>
+                    <td className="tabular">{money(section.material)}</td>
+                    <td className="tabular">{money(section.labor)}</td>
+                    <td className="tabular">{money(section.overhead)}</td>
                     <td className="tabular">
-                      <strong>{money.format(section.current)}</strong>
+                      <strong>{money(section.current)}</strong>
                     </td>
                   </tr>
                 ))}
@@ -1115,7 +1112,7 @@ export default function HakedisEditor({
                   </td>
                   <td className="tabular">
                     <strong>
-                      {money.format(
+                      {money(
                         calculateAdvanceMaterial(
                           advance.quantity,
                           advance.unitPrice,
@@ -1194,7 +1191,7 @@ export default function HakedisEditor({
                         <td>{advance.positionCode}</td>
                         <td>{advance.description}</td>
                         <td className="tabular">
-                          {money.format(advance.openAmount)}
+                          {money(advance.openAmount)}
                         </td>
                         <td>
                           <input
@@ -1213,7 +1210,7 @@ export default function HakedisEditor({
                           />
                         </td>
                         <td className="tabular">
-                          {money.format(round2(advance.openAmount - offset))}
+                          {money(round2(advance.openAmount - offset))}
                         </td>
                       </tr>
                     );
@@ -1294,7 +1291,7 @@ export default function HakedisEditor({
                         )}
                       </td>
                       <td className="tabular">
-                        {option?.hasLines ? "-" : money.format(cumulativeBase)}
+                        {option?.hasLines ? "-" : money(cumulativeBase)}
                       </td>
                       <td>
                         <input
@@ -1310,10 +1307,10 @@ export default function HakedisEditor({
                         />
                       </td>
                       <td className="tabular">
-                        <strong>{money.format(result.amount)}</strong>
+                        <strong>{money(result.amount)}</strong>
                       </td>
                       <td className="tabular">
-                        {money.format(result.cumulativeAmount)}
+                        {money(result.cumulativeAmount)}
                       </td>
                       <td>
                         <button
@@ -1390,10 +1387,10 @@ export default function HakedisEditor({
                             />
                           </td>
                           <td className="tabular">
-                            <small>KDV {money.format(lineResult.vatAmount)}</small>
+                            <small>KDV {money(lineResult.vatAmount)}</small>
                           </td>
                           <td className="tabular">
-                            {money.format(lineResult.grossAmount)}
+                            {money(lineResult.grossAmount)}
                           </td>
                           <td colSpan={2}>
                             <button
@@ -1448,7 +1445,7 @@ export default function HakedisEditor({
                   <strong>TOPLAM KESİNTİ</strong>
                 </td>
                 <td className="tabular">
-                  <strong>{money.format(totalDeduction)}</strong>
+                  <strong>{money(totalDeduction)}</strong>
                 </td>
                 <td colSpan={2}></td>
               </tr>
@@ -1579,7 +1576,7 @@ export default function HakedisEditor({
                       : "-"}
                   </td>
                   <td className="tabular">
-                    <strong>{money.format(planResults[index]?.amount ?? 0)}</strong>
+                    <strong>{money(planResults[index]?.amount ?? 0)}</strong>
                   </td>
                   <td>
                     <button
@@ -1707,7 +1704,7 @@ function SummaryLine({
       }}
     >
       <span>{label}</span>
-      <span className="tabular">{money.format(value)}</span>
+      <span className="tabular">{money(value)}</span>
     </div>
   );
 }

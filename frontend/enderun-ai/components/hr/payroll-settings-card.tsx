@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { Badge, Button, Card, CardContent, Input } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
+import { money } from "@/lib/format/turkish";
 import {
   payrollSettingsService,
   type PayrollSettings,
@@ -16,11 +17,6 @@ function getErrorMessage(error: unknown) {
   }
   return "İşlem tamamlanamadı. Lütfen tekrar deneyin.";
 }
-
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 /** Sayı alanları: number tipini korurken boş girişi de tolere eder. */
 function numeric(value: string) {
@@ -646,8 +642,8 @@ export default function PayrollSettingsCard({ companyId }: Props) {
             </div>
 
             <p className="text-xs text-slate-500">
-              Örnek: brüt asgari ücret {money.format(settings.minimumWageGross)},
-              SGK tavanı {money.format(settings.sgkBaseCeiling)}.
+              Örnek: brüt asgari ücret {money(settings.minimumWageGross)},
+              SGK tavanı {money(settings.sgkBaseCeiling)}.
             </p>
           </form>
         )}

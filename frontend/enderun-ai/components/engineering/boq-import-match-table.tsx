@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { customPositionService } from "@/services/engineering-position.service";
+import { unitPrice } from "@/lib/format/turkish";
 import type {
   BoqImportMatchDecision,
   BoqImportPreviewItem,
@@ -28,10 +29,6 @@ const disciplines = [
   { value: 99, label: "Diğer" },
 ];
 
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 /**
  * Aktarım kararlarını gönderilebilir listeye çevirir.
@@ -165,7 +162,7 @@ export default function BoqImportMatchTable({
                   <small style={{ display: "block" }}>{item.description}</small>
                 </td>
                 <td style={{ textAlign: "right" }}>
-                  {money.format(item.unitPrice)}
+                  {unitPrice(item.unitPrice)}
                   <small style={{ display: "block" }}>{item.unit}</small>
                 </td>
                 <td>
@@ -197,7 +194,7 @@ export default function BoqImportMatchTable({
                           >
                             {candidate.code} — {candidate.name.slice(0, 60)}
                             {candidate.unitPrice != null
-                              ? ` (${money.format(candidate.unitPrice)} TL)`
+                              ? ` (${unitPrice(candidate.unitPrice)} TL)`
                               : ""}
                           </option>
                         ))}

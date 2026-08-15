@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { usePermissions } from "@/lib/use-permissions";
+import { unitPrice as formatUnitPrice } from "@/lib/format/turkish";
 import {
   POSITION_PRICE_INSTITUTION_LABELS,
   PositionPriceInstitution,
@@ -10,10 +11,6 @@ import {
   type PositionPriceRow,
 } from "@/services/engineering-position.service";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 4,
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -224,7 +221,7 @@ export default function PositionPriceHistory({
                   </td>
                   <td>{row.institutionName}</td>
                   <td>
-                    {money.format(row.unitPrice)} {row.currencyCode}
+                    {formatUnitPrice(row.unitPrice, row.currencyCode)}
                   </td>
                   <td>
                     {row.effectiveFrom

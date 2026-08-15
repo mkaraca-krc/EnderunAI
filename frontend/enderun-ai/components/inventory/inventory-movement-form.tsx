@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { money } from "@/lib/format/turkish";
 import {
   inventoryMovementService,
   type SelectOption,
@@ -156,10 +157,7 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
 
         setNotice(
           `Kaydedildi — belge no: ${result.referenceNumber}, ` +
-            `tutar: ${result.totalCost.toLocaleString("tr-TR", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })} TRY`
+            `tutar: ${money(result.totalCost)}`
         );
       } else {
         const result = await inventoryMovementService.transfer({
@@ -185,7 +183,7 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
   const labels = TITLES[mode];
 
   return (
-    <ErpShell title={labels.title} description={labels.description}>
+    <ErpShell title={labels.title} description={labels.description} design="redwood">
       {error && <div className="erp-alert error">{error}</div>}
       {notice && <div className="erp-alert">{notice}</div>}
 

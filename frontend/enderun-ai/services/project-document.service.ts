@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api/api-client";
+import { decimal } from "@/lib/format/turkish";
 
 export const SUGGESTED_DOCUMENT_FOLDERS = [
   "Keşif",
@@ -151,12 +152,7 @@ export const projectDocumentService = {
 
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toLocaleString("tr-TR", {
-      maximumFractionDigits: 1,
-    })} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toLocaleString("tr-TR", {
-    maximumFractionDigits: 1,
-  })} MB`;
+  if (bytes < 1024 * 1024) return `${decimal(bytes / 1024, 1)} KB`;
+
+  return `${decimal(bytes / (1024 * 1024), 1)} MB`;
 }

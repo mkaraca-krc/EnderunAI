@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { AIAnalysisItem } from "@/services/ai-analysis.service";
 import type { FinanceDashboard } from "@/services/finance-dashboard.service";
 import type { ProjectProfitability } from "@/services/project-profitability.service";
+import { moneyWhole } from "@/lib/format/turkish";
 
 type ExecutiveAiSummaryWidgetProps = {
   /** Oturumdaki gerçek kullanıcıya göre üretilen karşılama. */
@@ -24,12 +25,6 @@ type SummaryItem = {
   tone: "positive" | "warning" | "critical" | "neutral";
 };
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 export default function ExecutiveAiSummaryWidget({
   greeting,
@@ -81,7 +76,7 @@ export default function ExecutiveAiSummaryWidget({
     });
   } else if (profitability.length > 0) {
     items.push({
-      text: `Proje portföyü toplam ${money.format(
+      text: `Proje portföyü toplam ${moneyWhole(
         totalProfit
       )} kâr gösteriyor.`,
       tone: totalProfit >= 0 ? "positive" : "critical",
@@ -116,9 +111,9 @@ export default function ExecutiveAiSummaryWidget({
 
     if (cashDataAvailable) {
       items.push({
-        text: `Banka bakiyesi ${money.format(
+        text: `Banka bakiyesi ${moneyWhole(
           finance.bankBalance
-        )}, net nakit ${money.format(finance.netCash)}.`,
+        )}, net nakit ${moneyWhole(finance.netCash)}.`,
         tone:
           finance.netCash >= 0
             ? "positive"
@@ -127,7 +122,7 @@ export default function ExecutiveAiSummaryWidget({
 
       if (finance.pendingPayments > 0) {
         items.push({
-          text: `${money.format(
+          text: `${moneyWhole(
             finance.pendingPayments
           )} tutarında bekleyen ödeme bulunuyor.`,
           tone: "warning",
@@ -136,7 +131,7 @@ export default function ExecutiveAiSummaryWidget({
 
       if (finance.supplierDebt > 0) {
         items.push({
-          text: `Açık tedarikçi borcu ${money.format(
+          text: `Açık tedarikçi borcu ${moneyWhole(
             finance.supplierDebt
           )}.`,
           tone: "neutral",

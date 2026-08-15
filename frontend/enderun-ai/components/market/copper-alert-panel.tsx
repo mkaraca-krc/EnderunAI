@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { whole } from "@/lib/format/turkish";
 
 import {
   CommodityAlertDirection,
@@ -8,10 +9,6 @@ import {
   type CommodityAlertStatus,
 } from "@/services/market.service";
 
-const usd = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -183,7 +180,7 @@ export default function CopperAlertPanel({
 
         {status?.latestPriceUsdPerTon != null && (
           <p style={{ marginTop: 8, fontSize: 13 }}>
-            Son fiyat: <strong>{usd.format(status.latestPriceUsdPerTon)} USD/ton</strong>
+            Son fiyat: <strong>{whole(status.latestPriceUsdPerTon)} USD/ton</strong>
             {status.latestPriceDate &&
               ` (${dateFormat.format(new Date(status.latestPriceDate))})`}
             {state === CommodityAlertDirection.BuyOpportunity && (
@@ -225,8 +222,8 @@ export default function CopperAlertPanel({
                         {isBuy ? "Alım fırsatı" : "Maliyet riski"}
                       </span>
                     </td>
-                    <td>{usd.format(trigger.priceUsdPerTon)} USD/ton</td>
-                    <td>{usd.format(trigger.thresholdUsdPerTon)} USD/ton</td>
+                    <td>{whole(trigger.priceUsdPerTon)} USD/ton</td>
+                    <td>{whole(trigger.thresholdUsdPerTon)} USD/ton</td>
                     <td>
                       <button
                         type="button"

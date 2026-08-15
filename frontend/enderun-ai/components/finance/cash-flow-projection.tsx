@@ -9,17 +9,9 @@ import {
   type EstimatedExpense,
 } from "@/services/cash-flow.service";
 import type { ProjectListItem } from "@/services/project.service";
+import { money, moneyWhole } from "@/lib/format/turkish";
 
-const money = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 0,
-});
 
-const moneyExact = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-});
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -227,10 +219,10 @@ export default function CashFlowProjectionPanel({
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {[
-              ["Bugünkü bakiye", money.format(data.openingBalance), ""],
+              ["Bugünkü bakiye", moneyWhole(data.openingBalance), ""],
               [
                 "Dönem sonu",
-                money.format(data.closingBalance),
+                moneyWhole(data.closingBalance),
                 `${formatDate(data.toDate)}`,
               ],
               [
@@ -239,13 +231,13 @@ export default function CashFlowProjectionPanel({
                   ? formatDate(data.shortfall.firstNegativeDate)
                   : "Yok",
                 data.shortfall
-                  ? money.format(data.shortfall.firstNegativeBalance)
+                  ? moneyWhole(data.shortfall.firstNegativeBalance)
                   : "Bakiye pozitif seyrediyor",
               ],
               [
                 "Gereken finansman",
                 data.shortfall
-                  ? money.format(data.shortfall.requiredFinancing)
+                  ? moneyWhole(data.shortfall.requiredFinancing)
                   : "—",
                 data.shortfall
                   ? `En derin: ${formatDate(data.shortfall.peakDate)}`
@@ -281,25 +273,25 @@ export default function CashFlowProjectionPanel({
                 <span>
                   Giriş:{" "}
                   <strong className="tabular-nums">
-                    {moneyExact.format(data.target.inflow)}
+                    {money(data.target.inflow)}
                   </strong>
                 </span>
                 <span>
                   Çıkış:{" "}
                   <strong className="tabular-nums">
-                    {moneyExact.format(data.target.outflow)}
+                    {money(data.target.outflow)}
                   </strong>
                 </span>
                 <span>
                   Bakiye:{" "}
                   <strong className="tabular-nums">
-                    {moneyExact.format(data.target.closingBalance)}
+                    {money(data.target.closingBalance)}
                   </strong>
                 </span>
                 <span>
                   Gereken finansman:{" "}
                   <strong className="tabular-nums">
-                    {moneyExact.format(data.target.requiredFinancing)}
+                    {money(data.target.requiredFinancing)}
                   </strong>
                 </span>
               </div>
@@ -329,27 +321,27 @@ export default function CashFlowProjectionPanel({
                       {month.label}
                     </td>
                     <td className="p-3 text-right tabular-nums text-emerald-700">
-                      {money.format(month.inflow)}
+                      {moneyWhole(month.inflow)}
                     </td>
                     <td className="p-3 text-right tabular-nums text-red-700">
-                      {money.format(month.outflow)}
+                      {moneyWhole(month.outflow)}
                     </td>
                     <td className="p-3 text-right tabular-nums">
-                      {money.format(month.net)}
+                      {moneyWhole(month.net)}
                     </td>
                     <td
                       className={`p-3 text-right font-semibold tabular-nums ${
                         month.closingBalance < 0 ? "text-red-700" : "text-slate-800"
                       }`}
                     >
-                      {money.format(month.closingBalance)}
+                      {moneyWhole(month.closingBalance)}
                     </td>
                     <td
                       className={`p-3 text-right tabular-nums ${
                         month.lowestBalance < 0 ? "text-red-700" : "text-slate-500"
                       }`}
                     >
-                      {money.format(month.lowestBalance)}
+                      {moneyWhole(month.lowestBalance)}
                       <span className="block text-[11px] text-slate-400">
                         {formatDate(month.lowestBalanceDate)}
                       </span>
@@ -430,7 +422,7 @@ export default function CashFlowProjectionPanel({
                                 }`}
                               >
                                 {item.isInflow ? "+" : "−"}
-                                {moneyExact.format(item.amount)}
+                                {money(item.amount)}
                               </span>
                             </div>
                           ))}
@@ -439,10 +431,10 @@ export default function CashFlowProjectionPanel({
 
                       <td className="p-3 text-right tabular-nums">
                         <span className="block text-emerald-700">
-                          +{money.format(day.inflow)}
+                          +{moneyWhole(day.inflow)}
                         </span>
                         <span className="block text-red-700">
-                          −{money.format(day.outflow)}
+                          −{moneyWhole(day.outflow)}
                         </span>
                       </td>
 
@@ -451,7 +443,7 @@ export default function CashFlowProjectionPanel({
                           day.runningBalance < 0 ? "text-red-700" : "text-slate-800"
                         }`}
                       >
-                        {moneyExact.format(day.runningBalance)}
+                        {money(day.runningBalance)}
                       </td>
                     </tr>
                   ))}
@@ -590,7 +582,7 @@ export default function CashFlowProjectionPanel({
                   </span>
 
                   <strong className="ml-auto tabular-nums">
-                    {moneyExact.format(expense.amount)}
+                    {money(expense.amount)}
                   </strong>
 
                   <button

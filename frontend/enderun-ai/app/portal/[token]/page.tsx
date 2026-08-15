@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { percent } from "@/lib/format/turkish";
 
 import {
   publicPortalService,
@@ -161,10 +162,7 @@ export default function EmployerPortalPage() {
                 }}
               >
                 <strong style={{ fontSize: "28px" }}>
-                  %
-                  {progress.completionRate.toLocaleString("tr-TR", {
-                    maximumFractionDigits: 1,
-                  })}
+                  {percent(progress.completionRate)}
                 </strong>
                 <span>proje geneli</span>
               </div>
@@ -199,10 +197,7 @@ export default function EmployerPortalPage() {
                 >
                   <span>{section.name}</span>
                   <span>
-                    %
-                    {section.completionRate.toLocaleString("tr-TR", {
-                      maximumFractionDigits: 1,
-                    })}
+                    {percent(section.completionRate)}
                     {" · "}
                     {section.completedItemCount}/{section.itemCount} kalem
                   </span>

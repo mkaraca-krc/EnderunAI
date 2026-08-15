@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { money } from "@/lib/format/turkish";
 
 import {
   personnelDutyService,
@@ -25,16 +26,6 @@ type Props = {
   onClose: () => void;
 };
 
-const currency = new Intl.NumberFormat("tr-TR", {
-  style: "currency",
-  currency: "TRY",
-  maximumFractionDigits: 2,
-});
-
-/** Tutar yoksa gizlenmiş demektir — sıfır ile karıştırılmamalı. */
-function money(value?: number | null) {
-  return value === null || value === undefined ? "—" : currency.format(value);
-}
 
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : "—";

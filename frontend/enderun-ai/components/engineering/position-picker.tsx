@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { unitPrice } from "@/lib/format/turkish";
 
 import {
   engineeringPositionService,
@@ -33,10 +34,6 @@ type Props = {
   onPick: (position: PickedPosition | null) => void;
 };
 
-const money = new Intl.NumberFormat("tr-TR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 /**
  * Poz kütüphanesinden arayarak seçim.
@@ -250,5 +247,5 @@ export default function PositionPicker({
 
 /** Referans fiyatı okunur biçime çevirir. */
 export function formatReferencePrice(value?: number | null) {
-  return value == null ? "—" : money.format(value);
+  return value == null ? "—" : unitPrice(value);
 }

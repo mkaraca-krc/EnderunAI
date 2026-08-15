@@ -178,3 +178,28 @@ describe("endeks katsayısı", () => {
     expect(decimalRange(undefined, 2, 4)).toBe(EMPTY_VALUE);
   });
 });
+
+/**
+ * GİZLENMİŞ TUTAR SIFIR GİBİ GÖRÜNMEZ.
+ *
+ * Maskeleme sunucuda yapılıyor: yetkisiz kullanıcıya tutar alanı `null`
+ * dönüyor. Ekranda bunun "0,00 ₺" diye çıkması, elden ödemesi olan bir
+ * personeli "ödeme yok" gibi gösterirdi — maskenin amacı tutarı
+ * saklamak, yanlış bir tutar uydurmak değil.
+ *
+ * Bu kural eskiden ekranların kendi küçük sarmalayıcılarında
+ * yazılıydı (`value == null ? "—" : ...`). Ortak biçimleyiciye
+ * geçerken o sarmalayıcılar kalktı; kural burada bir kez duruyor.
+ */
+describe("maskelenmiş tutar", () => {
+  it("boş tutar çizgi, sıfır tutar sıfırdır", () => {
+    expect(money(null)).toBe(EMPTY_VALUE);
+    expect(money(undefined)).toBe(EMPTY_VALUE);
+    expect(money(0)).toBe("0,00 ₺");
+  });
+
+  it("kuruşsuz biçimde de aynı ayrım geçerli", () => {
+    expect(moneyWhole(null)).toBe(EMPTY_VALUE);
+    expect(moneyWhole(0)).toBe("0 ₺");
+  });
+});

@@ -373,7 +373,7 @@ export default function SecretariatRegistryPage({ mode }: Props) {
       };
 
   return (
-    <ErpShell title={config.title} description={config.description}>
+    <ErpShell title={config.title} description={config.description} design="redwood">
       <div className="space-y-6">
         <section className="grid gap-4 md:grid-cols-3">
           {[

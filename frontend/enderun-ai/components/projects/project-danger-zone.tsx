@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { usePermissions } from "@/lib/use-permissions";
+import { decimal } from "@/lib/format/turkish";
 import {
   projectService,
   type ProjectDeletionImpact,
@@ -20,9 +21,7 @@ function formatSize(bytes: number) {
   if (bytes <= 0) return "0 KB";
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
 
-  return `${(bytes / (1024 * 1024)).toLocaleString("tr-TR", {
-    maximumFractionDigits: 1,
-  })} MB`;
+  return `${decimal(bytes / (1024 * 1024), 1)} MB`;
 }
 
 /**
