@@ -109,7 +109,7 @@ export default function ProjectDangerZone({
   };
 
   return (
-    <section className="erp-panel" style={{ borderColor: "#e0b4b4" }}>
+    <section className="erp-panel" style={{ borderColor: "var(--color-semantic-danger-border)" }}>
       <div className="erp-panel-header">
         <div>
           <h3>Proje Silme / Arşivleme</h3>

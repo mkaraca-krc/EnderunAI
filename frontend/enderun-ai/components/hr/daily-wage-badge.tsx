@@ -82,14 +82,14 @@ export default function DailyWageBadge({
       <span>
         Resmî yevmiye:{" "}
         <strong>{money(wage.officialDailyRate)}</strong>
-        <small style={{ display: "block", color: "#64748b" }}>
+        <small style={{ display: "block", color: "var(--erp-muted)" }}>
           saatlik {money(wage.officialHourlyRate)} ·{" "}
           {money(wage.dailyWorkHours)} saat/gün
         </small>
       </span>
 
       {hidden ? (
-        <span style={{ color: "#64748b" }}>
+        <span style={{ color: "var(--erp-muted)" }}>
           Gerçek yevmiye gizli
           <small style={{ display: "block" }}>
             Elden ödeme görme yetkiniz yok; bu rakam eksik olabilir.
@@ -98,10 +98,10 @@ export default function DailyWageBadge({
       ) : (
         <span>
           Gerçek yevmiye:{" "}
-          <strong style={{ color: "#0f766e" }}>
+          <strong style={{ color: "var(--erp-primary)" }}>
             {money(wage.actualDailyRate ?? 0)}
           </strong>
-          <small style={{ display: "block", color: "#64748b" }}>
+          <small style={{ display: "block", color: "var(--erp-muted)" }}>
             elden payı {money(wage.extraDailyRate ?? 0)}/gün ·
             saatlik {money(wage.actualHourlyRate ?? 0)}
           </small>

@@ -104,6 +104,48 @@ describe("tema kontrastı", () => {
    * belirgin biçimde daha karanlık. Bir tokenın koyu değeri yanlışlıkla
    * açık değerin kopyası olarak bırakılırsa bu test yakalar.
    */
+  /**
+   * GRAFİK SERİLERİ BİRBİRİNE KARIŞMAMALI.
+   *
+   * Yakalanmak istenen hata: dört seriden ikisinin aynı ya da neredeyse
+   * aynı değere düşmesi. Bu, gözle bakılmadan fark edilmez — çizelge
+   * yine "çalışıyor" görünür, sadece iki çubuk ayırt edilemez olur.
+   *
+   * ÖLÇÜ KONTRAST ORANI DEĞİL, RGB UZAKLIĞI. Kontrast yalnızca
+   * PARLAKLIĞA bakıyor; kırmızı ile aynı parlaklıktaki bir griyi
+   * "ayırt edilemez" sayar, oysa gözle bakan ikisini anında ayırır.
+   * Serileri ayıran şey çoğu zaman ton, parlaklık değil.
+   *
+   * Bu ayrımı ilk sürümde ters kurmuştum ve test, aslında sorunsuz olan
+   * kehribar/turkuaz çiftini kırdı.
+   */
+  it("grafik serileri birbirine karışmıyor", () => {
+    const tokens = ["chart-1", "chart-2", "chart-3", "chart-4"];
+    const series = tokens.map((token) => pair(`color-${token}`));
+
+    const rgb = (hex: string) => {
+      let h = hex.replace("#", "");
+      if (h.length === 3) h = [...h].map((c) => c + c).join("");
+      return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+    };
+
+    const distance = (a: string, b: string) => {
+      const [x, y] = [rgb(a), rgb(b)];
+      return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+    };
+
+    for (const theme of ["light", "dark"] as const) {
+      for (let i = 0; i < series.length; i += 1) {
+        for (let j = i + 1; j < series.length; j += 1) {
+          expect(
+            distance(series[i][theme], series[j][theme]),
+            `${theme}: ${tokens[i]} ile ${tokens[j]} birbirine çok yakın`,
+          ).toBeGreaterThan(40);
+        }
+      }
+    }
+  });
+
   it("koyu tema zeminleri gerçekten koyu", () => {
     for (const token of ["erp-bg", "erp-panel", "color-surface-bg", "color-surface-card"]) {
       const { light, dark } = pair(token);

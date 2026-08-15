@@ -109,6 +109,24 @@ function maskDateExpressions(source: string): string {
   return parts.join("");
 }
 
+/**
+ * Ham hex'in MEŞRU olduğu yerler — dördü de gerekçeli, liste kapalıdır.
+ *
+ *   yazdir / tutanak — Yazdırma sayfaları. Çıktı her zaman beyaz kâğıda
+ *     gidiyor; tema tokenı bağlanırsa koyu temadaki kullanıcı sözleşme
+ *     ekini siyah zeminle bastırır. Renkler burada bilinçli sabit.
+ *   layout.tsx — `themeColor` tarayıcı üst çubuğuna gidiyor ve meta
+ *     etiketi CSS değişkeni kabul etmiyor; literal olmak zorunda.
+ *   portal/[token] — Müşteriye açık, kabuk dışı tek sayfa. Tema
+ *     anahtarı yok, kendi kapalı görsel dünyası var.
+ */
+const HEX_ALLOWED = [
+  join("yazdir", "page.tsx"),
+  join("tutanak", "page.tsx"),
+  join("app", "layout.tsx"),
+  join("portal", "[token]", "page.tsx"),
+];
+
 function read(path: string) {
   const text = readFileSync(path, "utf8");
   return { path: path.slice(ROOT.length + 1), text, code: code(text) };
@@ -337,9 +355,17 @@ describe("Redwood ekranları", () => {
    * Anlam taşıyan renk için `rw-value-danger` / `rw-value-success` /
    * `rw-value-warning` sınıfları, grafik serileri için
    * `--color-chart-*` değişkenleri var.
+   *
+   * KAPSAM ARTIK EKRANLA SINIRLI DEĞİL. Ekran dosyalarını taramak
+   * koyu temada bir deliği açık bıraktı: renk çoğu zaman sayfada değil,
+   * içine gömülü bileşende yazılı. İK panellerinde, gantt çizelgesinde
+   * ve poz eşleme tablosunda 168 ham hex duruyordu — hepsi açık slate
+   * tonları, yani koyu zeminde okunmaz. Koyu temayı "bitti" saymak bu
+   * yüzden erkendi.
    */
   it("ham hex renk taşımıyor", () => {
-    const offenders = redwoodPages
+    const offenders = numberSurface
+      .filter((page) => !HEX_ALLOWED.some((allowed) => page.path.includes(allowed)))
       .filter((page) => /#[0-9a-fA-F]{3,8}\b/.test(page.code))
       .map((page) => page.path);
 

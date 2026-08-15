@@ -77,7 +77,7 @@ export default function PersonnelOvertimePanel({
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontSize: 12, color: "#475569" }}>Yıl</span>
+        <span style={{ fontSize: 12, color: "var(--erp-text)" }}>Yıl</span>
 
         <select
           value={year}
@@ -120,7 +120,7 @@ export default function PersonnelOvertimePanel({
           )}
         </div>
 
-        <div style={{ marginTop: 8, fontSize: 12, color: "#475569" }}>
+        <div style={{ marginTop: 8, fontSize: 12, color: "var(--erp-text)" }}>
           Hafta tatili {format(data.sundayHours)} saat · Genel tatil{" "}
           {format(data.publicHolidayHours)} saat — tatil çalışması yasal sınır
           sayımına girmez.
@@ -128,21 +128,21 @@ export default function PersonnelOvertimePanel({
       </div>
 
       {/* --- Bu ay: saat ve tutar ayrı satır --- */}
-      <div style={{ ...panel, background: "#fff" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
+      <div style={{ ...panel, background: "var(--color-surface-card)" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--erp-text)" }}>
           Bu ay ({String(data.currentMonth.month).padStart(2, "0")}.
           {data.currentMonth.year})
         </div>
 
         <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 13 }}>
           <div style={splitRow}>
-            <span style={{ color: "#64748b" }}>Mesai saati</span>
+            <span style={{ color: "var(--erp-muted)" }}>Mesai saati</span>
             <strong>{format(data.currentMonth.hours)} saat</strong>
           </div>
 
           {data.amountsHidden ? null : (
             <div style={splitRow}>
-              <span style={{ color: "#64748b" }}>Mesai tutarı (elden)</span>
+              <span style={{ color: "var(--erp-muted)" }}>Mesai tutarı (elden)</span>
               <strong>{money(data.currentMonth.amount)}</strong>
             </div>
           )}
@@ -153,24 +153,24 @@ export default function PersonnelOvertimePanel({
             style={{
               marginTop: 10,
               paddingTop: 10,
-              borderTop: "1px solid #e2e8f0",
+              borderTop: "1px solid var(--erp-border)",
               display: "grid",
               gap: 6,
               fontSize: 13,
             }}
           >
             <div style={splitRow}>
-              <span style={{ color: "#64748b" }}>Resmî net</span>
+              <span style={{ color: "var(--erp-muted)" }}>Resmî net</span>
               <span>{money(data.takeHome.officialNet)}</span>
             </div>
 
             <div style={splitRow}>
-              <span style={{ color: "#64748b" }}>Manuel elden</span>
+              <span style={{ color: "var(--erp-muted)" }}>Manuel elden</span>
               <span>{money(data.takeHome.manualExtraMonthly)}</span>
             </div>
 
             <div style={splitRow}>
-              <span style={{ color: "#64748b" }}>Mesai (elden)</span>
+              <span style={{ color: "var(--erp-muted)" }}>Mesai (elden)</span>
               <span>{money(data.takeHome.overtimeExtra)}</span>
             </div>
 
@@ -179,7 +179,7 @@ export default function PersonnelOvertimePanel({
               <span>{money(data.takeHome.totalTakeHome)}</span>
             </div>
 
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: "var(--erp-muted)", marginTop: 4 }}>
               Mesai saat ücreti resmî net + manuel elden üzerinden
               hesaplanır ({money(data.takeHome.hourlyRate)}/saat); mesai bu
               tabana geri beslenmez ve toplam eldene bir kez girer.
@@ -236,18 +236,18 @@ export default function PersonnelOvertimePanel({
               <div style={{ minWidth: 0 }}>
                 <strong>{date(line.workDate)}</strong>
 
-                <div style={{ marginTop: 4, fontSize: 13, color: "#64748b" }}>
+                <div style={{ marginTop: 4, fontSize: 13, color: "var(--erp-muted)" }}>
                   {line.kindName} · {coefficient(line.multiplier)}×
                   {line.reason ? ` · ${line.reason}` : ""}
                 </div>
 
                 <div style={{ marginTop: 6, fontSize: 12 }}>
                   {line.landedOnAttendance ? (
-                    <span style={{ color: "#64748b" }}>
+                    <span style={{ color: "var(--erp-muted)" }}>
                       Puantaj ayı: {line.attendanceMonth}
                     </span>
                   ) : (
-                    <span style={{ color: "#b45309", fontWeight: 600 }}>
+                    <span style={{ color: "var(--color-semantic-warning)", fontWeight: 600 }}>
                       Puantaja düşmedi
                     </span>
                   )}
@@ -258,7 +258,7 @@ export default function PersonnelOvertimePanel({
                 <div style={{ fontWeight: 700 }}>{format(line.hours)} saat</div>
 
                 {data.amountsHidden ? null : (
-                  <div style={{ marginTop: 4, fontSize: 13, color: "#64748b" }}>
+                  <div style={{ marginTop: 4, fontSize: 13, color: "var(--erp-muted)" }}>
                     {money(line.amount)}
                   </div>
                 )}
@@ -267,7 +267,7 @@ export default function PersonnelOvertimePanel({
           ))}
 
           {data.amountsHidden ? null : (
-            <div style={{ ...row, background: "#fff", fontWeight: 700 }}>
+            <div style={{ ...row, background: "var(--color-surface-card)", fontWeight: 700 }}>
               <span>Toplam</span>
               <span>{money(data.totalAmount)}</span>
             </div>
@@ -295,24 +295,24 @@ const box = {
   padding: 24,
   textAlign: "center",
   borderRadius: 12,
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
-  color: "#64748b",
+  background: "var(--color-surface-bg)",
+  border: "1px solid var(--erp-border)",
+  color: "var(--erp-muted)",
 } as const;
 
 const errorBox = {
   padding: 13,
   borderRadius: 11,
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-  color: "#b91c1c",
+  background: "var(--color-semantic-danger-tint)",
+  border: "1px solid var(--color-semantic-danger-border)",
+  color: "var(--color-semantic-danger)",
   fontWeight: 700,
 } as const;
 
 const panel = {
   padding: 13,
   borderRadius: 11,
-  border: "1px solid #e2e8f0",
+  border: "1px solid var(--erp-border)",
 } as const;
 
 const row = {
@@ -320,9 +320,9 @@ const row = {
   justifyContent: "space-between",
   gap: 16,
   padding: 13,
-  border: "1px solid #e2e8f0",
+  border: "1px solid var(--erp-border)",
   borderRadius: 11,
-  background: "#f8fafc",
+  background: "var(--color-surface-bg)",
 } as const;
 
 const splitRow = {
@@ -335,12 +335,12 @@ const select = {
   height: 34,
   padding: "0 10px",
   borderRadius: 9,
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  color: "#0f172a",
+  border: "1px solid var(--erp-border)",
+  background: "var(--color-surface-card)",
+  color: "var(--erp-text)",
 } as const;
 
-const success = { background: "#ecfdf5", borderColor: "#a7f3d0", color: "#065f46" } as const;
-const warning = { background: "#fffbeb", borderColor: "#fcd34d", color: "#92400e" } as const;
-const danger = { background: "#fef2f2", borderColor: "#fecaca", color: "#b91c1c" } as const;
-const neutral = { background: "#f8fafc", borderColor: "#e2e8f0", color: "#475569" } as const;
+const success = { background: "var(--color-semantic-success-tint)", borderColor: "var(--color-semantic-success-border)", color: "var(--color-semantic-success)" } as const;
+const warning = { background: "var(--color-semantic-warning-tint)", borderColor: "var(--color-semantic-warning-border)", color: "var(--color-semantic-warning)" } as const;
+const danger = { background: "var(--color-semantic-danger-tint)", borderColor: "var(--color-semantic-danger-border)", color: "var(--color-semantic-danger)" } as const;
+const neutral = { background: "var(--color-surface-bg)", borderColor: "var(--erp-border)", color: "var(--erp-text)" } as const;

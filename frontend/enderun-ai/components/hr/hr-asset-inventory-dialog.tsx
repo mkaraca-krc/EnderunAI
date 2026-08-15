@@ -29,11 +29,11 @@ const today = () => new Date().toISOString().slice(0, 10);
 const input = {
   width: "100%",
   minHeight: 42,
-  border: "1px solid #cbd5e1",
+  border: "1px solid var(--erp-border)",
   borderRadius: 10,
   padding: "8px 11px",
-  background: "#fff",
-  color: "#0f172a",
+  background: "var(--color-surface-card)",
+  color: "var(--erp-text)",
   boxSizing: "border-box",
 } as const;
 
@@ -72,7 +72,7 @@ function Field({
 }) {
   return (
     <label style={{ display: "grid", gap: 7 }}>
-      <span style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>
+      <span style={{ fontSize: 13, fontWeight: 800, color: "var(--erp-text)" }}>
         {label}{required ? " *" : ""}
       </span>
       {children}
@@ -221,7 +221,7 @@ export default function HrAssetInventoryDialog({
         <header style={modalHeader}>
           <div>
             <h2 style={{ margin: 0 }}>Depodan Zimmet Oluştur</h2>
-            <p style={{ margin: "5px 0 0", color: "#64748b" }}>
+            <p style={{ margin: "5px 0 0", color: "var(--erp-muted)" }}>
               Ekipman stoktan düşülür ve personele tek işlemde zimmetlenir.
             </p>
           </div>
@@ -230,7 +230,7 @@ export default function HrAssetInventoryDialog({
 
         <div style={{ padding: 20, display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 14, maxHeight: "72vh", overflow: "auto" }}>
           {error && (
-            <div style={{ gridColumn: "1 / -1", padding: 12, borderRadius: 10, background: "#fef2f2", color: "#b91c1c", fontWeight: 800 }}>
+            <div style={{ gridColumn: "1 / -1", padding: 12, borderRadius: 10, background: "var(--color-semantic-danger-tint)", color: "var(--color-semantic-danger)", fontWeight: 800 }}>
               {error}
             </div>
           )}
@@ -272,7 +272,7 @@ export default function HrAssetInventoryDialog({
           </div>
 
           {selectedItem && (
-            <div style={{ gridColumn: "1 / -1", padding: 13, borderRadius: 12, background: "#f0fdfa", border: "1px solid #99f6e4", color: "#134e4a" }}>
+            <div style={{ gridColumn: "1 / -1", padding: 13, borderRadius: 12, background: "var(--color-brand-primary-tint)", border: "1px solid var(--color-brand-primary-tint)", color: "var(--erp-primary)" }}>
               <strong>{selectedItem.code} · {selectedItem.name}</strong>
               <div style={{ marginTop: 5, fontSize: 13 }}>
                 Marka/Model: {selectedItem.brand || "-"} / {selectedItem.model || "-"} · Stok: {selectedItem.totalStock} {selectedItem.unit}
@@ -329,9 +329,9 @@ export default function HrAssetInventoryDialog({
 }
 
 const overlay = { position: "fixed", inset: 0, zIndex: 1300, display: "grid", placeItems: "center", padding: 20, background: "rgba(15,23,42,.62)" } as const;
-const modal = { width: "min(850px,100%)", maxHeight: "94vh", overflow: "hidden", borderRadius: 18, background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0 24px 70px rgba(15,23,42,.32)" } as const;
-const modalHeader = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: "1px solid #e2e8f0" } as const;
-const modalFooter = { display: "flex", justifyContent: "flex-end", gap: 10, padding: "16px 20px", borderTop: "1px solid #e2e8f0" } as const;
-const closeButton = { width: 34, height: 34, border: 0, borderRadius: 9, background: "#f1f5f9", color: "#334155", fontSize: 22, cursor: "pointer" } as const;
-const primaryButton = { minHeight: 42, border: 0, borderRadius: 10, padding: "0 18px", background: "#0f766e", color: "#fff", fontWeight: 900, cursor: "pointer" } as const;
-const secondaryButton = { minHeight: 42, border: "1px solid #cbd5e1", borderRadius: 10, padding: "0 18px", background: "#fff", color: "#334155", fontWeight: 900, cursor: "pointer" } as const;
+const modal = { width: "min(850px,100%)", maxHeight: "94vh", overflow: "hidden", borderRadius: 18, background: "var(--color-surface-card)", border: "1px solid var(--erp-border)", boxShadow: "0 24px 70px rgba(15,23,42,.32)" } as const;
+const modalHeader = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: "1px solid var(--erp-border)" } as const;
+const modalFooter = { display: "flex", justifyContent: "flex-end", gap: 10, padding: "16px 20px", borderTop: "1px solid var(--erp-border)" } as const;
+const closeButton = { width: 34, height: 34, border: 0, borderRadius: 9, background: "var(--color-border-subtle)", color: "var(--erp-text)", fontSize: 22, cursor: "pointer" } as const;
+const primaryButton = { minHeight: 42, border: 0, borderRadius: 10, padding: "0 18px", background: "var(--erp-primary)", color: "var(--color-surface-card)", fontWeight: 900, cursor: "pointer" } as const;
+const secondaryButton = { minHeight: 42, border: "1px solid var(--erp-border)", borderRadius: 10, padding: "0 18px", background: "var(--color-surface-card)", color: "var(--erp-text)", fontWeight: 900, cursor: "pointer" } as const;

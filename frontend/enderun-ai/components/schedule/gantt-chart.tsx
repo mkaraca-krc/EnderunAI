@@ -177,11 +177,11 @@ export default function GanttChart({
 
         <span style={{ flex: 1 }} />
 
-        <Legend color="#18797c" text="Planlanan" />
-        <Legend color="#bb2d3b" text="Kritik yol" />
-        <Legend color="#0b2c2d" text="Gerçekleşen" />
-        <Legend color="#b9b3a3" text="Baseline" />
-        <Legend color="#f1a522" text="Tahmini gecikme" />
+        <Legend color="var(--color-chart-1)" text="Planlanan" />
+        <Legend color="var(--color-semantic-danger)" text="Kritik yol" />
+        <Legend color="var(--erp-primary)" text="Gerçekleşen" />
+        <Legend color="var(--erp-border)" text="Baseline" />
+        <Legend color="var(--color-semantic-warning)" text="Tahmini gecikme" />
       </div>
 
       <div style={{ display: "flex", border: "1px solid var(--erp-border)" }}>
@@ -218,9 +218,9 @@ export default function GanttChart({
                 height: ROW_HEIGHT,
                 width: "100%",
                 border: "none",
-                borderBottom: "1px solid #eee8dc",
+                borderBottom: "1px solid var(--erp-border)",
                 background:
-                  selectedId === activity.id ? "#e8f4f4" : "transparent",
+                  selectedId === activity.id ? "var(--color-brand-primary-tint)" : "transparent",
                 textAlign: "left",
                 padding: activity.parentActivityId
                   ? "0 10px 0 28px"
@@ -239,7 +239,7 @@ export default function GanttChart({
                     width: 6,
                     height: 6,
                     borderRadius: "50%",
-                    background: "#bb2d3b",
+                    background: "var(--color-semantic-danger)",
                     flex: "0 0 auto",
                   }}
                 />
@@ -276,7 +276,7 @@ export default function GanttChart({
                 refY="3"
                 orient="auto"
               >
-                <path d="M0,0 L6,3 L0,6 Z" fill="#8a9694" />
+                <path d="M0,0 L6,3 L0,6 Z" fill="var(--erp-muted)" />
               </marker>
               <marker
                 id="gantt-arrow-critical"
@@ -286,7 +286,7 @@ export default function GanttChart({
                 refY="3"
                 orient="auto"
               >
-                <path d="M0,0 L6,3 L0,6 Z" fill="#bb2d3b" />
+                <path d="M0,0 L6,3 L0,6 Z" fill="var(--color-semantic-danger)" />
               </marker>
             </defs>
 
@@ -298,7 +298,7 @@ export default function GanttChart({
                 y={HEADER_HEIGHT}
                 width={dayWidth}
                 height={chartHeight}
-                fill="#f2efe6"
+                fill="var(--color-surface-bg)"
               />
             ))}
 
@@ -308,7 +308,7 @@ export default function GanttChart({
               y={0}
               width={Math.max(chartWidth, 400)}
               height={HEADER_HEIGHT}
-              fill="#ffffff"
+              fill="var(--color-surface-card)"
             />
             {monthTicks.map((tick) => (
               <g key={`m-${tick.dn}`}>
@@ -317,13 +317,13 @@ export default function GanttChart({
                   y1={0}
                   x2={x(tick.dn)}
                   y2={HEADER_HEIGHT + chartHeight}
-                  stroke="#e0dbcd"
+                  stroke="var(--erp-border)"
                 />
                 <text
                   x={x(tick.dn) + 4}
                   y={18}
                   fontSize={11}
-                  fill="#5c6b68"
+                  fill="var(--erp-muted)"
                 >
                   {tick.label}
                 </text>
@@ -345,7 +345,7 @@ export default function GanttChart({
                 y1={HEADER_HEIGHT + (index + 1) * ROW_HEIGHT}
                 x2={Math.max(chartWidth, 400)}
                 y2={HEADER_HEIGHT + (index + 1) * ROW_HEIGHT}
-                stroke="#eee8dc"
+                stroke="var(--erp-border)"
               />
             ))}
 
@@ -375,7 +375,7 @@ export default function GanttChart({
                   key={dependency.id}
                   points={`${x1},${y1} ${mid},${y1} ${mid},${y2} ${x2},${y2}`}
                   fill="none"
-                  stroke={critical ? "#bb2d3b" : "#8a9694"}
+                  stroke={critical ? "var(--color-semantic-danger)" : "var(--erp-muted)"}
                   strokeWidth={1}
                   markerEnd={`url(#${
                     critical ? "gantt-arrow-critical" : "gantt-arrow"
@@ -395,7 +395,7 @@ export default function GanttChart({
                 xOf(activity.plannedEnd) + dayWidth - startX
               );
 
-              const color = activity.isCritical ? "#bb2d3b" : "#18797c";
+              const color = activity.isCritical ? "var(--color-semantic-danger)" : "var(--color-chart-1)";
               const progressWidth = (width * Math.min(100, activity.progressRate)) / 100;
 
               const forecastX =
@@ -427,7 +427,7 @@ export default function GanttChart({
                       y={barY + 3}
                       width={Math.max(2, forecastX - startX - width)}
                       height={BAR_HEIGHT - 6}
-                      fill="#f1a522"
+                      fill="var(--color-semantic-warning)"
                       opacity={0.55}
                       rx={2}
                     />
@@ -454,7 +454,7 @@ export default function GanttChart({
                       width={progressWidth}
                       height={BAR_HEIGHT}
                       rx={3}
-                      fill="#0b2c2d"
+                      fill="var(--erp-primary)"
                       opacity={0.85}
                     />
                   )}
@@ -472,7 +472,7 @@ export default function GanttChart({
                       )}
                       height={4}
                       rx={2}
-                      fill="#b9b3a3"
+                      fill="var(--erp-border)"
                     />
                   )}
                 </g>
@@ -487,7 +487,7 @@ export default function GanttChart({
                   y1={HEADER_HEIGHT}
                   x2={xOf(deadline)}
                   y2={HEADER_HEIGHT + chartHeight}
-                  stroke="#bb2d3b"
+                  stroke="var(--color-semantic-danger)"
                   strokeWidth={1.5}
                   strokeDasharray="2 3"
                 />
@@ -495,7 +495,7 @@ export default function GanttChart({
                   x={xOf(deadline) + 3}
                   y={HEADER_HEIGHT - 6}
                   fontSize={10}
-                  fill="#bb2d3b"
+                  fill="var(--color-semantic-danger)"
                 >
                   Termin
                 </text>
@@ -509,14 +509,14 @@ export default function GanttChart({
                 y1={HEADER_HEIGHT}
                 x2={x(today)}
                 y2={HEADER_HEIGHT + chartHeight}
-                stroke="#1f9498"
+                stroke="var(--erp-accent)"
                 strokeWidth={1.5}
               />
               <text
                 x={x(today) + 3}
                 y={HEADER_HEIGHT - 20}
                 fontSize={10}
-                fill="#1f9498"
+                fill="var(--erp-accent)"
               >
                 Bugün
               </text>

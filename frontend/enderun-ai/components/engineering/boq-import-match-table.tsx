@@ -167,11 +167,11 @@ export default function BoqImportMatchTable({
                 </td>
                 <td>
                   {createdLabels[item.rowNumber] ? (
-                    <small style={{ color: "#15803d" }}>
+                    <small style={{ color: "var(--color-semantic-success)" }}>
                       Özel poz açıldı: {createdLabels[item.rowNumber]}
                     </small>
                   ) : candidates.length === 0 ? (
-                    <small style={{ color: "#6b7280" }}>
+                    <small style={{ color: "var(--erp-muted)" }}>
                       Kütüphanede karşılık bulunamadı.
                     </small>
                   ) : (
@@ -229,7 +229,7 @@ export default function BoqImportMatchTable({
                       style={{
                         marginTop: 6,
                         padding: 8,
-                        border: "1px solid #e3e8ee",
+                        border: "1px solid var(--erp-border)",
                         borderRadius: 4,
                         display: "grid",
                         gap: 6,
@@ -278,7 +278,7 @@ export default function BoqImportMatchTable({
                       </small>
 
                       {error && (
-                        <small style={{ color: "#b91c1c" }}>{error}</small>
+                        <small style={{ color: "var(--color-semantic-danger)" }}>{error}</small>
                       )}
 
                       <div style={{ display: "flex", gap: 6 }}>

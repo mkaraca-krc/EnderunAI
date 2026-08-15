@@ -393,7 +393,7 @@ export default function PersonnelDocumentsPanel({
               <div style={{ minWidth: 0 }}>
                 <strong>{document.title}</strong>
 
-                <div style={{ marginTop: 4, color: "#64748b", fontSize: 13 }}>
+                <div style={{ marginTop: 4, color: "var(--erp-muted)", fontSize: 13 }}>
                   {document.documentTypeName}
                   {document.documentNumber
                     ? ` · No: ${document.documentNumber}`
@@ -416,8 +416,8 @@ export default function PersonnelDocumentsPanel({
                   <span
                     style={{
                       ...badge,
-                      background: document.isVerified ? "#dcfce7" : "#fef3c7",
-                      color: document.isVerified ? "#166534" : "#92400e",
+                      background: document.isVerified ? "var(--color-semantic-success-tint)" : "var(--color-semantic-warning-tint)",
+                      color: document.isVerified ? "var(--color-semantic-success)" : "var(--color-semantic-warning)",
                     }}
                   >
                     {document.isVerified
@@ -426,7 +426,7 @@ export default function PersonnelDocumentsPanel({
                   </span>
 
                   <span
-                    style={{ ...badge, background: "#f1f5f9", color: "#334155" }}
+                    style={{ ...badge, background: "var(--color-border-subtle)", color: "var(--erp-text)" }}
                   >
                     {document.statusName}
                     {document.daysRemaining != null
@@ -435,7 +435,7 @@ export default function PersonnelDocumentsPanel({
                   </span>
 
                   {document.originalName ? (
-                    <span style={{ color: "#94a3b8" }}>
+                    <span style={{ color: "var(--erp-muted)" }}>
                       {document.originalName}
                     </span>
                   ) : null}
@@ -527,26 +527,26 @@ const box = {
   padding: 24,
   textAlign: "center",
   borderRadius: 12,
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
-  color: "#64748b",
+  background: "var(--color-surface-bg)",
+  border: "1px solid var(--erp-border)",
+  color: "var(--erp-muted)",
 } as const;
 
 const errorBox = {
   padding: 13,
   borderRadius: 11,
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-  color: "#b91c1c",
+  background: "var(--color-semantic-danger-tint)",
+  border: "1px solid var(--color-semantic-danger-border)",
+  color: "var(--color-semantic-danger)",
   fontWeight: 700,
 } as const;
 
 const noticeBox = {
   padding: 13,
   borderRadius: 11,
-  background: "#ecfdf5",
-  border: "1px solid #a7f3d0",
-  color: "#065f46",
+  background: "var(--color-semantic-success-tint)",
+  border: "1px solid var(--color-semantic-success-border)",
+  color: "var(--color-semantic-success)",
   fontWeight: 700,
 } as const;
 
@@ -555,16 +555,16 @@ const row = {
   justifyContent: "space-between",
   gap: 16,
   padding: 13,
-  border: "1px solid #e2e8f0",
+  border: "1px solid var(--erp-border)",
   borderRadius: 11,
-  background: "#f8fafc",
+  background: "var(--color-surface-bg)",
 } as const;
 
 const formBox = {
   padding: 16,
-  border: "1px solid #e2e8f0",
+  border: "1px solid var(--erp-border)",
   borderRadius: 12,
-  background: "#fff",
+  background: "var(--color-surface-card)",
 } as const;
 
 const formGrid = {
@@ -577,19 +577,19 @@ const fieldLabel = {
   display: "grid",
   gap: 6,
   fontSize: 12,
-  color: "#475569",
+  color: "var(--erp-text)",
 } as const;
 
 const input = {
   height: 38,
   padding: "0 10px",
   borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  color: "#0f172a",
+  border: "1px solid var(--erp-border)",
+  background: "var(--color-surface-card)",
+  color: "var(--erp-text)",
 } as const;
 
-const hint = { color: "#94a3b8", fontSize: 11 } as const;
+const hint = { color: "var(--erp-muted)", fontSize: 11 } as const;
 
 const badge = {
   padding: "2px 8px",
@@ -602,8 +602,8 @@ const primaryButton = {
   padding: "0 16px",
   borderRadius: 10,
   border: "none",
-  background: "#0f766e",
-  color: "#fff",
+  background: "var(--erp-primary)",
+  color: "var(--color-surface-card)",
   fontWeight: 700,
   cursor: "pointer",
 } as const;
@@ -612,15 +612,15 @@ const smallButton = {
   height: 34,
   padding: "0 12px",
   borderRadius: 9,
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  color: "#0f172a",
+  border: "1px solid var(--erp-border)",
+  background: "var(--color-surface-card)",
+  color: "var(--erp-text)",
   fontWeight: 600,
   cursor: "pointer",
 } as const;
 
 const dangerButton = {
   ...smallButton,
-  borderColor: "#fecaca",
-  color: "#b91c1c",
+  borderColor: "var(--color-semantic-danger-border)",
+  color: "var(--color-semantic-danger)",
 } as const;

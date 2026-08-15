@@ -125,7 +125,7 @@ export default function PositionSuggestButton({
                   width: "100%",
                   textAlign: "left",
                   padding: "4px 6px",
-                  border: "1px solid #e3e8ee",
+                  border: "1px solid var(--erp-border)",
                   borderRadius: 4,
                   background: "transparent",
                   cursor: "pointer",

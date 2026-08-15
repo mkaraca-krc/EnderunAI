@@ -189,8 +189,8 @@ export default function PositionPicker({
               style={{
                 position: "absolute",
                 zIndex: 20,
-                background: "var(--erp-surface, #fff)",
-                border: "1px solid #d8dee6",
+                background: "var(--erp-surface, var(--color-surface-card))",
+                border: "1px solid var(--erp-border)",
                 borderRadius: 6,
                 maxHeight: 260,
                 overflowY: "auto",

@@ -1332,7 +1332,7 @@ export default function HakedisEditor({
                       const lineResult = calculateDeductionLine(line);
 
                       return (
-                        <tr key={line.key} style={{ background: "#fbfdfd" }}>
+                        <tr key={line.key} style={{ background: "var(--color-surface-card)" }}>
                           <td style={{ paddingLeft: 40 }}>
                             <input
                               style={{ width: 130 }}
@@ -1411,7 +1411,7 @@ export default function HakedisEditor({
                     })}
 
                     {option?.hasLines && (
-                      <tr style={{ background: "#fbfdfd" }}>
+                      <tr style={{ background: "var(--color-surface-card)" }}>
                         <td colSpan={8} style={{ paddingLeft: 40 }}>
                           <button
                             type="button"
@@ -1484,7 +1484,7 @@ export default function HakedisEditor({
         </div>
 
         {isgNotice && (
-          <div style={{ padding: "0 22px 14px", color: "#b45309", fontSize: 13 }}>
+          <div style={{ padding: "0 22px 14px", color: "var(--color-semantic-warning)", fontSize: 13 }}>
             {isgNotice}
           </div>
         )}
@@ -1661,7 +1661,7 @@ export default function HakedisEditor({
 
           <div
             style={{
-              borderTop: "2px solid #0f2f38",
+              borderTop: "2px solid var(--erp-primary)",
               marginTop: 8,
               paddingTop: 8,
             }}

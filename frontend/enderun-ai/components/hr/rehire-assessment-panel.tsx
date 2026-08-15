@@ -103,12 +103,12 @@ export default function RehireAssessmentPanel({
 
   return (
     <div style={panel}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--erp-text)" }}>
         Ayrılış Değerlendirmesi
         {personnelFullName ? ` — ${personnelFullName}` : ""}
       </div>
 
-      <p style={{ marginTop: 6, fontSize: 12, color: "#64748b" }}>
+      <p style={{ marginTop: 6, fontSize: 12, color: "var(--erp-muted)" }}>
         Yasal çıkış nedeninden ayrıdır. Bu kod, kişi ileride yeniden işe
         alınmak istendiğinde İK&apos;ya gösterilir. Boş bırakılırsa
         &quot;değerlendirilmedi&quot; sayılır ve hiçbir engel ya da uyarı
@@ -148,7 +148,7 @@ export default function RehireAssessmentPanel({
       </div>
 
       <label style={{ display: "grid", gap: 6, marginTop: 12, fontSize: 12 }}>
-        <span style={{ color: "#475569" }}>
+        <span style={{ color: "var(--erp-text)" }}>
           Gerekçe {needsNote ? "(zorunlu)" : "(isteğe bağlı)"}
         </span>
 
@@ -170,7 +170,7 @@ export default function RehireAssessmentPanel({
       </div>
 
       {data?.rehireMarkedAtUtc ? (
-        <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
+        <div style={{ marginTop: 10, fontSize: 11, color: "var(--erp-muted)" }}>
           Son işaretleme: {new Date(data.rehireMarkedAtUtc).toLocaleString("tr-TR")}
         </div>
       ) : null}
@@ -208,36 +208,36 @@ const OPTIONS = [
     value: 0,
     label: "Yeşil — sorunsuz",
     hint: "Yeniden alınabilir.",
-    tone: { background: "#ecfdf5", borderColor: "#a7f3d0" },
+    tone: { background: "var(--color-semantic-success-tint)", borderColor: "var(--color-semantic-success-border)" },
   },
   {
     value: 1,
     label: "Sarı — dikkat, şartlı",
     hint: "İşe alımda uyarı çıkar, engellemez.",
-    tone: { background: "#fffbeb", borderColor: "#fcd34d" },
+    tone: { background: "var(--color-semantic-warning-tint)", borderColor: "var(--color-semantic-warning-border)" },
   },
   {
     value: 2,
     label: "Kırmızı — işe alınamaz",
     hint: "İşe alım engellenir; yalnız Genel Müdür gerekçeyle geçebilir.",
-    tone: { background: "#fef2f2", borderColor: "#fecaca" },
+    tone: { background: "var(--color-semantic-danger-tint)", borderColor: "var(--color-semantic-danger-border)" },
   },
 ] as const;
 
 const panel = {
   padding: 16,
-  border: "1px solid #e2e8f0",
+  border: "1px solid var(--erp-border)",
   borderRadius: 12,
-  background: "#fff",
+  background: "var(--color-surface-card)",
 } as const;
 
 const box = {
   padding: 20,
   textAlign: "center",
   borderRadius: 12,
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
-  color: "#64748b",
+  background: "var(--color-surface-bg)",
+  border: "1px solid var(--erp-border)",
+  color: "var(--erp-muted)",
 } as const;
 
 const optionRow = {
@@ -245,7 +245,7 @@ const optionRow = {
   alignItems: "flex-start",
   gap: 10,
   padding: 10,
-  border: "1px solid #e2e8f0",
+  border: "1px solid var(--erp-border)",
   borderRadius: 10,
   cursor: "pointer",
 } as const;
@@ -253,7 +253,7 @@ const optionRow = {
 const textarea = {
   padding: 10,
   borderRadius: 10,
-  border: "1px solid #cbd5e1",
+  border: "1px solid var(--erp-border)",
   font: "inherit",
   resize: "vertical",
 } as const;
@@ -262,19 +262,19 @@ const kvkkBox = {
   marginTop: 10,
   padding: 10,
   borderRadius: 10,
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
+  background: "var(--color-surface-bg)",
+  border: "1px solid var(--erp-border)",
   fontSize: 11,
-  color: "#475569",
+  color: "var(--erp-text)",
 } as const;
 
 const errorBox = {
   marginTop: 10,
   padding: 10,
   borderRadius: 10,
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-  color: "#b91c1c",
+  background: "var(--color-semantic-danger-tint)",
+  border: "1px solid var(--color-semantic-danger-border)",
+  color: "var(--color-semantic-danger)",
   fontSize: 12,
   fontWeight: 700,
 } as const;
@@ -283,9 +283,9 @@ const noticeBox = {
   marginTop: 10,
   padding: 10,
   borderRadius: 10,
-  background: "#ecfdf5",
-  border: "1px solid #a7f3d0",
-  color: "#065f46",
+  background: "var(--color-semantic-success-tint)",
+  border: "1px solid var(--color-semantic-success-border)",
+  color: "var(--color-semantic-success)",
   fontSize: 12,
   fontWeight: 700,
 } as const;
@@ -295,8 +295,8 @@ const primaryButton = {
   padding: "0 16px",
   borderRadius: 10,
   border: "none",
-  background: "#0f766e",
-  color: "#fff",
+  background: "var(--erp-primary)",
+  color: "var(--color-surface-card)",
   fontWeight: 700,
   cursor: "pointer",
 } as const;
@@ -305,9 +305,9 @@ const secondaryButton = {
   height: 38,
   padding: "0 14px",
   borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  color: "#0f172a",
+  border: "1px solid var(--erp-border)",
+  background: "var(--color-surface-card)",
+  color: "var(--erp-text)",
   fontWeight: 600,
   cursor: "pointer",
 } as const;

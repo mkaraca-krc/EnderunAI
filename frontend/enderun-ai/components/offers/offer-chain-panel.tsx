@@ -73,7 +73,7 @@ export default function OfferChainPanel({ offerId }: { offerId: string }) {
                 {project.code} — {project.name}
               </Link>
               {!project.bornFromThisOffer && (
-                <span style={{ color: "#b45309" }}>
+                <span style={{ color: "var(--color-semantic-warning)" }}>
                   {" "}
                   (bu teklif projeye <strong>ek iş</strong> olarak bağlandı)
                 </span>
