@@ -563,9 +563,250 @@ public sealed class RetailSaleTests(DatabaseFixture fixture)
         return client;
     }
 
+    private sealed record CreatedSale(Guid Id, string DocumentNumber, decimal GrandTotal);
+
     private sealed record PricingItem(
         Guid Id, string Code, string Name, string Unit,
         decimal? SalesPrice, decimal MaxDiscountRate, decimal? AverageUnitCost);
 
     private sealed record PricingResponse(List<PricingItem> Items, int HiddenCount);
+    /// <summary>Tamamlanmış satışı hazırlayan yardımcı.</summary>
+    private async Task<Guid> CompleteSaleAsync(Context context, decimal quantity = 4m)
+    {
+        return await WithServiceAsync(async service =>
+        {
+            var created = await service.CreateAsync(
+                Input(context, quantity: quantity), CancellationToken.None);
+
+            await service.SubmitAsync(created.Id, CancellationToken.None);
+            return created.Id;
+        });
+    }
+
+    /// <summary>
+    /// İPTAL: stok geri döner, fatura ters kayıt alır, tahsilat karşıt
+    /// hareketle kapanır — ve hepsi BİRER KEZ.
+    /// </summary>
+    [Fact]
+    public async Task Cancel_ReturnsStock_AndReversesInvoiceAndCash()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+        var saleId = await CompleteSaleAsync(context);
+
+        await WithServiceAsync(service =>
+            service.CancelAsync(saleId, "Müşteri vazgeçti", CancellationToken.None));
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var sale = await db.RetailSales.SingleAsync(x => x.Id == saleId);
+        Assert.Equal(RetailSaleStatus.Cancelled, sale.Status);
+        Assert.Equal("Müşteri vazgeçti", sale.DecisionReason);
+
+        // Stok başa döndü.
+        var stock = await db.WarehouseStocks.SingleAsync(
+            x => x.WarehouseId == context.WarehouseId && x.InventoryItemId == context.ItemId);
+        Assert.Equal(100m, stock.Quantity);
+
+        // Çıkış ve iade hareketi BİRER tane — çift ters kayıt yok.
+        Assert.Equal(1, await db.StockMovements.CountAsync(
+            x => x.InventoryItemId == context.ItemId && x.Type == StockMovementType.Issue));
+        Assert.Equal(1, await db.StockMovements.CountAsync(
+            x => x.InventoryItemId == context.ItemId && x.Type == StockMovementType.Return));
+
+        var invoice = await db.SalesInvoices.SingleAsync(x => x.Id == sale.SalesInvoiceId);
+        Assert.Equal(SalesInvoiceStatus.Cancelled, invoice.Status);
+        Assert.NotNull(invoice.ReversalVoucherId);
+
+        Assert.Equal(1, await db.CashTransactions.CountAsync(
+            x => x.SourceModule == "RETAIL_SALE_CANCEL" && x.SourceEntityId == saleId));
+    }
+
+    /// <summary>İptal gerekçesi zorunlu.</summary>
+    [Fact]
+    public async Task Cancel_RequiresReason()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+        var saleId = await CompleteSaleAsync(context);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WithServiceAsync(service => service.CancelAsync(saleId, "  ", CancellationToken.None)));
+    }
+
+    /// <summary>İkinci iptal reddedilir — ters kayıt iki kez üretilmez.</summary>
+    [Fact]
+    public async Task Cancel_Twice_IsRejected()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+        var saleId = await CompleteSaleAsync(context);
+
+        await WithServiceAsync(service =>
+            service.CancelAsync(saleId, "Birinci iptal", CancellationToken.None));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WithServiceAsync(service =>
+                service.CancelAsync(saleId, "İkinci iptal", CancellationToken.None)));
+    }
+
+    /// <summary>
+    /// KISMİ İADE doğru miktarı döndürür ve FİNANS ONAYINA bağlıdır:
+    /// onaydan önce stok değişmez.
+    /// </summary>
+    [Fact]
+    public async Task PartialReturn_NeedsApproval_ThenRestoresExactQuantity()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+        var saleId = await CompleteSaleAsync(context, quantity: 10m);
+
+        Guid returnId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var itemId = await db.RetailSaleItems
+                .Where(x => x.RetailSaleId == saleId).Select(x => x.Id).SingleAsync();
+
+            var retur = await WithServiceAsync(service => service.CreateReturnAsync(
+                saleId, [new RetailReturnLineInput(itemId, 3m)], "Ürün kusurlu",
+                CancellationToken.None));
+
+            returnId = retur.Id;
+            Assert.Equal(RetailSaleStatus.PendingApproval, retur.Status);
+        }
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // ONAYDAN ÖNCE STOK DEĞİŞMEDİ: 100 − 10 satılan.
+            var before = await db.WarehouseStocks.SingleAsync(
+                x => x.WarehouseId == context.WarehouseId && x.InventoryItemId == context.ItemId);
+            Assert.Equal(90m, before.Quantity);
+        }
+
+        await WithServiceAsync(service => service.ApproveAsync(returnId, CancellationToken.None));
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // Onaydan sonra tam 3 adet döndü.
+            var after = await db.WarehouseStocks.SingleAsync(
+                x => x.WarehouseId == context.WarehouseId && x.InventoryItemId == context.ItemId);
+            Assert.Equal(93m, after.Quantity);
+
+            var retur = await db.RetailSales.SingleAsync(x => x.Id == returnId);
+            Assert.Equal(RetailSaleStatus.Completed, retur.Status);
+            Assert.True(retur.IsReturn);
+            Assert.Equal(saleId, retur.OriginalSaleId);
+        }
+    }
+
+    /// <summary>
+    /// FAZLA İADE ENGELLENİR: satılandan çok iade edilirse stok yoktan
+    /// var edilirdi.
+    /// </summary>
+    [Fact]
+    public async Task Return_CannotExceedSoldQuantity()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+        var saleId = await CompleteSaleAsync(context, quantity: 5m);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var itemId = await db.RetailSaleItems
+            .Where(x => x.RetailSaleId == saleId).Select(x => x.Id).SingleAsync();
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WithServiceAsync(service => service.CreateReturnAsync(
+                saleId, [new RetailReturnLineInput(itemId, 6m)], "Fazla iade denemesi",
+                CancellationToken.None)));
+
+        Assert.Contains("en fazla", error.Message);
+    }
+
+    /// <summary>
+    /// ELDEN İÇEREN SATIŞIN İADESİNDE mal TAM döner, elden kısım
+    /// orantılı geri alınır ve resmî kasadan ÇIKMAZ — oraya hiç
+    /// girmemişti.
+    /// </summary>
+    [Fact]
+    public async Task ReturnOfCashSale_RestoresStockFully_AndKeepsCashIsolated()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+
+        // 10 adet × 100 TL + %20 KDV = 1200; 400'ü elden.
+        //
+        // BU AKIŞ HTTP ÜZERİNDEN: elden işaretleme sales.cash izni
+        // istiyor ve servis doğrudan çağrıldığında oturum yok, izin de
+        // yok. Bu doğru davranış — testin ona uyması gerekiyor.
+        using var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var createResponse = await client.PostAsJsonAsync("/api/perakende", new
+        {
+            companyId = context.CompanyId,
+            warehouseId = context.WarehouseId,
+            saleDate = DateTime.UtcNow.Date,
+            customerCurrentAccountId = context.CustomerId,
+            paymentMethod = 0,
+            overallDiscountRate = 0m,
+            cashAmount = 400m,
+            cashAccountId = context.CashAccountId,
+            items = new[]
+            {
+                new { inventoryItemId = context.ItemId, quantity = 10m, discountRate = 0m }
+            }
+        });
+
+        createResponse.EnsureSuccessStatusCode();
+
+        var created = await createResponse.Content.ReadFromJsonAsync<CreatedSale>();
+        var saleId = created!.Id;
+
+        (await client.PostAsync($"/api/perakende/{saleId}/gonder", null))
+            .EnsureSuccessStatusCode();
+
+        Guid returnId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var sale = await db.RetailSales.SingleAsync(x => x.Id == saleId);
+
+            Assert.Equal(400m, sale.CashAmount);
+            Assert.Equal(sale.GrandTotal - 400m, sale.RecordedAmount);
+
+            var itemId = await db.RetailSaleItems
+                .Where(x => x.RetailSaleId == saleId).Select(x => x.Id).SingleAsync();
+
+            var retur = await WithServiceAsync(service => service.CreateReturnAsync(
+                saleId, [new RetailReturnLineInput(itemId, 10m)], "Tam iade",
+                CancellationToken.None));
+
+            returnId = retur.Id;
+
+            // Tam iadede elden kısım da tamamen geri alınıyor.
+            Assert.Equal(400m, retur.CashAmount);
+        }
+
+        await WithServiceAsync(service => service.ApproveAsync(returnId, CancellationToken.None));
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // MAL TAM DÖNDÜ.
+            var stock = await db.WarehouseStocks.SingleAsync(
+                x => x.WarehouseId == context.WarehouseId && x.InventoryItemId == context.ItemId);
+            Assert.Equal(100m, stock.Quantity);
+
+            // Kasadan çıkan tutar YALNIZ kayıtlı kısım; elden dahil değil.
+            var refund = await db.CashTransactions
+                .SingleAsync(x => x.SourceModule == "RETAIL_RETURN" && x.SourceEntityId == returnId);
+
+            var retur = await db.RetailSales.SingleAsync(x => x.Id == returnId);
+            Assert.Equal(retur.RecordedAmount, refund.Amount);
+            Assert.NotEqual(retur.GrandTotal, refund.Amount);
+        }
+    }
 }

@@ -28,6 +28,14 @@ public sealed record CreateRetailSaleRequest(
 
 public sealed record RejectRetailSaleRequest(string Reason);
 
+public sealed record CancelRetailSaleRequest(string Reason);
+
+public sealed record RetailReturnLineRequest(Guid RetailSaleItemId, decimal Quantity);
+
+public sealed record CreateRetailReturnRequest(
+    string Reason,
+    List<RetailReturnLineRequest> Items);
+
 /// <summary>
 /// Perakende satış uçları.
 ///
@@ -330,6 +338,103 @@ public sealed class RetailSalesController(
         {
             return BadRequest(new { message = exception.Message });
         }
+    }
+
+    /// <summary>
+    /// Fiş iptali. Tamamlanmış fişte stok geri döner, fatura ters kayıt
+    /// üretir ve tahsilat karşıt hareketle kapanır.
+    ///
+    /// FİNANS YETKİSİ: iptal geliri ve kasayı geri alıyor; satışı
+    /// hazırlayan personelin işi değil.
+    /// </summary>
+    [HttpPost("{id:guid}/iptal")]
+    [RequirePermission(PermissionCatalog.Keys.SalesApprove)]
+    public async Task<IActionResult> Cancel(
+        Guid id, CancelRetailSaleRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var sale = await sales.CancelAsync(id, request.Reason, cancellationToken);
+            return Ok(new { Status = (int)sale.Status, sale.DecisionReason });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    /// <summary>
+    /// Kısmi ya da tam iade açar. Fiş HER ZAMAN finans onayına düşer.
+    ///
+    /// Açma yetkisi satış personelinde: iadeyi kabul eden tezgâhtaki
+    /// kişidir. Onay ayrı ve finansta.
+    /// </summary>
+    [HttpPost("{id:guid}/iade")]
+    [RequirePermission(PermissionCatalog.Keys.SalesCreate)]
+    public async Task<IActionResult> CreateReturn(
+        Guid id, CreateRetailReturnRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var retur = await sales.CreateReturnAsync(
+                id,
+                request.Items
+                    .Select(x => new RetailReturnLineInput(x.RetailSaleItemId, x.Quantity))
+                    .ToList(),
+                request.Reason,
+                cancellationToken);
+
+            return Ok(new { retur.Id, retur.DocumentNumber, retur.GrandTotal });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    /// <summary>Fişin satırları — iade ekranı bununla doluyor.</summary>
+    [HttpGet("{id:guid}/kalemler")]
+    [RequirePermission(PermissionCatalog.Keys.SalesView)]
+    public async Task<IActionResult> GetItems(Guid id, CancellationToken cancellationToken)
+    {
+        var items = await db.RetailSaleItems
+            .AsNoTracking()
+            .Where(x => x.RetailSaleId == id)
+            .OrderBy(x => x.LineNumber)
+            .Select(x => new
+            {
+                x.Id,
+                x.Description,
+                x.Unit,
+                x.Quantity,
+                x.UnitPrice,
+                x.DiscountRate,
+                x.LineTotal
+            })
+            .ToListAsync(cancellationToken);
+
+        // Daha önce iade edilen miktar: ekran kalan iade edilebiliri
+        // göstersin diye. Sunucu ayrıca kendi kontrolünü yapıyor.
+        var returned = await db.RetailSaleItems
+            .AsNoTracking()
+            .Where(x => x.RetailSale.OriginalSaleId == id
+                && x.RetailSale.Status != RetailSaleStatus.Cancelled
+                && x.RetailSale.Status != RetailSaleStatus.Rejected)
+            .GroupBy(x => x.Description)
+            .Select(g => new { g.Key, Quantity = g.Sum(x => x.Quantity) })
+            .ToDictionaryAsync(x => x.Key, x => x.Quantity, cancellationToken);
+
+        return Ok(items.Select(x => new
+        {
+            x.Id,
+            x.Description,
+            x.Unit,
+            x.Quantity,
+            x.UnitPrice,
+            x.DiscountRate,
+            x.LineTotal,
+            AlreadyReturned = returned.GetValueOrDefault(x.Description, 0m)
+        }));
     }
 
     /// <summary>

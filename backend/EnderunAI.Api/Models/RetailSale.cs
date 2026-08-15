@@ -144,6 +144,20 @@ public sealed class RetailSale : BaseEntity
     /// <summary>Onay sonrası oluşan tahsilat (peşin/kart). Vadede boş kalır.</summary>
     public Guid? CashTransactionId { get; set; }
 
+    /// <summary>
+    /// Bu fiş bir İADE fişi mi.
+    ///
+    /// İade AYRI BİR VARLIK DEĞİL, aynı fiş türünün ters yönlüsü —
+    /// böylece onay kapısı, elden maskesi ve durum makinesi tek yerde
+    /// kalıyor. İkinci bir onay motoru açmak, aynı kuralların iki kez
+    /// yazılması ve zamanla ayrışması demekti.
+    /// </summary>
+    public bool IsReturn { get; set; }
+
+    /// <summary>İade fişinin kaynağı olan satış.</summary>
+    public Guid? OriginalSaleId { get; set; }
+    public RetailSale? OriginalSale { get; set; }
+
     public ICollection<RetailSaleItem> Items { get; set; } = new List<RetailSaleItem>();
 }
 

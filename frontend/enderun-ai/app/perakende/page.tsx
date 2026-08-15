@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { Button, ConfirmDialog, EmptyState, Input, Select } from "@/components/ui";
+import { Button, ConfirmDialog, EmptyState, Input, Modal, Select } from "@/components/ui";
 import { money, quantity as formatQuantity, unitPrice } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
 import {
@@ -11,6 +11,7 @@ import {
   RETAIL_STATUS,
   retailSaleService,
   type RetailProduct,
+  type RetailSaleItemRow,
   type RetailSaleRow,
 } from "@/services/retail-sale.service";
 
@@ -58,6 +59,11 @@ export default function RetailSalesPage() {
   const [cashAmount, setCashAmount] = useState("0");
 
   const [rejecting, setRejecting] = useState<RetailSaleRow | null>(null);
+  const [cancelling, setCancelling] = useState<RetailSaleRow | null>(null);
+  const [returning, setReturning] = useState<RetailSaleRow | null>(null);
+  const [returnItems, setReturnItems] = useState<RetailSaleItemRow[]>([]);
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
+  const [returnReason, setReturnReason] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -202,6 +208,53 @@ export default function RetailSalesPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Satış kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function openReturn(sale: RetailSaleRow) {
+    setReturning(sale);
+    setReturnReason("");
+
+    try {
+      const items = await retailSaleService.items(sale.id);
+      setReturnItems(items);
+      setReturnQuantities(Object.fromEntries(items.map((item) => [item.id, "0"])));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fiş kalemleri okunamadı.");
+      setReturning(null);
+    }
+  }
+
+  async function submitReturn() {
+    if (!returning) return;
+
+    const chosen = returnItems
+      .map((item) => ({
+        retailSaleItemId: item.id,
+        quantity: Number(returnQuantities[item.id]) || 0,
+      }))
+      .filter((item) => item.quantity > 0);
+
+    if (chosen.length === 0) {
+      setError("İade edilecek en az bir kalem ve miktar girin.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      const created = await retailSaleService.createReturn(
+        returning.id, returnReason, chosen,
+      );
+
+      setNotice(`${created.documentNumber} iade fişi açıldı — finans onayı bekliyor.`);
+      setReturning(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "İade açılamadı.");
     } finally {
       setSaving(false);
     }
@@ -498,6 +551,24 @@ export default function RetailSalesPage() {
                       )}
                     </td>
                     <td style={{ textAlign: "right" }}>
+                      {canSell && sale.status === 2 && !sale.documentNumber.startsWith("PIF") && (
+                        <Button
+                          variant="secondary"
+                          disabled={saving}
+                          onClick={() => void openReturn(sale)}
+                        >
+                          İade
+                        </Button>
+                      )}{" "}
+                      {canApprove && sale.status === 2 && (
+                        <Button
+                          variant="danger"
+                          disabled={saving}
+                          onClick={() => setCancelling(sale)}
+                        >
+                          İptal
+                        </Button>
+                      )}{" "}
                       {canApprove && sale.status === 1 && (
                         <>
                           <Button
@@ -524,6 +595,107 @@ export default function RetailSalesPage() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={cancelling !== null}
+        title="Satışı iptal et"
+        description={
+          `${cancelling?.documentNumber ?? ""} iptal edilecek: stok geri dönecek, ` +
+          "fatura ters kayıt alacak ve tahsilat kapanacak. Bu işlem geri alınamaz."
+        }
+        confirmLabel="İptal Et"
+        requireReason
+        reasonLabel="İptal gerekçesi"
+        onCancel={() => setCancelling(null)}
+        onConfirm={(reason) => {
+          if (!cancelling) return;
+
+          void (async () => {
+            try {
+              await retailSaleService.cancel(cancelling.id, reason);
+              setNotice(`${cancelling.documentNumber} iptal edildi.`);
+              setCancelling(null);
+              await load();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "İptal tamamlanamadı.");
+            }
+          })();
+        }}
+      />
+
+      <Modal
+        open={returning !== null}
+        title={`İade — ${returning?.documentNumber ?? ""}`}
+        onClose={() => setReturning(null)}
+      >
+        <p>
+          İade edilecek miktarları girin. Fiş finans onayına düşer; onaya kadar
+          stok değişmez.
+        </p>
+
+        <div className="erp-table-wrap">
+          <table className="erp-table">
+            <thead>
+              <tr>
+                <th>Kalem</th>
+                <th style={{ textAlign: "right" }}>Satılan</th>
+                <th style={{ textAlign: "right" }}>İade edilen</th>
+                <th style={{ width: 120 }}>İade</th>
+              </tr>
+            </thead>
+            <tbody>
+              {returnItems.map((item) => {
+                const remaining = item.quantity - item.alreadyReturned;
+
+                return (
+                  <tr key={item.id}>
+                    <td>{item.description}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {formatQuantity(item.quantity)} {item.unit}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {formatQuantity(item.alreadyReturned)}
+                    </td>
+                    <td>
+                      <Input
+                        value={returnQuantities[item.id] ?? "0"}
+                        disabled={remaining <= 0}
+                        onChange={(event) =>
+                          setReturnQuantities((current) => ({
+                            ...current,
+                            [item.id]: event.target.value,
+                          }))
+                        }
+                      />
+                      <small style={{ display: "block" }}>
+                        en fazla {formatQuantity(remaining)}
+                      </small>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <label>
+          <span>İade gerekçesi</span>
+          <Input
+            value={returnReason}
+            onChange={(event) => setReturnReason(event.target.value)}
+          />
+        </label>
+
+        <div className="erp-toolbar rw-toolbar-end erp-mt">
+          <Button variant="secondary" onClick={() => setReturning(null)}>Vazgeç</Button>{" "}
+          <Button
+            disabled={saving || returnReason.trim().length === 0}
+            onClick={() => void submitReturn()}
+          >
+            İadeyi Onaya Gönder
+          </Button>
+        </div>
+      </Modal>
 
       <ConfirmDialog
         open={rejecting !== null}

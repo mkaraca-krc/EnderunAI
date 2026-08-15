@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Security.CurrentUser;
+using EnderunAI.Api.Contracts.Accounting;
 using EnderunAI.Api.Services.Accounting;
 using EnderunAI.Api.Services.DocumentNumbers;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,16 @@ public interface IRetailSaleService
     Task<RetailSale> ApproveAsync(Guid id, CancellationToken cancellationToken);
     Task<RetailSale> RejectAsync(Guid id, string reason, CancellationToken cancellationToken);
 
+    /// <summary>Fişi iptal eder: stok geri, gelir ve tahsilat ters kayıt.</summary>
+    Task<RetailSale> CancelAsync(Guid id, string reason, CancellationToken cancellationToken);
+
+    /// <summary>Kısmi ya da tam iade fişi açar — finans onayına düşer.</summary>
+    Task<RetailSale> CreateReturnAsync(
+        Guid originalSaleId,
+        IReadOnlyList<RetailReturnLineInput> lines,
+        string reason,
+        CancellationToken cancellationToken);
+
     /// <summary>
     /// Bir kalemin merkez depodaki SATILABİLİR adedi.
     /// Fiili stok eksi sanal rezerv.
@@ -34,6 +45,9 @@ public interface IRetailSaleService
     Task<decimal> GetAvailableAsync(
         Guid warehouseId, Guid inventoryItemId, CancellationToken cancellationToken);
 }
+
+/// <summary>İade satırı: hangi fiş satırından ne kadar geri geliyor.</summary>
+public sealed record RetailReturnLineInput(Guid RetailSaleItemId, decimal Quantity);
 
 public sealed record RetailSaleLineInput(
     Guid InventoryItemId,
@@ -58,6 +72,7 @@ public sealed class RetailSaleService(
     ICurrentUserService currentUser,
     IDocumentNumberService documentNumbers,
     IAccountingIntegrationService accounting,
+    ISalesInvoiceService salesInvoices,
     IUserAuthorizationService authorization) : IRetailSaleService
 {
     /// <summary>
@@ -328,6 +343,383 @@ public sealed class RetailSaleService(
         return sale;
     }
 
+
+    /// <summary>
+    /// FİŞ İPTALİ — TEK KAYNAKTAN, ÇİFT TERS KAYIT YOK.
+    ///
+    /// Sonuçlanmamış fiş (taslak/onay bekleyen) yalnız durum değiştirir:
+    /// ortada ne stok hareketi ne gelir var, tersine çevrilecek bir şey
+    /// yok. Rezerv de kendiliğinden çözülür.
+    ///
+    /// TAMAMLANMIŞ fişte üçü birden geri alınır: stok iade hareketiyle
+    /// döner, fatura mevcut SalesInvoiceService.CancelAsync ile ters
+    /// kayıt üretir (o servis çek tahsilatı ve bağlı iade kontrollerini
+    /// de yapıyor), tahsilat ters yönlü kasa hareketiyle kapatılır.
+    ///
+    /// ELDEN KISIM: mal tam döner, ama elden tutar resmî kasaya hiç
+    /// girmediği için oradan da çıkmaz — geri alınan tek şey fişteki
+    /// kayıt. Maskesi iptal sonrası da geçerli.
+    /// </summary>
+    public async Task<RetailSale> CancelAsync(
+        Guid id, string reason, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("İptal gerekçesi zorunludur.");
+
+        var sale = await LoadAsync(id, cancellationToken);
+
+        if (sale.Status == RetailSaleStatus.Cancelled)
+            throw new InvalidOperationException("Fiş zaten iptal edilmiş.");
+
+        if (sale.Status == RetailSaleStatus.Rejected)
+            throw new InvalidOperationException("Reddedilen fiş iptal edilmez.");
+
+        if (sale.IsReturn)
+            throw new InvalidOperationException("İade fişi iptal edilemez.");
+
+        var hasReturn = await db.RetailSales.AnyAsync(
+            x => x.OriginalSaleId == sale.Id && x.Status != RetailSaleStatus.Cancelled
+                && x.Status != RetailSaleStatus.Rejected,
+            cancellationToken);
+
+        if (hasReturn)
+        {
+            throw new InvalidOperationException(
+                "Bu fişe bağlı iade var. Önce iadeyi iptal edin.");
+        }
+
+        sale.DecisionReason = reason.Trim();
+        sale.DecidedAtUtc = DateTime.UtcNow;
+        sale.DecidedByUserId = currentUser.UserId;
+
+        if (sale.Status != RetailSaleStatus.Completed)
+        {
+            sale.Status = RetailSaleStatus.Cancelled;
+            await db.SaveChangesAsync(cancellationToken);
+            return sale;
+        }
+
+        var returnNumbers = new Dictionary<Guid, string>();
+
+        foreach (var item in sale.Items)
+        {
+            returnNumbers[item.Id] = await documentNumbers.GenerateAsync(
+                sale.CompanyId, "STOCK_RETURN", "IADE", cancellationToken);
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        await ReturnStockAsync(sale, sale.Items.ToDictionary(x => x.Id, x => x.Quantity),
+            returnNumbers, $"Perakende satış iptali {sale.DocumentNumber}", cancellationToken);
+
+        if (sale.SalesInvoiceId is Guid invoiceId)
+        {
+            await salesInvoices.CancelAsync(invoiceId, reason.Trim(), cancellationToken);
+        }
+
+        // TAHSİLAT TERS KAYDI: orijinal hareket silinmiyor, karşıt yönlü
+        // yeni bir hareket yazılıyor. Silinseydi kasanın o günkü
+        // dökümü geçmişe dönük değişir ve mutabakat tutmazdı.
+        if (sale.CashTransactionId is Guid cashId)
+        {
+            var original = await db.CashTransactions
+                .SingleAsync(x => x.Id == cashId, cancellationToken);
+
+            var reversal = new CashTransaction
+            {
+                CashAccountId = original.CashAccountId,
+                TransactionDate = DateTime.UtcNow.Date,
+                TransactionType = original.TransactionType,
+                Direction = CashTransactionDirection.Out,
+                Amount = original.Amount,
+                AmountTry = original.AmountTry,
+                CurrencyCode = original.CurrencyCode,
+                ExchangeRate = original.ExchangeRate,
+                Description = $"İptal — {original.Description}",
+                DocumentNumber = sale.DocumentNumber,
+                CurrentAccountId = original.CurrentAccountId,
+                SourceModule = "RETAIL_SALE_CANCEL",
+                SourceEntityId = sale.Id
+            };
+
+            db.CashTransactions.Add(reversal);
+            await db.SaveChangesAsync(cancellationToken);
+
+            reversal.AccountingVoucherId = await accounting
+                .CreateCashTransactionVoucherAsync(reversal, cancellationToken);
+        }
+
+        sale.Status = RetailSaleStatus.Cancelled;
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return sale;
+    }
+
+    /// <summary>
+    /// KISMİ YA DA TAM İADE — finans onayına düşer.
+    ///
+    /// İade AYRI BİR VARLIK DEĞİL: aynı fiş türünün ters yönlüsü.
+    /// Böylece onay kapısı, elden maskesi ve durum makinesi tek yerde
+    /// kalıyor; ikinci bir onay motoru yazılmadı.
+    ///
+    /// İade fişi HER ZAMAN onay bekler — tavan içinde peşin bir satışın
+    /// iadesi bile. Satışta hız gerekiyordu (kasa durmasın); iadede
+    /// para geri çıkıyor ve acele bir sebep yok.
+    /// </summary>
+    public async Task<RetailSale> CreateReturnAsync(
+        Guid originalSaleId,
+        IReadOnlyList<RetailReturnLineInput> lines,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("İade gerekçesi zorunludur.");
+
+        if (lines.Count == 0)
+            throw new InvalidOperationException("İade edilecek en az bir kalem seçilmelidir.");
+
+        var original = await LoadAsync(originalSaleId, cancellationToken);
+
+        if (original.Status != RetailSaleStatus.Completed)
+            throw new InvalidOperationException("Yalnızca tamamlanmış satıştan iade alınır.");
+
+        if (original.IsReturn)
+            throw new InvalidOperationException("İade fişinin iadesi alınamaz.");
+
+        // FAZLA İADE ENGELİ: daha önce iade edilen miktar düşülür.
+        // Kontrol olmasaydı aynı kalem defalarca iade edilip stok
+        // yoktan var edilebilirdi.
+        var alreadyReturned = await db.RetailSaleItems
+            .AsNoTracking()
+            .Where(x => x.RetailSale.OriginalSaleId == originalSaleId
+                && x.RetailSale.Status != RetailSaleStatus.Cancelled
+                && x.RetailSale.Status != RetailSaleStatus.Rejected)
+            .GroupBy(x => x.InventoryItemId)
+            .Select(g => new { g.Key, Quantity = g.Sum(x => x.Quantity) })
+            .ToDictionaryAsync(x => x.Key, x => x.Quantity, cancellationToken);
+
+        var retur = new RetailSale
+        {
+            CompanyId = original.CompanyId,
+            WarehouseId = original.WarehouseId,
+            SaleDate = DateTime.UtcNow.Date,
+            CustomerCurrentAccountId = original.CustomerCurrentAccountId,
+            WalkInCustomerName = original.WalkInCustomerName,
+            PaymentMethod = original.PaymentMethod,
+            CashAccountId = original.CashAccountId,
+            IsReturn = true,
+            OriginalSaleId = original.Id,
+            Status = RetailSaleStatus.PendingApproval,
+            ApprovalReason = $"İade: {reason.Trim()}",
+            SubmittedAtUtc = DateTime.UtcNow,
+            SubmittedByUserId = currentUser.UserId,
+            DocumentNumber = await documentNumbers.GenerateAsync(
+                original.CompanyId, "RETAIL_RETURN", "PIF", cancellationToken)
+        };
+
+        var line = 0;
+
+        foreach (var requested in lines)
+        {
+            if (requested.Quantity <= 0m)
+                continue;
+
+            var source = original.Items.SingleOrDefault(x => x.Id == requested.RetailSaleItemId)
+                ?? throw new InvalidOperationException("İade kalemi fişte bulunamadı.");
+
+            var returnable = source.Quantity
+                - alreadyReturned.GetValueOrDefault(source.InventoryItemId, 0m);
+
+            if (requested.Quantity > returnable)
+            {
+                throw new InvalidOperationException(
+                    $"{source.Description}: en fazla {returnable:0.##} {source.Unit} iade edilebilir " +
+                    $"(satışta {source.Quantity:0.##}, daha önce iade edilen " +
+                    $"{alreadyReturned.GetValueOrDefault(source.InventoryItemId, 0m):0.##}).");
+            }
+
+            var ratio = source.Quantity == 0m ? 0m : requested.Quantity / source.Quantity;
+
+            retur.Items.Add(new RetailSaleItem
+            {
+                LineNumber = ++line,
+                InventoryItemId = source.InventoryItemId,
+                Description = source.Description,
+                Unit = source.Unit,
+                Quantity = requested.Quantity,
+                UnitPrice = source.UnitPrice,
+                DiscountRate = source.DiscountRate,
+                MaxDiscountRateAtSale = source.MaxDiscountRateAtSale,
+                VatRate = source.VatRate,
+                LineSubtotal = Round(source.LineSubtotal * ratio),
+                VatAmount = Round(source.VatAmount * ratio),
+                LineTotal = Round(source.LineTotal * ratio)
+            });
+        }
+
+        if (retur.Items.Count == 0)
+            throw new InvalidOperationException("İade edilecek geçerli kalem yok.");
+
+        retur.Subtotal = retur.Items.Sum(x => x.LineSubtotal);
+        retur.VatTotal = retur.Items.Sum(x => x.VatAmount);
+        retur.GrandTotal = retur.Subtotal + retur.VatTotal;
+
+        // ELDEN KISIM ORANTILI GERİ ALINIR ve maskesi korunur: iade
+        // fişinde de ayrı sayısal alanda duruyor, açıklamaya yazılmıyor.
+        var cashRatio = original.GrandTotal == 0m ? 0m : original.CashAmount / original.GrandTotal;
+        retur.CashAmount = Round(retur.GrandTotal * cashRatio);
+        retur.RecordedAmount = retur.GrandTotal - retur.CashAmount;
+
+        db.RetailSales.Add(retur);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return retur;
+    }
+
+
+    /// <summary>
+    /// Onaylanan İADE fişini gerçeğe çevirir: stok geri, iade faturası,
+    /// para iadesi. Üçü tek transaction'da.
+    /// </summary>
+    private async Task CompleteReturnAsync(RetailSale sale, CancellationToken cancellationToken)
+    {
+        var original = await db.RetailSales
+            .Include(x => x.Items)
+            .SingleAsync(x => x.Id == sale.OriginalSaleId!.Value, cancellationToken);
+
+        var returnNumbers = new Dictionary<Guid, string>();
+
+        foreach (var item in sale.Items)
+        {
+            returnNumbers[item.Id] = await documentNumbers.GenerateAsync(
+                sale.CompanyId, "STOCK_RETURN", "IADE", cancellationToken);
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        await ReturnStockAsync(sale, sale.Items.ToDictionary(x => x.Id, x => x.Quantity),
+            returnNumbers, $"Perakende iade {sale.DocumentNumber}", cancellationToken);
+
+        // İADE FATURASI MEVCUT SERVİSTEN. O servis fazla iade
+        // kontrolünü, ters fişi ve orijinal faturaya bağı zaten
+        // yapıyor; burada tekrar yazılsaydı iki kural ayrışırdı.
+        if (original.SalesInvoiceId is Guid originalInvoiceId && sale.RecordedAmount > 0)
+        {
+            var originalInvoice = await db.SalesInvoices
+                .Include(x => x.Items)
+                .SingleAsync(x => x.Id == originalInvoiceId, cancellationToken);
+
+            var returnLines = new List<InvoiceReturnItemRequest>();
+
+            foreach (var item in sale.Items)
+            {
+                var invoiceLine = originalInvoice.Items
+                    .FirstOrDefault(x => x.Description == item.Description);
+
+                if (invoiceLine is not null)
+                    returnLines.Add(new InvoiceReturnItemRequest(invoiceLine.Id, item.Quantity));
+            }
+
+            if (returnLines.Count > 0)
+            {
+                var created = await salesInvoices.CreateReturnAsync(
+                    originalInvoiceId,
+                    new CreateInvoiceReturnRequest(
+                        sale.DocumentNumber,
+                        sale.SaleDate,
+                        returnLines,
+                        $"Perakende iade {sale.DocumentNumber}"),
+                    cancellationToken);
+
+                sale.SalesInvoiceId = created.Id;
+            }
+        }
+
+        // PARA İADESİ yalnız peşin/kartta ve yalnız KAYITLI tutar için.
+        // Elden kısım resmî kasaya hiç girmediği için oradan çıkmaz.
+        var refunds = sale.PaymentMethod is RetailPaymentMethod.Cash
+            or RetailPaymentMethod.CreditCard;
+
+        if (refunds && sale.RecordedAmount > 0 && sale.CashAccountId is Guid cashAccountId)
+        {
+            var refund = new CashTransaction
+            {
+                CashAccountId = cashAccountId,
+                TransactionDate = sale.SaleDate,
+                TransactionType = CashTransactionType.Collection,
+                Direction = CashTransactionDirection.Out,
+                Amount = sale.RecordedAmount,
+                AmountTry = sale.RecordedAmount,
+                CurrencyCode = "TRY",
+                ExchangeRate = 1m,
+                Description = $"Perakende iade {sale.DocumentNumber}",
+                DocumentNumber = sale.DocumentNumber,
+                CurrentAccountId = sale.CustomerCurrentAccountId,
+                SourceModule = "RETAIL_RETURN",
+                SourceEntityId = sale.Id
+            };
+
+            db.CashTransactions.Add(refund);
+            await db.SaveChangesAsync(cancellationToken);
+
+            refund.AccountingVoucherId = await accounting
+                .CreateCashTransactionVoucherAsync(refund, cancellationToken);
+
+            sale.CashTransactionId = refund.Id;
+        }
+
+        sale.Status = RetailSaleStatus.Completed;
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>Stoğu geri koyar ve iade hareketi yazar.</summary>
+    private async Task ReturnStockAsync(
+        RetailSale sale,
+        IReadOnlyDictionary<Guid, decimal> quantities,
+        IReadOnlyDictionary<Guid, string> documentNumbersByItem,
+        string description,
+        CancellationToken cancellationToken)
+    {
+        foreach (var item in sale.Items)
+        {
+            if (!quantities.TryGetValue(item.Id, out var amount) || amount <= 0m)
+                continue;
+
+            var stock = await db.WarehouseStocks
+                .Include(x => x.InventoryItem)
+                .SingleOrDefaultAsync(
+                    x => x.WarehouseId == sale.WarehouseId
+                        && x.InventoryItemId == item.InventoryItemId,
+                    cancellationToken)
+                ?? throw new InvalidOperationException(
+                    $"{item.Description}: depoda stok kaydı yok, iade işlenemedi.");
+
+            stock.Quantity += amount;
+            stock.UpdatedAtUtc = DateTime.UtcNow;
+
+            var unitCost = stock.InventoryItem.AverageUnitCost;
+
+            db.StockMovements.Add(new StockMovement
+            {
+                CompanyId = sale.CompanyId,
+                WarehouseId = sale.WarehouseId,
+                InventoryItemId = item.InventoryItemId,
+                Type = StockMovementType.Return,
+                Quantity = amount,
+                UnitCost = unitCost,
+                TotalCost = unitCost * amount,
+                ReferenceNumber = documentNumbersByItem[item.Id],
+                MovementDate = DateTime.UtcNow.Date,
+                Description = description,
+                CreatedByUserId = currentUser.UserId
+            });
+        }
+    }
+
     /// <summary>
     /// FİŞİ GERÇEĞE ÇEVİREN TEK YER.
     ///
@@ -339,6 +731,15 @@ public sealed class RetailSaleService(
     {
         if (sale.SalesInvoiceId is not null)
             throw new InvalidOperationException("Bu fiş zaten sonuçlandırılmış.");
+
+        // İADE FİŞİ TERS YÖNDE İŞLENİR: mal geri gelir, iade faturası
+        // kesilir, para geri çıkar. Aynı metodun içinde ayrılmasının
+        // sebebi "tek kez, tek transaction" güvencesinin ortak olması.
+        if (sale.IsReturn)
+        {
+            await CompleteReturnAsync(sale, cancellationToken);
+            return;
+        }
 
         // Belge numaraları transaction dışında üretilir: DocumentNumberService
         // kendi transaction'ını açıyor ve iç içe transaction hatası verir.

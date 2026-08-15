@@ -129,6 +129,24 @@ export const retailSaleService = {
     return request<{ status: number }>(`/api/perakende/${id}/onayla`, { method: "POST" });
   },
 
+  items(id: string) {
+    return request<RetailSaleItemRow[]>(`/api/perakende/${id}/kalemler`);
+  },
+
+  cancel(id: string, reason: string) {
+    return request<{ status: number }>(`/api/perakende/${id}/iptal`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  createReturn(id: string, reason: string, items: { retailSaleItemId: string; quantity: number }[]) {
+    return request<{ id: string; documentNumber: string }>(`/api/perakende/${id}/iade`, {
+      method: "POST",
+      body: JSON.stringify({ reason, items }),
+    });
+  },
+
   reject(id: string, reason: string) {
     return request<{ status: number }>(`/api/perakende/${id}/reddet`, {
       method: "POST",
@@ -136,6 +154,18 @@ export const retailSaleService = {
     });
   },
 };
+
+export interface RetailSaleItemRow {
+  id: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  discountRate: number;
+  lineTotal: number;
+  /** Daha önce iade edilen miktar — kalan iade edilebilir buradan çıkar. */
+  alreadyReturned: number;
+}
 
 export interface RetailPricingRow {
   id: string;
