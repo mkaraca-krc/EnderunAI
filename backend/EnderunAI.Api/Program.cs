@@ -145,6 +145,11 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Fleet.IVehicleExpenseService,
     EnderunAI.Api.Services.Fleet.VehicleExpenseService>();
+
+// Perakende satış: fişi fatura + stok + tahsilata çeviren tek servis.
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Retail.IRetailSaleService,
+    EnderunAI.Api.Services.Retail.RetailSaleService>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Engineering.IPositionMatchService,
     EnderunAI.Api.Services.Engineering.PositionMatchService>();

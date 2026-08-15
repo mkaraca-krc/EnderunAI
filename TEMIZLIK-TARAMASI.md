@@ -264,3 +264,28 @@ varsa yuvarlama kararı ayrıca alınmalı. Aynı taramada
 **Şimdilik:** yalnızca kaydedildi, kod ve şema değişmedi. Gösterim
 tarafı A4/17'de `unitPrice`e bağlandı, yani bugünkü veriyle doğru
 basıyor.
+
+## Alınan çek satış faturasına bağlanamıyor
+
+**Ne:** `Cheque` modelinde `SupplierInvoiceId` ve `ProgressPaymentId`
+var, `SalesInvoiceId` YOK. Yani müşteriden satış faturası karşılığı
+alınan bir çek, o faturaya iliştirilemiyor.
+
+**Neden riskli:** Nakit akışında satış faturası alacağı, çek tahsil
+edilip kasaya girene kadar AÇIK görünmeye devam ediyor. Tedarikçi
+tarafında bu bağ var ve kullanılıyor (`GetSupplierInvoiceItemsAsync`
+çek karşılığını bakiyeden düşüyor); satış tarafında simetri yok. Aynı
+alacak hem çek portföyünde hem açık fatura bakiyesinde durduğu için
+beklenen tahsilat **iki kez** görünebiliyor.
+
+Perakende paketinde bu eksiği uydurma bir bağla kapatmak yerine
+olduğu gibi bıraktım: yanlış eşleşen bir çek alacağı olduğundan erken
+kapatır ve nakit akışını olduğundan iyi gösterirdi — bu, olduğundan
+kötü göstermekten daha tehlikeli.
+
+**O turda değerlendirilecek:** `Cheque`e `SalesInvoiceId` eklemek ve
+`GetSalesInvoiceItemsAsync` içindeki çek düşümünü açmak; çek girişi
+ekranında satış faturası seçimi. Migration + ekran dokunuşu istiyor.
+
+**Şimdilik:** yalnızca kaydedildi. `CashFlowService` içinde eksiğin
+neden bilinçli bırakıldığı yorumda yazılı.

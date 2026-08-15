@@ -160,6 +160,7 @@ const RULES: Rule[] = [
 
   { match: "/sirketler", permission: "companies.view" },
   { match: "/subeler", permission: "companies.view" },
+  { match: "/perakende", permission: "sales.view" },
   { match: "/cariler", permission: "companies.view" },
 ];
 

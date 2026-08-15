@@ -66,6 +66,33 @@ public sealed class InventoryItem : BaseEntity
     /// <summary>Yüklenen görselin dosya yolu (uploads/stok-kartlari).</summary>
     public string? ImagePath { get; set; }
 
+    /// <summary>
+    /// Perakende liste fiyatı (KDV hariç, TRY). Satış ekranı birim fiyatı
+    /// BURADAN okur — satıcının elle yazdığı fiyat değil.
+    ///
+    /// MALİYETTEN AYRI ALAN: <see cref="AverageUnitCost"/> stok
+    /// değerlemesi için, bu ise satış için. İkisini tek alana
+    /// indirgemek maliyeti satıcıya göstermek demek olurdu; perakende
+    /// ekranı maliyeti hiç okumaz.
+    ///
+    /// Boşsa o kalem perakende satışa kapalıdır — sıfır fiyat değil,
+    /// "fiyatlandırılmamış" demektir.
+    /// </summary>
+    public decimal? SalesPrice { get; set; }
+
+    /// <summary>
+    /// Satış personelinin uygulayabileceği EN YÜKSEK iskonto oranı (%).
+    /// Yönetim belirler; personel bu tavanı aşamaz.
+    ///
+    /// TAVAN SUNUCUDA ZORLANIR. İstemciden gelen orana güvenilmez:
+    /// ekran tavanı gösterip girişi kısıtlasa bile, uç doğrudan
+    /// çağrılabiliyor. Aşan satış reddedilmez — FİNANS ONAYINA düşer;
+    /// yani tavan bir yasak değil, yetki sınırıdır.
+    ///
+    /// Varsayılan sıfır: tanımlanmadıysa iskonto yok demektir.
+    /// </summary>
+    public decimal MaxDiscountRate { get; set; }
+
     public ICollection<WarehouseStock> WarehouseStocks { get; set; } = new List<WarehouseStock>();
     public ICollection<StockMovement> StockMovements { get; set; } = new List<StockMovement>();
 }

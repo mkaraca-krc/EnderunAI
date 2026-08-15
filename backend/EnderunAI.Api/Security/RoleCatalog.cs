@@ -40,6 +40,11 @@ public static class RoleCatalog
             // taşıdığı için ayrı anahtar. Admin ve Genel Müdür bütün
             // anahtarları aldığı için burada tekrar listelenmiyor.
             PermissionCatalog.Keys.CashFlowView,
+            // Perakende satış: ONAY finansın işi. Tavan aşımını ve
+            // vadeyi onaylayan rol, alacağı ve nakit akışını taşıyan
+            // rolle aynı olmalı. Satış HAZIRLAMA yetkisi burada YOK —
+            // onaylayan ile hazırlayan aynı kişi olmamalı.
+            PermissionCatalog.Keys.SalesView, PermissionCatalog.Keys.SalesApprove,
             // Gider merkezi: "ofise ne harcadık, şantiyeye ne harcadık"
             // finansın raporu. Elden ödenen gider kalemleri ayrıca
             // extra_payment.view'a tabi, o izin de bu rolde var.
@@ -229,6 +234,21 @@ public static class RoleCatalog
             PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.AiUse
         ], RoleDataScopePolicy.SiteOnly),
+
+        new("Satış Personeli",
+            "Merkez depodan perakende satış hazırlar. Stok adedini ve satış fiyatını görür, MALİYETİ GÖRMEZ; iskonto tavanını aşamaz, elden satış açamaz.",
+        [
+            PermissionCatalog.Keys.DashboardView,
+            PermissionCatalog.Keys.SalesView, PermissionCatalog.Keys.SalesCreate,
+            // Cari GÖRÜNTÜLEME var, oluşturma yok: vadeli satışta müşteri
+            // seçebilmeli ama yeni cari açmak muhasebenin işi.
+            PermissionCatalog.Keys.CurrentAccountsView
+            // BİLEREK YOK:
+            //   inventory.view  -> maliyet ve stok değeri döndürüyor;
+            //                      satış ekranı kendi dar ucunu kullanır
+            //   sales.cash      -> elden satış ayrı yetki
+            //   sales.approve   -> kendi iskontosunu kendi onaylayamaz
+        ]),
 
         new("Sekreterya", "Dosyalar tam yetki, cari kart oluşturma/görüntüleme, projeler görüntüleme.",
         [

@@ -209,6 +209,8 @@ public sealed class AppDbContext(
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<WarehouseStock> WarehouseStocks => Set<WarehouseStock>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+    public DbSet<RetailSale> RetailSales => Set<RetailSale>();
+    public DbSet<RetailSaleItem> RetailSaleItems => Set<RetailSaleItem>();
     public DbSet<DocumentNumberSequence> DocumentNumberSequences => Set<DocumentNumberSequence>();
     public DbSet<ManufacturerPriceList> ManufacturerPriceLists => Set<ManufacturerPriceList>();
     public DbSet<ManufacturerPriceListItem> ManufacturerPriceListItems => Set<ManufacturerPriceListItem>();
@@ -341,6 +343,7 @@ public sealed class AppDbContext(
         ConfigurePurchaseRequestItems(modelBuilder);
         ConfigureInventoryItems(modelBuilder);
         ConfigureWarehouseStocks(modelBuilder);
+        ConfigureRetailSales(modelBuilder);
         ConfigureStockMovements(modelBuilder);
         ConfigureDocumentNumberSequences(modelBuilder);
         ConfigureManufacturerPriceLists(modelBuilder);
@@ -3194,7 +3197,75 @@ public sealed class AppDbContext(
             entity.Property(x => x.MaximumStock).HasPrecision(18, 4);
             entity.Property(x => x.CopperKgPerUnit).HasPrecision(18, 4);
             entity.Property(x => x.AverageUnitCost).HasPrecision(18, 4);
+            // Satış fiyatı BİRİM FİYAT ölçeğinde (6): gösterim tarafındaki
+            // `unitPrice` altı hane basıyor ve ölçek kolonun ölçeğini
+            // karşılamak zorunda (bkz. TEMIZLIK-TARAMASI.md).
+            entity.Property(x => x.SalesPrice).HasPrecision(18, 6);
+            entity.Property(x => x.MaxDiscountRate).HasPrecision(5, 2);
             entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureRetailSales(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RetailSale>(entity =>
+        {
+            entity.ToTable("retail_sales");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.DocumentNumber }).IsUnique();
+            entity.HasIndex(x => x.Status);
+
+            entity.Property(x => x.DocumentNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.WalkInCustomerName).HasMaxLength(200);
+            entity.Property(x => x.ApprovalReason).HasMaxLength(500);
+            entity.Property(x => x.DecisionReason).HasMaxLength(500);
+
+            entity.Property(x => x.OverallDiscountRate).HasPrecision(5, 2);
+            entity.Property(x => x.Subtotal).HasPrecision(18, 2);
+            entity.Property(x => x.DiscountAmount).HasPrecision(18, 2);
+            entity.Property(x => x.VatTotal).HasPrecision(18, 2);
+            entity.Property(x => x.GrandTotal).HasPrecision(18, 2);
+            entity.Property(x => x.RecordedAmount).HasPrecision(18, 2);
+            entity.Property(x => x.CashAmount).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Warehouse).WithMany()
+                .HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CustomerCurrentAccount).WithMany()
+                .HasForeignKey(x => x.CustomerCurrentAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SalesInvoice).WithMany()
+                .HasForeignKey(x => x.SalesInvoiceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CashAccount>().WithMany()
+                .HasForeignKey(x => x.CashAccountId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<RetailSaleItem>(entity =>
+        {
+            entity.ToTable("retail_sale_items");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.RetailSaleId);
+
+            entity.Property(x => x.Description).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
+
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 6);
+            entity.Property(x => x.DiscountRate).HasPrecision(5, 2);
+            entity.Property(x => x.MaxDiscountRateAtSale).HasPrecision(5, 2);
+            entity.Property(x => x.VatRate).HasPrecision(5, 2);
+            entity.Property(x => x.LineSubtotal).HasPrecision(18, 2);
+            entity.Property(x => x.VatAmount).HasPrecision(18, 2);
+            entity.Property(x => x.LineTotal).HasPrecision(18, 2);
+
+            entity.HasOne(x => x.RetailSale).WithMany(x => x.Items)
+                .HasForeignKey(x => x.RetailSaleId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.InventoryItem).WithMany()
+                .HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }

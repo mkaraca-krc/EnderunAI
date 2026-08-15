@@ -15,7 +15,8 @@ public interface ICashFlowService
 
 /// <summary>
 /// Vade bazlı nakit akışı: beklenen tahsilatlar (portföydeki/bankadaki
-/// alınan çekler + kesinleşmiş hakedişlerin tahsil edilmemiş bakiyesi)
+/// alınan çekler + kesinleşmiş hakedişlerin tahsil edilmemiş bakiyesi
+/// + kesinleşmiş satış faturalarının tahsil edilmemiş bakiyesi)
 /// karşısında beklenen ödemeler (vadesi gelmemiş verilen çekler +
 /// onaylı tedarikçi faturalarının ödenmemiş bakiyesi).
 ///
@@ -50,6 +51,8 @@ public sealed class CashFlowService(
         inflows.AddRange(await GetChequeItemsAsync(
             companyId, projectId, ChequeDirection.Received, today, cancellationToken));
         inflows.AddRange(await GetProgressPaymentItemsAsync(
+            companyId, projectId, today, cancellationToken));
+        inflows.AddRange(await GetSalesInvoiceItemsAsync(
             companyId, projectId, today, cancellationToken));
 
         outflows.AddRange(await GetChequeItemsAsync(
@@ -413,6 +416,135 @@ public sealed class CashFlowService(
                 $"{row.InternalNumber} — {row.SupplierTitle}",
                 row.SupplierCurrentAccountId,
                 row.SupplierTitle,
+                row.ProjectId,
+                row.ProjectCode,
+                expectedDate,
+                (int)(expectedDate.Date - today).TotalDays,
+                expectedDate.Date < today,
+                remaining,
+                row.CurrencyCode));
+        }
+
+        return items;
+    }
+    /// <summary>
+    /// KESİNLEŞMİŞ SATIŞ FATURALARININ TAHSİL EDİLMEMİŞ BAKİYESİ.
+    ///
+    /// Bu kaynak sonradan eklendi: nakit akışı girişleri yıllarca
+    /// yalnız çek portföyü ve hakediş bakiyesinden geliyordu, yani
+    /// vadeli bir satış faturası kesildiğinde alacak projeksiyonda hiç
+    /// görünmüyordu. Perakendede vadeli satış açılınca eksik ortaya
+    /// çıktı; ama kusur perakendeye ait değil, satış faturasının
+    /// tamamına aitti — bu yüzden düzeltme kaynağın kendisinde.
+    ///
+    /// ÇİFT SAYIM YOK: faturaya bağlanmış tahsilatlar (kasa hareketi)
+    /// ve karşılığında alınan çekler bakiyeden düşülüyor. Aksi hâlde
+    /// peşin satışta hem kasaya giren para hem de faturanın tamamı
+    /// beklenen tahsilat sayılırdı.
+    ///
+    /// Yalnız POSTED fatura sayılır: taslak fatura henüz bir alacak
+    /// doğurmamıştır. İADE FATURALARI HARİÇ (IsReturn) — onlar
+    /// alacağı azaltan ters kayıtlar, ayrı bir tahsilat beklentisi
+    /// değil.
+    /// </summary>
+    private async Task<List<CashFlowItemResponse>> GetSalesInvoiceItemsAsync(
+        Guid companyId,
+        Guid? projectId,
+        DateTime today,
+        CancellationToken cancellationToken)
+    {
+        var query = db.SalesInvoices
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId
+                && x.Status == SalesInvoiceStatus.Posted
+                && !x.IsReturn);
+
+        if (projectId is not null)
+            query = query.Where(x => x.ProjectId == projectId.Value);
+
+        var rows = await query
+            .Select(x => new
+            {
+                x.Id,
+                x.InternalNumber,
+                x.OfficialInvoiceNumber,
+                x.CustomerCurrentAccountId,
+                CustomerTitle = x.CustomerCurrentAccount.Title,
+                x.ProjectId,
+                ProjectCode = x.Project != null ? x.Project.Code : null,
+                x.CurrencyCode,
+                x.NetReceivableAmount,
+                x.InvoiceDate,
+                x.DueDate
+            })
+            .ToListAsync(cancellationToken);
+
+        if (rows.Count == 0)
+            return [];
+
+        var ids = rows.Select(x => x.Id).ToList();
+
+        var collections = await db.CashTransactions
+            .AsNoTracking()
+            .Where(x => x.SourceModule == "SalesInvoice"
+                && x.SourceEntityId != null
+                && ids.Contains(x.SourceEntityId!.Value)
+                && x.Direction == CashTransactionDirection.In)
+            .GroupBy(x => x.SourceEntityId!.Value)
+            .Select(g => new { SalesInvoiceId = g.Key, Total = g.Sum(x => x.Amount) })
+            .ToListAsync(cancellationToken);
+
+        // Perakende peşin/kart satışında tahsilat fişin kendisine
+        // bağlanıyor (SourceModule = "RETAIL_SALE"), faturaya değil.
+        // O tahsilatlar da bu faturanın bakiyesini kapatır; hesaba
+        // katılmazsa peşin satış "açık alacak" gibi görünürdü.
+        var retailCollections = await db.RetailSales
+            .AsNoTracking()
+            .Where(x => x.SalesInvoiceId != null
+                && ids.Contains(x.SalesInvoiceId!.Value)
+                && x.CashTransactionId != null)
+            .Join(db.CashTransactions.AsNoTracking(),
+                sale => sale.CashTransactionId!.Value,
+                cash => cash.Id,
+                (sale, cash) => new { sale.SalesInvoiceId, cash.Amount })
+            .GroupBy(x => x.SalesInvoiceId!.Value)
+            .Select(g => new { SalesInvoiceId = g.Key, Total = g.Sum(x => x.Amount) })
+            .ToListAsync(cancellationToken);
+
+        // ÇEK KARŞILIĞI BURADA DÜŞÜLEMİYOR: Cheque modelinde
+        // SupplierInvoiceId ve ProgressPaymentId var ama SalesInvoiceId
+        // YOK — alınan bir çek satış faturasına bağlanamıyor. Bu yüzden
+        // çekle kapatılan bir satış faturası, çek tahsil edilip kasaya
+        // girene kadar açık alacak olarak görünmeye devam eder.
+        //
+        // Uydurma bir bağ kurmak yerine eksik olduğu gibi bırakıldı:
+        // yanlış eşleşen bir çek, alacağı olduğundan erken kapatır ve
+        // nakit akışını olduğundan iyi gösterirdi. Çek↔satış faturası
+        // bağı ayrı bir iş (TEMIZLIK-TARAMASI'na yazıldı).
+        var items = new List<CashFlowItemResponse>();
+
+        foreach (var row in rows)
+        {
+            var collected = collections
+                .Where(x => x.SalesInvoiceId == row.Id).Sum(x => x.Total);
+            var retail = retailCollections
+                .Where(x => x.SalesInvoiceId == row.Id).Sum(x => x.Total);
+            var remaining = decimal.Round(
+                row.NetReceivableAmount - collected - retail, 2);
+
+            if (remaining <= 0m)
+                continue;
+
+            var expectedDate = row.DueDate ?? row.InvoiceDate;
+
+            items.Add(new CashFlowItemResponse(
+                "SalesInvoice",
+                "Satış faturası",
+                row.Id,
+                row.OfficialInvoiceNumber ?? row.InternalNumber,
+                $"{row.InternalNumber} — {row.CustomerTitle}",
+                row.CustomerCurrentAccountId,
+                row.CustomerTitle,
                 row.ProjectId,
                 row.ProjectCode,
                 expectedDate,

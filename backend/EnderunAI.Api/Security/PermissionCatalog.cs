@@ -100,6 +100,20 @@ public static class PermissionCatalog
         public const string InventoryEdit = "inventory.edit";
         public const string InventoryDelete = "inventory.delete";
 
+        // Perakende satış
+        //
+        // ÜÇ AYRI ANAHTAR, ÇÜNKÜ ÜÇ AYRI GÜVEN SEVİYESİ:
+        //   sales.*        satış hazırlar (fiyatı ve tavanı karttan okur)
+        //   sales.cash     satışın bir kısmını ELDEN işaretleyebilir
+        //   sales.approve  tavan aşımını ve vadeyi onaylar — yalnız finans
+        //
+        // Tek anahtar olsaydı satış hazırlayan personel kendi iskontosunu
+        // kendi onaylar, kendi elden satışını kendi açardı.
+        public const string SalesView = "sales.view";
+        public const string SalesCreate = "sales.create";
+        public const string SalesCash = "sales.cash";
+        public const string SalesApprove = "sales.approve";
+
         // Personel
         public const string PersonnelView = "personnel.view";
         public const string PersonnelManage = "personnel.manage";
@@ -449,7 +463,12 @@ public static class PermissionCatalog
         new(Keys.IsgDelete, "İSG", "Silme", "İSG kaydını siler."),
         new(Keys.IsgHealthView, "İSG", "Sağlık raporu detayı", "Sağlık raporunun tıbbi detayını (teşhis, kısıtlama, rapor dosyası) görür. Rapor tarihi ve geçerliliği bu izin olmadan da görünür."),
         new(Keys.IsgIncidentView, "İSG", "Kaza kayıtlarını görüntüleme", "Kaza ve ramak kala kayıt defterini görüntüler."),
-        new(Keys.IsgIncidentManage, "İSG", "Kaza kaydı yönetimi", "Kaza ve ramak kala kaydı oluşturur, günceller ve SGK bildirimini işler.")
+        new(Keys.IsgIncidentManage, "İSG", "Kaza kaydı yönetimi", "Kaza ve ramak kala kaydı oluşturur, günceller ve SGK bildirimini işler."),
+
+        new(Keys.SalesView, "Perakende Satış", "Görüntüleme", "Perakende satış fişlerini ve merkez depo satış stoğunu görüntüler. Maliyet bu izinle GÖRÜNMEZ."),
+        new(Keys.SalesCreate, "Perakende Satış", "Satış hazırlama", "Perakende satış fişi hazırlar. Fiyat ve iskonto tavanı stok kartından gelir; tavan aşımı finans onayına düşer."),
+        new(Keys.SalesCash, "Perakende Satış", "Elden tutar işaretleme", "Satışın bir kısmını elden olarak işaretler ve elden tutarları görür. Bu izin olmadan yalnızca kayıtlı satış yapılabilir."),
+        new(Keys.SalesApprove, "Perakende Satış", "Finans onayı", "İskonto tavanı aşılan veya vadeli satışları onaylar. Onaya kadar stok düşmez, fatura ve tahsilat oluşmaz.")
     ];
 
     public static bool IsKnownPermission(string permission) =>

@@ -26,6 +26,9 @@ describe("yol izinleri", () => {
     ["/taseronlar", "subcontractor.view"],
     ["/isg/kazalar", "isg.incident.view"],
     ["/is-programi", "schedule.view"],
+    // Perakende satış: satış personeli bu ekranı görür ama stok
+    // ekranlarını görmez — o uçlar maliyet döndürüyor.
+    ["/perakende", "sales.view"],
   ])("%s → %s", (path, permission) => {
     expect(routePermission(path)).toBe(permission);
   });
