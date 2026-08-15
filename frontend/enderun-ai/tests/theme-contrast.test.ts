@@ -146,6 +146,77 @@ describe("tema kontrastı", () => {
     }
   });
 
+  /**
+   * TAILWIND SKALALARI DA TEMA DUYARLI OLMALI.
+   *
+   * Bu testin ilk hâli yalnızca `--erp-*` ve `--color-semantic-*`
+   * tokenlarına bakıyordu ve koyu temayı iki kez "geçti" diye
+   * onayladı. Oysa ekranlar rengi çoğunlukla o tokenlarla değil,
+   * Tailwind sınıflarıyla yazıyor: `text-slate-900`, `bg-slate-50`.
+   * 160 Redwood ekranının 67'sinde 2997 kullanım vardı ve hepsi sabit
+   * değerdi — koyu temada siyah metin, beyaz kart.
+   *
+   * Testin kapsamı ekrandaki renk YAZMA BİÇİMİNİ takip etmezse,
+   * ölçtüğü şey gerçekte görülen şey olmuyor.
+   */
+  it("kullanılan Tailwind skalaları light-dark tanımlı", () => {
+    const families = ["slate", "red", "emerald", "amber", "blue", "cyan"];
+    const steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+
+    const missing: string[] = [];
+
+    for (const family of families) {
+      for (const step of steps) {
+        const token = `--color-${family}-${step}`;
+
+        if (!new RegExp(`${token}:\\s*light-dark\\(`).test(CSS)) {
+          missing.push(`${token}`);
+        }
+      }
+    }
+
+    expect(
+      missing,
+      "Skala tokenı sabit değerde kalmış; o sınıfı kullanan her ekran " +
+        "koyu temada açık renk basar.",
+    ).toEqual([]);
+  });
+
+  /**
+   * En yoğun kullanılan slate adımları koyu KARTTA da okunmalı.
+   *
+   * Zemin değil kart seçildi çünkü kart daha açık ve zor olan o.
+   * `text-slate-500` (531 kullanım) saf aynalamada 500'de kalıyor ve
+   * kartta 4.09 veriyordu — bu yüzden koyu değeri bir adım açıldı.
+   */
+  it("slate metin adımları koyu kartta okunuyor", () => {
+    const panel = pair("erp-panel").dark;
+
+    for (const step of [500, 600, 700, 800, 900, 950]) {
+      const { dark } = pair(`color-slate-${step}`);
+
+      expect(
+        Number(contrast(dark, panel).toFixed(2)),
+        `text-slate-${step} koyu kartta okunmuyor`,
+      ).toBeGreaterThanOrEqual(MINIMUM);
+    }
+  });
+
+  /**
+   * Rampa gerçekten TERS ÇEVRİLMİŞ olmalı.
+   *
+   * Bir adımın koyu değeri yanlışlıkla açık değerinin kopyası olarak
+   * bırakılırsa yukarıdaki testler bunu yakalamayabilir; burada yön
+   * kontrol ediliyor: en açık uç koyulaşmış, en koyu uç açılmış.
+   */
+  it("slate rampası koyu temada ters çevrilmiş", () => {
+    const lightEnd = pair("color-slate-50");
+    const darkEnd = pair("color-slate-900");
+
+    expect(luminance(lightEnd.dark)).toBeLessThan(luminance(lightEnd.light));
+    expect(luminance(darkEnd.dark)).toBeGreaterThan(luminance(darkEnd.light));
+  });
+
   it("koyu tema zeminleri gerçekten koyu", () => {
     for (const token of ["erp-bg", "erp-panel", "color-surface-bg", "color-surface-card"]) {
       const { light, dark } = pair(token);
