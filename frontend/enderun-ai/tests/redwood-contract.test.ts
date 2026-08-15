@@ -354,6 +354,38 @@ describe("Redwood ekranları", () => {
    * kaçırmıştım. Sayım o soruyu hiç sormuyordu.
    */
   /**
+   * YÜZDE İŞARETİ İKİ KEZ YAZILMAZ.
+   *
+   * `percent()` işareti KENDİSİ koyuyor ("%5,5") — Türkçe yazımda
+   * işaret başta. Çağrı yerinde bir de literal `%` varsa ekrana
+   * "%%5,5" çıkıyor.
+   *
+   * Bu hatayı yayma sırasında ben yaptım: eski kod işareti JSX'te
+   * yazıyordu ve biçimleyiciyi `percent`e bağlarken o literali
+   * silmeyi üç yerde unuttum. Gerçek veri provasında görüldü —
+   * derleyici için kusursuz bir metin, testler de sessizdi.
+   *
+   * YEREL `percent` İŞLEVLERİ AYRI: bazı ekranlarda aynı adda yerel
+   * bir yardımcı var ve o ÇIPLAK sayı döndürüyor; oralarda literal
+   * işaret doğru. Bu yüzden kural yalnız ortak biçimleyiciyi içe
+   * aktaran dosyalara uygulanıyor.
+   */
+  it("yüzde işaretini iki kez yazmıyor", () => {
+    const offenders = numberSurface
+      .filter((page) =>
+        /import\s*\{[^}]*\bpercent\b[^}]*\}\s*from\s*"@\/lib\/format\/turkish"/.test(page.code),
+      )
+      .filter((page) => /%\s*\$?\{\s*percent\(/.test(page.code))
+      .map((page) => page.path);
+
+    expect(
+      offenders,
+      "Yüzde işareti hem çağrı yerinde hem percent() içinde yazılmış; " +
+        'ekranda "%%5,5" çıkar. Literal işareti kaldırın.',
+    ).toEqual([]);
+  });
+
+  /**
    * HER LİSTE EKRANINDA TAZELEME VAR.
    *
    * Liste ekranı, kullanıcının veriye bakıp bir işlem yaptıktan sonra

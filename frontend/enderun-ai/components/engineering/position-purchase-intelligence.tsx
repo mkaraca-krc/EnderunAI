@@ -128,7 +128,7 @@ export default function PositionPurchaseIntelligence({
           </strong>
           {lastDelta != null && (
             <small>
-              resmî fiyata göre %{percent(lastDelta)}
+              resmî fiyata göre {percent(lastDelta)}
             </small>
           )}
         </div>
@@ -144,7 +144,7 @@ export default function PositionPurchaseIntelligence({
           </strong>
           {averageDelta != null && (
             <small>
-              resmî fiyata göre %{percent(averageDelta)}
+              resmî fiyata göre {percent(averageDelta)}
             </small>
           )}
         </div>

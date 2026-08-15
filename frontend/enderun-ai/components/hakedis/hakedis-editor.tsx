@@ -897,7 +897,7 @@ export default function HakedisEditor({
                     <small>
                       {result.exceedsContractQuantity
                         ? "Sözleşme miktarı aşıldı"
-                        : `%${percent(result.completionRate)}`}
+                        : `${percent(result.completionRate, 2)}`}
                     </small>
                   </td>
                   <td>
