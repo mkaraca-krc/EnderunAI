@@ -358,6 +358,10 @@ export default function ExpenseCentrePage() {
   if (permissionsLoading) {
     return (
       <ErpShell design="redwood" title="Gider Merkezi">
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
+      </div>
+
         <div className="p-6 text-sm text-slate-500">Yükleniyor…</div>
       </ErpShell>
     );

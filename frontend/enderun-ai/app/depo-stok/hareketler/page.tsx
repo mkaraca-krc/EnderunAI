@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { amount } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 import {
   inventoryMovementService,
   type InventoryMovement,
@@ -32,6 +33,7 @@ export default function StockMovementsPage() {
   const [items, setItems] = useState<InventoryMovement[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     void inventoryMovementService
@@ -41,7 +43,7 @@ export default function StockMovementsPage() {
         setError(err instanceof Error ? err.message : "Hareketler yüklenemedi.")
       )
       .finally(() => setLoading(false));
-  }, []);
+  }, [reloadKey]);
 
   return (
     <ErpShell
@@ -49,6 +51,10 @@ export default function StockMovementsPage() {
       title="Stok Hareketleri"
       description="Giriş, çıkış, transfer ve sayım hareketlerinin tek defteri"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => setReloadKey((key) => key + 1)}>Yenile</Button>
+      </div>
+
       <div className="erp-page-toolbar">
         <div>
           <strong>{items.length} hareket</strong>

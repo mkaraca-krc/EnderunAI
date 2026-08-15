@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 
 import {
   accountingAccountService,
@@ -431,6 +431,10 @@ export default function AccountingAccountsPage() {
       title="Hesap Planı"
       description="Enderun hesap planını ağaç yapısında yönetin."
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void loadAccounts()}>Yenile</Button>
+      </div>
+
       {message && (
         <div className="erp-alert success">
           {message}

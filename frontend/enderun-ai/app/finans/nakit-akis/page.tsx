@@ -13,6 +13,7 @@ import {
 } from "@/services/cash-flow.service";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
+import { Button } from "@/components/ui";
 
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
@@ -170,6 +171,10 @@ export default function CashFlowPage() {
       title="Nakit Akışı"
       description="Likidite takvimi ve vade bazlı beklenen tahsilat/ödemeler"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void loadForecast()}>Yenile</Button>
+      </div>
+
       {canSeeProjection && (
         <div className="mb-4 flex flex-wrap gap-2">
           <button

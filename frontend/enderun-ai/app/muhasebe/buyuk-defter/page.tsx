@@ -10,6 +10,7 @@ import {
 
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 
 import {
   accountingReportService,
@@ -482,7 +483,9 @@ export default function GeneralLedgerPage() {
                     {open ? "Daralt" : "Göster"}
                   </button>
                 </div>
-              </div>
+              
+          <Button variant="secondary" disabled={loadingReport} onClick={() => void loadReport(filters)}>Yenile</Button>
+        </div>
 
               {open && (
                 <>

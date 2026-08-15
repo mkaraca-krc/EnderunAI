@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { amount, money, number as formatNumber } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 import {
   currencyValuationService,
   type CurrencyValuationPreview,
@@ -133,6 +134,10 @@ export default function CurrencyValuationPage() {
       title="Kur Değerlemesi"
       description="Dövizli cari bakiyelerinin dönem sonu değerlemesi (646/656)"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void loadPreview()}>Yenile</Button>
+      </div>
+
       {error && <div className="erp-alert error">{error}</div>}
       {message && <div className="erp-alert success">{message}</div>}
 

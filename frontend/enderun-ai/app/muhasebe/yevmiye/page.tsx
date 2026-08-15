@@ -10,6 +10,7 @@ import {
 
 import ErpShell from "@/components/erp/erp-shell";
 import { amount, money } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 
 import {
   accountingReportService,
@@ -386,6 +387,8 @@ export default function JournalPage() {
               {report?.lines.length ?? 0} satır
             </small>
           </div>
+        
+          <Button variant="secondary" disabled={loadingReport} onClick={() => void loadReport(filters)}>Yenile</Button>
         </div>
 
         <div style={{ overflowX: "auto" }}>

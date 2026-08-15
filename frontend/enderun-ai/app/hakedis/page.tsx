@@ -6,6 +6,7 @@ import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
+import { Button } from "@/components/ui";
 import {
   progressPaymentService,
   ProgressPaymentStatus,
@@ -109,6 +110,8 @@ export default function ProgressPaymentsPage() {
         <Link href="/hakedis/yeni" className="erp-primary-link">
           + Yeni Hakediş
         </Link>
+      
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
       </div>
 
       {error && <div className="erp-alert error">{error}</div>}

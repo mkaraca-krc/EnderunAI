@@ -7,6 +7,7 @@ import { moneyWhole, number as formatNumber, percent } from "@/lib/format/turkis
 import CopperAlertPanel from "@/components/market/copper-alert-panel";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { companyService, type CompanyListItem } from "@/services/company.service";
+import { Button } from "@/components/ui";
 import {
   commodityService,
   copperImpactService,
@@ -271,14 +272,13 @@ export default function MarketPage() {
           ))}
         </div>
 
-        <button
-          type="button"
-          className="erp-btn ghost"
+        <Button
+          variant="secondary"
           disabled={refreshing}
           onClick={handleRefresh}
         >
           {refreshing ? "Güncelleniyor..." : "Şimdi güncelle"}
-        </button>
+        </Button>
       </div>
 
       {loading ? (

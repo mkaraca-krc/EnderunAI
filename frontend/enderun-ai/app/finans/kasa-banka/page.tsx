@@ -288,6 +288,8 @@ export default function CashAccountsPage() {
             + Yeni Hesap
           </button>
         </div>
+      
+        <Button variant="secondary" disabled={loading} onClick={() => void loadStatement()}>Yenile</Button>
       </div>
 
       {/*

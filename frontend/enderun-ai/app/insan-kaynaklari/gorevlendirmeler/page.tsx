@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import DutyDetailPanel from "@/components/hr/duty-detail-panel";
 import { usePermissions } from "@/lib/use-permissions";
 import {
@@ -360,6 +360,10 @@ export default function PersonnelDutiesPage() {
       title="Görevlendirmeler"
       description="Talep, onay, harcırah ve keşif sonucu tek akışta"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void loadItems()}>Yenile</Button>
+      </div>
+
       {error && (
         <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error}

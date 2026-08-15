@@ -353,6 +353,40 @@ describe("Redwood ekranları", () => {
    * ben de tam turda `variant="primary"` sayarak ölçtüğüm için
    * kaçırmıştım. Sayım o soruyu hiç sormuyordu.
    */
+  /**
+   * HER LİSTE EKRANINDA TAZELEME VAR.
+   *
+   * Liste ekranı, kullanıcının veriye bakıp bir işlem yaptıktan sonra
+   * geri döndüğü yer; tazeleme yoksa tek çare sayfayı yeniden
+   * yüklemek oluyor ve o da filtreleri sıfırlıyor.
+   *
+   * FORM VE DETAY EKRANLARI KAPSAM DIŞI: `/yeni`, `/duzenle`,
+   * `/[id]/…` ve içe aktarım sayfalarında tablo bulunsa bile o tablo
+   * bir liste değil, formun parçası.
+   *
+   * ETİKET HER ZAMAN "Yenile" DEĞİL: piyasa ekranı sağlayıcıdan yeni
+   * kur çekiyor ve düğmesi "Şimdi güncelle" diyor — yaptığı iş sayfayı
+   * yeniden okumak değil, veriyi kaynağından tazelemek. Etiketi
+   * "Yenile"ye çevirmek onu yanlış anlatırdı.
+   */
+  it("her liste ekranında tazeleme var", () => {
+    const formLike = /[/\\](yeni|duzenle|aktar|ice-aktar|e-fatura-ice-aktar)[/\\]page\.tsx$|[/\\]\[id\][/\\]/;
+    const refreshLabels = /Yenile|Şimdi güncelle/;
+
+    const offenders = redwoodPages
+      .filter((page) => /<DataTable|erp-table|<table/.test(page.code))
+      .filter((page) => !formLike.test(page.path))
+      .filter((page) => !refreshLabels.test(page.code))
+      .map((page) => page.path);
+
+    expect(
+      offenders,
+      "Liste ekranında tazeleme yok. " +
+        '<Button variant="secondary" onClick={() => void load()}>Yenile</Button> ' +
+        "ekleyin.",
+    ).toEqual([]);
+  });
+
   it("tazeleme düğmesi ortak bileşeni kullanıyor", () => {
     const offenders = redwoodPages
       .filter((page) => {

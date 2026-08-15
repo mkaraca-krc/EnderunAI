@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
+import { Button } from "@/components/ui";
 import {
   salesInvoiceService,
   SALES_INVOICE_STATUS_COLORS,
@@ -84,6 +85,10 @@ export default function SalesInvoicesPage() {
       title="Satış Faturaları"
       description="Hakediş dışı satışlar; kesinleştiğinde 120/600/391 gelir fişi otomatik oluşur"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void loadItems()}>Yenile</Button>
+      </div>
+
       <div className="erp-page-toolbar">
         <div>
           <strong>{summary.count} fatura</strong>

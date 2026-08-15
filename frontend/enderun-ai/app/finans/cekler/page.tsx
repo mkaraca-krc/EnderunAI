@@ -656,6 +656,10 @@ export default function ChequeRegisterPage() {
       title="Çek Defteri"
       description="Alınan ve verilen çekler, durum geçişleri ve otomatik muhasebe fişleri"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void loadItems()}>Yenile</Button>
+      </div>
+
       <div className="erp-page-toolbar">
         <div>
           <strong>{items.length} çek</strong>

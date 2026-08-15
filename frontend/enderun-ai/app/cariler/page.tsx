@@ -465,6 +465,8 @@ export default function Page() {
             + Yeni Cari Kart
           </button>
         </div>
+      
+        <Button variant="secondary" onClick={() => void load()}>Yenile</Button>
       </div>
 
       {msg && (

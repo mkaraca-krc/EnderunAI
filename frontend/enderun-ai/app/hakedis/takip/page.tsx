@@ -138,6 +138,10 @@ export default function HakedisTrackingPage() {
       title="Hakediş Takip"
       description="Projenin tüm hakedişleri, kesinti geçmişi ve açık bakiyeler"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void load(projectId)}>Yenile</Button>
+      </div>
+
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <label className="block text-xs font-bold text-slate-600">
           Proje

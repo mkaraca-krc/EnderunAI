@@ -10,6 +10,7 @@ import {
 
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 
 import {
   accountingVoucherService,
@@ -160,6 +161,8 @@ export default function AccountingVouchersPage() {
             + Yeni Fiş
           </Link>
         </div>
+      
+        <Button variant="secondary" disabled={loading} onClick={() => void loadItems()}>Yenile</Button>
       </div>
 
       {error && (

@@ -8,6 +8,7 @@ import { usePermissions } from "@/lib/use-permissions";
 import { branchService, type BranchListItem } from "@/services/branch.service";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
+import { Button } from "@/components/ui";
 import {
   projectSiteService,
   type ProjectSiteListItem,
@@ -202,6 +203,10 @@ export default function WarehousesPage() {
       title="Depolar"
       description="Merkez, şantiye, araç ve geçici depoların tanımı"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
+      </div>
+
       <div className="erp-page-toolbar">
         <div>
           <strong>{warehouses.length} depo</strong>

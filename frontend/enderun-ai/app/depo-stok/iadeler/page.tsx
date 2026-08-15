@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { amount, currencyMoney } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
@@ -144,6 +144,10 @@ export default function PurchaseReturnsPage() {
       title="Alış İadeleri"
       description="Mal kabulde reddedilen ve hasarlı gelen malın tedarikçiye iadesi"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
+      </div>
+
       {error && <div className="erp-alert error">{error}</div>}
       {notice && <div className="erp-alert success">{notice}</div>}
 

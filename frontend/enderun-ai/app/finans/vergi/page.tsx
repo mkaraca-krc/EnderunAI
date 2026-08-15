@@ -234,6 +234,10 @@ export default function TaxPage() {
       title="Vergi Yükü"
       description="KDV, SGK, muhtasar ve geçici vergi — yönetim görünümü"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
+      </div>
+
       <div className="erp-alert warning">
         Bu ekran <strong>beyanname üretmez</strong>. Rakamlar defterden
         hesaplanır ve tahminler &quot;tahmini&quot; etiketlidir; kesin beyan

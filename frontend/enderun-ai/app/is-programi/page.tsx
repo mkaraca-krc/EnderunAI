@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { Button } from "@/components/ui";
 import {
   projectScheduleService,
   type ScheduleAlert,
@@ -27,6 +28,7 @@ export default function ScheduleListPage() {
   const [alerts, setAlerts] = useState<Record<string, ScheduleAlert>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +67,7 @@ export default function ScheduleListPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   return (
     <ErpShell
@@ -73,6 +75,10 @@ export default function ScheduleListPage() {
       title="İş Programı"
       description="Projelerin Gantt planı, kritik yolu ve gecikme durumu"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => setReloadKey((key) => key + 1)}>Yenile</Button>
+      </div>
+
       {error && <div className="erp-alert error">{error}</div>}
 
       <section className="erp-table-card">

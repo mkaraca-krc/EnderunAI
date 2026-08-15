@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import {
@@ -374,6 +374,10 @@ export default function SecretariatRegistryPage({ mode }: Props) {
 
   return (
     <ErpShell title={config.title} description={config.description} design="redwood">
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
+      </div>
+
       <div className="space-y-6">
         <section className="grid gap-4 md:grid-cols-3">
           {[

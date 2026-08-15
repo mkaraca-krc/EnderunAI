@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { ApiError } from "@/lib/api/api-client";
 import { isgService, type IsgPersonnelCard } from "@/services/isg.service";
+import { Button } from "@/components/ui";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -24,6 +25,7 @@ export default function MyIsgRecordsPage() {
   const [loading, setLoading] = useState(true);
   const [notLinked, setNotLinked] = useState(false);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -52,7 +54,7 @@ export default function MyIsgRecordsPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   return (
     <ErpShell
@@ -60,6 +62,10 @@ export default function MyIsgRecordsPage() {
       title="İSG Belgelerim"
       description="Sağlık raporu, eğitim ve yetki belgelerinizin geçerlilik durumu"
     >
+      <div className="erp-toolbar rw-toolbar-end">
+        <Button variant="secondary" disabled={loading} onClick={() => setReloadKey((key) => key + 1)}>Yenile</Button>
+      </div>
+
       {error && <div className="erp-alert error">{error}</div>}
 
       {loading && <div className="erp-loading">Yükleniyor...</div>}
