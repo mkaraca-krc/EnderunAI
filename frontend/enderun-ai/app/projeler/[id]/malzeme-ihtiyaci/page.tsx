@@ -162,14 +162,7 @@ export default function ProjectMaterialRequirementPage() {
 
         {/* Depo mevcudu ve icmal dışarıdan değişiyor; eksik listesi
             tazelenmeden eskiyordu. */}
-        <button
-          type="button"
-          className="text-sm text-brand-700 hover:underline"
-          disabled={loading}
-          onClick={() => void load()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
 
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input

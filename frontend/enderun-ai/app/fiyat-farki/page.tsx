@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { coefficient } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 
 import {
   priceDifferenceService,
@@ -108,13 +109,7 @@ export default function PriceDifferencePage() {
             Yeni Endeks
           </Link>
 
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => void load()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
 
           <Link href="/hakedis">
             Hakedişlere Git

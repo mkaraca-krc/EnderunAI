@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 
 import {
   companyService,
@@ -421,14 +421,7 @@ export default function WorkTasksPage() {
 
       <div className="erp-page-toolbar">
         {/* Görev ataması ve durum değişikliği ekip içinde yapılıyor. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={loading}
-          onClick={() => void load()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
 
         <div>
           <strong>

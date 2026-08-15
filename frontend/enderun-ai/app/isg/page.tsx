@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { companyService, type CompanyListItem } from "@/services/company.service";
+import { Button } from "@/components/ui";
 import {
   isgService,
   type IsgDashboard,
@@ -92,14 +93,7 @@ export default function IsgDashboardPage() {
     >
       <div className="erp-page-toolbar">
         {/* Sertifika ve rapor süreleri gün geçtikçe doluyor; panel tazelenmeden eskiyordu. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={loading}
-          onClick={() => void load()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
 
         <div>
           <strong>{panel?.aktifPersonel ?? 0} aktif personel</strong>

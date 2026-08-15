@@ -12,6 +12,7 @@ import {
   type CurrentAccountListItem,
 } from "@/services/current-account.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
+import { Button } from "@/components/ui";
 import {
   OFFER_COUNTERPARTY_ROLES,
   OFFER_KINDS,
@@ -364,13 +365,7 @@ export default function OfferTrackingPage() {
       <div className="erp-page-toolbar">
         {/* Huni rakamları ve teklif durumları ekip içinde
             değişiyor; tazeleme olmadan ekran eskiyordu. */}
-        <button
-          type="button"
-          disabled={loading || busy}
-          onClick={() => void loadOffers()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading || busy} onClick={() => void loadOffers()}>Yenile</Button>
 
         <select
           value={companyId}

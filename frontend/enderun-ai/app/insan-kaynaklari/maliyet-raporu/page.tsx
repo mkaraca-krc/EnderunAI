@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
+import { Button } from "@/components/ui";
 import {
   hrPayrollService,
   type PayrollCostReport,
@@ -120,13 +121,7 @@ export default function PayrollCostReportPage() {
     >
       {/* Rapor bordro muhasebeleştirildikçe değişiyor. */}
       <div className="mb-4 flex justify-end">
-        <button
-          type="button"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          onClick={() => void loadReport()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" onClick={() => void loadReport()}>Yenile</Button>
       </div>
       <div className="erp-page-toolbar">
         <div>

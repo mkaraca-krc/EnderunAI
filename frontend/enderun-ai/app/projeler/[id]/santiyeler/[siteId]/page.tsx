@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import {
   projectSiteService,
   type AssignablePersonnelItem,
@@ -288,17 +288,10 @@ function DailyReportTab({ siteId }: { siteId: string }) {
           )}
           {/* Günlük rapor sahadan giriliyor; ekranı açık bırakan
               kullanıcı yeni girilen raporu göremiyordu. */}
-          <button
-            type="button"
-            className="erp-button secondary"
-            disabled={detailLoading || listLoading}
-            onClick={() => {
+          <Button variant="secondary" disabled={detailLoading || listLoading} onClick={() => {
               void loadList();
               void loadDetailForDate(selectedDate);
-            }}
-          >
-            Yenile
-          </button>
+            }}>Yenile</Button>
 
           <input
             className="erp-input"

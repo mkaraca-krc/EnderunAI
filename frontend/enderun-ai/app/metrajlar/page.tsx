@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { currencyMoney } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 
 import {
   projectMeasurementService,
@@ -98,13 +99,7 @@ export default function ProjectMeasurementListPage() {
         <div className="erp-actions">
           {/* Metrajın durumu onaycı tarafında değişiyor; listeyi
               tazelemeden "onay bekliyor" satırı öylece kalıyordu. */}
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => void load()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
 
           <Link href="/metrajlar/yeni">
             + Yeni Metraj

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import {
   EMPTY_VALUE,
   currencyMoney,
@@ -644,14 +644,7 @@ export default function ProjectCenterPage() {
         {/* Proje merkezi on küsur uçtan besleniyor (hakediş, günlük
             rapor, maliyet, portal); hepsi başka kullanıcıların işiyle
             değişiyor ve tazelemenin yolu sayfayı yeniden yüklemekti. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={loading}
-          onClick={() => setReloadToken((value) => value + 1)}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading} onClick={() => setReloadToken((value) => value + 1)}>Yenile</Button>
       </div>
 
       {error && <div className="erp-alert error">{error}</div>}

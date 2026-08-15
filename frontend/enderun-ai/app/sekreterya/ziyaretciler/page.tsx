@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { dateTime } from "@/lib/format/turkish";
 
 import {
@@ -390,13 +390,7 @@ export default function VisitorsPage() {
       <div className="space-y-6">
         {/* Ziyaretçi giriş/çıkışı güvenlik tarafından da işleniyor. */}
         <div className="flex justify-end">
-          <button
-            type="button"
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            onClick={() => void load()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" onClick={() => void load()}>Yenile</Button>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-4">

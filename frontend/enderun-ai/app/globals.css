@@ -3649,6 +3649,11 @@ body {
 }
 
 .rw button[data-variant="secondary"] {
+  /* ZEMİN DE BAĞLANIYOR. Bileşen Tailwind'den `bg-white` getiriyor ve
+     burada yalnız kenarlık ile metin bağlıydı; koyu temada ikincil
+     düğme bembeyaz kalıyordu. En sık ikincil düğme "Yenile" — yani
+     hata her listede görünürdü. */
+  background: var(--color-surface-card);
   border-color: var(--color-border-subtle);
   color: var(--color-brand-primary);
 }

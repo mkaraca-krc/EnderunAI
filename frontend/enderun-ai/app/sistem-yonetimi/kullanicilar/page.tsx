@@ -455,13 +455,7 @@ export default function UserManagementPage() {
       <div className="space-y-6">
         {/* Rol ve yetki değişiklikleri başka yöneticiler tarafından da yapılıyor. */}
         <div className="flex justify-end">
-          <button
-            type="button"
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            onClick={() => void loadData()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" onClick={() => void loadData()}>Yenile</Button>
         </div>
 
         {error && !editorOpen && !resetUser && (

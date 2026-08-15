@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { decimal } from "@/lib/format/turkish";
 import DailyWageBadge from "@/components/hr/daily-wage-badge";
 
@@ -1073,13 +1073,7 @@ export default function DailyAttendancePage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={loadAttendance}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
-            >
-              Yenile
-            </button>
+            <Button variant="secondary" onClick={loadAttendance}>Yenile</Button>
 
             <button
               type="button"

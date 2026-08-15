@@ -10,6 +10,7 @@ import {
   quantity as sharedQuantity,
 } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
+import { Button } from "@/components/ui";
 import {
   personnelService,
   type PersonnelListItem,
@@ -339,14 +340,7 @@ export default function SubcontractorDetailPage({
 
           {/* Hakediş ve kesinti kayıtları başka kullanıcılarca
               giriliyor; refreshKey vardı ama düğmesi yoktu. */}
-          <button
-            type="button"
-            onClick={() => setRefreshKey((value) => value + 1)}
-            style={smallButton}
-            disabled={saving}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={saving} onClick={() => setRefreshKey((value) => value + 1)}>Yenile</Button>
         </section>
 
         {error && <div style={{ ...box, color: "var(--color-semantic-danger)" }}>{error}</div>}

@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { currencyMoney } from "@/lib/format/turkish";
 
 import {
@@ -767,13 +767,7 @@ export default function SalaryCardsPage() {
     >
       {/* Maaş kartları başka İK kullanıcısınca da düzenleniyor. */}
       <div className="mb-4 flex justify-end">
-        <button
-          type="button"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          onClick={() => void loadRecords()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" onClick={() => void loadRecords()}>Yenile</Button>
       </div>
       <div
         style={{

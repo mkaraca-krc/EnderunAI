@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { amount } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
+import { Button } from "@/components/ui";
 
 import {
   PersonnelListItem,
@@ -168,13 +169,7 @@ export default function TerminationPage() {
     >
       {/* Çıkış kayıtları İK tarafından işleniyor. */}
       <div className="mb-4 flex justify-end">
-        <button
-          type="button"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          onClick={() => void refreshList()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" onClick={() => void refreshList()}>Yenile</Button>
       </div>
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-bold text-slate-900">Hesaplama</h2>

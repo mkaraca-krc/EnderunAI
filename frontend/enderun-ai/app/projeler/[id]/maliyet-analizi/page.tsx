@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { money, moneyWhole, percent } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 import {
   projectCostAnalysisService,
   ProjectCostClass,
@@ -258,14 +259,7 @@ export default function ProjectCostAnalysisPage() {
 
             {/* Maliyet fişleri ve hakediş ilerlemesi bu analizi
                 dışarıdan besliyor; tazelemeden rakamlar eskiyordu. */}
-            <button
-              type="button"
-              className="erp-secondary-button"
-              disabled={loading}
-              onClick={() => void load()}
-            >
-              Yenile
-            </button>
+            <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
             <Link className="erp-secondary-button" href={`/projeler/${projectId}`}>
               Projeye Dön
             </Link>

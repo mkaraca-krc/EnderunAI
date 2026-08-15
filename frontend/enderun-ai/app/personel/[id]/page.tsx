@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 import {
   personnelService,
   type PersonnelDetail,
@@ -75,14 +76,7 @@ export default function PersonnelDetailPage() {
         </div>
 
         {/* İK kartı başka kullanıcı tarafından güncelleniyor. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={loading}
-          onClick={() => setReloadToken((value) => value + 1)}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading} onClick={() => setReloadToken((value) => value + 1)}>Yenile</Button>
       </div>
 
       {error && <div className="erp-alert error">{error}</div>}

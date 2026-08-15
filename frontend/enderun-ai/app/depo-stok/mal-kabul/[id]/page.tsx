@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { money, quantity } from "@/lib/format/turkish";
 import {
   goodsReceiptService,
@@ -411,14 +411,7 @@ export default function GoodsReceiptDetailPage() {
             Siparişi Aç
           </Link>
 
-          <button
-            type="button"
-            onClick={() => void loadReceipt()}
-            disabled={processing}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={processing} onClick={() => void loadReceipt()}>Yenile</Button>
 
           {receipt.accountingVoucherId ? (
             <Link

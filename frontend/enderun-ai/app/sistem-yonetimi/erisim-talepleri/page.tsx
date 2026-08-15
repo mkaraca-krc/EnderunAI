@@ -99,13 +99,7 @@ export default function AccessRequestsPage() {
       <div className="space-y-6">
         {/* Talepler mesai dışında geliyor; bekleyen liste tazelenmeden eskiyordu. */}
         <div className="flex justify-end">
-          <button
-            type="button"
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            onClick={() => void load(includeDecided)}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" onClick={() => void load(includeDecided)}>Yenile</Button>
         </div>
 
         {error && (

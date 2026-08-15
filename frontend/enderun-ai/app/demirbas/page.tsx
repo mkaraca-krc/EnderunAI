@@ -7,6 +7,7 @@ import ErpShell from "@/components/erp/erp-shell";
 import { amount } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { companyService, type CompanyListItem } from "@/services/company.service";
+import { Button } from "@/components/ui";
 import {
   TOOL_ASSET_STATUSES,
   ToolAssetLocationType,
@@ -191,14 +192,7 @@ export default function ToolAssetsPage() {
 
       <div className="erp-page-toolbar">
         {/* Zimmet ve iade işlemleri başka kullanıcılarca yapılıyor. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={saving}
-          onClick={() => setReloadToken((value) => value + 1)}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={saving} onClick={() => setReloadToken((value) => value + 1)}>Yenile</Button>
 
         <div
           style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}

@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
@@ -279,13 +279,7 @@ export default function IsgPersonnelPage() {
       <div className="erp-page-toolbar">
         {/* Sağlık raporu ve eğitim kayıtları başka kullanıcılarca
             giriliyor; geçerlilik rozetleri tazelenmeden eskiyordu. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          onClick={() => void loadPeople()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" onClick={() => void loadPeople()}>Yenile</Button>
 
         <div>
           <strong>{people.length} personel</strong>

@@ -341,6 +341,42 @@ describe("Redwood ekranları", () => {
   });
 
   /**
+   * TAZELEME DÜĞMESİ ORTAK BİLEŞENDEN GELİR.
+   *
+   * "Yenile" dört ayrı biçimde yazılmıştı — ham `<button className=…>`
+   * (20), `erp-secondary-button` sınıflı `<button>` (26), düz
+   * `<button>` (5), `<button style=…>` (2) — ve yalnız 5'i ortak
+   * `<Button>` bileşenini kullanıyordu. Aynı işi yapan düğme ekrandan
+   * ekrana farklı görünüyordu.
+   *
+   * Bu, "tek Button varyantı" maddesinin gerçekte geçmediği yerdi;
+   * ben de tam turda `variant="primary"` sayarak ölçtüğüm için
+   * kaçırmıştım. Sayım o soruyu hiç sormuyordu.
+   */
+  it("tazeleme düğmesi ortak bileşeni kullanıyor", () => {
+    const offenders = redwoodPages
+      .filter((page) => {
+        for (const match of page.code.matchAll(/>\s*Yenile\s*</g)) {
+          const before = page.code.slice(0, match.index);
+
+          if (before.lastIndexOf("<button") > before.lastIndexOf("<Button")) {
+            return true;
+          }
+        }
+
+        return false;
+      })
+      .map((page) => page.path);
+
+    expect(
+      offenders,
+      'Ham <button> ile tazeleme yazılmış. <Button variant="secondary"> ' +
+        "kullanın: biçim tek yerden geliyor ve koyu temada zemini " +
+        "tokena bağlı.",
+    ).toEqual([]);
+  });
+
+  /**
    * HİÇBİR YERDE ham hex renk yok — yalnızca `style={{ }}` içinde
    * değil.
    *

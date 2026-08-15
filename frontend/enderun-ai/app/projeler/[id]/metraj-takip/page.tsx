@@ -12,7 +12,7 @@ import {
   quantity,
   unitPrice,
 } from "@/lib/format/turkish";
-import { Modal, Select } from "@/components/ui";
+import { Button, Modal, Select } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
 import {
   progressPaymentService,
@@ -310,9 +310,7 @@ export default function MetrajTakipPage() {
 
         {/* Metraj ve ek iş kayıtları sahadan giriliyor; bu ekran
             onların özeti ve tazelenmeden eskiyordu. */}
-        <button type="button" disabled={loading} onClick={() => void load()}>
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
 
         <Link href={`/projeler/${data.projectId}`}>Proje Kartına Dön</Link>
       </div>

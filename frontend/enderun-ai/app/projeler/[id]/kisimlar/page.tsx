@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { usePermissions } from "@/lib/use-permissions";
+import { Button } from "@/components/ui";
 import {
   projectBoqService,
   type HakedisSectionTemplate,
@@ -191,14 +192,7 @@ export default function ProjectSectionsPage() {
 
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
           {/* Kısımlar keşif tarafından da güncelleniyor. */}
-          <button
-            type="button"
-            className="erp-secondary-button"
-            disabled={loading}
-            onClick={() => void load()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
           <Link className="erp-secondary-button" href={`/projeler/${params.id}`}>
             ← Proje
           </Link>

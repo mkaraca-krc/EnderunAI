@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { money } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import {
@@ -195,14 +195,7 @@ export default function ToolAssetCardPage() {
 
       <div className="erp-page-toolbar">
         {/* Zimmet ve servis hareketleri başka ekranlardan işleniyor. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={saving}
-          onClick={() => setReloadKey((key) => key + 1)}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={saving} onClick={() => setReloadKey((key) => key + 1)}>Yenile</Button>
 
         <Link className="erp-secondary-button" href="/demirbas">
           Demirbaş Listesi

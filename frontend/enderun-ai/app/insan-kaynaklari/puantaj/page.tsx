@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 
 import {
   hrShiftService,
@@ -595,13 +595,7 @@ export default function WorkforceShiftPage() {
           </div>
 
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={loadAll}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
-            >
-              Yenile
-            </button>
+            <Button variant="secondary" onClick={loadAll}>Yenile</Button>
 
             <button
               type="button"

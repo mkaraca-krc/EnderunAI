@@ -13,6 +13,7 @@ import {
 
 import { extraPaymentService, type ExtraPayment } from "@/services/termination.service";
 import CashPaymentLedger from "@/components/hr/cash-payment-ledger";
+import { Button } from "@/components/ui";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -116,13 +117,7 @@ export default function ExtraPaymentsPage() {
     >
       {/* Elden ödeme kayıtları başka kullanıcılarca giriliyor. */}
       <div className="mb-4 flex justify-end">
-        <button
-          type="button"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          onClick={() => void refresh()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" onClick={() => void refresh()}>Yenile</Button>
       </div>
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">

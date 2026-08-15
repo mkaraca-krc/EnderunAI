@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { Button } from "@/components/ui";
 import {
   money,
   moneyWhole,
@@ -168,14 +169,7 @@ export default function ProjectProfitPage() {
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           {/* Maliyet fişleri ve referans fiyatlar dışarıdan
               güncelleniyor; yılı değiştirmeden tazelemek gerekiyor. */}
-          <button
-            type="button"
-            className="erp-secondary-button"
-            disabled={loading}
-            onClick={() => setReloadToken((value) => value + 1)}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={loading} onClick={() => setReloadToken((value) => value + 1)}>Yenile</Button>
 
           <label htmlFor="referenceYear">
             <small>Referans yılı</small>

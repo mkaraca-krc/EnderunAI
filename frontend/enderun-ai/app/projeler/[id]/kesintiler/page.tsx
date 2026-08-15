@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { Button } from "@/components/ui";
 
 import {
   deductionRuleService,
@@ -204,14 +205,7 @@ export default function ProjectDeductionsPage(){
       <div className="erp-page-toolbar">
         {/* Kesinti kuralları hakediş tarafında da değiştirilebiliyor;
             listeyi tazelemenin yolu yoktu. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={loading}
-          onClick={() => void load()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
       </div>
 
       <div className="erp-form-card">

@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
@@ -318,14 +318,7 @@ export default function IsgIncidentsPage() {
     >
       <div className="erp-page-toolbar">
         {/* Olay kaydı sahadan giriliyor. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={loading}
-          onClick={() => void load()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
 
         <div>
           <strong>{incidents.length} kayıt</strong>

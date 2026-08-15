@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { Button } from "@/components/ui";
 import {
   purchaseRequestService,
   type PurchaseRequestListItem,
@@ -227,13 +228,7 @@ export default function MaterialRequestsPage() {
               </option>
             </select>
 
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Yenile
-            </button>
+            <Button variant="secondary" onClick={() => void load()}>Yenile</Button>
           </div>
         </section>
 

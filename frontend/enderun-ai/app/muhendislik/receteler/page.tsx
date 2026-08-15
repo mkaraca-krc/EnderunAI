@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { decimal, whole } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 import {
   EngineeringRecipeCoverage,
   EngineeringRecipeListItem,
@@ -188,14 +189,7 @@ export default function EngineeringRecipesPage() {
             <p>Poz, disiplin ve reçete durumuna göre filtreleyin</p>
           </div>
 
-          <button
-            type="button"
-            className="erp-secondary-button"
-            onClick={load}
-            disabled={loading}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={loading} onClick={load}>Yenile</Button>
         </div>
 
         <div

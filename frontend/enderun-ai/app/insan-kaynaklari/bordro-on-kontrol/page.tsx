@@ -115,13 +115,7 @@ export default function PayrollReadinessPage() {
     >
       {/* Ön kontrol uyarıları puantaj ve ücret kartı değiştikçe güncelleniyor. */}
       <div className="mb-4 flex justify-end">
-        <button
-          type="button"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          onClick={() => void load()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" onClick={() => void load()}>Yenile</Button>
       </div>
       <div className="space-y-6">
         <Card>

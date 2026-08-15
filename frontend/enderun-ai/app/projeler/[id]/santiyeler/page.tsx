@@ -6,6 +6,7 @@ import { Fragment, FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { usePermissions } from "@/lib/use-permissions";
+import { Button } from "@/components/ui";
 import {
   projectSiteService,
   type ProjectSiteDetail,
@@ -193,14 +194,7 @@ export default function ProjectSitesPage() {
 
         {/* reloadToken vardı ama yalnızca bu sayfanın kendi
             işlemlerinden sonra artıyordu. */}
-        <button
-          type="button"
-          className="erp-btn"
-          disabled={loading}
-          onClick={() => setReloadToken((value) => value + 1)}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading} onClick={() => setReloadToken((value) => value + 1)}>Yenile</Button>
 
         {canCreate && (
           <button

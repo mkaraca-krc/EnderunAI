@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 import {
   projectBoqService,
   ProjectBoqStatus,
@@ -70,13 +71,7 @@ export default function ProjectBoqListPage() {
         <div className="erp-actions">
           {/* Keşif listesi başka kullanıcının onayıyla değişiyor;
               sayfayı yeniden yüklemeden görebilmek gerekiyor. */}
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => void load()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
 
           <Link href="/kesifler/yeni">
             + Yeni Keşif

@@ -8,6 +8,7 @@ import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { projectService, type ProjectListItem } from "@/services/project.service";
+import { Button } from "@/components/ui";
 import {
   TOOL_SERVICE_DECISIONS,
   TOOL_SERVICE_STATUSES,
@@ -275,14 +276,7 @@ function ServiceRequestsContent() {
 
       <div className="erp-page-toolbar">
         {/* Servis talepleri sahadan açılıyor. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={saving}
-          onClick={() => setReloadToken((value) => value + 1)}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={saving} onClick={() => setReloadToken((value) => value + 1)}>Yenile</Button>
 
         <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <input

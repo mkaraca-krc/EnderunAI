@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { currencyMoney } from "@/lib/format/turkish";
 
 import {
@@ -623,13 +623,7 @@ export default function AdditionalCompensationPage() {
     >
       {/* Ücret bileşenleri bordro döneminde sık değişiyor. */}
       <div className="mb-4 flex justify-end">
-        <button
-          type="button"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          onClick={() => void loadData()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" onClick={() => void loadData()}>Yenile</Button>
       </div>
       {error && (
         <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">

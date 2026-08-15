@@ -6,6 +6,7 @@ import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
 import { currencyMoney } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
+import { Button } from "@/components/ui";
 import {
   companyService,
   type CompanyListItem,
@@ -452,14 +453,7 @@ export default function SubcontractorsPage() {
 
             {/* Sözleşme kapsamı ve hakediş durumu başka kullanıcılarca
                 değiştiriliyor; refreshKey vardı ama düğmesi yoktu. */}
-            <button
-              type="button"
-              onClick={() => setRefreshKey((value) => value + 1)}
-              style={smallButton}
-              disabled={loading}
-            >
-              Yenile
-            </button>
+            <Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}>Yenile</Button>
 
             <button type="button" onClick={openCreate} style={primaryButton}>
               Yeni Sözleşme

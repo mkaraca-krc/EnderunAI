@@ -345,14 +345,7 @@ export default function AttendanceSheetPage() {
     >
       {/* Cetvel saha girişleriyle ve takvim değişikliğiyle güncelleniyor. */}
       <div className="mb-4 flex justify-end">
-        <button
-          type="button"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          disabled={busy}
-          onClick={() => void load()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={busy} onClick={() => void load()}>Yenile</Button>
       </div>
 
       {error && (

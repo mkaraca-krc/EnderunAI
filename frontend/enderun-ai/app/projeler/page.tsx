@@ -315,14 +315,7 @@ export default function ProjectsPage() {
         <div className="erp-actions">
           {/* Proje listesi teklif kazanıldığında ve sözleşme
               açıldığında dışarıdan büyüyor. */}
-          <button
-            type="button"
-            className="erp-secondary-button"
-            disabled={loading}
-            onClick={() => void loadData()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={loading} onClick={() => void loadData()}>Yenile</Button>
 
           <button
             type="button"

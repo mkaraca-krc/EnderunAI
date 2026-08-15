@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { unitPrice } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
+import { Button } from "@/components/ui";
 import {
   companyService,
   type CompanyListItem,
@@ -334,14 +335,7 @@ export default function CustomPositionsPage() {
               {/* refreshKey zaten vardı ama yalnızca bu sayfanın kendi
                   işlemlerinden sonra artıyordu; başka kullanıcının
                   eklediği pozu görmenin yolu sayfayı yeniden yüklemekti. */}
-              <button
-                type="button"
-                className="erp-secondary-button"
-                disabled={loading}
-                onClick={() => setRefreshKey((current) => current + 1)}
-              >
-                Yenile
-              </button>
+              <Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((current) => current + 1)}>Yenile</Button>
 
               <button
                 type="button"

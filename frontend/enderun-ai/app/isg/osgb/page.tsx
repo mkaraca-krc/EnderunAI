@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { money } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -301,14 +301,7 @@ export default function IsgOsgbPage() {
     >
       <div className="erp-page-toolbar">
         {/* Sözleşme ve uzman atamaları başka kullanıcı tarafından değiştiriliyor. */}
-        <button
-          type="button"
-          className="erp-secondary-button"
-          disabled={loading}
-          onClick={() => void load()}
-        >
-          Yenile
-        </button>
+        <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
 
         <div>
           <strong>{contracts.length} sözleşme</strong>

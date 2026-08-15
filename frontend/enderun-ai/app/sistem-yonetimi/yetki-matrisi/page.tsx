@@ -191,13 +191,7 @@ export default function PermissionMatrixPage() {
       <div className="space-y-4">
         {/* Matris hücreleri anında kaydediliyor; başka yöneticinin değişikliği tazelenmeden görünmüyordu. */}
         <div className="flex justify-end">
-          <button
-            type="button"
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            onClick={() => void load()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" onClick={() => void load()}>Yenile</Button>
         </div>
 
         {error && (

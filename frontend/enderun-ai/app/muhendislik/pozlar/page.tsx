@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { decimal } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 import {
   EngineeringPositionListItem,
   EngineeringPositionSource,
@@ -120,14 +121,7 @@ export default function EngineeringPositionsPage() {
           {/* Poz kütüphanesi içe aktarmayla ve başka kullanıcının
               poz eklemesiyle değişiyor; filtreye dokunmadan listeyi
               tazelemenin yolu yoktu. */}
-          <button
-            type="button"
-            className="erp-secondary-button"
-            disabled={loading}
-            onClick={() => void loadPositions()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={loading} onClick={() => void loadPositions()}>Yenile</Button>
           <Link href="/muhendislik" className="erp-secondary-button">
             Mühendislik Merkezi
           </Link>

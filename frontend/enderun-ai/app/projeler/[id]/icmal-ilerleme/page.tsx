@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { money, percent, quantity } from "@/lib/format/turkish";
+import { Button } from "@/components/ui";
 import {
   contractSummaryProgressService,
   type ContractSummaryProgress,
@@ -120,14 +121,7 @@ export default function ContractSummaryProgressPage() {
 
         <div className="erp-row-actions">
           {/* Saha raporu ve hakediş onayı bu oranları dışarıdan değiştiriyor. */}
-          <button
-            type="button"
-            className="erp-secondary-button"
-            disabled={loading}
-            onClick={() => void load()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
           <Link className="erp-secondary-button" href={`/projeler/${params.id}`}>
             ← Proje
           </Link>
@@ -166,14 +160,7 @@ export default function ContractSummaryProgressPage() {
           </Link>
           {/* Saha raporu ve hakediş onayı bu oranları dışarıdan
               değiştiriyor; tazelemeden ekran eskiyordu. */}
-          <button
-            type="button"
-            className="erp-secondary-button"
-            disabled={loading}
-            onClick={() => void load()}
-          >
-            Yenile
-          </button>
+          <Button variant="secondary" disabled={loading} onClick={() => void load()}>Yenile</Button>
           <Link
             className="erp-secondary-button"
             href={`/kesifler/${progress.boqId}`}

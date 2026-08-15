@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { ConfirmDialog } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { decimal } from "@/lib/format/turkish";
 import {
   hrOvertimeService,
@@ -380,13 +380,7 @@ export default function OvertimePage() {
           </h2>
 
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={loadItems}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold"
-            >
-              Yenile
-            </button>
+            <Button variant="secondary" onClick={loadItems}>Yenile</Button>
 
             <button
               type="button"
