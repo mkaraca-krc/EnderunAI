@@ -231,3 +231,36 @@ belgesi `personnel.view` gibi). Elden/maskeli kayıtların eki de aynı
 maskeye tabi olmalı — bir gider fişinin fotoğrafı, giderin kendisi
 gizliyken görünmemeli.
 
+
+## project_boq_items birim fiyat kolonları — ölçeksiz numeric
+
+**Ne:** `project_boq_items` tablosunda `MaterialUnitPrice`,
+`LaborUnitPrice` ve `OverheadUnitPrice` kolonları veritabanında
+**ölçek belirtilmeden** `numeric` olarak duruyor. Aynı tablodaki
+`UnitPrice` ise `numeric(_,6)`; yani dört birim fiyat kolonundan
+üçünün tanımlı bir ondalık ölçeği yok.
+
+**Neden riskli:** Depolama ile gösterim arasında sessiz bir uyuşmazlık
+riski. Ölçeksiz `numeric` pratikte sınırsız ondalık kabul ediyor;
+gösterim tarafında ise `unitPrice` en çok altı hane basıyor (A4/17'de
+dörtten altıya çıkarıldı, gerekçesi: gösterim ölçeği kolonun DB
+ölçeğini karşılamalı). Bir gün yedi ya da daha fazla ondalıklı bir
+değer yazılırsa ekran onu sessizce kırpar — ve bu rakam sözleşmeye
+giriyor. Ayrıca ölçeksiz kolon, aynı anlamı taşıyan `UnitPrice` ile
+farklı yuvarlama davranışı gösterebiliyor: dört kolon aynı satırda
+toplanırken üçü serbest, biri altı haneye yuvarlı.
+
+Bugün canlıda etkilenen kayıt yok (`project_boq_items` tek satır,
+2026-08-15 taraması) — kusur bu yüzden görünmüyor, yok olduğu için
+değil.
+
+**O turda değerlendirilecek:** üç kolona da tanımlı ölçek vermek ve
+`UnitPrice` ile hizalamak (`numeric(18,6)`). Migration gerektiriyor;
+mevcut değerlerin altı haneye sığdığı önce doğrulanmalı, sığmayan
+varsa yuvarlama kararı ayrıca alınmalı. Aynı taramada
+`ContractQuantity` (4) ile birim fiyat ölçeklerinin çarpımının
+`TotalAmount` (2) ile tutarlılığı da gözden geçirilsin.
+
+**Şimdilik:** yalnızca kaydedildi, kod ve şema değişmedi. Gösterim
+tarafı A4/17'de `unitPrice`e bağlandı, yani bugünkü veriyle doğru
+basıyor.
