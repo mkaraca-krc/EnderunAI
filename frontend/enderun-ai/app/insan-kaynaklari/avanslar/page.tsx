@@ -10,6 +10,7 @@ import {
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { currencyMoney } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   hrAdvanceService,
   HrAdvanceItem,
@@ -72,6 +73,20 @@ function formatDate(value?: string | null) {
 }
 
 export default function AdvancePage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN türetildi (HrWorkforceController):
+   *   POST   advances                 -> attendance-payroll.create
+   *   PUT    advances/{id}            -> attendance-payroll.edit
+   *   POST   advances/{id}/approve    -> attendance-payroll.approve
+   *   POST   advances/{id}/paid       -> attendance-payroll.create  (!)
+   *   DELETE advances/{id}            -> attendance-payroll.delete
+   *
+   * (!) "Ödendi" düğmesi CREATE iznine bağlı — bordrodaki aynı adlı
+   * düğme EDIT'e bağlı. Düğmenin adından türetilseydi ikisinden biri
+   * yanlış kapılanırdı; izin ucun kendisinden okundu.
+   */
+  const actions = useModuleActions("attendance-payroll");
+
   const [items, setItems] = useState<HrAdvanceItem[]>([]);
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
@@ -399,13 +414,15 @@ export default function AdvancePage() {
           <div className="flex gap-2">
             <Button variant="secondary" onClick={loadItems}>Yenile</Button>
 
-            <button
-              type="button"
-              onClick={openCreate}
-              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
-            >
-              + Yeni Avans Talebi
-            </button>
+            {!actions.loading && actions.can("create") && (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+              >
+                + Yeni Avans Talebi
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -719,16 +736,18 @@ export default function AdvancePage() {
                     </td>
                     <td className="p-4">
                       <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => openEdit(item)}
-                          className="rounded border px-3 py-1.5 text-xs"
-                        >
-                          Düzenle
-                        </button>
+                        {actions.can("edit") && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => openEdit(item)}
+                            className="rounded border px-3 py-1.5 text-xs"
+                          >
+                            Düzenle
+                          </button>
+                        )}
 
-                        {item.status === 1 && (
+                        {item.status === 1 && actions.can("approve") && (
                           <button
                             type="button"
                             disabled={busy}
@@ -739,7 +758,7 @@ export default function AdvancePage() {
                           </button>
                         )}
 
-                        {item.status === 2 && !item.paidAtUtc && (
+                        {item.status === 2 && !item.paidAtUtc && actions.can("create") && (
                           <button
                             type="button"
                             disabled={busy}
@@ -750,14 +769,16 @@ export default function AdvancePage() {
                           </button>
                         )}
 
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setPending({ kind: "delete", item })}
-                          className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
-                        >
-                          Sil
-                        </button>
+                        {actions.can("delete") && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setPending({ kind: "delete", item })}
+                            className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
+                          >
+                            Sil
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

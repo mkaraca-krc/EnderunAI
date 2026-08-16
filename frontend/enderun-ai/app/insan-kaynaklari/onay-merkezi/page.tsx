@@ -10,6 +10,7 @@ import {
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
 import { currencyMoney } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 import {
   CompanyListItem,
@@ -219,6 +220,16 @@ function StatusBadge({
 }
 
 export default function HrApprovalCenterPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN türetildi:
+   *   onay (approve)  -> attendance-payroll.approve
+   *   red / iptal     -> attendance-payroll.edit
+   *
+   * Red ve iptal EDIT'e bağlı, APPROVE'a değil: uçlar öyle. Onaylamaya
+   * yetkili olmayan ama düzeltme yetkisi olan biri reddedebiliyor.
+   */
+  const actions = useModuleActions("attendance-payroll");
+
   const [
     companies,
     setCompanies,
@@ -1278,69 +1289,73 @@ export default function HrApprovalCenterPage() {
                 : "Tümünü Seç"}
             </button>
 
-            <button
-              type="button"
-              onClick={() =>
-                setBulkOpen(true)
-              }
-              disabled={
-                selectedVisibleCount ===
-                  0 ||
-                processingIds.size > 0
-              }
-              style={{
-                minHeight: "40px",
-                border: "none",
-                borderRadius: "10px",
-                padding: "0 17px",
-                background:
-                  selectedVisibleCount > 0
-                    ? "var(--color-semantic-success)"
-                    : "var(--erp-muted)",
-                color: "var(--color-on-brand)",
-                fontWeight: 800,
-                cursor:
-                  selectedVisibleCount > 0
-                    ? "pointer"
-                    : "not-allowed",
-              }}
-            >
-              {processingIds.size > 0
-                ? "İşleniyor..."
-                : "Seçilenleri Onayla"}
-            </button>
+            {actions.can("approve") && (
+              <button
+                type="button"
+                onClick={() =>
+                  setBulkOpen(true)
+                }
+                disabled={
+                  selectedVisibleCount ===
+                    0 ||
+                  processingIds.size > 0
+                }
+                style={{
+                  minHeight: "40px",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "0 17px",
+                  background:
+                    selectedVisibleCount > 0
+                      ? "var(--color-semantic-success)"
+                      : "var(--erp-muted)",
+                  color: "var(--color-on-brand)",
+                  fontWeight: 800,
+                  cursor:
+                    selectedVisibleCount > 0
+                      ? "pointer"
+                      : "not-allowed",
+                }}
+              >
+                {processingIds.size > 0
+                  ? "İşleniyor..."
+                  : "Seçilenleri Onayla"}
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={
-                openSelectedReasonDialog
-              }
-              disabled={
-                selectedVisibleCount ===
-                  0 ||
-                processingIds.size > 0
-              }
-              style={{
-                minHeight: "40px",
-                border: "none",
-                borderRadius: "10px",
-                padding: "0 17px",
-                background:
-                  selectedVisibleCount > 0
-                    ? "var(--color-semantic-danger)"
-                    : "var(--erp-muted)",
-                color: "var(--color-on-brand)",
-                fontWeight: 800,
-                cursor:
-                  selectedVisibleCount > 0
-                    ? "pointer"
-                    : "not-allowed",
-              }}
-            >
-              {activeTab === "payroll"
-                ? "Seçilenleri İptal Et"
-                : "Seçilenleri Reddet"}
-            </button>
+            {actions.can("edit") && (
+              <button
+                type="button"
+                onClick={
+                  openSelectedReasonDialog
+                }
+                disabled={
+                  selectedVisibleCount ===
+                    0 ||
+                  processingIds.size > 0
+                }
+                style={{
+                  minHeight: "40px",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "0 17px",
+                  background:
+                    selectedVisibleCount > 0
+                      ? "var(--color-semantic-danger)"
+                      : "var(--erp-muted)",
+                  color: "var(--color-on-brand)",
+                  fontWeight: 800,
+                  cursor:
+                    selectedVisibleCount > 0
+                      ? "pointer"
+                      : "not-allowed",
+                }}
+              >
+                {activeTab === "payroll"
+                  ? "Seçilenleri İptal Et"
+                  : "Seçilenleri Reddet"}
+              </button>
+            )}
           </div>
         </section>
 
@@ -1613,101 +1628,105 @@ export default function HrApprovalCenterPage() {
                               "wrap",
                           }}
                         >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void approveSingle(
-                                item.id
-                              )
-                            }
-                            disabled={
-                              processingIds.has(
-                                item.id
-                              )
-                            }
-                            style={{
-                              minHeight:
-                                "34px",
-                              border:
-                                "none",
-                              borderRadius:
-                                "8px",
-                              padding:
-                                "0 13px",
-                              background:
-                                "var(--color-semantic-success)",
-                              color:
-                                "var(--erp-panel)",
-                              fontSize:
-                                "12px",
-                              fontWeight:
-                                800,
-                              cursor:
+                          {actions.can("approve") && actions.can("approve") && actions.can("approve") && actions.can("approve") && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void approveSingle(
+                                  item.id
+                                )
+                              }
+                              disabled={
                                 processingIds.has(
                                   item.id
                                 )
-                                  ? "not-allowed"
-                                  : "pointer",
-                              opacity:
-                                processingIds.has(
-                                  item.id
-                                )
-                                  ? 0.65
-                                  : 1,
-                            }}
-                          >
-                            {processingIds.has(
-                              item.id
-                            )
-                              ? "İşleniyor..."
-                              : "Onayla"}
-                          </button>
+                              }
+                              style={{
+                                minHeight:
+                                  "34px",
+                                border:
+                                  "none",
+                                borderRadius:
+                                  "8px",
+                                padding:
+                                  "0 13px",
+                                background:
+                                  "var(--color-semantic-success)",
+                                color:
+                                  "var(--erp-panel)",
+                                fontSize:
+                                  "12px",
+                                fontWeight:
+                                  800,
+                                cursor:
+                                  processingIds.has(
+                                    item.id
+                                  )
+                                    ? "not-allowed"
+                                    : "pointer",
+                                opacity:
+                                  processingIds.has(
+                                    item.id
+                                  )
+                                    ? 0.65
+                                    : 1,
+                              }}
+                            >
+                              {processingIds.has(
+                                item.id
+                              )
+                                ? "İşleniyor..."
+                                : "Onayla"}
+                            </button>
+                          )}
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openSingleReasonDialog(
-                                item.id
-                              )
-                            }
-                            disabled={
-                              processingIds.has(
-                                item.id
-                              )
-                            }
-                            style={{
-                              minHeight:
-                                "34px",
-                              border:
-                                "none",
-                              borderRadius:
-                                "8px",
-                              padding:
-                                "0 13px",
-                              background:
-                                "var(--color-semantic-danger)",
-                              color:
-                                "var(--erp-panel)",
-                              fontSize:
-                                "12px",
-                              fontWeight:
-                                800,
-                              cursor:
+                          {actions.can("edit") && actions.can("edit") && actions.can("edit") && actions.can("edit") && actions.can("edit") && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openSingleReasonDialog(
+                                  item.id
+                                )
+                              }
+                              disabled={
                                 processingIds.has(
                                   item.id
                                 )
-                                  ? "not-allowed"
-                                  : "pointer",
-                              opacity:
-                                processingIds.has(
-                                  item.id
-                                )
-                                  ? 0.65
-                                  : 1,
-                            }}
-                          >
-                            {negativeActionLabel()}
-                          </button>
+                              }
+                              style={{
+                                minHeight:
+                                  "34px",
+                                border:
+                                  "none",
+                                borderRadius:
+                                  "8px",
+                                padding:
+                                  "0 13px",
+                                background:
+                                  "var(--color-semantic-danger)",
+                                color:
+                                  "var(--erp-panel)",
+                                fontSize:
+                                  "12px",
+                                fontWeight:
+                                  800,
+                                cursor:
+                                  processingIds.has(
+                                    item.id
+                                  )
+                                    ? "not-allowed"
+                                    : "pointer",
+                                opacity:
+                                  processingIds.has(
+                                    item.id
+                                  )
+                                    ? 0.65
+                                    : 1,
+                              }}
+                            >
+                              {negativeActionLabel()}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -9,6 +9,7 @@ import {
 
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 import {
   hrLeaveService,
@@ -133,6 +134,15 @@ function calculateDays(startDate: string, endDate: string) {
 }
 
 export default function HrLeaveManagementPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN türetildi:
+   *   yeni kayıt -> attendance-payroll.create
+   *   güncelleme -> attendance-payroll.edit
+   *   onay       -> attendance-payroll.approve
+   *   silme      -> attendance-payroll.delete
+   */
+  const actions = useModuleActions("attendance-payroll");
+
   const [items, setItems] = useState<HrLeaveListItem[]>([]);
   const [companies, setCompanies] = useState<CompanyListItem[]>(
     []
@@ -675,13 +685,15 @@ export default function HrLeaveManagementPage() {
               {loading ? "Yükleniyor…" : "Yenile"}
             </button>
 
-            <button
-              type="button"
-              onClick={openCreateForm}
-              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
-            >
-              + Yeni İzin Talebi
-            </button>
+            {actions.can("create") && (
+              <button
+                type="button"
+                onClick={openCreateForm}
+                className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+              >
+                + Yeni İzin Talebi
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -1224,27 +1236,31 @@ export default function HrLeaveManagementPage() {
 
                       <td className="px-4 py-4">
                         <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => openEditForm(item)}
-                            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                          >
-                            Düzenle
-                          </button>
+                          {actions.can("edit") && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => openEditForm(item)}
+                              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              Düzenle
+                            </button>
+                          )}
 
                           {item.status === 1 && (
                             <>
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() =>
-                                  setPending({ kind: "approve", item })
-                                }
-                                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                              >
-                                Onayla
-                              </button>
+                              {actions.can("approve") && (
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    setPending({ kind: "approve", item })
+                                  }
+                                  className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                >
+                                  Onayla
+                                </button>
+                              )}
 
                               <button
                                 type="button"
@@ -1259,16 +1275,18 @@ export default function HrLeaveManagementPage() {
                             </>
                           )}
 
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() =>
-                              setPending({ kind: "delete", item })
-                            }
-                            className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
-                          >
-                            {busy ? "…" : "Sil"}
-                          </button>
+                          {actions.can("delete") && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                setPending({ kind: "delete", item })
+                              }
+                              className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                            >
+                              {busy ? "…" : "Sil"}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

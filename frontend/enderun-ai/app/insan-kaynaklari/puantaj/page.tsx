@@ -9,6 +9,7 @@ import {
 
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 import {
   hrShiftService,
@@ -98,6 +99,15 @@ function formatDate(value?: string | null) {
 }
 
 export default function WorkforceShiftPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN türetildi:
+   *   yeni kayıt -> attendance-payroll.create
+   *   güncelleme -> attendance-payroll.edit
+   *   onay       -> attendance-payroll.approve
+   *   silme      -> attendance-payroll.delete
+   */
+  const actions = useModuleActions("attendance-payroll");
+
   const [tab, setTab] = useState<TabKey>("shifts");
 
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
@@ -597,19 +607,21 @@ export default function WorkforceShiftPage() {
           <div className="flex gap-2">
             <Button variant="secondary" onClick={loadAll}>Yenile</Button>
 
-            <button
-              type="button"
-              onClick={
-                tab === "shifts"
-                  ? openCreateShift
-                  : openCreateAssignment
-              }
-              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
-            >
-              {tab === "shifts"
-                ? "+ Yeni Vardiya"
-                : "+ Yeni Atama"}
-            </button>
+            {actions.can("create") && (
+              <button
+                type="button"
+                onClick={
+                  tab === "shifts"
+                    ? openCreateShift
+                    : openCreateAssignment
+                }
+                className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+              >
+                {tab === "shifts"
+                  ? "+ Yeni Vardiya"
+                  : "+ Yeni Atama"}
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -1028,22 +1040,26 @@ export default function WorkforceShiftPage() {
                     </td>
                     <td className="p-4">
                       <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEditShift(item)}
-                          className="rounded border px-3 py-1.5 text-xs"
-                        >
-                          Düzenle
-                        </button>
+                        {actions.can("edit") && (
+                          <button
+                            type="button"
+                            onClick={() => openEditShift(item)}
+                            className="rounded border px-3 py-1.5 text-xs"
+                          >
+                            Düzenle
+                          </button>
+                        )}
 
-                        <button
-                          type="button"
-                          disabled={actionId === item.id}
-                          onClick={() => setPending({ kind: "shift", item })}
-                          className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
-                        >
-                          Sil
-                        </button>
+                        {actions.can("delete") && (
+                          <button
+                            type="button"
+                            disabled={actionId === item.id}
+                            onClick={() => setPending({ kind: "shift", item })}
+                            className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
+                          >
+                            Sil
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1135,19 +1151,21 @@ export default function WorkforceShiftPage() {
                       </td>
 
                       <td className="p-4 text-right">
-                        <button
-                          type="button"
-                          disabled={actionId === item.id}
-                          onClick={() =>
-                            setPending({
-                              kind: "assignment",
-                              item,
-                            })
-                          }
-                          className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
-                        >
-                          Sil
-                        </button>
+                        {actions.can("delete") && (
+                          <button
+                            type="button"
+                            disabled={actionId === item.id}
+                            onClick={() =>
+                              setPending({
+                                kind: "assignment",
+                                item,
+                              })
+                            }
+                            className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
+                          >
+                            Sil
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

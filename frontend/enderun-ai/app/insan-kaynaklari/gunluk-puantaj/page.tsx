@@ -11,6 +11,7 @@ import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { decimal } from "@/lib/format/turkish";
 import DailyWageBadge from "@/components/hr/daily-wage-badge";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 import {
   AttendanceItem,
@@ -204,6 +205,15 @@ function escapeCsv(value: unknown) {
 }
 
 export default function DailyAttendancePage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN türetildi:
+   *   yeni kayıt -> attendance-payroll.create
+   *   güncelleme -> attendance-payroll.edit
+   *   onay       -> attendance-payroll.approve
+   *   silme      -> attendance-payroll.delete
+   */
+  const actions = useModuleActions("attendance-payroll");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
@@ -1092,32 +1102,38 @@ export default function DailyAttendancePage() {
               Yazdır / PDF
             </button>
 
-            <button
-              type="button"
-              onClick={() => setPending({ kind: "approve-selected" })}
-              disabled={
-                selectedRecordIds.length === 0 || saving
-              }
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              Seçilenleri Onayla
-            </button>
+            {actions.can("approve") && (
+              <button
+                type="button"
+                onClick={() => setPending({ kind: "approve-selected" })}
+                disabled={
+                  selectedRecordIds.length === 0 || saving
+                }
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Seçilenleri Onayla
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={openBulk}
-              className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white"
-            >
-              + Toplu Puantaj
-            </button>
+            {actions.can("create") && (
+              <button
+                type="button"
+                onClick={openBulk}
+                className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white"
+              >
+                + Toplu Puantaj
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={openCreate}
-              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
-            >
-              + Tekil Kayıt
-            </button>
+            {actions.can("create") && (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+              >
+                + Tekil Kayıt
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -2005,14 +2021,16 @@ export default function DailyAttendancePage() {
                       <div className="flex justify-end gap-2">
                         {!item.isApproved && (
                           <>
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => openEdit(item)}
-                              className="rounded border px-3 py-1.5 text-xs"
-                            >
-                              Düzenle
-                            </button>
+                            {actions.can("edit") && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => openEdit(item)}
+                                className="rounded border px-3 py-1.5 text-xs"
+                              >
+                                Düzenle
+                              </button>
+                            )}
 
                             <button
                               type="button"
@@ -2023,14 +2041,16 @@ export default function DailyAttendancePage() {
                               Onayla
                             </button>
 
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => setPending({ kind: "delete", item })}
-                              className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
-                            >
-                              Sil
-                            </button>
+                            {actions.can("delete") && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => setPending({ kind: "delete", item })}
+                                className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
+                              >
+                                Sil
+                              </button>
+                            )}
                           </>
                         )}
                       </div>

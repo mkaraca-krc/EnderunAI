@@ -10,6 +10,7 @@ import {
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { decimal } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   hrOvertimeService,
   HrOvertimeItem,
@@ -78,6 +79,16 @@ function formatDate(value?: string | null) {
 }
 
 export default function OvertimePage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN türetildi (HrWorkforceController /
+   * HrPayrollController):
+   *   yeni kayıt -> attendance-payroll.create
+   *   güncelleme -> attendance-payroll.edit
+   *   onay       -> attendance-payroll.approve
+   *   silme      -> attendance-payroll.delete
+   */
+  const actions = useModuleActions("attendance-payroll");
+
   const [items, setItems] = useState<HrOvertimeItem[]>([]);
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
@@ -382,13 +393,15 @@ export default function OvertimePage() {
           <div className="flex gap-2">
             <Button variant="secondary" onClick={loadItems}>Yenile</Button>
 
-            <button
-              type="button"
-              onClick={openCreate}
-              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
-            >
-              + Yeni Fazla Mesai
-            </button>
+            {actions.can("create") && (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+              >
+                + Yeni Fazla Mesai
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -698,16 +711,18 @@ export default function OvertimePage() {
                     </td>
                     <td className="p-4">
                       <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => openEdit(item)}
-                          className="rounded border px-3 py-1.5 text-xs"
-                        >
-                          Düzenle
-                        </button>
+                        {actions.can("edit") && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => openEdit(item)}
+                            className="rounded border px-3 py-1.5 text-xs"
+                          >
+                            Düzenle
+                          </button>
+                        )}
 
-                        {item.status === 1 && (
+                        {item.status === 1 && actions.can("approve") && (
                           <button
                             type="button"
                             disabled={busy}
@@ -718,14 +733,16 @@ export default function OvertimePage() {
                           </button>
                         )}
 
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setPending({ kind: "delete", item })}
-                          className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
-                        >
-                          Sil
-                        </button>
+                        {actions.can("delete") && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setPending({ kind: "delete", item })}
+                            className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
+                          >
+                            Sil
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

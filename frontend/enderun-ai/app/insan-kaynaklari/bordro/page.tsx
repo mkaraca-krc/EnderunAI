@@ -10,6 +10,7 @@ import {
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
 import { currencyMoney } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   cashAccountService,
   type CashAccount,
@@ -160,6 +161,18 @@ const inputStyle = {
 };
 
 export default function PayrollManagementPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN türetildi (HrPayrollController):
+   *   POST   payroll/calculate      -> attendance-payroll.create
+   *   POST   records/{id}/approve   -> attendance-payroll.approve
+   *   POST   records/{id}/paid      -> attendance-payroll.edit   (!)
+   *   DELETE records/{id}           -> attendance-payroll.delete
+   *
+   * (!) "Ödendi" düğmesi EDIT'e bağlı — avans ekranındaki aynı adlı
+   * düğme CREATE'e bağlı. İzin ucun kendisinden okundu.
+   */
+  const actions = useModuleActions("attendance-payroll");
+
   const [companies, setCompanies] = useState<
     CompanyListItem[]
   >([]);
@@ -1462,55 +1475,59 @@ export default function PayrollManagementPage() {
               : "Yenile"}
           </button>
 
-          <button
-            type="button"
-            onClick={() =>
-              setPending({ kind: "calculate" })
-            }
-            disabled={
-              calculating || !companyId
-            }
-            style={{
-              minHeight: "42px",
-              border: "none",
-              borderRadius: "10px",
-              padding: "0 18px",
-              background: "var(--erp-text)",
-              color: "var(--color-on-brand)",
-              fontWeight: 800,
-              cursor:
-                calculating
-                  ? "wait"
-                  : "pointer",
-              opacity:
+          {actions.can("create") && (
+            <button
+              type="button"
+              onClick={() =>
+                setPending({ kind: "calculate" })
+              }
+              disabled={
                 calculating || !companyId
-                  ? 0.65
-                  : 1,
-            }}
-          >
-            {calculating
-              ? "Hesaplanıyor..."
-              : "Toplu Bordro Hesapla"}
-          </button>
+              }
+              style={{
+                minHeight: "42px",
+                border: "none",
+                borderRadius: "10px",
+                padding: "0 18px",
+                background: "var(--erp-text)",
+                color: "var(--color-on-brand)",
+                fontWeight: 800,
+                cursor:
+                  calculating
+                    ? "wait"
+                    : "pointer",
+                opacity:
+                  calculating || !companyId
+                    ? 0.65
+                    : 1,
+              }}
+            >
+              {calculating
+                ? "Hesaplanıyor..."
+                : "Toplu Bordro Hesapla"}
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setPending({ kind: "post" })}
-            disabled={periodBusy || !companyId}
-            style={{
-              minHeight: "42px",
-              border: "1px solid var(--erp-text)",
-              borderRadius: "10px",
-              padding: "0 18px",
-              background: "var(--erp-panel)",
-              color: "var(--erp-text)",
-              fontWeight: 800,
-              cursor: periodBusy ? "wait" : "pointer",
-              opacity: periodBusy || !companyId ? 0.65 : 1,
-            }}
-          >
-            Dönemi Muhasebeleştir
-          </button>
+          {actions.can("approve") && (
+            <button
+              type="button"
+              onClick={() => setPending({ kind: "post" })}
+              disabled={periodBusy || !companyId}
+              style={{
+                minHeight: "42px",
+                border: "1px solid var(--erp-text)",
+                borderRadius: "10px",
+                padding: "0 18px",
+                background: "var(--erp-panel)",
+                color: "var(--erp-text)",
+                fontWeight: 800,
+                cursor: periodBusy ? "wait" : "pointer",
+                opacity: periodBusy || !companyId ? 0.65 : 1,
+              }}
+            >
+              Dönemi Muhasebeleştir
+            </button>
+          )}
 
           <select
             value={periodCashAccountId}
@@ -1544,25 +1561,27 @@ export default function PayrollManagementPage() {
             }}
           />
 
-          <button
-            type="button"
-            onClick={() => setPending({ kind: "pay" })}
-            disabled={periodBusy || !companyId || !periodCashAccountId}
-            style={{
-              minHeight: "42px",
-              border: "none",
-              borderRadius: "10px",
-              padding: "0 18px",
-              background: "var(--color-semantic-success)",
-              color: "var(--color-on-brand)",
-              fontWeight: 800,
-              cursor: periodBusy ? "wait" : "pointer",
-              opacity:
-                periodBusy || !companyId || !periodCashAccountId ? 0.65 : 1,
-            }}
-          >
-            Dönemi Öde
-          </button>
+          {actions.can("edit") && (
+            <button
+              type="button"
+              onClick={() => setPending({ kind: "pay" })}
+              disabled={periodBusy || !companyId || !periodCashAccountId}
+              style={{
+                minHeight: "42px",
+                border: "none",
+                borderRadius: "10px",
+                padding: "0 18px",
+                background: "var(--color-semantic-success)",
+                color: "var(--color-on-brand)",
+                fontWeight: 800,
+                cursor: periodBusy ? "wait" : "pointer",
+                opacity:
+                  periodBusy || !companyId || !periodCashAccountId ? 0.65 : 1,
+              }}
+            >
+              Dönemi Öde
+            </button>
+          )}
         </div>
 
         {error && (
@@ -1938,7 +1957,7 @@ export default function PayrollManagementPage() {
                         </button>
 
                         {record.status <
-                          PayrollStatus.Approved && (
+                          PayrollStatus.Approved && actions.can("approve") && (
                           <button
                             type="button"
                             disabled={
@@ -1964,7 +1983,7 @@ export default function PayrollManagementPage() {
                         )}
 
                         {record.status ===
-                          PayrollStatus.Approved && (
+                          PayrollStatus.Approved && actions.can("edit") && (
                           <button
                             type="button"
                             disabled={
@@ -2010,7 +2029,7 @@ export default function PayrollManagementPage() {
                         </button>
 
                         {record.status <
-                          PayrollStatus.Approved && (
+                          PayrollStatus.Approved && actions.can("delete") && (
                           <button
                             type="button"
                             disabled={

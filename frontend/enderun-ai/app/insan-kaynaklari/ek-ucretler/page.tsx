@@ -10,6 +10,7 @@ import {
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { currencyMoney } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 import {
   CompensationComponent,
@@ -151,6 +152,15 @@ function paymentMethodLabel(value: number) {
 }
 
 export default function AdditionalCompensationPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN türetildi:
+   *   yeni kayıt -> attendance-payroll.create
+   *   güncelleme -> attendance-payroll.edit
+   *   onay       -> attendance-payroll.approve
+   *   silme      -> attendance-payroll.delete
+   */
+  const actions = useModuleActions("attendance-payroll");
+
   const [companies, setCompanies] =
     useState<CompanyListItem[]>([]);
 
@@ -748,13 +758,15 @@ export default function AdditionalCompensationPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={openCreate}
-            className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
-          >
-            + Yeni Ücret Bileşeni
-          </button>
+          {actions.can("create") && (
+            <button
+              type="button"
+              onClick={openCreate}
+              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+            >
+              + Yeni Ücret Bileşeni
+            </button>
+          )}
         </div>
       </section>
 
@@ -1440,26 +1452,30 @@ export default function AdditionalCompensationPage() {
 
                     <td className="p-4">
                       <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openEdit(item)
-                          }
-                          className="rounded border border-slate-300 px-3 py-2 text-xs font-semibold"
-                        >
-                          Düzenle
-                        </button>
+                        {actions.can("edit") && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openEdit(item)
+                            }
+                            className="rounded border border-slate-300 px-3 py-2 text-xs font-semibold"
+                          >
+                            Düzenle
+                          </button>
+                        )}
 
-                        <button
-                          type="button"
-                          disabled={
-                            actionId === item.id
-                          }
-                          onClick={() => setPending(item)}
-                          className="rounded border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-50"
-                        >
-                          Sil
-                        </button>
+                        {actions.can("delete") && (
+                          <button
+                            type="button"
+                            disabled={
+                              actionId === item.id
+                            }
+                            onClick={() => setPending(item)}
+                            className="rounded border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-50"
+                          >
+                            Sil
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
