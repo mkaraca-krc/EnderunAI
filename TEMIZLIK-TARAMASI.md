@@ -289,3 +289,34 @@ ekranında satış faturası seçimi. Migration + ekran dokunuşu istiyor.
 
 **Şimdilik:** yalnızca kaydedildi. `CashFlowService` içinde eksiğin
 neden bilinçli bırakıldığı yorumda yazılı.
+
+## Poz kütüphanesi birim yazımları tekilleştirilmeli
+
+**Ne:** `engineering_positions` tablosunda adet birimi iki ayrı yazımla
+duruyor: "Ad" (7.429 kayıt) ve "AD" (7.199 kayıt) — toplam 14.628
+kayıt, kütüphanenin yaklaşık %62'si. Aynı birim, iki yazım. Diğer
+birimlerde de benzer dağılım olabilir (m/MT, m²/m2), taranmadı.
+
+**Neden riskli:** Kaynak veride aynı şeyin iki yazımı olması, o veriyi
+okuyan her yerin kendi eşleştirme kuralını yazmasına yol açıyor. Bugün
+`UnitNormalizer` bunu maskeliyor ve reçete aktarımı doğru çalışıyor;
+ama normalizasyon bir ÇÖZÜM DEĞİL, bir YAMA. Sözlüğe girmeyen yeni bir
+yazım çıktığında (ya da normalizasyondan geçmeyen yeni bir tüketici
+eklendiğinde) aynı sorun sessizce geri gelir.
+
+Ayrıca raporlama tarafında gruplama yapan her sorgu "Ad" ve "AD"yi iki
+ayrı grup sayar — birim bazlı bir özet istendiğinde sayılar bölünür.
+
+**O turda değerlendirilecek:** kaynak veriyi tekilleştirmek — her birim
+için tek yazım seçip `engineering_positions` üzerinde tek seferlik
+güncelleme. Öncesinde tam bir birim envanteri çıkarılmalı (yalnız adet
+değil, m/m²/m³/kg/saat yazımları da). Güncelleme geri alınabilir olsun
+diye eski değer bir denetim kaydına yazılmalı ya da migration Down'ı
+yazılabilir olmalı.
+
+`UnitNormalizer` kaynak temizlense bile KALMALI: dışarıdan gelen Excel
+dosyaları her zaman serbest yazım taşıyacak, normalizasyon o sınırda
+gerekli. Kaldırılacak olan şey kütüphanenin kendi içindeki tutarsızlık.
+
+**Şimdilik:** yalnızca kaydedildi. Normalizasyon canlıda çalışıyor ve
+reçete aktarımı bu yazımlar yüzünden satır kaybetmiyor.

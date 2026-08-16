@@ -297,4 +297,78 @@ public sealed class RecipeImportServiceTests(DatabaseFixture fixture)
         Assert.Equal(2, result.CreatedRecipes);
         Assert.Equal(1, result.CreatedInventoryItems);
     }
+    /// <summary>
+    /// EŞDEĞER YAZIM ARTIK UYUŞMAZLIK SAYILMIYOR.
+    ///
+    /// Poz kütüphanesi adet birimini "Ad" yazıyor, Enderun stok
+    /// kartları "Adet". Eskiden bu satırların HEPSİ atlanıyordu —
+    /// canlıda 14.628 poz "Ad"/"AD" yazımıyla duruyor, yani bir reçete
+    /// dosyasının neredeyse tamamı düşerdi.
+    /// </summary>
+    [Fact]
+    public async Task EsdegerBirimYazimi_KartaBaglanir()
+    {
+        var context = await CreateContextAsync(("BUAT-01", "Buat", "Adet"));
+
+        var preview = await WithServiceAsync((service, _) => service.PreviewAsync(
+            Parsed(Row(context.PositionCode, "BUAT-01", "Buat", unit: "Ad")),
+            new RecipeImportOptions(context.CompanyId, CreateMissingInventoryItems: false),
+            CancellationToken.None));
+
+        var row = Assert.Single(preview.Rows);
+
+        Assert.Equal(RecipeImportAction.UseExistingItem, row.Action);
+        Assert.Null(row.Error);
+    }
+
+    /// <summary>
+    /// GERÇEK UYUŞMAZLIK HÂLÂ ATLANIYOR. Normalizasyon kontrolü
+    /// gevşetmiyor; "m" ile "Adet" farklı fiziksel birimler ve sessizce
+    /// bağlanmaları reçeteye yanlış miktar yazmak olurdu.
+    /// </summary>
+    [Fact]
+    public async Task GercekBirimUyusmazligi_HalaAtlanir()
+    {
+        var context = await CreateContextAsync(("KBL-77", "NYA Kablo", "Adet"));
+
+        var preview = await WithServiceAsync((service, _) => service.PreviewAsync(
+            Parsed(Row(context.PositionCode, "KBL-77", "NYA Kablo", unit: "m")),
+            new RecipeImportOptions(context.CompanyId, CreateMissingInventoryItems: false),
+            CancellationToken.None));
+
+        var row = Assert.Single(preview.Rows);
+
+        Assert.Equal(RecipeImportAction.Skip, row.Action);
+        Assert.Contains("Birim uyuşmuyor", row.Error);
+    }
+
+    /// <summary>
+    /// KART AÇMA KAPALIYKEN kartsız malzeme OLUŞTURULMUYOR ama
+    /// raporda malzeme bazında görünüyor — "kaç malzeme, hangileri"
+    /// sorusu kart açma kararını verecek olan şey.
+    /// </summary>
+    [Fact]
+    public async Task KartAcmaKapali_KartsizMalzemeler_RaporlaniyorAmaAcilmiyor()
+    {
+        var context = await CreateContextAsync();
+
+        var preview = await WithServiceAsync((service, _) => service.PreviewAsync(
+            Parsed(
+                Row(context.PositionCode, "YOK-01", "Tanımsız Malzeme", unit: "Ad"),
+                Row(context.PositionCode, "YOK-01", "Tanımsız Malzeme", unit: "Ad"),
+                Row(context.PositionCode, "YOK-02", "Başka Malzeme", unit: "m")),
+            new RecipeImportOptions(context.CompanyId, CreateMissingInventoryItems: false),
+            CancellationToken.None));
+
+        Assert.All(preview.Rows, row => Assert.Equal(RecipeImportAction.Skip, row.Action));
+        Assert.Equal(0, preview.NewInventoryItemCount);
+
+        // Malzeme bazında toplanmış: iki satırda geçen malzeme TEK kayıt.
+        Assert.Equal(2, preview.MissingInventoryItems.Count);
+
+        var mostCommon = preview.MissingInventoryItems.First();
+        Assert.Equal("YOK-01", mostCommon.MaterialCode);
+        Assert.Equal(2, mostCommon.RowCount);
+    }
+
 }

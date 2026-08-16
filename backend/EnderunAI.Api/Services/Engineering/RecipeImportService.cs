@@ -1,4 +1,5 @@
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Services.Units;
 using EnderunAI.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -45,6 +46,20 @@ public sealed record RecipeImportPositionSummary(
     /// <summary>Pozun bugünkü geçerli reçete sürümü; yoksa 0.</summary>
     int CurrentVersion);
 
+/// <summary>
+/// Stok kartı olmayan malzeme — kaç satırda geçiyor ve hangi birimle.
+///
+/// Kart açma KAPALIYKEN bu satırlar atlanıyor. Atlananları satır satır
+/// okumak yerine malzeme bazında toplanmış bir liste gerekiyordu:
+/// "kaç malzeme, hangileri" sorusunun cevabı kararı verecek olan şey,
+/// çünkü kart açmak stok master'ını kalıcı olarak büyütüyor.
+/// </summary>
+public sealed record RecipeImportMissingItem(
+    string? MaterialCode,
+    string? MaterialName,
+    string? Unit,
+    int RowCount);
+
 public sealed record RecipeImportPreview(
     int TotalRows,
     int ValidRows,
@@ -53,6 +68,8 @@ public sealed record RecipeImportPreview(
     int MissingPositionCount,
     int NewInventoryItemCount,
     int InheritedPositionCodeCount,
+    /// <summary>Stok kartı bulunamayan malzemeler (malzeme bazında).</summary>
+    IReadOnlyList<RecipeImportMissingItem> MissingInventoryItems,
     IReadOnlyList<string> FileWarnings,
     IReadOnlyList<RecipeImportPositionSummary> Positions,
     IReadOnlyList<RecipeImportPreviewRow> Rows);
@@ -139,6 +156,7 @@ public sealed class RecipeImportService(AppDbContext db) : IRecipeImportService
             positions.Count(x => !x.PositionFound),
             rows.Count(x => x.Action == RecipeImportAction.CreateItem),
             rows.Count(x => x.PositionCodeInherited),
+            CollectMissingItems(rows),
             parsed.FileWarnings,
             positions,
             rows);
@@ -320,6 +338,31 @@ public sealed class RecipeImportService(AppDbContext db) : IRecipeImportService
     /// <summary>
     /// Satırın kararı. Önizleme ve aktarım aynı yolu kullanır.
     /// </summary>
+    /// <summary>
+    /// Kartı olmayan malzemeleri malzeme bazında toplar.
+    ///
+    /// Ayrım koda göre, kod yoksa ada göre yapılıyor — aynı malzemenin
+    /// iki satırda iki kez sayılmaması için. Sıralama satır sayısına
+    /// göre: en çok geçen malzeme kart açma kararında en önemlisidir.
+    /// </summary>
+    private static List<RecipeImportMissingItem> CollectMissingItems(
+        IEnumerable<RecipeImportPreviewRow> rows)
+    {
+        return rows
+            .Where(x => x.Action is RecipeImportAction.Skip or RecipeImportAction.CreateItem)
+            .Where(x => x.Error is null || x.Error.Contains("stok kartı", StringComparison.OrdinalIgnoreCase))
+            .Where(x => x.MaterialName is not null || x.MaterialCode is not null)
+            .GroupBy(x => x.MaterialCode ?? x.MaterialName!, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new RecipeImportMissingItem(
+                g.First().MaterialCode,
+                g.First().MaterialName,
+                g.First().Unit,
+                g.Count()))
+            .OrderByDescending(x => x.RowCount)
+            .ThenBy(x => x.MaterialName)
+            .ToList();
+    }
+
     private static RecipeImportPreviewRow Resolve(
         RecipeImportRow row,
         ImportContext context,
@@ -355,7 +398,16 @@ public sealed class RecipeImportService(AppDbContext db) : IRecipeImportService
 
         if (item is not null)
         {
-            if (!string.Equals(item.Unit, row.Unit, StringComparison.OrdinalIgnoreCase))
+            // BİRİM KARŞILAŞTIRMASI NORMALİZE EDİLMİŞ DEĞER ÜZERİNDEN.
+            //
+            // Poz kütüphanesi adet birimini "Ad"/"AD" yazıyor, stok
+            // kartları "Adet"; ikisi aynı birim olduğu hâlde düz metin
+            // karşılaştırması her satırı atlıyordu.
+            //
+            // Kontrol GEVŞEMİYOR: sözlük yalnız eşdeğer YAZIMLARI
+            // biliyor, farklı fiziksel birimleri değil. "m" yazan satır
+            // "Adet" kartına hâlâ bağlanmıyor.
+            if (!UnitNormalizer.AreEquivalent(item.Unit, row.Unit))
             {
                 return Skip(
                     $"Birim uyuşmuyor: dosyada \"{row.Unit}\", stok kartında \"{item.Unit}\".",
