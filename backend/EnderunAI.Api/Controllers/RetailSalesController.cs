@@ -59,6 +59,10 @@ public sealed class RetailSalesController(
     /// karar rolden değil İZİNDEN türetiliyor, böylece kullanıcı bazlı
     /// kısıtlama (UserPermissionOverride) da geçerli oluyor.
     /// </summary>
+    /// <summary>Tarihi gün başına indirip UTC olarak işaretler.</summary>
+    private static DateTime AsUtcDate(DateTime value) =>
+        DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
+
     private async Task<bool> HasAsync(string permission, CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not Guid userId)
@@ -435,6 +439,250 @@ public sealed class RetailSalesController(
             x.LineTotal,
             AlreadyReturned = returned.GetValueOrDefault(x.Description, 0m)
         }));
+    }
+
+    /// <summary>
+    /// GÜN SONU KASA.
+    ///
+    /// ŞİRKET FİLTRESİ ZORUNLU: kasa dökümü şirket bazındadır. Filtre
+    /// olmadan yazılmıştı ve test yakaladı — çok şirketli kurulumda
+    /// bir şirketin kasası ötekinin satışlarını da toplardı.
+    ///
+    /// HER RAKAM KENDİ KAYNAĞINDAN OKUNUYOR, yeniden hesaplanmıyor:
+    ///   nakit / kart -> CashTransaction (fiilen kasaya giren para)
+    ///   çek / vade   -> henüz tahsilat yok; fişin kendi tutarı
+    ///   elden        -> fişin ayrı alanı, extra_payment.view maskeli
+    ///
+    /// İADE VE İPTAL DÜŞÜLÜR: kasadan çıkan karşıt hareketler aynı
+    /// sorguya giriyor, ayrı bir çıkarma yapılmıyor — o da ikinci bir
+    /// hesap olurdu.
+    /// </summary>
+    [HttpGet("raporlar/gun-sonu")]
+    [RequirePermission(PermissionCatalog.Keys.SalesView)]
+    public async Task<IActionResult> DayEnd(
+        [FromQuery] Guid companyId,
+        [FromQuery] DateTime? date,
+        CancellationToken cancellationToken)
+    {
+        // Sorgudan gelen tarih Kind=Unspecified geliyor; PostgreSQL
+        // 'timestamp with time zone' yalnız UTC kabul ediyor. İşaretleme
+        // yapılmazsa uç 500 veriyor.
+        var day = AsUtcDate(date ?? DateTime.UtcNow);
+        var next = day.AddDays(1);
+        var canSeeCash = await cashVisibility.CanViewExtraPaymentAsync(cancellationToken);
+
+        var retailModules = new[] { "RETAIL_SALE", "RETAIL_RETURN", "RETAIL_SALE_CANCEL" };
+
+        // Kasaya fiilen giren/çıkan para. Hesap TÜRÜNE göre ayrılıyor:
+        // peşin kasaya, POS tahsilatı bankaya düşüyor.
+        var movements = await db.CashTransactions
+            .AsNoTracking()
+            .Where(x => retailModules.Contains(x.SourceModule!)
+                && x.CashAccount.CompanyId == companyId
+                && x.TransactionDate >= day && x.TransactionDate < next)
+            .Select(x => new
+            {
+                AccountType = (int)x.CashAccount.Type,
+                Signed = x.Direction == CashTransactionDirection.In ? x.Amount : -x.Amount
+            })
+            .ToListAsync(cancellationToken);
+
+        var cash = movements.Where(x => x.AccountType == 0).Sum(x => x.Signed);
+        var card = movements.Where(x => x.AccountType == 1).Sum(x => x.Signed);
+
+        // Çek ve vadede tahsilat yok; alacak açık. Fişin kendi tutarı
+        // okunuyor ve iade fişleri ters işaretle giriyor.
+        var openSales = await db.RetailSales
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId
+                && x.Status == RetailSaleStatus.Completed
+                && x.SaleDate >= day && x.SaleDate < next
+                && (x.PaymentMethod == RetailPaymentMethod.Cheque
+                    || x.PaymentMethod == RetailPaymentMethod.Term))
+            .Select(x => new
+            {
+                Method = (int)x.PaymentMethod,
+                Signed = x.IsReturn ? -x.RecordedAmount : x.RecordedAmount
+            })
+            .ToListAsync(cancellationToken);
+
+        var cheque = openSales.Where(x => x.Method == 2).Sum(x => x.Signed);
+        var term = openSales.Where(x => x.Method == 3).Sum(x => x.Signed);
+
+        var cashSideRows = await db.RetailSales
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId
+                && x.Status == RetailSaleStatus.Completed
+                && x.SaleDate >= day && x.SaleDate < next
+                && x.CashAmount > 0)
+            .Select(x => new { x.IsReturn, x.CashAmount })
+            .ToListAsync(cancellationToken);
+
+        var offBook = cashSideRows.Sum(x => x.IsReturn ? -x.CashAmount : x.CashAmount);
+
+        var saleCount = await db.RetailSales.CountAsync(
+            x => x.CompanyId == companyId && x.Status == RetailSaleStatus.Completed
+                && x.SaleDate >= day && x.SaleDate < next && !x.IsReturn,
+            cancellationToken);
+
+        var returnCount = await db.RetailSales.CountAsync(
+            x => x.CompanyId == companyId && x.Status == RetailSaleStatus.Completed
+                && x.SaleDate >= day && x.SaleDate < next && x.IsReturn,
+            cancellationToken);
+
+        return Ok(new
+        {
+            date = day,
+            cash,
+            card,
+            cheque,
+            term,
+            recordedTotal = cash + card + cheque + term,
+            // ELDEN AYRI SATIRDA ve yalnız yetkiliye. Kayıtlı toplama
+            // EKLENMİYOR: eklenirse resmî ciro ile kasa dökümü
+            // birbirini tutmaz.
+            cashAmount = canSeeCash ? offBook : (decimal?)null,
+            hiddenCount = canSeeCash ? 0 : cashSideRows.Count,
+            saleCount,
+            returnCount
+        });
+    }
+
+    /// <summary>
+    /// PERSONEL BAZINDA SATIŞ VE İSKONTO.
+    ///
+    /// Kimin ne kadar sattığı ve NE KADAR İSKONTO VERDİĞİ. İkincisi
+    /// asıl soru: tavan içinde kalmak tek başına yeterli değil, sürekli
+    /// tavana yakın iskonto veren satıcı marjı sessizce eritir.
+    /// </summary>
+    [HttpGet("raporlar/personel")]
+    [RequirePermission(PermissionCatalog.Keys.SalesView)]
+    public async Task<IActionResult> ByStaff(
+        [FromQuery] Guid companyId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken)
+    {
+        var start = AsUtcDate(from ?? DateTime.UtcNow.AddDays(-30));
+        var end = AsUtcDate(to ?? DateTime.UtcNow).AddDays(1);
+
+        var rows = await db.RetailSales
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId
+                && x.Status == RetailSaleStatus.Completed
+                && x.SaleDate >= start && x.SaleDate < end
+                && !x.IsReturn)
+            .GroupBy(x => x.SubmittedByUserId)
+            .Select(g => new
+            {
+                UserId = g.Key,
+                SaleCount = g.Count(),
+                Total = g.Sum(x => x.GrandTotal),
+                DiscountTotal = g.Sum(x => x.DiscountAmount),
+                ApprovalCount = g.Count(x => x.ApprovalReason != null)
+            })
+            .ToListAsync(cancellationToken);
+
+        var userIds = rows.Where(x => x.UserId != null).Select(x => x.UserId!.Value).ToArray();
+
+        var names = await db.Users
+            .AsNoTracking()
+            .Where(x => userIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
+
+        return Ok(rows
+            .OrderByDescending(x => x.Total)
+            .Select(x => new
+            {
+                x.UserId,
+                FullName = x.UserId != null && names.TryGetValue(x.UserId.Value, out var name)
+                    ? name
+                    : "—",
+                x.SaleCount,
+                x.Total,
+                x.DiscountTotal,
+                // Toplam içinde iskontonun payı: satıcıyı satıcıyla
+                // karşılaştırmanın tek adil yolu, çünkü ciro farklı.
+                DiscountRate = x.Total + x.DiscountTotal == 0m
+                    ? 0m
+                    : x.DiscountTotal / (x.Total + x.DiscountTotal) * 100m,
+                x.ApprovalCount
+            }));
+    }
+
+    /// <summary>
+    /// AÇIK VADE / ALACAK.
+    ///
+    /// Kaynağı perakende olan satış faturalarının TAHSİL EDİLMEMİŞ
+    /// bakiyesi. Fişten değil FATURADAN okunuyor — alacağın tek kaynağı
+    /// o; fişten okunsaydı faturaya sonradan yapılan tahsilat
+    /// görünmezdi.
+    /// </summary>
+    [HttpGet("raporlar/acik-vade")]
+    [RequirePermission(PermissionCatalog.Keys.SalesView)]
+    public async Task<IActionResult> OpenReceivables(
+        [FromQuery] Guid companyId,
+        CancellationToken cancellationToken)
+    {
+        var sales = await db.RetailSales
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId
+                && x.Status == RetailSaleStatus.Completed
+                && !x.IsReturn
+                && x.SalesInvoiceId != null
+                && (x.PaymentMethod == RetailPaymentMethod.Term
+                    || x.PaymentMethod == RetailPaymentMethod.Cheque))
+            .Select(x => new
+            {
+                x.Id,
+                x.DocumentNumber,
+                x.SaleDate,
+                x.DueDate,
+                PaymentMethod = (int)x.PaymentMethod,
+                InvoiceId = x.SalesInvoiceId!.Value,
+                CustomerTitle = x.CustomerCurrentAccount != null
+                    ? x.CustomerCurrentAccount.Title
+                    : x.WalkInCustomerName
+            })
+            .ToListAsync(cancellationToken);
+
+        if (sales.Count == 0)
+            return Ok(Array.Empty<object>());
+
+        var invoiceIds = sales.Select(x => x.InvoiceId).ToList();
+
+        var invoices = await db.SalesInvoices
+            .AsNoTracking()
+            .Where(x => invoiceIds.Contains(x.Id) && x.Status == SalesInvoiceStatus.Posted)
+            .ToDictionaryAsync(x => x.Id, x => x.NetReceivableAmount, cancellationToken);
+
+        var collected = await db.CashTransactions
+            .AsNoTracking()
+            .Where(x => x.SourceModule == "SalesInvoice"
+                && x.SourceEntityId != null
+                && invoiceIds.Contains(x.SourceEntityId!.Value)
+                && x.Direction == CashTransactionDirection.In)
+            .GroupBy(x => x.SourceEntityId!.Value)
+            .Select(g => new { g.Key, Total = g.Sum(x => x.Amount) })
+            .ToDictionaryAsync(x => x.Key, x => x.Total, cancellationToken);
+
+        var today = DateTime.UtcNow.Date;
+
+        return Ok(sales
+            .Where(x => invoices.ContainsKey(x.InvoiceId))
+            .Select(x => new
+            {
+                x.Id,
+                x.DocumentNumber,
+                x.SaleDate,
+                x.DueDate,
+                x.PaymentMethod,
+                x.CustomerTitle,
+                Remaining = invoices[x.InvoiceId] - collected.GetValueOrDefault(x.InvoiceId, 0m),
+                IsOverdue = x.DueDate != null && x.DueDate.Value.Date < today
+            })
+            .Where(x => x.Remaining > 0m)
+            .OrderBy(x => x.DueDate ?? x.SaleDate));
     }
 
     /// <summary>

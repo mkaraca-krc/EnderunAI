@@ -197,3 +197,58 @@ export const retailPricingService = {
     });
   },
 };
+
+export interface DayEndReport {
+  date: string;
+  cash: number;
+  card: number;
+  cheque: number;
+  term: number;
+  recordedTotal: number;
+  /** Yetkisiz kullanıcıda null — maskelenmiştir. */
+  cashAmount?: number | null;
+  hiddenCount: number;
+  saleCount: number;
+  returnCount: number;
+}
+
+export interface StaffSalesRow {
+  userId?: string | null;
+  fullName: string;
+  saleCount: number;
+  total: number;
+  discountTotal: number;
+  discountRate: number;
+  approvalCount: number;
+}
+
+export interface OpenReceivableRow {
+  id: string;
+  documentNumber: string;
+  saleDate: string;
+  dueDate?: string | null;
+  paymentMethod: number;
+  customerTitle?: string | null;
+  remaining: number;
+  isOverdue: boolean;
+}
+
+export const retailReportService = {
+  dayEnd(companyId: string, date: string) {
+    return request<DayEndReport>(
+      `/api/perakende/raporlar/gun-sonu?companyId=${companyId}&date=${date}`,
+    );
+  },
+
+  byStaff(companyId: string, from: string, to: string) {
+    return request<StaffSalesRow[]>(
+      `/api/perakende/raporlar/personel?companyId=${companyId}&from=${from}&to=${to}`,
+    );
+  },
+
+  openReceivables(companyId: string) {
+    return request<OpenReceivableRow[]>(
+      `/api/perakende/raporlar/acik-vade?companyId=${companyId}`,
+    );
+  },
+};

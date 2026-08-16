@@ -164,6 +164,7 @@ const RULES: Rule[] = [
   // Satış ekranından ÖNCE gelmeli — "/perakende" kalıbı bu yolu da
   // yakalar ve satış izniyle açılmasına yol açardı.
   { match: "/perakende/fiyatlar", permission: "inventory.edit" },
+  { match: "/perakende/raporlar", permission: "sales.view" },
   { match: "/perakende", permission: "sales.view" },
   { match: "/cariler", permission: "companies.view" },
 ];

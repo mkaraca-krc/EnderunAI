@@ -809,4 +809,194 @@ public sealed class RetailSaleTests(DatabaseFixture fixture)
             Assert.NotEqual(retur.GrandTotal, refund.Amount);
         }
     }
+    /// <summary>
+    /// GÜN SONU KASA doğru okuyor: peşin satış nakde, iade nakitten
+    /// DÜŞÜYOR — ayrı bir çıkarma yapılmadan, karşıt kasa hareketi
+    /// aynı sorguya girdiği için.
+    /// </summary>
+    [Fact]
+    public async Task DayEndReport_ReadsCashAndNetsOutReturns()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+        var saleId = await CompleteSaleAsync(context, quantity: 5m);
+
+        using var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var before = await client.GetFromJsonAsync<DayEndReport>(
+            $"/api/perakende/raporlar/gun-sonu?companyId={context.CompanyId}&date={DateTime.UtcNow:yyyy-MM-dd}");
+
+        Assert.NotNull(before);
+        // 5 × 100 + %20 KDV = 600
+        Assert.Equal(600m, before!.Cash);
+        Assert.Equal(1, before.SaleCount);
+
+        Guid returnId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var itemId = await db.RetailSaleItems
+                .Where(x => x.RetailSaleId == saleId).Select(x => x.Id).SingleAsync();
+
+            var retur = await WithServiceAsync(service => service.CreateReturnAsync(
+                saleId, [new RetailReturnLineInput(itemId, 2m)], "Kısmi iade",
+                CancellationToken.None));
+
+            returnId = retur.Id;
+        }
+
+        await WithServiceAsync(service => service.ApproveAsync(returnId, CancellationToken.None));
+
+        var after = await client.GetFromJsonAsync<DayEndReport>(
+            $"/api/perakende/raporlar/gun-sonu?companyId={context.CompanyId}&date={DateTime.UtcNow:yyyy-MM-dd}");
+
+        // 2 adet iade = 240 geri çıktı.
+        Assert.Equal(360m, after!.Cash);
+        Assert.Equal(1, after.ReturnCount);
+    }
+
+    /// <summary>
+    /// ELDEN TUTAR KAYITLI TOPLAMA KARIŞMIYOR — ve maskeli.
+    ///
+    /// Karışsaydı resmî ciro ile kasa dökümü birbirini tutmaz, elden
+    /// para da resmî rapora sızmış olurdu.
+    /// </summary>
+    [Fact]
+    public async Task DayEndReport_KeepsOffBookSeparate_AndMasked()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+
+        using var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var createResponse = await client.PostAsJsonAsync("/api/perakende", new
+        {
+            companyId = context.CompanyId,
+            warehouseId = context.WarehouseId,
+            saleDate = DateTime.UtcNow.Date,
+            customerCurrentAccountId = context.CustomerId,
+            paymentMethod = 0,
+            overallDiscountRate = 0m,
+            cashAmount = 200m,
+            cashAccountId = context.CashAccountId,
+            items = new[]
+            {
+                new { inventoryItemId = context.ItemId, quantity = 5m, discountRate = 0m }
+            }
+        });
+
+        createResponse.EnsureSuccessStatusCode();
+        var created = await createResponse.Content.ReadFromJsonAsync<CreatedSale>();
+
+        (await client.PostAsync($"/api/perakende/{created!.Id}/gonder", null))
+            .EnsureSuccessStatusCode();
+
+        var report = await client.GetFromJsonAsync<DayEndReport>(
+            $"/api/perakende/raporlar/gun-sonu?companyId={context.CompanyId}&date={DateTime.UtcNow:yyyy-MM-dd}");
+
+        Assert.NotNull(report);
+
+        // Kasaya giren YALNIZ kayıtlı kısım: 600 − 200 = 400.
+        Assert.Equal(400m, report!.Cash);
+        Assert.Equal(200m, report.CashAmount);
+
+        // Kayıtlı toplam elden içermiyor.
+        Assert.Equal(400m, report.RecordedTotal);
+
+        // Yetkisiz kullanıcıda elden null ve gizlenen sayı dolu.
+        using var restricted = await CreateClientWithoutExtraPaymentAsync();
+
+        var masked = await restricted.GetFromJsonAsync<DayEndReport>(
+            $"/api/perakende/raporlar/gun-sonu?companyId={context.CompanyId}&date={DateTime.UtcNow:yyyy-MM-dd}");
+
+        Assert.Null(masked!.CashAmount);
+        Assert.True(masked.HiddenCount > 0);
+        // Kayıtlı rakamlar maskeden etkilenmiyor.
+        Assert.Equal(400m, masked.Cash);
+    }
+
+    /// <summary>Açık vade raporu tahsil edilmemiş bakiyeyi FATURADAN okuyor.</summary>
+    [Fact]
+    public async Task OpenReceivablesReport_ReadsInvoiceBalance()
+    {
+        var context = await CreateContextAsync($"R{Guid.NewGuid():N}"[..8]);
+
+        var saleId = await WithServiceAsync(async service =>
+        {
+            var created = await service.CreateAsync(
+                Input(context, quantity: 3m,
+                    method: RetailPaymentMethod.Term,
+                    dueDate: DateTime.UtcNow.Date.AddDays(30)),
+                CancellationToken.None);
+
+            await service.SubmitAsync(created.Id, CancellationToken.None);
+            await service.ApproveAsync(created.Id, CancellationToken.None);
+            return created.Id;
+        });
+
+        using var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var rows = await client.GetFromJsonAsync<List<OpenReceivableRow>>(
+            $"/api/perakende/raporlar/acik-vade?companyId={context.CompanyId}");
+
+        var row = Assert.Single(rows!, x => x.Id == saleId);
+
+        // 3 × 100 + %20 = 360, hiç tahsilat yok.
+        Assert.Equal(360m, row.Remaining);
+        Assert.False(row.IsOverdue);
+    }
+
+    private async Task<HttpClient> CreateClientWithoutExtraPaymentAsync()
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var passwordService = scope.ServiceProvider.GetRequiredService<PasswordService>();
+
+        const string password = "RetailReport!2026";
+        var username = $"test-report-{Guid.NewGuid():N}"[..40];
+        var hash = passwordService.Hash(password);
+
+        var user = new AppUser
+        {
+            Username = username,
+            FullName = "Rapor Kullanıcısı",
+            PasswordHash = hash.Hash,
+            PasswordSalt = hash.Salt,
+            IsActive = true,
+            WorkHoursExempt = true
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var role = await db.Roles.SingleAsync(x => x.Name == "Admin");
+        db.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+        db.UserDataScopes.Add(new UserDataScope { UserId = user.Id, ScopeType = DataScopeType.All });
+
+        var permission = await db.Permissions
+            .SingleAsync(x => x.Key == PermissionCatalog.Keys.ExtraPaymentView);
+
+        db.UserPermissionOverrides.Add(new UserPermissionOverride
+        {
+            UserId = user.Id,
+            PermissionId = permission.Id,
+            Effect = PermissionOverrideEffect.Deny
+        });
+
+        await db.SaveChangesAsync();
+
+        var client = fixture.Factory.CreateClient();
+        var token = await AuthHelper.LoginAsync(client, username, password);
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        return client;
+    }
+
+    private sealed record DayEndReport(
+        DateTime Date, decimal Cash, decimal Card, decimal Cheque, decimal Term,
+        decimal RecordedTotal, decimal? CashAmount, int HiddenCount,
+        int SaleCount, int ReturnCount);
+
+    private sealed record OpenReceivableRow(
+        Guid Id, string DocumentNumber, DateTime SaleDate, DateTime? DueDate,
+        int PaymentMethod, string? CustomerTitle, decimal Remaining, bool IsOverdue);
 }
