@@ -126,7 +126,7 @@ export default function ProjectMeasurementDetailPage() {
    * Aksiyon izinleri UÇLARDAN (ProjectMeasurementsController):
    *   POST   {id}/submit  -> hakedis.create
    *   POST   {id}/approve -> hakedis.approve
-   *   POST   {id}/cancel  -> hakedis.EDIT   (delete değil!)
+   *   POST   {id}/cancel  -> hakedis.delete (A tipi daraltmayla)
    *   DELETE {id}         -> hakedis.delete
    *
    * İPTAL EDIT'E BAĞLI, silmeye değil. Yıkıcı bir işlem için zayıf bir
@@ -437,7 +437,7 @@ export default function ProjectMeasurementDetailPage() {
               </button>
             )}
 
-            {actions.can("edit") && actions.can("edit") && (
+            {actions.can("edit") && actions.can("delete") && (
               <button
                 type="button"
                 disabled={processing}

@@ -378,13 +378,32 @@ ikisinde de hem edit hem delete var; Duygu YILDIRICI'da accounting
 edit+delete birlikte. Yani bugün daraltma yapılsa **hiçbir kullanıcı
 iş yapamaz hale gelmez.**
 
-**O turda değerlendirilecek:** yukarıdaki uçlarda `Edit` → `Delete`
-daraltması, TEK SEFERDE. Uç-uç yapmak yerine hepsini birden yapmak
-gerekiyor; tek tek yapılırsa yarısı zayıf yarısı güçlü kalır ve kural
-öğrenilemez. "Ayrı karar" işaretli üçü (red, görev iptali, fiyat
-listesi pasife alma) tartışılmalı — red her zaman yıkıcı sayılmayabilir.
+**YAPILDI (2026-08-16).** Dokuz uç tek seferde daraltıldı:
+purchase-orders, goods-receipts, project-measurements,
+progress-payments, purchase-requests, sales-invoices,
+hr/payroll/records, hr/assets iptalleri Edit -> Delete;
+currency-valuation/reverse Manage -> Delete.
 
-**Şimdilik:** kod değişmedi. R2 arayüz kapılarını UÇLARDAN türetiyor,
-yani bugünkü (zayıf) yetkiyi izliyor — arayüzü backend'den koparmamak
-için. Daraltma yapıldığında R2 kapıları kendiliğinden takip eder,
-çünkü izin tek kaynaktan geliyor.
+Tek seferde yapıldı çünkü uç-uç yapılsaydı yarısı zayıf yarısı güçlü
+kalır ve kural öğrenilemezdi.
+
+Arayüz kapıları KENDİLİĞİNDEN takip etti — izin tek kaynaktan geldiği
+için ek bir frontend değişikliği gerekmedi. 2237 backend testi geçti.
+
+**HÂLÂ AÇIK — üçü bilinçli bırakıldı:**
+  hr/workforce/{advances,leaves,overtimes}/{id}/reject
+  tasks/{id}/cancel
+  manufacturer-price-lists/{id}/deactivate
+
+RED HER ZAMAN YIKICI SAYILMAYABİLİR: bir izin talebini reddetmek
+defterde iz bırakmıyor, yalnız akışı sonlandırıyor. Görev iptali ve
+fiyat listesi pasife alma da benzer biçimde tartışmalı. Bunlar ayrı
+bir karar.
+
+**AYRICA AÇIK:** `hr/gorevlendirmeler/{id}/iptal` özniteliği
+`personnel.view` ama gerçek kontrol metodun içinde (`CanApproveAsync`,
+yalnız Genel Müdür). Güvenlik sorunu değil ama ARAYÜZ TÜRETMESİ için
+sorun: öznitelikten türeten bir düğme kapısı, view yetkisi olan
+herkese düğmeyi gösterir ve kullanıcı 403 yer. Ya öznitelik gerçek
+gereksinimi yansıtmalı ya da o düğme özel ele alınmalı (R2/4'te
+karşılaşılacak).

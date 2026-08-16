@@ -150,28 +150,30 @@ describe("eleman seviyesi yetki (R2/1)", () => {
   /**
    * YIKICI AKSİYONLAR UCUN DEDİĞİ İZNE BAĞLI — TAHMİNE DEĞİL.
    *
-   * Beklenti "yıkıcı işlem delete ister" yönündeydi ve MUHASEBEDE
-   * öyle: fiş iptali accounting.delete istiyor. Ama hakediş ve satın
-   * almada uçlar EDIT diyor:
-   *   project-measurements/{id}/cancel -> hakedis.edit
-   *   purchase-orders/{id}/cancel      -> purchasing-orders.edit
-   *   goods-receipts/{id}/cancel       -> purchasing-receipts.edit
+   * SIRALAMA ÖNEMLİ, ÇÜNKÜ DERSİ O TAŞIYOR:
    *
-   * Düğmeleri delete'e bağlamak arayüzü uçtan koparırdı: edit yetkisi
-   * olan kullanıcı düğmeyi göremez ama API'den yine iptal edebilirdi —
-   * "gizli ama izinli". Bu yüzden UCUN DEDİĞİ yazıldı; yetkinin zayıf
-   * olması ayrı bir mesele ve TEMIZLIK'e kaydedildi.
+   * 1. Ölçüm, iptal uçlarının EDIT istediğini gösterdi (beklenti
+   *    delete'ti). Arayüz o an ucu izledi — delete'e bağlamak
+   *    "gizli ama izinli" sapması üretirdi: edit yetkili kullanıcı
+   *    düğmeyi göremez ama API'den yine iptal edebilirdi.
+   * 2. Sonra UÇLAR daraltıldı (A tipi): dokuz yıkıcı uç
+   *    Edit/Manage -> Delete. Etki ölçüldü, canlıda etkilenen yoktu.
+   * 3. Arayüz kapıları KENDİLİĞİNDEN takip etti — çünkü izin tek
+   *    kaynaktan geliyor.
    *
-   * BU TEST O KARARI KİLİTLİYOR: biri "yıkıcı → delete" refleksiyle
-   * düzeltmeye kalkarsa, önce ucu değiştirmesi gerektiğini görür.
+   * Yani düzeltme UI'da değil UÇTA yapıldı ve arayüz onu izledi.
+   * Tersini yapmak arayüzü backend'den koparırdı.
+   *
+   * BU TEST O ZİNCİRİ KİLİTLİYOR: kapı ile ucun izni ayrışırsa kırılır.
    */
   it("yıkıcı aksiyonlar ucun izniyle kapılı, tahminle değil", () => {
     // İşaretçiler ÇAĞRI YERİNİN kendisi; "cancel" gibi genel bir
     // kelime yorumlarda da geçiyor ve yanlış yeri bulurdu.
     const cases: [string, string, string][] = [
-      ["metrajlar/[id]", 'setPendingAction("cancel")', "edit"],
-      ["satin-alma/siparis/[id]", 'setPendingAction("cancel")', "edit"],
-      ["depo-stok/mal-kabul/[id]", 'setConfirming("iptal")', "edit"],
+      // İptal artık delete istiyor (A tipi daraltma sonrası).
+      ["metrajlar/[id]", 'setPendingAction("cancel")', "delete"],
+      ["satin-alma/siparis/[id]", 'setPendingAction("cancel")', "delete"],
+      ["depo-stok/mal-kabul/[id]", 'setConfirming("iptal")', "delete"],
       // Gerçek SİLME uçları delete istiyor; ayrım korunmalı.
       ["metrajlar/[id]", 'setPendingAction("remove")', "delete"],
       ["hakedis/dosyalar", "setPendingDelete(file)", "delete"],

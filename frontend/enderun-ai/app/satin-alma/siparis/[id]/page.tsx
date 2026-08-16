@@ -129,7 +129,7 @@ export default function PurchaseOrderDetailPage() {
    *   POST {id}/submit  -> purchasing-orders.edit
    *   POST {id}/approve -> purchasing-orders.approve
    *   POST {id}/reject  -> purchasing-orders.approve
-   *   POST {id}/cancel  -> purchasing-orders.EDIT  (delete değil!)
+   *   POST {id}/cancel  -> purchasing-orders.delete (A tipi daraltma)
    *
    * İptal ucunda iç yetki kontrolü de YOK; tek kapı edit. Yıkıcı işlem
    * için zayıf, ama arayüz ucu izler. TEMIZLIK'e yazıldı.
@@ -376,7 +376,7 @@ export default function PurchaseOrderDetailPage() {
                       </Link>
                     )}
 
-                  {[0, 1, 6].includes(order.status) && actions.can("edit") && (
+                  {[0, 1, 6].includes(order.status) && actions.can("delete") && (
                     <Button
                       variant="danger"
                       loading={processing}

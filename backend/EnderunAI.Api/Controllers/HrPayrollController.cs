@@ -75,7 +75,12 @@ public sealed class HrPayrollController(IHrApprovalService service) : Controller
                 id, CurrentUserId(), cancellationToken)));
 
     [HttpPost("records/{id:guid}/cancel")]
-    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollEdit)]
+        // YIKICI İŞLEM, DELETE YETKİSİ İSTER: iptal kesinleşmiş belgeyi
+        // ters kayıtla geri alıyor — muhasebe fişi doğuruyor, stok/tahsilat
+        // hareketi yaratıyor. "Düzeltme" değil "yıkma"; edit bunun için
+        // zayıftı. Daraltma öncesi etki ölçüldü: canlıdaki hiçbir kullanıcı
+        // iş yapamaz hale gelmedi (edit'i olan herkeste delete de var).
+    [RequirePermission(PermissionCatalog.Keys.AttendancePayrollDelete)]
     public Task<IActionResult> Cancel(
         Guid id, ReasonRequest request, CancellationToken cancellationToken) =>
         ExecuteAsync(async () =>

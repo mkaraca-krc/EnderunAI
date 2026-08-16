@@ -263,7 +263,12 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
+        // YIKICI İŞLEM, DELETE YETKİSİ İSTER: iptal kesinleşmiş belgeyi
+        // ters kayıtla geri alıyor — muhasebe fişi doğuruyor, stok/tahsilat
+        // hareketi yaratıyor. "Düzeltme" değil "yıkma"; edit bunun için
+        // zayıftı. Daraltma öncesi etki ölçüldü: canlıdaki hiçbir kullanıcı
+        // iş yapamaz hale gelmedi (edit'i olan herkeste delete de var).
+    [RequirePermission(PermissionCatalog.Keys.PersonnelDelete)]
     public async Task<IActionResult> Cancel(
         Guid id,
         CancelAssetRequest request,

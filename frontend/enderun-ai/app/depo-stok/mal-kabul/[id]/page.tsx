@@ -67,7 +67,7 @@ export default function GoodsReceiptDetailPage() {
    * Aksiyon izinleri UÇLARDAN (GoodsReceiptsController):
    *   PUT  {id}          -> purchasing-receipts.edit
    *   POST {id}/post     -> purchasing-receipts.approve
-   *   POST {id}/cancel   -> purchasing-receipts.EDIT  (delete değil!)
+   *   POST {id}/cancel   -> purchasing-receipts.delete (A tipi daraltma)
    */
   const actions = useModuleActions("purchasing-receipts");
 
@@ -453,7 +453,7 @@ export default function GoodsReceiptDetailPage() {
                   {processing ? "İşleniyor..." : "Stok Kaydı Yap"}
                 </button>
               )}
-              {actions.can("edit") && (
+              {actions.can("delete") && (
                 <button
                   type="button"
                   onClick={() => setConfirming("iptal")}

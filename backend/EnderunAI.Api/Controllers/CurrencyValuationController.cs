@@ -89,7 +89,10 @@ public sealed class CurrencyValuationController(
     /// Değerleme turunu ters kayıtla iptal eder.
     /// </summary>
     [HttpPost("{id:guid}/reverse")]
-    [RequirePermission(PermissionCatalog.Keys.AccountingManage)]
+        // YIKICI İŞLEM, DELETE YETKİSİ İSTER: değerlemeyi geri almak
+        // defterde ters fiş doğuruyor. "manage" geniş bir anahtar ve bu
+        // işlemi ayırt etmiyordu. Etki ölçüldü: canlıda etkilenen yok.
+    [RequirePermission(PermissionCatalog.Keys.AccountingDelete)]
     public async Task<IActionResult> Reverse(
         Guid id,
         [FromBody] ReverseCurrencyValuationRequest? request,

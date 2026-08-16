@@ -562,7 +562,12 @@ public sealed class PurchaseRequestsController(
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingRequestsEdit)]
+        // YIKICI İŞLEM, DELETE YETKİSİ İSTER: iptal kesinleşmiş belgeyi
+        // ters kayıtla geri alıyor — muhasebe fişi doğuruyor, stok/tahsilat
+        // hareketi yaratıyor. "Düzeltme" değil "yıkma"; edit bunun için
+        // zayıftı. Daraltma öncesi etki ölçüldü: canlıdaki hiçbir kullanıcı
+        // iş yapamaz hale gelmedi (edit'i olan herkeste delete de var).
+    [RequirePermission(PermissionCatalog.Keys.PurchasingRequestsDelete)]
     public async Task<IActionResult> Cancel(
         Guid id,
         CancelPurchaseRequestRequest request,

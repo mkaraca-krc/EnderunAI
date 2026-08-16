@@ -75,7 +75,12 @@ public sealed class GoodsReceiptsController(IGoodsReceiptService service) : Cont
         await ExecuteAsync(() => service.PostAsync(id, cancellationToken));
 
     [HttpPost("{id:guid}/cancel")]
-    [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsEdit)]
+        // YIKICI İŞLEM, DELETE YETKİSİ İSTER: iptal kesinleşmiş belgeyi
+        // ters kayıtla geri alıyor — muhasebe fişi doğuruyor, stok/tahsilat
+        // hareketi yaratıyor. "Düzeltme" değil "yıkma"; edit bunun için
+        // zayıftı. Daraltma öncesi etki ölçüldü: canlıdaki hiçbir kullanıcı
+        // iş yapamaz hale gelmedi (edit'i olan herkeste delete de var).
+    [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsDelete)]
     public async Task<IActionResult> Cancel(
         Guid id,
         GoodsReceiptReasonRequest request,
