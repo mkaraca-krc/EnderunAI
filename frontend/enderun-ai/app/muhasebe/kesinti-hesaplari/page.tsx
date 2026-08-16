@@ -19,12 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
-import { usePermissions } from "@/lib/use-permissions";
 import {
   accountingAccountService,
   type AccountingAccountListItem,
 } from "@/services/accounting-account.service";
 import { companyService, type CompanyListItem } from "@/services/company.service";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   hakedisDeductionAccountService,
   type DeductionAccountMapping,
@@ -59,8 +59,12 @@ function isSelectable(account: AccountingAccountListItem) {
 }
 
 export default function DeductionAccountsPage() {
-  const { has } = usePermissions();
-  const canManage = has("accounting.manage");
+  /*
+   * PUT hakedis-deduction-accounts -> accounting.manage
+   * Kesinti hesabı eşlemesi defteri etkiliyor.
+   */
+  const actions = useModuleActions("accounting");
+  const canManage = actions.can("manage");
 
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
@@ -232,7 +236,7 @@ export default function DeductionAccountsPage() {
               {loading ? "Yükleniyor..." : "Yenile"}
             </Button>
 
-            {canManage && (
+            {canManage && actions.can("manage") && (
               <Button onClick={() => void save()} disabled={saving || !dirty}>
                 {saving ? "Kaydediliyor..." : "Kaydet"}
               </Button>

@@ -12,6 +12,7 @@ import { useParams } from "next/navigation";
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
 import { amount, money } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 import {
   accountingVoucherService,
@@ -51,6 +52,17 @@ const date = new Intl.DateTimeFormat("tr-TR");
 export default function AccountingVoucherDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+
+  /*
+   * Aksiyon izinleri UÇLARDAN türetildi (AccountingVouchersController):
+   *   POST vouchers/{id}/post   -> accounting.approve
+   *   POST vouchers/{id}/cancel -> accounting.delete   (!)
+   *
+   * (!) Fiş İPTALİ delete iznine bağlı, edit'e değil: kesinleşmiş bir
+   * fişi iptal etmek defterde ters kayıt doğuruyor ve silmeye denk
+   * bir yetki sayılmış. Uç öyle diyor.
+   */
+  const actions = useModuleActions("accounting");
 
   const [item, setItem] =
     useState<AccountingVoucherDetail | null>(null);
@@ -229,7 +241,7 @@ export default function AccountingVoucherDetailPage() {
             </Link>
           )}
 
-          {item.status === 0 && (
+          {item.status === 0 && actions.can("approve") && (
             <button
               type="button"
               className="erp-primary-button"
@@ -244,7 +256,7 @@ export default function AccountingVoucherDetailPage() {
             </button>
           )}
 
-          {item.status !== 2 && (
+          {item.status !== 2 && actions.can("delete") && (
             <button
               type="button"
               className="erp-secondary-button"

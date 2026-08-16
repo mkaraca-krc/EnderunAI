@@ -87,6 +87,18 @@ const RULES: Rule[] = [
   { match: "/isg", permission: "isg.view" },
 
   // --- Muhasebe ve finans ---
+  /*
+   * TEK İŞİ BİR AKSİYON OLAN EKRAN, O AKSİYONUN İZNİYLE AÇILIR.
+   *
+   * "/muhasebe" yalnız accounting.view istiyordu; yani yalnızca
+   * görüntüleme yetkisi olan biri "Yeni Fiş" ekranını açıp uzun formu
+   * doldurabiliyor, reddi ancak KAYDEDERKEN yiyordu. Düğmeyi gizlemek
+   * bunu çözmez — ekranın kendisi zaten aksiyon.
+   *
+   * Sıra önemli: spesifik kalıplar genel "/muhasebe" kuralından ÖNCE.
+   */
+  { match: /^\/muhasebe\/[^/]+\/yeni/, permission: "accounting.create" },
+  { match: /^\/muhasebe\/[^/]+\/[^/]+\/duzenle/, permission: "accounting.edit" },
   { match: "/muhasebe", permission: "accounting.view" },
   {
     // Gider merkezi şirket geneli tabloyu tek ekranda topluyor;

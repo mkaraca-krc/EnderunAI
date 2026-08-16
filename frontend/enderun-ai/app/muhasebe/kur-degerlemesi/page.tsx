@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { amount, money, number as formatNumber } from "@/lib/format/turkish";
 import { Button } from "@/components/ui";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   currencyValuationService,
   type CurrencyValuationPreview,
@@ -19,6 +20,12 @@ function todayIso() {
 }
 
 export default function CurrencyValuationPage() {
+  /*
+   * POST currency-valuations -> accounting.manage
+   * Kur değerlemesi defterde fiş üretiyor; ayrı bir yönetim yetkisi.
+   */
+  const actions = useModuleActions("accounting");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [valuationDate, setValuationDate] = useState(todayIso);
@@ -176,14 +183,16 @@ export default function CurrencyValuationPage() {
           </label>
         </div>
 
-        <button
-          type="button"
-          className="erp-primary-button"
-          disabled={!canPost}
-          onClick={() => void handlePost()}
-        >
-          {posting ? "Kesiliyor..." : "Değerleme Fişini Kes"}
-        </button>
+        {actions.can("manage") && (
+          <button
+            type="button"
+            className="erp-primary-button"
+            disabled={!canPost}
+            onClick={() => void handlePost()}
+          >
+            {posting ? "Kesiliyor..." : "Değerleme Fişini Kes"}
+          </button>
+        )}
       </div>
 
       <div className="erp-panel" style={{ marginBottom: 16 }}>

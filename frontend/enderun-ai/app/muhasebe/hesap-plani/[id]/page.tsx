@@ -11,6 +11,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 import {
   accountingAccountService,
@@ -59,6 +60,12 @@ export default function AccountingAccountDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params.id;
+
+  /*
+   * POST accounting-accounts/{id}/deactivate -> accounting.delete
+   * Pasife almak silmeye denk yetki: hesap defterden düşüyor.
+   */
+  const actions = useModuleActions("accounting");
 
   const [item, setItem] =
     useState<AccountingAccountDetail | null>(null);
@@ -294,7 +301,7 @@ export default function AccountingAccountDetailPage() {
             Hesap Planına Dön
           </Link>
 
-          {item.isActive && (
+          {item.isActive && actions.can("delete") && (
             <button
               type="button"
               className="erp-secondary-button"

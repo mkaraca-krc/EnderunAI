@@ -54,10 +54,30 @@ const R2_1 = [
   "puantaj",
 ];
 
-const hr = screens(join(ROOT, "app", "insan-kaynaklari")).map((path) => ({
-  path: path.slice(ROOT.length + 1),
-  text: readFileSync(path, "utf8"),
-}));
+/**
+ * R2/2 kapsamı: muhasebe ailesi.
+ *
+ * Buradaki "yeni" ve "duzenle" ekranları LİSTEDE YOK — onlar düğme
+ * kapısıyla değil ROTA kapısıyla korunuyor. Tek işi bir aksiyon olan
+ * ekranda düğmeyi gizlemek yetmez: kullanıcı uzun formu doldurur,
+ * reddi ancak kaydederken yer.
+ */
+const R2_2 = [
+  join("fisler", "[id]"),
+  join("hesap-plani", "[id]"),
+  join("kur-degerlemesi"),
+  join("kesinti-hesaplari"),
+];
+
+function read(directory: string) {
+  return screens(join(ROOT, "app", directory)).map((path) => ({
+    path: path.slice(ROOT.length + 1),
+    text: readFileSync(path, "utf8"),
+  }));
+}
+
+const hr = read("insan-kaynaklari");
+const accounting = read("muhasebe");
 
 describe("eleman seviyesi yetki (R2/1)", () => {
   it("kapsamdaki sekiz ekranın hepsi kapılı", () => {
@@ -73,6 +93,34 @@ describe("eleman seviyesi yetki (R2/1)", () => {
     ).toEqual([]);
   });
 
+  it("muhasebe ailesindeki aksiyon ekranları kapılı", () => {
+    const missing = R2_2.filter((name) => {
+      // TAM eşleşme: "fisler/[id]" kalıbı "fisler/[id]/duzenle" ile de
+      // eşleşiyordu ve yanlış dosyaya bakıyordu.
+      const screen = accounting.find(
+        (x) => x.path === join("app", "muhasebe", name, "page.tsx"),
+      );
+      return !screen || !screen.text.includes("useModuleActions");
+    });
+
+    expect(missing).toEqual([]);
+  });
+
+  /**
+   * TEK İŞİ AKSİYON OLAN EKRAN ROTA KAPISINDA.
+   *
+   * "/muhasebe" yalnız accounting.view istiyordu; görüntüleme yetkisi
+   * olan biri "Yeni Fiş" ekranını açıp formu doldurabiliyordu.
+   */
+  it("muhasebe yeni/duzenle ekranları rota kapısında", () => {
+    const routes = readFileSync(
+      join(ROOT, "lib", "auth", "route-permissions.ts"), "utf8",
+    );
+
+    expect(routes).toMatch(/muhasebe[\s\S]*yeni[\s\S]*accounting\.create/);
+    expect(routes).toMatch(/muhasebe[\s\S]*duzenle[\s\S]*accounting\.edit/);
+  });
+
   /**
    * İZİN ANAHTARI ÇAĞRI YERİNDE ELLE YAZILMAZ.
    *
@@ -83,8 +131,8 @@ describe("eleman seviyesi yetki (R2/1)", () => {
    */
   it("izin anahtarını çağrı yerinde birleştirmiyor", () => {
     const offenders = hr
-      .filter((screen) => R2_1.some((name) => screen.path.includes(join(name, "page.tsx"))))
-      .filter((screen) => /has\(\s*["'`]attendance-payroll\./.test(screen.text))
+      .concat(accounting)
+      .filter((screen) => /has\(\s*["'`](attendance-payroll|accounting)\./.test(screen.text))
       .map((screen) => screen.path);
 
     expect(offenders).toEqual([]);
