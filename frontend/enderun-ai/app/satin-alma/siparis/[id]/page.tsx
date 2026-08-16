@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
 import { currencyMoney, percent, quantity } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   Badge,
   Button,
@@ -122,6 +123,18 @@ const ACTION_DIALOGS: Record<
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
+
+  /*
+   * Aksiyon izinleri UÇLARDAN (PurchaseOrdersController):
+   *   POST {id}/submit  -> purchasing-orders.edit
+   *   POST {id}/approve -> purchasing-orders.approve
+   *   POST {id}/reject  -> purchasing-orders.approve
+   *   POST {id}/cancel  -> purchasing-orders.EDIT  (delete değil!)
+   *
+   * İptal ucunda iç yetki kontrolü de YOK; tek kapı edit. Yıkıcı işlem
+   * için zayıf, ama arayüz ucu izler. TEMIZLIK'e yazıldı.
+   */
+  const actions = useModuleActions("purchasing-orders");
 
   const [order, setOrder] =
     useState<PurchaseOrderDetail | null>(null);
@@ -320,7 +333,7 @@ export default function PurchaseOrderDetailPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  {order.status === 0 && (
+                  {order.status === 0 && actions.can("edit") && (
                     <Button
                       loading={processing}
                       onClick={() => setPendingAction("submit")}
@@ -332,20 +345,24 @@ export default function PurchaseOrderDetailPage() {
                   {order.status === 1 &&
                     approvalContext?.canCurrentUserApprove && (
                     <>
-                      <Button
-                        loading={processing}
-                        onClick={() => setPendingAction("approve")}
-                      >
-                        Onayla
-                      </Button>
+                      {actions.can("approve") && (
+                        <Button
+                          loading={processing}
+                          onClick={() => setPendingAction("approve")}
+                        >
+                          Onayla
+                        </Button>
+                      )}
 
-                      <Button
-                        variant="danger"
-                        loading={processing}
-                        onClick={() => setPendingAction("reject")}
-                      >
-                        Reddet
-                      </Button>
+                      {actions.can("approve") && (
+                        <Button
+                          variant="danger"
+                          loading={processing}
+                          onClick={() => setPendingAction("reject")}
+                        >
+                          Reddet
+                        </Button>
+                      )}
                     </>
                   )}
 
@@ -359,7 +376,7 @@ export default function PurchaseOrderDetailPage() {
                       </Link>
                     )}
 
-                  {[0, 1, 6].includes(order.status) && (
+                  {[0, 1, 6].includes(order.status) && actions.can("edit") && (
                     <Button
                       variant="danger"
                       loading={processing}

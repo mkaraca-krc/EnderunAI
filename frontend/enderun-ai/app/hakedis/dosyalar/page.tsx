@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   hakedisFileService,
   hakedisFileUrl,
@@ -77,6 +78,12 @@ export default function HakedisFilesPage() {
   const { has } = usePermissions();
   const canUpload = has("hakedis.create");
   const canDelete = has("hakedis.delete");
+
+  /*
+   * DELETE hakedis-files/{name} -> hakedis.delete
+   * Analiz ucu hakedis.view istiyor; okuma sayılır, kapılanmaz.
+   */
+  const actions = useModuleActions("hakedis");
 
   const [files, setFiles] = useState<HakedisFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -283,7 +290,7 @@ export default function HakedisFilesPage() {
                             İndir
                           </a>
 
-                          {canDelete && (
+                          {canDelete && actions.can("delete") && (
                             <button
                               type="button"
                               disabled={busy}

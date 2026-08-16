@@ -34,6 +34,7 @@ import {
   type CreatePurchaseOrderFromRfqResponse,
 } from "@/services/purchase-order.service";
 import { brandMismatch } from "@/lib/purchasing/requested-brand";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 function formatMoney(value: number, currency = "TRY") {
   return currencyMoney(value, currency);
@@ -65,6 +66,14 @@ function scoreVariant(score: number) {
 export default function RfqComparisonPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+
+  /*
+   * Aksiyon izinleri UÇLARDAN:
+   *   POST rfq/{id}/close        -> purchasing-rfq.edit
+   *   POST rfq/{id}/award        -> purchasing-rfq.approve
+   *   POST purchase-orders/from-rfq -> purchasing-orders.create
+   */
+  const actions = useModuleActions("purchasing-rfq");
 
   const [comparison, setComparison] =
     useState<RfqComparison | null>(null);
@@ -335,13 +344,15 @@ export default function RfqComparisonPage() {
                     RFQ Detayına Dön
                   </Link>
 
-                  <Button
-                    variant="danger"
-                    loading={closing}
-                    onClick={() => setConfirming("kapat")}
-                  >
-                    RFQ Kapat
-                  </Button>
+                  {actions.can("edit") && (
+                    <Button
+                      variant="danger"
+                      loading={closing}
+                      onClick={() => setConfirming("kapat")}
+                    >
+                      RFQ Kapat
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -663,14 +674,16 @@ export default function RfqComparisonPage() {
                       </div>
                     ) : (
                       <div className="mt-6 space-y-3">
-                        <Button
-                          loading={awarding}
-                          disabled={!selectedSupplier.hasQuotation}
-                          onClick={() => setConfirming("kazanan")}
-                          className="w-full"
-                        >
-                          Kazanan Tedarikçi Seç
-                        </Button>
+                        {actions.can("approve") && (
+                          <Button
+                            loading={awarding}
+                            disabled={!selectedSupplier.hasQuotation}
+                            onClick={() => setConfirming("kazanan")}
+                            className="w-full"
+                          >
+                            Kazanan Tedarikçi Seç
+                          </Button>
+                        )}
 
                         <p className="text-xs text-slate-500">
                           Seçimden sonra RFQ sonuçlandırılır ve

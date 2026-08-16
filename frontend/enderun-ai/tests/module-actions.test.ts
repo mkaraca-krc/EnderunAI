@@ -76,6 +76,21 @@ function read(directory: string) {
   }));
 }
 
+/**
+ * R2/3 kapsamı: hakediş + satın alma.
+ *
+ * Bu grup YIKICI aksiyonlarla dolu (iptal, red, silme) ve tam da
+ * burada uçtan türetmenin değeri görülüyor — aşağıdaki teste bak.
+ */
+const R2_3: [string, string][] = [
+  ["metrajlar/[id]", "hakedis"],
+  ["hakedis/dosyalar", "hakedis"],
+  ["satin-alma/siparis/[id]", "purchasing-orders"],
+  ["satin-alma/rfq/[id]", "purchasing-rfq"],
+  ["satin-alma/rfq/[id]/karsilastirma", "purchasing-rfq"],
+  ["depo-stok/mal-kabul/[id]", "purchasing-receipts"],
+];
+
 const hr = read("insan-kaynaklari");
 const accounting = read("muhasebe");
 
@@ -119,6 +134,66 @@ describe("eleman seviyesi yetki (R2/1)", () => {
 
     expect(routes).toMatch(/muhasebe[\s\S]*yeni[\s\S]*accounting\.create/);
     expect(routes).toMatch(/muhasebe[\s\S]*duzenle[\s\S]*accounting\.edit/);
+  });
+
+  it("hakediş ve satın alma ekranları kapılı", () => {
+    const missing = R2_3.filter(([screen, module]) => {
+      const path = join(ROOT, "app", ...screen.split("/"), "page.tsx");
+      const text = readFileSync(path, "utf8");
+
+      return !text.includes(`useModuleActions("${module}")`);
+    }).map(([screen]) => screen);
+
+    expect(missing).toEqual([]);
+  });
+
+  /**
+   * YIKICI AKSİYONLAR UCUN DEDİĞİ İZNE BAĞLI — TAHMİNE DEĞİL.
+   *
+   * Beklenti "yıkıcı işlem delete ister" yönündeydi ve MUHASEBEDE
+   * öyle: fiş iptali accounting.delete istiyor. Ama hakediş ve satın
+   * almada uçlar EDIT diyor:
+   *   project-measurements/{id}/cancel -> hakedis.edit
+   *   purchase-orders/{id}/cancel      -> purchasing-orders.edit
+   *   goods-receipts/{id}/cancel       -> purchasing-receipts.edit
+   *
+   * Düğmeleri delete'e bağlamak arayüzü uçtan koparırdı: edit yetkisi
+   * olan kullanıcı düğmeyi göremez ama API'den yine iptal edebilirdi —
+   * "gizli ama izinli". Bu yüzden UCUN DEDİĞİ yazıldı; yetkinin zayıf
+   * olması ayrı bir mesele ve TEMIZLIK'e kaydedildi.
+   *
+   * BU TEST O KARARI KİLİTLİYOR: biri "yıkıcı → delete" refleksiyle
+   * düzeltmeye kalkarsa, önce ucu değiştirmesi gerektiğini görür.
+   */
+  it("yıkıcı aksiyonlar ucun izniyle kapılı, tahminle değil", () => {
+    // İşaretçiler ÇAĞRI YERİNİN kendisi; "cancel" gibi genel bir
+    // kelime yorumlarda da geçiyor ve yanlış yeri bulurdu.
+    const cases: [string, string, string][] = [
+      ["metrajlar/[id]", 'setPendingAction("cancel")', "edit"],
+      ["satin-alma/siparis/[id]", 'setPendingAction("cancel")', "edit"],
+      ["depo-stok/mal-kabul/[id]", 'setConfirming("iptal")', "edit"],
+      // Gerçek SİLME uçları delete istiyor; ayrım korunmalı.
+      ["metrajlar/[id]", 'setPendingAction("remove")', "delete"],
+      ["hakedis/dosyalar", "setPendingDelete(file)", "delete"],
+    ];
+
+    for (const [screen, marker, action] of cases) {
+      const path = join(ROOT, "app", ...screen.split("/"), "page.tsx");
+      const text = readFileSync(path, "utf8");
+
+      const index = text.indexOf(marker);
+      expect(index, `${screen}: "${marker}" bulunamadı`).toBeGreaterThan(0);
+
+      // İşaretçiden geriye doğru en yakın kapı bu eylem olmalı.
+      const before = text.slice(Math.max(0, index - 400), index);
+      const gates = [...before.matchAll(/actions\.can\("(\w+)"\)/g)];
+      const nearest = gates.at(-1)?.[1];
+
+      expect(
+        nearest,
+        `${screen} / ${marker}: kapı "${action}" olmalıydı, "${nearest}" bulundu`,
+      ).toBe(action);
+    }
   });
 
   /**

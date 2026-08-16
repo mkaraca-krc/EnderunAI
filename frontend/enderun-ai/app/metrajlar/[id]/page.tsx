@@ -13,6 +13,7 @@ import {
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
 import { currencyMoney, quantity } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 import {
   projectMeasurementService,
@@ -120,6 +121,20 @@ export default function ProjectMeasurementDetailPage() {
   const router = useRouter();
 
   const id = String(params.id ?? "");
+
+  /*
+   * Aksiyon izinleri UÇLARDAN (ProjectMeasurementsController):
+   *   POST   {id}/submit  -> hakedis.create
+   *   POST   {id}/approve -> hakedis.approve
+   *   POST   {id}/cancel  -> hakedis.EDIT   (delete değil!)
+   *   DELETE {id}         -> hakedis.delete
+   *
+   * İPTAL EDIT'E BAĞLI, silmeye değil. Yıkıcı bir işlem için zayıf bir
+   * yetki; ama karar ucun, arayüz onu izler. Aksi hâlde edit yetkili
+   * kullanıcı düğmeyi göremez ama API'den yine iptal edebilirdi —
+   * "gizli ama izinli" sapması. Tutarsızlık TEMIZLIK'e yazıldı.
+   */
+  const actions = useModuleActions("hakedis");
 
   const [item, setItem] =
     useState<ProjectMeasurementDetail | null>(
@@ -381,50 +396,58 @@ export default function ProjectMeasurementDetailPage() {
         {item.status ===
           ProjectMeasurementStatus.Draft && (
           <>
-            <button
-              type="button"
-              disabled={processing}
-              onClick={() =>
-                setPendingAction("submit")
-              }
-            >
-              Onaya Gönder
-            </button>
+            {actions.can("create") && (
+              <button
+                type="button"
+                disabled={processing}
+                onClick={() =>
+                  setPendingAction("submit")
+                }
+              >
+                Onaya Gönder
+              </button>
+            )}
 
-            <button
-              type="button"
-              disabled={processing}
-              onClick={() =>
-                setPendingAction("remove")
-              }
-            >
-              Taslağı Sil
-            </button>
+            {actions.can("delete") && (
+              <button
+                type="button"
+                disabled={processing}
+                onClick={() =>
+                  setPendingAction("remove")
+                }
+              >
+                Taslağı Sil
+              </button>
+            )}
           </>
         )}
 
         {item.status ===
           ProjectMeasurementStatus.PendingApproval && (
           <>
-            <button
-              type="button"
-              disabled={processing}
-              onClick={() =>
-                setPendingAction("approve")
-              }
-            >
-              Metrajı Onayla
-            </button>
+            {actions.can("approve") && (
+              <button
+                type="button"
+                disabled={processing}
+                onClick={() =>
+                  setPendingAction("approve")
+                }
+              >
+                Metrajı Onayla
+              </button>
+            )}
 
-            <button
-              type="button"
-              disabled={processing}
-              onClick={() =>
-                setPendingAction("cancel")
-              }
-            >
-              Metrajı İptal Et
-            </button>
+            {actions.can("edit") && actions.can("edit") && (
+              <button
+                type="button"
+                disabled={processing}
+                onClick={() =>
+                  setPendingAction("cancel")
+                }
+              >
+                Metrajı İptal Et
+              </button>
+            )}
           </>
         )}
 

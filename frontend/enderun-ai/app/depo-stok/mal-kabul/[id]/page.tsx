@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { money, quantity } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   goodsReceiptService,
   purchaseReturnService,
@@ -61,6 +62,14 @@ function formatMoney(value?: number | null) {
 
 export default function GoodsReceiptDetailPage() {
   const params = useParams<{ id: string }>();
+
+  /*
+   * Aksiyon izinleri UÇLARDAN (GoodsReceiptsController):
+   *   PUT  {id}          -> purchasing-receipts.edit
+   *   POST {id}/post     -> purchasing-receipts.approve
+   *   POST {id}/cancel   -> purchasing-receipts.EDIT  (delete değil!)
+   */
+  const actions = useModuleActions("purchasing-receipts");
 
   const [purchaseReturns, setPurchaseReturns] = useState<
     PurchaseReturnListItem[]
@@ -424,30 +433,36 @@ export default function GoodsReceiptDetailPage() {
 
           {receipt.status === 0 ? (
             <>
-              <button
-                type="button"
-                onClick={() => void saveDraft()}
-                disabled={processing}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Taslağı Kaydet
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming("isle")}
-                disabled={processing}
-                className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {processing ? "İşleniyor..." : "Stok Kaydı Yap"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming("iptal")}
-                disabled={processing}
-                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                İptal Et
-              </button>
+              {actions.can("edit") && (
+                <button
+                  type="button"
+                  onClick={() => void saveDraft()}
+                  disabled={processing}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Taslağı Kaydet
+                </button>
+              )}
+              {actions.can("approve") && (
+                <button
+                  type="button"
+                  onClick={() => setConfirming("isle")}
+                  disabled={processing}
+                  className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {processing ? "İşleniyor..." : "Stok Kaydı Yap"}
+                </button>
+              )}
+              {actions.can("edit") && (
+                <button
+                  type="button"
+                  onClick={() => setConfirming("iptal")}
+                  disabled={processing}
+                  className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  İptal Et
+                </button>
+              )}
             </>
           ) : null}
         </div>

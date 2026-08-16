@@ -320,3 +320,71 @@ gerekli. Kaldırılacak olan şey kütüphanenin kendi içindeki tutarsızlık.
 
 **Şimdilik:** yalnızca kaydedildi. Normalizasyon canlıda çalışıyor ve
 reçete aktarımı bu yazımlar yüzünden satır kaybetmiyor.
+
+## Yıkıcı işlemler zayıf yetkiyle korunuyor — konsolide liste
+
+**Ne:** Defterde kalıcı iz bırakan işlemler (iptal, geri alma, pasife
+alma, red) çoğu yerde `edit` ya da `create` yetkisiyle korunuyor;
+`delete` yalnız gerçek silme uçlarında aranıyor. R2 taramasında
+**27 yıkıcı uçtan 16'sı zayıf yetkili** çıktı.
+
+Muhasebe tarafında desen DOĞRU kurulmuş (fiş iptali → accounting.delete,
+hesap pasife alma → accounting.delete); hakediş, satın alma ve İK'da
+kurulmamış. Yani tutarsızlık sistematik değil, dağınık.
+
+**Neden riskli:** İptal, kesinleşmiş bir belgeyi ters kayıtla geri
+alıyor — muhasebe fişi doğuruyor, stok hareketi yaratıyor, tahsilatı
+kapatıyor. Bunu yapabilmek "düzeltme" değil "yıkma" yetkisi; `edit`
+bunun için zayıf.
+
+**Zayıf yetkili uçlar (uç + mevcut + olması gereken):**
+
+| Uç | Mevcut | Olması gereken |
+|---|---|---|
+| `purchase-orders/{id}/cancel` | purchasing-orders.edit | .delete |
+| `goods-receipts/{id}/cancel` | purchasing-receipts.edit | .delete |
+| `project-measurements/{id}/cancel` | hakedis.edit | .delete |
+| `progress-payments/{id}/cancel` | hakedis.edit | .delete |
+| `purchase-requests/{id}/cancel` | purchasing-requests.edit | .delete |
+| `sales-invoices/{id}/cancel` | accounting.edit | .delete |
+| `hr/payroll/records/{id}/cancel` | attendance-payroll.edit | .delete |
+| `hr/workforce/{advances,leaves,overtimes}/{id}/reject` | attendance-payroll.edit | ayrı karar |
+| `hr/assets/{id}/cancel` | personnel.edit | .delete |
+| `tasks/{id}/cancel` | tasks.manage | ayrı karar |
+| `accounting/currency-valuation/{id}/reverse` | accounting.manage | .delete |
+| `manufacturer-price-lists/{id}/deactivate` | engineering.manage | ayrı karar |
+
+**Bir uç YANLIŞ ALARM, listeye alınmadı:**
+`hr/gorevlendirmeler/{id}/iptal` özniteliği `personnel.view` diyor ama
+metodun İÇİNDE `CanApproveAsync` kontrolü var ve yalnız Genel Müdür
+geçebiliyor. Güvenlik açığı değil. Ancak ARAYÜZ türetmesi için sorun:
+öznitelikten türeten bir düğme kapısı, view yetkisi olan herkese
+düğmeyi gösterir ve kullanıcı 403 yer. Bu uçta ya öznitelik gerçek
+gereksinimi yansıtmalı ya da düğme özel olarak ele alınmalı.
+
+**ETKİ ÖLÇÜMÜ YAPILDI (2026-08-16), daraltma ucuz:**
+
+Rol kataloğunda `edit` olup `delete` olmayan roller:
+- purchasing-orders: **0 rol**
+- hakedis: **0 rol**
+- attendance-payroll: **0 rol**
+- purchasing-requests: **0 rol**
+- purchasing-receipts: 1 rol (Depo Sorumlusu)
+- accounting: 1 rol (Ön Muhasebe)
+
+Canlıdaki 9 aktif kullanıcıda ise **etkilenen kimse yok**: ilgili
+izinlere sahip iki kullanıcının (Mehmet Karacabey, Özlem TÜRKMEN)
+ikisinde de hem edit hem delete var; Duygu YILDIRICI'da accounting
+edit+delete birlikte. Yani bugün daraltma yapılsa **hiçbir kullanıcı
+iş yapamaz hale gelmez.**
+
+**O turda değerlendirilecek:** yukarıdaki uçlarda `Edit` → `Delete`
+daraltması, TEK SEFERDE. Uç-uç yapmak yerine hepsini birden yapmak
+gerekiyor; tek tek yapılırsa yarısı zayıf yarısı güçlü kalır ve kural
+öğrenilemez. "Ayrı karar" işaretli üçü (red, görev iptali, fiyat
+listesi pasife alma) tartışılmalı — red her zaman yıkıcı sayılmayabilir.
+
+**Şimdilik:** kod değişmedi. R2 arayüz kapılarını UÇLARDAN türetiyor,
+yani bugünkü (zayıf) yetkiyi izliyor — arayüzü backend'den koparmamak
+için. Daraltma yapıldığında R2 kapıları kendiliğinden takip eder,
+çünkü izin tek kaynaktan geliyor.

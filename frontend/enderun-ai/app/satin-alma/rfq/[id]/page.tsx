@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { ConfirmDialog } from "@/components/ui";
 import { currencyMoney, quantity } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   Badge,
   Button,
@@ -84,6 +85,14 @@ function formatMoney(
 
 export default function RfqDetailPage() {
   const params = useParams<{ id: string }>();
+
+  /*
+   * Aksiyon izinleri UÇLARDAN (RfqController):
+   *   POST {id}/send  -> purchasing-rfq.edit
+   *   POST {id}/close -> purchasing-rfq.edit
+   *   POST {id}/award -> purchasing-rfq.approve
+   */
+  const actions = useModuleActions("purchasing-rfq");
 
   const [item, setItem] = useState<RfqDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -253,7 +262,7 @@ export default function RfqDetailPage() {
                     Kaynak Talebi Aç
                   </Link>
 
-                  {item.status === 0 && (
+                  {item.status === 0 && actions.can("edit") && (
                     <Button
                       loading={processing}
                       onClick={() => setConfirming("gonder")}
@@ -271,7 +280,7 @@ export default function RfqDetailPage() {
                     </Link>
                   )}
 
-                  {[0, 1, 2].includes(item.status) && (
+                  {[0, 1, 2].includes(item.status) && actions.can("edit") && (
                     <Button
                       variant="danger"
                       loading={processing}
