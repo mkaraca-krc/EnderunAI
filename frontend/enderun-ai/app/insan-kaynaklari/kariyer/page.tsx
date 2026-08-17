@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   branchService,
   type BranchListItem,
@@ -393,6 +394,12 @@ function SectionHeader({
 }
 
 export default function CareerPage() {
+  /*
+   * POST hr/career -> personnel.create
+   * Kariyer hareketi personel kaydını değiştiriyor.
+   */
+  const actions = useModuleActions("personnel");
+
   const [movements, setMovements] = useState<CareerMovement[]>([]);
   const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
@@ -834,7 +841,9 @@ export default function CareerPage() {
             <Button variant="secondary" onClick={() => void loadScreen()}>
               Yenile
             </Button>
-            <Button onClick={() => openEditor()}>+ Kariyer Hareketi</Button>
+            {actions.can("create") && actions.can("create") && (
+              <Button onClick={() => openEditor()}>+ Kariyer Hareketi</Button>
+            )}
           </div>
         </div>
 

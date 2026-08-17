@@ -23,6 +23,7 @@ import {
 } from "@/components/ui";
 import { branchService, type BranchListItem } from "@/services/branch.service";
 import { companyService, type CompanyListItem } from "@/services/company.service";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   hrRecruitmentService,
   type CandidateInterview,
@@ -220,6 +221,18 @@ function emptyEditor(kind: Tab): EditorState {
 }
 
 export default function HrRecruitmentPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN (HrRecruitmentController):
+   *   POST   postings|candidates|applications|interviews      -> personnel.create
+   *   PUT    .../{id}                                          -> personnel.edit
+   *   POST   postings/{id}/publish                             -> personnel.edit
+   *   DELETE .../{id}                                          -> personnel.delete
+   *
+   * Dört varlık (ilan, aday, başvuru, görüşme) aynı izin ailesini
+   * paylaşıyor; uçlar öyle kurulmuş.
+   */
+  const actions = useModuleActions("personnel");
+
   const [tab, setTab] = useState<Tab>("postings");
   const [postings, setPostings] = useState<JobPosting[]>([]);
   const [candidates, setCandidates] = useState<JobCandidate[]>([]);
@@ -646,9 +659,11 @@ export default function HrRecruitmentPage() {
                 Veriler doğrudan İK işe alım servisinden alınır.
               </p>
             </div>
-            <Button onClick={openCreate}>
-              + Yeni {createLabels[tab]}
-            </Button>
+            {actions.can("create") && actions.can("create") && (
+              <Button onClick={openCreate}>
+                + Yeni {createLabels[tab]}
+              </Button>
+            )}
           </div>
 
           <div className="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
@@ -733,18 +748,22 @@ export default function HrRecruitmentPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        {item.status === 0 && (
+                        {item.status === 0 && actions.can("edit") && (
                           <Button size="sm" onClick={() => setPending({ kind: "publish", item })}>Yayınla</Button>
                         )}
-                        <Button size="sm" variant="secondary" onClick={() => openPosting(item)}>Düzenle</Button>
-                        <Button size="sm" variant="ghost" onClick={() =>
-                            setPending({
-                              kind: "delete",
-                              tab: "postings",
-                              id: item.id,
-                              label: item.title,
-                            })
-                          }>Sil</Button>
+                        {actions.can("edit") && (
+                          <Button size="sm" variant="secondary" onClick={() => openPosting(item)}>Düzenle</Button>
+                        )}
+                        {actions.can("delete") && actions.can("delete") && actions.can("delete") && actions.can("delete") && (
+                          <Button size="sm" variant="ghost" onClick={() =>
+                              setPending({
+                                kind: "delete",
+                                tab: "postings",
+                                id: item.id,
+                                label: item.title,
+                              })
+                            }>Sil</Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -785,7 +804,9 @@ export default function HrRecruitmentPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="secondary" onClick={() => openCandidate(item)}>Düzenle</Button>
+                        {actions.can("edit") && (
+                          <Button size="sm" variant="secondary" onClick={() => openCandidate(item)}>Düzenle</Button>
+                        )}
                         <Button size="sm" variant="ghost" onClick={() =>
                             setPending({
                               kind: "delete",
@@ -826,7 +847,9 @@ export default function HrRecruitmentPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="secondary" onClick={() => openApplication(item)}>Düzenle</Button>
+                        {actions.can("edit") && (
+                          <Button size="sm" variant="secondary" onClick={() => openApplication(item)}>Düzenle</Button>
+                        )}
                         <Button size="sm" variant="ghost" onClick={() =>
                             setPending({
                               kind: "delete",
@@ -883,7 +906,9 @@ export default function HrRecruitmentPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="secondary" onClick={() => openInterview(item)}>Düzenle</Button>
+                          {actions.can("edit") && (
+                            <Button size="sm" variant="secondary" onClick={() => openInterview(item)}>Düzenle</Button>
+                          )}
                           <Button size="sm" variant="ghost" onClick={() =>
                             setPending({
                               kind: "delete",

@@ -91,6 +91,15 @@ const R2_3: [string, string][] = [
   ["depo-stok/mal-kabul/[id]", "purchasing-receipts"],
 ];
 
+/**
+ * R2/4a kapsamı: personel ailesi.
+ *
+ * İşe alım dört varlığı (ilan, aday, başvuru, görüşme) tek ekranda
+ * topluyor ve dördü de aynı izin ailesini paylaşıyor — uçlar öyle
+ * kurulmuş, ekran onu izliyor.
+ */
+const R2_4A = ["ise-alim", "zimmetler", "organizasyon", "kariyer"];
+
 const hr = read("insan-kaynaklari");
 const accounting = read("muhasebe");
 
@@ -196,6 +205,17 @@ describe("eleman seviyesi yetki (R2/1)", () => {
         `${screen} / ${marker}: kapı "${action}" olmalıydı, "${nearest}" bulundu`,
       ).toBe(action);
     }
+  });
+
+  it("personel ailesi ekranları kapılı", () => {
+    const missing = R2_4A.filter((name) => {
+      const screen = hr.find(
+        (x) => x.path === join("app", "insan-kaynaklari", name, "page.tsx"),
+      );
+      return !screen || !screen.text.includes('useModuleActions("personnel")');
+    });
+
+    expect(missing).toEqual([]);
   });
 
   /**

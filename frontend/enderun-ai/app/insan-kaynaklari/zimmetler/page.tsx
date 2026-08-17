@@ -8,6 +8,7 @@ import HrAssetInventoryDialog from "@/components/hr/hr-asset-inventory-dialog";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { personnelService, type PersonnelListItem } from "@/services/personnel.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   hrAssetService,
   HrAssetAssignmentStatus,
@@ -148,6 +149,15 @@ function StatusBadge({ item }: { item: AssetAssignment }) {
 }
 
 export default function HrAssetsPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN (HrAssetsController):
+   *   POST   hr/assets            -> personnel.create
+   *   PUT    hr/assets/{id}       -> personnel.edit
+   *   DELETE hr/assets/{id}       -> personnel.delete
+   *   POST   hr/assets/{id}/cancel-> personnel.delete (A tipi daraltma)
+   */
+  const actions = useModuleActions("personnel");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
@@ -560,9 +570,11 @@ export default function HrAssetsPage() {
             >
               + Depodan Zimmet
             </button>
-            <button type="button" onClick={openCreate} style={{ minHeight: 42, border: 0, borderRadius: 10, padding: "0 18px", background: "var(--erp-primary)", color: "var(--color-on-brand)", fontWeight: 900, cursor: "pointer" }}>
-              + Manuel Zimmet
-            </button>
+            {actions.can("create") && (
+              <button type="button" onClick={openCreate} style={{ minHeight: 42, border: 0, borderRadius: 10, padding: "0 18px", background: "var(--erp-primary)", color: "var(--color-on-brand)", fontWeight: 900, cursor: "pointer" }}>
+                + Manuel Zimmet
+              </button>
+            )}
           </div>
         </section>
 
@@ -662,7 +674,9 @@ export default function HrAssetsPage() {
                     <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}><StatusBadge item={item}/></td>
                     <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button onClick={() => openEdit(item)} disabled={busyId === item.id} style={actionButton("var(--erp-muted)")}>Düzenle</button>
+                        {actions.can("edit") && (
+                          <button onClick={() => openEdit(item)} disabled={busyId === item.id} style={actionButton("var(--erp-muted)")}>Düzenle</button>
+                        )}
                         <a
                           href={`/insan-kaynaklari/zimmetler/${item.id}/tutanak`}
                           target="_blank"
@@ -681,7 +695,7 @@ export default function HrAssetsPage() {
                           <button onClick={() => openAction("lost", item)} style={actionButton("var(--color-semantic-danger)")}>Kayıp</button>
                           <button onClick={() => openAction("cancel", item)} style={actionButton("var(--erp-muted)")}>İptal</button>
                         </>}
-                        {item.status === HrAssetAssignmentStatus.Cancelled && (
+                        {item.status === HrAssetAssignmentStatus.Cancelled && actions.can("delete") && (
                           <button onClick={() => setPending(item)} style={actionButton("var(--color-semantic-danger)")}>Sil</button>
                         )}
                       </div>

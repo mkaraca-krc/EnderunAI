@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   companyService,
   type CompanyListItem,
@@ -265,6 +266,15 @@ function OrganizationNode({
 }
 
 export default function OrganizationPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN (HrDepartmentsController /
+   * HrPositionsController):
+   *   POST   hr/departments|positions      -> personnel.create
+   *   PUT    hr/departments|positions/{id} -> personnel.edit
+   *   DELETE hr/departments|positions/{id} -> personnel.delete
+   */
+  const actions = useModuleActions("personnel");
+
   const [departments, setDepartments] = useState<HrDepartment[]>([]);
   const [positions, setPositions] = useState<HrPosition[]>([]);
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
@@ -730,16 +740,20 @@ export default function OrganizationPage() {
               >
                 Personellere git
               </Link>
-              <Button variant="secondary" onClick={() => openNewDepartment()}>
-                + Yeni departman
-              </Button>
-              <Button
-                className="bg-emerald-500 text-slate-950 hover:bg-emerald-400"
-                onClick={() => openNewPosition()}
-                disabled={departments.length === 0}
-              >
-                + Yeni pozisyon
-              </Button>
+              {actions.can("create") && actions.can("create") && actions.can("create") && (
+                <Button variant="secondary" onClick={() => openNewDepartment()}>
+                  + Yeni departman
+                </Button>
+              )}
+              {actions.can("create") && actions.can("create") && actions.can("create") && (
+                <Button
+                  className="bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                  onClick={() => openNewPosition()}
+                  disabled={departments.length === 0}
+                >
+                  + Yeni pozisyon
+                </Button>
+              )}
             </div>
           </div>
         </section>
