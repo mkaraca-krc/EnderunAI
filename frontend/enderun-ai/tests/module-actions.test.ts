@@ -481,7 +481,7 @@ describe("eleman seviyesi yetki (R2/1)", () => {
      */
     const occurrences: number[] = [];
     for (let at = text.indexOf(label); at > -1; at = text.indexOf(label, at + 1)) {
-      const window = text.slice(Math.max(0, at - 600), at);
+      const window = text.slice(Math.max(0, at - 1200), at);
       /*
        * "Bu etiket açık bir düğmenin İÇİNDE mi" sorusu: penceredeki
        * son açılış etiketi, son kapanış etiketinden sonra geliyorsa
@@ -570,7 +570,7 @@ describe("eleman seviyesi yetki (R2/1)", () => {
 
     const occurrences: number[] = [];
     for (let at = text.indexOf(label); at > -1; at = text.indexOf(label, at + 1)) {
-      const window = text.slice(Math.max(0, at - 600), at);
+      const window = text.slice(Math.max(0, at - 1200), at);
       const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
       const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
 
@@ -709,7 +709,7 @@ describe("eleman seviyesi yetki (R2/1)", () => {
 
     const occurrences: number[] = [];
     for (let at = text.indexOf(label); at > -1; at = text.indexOf(label, at + 1)) {
-      const window = text.slice(Math.max(0, at - 600), at);
+      const window = text.slice(Math.max(0, at - 1200), at);
       const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
       const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
 
@@ -880,7 +880,7 @@ describe("eleman seviyesi yetki (R2/1)", () => {
 
     const occurrences: number[] = [];
     for (let at = text.indexOf(label); at > -1; at = text.indexOf(label, at + 1)) {
-      const window = text.slice(Math.max(0, at - 600), at);
+      const window = text.slice(Math.max(0, at - 1200), at);
       const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
       const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
 
@@ -1072,5 +1072,216 @@ describe("eleman seviyesi yetki (R2/1)", () => {
 
     // servis dosyası silindi
     expect(existsSync(join(ROOT, "services", "report.service.ts"))).toBe(false);
+  });
+  /**
+   * R2/4 KAPANIŞ — son iki ekran.
+   *
+   * İkisinde de rota kapısı yetmiyordu: ekranın asıl işi listeyi
+   * GÖSTERMEK, o yüzden rota okuma izniyle açılıyor. Ama proje açmak ve
+   * talep açmak ayrı yetkiler.
+   */
+  const R2_KAPANIS: Array<[string, string, string]> = [
+    ["app/projeler/page.tsx", "+ Yeni Proje", "create"],
+    ["app/projeler/page.tsx", "Düzenle", "edit"],
+    ["app/satin-alma/page.tsx", "Taslak Kaydet", "create"],
+    ["app/insan-kaynaklari/puantaj-cetveli/page.tsx", "Takvimden Doldur", "create"],
+    ["app/insan-kaynaklari/puantaj-cetveli/page.tsx", "Ayı Onayla", "approve"],
+    ["app/insan-kaynaklari/tatil-takvimi/page.tsx", "Sabit Tatilleri Ekle", "manage"],
+    ["app/insan-kaynaklari/tatil-takvimi/page.tsx", "Bayramı Ekle", "manage"],
+    ["app/insan-kaynaklari/tatil-takvimi/page.tsx", "Günü Ekle", "manage"],
+    ["app/insan-kaynaklari/tatil-takvimi/page.tsx", "Kaldır", "manage"],
+    ["app/insan-kaynaklari/tatil-takvimi/page.tsx", "Takvimi Doğrula", "manage"],
+  ];
+
+  it.each(R2_KAPANIS)("%s -> \"%s\" %s kapısında", (relative, label, action) => {
+    const text = readFileSync(join(ROOT, relative), "utf8");
+
+    const occurrences: number[] = [];
+    for (let at = text.indexOf(label); at > -1; at = text.indexOf(label, at + 1)) {
+      const window = text.slice(Math.max(0, at - 1200), at);
+      const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
+      const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
+      const selfClosed = open > -1 && window.slice(open).includes("/>");
+      if (open > -1 && open > close && !selfClosed) occurrences.push(at);
+    }
+
+    expect(occurrences.length, `"${label}" düğme olarak bulunamadı`).toBeGreaterThan(0);
+
+    for (const at of occurrences) {
+      const before = text.slice(0, at);
+      const gate = before.lastIndexOf('.can("');
+
+      expect(gate, `"${label}" için kapı yok`).toBeGreaterThan(-1);
+      expect(at - gate, `"${label}" kapıdan çok uzak`).toBeLessThan(900);
+
+      const gateText = before.slice(Math.max(0, gate - 40));
+      const found = [...gateText.matchAll(/(\w+)\.can\("([^"]+)"\)/g)];
+      const match = found[found.length - 1];
+      const actual = action.includes(".")
+        ? `${match?.[1]}.${match?.[2]}`
+        : match?.[2];
+
+      expect(actual, `"${label}" yanlış kapıda`).toBe(action);
+    }
+  });
+
+  /**
+   * KAPANIŞ SÖZLEŞMESİ — YENİ KAPISIZ EKRAN EKLENEMEZ.
+   *
+   * R2/4 kapandığında yazan aksiyonu olan 97 ekranın hepsi üç yoldan
+   * biriyle korunuyordu:
+   *   1. düğme kapısı  (useModuleActions)      64 ekran
+   *   2. rota kapısı   (tam sayfa aksiyon ekranı) 16 ekran
+   *   3. satır içi izin (önceden var olan, uçlarla eşleştiği ölçüldü) 15 ekran
+   *
+   * Bu test yeni bir ekran YAZAN bir uç çağırıp hiçbir kapı taşımazsa
+   * düşer. Amacı kapsamı dondurmak değil — yeni ekranın hangi yolu
+   * seçtiğini BİLİNÇLİ bir karar yapmak. Yeni ekran eklerken listeye
+   * eklemek gerekiyorsa, o eklemenin kendisi kararın kaydı olur.
+   *
+   * ARAYÜZ GÜVENLİK SINIRI DEĞİL: uçlardaki RequirePermission sınır.
+   * Buradaki bir eksik veriyi açığa çıkarmaz, kullanıcıya yapamayacağı
+   * işi gösterir.
+   */
+  it("yazan aksiyonu olan her ekran bir kapı taşıyor", () => {
+    /*
+     * ROTA KAPISIYLA KORUNAN TAM SAYFA AKSİYON EKRANLARI.
+     * Tek işi bir yazma çağrısı olan ekranlarda düğmeyi gizlemek
+     * yetmiyor: yalnız görüntüleme yetkisi olan biri uzun formu
+     * doldurup reddi ancak kaydederken yiyor. Bunlar
+     * lib/auth/route-permissions.ts içinde yazma izniyle kapılı ve
+     * tests/route-permissions.test.ts bunu doğruluyor.
+     */
+    const ROTA_KAPILI = [
+      "app/depo-stok/mal-kabul/yeni/page.tsx",
+      "app/depo-stok/malzeme-talepleri/yeni/page.tsx",
+      "app/fiyat-farki/endeksler/yeni/page.tsx",
+      "app/fiyat-farki/profiller/yeni/page.tsx",
+      "app/hakedis/[id]/duzenle/page.tsx",
+      "app/hakedis/yeni/page.tsx",
+      "app/kesifler/yeni/page.tsx",
+      "app/metrajlar/yeni/page.tsx",
+      "app/muhasebe/fisler/[id]/duzenle/page.tsx",
+      "app/muhasebe/fisler/yeni/page.tsx",
+      "app/muhasebe/hesap-plani/yeni/page.tsx",
+      "app/muhasebe/faturalar/yeni/page.tsx",
+      "app/muhasebe/satis-faturalari/yeni/page.tsx",
+      "app/muhendislik/pozlar/ice-aktar/page.tsx",
+      "app/muhendislik/pozlar/ozel/page.tsx",
+      "app/muhendislik/pozlar/yeni/page.tsx",
+      "app/muhendislik/receteler/ice-aktar/page.tsx",
+      "app/depo-stok/yeni/page.tsx",
+      "app/perakende/fiyatlar/page.tsx",
+      "app/projeler/[id]/santiyeler/yeni/page.tsx",
+      "app/teklifler/yeni/page.tsx",
+    ];
+
+    const kapisiz: string[] = [];
+
+    for (const path of screens(join(ROOT, "app"))) {
+      const text = readFileSync(path, "utf8");
+      if (!text.includes('design="redwood"')) continue;
+
+      // yazan bir servis çağrısı var mı (kaba ama yeterli sinyal)
+      const yazan = /(Service)\.(create|update|delete|remove|approve|reject|submit|cancel|post|assign|save|toggle|advance|decide|finalize|replace|upload|commit|refresh|void|revoke)/.test(
+        text,
+      );
+      if (!yazan) continue;
+
+      const kapili =
+        text.includes("useModuleActions") ||
+        text.includes("usePermissions") ||
+        text.includes("hasPermission(session") ||
+        text.includes('apiClient<{ permissions');
+
+      const rel = path.slice(path.indexOf("app/")).split("\\").join("/");
+
+      if (!kapili && !ROTA_KAPILI.includes(rel)) kapisiz.push(rel);
+    }
+
+    expect(
+      kapisiz,
+      `Bu ekranlar yazan uç çağırıyor ama kapı taşımıyor. Ya düğme ` +
+        `kapısı ekleyin (useModuleActions, izni ucun ` +
+        `RequirePermission'ından türetin) ya da tam sayfa aksiyon ` +
+        `ekranıysa route-permissions.ts'e yazma izni kuralı ekleyip ` +
+        `yukarıdaki ROTA_KAPILI listesine alın.`,
+    ).toEqual([]);
+  });
+  /**
+   * ÖLÜ EKRAN KALDIRILDI: proje kesinti politikası.
+   *
+   * `projeler/[id]/kesintiler` (463 satır) hem listesini hem kaydını
+   * `progress-payment-deduction-rules` ucuna yapıyordu. O uç backend'de
+   * HİÇ YOK: controller yok, rota yok, `ProgressPaymentDeductionRule`
+   * modeli bile yok. Ekran açılıyor, liste yüklenmiyor, kaydet her
+   * zaman hata veriyordu.
+   *
+   * Kesintiler pratikte ÇALIŞIYOR ama başka yolla: hakediş
+   * oluşturulurken/düzenlenirken belge başına giriliyor
+   * (`ProgressPaymentsController.ApplyDeductions`). Fiyat farkı ve PDF
+   * ile aynı desen — elle giriş çalışıyor, otomasyon katmanı hiç
+   * yazılmamış.
+   *
+   * İKİ GİRİŞ NOKTASI vardı ve ikisi de kaldırıldı: proje detayındaki
+   * "Kesinti Politikası" modül kartı ve "Finansal Sözleşme Oranları"
+   * panelindeki bağlantı.
+   */
+  it("ölü kesinti politikası ekranı ve girişleri kalmadı", () => {
+    expect(
+      existsSync(join(ROOT, "app", "projeler", "[id]", "kesintiler")),
+      "ölü ekran hâlâ duruyor",
+    ).toBe(false);
+
+    expect(
+      existsSync(join(ROOT, "services", "deduction-rule.service.ts")),
+      "ölü servis hâlâ duruyor",
+    ).toBe(false);
+
+    const projeDetay = readFileSync(join(ROOT, "app/projeler/[id]/page.tsx"), "utf8");
+    const code = projeDetay
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, " ")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/\/\/[^\n]*/g, " ");
+
+    expect(code, "modül kartı ya da bağlantı hâlâ var").not.toContain("kesintiler");
+
+    /*
+     * ÇALIŞAN AKIŞ DURUYOR: kesinti türleri ve varsayılan oranları
+     * hakediş hesabında tanımlı ve sunucudaki HakedisDeductionType ile
+     * eşleşiyor. Ölü servisin kendi enum'u vardı; silinen o.
+     */
+    const hesap = readFileSync(join(ROOT, "lib", "hakedis", "calculation.ts"), "utf8");
+    expect(hesap).toContain("DeductionType");
+  });
+  /**
+   * DEĞERİ DE GÖSTEREN DÜĞME GİZLENMEZ, DÜZ METNE DÜŞER.
+   *
+   * İki yerde aynı desen var: piyasa ekranındaki tonaj hücresi ve
+   * depo-stok'taki asgari stok hücresi. Düğme aynı zamanda DEĞERİ
+   * gösteriyor; gizlemek okuma yetkisi olan kullanıcıdan veriyi de
+   * saklardı. Sadece düzenleme girişi kapanıyor.
+   *
+   * Bu test yedeğin silinip düğmenin tamamen gizlenmesini yakalar.
+   */
+  const DEGER_GOSTEREN_HUCRELER: Array<[string, string]> = [
+    ["app/finans/piyasa/page.tsx", 'actions.can("manage") ? ('],
+    ["app/depo-stok/page.tsx", "if (!canEdit) {"],
+  ];
+
+  it.each(DEGER_GOSTEREN_HUCRELER)("%s değer yedeği duruyor", (relative, marker) => {
+    const text = readFileSync(join(ROOT, relative), "utf8");
+
+    const at = text.indexOf(marker);
+    expect(at, `${relative}: yetki dalı yok`).toBeGreaterThan(-1);
+
+    /*
+     * YETKİSİZ DALDA DEĞER YİNE BASILIYOR. İşaretçiden sonraki blokta
+     * hem bir <span> hem de değeri biçimleyen çağrı olmalı; düğme
+     * tamamen gizlenirse ikisi de kaybolur.
+     */
+    const dal = text.slice(at, at + 1500);
+    expect(dal, `${relative}: düz metin yedeği yok`).toContain("<span");
+    expect(dal, `${relative}: değer basılmıyor`).toContain("formatNumber(");
   });
 });

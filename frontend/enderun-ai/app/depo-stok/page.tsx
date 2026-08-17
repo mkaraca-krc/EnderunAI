@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { amount, money } from "@/lib/format/turkish";
 
 import {
@@ -108,6 +109,15 @@ function requestStatusClass(status: number): string {
 }
 
 export default function InventoryOperationsPage() {
+  /**
+   * Düğme -> uç -> izin:
+   *   PUT inventory/items/{id} -> inventory.edit
+   *
+   * Asgari stok hücresi `updateMinimumStock` çağırıyor; o da kalemi
+   * okuyup `updateItem` ile geri yazıyor, yani uç inventory.edit.
+   */
+  const actions = useModuleActions("inventory");
+
   const [items, setItems] = useState<InventoryItemListItem[]>([]);
   const [requests, setRequests] = useState<PurchaseRequestListItem[]>([]);
   const [movements, setMovements] =
@@ -935,7 +945,11 @@ export default function InventoryOperationsPage() {
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-3 text-right">
-                          <MinimumStockCell item={item} onSaved={loadDashboard} />
+                          <MinimumStockCell
+                            item={item}
+                            onSaved={loadDashboard}
+                            canEdit={actions.can("edit")}
+                          />
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
@@ -1120,15 +1134,34 @@ function EmptyRow({
 function MinimumStockCell({
   item,
   onSaved,
+  canEdit,
 }: {
   item: InventoryItemListItem;
   onSaved: () => void;
+  /**
+   * İzin PROP olarak geliyor: bu hücre SATIR BAŞINA render ediliyor.
+   */
+  canEdit: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(item.minimumStock);
   const [saving, setSaving] = useState(false);
 
   if (!editing) {
+    /*
+     * YETKİSİZ KULLANICIDA DEĞER GİZLENMEZ. Bu düğme aynı zamanda
+     * kritik stok seviyesini GÖSTERİYOR; gizlemek okuma yetkisi olan
+     * kullanıcıdan veriyi de saklardı. Sadece düzenleme girişi kapanıyor
+     * (piyasa ekranındaki tonaj hücresiyle aynı gerekçe).
+     */
+    if (!canEdit) {
+      return (
+        <span className="text-slate-700">
+          {formatNumber(item.minimumStock)} {item.unit}
+        </span>
+      );
+    }
+
     return (
       <button
         type="button"

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { ConfirmDialog } from "@/components/ui";
 import { Button, EmptyState, Select } from "@/components/ui";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -105,6 +106,18 @@ function isOvertimeLocked(cell: AttendanceCell) {
  * istek atıyor ve yarısı geçip yarısı düşebiliyordu.
  */
 export default function AttendanceSheetPage() {
+  /**
+   * Düğme -> uç -> izin (AttendanceSheetController):
+   *   POST hr/attendance/cetvel/olustur -> attendance-payroll.create
+   *   POST hr/attendance/cetvel/kaydet  -> attendance-payroll.edit
+   *   POST hr/attendance/cetvel/onayla  -> attendance-payroll.approve
+   *
+   * ÜÇ AYRI YETKİ: cetveli takvimden DOLDURMAK oluşturma, hücre
+   * düzenlemek edit, ayı KAPATMAK onay. Cetvel bordronun girdisi
+   * olduğu için onay ayrı tutulmuş.
+   */
+  const actions = useModuleActions("attendance-payroll");
+
   const today = new Date();
 
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
@@ -484,6 +497,7 @@ export default function AttendanceSheetPage() {
 
       {sheet && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
+          {actions.can("create") && (
           <Button
             disabled={busy || !sheet.holidayCalendarVerified}
             onClick={() =>
@@ -500,6 +514,7 @@ export default function AttendanceSheetPage() {
           >
             Takvimden Doldur
           </Button>
+          )}
 
           <Button
             variant={overtimeMode ? "primary" : "secondary"}
@@ -509,23 +524,27 @@ export default function AttendanceSheetPage() {
             {overtimeMode ? "Mesai Girişini Kapat" : "Mesai Girişi"}
           </Button>
 
-          <Button
-            variant="secondary"
-            disabled={busy || dirtyCount === 0}
-            onClick={() => void saveDraft()}
-          >
-            {dirtyCount === 0
-              ? "Kaydedilecek değişiklik yok"
-              : `${dirtyCount} değişikliği kaydet`}
-          </Button>
+          {actions.can("edit") && (
+            <Button
+              variant="secondary"
+              disabled={busy || dirtyCount === 0}
+              onClick={() => void saveDraft()}
+            >
+              {dirtyCount === 0
+                ? "Kaydedilecek değişiklik yok"
+                : `${dirtyCount} değişikliği kaydet`}
+            </Button>
+          )}
 
-          <Button
-            variant="secondary"
-            disabled={busy || sheet.recordCount === 0}
-            onClick={() => setApproveOpen(true)}
-          >
-            Ayı Onayla
-          </Button>
+          {actions.can("approve") && (
+            <Button
+              variant="secondary"
+              disabled={busy || sheet.recordCount === 0}
+              onClick={() => setApproveOpen(true)}
+            >
+              Ayı Onayla
+            </Button>
+          )}
 
           <span className="ml-auto text-xs text-slate-500">
             {sheet.personnelCount} personel · {sheet.recordCount} gün kaydı ·{" "}

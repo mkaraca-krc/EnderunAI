@@ -129,7 +129,7 @@ type ProjectModule = {
 };
 
 const modules: ProjectModule[] = [
-  // Proje bazlı olanlar "kesintiler" gibi göreli yazılır; aşağıdaki
+  // Proje bazlı olanlar "santiyeler" gibi göreli yazılır; aşağıdaki
   // bağlantı kurucusu başına /projeler/{id}/ ekler.
   //
   // permission alanı yalnızca kâr marjı / maliyet tutarı taşıyan
@@ -147,7 +147,6 @@ const modules: ProjectModule[] = [
   { label: "Personel", href: "/personel", icon: "♙", text: "Projeye bağlı personel" },
   { label: "Depo & Stok", href: "/depo-stok", icon: "⌂", text: "Şantiye deposu ve stoklar" },
   { label: "Finans", href: "/finans", icon: "₺", text: "Proje finansal görünümü" },
-  { label: "Kesinti Politikası", href: "kesintiler", icon: "%", text: "Hakediş otomatik kesinti kuralları" },
   { label: "Dokümanlar", href: "/dokumanlar", icon: "□", text: "Sözleşme ve proje evrakları" },
   { label: "AI Analizleri", href: "/ai-asistan", icon: "⌘", text: "Risk, eksik ve öneriler" },
 ];
@@ -1417,12 +1416,13 @@ export default function ProjectCenterPage() {
                 </p>
               </div>
 
-              <Link
-                href={`/projeler/${project.id}/kesintiler`}
-                className="erp-button secondary"
-              >
-                Kesinti Politikasını Aç
-              </Link>
+              {/* "Kesinti Politikasını Aç" bağlantısı buradaydı.
+                  Gittiği ekran ÖLÜYDÜ: hem listesi hem kaydı
+                  `progress-payment-deduction-rules` ucuna gidiyordu, o uç
+                  backend'de hiç yazılmamış (controller yok, model bile
+                  yok). Kesintiler pratikte hakediş belgesinin kendi
+                  içinde giriliyor (ProgressPaymentsController.ApplyDeductions),
+                  o akış çalışıyor. Bkz. TEMIZLIK-TARAMASI.md. */}
             </div>
 
             <div className="erp-detail-grid">

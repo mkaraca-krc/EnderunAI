@@ -130,6 +130,7 @@ const RULES: Rule[] = [
   { match: "/satin-alma", permission: "purchasing.view" },
 
   // --- Depo ---
+  { match: /^\/depo-stok\/yeni/, permission: "inventory.create" },
   { match: /^\/depo-stok\/mal-kabul\/yeni/, permission: "purchasing-receipts.create" },
   {
     match: /^\/depo-stok\/malzeme-talepleri\/yeni/,

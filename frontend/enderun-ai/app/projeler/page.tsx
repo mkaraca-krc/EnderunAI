@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, Drawer } from "@/components/ui";
 import { amount } from "@/lib/format/turkish";
 import { matchesSearch } from "@/lib/search/fold";
@@ -45,6 +46,19 @@ const initialForm = {
 };
 
 export default function ProjectsPage() {
+  /**
+   * Düğme -> uç -> izin (ProjectsController):
+   *   POST projects      -> projects.create
+   *   PUT  projects/{id} -> projects.edit
+   *
+   * ROTA KAPISI BURADA YETMİYOR: "/projeler" yalnız projects.view
+   * istiyor, çünkü ekranın asıl işi listeyi GÖSTERMEK. Proje açmak ve
+   * düzenlemek ayrı yetkiler.
+   *
+   * "Kaydet" AYNI DÜĞME İKİ AYRI UÇ: düzenlemede PUT, yenide POST.
+   */
+  const actions = useModuleActions("projects");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [branches, setBranches] = useState<BranchListItem[]>([]);
   const [accounts, setAccounts] = useState<CurrentAccountListItem[]>([]);
@@ -317,13 +331,15 @@ export default function ProjectsPage() {
               açıldığında dışarıdan büyüyor. */}
           <Button variant="secondary" disabled={loading} onClick={() => void loadData()}>Yenile</Button>
 
-          <button
-            type="button"
-            className="erp-primary-button"
-            onClick={() => setShowForm(true)}
-          >
-            + Yeni Proje
-          </button>
+          {actions.can("create") && (
+            <button
+              type="button"
+              className="erp-primary-button"
+              onClick={() => setShowForm(true)}
+            >
+              + Yeni Proje
+            </button>
+          )}
         </div>
       </div>
 
@@ -348,21 +364,25 @@ export default function ProjectsPage() {
               Vazgeç
             </Button>
 
-            <Button
-              type="submit"
-              form="proje-formu"
-              loading={saving}
-              disabled={
-                !form.companyId ||
-                !form.branchId ||
-                (Number(form.status) !== ProjectStatus.Kesif &&
-                  !form.employerCurrentAccountId)
-              }
-            >
-              {editingProjectId
-                ? "Değişiklikleri Kaydet"
-                : "Projeyi ve Depoyu Oluştur"}
-            </Button>
+            {(editingProjectId
+              ? actions.can("edit")
+              : actions.can("create")) && (
+              <Button
+                type="submit"
+                form="proje-formu"
+                loading={saving}
+                disabled={
+                  !form.companyId ||
+                  !form.branchId ||
+                  (Number(form.status) !== ProjectStatus.Kesif &&
+                    !form.employerCurrentAccountId)
+                }
+              >
+                {editingProjectId
+                  ? "Değişiklikleri Kaydet"
+                  : "Projeyi ve Depoyu Oluştur"}
+              </Button>
+            )}
           </div>
         }
       >
@@ -812,12 +832,14 @@ export default function ProjectsPage() {
                     </td>
                     <td>
                       <div className="erp-actions">
-                        <button
-                          type="button"
-                          onClick={() => editProject(project.id)}
-                        >
-                          Düzenle
-                        </button>
+                        {actions.can("edit") && (
+                          <button
+                            type="button"
+                            onClick={() => editProject(project.id)}
+                          >
+                            Düzenle
+                          </button>
+                        )}
 
                         <Link
                           className="erp-row-link"

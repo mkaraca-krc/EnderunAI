@@ -737,3 +737,66 @@ silmek girilmiş endeksleri geri dönüşsüz atmak olurdu.
 
 Hesap ucu da YAZILMADI: uydurulacak şey formülün kendisi olurdu.
 Netleşmesi gerekenler yukarıdaki fiyat farkı kaydında listeli.
+
+---
+
+## Ölü ekran KALDIRILDI: proje kesinti politikası (2026-08-17)
+
+`app/projeler/[id]/kesintiler` — 463 satır, menüden erişilebilir,
+**tamamen ölü.** Hem listesi hem kaydı `progress-payment-deduction-rules`
+ucuna gidiyordu; o uç backend'de HİÇ YOK: controller yok, rota yok,
+`ProgressPaymentDeductionRule` modeli bile yok. Ekran açılıyor, liste
+yüklenmiyor, "Kural Kaydet" her zaman hata veriyordu.
+
+**Kesintiler pratikte çalışıyor**, ama belge başına: hakediş
+oluşturulurken/düzenlenirken `request.Deductions` ile giriliyor
+(`ProgressPaymentsController.ApplyDeductions`), kesinti türleri ve
+varsayılan oranları `lib/hakedis/calculation.ts` içinde tanımlı ve
+sunucudaki `HakedisDeductionType` ile eşleşiyor.
+
+Bu, fiyat farkı ve PDF ile **aynı desenin üçüncü örneği**: elle giriş
+çalışıyor, otomasyon/kural katmanı hiç yazılmamış, arayüz o katman
+varmış gibi davranıyor.
+
+Kaldırılan:
+  - `app/projeler/[id]/kesintiler/page.tsx` (463 satır)
+  - `services/deduction-rule.service.ts` (112 satır)
+  - proje detayındaki **iki giriş noktası**: "Kesinti Politikası" modül
+    kartı ve "Finansal Sözleşme Oranları" panelindeki
+    "Kesinti Politikasını Aç" bağlantısı
+
+`lib/hakedis/calculation.ts` içindeki `DeductionType` DOKUNULMADI —
+o çalışan olan; silinen ölü servisin kendi kopyasıydı.
+
+**Kural motoru ileride istenirse** netleşmesi gerekenler: kural proje
+bazında mı sözleşme bazında mı; hakedişe hangi aşamada uygulanacak;
+belge üzerinde elle değiştirilebilecek mi (elle giriş bugün çalışıyor,
+kural onu ezerse geçmiş hakedişler ne olacak).
+
+---
+
+## R2/4 KAPANIŞ ÖLÇÜMÜ (2026-08-17)
+
+Yazan aksiyonu olan **97 ekran**, üç yoldan biriyle korunuyor:
+
+| Yol | Ekran |
+|---|---|
+| Düğme kapısı (`useModuleActions`) | 69 |
+| Rota kapısı (tam sayfa aksiyon ekranı) | 21 |
+| Satır içi izin (önceden var olan, uçlarla eşleştiği ölçüldü) | 15 |
+
+**KAPANIŞ ÖLÇÜMÜM İKİ KEZ EKSİK ÇIKTI, ikisi de aynı kökten:** ölçüm
+aracı uç izni ÇÖZÜLEMEYEN ekranları sessizce dışarıda bırakıyordu.
+Önce "2 ekran kaldı" dedim; sözleşme testinin mantığını simüle edince
+11 çıktı (dördü zaten rota kuralıyla kapalıymış, biri ölü ekran, altısı
+gerçek iş).
+
+Bu yüzden kapanışa bir **sözleşme testi** eklendi
+(`tests/module-actions.test.ts`, "yazan aksiyonu olan her ekran bir kapı
+taşıyor"): yeni bir ekran yazan uç çağırıp hiçbir kapı taşımazsa test
+düşüyor ve hata mesajı iki çözüm yolunu da söylüyor. Sonda ile
+doğrulandı: uydurma kapısız bir ekran eklendiğinde adıyla yakalandı.
+
+Amacı kapsamı dondurmak değil; yeni ekranın hangi yolu seçtiğini
+BİLİNÇLİ karar yapmak. Artık ölçüm aracının bir hatası testi kör
+bırakamaz — test aracı değil, dosyaları tarıyor.

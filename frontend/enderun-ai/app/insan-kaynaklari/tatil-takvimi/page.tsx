@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { ConfirmDialog } from "@/components/ui";
 import {
   Badge,
@@ -46,6 +47,23 @@ function messageOf(error: unknown) {
  * doğrulamayı düşürür.
  */
 export default function HolidayCalendarPage() {
+  /**
+   * Düğme -> uç -> izin (HolidayCalendarController): ALTI YAZAN UÇ,
+   * HEPSİ TEK ANAHTARDA -> attendance.manage
+   *   POST   hr/tatil-takvimi/{year}/sabit-tatiller
+   *   POST   hr/tatil-takvimi/{year}/dini-bayram
+   *   POST   hr/tatil-takvimi/{year}/gun
+   *   DELETE hr/tatil-takvimi/gun/{id}
+   *   POST   hr/tatil-takvimi/{year}/dogrula
+   *   PUT    hr/tatil-takvimi/{year}/calisma-haftasi
+   *
+   * SİLME DE manage'de; attendance.delete diye bir anahtar yok.
+   * Çalışma haftası SELECT'leri de yazıyor — onlar gizlenmiyor çünkü
+   * aynı zamanda mevcut değeri GÖSTERİYORLAR (piyasa ekranındaki tonaj
+   * hücresiyle aynı gerekçe); yetkisizde uç reddeder.
+   */
+  const actions = useModuleActions("attendance");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [year, setYear] = useState(new Date().getFullYear());
@@ -209,6 +227,7 @@ export default function HolidayCalendarPage() {
             Yılbaşı, 23 Nisan, 1 Mayıs, 19 Mayıs, 15 Temmuz, 30 Ağustos ve
             Cumhuriyet Bayramı. Tarihleri her yıl aynı, hesaplanabilir.
           </p>
+          {actions.can("manage") && (
           <Button
             variant="secondary"
             disabled={busy || !companyId}
@@ -224,6 +243,7 @@ export default function HolidayCalendarPage() {
           >
             Sabit Tatilleri Ekle
           </Button>
+          )}
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -250,6 +270,7 @@ export default function HolidayCalendarPage() {
               value={religiousFirstDay}
               onChange={(event) => setReligiousFirstDay(event.target.value)}
             />
+            {actions.can("manage") && (
             <Button
               variant="secondary"
               disabled={busy || !religiousFirstDay}
@@ -269,6 +290,7 @@ export default function HolidayCalendarPage() {
             >
               Bayramı Ekle
             </Button>
+            )}
           </div>
         </div>
 
@@ -299,6 +321,7 @@ export default function HolidayCalendarPage() {
               />
               Yarım gün
             </label>
+            {actions.can("manage") && (
             <Button
               variant="secondary"
               disabled={busy || !customDate || !customName.trim()}
@@ -323,6 +346,7 @@ export default function HolidayCalendarPage() {
             >
               Günü Ekle
             </Button>
+            )}
           </div>
         </div>
       </div>
@@ -421,20 +445,22 @@ export default function HolidayCalendarPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="secondary"
-                      disabled={busy}
-                      onClick={() =>
-                        run(async () => {
-                          const result = await holidayCalendarService.removeDay(
-                            day.id
-                          );
-                          return result.message;
-                        })
-                      }
-                    >
-                      Kaldır
-                    </Button>
+                    {actions.can("manage") && (
+                      <Button
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={() =>
+                          run(async () => {
+                            const result = await holidayCalendarService.removeDay(
+                              day.id
+                            );
+                            return result.message;
+                          })
+                        }
+                      >
+                        Kaldır
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -442,12 +468,14 @@ export default function HolidayCalendarPage() {
           </Table>
 
           <div className="mt-4 flex items-center gap-3">
-            <Button
-              disabled={busy || data?.isVerified}
-              onClick={() => setVerifyOpen(true)}
-            >
-              {data?.isVerified ? "Doğrulandı" : "Takvimi Doğrula"}
-            </Button>
+            {actions.can("manage") && (
+              <Button
+                disabled={busy || data?.isVerified}
+                onClick={() => setVerifyOpen(true)}
+              >
+                {data?.isVerified ? "Doğrulandı" : "Takvimi Doğrula"}
+              </Button>
+            )}
 
             <span className="text-xs text-slate-500">
               Doğrulamadan sonra yapılan her değişiklik doğrulamayı düşürür.
