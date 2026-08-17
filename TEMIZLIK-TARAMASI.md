@@ -800,3 +800,91 @@ doğrulandı: uydurma kapısız bir ekran eklendiğinde adıyla yakalandı.
 Amacı kapsamı dondurmak değil; yeni ekranın hangi yolu seçtiğini
 BİLİNÇLİ karar yapmak. Artık ölçüm aracının bir hatası testi kör
 bırakamaz — test aracı değil, dosyaları tarıyor.
+
+---
+
+## R3 Adım 0: VERİ KAPSAMI 122 CONTROLLER'IN 10'UNDA UYGULANIYOR (2026-08-17)
+
+R3 merdivende "UserDataScope arayüzü" diye tanımlanmıştı. Ölçüm asıl
+boşluğun arayüzde DEĞİL zorlamada olduğunu gösterdi.
+
+### Model beş seviye taşıyor, yazma yolu ikisini üretiyor
+
+`DataScopeType`: All / Company / Branch / Project / Site.
+`CurrentDataScopeSnapshot` beşini de destekliyor (ayrı Guid kümeleri +
+`Apply()` metotları). Ama `UserManagementController` yalnızca iki şey
+yazabiliyor: `All` satırı ya da seçilen şantiyeler için `Site` satırları.
+**Şirket/şube/proje kapsamı arayüzden hiç verilemiyor** — ancak elle SQL
+ile oluşur.
+
+İyi olan taraf: `SiteOnly` rol seçilip hiç şantiye atanmazsa
+**fail-closed** davranılıyor (hiç satır eklenmiyor → hiçbir şey
+görünmüyor). Kod yorumunda "önceden yanlışlıkla kısıtsız erişim
+veriliyordu" diye düzeltme kaydı var.
+
+### Zorlama ölçümü
+
+Sınıflandırma tahminle değil, döndürülen VARLIĞIN kapsam alanı taşıyıp
+taşımadığından türetildi: 173 `BaseEntity` varlığının **112'si**
+`CompanyId`/`BranchId`/`ProjectId`/`ProjectSiteId` taşıyor.
+
+| | |
+|---|---|
+| Kapsam alanı taşıyan varlığa dokunan GET ucu | 210 |
+| Kapsam uygulayan controller'da | 28 |
+| **Kapsamsız** | **182** (67 controller) |
+
+Ham 182 yanıltıcı: bugün kapsam kısıtı yalnız iki role uygulanıyor
+(`SiteOnly` = **Şantiye Şefi**, **Formen**). Gerçek açık:
+
+| Rol | Erişebildiği KAPSAMSIZ okuma ucu |
+|---|---|
+| Şantiye Şefi (19 izin) | **39** |
+| Formen (10 izin) | **24** |
+
+### Doğrulanmış iki örnek
+
+`GET hr/recruitment/candidates` — `personnel.view` istiyor, gövdesi
+tam olarak `db.JobCandidates.AsNoTracking().OrderByDescending(...)`.
+**Hiçbir süzgeç yok, companyId bile yok.** `JobCandidate` modelinde
+`IdentityNumber` alanı var. Yani bir Formen, bütün şirketlerdeki tüm
+iş başvurusu adaylarını kimlik numarasıyla listeleyebiliyordu.
+
+`GET hr/personnel` — yalnızca İSTEĞE BAĞLI `companyId`/`projectId`
+parametreleriyle süzülüyordu; parametre gönderilmezse hepsi dönüyordu.
+Arama kutusu `IdentityNumber` içinde de arıyor.
+
+Alternatif bir şirket kapsamı mekanizması aranıp bulunamadı
+(`ICurrentCompany`, `X-Company` başlığı vb. YOK) — yani bu uçlarda
+kapsam hiçbir katmanda uygulanmıyordu.
+
+**Maaş ve elden ödeme maskeleri ayrı ve çalışıyor**
+(`ISalaryVisibilityService` enjekte edilmiş); açık olan kimlik ve liste
+kapsamıydı.
+
+### R3 ikiye ayrıldı
+
+**R3a — zorlama (backend, asıl güvenlik sınırı).** 39 + 24 ucun kapsam
+sorması. Desen zaten kurulu ve testli (10 controller).
+
+**R3b — arayüz.** Kapsam atama ekranı. Zorlama gerçek olmadan yapılırsa
+YANLIŞ GÜVEN üretir: yönetici "bu kullanıcıyı projeyle sınırladım" der,
+kullanıcı 112 controller'dan her şeyi görmeye devam eder.
+
+### R3a yığın 1 — personel ailesi (YAPILDI)
+
+Süzgeç TEK KAYNAĞA eklendi:
+`CurrentDataScopeSnapshot.Apply(IQueryable<Personnel>)`. Controller'a
+dağıtılmadı çünkü personel şantiyeye doğrudan değil
+`ProjectSiteAssignment` üzerinden bağlı ve "aktif atama" tanımı
+(`IsActive && !IsDeleted && EndDate == null`) yerlere göre kayardı.
+
+`PersonnelController`: liste, `veri-eksikleri`, detay. Detayda **404**
+dönüyor (403 değil) — `ProjectSitesController` desenıyle aynı, kaydın
+varlığını sızdırmamak için.
+
+**AÇIK KARAR — `HrRecruitment` bilinçli olarak bu yığına alınmadı:**
+şantiye kapsamlı kullanıcının aday havuzunda ne görmesi gerektiği
+personeldeki kadar net değil. Aday havuzu şantiye verisi değil İK ofisi
+verisi; doğru cevap muhtemelen "hiçbir şey" ama bu personelden daha sert
+bir kesme ve ayrı karar istiyor.

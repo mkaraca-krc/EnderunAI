@@ -32,6 +32,32 @@ public sealed record CurrentDataScopeSnapshot(
                 BranchIds.Contains(item.BranchId) ||
                 ProjectIds.Contains(item.Id));
 
+    /// <summary>
+    /// Personel listesini kapsama daraltır.
+    ///
+    /// NEDEN AYRI BİR AŞIRI YÜKLEME: personel şantiyeye doğrudan değil,
+    /// <see cref="ProjectSiteAssignment"/> üzerinden bağlı. Süzgeci her
+    /// kontrolcüde ayrı yazmak, "aktif atama" tanımının (EndDate boş VE
+    /// IsActive) yerlere göre kaymasına yol açardı. Şirket/şube kapsamı
+    /// da burada, tek yerde.
+    ///
+    /// ŞANTİYE KAPSAMLI KULLANICI (Şantiye Şefi, Formen) yalnızca KENDİ
+    /// şantiyelerine ATANMIŞ personeli görür. Şirket kapsamı olan
+    /// kullanıcı o şirketin tümünü görür.
+    /// </summary>
+    public IQueryable<Personnel> Apply(IQueryable<Personnel> query) =>
+        HasGlobalAccess
+            ? query
+            : query.Where(item =>
+                CompanyIds.Contains(item.CompanyId) ||
+                (item.BranchId.HasValue &&
+                    BranchIds.Contains(item.BranchId.Value)) ||
+                item.SiteAssignments.Any(assignment =>
+                    assignment.IsActive &&
+                    !assignment.IsDeleted &&
+                    assignment.EndDate == null &&
+                    SiteIds.Contains(assignment.ProjectSiteId)));
+
     public bool CanAccessCompany(Guid companyId) =>
         HasGlobalAccess || CompanyIds.Contains(companyId);
 

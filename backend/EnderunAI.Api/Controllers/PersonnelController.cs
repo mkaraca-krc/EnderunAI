@@ -36,10 +36,10 @@ public sealed class PersonnelController(
     public async Task<IActionResult> DataCompleteness(
         [FromQuery] Guid? companyId,
         [FromServices] Data.HumanResources.HrDbContext hrDb,
+        [FromServices] IScopedData scoped,
         CancellationToken cancellationToken)
     {
-        var query = db.Personnel
-            .AsNoTracking()
+        var query = (await scoped.PersonnelAsync(cancellationToken))
             .Where(x => x.Status == PersonnelStatus.Active && x.IsActive);
 
         if (companyId is Guid id)
@@ -223,9 +223,22 @@ public sealed class PersonnelController(
         [FromQuery] Guid? companyId,
         [FromQuery] Guid? projectId,
         [FromQuery] string? search,
+        [FromServices] IScopedData scoped,
         CancellationToken cancellationToken)
     {
-        var query = db.Personnel.AsNoTracking();
+        /*
+         * VERİ KAPSAMI DİKİŞTEN GELİR. Bu uç yalnızca isteğe bağlı
+         * companyId/projectId parametreleriyle süzülüyordu; parametre
+         * gönderilmezse BÜTÜN şirketlerdeki tüm personel dönüyordu.
+         * `personnel.view` izni Şantiye Şefi ve Formen'de de var — yani
+         * şantiye kapsamlı iki rol, arama kutusundan kimlik numarasıyla
+         * herkesi bulabiliyordu.
+         *
+         * Ham `db.Personnel` KULLANILMIYOR: bekçi test kontrolcülerde
+         * okuma amaçlı ham erişimi yasaklıyor, böylece kapsam uygulamayı
+         * unutmak mümkün değil (bkz. Security/ScopedData.cs).
+         */
+        var query = await scoped.PersonnelAsync(cancellationToken);
 
         if (companyId.HasValue)
             query = query.Where(x => x.CompanyId == companyId.Value);
@@ -322,12 +335,18 @@ public sealed class PersonnelController(
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
     public async Task<IActionResult> GetById(
         Guid id,
+        [FromServices] IScopedData scoped,
         CancellationToken cancellationToken)
     {
         var canViewSalary = await salaryVisibility.CanViewSalaryAsync(cancellationToken);
 
-        var item = await db.Personnel
-            .AsNoTracking()
+        /*
+         * KAPSAM DIŞI KAYIT "BULUNAMADI" DÖNER, "yasak" değil.
+         * ProjectSitesController'daki desenin aynısı: varlığı ifşa
+         * etmemek için 404. Süzgeç liste ucuyla AYNI dikişten geliyor,
+         * yani iki uç asla ayrışamaz.
+         */
+        var item = await (await scoped.PersonnelAsync(cancellationToken))
             .Where(x => x.Id == id)
             .Select(x => new
             {

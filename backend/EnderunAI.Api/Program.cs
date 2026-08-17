@@ -474,6 +474,10 @@ builder.Services.AddScoped<IDocumentNumberService, DocumentNumberService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Purchasing.Automation.IPurchaseRequestGenerator, EnderunAI.Api.Services.Purchasing.Automation.PurchaseRequestGenerator>();
 builder.Services.AddScoped<EnderunAI.Api.Security.IUserAuthorizationService, EnderunAI.Api.Security.UserAuthorizationService>();
 builder.Services.AddScoped<EnderunAI.Api.Security.ICurrentDataScopeService, EnderunAI.Api.Security.CurrentDataScopeService>();
+
+// Kapsamlı okuma dikişi: kontrolcülerin kapsam taşıyan varlıkları
+// okuduğu tek yol (bkz. Security/ScopedData.cs).
+builder.Services.AddScoped<EnderunAI.Api.Security.IScopedData, EnderunAI.Api.Security.ScopedData>();
 builder.Services.AddScoped<EnderunAI.Api.Security.ISalaryVisibilityService, EnderunAI.Api.Security.SalaryVisibilityService>();
 builder.Services.AddScoped<EnderunAI.Api.Security.IExtraPaymentVisibilityService, EnderunAI.Api.Security.ExtraPaymentVisibilityService>();
 // Resmî net + elden ödeme + toplam ele geçen hesabı; ücret kartı
