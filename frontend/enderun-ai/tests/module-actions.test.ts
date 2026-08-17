@@ -516,4 +516,106 @@ describe("eleman seviyesi yetki (R2/1)", () => {
       expect(nearest, `"${label}" yanlış yetkide`).toBe(action);
     }
   });
+  /**
+   * R2/4d yığın 1 — muhasebe ve hakediş belge ekranları.
+   *
+   * Bu ailede iki ayrım kritik:
+   *   RED = ONAY yetkisinde (ikisi de onay makamının kararı, yıkıcı değil)
+   *   İPTAL = DELETE yetkisinde (fişi ters kayıtla dengeliyor, defter izi)
+   */
+  const R2_4D1: Array<[string, string, string]> = [
+    ["app/muhasebe/faturalar/[id]/page.tsx", "Onaya Gönder", "edit"],
+    ["app/muhasebe/faturalar/[id]/page.tsx", "Onayla ve Fişleştir", "approve"],
+    ["app/muhasebe/faturalar/[id]/page.tsx", "Reddet", "approve"],
+    ["app/muhasebe/faturalar/[id]/page.tsx", "İptal Et", "delete"],
+    ["app/muhasebe/faturalar/[id]/page.tsx", "İade Faturasını Oluştur", "create"],
+    ["app/muhasebe/satis-faturalari/[id]/page.tsx", "Kesinleştir ve Fiş Oluştur", "edit"],
+    ["app/muhasebe/satis-faturalari/[id]/page.tsx", "İptal Et", "delete"],
+    ["app/muhasebe/satis-faturalari/[id]/page.tsx", "İade Faturasını Oluştur", "create"],
+    ["app/muhasebe/e-fatura-ice-aktar/page.tsx", "Dosyaları Oku", "create"],
+    ["app/hakedis/[id]/page.tsx", "Sil", "delete"],
+    ["app/hakedis/[id]/page.tsx", "Onaya Gönder", "edit"],
+    ["app/hakedis/[id]/page.tsx", "Onayla", "approve"],
+    ["app/hakedis/[id]/page.tsx", "Kesinleştir ve Fişleştir", "approve"],
+    ["app/hakedis/[id]/page.tsx", "Hakedişi İptal Et", "delete"],
+    ["app/projeler/[id]/metraj-takip/page.tsx", "İlave İşi Kaydet", "create"],
+  ];
+
+  it.each(R2_4D1)("%s -> \"%s\" %s kapısında", (relative, label, action) => {
+    const text = readFileSync(join(ROOT, relative), "utf8");
+
+    const occurrences: number[] = [];
+    for (let at = text.indexOf(label); at > -1; at = text.indexOf(label, at + 1)) {
+      const window = text.slice(Math.max(0, at - 600), at);
+      const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
+      const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
+      if (open > -1 && open > close) occurrences.push(at);
+    }
+
+    expect(occurrences.length, `"${label}" düğme olarak bulunamadı`).toBeGreaterThan(0);
+
+    for (const at of occurrences) {
+      const before = text.slice(0, at);
+      const gate = before.lastIndexOf('.can("');
+
+      expect(gate, `"${label}" için kapı yok`).toBeGreaterThan(-1);
+      expect(at - gate, `"${label}" kapıdan çok uzak`).toBeLessThan(900);
+
+      const nearest = /\.can\("([^"]+)"\)/.exec(before.slice(gate))?.[1];
+      expect(nearest, `"${label}" yanlış yetkide`).toBe(action);
+    }
+  });
+
+  /**
+   * SATIR BİLEŞENİNE İZİN PROP OLARAK GEÇER.
+   *
+   * `ExtraWorkRow` satır başına render ediliyor. İçinde
+   * `useModuleActions` çağrılsa her satır kendi izin okumasını yapardı;
+   * `useCurrentUser` örnek başına istek attığı için bu satır sayısı
+   * kadar `auth/me` demek olurdu.
+   *
+   * Ayrıca `canTransferWork` (yetki) ile `canTransfer` (iş kuralı: uç
+   * bu işi aktarılabilir saydı mı) AYRI kalmalı; birleştirilirse
+   * kuralın biri diğerini sessizce yutar.
+   */
+  it("satır bileşeni izni prop olarak alıyor, kancayı içinde çağırmıyor", () => {
+    const text = readFileSync(
+      join(ROOT, "app/projeler/[id]/metraj-takip/page.tsx"),
+      "utf8",
+    );
+    const row = text.slice(text.indexOf("function ExtraWorkRow"));
+
+    expect(row).toContain("canApprove: boolean;");
+    expect(row).toContain("canTransferWork: boolean;");
+    expect(row).not.toContain("useModuleActions(");
+    // iş kuralı propu ayrı duruyor
+    expect(row).toContain("canTransfer: boolean;");
+  });
+
+  /**
+   * FİYAT FARKI HESAP PANELİ KALDIRILDI — hayalet arayüz bırakılmadı.
+   *
+   * Panel `POST price-difference-calculations/calculate` çağırıyordu;
+   * o uç backend'de YOK ve PDF üreten bir kütüphane de yok. Elle
+   * girilen `priceDifferenceAmount` çalışmaya devam ediyor: hakediş
+   * formunda giriliyor, Excel çıktısına, finans panosuna ve kâr
+   * hesabına akıyor. Yani kaldırılan şey yetenek değil, çalışmayan
+   * otomatik hesap.
+   *
+   * ANA VERİ EKRANLARI (profiller, endeksler) KASITLI OLARAK DURUYOR:
+   * formül yazıldığında ihtiyaç duyulacak veri onlarda.
+   */
+  it("hakediş detayında ölü fiyat farkı hesabı kalmadı", () => {
+    const text = readFileSync(join(ROOT, "app/hakedis/[id]/page.tsx"), "utf8");
+
+    expect(text).not.toContain("priceDifferenceService");
+    expect(text).not.toContain("Fiyat Farkı Hesabı");
+    expect(text).not.toContain("calculatePriceDifference");
+    // elle girilen tutarın GÖSTERİMİ kalmalı
+    expect(text).toContain("item.priceDifferenceAmount");
+
+    // ana veri ekranları silinmedi
+    const rules = readFileSync(join(ROOT, "lib", "auth", "route-permissions.ts"), "utf8");
+    expect(rules).toContain("fiyat-farki");
+  });
 });

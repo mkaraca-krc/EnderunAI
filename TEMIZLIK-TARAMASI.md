@@ -527,3 +527,96 @@ modül durumu sıfırlanmıyor. İki akış da `clearCurrentUserCache()`
 `ErpShell` kendi `auth/me` çağrısını `apiClient` ile doğrudan yapıyor
 ve bu önbelleği KULLANMIYOR — sayfa başına hâlâ bir fazladan istek var.
 Ayrı bir tur işi.
+
+---
+
+## Hayalet arayüz: ekran var, uç yok (2026-08-17)
+
+R2/4d yığın 1'de bir düğmenin ucunu ararken çıktı; aranan tek düğmeden
+büyük bir desen oldu.
+
+### 1. Fiyat farkı otomatik hesabı — KALDIRILDI
+
+Hakediş detayındaki "Fiyat Farkı Hesabı" paneli
+`POST price-difference-calculations/calculate` çağırıyordu.
+**Böyle bir uç backend'de yok** — `PriceDifferenceController` yalnız
+`price-difference-profiles` ve `price-difference-indexes` rotalarını
+taşıyor, "calculate" adlı hiçbir metot yok. `PriceDifferenceCalculation`
+diye bir model de yok. Yani düğme 404 dönüyordu.
+
+**Fiyat farkı ise gerçekten kullanılıyor — elle.**
+`ProgressPayment.PriceDifferenceAmount` hakediş formunda elle giriliyor
+ve şuralara akıyor:
+
+| Tüketen | Ne yapıyor |
+|---|---|
+| `HakedisExportController:124` | Excel çıktısına "Fiyat Farkı" satırı |
+| `FinanceDashboardController:66` | gerçekleşen hakedişlerin toplamı |
+| `HakedisProfitService:41` | **kâr hesabına giriyor** |
+| `HakedisTrackingController:64` | takip listesinde kolon |
+
+Karar: **panel bütünüyle kaldırıldı** (düğme, üç seçim kutusu, sonuç
+bloğu, durum, işleyici, kullanılmayan importlar). Elle giriş yolu
+çalıştığı için hiçbir yetenek kaybedilmedi; kaldırılan şey yalnızca
+çalışmayan otomatik hesap. Yarım bir düğme bırakmak, panelin
+gerisini bırakmaktan kötü olurdu.
+
+**Ana veri ekranları KASITLI olarak duruyor** (`fiyat-farki/profiller`,
+`fiyat-farki/endeksler`). Silinmedi çünkü formül yazıldığında ihtiyaç
+duyulacak veri onlarda — ve girilmiş endeksler çöpe atılmamalı.
+
+### 2. Ana veri atıl: profiller ve endeksler hiçbir şey beslemiyor
+
+Tarama sonucu net: `PriceDifferenceProfile`, `PriceDifferenceCoefficient`
+ve `PriceDifferenceIndexPeriod` tablolarına **yalnız kendi CRUD
+controller'ı** dokunuyor. Başka hiçbir kod okumuyor.
+
+Yani iki ekran veri girişi kabul ediyor, kaydediyor ve o veri hiçbir
+sonuç üretmiyor. Aylık Yİ-ÜFE endeksi giren biri varsa o emek şu an
+karşılıksız.
+
+Model kamu formülünün tam kendisi: katsayılar **A, B1..B5, C**
+(4735 sayılı kanun fiyat farkı esasları), endeksler işçilik / akaryakıt
+/ malzeme / makine / çimento (formülün Yİ-ÜFE alt endeksleri),
+`PriceDifferenceCalculationType` = kamu formülü / sabit oran / elle.
+Biri işi doğru kurmaya başlamış, ana veriyi bitirmiş, hesabı yazmamış.
+
+**Fiyat farkı ayrı paket olarak kurulursa netleşmesi gerekenler:**
+  - formül: kamu Yİ-ÜFE standardı mı, sözleşmeye özel endeks mi
+  - hesap hakedişe hangi aşamada işlenecek (taslakta mı, onayda mı)
+  - `PriceDifferenceAmount` elle mi kalacak, hesaptan mı gelecek
+    (ikisi birden olursa hangisi kazanır)
+  - geçmiş hakedişler yeniden hesaplanacak mı
+
+### 3. PDF çıktısının TAMAMI yazılmamış — KARAR BEKLİYOR
+
+`services/report.service.ts` beş PDF ucu tanımlıyor:
+
+    /api/reports/progress-payment/{id}/pdf
+    /api/reports/price-difference/{id}/pdf
+    /api/reports/deductions/{id}/pdf
+    /api/reports/purchase-order/{id}/pdf
+    /api/reports/stock-issue/{id}/pdf
+
+**Backend'de `api/reports` diye bir rota yok** ve `QuestPDF / iText /
+DinkToPdf / Puppeteer / wkhtmltopdf` — PDF üretebilecek **hiçbir
+kütüphane projede yok.** Yani beşi de ölü.
+
+İkisi GÖRÜNÜR bir düğmeye bağlı:
+  - `hakedis/[id]` "PDF" düğmesi (Excel yanında; **Excel çalışıyor**:
+    `api/hakedis-export/{id}/excel`)
+  - `satin-alma/siparis/[id]` "Sipariş PDF İndir" (alternatifi YOK)
+
+Bu turda **kaldırılmadı**, çünkü fiyat farkından farklı: orada elle
+giriş yolu vardı, burada yeteneğin kendisi yok. Düğmeyi silmek eksik
+özelliği gizlemek olur.
+
+Hiçbir düğmeye bağlı OLMAYAN üç işleyici (`downloadPricePdf`,
+`downloadDeductionPdf`, `downloadProgressPdf`) ölü kod olarak
+`hakedis/[id]`'den kaldırıldı.
+
+**Karar gerekiyor:** PDF çıktısı gerçek bir ihtiyaç mı?
+  - Evet ise → ayrı paket: kütüphane seçimi + şablonlar (hakediş,
+    sipariş, kesinti, stok çıkışı). Excel şablonları referans olur.
+  - Hayır ise → iki görünür düğme kaldırılır, `report.service.ts`
+    silinir.

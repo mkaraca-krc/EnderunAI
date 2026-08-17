@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   amount,
   decimal,
@@ -84,6 +85,18 @@ function impactStyle(impact: number): {
  * yapılmaz.
  */
 export default function MetrajTakipPage() {
+  /**
+   * Düğme -> uç -> izin (ProjectExtraWorksController):
+   *   POST project-extra-works                    -> hakedis.create
+   *   POST project-extra-works/{id}/approve       -> hakedis.approve
+   *   POST project-extra-works/{id}/reject        -> hakedis.approve
+   *   POST project-extra-works/{id}/transfer/{id} -> hakedis.edit
+   *
+   * İlave iş METRAJ ekranında ama izni HAKEDİŞ modülünde: tutarı
+   * hakedişe giriyor. Ekran adına bakıp projects.* demek yanlış olurdu.
+   */
+  const actions = useModuleActions("hakedis");
+
   const params = useParams<{ id: string }>();
 
   const [data, setData] = useState<ProgressTracking | null>(null);
@@ -512,14 +525,16 @@ export default function MetrajTakipPage() {
           </div>
 
           <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12 }}>
-            <button
-              type="submit"
-              disabled={
-                busy || data.contractType === ProjectContractType.Undetermined
-              }
-            >
-              {busy ? "Kaydediliyor..." : "İlave İşi Kaydet"}
-            </button>
+            {actions.can("create") && (
+              <button
+                type="submit"
+                disabled={
+                  busy || data.contractType === ProjectContractType.Undetermined
+                }
+              >
+                {busy ? "Kaydediliyor..." : "İlave İşi Kaydet"}
+              </button>
+            )}
 
             {Number(form.quantity) > 0 && Number(form.unitPrice) > 0 && (
               <span className="rw-value-muted" style={{ fontSize: 13 }}>
@@ -581,6 +596,8 @@ export default function MetrajTakipPage() {
                     onApprove={approve}
                     onReject={reject}
                     onTransfer={openTransfer}
+                    canApprove={actions.can("approve")}
+                    canTransferWork={actions.can("edit")}
                   />
                 ))}
               </tbody>
@@ -670,13 +687,15 @@ export default function MetrajTakipPage() {
             >
               Vazgeç
             </button>
-            <button
-              type="button"
-              disabled={busy || !transferPaymentId}
-              onClick={() => void confirmTransfer()}
-            >
-              {busy ? "Aktarılıyor..." : "Aktar"}
-            </button>
+            {actions.can("edit") && (
+              <button
+                type="button"
+                disabled={busy || !transferPaymentId}
+                onClick={() => void confirmTransfer()}
+              >
+                {busy ? "Aktarılıyor..." : "Aktar"}
+              </button>
+            )}
           </div>
         }
       >
@@ -738,6 +757,8 @@ function ExtraWorkRow({
   onApprove,
   onReject,
   onTransfer,
+  canApprove,
+  canTransferWork,
 }: {
   work: ProjectExtraWork;
   documents: ProjectDocumentListItem[];
@@ -749,6 +770,16 @@ function ExtraWorkRow({
   onApprove: (work: ProjectExtraWork, documentId: string) => void;
   onReject: (work: ProjectExtraWork) => void;
   onTransfer: (work: ProjectExtraWork) => void;
+  /*
+   * İZİNLER PROP OLARAK GELİYOR: bu bileşen SATIR BAŞINA render
+   * ediliyor, kancayı içeride çağırmak her satırda bir örnek açardı.
+   *
+   * `canTransferWork` iş kuralı olan `canTransfer` ile KARIŞTIRILMAMALI:
+   * o "uç bu işi aktarılabilir saydı mı", bu "kullanıcının aktarma
+   * yetkisi var mı". İkisi ayrı ve ikisi de gerekli.
+   */
+  canApprove: boolean;
+  canTransferWork: boolean;
 }) {
   const [documentId, setDocumentId] = useState("");
 
@@ -804,7 +835,7 @@ function ExtraWorkRow({
       </td>
       <td>{work.progressPaymentNumber ?? "-"}</td>
       <td>
-        {isPending && (
+        {isPending && canApprove && (
           <div style={{ display: "flex", gap: 6 }}>
             <button
               type="button"
@@ -825,7 +856,7 @@ function ExtraWorkRow({
           </div>
         )}
 
-        {canTransfer && (
+        {canTransfer && canTransferWork && (
           <button
             type="button"
             disabled={busy || !hasPayments}

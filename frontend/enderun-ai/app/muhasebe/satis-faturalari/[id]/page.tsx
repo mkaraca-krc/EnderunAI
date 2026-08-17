@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { ConfirmDialog } from "@/components/ui";
 import { money, unitPrice } from "@/lib/format/turkish";
 import {
@@ -19,6 +20,14 @@ import {
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 export default function SalesInvoiceDetailPage() {
+  /**
+   * Düğme -> uç -> izin (SalesInvoicesController):
+   *   POST sales-invoices/{id}/post    -> accounting.edit
+   *   POST sales-invoices/{id}/cancel  -> accounting.DELETE
+   *   POST sales-invoices/{id}/returns -> accounting.create
+   */
+  const actions = useModuleActions("accounting");
+
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const invoiceId = params.id;
@@ -165,7 +174,7 @@ export default function SalesInvoiceDetailPage() {
         </div>
 
         <div style={{ display: "flex", gap: "8px" }}>
-          {isDraft && (
+          {isDraft && actions.can("edit") && (
             <button
               type="button"
               className="erp-primary-button"
@@ -178,16 +187,20 @@ export default function SalesInvoiceDetailPage() {
 
           {/* Kesinleşmiş fatura da iptal edilebilir: fiş silinmez, ters
               kaydı kesilir ve ikisi de defterde kalır. */}
-          <button
-            type="button"
-            className="erp-secondary-button"
-            disabled={processing || invoice.status === 2}
-            onClick={() => setCancelling(true)}
-          >
-            İptal Et
-          </button>
+          {actions.can("delete") && (
+            <button
+              type="button"
+              className="erp-secondary-button"
+              disabled={processing || invoice.status === 2}
+              onClick={() => setCancelling(true)}
+            >
+              İptal Et
+            </button>
+          )}
 
-          {invoice.status === 1 && !invoice.isReturn && (
+          {invoice.status === 1 &&
+            !invoice.isReturn &&
+            actions.can("create") && (
             <button
               type="button"
               className="erp-secondary-button"
@@ -352,9 +365,11 @@ export default function SalesInvoiceDetailPage() {
             >
               Vazgeç
             </button>
-            <button type="submit" className="erp-primary-button" disabled={processing}>
-              {processing ? "Oluşturuluyor..." : "İade Faturasını Oluştur"}
-            </button>
+            {actions.can("create") && (
+              <button type="submit" className="erp-primary-button" disabled={processing}>
+                {processing ? "Oluşturuluyor..." : "İade Faturasını Oluştur"}
+              </button>
+            )}
           </div>
         </form>
       )}

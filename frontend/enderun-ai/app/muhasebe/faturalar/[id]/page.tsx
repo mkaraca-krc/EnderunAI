@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { ConfirmDialog } from "@/components/ui";
 import { money, unitPrice } from "@/lib/format/turkish";
 import {
@@ -19,6 +20,20 @@ import {
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 export default function SupplierInvoiceDetailPage() {
+  /**
+   * Düğme -> uç -> izin (SupplierInvoicesController):
+   *   POST supplier-invoices/{id}/submit  -> accounting.edit
+   *   POST supplier-invoices/{id}/approve -> accounting.approve
+   *   POST supplier-invoices/{id}/reject  -> accounting.approve
+   *   POST supplier-invoices/{id}/cancel  -> accounting.DELETE
+   *   POST supplier-invoices/{id}/returns -> accounting.create
+   *
+   * REDDETMEK ONAYLAMAKLA AYNI YETKİDE: ikisi de onay makamının
+   * kararı. İptal ayrı ve daha ağır — fişi ters kayıtla dengeliyor,
+   * bu yüzden A tipi daraltmada edit'ten delete'e çekilmişti.
+   */
+  const actions = useModuleActions("accounting");
+
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const invoiceId = params.id;
@@ -177,7 +192,7 @@ export default function SupplierInvoiceDetailPage() {
               </div>
 
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                {invoice.status === 0 && (
+                {invoice.status === 0 && actions.can("edit") && (
                   <button
                     type="button"
                     className="erp-primary-button"
@@ -190,7 +205,7 @@ export default function SupplierInvoiceDetailPage() {
                   </button>
                 )}
 
-                {invoice.status === 1 && (
+                {invoice.status === 1 && actions.can("approve") && (
                   <>
                     <button
                       type="button"
@@ -213,7 +228,8 @@ export default function SupplierInvoiceDetailPage() {
                   </>
                 )}
 
-                {(invoice.status === 0 || invoice.status === 1) && (
+                {(invoice.status === 0 || invoice.status === 1) &&
+                  actions.can("delete") && (
                   <button
                     type="button"
                     className="erp-secondary-button"
@@ -232,7 +248,9 @@ export default function SupplierInvoiceDetailPage() {
                   Listeye Dön
                 </button>
 
-                {invoice.status === 2 && !invoice.isReturn && (
+                {invoice.status === 2 &&
+                  !invoice.isReturn &&
+                  actions.can("create") && (
                   <button
                     type="button"
                     className="erp-secondary-button"
@@ -376,13 +394,15 @@ export default function SupplierInvoiceDetailPage() {
                   >
                     Vazgeç
                   </button>
-                  <button
-                    type="submit"
-                    className="erp-primary-button"
-                    disabled={processing}
-                  >
-                    {processing ? "Oluşturuluyor..." : "İade Faturasını Oluştur"}
-                  </button>
+                  {actions.can("create") && (
+                    <button
+                      type="submit"
+                      className="erp-primary-button"
+                      disabled={processing}
+                    >
+                      {processing ? "Oluşturuluyor..." : "İade Faturasını Oluştur"}
+                    </button>
+                  )}
                 </div>
               </form>
             )}

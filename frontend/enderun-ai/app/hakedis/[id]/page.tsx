@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { ConfirmDialog } from "@/components/ui";
 import { money, quantity, unitPrice } from "@/lib/format/turkish";
 
@@ -13,13 +14,6 @@ import {
   ProgressPaymentStatus,
   type ProgressPaymentDetail,
 } from "@/services/progress-payment.service";
-
-import {
-  priceDifferenceService,
-  type PriceDifferenceCalculation,
-  type PriceDifferenceIndexPeriod,
-  type PriceDifferenceProfile,
-} from "@/services/price-difference.service";
 
 import {
   reportService,
@@ -44,6 +38,26 @@ const statusClasses: Record<ProgressPaymentStatus, string> = {
 const date = new Intl.DateTimeFormat("tr-TR");
 
 export default function ProgressPaymentDetailPage() {
+  /**
+   * Düğme -> uç -> izin (ProgressPaymentsController):
+   *   POST   progress-payments/{id}/submit  -> hakedis.edit
+   *   POST   progress-payments/{id}/approve -> hakedis.approve
+   *   POST   progress-payments/{id}/post    -> hakedis.approve
+   *   DELETE progress-payments/{id}         -> hakedis.delete
+   *   POST   progress-payments/{id}/cancel  -> hakedis.DELETE
+   *
+   * "Kesinleştir ve Fişleştir" ONAYLAMAYLA AYNI yetkide: uç ikisini de
+   * hakedis.approve ile koruyor. Fişleştirme muhasebe kaydı üretse de
+   * izin hakediş modülünde kalıyor.
+   *
+   * FİYAT FARKI HESAPLA DÜĞMESİ BİLİNÇLİ OLARAK KAPILANMADI: çağırdığı
+   * uç (`price-difference-calculations/calculate`) backend'de YOK, o
+   * yüzden türetilecek bir RequirePermission da yok. Uydurma bir kapı
+   * koymak, uç yazıldığında yanlış yetkiye çakılırdı.
+   * Bkz. TEMIZLIK-TARAMASI.md.
+   */
+  const actions = useModuleActions("hakedis");
+
   const params = useParams<{ id: string }>();
   const router = useRouter();
 
@@ -57,27 +71,6 @@ export default function ProgressPaymentDetailPage() {
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState<"sil" | "iptal" | null>(null);
 
-  const [priceProfiles, setPriceProfiles] =
-    useState<PriceDifferenceProfile[]>([]);
-
-  const [priceIndexes, setPriceIndexes] =
-    useState<PriceDifferenceIndexPeriod[]>([]);
-
-  const [selectedProfileId, setSelectedProfileId] =
-    useState("");
-
-  const [selectedBaseIndexId, setSelectedBaseIndexId] =
-    useState("");
-
-  const [selectedCurrentIndexId, setSelectedCurrentIndexId] =
-    useState("");
-
-  const [priceCalculation, setPriceCalculation] =
-    useState<PriceDifferenceCalculation | null>(null);
-
-  const [priceWorking, setPriceWorking] =
-    useState(false);
-
   const id = params.id;
 
   async function load() {
@@ -89,53 +82,6 @@ export default function ProgressPaymentDetailPage() {
         await progressPaymentService.getById(id);
 
       setItem(result);
-
-      const [
-        profileResult,
-        indexResult,
-      ] = await Promise.all([
-        priceDifferenceService.getProfiles({
-          companyId: result.companyId,
-          projectId: result.projectId,
-        }),
-
-        priceDifferenceService.getIndexes(),
-      ]);
-
-      setPriceProfiles(profileResult);
-      setPriceIndexes(indexResult);
-
-      const defaultProfile =
-        profileResult.find(
-          (x) => x.isDefault
-        ) ?? profileResult[0];
-
-      if (defaultProfile) {
-        setSelectedProfileId(
-          defaultProfile.id
-        );
-      }
-
-      if (indexResult.length > 0) {
-        const sortedIndexes =
-          [...indexResult].sort(
-            (a, b) =>
-              b.year * 100 +
-              b.month -
-              (a.year * 100 +
-                a.month)
-          );
-
-        setSelectedCurrentIndexId(
-          sortedIndexes[0].id
-        );
-
-        setSelectedBaseIndexId(
-          sortedIndexes[
-            sortedIndexes.length - 1
-          ].id
-        );
-      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -225,94 +171,11 @@ export default function ProgressPaymentDetailPage() {
 
 
 
-  async function downloadProgressPdf() {
-
-    if (!item) return;
-
-    await reportService
-      .downloadProgressPaymentPdf(
-        item.id
-      );
-  }
-
-
-  async function downloadPricePdf() {
-
-    if (!item) return;
-
-    await reportService
-      .downloadPriceDifferencePdf(
-        item.id
-      );
-  }
-
-
-  async function downloadDeductionPdf() {
-
-    if (!item) return;
-
-    await reportService
-      .downloadDeductionPdf(
-        item.id
-      );
-  }
 
 
 
-  async function calculatePriceDifference() {
-    if (!item) {
-      return;
-    }
 
-    if (
-      !selectedProfileId ||
-      !selectedBaseIndexId ||
-      !selectedCurrentIndexId
-    ) {
-      setError(
-        "Fiyat farkı profili ve endeks dönemleri seçilmelidir."
-      );
-      return;
-    }
 
-    setPriceWorking(true);
-    setError("");
-    setMessage("");
-
-    try {
-      const result =
-        await priceDifferenceService.calculate({
-          progressPaymentId: item.id,
-          priceDifferenceProfileId:
-            selectedProfileId,
-          baseIndexPeriodId:
-            selectedBaseIndexId,
-          currentIndexPeriodId:
-            selectedCurrentIndexId,
-          baseAmount:
-            item.currentAmount,
-          notes:
-            "Hakediş ekranından hesaplandı.",
-        });
-
-      setPriceCalculation(result);
-
-      setMessage(
-        "Fiyat farkı hesabı başarıyla oluşturuldu."
-      );
-
-      await load();
-
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Fiyat farkı hesaplanamadı."
-      );
-    } finally {
-      setPriceWorking(false);
-    }
-  }
 
 
   const withholdingRate = useMemo(() => {
@@ -494,28 +357,33 @@ export default function ProgressPaymentDetailPage() {
                 Düzenle
               </Link>
 
-              <button
-                type="button"
-                disabled={working}
-                onClick={() => setConfirming("sil")}
-              >
-                Sil
-              </button>
+              {actions.can("delete") && (
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() => setConfirming("sil")}
+                >
+                  Sil
+                </button>
+              )}
 
-              <button
-                type="button"
-                disabled={working}
-                onClick={() =>
-                  void runAction("submit")
-                }
-              >
-                Onaya Gönder
-              </button>
+              {actions.can("edit") && (
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() =>
+                    void runAction("submit")
+                  }
+                >
+                  Onaya Gönder
+                </button>
+              )}
             </>
           )}
 
           {item.status ===
-            ProgressPaymentStatus.PendingApproval && (
+            ProgressPaymentStatus.PendingApproval &&
+            actions.can("approve") && (
             <button
               type="button"
               disabled={working}
@@ -528,7 +396,8 @@ export default function ProgressPaymentDetailPage() {
           )}
 
           {item.status ===
-            ProgressPaymentStatus.Approved && (
+            ProgressPaymentStatus.Approved &&
+            actions.can("approve") && (
             <button
               type="button"
               disabled={working}
@@ -544,7 +413,8 @@ export default function ProgressPaymentDetailPage() {
           {item.status !==
             ProgressPaymentStatus.Posted &&
             item.status !==
-              ProgressPaymentStatus.Cancelled && (
+              ProgressPaymentStatus.Cancelled &&
+            actions.can("delete") && (
               <button
                 type="button"
                 disabled={working}
@@ -737,184 +607,6 @@ export default function ProgressPaymentDetailPage() {
         )}
       </div>
 
-      <div
-        className="erp-form-card"
-        style={{ marginTop: 16 }}
-      >
-        <div className="erp-toolbar">
-          <div>
-            <strong>Fiyat Farkı Hesabı</strong>
-            <small>
-              Hakediş tutarı üzerinden fiyat farkı hesaplama
-            </small>
-          </div>
-
-          <button
-            type="button"
-            disabled={priceWorking}
-            onClick={() =>
-              void calculatePriceDifference()
-            }
-          >
-            {priceWorking
-              ? "Hesaplanıyor..."
-              : "Fiyat Farkını Hesapla"}
-          </button>
-        </div>
-
-        <div className="erp-form-grid">
-
-          <label>
-            <span>Fiyat Farkı Profili</span>
-
-            <select
-              value={selectedProfileId}
-              onChange={(event) =>
-                setSelectedProfileId(
-                  event.target.value
-                )
-              }
-            >
-              <option value="">
-                Profil seçin
-              </option>
-
-              {priceProfiles.map((profile) => (
-                <option
-                  key={profile.id}
-                  value={profile.id}
-                >
-                  {profile.profileName}
-                </option>
-              ))}
-            </select>
-          </label>
-
-
-          <label>
-            <span>Baz Dönem</span>
-
-            <select
-              value={selectedBaseIndexId}
-              onChange={(event) =>
-                setSelectedBaseIndexId(
-                  event.target.value
-                )
-              }
-            >
-              <option value="">
-                Baz dönem seçin
-              </option>
-
-              {priceIndexes.map((index) => (
-                <option
-                  key={index.id}
-                  value={index.id}
-                >
-                  {index.month
-                    .toString()
-                    .padStart(2, "0")}
-                  /{index.year}
-                  {" "}
-                  {index.sourceName}
-                </option>
-              ))}
-            </select>
-          </label>
-
-
-          <label>
-            <span>Cari Dönem</span>
-
-            <select
-              value={selectedCurrentIndexId}
-              onChange={(event) =>
-                setSelectedCurrentIndexId(
-                  event.target.value
-                )
-              }
-            >
-              <option value="">
-                Cari dönem seçin
-              </option>
-
-              {priceIndexes.map((index) => (
-                <option
-                  key={index.id}
-                  value={index.id}
-                >
-                  {index.month
-                    .toString()
-                    .padStart(2, "0")}
-                  /{index.year}
-                  {" "}
-                  {index.sourceName}
-                </option>
-              ))}
-            </select>
-          </label>
-
-        </div>
-
-
-        {priceCalculation && (
-          <div
-            className="erp-form-card rw-panel-highlight"
-            style={{ marginTop: 16 }}
-          >
-
-            <div className="erp-form-grid">
-
-              <div>
-                <span>Pn</span>
-
-                <strong>
-                  {quantity(
-                    priceCalculation.pn
-                  )}
-                </strong>
-              </div>
-
-
-              <div>
-                <span>Delta</span>
-
-                <strong>
-                  {quantity(
-                    priceCalculation.delta
-                  )}
-                </strong>
-              </div>
-
-
-              <div>
-                <span>Esas Tutar</span>
-
-                <strong>
-                  {money(
-                    priceCalculation.baseAmount
-                  )}
-                </strong>
-              </div>
-
-
-              <div>
-                <span>Fiyat Farkı</span>
-
-                <strong>
-                  {money(
-                    priceCalculation
-                      .priceDifferenceAmount
-                  )}
-                </strong>
-              </div>
-
-            </div>
-
-          </div>
-        )}
-
-      </div>
 
 
       <div

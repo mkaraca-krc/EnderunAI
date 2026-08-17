@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { money, unitPrice } from "@/lib/format/turkish";
 import ErpSearchSelect, {
   type SearchSelectOption,
@@ -50,6 +51,16 @@ type RowDecision = {
 };
 
 export default function EInvoiceImportPage() {
+  /**
+   * Düğme -> uç -> izin (EInvoiceImportController):
+   *   POST e-invoice/import/preview -> accounting.create
+   *   POST e-invoice/import/commit  -> accounting.create
+   *
+   * ÖNİZLEME DE create İSTİYOR (uçta öyle): XML'i okuyup eşleştirme
+   * yapıyor, salt okuma değil. Kapı ucun istediğine eşit.
+   */
+  const actions = useModuleActions("accounting");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [accounts, setAccounts] = useState<CurrentAccountListItem[]>([]);
@@ -392,14 +403,16 @@ export default function EInvoiceImportPage() {
           </small>
 
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <button
-              type="button"
-              className="erp-primary-button"
-              disabled={!companyId || files.length === 0 || reading}
-              onClick={() => void handleRead()}
-            >
-              {reading ? "Okunuyor..." : `Dosyaları Oku (${files.length})`}
-            </button>
+            {actions.can("create") && (
+              <button
+                type="button"
+                className="erp-primary-button"
+                disabled={!companyId || files.length === 0 || reading}
+                onClick={() => void handleRead()}
+              >
+                {reading ? "Okunuyor..." : `Dosyaları Oku (${files.length})`}
+              </button>
+            )}
 
             {/* Buton pasifse sebebi yazsın; yoksa kullanıcı tıklamayı
                 deneyip bir arıza olduğunu düşünüyor. */}
@@ -577,6 +590,7 @@ export default function EInvoiceImportPage() {
             )}
 
             <div>
+              {actions.can("create") && (
               <button
                 type="button"
                 className="erp-primary-button"
@@ -592,6 +606,7 @@ export default function EInvoiceImportPage() {
                   ? "Aktarılıyor..."
                   : `Seçili ${selectedRows.length} Faturayı İçe Aktar`}
               </button>
+              )}
             </div>
           </div>
         </div>
