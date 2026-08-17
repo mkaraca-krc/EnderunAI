@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { ConfirmDialog } from "@/components/ui";
 import PayrollSettingsCard from "@/components/hr/payroll-settings-card";
 import { Button, Card, CardContent, Input } from "@/components/ui";
@@ -57,9 +58,16 @@ function toDrafts(windows: RoleWorkHourWindowItem[]): DayDraft[] {
 function RoleWorkHourEditor({
   role,
   onSaved,
+  canEdit,
 }: {
   role: RoleWorkHourWindows;
   onSaved: (message: string) => void;
+  /**
+   * İzin PROP olarak geliyor: bu bileşen rol başına bir kez
+   * render ediliyor ve kancayı içeride çağırmak her rol kartında
+   * ayrı bir /me isteği açardı (useCurrentUser örnek başına fetch).
+   */
+  canEdit: boolean;
 }) {
   const [drafts, setDrafts] = useState<DayDraft[]>(() => toDrafts(role.windows));
   const [saving, setSaving] = useState(false);
@@ -104,9 +112,11 @@ function RoleWorkHourEditor({
     <div className="rounded-xl border border-slate-200 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h4 className="font-semibold text-slate-950">{role.name}</h4>
-        <Button type="button" onClick={() => void save()} loading={saving} className="text-xs">
-          Kaydet
-        </Button>
+        {canEdit && (
+          <Button type="button" onClick={() => void save()} loading={saving} className="text-xs">
+            Kaydet
+          </Button>
+        )}
       </div>
       {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
       <div className="grid gap-2">
@@ -161,6 +171,21 @@ const emptyForm: UpdateCompanySettingsPayload = {
 };
 
 export default function CompanySettingsPage() {
+  /**
+   * Düğme -> uç -> izin (CompanySettingsController): YEDİ YAZAN UÇ,
+   * HEPSİ TEK ANAHTARDA -> company-settings.edit
+   *   PUT    company-settings
+   *   POST   company-settings/logo
+   *   POST   company-settings/bank-accounts
+   *   DELETE company-settings/bank-accounts/{id}
+   *   PUT    company-settings/work-hour-windows/{roleId}
+   *   PUT    company-settings/finance-settings
+   *   POST   company-settings/email-test
+   *
+   * Banka hesabı SİLME de edit'te; company-settings.delete diye bir
+   * anahtar yok. Arayüzde daha ince bir ayrım uydurulmadı.
+   */
+  const actions = useModuleActions("company-settings");
   const [company, setCompany] = useState<CompanySettings | null>(null);
   const [form, setForm] = useState<UpdateCompanySettingsPayload>(emptyForm);
   const [loading, setLoading] = useState(true);
@@ -428,16 +453,18 @@ export default function CompanySettingsPage() {
                     <span className="text-xs text-slate-400">Logo yok</span>
                   )}
                 </div>
-                <label className="w-full">
-                  <span className="sr-only">Logo yükle</span>
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={handleLogoChange}
-                    disabled={uploadingLogo}
-                    className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-700 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
-                  />
-                </label>
+                {actions.can("edit") && (
+                  <label className="w-full">
+                    <span className="sr-only">Logo yükle</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleLogoChange}
+                      disabled={uploadingLogo}
+                      className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-700 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
+                    />
+                  </label>
+                )}
                 <p className="text-center text-xs text-slate-400">
                   PDF, e-posta şablonu ve işveren portalı bu logoyu kullanır.
                 </p>
@@ -533,9 +560,11 @@ export default function CompanySettingsPage() {
                     />
                   </label>
                   <div className="flex justify-end">
-                    <Button type="submit" loading={saving}>
-                      Kaydet
-                    </Button>
+                    {actions.can("edit") && (
+                      <Button type="submit" loading={saving}>
+                        Kaydet
+                      </Button>
+                    )}
                   </div>
                 </form>
               </CardContent>
@@ -568,13 +597,15 @@ export default function CompanySettingsPage() {
                             </span>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          className="text-xs text-red-600 hover:underline"
-                          onClick={() => setPending(account.id)}
-                        >
-                          Sil
-                        </button>
+                        {actions.can("edit") && (
+                          <button
+                            type="button"
+                            className="text-xs text-red-600 hover:underline"
+                            onClick={() => setPending(account.id)}
+                          >
+                            Sil
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -608,9 +639,11 @@ export default function CompanySettingsPage() {
                       }))
                     }
                   />
-                  <Button type="submit" loading={addingBank}>
-                    + Ekle
-                  </Button>
+                  {actions.can("edit") && (
+                    <Button type="submit" loading={addingBank}>
+                      + Ekle
+                    </Button>
+                  )}
                 </form>
               </CardContent>
             </Card>
@@ -730,9 +763,11 @@ export default function CompanySettingsPage() {
                     </div>
 
                     <div className="flex justify-end">
-                      <Button type="submit" loading={financeSaving}>
-                        Finans Ayarlarını Kaydet
-                      </Button>
+                      {actions.can("edit") && (
+                        <Button type="submit" loading={financeSaving}>
+                          Finans Ayarlarını Kaydet
+                        </Button>
+                      )}
                     </div>
                   </form>
                 )}
@@ -773,9 +808,11 @@ export default function CompanySettingsPage() {
                     required
                     className="flex-1"
                   />
-                  <Button type="submit" loading={sendingTestEmail}>
-                    Test E-postası Gönder
-                  </Button>
+                  {actions.can("edit") && (
+                    <Button type="submit" loading={sendingTestEmail}>
+                      Test E-postası Gönder
+                    </Button>
+                  )}
                 </form>
               </CardContent>
             </Card>
@@ -813,6 +850,7 @@ export default function CompanySettingsPage() {
                           setNotice(message);
                           void loadWorkHourWindows();
                         }}
+                        canEdit={actions.can("edit")}
                       />
                     ))}
                   </div>

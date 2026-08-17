@@ -75,6 +75,11 @@ export default function RfqComparisonPage() {
    */
   const actions = useModuleActions("purchasing-rfq");
 
+  // Sipariş oluşturma bu ekranda ama izni BU MODÜLDE DEĞİL: uç
+  // purchasing-orders.create istiyor. Ekranın modülüne bağlamak
+  // "gizli ama izinli" ya da tersini üretirdi.
+  const orderActions = useModuleActions("purchasing-orders");
+
   const [comparison, setComparison] =
     useState<RfqComparison | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] =
@@ -655,14 +660,16 @@ export default function RfqComparisonPage() {
                             </Button>
                           </div>
                         ) : (
-                          <Button
-                            loading={creatingOrder}
-                            disabled={creatingOrder}
-                            onClick={() => setConfirming("siparis")}
-                            className="w-full"
-                          >
-                            Satın Alma Siparişi Oluştur
-                          </Button>
+                          orderActions.can("create") && (
+                            <Button
+                              loading={creatingOrder}
+                              disabled={creatingOrder}
+                              onClick={() => setConfirming("siparis")}
+                              className="w-full"
+                            >
+                              Satın Alma Siparişi Oluştur
+                            </Button>
+                          )
                         )}
 
                         <p className="text-xs text-slate-500">

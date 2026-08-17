@@ -130,8 +130,14 @@ public sealed class TaxController(
     }
 
     /// <summary>Yanlış işaretlenen ödemeyi geri alır.</summary>
+    // YIKICI AKSİYON -> DELETE YETKİSİ. Ödeme kaydını geri almak
+    // muhasebede iz bırakan bir işlem; "düzenleme" değil. Daha önce
+    // AccountingEdit istiyordu, aynı desendeki 9 uçla birlikte
+    // daraltıldı (bkz. TEMIZLIK-TARAMASI.md). Etki ölçümü: yalnızca
+    // "Ön Muhasebe" rolünde accounting.edit var ama accounting.delete
+    // yok; diğer 14 rol etkilenmiyor.
     [HttpDelete("payments")]
-    [RequirePermission(PermissionCatalog.Keys.AccountingEdit)]
+    [RequirePermission(PermissionCatalog.Keys.AccountingDelete)]
     public async Task<IActionResult> UndoPayment(
         [FromQuery] Guid companyId,
         [FromQuery] int kind,

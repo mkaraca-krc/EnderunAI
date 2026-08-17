@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog } from "@/components/ui";
 
 import {
@@ -83,6 +84,21 @@ function formatDate(value?: string | null) {
 }
 
 export default function WorkTasksPage() {
+  /**
+   * Düğme -> uç -> izin (WorkTasksController):
+   *   POST tasks               -> tasks.manage
+   *   POST tasks/{id}/start    -> tasks.manage
+   *   POST tasks/{id}/complete -> tasks.manage
+   *   POST tasks/{id}/cancel   -> tasks.manage
+   *
+   * BU MODÜLDE YETKİ AYRIMI YOK: oluşturma, başlatma, tamamlama ve
+   * İPTAL aynı anahtarda. "Yıkıcı aksiyon delete yetkisi ister"
+   * kuralını burada uygulayamam — tasks.delete diye bir anahtar yok
+   * ve uç tek anahtar zorluyor. Arayüzde uydursaydım tasks.manage'i
+   * olan kullanıcı iptal düğmesini göremez ama uca yine erişirdi.
+   * Ayrım isteniyorsa ÖNCE uç bölünmeli (bkz. TEMIZLIK-TARAMASI.md).
+   */
+  const actions = useModuleActions("tasks");
   const [companies, setCompanies] = useState<
     CompanyListItem[]
   >([]);
@@ -430,17 +446,19 @@ export default function WorkTasksPage() {
           <span> listelendi</span>
         </div>
 
-        <button
-          type="button"
-          className="erp-primary-button"
-          onClick={() =>
-            setShowForm((value) => !value)
-          }
-        >
-          {showForm
-            ? "Formu Kapat"
-            : "+ Yeni Görev"}
-        </button>
+        {actions.can("manage") && (
+          <button
+            type="button"
+            className="erp-primary-button"
+            onClick={() =>
+              setShowForm((value) => !value)
+            }
+          >
+            {showForm
+              ? "Formu Kapat"
+              : "+ Yeni Görev"}
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -629,15 +647,17 @@ export default function WorkTasksPage() {
               Vazgeç
             </button>
 
-            <button
-              type="submit"
-              className="erp-primary-button"
-              disabled={saving}
-            >
-              {saving
-                ? "Kaydediliyor..."
-                : "Görevi Kaydet"}
-            </button>
+            {actions.can("manage") && (
+              <button
+                type="submit"
+                className="erp-primary-button"
+                disabled={saving}
+              >
+                {saving
+                  ? "Kaydediliyor..."
+                  : "Görevi Kaydet"}
+              </button>
+            )}
           </div>
         </form>
       )}
@@ -905,7 +925,8 @@ export default function WorkTasksPage() {
                       {(item.status ===
                         WorkTaskStatus.Open ||
                         item.status ===
-                          WorkTaskStatus.Waiting) && (
+                          WorkTaskStatus.Waiting) &&
+                        actions.can("manage") && (
                         <button
                           type="button"
                           disabled={
@@ -922,7 +943,7 @@ export default function WorkTasksPage() {
                         </button>
                       )}
 
-                      {!closed && (
+                      {!closed && actions.can("manage") && (
                         <button
                           type="button"
                           disabled={
@@ -940,7 +961,7 @@ export default function WorkTasksPage() {
                         </button>
                       )}
 
-                      {!closed && (
+                      {!closed && actions.can("manage") && (
                         <button
                           type="button"
                           disabled={

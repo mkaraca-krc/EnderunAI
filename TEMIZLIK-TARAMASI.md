@@ -407,3 +407,123 @@ sorun: öznitelikten türeten bir düğme kapısı, view yetkisi olan
 herkese düğmeyi gösterir ve kullanıcı 403 yer. Ya öznitelik gerçek
 gereksinimi yansıtmalı ya da o düğme özel ele alınmalı (R2/4'te
 karşılaşılacak).
+
+---
+
+## Yıkıcı uç taraması YENİLENDİ (2026-08-17) — önceki liste eksikti
+
+Yukarıdaki dokuz-uç listesi, servis katmanını yanlış okuyan bir ölçüm
+aracıyla üretildi. İki hata vardı:
+
+1. Araç, bir servis dosyasındaki **ilk** `export const` nesnesini alıyordu.
+   `cheque.service.ts` gibi dosyalarda servis nesnesi altıncı export
+   olduğu için o dosyanın hiçbir metodu eşleşmedi.
+2. Metot gövdesini bulmak için parametre listesinden sonraki ilk `{`
+   yerine ilk `{` aranıyordu. `createLoan(payload: { ... })` gibi çok
+   satırlı tipli parametrede "gövde" sanılan şey payload TİPİ oldu;
+   içinde `method:` bulunmadığı için o metotlar GET sayıldı.
+
+Sonuç: yazan uçların bir kısmı hiç taranmadı. Tarama doğrudan
+controller'lardan yeniden yapıldı (frontend'den bağımsız, bu yüzden
+servis eşleşmesi sonucu etkilemiyor): **83 yıkıcı uç, 16'sı
+delete/manage/approve dışında.**
+
+### Daraltıldı
+
+| Uç | Eski | Yeni | Etki |
+|---|---|---|---|
+| `DELETE api/tax/payments` | accounting.edit | **accounting.delete** | yalnız "Ön Muhasebe" rolü kaybediyor |
+
+Ödeme kaydını geri almak muhasebede iz bırakıyor; düzenleme değil.
+Aynı desendeki dokuz uçla tutarlı hale getirildi.
+
+**Canlı kullanıcı doğrulaması yapılamadı:** bu turda veritabanı erişimi
+yoktu. Rol tarafı statik olarak `RoleCatalog`'tan ölçüldü (15 rol, 2'si
+tam yetkili). Daha önceki turda 9 aktif kullanıcının hiçbirinde "Ön
+Muhasebe" rolü yoktu; o günden beri kullanıcı eklendiyse tek etkilenen
+o rol olur. Geri alınması tek satır.
+
+### Daraltılamaz — modülde delete anahtarı YOK
+
+| Uç | Mevcut | Neden |
+|---|---|---|
+| `DELETE api/cash-flow/tahmini-giderler/{id}` | cashflow.view | modülün TEK anahtarı `cashflow.view`; yazma da okuma da aynı kapıda |
+| `DELETE api/company-settings/bank-accounts/{id}` | company-settings.edit | `company-settings.delete` yok |
+| `DELETE api/kurumlar-vergisi-oranlari/{id}` | company-settings.edit | aynı |
+| `POST api/tasks/{id}/cancel` | tasks.manage | `tasks.delete` yok; modülde hiç ayrım yok |
+
+`cashflow` en dikkat çekeni: **görüntüleme izniyle kayıt silinebiliyor.**
+Anahtar ailesinin genişletilmesi gerekiyor (`cashflow.edit`,
+`cashflow.delete`); bu bir izin katalogu kararı, tek uçluk değil.
+
+### Yıkıcı sayılmadı — bilinçli
+
+| Uç | Mevcut | Gerekçe |
+|---|---|---|
+| `PUT hr/personnel/assignments/{id}/close` | personnel.edit | atamayı kapatmak silme değil, `EndDate` yazmak |
+| `PUT project-sites/assignments/{id}/close` | personnel.edit | aynı |
+| `POST rfq/{id}/close` | purchasing-rfq.edit | RFQ kapatmak normal akış adımı (kazanan seçildikten sonra) |
+| `POST api/bildirimler/{id}/kapat` | (izin yok) | metot içinde görünürlük kontrolü var: göremediği bildirimi kapatamıyor |
+| `POST api/hizir/actions/{id}/cancel` | ai.use | kullanıcının kendi işlemini iptali |
+
+### Yeni kayıt: kredi durumu
+
+`POST finansal-araclar/krediler/{id}/durum` **finance.edit** istiyor ve
+gövdesinde "iptal" durumu da var. Rota adında "cancel/iptal" geçmediği
+için yıkıcı taramasına düşmüyor. Durum makinesinin hangi geçişleri
+yıkıcı saydığı ayrı bir karar; şu an tek uç bütün geçişleri taşıyor.
+
+---
+
+## Arayüzde üç ayrı yetki mekanizması var (2026-08-17)
+
+R2 yayılırken ortaya çıktı. Aynı işi yapan üç desen:
+
+| Desen | Ekran sayısı | Örnek |
+|---|---|---|
+| `useModuleActions(modül).can(eylem)` | 34 | R2 ile eklenen |
+| `usePermissions()` + satır içi `has("x.y")` | 18 | `finans/gider-merkezi` |
+| `hasPermission(session, "x.y")` | 1+ | `satin-alma/butce-onay` |
+
+Üçü de aynı `/auth/me` verisine bakıyor, yani **ikinci bir izin haritası
+değil** — davranış farkı yok. Fark denetlenebilirlikte: satır içi
+anahtarlar hangi ucun istediğini yazmıyor, o yüzden uçtan ayrışıp
+ayrışmadığı gözle görülmüyor.
+
+Ölçüm yapıldı: 18 satır içi ekranın anahtarları uçlarla karşılaştırıldı.
+**İki gerçek sapma bulundu, ikisi de düzeltildi:**
+
+- `satin-alma/butce-onay` — bütçe formu `purchasing.approve ||
+  finance.approve` ile açılıyordu, uç yalnız `purchasing.approve`
+  istiyor. Yalnız finans onayı olan kullanıcı formu dolduruyor, reddi
+  KAYDEDERKEN yiyordu.
+- `projeler/[id]` — işveren portalı (create/delete/edit) ve işçilik
+  kaydı (personnel.create) hiç kapılı değildi; ekran yalnızca
+  `expense.manage` kapısını taşıyordu.
+
+Kalan 16 ekranın anahtarları uçlarla eşleşiyor; **çevirme işi
+bekliyor, hata beklemiyor.** Çevirmenin kazancı tek: kapı yorumu ucun
+adını taşıyor ve gelecekteki sapma testle yakalanabiliyor.
+
+---
+
+## `useCurrentUser` her örnekte ayrı `/auth/me` atıyordu (2026-08-17) — DÜZELTİLDİ
+
+Kanca modül düzeyinde önbellek tutmuyordu; her çağıran kendi isteğini
+açıyordu. R2 öncesinde bu görünmüyordu (sayfa başına bir-iki örnek),
+R2 ile ekranın modülü dışında izin isteyen her düğme ikinci bir
+`useModuleActions` çağrısı doğurduğu için çoğaldı — `finans/vergi`
+üç modülün iznini istiyor, `santiyeler/[siteId]` de üç.
+
+Söz (promise) modül düzeyine alındı: ilk çağıran isteği başlatır,
+diğerleri aynı sözü bekler.
+
+**Yalnızca başarılı yanıt önbellekleniyor.** 401 önbellekte kalsaydı
+giriş sonrası kullanıcı hâlâ oturumsuz görünürdü: giriş `router.push`,
+çıkış `router.replace` ile yapılıyor, yani tam sayfa yüklemesi yok ve
+modül durumu sıfırlanmıyor. İki akış da `clearCurrentUserCache()`
+çağırıyor, test bunu doğruluyor.
+
+`ErpShell` kendi `auth/me` çağrısını `apiClient` ile doğrudan yapıyor
+ve bu önbelleği KULLANMIYOR — sayfa başına hâlâ bir fazladan istek var.
+Ayrı bir tur işi.

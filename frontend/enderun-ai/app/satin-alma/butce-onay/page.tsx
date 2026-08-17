@@ -134,10 +134,20 @@ export default function ProcurementBudgetApprovalPage() {
     [companyId, projects],
   );
 
+  /*
+   * Düğme -> uç -> izin (ProcurementApprovalController):
+   *   PUT  .../companies/{id}/policy         -> system.users.manage
+   *   POST .../projects/{id}/budgets         -> purchasing.approve
+   *   PUT  .../projects/{id}/budgets/{id}    -> purchasing.approve
+   *
+   * BÜTÇE KAPISI DARALTILDI. Önce `purchasing.approve || finance.approve`
+   * idi; uç yalnızca purchasing.approve istiyor. Yalnız finance.approve'u
+   * olan kullanıcı formu görüyor, dolduruyor ve reddi ancak KAYDEDERKEN
+   * yiyordu. Kapıyı ucun istediğine eşitlemek doğru yön: uç zaten
+   * geçirmiyordu, değişen tek şey boşa doldurulan formun kalkması.
+   */
   const canConfigurePolicy = hasPermission(session, "system.users.manage");
-  const canManageBudget =
-    hasPermission(session, "purchasing.approve") ||
-    hasPermission(session, "finance.approve");
+  const canManageBudget = hasPermission(session, "purchasing.approve");
 
   async function loadDashboard(selectedCompanyId: string, selectedProjectId = "") {
     if (!selectedCompanyId) {

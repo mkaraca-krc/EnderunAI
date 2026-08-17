@@ -571,19 +571,21 @@ export default function AccountingAccountDetailPage() {
           className="erp-actions"
           style={{ marginTop: 18 }}
         >
-          <button
-            type="submit"
-            className="erp-primary-button"
-            disabled={
-              saving ||
-              !form.code.trim() ||
-              !form.name.trim()
-            }
-          >
-            {saving
-              ? "Kaydediliyor..."
-              : "Değişiklikleri Kaydet"}
-          </button>
+          {actions.can("edit") && (
+            <button
+              type="submit"
+              className="erp-primary-button"
+              disabled={
+                saving ||
+                !form.code.trim() ||
+                !form.name.trim()
+              }
+            >
+              {saving
+                ? "Kaydediliyor..."
+                : "Değişiklikleri Kaydet"}
+            </button>
+          )}
         </div>
       </form>
       <ConfirmDialog

@@ -109,8 +109,17 @@ const RULES: Rule[] = [
   { match: "/finans", permission: "finance.view" },
 
   // --- Hakediş ---
+  /*
+   * "yeni" ve "duzenle" TAM SAYFA AKSİYON EKRANI. Muhasebede olduğu
+   * gibi burada da düğme kapısı yetmez: ekranın kendisi tek bir
+   * yazma işleminden ibaret, o yüzden o işlemin izniyle açılır.
+   */
+  { match: /^\/hakedis\/yeni/, permission: "hakedis.create" },
+  { match: /^\/hakedis\/[^/]+\/duzenle/, permission: "hakedis.edit" },
   { match: "/hakedis", permission: "hakedis.view" },
+  { match: /^\/fiyat-farki\/[^/]+\/yeni/, permission: "hakedis.create" },
   { match: "/fiyat-farki", permission: "hakedis.view" },
+  { match: /^\/metrajlar\/yeni/, permission: "hakedis.create" },
   { match: "/metrajlar", permission: "hakedis.view" },
 
   // --- Satın alma ---
@@ -121,6 +130,11 @@ const RULES: Rule[] = [
   { match: "/satin-alma", permission: "purchasing.view" },
 
   // --- Depo ---
+  { match: /^\/depo-stok\/mal-kabul\/yeni/, permission: "purchasing-receipts.create" },
+  {
+    match: /^\/depo-stok\/malzeme-talepleri\/yeni/,
+    permission: "purchasing-requests.create",
+  },
   { match: "/depo", permission: "inventory.view" },
 
   // --- Filo ---
@@ -133,7 +147,9 @@ const RULES: Rule[] = [
     match: /^\/muhendislik\/(pozlar|receteler)\/ice-aktar/,
     permission: "engineering.manage",
   },
+  { match: /^\/muhendislik\/pozlar\/(yeni|ozel)/, permission: "engineering.manage" },
   { match: "/muhendislik", permission: "engineering.view" },
+  { match: /^\/kesifler\/yeni/, permission: "hakedis.create" },
   { match: "/kesifler", permission: "engineering.view" },
 
   // --- Proje alt ekranları (spesifik → genel) ---
@@ -152,6 +168,10 @@ const RULES: Rule[] = [
     match: /^\/projeler\/[^/]+\/is-programi/,
     permission: ["projects.view", "schedule.view"],
   },
+  {
+    match: /^\/projeler\/[^/]+\/santiyeler\/yeni/,
+    permission: "sites.create",
+  },
 
   // İş programını okuma bilinçli olarak geniş: planı uygulayan saha
   // (Şantiye Şefi, Formen) proje listesini görmez ama kendi terminini
@@ -159,6 +179,7 @@ const RULES: Rule[] = [
   { match: "/is-programi", permission: "schedule.view" },
 
   { match: "/projeler", permission: "projects.view" },
+  { match: /^\/teklifler\/yeni/, permission: "engineering.manage" },
   { match: "/teklifler", permission: "projects.view" },
 
   // --- Sekreterya ---

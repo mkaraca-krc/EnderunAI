@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog } from "@/components/ui";
 import {
   projectSiteService,
@@ -39,6 +40,16 @@ const emptyReportForm = {
 };
 
 function DailyReportTab({ siteId }: { siteId: string }) {
+  /**
+   * Düğme -> uç -> izin (ProjectSiteDailyReportsController):
+   *   POST   .../daily-reports                        -> site-reports.create
+   *   PUT    .../daily-reports/{id}                    -> site-reports.edit
+   *   POST   .../daily-reports/{id}/photos             -> site-reports.edit
+   *   PATCH  .../photos/{id}/visibility                -> site-reports.edit
+   *   DELETE .../photos/{id}                           -> site-reports.delete
+   *   POST   .../daily-reports/{id}/approve            -> site-reports.approve
+   */
+  const reportActions = useModuleActions("site-reports");
   const [list, setList] = useState<DailyReportListItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(todayIso());
@@ -299,7 +310,7 @@ function DailyReportTab({ siteId }: { siteId: string }) {
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
           />
-          {detail && !isApproved && (
+          {detail && !isApproved && reportActions.can("approve") && (
             <button
               type="button"
               className="erp-button"
@@ -550,9 +561,13 @@ function DailyReportTab({ siteId }: { siteId: string }) {
           </div>
 
           <div className="erp-actions">
-            <button type="submit" disabled={saving}>
-              {saving ? "Kaydediliyor..." : detail ? "Raporu Güncelle" : "Raporu Kaydet"}
-            </button>
+            {/* AYNI DÜĞME İKİ AYRI UÇ: yeni rapor POST (create),
+                mevcut rapor PUT (edit). İzin de ona göre değişiyor. */}
+            {(detail ? reportActions.can("edit") : reportActions.can("create")) && (
+              <button type="submit" disabled={saving}>
+                {saving ? "Kaydediliyor..." : detail ? "Raporu Güncelle" : "Raporu Kaydet"}
+              </button>
+            )}
           </div>
           </fieldset>
         </form>
@@ -581,10 +596,12 @@ function DailyReportTab({ siteId }: { siteId: string }) {
               />
               <span>İşverene görünür</span>
             </label>
-            <label>
-              <span>Fotoğraf Seç</span>
-              <input type="file" accept="image/*" onChange={uploadPhoto} disabled={uploadingPhoto} />
-            </label>
+            {reportActions.can("edit") && (
+              <label>
+                <span>Fotoğraf Seç</span>
+                <input type="file" accept="image/*" onChange={uploadPhoto} disabled={uploadingPhoto} />
+              </label>
+            )}
           </div>
 
           {detail.photos.length === 0 ? (
@@ -600,20 +617,24 @@ function DailyReportTab({ siteId }: { siteId: string }) {
                     </span>
                   </div>
                   <div className="erp-actions">
-                    <button
-                      type="button"
-                      className="erp-button secondary"
-                      onClick={() => togglePhotoVisibility(photo.id, photo.isVisibleToEmployer)}
-                    >
-                      {photo.isVisibleToEmployer ? "Gizle" : "Göster"}
-                    </button>
-                    <button
-                      type="button"
-                      className="erp-button secondary"
-                      onClick={() => deletePhoto(photo.id)}
-                    >
-                      Sil
-                    </button>
+                    {reportActions.can("edit") && (
+                      <button
+                        type="button"
+                        className="erp-button secondary"
+                        onClick={() => togglePhotoVisibility(photo.id, photo.isVisibleToEmployer)}
+                      >
+                        {photo.isVisibleToEmployer ? "Gizle" : "Göster"}
+                      </button>
+                    )}
+                    {reportActions.can("delete") && (
+                      <button
+                        type="button"
+                        className="erp-button secondary"
+                        onClick={() => deletePhoto(photo.id)}
+                      >
+                        Sil
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -672,6 +693,18 @@ function DailyReportTab({ siteId }: { siteId: string }) {
 }
 
 export default function ProjectSiteDetailPage() {
+  /**
+   * BU EKRANDA ÜÇ MODÜLÜN İZNİ VAR — hepsi ucundan türetildi:
+   *   POST project-sites/{id}/warehouses       -> inventory.create
+   *   POST project-sites/{id}/assignments      -> personnel.edit
+   *   PUT  project-sites/assignments/{id}/close -> personnel.edit
+   *
+   * Şantiye altında depo açmak SİTE değil STOK yetkisi istiyor; ekranın
+   * adına bakıp sites.* demek yanlış olurdu. Günlük rapor kapıları
+   * DailyReportTab içinde, ayrı modülde (site-reports.*).
+   */
+  const inventoryActions = useModuleActions("inventory");
+  const personnelActions = useModuleActions("personnel");
   const params = useParams<{ id: string; siteId: string }>();
 
   const [site, setSite] = useState<ProjectSiteDetail | null>(null);
@@ -891,9 +924,11 @@ export default function ProjectSiteDetailPage() {
               </div>
 
               <div className="erp-actions">
-                <button type="submit" disabled={creatingWarehouse}>
-                  {creatingWarehouse ? "Kaydediliyor..." : "Depoyu Kaydet"}
-                </button>
+                {inventoryActions.can("create") && (
+                  <button type="submit" disabled={creatingWarehouse}>
+                    {creatingWarehouse ? "Kaydediliyor..." : "Depoyu Kaydet"}
+                  </button>
+                )}
               </div>
             </form>
 
@@ -967,9 +1002,11 @@ export default function ProjectSiteDetailPage() {
               </div>
 
               <div className="erp-actions">
-                <button type="submit" disabled={assigning || !form.personnelId}>
-                  {assigning ? "Atanıyor..." : "Personeli Ata"}
-                </button>
+                {personnelActions.can("edit") && (
+                  <button type="submit" disabled={assigning || !form.personnelId}>
+                    {assigning ? "Atanıyor..." : "Personeli Ata"}
+                  </button>
+                )}
               </div>
             </form>
           </section>
@@ -1004,7 +1041,9 @@ export default function ProjectSiteDetailPage() {
                       </span>
                     </div>
 
-                    {assignment.isActive && !assignment.endDate ? (
+                    {assignment.isActive &&
+                    !assignment.endDate &&
+                    personnelActions.can("edit") ? (
                       <button
                         type="button"
                         className="erp-button secondary"

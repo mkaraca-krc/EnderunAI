@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { clearCurrentUserCache } from "@/lib/use-current-user";
 
 type LoginResponse = {
   token?: string;
@@ -120,6 +121,11 @@ export default function LoginPage() {
         }
         return;
       }
+
+      // Giriş client-side navigasyonla yapılıyor; oturum önbelleği
+      // temizlenmezse yeni kullanıcı eski (ya da oturumsuz) yanıtı
+      // görürdü.
+      clearCurrentUserCache();
 
       router.push("/dashboard");
       router.refresh();

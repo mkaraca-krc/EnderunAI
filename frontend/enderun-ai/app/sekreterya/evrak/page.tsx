@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog } from "@/components/ui";
 import CorrespondenceDetailModal from "@/components/secretariat/correspondence-detail-modal";
 
@@ -74,6 +75,15 @@ function formatDate(value?: string | null) {
 }
 
 export default function CorrespondencePage() {
+  /**
+   * Düğme -> uç -> izin (SecretariatController):
+   *   POST   secretariat/correspondence      -> documents.create
+   *   DELETE secretariat/correspondence/{id} -> documents.delete
+   *
+   * Sekreterya ekranlarının çoğu tek `secretariat.manage` anahtarında;
+   * evrak İSTİSNA — kendi documents.* ailesi var ve silme ayrı.
+   */
+  const actions = useModuleActions("documents");
   const [companies, setCompanies] =
     useState<CompanyListItem[]>([]);
 
@@ -303,13 +313,15 @@ export default function CorrespondencePage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white"
-            onClick={() => setShowForm((value) => !value)}
-          >
-            {showForm ? "Formu Kapat" : "Yeni Evrak"}
-          </button>
+          {actions.can("create") && (
+            <button
+              type="button"
+              className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white"
+              onClick={() => setShowForm((value) => !value)}
+            >
+              {showForm ? "Formu Kapat" : "Yeni Evrak"}
+            </button>
+          )}
         </div>
 
         {error && (
@@ -540,12 +552,14 @@ export default function CorrespondencePage() {
             </div>
 
             <div className="mt-5 flex justify-end">
-              <button
-                disabled={saving}
-                className="rounded-lg bg-brand-700 px-5 py-2 text-sm font-medium text-white disabled:opacity-60"
-              >
-                {saving ? "Kaydediliyor..." : "Evrakı Kaydet"}
-              </button>
+              {actions.can("create") && (
+                <button
+                  disabled={saving}
+                  className="rounded-lg bg-brand-700 px-5 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {saving ? "Kaydediliyor..." : "Evrakı Kaydet"}
+                </button>
+              )}
             </div>
           </form>
         )}
@@ -702,22 +716,24 @@ export default function CorrespondencePage() {
                               ` (${item.attachmentCount} ek)`}
                           </button>
 
-                          <button
-                            type="button"
-                            disabled={processingId === item.id}
-                            onClick={() =>
-                              setPending({
-                                id: item.id,
-                                direction: item.direction,
-                                subject: item.subject,
-                              })
-                            }
-                            className="text-sm font-medium text-red-600 disabled:opacity-50"
-                          >
-                            {processingId === item.id
-                              ? "Siliniyor..."
-                              : "Sil"}
-                          </button>
+                          {actions.can("delete") && (
+                            <button
+                              type="button"
+                              disabled={processingId === item.id}
+                              onClick={() =>
+                                setPending({
+                                  id: item.id,
+                                  direction: item.direction,
+                                  subject: item.subject,
+                                })
+                              }
+                              className="text-sm font-medium text-red-600 disabled:opacity-50"
+                            >
+                              {processingId === item.id
+                                ? "Siliniyor..."
+                                : "Sil"}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

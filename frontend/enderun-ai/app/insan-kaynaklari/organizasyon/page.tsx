@@ -143,6 +143,8 @@ function OrganizationNode({
   onEdit,
   onAddChild,
   onAddPosition,
+  canCreate,
+  canEdit,
 }: {
   department: HrDepartment;
   departments: HrDepartment[];
@@ -153,6 +155,14 @@ function OrganizationNode({
   onEdit: (department: HrDepartment) => void;
   onAddChild: (department: HrDepartment) => void;
   onAddPosition: (department: HrDepartment) => void;
+  /**
+   * İzin PROP olarak geliyor, kanca burada ÇAĞRILMIYOR.
+   * useCurrentUser her örnekte kendi isteğini atıyor; bu bileşen
+   * özyinelemeli olduğu için kancayı içeride çağırmak departman
+   * başına bir /me isteği demek olurdu.
+   */
+  canCreate: boolean;
+  canEdit: boolean;
 }) {
   const children = departments.filter(
     (item) => item.parentDepartmentId === department.id
@@ -207,19 +217,25 @@ function OrganizationNode({
               <span className="text-xs text-slate-500">Personel</span>
             </div>
             <div className="flex gap-1 opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
-              <Button size="sm" variant="ghost" onClick={() => onAddChild(department)}>
-                Alt birim
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onAddPosition(department)}
-              >
-                Pozisyon
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => onEdit(department)}>
-                Düzenle
-              </Button>
+              {canCreate && (
+                <Button size="sm" variant="ghost" onClick={() => onAddChild(department)}>
+                  Alt birim
+                </Button>
+              )}
+              {canCreate && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onAddPosition(department)}
+                >
+                  Pozisyon
+                </Button>
+              )}
+              {canEdit && (
+                <Button size="sm" variant="secondary" onClick={() => onEdit(department)}>
+                  Düzenle
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -257,6 +273,8 @@ function OrganizationNode({
               onEdit={onEdit}
               onAddChild={onAddChild}
               onAddPosition={onAddPosition}
+              canCreate={canCreate}
+              canEdit={canEdit}
             />
           ))}
         </div>
@@ -740,12 +758,12 @@ export default function OrganizationPage() {
               >
                 Personellere git
               </Link>
-              {actions.can("create") && actions.can("create") && actions.can("create") && (
+              {actions.can("create") && (
                 <Button variant="secondary" onClick={() => openNewDepartment()}>
                   + Yeni departman
                 </Button>
               )}
-              {actions.can("create") && actions.can("create") && actions.can("create") && (
+              {actions.can("create") && (
                 <Button
                   className="bg-emerald-500 text-slate-950 hover:bg-emerald-400"
                   onClick={() => openNewPosition()}
@@ -920,6 +938,8 @@ export default function OrganizationPage() {
                       onEdit={openEditDepartment}
                       onAddChild={openNewDepartment}
                       onAddPosition={openNewPosition}
+                      canCreate={actions.can("create")}
+                      canEdit={actions.can("edit")}
                     />
                   ))}
                 </div>
@@ -998,21 +1018,25 @@ export default function OrganizationPage() {
                             >
                               Pozisyon
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => openEditDepartment(department)}
-                            >
-                              Düzenle
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-600 hover:bg-red-50"
-                              onClick={() => setPending({ kind: "department", record: department })}
-                            >
-                              Sil
-                            </Button>
+                            {actions.can("edit") && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => openEditDepartment(department)}
+                              >
+                                Düzenle
+                              </Button>
+                            )}
+                            {actions.can("delete") && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-600 hover:bg-red-50"
+                                onClick={() => setPending({ kind: "department", record: department })}
+                              >
+                                Sil
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1114,21 +1138,25 @@ export default function OrganizationPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => openEditPosition(position)}
-                            >
-                              Düzenle
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-600 hover:bg-red-50"
-                              onClick={() => setPending({ kind: "position", record: position })}
-                            >
-                              Sil
-                            </Button>
+                            {actions.can("edit") && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => openEditPosition(position)}
+                              >
+                                Düzenle
+                              </Button>
+                            )}
+                            {actions.can("delete") && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-600 hover:bg-red-50"
+                                onClick={() => setPending({ kind: "position", record: position })}
+                              >
+                                Sil
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

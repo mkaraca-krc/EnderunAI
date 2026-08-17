@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, Drawer } from "@/components/ui";
 import { date as formatDate, money } from "@/lib/format/turkish";
 import {
@@ -33,6 +34,14 @@ import { projectService, type ProjectListItem } from "@/services/project.service
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function CashAccountsPage() {
+  /**
+   * Düğme -> uç -> izin (CashAccountsController):
+   *   POST cash-accounts                    -> finance.create
+   *   POST cash-accounts/{id}/transactions  -> finance.create
+   *
+   * Hesap açmak ve hareket girmek AYNI yetkide: uçlar öyle istiyor.
+   */
+  const actions = useModuleActions("finance");
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
 
@@ -280,13 +289,15 @@ export default function CashAccountsPage() {
         </label>
 
         <div className="erp-actions">
-          <button
-            type="button"
-            className="erp-primary-button"
-            onClick={() => setShowAccountForm(true)}
-          >
-            + Yeni Hesap
-          </button>
+          {actions.can("create") && (
+            <button
+              type="button"
+              className="erp-primary-button"
+              onClick={() => setShowAccountForm(true)}
+            >
+              + Yeni Hesap
+            </button>
+          )}
         </div>
       
         <Button variant="secondary" disabled={loading} onClick={() => void loadStatement()}>Yenile</Button>
@@ -529,13 +540,15 @@ export default function CashAccountsPage() {
               {selectedAccount.code} — {selectedAccount.name} hareketleri
             </h2>
 
-            <button
-              type="button"
-              className="erp-primary-button"
-              onClick={() => setShowTransactionForm(true)}
-            >
-              + Tahsilat / Ödeme
-            </button>
+            {actions.can("create") && (
+              <button
+                type="button"
+                className="erp-primary-button"
+                onClick={() => setShowTransactionForm(true)}
+              >
+                + Tahsilat / Ödeme
+              </button>
+            )}
           </div>
 
           <Drawer

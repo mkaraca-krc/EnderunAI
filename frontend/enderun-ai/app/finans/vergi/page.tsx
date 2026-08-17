@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog, Modal } from "@/components/ui";
 import { money, moneyWhole } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -18,6 +19,20 @@ import {
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 export default function TaxPage() {
+  /**
+   * BU EKRAN ÜÇ FARKLI MODÜLÜN İZNİNİ İSTİYOR — düğme başına ucun
+   * kendi RequirePermission'ı:
+   *   PUT    kurumlar-vergisi-oranlari -> company-settings.edit
+   *   POST   tax/vat-accrual           -> accounting.manage
+   *   POST   tax/payments              -> accounting.edit
+   *   DELETE tax/payments              -> accounting.delete
+   *
+   * "Ekranın modülü" diye tek bir anahtara bağlamak yanlış olurdu:
+   * kurumlar vergisi oranı muhasebe değil şirket ayarı yetkisiyle
+   * korunuyor.
+   */
+  const actions = useModuleActions("accounting");
+  const settingsActions = useModuleActions("company-settings");
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [year, setYear] = useState(new Date().getFullYear());
@@ -305,14 +320,16 @@ export default function TaxPage() {
               placeholder="Örn. 25"
               style={{ width: "120px" }}
             />
-            <button
-              type="button"
-              className="erp-primary-button"
-              disabled={savingRate || rateInput.trim() === "" || !companyId}
-              onClick={() => void saveRate()}
-            >
-              {savingRate ? "Kaydediliyor..." : `${year} oranını kaydet`}
-            </button>
+            {settingsActions.can("edit") && (
+              <button
+                type="button"
+                className="erp-primary-button"
+                disabled={savingRate || rateInput.trim() === "" || !companyId}
+                onClick={() => void saveRate()}
+              >
+                {savingRate ? "Kaydediliyor..." : `${year} oranını kaydet`}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -382,13 +399,15 @@ export default function TaxPage() {
                         </td>
                         <td>
                           <div className="erp-actions">
-                            <button
-                              type="button"
-                              disabled={saving}
-                              onClick={() => requestMarkPaid(item)}
-                            >
-                              Ödendi
-                            </button>
+                            {actions.can("edit") && (
+                              <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => requestMarkPaid(item)}
+                              >
+                                Ödendi
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -410,13 +429,15 @@ export default function TaxPage() {
                           </td>
                           <td>
                             <div className="erp-actions">
-                              <button
-                                type="button"
-                                disabled={saving}
-                                onClick={() => setUndoingItem(item)}
-                              >
-                                Geri Al
-                              </button>
+                              {actions.can("delete") && (
+                                <button
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() => setUndoingItem(item)}
+                                >
+                                  Geri Al
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -495,14 +516,16 @@ export default function TaxPage() {
                               {row.accrualVoucherNumber}
                             </span>
                           ) : (
-                            <button
-                              type="button"
-                              className="erp-secondary-button"
-                              disabled={saving}
-                              onClick={() => void accrue(row.month)}
-                            >
-                              Fiş Kes
-                            </button>
+                            actions.can("manage") && (
+                              <button
+                                type="button"
+                                className="erp-secondary-button"
+                                disabled={saving}
+                                onClick={() => void accrue(row.month)}
+                              >
+                                Fiş Kes
+                              </button>
+                            )
                           )}
                         </td>
                       </tr>
@@ -658,9 +681,11 @@ export default function TaxPage() {
               Vazgeç
             </Button>
 
-            <Button onClick={() => void confirmMarkPaid()} loading={saving}>
-              Ödendi olarak işaretle
-            </Button>
+            {actions.can("edit") && (
+              <Button onClick={() => void confirmMarkPaid()} loading={saving}>
+                Ödendi olarak işaretle
+              </Button>
+            )}
           </div>
         }
       >

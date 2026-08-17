@@ -13,6 +13,7 @@ import {
   decimal,
 } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import ProjectDocumentsSection from "@/components/projects/project-documents-section";
 import ProjectDangerZone from "@/components/projects/project-danger-zone";
 import { projectService } from "@/services/project.service";
@@ -178,6 +179,17 @@ export default function ProjectCenterPage() {
   // zaten gelmiyor). Kategori listesi gelmezse form kaydedemez ve
   // kullanıcı bunu boş açılan listeden görür.
   const canManageExpense = has("expense.manage");
+
+  /*
+   * İşveren portalı ve işçilik kaydı BU EKRANDA ama izinleri proje
+   * modülünde değil — ucun kendi RequirePermission'ı:
+   *   POST projects/{id}/employer-portal-link            -> employer-portal.create
+   *   POST projects/{id}/employer-portal-link/revoke     -> employer-portal.delete
+   *   POST projects/{id}/employer-portal-link/send-email -> employer-portal.edit
+   *   POST projects/{id}/labor-costs                     -> personnel.create
+   */
+  const portalActions = useModuleActions("employer-portal");
+  const laborActions = useModuleActions("personnel");
 
   // İzin isteyen kartlar yalnızca yetkiliye görünür; izin alanı boş
   // olan kartlar herkeste durur.
@@ -860,14 +872,16 @@ export default function ProjectCenterPage() {
             {!portalLink || !portalLink.isActive ? (
               <div className="erp-empty-state">
                 <p>Bu proje için aktif bir işveren portalı linki yok.</p>
-                <button
-                  type="button"
-                  className="erp-button"
-                  onClick={() => void createPortalLink()}
-                  disabled={portalLoading}
-                >
-                  {portalLoading ? "Oluşturuluyor..." : "Portal Linki Oluştur"}
-                </button>
+                {portalActions.can("create") && (
+                  <button
+                    type="button"
+                    className="erp-button"
+                    onClick={() => void createPortalLink()}
+                    disabled={portalLoading}
+                  >
+                    {portalLoading ? "Oluşturuluyor..." : "Portal Linki Oluştur"}
+                  </button>
+                )}
               </div>
             ) : (
               <div className="erp-form-card">
@@ -893,22 +907,28 @@ export default function ProjectCenterPage() {
                   >
                     {portalCopied ? "Kopyalandı ✓" : "Linki Kopyala"}
                   </button>
-                  <button
-                    type="button"
-                    className="erp-button secondary"
-                    onClick={() => void createPortalLink()}
-                    disabled={portalLoading}
-                  >
-                    Yeni Link Üret (Eskisini Geçersiz Kılar)
-                  </button>
-                  <button
-                    type="button"
-                    className="erp-button secondary"
-                    onClick={() => setRevokeOpen(true)}
-                    disabled={portalLoading}
-                  >
-                    İptal Et
-                  </button>
+                  {portalActions.can("create") && (
+                    <button
+                      type="button"
+                      className="erp-button secondary"
+                      onClick={() => void createPortalLink()}
+                      disabled={portalLoading}
+                    >
+                      Yeni Link Üret (Eskisini Geçersiz Kılar)
+                    </button>
+                  )}
+                  {/* Linki iptal etmek işverenin erişimini kesiyor:
+                      uç employer-portal.delete istiyor, create değil. */}
+                  {portalActions.can("delete") && (
+                    <button
+                      type="button"
+                      className="erp-button secondary"
+                      onClick={() => setRevokeOpen(true)}
+                      disabled={portalLoading}
+                    >
+                      İptal Et
+                    </button>
+                  )}
                 </div>
 
                 {!emailConfigured ? (
@@ -946,9 +966,11 @@ export default function ProjectCenterPage() {
                       </label>
 
                       <div className="erp-actions">
-                        <button type="submit" disabled={sendingEmail}>
-                          {sendingEmail ? "Gönderiliyor..." : "E-posta ile Gönder"}
-                        </button>
+                        {portalActions.can("edit") && (
+                          <button type="submit" disabled={sendingEmail}>
+                            {sendingEmail ? "Gönderiliyor..." : "E-posta ile Gönder"}
+                          </button>
+                        )}
                       </div>
                     </form>
                   </>
@@ -1291,9 +1313,11 @@ export default function ProjectCenterPage() {
               </div>
 
               <div className="erp-actions">
-                <button type="submit" disabled={laborSaving}>
-                  {laborSaving ? "Kaydediliyor..." : "Personel Maliyet Kaydı Ekle"}
-                </button>
+                {laborActions.can("create") && (
+                  <button type="submit" disabled={laborSaving}>
+                    {laborSaving ? "Kaydediliyor..." : "Personel Maliyet Kaydı Ekle"}
+                  </button>
+                )}
               </div>
             </form>
 

@@ -5,6 +5,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { amount as formatAmount, money, number as formatNumber } from "@/lib/format/turkish";
 import { summarizeCheques } from "@/lib/cheques/totals";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
 import { branchService, type BranchListItem } from "@/services/branch.service";
 import {
@@ -81,6 +82,20 @@ const emptyReplaceForm = {
 };
 
 export default function ChequeRegisterPage() {
+  /**
+   * Düğme -> uç -> izin (ChequesController, FactoringController):
+   *   POST   cheques                     -> finance.create
+   *   PUT    cheques/{id}                -> finance.edit
+   *   POST   cheques/{id}/replace        -> finance.edit
+   *   POST   cheques/{id}/status         -> finance.edit
+   *   POST   cheques/{id}/durum-geri-al  -> finance.approve
+   *   POST   cheques/{id}/iptal          -> finance.approve
+   *   POST   factoring                   -> finance.create
+   *   POST   factoring/preview           -> finance.view  (kapı yok:
+   *          önizleme okumadır, ekrandaki kullanıcıda zaten var)
+   */
+  const actions = useModuleActions("finance");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
 
@@ -677,13 +692,15 @@ export default function ChequeRegisterPage() {
             ))}
           </select>
 
-          <button
-            type="button"
-            className="erp-primary-button"
-            onClick={() => setShowChequeForm((value) => !value)}
-          >
-            + Yeni {direction === ChequeDirection.Received ? "Alınan" : "Verilen"} Çek
-          </button>
+          {actions.can("create") && (
+            <button
+              type="button"
+              className="erp-primary-button"
+              onClick={() => setShowChequeForm((value) => !value)}
+            >
+              + Yeni {direction === ChequeDirection.Received ? "Alınan" : "Verilen"} Çek
+            </button>
+          )}
         </div>
       </div>
 
@@ -1310,7 +1327,8 @@ export default function ChequeRegisterPage() {
             </h2>
 
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {detail.allowedNextStatuses.includes(ChequeStatus.Replaced) && (
+              {detail.allowedNextStatuses.includes(ChequeStatus.Replaced) &&
+                actions.can("edit") && (
                 <button
                   type="button"
                   className="erp-secondary-button"
@@ -1327,7 +1345,7 @@ export default function ChequeRegisterPage() {
                 </button>
               )}
 
-              {canFactor && (
+              {canFactor && actions.can("create") && (
                 <button
                   type="button"
                   className="erp-primary-button"
@@ -1558,9 +1576,11 @@ export default function ChequeRegisterPage() {
                 </div>
 
                 <div>
-                  <button type="submit" className="erp-primary-button" disabled={saving}>
-                    {saving ? "İşleniyor..." : "Durumu Güncelle"}
-                  </button>
+                  {actions.can("edit") && (
+                    <button type="submit" className="erp-primary-button" disabled={saving}>
+                      {saving ? "İşleniyor..." : "Durumu Güncelle"}
+                    </button>
+                  )}
                 </div>
               </form>
             ) : (
@@ -1591,38 +1611,47 @@ export default function ChequeRegisterPage() {
                 </small>
 
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    className="erp-secondary-button"
-                    disabled={saving}
-                    onClick={openEditModal}
-                  >
-                    Çeki Düzenle
-                  </button>
+                  {actions.can("edit") && (
+                    <button
+                      type="button"
+                      className="erp-secondary-button"
+                      disabled={saving}
+                      onClick={openEditModal}
+                    >
+                      Çeki Düzenle
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="erp-secondary-button"
-                    disabled={saving}
-                    onClick={() => {
-                      setConfirmError("");
-                      setConfirmMode("reverse");
-                    }}
-                  >
-                    Son Durumu Geri Al
-                  </button>
+                  {/* Durum geri alma ve iptal, uçta finance.approve
+                      istiyor — düzenlemeden DAHA ağır bir yetki.
+                      İkisi de muhasebe fişine ters kayıt üretiyor. */}
+                  {actions.can("approve") && (
+                    <button
+                      type="button"
+                      className="erp-secondary-button"
+                      disabled={saving}
+                      onClick={() => {
+                        setConfirmError("");
+                        setConfirmMode("reverse");
+                      }}
+                    >
+                      Son Durumu Geri Al
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="erp-secondary-button"
-                    disabled={saving}
-                    onClick={() => {
-                      setConfirmError("");
-                      setConfirmMode("void");
-                    }}
-                  >
-                    Çeki İptal Et
-                  </button>
+                  {actions.can("approve") && (
+                    <button
+                      type="button"
+                      className="erp-secondary-button"
+                      disabled={saving}
+                      onClick={() => {
+                        setConfirmError("");
+                        setConfirmMode("void");
+                      }}
+                    >
+                      Çeki İptal Et
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (

@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { clearCurrentUserCache } from "@/lib/use-current-user";
+
 type LogoutButtonProps = {
   variant?: "default" | "erp";
 };
@@ -32,6 +34,8 @@ export function LogoutButton({
       localStorage.removeItem("token");
       localStorage.removeItem("enderun_token");
       sessionStorage.removeItem("enderun-ai-sidebar-scroll");
+
+      clearCurrentUserCache();
 
       router.replace("/login");
       router.refresh();

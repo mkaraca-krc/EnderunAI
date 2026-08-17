@@ -287,4 +287,233 @@ describe("eleman seviyesi yetki (R2/1)", () => {
     // Kod tarafında sabit izin anahtarı olmamalı.
     expect(code).not.toMatch(/["'`][a-z-]+\.(create|edit|delete|approve|view)["'`]/);
   });
+  /**
+   * R2/4c kapsamı: finans, şantiye, görev ve ayar ekranları.
+   *
+   * Her satır BİR EKRAN ve o ekranda kapılanması gereken eylemler.
+   * Eylem adları uçların RequirePermission'ından geldi, düğme
+   * adlarından değil.
+   */
+  const R2_4C: Array<[string, string[]]> = [
+    ["app/finans/cekler/page.tsx", ["create", "edit", "approve"]],
+    ["app/finans/kasa-banka/page.tsx", ["create"]],
+    ["app/finans/piyasa/page.tsx", ["manage"]],
+    ["app/finans/vergi/page.tsx", ["edit", "delete", "manage"]],
+    ["app/gorevler/page.tsx", ["manage"]],
+    ["app/sekreterya/evrak/page.tsx", ["create", "delete"]],
+    ["app/sistem-yonetimi/sirket-ayarlari/page.tsx", ["edit"]],
+    ["app/projeler/[id]/santiyeler/[siteId]/page.tsx",
+      ["create", "edit", "delete", "approve"]],
+    ["app/projeler/[id]/page.tsx", ["create", "delete", "edit"]],
+    ["app/insan-kaynaklari/organizasyon/page.tsx", ["edit", "delete"]],
+    ["app/muhasebe/hesap-plani/[id]/page.tsx", ["edit", "delete"]],
+  ];
+
+  it.each(R2_4C)("R2/4c — %s aksiyonları kapılı", (relative, expected) => {
+    const text = readFileSync(join(ROOT, relative), "utf8");
+    const gated = new Set(
+      [...text.matchAll(/[Aa]ctions\.can\("([^"]+)"\)/g)].map((m) => m[1]),
+    );
+
+    for (const action of expected) {
+      expect(gated.has(action), `${relative}: ${action} kapısı yok`).toBe(true);
+    }
+  });
+
+  /**
+   * YIKICI AKSİYON, UCUN İSTEDİĞİ AĞIR YETKİDE.
+   *
+   * Çekte "Son Durumu Geri Al" ve "Çeki İptal Et" muhasebe fişine
+   * ters kayıt üretiyor; uç finance.approve istiyor — düzenlemeden
+   * daha ağır. Vergide "Geri Al" ödeme kaydını siliyor:
+   * accounting.delete. Bunlar edit'e kaysa "görünür ama reddedilir"
+   * olurdu.
+   */
+  it("yıkıcı finans aksiyonları edit'e değil approve/delete'e bağlı", () => {
+    const cheques = readFileSync(join(ROOT, "app/finans/cekler/page.tsx"), "utf8");
+
+    for (const label of ["Son Durumu Geri Al", "Çeki İptal Et"]) {
+      const at = cheques.indexOf(label);
+      expect(at, `${label} bulunamadı`).toBeGreaterThan(-1);
+
+      const before = cheques.slice(0, at);
+      const gate = before.lastIndexOf('actions.can("');
+      const action = /actions\.can\("([^"]+)"\)/.exec(before.slice(gate))?.[1];
+
+      expect(action, `${label} yanlış yetkide`).toBe("approve");
+    }
+
+    const tax = readFileSync(join(ROOT, "app/finans/vergi/page.tsx"), "utf8");
+    const undo = tax.indexOf("Geri Al");
+    const gate = tax.slice(0, undo).lastIndexOf('actions.can("');
+    expect(/actions\.can\("([^"]+)"\)/.exec(tax.slice(gate))?.[1]).toBe("delete");
+  });
+
+  /**
+   * ARAYÜZ DARALTMASI TEK BAŞINA YAPILMAZ.
+   *
+   * Vergi ekranındaki "Geri Al" accounting.delete'e bağlandı; uç hâlâ
+   * accounting.edit isterse "gizli ama izinli" doğar — yetkisi olan
+   * kullanıcı düğmeyi göremez ama API'den işlemi yine yapar. Bu test
+   * ucun da daraltıldığını doğruluyor.
+   */
+  it("vergi ödemesi geri alma ucu delete yetkisinde", () => {
+    const controller = readFileSync(
+      join(ROOT, "..", "..", "backend", "EnderunAI.Api", "Controllers", "TaxController.cs"),
+      "utf8",
+    );
+    const at = controller.indexOf('[HttpDelete("payments")]');
+    expect(at).toBeGreaterThan(-1);
+
+    const attribute = controller.slice(at, at + 200);
+    expect(attribute).toContain("AccountingDelete");
+    expect(attribute).not.toContain("AccountingEdit");
+  });
+
+  /**
+   * OTURUM İSTEĞİ PAYLAŞILIYOR.
+   *
+   * useCurrentUser her örnekte kendi `auth/me` isteğini atıyordu. R2
+   * yayıldıkça bir sayfada üç dört örnek olması normalleşti; ekranın
+   * modülü dışında izin isteyen her düğme ikinci bir çağrı doğuruyor.
+   *
+   * Önbellek YALNIZCA BAŞARILI yanıtı tutmalı ve giriş/çıkış onu
+   * temizlemeli: ikisi de router.push ile çalışıyor, yani modül
+   * durumu kendiliğinden sıfırlanmıyor. 401 önbellekte kalsaydı
+   * giriş sonrası kullanıcı hâlâ oturumsuz görünürdü.
+   */
+  it("oturum isteği paylaşılıyor ve giriş/çıkışta temizleniyor", () => {
+    const hook = readFileSync(join(ROOT, "lib", "use-current-user.ts"), "utf8");
+
+    expect(hook).toMatch(/let sessionRequest/);
+    expect(hook).toContain("clearCurrentUserCache");
+    // başarısız istek önbellekte kalmıyor
+    expect(hook).toMatch(/catch\([\s\S]{0,200}sessionRequest = null/);
+
+    for (const consumer of ["app/login/page.tsx", "components/logout-button.tsx"]) {
+      expect(
+        readFileSync(join(ROOT, consumer), "utf8"),
+        `${consumer} önbelleği temizlemiyor`,
+      ).toContain("clearCurrentUserCache()");
+    }
+  });
+
+  /**
+   * BÜTÇE KAPISI UCUN İSTEDİĞİNDEN GENİŞ OLAMAZ.
+   *
+   * `purchasing.approve || finance.approve` idi; uç yalnızca
+   * purchasing.approve istiyor. Yalnız finance.approve'u olan
+   * kullanıcı formu doldurup reddi KAYDEDERKEN yiyordu.
+   */
+  it("bütçe onay ekranı ucun istediği izne eşit", () => {
+    const text = readFileSync(join(ROOT, "app/satin-alma/butce-onay/page.tsx"), "utf8");
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+    expect(code).toContain('hasPermission(session, "purchasing.approve")');
+    expect(code).not.toContain('hasPermission(session, "finance.approve")');
+  });
+
+  /**
+   * TAM SAYFA AKSİYON EKRANI ROTA KAPISIYLA KORUNUR.
+   *
+   * "yeni" ve "duzenle" ekranlarının tek işi bir yazma çağrısı.
+   * Düğmeyi gizlemek yetmez: yalnız görüntüleme yetkisi olan biri
+   * uzun formu doldurup reddi ancak kaydederken yiyor.
+   */
+  it("yeni/duzenle ekranları rota seviyesinde kapılı", () => {
+    const rules = readFileSync(join(ROOT, "lib", "auth", "route-permissions.ts"), "utf8");
+
+    for (const fragment of [
+      "hakedis\\/yeni",
+      "hakedis\\/[^/]+\\/duzenle",
+      "fiyat-farki\\/[^/]+\\/yeni",
+      "metrajlar\\/yeni",
+      "mal-kabul\\/yeni",
+      "malzeme-talepleri\\/yeni",
+      "santiyeler\\/yeni",
+      "teklifler\\/yeni",
+    ]) {
+      expect(rules, `${fragment} rota kuralı yok`).toContain(fragment);
+    }
+  });
+  /**
+   * DÜĞME BAZINDA KAPI — eylem adının dosyada geçmesi yetmez.
+   *
+   * Önceki sürüm "bu ekranda manage kapısı var mı" diye soruyordu;
+   * dört düğmeden birinin kapısı silinse test yine geçiyordu. Sonda
+   * (probe) bunu yakaladı. Bu sürüm her düğmenin ETİKETİNDEN geriye
+   * gidip EN YAKIN kapıyı okuyor.
+   */
+  const BUTTON_GATES: Array<[string, string, string]> = [
+    // [ekran, düğme etiketi, beklenen eylem]
+    ["app/gorevler/page.tsx", "+ Yeni Görev", "manage"],
+    ["app/gorevler/page.tsx", "Görevi Kaydet", "manage"],
+    ["app/gorevler/page.tsx", "Başlat", "manage"],
+    ["app/gorevler/page.tsx", "Tamamla", "manage"],
+    ["app/finans/kasa-banka/page.tsx", "+ Yeni Hesap", "create"],
+    ["app/finans/kasa-banka/page.tsx", "+ Tahsilat / Ödeme", "create"],
+    ["app/finans/piyasa/page.tsx", "Şimdi güncelle", "manage"],
+    ["app/finans/vergi/page.tsx", "Fiş Kes", "manage"],
+    ["app/finans/vergi/page.tsx", "Ödendi", "edit"],
+    ["app/sekreterya/evrak/page.tsx", "Evrakı Kaydet", "create"],
+    ["app/sistem-yonetimi/sirket-ayarlari/page.tsx", "+ Ekle", "edit"],
+    ["app/sistem-yonetimi/sirket-ayarlari/page.tsx", "Finans Ayarlarını Kaydet", "edit"],
+    ["app/sistem-yonetimi/sirket-ayarlari/page.tsx", "Test E-postası Gönder", "edit"],
+    ["app/projeler/[id]/santiyeler/[siteId]/page.tsx", "Onayla", "approve"],
+    ["app/projeler/[id]/santiyeler/[siteId]/page.tsx", "Depoyu Kaydet", "create"],
+    ["app/projeler/[id]/santiyeler/[siteId]/page.tsx", "Personeli Ata", "edit"],
+    ["app/projeler/[id]/santiyeler/[siteId]/page.tsx", "Atamayı Kapat", "edit"],
+    ["app/projeler/[id]/page.tsx", "Portal Linki Oluştur", "create"],
+    ["app/projeler/[id]/page.tsx", "İptal Et", "delete"],
+    ["app/projeler/[id]/page.tsx", "E-posta ile Gönder", "edit"],
+    ["app/finans/cekler/page.tsx", "Durumu Güncelle", "edit"],
+    ["app/finans/cekler/page.tsx", "Çeki Düzenle", "edit"],
+  ];
+
+  it.each(BUTTON_GATES)("%s -> \"%s\" düğmesi %s kapısında", (relative, label, action) => {
+    const text = readFileSync(join(ROOT, relative), "utf8");
+
+    /*
+     * Etiket dosyada BİRDEN FAZLA yerde geçebiliyor — çoğu ekranda
+     * aynı kelime bir durum etiketi olarak da duruyor ("Ödendi",
+     * "Tamamla"). Bu yüzden yalnızca DÜĞME bağlamındaki geçişler
+     * sayılıyor: hemen öncesinde <button/<Button açılışı olanlar.
+     */
+    const occurrences: number[] = [];
+    for (let at = text.indexOf(label); at > -1; at = text.indexOf(label, at + 1)) {
+      const window = text.slice(Math.max(0, at - 600), at);
+      /*
+       * "Bu etiket açık bir düğmenin İÇİNDE mi" sorusu: penceredeki
+       * son açılış etiketi, son kapanış etiketinden sonra geliyorsa
+       * evet. Yalnızca "</button> yok" demek yetmiyordu — yan yana
+       * duran iki düğmede ikincisinin etiketi de elenirdi.
+       */
+      const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
+      const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
+      if (open > -1 && open > close) {
+        occurrences.push(at);
+      }
+    }
+
+    expect(occurrences.length, `"${label}" düğme olarak bulunamadı`).toBeGreaterThan(0);
+
+    /*
+     * DÜĞME BAĞLAMINDAKİ HER GEÇİŞ kapılı olmalı. "en az biri" demek,
+     * dört düğmeden birinin kapısı silindiğinde testi kör bırakırdı —
+     * sonda (probe) tam bunu yakaladı.
+     */
+    for (const at of occurrences) {
+      const before = text.slice(0, at);
+      const gate = before.lastIndexOf('.can("');
+
+      expect(gate, `"${label}" için kapı yok`).toBeGreaterThan(-1);
+      expect(
+        at - gate,
+        `"${label}" en yakın kapıdan ${at - gate} karakter uzakta — kapı başka düğmenin olabilir`,
+      ).toBeLessThan(900);
+
+      const nearest = /\.can\("([^"]+)"\)/.exec(before.slice(gate))?.[1];
+      expect(nearest, `"${label}" yanlış yetkide`).toBe(action);
+    }
+  });
 });

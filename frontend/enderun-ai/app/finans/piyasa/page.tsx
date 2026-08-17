@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { moneyWhole, number as formatNumber, percent } from "@/lib/format/turkish";
 import CopperAlertPanel from "@/components/market/copper-alert-panel";
 import { useCurrentUser } from "@/lib/use-current-user";
@@ -55,6 +56,13 @@ function toneOf(value?: number | null) {
  * bilmeden verilemez.
  */
 export default function MarketPage() {
+  /**
+   * Düğme -> uç -> izin (MarketController):
+   *   POST market/exchange-rates/refresh -> finance.manage
+   *   POST market/commodities/refresh    -> finance.manage
+   *   PUT  market/copper-impact/{id}     -> finance.manage
+   */
+  const actions = useModuleActions("finance");
   const [days, setDays] = useState<number>(30);
   const [copper, setCopper] = useState<CommoditySummary | null>(null);
   const [usdRates, setUsdRates] = useState<ExchangeRateRow[]>([]);
@@ -272,13 +280,20 @@ export default function MarketPage() {
           ))}
         </div>
 
-        <Button
-          variant="secondary"
-          disabled={refreshing}
-          onClick={handleRefresh}
-        >
-          {refreshing ? "Güncelleniyor..." : "Şimdi güncelle"}
-        </Button>
+        {/* "Şimdi güncelle" bir okuma tazelemesi DEĞİL: dış kaynaktan
+            kur ve emtia fiyatı çekip veritabanına yazıyor, bu yüzden uç
+            finance.manage istiyor. Yetkisi olmayan kullanıcı veriyi
+            yine tazeleyebilir — yukarıdaki gün penceresi düğmeleri
+            listeyi yeniden okuyor. */}
+        {actions.can("manage") && (
+          <Button
+            variant="secondary"
+            disabled={refreshing}
+            onClick={handleRefresh}
+          >
+            {refreshing ? "Güncelleniyor..." : "Şimdi güncelle"}
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -472,7 +487,7 @@ export default function MarketPage() {
                                 Vazgeç
                               </button>
                             </div>
-                          ) : (
+                          ) : actions.can("manage") ? (
                             <button
                               type="button"
                               className="erp-btn ghost"
@@ -488,6 +503,18 @@ export default function MarketPage() {
                                 ? "Bilinmiyor — gir"
                                 : `${formatNumber(impact.remainingTons, 0)} ton`}
                             </button>
+                          ) : (
+                            /* YETKİSİZ KULLANICIDA DEĞER KAYBOLMAZ.
+                               Bu hücre aynı zamanda tonajı GÖSTERİYOR;
+                               düğmeyi gizlemek okuma yetkisi olan
+                               kullanıcıdan veriyi de saklardı. Sadece
+                               düzenleme girişi kapanıyor. */
+                            <span>
+                              {impact.remainingTons === null ||
+                              impact.remainingTons === undefined
+                                ? "—"
+                                : `${formatNumber(impact.remainingTons, 0)} ton`}
+                            </span>
                           )}
                           <small>{impact.tonnageSourceName}</small>
                         </td>
