@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { money } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
@@ -48,6 +49,17 @@ function statusClass(status: number) {
  * olduğunda cevaplanabiliyor.
  */
 export default function ToolAssetCardPage() {
+  /**
+   * Düğme -> uç -> izin (ToolAssetsController):
+   *   POST tool-assets/{id}/assign -> personnel.CREATE (zimmet açıyor)
+   *   POST tool-assets/{id}/return -> personnel.EDIT   (zimmeti kapatıyor)
+   *
+   * ZİMMET VERMEK create, İADE ALMAK edit: uç öyle ayırmış. Sezgiye
+   * ters görünüyor ama iade mevcut zimmet kaydını güncelliyor, yeni
+   * kayıt açmıyor.
+   */
+  const actions = useModuleActions("personnel");
+
   const params = useParams<{ id: string }>();
   const assetId = params.id;
 
@@ -279,7 +291,8 @@ export default function ToolAssetCardPage() {
 
               <div style={{ display: "flex", gap: 8 }}>
                 {asset!.status !== ToolAssetStatus.Scrapped &&
-                  asset!.status !== ToolAssetStatus.InService && (
+                  asset!.status !== ToolAssetStatus.InService &&
+                  actions.can("create") && (
                     <button
                       type="button"
                       className="erp-secondary-button"
@@ -298,14 +311,16 @@ export default function ToolAssetCardPage() {
                     >
                       Tutanak
                     </Link>
-                    <button
-                      type="button"
-                      className="erp-secondary-button"
-                      onClick={() => setReturnOpen(true)}
-                      disabled={saving}
-                    >
-                      İade Al
-                    </button>
+                    {actions.can("edit") && (
+                      <button
+                        type="button"
+                        className="erp-secondary-button"
+                        onClick={() => setReturnOpen(true)}
+                        disabled={saving}
+                      >
+                        İade Al
+                      </button>
+                    )}
                   </>
                 )}
               </div>
@@ -449,13 +464,15 @@ export default function ToolAssetCardPage() {
                 </div>
 
                 <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                  <button
-                    type="submit"
-                    className="erp-primary-button"
-                    disabled={saving}
-                  >
-                    {saving ? "Kaydediliyor..." : "Kaydet"}
-                  </button>
+                  {actions.can("create") && (
+                    <button
+                      type="submit"
+                      className="erp-primary-button"
+                      disabled={saving}
+                    >
+                      {saving ? "Kaydediliyor..." : "Kaydet"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="erp-secondary-button"

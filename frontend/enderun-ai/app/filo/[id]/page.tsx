@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { money } from "@/lib/format/turkish";
 import {
   Badge,
@@ -45,6 +46,12 @@ function formatDate(value?: string | null) {
  * ayrıca yazılır (tutarı değil, sayısı).
  */
 export default function VehicleDetailPage() {
+  /**
+   * Düğme -> uç -> izin (VehiclesController):
+   *   POST vehicles/{id}/assignments -> vehicle.manage
+   */
+  const actions = useModuleActions("vehicle");
+
   const params = useParams<{ id: string }>();
   const vehicleId = params.id;
 
@@ -158,9 +165,11 @@ export default function VehicleDetailPage() {
             Yenile
           </Button>
 
-          <Button onClick={() => setAssignOpen(true)} disabled={!vehicle}>
-            Atama Yap
-          </Button>
+          {actions.can("manage") && (
+            <Button onClick={() => setAssignOpen(true)} disabled={!vehicle}>
+              Atama Yap
+            </Button>
+          )}
         </div>
       </div>
 
@@ -431,9 +440,11 @@ export default function VehicleDetailPage() {
             <Button variant="secondary" onClick={() => setAssignOpen(false)}>
               Vazgeç
             </Button>
-            <Button onClick={assign} loading={saving}>
-              Ata
-            </Button>
+            {actions.can("manage") && (
+              <Button onClick={assign} loading={saving}>
+                Ata
+              </Button>
+            )}
           </div>
         </div>
       </Modal>

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { quantity } from "@/lib/format/turkish";
 import {
   Badge,
@@ -40,6 +41,16 @@ import {
  * sınırlar ve kırptıysa söyler.
  */
 export default function ProjectMaterialRequirementPage() {
+  /**
+   * Düğme -> uç -> izin:
+   *   POST projects/{id}/material-requirement/create-request
+   *     -> purchasing-requests.create
+   *
+   * Proje ekranında ama izni SATIN ALMA TALEBİ modülünde: ürettiği şey
+   * bir satın alma talebi. projects.* demek yanlış olurdu.
+   */
+  const actions = useModuleActions("purchasing-requests");
+
   const params = useParams<{ id: string }>();
   const projectId = params.id;
 
@@ -231,12 +242,14 @@ export default function ProjectMaterialRequirementPage() {
                 Eksikleri seç
               </Button>
 
-              <Button
-                onClick={() => setFormOpen(true)}
-                disabled={selectedCount === 0}
-              >
-                Talep Oluştur ({selectedCount})
-              </Button>
+              {actions.can("create") && (
+                <Button
+                  onClick={() => setFormOpen(true)}
+                  disabled={selectedCount === 0}
+                >
+                  Talep Oluştur ({selectedCount})
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -457,9 +470,11 @@ export default function ProjectMaterialRequirementPage() {
             <Button variant="secondary" onClick={() => setFormOpen(false)}>
               Vazgeç
             </Button>
-            <Button onClick={submit} loading={saving}>
-              Taslak Talep Oluştur
-            </Button>
+            {actions.can("create") && (
+              <Button onClick={submit} loading={saving}>
+                Taslak Talep Oluştur
+              </Button>
+            )}
           </div>
         </div>
       </Modal>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   Badge,
   Button,
@@ -55,6 +56,15 @@ function emptyForm(companyId: string): SaveVehiclePayload {
  * eşik doğar ve liste "yaklaşıyor" derken bildirim merkezi susardı.
  */
 export default function FleetPage() {
+  /**
+   * Düğme -> uç -> izin (VehiclesController):
+   *   POST vehicles -> vehicle.manage
+   *
+   * BU MODÜLDE YETKİ AYRIMI YOK: yalnız vehicle.view ve vehicle.manage
+   * var. Oluşturma/düzenleme/silme ayrımı arayüzde uydurulmadı.
+   */
+  const actions = useModuleActions("vehicle");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [vehicles, setVehicles] = useState<VehicleListItem[]>([]);
@@ -196,14 +206,16 @@ export default function FleetPage() {
           </Button>
         </form>
 
-        <Button
-          onClick={() => {
-            setForm(emptyForm(companyId || companies[0]?.id || ""));
-            setFormOpen(true);
-          }}
-        >
-          + Yeni Araç
-        </Button>
+        {actions.can("manage") && (
+          <Button
+            onClick={() => {
+              setForm(emptyForm(companyId || companies[0]?.id || ""));
+              setFormOpen(true);
+            }}
+          >
+            + Yeni Araç
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -426,9 +438,11 @@ export default function FleetPage() {
           <Button variant="secondary" onClick={() => setFormOpen(false)}>
             Vazgeç
           </Button>
-          <Button onClick={submit} loading={saving}>
-            Kaydet
-          </Button>
+          {actions.can("manage") && (
+            <Button onClick={submit} loading={saving}>
+              Kaydet
+            </Button>
+          )}
         </div>
       </Modal>
     </ErpShell>

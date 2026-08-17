@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { ConfirmDialog } from "@/components/ui";
 import { quantity } from "@/lib/format/turkish";
 
@@ -109,6 +110,14 @@ const ACTION_DIALOGS: Record<
 };
 
 export default function MaterialRequestDetailPage() {
+  /**
+   * Düğme -> uç -> izin (PurchaseRequestsController):
+   *   POST purchase-requests/{id}/submit  -> purchasing-requests.edit
+   *   POST purchase-requests/{id}/approve -> purchasing-requests.approve
+   *   POST purchase-requests/{id}/cancel  -> purchasing-requests.DELETE
+   */
+  const actions = useModuleActions("purchasing-requests");
+
   const params = useParams<{ id: string }>();
   const requestId = params.id;
 
@@ -322,7 +331,7 @@ export default function MaterialRequestDetailPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  {request.status === 0 ? (
+                  {request.status === 0 && actions.can("edit") ? (
                     <button
                       type="button"
                       disabled={processing}
@@ -333,7 +342,7 @@ export default function MaterialRequestDetailPage() {
                     </button>
                   ) : null}
 
-                  {request.status === 1 ? (
+                  {request.status === 1 && actions.can("approve") ? (
                     <button
                       type="button"
                       disabled={processing}
@@ -346,7 +355,7 @@ export default function MaterialRequestDetailPage() {
 
                   {![5, 6, 7].includes(
                     request.status,
-                  ) ? (
+                  ) && actions.can("delete") ? (
                     <button
                       type="button"
                       disabled={processing}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { amount, currencyMoney } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -43,6 +44,18 @@ function messageOf(error: unknown) {
  * ayrı sekmede duruyor.
  */
 export default function PurchaseReturnsPage() {
+  /**
+   * Düğme -> uç -> izin (PurchaseReturnsController):
+   *   POST purchase-returns/{id}/durum -> purchasing-receipts.edit
+   *
+   * ÜÇ DÜĞME DE (gönderildi / kapat / iptal) AYNI UCA gidiyor: durum
+   * ilerletme tek uçta toplanmış. "İptal yıkıcıdır, delete olmalı"
+   * kuralı burada uygulanamaz — uç ayrım yapmıyor ve
+   * purchasing-receipts.delete'e bağlamak "gizli ama izinli" üretirdi.
+   * Ayrım isteniyorsa önce uç bölünmeli (bkz. TEMIZLIK-TARAMASI.md).
+   */
+  const actions = useModuleActions("purchasing-receipts");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [items, setItems] = useState<PurchaseReturnListItem[]>([]);
@@ -276,7 +289,8 @@ export default function PurchaseReturnsPage() {
                           Aç
                         </Link>
 
-                        {row.status === PURCHASE_RETURN_STATUS.Draft && (
+                        {row.status === PURCHASE_RETURN_STATUS.Draft &&
+                          actions.can("edit") && (
                           <button
                             type="button"
                             className="erp-primary-button"
@@ -289,7 +303,8 @@ export default function PurchaseReturnsPage() {
                           </button>
                         )}
 
-                        {row.status === PURCHASE_RETURN_STATUS.Sent && (
+                        {row.status === PURCHASE_RETURN_STATUS.Sent &&
+                          actions.can("edit") && (
                           <button
                             type="button"
                             className="erp-primary-button"
@@ -303,7 +318,8 @@ export default function PurchaseReturnsPage() {
                         )}
 
                         {(row.status === PURCHASE_RETURN_STATUS.Draft ||
-                          row.status === PURCHASE_RETURN_STATUS.Sent) && (
+                          row.status === PURCHASE_RETURN_STATUS.Sent) &&
+                          actions.can("edit") && (
                           <button
                             type="button"
                             className="erp-secondary-button"

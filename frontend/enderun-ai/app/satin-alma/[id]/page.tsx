@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { ConfirmDialog } from "@/components/ui";
 import {
   Badge,
@@ -120,6 +121,25 @@ const ACTION_DIALOGS: Record<
 };
 
 export default function PurchaseRequestDetailPage() {
+  /**
+   * Düğme -> uç -> izin (PurchaseRequestsController, RfqController):
+   *   POST purchase-requests/{id}/submit -> purchasing-requests.edit
+   *   POST purchase-requests/{id}/approve -> purchasing-requests.approve
+   *   POST purchase-requests/{id}/reject  -> purchasing-requests.approve
+   *   POST purchase-requests/{id}/iade    -> purchasing-requests.approve
+   *   POST purchase-requests/{id}/cancel  -> purchasing-requests.DELETE
+   *   POST rfq/create-from-purchase-request/{id} -> purchasing-RFQ.create
+   *
+   * ONAYLA / DÜZELTMEYE İADE / REDDET ÜÇÜ AYNI YETKİDE: üçü de onay
+   * makamının kararı, hiçbiri defter izi bırakmıyor. İptal ayrı ve
+   * daha ağır (delete).
+   *
+   * RFQ OLUŞTURMA BU EKRANDA AMA BAŞKA MODÜLÜN İZNİNİ İSTİYOR:
+   * purchasing-rfq.create. Talep modülüne bağlamak yanlış olurdu.
+   */
+  const actions = useModuleActions("purchasing-requests");
+  const rfqActions = useModuleActions("purchasing-rfq");
+
   const params = useParams<{ id: string }>();
   const router = useRouter();
 
@@ -345,7 +365,8 @@ export default function PurchaseRequestDetailPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  {(item.status === 0 || item.status === 8) && (
+                  {(item.status === 0 || item.status === 8) &&
+                    actions.can("edit") && (
                     <Button
                       loading={processing}
                       onClick={() => setPendingAction("submit")}
@@ -356,7 +377,7 @@ export default function PurchaseRequestDetailPage() {
                     </Button>
                   )}
 
-                  {item.status === 1 && (
+                  {item.status === 1 && actions.can("approve") && (
                     <>
                       <Button
                         loading={processing}
@@ -383,7 +404,7 @@ export default function PurchaseRequestDetailPage() {
                     </>
                   )}
 
-                  {item.status === 2 && (
+                  {item.status === 2 && rfqActions.can("create") && (
                     <Button
                       variant="secondary"
                       onClick={() =>
@@ -405,7 +426,8 @@ export default function PurchaseRequestDetailPage() {
                     </Link>
                   )}
 
-                  {![5, 6, 7].includes(item.status) && (
+                  {![5, 6, 7].includes(item.status) &&
+                    actions.can("delete") && (
                     <Button
                       variant="danger"
                       loading={processing}
@@ -513,18 +535,20 @@ export default function PurchaseRequestDetailPage() {
                       Vazgeç
                     </Button>
 
-                    <Button
-                      type="button"
-                      loading={creatingRfq}
-                      disabled={
-                        suppliers.length === 0 ||
-                        selectedSupplierIds.length === 0 ||
-                        !rfqTitle.trim()
-                      }
-                      onClick={createRfq}
-                    >
-                      RFQ Oluştur
-                    </Button>
+                    {rfqActions.can("create") && (
+                      <Button
+                        type="button"
+                        loading={creatingRfq}
+                        disabled={
+                          suppliers.length === 0 ||
+                          selectedSupplierIds.length === 0 ||
+                          !rfqTitle.trim()
+                        }
+                        onClick={createRfq}
+                      >
+                        RFQ Oluştur
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>

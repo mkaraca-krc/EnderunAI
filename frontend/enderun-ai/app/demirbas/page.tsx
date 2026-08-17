@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { amount } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -55,6 +56,19 @@ const emptyForm: SaveToolAssetPayload = {
  * alet bazında birikir.
  */
 export default function ToolAssetsPage() {
+  /**
+   * Düğme -> uç -> izin (ToolAssetsController):
+   *   POST tool-assets      -> PERSONNEL.create
+   *   PUT  tool-assets/{id} -> PERSONNEL.edit
+   *
+   * DEMİRBAŞ EKRANI AMA İZİN PERSONEL AİLESİNDE. Ekran adına bakıp
+   * inventory.* demek tahmin olurdu; uçlar personnel.* zorluyor
+   * (alet zimmeti personel kaydına bağlı).
+   *
+   * "Kaydet" AYNI DÜĞME İKİ AYRI UÇ: düzenlemede PUT, yenide POST.
+   */
+  const actions = useModuleActions("personnel");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [assets, setAssets] = useState<ToolAsset[]>([]);
 
@@ -244,9 +258,11 @@ export default function ToolAssetsPage() {
           <Link className="erp-secondary-button" href="/demirbas/servis">
             Servis Talepleri
           </Link>
-          <button type="button" className="erp-primary-button" onClick={openCreate}>
-            Yeni Alet
-          </button>
+          {actions.can("create") && (
+            <button type="button" className="erp-primary-button" onClick={openCreate}>
+              Yeni Alet
+            </button>
+          )}
         </div>
       </div>
 
@@ -343,9 +359,11 @@ export default function ToolAssetsPage() {
             </label>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <button type="submit" className="erp-primary-button" disabled={saving}>
-                {saving ? "Kaydediliyor..." : "Kaydet"}
-              </button>
+              {(editingId ? actions.can("edit") : actions.can("create")) && (
+                <button type="submit" className="erp-primary-button" disabled={saving}>
+                  {saving ? "Kaydediliyor..." : "Kaydet"}
+                </button>
+              )}
               <button
                 type="button"
                 className="erp-secondary-button"
@@ -438,13 +456,15 @@ export default function ToolAssetsPage() {
                           >
                             Kart
                           </Link>
-                          <button
-                            type="button"
-                            className="erp-secondary-button"
-                            onClick={() => openEdit(asset)}
-                          >
-                            Düzenle
-                          </button>
+                          {actions.can("edit") && (
+                            <button
+                              type="button"
+                              className="erp-secondary-button"
+                              onClick={() => openEdit(asset)}
+                            >
+                              Düzenle
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

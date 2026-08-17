@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { money } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { projectService, type ProjectListItem } from "@/services/project.service";
@@ -76,6 +77,20 @@ function nextStates(status: number): [number, string][] {
 }
 
 function ServiceRequestsContent() {
+  /**
+   * Düğme -> uç -> izin (ToolServiceRequestsController):
+   *   POST tool-service-requests                        -> personnel.create
+   *   POST tool-service-requests/{id}/decide            -> personnel.edit
+   *   POST tool-service-requests/{id}/advance           -> personnel.edit
+   *   POST tool-service-requests/{id}/replacement-request
+   *        -> PURCHASING-REQUESTS.create
+   *
+   * SON DÜĞME BAŞKA MODÜLDE: hurdaya ayrılan aletin yerine SATIN ALMA
+   * TALEBİ açıyor. Servis ekranında olması onu personnel.* yapmıyor.
+   */
+  const actions = useModuleActions("personnel");
+  const purchasingActions = useModuleActions("purchasing-requests");
+
   const searchParams = useSearchParams();
   const presetAssetId = searchParams.get("assetId") ?? "";
 
@@ -349,9 +364,11 @@ function ServiceRequestsContent() {
             </select>
           </label>
 
-          <button type="submit" className="erp-primary-button" disabled={saving}>
-            {saving ? "Açılıyor..." : "Talep Aç"}
-          </button>
+          {actions.can("create") && (
+            <button type="submit" className="erp-primary-button" disabled={saving}>
+              {saving ? "Açılıyor..." : "Talep Aç"}
+            </button>
+          )}
         </form>
       </section>
 
@@ -415,9 +432,11 @@ function ServiceRequestsContent() {
             </label>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <button type="submit" className="erp-primary-button" disabled={saving}>
-                Kararı Kaydet
-              </button>
+              {actions.can("edit") && (
+                <button type="submit" className="erp-primary-button" disabled={saving}>
+                  Kararı Kaydet
+                </button>
+              )}
               <button
                 type="button"
                 className="erp-secondary-button"
@@ -489,7 +508,8 @@ function ServiceRequestsContent() {
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {request.decision === ToolServiceDecision.Pending &&
                           request.status !== ToolServiceStatus.Completed &&
-                          request.status !== ToolServiceStatus.Scrapped && (
+                          request.status !== ToolServiceStatus.Scrapped &&
+                          actions.can("edit") && (
                             <button
                               type="button"
                               className="erp-secondary-button"
@@ -502,7 +522,8 @@ function ServiceRequestsContent() {
                             </button>
                           )}
 
-                        {nextStates(request.status).map(([value, label]) => (
+                        {actions.can("edit") &&
+                          nextStates(request.status).map(([value, label]) => (
                           <button
                             key={value}
                             type="button"
@@ -514,7 +535,8 @@ function ServiceRequestsContent() {
                         ))}
 
                         {request.status === ToolServiceStatus.Scrapped &&
-                          !request.replacementPurchaseRequestId && (
+                          !request.replacementPurchaseRequestId &&
+                          purchasingActions.can("create") && (
                             <button
                               type="button"
                               className="erp-secondary-button"

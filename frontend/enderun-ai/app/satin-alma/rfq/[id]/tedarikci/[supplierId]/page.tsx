@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { currencyMoney } from "@/lib/format/turkish";
 import {
   Badge,
@@ -55,6 +56,15 @@ function formatMoney(value: number, currency: string) {
 }
 
 export default function SupplierQuotationPage() {
+  /**
+   * Düğme -> uç -> izin (RfqController):
+   *   POST rfq/{id}/suppliers/{supplierId}/quotation -> purchasing-rfq.edit
+   *
+   * "Teklifi Kaydet" ekranda İKİ YERDE (üstte ve altta); ikisi de aynı
+   * uca gidiyor, ikisi de kapılandı.
+   */
+  const actions = useModuleActions("purchasing-rfq");
+
   const params = useParams<{
     id: string;
     supplierId: string;
@@ -353,12 +363,14 @@ export default function SupplierQuotationPage() {
                     Vazgeç
                   </Link>
 
-                  <Button
-                    loading={saving}
-                    onClick={saveQuotation}
-                  >
-                    Teklifi Kaydet
-                  </Button>
+                  {actions.can("edit") && (
+                    <Button
+                      loading={saving}
+                      onClick={saveQuotation}
+                    >
+                      Teklifi Kaydet
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -689,12 +701,14 @@ export default function SupplierQuotationPage() {
                     Vazgeç
                   </Link>
 
-                  <Button
-                    loading={saving}
-                    onClick={saveQuotation}
-                  >
-                    Teklifi Kaydet
-                  </Button>
+                  {actions.can("edit") && (
+                    <Button
+                      loading={saving}
+                      onClick={saveQuotation}
+                    >
+                      Teklifi Kaydet
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardContent>

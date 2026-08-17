@@ -512,8 +512,27 @@ describe("eleman seviyesi yetki (R2/1)", () => {
         `"${label}" en yakın kapıdan ${at - gate} karakter uzakta — kapı başka düğmenin olabilir`,
       ).toBeLessThan(900);
 
-      const nearest = /\.can\("([^"]+)"\)/.exec(before.slice(gate))?.[1];
-      expect(nearest, `"${label}" yanlış yetkide`).toBe(action);
+      /*
+       * KANCA ADI DA KARŞILAŞTIRILIYOR.
+       *
+       * Önce yalnız eylem adına bakılıyordu; `rfqActions.can("create")`
+       * yerine `actions.can("create")` yazılsa test geçiyordu — yani
+       * çapraz modül kapısının yanlış modüle kayması yakalanmıyordu.
+       * Sonda (probe) bunu gösterdi.
+       *
+       * Beklenen değer "create" ise yalnız eylem, "rfqActions.create"
+       * ise kanca + eylem karşılaştırılır.
+       */
+      // Dilim `.can("` ile başlıyor; kanca adı ONDAN ÖNCE, o yüzden
+      // pencere geriye açılıyor ve en SON eşleşme alınıyor.
+      const gateText = before.slice(Math.max(0, gate - 40));
+      const found = [...gateText.matchAll(/(\w+)\.can\("([^"]+)"\)/g)];
+      const match = found[found.length - 1];
+      const actual = action.includes(".")
+        ? `${match?.[1]}.${match?.[2]}`
+        : match?.[2];
+
+      expect(actual, `"${label}" yanlış kapıda`).toBe(action);
     }
   });
   /**
@@ -561,8 +580,27 @@ describe("eleman seviyesi yetki (R2/1)", () => {
       expect(gate, `"${label}" için kapı yok`).toBeGreaterThan(-1);
       expect(at - gate, `"${label}" kapıdan çok uzak`).toBeLessThan(900);
 
-      const nearest = /\.can\("([^"]+)"\)/.exec(before.slice(gate))?.[1];
-      expect(nearest, `"${label}" yanlış yetkide`).toBe(action);
+      /*
+       * KANCA ADI DA KARŞILAŞTIRILIYOR.
+       *
+       * Önce yalnız eylem adına bakılıyordu; `rfqActions.can("create")`
+       * yerine `actions.can("create")` yazılsa test geçiyordu — yani
+       * çapraz modül kapısının yanlış modüle kayması yakalanmıyordu.
+       * Sonda (probe) bunu gösterdi.
+       *
+       * Beklenen değer "create" ise yalnız eylem, "rfqActions.create"
+       * ise kanca + eylem karşılaştırılır.
+       */
+      // Dilim `.can("` ile başlıyor; kanca adı ONDAN ÖNCE, o yüzden
+      // pencere geriye açılıyor ve en SON eşleşme alınıyor.
+      const gateText = before.slice(Math.max(0, gate - 40));
+      const found = [...gateText.matchAll(/(\w+)\.can\("([^"]+)"\)/g)];
+      const match = found[found.length - 1];
+      const actual = action.includes(".")
+        ? `${match?.[1]}.${match?.[2]}`
+        : match?.[2];
+
+      expect(actual, `"${label}" yanlış kapıda`).toBe(action);
     }
   });
 
@@ -617,5 +655,173 @@ describe("eleman seviyesi yetki (R2/1)", () => {
     // ana veri ekranları silinmedi
     const rules = readFileSync(join(ROOT, "lib", "auth", "route-permissions.ts"), "utf8");
     expect(rules).toContain("fiyat-farki");
+  });
+  /**
+   * R2/4d yığın 2 — satın alma, depo, demirbaş, filo.
+   *
+   * Bu yığının dersi: EKRAN ADI MODÜLÜ BELİRLEMİYOR.
+   *   demirbaş ekranları  -> personnel.*        (zimmet personele bağlı)
+   *   "Yerine Talep Aç"   -> purchasing-requests.create (satın alma talebi açıyor)
+   *   "RFQ Oluştur"       -> purchasing-rfq.create      (talep ekranında ama RFQ modülü)
+   *   malzeme ihtiyacı    -> purchasing-requests.create (proje ekranında)
+   */
+  const R2_4D2: Array<[string, string, string]> = [
+    ["app/satin-alma/[id]/page.tsx", "Onaya Gönder", "edit"],
+    ["app/satin-alma/[id]/page.tsx", "Onayla", "approve"],
+    ["app/satin-alma/[id]/page.tsx", "Düzeltmeye İade Et", "approve"],
+    ["app/satin-alma/[id]/page.tsx", "Reddet", "approve"],
+    ["app/satin-alma/[id]/page.tsx", "İptal Et", "delete"],
+    ["app/satin-alma/[id]/page.tsx", "RFQ Oluştur", "rfqActions.create"],
+    ["app/satin-alma/rfq/[id]/tedarikci/[supplierId]/page.tsx", "Teklifi Kaydet", "edit"],
+    ["app/depo-stok/malzeme-talepleri/[id]/page.tsx", "Onaya Gönder", "edit"],
+    ["app/depo-stok/malzeme-talepleri/[id]/page.tsx", "Talebi Onayla", "approve"],
+    ["app/depo-stok/malzeme-talepleri/[id]/page.tsx", "Talebi İptal Et", "delete"],
+    ["app/depo-stok/iadeler/page.tsx", "Tedarikçiye Gönderildi", "edit"],
+    ["app/projeler/[id]/malzeme-ihtiyaci/page.tsx", "Taslak Talep Oluştur", "actions.create"],
+    ["app/demirbas/page.tsx", "Yeni Alet", "create"],
+    ["app/demirbas/page.tsx", "Düzenle", "edit"],
+    ["app/demirbas/[id]/page.tsx", "İade Al", "edit"],
+    ["app/demirbas/servis/page.tsx", "Talep Aç", "create"],
+    ["app/demirbas/servis/page.tsx", "Kararı Kaydet", "edit"],
+    ["app/demirbas/servis/page.tsx", "Karar Ver", "edit"],
+    ["app/demirbas/servis/page.tsx", "Yerine Talep Aç", "purchasingActions.create"],
+    ["app/filo/page.tsx", "+ Yeni Araç", "manage"],
+    ["app/filo/[id]/page.tsx", "Atama Yap", "manage"],
+    ["app/filo/[id]/page.tsx", "Ata", "manage"],
+  ];
+
+  it.each(R2_4D2)("%s -> \"%s\" %s kapısında", (relative, label, action) => {
+    const text = readFileSync(join(ROOT, relative), "utf8");
+
+    const occurrences: number[] = [];
+    for (let at = text.indexOf(label); at > -1; at = text.indexOf(label, at + 1)) {
+      const window = text.slice(Math.max(0, at - 600), at);
+      const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
+      const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
+      if (open > -1 && open > close) occurrences.push(at);
+    }
+
+    expect(occurrences.length, `"${label}" düğme olarak bulunamadı`).toBeGreaterThan(0);
+
+    for (const at of occurrences) {
+      const before = text.slice(0, at);
+      const gate = before.lastIndexOf('.can("');
+
+      expect(gate, `"${label}" için kapı yok`).toBeGreaterThan(-1);
+      expect(at - gate, `"${label}" kapıdan çok uzak`).toBeLessThan(900);
+
+      /*
+       * KANCA ADI DA KARŞILAŞTIRILIYOR.
+       *
+       * Önce yalnız eylem adına bakılıyordu; `rfqActions.can("create")`
+       * yerine `actions.can("create")` yazılsa test geçiyordu — yani
+       * çapraz modül kapısının yanlış modüle kayması yakalanmıyordu.
+       * Sonda (probe) bunu gösterdi.
+       *
+       * Beklenen değer "create" ise yalnız eylem, "rfqActions.create"
+       * ise kanca + eylem karşılaştırılır.
+       */
+      // Dilim `.can("` ile başlıyor; kanca adı ONDAN ÖNCE, o yüzden
+      // pencere geriye açılıyor ve en SON eşleşme alınıyor.
+      const gateText = before.slice(Math.max(0, gate - 40));
+      const found = [...gateText.matchAll(/(\w+)\.can\("([^"]+)"\)/g)];
+      const match = found[found.length - 1];
+      const actual = action.includes(".")
+        ? `${match?.[1]}.${match?.[2]}`
+        : match?.[2];
+
+      expect(actual, `"${label}" yanlış kapıda`).toBe(action);
+    }
+  });
+
+  /**
+   * ÇAPRAZ MODÜL KAPILARI İKİNCİ KANCADAN GELİYOR.
+   *
+   * Bir düğme ekranın modülü dışında bir izin istiyorsa, o izin ayrı
+   * bir `useModuleActions` çağrısıyla alınmalı. Ekranın kancasına
+   * bağlamak (örneğin "RFQ Oluştur"u purchasing-requests'e) sessizce
+   * yanlış yetkiye bakardı.
+   */
+  it("çapraz modül aksiyonları ayrı kanca kullanıyor", () => {
+    const cases: Array<[string, string]> = [
+      ["app/satin-alma/[id]/page.tsx", 'useModuleActions("purchasing-rfq")'],
+      ["app/demirbas/servis/page.tsx", 'useModuleActions("purchasing-requests")'],
+      ["app/projeler/[id]/malzeme-ihtiyaci/page.tsx", 'useModuleActions("purchasing-requests")'],
+    ];
+
+    for (const [relative, expected] of cases) {
+      expect(
+        readFileSync(join(ROOT, relative), "utf8"),
+        `${relative}: ${expected} yok`,
+      ).toContain(expected);
+    }
+  });
+
+  /**
+   * DEMİRBAŞ EKRANLARI personnel.* KULLANIYOR, inventory.* DEĞİL.
+   *
+   * Ekran adına bakan biri inventory derdi; uçlar personnel zorluyor
+   * çünkü alet zimmeti personel kaydına bağlı. Bu test o türetmenin
+   * geri kaymasını engelliyor.
+   */
+  it("demirbaş kapıları personel modülünde", () => {
+    for (const relative of [
+      "app/demirbas/page.tsx",
+      "app/demirbas/[id]/page.tsx",
+      "app/demirbas/servis/page.tsx",
+    ]) {
+      const text = readFileSync(join(ROOT, relative), "utf8");
+      expect(text, `${relative}`).toContain('useModuleActions("personnel")');
+      expect(text, `${relative} inventory kullanmamalı`).not.toContain(
+        'useModuleActions("inventory")',
+      );
+    }
+  });
+
+  /**
+   * ZİMMET VERMEK create, İADE ALMAK edit.
+   *
+   * Sezgiye ters: "iade = geri alma = delete" denirdi. Uç öyle
+   * kurmamış — iade MEVCUT zimmet kaydını güncelliyor, yeni kayıt
+   * açmıyor. Düğme adından değil uçtan türetmenin örneği.
+   */
+  it("zimmet ver create, iade al edit yetkisinde", () => {
+    const text = readFileSync(join(ROOT, "app/demirbas/[id]/page.tsx"), "utf8");
+
+    const returnAt = text.indexOf("İade Al");
+    const returnGate = text.slice(0, returnAt).lastIndexOf('.can("');
+    expect(/\.can\("([^"]+)"\)/.exec(text.slice(returnGate))?.[1]).toBe("edit");
+
+    // zimmet verme düğmesi ("Zimmet Ver" / "Devret") create kapısında
+    const assignAt = text.indexOf("Zimmet Ver");
+    expect(assignAt).toBeGreaterThan(-1);
+    const assignGate = text.slice(0, assignAt).lastIndexOf('.can("');
+    expect(/\.can\("([^"]+)"\)/.exec(text.slice(assignGate))?.[1]).toBe("create");
+  });
+  /**
+   * AYNI DÜĞME İKİ AYRI UCA GİDİYORSA KAPI DA İKİ DALLI OLMALI.
+   *
+   * Bir form hem yeni kayıt (POST -> create) hem düzenleme
+   * (PUT -> edit) yapıyorsa tek anahtara indirgemek iki yönde de
+   * bozuk: `create`e bağlanırsa düzenleme yetkisi olan kaydedemez,
+   * `edit`e bağlanırsa yeni kayıt açan göremez.
+   *
+   * Sonda bu testin yokluğunda dalın sessizce silinebildiğini
+   * gösterdi: ternary'yi tek çağrıya indirince hiçbir test düşmedi.
+   */
+  const DUAL_ENDPOINT_BUTTONS: Array<[string, string]> = [
+    ["app/demirbas/page.tsx", "Kaydediliyor..."],
+    ["app/projeler/[id]/santiyeler/[siteId]/page.tsx", "Raporu Güncelle"],
+  ];
+
+  it.each(DUAL_ENDPOINT_BUTTONS)("%s -> \"%s\" iki dallı kapıda", (relative, label) => {
+    const text = readFileSync(join(ROOT, relative), "utf8");
+    const at = text.indexOf(label);
+    expect(at, `"${label}" bulunamadı`).toBeGreaterThan(-1);
+
+    const before = text.slice(Math.max(0, at - 400), at);
+
+    expect(before, `"${label}": create dalı yok`).toContain('can("create")');
+    expect(before, `"${label}": edit dalı yok`).toContain('can("edit")');
   });
 });

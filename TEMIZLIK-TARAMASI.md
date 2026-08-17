@@ -620,3 +620,32 @@ Hiçbir düğmeye bağlı OLMAYAN üç işleyici (`downloadPricePdf`,
     sipariş, kesinti, stok çıkışı). Excel şablonları referans olur.
   - Hayır ise → iki görünür düğme kaldırılır, `report.service.ts`
     silinir.
+
+---
+
+## Arayüzde uygulanamayan yetki ayrımları — uç bölünmeli (2026-08-17, R2/4d)
+
+"Yıkıcı aksiyon delete yetkisi ister" kuralı bazı modüllerde
+UYGULANAMIYOR: uç ayrım yapmıyor. Arayüzde uydurmak "gizli ama izinli"
+üretirdi — kullanıcı düğmeyi göremez ama API'den işlemi yine yapar.
+
+| Ekran / uç | Tek anahtar | Ayrılması gereken |
+|---|---|---|
+| `POST purchase-returns/{id}/durum` | purchasing-receipts.edit | üç düğme (tedarikçiye gönderildi / kapat / **iptal**) aynı uca gidiyor; durum ilerletme tek uçta |
+| `POST tasks/{id}/*` | tasks.manage | oluştur/başlat/tamamla/**iptal** ayrımı yok; `tasks.delete` anahtarı da yok |
+| `POST vehicles`, `POST vehicles/{id}/assignments` | vehicle.manage | modülde yalnız `vehicle.view` + `vehicle.manage`; create/edit/delete yok |
+| `secretariat.manage` (kargo, ziyaretçiler) | secretariat.manage | create/edit/delete ayrımı yok |
+| `subcontractor.manage` | subcontractor.manage | aynı |
+| `salary.manage` (ücret kartları) | salary.manage | create/update/**delete** aynı anahtarda |
+| `company-settings.edit` | company-settings.edit | banka hesabı **silme** de edit'te; `company-settings.delete` yok |
+
+Bunların hepsinde arayüz ucun istediği anahtara eşitlendi ve gerekçe
+kodda yorum olarak yazıldı. Ayrım isteniyorsa sıra şu: önce
+`PermissionCatalog`'a anahtar, sonra uçta `RequirePermission`, sonra
+rol dağıtımı (etki ölçümü), en son arayüz — arayüz her zaman SON.
+
+### Ayrıca: kredi durumu tek uçta
+`POST finansal-araclar/krediler/{id}/durum` (finance.edit) gövdesinde
+"iptal" durumu da var. Rota adında "cancel/iptal" geçmediği için yıkıcı
+taramasına düşmüyor. Durum makinesinin hangi geçişlerinin yıkıcı
+sayıldığı ayrı bir karar.
