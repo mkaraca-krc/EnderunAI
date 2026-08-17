@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   Badge,
   Button,
@@ -85,6 +86,12 @@ function formatDate(value?: string | null) {
 }
 
 export default function PersonnelPage() {
+  /**
+   * Düğme -> uç -> izin:
+   *   POST hr/personnel -> personnel.create
+   */
+  const actions = useModuleActions("personnel");
+
   const [items, setItems] = useState<PersonnelListItem[]>([]);
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [branches, setBranches] = useState<BranchListItem[]>([]);
@@ -369,12 +376,14 @@ export default function PersonnelPage() {
           Yenile
         </Button>
 
-        <Button
-          type="button"
-          onClick={() => setShowForm((value) => !value)}
-        >
-          {showForm ? "Formu Kapat" : "+ Yeni Personel"}
-        </Button>
+        {actions.can("create") && (
+          <Button
+            type="button"
+            onClick={() => setShowForm((value) => !value)}
+          >
+            {showForm ? "Formu Kapat" : "+ Yeni Personel"}
+          </Button>
+        )}
       </div>
 
       {showForm && (
@@ -523,9 +532,11 @@ export default function PersonnelPage() {
                   Vazgeç
                 </Button>
 
-                <Button type="submit" loading={saving}>
-                  Personeli Kaydet
-                </Button>
+                {actions.can("create") && (
+                  <Button type="submit" loading={saving}>
+                    Personeli Kaydet
+                  </Button>
+                )}
               </div>
             </form>
           </CardContent>

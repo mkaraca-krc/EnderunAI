@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { ConfirmDialog } from "@/components/ui";
 import { money } from "@/lib/format/turkish";
 
@@ -71,6 +72,29 @@ const REJECTION_TEXT = {
 } as const;
 
 export default function ApprovalCenterPage() {
+  /**
+   * ONAY MERKEZİ DÖRT MODÜLÜN ONAYINI TEK EKRANDA TOPLUYOR — her
+   * bölümün kapısı kendi ucundan geliyor:
+   *   POST progress-payments/{id}/approve      -> hakedis.approve
+   *   POST progress-payments/{id}/cancel       -> hakedis.DELETE
+   *   POST purchase-orders/{id}/approve        -> purchasing-orders.approve
+   *   POST purchase-orders/{id}/reject         -> purchasing-orders.approve
+   *   POST purchase-requests/{id}/approve      -> purchasing-requests.approve
+   *   POST purchase-requests/{id}/cancel       -> purchasing-requests.DELETE
+   *   POST .../daily-reports/{id}/approve      -> site-reports.approve
+   *
+   * TEK BİR "onay yetkisi" YOK. Ekranın kendisi bir kapıya bağlanamaz:
+   * yalnız satın alma onayı olan kullanıcı hakediş bölümünü görmemeli
+   * ama sipariş bölümünü görmeli. Bölüm bölüm kapılandı.
+   *
+   * REDDETMEK ONAYLAMAKLA aynı yetkide, İPTAL ETMEK delete'te — iptal
+   * defter izi bırakıyor, ret akışı sonlandırıyor.
+   */
+  const hakedisActions = useModuleActions("hakedis");
+  const orderActions = useModuleActions("purchasing-orders");
+  const requestActions = useModuleActions("purchasing-requests");
+  const reportActions = useModuleActions("site-reports");
+
   const [progressPayments, setProgressPayments] =
     useState<ProgressPaymentListItem[]>([]);
 
@@ -391,6 +415,7 @@ export default function ApprovalCenterPage() {
                     Detay
                   </Link>
 
+                  {hakedisActions.can("approve") && (
                   <button
                     type="button"
                     className="erp-primary-button"
@@ -414,17 +439,22 @@ export default function ApprovalCenterPage() {
                       ? "İşleniyor..."
                       : "Onayla"}
                   </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="approval-danger-button"
-                    disabled={processing !== null}
-                    onClick={() =>
-                      setRejection({ kind: "progress-cancel", id: item.id })
-                    }
-                  >
-                    İptal
-                  </button>
+                  {/* Hakediş İPTALİ onaydan farklı yetkide: uç
+                      hakedis.DELETE istiyor (defter izi bırakıyor). */}
+                  {hakedisActions.can("delete") && (
+                    <button
+                      type="button"
+                      className="approval-danger-button"
+                      disabled={processing !== null}
+                      onClick={() =>
+                        setRejection({ kind: "progress-cancel", id: item.id })
+                      }
+                    >
+                      İptal
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
@@ -469,6 +499,7 @@ export default function ApprovalCenterPage() {
                     Detay
                   </Link>
 
+                  {orderActions.can("approve") && (
                   <button
                     type="button"
                     className="erp-primary-button"
@@ -492,17 +523,20 @@ export default function ApprovalCenterPage() {
                       ? "İşleniyor..."
                       : "Onayla"}
                   </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="approval-danger-button"
-                    disabled={processing !== null}
-                    onClick={() =>
-                      setRejection({ kind: "order-reject", id: item.id })
-                    }
-                  >
-                    Reddet
-                  </button>
+                  {orderActions.can("approve") && (
+                    <button
+                      type="button"
+                      className="approval-danger-button"
+                      disabled={processing !== null}
+                      onClick={() =>
+                        setRejection({ kind: "order-reject", id: item.id })
+                      }
+                    >
+                      Reddet
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
@@ -548,6 +582,7 @@ export default function ApprovalCenterPage() {
                     Detay
                   </Link>
 
+                  {requestActions.can("approve") && (
                   <button
                     type="button"
                     className="erp-primary-button"
@@ -571,17 +606,21 @@ export default function ApprovalCenterPage() {
                       ? "İşleniyor..."
                       : "Onayla"}
                   </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="approval-danger-button"
-                    disabled={processing !== null}
-                    onClick={() =>
-                      setRejection({ kind: "request-cancel", id: item.id })
-                    }
-                  >
-                    İptal
-                  </button>
+                  {/* Talep İPTALİ purchasing-requests.DELETE istiyor. */}
+                  {requestActions.can("delete") && (
+                    <button
+                      type="button"
+                      className="approval-danger-button"
+                      disabled={processing !== null}
+                      onClick={() =>
+                        setRejection({ kind: "request-cancel", id: item.id })
+                      }
+                    >
+                      İptal
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
@@ -677,16 +716,18 @@ export default function ApprovalCenterPage() {
                     Detay
                   </Link>
 
-                  <button
-                    type="button"
-                    className="erp-primary-button"
-                    disabled={processing !== null}
-                    onClick={() => void approveSiteReport(item)}
-                  >
-                    {isProcessing("site-report-approve", item.id)
-                      ? "İşleniyor..."
-                      : "Onayla"}
-                  </button>
+                  {reportActions.can("approve") && (
+                    <button
+                      type="button"
+                      className="erp-primary-button"
+                      disabled={processing !== null}
+                      onClick={() => void approveSiteReport(item)}
+                    >
+                      {isProcessing("site-report-approve", item.id)
+                        ? "İşleniyor..."
+                        : "Onayla"}
+                    </button>
+                  )}
                 </div>
               </article>
             ))}

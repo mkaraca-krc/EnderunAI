@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { currencyMoney, decimalRange, percent, quantity, unitPrice } from "@/lib/format/turkish";
 import {
   Badge,
@@ -46,6 +47,16 @@ function date(value?: string | null) {
 }
 
 export default function OfferDetailPage() {
+  /**
+   * Düğme -> uç -> izin:
+   *   POST offers/{id}/icmale-aktar -> ENGINEERING.manage
+   *
+   * Teklif ekranında ama izni MÜHENDİSLİK modülünde: icmal (poz/metraj
+   * defteri) mühendislik verisi. offer_tracking.* demek yanlış olurdu —
+   * o, teklifin ticari takibi.
+   */
+  const actions = useModuleActions("engineering");
+
   const params = useParams<{ id: string }>();
   const offerId = params.id;
   const [item, setItem] = useState<OfferDetail | null>(null);
@@ -123,14 +134,16 @@ export default function OfferDetailPage() {
           <Link className="erp-secondary-button" href={`/teklifler/${offerId}/yazdir`}>
             Yazdır
           </Link>
-          <button
-            type="button"
-            className="erp-secondary-button"
-            disabled={transferring}
-            onClick={() => void handleTransfer()}
-          >
-            {transferring ? "Aktarılıyor..." : "İcmale Aktar"}
-          </button>
+          {actions.can("manage") && (
+            <button
+              type="button"
+              className="erp-secondary-button"
+              disabled={transferring}
+              onClick={() => void handleTransfer()}
+            >
+              {transferring ? "Aktarılıyor..." : "İcmale Aktar"}
+            </button>
+          )}
         </span>
       </div>
 

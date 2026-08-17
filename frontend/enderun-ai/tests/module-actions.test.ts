@@ -490,7 +490,12 @@ describe("eleman seviyesi yetki (R2/1)", () => {
        */
       const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
       const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
-      if (open > -1 && open > close) {
+
+      // Kendini kapatan `<button ... />` açık sayılmaz (bkz. aşağıdaki
+      // aynı kontrol); ondan sonraki başlık metni düğme sanılıyordu.
+      const selfClosed = open > -1 && window.slice(open).includes("/>");
+
+      if (open > -1 && open > close && !selfClosed) {
         occurrences.push(at);
       }
     }
@@ -568,7 +573,16 @@ describe("eleman seviyesi yetki (R2/1)", () => {
       const window = text.slice(Math.max(0, at - 600), at);
       const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
       const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
-      if (open > -1 && open > close) occurrences.push(at);
+
+      /*
+       * KENDİNİ KAPATAN DÜĞME AÇIK SAYILMAZ. `<button ... />` biçiminde
+       * bir eleman (örneğin panel kapatma katmanı) kapanış etiketi
+       * taşımadığı için "açık" görünüyordu; ondan sonraki bir BAŞLIK
+       * metni yanlışlıkla düğme etiketi sayılıyordu.
+       */
+      const selfClosed = open > -1 && window.slice(open).includes("/>");
+
+      if (open > -1 && open > close && !selfClosed) occurrences.push(at);
     }
 
     expect(occurrences.length, `"${label}" düğme olarak bulunamadı`).toBeGreaterThan(0);
@@ -698,7 +712,16 @@ describe("eleman seviyesi yetki (R2/1)", () => {
       const window = text.slice(Math.max(0, at - 600), at);
       const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
       const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
-      if (open > -1 && open > close) occurrences.push(at);
+
+      /*
+       * KENDİNİ KAPATAN DÜĞME AÇIK SAYILMAZ. `<button ... />` biçiminde
+       * bir eleman (örneğin panel kapatma katmanı) kapanış etiketi
+       * taşımadığı için "açık" görünüyordu; ondan sonraki bir BAŞLIK
+       * metni yanlışlıkla düğme etiketi sayılıyordu.
+       */
+      const selfClosed = open > -1 && window.slice(open).includes("/>");
+
+      if (open > -1 && open > close && !selfClosed) occurrences.push(at);
     }
 
     expect(occurrences.length, `"${label}" düğme olarak bulunamadı`).toBeGreaterThan(0);
@@ -823,5 +846,181 @@ describe("eleman seviyesi yetki (R2/1)", () => {
 
     expect(before, `"${label}": create dalı yok`).toContain('can("create")');
     expect(before, `"${label}": edit dalı yok`).toContain('can("edit")');
+  });
+  /**
+   * R2/4d yığın 3 — İK, teklif, yönetim.
+   *
+   * Bu yığının hassasiyeti: ekranların dördü ELDEN ÖDEME ve MAAŞ
+   * taşıyor. Kapı eklemek maskeyi değiştirmez — maske "görebilir mi",
+   * kapı "yazabilir mi" sorusu. Aşağıdaki ayrı test maskelerin yerinde
+   * durduğunu doğruluyor.
+   */
+  const R2_4D3: Array<[string, string, string]> = [
+    ["app/insan-kaynaklari/cikis-tazminat/page.tsx", "Çıkış Kaydı Oluştur", "salaryActions.manage"],
+    ["app/insan-kaynaklari/cikis-tazminat/page.tsx", "Kesinleştir", "payrollActions.approve"],
+    ["app/insan-kaynaklari/ek-odemeler/page.tsx", "Kaydediliyor...", "manage"],
+    ["app/insan-kaynaklari/veri-eksikleri/page.tsx", "alanı doldur", "edit"],
+    ["app/personel/page.tsx", "Personeli Kaydet", "create"],
+    ["app/insan-kaynaklari/ucret-kartlari/page.tsx", "Yeni Maaş Kartı", "manage"],
+    ["app/insan-kaynaklari/personeller/page.tsx", "+ Yeni Personel", "create"],
+    ["app/insan-kaynaklari/personeller/page.tsx", "Personeli Düzenle", "edit"],
+    ["app/insan-kaynaklari/personeller/page.tsx", "Görev Yeri", "edit"],
+    ["app/insan-kaynaklari/personeller/page.tsx", "Oluştur ve seç", "siteActions.create"],
+    ["app/teklifler/[id]/page.tsx", "İcmale Aktar", "manage"],
+    ["app/teklifler/takip/page.tsx", "Sözleşmeyi Aç", "manage"],
+    ["app/sistem-yonetimi/yetki-matrisi/page.tsx", "Rolü oluştur", "create"],
+    ["app/muhendislik/pozlar/[id]/page.tsx", "Değişiklikleri Kaydet", "manage"],
+    ["app/taseronlar/[id]/page.tsx", "Yeni Hakediş", "actions.manage"],
+    ["app/taseronlar/[id]/page.tsx", "Ekibe Ekle", "actions.manage"],
+    ["app/onay-merkezi/page.tsx", "Reddet", "orderActions.approve"],
+  ];
+
+  it.each(R2_4D3)("%s -> \"%s\" %s kapısında", (relative, label, action) => {
+    const text = readFileSync(join(ROOT, relative), "utf8");
+
+    const occurrences: number[] = [];
+    for (let at = text.indexOf(label); at > -1; at = text.indexOf(label, at + 1)) {
+      const window = text.slice(Math.max(0, at - 600), at);
+      const open = Math.max(window.lastIndexOf("<button"), window.lastIndexOf("<Button"));
+      const close = Math.max(window.lastIndexOf("</button>"), window.lastIndexOf("</Button>"));
+
+      /*
+       * KENDİNİ KAPATAN DÜĞME AÇIK SAYILMAZ. `<button ... />` biçiminde
+       * bir eleman (örneğin panel kapatma katmanı) kapanış etiketi
+       * taşımadığı için "açık" görünüyordu; ondan sonraki bir BAŞLIK
+       * metni yanlışlıkla düğme etiketi sayılıyordu.
+       */
+      const selfClosed = open > -1 && window.slice(open).includes("/>");
+
+      if (open > -1 && open > close && !selfClosed) occurrences.push(at);
+    }
+
+    expect(occurrences.length, `"${label}" düğme olarak bulunamadı`).toBeGreaterThan(0);
+
+    for (const at of occurrences) {
+      const before = text.slice(0, at);
+      const gate = before.lastIndexOf('.can("');
+
+      expect(gate, `"${label}" için kapı yok`).toBeGreaterThan(-1);
+      expect(at - gate, `"${label}" kapıdan çok uzak`).toBeLessThan(900);
+
+      const gateText = before.slice(Math.max(0, gate - 40));
+      const found = [...gateText.matchAll(/(\w+)\.can\("([^"]+)"\)/g)];
+      const match = found[found.length - 1];
+      const actual = action.includes(".")
+        ? `${match?.[1]}.${match?.[2]}`
+        : match?.[2];
+
+      expect(actual, `"${label}" yanlış kapıda`).toBe(action);
+    }
+  });
+
+  /**
+   * MASKELER YERİNDE — kapı eklemek görünürlük mantığını değiştirmedi.
+   *
+   * Elden ödeme ve maaş taşıyan ekranlarda iki ayrı mekanizma var ve
+   * İKİSİ DE gerekli:
+   *   maske  -> tutarı GÖREBİLİR Mİ  (backend projeksiyonu + view izni)
+   *   kapı   -> YAZABİLİR Mİ         (extra_payment.manage)
+   *
+   * Bu test maskenin silinip yerine kapı konmadığını doğruluyor. Maske
+   * güvenlik sınırı; kapı yalnızca arayüz kolaylığı.
+   */
+  it("elden ödeme maskeleri kapı eklendikten sonra da yerinde", () => {
+    const p360 = readFileSync(
+      join(ROOT, "app/insan-kaynaklari/personel-360/page.tsx"),
+      "utf8",
+    );
+    // backend projeksiyonundan gelen maske bayrağı duruyor
+    expect(p360).toContain("financial.extraPaymentHidden");
+    // ve kapı ONUN ÜSTÜNE eklendi, yerine geçmedi
+    expect(p360).toContain("!financial.extraPaymentHidden && canManage");
+
+    const personnel = readFileSync(
+      join(ROOT, "app/insan-kaynaklari/personeller/page.tsx"),
+      "utf8",
+    );
+    expect(personnel).toContain('permissions.has("salary.view")');
+    expect(personnel).toContain('permissions.has("extra_payment.manage")');
+  });
+
+  /**
+   * ELDEN CARİ KAYDI TAŞERON YETKİSİYLE AÇILAMAZ.
+   *
+   * `subcontractor-ledger/cash` ucu extra_payment.manage istiyor;
+   * faturalı kayıt (`subcontractor-ledger`) subcontractor.manage.
+   * Aynı düğme, seçime göre iki ayrı modül. Tek anahtara indirgemek
+   * elden izolasyonunu taşeron modülünden delerdi.
+   *
+   * Ayrıca "Elden" SEÇENEĞİ de yetkisiz kullanıcıya sunulmuyor:
+   * seçip formu doldurup reddi kaydederken yemek kötü deneyim.
+   */
+  it("taşeronda elden kayıt ayrı yetkide", () => {
+    const text = readFileSync(join(ROOT, "app/taseronlar/[id]/page.tsx"), "utf8");
+
+    expect(text).toContain('useModuleActions("extra_payment")');
+    expect(text).toContain("entryIsCash");
+    // kaydet düğmesi seçime göre modül değiştiriyor
+    expect(text).toMatch(
+      /entryIsCash[\s\S]{0,120}extraPaymentActions\.can\("manage"\)[\s\S]{0,120}actions\.can\("manage"\)/,
+    );
+    // elden seçeneği yetkisizde listede yok
+    expect(text).toMatch(
+      /extraPaymentActions\.can\("manage"\)[\s\S]{0,120}value="cash"/,
+    );
+  });
+
+  /**
+   * ONAY MERKEZİ TEK KAPIYA BAĞLANAMAZ.
+   *
+   * Dört modülün onayını topluyor. Ekranı tek anahtara bağlamak,
+   * yalnız satın alma onayı olan kullanıcıya hakediş bölümünü de
+   * gösterirdi (ya da tersine sipariş bölümünü gizlerdi).
+   */
+  it("onay merkezi bölüm bölüm kapılı", () => {
+    const text = readFileSync(join(ROOT, "app/onay-merkezi/page.tsx"), "utf8");
+
+    for (const hook of [
+      'useModuleActions("hakedis")',
+      'useModuleActions("purchasing-orders")',
+      'useModuleActions("purchasing-requests")',
+      'useModuleActions("site-reports")',
+    ]) {
+      expect(text, `${hook} yok`).toContain(hook);
+    }
+
+    // iptaller delete'te, onaylar approve'da
+    expect(text).toContain('hakedisActions.can("delete")');
+    expect(text).toContain('requestActions.can("delete")');
+    expect(text).toContain('hakedisActions.can("approve")');
+  });
+
+  /**
+   * YETKİ MATRİSİ HÜCRELERİ GİZLENMİYOR, PASİFLEŞTİRİLİYOR.
+   *
+   * Matris bir TABLO: hücreyi kaldırmak satırı bozar ve okuma yetkisi
+   * olan kullanıcı mevcut yetki dağılımını göremez. Okuma korunuyor,
+   * yazma kapanıyor.
+   */
+  it("yetki matrisinde hücreler pasifleşiyor, kaybolmuyor", () => {
+    const text = readFileSync(
+      join(ROOT, "app/sistem-yonetimi/yetki-matrisi/page.tsx"),
+      "utf8",
+    );
+
+    /*
+     * İKİ AYRI DÜĞME, İKİSİ DE KONTROL EDİLİYOR:
+     *   veri kapsamı düğmesi (role.name === "Admin" kontrolüyle)
+     *   izin hücresi        (isPending kontrolüyle)
+     * Önce tek bir `disabled={... !can("edit")` deseni aranıyordu;
+     * hücrenin kapısı silinse kapsam düğmesi eşleşiyor ve test
+     * geçiyordu. Sonda bunu gösterdi.
+     */
+    expect(text, "izin hücresi kapısı yok").toMatch(
+      /isPending[\s\S]{0,80}!actions\.can\("edit"\)/,
+    );
+    expect(text, "veri kapsamı düğmesi kapısı yok").toMatch(
+      /role\.name === "Admin" \|\| !actions\.can\("edit"\)/,
+    );
   });
 });

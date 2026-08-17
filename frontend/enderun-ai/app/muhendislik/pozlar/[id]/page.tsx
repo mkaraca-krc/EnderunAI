@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import RecipeEditor from "@/components/engineering/recipe-editor";
 import PositionPriceHistory from "@/components/engineering/position-price-history";
 import PositionPurchaseIntelligence from "@/components/engineering/position-purchase-intelligence";
@@ -64,6 +65,12 @@ const emptyForm: FormState = {
 };
 
 export default function EngineeringPositionDetailPage() {
+  /**
+   * Düğme -> uç -> izin:
+   *   PUT engineering-positions/{id} -> engineering.manage
+   */
+  const actions = useModuleActions("engineering");
+
   const params = useParams<{ id: string }>();
   const id = params.id;
 
@@ -500,13 +507,15 @@ export default function EngineeringPositionDetailPage() {
                 marginTop: 24,
               }}
             >
-              <button
-                type="submit"
-                className="erp-primary-button"
-                disabled={saving}
-              >
-                {saving ? "Kaydediliyor..." : "Değişiklikleri Kaydet"}
-              </button>
+              {actions.can("manage") && (
+                <button
+                  type="submit"
+                  className="erp-primary-button"
+                  disabled={saving}
+                >
+                  {saving ? "Kaydediliyor..." : "Değişiklikleri Kaydet"}
+                </button>
+              )}
             </div>
           </form>
         )}

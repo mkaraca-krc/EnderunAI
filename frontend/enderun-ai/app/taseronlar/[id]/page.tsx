@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   currencyMoney,
   date as sharedDate,
@@ -62,6 +63,25 @@ export default function SubcontractorDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  /**
+   * Düğme -> uç -> izin:
+   *   POST subcontractor-progress-payments            -> subcontractor.manage
+   *   POST subcontractor-progress-payments/{id}/approve -> subcontractor.APPROVE
+   *   POST subcontractor-ledger                       -> subcontractor.manage
+   *   POST subcontractor-ledger/cash                  -> EXTRA_PAYMENT.manage
+   *   PUT  subcontractor-contracts/{id}/team          -> subcontractor.manage
+   *   POST subcontractor-documents                    -> subcontractor.manage
+   *
+   * ELDEN CARİ KAYDI AYRI ANAHTARDA. Taşeron modülünün manage yetkisi
+   * elden kayıt açmaya YETMİYOR; uç extra_payment.manage istiyor.
+   * Elden izolasyonunun taşeron tarafındaki karşılığı bu.
+   *
+   * Onay tek istisna: taşeron hakedişini onaylamak subcontractor.approve
+   * istiyor — modülün geri kalanı tek manage anahtarında.
+   */
+  const actions = useModuleActions("subcontractor");
+  const extraPaymentActions = useModuleActions("extra_payment");
+
 
   const [contract, setContract] = useState<SubcontractorContractDetail | null>(
     null
@@ -407,6 +427,7 @@ export default function SubcontractorDetailPage({
                         <span style={{ color: "var(--erp-muted)" }}> · {member.jobTitle}</span>
                       )}
                     </span>
+                    {actions.can("manage") && (
                     <button
                       type="button"
                       style={smallButton}
@@ -419,6 +440,7 @@ export default function SubcontractorDetailPage({
                     >
                       Çıkar
                     </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -437,6 +459,7 @@ export default function SubcontractorDetailPage({
                   </option>
                 ))}
               </select>
+              {actions.can("manage") && (
               <button
                 type="button"
                 style={smallButton}
@@ -448,6 +471,7 @@ export default function SubcontractorDetailPage({
               >
                 Ekibe Ekle
               </button>
+              )}
             </div>
           </section>
         )}
@@ -611,14 +635,16 @@ export default function SubcontractorDetailPage({
               />
             </label>
 
-            <button
-              type="button"
-              style={primaryButton}
-              disabled={saving || !docFile || !docTitle.trim()}
-              onClick={() => void uploadDocument()}
-            >
-              Yükle
-            </button>
+            {actions.can("manage") && (
+              <button
+                type="button"
+                style={primaryButton}
+                disabled={saving || !docFile || !docTitle.trim()}
+                onClick={() => void uploadDocument()}
+              >
+                Yükle
+              </button>
+            )}
           </div>
         </section>
 
@@ -721,7 +747,11 @@ export default function SubcontractorDetailPage({
                   style={input}
                 >
                   <option value="invoiced">Faturalı</option>
-                  <option value="cash">Elden</option>
+                  {/* Elden kayıt yetkisi yoksa seçenek hiç sunulmuyor:
+                      seçip forma yazıp reddi kaydederken yemek kötü. */}
+                  {extraPaymentActions.can("manage") && (
+                    <option value="cash">Elden</option>
+                  )}
                 </select>
               </label>
 
@@ -766,14 +796,24 @@ export default function SubcontractorDetailPage({
                 />
               </label>
 
-              <button
-                type="button"
-                style={primaryButton}
-                disabled={saving || !entryAmount}
-                onClick={() => void saveLedgerEntry()}
-              >
-                Kaydet
-              </button>
+              {/* AYNI DÜĞME İKİ AYRI UÇ VE İKİ AYRI MODÜL:
+                  "Elden" seçiliyse subcontractor-ledger/cash
+                  (extra_payment.manage), "Faturalı" ise
+                  subcontractor-ledger (subcontractor.manage). Elden
+                  kaydın yetkisi taşeron modülünde DEĞİL — elden
+                  izolasyonu gereği ayrı anahtarda. */}
+              {(entryIsCash
+                ? extraPaymentActions.can("manage")
+                : actions.can("manage")) && (
+                <button
+                  type="button"
+                  style={primaryButton}
+                  disabled={saving || !entryAmount}
+                  onClick={() => void saveLedgerEntry()}
+                >
+                  Kaydet
+                </button>
+              )}
             </div>
 
             <div style={{ fontSize: 12, color: "var(--erp-muted)" }}>
@@ -861,14 +901,16 @@ export default function SubcontractorDetailPage({
                   style={input}
                 />
               </label>
-              <button
-                type="button"
-                style={primaryButton}
-                onClick={() => void createPayment()}
-                disabled={saving}
-              >
-                Yeni Hakediş
-              </button>
+              {actions.can("manage") && (
+                <button
+                  type="button"
+                  style={primaryButton}
+                  onClick={() => void createPayment()}
+                  disabled={saving}
+                >
+                  Yeni Hakediş
+                </button>
+              )}
             </div>
           </div>
 
@@ -929,16 +971,17 @@ export default function SubcontractorDetailPage({
                             Aç
                           </button>
                           {payment.status ===
-                            SubcontractorProgressPaymentStatus.Draft && (
-                            <button
-                              type="button"
-                              style={smallButton}
-                              disabled={saving}
-                              onClick={() => void approvePayment(payment.id)}
-                            >
-                              Onayla
-                            </button>
-                          )}
+                            SubcontractorProgressPaymentStatus.Draft &&
+                            actions.can("approve") && (
+                              <button
+                                type="button"
+                                style={smallButton}
+                                disabled={saving}
+                                onClick={() => void approvePayment(payment.id)}
+                              >
+                                Onayla
+                              </button>
+                            )}
                         </div>
                       </td>
                     </tr>

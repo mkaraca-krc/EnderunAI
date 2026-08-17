@@ -4,6 +4,7 @@ import RehireAssessmentPanel from "@/components/hr/rehire-assessment-panel";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { amount } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { Button } from "@/components/ui";
@@ -43,6 +44,20 @@ function today() {
  * yetkisiz kullanıcıda alanlar null döndüğü için kart hiç çizilmez.
  */
 export default function TerminationPage() {
+  /**
+   * Düğme -> uç -> izin (PersonnelTerminationsController):
+   *   POST personnel-terminations              -> SALARY.manage
+   *   POST personnel-terminations/{id}/finalize -> ATTENDANCE-PAYROLL.approve
+   *   GET  personnel-terminations/simulate     -> salary.view (kapı yok:
+   *        okuma, kayıt oluşturmuyor — düğmenin adı da bunu söylüyor)
+   *
+   * İKİ AYRI MODÜL: çıkış kaydını AÇMAK maaş yetkisi, KESİNLEŞTİRMEK
+   * bordro onayı istiyor. Kesinleştirme tazminatı bordroya bağlıyor,
+   * o yüzden onay makamı orada.
+   */
+  const salaryActions = useModuleActions("salary");
+  const payrollActions = useModuleActions("attendance-payroll");
+
   const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
   const [reasons, setReasons] = useState<TerminationReasonOption[]>([]);
   const [terminations, setTerminations] = useState<TerminationListItem[]>([]);
@@ -265,13 +280,15 @@ export default function TerminationPage() {
             >
               {loading ? "Hesaplanıyor..." : "Hesapla (kayıt oluşturmaz)"}
             </button>
-            <button
-              type="submit"
-              disabled={saving || !personnelId}
-              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-            >
-              {saving ? "Kaydediliyor..." : "Çıkış Kaydı Oluştur"}
-            </button>
+            {salaryActions.can("manage") && (
+              <button
+                type="submit"
+                disabled={saving || !personnelId}
+                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {saving ? "Kaydediliyor..." : "Çıkış Kaydı Oluştur"}
+              </button>
+            )}
           </div>
         </form>
 
@@ -350,15 +367,16 @@ export default function TerminationPage() {
                             : "Ayrılış Değerlendirmesi"}
                         </button>
 
-                        {row.status !== TerminationStatus.Finalized && (
-                          <button
-                            type="button"
-                            onClick={() => void finalize(row.id)}
-                            className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800"
-                          >
-                            Kesinleştir
-                          </button>
-                        )}
+                        {row.status !== TerminationStatus.Finalized &&
+                          payrollActions.can("approve") && (
+                            <button
+                              type="button"
+                              onClick={() => void finalize(row.id)}
+                              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800"
+                            >
+                              Kesinleştir
+                            </button>
+                          )}
                       </div>
                     </td>
                   </tr>

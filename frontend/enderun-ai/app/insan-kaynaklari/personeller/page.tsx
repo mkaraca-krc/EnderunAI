@@ -7,6 +7,7 @@ import {
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { money } from "@/lib/format/turkish";
 import {
   Badge,
@@ -171,6 +172,24 @@ function PersonnelShortcuts({ personnelId }: { personnelId: string }) {
 }
 
 export default function HrPersonnelPage() {
+  /**
+   * Düğme -> uç -> izin:
+   *   POST hr/personnel                    -> personnel.create
+   *   PUT  hr/personnel/{id}               -> personnel.edit
+   *   PUT  hr/personnel/{id}/gorev-yeri    -> personnel.edit
+   *   POST projects/{id}/sites             -> SITES.create (şantiye kısayolu)
+   *   POST/PUT personnel-extra-payments    -> extra_payment.manage
+   *
+   * ELDEN ÖDEME ALANI BU KAPILARIN DIŞINDA: aşağıda kendi
+   * `permissions.has("extra_payment.manage")` kontrolüyle korunuyor ve
+   * `salary.view` olmayana blok hiç açılmıyor. O mantığa DOKUNULMADI —
+   * maske "görebilir mi", buradaki kapılar "yazabilir mi" sorusu.
+   *
+   * "Kaydet" AYNI DÜĞME İKİ AYRI UÇ: düzenlemede PUT, yenide POST.
+   */
+  const actions = useModuleActions("personnel");
+  const siteActions = useModuleActions("sites");
+
   const [items, setItems] = useState<PersonnelListItem[]>([]);
 
   /** Personel kimliği → eksik veri özeti. Eksiği olmayan kayıt yok. */
@@ -876,7 +895,9 @@ export default function HrPersonnelPage() {
                 Kart
               </button>
             </div>
-            <Button onClick={openCreate}>+ Yeni Personel</Button>
+            {actions.can("create") && (
+              <Button onClick={openCreate}>+ Yeni Personel</Button>
+            )}
           </div>
         </CardHeader>
 
@@ -960,7 +981,11 @@ export default function HrPersonnelPage() {
               title="Filtrelere uygun personel bulunamadı"
               description="Filtreleri temizleyin veya yeni bir personel kaydı oluşturun."
               icon="♙"
-              action={<Button onClick={openCreate}>Yeni Personel</Button>}
+              action={
+                actions.can("create") ? (
+                  <Button onClick={openCreate}>Yeni Personel</Button>
+                ) : undefined
+              }
             />
           </CardContent>
         </Card>
@@ -1017,14 +1042,16 @@ export default function HrPersonnelPage() {
 
                   <div className="border-t border-slate-100 bg-slate-50/70 p-4">
                     <PersonnelShortcuts personnelId={item.id} />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="mt-3 w-full"
-                      onClick={() => void openEdit(item.id)}
-                    >
-                      Personeli Düzenle
-                    </Button>
+                    {actions.can("edit") && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="mt-3 w-full"
+                        onClick={() => void openEdit(item.id)}
+                      >
+                        Personeli Düzenle
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -1123,16 +1150,20 @@ export default function HrPersonnelPage() {
                         <PersonnelShortcuts personnelId={item.id} />
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => openWorkLocation(item)}
-                        >
-                          Görev Yeri
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => void openEdit(item.id)}>
-                          Düzenle
-                        </Button>
+                        {actions.can("edit") && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => openWorkLocation(item)}
+                          >
+                            Görev Yeri
+                          </Button>
+                        )}
+                        {actions.can("edit") && (
+                          <Button variant="secondary" size="sm" onClick={() => void openEdit(item.id)}>
+                            Düzenle
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -1335,14 +1366,16 @@ export default function HrPersonnelPage() {
                           </label>
 
                           <div className="flex gap-2">
-                            <Button
-                              onClick={() => void createSiteShortcut()}
-                              disabled={siteShortcutSaving}
-                            >
-                              {siteShortcutSaving
-                                ? "Oluşturuluyor..."
-                                : "Oluştur ve seç"}
-                            </Button>
+                            {siteActions.can("create") && (
+                              <Button
+                                onClick={() => void createSiteShortcut()}
+                                disabled={siteShortcutSaving}
+                              >
+                                {siteShortcutSaving
+                                  ? "Oluşturuluyor..."
+                                  : "Oluştur ve seç"}
+                              </Button>
+                            )}
                             <Button
                               variant="secondary"
                               onClick={() => setSiteShortcutOpen(false)}
@@ -1382,12 +1415,14 @@ export default function HrPersonnelPage() {
               >
                 Vazgeç
               </Button>
-              <Button
-                onClick={() => void saveWorkLocation()}
-                disabled={locationSaving}
-              >
-                {locationSaving ? "Kaydediliyor..." : "Kaydet"}
-              </Button>
+              {actions.can("edit") && (
+                <Button
+                  onClick={() => void saveWorkLocation()}
+                  disabled={locationSaving}
+                >
+                  {locationSaving ? "Kaydediliyor..." : "Kaydet"}
+                </Button>
+              )}
             </div>
           </aside>
         </div>
@@ -1703,9 +1738,11 @@ export default function HrPersonnelPage() {
                   <Button type="button" variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
                     Vazgeç
                   </Button>
-                  <Button type="submit" loading={saving}>
-                    {editingId ? "Değişiklikleri Kaydet" : "Personeli Kaydet"}
-                  </Button>
+                  {(editingId ? actions.can("edit") : actions.can("create")) && (
+                    <Button type="submit" loading={saving}>
+                      {editingId ? "Değişiklikleri Kaydet" : "Personeli Kaydet"}
+                    </Button>
+                  )}
                 </div>
               </form>
             )}

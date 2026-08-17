@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { currencyMoney, moneyWhole, percent } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { branchService, type BranchListItem } from "@/services/branch.service";
@@ -77,6 +78,18 @@ function today() {
  * "geçen sefer bu işe şu fiyatı vermiştik" sorusunun tek cevabı.
  */
 export default function OfferTrackingPage() {
+  /**
+   * Düğme -> uç -> izin (OffersController):
+   *   PUT  offers/{id}/takip    -> offer_tracking.manage
+   *   POST offers/{id}/durum    -> offer_tracking.manage
+   *   POST offers/{id}/sozlesme -> offer_tracking.manage
+   *
+   * ÜÇÜ DE TEK ANAHTARDA. Sözleşme açmak (proje yaratıyor) daha ağır
+   * bir yetki isteyebilirdi ama uç ayrım yapmıyor; arayüzde
+   * uydurulmadı.
+   */
+  const actions = useModuleActions("offer_tracking");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [accounts, setAccounts] = useState<CurrentAccountListItem[]>([]);
@@ -537,7 +550,7 @@ export default function OfferTrackingPage() {
                             Aç
                           </Link>
 
-                          {next.length > 0 && (
+                          {next.length > 0 && actions.can("manage") && (
                             <>
                               <button
                                 type="button"
@@ -557,7 +570,8 @@ export default function OfferTrackingPage() {
                           )}
 
                           {item.status === OFFER_STATUS.Won &&
-                            !item.projectId && (
+                            !item.projectId &&
+                            actions.can("manage") && (
                               <button
                                 type="button"
                                 className="erp-primary-button"
@@ -661,13 +675,15 @@ export default function OfferTrackingPage() {
             </div>
 
             <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-              <button
-                type="submit"
-                className="erp-primary-button"
-                disabled={busy}
-              >
-                Kaydet
-              </button>
+              {actions.can("manage") && (
+                <button
+                  type="submit"
+                  className="erp-primary-button"
+                  disabled={busy}
+                >
+                  Kaydet
+                </button>
+              )}
               <button
                 type="button"
                 className="erp-secondary-button"
@@ -765,13 +781,15 @@ export default function OfferTrackingPage() {
             </div>
 
             <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-              <button
-                type="submit"
-                className="erp-primary-button"
-                disabled={busy}
-              >
-                {busy ? "Kaydediliyor..." : "Kaydet"}
-              </button>
+              {actions.can("manage") && (
+                <button
+                  type="submit"
+                  className="erp-primary-button"
+                  disabled={busy}
+                >
+                  {busy ? "Kaydediliyor..." : "Kaydet"}
+                </button>
+              )}
               <button
                 type="button"
                 className="erp-secondary-button"
@@ -1094,13 +1112,15 @@ export default function OfferTrackingPage() {
             </label>
 
             <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-              <button
-                type="submit"
-                className="erp-primary-button"
-                disabled={busy}
-              >
-                {busy ? "Oluşturuluyor..." : "Sözleşmeyi Aç"}
-              </button>
+              {actions.can("manage") && (
+                <button
+                  type="submit"
+                  className="erp-primary-button"
+                  disabled={busy}
+                >
+                  {busy ? "Oluşturuluyor..." : "Sözleşmeyi Aç"}
+                </button>
+              )}
               <button
                 type="button"
                 className="erp-secondary-button"

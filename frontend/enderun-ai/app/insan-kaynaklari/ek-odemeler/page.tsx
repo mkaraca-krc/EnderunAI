@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { amount } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 
@@ -32,6 +33,17 @@ function money(value: number) {
  * muhasebeye hiçbir kayıt üretmez.
  */
 export default function ExtraPaymentsPage() {
+  /**
+   * Düğme -> uç -> izin:
+   *   POST personnel-extra-payments -> extra_payment.manage
+   *
+   * ELDEN ÖDEME. Bu ekranın GÖRÜNÜRLÜĞÜ rota kapısında
+   * (extra_payment.view) ve tutar maskelemesi projeksiyon katmanında;
+   * buradaki kapı yalnızca YAZMA yetkisini soruyor. Maskeleme
+   * mantığına dokunulmadı.
+   */
+  const actions = useModuleActions("extra_payment");
+
   const [records, setRecords] = useState<ExtraPayment[]>([]);
   const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
 
@@ -186,13 +198,15 @@ export default function ExtraPaymentsPage() {
           </label>
 
           <div className="sm:col-span-2 lg:col-span-5">
-            <button
-              type="submit"
-              disabled={saving || !personnelId}
-              className="rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-cyan-800 disabled:opacity-60"
-            >
-              {saving ? "Kaydediliyor..." : "Kaydet"}
-            </button>
+            {actions.can("manage") && (
+              <button
+                type="submit"
+                disabled={saving || !personnelId}
+                className="rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-cyan-800 disabled:opacity-60"
+              >
+                {saving ? "Kaydediliyor..." : "Kaydet"}
+              </button>
+            )}
           </div>
         </form>
 

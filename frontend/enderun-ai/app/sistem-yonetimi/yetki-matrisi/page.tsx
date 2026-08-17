@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, Input, Select } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
 import {
@@ -27,6 +28,19 @@ function getErrorMessage(error: unknown) {
 }
 
 export default function PermissionMatrixPage() {
+  /**
+   * Düğme -> uç -> izin (PermissionMatrixController):
+   *   POST  user-management/permission-matrix/toggle -> user-management.edit
+   *   PATCH .../roles/{id}/scope-policy              -> user-management.edit
+   *   POST  .../roles                                -> user-management.create
+   *
+   * MATRİS HÜCRELERİ GİZLENMİYOR, PASİFLEŞTİRİLİYOR. Matris bir
+   * TABLO: hücreyi kaldırmak satırı bozar ve okuma yetkisi olan
+   * kullanıcı mevcut yetki dağılımını göremez hale gelir. Okuma
+   * korunuyor, yazma kapanıyor.
+   */
+  const actions = useModuleActions("user-management");
+
   const [matrix, setMatrix] = useState<PermissionMatrix | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -211,7 +225,9 @@ export default function PermissionMatrixPage() {
             role sahip kullanıcıların Kullanıcı Yönetimi'nde şantiye seçmesini
             zorunlu kılar.
           </p>
-          <Button onClick={() => setNewRoleOpen(true)}>+ Rol Ekle/Kopyala</Button>
+          {actions.can("create") && (
+            <Button onClick={() => setNewRoleOpen(true)}>+ Rol Ekle/Kopyala</Button>
+          )}
         </div>
 
         {loading ? (
@@ -237,7 +253,7 @@ export default function PermissionMatrixPage() {
                         </span>
                         <button
                           type="button"
-                          disabled={role.name === "Admin"}
+                          disabled={role.name === "Admin" || !actions.can("edit")}
                           onClick={() =>
                             void toggleScopePolicy(role.id, role.dataScopePolicy)
                           }
@@ -293,7 +309,11 @@ export default function PermissionMatrixPage() {
                             >
                               <button
                                 type="button"
-                                disabled={role.name === "Admin" || isPending}
+                                disabled={
+                                  role.name === "Admin" ||
+                                  isPending ||
+                                  !actions.can("edit")
+                                }
                                 onClick={() =>
                                   void toggleCell(
                                     role.id,
@@ -379,9 +399,11 @@ export default function PermissionMatrixPage() {
                 >
                   Vazgeç
                 </Button>
-                <Button type="submit" loading={savingRole}>
-                  Rolü oluştur
-                </Button>
+                {actions.can("create") && (
+                  <Button type="submit" loading={savingRole}>
+                    Rolü oluştur
+                  </Button>
+                )}
               </div>
             </form>
           </div>

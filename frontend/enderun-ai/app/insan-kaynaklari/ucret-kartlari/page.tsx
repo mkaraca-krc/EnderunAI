@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { currencyMoney } from "@/lib/format/turkish";
 
@@ -161,6 +162,22 @@ function errorMessage(
 }
 
 export default function SalaryCardsPage() {
+  /**
+   * Düğme -> uç -> izin (HrPayrollController):
+   *   POST   hr/payroll/salary-definitions      -> salary.manage
+   *   PUT    hr/payroll/salary-definitions/{id} -> salary.manage
+   *   DELETE hr/payroll/salary-definitions/{id} -> salary.manage
+   *
+   * ÜÇÜ DE TEK ANAHTARDA — SİLME DAHİL. `salary.delete` diye bir anahtar
+   * yok; "yıkıcı aksiyon delete ister" kuralı burada uygulanamıyor.
+   * Arayüzde uydurmak "gizli ama izinli" üretirdi (bkz.
+   * TEMIZLIK-TARAMASI.md, uygulanamayan ayrımlar tablosu).
+   *
+   * MAAŞ GÖRÜNÜRLÜĞÜ AYRI: rota kapısı salary.view, tutar maskelemesi
+   * projeksiyon katmanında. Buradaki kapı yalnızca yazma.
+   */
+  const actions = useModuleActions("salary");
+
   const [
     companies,
     setCompanies,
@@ -997,22 +1014,24 @@ export default function SalaryCardsPage() {
               />
             </label>
 
-            <button
-              type="button"
-              onClick={newRecord}
-              style={{
-                minHeight: "43px",
-                border: "none",
-                borderRadius: "10px",
-                padding: "0 18px",
-                background: "var(--erp-primary)",
-                color: "var(--color-on-brand)",
-                fontWeight: 800,
-                cursor: "pointer",
-              }}
-            >
-              Yeni Maaş Kartı
-            </button>
+            {actions.can("manage") && (
+              <button
+                type="button"
+                onClick={newRecord}
+                style={{
+                  minHeight: "43px",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "0 18px",
+                  background: "var(--erp-primary)",
+                  color: "var(--color-on-brand)",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                Yeni Maaş Kartı
+              </button>
+            )}
           </div>
         </section>
 
@@ -1392,6 +1411,7 @@ export default function SalaryCardsPage() {
                               gap: "8px",
                             }}
                           >
+                            {actions.can("manage") && (
                             <button
                               type="button"
                               onClick={() =>
@@ -1416,7 +1436,9 @@ export default function SalaryCardsPage() {
                             >
                               Düzenle
                             </button>
+                            )}
 
+                            {actions.can("manage") && (
                             <button
                               type="button"
                               disabled={
@@ -1445,6 +1467,7 @@ export default function SalaryCardsPage() {
                             >
                               Sil
                             </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -2090,6 +2113,7 @@ export default function SalaryCardsPage() {
                 Vazgeç
               </button>
 
+              {actions.can("manage") && (
               <button
                 type="submit"
                 disabled={saving}
@@ -2118,6 +2142,7 @@ export default function SalaryCardsPage() {
                     ? "Değişiklikleri Kaydet"
                     : "Maaş Kartı Oluştur"}
               </button>
+              )}
             </footer>
           </form>
         </div>

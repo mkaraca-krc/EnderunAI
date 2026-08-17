@@ -4,6 +4,7 @@ import PersonnelDocumentsPanel from "@/components/hr/personnel-documents-panel";
 import PersonnelOvertimePanel from "@/components/hr/personnel-overtime-panel";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import { currencyMoney } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { personnelService } from "@/services/personnel.service";
@@ -67,6 +68,17 @@ function alertTone(severity: string) {
 }
 
 export default function Personnel360Page() {
+  /**
+   * Düğme -> uç -> izin:
+   *   POST personnel-extra-payments      -> extra_payment.manage
+   *   PUT  personnel-extra-payments/{id} -> extra_payment.manage
+   *
+   * TUTAR MASKELEMESİ AYRI VE KORUNDU: `financial.extraPaymentHidden`
+   * backend projeksiyonundan geliyor. Maske görünürlüğü, buradaki kapı
+   * yazmayı kontrol ediyor.
+   */
+  const extraPaymentActions = useModuleActions("extra_payment");
+
   const [personnel, setPersonnel] = useState<PersonnelOption[]>([]);
   const [personnelId, setPersonnelId] = useState("");
   const [search, setSearch] = useState("");
@@ -276,6 +288,7 @@ export default function Personnel360Page() {
               personnelId={personnelId}
               financial={data.financial}
               onSaved={() => setRefreshKey((current) => current + 1)}
+              canManage={extraPaymentActions.can("manage")}
             />
 
             <section style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 380px", gap: 18 }}>
@@ -372,10 +385,17 @@ function SalaryPanel({
   personnelId,
   financial,
   onSaved,
+  canManage,
 }: {
   personnelId: string;
   financial: Personnel360Response["financial"];
   onSaved: () => void;
+  /**
+   * ELDEN ÖDEME YAZMA YETKİSİ — uç extra_payment.manage istiyor.
+   * Prop olarak geliyor; bu panel sekme değişiminde yeniden
+   * kurulabiliyor ve kancayı içeride çağırmak gereksiz.
+   */
+  canManage: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
@@ -471,7 +491,13 @@ function SalaryPanel({
         }}
       >
         <h3 style={{ margin: 0 }}>Ücret ve Ek Ödeme</h3>
-        {!financial.extraPaymentHidden && (
+        {/* MASKE VE KAPI AYRI SORULAR, İKİSİ DE GEREKLİ.
+            `extraPaymentHidden` backend projeksiyonundan geliyor ve
+            "bu kullanıcı tutarı GÖREBİLİR Mİ" sorusunu yanıtlıyor;
+            `can("manage")` ise "YAZABİLİR Mİ". Görüp yazamayan bir
+            kullanıcı düğmeyi görmemeli. Maske kontrolü olduğu gibi
+            korundu, kapı üstüne eklendi. */}
+        {!financial.extraPaymentHidden && canManage && (
           <button
             type="button"
             onClick={() => setOpen((current) => !current)}
@@ -568,9 +594,11 @@ function SalaryPanel({
               style={input}
             />
           </label>
-          <button type="submit" style={smallButton} disabled={saving}>
-            {saving ? "Kaydediliyor..." : "Kaydet"}
-          </button>
+          {canManage && (
+            <button type="submit" style={smallButton} disabled={saving}>
+              {saving ? "Kaydediliyor..." : "Kaydet"}
+            </button>
+          )}
         </form>
       )}
     </section>

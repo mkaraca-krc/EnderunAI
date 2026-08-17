@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   Badge,
   Button,
@@ -80,6 +81,12 @@ function messageOf(error: unknown) {
 }
 
 export default function PersonnelDataGapsPage() {
+  /**
+   * Düğme -> uç -> izin:
+   *   PUT hr/personnel/{id}/veri-tamamla -> personnel.edit
+   */
+  const actions = useModuleActions("personnel");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [summary, setSummary] = useState<PersonnelDataCompletenessSummary | null>(
@@ -375,12 +382,14 @@ export default function PersonnelDataGapsPage() {
                         ))}
 
                         <div className="flex gap-2">
-                          <Button
-                            disabled={busy}
-                            onClick={() => void save(person)}
-                          >
-                            Kaydet
-                          </Button>
+                          {actions.can("edit") && (
+                            <Button
+                              disabled={busy}
+                              onClick={() => void save(person)}
+                            >
+                              Kaydet
+                            </Button>
+                          )}
                           <Button
                             variant="secondary"
                             onClick={() => {
@@ -393,12 +402,14 @@ export default function PersonnelDataGapsPage() {
                         </div>
                       </div>
                     ) : (
+                      actions.can("edit") && (
                       <Button
                         variant="secondary"
                         onClick={() => startEditing(person)}
                       >
                         {editable.length} alanı doldur
                       </Button>
+                      )
                     )}
                   </TableCell>
                 </TableRow>
