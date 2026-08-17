@@ -10,6 +10,7 @@ import {
 
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 import {
   companyService,
@@ -68,6 +69,15 @@ const initialForm = {
 };
 
 export default function CargoPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN (SecretariatController):
+   *   POST/PUT/DELETE cargo|visitors -> secretariat.manage
+   *
+   * Sekreteryada create/edit/delete ayrımı YOK; hepsi tek "manage"
+   * anahtarında. Uç öyle kurulmuş, ekran onu izliyor.
+   */
+  const actions = useModuleActions("secretariat");
+
   const [companies, setCompanies] =
     useState<CompanyListItem[]>([]);
 
@@ -386,17 +396,19 @@ export default function CargoPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white"
-            onClick={() =>
-              setShowForm((value) => !value)
-            }
-          >
-            {showForm
-              ? "Formu Kapat"
-              : "Yeni Kargo Kaydı"}
-          </button>
+          {actions.can("manage") && (
+            <button
+              type="button"
+              className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white"
+              onClick={() =>
+                setShowForm((value) => !value)
+              }
+            >
+              {showForm
+                ? "Formu Kapat"
+                : "Yeni Kargo Kaydı"}
+            </button>
+          )}
         </div>
 
         {error && (
@@ -915,20 +927,22 @@ export default function CargoPage() {
                       </td>
 
                       <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          disabled={
-                            processingId === item.id
-                          }
-                          onClick={() =>
-                            setPending(item.id)
-                          }
-                          className="text-sm font-medium text-red-600 disabled:opacity-50"
-                        >
-                          {processingId === item.id
-                            ? "İşleniyor..."
-                            : "Sil"}
-                        </button>
+                        {actions.can("manage") && (
+                          <button
+                            type="button"
+                            disabled={
+                              processingId === item.id
+                            }
+                            onClick={() =>
+                              setPending(item.id)
+                            }
+                            className="text-sm font-medium text-red-600 disabled:opacity-50"
+                          >
+                            {processingId === item.id
+                              ? "İşleniyor..."
+                              : "Sil"}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))

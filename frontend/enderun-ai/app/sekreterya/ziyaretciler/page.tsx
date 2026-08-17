@@ -11,6 +11,7 @@ import {
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { dateTime } from "@/lib/format/turkish";
+import { useModuleActions } from "@/lib/auth/module-actions";
 
 import {
   companyService,
@@ -75,6 +76,15 @@ const initialForm = {
 };
 
 export default function VisitorsPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN (SecretariatController):
+   *   POST/PUT/DELETE cargo|visitors -> secretariat.manage
+   *
+   * Sekreteryada create/edit/delete ayrımı YOK; hepsi tek "manage"
+   * anahtarında. Uç öyle kurulmuş, ekran onu izliyor.
+   */
+  const actions = useModuleActions("secretariat");
+
   const [companies, setCompanies] =
     useState<CompanyListItem[]>([]);
 
@@ -404,17 +414,19 @@ export default function VisitorsPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white"
-            onClick={() =>
-              setShowForm((value) => !value)
-            }
-          >
-            {showForm
-              ? "Formu Kapat"
-              : "Yeni Ziyaretçi"}
-          </button>
+          {actions.can("manage") && (
+            <button
+              type="button"
+              className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white"
+              onClick={() =>
+                setShowForm((value) => !value)
+              }
+            >
+              {showForm
+                ? "Formu Kapat"
+                : "Yeni Ziyaretçi"}
+            </button>
+          )}
         </div>
 
         {error && (
@@ -951,7 +963,7 @@ export default function VisitorsPage() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-3">
                           {item.status ===
-                            VisitorStatus.Expected && (
+                            VisitorStatus.Expected && actions.can("manage") && (
                             <button
                               type="button"
                               disabled={
@@ -967,7 +979,7 @@ export default function VisitorsPage() {
                           )}
 
                           {item.status ===
-                            VisitorStatus.CheckedIn && (
+                            VisitorStatus.CheckedIn && actions.can("manage") && (
                             <button
                               type="button"
                               disabled={
@@ -982,20 +994,22 @@ export default function VisitorsPage() {
                             </button>
                           )}
 
-                          <button
-                            type="button"
-                            disabled={
-                              processingId === item.id
-                            }
-                            onClick={() =>
-                              setPending({ kind: "delete", item })
-                            }
-                            className="font-medium text-red-600 disabled:opacity-50"
-                          >
-                            {processingId === item.id
-                              ? "İşleniyor..."
-                              : "Sil"}
-                          </button>
+                          {actions.can("manage") && (
+                            <button
+                              type="button"
+                              disabled={
+                                processingId === item.id
+                              }
+                              onClick={() =>
+                                setPending({ kind: "delete", item })
+                              }
+                              className="font-medium text-red-600 disabled:opacity-50"
+                            >
+                              {processingId === item.id
+                                ? "İşleniyor..."
+                                : "Sil"}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

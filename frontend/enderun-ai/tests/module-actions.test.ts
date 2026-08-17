@@ -100,6 +100,21 @@ const R2_3: [string, string][] = [
  */
 const R2_4A = ["ise-alim", "zimmetler", "organizasyon", "kariyer"];
 
+/**
+ * R2/4b kapsamı: sekreterya, sistem yönetimi, taşeronlar.
+ *
+ * Bu ailelerde create/edit/delete ayrımı YOK; sekreterya ve taşeron
+ * uçları tek "manage" anahtarında toplanmış. Ekran onu izliyor —
+ * daha ince bir ayrım istenirse önce UÇ bölünmeli.
+ */
+const R2_4B: [string, string][] = [
+  ["sekreterya/kargo", "secretariat"],
+  ["sekreterya/ziyaretciler", "secretariat"],
+  ["sistem-yonetimi/kullanicilar", "user-management"],
+  ["sistem-yonetimi/erisim-talepleri", "user-management"],
+  ["taseronlar", "subcontractor"],
+];
+
 const hr = read("insan-kaynaklari");
 const accounting = read("muhasebe");
 
@@ -214,6 +229,15 @@ describe("eleman seviyesi yetki (R2/1)", () => {
       );
       return !screen || !screen.text.includes('useModuleActions("personnel")');
     });
+
+    expect(missing).toEqual([]);
+  });
+
+  it("sekreterya, sistem yönetimi ve taşeron ekranları kapılı", () => {
+    const missing = R2_4B.filter(([screen, module]) => {
+      const path = join(ROOT, "app", ...screen.split("/"), "page.tsx");
+      return !readFileSync(path, "utf8").includes(`useModuleActions("${module}")`);
+    }).map(([screen]) => screen);
 
     expect(missing).toEqual([]);
   });

@@ -7,6 +7,7 @@ import ErpShell from "@/components/erp/erp-shell";
 import { currencyMoney } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { Button } from "@/components/ui";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   companyService,
   type CompanyListItem,
@@ -147,6 +148,12 @@ function errorMessage(error: unknown) {
 }
 
 export default function SubcontractorsPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN (SubcontractorContractsController):
+   *   POST/PUT/DELETE subcontractor-contracts -> subcontractor.manage
+   */
+  const actions = useModuleActions("subcontractor");
+
   const [items, setItems] = useState<SubcontractorContractListItem[]>([]);
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [accounts, setAccounts] = useState<CurrentAccountListItem[]>([]);
@@ -455,9 +462,11 @@ export default function SubcontractorsPage() {
                 değiştiriliyor; refreshKey vardı ama düğmesi yoktu. */}
             <Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}>Yenile</Button>
 
-            <button type="button" onClick={openCreate} style={primaryButton}>
-              Yeni Sözleşme
-            </button>
+            {actions.can("manage") && (
+              <button type="button" onClick={openCreate} style={primaryButton}>
+                Yeni Sözleşme
+              </button>
+            )}
           </div>
         </section>
 
@@ -534,13 +543,15 @@ export default function SubcontractorsPage() {
                         <Link href={`/taseronlar/${item.id}`} style={linkButton}>
                           Aç
                         </Link>
-                        <button
-                          type="button"
-                          onClick={() => void openEdit(item.id)}
-                          style={smallButton}
-                        >
-                          Düzenle
-                        </button>
+                        {actions.can("manage") && (
+                          <button
+                            type="button"
+                            onClick={() => void openEdit(item.id)}
+                            style={smallButton}
+                          >
+                            Düzenle
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

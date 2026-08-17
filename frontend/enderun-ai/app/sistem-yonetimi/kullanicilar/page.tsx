@@ -29,6 +29,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   userManagementService,
   type ManagedUser,
@@ -126,6 +127,17 @@ function SectionHeader({
 }
 
 export default function UserManagementPage() {
+  /*
+   * Aksiyon izinleri UÇLARDAN (UserManagementController):
+   *   POST users                       -> user-management.create
+   *   PUT  users/{id}                  -> user-management.edit
+   *   POST users/{id}/reset-password   -> user-management.edit
+   *
+   * ŞİFRE SIFIRLAMA edit'e bağlı, ayrı bir yetki değil. Uç öyle;
+   * ayrı bir anahtar gerekiyorsa o backend kararı.
+   */
+  const actions = useModuleActions("user-management");
+
   const [catalog, setCatalog] = useState<UserManagementCatalog | null>(null);
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -540,7 +552,9 @@ export default function UserManagementPage() {
                 <Link href="/sistem-yonetimi/yetki-matrisi">
                   <Button variant="secondary">Yetki Matrisi</Button>
                 </Link>
-                <Button onClick={openCreate}>+ Yeni Kullanıcı</Button>
+                {actions.can("create") && (
+                  <Button onClick={openCreate}>+ Yeni Kullanıcı</Button>
+                )}
               </div>
             }
           />
@@ -670,36 +684,42 @@ export default function UserManagementPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => openEdit(user)}
-                            >
-                              Düzenle
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setResetPassword("");
-                                setResetUser(user);
-                              }}
-                            >
-                              Şifre
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={saving}
-                              className={
-                                user.isActive
-                                  ? "text-red-600 hover:bg-red-50"
-                                  : "text-emerald-700 hover:bg-emerald-50"
-                              }
-                              onClick={() => setPendingToggle(user)}
-                            >
-                              {user.isActive ? "Pasife al" : "Aktifleştir"}
-                            </Button>
+                            {actions.can("edit") && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => openEdit(user)}
+                              >
+                                Düzenle
+                              </Button>
+                            )}
+                            {actions.can("edit") && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setResetPassword("");
+                                  setResetUser(user);
+                                }}
+                              >
+                                Şifre
+                              </Button>
+                            )}
+                            {actions.can("edit") && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={saving}
+                                className={
+                                  user.isActive
+                                    ? "text-red-600 hover:bg-red-50"
+                                    : "text-emerald-700 hover:bg-emerald-50"
+                                }
+                                onClick={() => setPendingToggle(user)}
+                              >
+                                {user.isActive ? "Pasife al" : "Aktifleştir"}
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

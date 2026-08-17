@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { Badge, Button, Card, CardContent } from "@/components/ui";
 import { ApiError } from "@/lib/api/api-client";
+import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   accessRequestService,
   type AccessRequestListItem,
@@ -28,6 +29,13 @@ function statusBadge(status: AccessRequestListItem["status"]) {
 }
 
 export default function AccessRequestsPage() {
+  /*
+   * POST access-requests/{id}/approve -> user-management.edit
+   * POST access-requests/{id}/reject  -> user-management.edit
+   * İkisi de aynı yetkide; erişim talebini karara bağlamak tek iş.
+   */
+  const actions = useModuleActions("user-management");
+
   const [items, setItems] = useState<AccessRequestListItem[]>([]);
   const [includeDecided, setIncludeDecided] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -181,14 +189,16 @@ export default function AccessRequestsPage() {
                           }
                         />
                         <span className="text-xs text-slate-400">dk</span>
-                        <Button
-                          type="button"
-                          loading={processingId === item.id}
-                          onClick={() => void approve(item.id)}
-                          className="text-xs"
-                        >
-                          Onayla
-                        </Button>
+                        {actions.can("edit") && (
+                          <Button
+                            type="button"
+                            loading={processingId === item.id}
+                            onClick={() => void approve(item.id)}
+                            className="text-xs"
+                          >
+                            Onayla
+                          </Button>
+                        )}
                         <input
                           type="text"
                           placeholder="Ret gerekçesi (ops.)"
@@ -201,14 +211,16 @@ export default function AccessRequestsPage() {
                             }))
                           }
                         />
-                        <button
-                          type="button"
-                          disabled={processingId === item.id}
-                          onClick={() => void reject(item.id)}
-                          className="text-xs text-red-600 hover:underline disabled:opacity-50"
-                        >
-                          Reddet
-                        </button>
+                        {actions.can("edit") && (
+                          <button
+                            type="button"
+                            disabled={processingId === item.id}
+                            onClick={() => void reject(item.id)}
+                            className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                          >
+                            Reddet
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
