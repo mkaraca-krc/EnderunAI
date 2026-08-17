@@ -649,3 +649,91 @@ rol dağıtımı (etki ölçümü), en son arayüz — arayüz her zaman SON.
 "iptal" durumu da var. Rota adında "cancel/iptal" geçmediği için yıkıcı
 taramasına düşmüyor. Durum makinesinin hangi geçişlerinin yıkıcı
 sayıldığı ayrı bir karar.
+
+---
+
+## `personeller` ekranı paylaşılan izin önbelleğine taşınmalı (2026-08-17)
+
+**Borç, acil değil — bugün çalışıyor.**
+
+`app/insan-kaynaklari/personeller/page.tsx` izinleri kendisi çözüyor:
+`apiClient<{permissions}>("auth/me")` çağırıp `Set<string>` kuruyor
+(satır ~311). Bu, arayüzdeki **dördüncü** izin çözme yolu:
+
+| # | Yol | Ekran |
+|---|---|---|
+| 1 | `useModuleActions(modül).can(eylem)` | R2 ile 50+ |
+| 2 | `usePermissions()` + satır içi `has("x.y")` | 15 |
+| 3 | `hasPermission(session, "x.y")` | butce-onay |
+| 4 | **kendi `auth/me` + kendi Set'i** | **personeller** |
+
+Dördü de aynı veriye bakıyor; davranış farkı yok. İki maliyeti var:
+
+1. **Paylaşılan önbelleği kullanmıyor.** `useCurrentUser` artık modül
+   düzeyinde tek istek yapıyor; bu ekran onun dışında kalıyor ve
+   sayfa başına fazladan bir `auth/me` isteği açıyor.
+2. Denetlenebilirlik: anahtarlar satır içi, hangi ucun istediği
+   yazılmıyor.
+
+**`hasAllPermissions` bayrağına bakmaması SORUN DEĞİL.** Bayrak
+`PermissionCatalog.HasEveryPermission(permissions)` ile, yani dizinin
+tamamlığından türetiliyor (`AuthController:116`); süper kullanıcının
+dizisi eksiksiz geldiği için `permissions.has(x)` doğru sonuç veriyor.
+Bu ekranda süper kullanıcı hatası yok.
+
+**NEDEN R2 TURUNDA ÇEVRİLMEDİ:** kurulan izin kümesi bir VERİ ÇEKME
+effect'ini besliyor (`if (!permissions.has("salary.view")) return;`
+satır ~447 ve `has("extra_payment.view")` satır ~476). `usePermissions`
+kancasına geçmek `loading` durumunu o effect'lerin sıralamasına doğru
+bağlamayı gerektiriyor — yanlış yapılırsa maaş/elden verisi hiç
+çekilmez ya da iki kez çekilir. Bir arayüz kapılama süpürmesine
+iliştirilecek iş değil.
+
+**Ayrı refactor olarak yapılmalı**, kendi testiyle: izinler yüklenmeden
+effect'in çalışmadığı, yüklendikten sonra bir kez çalıştığı ve
+`salary.view` olmayan kullanıcıda elden verisinin hiç istenmediği
+doğrulanmalı.
+
+---
+
+## PDF kararı VERİLDİ: ölü düğmeler kaldırıldı (2026-08-17)
+
+Önceki kayıtta "karar bekliyor, çünkü fiyat farkından farklı — orada
+elle giriş yolu vardı, burada yeteneğin kendisi yok" yazmıştım.
+**Bu tespit eksikti ve düzeltildi:** her iki ekranda da ÇALIŞAN bir
+yazdırma sayfası, ölü düğmenin tam yanında duruyor.
+
+| Ekran | Ölü uç | Çalışan alternatif |
+|---|---|---|
+| `hakedis/[id]` | `/api/reports/progress-payment/{id}/pdf` | `hakedis/[id]/yazdir` (571 satır, print stilleri) **+ Excel** (`api/hakedis-export/{id}/excel`) |
+| `satin-alma/siparis/[id]` | `/api/reports/purchase-order/{id}/pdf` | `satin-alma/siparis/[id]/yazdir` (500 satır) |
+
+İkisi de ekrandan link olarak veriliyor. Hakediş ekranındaki yorum
+zaten bunu söylüyormuş: *"NATURA formatında, logo antetli çıktı; PDF
+tarayıcının yazdırma penceresinden alınır."* Yani PDF yeteneği
+sunucu üretimi olarak değil, YAZDIRMA SAYFASI olarak sağlanmış.
+
+Kaldırıldı:
+  - `hakedis/[id]` "Hakediş PDF İndir" düğmesi + `downloadPdf` işleyicisi
+  - `satin-alma/siparis/[id]` "Sipariş PDF İndir" düğmesi + işleyicisi
+    + `downloadingPdf` durumu
+  - `services/report.service.ts` (tamamı — beş ucun hiçbiri yoktu)
+
+Her iki ekrana kaldırma gerekçesi yorum olarak yazıldı, test yazdırma
+yolunun DURDUĞUNU da doğruluyor (silinirse düşer).
+
+**Sunucu tarafı PDF ayrıca istenirse** (imzalı çıktı, otomatik e-posta
+eki, arşivleme gibi bir ihtiyaç) ayrı paket: kütüphane seçimi +
+şablonlar. Yazdırma sayfaları ve Excel şablonları referans olur.
+
+### Fiyat farkı kararı da netleşti
+
+Endeks ve profil ekranları **kaldırılmadı.** Gerekçe "belki lazım olur"
+değil: `ProgressPayment.PriceDifferenceAmount` bugün ELLE giriliyor ve
+hakediş Excel çıktısına, finans panosuna, hakediş takibine ve
+**kâr hesabına** (`HakedisProfitService`) akıyor. Yani eskalasyon
+pratikte kullanılıyor; eksik olan yalnızca otomatik hesap. Ana veriyi
+silmek girilmiş endeksleri geri dönüşsüz atmak olurdu.
+
+Hesap ucu da YAZILMADI: uydurulacak şey formülün kendisi olurdu.
+Netleşmesi gerekenler yukarıdaki fiyat farkı kaydında listeli.

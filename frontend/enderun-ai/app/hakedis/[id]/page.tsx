@@ -15,10 +15,6 @@ import {
   type ProgressPaymentDetail,
 } from "@/services/progress-payment.service";
 
-import {
-  reportService,
-} from "@/services/report.service";
-
 const statusLabels: Record<ProgressPaymentStatus, string> = {
   [ProgressPaymentStatus.Draft]: "Taslak",
   [ProgressPaymentStatus.PendingApproval]: "Onay Bekliyor",
@@ -137,32 +133,6 @@ export default function ProgressPaymentDetailPage() {
         err instanceof Error
           ? err.message
           : "Excel indirilemedi."
-      );
-
-    }
-
-  }
-
-
-  async function downloadPdf() {
-
-    if (!item) {
-      return;
-    }
-
-    try {
-
-      await reportService
-        .downloadProgressPaymentPdf(
-          item.id
-        );
-
-    } catch (err) {
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "PDF indirilemedi."
       );
 
     }
@@ -307,7 +277,13 @@ export default function ProgressPaymentDetailPage() {
       <div className="erp-toolbar">
         <div className="erp-actions">
           {/* NATURA formatında, logo antetli çıktı; PDF tarayıcının
-              yazdırma penceresinden alınır. */}
+              yazdırma penceresinden alınır.
+
+              SUNUCU TARAFI PDF YOK: yanında duran "Hakediş PDF İndir"
+              düğmesi /api/reports/... çağırıyordu, o uç hiç yazılmamış
+              (backend'de api/reports rotası ve PDF kütüphanesi yok).
+              Düğme kaldırıldı; PDF yeteneği bu yazdırma sayfasıyla
+              zaten sağlanıyor. Bkz. TEMIZLIK-TARAMASI.md. */}
           <Link href={`/hakedis/${item.id}/yazdir`}>
             NATURA Çıktısı
           </Link>
@@ -321,13 +297,6 @@ export default function ProgressPaymentDetailPage() {
             onClick={() => void downloadExcel()}
           >
             Excel İndir
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void downloadPdf()}
-          >
-            Hakediş PDF İndir
           </button>
         </div>
 

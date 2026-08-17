@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -1022,5 +1022,55 @@ describe("eleman seviyesi yetki (R2/1)", () => {
     expect(text, "veri kapsamı düğmesi kapısı yok").toMatch(
       /role\.name === "Admin" \|\| !actions\.can\("edit"\)/,
     );
+  });
+  /**
+   * SUNUCU TARAFI PDF HİÇ YAZILMAMIŞ — ÖLÜ DÜĞMELER KALDIRILDI.
+   *
+   * `report.service.ts` beş PDF ucu tanımlıyordu; backend'de `api/reports`
+   * rotası YOK ve PDF üretebilecek kütüphane de yok (QuestPDF, iText,
+   * DinkToPdf, Puppeteer, wkhtmltopdf — hiçbiri projede değil).
+   *
+   * Kaldırmanın gerekçesi "kullanılmıyor" değil: her iki ekranda da
+   * ÇALIŞAN bir yazdırma sayfası ölü düğmenin YANINDA duruyor
+   * (`/hakedis/{id}/yazdir`, `/satin-alma/siparis/{id}/yazdir`).
+   * PDF yeteneği tarayıcının yazdırma penceresiyle zaten sağlanıyor;
+   * ölü düğme yalnızca kullanıcıyı yanıltıyordu.
+   *
+   * Bu test yazdırma yolunun DURDUĞUNU da doğruluyor — düğme
+   * kaldırıldıktan sonra o link tek çıkış yolu.
+   */
+  it("ölü PDF düğmeleri kalktı, yazdırma yolu duruyor", () => {
+    const hakedis = readFileSync(join(ROOT, "app/hakedis/[id]/page.tsx"), "utf8");
+    const siparis = readFileSync(
+      join(ROOT, "app/satin-alma/siparis/[id]/page.tsx"),
+      "utf8",
+    );
+
+    for (const [text, name] of [[hakedis, "hakedis"], [siparis, "siparis"]] as const) {
+      /*
+       * YORUMLAR SOYULUYOR. Kaldırma gerekçesi kodda yorum olarak
+       * yazılı ve içinde eski düğme adı geçiyor; ham metinde arayan
+       * bir tarama kendi açıklamamızı bulgu sanıyordu.
+       */
+      const code = text
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, " ")
+        .replace(/\/\/[^\n]*/g, " ");
+
+      expect(code, `${name}: reportService hâlâ kullanılıyor`).not.toContain(
+        "reportService",
+      );
+      expect(code, `${name}: ölü PDF düğmesi hâlâ var`).not.toMatch(/PDF İndir/);
+    }
+
+    // çalışan çıkış yolu duruyor
+    expect(hakedis).toContain("/yazdir");
+    expect(siparis).toContain("/yazdir");
+
+    // Excel yolu da duruyor (hakedişte ikinci alternatif)
+    expect(hakedis).toContain("hakedis-export");
+
+    // servis dosyası silindi
+    expect(existsSync(join(ROOT, "services", "report.service.ts"))).toBe(false);
   });
 });

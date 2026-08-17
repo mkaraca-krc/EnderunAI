@@ -32,9 +32,6 @@ import {
 } from "@/services/procurement-approval.service";
 
 import {
-  reportService,
-} from "@/services/report.service";
-import {
   brandMismatch,
   requestedBrandLabel,
 } from "@/lib/purchasing/requested-brand";
@@ -142,8 +139,6 @@ export default function PurchaseOrderDetailPage() {
     useState<PurchaseOrderApprovalContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [downloadingPdf, setDownloadingPdf] =
-    useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [pendingAction, setPendingAction] = useState<OrderAction | null>(null);
@@ -200,33 +195,6 @@ export default function PurchaseOrderDetailPage() {
     orderedTotal > 0
       ? (receivedTotal / orderedTotal) * 100
       : 0;
-
-  async function downloadPurchaseOrderPdf() {
-    if (!order?.id) {
-      setError(
-        "PDF oluşturmak için sipariş bilgisi bulunamadı."
-      );
-      return;
-    }
-
-    try {
-      setDownloadingPdf(true);
-      setError("");
-
-      await reportService.downloadPurchaseOrderPdf(
-        order.id
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Sipariş PDF'i indirilemedi."
-      );
-    } finally {
-      setDownloadingPdf(false);
-    }
-  }
-
 
   async function runAction(action: OrderAction, reason: string) {
     if (!order) return;
@@ -395,14 +363,11 @@ export default function PurchaseOrderDetailPage() {
                     </Link>
                   )}
 
-                  <Button
-                    variant="secondary"
-                    loading={downloadingPdf}
-                    disabled={downloadingPdf}
-                    onClick={downloadPurchaseOrderPdf}
-                  >
-                    Sipariş PDF İndir
-                  </Button>
+                  {/* SUNUCU TARAFI PDF YOK. Burada "Sipariş PDF İndir"
+                      düğmesi vardı; /api/reports/purchase-order/... 
+                      çağırıyor ama o uç hiç yazılmamış. Aşağıdaki
+                      "Yazdır" sayfası çıktının çalışan yolu — tarayıcı
+                      yazdırma penceresinden PDF olarak kaydedilir. */}
 
                   <Link
                     href={`/satin-alma/siparis/${order.id}/yazdir`}
