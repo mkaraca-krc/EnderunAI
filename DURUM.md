@@ -88,14 +88,32 @@ içe aktarma sorguları da süzülür → sessizce eksik rakam.
 - **yığın 3:** `Inventory`, `Warehouses`, `PurchaseRequests`, `Vehicles`,
   `ToolServiceRequests`, `ProjectDailyReportsRollup`, `Projects`,
   `SubcontractorContracts`, `IsgDashboard`
-- **açık karar:** `HrRecruitment` (adaylar/başvurular/mülakatlar).
-  Şantiye kapsamlı kullanıcının aday havuzunda ne görmesi gerektiği net
-  değil — aday havuzu şantiye verisi değil, İK ofisi verisi. Doğru cevap
-  muhtemelen "hiçbir şey" ama bu personelden sert bir kesme.
-  **Doğrulanmış açık:** `GET hr/recruitment/candidates` gövdesi
-  `db.JobCandidates.AsNoTracking().OrderByDescending(...)` — hiçbir
-  süzgeç yok, `companyId` bile yok; `JobCandidate` modelinde
-  `IdentityNumber` var.
+- **`HrRecruitment` — KARAR VERİLDİ (2026-08-18), ADAY TARAFI KAPANDI.**
+  İşe alım Enderun'da MERKEZİ (kullanıcı kararı): adayları İK/merkez
+  görür. Üç katman kuruldu, commit `9cab1f55`:
+    1. okuma uçları `personnel.view` -> `personnel.manage`
+       (Şantiye Şefi / Formen / İSG Sorumlusu erişimi kaybetti; etki
+       RoleCatalog'dan ölçüldü, başka rol etkilenmedi)
+    2. aday listesi dikişte ŞİRKET kapsamıyla süzülüyor
+       (`JobCandidate` yalnız CompanyId taşır — ilan projeye
+       bağlanabilir, aday havuzu ortak; merkezi modelin veri karşılığı)
+    3. TC kimlik numarası MASKELİ — `personnel.create` ister,
+       fail-closed, istemciye hiç gitmez
+  Üç sonda da yakaladı (yetki geri çekilirse / maske hep açıksa /
+  maske fail-open olursa).
+
+  **KAPATILAN AÇIK:** `GET hr/recruitment/candidates` gövdesi tam olarak
+  `db.JobCandidates.AsNoTracking().OrderByDescending(...)` idi — hiçbir
+  süzgeç yok, `companyId` bile yok — ve `personnel.view` saha
+  rollerinde olduğu için onlar bütün şirketlerdeki tüm adayları TC
+  kimlik numarasıyla listeleyebiliyordu.
+
+  **KALAN İŞ:** ilan / başvuru / mülakat uçları hâlâ ham `db` erişiyor
+  → R3a yığın 2'de dikişe alınacak.
+
+  **KABUL EDİLEN SINIR:** maskenin DAVRANIŞI uçtan canlı doğrulanamıyor;
+  `personnel.manage` olup `personnel.create` OLMAYAN rol katalogda yok.
+  Bugün asıl korumayı yetki daralması yapıyor, maske gelecek içindir.
 
 ---
 
@@ -298,3 +316,58 @@ hipotez ölçümle çöktü; yedincisini varsayımla düzeltmek aynı hata olur.
 **Somut sonraki adım:** aynı 3 sınıfı N kez koşup düşen test adlarını
 biriktiren bir betik; düşme deseni (hep aynı testler mi, hep ilk sınıf
 mı) mekanizmayı daraltır.
+
+---
+
+## 8. ELENEN HİPOTEZLER — bunları TEKRAR KOVALAMA
+
+**Negatif bilgi en kolay kaybolan ve en pahalı yeniden öğrenilen şeydir.**
+Aşağıdakiler R3a yığın 1 doğrulanırken ÖLÇÜMLE çürütüldü. Yeni bir
+kapsam sorunu görüldüğünde bu listeye önce bakılmalı.
+
+Bağlam: personel listesi bazı kullanıcılar için boş dönüyordu. Dört tur
+boyunca altı hipotez kovalandı; **hepsi yanlış çıktı.** Gerçek sebep
+tek satırdı ve en sonda bulundu.
+
+| # | Hipotez | Nasıl elendi |
+|---|---|---|
+| 1 | `HasGlobalAccess` false hesaplanıyor | İstek içinden ölçüldü: **True**. Yanıt başlığına yazdırıldı. |
+| 2 | Kapsam uygulayan mevcut 10 kontrolcüde de sistemik hata var | Dayanaksız çıktı; kapsam mekanizması doğru çalışıyor. |
+| 3 | EF zorunlu navigasyon (`x.Company.Name`) INNER JOIN'e dönüp satırı sessizce düşürüyor | Ölçüldü: şirket görünür (`sirketVar=True`) ve şantiye şefi AYNI projeksiyondan satırı alıyor. |
+| 4 | `canViewSalary` projeksiyonu satır düşürüyor | `Personnel.MonthlySalary` sıradan bir `decimal?` kolonu — join yok, satır düşürmez. |
+| 5 | Testler-arası bulaşma (fixture yalıtımsızlığı) | 3 sınıflık KÜÇÜK koşuda da düştü; ayrıca her sınıf tek başına geçiyor. |
+| 6 | Seed edilen `test.admin` global erişim alamıyor | Ölçüldü: `roller=[Admin]`, `All` kapsam satırı var (tip 0, aktif), **135/135 izin**. |
+
+### GERÇEK SEBEP: kendi sondamın kaynakta bıraktığı sabotaj
+
+`CurrentDataScopeService.cs` içinde
+`Apply(IQueryable<Personnel>)` aşırı yüklemesinin ilk satırı
+`HasGlobalAccess` yerine **`false`** yazılı kalmıştı. Bir önceki sonda
+turunun C sondası ("kapsamsız kullanıcı da daraltılırsa") kaynağa
+uygulanmış, ama harness'in hata dalı yedeği **geri koymak yerine
+silmişti** (`rm -f "$file.probe-bak"`). Tur "SONDA YERLEŞMEDİ"
+raporlarken sabotaj kodda kaldı.
+
+Sonuç: `HasGlobalAccess` doğru hesaplanıyordu ama `Apply` onu yok sayıp
+HER ZAMAN süzüyordu. Global erişimli kullanıcıların kümeleri boş olduğu
+için 0 satır; şantiye şefinin `SiteIds` dolu olduğu için 1 satır. Bu da
+"süzgeç eklemek satır sayısını ARTIRIYOR" gibi imkânsız görünen bir
+tabloya yol açtı.
+
+### Bundan çıkan dört kural (§5'te 12-15 numaralı)
+
+12. Test koşuları serileştirilir (paylaşılan test DB).
+13. Kaynağı değiştiren sonda harness'i **her yolda** yedeği geri koyar.
+14. Sonda turundan sonra **`git diff` okunur** — `git status` yetmez,
+    kendi meşru değişikliğin sabotajı maskeler.
+15. Teşhiste sıra, hipotezin akla yatkınlığına göre değil **ölçümün
+    ayırıcılığına** göre kurulur.
+
+### Ayrıca elendi: "16 düşme regresyondu"
+
+Tam tur bir kez 16 düşme verdi, tekrarında 2244/2244 geçti; sonra iki
+kez daha 2246/2246. Aynı 3 sınıf bir koşuda 13 düştü, üç koşuda 50/50
+geçti. Yani o düşmeler **kararsızlıktı**, mantık hatası değil — dikişin
+izi 15 isteğin hepsinde `global=True` ve `ham == kapsamli` gösterdi
+(bkz. §7). Kararsızlığın MEKANİZMASI hâlâ bilinmiyor ve ölçülmeden
+fixture'a dokunulmamalı.
