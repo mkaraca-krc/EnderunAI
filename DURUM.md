@@ -8,12 +8,13 @@
 > Okuma sırası:
 > 1. **§8 ELENEN HİPOTEZLER** — bunlar ÖLÇÜMLE çürütüldü, tekrar
 >    kovalama. Negatif bilgi en kolay kaybolan şeydir.
-> 2. **§5 ÇALIŞMA DİSİPLİNLERİ** — 18 kural. Özellikle 12-15:
+> 2. **§5 ÇALIŞMA DİSİPLİNLERİ** — 17 kural. Özellikle 12-17:
 >    test koşuları serileştirilir; sonda harness'i her yolda yedeği
 >    geri koyar; sonda sonrası `git diff` okunur; teşhiste sıra
 >    ölçümün AYIRICILIĞINA göre kurulur.
-> 3. **§7 KARARSIZ SUITE** — mekanizma HENÜZ BİLİNMİYOR.
->    **Ölçmeden fixture'a DOKUNMA.**
+> 3. **§7 KARARSIZ SUITE** — 3 sınıflık koşuda kararsızlık 10 turda
+>    ÜRETİLEMEDİ; güçlü şüphe, "kararsızlık"ın aslında §8'deki sabotaj
+>    penceresi olduğu. Tam tur ölçümü açık. **Fixture'a hâlâ DOKUNMA.**
 >
 > Sıradaki iş, bu sırayla:
 > 1. Kararsızlık ölçümü: en çok düşen üç sınıfı (PersonnelDataIntegration,
@@ -164,9 +165,26 @@ ucu backend'de hiç yok (model de yok). O ekrandaki panel KALDIRILDI.
 model kamu formülünün tam kendisi (A, B1..B5, C katsayıları + Yİ-ÜFE
 alt endeksleri). Ama o tabloları OKUYAN hiçbir kod yok: atıl.
 
-**Cevaplanamayan alt soru:** endeks/profil ekranlarına veri girildi mi?
-Veritabanı erişimi bu oturumda kapalıydı, bakılamadı. Girildiyse özelliği
-öne almak mantıklı.
+**ÖLÇÜLDÜ (2026-08-18) — cevap: hiç kullanılmamış.** Veritabanı erişimi
+sonraki oturumda açıktı, sayıldı:
+
+| Tablo | Satır |
+|---|---|
+| `price_difference_profiles` | **0** |
+| `price_difference_index_periods` | **0** |
+| `price_difference_coefficients` | **0** |
+| fiyat farkı girilmiş hakediş | **0** (toplam 1 hakediş, tutar 0,00) |
+| karşılaştırma: `projects` / `personnel` | 4 / 81 |
+
+Kanıtın gücü: "hakedişlerde fiyat farkı yok" TEK BAŞINA zayıf (sistemde
+yalnız 1 hakediş var). Ama **profil ve endeks tablolarının tamamen boş
+olması güçlü** — 81 personel ve 4 proje girilmiş bir kurulumda fiyat
+farkı ana verisine hiç dokunulmamış.
+
+**Öneri (kullanıcı onayı bekliyor):** `fiyat-farki/profiller` ve
+`endeksler` ekranları + menü bölümü kaldırılsın; **backend model ve
+tablolar KALSIN** (veri kaybı yok, migration gerekmez, şema hazır).
+`ProgressPayment.PriceDifferenceAmount` elle giriş yolu KALIR.
 
 **Karar verilirse netleşmesi gerekenler:** formül (kamu Yİ-ÜFE standardı
 mı sözleşmeye özel endeks mi), hesabın hakedişe hangi aşamada işleneceği,
@@ -194,6 +212,53 @@ ayrıca istenirse (imzalı çıktı, e-posta eki) ayrı paket.
 | Perakende V3 (raporlar) | bekliyor |
 | Reçete aktarım provası | VERİ ENGELİ: 0 reçete, 9 stok kalemi, birim sözlükleri örtüşmüyor. Reçete Excel yolu + `CreateMissingInventoryItems` kararı + birim kararı gerekiyor |
 | NATURA icmal provası | hazır, gerçek belge no yakmadan koşulacak |
+
+### LİSTE STANDARDI (yeni iş kolu, 2026-08-18)
+
+Denetim raporu: 143 liste ekranı (105 tablo + 38 kart). Ölçüm sonuçları
+`TEMIZLIK-TARAMASI.md` ve yayınlanan denetim sayfasında.
+
+**Ölçülen taban:**
+- Sayfalama: **0/143**. Kod tabanının tamamında `setPage · currentPage ·
+  pageSize · totalPages · pageCount` araması 0 sonuç. Backend'de de yok:
+  122 kontrolcüden 1'i `.Skip()` kullanıyor, ortak sayfalama tipi yoktu.
+- Gerçek dosya indirebilen ekran: **3/143**. Excel kütüphanesi kurulu
+  DEĞİL (bağımlılıklar: next, react, react-dom, qrcode).
+- Yazdır düğmesi: **7/143**, üçünde `@media print` yok →
+  menü/kenar çubuğu kâğıda basılıyor. `globals.css`'te tek bir
+  `@media print` kuralı yok.
+- Kırıntı yolu: **çalışıyor** — `ErpShell` menüden türetiyor. Eksik olan
+  sayfa içi dönüş (42 detay ekranından 12'sinde var).
+
+**Hangi listeler GERÇEKTEN büyük** (canlı `count(*)`, tahmin değil):
+`position_unit_prices` 44.934 · `engineering_positions` 23.531 ·
+`attendance_records` 5.637 · `security_audit_events` 1.580 ·
+`accounting_accounts` 1.111. Kalan 208 tablo 100 satırın ALTINDA.
+Yani sunucu sayfalaması **5 ekranın** meselesi, 143'ün değil.
+
+| Faz | Durum |
+|---|---|
+| **F0** — poz ekranındaki yanlış rakam | **BİTTİ** (aşağıda) |
+| F1 — standart tablo bileşeni + global `@media print` | sırada |
+| F2 — sunucu sayfalaması, yalnız 5 büyük liste | F1'den sonra |
+| F3 — 105 tablo ekranı bileşene taşınır | modül modül |
+| F4 — 38 kart listesi | en son |
+
+**F0 ne yaptı:** poz kütüphanesi ekranı uçtan gelen diziyi sayıp
+"Toplam Poz — Kütüphanedeki kayıtlar" diye gösteriyordu; uç varsayılan
+100 kayıt döndürüyor. Yani 23.531 pozluk kütüphane için ekranda **100**
+yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
+- `Contracts/Core/PagedResult.cs` (yeni) — `Items · Total · Take ·
+  HasMore`. F2 bunu genelleştirecek.
+- `EngineeringPositionsController.GetAll` toplamı **süzgeçten sonra,
+  tavandan önce** sayıyor (arama sonucu da doğru raporlansın).
+- Aynı ucun 4 tüketicisi de düzeltildi. İkincisi ayrı bir kusurdu:
+  `teklifler/yeni` açılır listesi `take` hiç göndermiyordu → teklif
+  hazırlarken **23.530 aktif pozdan 100'ü** seçilebiliyordu. Tavan 500'e
+  çekildi + kırpılma yazıyla bildiriliyor. Kalıcı çözüm arama tabanlı
+  poz seçici (keşif ve satın almada zaten var) — F3'te bu ekrana geçecek.
+- Testler: `PositionListTruncationTests` (5, backend) +
+  `tests/list-truncation.test.ts` (5, frontend). Dört sonda da yakaladı.
 
 ---
 
@@ -286,6 +351,37 @@ ayrıca istenirse (imzalı çıktı, e-posta eki) ayrı paket.
     bozuk olabilir mi?" sorusundan her zaman daha ucuzdur. Bu oturumda
     en ayırıcı ölçüm (dikişin döndürdüğü sorguyu saymak) en sona
     bırakıldığı için dört tur kaybedildi.
+16. **SONDA HARNESS'İNDE GERİ KOYMA `trap` İLE BAĞLANIR.** Kural 13
+    yetmiyor: 2026-08-18'de F0 sonda turu ZAMAN AŞIMINA uğradı, betik
+    öldürüldü ve sabotaj (`query.CountAsync` yerine
+    `db.EngineeringPositions.CountAsync`) kaynakta kaldı. Betiğin hata
+    dalı doğruydu; sorun betiğin O DALA HİÇ ULAŞAMAMASIYDI. Doğrusu:
+    `trap 'mv "$F.probe-bak" "$F"' EXIT INT TERM` — süreç nasıl biterse
+    bitsin geri koyar. Ayrıca sondalar TEK TEK koşulur: her sonda ayrı
+    bir derleme demek, üçünü tek komuta dizmek zaman aşımı riskidir.
+    (Kural 14 bu kez işe yaradı: sabotaj bir dakikada yakalandı.)
+17. **SONDA GERİ KONDUKTAN SONRA KAYNAK `touch`'LANIR — YOKSA İKİLİ
+    SABOTAJLI KALIR.** Kural 14'ün KÖR NOKTASI ve 2026-08-18'de tam
+    turda 5 düşmeye mal oldu.
+
+    Mekanizma: `cp dosya dosya.probe-bak` yedeğe O ANIN mtime'ını verir.
+    Sonda uygulanır, derlenir, ikili sabotajlı olur. `mv` ile geri
+    konunca kaynak dosya YEDEĞİN mtime'ını alır — yani zaman damgası
+    GERİYE gider. MSBuild "kaynak, DLL'den eski" görüp yeniden
+    DERLEMEZ. Sonuç: `git status` temiz, `git diff` temiz, kaynak
+    doğru — ama çalışan ikili hâlâ sabotajlı.
+
+    Belirti çok yanıltıcıydı: yeni yazılan testler tek başına GEÇİYOR
+    (yalıtılmış veritabanında süzgeçsiz sayım da doğru çıkıyor), tam
+    turda DÜŞÜYOR. "Testlerim kötü yazılmış" diye okunmaya çok müsait.
+    Gerçek teşhis, uca giden isteğin gövdesini basan geçici bir teşhis
+    testiyle geldi: `items` süzülü (0 yabancı kayıt) ama `total`
+    süzgeçsiz — yani kaynak DEĞİL ikili konuşuyordu.
+
+    Kural: sonda harness'i geri koyduktan sonra `touch "$FILE"`.
+    Denetim de değişir — "kaynak temiz mi" YETMEZ, **"ikili kaynaktan
+    yeni mi"** sorulur:
+    `stat -c %y kaynak.cs` vs `stat -c %y bin/.../*.dll`.
 
 ---
 
@@ -344,9 +440,38 @@ Değişiklik kenara alındığında (git stash) aynı 3 sınıf 50/50 geçiyor.
 **Bu mekanizma ölçülmeden fixture'a dokunulmamalı** — bu oturumda altı
 hipotez ölçümle çöktü; yedincisini varsayımla düzeltmek aynı hata olur.
 
-**Somut sonraki adım:** aynı 3 sınıfı N kez koşup düşen test adlarını
-biriktiren bir betik; düşme deseni (hep aynı testler mi, hep ilk sınıf
-mı) mekanizmayı daraltır.
+### N-KEZ ÖLÇÜMÜ YAPILDI (2026-08-18) — 10/10 YEŞİL
+
+Aynı 3 sınıf, aynı komut, 10 kez seri koşuldu. Sonuç:
+
+| Tur | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Düşen | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+50/50, her turda. Süre 18–25 sn. trx'ten okunan sınıf sırası da her
+turda AYNI: `PersonnelDataIntegration → PersonnelWorkLocation →
+SalaryPrivacy`. Yani sıra rastgeleliği diye bir şey de yok.
+
+**Bundan çıkan güçlü şüphe: "kararsızlık" hiç var olmamış olabilir.**
+
+§7'nin başındaki tablo (3 sınıf → 13 düştü) ve tam turdaki 16 düşme,
+§8'de anlatılan SABOTAJ PENCERESİNDE ölçüldü. O sabotajın belirtisi
+(`Apply` her zaman süzüyor → global erişimli kullanıcı 0 satır görür)
+kayda geçen belirtiyle BİREBİR aynı: "düşen testler personeli
+göremiyor — liste boş, detay 404".
+
+Yani "aynı kod, farklı sonuç" görüntüsü büyük olasılıkla şuydu: kod
+AYNI DEĞİLDİ. Sonda kaynağa uygulanmış hâldeyken koşan turlar düşüyor,
+harness geri koyduktan sonrakiler geçiyordu. Rastgelelik sanılan şey,
+sondanın kaynakta olup olmamasıydı.
+
+**AÇIK KALAN YARIM:** tam tur (2246 test) bu iddiaya karşı henüz N kez
+koşulmadı — 16 düşme oradan gelmişti. Kapanması için tam tur en az 3 kez
+koşulmalı. **O ölçüm alınana kadar "kararsızlık yoktur" DENMEZ**;
+bugünkü doğru ifade "3 sınıflık koşuda kararsızlık ÜRETİLEMEDİ".
+
+**Fixture'a hâlâ dokunulmadı** ve bu doğru karar: düzeltilecek bir
+mekanizma olmayabilir.
 
 ---
 
@@ -393,6 +518,30 @@ tabloya yol açtı.
     kendi meşru değişikliğin sabotajı maskeler.
 15. Teşhiste sıra, hipotezin akla yatkınlığına göre değil **ölçümün
     ayırıcılığına** göre kurulur.
+
+### Ayrıca elendi (2026-08-18): "F0 testleri kötü yazılmış"
+
+Tam turda `PositionListTruncationTests`in 5'i de düştü, tek başına 5'i
+de geçiyordu. İlk okuma "testler global veritabanı durumuna bağımlı"
+olurdu ve YANLIŞ olurdu.
+
+Ayırıcı ölçüm: geçici bir teşhis testi isteğin gövdesini bastı.
+`items` doğru süzülmüş (0 yabancı şirket kaydı), `total` süzgeçsiz —
+oysa kaynakta ikisi de AYNI `query` üzerinden. Kaynak ile davranışın
+çelişmesi tek bir şeye işaret eder: çalışan ikili kaynak değil.
+
+Sebep §5/17: sonda geri konunca dosyanın mtime'ı geriye gitti,
+MSBuild yeniden derlemedi, sabotajlı DLL kaldı. Düşen sayılar da bunu
+söylüyordu — 191 → 321 → 451 → 463 → 593, aralar tam olarak testlerin
+kendi tohumladığı 130/130/12/130. Yani sayım veritabanı geneliydi,
+sondanın `db.EngineeringPositions.CountAsync` hâli.
+
+### Ayrıca elendi (2026-08-18): "3 sınıflık koşu kararsız"
+
+10 kez koşuldu, **10 kez 50/50**. Kararsızlık ÜRETİLEMEDİ. Bu, §7'deki
+"~dörtte bir kararsızlık" kaydının büyük olasılıkla sabotaj penceresinin
+ölçümü olduğunu gösteriyor — belirtiler birebir örtüşüyor. Tam tur için
+aynı iddia HENÜZ kanıtlanmadı.
 
 ### Ayrıca elendi: "16 düşme regresyondu"
 

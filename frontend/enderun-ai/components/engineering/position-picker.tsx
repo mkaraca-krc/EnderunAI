@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { unitPrice } from "@/lib/format/turkish";
+import { unitPrice, whole } from "@/lib/format/turkish";
 
 import {
   engineeringPositionService,
@@ -56,6 +56,8 @@ export default function PositionPicker({
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<EngineeringPositionListItem[]>([]);
+  /* 0 = kırpılma yok. Aksi hâlde toplam eşleşme sayısı. */
+  const [matchCount, setMatchCount] = useState(0);
   const [error, setError] = useState("");
 
   // Aramayı her tuşta değil, yazma durunca çalıştır.
@@ -84,10 +86,16 @@ export default function PositionPicker({
             take: 40,
           });
 
-          setResults(rows);
+          setResults(rows.items);
+          /*
+           * Eşleşme sayısı tavanı aşıyorsa kullanıcı aramasını
+           * daraltmalı; "ilk 40" listesini tüm sonuç sanmamalı.
+           */
+          setMatchCount(rows.hasMore ? rows.total : 0);
           setError("");
         } catch (err) {
           setResults([]);
+          setMatchCount(0);
           setError(err instanceof Error ? err.message : "Poz aranamadı.");
         }
       })();
@@ -181,6 +189,13 @@ export default function PositionPicker({
             <small>
               Eşleşen poz yok. Kütüphanede karşılığı yoksa özel poz
               tanımlayabilirsiniz.
+            </small>
+          )}
+
+          {matchCount > 0 && (
+            <small className="erp-text-muted">
+              {whole(matchCount)} eşleşmeden ilk{" "}
+              {results.length} tanesi. Aramayı daraltın.
             </small>
           )}
 

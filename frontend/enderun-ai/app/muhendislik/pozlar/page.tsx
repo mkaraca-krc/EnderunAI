@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
-import { decimal } from "@/lib/format/turkish";
+import { decimal, whole } from "@/lib/format/turkish";
 import { Button } from "@/components/ui";
 import {
   EngineeringPositionListItem,
@@ -44,6 +44,14 @@ function formatHours(value: number) {
 
 export default function EngineeringPositionsPage() {
   const [items, setItems] = useState<EngineeringPositionListItem[]>([]);
+  /*
+   * KÜTÜPHANEDEKİ GERÇEK KAYIT SAYISI — listelenen kayıt sayısıyla
+   * AYNI ŞEY DEĞİL. Uç bir tavan uyguluyor (varsayılan 100); bu ekran
+   * eskiden gelen dizinin uzunluğunu "Toplam Poz" diye gösteriyordu,
+   * yani 23.531 pozluk kütüphane için ekranda 100 yazıyordu.
+   */
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [search, setSearch] = useState("");
   const [discipline, setDiscipline] = useState("");
   const [status, setStatus] = useState("");
@@ -63,7 +71,9 @@ export default function EngineeringPositionsPage() {
         source: source === "" ? undefined : Number(source),
       });
 
-      setItems(result);
+      setItems(result.items);
+      setTotal(result.total);
+      setHasMore(result.hasMore);
     } catch (err) {
       setError(
         err instanceof Error
@@ -82,7 +92,14 @@ export default function EngineeringPositionsPage() {
 
   const summary = useMemo(() => {
     return {
-      total: items.length,
+      /*
+       * TOPLAM UÇTAN GELİR, listeden sayılmaz. Aşağıdaki `active` ve
+       * `custom` ise hâlâ listelenen kümeden sayılıyor — bu yüzden
+       * etiketleri de "listelenen" diyor. Kütüphane geneli için
+       * kırılım gerekiyorsa uç ayrıca döndürmeli; olmayan bilgiyi
+       * ekranda varmış gibi göstermek bu ekranın ta baştaki hatasıydı.
+       */
+      total,
       active: items.filter((x) => x.status === 1).length,
       // Kaynak 0 RESMÎ kurum pozu, 1 şirkete özel. Bir dönem burada
       // 0 sayılıp "Enderun" diye gösteriliyordu; 23.500 resmî poz
@@ -95,7 +112,7 @@ export default function EngineeringPositionsPage() {
         0
       ),
     };
-  }, [items]);
+  }, [items, total]);
 
   return (
     <ErpShell
@@ -145,8 +162,14 @@ export default function EngineeringPositionsPage() {
           <div className="enderun-dashboard-stat-icon">▦</div>
           <div>
             <span>Toplam Poz</span>
-            <strong>{loading ? "…" : summary.total}</strong>
-            <small>Kütüphanedeki kayıtlar</small>
+            <strong>
+              {loading ? "…" : whole(summary.total)}
+            </strong>
+            <small>
+              {hasMore
+                ? `${items.length} tanesi listeleniyor`
+                : "Kütüphanedeki kayıtlar"}
+            </small>
           </div>
         </div>
 
@@ -155,7 +178,9 @@ export default function EngineeringPositionsPage() {
           <div>
             <span>Aktif Poz</span>
             <strong>{loading ? "…" : summary.active}</strong>
-            <small>Kullanıma açık pozlar</small>
+            <small>
+              {hasMore ? "Listelenenler içinde" : "Kullanıma açık pozlar"}
+            </small>
           </div>
         </div>
 
@@ -164,7 +189,9 @@ export default function EngineeringPositionsPage() {
           <div>
             <span>Özel Poz</span>
             <strong>{loading ? "…" : summary.custom}</strong>
-            <small>Şirkete özel pozlar</small>
+            <small>
+              {hasMore ? "Listelenenler içinde" : "Şirkete özel pozlar"}
+            </small>
           </div>
         </div>
 
@@ -253,6 +280,25 @@ export default function EngineeringPositionsPage() {
             Filtreleri Temizle
           </button>
         </div>
+
+        {/*
+          KIRPMA UYARISI. Uç bir tavan uyguluyor ve bu doğru — 23 bin
+          satırı tarayıcıya yollamak ekranı kilitler. Yanlış olan,
+          kırpıldığını söylememekti: kullanıcı listenin tamamını
+          gördüğünü sanıp 101. pozun var olmadığı sonucuna varıyordu.
+          Sayfalama gelene kadar (F1/F2) çıkış yolu arama.
+        */}
+        {!loading && hasMore && (
+          <div className="erp-alert warning">
+            <strong>
+              {whole(total)} pozdan {items.length} tanesi
+              gösteriliyor.
+            </strong>{" "}
+            {search.trim()
+              ? "Aramanızı daraltın."
+              : "Aradığınız pozu bulmak için yukarıdaki arama kutusunu kullanın; arama kütüphanenin tamamında çalışır."}
+          </div>
+        )}
 
         {loading ? (
           <div className="erp-loading">Pozlar yükleniyor...</div>

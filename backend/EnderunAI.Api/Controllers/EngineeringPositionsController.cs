@@ -1,3 +1,4 @@
+using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Contracts.Engineering;
 using EnderunAI.Api.Services.Engineering;
 using EnderunAI.Api.Data;
@@ -77,6 +78,13 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
         // yapılmadan tüm kütüphane çekilemez.
         var limit = take is > 0 and <= 500 ? take.Value : 100;
 
+        // TOPLAM, TAVANDAN ÖNCE SAYILIR. Yalnız diziyi döndürdüğümüz
+        // sürece arayüz kırpıldığını bilemiyordu ve gelen kaydı toplam
+        // sanıyordu — poz ekranı 23.531 kayıtlık kütüphane için
+        // "Toplam Poz: 100" gösteriyordu. Süzgeçler uygulanmış sorgu
+        // üzerinden sayıyoruz ki arama sonucu da doğru raporlansın.
+        var total = await query.CountAsync(cancellationToken);
+
         var items = await query
             .OrderBy(x => x.Code)
             .Take(limit)
@@ -92,7 +100,7 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(items);
+        return Ok(PagedResult<object>.From(items, total, limit));
     }
 
     [HttpGet("{id:guid}")]

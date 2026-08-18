@@ -6,7 +6,7 @@ import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
 import { // `calculate` icinde ayni adda yerel bir degisken var; takma ad
   // olmasaydi okuyan hangisinin kastedildigini ayirt edemezdi.
-  quantity as formatQuantity, currencyMoney, decimal, percent } from "@/lib/format/turkish";
+  quantity as formatQuantity, currencyMoney, decimal, percent, whole } from "@/lib/format/turkish";
 import CostBreakdownModal from "@/components/offers/cost-breakdown-modal";
 import {
   Button,
@@ -143,6 +143,10 @@ export default function NewOfferPage() {
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [positions, setPositions] = useState<EngineeringPositionListItem[]>([]);
+  /* Açılır liste kütüphanenin tamamını taşımıyor; kaç poz olduğunu ve
+     kırpıldığını kullanıcıya söylemek zorundayız. */
+  const [positionsTruncated, setPositionsTruncated] = useState(false);
+  const [positionTotal, setPositionTotal] = useState(0);
   const [loadingRecipeLine, setLoadingRecipeLine] = useState<number | null>(null);
   const [laborHourRate, setLaborHourRate] = useState("500");
   const [machineHourRate, setMachineHourRate] = useState("750");
@@ -182,12 +186,25 @@ export default function NewOfferPage() {
         const [companyRows, projectRows, positionRows] = await Promise.all([
           companyService.getAll(),
           projectService.getAll(),
-          engineeringPositionService.getAll({ status: 1 }),
+          /*
+           * TAVAN AÇIKÇA İSTENİYOR. Bu açılır liste eskiden uca hiç
+           * `take` göndermiyordu, yani uç varsayılanı olan 100 kayıt
+           * geliyordu — 23.530 aktif pozdan 100'ü. Kullanıcı listede
+           * göremediği pozun var olmadığını sanıyordu.
+           *
+           * Tavan 500'e çekildi (ucun izin verdiği en yüksek değer) ve
+           * kırpılma artık kaleme yazıyla bildiriliyor. Kalıcı çözüm
+           * arama tabanlı poz seçici — kesif ve satın alma ekranlarında
+           * zaten kullanılıyor; bu ekrana geçirilmesi ayrı iş.
+           */
+          engineeringPositionService.getAll({ status: 1, take: 500 }),
         ]);
 
         setCompanies(companyRows);
         setProjects(projectRows);
-        setPositions(positionRows);
+        setPositions(positionRows.items);
+        setPositionsTruncated(positionRows.hasMore);
+        setPositionTotal(positionRows.total);
 
         if (companyRows.length === 1) {
           setForm((current) => ({
@@ -801,6 +818,15 @@ export default function NewOfferPage() {
                                 </option>
                               ))}
                             </select>
+
+                            {positionsTruncated && (
+                              <small className="mt-1 block text-amber-700">
+                                {whole(positionTotal)} aktif
+                                pozdan ilk {positions.length} tanesi listede.
+                                Aradığınız poz yoksa poz no ve tanımı elle
+                                yazabilirsiniz.
+                              </small>
+                            )}
 
                             {line.positionNumber && (
                               <small className="mt-1 block text-slate-500">

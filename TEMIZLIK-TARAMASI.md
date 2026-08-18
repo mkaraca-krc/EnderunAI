@@ -888,3 +888,117 @@ varlığını sızdırmamak için.
 personeldeki kadar net değil. Aday havuzu şantiye verisi değil İK ofisi
 verisi; doğru cevap muhtemelen "hiçbir şey" ama bu personelden daha sert
 bir kesme ve ayrı karar istiyor.
+
+---
+
+# LİSTE / TABLO STANDARDI DENETİMİ (2026-08-18)
+
+Kapsam: `app/` altındaki 177 sayfa tarandı, **143'ü liste ekranı**
+(105 tablo + 38 kart tabanlı). Kart tabanlılar `<table>` kullanmadıkları
+için ilk taramada görünmemişti — personeller, kullanıcılar, işe alım,
+kariyer, organizasyon gibi ekranlar bu grupta.
+
+## Tarayıcı iki kez yanıldı — düzeltilerek kaydediliyor
+
+Denetim aracının kendi hataları, §6'daki uyarının yeni örneği:
+
+1. **"12 ekranda istemci sayfalaması var" — YANLIŞ POZİTİF.** Eşleşen
+   `Önceki`/`Sonraki` metinleri sayfalama düğmesi değil SÜTUN
+   BAŞLIĞIYDI: "Önceki Hakediş", "Önceki %", "Önceki Teslim".
+   Doğrulama: kod tabanının tamamında
+   `setPage · currentPage · pageSize · rowsPerPage · totalPages ·
+   pageCount` araması → **0 sonuç**. Gerçek sayı **0/143**.
+2. **"7 ekran Excel'e aktarıyor" — YANLIŞ POZİTİF.** Dördü "Excel/CSV"
+   kelimesini İÇE AKTARMA ekranı olduğu için geçiriyordu. Gerçekten
+   dosya indirebilen (`createObjectURL` / `download=` / `new Blob`)
+   ekran sayısı **3**: `hakedis/[id]`, `gunluk-puantaj`, `zimmetler`.
+
+Ders (§6'ya ek): metin eşleşmesi niyet ölçmez. Sayı bir karara
+dayanacaksa, deseni gören her satır ELLE okunur.
+
+## Veri gerçeği — canlı `count(*)`
+
+Öncelik tahminle değil sayımla kuruldu:
+
+| Tablo | Satır |
+|---|---|
+| `position_unit_prices` | 44.934 |
+| `engineering_positions` | 23.531 |
+| `attendance_records` | 5.637 |
+| `security_audit_events` | 1.580 |
+| `accounting_accounts` | 1.111 |
+| `current_accounts` | 150 |
+| `personnel` | 81 |
+
+**Kalan 208 tablonun tamamı 100 satırın altında.** Yani sunucu
+sayfalaması 143 ekranın değil, **5 ekranın** meselesi. Diğerlerinde
+amaç performans değil, uzun listede kaybolmamak.
+
+## Bulgular
+
+**Sayfalama: 0/143.** Backend'de de yoktu — 122 kontrolcüden 1'i
+`.Skip()` kullanıyor, ortak sayfalama tipi tanımlı değildi.
+Kontrolcülerde **16 sessiz tavan** var (`.Take(100)`, `.Take(500)` …)
+ve hiçbiri toplam sayı döndürmüyordu.
+
+**Yazdır: 7/143, üçü menüyü de basıyor.** `app/globals.css` içinde
+**tek bir `@media print` kuralı yok**; yazdırma stilini ihtiyacı olan
+her sayfa kendi içinde yazmış, bu yüzden üçünde unutulmuş:
+- `hakedis/[id]/yazdir` — ayrı yazdırma sayfası olduğu hâlde print CSS'i
+  yok, kendi yazdır düğmesini basıyor.
+- `insan-kaynaklari/gunluk-puantaj` ve `zimmetler` — ErpShell içinde
+  yazdır düğmesi taşıyor, print CSS'i yok → **menü ve kenar çubuğu
+  kâğıda basılıyor**.
+Antetli/kurumsal ortak çıktı şablonu yok; dört yazdırma sayfasının
+dördü de başlığını elle kurmuş.
+
+**Dışa aktarma: 3/143.** Kurulu Excel kütüphanesi YOK (bağımlılıklar
+`next · react · react-dom · qrcode`). Karar gerekiyor: bağımlılıksız
+CSV (UTF-8 BOM + noktalı virgül; Excel TR çift tıkla doğru açar) mı,
+backend'de gerçek `.xlsx` mi. Öneri: CSV ile başla.
+
+**Navigasyon: çalışıyor.** `ErpShell` kırıntı yolunu MENÜDEN türetiyor,
+URL parçalarından değil — kullanıcı "hesap-plani" gibi teknik metin
+görmüyor, karşılığı olmayan sayfada uydurma üst seviye gösterilmiyor.
+Eksik olan yalnız sayfa içi dönüş: 42 detay ekranından 12'sinde var.
+
+**Arama 44/143, filtre 81/143.** Ortak bileşen olmadığı için her ekran
+kendi kutusunu ve gecikmesini ayrı yazmış. "Filtre sonrası sayfalama
+doğru mu?" sorusunun bugün cevabı yok — çelişecek sayfalama yok.
+F1'de bağlanacak kural: *filtre değişince sayfa 1'e döner ve toplam
+sayı filtrelenmiş kümeyi gösterir.*
+
+## F0 — kapatılan kusur: ekranda duran yanlış rakam
+
+Poz kütüphanesi ekranı uca `take` göndermiyordu → uç varsayılanı 100
+kayıt. Ekran gelen diziyi sayıp **"Toplam Poz — Kütüphanedeki
+kayıtlar"** diye gösteriyordu.
+
+**Ekranda: 100. Veritabanında: 23.531.**
+
+"Aktif Poz" ve "Özel Poz" kartları da aynı 100 üzerinden sayılıp
+kütüphane geneliymiş gibi etiketlenmişti. 101. poza ulaşmanın tek yolu
+aramaydı ve kullanıcı kırpıldığını hiçbir yerden anlamıyordu.
+
+Backend'deki tavan KASITLI ve yorumu da vardı ("tamamını döndürmek
+istemciyi kilitler"). **Hatalı olan tavan değil, tavanın kullanıcıya
+söylenmemesiydi.** Bu bir performans eksiği değil sessiz veri kaybı:
+eksik liste, doğru sayı kılığında.
+
+**İkinci kusur — aynı kök, daha ağır sonuç.** Ucun 4 tüketicisi
+denetlenirken `app/teklifler/yeni/page.tsx:185` çıktı:
+`getAll({ status: 1 })`, `take` yok → **23.530 aktif pozdan 100'ü**.
+Bu bir açılır liste ve teklif hazırlarken kullanılıyor; yani sistem
+satılabilir kalemi sessizce kısıtlıyordu. Kalem alanları serbest metin
+kabul ettiği için kullanıcı tıkanmıyor ama listede göremediği pozun
+var olmadığını sanıyor.
+
+Yapılanlar: `Contracts/Core/PagedResult.cs` (Items · Total · Take ·
+HasMore); toplam **süzgeçten sonra, tavandan önce** sayılıyor;
+4 tüketici de kırpılmayı bildiriyor; teklif ekranında tavan 500'e
+çekildi. Testler: `PositionListTruncationTests` (5) +
+`tests/list-truncation.test.ts` (5). Dört sonda da yakaladı.
+
+**F3 borcu:** `teklifler/yeni` açılır listesi arama tabanlı poz
+seçiciye (`components/engineering/position-picker.tsx`) geçmeli —
+bileşen zaten var ve keşif ile satın almada kullanılıyor.

@@ -51,6 +51,28 @@ export function positionSourceLabel(
   return officialInstitution?.trim() || "Resmî kurum";
 }
 
+/**
+ * KIRPILMIŞ LİSTE SONUCU.
+ *
+ * Uç, kütüphanenin tamamını döndürmüyor — 23 binin üzerinde poz var ve
+ * hepsini tarayıcıya yollamak ekranı kilitler. Eskiden yalnız dizi
+ * dönüyordu; ekran gelen kaydı TOPLAM sanıyor ve "Toplam Poz: 100"
+ * yazıyordu. Artık kaç kayıt olduğu da geliyor ki arayüz kırpıldığını
+ * SÖYLEYEBİLSİN.
+ *
+ * `total` süzgeçlerden sonra, tavandan önce sayılır: arama yapıldıysa
+ * eşleşme sayısını verir.
+ */
+export type PagedPositions = {
+  items: EngineeringPositionListItem[];
+  /** Süzgeçlere uyan toplam kayıt sayısı. */
+  total: number;
+  /** Bu istekte uygulanan tavan. */
+  take: number;
+  /** Gösterilmeyen kayıt var mı. */
+  hasMore: boolean;
+};
+
 export type EngineeringPositionFilters = {
   search?: string;
   source?: number;
@@ -86,7 +108,7 @@ export const engineeringPositionService = {
 
     const query = params.toString();
 
-    return apiClient<EngineeringPositionListItem[]>(
+    return apiClient<PagedPositions>(
       `engineering-positions${query ? `?${query}` : ""}`
     );
   },

@@ -70,6 +70,8 @@ export default function CustomPositionsPage() {
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [items, setItems] = useState<EngineeringPositionListItem[]>([]);
+  /* Uç 500'de kırpmış mı — kırpıldıysa liste eksik olabilir. */
+  const [truncated, setTruncated] = useState(false);
   const [prices, setPrices] = useState<Record<string, number | null>>({});
 
   const [loading, setLoading] = useState(true);
@@ -125,11 +127,18 @@ export default function CustomPositionsPage() {
 
         if (cancelled) return;
 
+        /*
+         * ŞİRKET SÜZGECİ İSTEMCİDE, TAVAN SUNUCUDA. Bugün özel poz
+         * sayısı tavanın (500) çok altında olduğu için sorun değil;
+         * aşılırsa bir şirketin pozları ilk 500'ün DIŞINDA kalıp
+         * sessizce kaybolabilir. Uyarıyı bu yüzden gösteriyoruz.
+         */
         const scoped = companyId
-          ? result.filter((x) => x.companyId === companyId)
-          : result;
+          ? result.items.filter((x) => x.companyId === companyId)
+          : result.items;
 
         setItems(scoped);
+        setTruncated(result.hasMore);
 
         // Fiyatlar poz listesinde gelmiyor; her poz için ayrı çözülüyor.
         // Şirkete özel poz sayısı düşük olduğu için bu kabul edilebilir;
@@ -307,6 +316,18 @@ export default function CustomPositionsPage() {
 
         {error && <div className="erp-alert erp-alert-danger">{error}</div>}
         {notice && <div className="erp-alert erp-alert-success">{notice}</div>}
+
+        {/*
+          Tavan doldu: şirket süzgeci istemcide çalıştığı için bu
+          durumda bazı özel pozlar hiç gelmemiş olabilir.
+        */}
+        {truncated && (
+          <div className="erp-alert warning">
+            <strong>Liste eksik olabilir.</strong> Özel poz sayısı
+            sunucu tavanına (500) ulaştı; bu ekran şirket süzgecini
+            geldikten sonra uyguluyor.
+          </div>
+        )}
 
         <section className="erp-card">
           <div className="erp-card-header">
