@@ -21,7 +21,17 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     // ---- Job postings ----
 
     [HttpGet("postings")]
-    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
+    // İŞE ALIM MERKEZİ BİR İK İŞLEVİ — şantiye aday havuzu yönetmez.
+    //
+    // Bu uçlar `personnel.view` istiyordu ve o izin Şantiye Şefi,
+    // Formen ve İSG Sorumlusu'nda da var; yani saha rolleri bütün
+    // adayları (TC kimlik numarasıyla birlikte) listeleyebiliyordu.
+    //
+    // ETKİ ÖLÇÜMÜ (RoleCatalog, 15 rol): personnel.manage'e çekilince
+    // yalnız Şantiye Şefi / Formen / İSG Sorumlusu erişimi kaybediyor —
+    // istenen sonuç bu. Admin, Genel Müdür, İK Sorumlusu ve Teknik
+    // Koordinatör etkilenmiyor. Yeni izin anahtarı AÇILMADI.
+    [RequirePermission(PermissionCatalog.Keys.PersonnelManage)]
     public async Task<IActionResult> GetPostings(
         [FromQuery] Guid? companyId,
         [FromQuery] int? status,
@@ -128,20 +138,37 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     // ---- Candidates ----
 
     [HttpGet("candidates")]
-    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
-    public async Task<IActionResult> GetCandidates(CancellationToken cancellationToken)
+    // İŞE ALIM MERKEZİ BİR İK İŞLEVİ — şantiye aday havuzu yönetmez.
+    //
+    // Bu uçlar `personnel.view` istiyordu ve o izin Şantiye Şefi,
+    // Formen ve İSG Sorumlusu'nda da var; yani saha rolleri bütün
+    // adayları (TC kimlik numarasıyla birlikte) listeleyebiliyordu.
+    //
+    // ETKİ ÖLÇÜMÜ (RoleCatalog, 15 rol): personnel.manage'e çekilince
+    // yalnız Şantiye Şefi / Formen / İSG Sorumlusu erişimi kaybediyor —
+    // istenen sonuç bu. Admin, Genel Müdür, İK Sorumlusu ve Teknik
+    // Koordinatör etkilenmiyor. Yeni izin anahtarı AÇILMADI.
+    [RequirePermission(PermissionCatalog.Keys.PersonnelManage)]
+    public async Task<IActionResult> GetCandidates(
+        [FromServices] ICandidateIdentityVisibilityService identityVisibility,
+        [FromServices] IScopedData scoped,
+        CancellationToken cancellationToken)
     {
-        var items = await db.JobCandidates.AsNoTracking()
+        var canViewIdentity =
+            await identityVisibility.CanViewIdentityNumberAsync(cancellationToken);
+
+        var items = await (await scoped.JobCandidatesAsync(cancellationToken))
             .OrderByDescending(x => x.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return Ok(items.Select(CandidateDto));
+        return Ok(items.Select(x => CandidateDto(x, canViewIdentity)));
     }
 
     [HttpPost("candidates")]
     [RequirePermission(PermissionCatalog.Keys.PersonnelCreate)]
     public async Task<IActionResult> CreateCandidate(
         SaveJobCandidateRequest request,
+        [FromServices] ICandidateIdentityVisibilityService identityVisibility,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.FirstName) || string.IsNullOrWhiteSpace(request.LastName))
@@ -157,7 +184,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
         db.JobCandidates.Add(item);
         await db.SaveChangesAsync(cancellationToken);
 
-        return Ok(CandidateDto(item));
+        return Ok(CandidateDto(item, await identityVisibility.CanViewIdentityNumberAsync(cancellationToken)));
     }
 
     [HttpPut("candidates/{id:guid}")]
@@ -165,6 +192,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     public async Task<IActionResult> UpdateCandidate(
         Guid id,
         SaveJobCandidateRequest request,
+        [FromServices] ICandidateIdentityVisibilityService identityVisibility,
         CancellationToken cancellationToken)
     {
         var item = await db.JobCandidates.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -178,7 +206,7 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
         item.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(CandidateDto(item));
+        return Ok(CandidateDto(item, await identityVisibility.CanViewIdentityNumberAsync(cancellationToken)));
     }
 
     [HttpDelete("candidates/{id:guid}")]
@@ -200,7 +228,17 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     // ---- Applications ----
 
     [HttpGet("applications")]
-    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
+    // İŞE ALIM MERKEZİ BİR İK İŞLEVİ — şantiye aday havuzu yönetmez.
+    //
+    // Bu uçlar `personnel.view` istiyordu ve o izin Şantiye Şefi,
+    // Formen ve İSG Sorumlusu'nda da var; yani saha rolleri bütün
+    // adayları (TC kimlik numarasıyla birlikte) listeleyebiliyordu.
+    //
+    // ETKİ ÖLÇÜMÜ (RoleCatalog, 15 rol): personnel.manage'e çekilince
+    // yalnız Şantiye Şefi / Formen / İSG Sorumlusu erişimi kaybediyor —
+    // istenen sonuç bu. Admin, Genel Müdür, İK Sorumlusu ve Teknik
+    // Koordinatör etkilenmiyor. Yeni izin anahtarı AÇILMADI.
+    [RequirePermission(PermissionCatalog.Keys.PersonnelManage)]
     public async Task<IActionResult> GetApplications(CancellationToken cancellationToken)
     {
         var items = await db.JobApplications.AsNoTracking()
@@ -290,7 +328,17 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
     // ---- Interviews ----
 
     [HttpGet("interviews")]
-    [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
+    // İŞE ALIM MERKEZİ BİR İK İŞLEVİ — şantiye aday havuzu yönetmez.
+    //
+    // Bu uçlar `personnel.view` istiyordu ve o izin Şantiye Şefi,
+    // Formen ve İSG Sorumlusu'nda da var; yani saha rolleri bütün
+    // adayları (TC kimlik numarasıyla birlikte) listeleyebiliyordu.
+    //
+    // ETKİ ÖLÇÜMÜ (RoleCatalog, 15 rol): personnel.manage'e çekilince
+    // yalnız Şantiye Şefi / Formen / İSG Sorumlusu erişimi kaybediyor —
+    // istenen sonuç bu. Admin, Genel Müdür, İK Sorumlusu ve Teknik
+    // Koordinatör etkilenmiyor. Yeni izin anahtarı AÇILMADI.
+    [RequirePermission(PermissionCatalog.Keys.PersonnelManage)]
     public async Task<IActionResult> GetInterviews(CancellationToken cancellationToken)
     {
         var items = await db.CandidateInterviews.AsNoTracking()
@@ -475,13 +523,21 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
         };
     }
 
-    private static object CandidateDto(JobCandidate x) => new
+    /// <summary>
+    /// Aday kartı. KİMLİK NUMARASI MASKELİ.
+    ///
+    /// `canViewIdentity` false ise TC null döner — istemciye hiç
+    /// gitmez, gizlenmez. Bu uçlar `personnel.view` ile korunuyor ve o
+    /// izin Şantiye Şefi ile Formen'de de var; maske olmadan personel
+    /// görebilen HERKES bütün adayların TC'sini görüyordu.
+    /// </summary>
+    private static object CandidateDto(JobCandidate x, bool canViewIdentity) => new
     {
         x.Id,
         x.FirstName,
         x.LastName,
         fullName = $"{x.FirstName} {x.LastName}".Trim(),
-        x.IdentityNumber,
+        IdentityNumber = canViewIdentity ? x.IdentityNumber : null,
         x.BirthDate,
         phone = x.PhoneNumber,
         x.Email,

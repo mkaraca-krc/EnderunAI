@@ -478,6 +478,9 @@ builder.Services.AddScoped<EnderunAI.Api.Security.ICurrentDataScopeService, Ende
 // Kapsamlı okuma dikişi: kontrolcülerin kapsam taşıyan varlıkları
 // okuduğu tek yol (bkz. Security/ScopedData.cs).
 builder.Services.AddScoped<EnderunAI.Api.Security.IScopedData, EnderunAI.Api.Security.ScopedData>();
+
+// Aday TC kimlik numarası maskesi (fail-closed, personnel.create ister).
+builder.Services.AddScoped<EnderunAI.Api.Security.ICandidateIdentityVisibilityService, EnderunAI.Api.Security.CandidateIdentityVisibilityService>();
 builder.Services.AddScoped<EnderunAI.Api.Security.ISalaryVisibilityService, EnderunAI.Api.Security.SalaryVisibilityService>();
 builder.Services.AddScoped<EnderunAI.Api.Security.IExtraPaymentVisibilityService, EnderunAI.Api.Security.ExtraPaymentVisibilityService>();
 // Resmî net + elden ödeme + toplam ele geçen hesabı; ücret kartı

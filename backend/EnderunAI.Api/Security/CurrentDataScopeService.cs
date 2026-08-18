@@ -58,6 +58,25 @@ public sealed record CurrentDataScopeSnapshot(
                     assignment.EndDate == null &&
                     SiteIds.Contains(assignment.ProjectSiteId)));
 
+    /// <summary>
+    /// Aday havuzunu kapsama daraltır.
+    ///
+    /// ADAY ŞİRKET SEVİYESİNDE TUTULUYOR: <see cref="JobCandidate"/>
+    /// yalnızca `CompanyId` taşıyor, proje/şantiye bağı YOK. İşe alım
+    /// merkezi bir İK işlevi olduğu için model de öyle kurulmuş —
+    /// ilanlar (`JobPosting`) projeye/departmana bağlanabiliyor ama
+    /// adaylar ortak havuzda.
+    ///
+    /// Bu yüzden süzgeç ŞİRKET kümesine bakar. Şantiye kapsamlı
+    /// kullanıcının şirket kümesi boştur, yani hiçbir aday görmez —
+    /// uçtaki `personnel.manage` zaten onu geçirmiyor, bu ikinci
+    /// savunma katmanı.
+    /// </summary>
+    public IQueryable<JobCandidate> Apply(IQueryable<JobCandidate> query) =>
+        HasGlobalAccess
+            ? query
+            : query.Where(item => CompanyIds.Contains(item.CompanyId));
+
     public bool CanAccessCompany(Guid companyId) =>
         HasGlobalAccess || CompanyIds.Contains(companyId);
 

@@ -90,9 +90,15 @@ public sealed class DataScopeSeamTests
             "extra_payment izniyle korunuyor ve tutar maskeleme " +
             "projeksiyon katmanında; kapsam ayrıca uygulanmalı.",
         ["HrRecruitmentController.cs"] =
-            "AÇIK KARAR: şantiye kapsamlı kullanıcının aday havuzunda ne " +
-            "görmesi gerektiği personeldeki kadar net değil (aday havuzu " +
-            "şantiye verisi değil, İK ofisi verisi).",
+            "KARAR VERİLDİ: işe alım MERKEZİ bir İK işlevi. Üç katman " +
+            "kuruldu — (1) okuma uçları personnel.view'dan " +
+            "personnel.manage'e çekildi (Şantiye Şefi/Formen/İSG " +
+            "erişimi kaybetti, etki ölçüldü), (2) aday listesi dikişte " +
+            "ŞİRKET kapsamıyla süzülüyor (JobCandidate yalnız CompanyId " +
+            "taşır; ilan projeye bağlanabilir, aday havuzu ortak), " +
+            "(3) TC kimlik numarası maskeli (personnel.create ister, " +
+            "fail-closed). Kalan ham db erişimi: ilan/başvuru/mülakat " +
+            "uçları — R3a yığın 2'de dikişe alınacak.",
     };
 
     [Fact]

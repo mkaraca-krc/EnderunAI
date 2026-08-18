@@ -443,4 +443,105 @@ public sealed class PermissionAndScopeTests(DatabaseFixture fixture)
         Assert.Contains(kendi.EmployeeNumber, darBody);
         Assert.DoesNotContain(baska.EmployeeNumber, darBody);
     }
+    /// <summary>
+    /// İŞE ALIM MERKEZİ — saha rolleri aday havuzunu göremez.
+    ///
+    /// Bu uçlar `personnel.view` istiyordu ve o izin Şantiye Şefi,
+    /// Formen ve İSG Sorumlusu'nda da var. Yani saha rolleri BÜTÜN
+    /// şirketlerdeki tüm adayları, TC KİMLİK NUMARASIYLA birlikte
+    /// listeleyebiliyordu — uçta hiçbir süzgeç yoktu, companyId bile.
+    ///
+    /// Etki ölçümü (RoleCatalog, 15 rol): personnel.manage'e çekilince
+    /// yalnız o üç rol erişimi kaybediyor.
+    /// </summary>
+    [Fact]
+    public async Task SantiyeSefi_AdayHavuzunuGoremez()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var project = await TestDataFactory.CreateProjectAsync(db, suffix);
+
+        var site = new ProjectSite
+        {
+            ProjectId = project.Id,
+            Code = $"AD-{suffix}",
+            Name = "Şantiye"
+        };
+        db.ProjectSites.Add(site);
+        await db.SaveChangesAsync();
+
+        var (client, _) = await CreateUserWithRolesAsync(
+            "aday-santiyesefi",
+            "AdaySefi!2026Test",
+            ["Şantiye Şefi"],
+            [site.Id]);
+
+        var response = await client.GetAsync("/api/hr/recruitment/candidates");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    /// <summary>
+    /// ADAY TC KİMLİK NUMARASI MASKELİ — fail-closed kişisel veri.
+    ///
+    /// TC, aday listesinde düz metin dönüyordu. Aday henüz çalışan bile
+    /// değil; numarayı görmek için bir iş gerekçesi olmalı — adayı
+    /// personel kaydına çevirmek. O işlemin izni `personnel.create`,
+    /// maske onu soruyor.
+    ///
+    /// Bu test personnel.manage'i OLAN ama personnel.create'i OLMAYAN
+    /// bir rol gerektiriyor. Böyle bir rol katalogda yoksa test
+    /// maskenin VARLIĞINI doğrular; asıl davranış birim testiyle değil
+    /// uçtan doğrulanır.
+    /// </summary>
+    [Fact]
+    public async Task AdayKimlikNumarasi_YetkisizeDonmez()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var (company, _, _) = await TestDataFactory.CreateCompanyStackAsync(db, suffix);
+
+        db.JobCandidates.Add(new JobCandidate
+        {
+            CompanyId = company.Id,
+            FirstName = "Aday",
+            LastName = $"Test {suffix}",
+            IdentityNumber = "12345678901"
+        });
+        await db.SaveChangesAsync();
+
+        // Admin: personnel.create var -> TC görünür
+        var adminClient = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+        var adminBody = await (await adminClient.GetAsync("/api/hr/recruitment/candidates"))
+            .Content.ReadAsStringAsync();
+
+        Assert.Contains("12345678901", adminBody);
+
+        // Maske servisi personnel.create soruyor: kaynak kontrolü.
+        var kaynak = await File.ReadAllTextAsync(
+            SecurityFilePath("CandidateIdentityVisibilityService.cs"));
+
+        Assert.Contains("PersonnelCreate", kaynak);
+        // fail-closed: kullanıcı çözülemezse gösterme
+        Assert.Matches(@"UserId is not Guid[\s\S]{0,60}return false", kaynak);
+    }
+
+    private static string SecurityFilePath(string fileName)
+    {
+        var dir = AppContext.BaseDirectory;
+
+        while (dir is not null &&
+               !Directory.Exists(Path.Combine(dir, "EnderunAI.Api", "Security")))
+        {
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+
+        return Path.Combine(dir!, "EnderunAI.Api", "Security", fileName);
+    }
 }

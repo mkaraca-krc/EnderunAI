@@ -52,6 +52,15 @@ public interface IScopedData
     /// </summary>
     Task<IQueryable<Personnel>> PersonnelAsync(
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kullanıcının görebileceği aday havuzu. Aday ŞİRKET seviyesinde
+    /// tutuluyor (JobCandidate yalnız CompanyId taşır); şantiye
+    /// kapsamlı kullanıcının şirket kümesi boş olduğu için hiçbir aday
+    /// görmez.
+    /// </summary>
+    Task<IQueryable<JobCandidate>> JobCandidatesAsync(
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class ScopedData(
@@ -76,6 +85,20 @@ public sealed class ScopedData(
          * ProjectSitesController'daki mevcut desen de aynı: `scope is
          * null` erişim YOK demek.
          */
+        if (scope is null)
+            return query.Where(_ => false);
+
+        return scope.Apply(query);
+    }
+
+    public async Task<IQueryable<JobCandidate>> JobCandidatesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var scope = await scopeService.GetAsync(cancellationToken);
+
+        var query = db.JobCandidates.AsNoTracking();
+
+        // Personel ile aynı fail-closed kural.
         if (scope is null)
             return query.Where(_ => false);
 
