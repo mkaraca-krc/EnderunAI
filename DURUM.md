@@ -1,5 +1,36 @@
 # DURUM — açık işler ve yol haritası
 
+> ## BURADAN BAŞLA (temiz bağlam için)
+>
+> **Bu dosyayı baştan sona oku, sonra hiçbir şeye dokunmadan
+> "kararsızlık ölçümü"nden devam et.**
+>
+> Okuma sırası:
+> 1. **§8 ELENEN HİPOTEZLER** — bunlar ÖLÇÜMLE çürütüldü, tekrar
+>    kovalama. Negatif bilgi en kolay kaybolan şeydir.
+> 2. **§5 ÇALIŞMA DİSİPLİNLERİ** — 18 kural. Özellikle 12-15:
+>    test koşuları serileştirilir; sonda harness'i her yolda yedeği
+>    geri koyar; sonda sonrası `git diff` okunur; teşhiste sıra
+>    ölçümün AYIRICILIĞINA göre kurulur.
+> 3. **§7 KARARSIZ SUITE** — mekanizma HENÜZ BİLİNMİYOR.
+>    **Ölçmeden fixture'a DOKUNMA.**
+>
+> Sıradaki iş, bu sırayla:
+> 1. Kararsızlık ölçümü: en çok düşen üç sınıfı (PersonnelDataIntegration,
+>    PersonnelWorkLocation, SalaryPrivacy) N kez koşup düşen test
+>    adlarını biriktir. Aranan desen → işaret ettiği mekanizma:
+>    hep aynı testler → testin kendi durumu; hep ilk sınıf → host/migration
+>    yarışı; hep ilk istek → bağlantı havuzu ısınması; rastgele → derin yarış.
+> 2. Mekanizmaya göre düzeltme (varsayımla değil).
+> 3. R3a yığın 2 — İK ailesi, 10 kontrolcü. Bekçi testindeki
+>    (`DataScopeSeamTests`) istisna listesi borç sayacıdır; her yığın
+>    onu kısaltmalı.
+>
+> Test koşumu için DB bağlantısı: `deploy/scripts/safe-deploy.sh`
+> içindeki `resolve_test_db_connection` deseni — `/etc/enderunai/backend.env`
+> içinden `DB_CONNECTION` okunup `enderun_ai` -> `enderun_ai_test`
+> değiştirilir.
+
 Bu dosya UZUN OTURUM KAYBINA KARŞI yazıldı. Bağlam temizlendiğinde
 buradan devam edilebilir. Ayrıntılı bulgular `TEMIZLIK-TARAMASI.md`
 içinde (yaklaşık 890 satır, kronolojik).
