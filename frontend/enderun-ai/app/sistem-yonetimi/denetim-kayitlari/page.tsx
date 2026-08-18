@@ -1,5 +1,6 @@
 "use client";
 
+import { whole } from "@/lib/format/turkish";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
@@ -75,21 +76,28 @@ export default function SecurityAuditPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  /* Kütüphanedeki gerçek kayıt sayısı — listelenen kayıt sayısı DEĞİL. */
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
-      setEvents(
-        await securityAuditService.getEvents({
-          entityType: entityType.trim() || undefined,
-          take: Number(take),
-        })
-      );
+      const result = await securityAuditService.getEvents({
+        entityType: entityType.trim() || undefined,
+        take: Number(take),
+      });
+
+      setEvents(result.items);
+      setTotal(result.total);
+      setHasMore(result.hasMore);
     } catch (err) {
       setError(messageOf(err));
       setEvents([]);
+      setTotal(0);
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
@@ -164,7 +172,17 @@ export default function SecurityAuditPage() {
                 <h2 className="text-sm font-semibold text-slate-900">
                   Denetim kayıtları
                 </h2>
-                <Badge>{events.length}</Badge>
+                {/*
+                  ROZET TOPLAMI SÖYLER, GELEN KAYDI DEĞİL. Uç `take`
+                  ile kırpıyor (varsayılan 50) ve canlıda 1.580 denetim
+                  olayı var; rozet listeden sayılırsa "50 kayıt var"
+                  demiş oluyordu.
+                */}
+                <Badge>
+                  {hasMore
+                    ? `${whole(total)} kayıttan ${events.length}`
+                    : whole(total)}
+                </Badge>
               </div>
             </CardHeader>
 

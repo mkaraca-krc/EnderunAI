@@ -1,5 +1,6 @@
 "use client";
 
+import { whole } from "@/lib/format/turkish";
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
@@ -42,6 +43,9 @@ export default function PriceSearchPage() {
   const [search, setSearch] = useState("");
   const [discountRate, setDiscountRate] = useState("0");
   const [items, setItems] = useState<ManufacturerPriceProduct[]>([]);
+  /* Aramaya uyan toplam kayıt — gösterilenden fazla olabilir. */
+  const [matchTotal, setMatchTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -80,13 +84,17 @@ export default function PriceSearchPage() {
     setError("");
 
     try {
-      setItems(
-        await manufacturerPriceListService.searchProducts({
-          companyId,
-          search: search.trim(),
-          take: 200,
-        })
-      );
+      const result = await manufacturerPriceListService.searchProducts({
+        companyId,
+        search: search.trim(),
+        take: 200,
+      });
+
+      setItems(result.items);
+      // Kaç eşleşme olduğu söylenmezse kullanıcı "en ucuz bu" derken
+      // görmediği satırlar olabilir.
+      setMatchTotal(result.total);
+      setHasMore(result.hasMore);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fiyatlar aranamadı.");
     } finally {
@@ -113,6 +121,17 @@ export default function PriceSearchPage() {
           {error}
         </div>
       )}
+
+        {/*
+          KAÇ EŞLEŞME OLDUĞU SÖYLENİR. Fiyat karşılaştırmasında eksik
+          liste "en ucuz bu" dedirtir; görülmeyen satır kararı bozar.
+        */}
+        {!loading && hasMore && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <strong>{whole(matchTotal)} eşleşmeden {items.length} tanesi
+            gösteriliyor.</strong> Aramayı daraltın.
+          </div>
+        )}
 
       {/* Fiyat listeleri: uclari vardi, ekrani yoktu. Aramanin
           hangi listelerden beslendigi burada gorunuyor. */}

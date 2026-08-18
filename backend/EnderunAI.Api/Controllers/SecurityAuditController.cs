@@ -1,3 +1,4 @@
+using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
@@ -28,6 +29,10 @@ public sealed class SecurityAuditController(AppDbContext db) : ControllerBase
         if (entityId.HasValue)
             query = query.Where(x => x.EntityId == entityId.Value);
 
+
+        // TOPLAM TAVANDAN ÖNCE SAYILIR — arayüz kırpıldığını bilsin.
+        var total = await query.CountAsync(cancellationToken);
+
         var items = await query
             .OrderByDescending(x => x.OccurredAtUtc)
             .Take(limit)
@@ -45,6 +50,6 @@ public sealed class SecurityAuditController(AppDbContext db) : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(items);
+        return Ok(PagedResult<object>.From(items, total, limit));
     }
 }

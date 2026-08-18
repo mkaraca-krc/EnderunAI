@@ -1,3 +1,4 @@
+import type { Paged } from "@/lib/api/paged";
 import { apiClient } from "@/lib/api/api-client";
 
 export type ManufacturerPriceProduct = {
@@ -99,7 +100,7 @@ export const manufacturerPriceListService = {
       take: String(params.take ?? 100),
     });
 
-    return apiClient<ManufacturerPriceProduct[]>(
+    return apiClient<Paged<ManufacturerPriceProduct>>(
       `manufacturer-price-lists/search-products?${query.toString()}`
     );
   },

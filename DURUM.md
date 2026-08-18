@@ -238,11 +238,43 @@ Yani sunucu sayfalaması **5 ekranın** meselesi, 143'ün değil.
 
 | Faz | Durum |
 |---|---|
-| **F0** — poz ekranındaki yanlış rakam | **BİTTİ** (aşağıda) |
-| F1 — standart tablo bileşeni + global `@media print` | sırada |
-| F2 — sunucu sayfalaması, yalnız 5 büyük liste | F1'den sonra |
-| F3 — 105 tablo ekranı bileşene taşınır | modül modül |
-| F4 — 38 kart listesi | en son |
+| **F0** — poz ekranındaki yanlış rakam | **BİTTİ**, yayında (`5a390f6e`) |
+| **F1** — sayım doğruluğu: kırpan her uç toplam döndürür | **BİTTİ** (aşağıda) |
+| F2 — ortak `PagedResult` + standart tablo bileşeni + global `@media print` | sırada |
+| F3 — büyük listelerde sunucu sayfalaması (5 liste) | F2'den sonra |
+| F4 — kalan tablo ekranları bileşene taşınır | modül modül |
+| F5 — yazdır/Excel (tüm kayıtlar vs bu sayfa) | F4'ten sonra |
+| F6 — arama/filtre sayfalamayla uyumlu | en son |
+
+**F1 ne yaptı — sayım doğruluğu.** F0 tek ekranı düzeltti; F1 kuralı
+UÇTA zorladı. Sorgu dizesinden `take`/`limit` alan beş uç
+`PagedResult` döndürüyor: `SecurityAudit`, `EngineeringRecipes`,
+`AccessRequests`, `ManufacturerPriceLists`, `ProjectDailyReportsRollup`.
+
+Sözleşme testi (`PagedEndpointContractTests`): *çağıranın tavan
+verebildiği her uç toplam da döndürür.* SABİT tavanlar (`.Take(8)`,
+`.Take(20)`) kuralın dışında — onlar kırpma değil TASARIM SINIRI
+("son 8 rapor"). Gerekçesi yazılı iki istisna: `Suggest` ve
+`SearchPositions` — ikisi de SIRALI sonuç üretiyor, kırpılmış liste
+değil; "kaç öneri var" anlamlı bir sayı değil.
+
+Ekran tarafında düzelen sayaçlar:
+- `denetim-kayitlari` rozeti listeden sayıyordu; canlıda **1.580**
+  denetim olayı var, uç 50'de kırpıyor → rozet "50" diyordu.
+- `dashboard` bekleyen erişim talebi sayacı kırpılmış listeden
+  sayıyordu (uç 100'de kırpıyor). Bekleyen talebin eksik görünmesi,
+  hiç görünmemesi kadar kötü.
+- `erisim-talepleri`, `receteler`, `teklifler/fiyatlar` — hepsi
+  toplamı uçtan alıyor ve kırpılmayı yazıyla söylüyor.
+
+Ortak tip: `lib/api/paged.ts` (`Paged<T>` + `truncationNotice`).
+
+**Denetimde çıkan ama F1'de FİİLİ ETKİSİ OLMAYANLAR:** 17 ekran hâlâ
+dizi uzunluğundan sayıyor — ama uçları kırpmadığı için bugün DOĞRU
+(personeller 81, kullanıcılar 13, faturalar 11, hesap planı 1.111'in
+tamamı geliyor). Bunlar F3'te sayfalama gelince yanlışa dönecek;
+`PagedEndpointContractTests` o anda uçları yakalar, ekran tarafını da
+`tests/list-truncation.test.ts` listesine eklemek gerekecek.
 
 **F0 ne yaptı:** poz kütüphanesi ekranı uçtan gelen diziyi sayıp
 "Toplam Poz — Kütüphanedeki kayıtlar" diye gösteriyordu; uç varsayılan

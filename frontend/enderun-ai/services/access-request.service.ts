@@ -1,3 +1,4 @@
+import type { Paged } from "@/lib/api/paged";
 import { apiClient } from "@/lib/api/api-client";
 
 export type AccessRequestStatus = 0 | 1 | 2;
@@ -19,7 +20,7 @@ const root = "access-requests";
 
 export const accessRequestService = {
   getAll(includeDecided = false) {
-    return apiClient<AccessRequestListItem[]>(
+    return apiClient<Paged<AccessRequestListItem>>(
       `${root}?includeDecided=${includeDecided ? "true" : "false"}`
     );
   },

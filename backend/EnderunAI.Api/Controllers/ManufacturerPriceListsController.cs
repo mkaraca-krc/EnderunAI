@@ -1,3 +1,4 @@
+using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Contracts.Pricing;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
@@ -120,7 +121,7 @@ public sealed class ManufacturerPriceListsController(AppDbContext db)
         var term = search.Trim().ToLower();
         var today = DateTime.UtcNow.Date;
 
-        var rows = await db.ManufacturerPriceListItems
+        var matches = db.ManufacturerPriceListItems
             .AsNoTracking()
             .Where(x =>
                 x.ManufacturerPriceList.CompanyId == companyId &&
@@ -130,7 +131,14 @@ public sealed class ManufacturerPriceListsController(AppDbContext db)
                 (x.ProductCode.ToLower().Contains(term) ||
                  x.ProductDescription.ToLower().Contains(term) ||
                  (x.Brand != null && x.Brand.ToLower().Contains(term)) ||
-                 (x.Model != null && x.Model.ToLower().Contains(term))))
+                 (x.Model != null && x.Model.ToLower().Contains(term))));
+
+        // KAÇ EŞLEŞME OLDUĞU SÖYLENİR. Kırpılmış listeyi tüm sonuç
+        // sanmak fiyat karşılaştırmasını yanıltır: kullanıcı "en ucuz
+        // bu" derken görmediği 150 satır olabilir.
+        var total = await matches.CountAsync(cancellationToken);
+
+        var rows = await matches
             .OrderByDescending(x => x.ManufacturerPriceList.ListDate)
             .ThenBy(x => x.ManufacturerPriceList.ManufacturerName)
             .Take(take)
@@ -153,7 +161,7 @@ public sealed class ManufacturerPriceListsController(AppDbContext db)
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(rows);
+        return Ok(PagedResult<object>.From(rows, total, take));
     }
 
     [HttpPost]

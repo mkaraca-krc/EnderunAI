@@ -1,3 +1,4 @@
+using EnderunAI.Api.Contracts.Core;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using EnderunAI.Api.Contracts;
@@ -37,6 +38,11 @@ public sealed class AccessRequestsController(AppDbContext db) : ControllerBase
         if (!includeDecided)
             query = query.Where(item => item.Status == AccessRequestStatus.Pending);
 
+
+        // TOPLAM TAVANDAN ÖNCE SAYILIR — bekleyen talep sayısı
+        // kırpılmış listeden sayılırsa 100'de yalan söyler.
+        var total = await query.CountAsync(cancellationToken);
+
         var items = await query
             .OrderByDescending(item => item.CreatedAtUtc)
             .Take(100)
@@ -55,7 +61,7 @@ public sealed class AccessRequestsController(AppDbContext db) : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(items);
+        return Ok(PagedResult<object>.From(items, total, 100));
     }
 
     [HttpPost("{id:guid}/approve")]

@@ -84,7 +84,9 @@ public sealed class WorkHourAccessTests(DatabaseFixture fixture)
         Assert.Equal(HttpStatusCode.OK, auditResponse.StatusCode);
         var events = await auditResponse.Content.ReadFromJsonAsync<JsonElement>();
 
-        var found = events.EnumerateArray().Any(e =>
+        // Uç artık sayfalı sonuç döndürüyor (kırpma kullanıcıya
+        // söylensin diye): { items, total, take, hasMore }.
+        var found = events.GetProperty("items").EnumerateArray().Any(e =>
             e.GetProperty("actorUsername").GetString() == username &&
             e.GetProperty("action").GetString() == "LoginRejectedOutsideWorkHours");
         Assert.True(found, "Mesai dışı giriş reddi audit log'a düşmedi.");
@@ -200,7 +202,7 @@ public sealed class WorkHourAccessTests(DatabaseFixture fixture)
         var pendingResponse = await adminClient.GetAsync("/api/access-requests");
         Assert.Equal(HttpStatusCode.OK, pendingResponse.StatusCode);
         var pending = await pendingResponse.Content.ReadFromJsonAsync<JsonElement>();
-        var requestId = pending.EnumerateArray()
+        var requestId = pending.GetProperty("items").EnumerateArray()
             .First(x => x.GetProperty("username").GetString() == username)
             .GetProperty("id").GetGuid();
 
@@ -241,7 +243,7 @@ public sealed class WorkHourAccessTests(DatabaseFixture fixture)
         var adminClient = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
         var pendingResponse = await adminClient.GetAsync("/api/access-requests");
         var pending = await pendingResponse.Content.ReadFromJsonAsync<JsonElement>();
-        var requestId = pending.EnumerateArray()
+        var requestId = pending.GetProperty("items").EnumerateArray()
             .First(x => x.GetProperty("username").GetString() == username)
             .GetProperty("id").GetGuid();
 

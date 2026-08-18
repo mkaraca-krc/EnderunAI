@@ -29,6 +29,9 @@ const disciplineLabels: Record<number, string> = {
 
 export default function EngineeringRecipesPage() {
   const [recipes, setRecipes] = useState<RecipeRow[]>([]);
+  /* Uçtan gelen gerçek reçete sayısı — listeden türetilmez. */
+  const [recipeTotal, setRecipeTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [coverage, setCoverage] = useState<EngineeringRecipeCoverage | null>(
     null
   );
@@ -57,8 +60,11 @@ export default function EngineeringRecipesPage() {
         engineeringRecipeService.getCoverage(),
       ]);
 
+      setRecipeTotal(recipeItems.total);
+      setHasMore(recipeItems.hasMore);
+
       setRecipes(
-        recipeItems.map((recipe) => ({
+        recipeItems.items.map((recipe) => ({
           ...recipe,
           discipline: recipe.discipline ?? 0,
           unit: recipe.unit ?? "",
@@ -104,6 +110,18 @@ export default function EngineeringRecipesPage() {
     >
       {error && <div className="erp-alert error">{error}</div>}
 
+      {/* Uç kırptıysa söylenir; arama daraltmak tek çıkış yolu. */}
+      {!loading && hasMore && (
+        <div className="erp-alert warning">
+          <strong>
+            {whole(recipeTotal)} reçeteden {recipes.length} tanesi
+            gösteriliyor.
+          </strong>{" "}
+          Aradığınız reçeteyi bulmak için arama ve disiplin filtresini
+          kullanın.
+        </div>
+      )}
+
       <section className="enderun-dashboard-hero">
         <div>
           <span className="enderun-dashboard-kicker">
@@ -137,7 +155,12 @@ export default function EngineeringRecipesPage() {
           <div className="enderun-dashboard-stat-icon">⚙</div>
           <div>
             <span>Toplam Reçete</span>
-            <strong>{loading ? "…" : recipes.length}</strong>
+            {/*
+              SAYI UÇTAN GELİR. Uç `take` ile kırpıyor (bu ekran 500
+              istiyor); listeden saymak, kütüphane büyüdüğünde sessizce
+              yanlış olurdu.
+            */}
+            <strong>{loading ? "…" : whole(recipeTotal)}</strong>
             <small>Kayıtlı reçete versiyonları</small>
           </div>
         </div>

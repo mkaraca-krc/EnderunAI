@@ -1,5 +1,6 @@
 "use client";
 
+import { whole } from "@/lib/format/turkish";
 import { useCallback, useEffect, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { Badge, Button, Card, CardContent } from "@/components/ui";
@@ -38,6 +39,9 @@ export default function AccessRequestsPage() {
 
   const [items, setItems] = useState<AccessRequestListItem[]>([]);
   const [includeDecided, setIncludeDecided] = useState(false);
+  /* Uçtan gelen gerçek sayılar — listeden türetilmez. */
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -50,7 +54,9 @@ export default function AccessRequestsPage() {
     setError("");
     try {
       const result = await accessRequestService.getAll(withDecided);
-      setItems(result);
+      setItems(result.items);
+      setPendingTotal(result.total);
+      setHasMore(result.hasMore);
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
@@ -96,7 +102,18 @@ export default function AccessRequestsPage() {
     }
   }
 
-  const pendingCount = items.filter((item) => item.status === 0).length;
+  /*
+   * BEKLEYEN SAYISI UÇTAN GELİR. Uç listeyi 100'de kırpıyor; sayıyı
+   * listeden türetmek 101. talepten sonra sessizce yanlış olurdu ve
+   * bekleyen erişim talebi tam da gözden kaçmaması gereken şey.
+   *
+   * `includeDecided` açıkken toplam KARARA BAĞLANMIŞLARI da içerir;
+   * o durumda bekleyen sayısı listeden sayılır — kırpılma uyarısı
+   * ayrıca gösteriliyor.
+   */
+  const pendingCount = includeDecided
+    ? items.filter((item) => item.status === 0).length
+    : pendingTotal;
 
   return (
     <ErpShell
@@ -113,6 +130,15 @@ export default function AccessRequestsPage() {
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
+          </div>
+        )}
+
+        {/* Uç 100'de kırpıyor; liste eksikse söylenir. */}
+        {hasMore && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <strong>{whole(pendingTotal)} talepten {items.length} tanesi
+            gösteriliyor.</strong> Karara bağlananları gizleyerek listeyi
+            kısaltabilirsiniz.
           </div>
         )}
         {notice && (

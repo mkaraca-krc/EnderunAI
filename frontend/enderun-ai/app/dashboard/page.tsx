@@ -313,7 +313,10 @@ export default function DashboardPage() {
       })
       .then((requests) => {
         if (active && requests) {
-          setPendingAccessRequests(requests.length);
+          // Uç 100'de kırpıyor; sayaç TOPLAMI gösterir, gelen kaydı
+          // değil. Bekleyen talep sayısının eksik görünmesi, talebin
+          // hiç görünmemesi kadar kötü.
+          setPendingAccessRequests(requests.total);
         }
       })
       .catch(() => {

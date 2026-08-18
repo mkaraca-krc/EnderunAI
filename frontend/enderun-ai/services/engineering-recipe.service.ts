@@ -1,3 +1,4 @@
+import type { Paged } from "@/lib/api/paged";
 import { apiClient } from "@/lib/api/api-client";
 
 export type RecipeMaterial = {
@@ -102,7 +103,7 @@ export const engineeringRecipeService = {
 
     const query = params.toString();
 
-    return apiClient<EngineeringRecipeListItem[]>(
+    return apiClient<Paged<EngineeringRecipeListItem>>(
       `engineering-recipes${query ? `?${query}` : ""}`
     );
   },

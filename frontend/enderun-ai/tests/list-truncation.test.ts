@@ -48,6 +48,45 @@ describe("kırpılmış liste dürüstlüğü", () => {
     );
   });
 
+  it("kırpan uçları tüketen ekranlar toplamı uçtan alır", () => {
+    // Her biri FAZ 1'de dönüştürülen bir ucu tüketiyor. Sayıyı listeden
+    // türetmek, uç kırptığı anda sessizce yanlış olur.
+    const kirpanEkranlar: [string, RegExp][] = [
+      ["app/sistem-yonetimi/denetim-kayitlari/page.tsx", /setTotal\(result\.total\)/],
+      ["app/sistem-yonetimi/erisim-talepleri/page.tsx", /setPendingTotal\(result\.total\)/],
+      ["app/muhendislik/receteler/page.tsx", /setRecipeTotal\(recipeItems\.total\)/],
+      ["app/teklifler/fiyatlar/page.tsx", /setMatchTotal\(result\.total\)/],
+      ["app/dashboard/page.tsx", /setPendingAccessRequests\(requests\.total\)/],
+    ];
+
+    for (const [path, beklenen] of kirpanEkranlar) {
+      expect(read(path), `${path} toplamı uçtan almalı`).toMatch(beklenen);
+    }
+  });
+
+  it("kırpan uçları tüketen ekranlar kırpılmayı söyler", () => {
+    const uyariVerenler = [
+      "app/sistem-yonetimi/denetim-kayitlari/page.tsx",
+      "app/sistem-yonetimi/erisim-talepleri/page.tsx",
+      "app/muhendislik/receteler/page.tsx",
+      "app/teklifler/fiyatlar/page.tsx",
+    ];
+
+    for (const path of uyariVerenler) {
+      expect(read(path), `${path} hasMore'u kullanmalı`).toMatch(/hasMore/);
+    }
+  });
+
+  it("sayaç kartı kırpılmış listeden saymaz", () => {
+    // ASIL KUSURUN İMZASI: uçtan gelen diziyi sayıp toplam diye
+    // göstermek. Dönüştürülen ekranlarda bu desen kalmamalı.
+    expect(read("app/sistem-yonetimi/denetim-kayitlari/page.tsx"))
+      .not.toMatch(/<Badge>\{events\.length\}<\/Badge>/);
+
+    expect(read("app/muhendislik/receteler/page.tsx"))
+      .not.toMatch(/<strong>\{loading \? "…" : recipes\.length\}<\/strong>/);
+  });
+
   it("poz seçicileri kırpılmayı gizlemez", () => {
     const picker = read("components/engineering/position-picker.tsx");
     expect(picker).toMatch(/rows\.hasMore/);

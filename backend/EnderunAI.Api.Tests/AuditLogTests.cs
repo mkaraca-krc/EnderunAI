@@ -31,10 +31,16 @@ public sealed class AuditLogTests(DatabaseFixture fixture)
 
         Assert.Equal(HttpStatusCode.OK, auditResponse.StatusCode);
 
+        // Uç sayfalı sonuç döndürüyor: { items, total, take, hasMore }.
+        // Toplam, tavandan (burada take=5) ÖNCE sayılır — yani kaç
+        // denetim kaydı olduğunu söyler, kaçının geldiğini değil.
         var events = await auditResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-        Assert.True(events.GetArrayLength() >= 1);
+        var items = events.GetProperty("items");
 
-        var entry = events[0];
+        Assert.True(items.GetArrayLength() >= 1);
+        Assert.True(events.GetProperty("total").GetInt32() >= items.GetArrayLength());
+
+        var entry = items[0];
         Assert.Equal("Created", entry.GetProperty("action").GetString());
         Assert.Equal("EmployerPortalLink", entry.GetProperty("entityType").GetString());
         Assert.Equal(AuthHelper.AdminUsername, entry.GetProperty("actorUsername").GetString());

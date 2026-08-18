@@ -1,3 +1,4 @@
+import type { Paged } from "@/lib/api/paged";
 import { apiClient } from "@/lib/api/api-client";
 
 const root = "security-audit/events";
@@ -42,6 +43,8 @@ export const securityAuditService = {
     if (params?.take) query.set("take", String(params.take));
 
     const suffix = query.toString();
-    return apiClient<SecurityAuditEvent[]>(suffix ? `${root}?${suffix}` : root);
+    return apiClient<Paged<SecurityAuditEvent>>(
+      suffix ? `${root}?${suffix}` : root
+    );
   },
 };

@@ -1,3 +1,4 @@
+using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
@@ -20,8 +21,15 @@ public sealed class ProjectDailyReportsRollupController(AppDbContext db) : Contr
     {
         var limit = take > 0 && take <= 100 ? take : 10;
 
-        var items = await db.ProjectSiteDailyReports.AsNoTracking()
-            .Where(x => x.ProjectSite.ProjectId == projectId)
+        var matches = db.ProjectSiteDailyReports.AsNoTracking()
+            .Where(x => x.ProjectSite.ProjectId == projectId);
+
+        // "Son N rapor" gösterilirken projede kaç rapor olduğu da
+        // söylenir; yoksa 10 rapor gören kullanıcı projenin tamamının
+        // 10 rapordan ibaret olduğunu sanıyor.
+        var total = await matches.CountAsync(cancellationToken);
+
+        var items = await matches
             .OrderByDescending(x => x.ReportDate)
             .Take(limit)
             .Select(x => new
@@ -36,6 +44,6 @@ public sealed class ProjectDailyReportsRollupController(AppDbContext db) : Contr
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(items);
+        return Ok(PagedResult<object>.From(items, total, limit));
     }
 }

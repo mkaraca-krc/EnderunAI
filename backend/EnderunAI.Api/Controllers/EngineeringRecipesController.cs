@@ -1,3 +1,4 @@
+using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Contracts.Engineering;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
@@ -56,6 +57,10 @@ public sealed class EngineeringRecipesController(
                 EF.Functions.ILike(x.EngineeringPosition.Name, $"%{term}%"));
         }
 
+
+        // TOPLAM TAVANDAN ÖNCE SAYILIR — arayüz kırpıldığını bilsin.
+        var total = await query.CountAsync(cancellationToken);
+
         var items = await query
             .OrderBy(x => x.EngineeringPosition.Code)
             .ThenByDescending(x => x.Version)
@@ -80,7 +85,7 @@ public sealed class EngineeringRecipesController(
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(items);
+        return Ok(PagedResult<object>.From(items, total, limit));
     }
 
     /// <summary>
