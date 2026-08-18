@@ -4005,3 +4005,229 @@ body {
   border-color: var(--color-brand-primary);
   background: var(--color-brand-primary-tint);
 }
+
+/* =========================================================
+   YAZDIRMA — TEK KAYNAK
+
+   NEDEN VAR: bu dosyada yazdırmayla ilgili TEK BİR kural yoktu.
+   İhtiyacı olan sayfalar stilini kendi içine yazmıştı ve üçünde
+   unutulmuştu: `gunluk-puantaj` ile `zimmetler` ErpShell içinde
+   yazdır düğmesi taşıyor ve Ctrl+P menüyü, kenar çubuğunu,
+   düğmeleri de kâğıda basıyordu. `hakedis/[id]/yazdir` ise ayrı
+   bir yazdırma sayfası olduğu hâlde kendi yazdır düğmesini
+   basıyordu.
+
+   Kural: kâğıda YALNIZCA içerik gider. Gezinme, eylem düğmeleri ve
+   ekrana özgü süs basılmaz. Bir öğe yazdırılmasın isteniyorsa
+   `no-print`, yalnız kâğıtta görünsün isteniyorsa `print-only`.
+   ========================================================= */
+@media print {
+  /* Gezinme ve kabuk: kâğıtta işi yok. */
+  .erp-sidebar,
+  .erp-topbar,
+  .erp-breadcrumb,
+  .erp-mobile-menu-button,
+  .erp-collapse-button,
+  .erp-topbar-actions,
+  .erp-company-switcher,
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: revert !important;
+  }
+
+  /* Eylem düğmeleri kâğıtta anlamsız — tıklanamaz bir dikdörtgen.
+     Yazdırma sayfalarının kendi "Yazdır" düğmesi de buna dahil. */
+  button,
+  .erp-primary-button,
+  .erp-secondary-button {
+    display: none !important;
+  }
+
+  /* Kabuk düzeni ekran içindi: kâğıtta tek sütun, tam genişlik. */
+  .erp-shell,
+  .erp-content,
+  .erp-page-header {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Ekranda yatay kaydırılan tablo kâğıtta kırpılmamalı. */
+  .overflow-x-auto,
+  .erp-table-scroll {
+    overflow: visible !important;
+  }
+
+  /* Satır ortadan bölünmesin; başlık her sayfada tekrarlansın. */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr,
+  img {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Bağlantı adresleri kâğıda basılmaz: ERP çıktısında
+     "(https://…/personel/8f3a…)" gürültüden başka bir şey değil. */
+  a[href]::after {
+    content: none !important;
+  }
+}
+
+/* =========================================================
+   STANDART LİSTE TABLOSU (components/ui/data-table.tsx)
+
+   Denetimde 143 liste ekranının hiçbirinde sayfalama yoktu ve her
+   ekran kendi tablo biçimini ayrı yazmıştı. Bu blok o biçimin tek
+   kaynağı.
+   ========================================================= */
+.erp-data-table {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.erp-data-table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.erp-data-table-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 320px;
+}
+
+.erp-data-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Geniş tablo KENDİ İÇİNDE kayar; sayfa gövdesi yana kaymaz. */
+.erp-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--erp-border, #e2e8f0);
+  border-radius: 12px;
+  background: var(--erp-surface, #fff);
+}
+
+.erp-data-table-grid {
+  width: 100%;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.erp-data-table-grid thead th {
+  padding: 12px 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--erp-text-muted, #64748b);
+  background: var(--erp-surface-muted, #f8fafc);
+  border-bottom: 1px solid var(--erp-border, #e2e8f0);
+  white-space: nowrap;
+}
+
+.erp-data-table-grid tbody td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--erp-border-soft, #f1f5f9);
+  color: var(--erp-text, #0f172a);
+  vertical-align: middle;
+}
+
+.erp-data-table-grid tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.erp-data-table-grid tbody tr:hover td {
+  background: var(--erp-surface-muted, #f8fafc);
+}
+
+.erp-data-table-empty {
+  padding: 32px 16px !important;
+  text-align: center;
+  color: var(--erp-text-muted, #64748b);
+}
+
+.erp-data-table-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* "Toplam X kayıt" — sayfalama eklendikten sonra kullanıcının
+   listenin tamamını gördüğünü sanmaması buna bağlı. */
+.erp-data-table-count {
+  font-size: 0.8125rem;
+  color: var(--erp-text-muted, #64748b);
+  font-variant-numeric: tabular-nums;
+}
+
+.erp-data-table-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.erp-data-table-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  color: var(--erp-text-muted, #64748b);
+}
+
+.erp-data-table-size .erp-input {
+  width: auto;
+  padding: 4px 8px;
+}
+
+.erp-data-table-page {
+  padding: 0 8px;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--erp-text, #0f172a);
+}
+
+/* Yalnız kâğıtta görünen başlık: ekranda sayfa başlığı zaten var,
+   çıktıda hangi listeye baktığını söyleyen bir satır gerekiyor. */
+.print-only {
+  display: none;
+}
+
+.erp-print-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 8px;
+}

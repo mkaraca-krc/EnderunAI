@@ -240,11 +240,42 @@ Yani sunucu sayfalaması **5 ekranın** meselesi, 143'ün değil.
 |---|---|
 | **F0** — poz ekranındaki yanlış rakam | **BİTTİ**, yayında (`5a390f6e`) |
 | **F1** — sayım doğruluğu: kırpan her uç toplam döndürür | **BİTTİ** (aşağıda) |
-| F2 — ortak `PagedResult` + standart tablo bileşeni + global `@media print` | sırada |
+| **F2** — standart tablo bileşeni + global `@media print` | **BİTTİ** (aşağıda) |
 | F3 — büyük listelerde sunucu sayfalaması (5 liste) | F2'den sonra |
 | F4 — kalan tablo ekranları bileşene taşınır | modül modül |
 | F5 — yazdır/Excel (tüm kayıtlar vs bu sayfa) | F4'ten sonra |
 | F6 — arama/filtre sayfalamayla uyumlu | en son |
+
+**F2 ne yaptı — standart tablo + yazdırma.**
+- `components/ui/data-table.tsx`: sayfalama (ilk/önceki/sonraki/son,
+  "sayfa Y/Z"), sayfa başına 25/50/100, "Toplam X kayıt · A–B arası",
+  arama/filtre yuvası, CSV (bu sayfa / tümü), yazdır. İki kip:
+  `client` (bileşen dilimler) ve `server` (uç `Paged<T>` döndürür).
+- **Sütunlar veri olarak tanımlanıyor** (`render` = ekranda ne görünür,
+  `value` = dosyaya/kâğıda ne yazılır). JSX'ten metin kazımak rozet ve
+  bağlantı içeren hücrelerde saçma çıktı üretirdi.
+- **"Tümünü İndir" ancak `fetchAll` varsa görünür.** Sunucu kipinde
+  eldeki sayfa her şey değil; veremediğimiz şeyi düğme olarak
+  göstermek yalan olurdu.
+- `app/globals.css`: tek `@media print` bloğu. `gunluk-puantaj`,
+  `zimmetler` ve `hakedis/[id]/yazdir`'ın kâğıda menü/düğme basması
+  bitti.
+- Pilot: `depo-stok/hareketler` (rozet + bağlantı + iki satırlı hücre
+  içerdiği için `render`/`value` ayrımını gerçekten sınıyor).
+- Testler: `data-table.test.tsx` (14, gerçek davranış),
+  `print-contract.test.ts` (5). Dört sonda da yakaladı.
+
+**F2'de test bir hata yakaladı:** filtre sıfırlaması ile sayfa
+sıkıştırma iki ayrı `useEffect`'teydi ve YARIŞIYORLARDI — sıfırlama 1
+yazdıktan sonra sıkıştırma bayat `page` ile 2'ye çekiyordu, yani
+"filtre değişince sayfa 1'e döner" sözü tutulmuyordu. Sıkıştırma
+render'da türetilmiş değere çevrildi.
+
+**KARAR — `muhasebe/hesap-plani` sayfalamaya ALINMAYACAK.** 1.111
+satır taşıyor ama AĞAÇ: sayfalama üst-alt hesap ilişkisini kırar,
+2. sayfa bir alt ağacın ortasından başlar. Ayrıca ekran kapalı
+başlıyor (`expandedIds = new Set()`), yani görünen satır zaten az.
+Arama gerektiğinde ağacı açıyor; doğru araç sayfalama değil.
 
 **F1 ne yaptı — sayım doğruluğu.** F0 tek ekranı düzeltti; F1 kuralı
 UÇTA zorladı. Sorgu dizesinden `take`/`limit` alan beş uç
