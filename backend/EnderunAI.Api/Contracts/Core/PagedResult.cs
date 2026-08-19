@@ -21,12 +21,27 @@ namespace EnderunAI.Api.Contracts.Core;
 /// <param name="Total">Süzgeçlere uyan TOPLAM kayıt sayısı.</param>
 /// <param name="Take">Bu istekte uygulanan tavan.</param>
 /// <param name="HasMore">Gösterilmeyen kayıt var mı — arayüz bunu uyarıya çevirir.</param>
+/// <param name="Page">Kaçıncı sayfa döndü (1'den başlar).</param>
 public sealed record PagedResult<T>(
     IReadOnlyList<T> Items,
     int Total,
     int Take,
-    bool HasMore)
+    bool HasMore,
+    int Page = 1)
 {
+    /// <summary>Sayfalanmayan, yalnız tavan uygulayan uçlar için.</summary>
     public static PagedResult<T> From(IReadOnlyList<T> items, int total, int take) =>
         new(items, total, take, total > items.Count);
+
+    /// <summary>
+    /// SAYFALANAN uçlar için.
+    ///
+    /// <c>HasMore</c> burada <c>items.Count</c>'a bakamaz: son sayfada
+    /// tavandan az kayıt döner ama bu "daha yok" demek değildir —
+    /// 3. sayfada 7 kayıt varken toplam 57 olabilir. Sayfa ve tavan
+    /// üzerinden hesaplanır.
+    /// </summary>
+    public static PagedResult<T> FromPage(
+        IReadOnlyList<T> items, int total, int take, int page) =>
+        new(items, total, take, (long)page * take < total, page);
 }

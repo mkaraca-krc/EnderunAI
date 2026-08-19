@@ -36,11 +36,14 @@ export const securityAuditService = {
     entityType?: string;
     entityId?: string;
     take?: number;
+    /** 1'den başlar. Uç `Skip` uygular. */
+    page?: number;
   }) {
     const query = new URLSearchParams();
     if (params?.entityType) query.set("entityType", params.entityType);
     if (params?.entityId) query.set("entityId", params.entityId);
     if (params?.take) query.set("take", String(params.take));
+    if (params?.page) query.set("page", String(params.page));
 
     const suffix = query.toString();
     return apiClient<Paged<SecurityAuditEvent>>(

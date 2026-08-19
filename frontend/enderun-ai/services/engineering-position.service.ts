@@ -71,6 +71,8 @@ export type PagedPositions = {
   take: number;
   /** Gösterilmeyen kayıt var mı. */
   hasMore: boolean;
+  /** Kaçıncı sayfa döndü. */
+  page: number;
 };
 
 export type EngineeringPositionFilters = {
@@ -80,6 +82,8 @@ export type EngineeringPositionFilters = {
   status?: number;
   /** Kaç kayıt döneceği; uç varsayılan 100, tavan 500 uygular. */
   take?: number;
+  /** 1'den başlar. Uç `Skip` uygular; istemci dilimlemez. */
+  page?: number;
 };
 
 export const engineeringPositionService = {
@@ -104,6 +108,10 @@ export const engineeringPositionService = {
 
     if (filters.take !== undefined) {
       params.set("take", String(filters.take));
+    }
+
+    if (filters.page !== undefined) {
+      params.set("page", String(filters.page));
     }
 
     const query = params.toString();

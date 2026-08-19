@@ -18,6 +18,7 @@ public sealed class SecurityAuditController(AppDbContext db) : ControllerBase
         [FromQuery] string? entityType,
         [FromQuery] Guid? entityId,
         [FromQuery] int take,
+        [FromQuery] int? page,
         CancellationToken cancellationToken)
     {
         var limit = take > 0 && take <= 200 ? take : 50;
@@ -33,8 +34,13 @@ public sealed class SecurityAuditController(AppDbContext db) : ControllerBase
         // TOPLAM TAVANDAN ÖNCE SAYILIR — arayüz kırpıldığını bilsin.
         var total = await query.CountAsync(cancellationToken);
 
+        // Denetim kütüğü yalnız BÜYÜR; canlıda 1.580 olay var ve
+        // eskiye bakmanın tek yolu sayfalama.
+        var currentPage = page is > 0 ? page.Value : 1;
+
         var items = await query
             .OrderByDescending(x => x.OccurredAtUtc)
+            .Skip((currentPage - 1) * limit)
             .Take(limit)
             .Select(x => new
             {
@@ -50,6 +56,6 @@ public sealed class SecurityAuditController(AppDbContext db) : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(PagedResult<object>.From(items, total, limit));
+        return Ok(PagedResult<object>.FromPage(items, total, limit, currentPage));
     }
 }

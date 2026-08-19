@@ -137,6 +137,82 @@ public sealed class PositionListTruncationTests(DatabaseFixture fixture)
         Assert.False(body.GetProperty("hasMore").GetBoolean());
     }
 
+
+    /// <summary>
+    /// SAYFA 2 GERÇEKTEN İKİNCİ SAYFAYI DÖNDÜRÜR.
+    ///
+    /// Sunucu sayfalamasının tek sözü bu: aynı sıralamada, ilk
+    /// sayfadakilerle ÇAKIŞMAYAN kayıtlar. `Skip` unutulursa uç her
+    /// sayfada aynı 100 kaydı döndürür ve kullanıcı sayfa çevirdiğini
+    /// sanarak yerinde sayar — hiçbir hata mesajı da almaz.
+    /// </summary>
+    [Fact]
+    public async Task IkinciSayfa_IlkSayfayiTekrarlamaz()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var companyId = await SeedPositionsAsync(130, suffix);
+
+        var birinci = await GetAsync($"companyId={companyId}&take=25&page=1");
+        var ikinci = await GetAsync($"companyId={companyId}&take=25&page=2");
+
+        var birinciKodlar = birinci.GetProperty("items").EnumerateArray()
+            .Select(x => x.GetProperty("code").GetString()!).ToList();
+        var ikinciKodlar = ikinci.GetProperty("items").EnumerateArray()
+            .Select(x => x.GetProperty("code").GetString()!).ToList();
+
+        Assert.Equal(25, birinciKodlar.Count);
+        Assert.Equal(25, ikinciKodlar.Count);
+        Assert.Empty(birinciKodlar.Intersect(ikinciKodlar));
+
+        // Sıralama Code'a göre: ikinci sayfa birincinin devamı olmalı.
+        Assert.Equal(birinciKodlar.OrderBy(x => x), birinciKodlar);
+        Assert.True(string.CompareOrdinal(ikinciKodlar[0], birinciKodlar[^1]) > 0);
+
+        // Toplam sayfa değişince DEĞİŞMEZ.
+        Assert.Equal(130, ikinci.GetProperty("total").GetInt32());
+        Assert.Equal(2, ikinci.GetProperty("page").GetInt32());
+    }
+
+    /// <summary>
+    /// SON SAYFADA "daha var" DENMEZ.
+    ///
+    /// `HasMore` burada `items.Count`'a bakamaz: son sayfa tavandan az
+    /// kayıt döndürür ama bu tek başına "bitti" demek değildir.
+    /// </summary>
+    [Fact]
+    public async Task SonSayfa_DahaVarDemez()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var companyId = await SeedPositionsAsync(130, suffix);
+
+        var sonSayfa = await GetAsync($"companyId={companyId}&take=25&page=6");
+
+        // 130 kayıt / 25 = 6 sayfa; sonuncusunda 5 kayıt var.
+        Assert.Equal(5, sonSayfa.GetProperty("items").GetArrayLength());
+        Assert.Equal(130, sonSayfa.GetProperty("total").GetInt32());
+        Assert.False(sonSayfa.GetProperty("hasMore").GetBoolean());
+
+        var ortaSayfa = await GetAsync($"companyId={companyId}&take=25&page=3");
+        Assert.True(ortaSayfa.GetProperty("hasMore").GetBoolean());
+    }
+
+    /// <summary>
+    /// Var olmayan sayfa istenirse boş döner ama TOPLAM doğru kalır —
+    /// arayüz "kayıt yok" değil "bu sayfada kayıt yok" diyebilsin.
+    /// </summary>
+    [Fact]
+    public async Task AsiriSayfa_BosDonerAmaToplamiKorur()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var companyId = await SeedPositionsAsync(30, suffix);
+
+        var body = await GetAsync($"companyId={companyId}&take=25&page=99");
+
+        Assert.Empty(body.GetProperty("items").EnumerateArray());
+        Assert.Equal(30, body.GetProperty("total").GetInt32());
+        Assert.False(body.GetProperty("hasMore").GetBoolean());
+    }
+
     /// <summary>
     /// TOPLAM ŞİRKET SÜZGECİNE UYAR — başka şirketin kayıtları sayıma
     /// girmez.

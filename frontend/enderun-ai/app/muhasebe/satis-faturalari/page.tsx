@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -15,6 +20,86 @@ import {
 } from "@/services/sales-invoice.service";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
+
+const columns: DataTableColumn<SalesInvoiceListItem>[] = [
+  {
+    key: "no",
+    header: "Fatura No",
+    value: (item) => item.officialInvoiceNumber ?? "(numara yok)",
+    render: (item) => (
+      <>
+        <Link href={`/muhasebe/satis-faturalari/${item.id}`}>
+          <strong>{item.officialInvoiceNumber ?? "(numara yok)"}</strong>
+        </Link>
+        <small>{item.internalNumber}</small>
+      </>
+    ),
+  },
+  { key: "musteri", header: "Müşteri", value: (item) => item.customerTitle },
+  {
+    key: "proje",
+    header: "Proje",
+    value: (item) =>
+      [item.projectCode ?? "—", item.projectName].filter(Boolean).join(" "),
+    render: (item) => (
+      <>
+        {item.projectCode ?? "—"}
+        {item.projectName && <small>{item.projectName}</small>}
+      </>
+    ),
+  },
+  {
+    key: "tarih",
+    header: "Tarih",
+    value: (item) => dateFormat.format(new Date(item.invoiceDate)),
+  },
+  {
+    key: "tutar",
+    header: "Tutar",
+    numeric: true,
+    value: (item) => item.grandTotal,
+    render: (item) => (
+      <>
+        <strong>{money(item.grandTotal)}</strong>
+        <small>KDV: {money(item.vatTotal)}</small>
+      </>
+    ),
+  },
+  {
+    key: "tahsil",
+    header: "Tahsil Edilecek",
+    numeric: true,
+    value: (item) => item.netReceivableAmount,
+    render: (item) => (
+      <>
+        {money(item.netReceivableAmount)}
+        {item.withholdingAmount > 0 && (
+          <small>Tevkifat: {money(item.withholdingAmount)}</small>
+        )}
+      </>
+    ),
+  },
+  {
+    key: "durum",
+    header: "Durum",
+    value: (item) => SALES_INVOICE_STATUS_LABELS[item.status] ?? "—",
+    render: (item) => (
+      <>
+        <span
+          className={`erp-status ${SALES_INVOICE_STATUS_COLORS[item.status] ?? "gray"}`}
+        >
+          {SALES_INVOICE_STATUS_LABELS[item.status] ?? "—"}
+        </span>
+        {item.requiresManualReview && <small>Elle kontrol gerekli</small>}
+      </>
+    ),
+  },
+  {
+    key: "fis",
+    header: "Fiş",
+    value: (item) => item.accountingVoucherNumber ?? "—",
+  },
+];
 
 export default function SalesInvoicesPage() {
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
@@ -162,57 +247,15 @@ export default function SalesInvoicesPage() {
           </div>
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Fatura No</th>
-                  <th>Müşteri</th>
-                  <th>Proje</th>
-                  <th>Tarih</th>
-                  <th>Tutar</th>
-                  <th>Tahsil Edilecek</th>
-                  <th>Durum</th>
-                  <th>Fiş</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <Link href={`/muhasebe/satis-faturalari/${item.id}`}>
-                        <strong>{item.officialInvoiceNumber ?? "(numara yok)"}</strong>
-                      </Link>
-                      <small>{item.internalNumber}</small>
-                    </td>
-                    <td>{item.customerTitle}</td>
-                    <td>
-                      {item.projectCode ?? "—"}
-                      {item.projectName && <small>{item.projectName}</small>}
-                    </td>
-                    <td>{dateFormat.format(new Date(item.invoiceDate))}</td>
-                    <td>
-                      <strong>{money(item.grandTotal)}</strong>
-                      <small>KDV: {money(item.vatTotal)}</small>
-                    </td>
-                    <td>
-                      {money(item.netReceivableAmount)}
-                      {item.withholdingAmount > 0 && (
-                        <small>Tevkifat: {money(item.withholdingAmount)}</small>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`erp-status ${SALES_INVOICE_STATUS_COLORS[item.status] ?? "gray"}`}
-                      >
-                        {SALES_INVOICE_STATUS_LABELS[item.status] ?? "—"}
-                      </span>
-                      {item.requiresManualReview && <small>Elle kontrol gerekli</small>}
-                    </td>
-                    <td>{item.accountingVoucherNumber ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+<DataTable
+              rows={items}
+              columns={columns}
+              rowKey={(item) => item.id}
+              loading={loading}
+              title="Satış Faturaları"
+              emptyText="Bu filtreyle eşleşen fatura yok."
+              resetKey={`${companyId}|${status}|${search}`}
+            />
           </div>
         )}
       </div>

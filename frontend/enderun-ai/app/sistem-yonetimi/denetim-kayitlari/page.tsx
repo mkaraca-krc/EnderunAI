@@ -1,6 +1,9 @@
 "use client";
 
-import { whole } from "@/lib/format/turkish";
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
@@ -9,16 +12,7 @@ import {
   Button,
   Card,
   CardContent,
-  CardHeader,
-  EmptyState,
   Input,
-  Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from "@/components/ui";
 import {
   securityAuditService,
@@ -63,22 +57,75 @@ function formatDateTime(value: string) {
 }
 
 /** Uç 200'ü aşan değeri zaten kırpıyor; seçenekler onun içinde. */
-const TAKE_OPTIONS = [
-  { label: "Son 50", value: "50" },
-  { label: "Son 100", value: "100" },
-  { label: "Son 200", value: "200" },
+/**
+ * SÜTUNLAR — dosyaya giden değer ekrandaki rozet/açılır detaydan ayrı.
+ *
+ * Denetim kütüğünün dışa aktarılması gerçek bir ihtiyaç: bir olayı
+ * incelerken kayıtları başka bir yere taşımak isteniyor.
+ */
+const columns: DataTableColumn<SecurityAuditEvent>[] = [
+  {
+    key: "zaman",
+    header: "Zaman",
+    value: (event) => formatDateTime(event.occurredAtUtc),
+  },
+  {
+    key: "kullanici",
+    header: "Kullanıcı",
+    value: (event) => event.actorUsername || "Sistem",
+    render: (event) =>
+      event.actorUsername || (
+        <span className="font-normal text-slate-400">Sistem</span>
+      ),
+  },
+  {
+    key: "eylem",
+    header: "Eylem",
+    value: (event) => event.action,
+    render: (event) => <Badge variant="info">{event.action}</Badge>,
+  },
+  {
+    key: "varlik",
+    header: "Varlık",
+    value: (event) => event.entityType || "—",
+  },
+  {
+    key: "ip",
+    header: "IP",
+    value: (event) => event.ipAddress || "—",
+  },
+  {
+    key: "detay",
+    header: "Detay",
+    // Dosyada ham JSON tek hücrede; ekranda açılır kapanır.
+    value: (event) => event.detailsJson || "",
+    render: (event) =>
+      event.detailsJson ? (
+        <details>
+          <summary className="cursor-pointer text-sm text-brand-700">
+            Göster
+          </summary>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-600">
+            {event.detailsJson}
+          </pre>
+        </details>
+      ) : (
+        <span className="text-slate-400">—</span>
+      ),
+  },
 ];
 
 export default function SecurityAuditPage() {
   const [events, setEvents] = useState<SecurityAuditEvent[]>([]);
   const [entityType, setEntityType] = useState("");
-  const [take, setTake] = useState("50");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   /* Kütüphanedeki gerçek kayıt sayısı — listelenen kayıt sayısı DEĞİL. */
   const [total, setTotal] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
+  /* Sayfa sunucuda atlanıyor: kütük yalnız büyür. */
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,21 +134,20 @@ export default function SecurityAuditPage() {
     try {
       const result = await securityAuditService.getEvents({
         entityType: entityType.trim() || undefined,
-        take: Number(take),
+        take: pageSize,
+        page,
       });
 
       setEvents(result.items);
       setTotal(result.total);
-      setHasMore(result.hasMore);
     } catch (err) {
       setError(messageOf(err));
       setEvents([]);
       setTotal(0);
-      setHasMore(false);
     } finally {
       setLoading(false);
     }
-  }, [entityType, take]);
+  }, [entityType, pageSize, page]);
 
   useEffect(() => {
     void (async () => {
@@ -123,16 +169,12 @@ export default function SecurityAuditPage() {
                 label="Varlık türü"
                 placeholder="Örn. WorkHourAccess (boş = tümü)"
                 value={entityType}
-                onChange={(event) => setEntityType(event.target.value)}
-              />
-            </div>
-
-            <div className="w-40">
-              <Select
-                label="Kayıt sayısı"
-                value={take}
-                onChange={(event) => setTake(event.target.value)}
-                options={TAKE_OPTIONS}
+                onChange={(event) => {
+                  // Filtre değişince sayfa 1'e döner; yoksa uçtan boş
+                  // sayfa gelir.
+                  setEntityType(event.target.value);
+                  setPage(1);
+                }}
               />
             </div>
 
@@ -156,97 +198,24 @@ export default function SecurityAuditPage() {
           dayanarak sonuç çıkarmayın.
         </div>
 
-        {loading ? (
-          <div className="py-10 text-center text-sm text-slate-500">
-            Yükleniyor...
-          </div>
-        ) : events.length === 0 ? (
-          <EmptyState
-            title="Kayıt yok"
-            description="Bu filtreyle eşleşen denetim kaydı bulunmuyor."
-          />
-        ) : (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Denetim kayıtları
-                </h2>
-                {/*
-                  ROZET TOPLAMI SÖYLER, GELEN KAYDI DEĞİL. Uç `take`
-                  ile kırpıyor (varsayılan 50) ve canlıda 1.580 denetim
-                  olayı var; rozet listeden sayılırsa "50 kayıt var"
-                  demiş oluyordu.
-                */}
-                <Badge>
-                  {hasMore
-                    ? `${whole(total)} kayıttan ${events.length}`
-                    : whole(total)}
-                </Badge>
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Zaman</TableHead>
-                    <TableHead>Kullanıcı</TableHead>
-                    <TableHead>Eylem</TableHead>
-                    <TableHead>Varlık</TableHead>
-                    <TableHead>IP</TableHead>
-                    <TableHead>Detay</TableHead>
-                  </TableRow>
-                </TableHeader>
-
-                <TableBody>
-                  {events.map((event) => (
-                    <TableRow key={event.id}>
-                      <TableCell className="whitespace-nowrap text-sm">
-                        {formatDateTime(event.occurredAtUtc)}
-                      </TableCell>
-
-                      <TableCell className="font-medium">
-                        {event.actorUsername || (
-                          <span className="font-normal text-slate-400">
-                            Sistem
-                          </span>
-                        )}
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge variant="info">{event.action}</Badge>
-                      </TableCell>
-
-                      <TableCell className="text-sm text-slate-600">
-                        {event.entityType || "—"}
-                      </TableCell>
-
-                      <TableCell className="font-mono text-xs text-slate-500">
-                        {event.ipAddress || "—"}
-                      </TableCell>
-
-                      <TableCell className="max-w-md">
-                        {event.detailsJson ? (
-                          <details>
-                            <summary className="cursor-pointer text-sm text-brand-700">
-                              Göster
-                            </summary>
-                            <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-600">
-                              {event.detailsJson}
-                            </pre>
-                          </details>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+        <DataTable
+          rows={events}
+          columns={columns}
+          rowKey={(event) => event.id}
+          loading={loading}
+          title="Denetim Kayıtları"
+          emptyText="Bu filtreyle eşleşen denetim kaydı bulunmuyor."
+          server={{
+            total,
+            page,
+            pageSize,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
+          }}
+          resetKey={entityType}
+        />
       </div>
     </ErpShell>
   );

@@ -8,7 +8,7 @@
 > Okuma sırası:
 > 1. **§8 ELENEN HİPOTEZLER** — bunlar ÖLÇÜMLE çürütüldü, tekrar
 >    kovalama. Negatif bilgi en kolay kaybolan şeydir.
-> 2. **§5 ÇALIŞMA DİSİPLİNLERİ** — 17 kural. Özellikle 12-17:
+> 2. **§5 ÇALIŞMA DİSİPLİNLERİ** — 18 kural. Özellikle 12-18:
 >    test koşuları serileştirilir; sonda harness'i her yolda yedeği
 >    geri koyar; sonda sonrası `git diff` okunur; teşhiste sıra
 >    ölçümün AYIRICILIĞINA göre kurulur.
@@ -241,10 +241,45 @@ Yani sunucu sayfalaması **5 ekranın** meselesi, 143'ün değil.
 | **F0** — poz ekranındaki yanlış rakam | **BİTTİ**, yayında (`5a390f6e`) |
 | **F1** — sayım doğruluğu: kırpan her uç toplam döndürür | **BİTTİ** (aşağıda) |
 | **F2** — standart tablo bileşeni + global `@media print` | **BİTTİ** (aşağıda) |
-| F3 — büyük listelerde sunucu sayfalaması (5 liste) | F2'den sonra |
+| **F3** — büyük listelerde sunucu sayfalaması | **BİTTİ** (aşağıda) |
 | F4 — kalan tablo ekranları bileşene taşınır | modül modül |
 | F5 — yazdır/Excel (tüm kayıtlar vs bu sayfa) | F4'ten sonra |
 | F6 — arama/filtre sayfalamayla uyumlu | en son |
+
+**F3 ne yaptı — ÖLÇÜMLE DARALTILMIŞ sunucu sayfalaması.**
+
+Kullanıcı "poz, personel, fatura, cari, hakediş, stok" demişti; canlı
+sayım listeyi değiştirdi ve onay alındı:
+
+| Ekran | Canlı satır | Karar |
+|---|---|---|
+| Poz kütüphanesi | **23.531** | sunucu sayfalaması |
+| Denetim kayıtları | **1.580** | sunucu sayfalaması |
+| Poz birim fiyatları | tabloda 44.934 ama **poz başına en çok 4** | gerekmez |
+| Puantaj | ayda 2.449 hücre ama **79 personel satırı** (ızgara) | gerekmez |
+| Personel 81 · Cariler 150 · Faturalar 11+11 · Hakediş 1 · Stok hareketi 0 | | istemci sayfalaması |
+
+Kendi denetim raporumdaki iki hata bu ölçümle düzeldi: poz birim
+fiyatlarını ve puantajı "sunucu sayfalaması şart" diye işaretlemiştim.
+
+- `PagedResult` sayfa numarası taşıyor; `FromPage` ile `HasMore`
+  **sayfa × tavan < toplam** üzerinden hesaplanıyor. `items.Count`'a
+  bakamaz: son sayfa tavandan az kayıt döndürür ama bu "daha yok"
+  demek değildir.
+- `EngineeringPositions` ve `SecurityAudit` uçları `page` alıp `Skip`
+  uyguluyor; iki ekran `DataTable` sunucu kipinde.
+- İstemci sayfalaması: alış faturaları, satış faturaları, hakedişler.
+- Yeni testler: ikinci sayfa birinciyi tekrarlamıyor, son sayfada
+  "daha var" denmiyor, aşırı sayfa boş dönerken toplam korunuyor.
+
+**Sonda C ilk turda KAÇIRDI** — bekçi testi `page,` arıyordu ama o
+metin `DataTable`'ın `server={{ total, page, pageSize }}` bloğunda da
+geçiyor; istek sayfayı göndermeyi bıraksa bile test geçiyordu. Test
+artık servis çağrısının İÇİNE bakıyor.
+
+**BORÇ:** `app/hakedis/page.tsx` 3 ESLint hatası taşıyor (effect
+içinde senkron `setState`). F3'ten ÖNCE de vardı, sayısı değişmedi;
+kapsam dışı bırakıldı.
 
 **F2 ne yaptı — standart tablo + yazdırma.**
 - `components/ui/data-table.tsx`: sayfalama (ilk/önceki/sonraki/son,
@@ -445,6 +480,27 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     Denetim de değişir — "kaynak temiz mi" YETMEZ, **"ikili kaynaktan
     yeni mi"** sorulur:
     `stat -c %y kaynak.cs` vs `stat -c %y bin/.../*.dll`.
+18. **`trap` YETMEZ — SIGKILL'İ YAKALAMAZ.** 2026-08-19'da F3 sonda
+    betiği OOM ile öldürüldü; `trap ... EXIT INT TERM` hiç çalışmadı ve
+    sonda (`Skip` kaldırılmış hâli) kaynakta kaldı. Kural 16 gerekli
+    ama yeterli değil.
+
+    Kural: sonda turundan sonra **her zaman** `find . -name '*.probe-bak'`
+    çalıştırılır — betiğin "temizledim" demesine güvenilmez, çünkü
+    öldürülen betik hiçbir şey diyemez. Deploy ve tam tur öncesine de
+    aynı denetim konur (bkz. `faz1_tam.sh` deseni: yedek varsa DURDUR).
+
+    Ayrıca sondalar **teker teker** koşulur ve aralarda
+    `dotnet build-server shutdown` yapılır: bu makinede 7,9 GB RAM var
+    ve Roslyn sunucusu tek başına 750 MB tutabiliyor.
+
+    **EK DERS (aynı gün, daha sinsi):** "betik öldü" teşhisim YANLIŞTI.
+    Betik koşuyordu; `ps ... | head -3` çıktısını kestiği için
+    görünmedi. O yanlış teşhisle CANLI BİR SONDANIN yedeğini "kalıntı"
+    sanıp geri koydum — yani sondayı koşarken bozdum. İki kural çıkıyor:
+    (a) süreç ararken `head` KULLANMA, tam listeyi oku;
+    (b) `.probe-bak` görüldüğünde önce "sonda betiği HÂLÂ KOŞUYOR MU"
+    sorulur, sonra geri konur. Kalıntı ile canlı yedek aynı görünür.
 
 ---
 

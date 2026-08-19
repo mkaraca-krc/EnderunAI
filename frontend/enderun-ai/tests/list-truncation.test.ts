@@ -33,9 +33,19 @@ describe("kırpılmış liste dürüstlüğü", () => {
     expect(pozlar).toMatch(/setHasMore\(result\.hasMore\)/);
   });
 
-  it("poz ekranı kırpıldığını kullanıcıya söyler", () => {
-    expect(pozlar).toMatch(/hasMore\s*&&/);
-    expect(pozlar).toContain("gösteriliyor");
+  it("poz ekranı artık kırpmıyor — sayfalıyor", () => {
+    /*
+     * F0'da bu ekran "23.531 pozdan 100'ü gösteriliyor" uyarısı
+     * veriyordu; doğruydu ama çıkış yolu yalnız aramaydı. F3'te
+     * sunucu sayfalaması geldi: uyarı yerini sayfa denetimlerine
+     * bıraktı. Sözleşme "kırpıldığını söyle"den "sayfayı uca gönder"e
+     * döndü — aşağıdaki sunucu kipi testi bunu koruyor.
+     *
+     * Kart etiketleri hâlâ dürüst olmak zorunda: aktif/özel sayıları
+     * GÖRÜNEN sayfadan sayılıyor, kütüphane genelinden değil.
+     */
+    expect(pozlar).toMatch(/hasMore/);
+    expect(pozlar).toContain("Listelenenler içinde");
   });
 
   it("poz servisi sayfalı yanıt tipini kullanır", () => {
@@ -65,8 +75,8 @@ describe("kırpılmış liste dürüstlüğü", () => {
   });
 
   it("kırpan uçları tüketen ekranlar kırpılmayı söyler", () => {
+    // SAYFALANMAYAN ekranlar: kırpılmayı yazıyla söylemek zorundalar.
     const uyariVerenler = [
-      "app/sistem-yonetimi/denetim-kayitlari/page.tsx",
       "app/sistem-yonetimi/erisim-talepleri/page.tsx",
       "app/muhendislik/receteler/page.tsx",
       "app/teklifler/fiyatlar/page.tsx",
@@ -74,6 +84,39 @@ describe("kırpılmış liste dürüstlüğü", () => {
 
     for (const path of uyariVerenler) {
       expect(read(path), `${path} hasMore'u kullanmalı`).toMatch(/hasMore/);
+    }
+  });
+
+  it("sunucu sayfalaması olan ekranlar toplamı DataTable'a verir", () => {
+    /*
+     * SAYFALANAN ekranda "kırpıldı" uyarısı GEREKMİYOR — kırpma yok,
+     * sayfa var. Sözleşme burada değişiyor: ekran uçtan gelen toplamı
+     * DataTable'ın sunucu kipine geçirmeli ki "Toplam X kayıt · sayfa
+     * Y/Z" doğru çıksın.
+     */
+    const sunucuSayfalamali = [
+      "app/muhendislik/pozlar/page.tsx",
+      "app/sistem-yonetimi/denetim-kayitlari/page.tsx",
+    ];
+
+    for (const path of sunucuSayfalamali) {
+      const kod = read(path);
+
+      expect(kod, `${path} sunucu kipi kullanmalı`).toMatch(/server=\{\{/);
+      expect(kod, `${path} toplamı uçtan vermeli`).toMatch(/\btotal,/);
+
+      /*
+       * SAYFA SERVİS ÇAĞRISINDA GEÇMELİ.
+       *
+       * İlk sürüm yalnızca `page,` arıyordu ve KAÇIRDI: o metin
+       * DataTable'ın `server={{ total, page, pageSize }}` bloğunda da
+       * geçiyor. Yani istek sayfayı uca göndermeyi bıraksa bile test
+       * geçiyordu — sonda bunu yakaladı. Artık çağrının İÇİNE bakıyor.
+       */
+      expect(
+        kod,
+        `${path} sayfayı SERVİS ÇAĞRISINDA uca göndermeli`
+      ).toMatch(/\.(getAll|getEvents)\(\{[\s\S]{0,240}?\n\s*page,/);
     }
   });
 

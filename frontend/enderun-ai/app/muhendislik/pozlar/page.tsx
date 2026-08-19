@@ -6,6 +6,10 @@ import ErpShell from "@/components/erp/erp-shell";
 import { decimal, whole } from "@/lib/format/turkish";
 import { Button } from "@/components/ui";
 import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+import {
   EngineeringPositionListItem,
   EngineeringPositionSource,
   engineeringPositionService,
@@ -42,6 +46,84 @@ function formatHours(value: number) {
   return decimal(value, 2);
 }
 
+/**
+ * SÜTUNLAR — ekranda görünen ile dosyaya/kâğıda giden ayrı.
+ * Rozet ve bağlantı içeren hücrelerin düz karşılığı `value`.
+ */
+const columns: DataTableColumn<EngineeringPositionListItem>[] = [
+  {
+    key: "kod",
+    header: "Poz No",
+    value: (item) => item.officialCode || item.code,
+    render: (item) => (
+      <>
+        <strong>{item.code}</strong>
+        {item.officialCode && (
+          <small style={{ display: "block" }}>{item.officialCode}</small>
+        )}
+      </>
+    ),
+  },
+  {
+    key: "ad",
+    header: "Açıklama",
+    value: (item) => item.name,
+    render: (item) => (
+      <>
+        <strong>{item.name}</strong>
+        <small style={{ display: "block" }}>
+          {item.category || item.companyName}
+        </small>
+      </>
+    ),
+  },
+  {
+    key: "disiplin",
+    header: "Disiplin",
+    value: (item) =>
+      disciplineLabels[item.discipline] ?? `Disiplin ${item.discipline}`,
+  },
+  { key: "birim", header: "Birim", value: (item) => item.unit },
+  {
+    key: "kaynak",
+    header: "Kaynak",
+    value: (item) =>
+      positionSourceLabel(item.source, item.officialInstitution),
+  },
+  {
+    key: "adamsaat",
+    header: "Adam/Saat",
+    numeric: true,
+    value: (item) => formatHours(item.totalLaborHours),
+  },
+  {
+    key: "revizyon",
+    header: "Revizyon",
+    value: (item) => `R${item.revisionNumber}`,
+  },
+  {
+    key: "durum",
+    header: "Durum",
+    value: (item) => statusLabels[item.status] ?? `Durum ${item.status}`,
+    render: (item) => (
+      <span className={item.status === 1 ? "erp-status green" : "erp-status"}>
+        {statusLabels[item.status] ?? `Durum ${item.status}`}
+      </span>
+    ),
+  },
+  {
+    key: "ac",
+    header: "",
+    // Bağlantının dosyada karşılığı yok.
+    value: () => "",
+    render: (item) => (
+      <Link href={`/muhendislik/pozlar/${item.id}`} className="erp-row-link">
+        Aç →
+      </Link>
+    ),
+  },
+];
+
 export default function EngineeringPositionsPage() {
   const [items, setItems] = useState<EngineeringPositionListItem[]>([]);
   /*
@@ -52,6 +134,26 @@ export default function EngineeringPositionsPage() {
    */
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  /*
+   * SAYFA SUNUCUDA ATLANIYOR. 23.531 poz istemciye yollanamaz; uç
+   * `page` ve `take` alıp `Skip` uyguluyor.
+   */
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  /*
+   * FİLTRE DEĞİŞİNCE SAYFA 1'E DÖNER — ve bu effect'te DEĞİL, filtreyi
+   * değiştiren yerde yapılır. Effect'te yapmak art arda render
+   * tetikliyordu (React'ın "you might not need an effect" uyarısı) ve
+   * daha kötüsü: istek bir kez eski sayfayla gidip boş dönüyordu.
+   *
+   * Sıfırlanmazsa kullanıcı 7. sayfadayken arama yaptığında uçtan boş
+   * sayfa gelir — sayfalamanın en sık görülen hatası.
+   */
+  function applyFilter(apply: () => void) {
+    apply();
+    setPage(1);
+  }
   const [search, setSearch] = useState("");
   const [discipline, setDiscipline] = useState("");
   const [status, setStatus] = useState("");
@@ -65,6 +167,8 @@ export default function EngineeringPositionsPage() {
 
     try {
       const result = await engineeringPositionService.getAll({
+        take: pageSize,
+        page,
         search: search || undefined,
         discipline: discipline === "" ? undefined : Number(discipline),
         status: status === "" ? undefined : Number(status),
@@ -83,12 +187,13 @@ export default function EngineeringPositionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, discipline, status, source]);
+  }, [search, discipline, status, source, page, pageSize]);
 
   useEffect(() => {
     const timer = window.setTimeout(loadPositions, 350);
     return () => window.clearTimeout(timer);
   }, [loadPositions]);
+
 
   const summary = useMemo(() => {
     return {
@@ -224,14 +329,18 @@ export default function EngineeringPositionsPage() {
           <input
             className="erp-input"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) =>
+              applyFilter(() => setSearch(event.target.value))
+            }
             placeholder="Poz no, açıklama veya anahtar kelime ara..."
           />
 
           <select
             className="erp-input"
             value={discipline}
-            onChange={(event) => setDiscipline(event.target.value)}
+            onChange={(event) =>
+              applyFilter(() => setDiscipline(event.target.value))
+            }
           >
             <option value="">Tüm disiplinler</option>
             {Object.entries(disciplineLabels).map(([value, label]) => (
@@ -244,7 +353,9 @@ export default function EngineeringPositionsPage() {
           <select
             className="erp-input"
             value={source}
-            onChange={(event) => setSource(event.target.value)}
+            onChange={(event) =>
+              applyFilter(() => setSource(event.target.value))
+            }
           >
             <option value="">Tüm kaynaklar</option>
             <option value={EngineeringPositionSource.Official}>
@@ -258,7 +369,9 @@ export default function EngineeringPositionsPage() {
           <select
             className="erp-input"
             value={status}
-            onChange={(event) => setStatus(event.target.value)}
+            onChange={(event) =>
+              applyFilter(() => setStatus(event.target.value))
+            }
           >
             <option value="">Tüm durumlar</option>
             {Object.entries(statusLabels).map(([value, label]) => (
@@ -272,126 +385,36 @@ export default function EngineeringPositionsPage() {
             className="erp-secondary-button"
             type="button"
             onClick={() => {
-              setSearch("");
-              setDiscipline("");
-              setStatus("");
+              applyFilter(() => {
+                setSearch("");
+                setDiscipline("");
+                setStatus("");
+              });
             }}
           >
             Filtreleri Temizle
           </button>
         </div>
 
-        {/*
-          KIRPMA UYARISI. Uç bir tavan uyguluyor ve bu doğru — 23 bin
-          satırı tarayıcıya yollamak ekranı kilitler. Yanlış olan,
-          kırpıldığını söylememekti: kullanıcı listenin tamamını
-          gördüğünü sanıp 101. pozun var olmadığı sonucuna varıyordu.
-          Sayfalama gelene kadar (F1/F2) çıkış yolu arama.
-        */}
-        {!loading && hasMore && (
-          <div className="erp-alert warning">
-            <strong>
-              {whole(total)} pozdan {items.length} tanesi
-              gösteriliyor.
-            </strong>{" "}
-            {search.trim()
-              ? "Aramanızı daraltın."
-              : "Aradığınız pozu bulmak için yukarıdaki arama kutusunu kullanın; arama kütüphanenin tamamında çalışır."}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="erp-loading">Pozlar yükleniyor...</div>
-        ) : items.length === 0 ? (
-          <div className="erp-empty-state">
-            <div className="enderun-empty-symbol">▦</div>
-            <strong>Poz bulunamadı</strong>
-            <p>Filtreleri değiştirin veya yeni bir mühendislik pozu ekleyin.</p>
-            <Link
-              href="/muhendislik/pozlar/yeni"
-              className="erp-primary-button"
-            >
-              Yeni Poz Oluştur
-            </Link>
-          </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Poz No</th>
-                  <th>Açıklama</th>
-                  <th>Disiplin</th>
-                  <th>Birim</th>
-                  <th>Kaynak</th>
-                  <th>Adam/Saat</th>
-                  <th>Revizyon</th>
-                  <th>Durum</th>
-                  <th />
-                </tr>
-              </thead>
-
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <strong>{item.code}</strong>
-                      {item.officialCode && (
-                        <small style={{ display: "block" }}>
-                          {item.officialCode}
-                        </small>
-                      )}
-                    </td>
-
-                    <td>
-                      <strong>{item.name}</strong>
-                      <small style={{ display: "block" }}>
-                        {item.category || item.companyName}
-                      </small>
-                    </td>
-
-                    <td>
-                      {disciplineLabels[item.discipline] ??
-                        `Disiplin ${item.discipline}`}
-                    </td>
-
-                    <td>{item.unit}</td>
-
-                    <td>
-                      {positionSourceLabel(item.source, item.officialInstitution)}
-                    </td>
-
-                    <td>{formatHours(item.totalLaborHours)}</td>
-
-                    <td>R{item.revisionNumber}</td>
-
-                    <td>
-                      <span
-                        className={
-                          item.status === 1
-                            ? "erp-status green"
-                            : "erp-status"
-                        }
-                      >
-                        {statusLabels[item.status] ??
-                          `Durum ${item.status}`}
-                      </span>
-                    </td>
-
-                    <td>
-                      <Link
-                        href={`/muhendislik/pozlar/${item.id}`}
-                        className="erp-row-link"
-                      >
-                        Aç →
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable
+          rows={items}
+          columns={columns}
+          rowKey={(item) => item.id}
+          loading={loading}
+          title="Poz Kütüphanesi"
+          emptyText="Poz bulunamadı. Filtreleri değiştirin veya yeni bir mühendislik pozu ekleyin."
+          server={{
+            total,
+            page,
+            pageSize,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
+          }}
+          /* Filtre değişince sayfa 1'e döner. */
+          resetKey={`${search}|${discipline}|${status}|${source}`}
+        />
       </section>
     </ErpShell>
   );

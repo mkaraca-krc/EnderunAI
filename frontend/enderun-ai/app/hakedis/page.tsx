@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -30,6 +35,75 @@ const statusClasses: Record<ProgressPaymentStatus, string> = {
 };
 
 const dateFormatter = new Intl.DateTimeFormat("tr-TR");
+
+const columns: DataTableColumn<ProgressPaymentListItem>[] = [
+  {
+    key: "hakedis",
+    header: "Hakediş",
+    value: (item) => item.progressPaymentNumber,
+    render: (item) => (
+      <>
+        <strong>{item.progressPaymentNumber}</strong>
+        <small>{item.itemCount} poz satırı</small>
+      </>
+    ),
+  },
+  {
+    key: "proje",
+    header: "Proje",
+    value: (item) => `${item.projectCode} ${item.projectName}`,
+    render: (item) => (
+      <>
+        <strong>{item.projectCode}</strong>
+        <small>{item.projectName}</small>
+      </>
+    ),
+  },
+  { key: "donem", header: "Dönem", value: (item) => item.periodNumber },
+  {
+    key: "tarih",
+    header: "Tarih",
+    value: (item) =>
+      dateFormatter.format(new Date(item.progressPaymentDate)),
+  },
+  {
+    key: "budonem",
+    header: "Bu Dönem",
+    numeric: true,
+    value: (item) => item.currentAmount,
+    render: (item) => money(item.currentAmount),
+  },
+  {
+    key: "kumulatif",
+    header: "Kümülatif",
+    numeric: true,
+    value: (item) => item.cumulativeAmount,
+    render: (item) => money(item.cumulativeAmount),
+  },
+  {
+    key: "net",
+    header: "Net Ödeme",
+    numeric: true,
+    value: (item) => item.netPayableAmount,
+    render: (item) => <strong>{money(item.netPayableAmount)}</strong>,
+  },
+  {
+    key: "durum",
+    header: "Durum",
+    value: (item) => statusLabels[item.status],
+    render: (item) => (
+      <span className={`erp-status ${statusClasses[item.status]}`}>
+        {statusLabels[item.status]}
+      </span>
+    ),
+  },
+  {
+    key: "detay",
+    header: "",
+    value: () => "",
+    render: (item) => <Link href={`/hakedis/${item.id}`}>Detay</Link>,
+  },
+];
 
 export default function ProgressPaymentsPage() {
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
@@ -169,81 +243,15 @@ export default function ProgressPaymentsPage() {
       </div>
 
       <div className="erp-table-card">
-        <table className="erp-table">
-          <thead>
-            <tr>
-              <th>Hakediş</th>
-              <th>Proje</th>
-              <th>Dönem</th>
-              <th>Tarih</th>
-              <th>Bu Dönem</th>
-              <th>Kümülatif</th>
-              <th>Net Ödeme</th>
-              <th>Durum</th>
-              <th></th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {!loading && items.length === 0 && (
-              <tr>
-                <td colSpan={9}>
-                  <div className="erp-empty-state">
-                    <strong>Henüz hakediş kaydı bulunmuyor.</strong>
-                    <p>
-                      İlk hakedişi oluşturarak proje ilerleme ve ödeme takibini başlatın.
-                    </p>
-                    <Link href="/hakedis/yeni">Yeni Hakediş Oluştur</Link>
-                  </div>
-                </td>
-              </tr>
-            )}
-
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td>
-                  <strong>{item.progressPaymentNumber}</strong>
-                  <small>{item.itemCount} poz satırı</small>
-                </td>
-
-                <td>
-                  <strong>{item.projectCode}</strong>
-                  <small>{item.projectName}</small>
-                </td>
-
-                <td>{item.periodNumber}</td>
-
-                <td>
-                  {dateFormatter.format(
-                    new Date(item.progressPaymentDate)
-                  )}
-                </td>
-
-                <td>{money(item.currentAmount)}</td>
-
-                <td>{money(item.cumulativeAmount)}</td>
-
-                <td>
-                  <strong>{money(item.netPayableAmount)}</strong>
-                </td>
-
-                <td>
-                  <span
-                    className={`erp-status ${
-                      statusClasses[item.status]
-                    }`}
-                  >
-                    {statusLabels[item.status]}
-                  </span>
-                </td>
-
-                <td>
-                  <Link href={`/hakedis/${item.id}`}>Detay</Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+            rows={items}
+            columns={columns}
+            rowKey={(item) => item.id}
+            loading={loading}
+            title="Hakedişler"
+            emptyText="Henüz hakediş kaydı bulunmuyor."
+            resetKey={`${companyId}|${projectId}`}
+          />
       </div>
     </ErpShell>
   );

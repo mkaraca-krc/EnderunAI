@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -17,6 +22,123 @@ import {
 } from "@/services/supplier-invoice.service";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
+
+/**
+ * SÜTUNLAR — rozet ve bağlantı içeren hücrelerin düz karşılığı
+ * `value` ile veriliyor; dosyaya "▲" ya da bağlantı metni gitmez.
+ */
+const columns: DataTableColumn<SupplierInvoiceListItem>[] = [
+  {
+    key: "no",
+    header: "Fatura No",
+    value: (item) => item.invoiceNumber,
+    render: (item) => (
+      <>
+        <Link href={`/muhasebe/faturalar/${item.id}`}>
+          <strong>{item.invoiceNumber}</strong>
+        </Link>
+        <small>{item.internalNumber}</small>
+      </>
+    ),
+  },
+  {
+    key: "tip",
+    header: "Tip",
+    value: (item) =>
+      item.isReturn ? `${item.invoiceTypeName} (İade)` : item.invoiceTypeName,
+    render: (item) => (
+      <>
+        <span
+          className={`erp-status ${item.invoiceType === 1 ? "yellow" : "gray"}`}
+        >
+          {item.invoiceTypeName}
+        </span>
+        {item.isReturn && (
+          <span className="erp-status red" style={{ marginLeft: "4px" }}>
+            İade
+          </span>
+        )}
+      </>
+    ),
+  },
+  {
+    key: "tedarikci",
+    header: "Tedarikçi",
+    value: (item) => item.supplierTitle,
+  },
+  {
+    key: "yer",
+    header: "Proje / Masraf Merkezi",
+    value: (item) =>
+      item.projectId
+        ? `${item.projectCode} ${item.projectName ?? ""}`.trim()
+        : `${item.costCenterCode ?? "—"} (Projesiz)`,
+    render: (item) =>
+      item.projectId ? (
+        <>
+          {item.projectCode}
+          <small>{item.projectName}</small>
+        </>
+      ) : (
+        <>
+          {item.costCenterCode ?? "—"}
+          <small>Projesiz</small>
+        </>
+      ),
+  },
+  {
+    key: "tarih",
+    header: "Tarih",
+    value: (item) => dateFormat.format(new Date(item.invoiceDate)),
+  },
+  {
+    key: "tutar",
+    header: "Tutar",
+    numeric: true,
+    value: (item) => item.grandTotal,
+    render: (item) => (
+      <>
+        <strong>{money(item.grandTotal)}</strong>
+        <small>KDV: {money(item.vatTotal)}</small>
+      </>
+    ),
+  },
+  {
+    key: "eslesme",
+    header: "3 Yönlü",
+    value: (item) => MATCH_STATUS_LABELS[item.matchStatus] ?? "—",
+    render: (item) => (
+      <span
+        className={`erp-status ${MATCH_STATUS_COLORS[item.matchStatus] ?? "gray"}`}
+      >
+        {MATCH_STATUS_LABELS[item.matchStatus] ?? "—"}
+      </span>
+    ),
+  },
+  {
+    key: "durum",
+    header: "Durum",
+    value: (item) =>
+      SUPPLIER_INVOICE_STATUS_LABELS[item.status] ?? "—",
+    render: (item) => (
+      <>
+        <span
+          className={`erp-status ${SUPPLIER_INVOICE_STATUS_COLORS[item.status] ?? "gray"}`}
+        >
+          {SUPPLIER_INVOICE_STATUS_LABELS[item.status] ?? "—"}
+        </span>
+        {item.requiresGmApproval && item.status === 1 && (
+          <small>GM onayı gerekli</small>
+        )}
+      </>
+    ),
+  },
+  {
+    key: "fis",
+    header: "Fiş",
+    value: (item) => item.accountingVoucherNumber ?? "—",
+  },
+];
 
 export default function SupplierInvoicesPage() {
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
@@ -152,80 +274,15 @@ export default function SupplierInvoicesPage() {
           </div>
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Fatura No</th>
-                  <th>Tip</th>
-                  <th>Tedarikçi</th>
-                  <th>Proje / Masraf Merkezi</th>
-                  <th>Tarih</th>
-                  <th>Tutar</th>
-                  <th>3 Yönlü</th>
-                  <th>Durum</th>
-                  <th>Fiş</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <Link href={`/muhasebe/faturalar/${item.id}`}>
-                        <strong>{item.invoiceNumber}</strong>
-                      </Link>
-                      <small>{item.internalNumber}</small>
-                    </td>
-                    <td>
-                      <span
-                        className={`erp-status ${item.invoiceType === 1 ? "yellow" : "gray"}`}
-                      >
-                        {item.invoiceTypeName}
-                      </span>
-                      {item.isReturn && (
-                        <span className="erp-status red" style={{ marginLeft: "4px" }}>
-                          İade
-                        </span>
-                      )}
-                    </td>
-                    <td>{item.supplierTitle}</td>
-                    <td>
-                      {item.projectId ? (
-                        <>
-                          {item.projectCode}
-                          <small>{item.projectName}</small>
-                        </>
-                      ) : (
-                        <>
-                          {item.costCenterCode ?? "—"}
-                          <small>Projesiz</small>
-                        </>
-                      )}
-                    </td>
-                    <td>{dateFormat.format(new Date(item.invoiceDate))}</td>
-                    <td>
-                      <strong>{money(item.grandTotal)}</strong>
-                      <small>KDV: {money(item.vatTotal)}</small>
-                    </td>
-                    <td>
-                      <span className={`erp-status ${MATCH_STATUS_COLORS[item.matchStatus] ?? "gray"}`}>
-                        {MATCH_STATUS_LABELS[item.matchStatus] ?? "—"}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className={`erp-status ${SUPPLIER_INVOICE_STATUS_COLORS[item.status] ?? "gray"}`}
-                      >
-                        {SUPPLIER_INVOICE_STATUS_LABELS[item.status] ?? "—"}
-                      </span>
-                      {item.requiresGmApproval && item.status === 1 && (
-                        <small>GM onayı gerekli</small>
-                      )}
-                    </td>
-                    <td>{item.accountingVoucherNumber ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+<DataTable
+              rows={items}
+              columns={columns}
+              rowKey={(item) => item.id}
+              loading={loading}
+              title="Alış Faturaları"
+              emptyText="Bu filtreyle eşleşen fatura yok."
+              resetKey={`${companyId}|${status}|${search}`}
+            />
           </div>
         )}
       </div>

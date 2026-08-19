@@ -54,6 +54,7 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
         [FromQuery] int? status,
         [FromQuery] string? search,
         [FromQuery] int? take,
+        [FromQuery] int? page,
         CancellationToken cancellationToken)
     {
         var query = db.EngineeringPositions.AsNoTracking();
@@ -85,8 +86,14 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
         // üzerinden sayıyoruz ki arama sonucu da doğru raporlansın.
         var total = await query.CountAsync(cancellationToken);
 
+        // SAYFA SUNUCUDA ATLANIR. 23.531 poz için istemciye hepsini
+        // yollayıp orada dilimlemek ekranı kilitler; kullanıcı da
+        // 101. poza yalnız aramayla ulaşabiliyordu.
+        var currentPage = page is > 0 ? page.Value : 1;
+
         var items = await query
             .OrderBy(x => x.Code)
+            .Skip((currentPage - 1) * limit)
             .Take(limit)
             .Select(x => new
             {
@@ -100,7 +107,7 @@ public sealed class EngineeringPositionsController(AppDbContext db) : Controller
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(PagedResult<object>.From(items, total, limit));
+        return Ok(PagedResult<object>.FromPage(items, total, limit, currentPage));
     }
 
     [HttpGet("{id:guid}")]

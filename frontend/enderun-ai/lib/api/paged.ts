@@ -20,6 +20,8 @@ export type Paged<T> = {
   take: number;
   /** Gösterilmeyen kayıt var mı — ekran bunu uyarıya çevirmeli. */
   hasMore: boolean;
+  /** Kaçıncı sayfa döndü (sayfalanan uçlarda; diğerlerinde 1). */
+  page?: number;
 };
 
 /**
