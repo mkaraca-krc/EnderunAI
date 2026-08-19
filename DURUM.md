@@ -284,6 +284,47 @@ ayrıca istenirse (imzalı çıktı, e-posta eki) ayrı paket.
 
 ---
 
+## 3b. STOK/DEPO YENİDEN YAPILANDIRMA (yeni paket, 2026-08-19)
+
+Denetim raporu yayınlandı; on faz planlandı. **Üç iş kararı alındı:**
+GR/IR ara hesabı kullanılacak · kartlar silinmeyip pasife alınacak ·
+kod sırası şirket başına.
+
+**S0 (bitti) — arşivin anlam kazanması.**
+
+Denetimde kartların `IsDeleted` ile pasife alınmasını önermiştim;
+kodu okuyunca `BaseEntity`'nin HEM `IsActive` HEM `IsDeleted`
+taşıdığı görüldü. Doğru araç `IsActive`: global sorgu süzgecine
+dokunmuyor, dolayısıyla mevcut belgeleri riske atmıyor. `IsDeleted`
+seçilseydi arşivlenmiş karta bağlı taslak faturayı işlerken
+`SupplierInvoiceStockPoster` sözlükten okuyup
+**`KeyNotFoundException` ile çökecekti** (kartları süzgeçli okuyor).
+
+**ASIL BULGU: `IsActive` vardı ve HİÇBİR ŞEY İFADE ETMİYORDU.**
+Yalnız `GoodsReceiptService` ona uyuyordu; stok listesi/seçici,
+perakende ürün arama ve alış faturası doğrulaması yok sayıyordu.
+Yani kart arşivlense bile yeni belgelerde çıkmaya devam ediyordu —
+"temiz başlangıç" bu hâliyle imkânsızdı.
+
+Kural gerçek yapıldı:
+- Stok listesi arşivi VARSAYILAN olarak gizler; yönetim ekranı
+  `includeInactive=true` ile açıkça ister (kart geri açılabilsin).
+- Perakende ürün arama arşivlenmiş kartı satışa çıkarmaz.
+- Alış faturası arşivlenmiş karta yeni kalem bağlanmasını reddeder.
+
+**Teste bağlanan ayrım:** arşiv YENİ belgeyi engeller, MEVCUT belgeyi
+bozmaz. Fatura kalemi kendi `Description`/`Unit` alanlarını taşıyor ve
+kart bağı opsiyonel; arşivlenen kart geçmiş faturayı görünmez yapmıyor.
+
+**Veri durumu (ölçüldü):** stok hareketi 0, depo stoğu 0, mal kabul 0,
+sipariş 0, perakende satış 0. Yani "temizlik" için silinecek hareket
+YOK. 9 kart pasife alındı; 10 alış faturası kalemi onlara bağlı olduğu
+için silinemezdi.
+
+İki sonda da yakaladı. Tam tur 2262/2262.
+
+---
+
 ## 3. Sıradaki paketler
 
 | Paket | Durum |

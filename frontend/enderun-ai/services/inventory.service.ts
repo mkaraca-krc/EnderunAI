@@ -124,6 +124,12 @@ export const inventoryService = {
     category?: string;
     warehouseId?: string;
     criticalOnly?: boolean;
+    /**
+     * ARŞİVLENMİŞ kartları da getirir. Varsayılan KAPALI: seçiciler
+     * arşivi görmemeli. Yalnız stok kartı YÖNETİM ekranı açar —
+     * orada arşiv görülüp geri açılabilmeli.
+     */
+    includeInactive?: boolean;
   }): Promise<InventoryItemListItem[]> {
     const query = new URLSearchParams();
 
@@ -132,6 +138,7 @@ export const inventoryService = {
     if (params?.category) query.set("category", params.category);
     if (params?.warehouseId) query.set("warehouseId", params.warehouseId);
     if (params?.criticalOnly) query.set("criticalOnly", "true");
+    if (params?.includeInactive) query.set("includeInactive", "true");
 
     const suffix = query.size > 0 ? `?${query.toString()}` : "";
     return apiClient<InventoryItemListItem[]>(`inventory/items${suffix}`);

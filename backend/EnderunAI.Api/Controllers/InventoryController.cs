@@ -26,9 +26,27 @@ public sealed class InventoryController(
         [FromQuery] string? category,
         [FromQuery] Guid? warehouseId,
         [FromQuery] bool? criticalOnly,
+        [FromQuery] bool includeInactive,
         CancellationToken cancellationToken)
     {
         var query = db.InventoryItems.AsNoTracking();
+
+        /*
+         * ARŞİVLENMİŞ KART VARSAYILAN OLARAK GELMEZ.
+         *
+         * `IsActive` bayrağı vardı ama yalnızca `GoodsReceiptService`
+         * ona uyuyordu: liste/seçici, perakende ürün arama ve alış
+         * faturası doğrulaması yok sayıyordu. Yani kartı arşivlemek
+         * HİÇBİR ŞEY İFADE ETMİYORDU — kart yeni belgelerde çıkmaya
+         * devam ediyordu.
+         *
+         * Bu uç hem seçici hem yönetim ekranı tarafından kullanılıyor;
+         * yönetim ekranı arşivi görüp geri açabilmeli, o yüzden
+         * `includeInactive` AÇIKÇA istenir. Varsayılan kapalı:
+         * unutulan bir çağrı arşivi sızdırmasın.
+         */
+        if (!includeInactive) query = query.Where(x => x.IsActive);
+
         if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
         if (!string.IsNullOrWhiteSpace(search))
         {

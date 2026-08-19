@@ -92,7 +92,10 @@ public sealed class RetailSalesController(
 
         var query = db.InventoryItems
             .AsNoTracking()
-            .Where(x => x.SalesPrice != null);
+            // ARŞİVLENMİŞ KART SATIŞA ÇIKMAZ. Fiyatı olması yetmez;
+            // arşivden çıkarılmış bir malzeme yeni satışa girerse
+            // "temiz başlangıç" ilk gün bozulur.
+            .Where(x => x.IsActive && x.SalesPrice != null);
 
         if (!string.IsNullOrWhiteSpace(term))
         {

@@ -775,6 +775,27 @@ public sealed class SupplierInvoiceService(
 
         if (validCount != ids.Count)
             throw new ArgumentException("Kalemlerden biri bu şirkete ait olmayan bir stok kartına bağlı.");
+
+        /*
+         * ARŞİVLENMİŞ KARTA YENİ FATURA KALEMİ BAĞLANAMAZ.
+         *
+         * Şirket kontrolü tek başına yetmiyordu: arşivden çıkarılmış
+         * bir kart aynı şirkete ait olduğu için geçiyordu. Arşivin
+         * anlamı "yeni belgede kullanılmaz"; kontrol edilmezse bayrak
+         * süs olur.
+         *
+         * MEVCUT faturalar etkilenmez: bu doğrulama yalnız kalem
+         * YAZILIRKEN çalışır, işlenirken değil.
+         */
+        var archived = await db.InventoryItems
+            .Where(x => ids.Contains(x.Id) && !x.IsActive)
+            .Select(x => x.Code + " " + x.Name)
+            .ToListAsync(cancellationToken);
+
+        if (archived.Count > 0)
+            throw new ArgumentException(
+                "Arşivlenmiş stok kartına fatura kalemi bağlanamaz: "
+                + string.Join(", ", archived));
     }
 
     private async Task ValidateWarehousesAsync(

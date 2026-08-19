@@ -146,7 +146,13 @@ export default function InventoryOperationsPage() {
 
       const [inventoryData, requestData, movementData, categoryData, warehouseData] =
         await Promise.all([
-          inventoryService.getItems(),
+          /*
+           * YÖNETİM EKRANI ARŞİVİ DE GÖRÜR. Uç varsayılan olarak
+           * arşivlenmiş kartları gizliyor (seçiciler görmesin diye);
+           * burada açıkça isteniyor ki kart geri açılabilsin.
+           * Ekran zaten `item.isActive` ile ayırıyor.
+           */
+          inventoryService.getItems({ includeInactive: true }),
           purchaseRequestService.getAll({
             requestType: 1,
           }),
@@ -191,6 +197,7 @@ export default function InventoryOperationsPage() {
           category: selectedCategory || undefined,
           warehouseId: selectedWarehouseId || undefined,
           criticalOnly: onlyCritical || undefined,
+          includeInactive: true,
         });
 
         setItems(data);
