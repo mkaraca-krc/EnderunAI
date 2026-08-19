@@ -418,6 +418,54 @@ düğmesi olmalı; etiket ekranında yoktu, eklendi.
 
 Üç sonda da yakaladı. Tam tur 2292/2292, frontend 354/354.
 
+**S4 (bitti) — tek giriş kapısı + kuralların sözleşmeye bağlanması.**
+
+Bu fazda YENİ KURAL KURULMADI; kurallar UNUTULAMAZ hâle getirildi.
+Negatif yasağı dört düşüm yolunda da zaten vardı — eksik olan, beşinci
+yol yazıldığında kimsenin uyarmayacak olmasıydı.
+
+- `POST inventory/receipts` KALDIRILDI. Siparişe ya da mal kabule bağlı
+  değildi: `inventory.create` izni olan biri sadece bir referans
+  numarası yazıp stok yaratabiliyordu. Daha kötüsü MALİYET YAZMIYORDU
+  (`UnitCost`/`TotalCost` boş, ağırlıklı ortalama güncellenmiyor) —
+  yani sıfır maliyetli stok girip stok değeri ile muhasebeyi ilk
+  günden ayırıyordu. Canlıda bu uçtan gelmiş hareket YOKTU (stok
+  hareketi sayısı 0), kaldırmak veri kaybetmedi.
+  Beraberinde: `/depo-stok/giris` ekranı, menü girdisi, servis metodu,
+  formun `receipt` modu ve artık kalan `StockReceiptRequest` kaydı.
+  Hareketler sayfasındaki "Stok Girişi" düğmesi MAL KABUL'e bakıyor.
+- Giriş artık yalnız üç kapıdan: mal kabul (siparişe bağlı, maliyetli),
+  iade dönüşü, gerekçeli sayım düzeltmesi.
+- SAYIM GEREKÇESİ ZORUNLU oldu (uçta da ekranda da). Sayım düzeltmesi
+  belgeye bağlı olmadan stok değiştirebilen TEK yol; gerekçesiz
+  bırakılsaydı kaldırdığımız kapı arka taraftan açık kalırdı.
+  Davranışı ayrıca E2E testi kanıtlıyor: null/boş/boşluk üçü de 400,
+  ve stok DEĞİŞMİYOR (400 dönüp yine de yazsaydı red anlamsızdı).
+- `StockMovementContractTests` (5 kural): stok düşüren her yol
+  öncesinde AYNI kaydın miktarını kontrol eder · serbest giriş ucu geri
+  gelmez · stok artıran her yol maliyet yazar · hareket istekleri birim
+  ALMAZ (birim kartta sabit) · sayım düzeltmesi gerekçe ister.
+
+SONDADA İKİ DERS:
+
+1. İlk yazdığım negatif-yasağı kuralı KAÇIRDI. "Dosyada bir yerde
+   miktar karşılaştırması ya da 'yetersiz' kelimesi geçsin" diyordu;
+   `RetailSaleService` içindeki alakasız bir "iade fişi iptal edilemez"
+   mesajı ve `requested.Quantity <= 0` kontrolü, sildiğim GERÇEK
+   kontrolün yerine geçti. Kural hiçbir şey korumuyordu. Düzeltmesi:
+   her `X.Quantity -=` noktası için, ÖNCESİNDE `X.Quantity <` aranıyor
+   — aynı değişken, düşüşten önce. Ayrıca düşüş noktası sayısı 4'ün
+   altına inerse test kendini "kural boşalmış olabilir" diye düşürüyor.
+2. Sabotaj DERLENEBİLİR olmalı. İlk turda A/C/E sabotajlarım derlemeyi
+   bozdu; `dotnet test` hiç koşmadı ve sonuç satırı BOŞ geldi. Boş
+   sonuç "test geçti" değildir — sonda harness'i artık boş sonucu
+   `SONUC YOK -> error CSxxxx` diye yazıyor, sessizce yeşil saymıyor.
+
+Yedi sondanın hepsi yakaladı (A1 kontrol silindi · A2 kontrol yanlış
+nesneye bakıyor · A3 transferde kontrol silindi · B serbest giriş geri
+geldi · C gerekçe kalktı · D maliyetsiz yeni yol · E isteğe birim
+eklendi). Şema değişmedi, migration yok.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

@@ -153,8 +153,12 @@ export default function StockMovementsPage() {
         </div>
 
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <Link className="erp-primary-button" href="/depo-stok/giris">
-            Stok Girişi
+          {/*
+            Stok girişi artık serbest değil: giriş yalnız mal kabulden
+            (siparişe bağlı, maliyetli) yapılır. Buton oraya gider.
+          */}
+          <Link className="erp-primary-button" href="/depo-stok/mal-kabul">
+            Mal Kabul
           </Link>
           <Link className="erp-secondary-button" href="/depo-stok/cikis">
             Stok Çıkışı

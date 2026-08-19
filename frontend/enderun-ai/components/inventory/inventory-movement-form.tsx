@@ -10,13 +10,9 @@ import {
   type SelectOption,
 } from "@/services/inventory-movement.service";
 
-type MovementMode = "receipt" | "issue" | "transfer";
+type MovementMode = "issue" | "transfer";
 
 const TITLES: Record<MovementMode, { title: string; description: string }> = {
-  receipt: {
-    title: "Stok Girişi",
-    description: "İrsaliye karşılığı depoya malzeme girişi",
-  },
   issue: {
     title: "Stok Çıkışı",
     description:
@@ -112,9 +108,6 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
   if (!(Number(quantity) > 0)) {
     validationErrors.push("Miktar sıfırdan büyük olmalı.");
   }
-  if (mode === "receipt" && !referenceNumber.trim()) {
-    validationErrors.push("Depo girişinde irsaliye/referans numarası zorunlu.");
-  }
   if (!movementDate) validationErrors.push("Hareket tarihi girin.");
 
   async function submit(event: React.FormEvent) {
@@ -139,13 +132,6 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
     };
 
     try {
-      if (mode === "receipt") {
-        await inventoryMovementService.receipt({ warehouseId, ...common });
-        router.push("/depo-stok/hareketler");
-        router.refresh();
-        return;
-      }
-
       if (mode === "issue") {
         const result = await inventoryMovementService.issue({
           warehouseId,
@@ -346,17 +332,13 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
           </label>
 
           <label>
-            <span>
-              {mode === "receipt"
-                ? "İrsaliye / Referans No *"
-                : "Not / Referans (ops.)"}
-            </span>
+            <span>Not / Referans (ops.)</span>
             <input
               type="text"
               value={referenceNumber}
               onChange={(event) => setReferenceNumber(event.target.value)}
             />
-            {mode !== "receipt" && (
+            {(
               <small>
                 Belge numarası ({mode === "issue" ? "CIKIS" : "TRF"}-yıl-sıra)
                 otomatik üretilir.

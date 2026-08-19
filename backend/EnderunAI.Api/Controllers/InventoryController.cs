@@ -560,52 +560,27 @@ public sealed class InventoryController(
         return Ok(movements);
     }
 
-    [HttpPost("receipts")]
-    [RequirePermission(PermissionCatalog.Keys.InventoryCreate)]
-    public async Task<IActionResult> Receipt(StockReceiptRequest request, CancellationToken cancellationToken)
-    {
-        if (request.Quantity <= 0) return BadRequest(new { message = "Miktar sıfırdan büyük olmalıdır." });
-        if (string.IsNullOrWhiteSpace(request.ReferenceNumber))
-            return BadRequest(new { message = "Referans / irsaliye numarası zorunludur." });
-
-        var warehouse = await db.Warehouses.SingleOrDefaultAsync(x => x.Id == request.WarehouseId, cancellationToken);
-        if (warehouse is null) return NotFound(new { message = "Depo bulunamadı." });
-
-        var item = await db.InventoryItems.SingleOrDefaultAsync(
-            x => x.Id == request.InventoryItemId && x.CompanyId == warehouse.CompanyId, cancellationToken);
-        if (item is null) return NotFound(new { message = "Malzeme kartı bulunamadı." });
-
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var stock = await db.WarehouseStocks.SingleOrDefaultAsync(
-            x => x.WarehouseId == request.WarehouseId && x.InventoryItemId == request.InventoryItemId, cancellationToken);
-
-        if (stock is null)
-        {
-            stock = new WarehouseStock { WarehouseId = request.WarehouseId, InventoryItemId = request.InventoryItemId };
-            db.WarehouseStocks.Add(stock);
-        }
-
-        stock.Quantity += request.Quantity;
-        stock.UpdatedAtUtc = DateTime.UtcNow;
-
-        db.StockMovements.Add(new StockMovement
-        {
-            CompanyId = warehouse.CompanyId,
-            WarehouseId = warehouse.Id,
-            InventoryItemId = item.Id,
-            ProjectId = request.ProjectId,
-            PurchaseRequestId = request.PurchaseRequestId,
-            Type = StockMovementType.Receipt,
-            Quantity = request.Quantity,
-            ReferenceNumber = request.ReferenceNumber.Trim(),
-            MovementDate = ToUtc(request.MovementDate),
-            Description = request.Description?.Trim()
-        });
-
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return Ok(new { message = "Depo girişi kaydedildi.", stock.Quantity });
-    }
+    /*
+     * SERBEST ELLE GİRİŞ UCU KALDIRILDI (S4 — tek giriş kapısı).
+     *
+     * `POST inventory/receipts` siparişe ya da mal kabule bağlı
+     * DEĞİLDİ: `inventory.create` izni olan biri yalnız bir referans
+     * numarası yazarak stok yaratabiliyordu.
+     *
+     * Daha kötüsü MALİYET YAZMIYORDU — `UnitCost` ve `TotalCost` boş
+     * kalıyor, ağırlıklı ortalama güncellenmiyordu. Yani SIFIR
+     * MALİYETLİ stok giriyor ve o andan sonra stok değeri ile muhasebe
+     * birbirini tutmuyordu.
+     *
+     * GİRİŞ ARTIK YALNIZ ÜÇ KAPIDAN:
+     *   1. Mal kabul (siparişe bağlı, maliyet ve ağırlıklı ortalama
+     *      `GoodsReceiptService` içinde),
+     *   2. İade dönüşü (alış faturası iadesi),
+     *   3. Sayım düzeltme (yetkili + GEREKÇELİ).
+     *
+     * Canlıda bu uçtan gelmiş hareket yoktu (stok hareketi sayısı 0),
+     * yani kaldırmak veri kaybetmedi.
+     */
 
     [HttpPost("issues")]
     [RequirePermission(PermissionCatalog.Keys.InventoryCreate)]
@@ -868,6 +843,22 @@ public sealed class InventoryController(
     public async Task<IActionResult> Adjustment(StockAdjustmentRequest request, CancellationToken cancellationToken)
     {
         if (request.CountedQuantity < 0) return BadRequest(new { message = "Sayılan miktar negatif olamaz." });
+
+        /*
+         * GEREKÇE ZORUNLU (S4).
+         *
+         * Sayım düzeltme, tek giriş kapısı kuralının İSTİSNASI: belgeye
+         * bağlı olmadan stok değiştirebilen tek yol. Bu yüzden ne
+         * olduğu YAZILMAK ZORUNDA — fire mi, kayıp mı, hatalı giriş mi.
+         *
+         * Gerekçesiz düzeltme, kaldırdığımız serbest giriş ucunun aynı
+         * kapısını arka taraftan açardı.
+         */
+        if (string.IsNullOrWhiteSpace(request.Description))
+            return BadRequest(new
+            {
+                message = "Düzeltme gerekçesi zorunludur (fire, kayıp, hatalı giriş vb.)."
+            });
 
         var stock = await db.WarehouseStocks.Include(x => x.Warehouse).Include(x => x.InventoryItem).SingleOrDefaultAsync(
             x => x.WarehouseId == request.WarehouseId && x.InventoryItemId == request.InventoryItemId, cancellationToken);

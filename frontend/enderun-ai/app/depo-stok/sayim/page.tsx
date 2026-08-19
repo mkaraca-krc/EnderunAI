@@ -78,6 +78,12 @@ export default function StockCountPage() {
     validationErrors.push("Sayılan miktar negatif olamaz.");
   }
   if (!movementDate) validationErrors.push("Sayım tarihi girin.");
+  // Gerekçe ZORUNLU: sayım düzeltmesi, belgeye bağlı olmadan stok
+  // değiştirebilen tek yol. Ne olduğu yazılmazsa serbest giriş kapısı
+  // arkadan açılır. Uç de aynı kuralı uyguluyor.
+  if (!description.trim()) {
+    validationErrors.push("Düzeltme gerekçesi zorunludur.");
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -97,7 +103,7 @@ export default function StockCountPage() {
         inventoryItemId,
         countedQuantity: Number(countedQuantity),
         movementDate,
-        description: description || undefined,
+        description: description.trim(),
       });
 
       setNotice(
@@ -187,13 +193,16 @@ export default function StockCountPage() {
           </label>
 
           <label className="span-2">
-            <span>Açıklama</span>
+            <span>Düzeltme Gerekçesi *</span>
             <input
               type="text"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="Sayım ekibi, tespit notu vb."
+              placeholder="Fire, kayıp, hatalı giriş, sayım ekibi notu…"
             />
+            <small>
+              Farkın nedeni yazılmadan düzeltme kaydedilmez.
+            </small>
           </label>
         </div>
 

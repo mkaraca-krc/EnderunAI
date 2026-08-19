@@ -20,15 +20,11 @@ public sealed record CreateInventoryItemRequest(
     // modülünün proje ayağı boş çalışır.
     decimal? CopperKgPerUnit = null);
 
-public sealed record StockReceiptRequest(
-    Guid WarehouseId,
-    Guid InventoryItemId,
-    Guid? ProjectId,
-    Guid? PurchaseRequestId,
-    decimal Quantity,
-    string ReferenceNumber,
-    DateTime MovementDate,
-    string? Description);
+/*
+ * `StockReceiptRequest` kaldırıldı (S4): karşılığı olan serbest
+ * giriş ucu yok. Giriş yalnız mal kabul, iade dönüşü ve gerekçeli
+ * sayım düzeltmesinden yapılır.
+ */
 
 public sealed record StockIssueRequest(
     Guid WarehouseId,

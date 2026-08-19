@@ -28,7 +28,7 @@ const ROOT = join(__dirname, "..");
  *
  * Bu tarama önce yalnızca `app/**\/page.tsx` dosyalarına bakıyordu ve
  * altı ekranı kaçırdı: `sekreterya/toplantilar|telefon-notlari|
- * randevular` ve `depo-stok/giris|cikis|transfer` sayfaları iki-beş
+ * randevular` ve `depo-stok/cikis|transfer` sayfaları iki-beş
  * satırlık birer yeniden-dışa-aktarım; kabuğu `components/` altındaki
  * ortak bir bileşen açıyor. Sayfa dosyasında `<ErpShell` geçmediği
  * için "geçirilmemiş" bile sayılmıyorlardı — kullanıcı o altı ekranda

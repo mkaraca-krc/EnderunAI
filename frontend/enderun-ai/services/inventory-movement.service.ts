@@ -89,7 +89,6 @@ export const inventoryMovementService = {
   /** Bir deponun stok satırları; sayım ekranı mevcut miktarı buradan okur. */
   getWarehouseStocks: (warehouseId: string) =>
     request<WarehouseStockRow[]>(`/api/inventory/warehouses/${warehouseId}/stocks`),
-  receipt: (body: unknown) => request("/api/inventory/receipts", { method: "POST", body: JSON.stringify(body) }),
   issue: (body: unknown) => request<{ referenceNumber: string; unitCost: number; totalCost: number }>(
     "/api/inventory/issues", { method: "POST", body: JSON.stringify(body) }),
   transfer: (body: unknown) => request<{ referenceNumber: string }>(

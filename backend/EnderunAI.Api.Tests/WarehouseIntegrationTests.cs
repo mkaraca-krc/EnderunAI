@@ -382,4 +382,81 @@ public sealed class WarehouseIntegrationTests(DatabaseFixture fixture)
             x.InventoryItemId == item.Id && x.Type == StockMovementType.Adjustment);
         Assert.Equal(-5m, movement.Quantity);
     }
+
+    /// <summary>
+    /// GEREKÇESİZ SAYIM DÜZELTMESİ REDDEDİLİR (S4).
+    ///
+    /// Sayım düzeltmesi, belgeye bağlı olmadan stok değiştirebilen tek
+    /// yol. Gerekçe istenmezse kaldırdığımız serbest giriş kapısı arka
+    /// taraftan açılır: kimse neden değiştiğini bilmeden stok artar.
+    ///
+    /// Stok kaydının DEĞİŞMEDİĞİ de doğrulanıyor — 400 dönüp yine de
+    /// yazmış olsaydı red anlamsız olurdu.
+    /// </summary>
+    [Fact]
+    public async Task Adjustment_WithoutReason_IsRejectedAndLeavesStockUntouched()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var (company, branch, _) = await TestDataFactory.CreateCompanyStackAsync(db, suffix);
+
+        var warehouse = new Warehouse
+        {
+            CompanyId = company.Id,
+            BranchId = branch.Id,
+            Code = $"DEPO-{suffix}",
+            Name = $"Test Depo {suffix}",
+            Type = WarehouseType.Central
+        };
+        db.Warehouses.Add(warehouse);
+
+        var item = new InventoryItem
+        {
+            CompanyId = company.Id,
+            Code = $"MLZ-{suffix}",
+            Name = $"Test Malzeme {suffix}",
+            Unit = "adet"
+        };
+        db.InventoryItems.Add(item);
+        await db.SaveChangesAsync();
+
+        db.WarehouseStocks.Add(new WarehouseStock
+        {
+            WarehouseId = warehouse.Id,
+            InventoryItemId = item.Id,
+            Quantity = 60
+        });
+        await db.SaveChangesAsync();
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        // Boş dizge de gerekçesizdir: "   " yazarak kural aşılamaz.
+        foreach (var gerekce in new[] { (string?)null, "", "   " })
+        {
+            var response = await client.PostAsJsonAsync("/api/inventory/adjustments", new
+            {
+                warehouseId = warehouse.Id,
+                inventoryItemId = item.Id,
+                countedQuantity = 55,
+                projectId = (Guid?)null,
+                movementDate = DateTime.UtcNow.Date,
+                description = gerekce
+            });
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        using var verifyScope = fixture.Factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var stock = await verifyDb.WarehouseStocks.SingleAsync(x =>
+            x.WarehouseId == warehouse.Id && x.InventoryItemId == item.Id);
+        Assert.Equal(60m, stock.Quantity);
+
+        Assert.False(await verifyDb.StockMovements.AnyAsync(x =>
+            x.InventoryItemId == item.Id));
+    }
 }
