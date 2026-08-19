@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import ErpShell from "@/components/erp/erp-shell";
 import { decimal, whole } from "@/lib/format/turkish";
 import { Button } from "@/components/ui";
@@ -26,6 +31,73 @@ const disciplineLabels: Record<number, string> = {
   6: "Mekanik",
   7: "İnşaat",
 };
+
+const columns: DataTableColumn<RecipeRow>[] = [
+  {
+    key: "poz",
+    header: "Poz",
+    value: (recipe) => `${recipe.positionCode} (${recipe.unit})`,
+    render: (recipe) => (
+      <>
+        <strong>{recipe.positionCode}</strong>
+        <small style={{ display: "block" }}>{recipe.unit}</small>
+      </>
+    ),
+  },
+  {
+    key: "aciklama",
+    header: "Açıklama",
+    value: (recipe) =>
+      `${recipe.positionName} — ${recipe.description || "Açıklama bulunmuyor"}`,
+    render: (recipe) => (
+      <>
+        <strong>{recipe.positionName}</strong>
+        <small style={{ display: "block" }}>
+          {recipe.description || "Açıklama bulunmuyor"}
+        </small>
+      </>
+    ),
+  },
+  {
+    key: "disiplin",
+    header: "Disiplin",
+    value: (recipe) =>
+      disciplineLabels[recipe.discipline] ?? `Disiplin ${recipe.discipline}`,
+  },
+  { key: "versiyon", header: "Versiyon", value: (recipe) => `V${recipe.version}` },
+  { key: "malzeme", header: "Malzeme", numeric: true, value: (r) => r.materialCount },
+  { key: "iscilik", header: "İşçilik", numeric: true, value: (r) => r.laborCount },
+  { key: "makine", header: "Makine", numeric: true, value: (r) => r.machineCount },
+  {
+    key: "adamsaat",
+    header: "Adam/Saat",
+    numeric: true,
+    value: (recipe) => decimal(Number(recipe.totalLaborHours), 2),
+  },
+  {
+    key: "durum",
+    header: "Durum",
+    value: (recipe) => (recipe.isDefault ? "Varsayılan" : "Alternatif"),
+    render: (recipe) => (
+      <span className={recipe.isDefault ? "erp-status green" : "erp-status"}>
+        {recipe.isDefault ? "Varsayılan" : "Alternatif"}
+      </span>
+    ),
+  },
+  {
+    key: "duzenle",
+    header: "",
+    value: () => "",
+    render: (recipe) => (
+      <Link
+        href={`/muhendislik/pozlar/${recipe.engineeringPositionId}`}
+        className="erp-row-link"
+      >
+        Düzenle →
+      </Link>
+    ),
+  },
+];
 
 export default function EngineeringRecipesPage() {
   const [recipes, setRecipes] = useState<RecipeRow[]>([]);
@@ -290,79 +362,14 @@ export default function EngineeringRecipesPage() {
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Poz</th>
-                  <th>Açıklama</th>
-                  <th>Disiplin</th>
-                  <th>Versiyon</th>
-                  <th>Malzeme</th>
-                  <th>İşçilik</th>
-                  <th>Makine</th>
-                  <th>Adam/Saat</th>
-                  <th>Durum</th>
-                  <th />
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredRecipes.map((recipe) => (
-                  <tr key={recipe.id}>
-                    <td>
-                      <strong>{recipe.positionCode}</strong>
-                      <small style={{ display: "block" }}>
-                        {recipe.unit}
-                      </small>
-                    </td>
-
-                    <td>
-                      <strong>{recipe.positionName}</strong>
-                      <small style={{ display: "block" }}>
-                        {recipe.description || "Açıklama bulunmuyor"}
-                      </small>
-                    </td>
-
-                    <td>
-                      {disciplineLabels[recipe.discipline] ??
-                        `Disiplin ${recipe.discipline}`}
-                    </td>
-
-                    <td>V{recipe.version}</td>
-                    <td>{recipe.materialCount}</td>
-                    <td>{recipe.laborCount}</td>
-                    <td>{recipe.machineCount}</td>
-
-                    <td>
-                      {decimal(Number(recipe.totalLaborHours), 2)}
-                    </td>
-
-                    <td>
-                      <span
-                        className={
-                          recipe.isDefault
-                            ? "erp-status green"
-                            : "erp-status"
-                        }
-                      >
-                        {recipe.isDefault
-                          ? "Varsayılan"
-                          : "Alternatif"}
-                      </span>
-                    </td>
-
-                    <td>
-                      <Link
-                        href={`/muhendislik/pozlar/${recipe.engineeringPositionId}`}
-                        className="erp-row-link"
-                      >
-                        Düzenle →
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              rows={filteredRecipes}
+              columns={columns}
+              rowKey={(recipe) => recipe.id}
+              title="Mühendislik Reçeteleri"
+              emptyText="Reçete bulunmuyor."
+              resetKey={`${search}|${discipline}|${onlyDefault}`}
+            />
           </div>
         )}
       </section>

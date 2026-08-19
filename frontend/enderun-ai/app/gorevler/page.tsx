@@ -8,6 +8,11 @@ import {
   useState,
 } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog } from "@/components/ui";
@@ -386,6 +391,127 @@ export default function WorkTasksPage() {
       setProcessingId("");
     }
   }
+
+
+  /* Sütunlar `projects`, `actions` ve `processingId` üzerine kapanıyor;
+     belleğe alınmıyor (bayat kapanış riski — F4b desen kararı). */
+  const columns: DataTableColumn<WorkTask>[] = [
+    {
+      key: "gorev",
+      header: "Görev",
+      value: (item) =>
+        `${item.taskNumber} — ${item.title}${item.isOverdue ? " (Gecikti)" : ""}`,
+      render: (item) => (
+        <>
+          <strong>{item.taskNumber}</strong>
+          <small>{item.title}</small>
+          {item.isOverdue && <span className="erp-status red">Gecikti</span>}
+        </>
+      ),
+    },
+    {
+      key: "proje",
+      header: "Proje",
+      value: (item) => {
+        const project = projects.find((row) => row.id === item.projectId);
+        return project ? `${project.code} — ${project.name}` : "—";
+      },
+      render: (item) => {
+        const project = projects.find((row) => row.id === item.projectId);
+
+        return project ? (
+          <>
+            <strong>{project.code}</strong>
+            <small>{project.name}</small>
+          </>
+        ) : (
+          "—"
+        );
+      },
+    },
+    {
+      key: "oncelik",
+      header: "Öncelik",
+      value: (item) => priorityLabels[item.priority] ?? item.priorityName,
+      render: (item) => (
+        <span className={`erp-status ${priorityClasses[item.priority] ?? "gray"}`}>
+          {priorityLabels[item.priority] ?? item.priorityName}
+        </span>
+      ),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (item) => statusLabels[item.status] ?? item.statusName,
+      render: (item) => (
+        <span className={`erp-status ${statusClasses[item.status] ?? "gray"}`}>
+          {statusLabels[item.status] ?? item.statusName}
+        </span>
+      ),
+    },
+    {
+      key: "baslangic",
+      header: "Başlangıç",
+      value: (item) => formatDate(item.startDate),
+    },
+    {
+      key: "sonTarih",
+      header: "Son Tarih",
+      value: (item) => formatDate(item.dueDate),
+    },
+    {
+      key: "kaynak",
+      header: "Kaynak",
+      value: (item) => item.sourceModule || "MANUAL",
+    },
+    {
+      key: "islem",
+      header: "İşlem",
+      value: () => "",
+      render: (item) => {
+        const closed =
+          item.status === WorkTaskStatus.Completed ||
+          item.status === WorkTaskStatus.Cancelled;
+
+        return (
+          <div className="flex flex-wrap gap-2">
+            {(item.status === WorkTaskStatus.Open ||
+              item.status === WorkTaskStatus.Waiting) &&
+              actions.can("manage") && (
+                <button
+                  type="button"
+                  disabled={processingId === item.id}
+                  onClick={() => void startTask(item.id)}
+                >
+                  Başlat
+                </button>
+              )}
+
+            {!closed && actions.can("manage") && (
+              <button
+                type="button"
+                disabled={processingId === item.id}
+                onClick={() => setPending({ kind: "complete", id: item.id })}
+              >
+                Tamamla
+              </button>
+            )}
+
+            {!closed && actions.can("manage") && (
+              <button
+                type="button"
+                disabled={processingId === item.id}
+                onClick={() => setPending({ kind: "cancel", id: item.id })}
+              >
+                İptal
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
+
 
   return (
     <ErpShell
@@ -798,193 +924,15 @@ export default function WorkTasksPage() {
       </div>
 
       <div className="erp-table-card">
-        <table className="erp-table">
-          <thead>
-            <tr>
-              <th>Görev</th>
-              <th>Proje</th>
-              <th>Öncelik</th>
-              <th>Durum</th>
-              <th>Başlangıç</th>
-              <th>Son Tarih</th>
-              <th>Kaynak</th>
-              <th>İşlem</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {!loading &&
-              items.length === 0 && (
-                <tr>
-                  <td colSpan={8}>
-                    <div className="erp-empty-state">
-                      <strong>
-                        Görev bulunamadı.
-                      </strong>
-                      <p>
-                        Yeni bir görev oluşturun
-                        veya filtreleri değiştirin.
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-
-            {items.map((item) => {
-              const project =
-                projects.find(
-                  (row) =>
-                    row.id === item.projectId
-                );
-
-              const closed =
-                item.status ===
-                  WorkTaskStatus.Completed ||
-                item.status ===
-                  WorkTaskStatus.Cancelled;
-
-              return (
-                <tr key={item.id}>
-                  <td>
-                    <strong>
-                      {item.taskNumber}
-                    </strong>
-                    <small>
-                      {item.title}
-                    </small>
-
-                    {item.isOverdue && (
-                      <span className="erp-status red">
-                        Gecikti
-                      </span>
-                    )}
-                  </td>
-
-                  <td>
-                    {project ? (
-                      <>
-                        <strong>
-                          {project.code}
-                        </strong>
-                        <small>
-                          {project.name}
-                        </small>
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-
-                  <td>
-                    <span
-                      className={`erp-status ${
-                        priorityClasses[
-                          item.priority
-                        ] ?? "gray"
-                      }`}
-                    >
-                      {priorityLabels[
-                        item.priority
-                      ] ?? item.priorityName}
-                    </span>
-                  </td>
-
-                  <td>
-                    <span
-                      className={`erp-status ${
-                        statusClasses[
-                          item.status
-                        ] ?? "gray"
-                      }`}
-                    >
-                      {statusLabels[
-                        item.status
-                      ] ?? item.statusName}
-                    </span>
-                  </td>
-
-                  <td>
-                    {formatDate(
-                      item.startDate
-                    )}
-                  </td>
-
-                  <td>
-                    {formatDate(
-                      item.dueDate
-                    )}
-                  </td>
-
-                  <td>
-                    {item.sourceModule ||
-                      "MANUAL"}
-                  </td>
-
-                  <td>
-                    <div className="flex flex-wrap gap-2">
-                      {(item.status ===
-                        WorkTaskStatus.Open ||
-                        item.status ===
-                          WorkTaskStatus.Waiting) &&
-                        actions.can("manage") && (
-                        <button
-                          type="button"
-                          disabled={
-                            processingId ===
-                            item.id
-                          }
-                          onClick={() =>
-                            void startTask(
-                              item.id
-                            )
-                          }
-                        >
-                          Başlat
-                        </button>
-                      )}
-
-                      {!closed && actions.can("manage") && (
-                        <button
-                          type="button"
-                          disabled={
-                            processingId ===
-                            item.id
-                          }
-                          onClick={() =>
-                            setPending({
-                              kind: "complete",
-                              id: item.id,
-                            })
-                          }
-                        >
-                          Tamamla
-                        </button>
-                      )}
-
-                      {!closed && actions.can("manage") && (
-                        <button
-                          type="button"
-                          disabled={
-                            processingId ===
-                            item.id
-                          }
-                          onClick={() =>
-                            setPending({
-                              kind: "cancel",
-                              id: item.id,
-                            })
-                          }
-                        >
-                          İptal
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <DataTable
+            rows={items}
+            columns={columns}
+            rowKey={(item) => item.id}
+            loading={loading}
+            title="Görevler"
+            emptyText="Görev bulunamadı. Yeni bir görev oluşturun veya filtreleri değiştirin."
+            resetKey={`${projectFilter}|${statusFilter}|${priorityFilter}`}
+          />
       </div>
       {pending && (
         <ConfirmDialog

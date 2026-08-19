@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { Button } from "@/components/ui";
 import {
@@ -69,6 +74,99 @@ export default function ScheduleListPage() {
     };
   }, [reloadKey]);
 
+
+  /*
+   * Durum sütunu ekranda rozet, dosyada düz metin. Uyarı satır BAŞINA
+   * projeden geliyor, o yüzden sütunlar `alerts` üzerine kapanıyor.
+   */
+  function statusText(item: (typeof items)[number]) {
+    const alert = alerts[item.projectId];
+
+    if (!alert) return "Takipte";
+    if (alert.deadlineAtRisk) return "Termin tehlikede";
+    if (alert.criticalRiskCount > 0)
+      return `Kritik yolda ${alert.criticalRiskCount} iş geride`;
+    if (alert.delayWorkDays > 0) return `${alert.delayWorkDays} iş günü gecikme`;
+    return "Termin yaklaşıyor";
+  }
+
+  const columns: DataTableColumn<(typeof items)[number]>[] = [
+    {
+      key: "proje",
+      header: "Proje",
+      value: (item) => `${item.projectCode} — ${item.projectName}`,
+      render: (item) => (
+        <>
+          <Link href={`/projeler/${item.projectId}/is-programi`}>
+            <strong>{item.projectCode}</strong>
+          </Link>
+          <small style={{ display: "block" }}>{item.projectName}</small>
+        </>
+      ),
+    },
+    { key: "program", header: "Program", value: (item) => item.name },
+    {
+      key: "aktivite",
+      header: "Aktivite",
+      numeric: true,
+      value: (item) => item.activityCount,
+    },
+    {
+      key: "termin",
+      header: "Termin",
+      value: (item) =>
+        `${formatDate(item.deadline)} (${item.hasContractDeadline ? "sözleşmeden" : "plandan"})`,
+      render: (item) => (
+        <>
+          {formatDate(item.deadline)}
+          <small style={{ display: "block" }}>
+            {item.hasContractDeadline ? "sözleşmeden" : "plandan"}
+          </small>
+        </>
+      ),
+    },
+    {
+      key: "baseline",
+      header: "Baseline",
+      value: (item) =>
+        item.baselineRevisionNumber === 0
+          ? "Kaydedilmedi"
+          : `${item.baselineRevisionNumber}. revizyon`,
+      render: (item) =>
+        item.baselineRevisionNumber === 0 ? (
+          <span className="erp-status gray">Kaydedilmedi</span>
+        ) : (
+          `${item.baselineRevisionNumber}. revizyon`
+        ),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: statusText,
+      render: (item) => {
+        const alert = alerts[item.projectId];
+
+        if (!alert) return <span className="erp-status green">Takipte</span>;
+        if (alert.deadlineAtRisk)
+          return <span className="erp-status red">Termin tehlikede</span>;
+        if (alert.criticalRiskCount > 0)
+          return (
+            <span className="erp-status orange">
+              Kritik yolda {alert.criticalRiskCount} iş geride
+            </span>
+          );
+        if (alert.delayWorkDays > 0)
+          return (
+            <span className="erp-status orange">
+              {alert.delayWorkDays} iş günü gecikme
+            </span>
+          );
+        return <span className="erp-status blue">Termin yaklaşıyor</span>;
+      },
+    },
+  ];
+
+
   return (
     <ErpShell
       design="redwood"
@@ -99,68 +197,13 @@ export default function ScheduleListPage() {
           </div>
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Proje</th>
-                  <th>Program</th>
-                  <th>Aktivite</th>
-                  <th>Termin</th>
-                  <th>Baseline</th>
-                  <th>Durum</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => {
-                  const alert = alerts[item.projectId];
-
-                  return (
-                    <tr key={item.id}>
-                      <td>
-                        <Link href={`/projeler/${item.projectId}/is-programi`}>
-                          <strong>{item.projectCode}</strong>
-                        </Link>
-                        <small style={{ display: "block" }}>
-                          {item.projectName}
-                        </small>
-                      </td>
-                      <td>{item.name}</td>
-                      <td>{item.activityCount}</td>
-                      <td>
-                        {formatDate(item.deadline)}
-                        <small style={{ display: "block" }}>
-                          {item.hasContractDeadline ? "sözleşmeden" : "plandan"}
-                        </small>
-                      </td>
-                      <td>
-                        {item.baselineRevisionNumber === 0 ? (
-                          <span className="erp-status gray">Kaydedilmedi</span>
-                        ) : (
-                          `${item.baselineRevisionNumber}. revizyon`
-                        )}
-                      </td>
-                      <td>
-                        {!alert ? (
-                          <span className="erp-status green">Takipte</span>
-                        ) : alert.deadlineAtRisk ? (
-                          <span className="erp-status red">Termin tehlikede</span>
-                        ) : alert.criticalRiskCount > 0 ? (
-                          <span className="erp-status orange">
-                            Kritik yolda {alert.criticalRiskCount} iş geride
-                          </span>
-                        ) : alert.delayWorkDays > 0 ? (
-                          <span className="erp-status orange">
-                            {alert.delayWorkDays} iş günü gecikme
-                          </span>
-                        ) : (
-                          <span className="erp-status blue">Termin yaklaşıyor</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <DataTable
+              rows={items}
+              columns={columns}
+              rowKey={(item) => item.id}
+              title="İş Programları"
+              emptyText="İş programı bulunmuyor."
+            />
           </div>
         )}
       </section>

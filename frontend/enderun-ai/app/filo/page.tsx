@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import {
@@ -55,6 +60,86 @@ function emptyForm(companyId: string): SaveVehiclePayload {
  * motorunun kendi sabitinden okunuyor. Burada hesaplansaydı ikinci bir
  * eşik doğar ve liste "yaklaşıyor" derken bildirim merkezi susardı.
  */
+const columns: DataTableColumn<VehicleListItem>[] = [
+  {
+    key: "plaka",
+    header: "Plaka",
+    value: (vehicle) =>
+      [vehicle.plateNumber, vehicle.brand, vehicle.model]
+        .filter(Boolean)
+        .join(" "),
+    render: (vehicle) => (
+      <>
+        <Link
+          href={`/filo/${vehicle.id}`}
+          className="font-medium text-brand-700 hover:underline"
+        >
+          {vehicle.plateNumber}
+        </Link>
+        {(vehicle.brand || vehicle.model) && (
+          <span className="block text-xs text-slate-500">
+            {[vehicle.brand, vehicle.model].filter(Boolean).join(" ")}
+          </span>
+        )}
+      </>
+    ),
+  },
+  {
+    key: "tip",
+    header: "Tip",
+    value: (vehicle) => VEHICLE_TYPE_LABELS[vehicle.type] ?? "—",
+  },
+  {
+    key: "sahiplik",
+    header: "Sahiplik",
+    value: (vehicle) => VEHICLE_OWNERSHIP_LABELS[vehicle.ownership],
+    render: (vehicle) => (
+      <Badge variant={vehicle.ownership === 1 ? "info" : "default"}>
+        {VEHICLE_OWNERSHIP_LABELS[vehicle.ownership]}
+      </Badge>
+    ),
+  },
+  {
+    key: "yer",
+    header: "Güncel yer",
+    value: (vehicle) =>
+      !vehicle.currentAssignment
+        ? "Atanmadı"
+        : vehicle.currentAssignment.projectId
+          ? `${vehicle.currentAssignment.projectCode} / ${vehicle.currentAssignment.driverName ?? "sürücü atanmadı"}`
+          : "Merkez havuzu",
+    render: (vehicle) =>
+      vehicle.currentAssignment ? (
+        vehicle.currentAssignment.projectId ? (
+          <>
+            <span className="block text-slate-900">
+              {vehicle.currentAssignment.projectCode}
+            </span>
+            <span className="block text-xs text-slate-500">
+              {vehicle.currentAssignment.driverName ?? "sürücü atanmadı"}
+            </span>
+          </>
+        ) : (
+          <span className="text-slate-600">Merkez havuzu</span>
+        )
+      ) : (
+        <span className="text-slate-400">Atanmadı</span>
+      ),
+  },
+  {
+    key: "yenileme",
+    header: "Yenileme",
+    value: (vehicle) =>
+      vehicle.dueSoonCount > 0 ? `${vehicle.dueSoonCount} yaklaşan` : "—",
+    render: (vehicle) =>
+      vehicle.dueSoonCount > 0 ? (
+        <Badge variant="warning">{vehicle.dueSoonCount} yaklaşan</Badge>
+      ) : (
+        <span className="text-xs text-slate-400">—</span>
+      ),
+  },
+];
+
 export default function FleetPage() {
   /**
    * Düğme -> uç -> izin (VehiclesController):
@@ -233,81 +318,14 @@ export default function FleetPage() {
             />
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-600">
-                    <th className="px-3 py-2 text-left">Plaka</th>
-                    <th className="px-3 py-2 text-left">Tip</th>
-                    <th className="px-3 py-2 text-left">Sahiplik</th>
-                    <th className="px-3 py-2 text-left">Güncel yer</th>
-                    <th className="px-3 py-2 text-left">Yenileme</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {vehicles.map((vehicle) => (
-                    <tr key={vehicle.id} className="border-t border-slate-200">
-                      <td className="px-3 py-2">
-                        <Link
-                          href={`/filo/${vehicle.id}`}
-                          className="font-medium text-brand-700 hover:underline"
-                        >
-                          {vehicle.plateNumber}
-                        </Link>
-                        {(vehicle.brand || vehicle.model) && (
-                          <span className="block text-xs text-slate-500">
-                            {[vehicle.brand, vehicle.model]
-                              .filter(Boolean)
-                              .join(" ")}
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="px-3 py-2">
-                        {VEHICLE_TYPE_LABELS[vehicle.type] ?? "—"}
-                      </td>
-
-                      <td className="px-3 py-2">
-                        <Badge
-                          variant={vehicle.ownership === 1 ? "info" : "default"}
-                        >
-                          {VEHICLE_OWNERSHIP_LABELS[vehicle.ownership]}
-                        </Badge>
-                      </td>
-
-                      <td className="px-3 py-2">
-                        {vehicle.currentAssignment ? (
-                          vehicle.currentAssignment.projectId ? (
-                            <>
-                              <span className="block text-slate-900">
-                                {vehicle.currentAssignment.projectCode}
-                              </span>
-                              <span className="block text-xs text-slate-500">
-                                {vehicle.currentAssignment.driverName ??
-                                  "sürücü atanmadı"}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-slate-600">Merkez havuzu</span>
-                          )
-                        ) : (
-                          <span className="text-slate-400">Atanmadı</span>
-                        )}
-                      </td>
-
-                      <td className="px-3 py-2">
-                        {vehicle.dueSoonCount > 0 ? (
-                          <Badge variant="warning">
-                            {vehicle.dueSoonCount} yaklaşan
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <DataTable
+                rows={vehicles}
+                columns={columns}
+                rowKey={(vehicle) => vehicle.id}
+                title="Araç Filosu"
+                emptyText="Araç bulunmuyor."
+                resetKey={`${companyId}|${ownership}|${search}`}
+              />
             </div>
           )}
         </CardContent>

@@ -355,7 +355,15 @@ dizisi ucuz bir nesne; doğruluk hıza tercih edildi.
 `depo-stok/malzeme-talepleri`, `perakende/raporlar` (iki tablo).
 Ham tablo sayısı **58 → 55**.
 
-**F4 kalan:** 55 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
+**F4d (bitti):** `is-programi`, `muhendislik/receteler`, `filo`,
+`cariler`, `gorevler`. Ham tablo **54 → 49**.
+
+`cariler` ve `gorevler` sütunları veri değil FONKSİYON içinde
+tanımlanıyor: bakiye sütunu `balances` haritası, eylem sütunu
+`actions`/`processingId` üzerine kapanıyor. F4b'deki desen kararı
+gereği belleğe ALINMIYOR.
+
+**F4 kalan:** 49 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
 `cariler`, `finans/*`, `insan-kaynaklari/*` aileleri.
 
 **F6 ne yaptı — ve BU BOŞLUĞU BU PROGRAM AÇTI.**

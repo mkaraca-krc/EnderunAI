@@ -7,6 +7,11 @@ import {
   useMemo,
   useState,
 } from "react";
+
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog, Drawer } from "@/components/ui";
@@ -440,6 +445,147 @@ export default function Page() {
     }
   }
 
+
+  /*
+   * Bakiye sütunu `balances` üzerine kapanıyor ve eylem sütunu
+   * duruma bağlı, o yüzden sütunlar bileşen içinde tanımlanıyor
+   * (belleğe ALINMIYOR — bkz. F4b desen kararı: bayat kapanış riski).
+   */
+  const columns: DataTableColumn<Account>[] = [
+    { key: "kod", header: "Kod", value: (account) => account.code },
+    {
+      key: "unvan",
+      header: "Ünvan",
+      value: (account) =>
+        `${account.title} (${roleLabels(account.roles).join(" · ")})`,
+      render: (account) => (
+        <>
+          <strong>{account.title}</strong>
+          {/* Roller kartın en ayırt edici bilgisi: aynı ünvanlı bir
+              cari hem müşteri hem tedarikçi olabiliyor. */}
+          <small>{roleLabels(account.roles).join(" · ")}</small>
+        </>
+      ),
+    },
+    { key: "sirket", header: "Şirket", value: (account) => account.companyName },
+    {
+      key: "alici",
+      header: "120 Alıcı",
+      value: (account) =>
+        account.receivableAccountingAccountId ? "Bağlı" : "Bağlı Değil",
+      render: (account) => (
+        <span
+          className={
+            account.receivableAccountingAccountId
+              ? "erp-status green"
+              : "erp-status gray"
+          }
+        >
+          {account.receivableAccountingAccountId ? "Bağlı" : "Bağlı Değil"}
+        </span>
+      ),
+    },
+    {
+      key: "satici",
+      header: "320 Satıcı",
+      value: (account) =>
+        account.payableAccountingAccountId ? "Bağlı" : "Bağlı Değil",
+      render: (account) => (
+        <span
+          className={
+            account.payableAccountingAccountId
+              ? "erp-status green"
+              : "erp-status gray"
+          }
+        >
+          {account.payableAccountingAccountId ? "Bağlı" : "Bağlı Değil"}
+        </span>
+      ),
+    },
+    {
+      key: "bakiye",
+      header: "Bakiye",
+      numeric: true,
+      value: (account) => {
+        const row = balances[account.id];
+        if (row === undefined) return "Hareket yok";
+
+        const yon =
+          row.balance === 0 ? "Kapalı" : row.balance > 0 ? "Borç" : "Alacak";
+
+        return `${money(Math.abs(row.balance))} ${yon}`;
+      },
+      render: (account) =>
+        balances[account.id] === undefined ? (
+          <span className="erp-status gray">Hareket yok</span>
+        ) : (
+          <>
+            <strong>{money(Math.abs(balances[account.id].balance))}</strong>
+            <small>
+              {balances[account.id].balance === 0
+                ? "Kapalı"
+                : balances[account.id].balance > 0
+                  ? "Borç"
+                  : "Alacak"}
+            </small>
+            {/* Dövizli caride TL toplam kurla oynadığı için tek başına
+                yanıltıcı; dövizin kendi tutarı da yazılır. */}
+            {balances[account.id].hasForeignCurrency &&
+              (balances[account.id].currencyBalances ?? [])
+                .filter((row) => row.currencyCode !== "TRY")
+                .map((row) => (
+                  <small key={row.currencyCode}>
+                    {formatCurrency(Math.abs(row.balance), row.currencyCode)}{" "}
+                    {row.balance >= 0 ? "borç" : "alacak"}
+                  </small>
+                ))}
+          </>
+        ),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (account) => STATUS_LABELS[account.status] ?? "Bilinmiyor",
+      render: (account) => (
+        <span className={`erp-status ${statusTone(account.status)}`}>
+          {STATUS_LABELS[account.status] ?? "Bilinmiyor"}
+        </span>
+      ),
+    },
+    {
+      key: "islemler",
+      header: "İşlemler",
+      value: () => "",
+      render: (account) => (
+        <div className="erp-actions">
+          <button type="button" onClick={() => startEdit(account)}>
+            Düzenle
+          </button>
+
+          {account.status === 0 && (
+            <button type="button" onClick={() => act(account.id, "submit")}>
+              Onaya Gönder
+            </button>
+          )}
+
+          {account.status === 1 && (
+            <button type="button" onClick={() => act(account.id, "approve")}>
+              Onayla
+            </button>
+          )}
+
+          <Link
+            className="erp-secondary-button"
+            href={`/cariler/${account.id}/ekstre`}
+          >
+            Ekstre
+          </Link>
+        </div>
+      ),
+    },
+  ];
+
+
   return (
     <ErpShell
       title="Cari Kartlar"
@@ -534,170 +680,14 @@ export default function Page() {
         </div>
 
         <div className="erp-table-wrap">
-          <table className="erp-table">
-            <thead>
-              <tr>
-                <th>Kod</th>
-                <th>Ünvan</th>
-                <th>Şirket</th>
-                <th>120 Alıcı</th>
-                <th>320 Satıcı</th>
-                <th className="num">Bakiye</th>
-                <th>Durum</th>
-                <th>İşlemler</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {visible.map((account) => (
-                <tr key={account.id}>
-                  <td>{account.code}</td>
-
-                  <td>
-                    <strong>{account.title}</strong>
-                    {/* Roller kartın en ayırt edici bilgisi ama tabloda
-                        hiç görünmüyordu: aynı ünvanlı bir cari hem
-                        müşteri hem tedarikçi olabiliyor. */}
-                    <small>{roleLabels(account.roles).join(" · ")}</small>
-                  </td>
-
-                  <td>{account.companyName}</td>
-
-                  <td>
-                    <span
-                      className={
-                        account.receivableAccountingAccountId
-                          ? "erp-status green"
-                          : "erp-status gray"
-                      }
-                    >
-                      {account.receivableAccountingAccountId
-                        ? "Bağlı"
-                        : "Bağlı Değil"}
-                    </span>
-                  </td>
-
-                  <td>
-                    <span
-                      className={
-                        account.payableAccountingAccountId
-                          ? "erp-status green"
-                          : "erp-status gray"
-                      }
-                    >
-                      {account.payableAccountingAccountId
-                        ? "Bağlı"
-                        : "Bağlı Değil"}
-                    </span>
-                  </td>
-
-                  <td className="num">
-                    {balances[account.id] === undefined ? (
-                      <span className="erp-status gray">Hareket yok</span>
-                    ) : (
-                      <>
-                        <strong>
-                          {money(Math.abs(balances[account.id].balance))}
-                        </strong>
-                        <small>
-                          {balances[account.id].balance === 0
-                            ? "Kapalı"
-                            : balances[account.id].balance > 0
-                              ? "Borç"
-                              : "Alacak"}
-                        </small>
-                        {/* Dövizli caride TL toplam kurla oynadığı için tek
-                            başına yanıltıcı; dövizin kendi tutarı da yazılır. */}
-                        {balances[account.id].hasForeignCurrency &&
-                          (balances[account.id].currencyBalances ?? [])
-                            .filter((row) => row.currencyCode !== "TRY")
-                            .map((row) => (
-                              <small key={row.currencyCode}>
-                                {formatCurrency(
-                                  Math.abs(row.balance),
-                                  row.currencyCode
-                                )}{" "}
-                                {row.balance >= 0 ? "borç" : "alacak"}
-                              </small>
-                            ))}
-                      </>
-                    )}
-                  </td>
-
-                  <td>
-                    <span className={`erp-status ${statusTone(account.status)}`}>
-                      {STATUS_LABELS[account.status] ?? "Bilinmiyor"}
-                    </span>
-                  </td>
-
-                  <td>
-                    <div className="erp-actions">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(account)}
-                      >
-                        Düzenle
-                      </button>
-
-                      {account.status === 0 && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            act(account.id, "submit")
-                          }
-                        >
-                          Onaya Gönder
-                        </button>
-                      )}
-
-                      {account.status === 1 && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            act(account.id, "approve")
-                          }
-                        >
-                          Onayla
-                        </button>
-                      )}
-
-                      <Link
-                        className="erp-secondary-button"
-                        href={`/cariler/${account.id}/ekstre`}
-                      >
-                        Ekstre
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {visible.length === 0 && (
-                <tr>
-                  {/*
-                    SÜTUN SAYISI 8: burada 7 yazıyordu, yani boş satır
-                    tabloyu tam kaplamıyor, son sütunun altında kopuk
-                    bir hücre kalıyordu.
-                  */}
-                  <td colSpan={8}>
-                    <div className="erp-empty-state">
-                      <div className="erp-empty-icon">☰</div>
-                      <strong>
-                        {items.length === 0
-                          ? "Henüz cari kart yok"
-                          : "Süzgece uyan cari kart yok"}
-                      </strong>
-                      <p>
-                        {items.length === 0
-                          ? "İlk müşteri, tedarikçi veya alt yüklenici kartını oluşturarak başlayın."
-                          : "Arama metnini kısaltın ya da rol ve durum süzgecini temizleyin."}
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <DataTable
+              rows={visible}
+              columns={columns}
+              rowKey={(account) => account.id}
+              title="Cari Hesaplar"
+              emptyText="Cari hesap bulunamadı."
+              resetKey={`${search}|${roleFilter}|${statusFilter}`}
+            />
         </div>
       </div>
 
