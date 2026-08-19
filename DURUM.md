@@ -384,7 +384,18 @@ etkiliyor ve "mahsup bekliyor" / "saha raporu bekliyor" iş akışı
 uyarısı. Rozet rengiyle anlatılan bu ayrımların hepsi `value`
 metnine de yazıldı — kâğıtta ve dosyada kaybolmasınlar.
 
-**F4 kalan:** 44 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
+**F4g (bitti):** `finans/kasa-banka` (iki tablo: hesap listesi ve
+ekstre). Ham tablo **44 → 43**.
+
+**Bileşene yeni yetenek: `rowProps`.** Bu ekranda SATIRIN KENDİSİ
+seçilebilir ve klavyeyle erişilebilir olmak zorunda (`tabIndex`,
+`aria-current`, `onKeyDown`) — hesap seçilmeden ekstre görünmüyor,
+yani satır seçimi bir gezinme aracı. Bileşen bunu desteklemeseydi
+ekran ham tabloda kalır ve sayfalama/çıktı kazanamazdı. F5'te alt
+toplamın `yevmiye`'yi açtığı desenin aynısı: eksik yetenek, taşımanın
+önündeki asıl engel.
+
+**F4 kalan:** 43 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
 `cariler`, `finans/*`, `insan-kaynaklari/*` aileleri.
 
 **F6 ne yaptı — ve BU BOŞLUĞU BU PROGRAM AÇTI.**

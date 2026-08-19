@@ -520,3 +520,38 @@ describe("DataTable — yazdırma kapsamı", () => {
     }
   });
 });
+
+describe("DataTable — seçilebilir satır", () => {
+  it("satıra özellik geçirilebiliyor ve klavyeyle erişilebilir kalıyor", () => {
+    const secilenler: string[] = [];
+
+    render(
+      <DataTable
+        rows={rows(3)}
+        columns={columns}
+        rowKey={(r) => r.id}
+        rowProps={(row) => ({
+          tabIndex: 0,
+          "aria-current": row.id === "1",
+          onClick: () => secilenler.push(row.id),
+        })}
+      />
+    );
+
+    const satirlar = bodyRows();
+
+    // Klavyeyle gezen kullanıcı satıra ulaşabilmeli: yalnız onClick
+    // olsaydı hiçbir satır seçilemezdi.
+    expect(satirlar[0]).toHaveAttribute("tabindex", "0");
+    expect(satirlar[1]).toHaveAttribute("aria-current", "true");
+
+    fireEvent.click(satirlar[2]);
+    expect(secilenler).toEqual(["2"]);
+  });
+
+  it("rowProps verilmezse satır sade kalır", () => {
+    render(<DataTable rows={rows(2)} columns={columns} rowKey={(r) => r.id} />);
+
+    expect(bodyRows()[0]).not.toHaveAttribute("tabindex");
+  });
+});

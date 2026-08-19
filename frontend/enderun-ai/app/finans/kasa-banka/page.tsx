@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, Drawer } from "@/components/ui";
@@ -17,6 +22,7 @@ import {
   CashTransactionType,
   type CashAccount,
   type CashAccountStatement,
+  type CashTransaction,
 } from "@/services/cash-account.service";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import {
@@ -32,6 +38,114 @@ import { projectService, type ProjectListItem } from "@/services/project.service
  * basamakları kaydırıyor, iki satırın rakamları hizalanmıyordu.
  */
 const today = () => new Date().toISOString().slice(0, 10);
+
+const accountColumns: DataTableColumn<CashAccount>[] = [
+  { key: "kod", header: "Kod", value: (account) => account.code },
+  {
+    key: "ad",
+    header: "Ad",
+    value: (account) =>
+      [account.name, account.bankName].filter(Boolean).join(" — "),
+    render: (account) => (
+      <>
+        {account.name}
+        {account.bankName && <small>{account.bankName}</small>}
+      </>
+    ),
+  },
+  {
+    key: "tur",
+    header: "Tür",
+    value: (account) =>
+      CASH_ACCOUNT_TYPE_LABELS[account.type] ?? account.typeName,
+    render: (account) => (
+      <span className={`erp-status ${account.type === 1 ? "blue" : "gray"}`}>
+        {CASH_ACCOUNT_TYPE_LABELS[account.type] ?? account.typeName}
+      </span>
+    ),
+  },
+  {
+    key: "muhasebe",
+    header: "Muhasebe Hesabı",
+    value: (account) =>
+      `${account.accountingAccountCode} ${account.accountingAccountName}`,
+    render: (account) => (
+      <>
+        {account.accountingAccountCode}
+        <small>{account.accountingAccountName}</small>
+      </>
+    ),
+  },
+  {
+    key: "giren",
+    header: "Giren",
+    numeric: true,
+    value: (account) => account.totalIn,
+    render: (account) => money(account.totalIn),
+  },
+  {
+    key: "cikan",
+    header: "Çıkan",
+    numeric: true,
+    value: (account) => account.totalOut,
+    render: (account) => money(account.totalOut),
+  },
+  {
+    key: "bakiye",
+    header: "Bakiye",
+    numeric: true,
+    value: (account) => account.balance,
+    render: (account) => <strong>{money(account.balance)}</strong>,
+  },
+];
+
+const statementColumns: DataTableColumn<CashTransaction>[] = [
+  {
+    key: "tarih",
+    header: "Tarih",
+    value: (row) => formatDate(row.transactionDate),
+  },
+  { key: "islem", header: "İşlem", value: (row) => row.transactionTypeName },
+  {
+    key: "aciklama",
+    header: "Açıklama",
+    value: (row) =>
+      [row.description, row.documentNumber].filter(Boolean).join(" — "),
+    render: (row) => (
+      <>
+        {row.description}
+        {row.documentNumber && <small>{row.documentNumber}</small>}
+      </>
+    ),
+  },
+  { key: "cari", header: "Cari", value: (row) => row.currentAccountTitle ?? "—" },
+  {
+    key: "fis",
+    header: "Fiş",
+    value: (row) => row.accountingVoucherNumber ?? "—",
+  },
+  {
+    key: "giren",
+    header: "Giren",
+    numeric: true,
+    value: (row) => (row.direction === 0 ? row.amount : ""),
+    render: (row) => (row.direction === 0 ? money(row.amount) : "—"),
+  },
+  {
+    key: "cikan",
+    header: "Çıkan",
+    numeric: true,
+    value: (row) => (row.direction === 1 ? row.amount : ""),
+    render: (row) => (row.direction === 1 ? money(row.amount) : "—"),
+  },
+  {
+    key: "bakiye",
+    header: "Bakiye",
+    numeric: true,
+    value: (row) => row.runningBalance,
+    render: (row) => money(row.runningBalance),
+  },
+];
 
 export default function CashAccountsPage() {
   /**
@@ -469,66 +583,34 @@ export default function CashAccountsPage() {
           </div>
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Kod</th>
-                  <th>Ad</th>
-                  <th>Tür</th>
-                  <th>Muhasebe Hesabı</th>
-                  <th className="num">Giren</th>
-                  <th className="num">Çıkan</th>
-                  <th className="num">Bakiye</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((account) => (
-                  /*
-                    SATIR SEÇİLEBİLİR VE KLAVYEYLE ULAŞILABİLİR:
-                    yalnızca onClick vardı; klavyeyle gezen kullanıcı
-                    hiçbir hesabı seçemiyor, dolayısıyla ekstreyi hiç
-                    göremiyordu. Seçili satır artık kalın yazıyla değil,
-                    marka rengi şeritle işaretleniyor — kalınlık iki
-                    satır arasında fark edilmiyordu.
-                  */
-                  <tr
-                    key={account.id}
-                    tabIndex={0}
-                    aria-current={account.id === selectedId}
-                    className={`rw-selectable ${
-                      account.id === selectedId ? "selected" : ""
-                    }`}
-                    onClick={() => setSelectedId(account.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSelectedId(account.id);
-                      }
-                    }}
-                  >
-                    <td>{account.code}</td>
-                    <td>
-                      {account.name}
-                      {account.bankName && <small>{account.bankName}</small>}
-                    </td>
-                    <td>
-                      <span className={`erp-status ${account.type === 1 ? "blue" : "gray"}`}>
-                        {CASH_ACCOUNT_TYPE_LABELS[account.type] ?? account.typeName}
-                      </span>
-                    </td>
-                    <td>
-                      {account.accountingAccountCode}
-                      <small>{account.accountingAccountName}</small>
-                    </td>
-                    <td className="num">{money(account.totalIn)}</td>
-                    <td className="num">{money(account.totalOut)}</td>
-                    <td className="num">
-                      <strong>{money(account.balance)}</strong>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+                rows={accounts}
+                columns={accountColumns}
+                rowKey={(account) => account.id}
+                title="Kasa ve Banka Hesapları"
+                emptyText="Hesap bulunmuyor."
+                resetKey={companyId}
+                /*
+                  SATIR SEÇİLEBİLİR VE KLAVYEYLE ULAŞILABİLİR: hesap
+                  seçilmeden ekstre görünmüyor, yani satır seçimi bir
+                  gezinme aracı. Yalnız onClick olsaydı klavyeyle gezen
+                  kullanıcı hiçbir hesabı seçemez, ekstreyi hiç göremezdi.
+                */
+                rowProps={(account) => ({
+                  tabIndex: 0,
+                  "aria-current": account.id === selectedId,
+                  className: `rw-selectable ${
+                    account.id === selectedId ? "selected" : ""
+                  }`,
+                  onClick: () => setSelectedId(account.id),
+                  onKeyDown: (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedId(account.id);
+                    }
+                  },
+                })}
+              />
           </div>
         )}
       </div>
@@ -699,59 +781,13 @@ export default function CashAccountsPage() {
             </div>
           ) : (
             <div className="erp-table-wrap">
-              <table className="erp-table">
-                <thead>
-                  <tr>
-                    <th>Tarih</th>
-                    <th>İşlem</th>
-                    <th>Açıklama</th>
-                    <th>Cari</th>
-                    <th>Fiş</th>
-                    <th className="num">Giren</th>
-                    <th className="num">Çıkan</th>
-                    <th className="num">Bakiye</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {statement.transactions.map((row) => (
-                    <tr key={row.id}>
-                      <td>{formatDate(row.transactionDate)}</td>
-                      <td>{row.transactionTypeName}</td>
-                      <td>
-                        {row.description}
-                        {row.documentNumber && <small>{row.documentNumber}</small>}
-                      </td>
-                      <td>{row.currentAccountTitle ?? "—"}</td>
-                      <td>{row.accountingVoucherNumber ?? "—"}</td>
-                      <td className="num">
-                        {row.direction === 0 ? money(row.amount) : "—"}
-                      </td>
-                      <td className="num">
-                        {row.direction === 1 ? money(row.amount) : "—"}
-                      </td>
-                      <td className="num">
-                        {money(row.runningBalance)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={5}>
-                      <strong>Dönem toplamı</strong>
-                    </td>
-                    <td className="num">
-                      <strong>{money(statement.totalIn)}</strong>
-                    </td>
-                    <td className="num">
-                      <strong>{money(statement.totalOut)}</strong>
-                    </td>
-                    <td className="num">
-                      <strong>{money(statement.closingBalance)}</strong>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+              <DataTable
+                  rows={statement.transactions}
+                  columns={statementColumns}
+                  rowKey={(row) => row.id}
+                  title="Hesap Ekstresi"
+                  emptyText="Bu hesapta hareket yok."
+                />
             </div>
           )}
         </div>

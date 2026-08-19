@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { flushSync } from "react-dom";
 
 import { whole } from "@/lib/format/turkish";
@@ -122,6 +129,19 @@ type Props<T> = {
 
   /** Alt toplam satırının etiketi. */
   footerLabel?: string;
+
+  /**
+   * SATIRIN KENDİSİNE ÖZELLİK EKLER — seçilebilir satırlar için.
+   *
+   * Bazı ekranlarda satır tıklanabilir ve KLAVYEYLE ERİŞİLEBİLİR
+   * olmak zorunda (`tabIndex`, `aria-current`, `onKeyDown`).
+   * `finans/kasa-banka` bunun örneği: hesap seçilmeden ekstre
+   * görünmüyor, yani satır seçimi bir gezinme aracı.
+   *
+   * Bileşen bunu desteklemeseydi o ekranlar ham tabloda kalır ve
+   * sayfalama/çıktı kazanamazdı.
+   */
+  rowProps?: (row: T) => HTMLAttributes<HTMLTableRowElement>;
 };
 
 const PAGE_SIZES = [25, 50, 100];
@@ -187,6 +207,7 @@ export function DataTable<T>({
   defaultPageSize = 25,
   printMeta,
   footerLabel = "Toplam",
+  rowProps,
 }: Props<T>) {
   const [clientPage, setClientPage] = useState(1);
   const [clientPageSize, setClientPageSize] = useState(defaultPageSize);
@@ -453,7 +474,7 @@ export function DataTable<T>({
               </tr>
             ) : (
               visible.map((row) => (
-                <tr key={rowKey(row)}>
+                <tr key={rowKey(row)} {...rowProps?.(row)}>
                   {columns.map((column) => (
                     <td
                       key={column.key}
