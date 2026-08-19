@@ -11,7 +11,8 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/projects/{projectId:guid}")]
-public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerBase
+public sealed class HrProjectLaborCostsController(AppDbContext db,
+    IScopedData scoped) : ControllerBase
 {
     [HttpGet("labor-costs")]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
@@ -56,7 +57,16 @@ public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerB
             .ToListAsync(cancellationToken);
 
         var personnelIds = rows.Select(x => x.PersonnelId).Distinct().ToArray();
-        var personnelNames = await db.Personnel.AsNoTracking()
+
+        /*
+         * ADLAR DİKİŞTEN. Bu uç `personnel.view` ile korunuyor ve o
+         * izin şantiye kapsamlı rollerde de var; kapsam dışı bir
+         * personelin adı burada çözülürse maliyet satırı isimle
+         * eşleşir ve kim olduğu sızar.
+         */
+        var scopedPersonnel = await scoped.PersonnelAsync(cancellationToken);
+
+        var personnelNames = await scopedPersonnel
             .Where(x => personnelIds.Contains(x.Id))
             .ToDictionaryAsync(
                 x => x.Id,
@@ -96,7 +106,10 @@ public sealed class HrProjectLaborCostsController(AppDbContext db) : ControllerB
         if (project is null)
             return NotFound(new { message = "Proje bulunamadı." });
 
-        var personnel = await db.Personnel.AsNoTracking()
+        // Kapsam dışı personele maliyet yazılamaz.
+        var visiblePersonnel = await scoped.PersonnelAsync(cancellationToken);
+
+        var personnel = await visiblePersonnel
             .SingleOrDefaultAsync(x => x.Id == request.PersonnelId, cancellationToken);
 
         if (personnel is null)

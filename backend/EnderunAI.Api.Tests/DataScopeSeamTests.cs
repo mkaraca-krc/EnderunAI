@@ -66,12 +66,27 @@ public sealed class DataScopeSeamTests
 
         // --- Aşağıdakiler HENÜZ TAŞINMADI (R3a sonraki yığınlar) ---
         ["PayrollReadinessController.cs"] = "R3a yığın 2 — bordro ailesi.",
-        ["HrCareerController.cs"] = "R3a yığın 2 — İK ailesi.",
-        ["HrAssetsController.cs"] = "R3a yığın 2 — zimmet ailesi.",
-        ["HrProjectLaborCostsController.cs"] = "R3a yığın 2 — İK ailesi.",
-        ["PersonnelOvertimeController.cs"] = "R3a yığın 2 — puantaj ailesi.",
+        ["HrCareerController.cs"] =
+            "OKUMA UÇLARI DİKİŞTE (R3a yığın 2). Kalan ham erişim yazma "
+            + "yolunda: kariyer hareketi AÇMAK `personnel.create` ister "
+            + "ve o izin şantiye kapsamlı rollerde yok.",
+        ["HrAssetsController.cs"] =
+            "Personel analizi dikişte (R3a yığın 2). Kalan ham erişim "
+            + "zimmet DEVRİNDE hedef personelin varlığını doğruluyor; "
+            + "o uç `personnel.edit` istiyor.",
+        ["HrProjectLaborCostsController.cs"] =
+            "TAMAMEN DİKİŞTE (R3a yığın 2) — liste adları ve maliyet "
+            + "yazma yolu. Liste bu dosyada kalıyor çünkü bekçi test "
+            + "yorumları soyduktan sonra eşleşme kalmıyor; kayıt "
+            + "gelecekte ham erişim eklenirse fark edilsin diye duruyor.",
+        ["PersonnelOvertimeController.cs"] =
+            "DİKİŞE TAŞINDI (R3a yığın 2). Kayıt, ham erişim geri "
+            + "eklenirse fark edilsin diye duruyor.",
         ["PersonnelExtraPaymentsController.cs"] = "R3a yığın 2 — elden ödeme.",
-        ["PersonnelDutiesController.cs"] = "R3a yığın 2 — görevlendirme.",
+        ["PersonnelDutiesController.cs"] =
+            "Liste ve görev açma dikişte (R3a yığın 2). Kalan ham "
+            + "erişim `db.PersonnelDuties` üzerinde — o varlık kapsam "
+            + "taşımıyor, personel üzerinden süzülüyor.",
         ["PersonnelDocumentsController.cs"] = "R3a yığın 2 — personel evrakı.",
         ["PersonnelTerminationsController.cs"] = "R3a yığın 2 — çıkış.",
         ["SubcontractorContractsController.cs"] = "R3a yığın 3 — taşeron.",

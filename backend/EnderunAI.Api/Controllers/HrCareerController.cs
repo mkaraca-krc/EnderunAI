@@ -29,7 +29,8 @@ public sealed class HrCareerController(
     HrDbContext hrDb,
     ISalaryVisibilityService salaryVisibility,
     ICurrentUserService currentUser,
-    IUserAuthorizationService authorization) : ControllerBase
+    IUserAuthorizationService authorization,
+    IScopedData scoped) : ControllerBase
 {
     private static readonly string[] KindByActionType =
     {
@@ -59,6 +60,23 @@ public sealed class HrCareerController(
         if (companyId.HasValue)
             query = query.Where(x => x.CompanyId == companyId.Value);
 
+        /*
+         * KAPSAM: kariyer hareketi PERSONELE ait bir veri.
+         *
+         * Bu uç `personnel.view` ile korunuyor ve o izin ŞANTİYE ŞEFİ
+         * ile FORMEN'de de var — ikisi de yalnız kendi şantiyesini
+         * görmeli. Süzgeç olmadan terfi, ünvan ve proje değişikliği
+         * geçmişinin tamamı görünüyordu.
+         *
+         * `companyId` çağırandan geliyor ve TEK BAŞINA yetmez:
+         * kullanıcının o şirketi görme hakkı ayrıca sorulmalı. Kapsam
+         * dikişi bunu personel üzerinden zorluyor.
+         */
+        var visiblePersonnel = await scoped.PersonnelAsync(cancellationToken);
+
+        query = query.Where(x =>
+            visiblePersonnel.Any(person => person.Id == x.PersonnelId));
+
         var rows = await query
             .OrderByDescending(x => x.EffectiveDate)
             .ToListAsync(cancellationToken);
@@ -72,6 +90,13 @@ public sealed class HrCareerController(
         Guid personnelId,
         CancellationToken cancellationToken)
     {
+        // Kapsam dışı personelin geçmişi 404: kaydın VARLIĞI da
+        // sızmamalı (PersonnelController deseni).
+        var visiblePersonnel = await scoped.PersonnelAsync(cancellationToken);
+
+        if (!await visiblePersonnel.AnyAsync(x => x.Id == personnelId, cancellationToken))
+            return NotFound(new { message = "Personel bulunamadı." });
+
         var rows = await db.HrCareerHistories.AsNoTracking()
             .Where(x => x.PersonnelId == personnelId)
             .OrderByDescending(x => x.EffectiveDate)
@@ -86,7 +111,9 @@ public sealed class HrCareerController(
         Guid personnelId,
         CancellationToken cancellationToken)
     {
-        var personnel = await db.Personnel.AsNoTracking()
+        var visiblePersonnel = await scoped.PersonnelAsync(cancellationToken);
+
+        var personnel = await visiblePersonnel
             .SingleOrDefaultAsync(x => x.Id == personnelId, cancellationToken);
 
         if (personnel is null)
@@ -247,7 +274,9 @@ public sealed class HrCareerController(
             return Array.Empty<object>();
 
         var personnelIds = rows.Select(x => x.PersonnelId).Distinct().ToArray();
-        var personnelMap = await db.Personnel.AsNoTracking()
+        var scopedPersonnel = await scoped.PersonnelAsync(cancellationToken);
+
+        var personnelMap = await scopedPersonnel
             .Where(x => personnelIds.Contains(x.Id))
             .ToDictionaryAsync(
                 x => x.Id,

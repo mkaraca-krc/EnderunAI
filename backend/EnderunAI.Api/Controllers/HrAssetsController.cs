@@ -10,7 +10,8 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/hr/assets")]
-public sealed class HrAssetsController(AppDbContext db) : ControllerBase
+public sealed class HrAssetsController(AppDbContext db,
+    IScopedData scoped) : ControllerBase
 {
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.PersonnelView)]
@@ -383,7 +384,15 @@ public sealed class HrAssetsController(AppDbContext db) : ControllerBase
         Guid personnelId,
         CancellationToken cancellationToken)
     {
-        var personnel = await db.Personnel.AsNoTracking()
+        /*
+         * KAPSAM DİKİŞİ. `personnel.view` şantiye kapsamlı rollerde de
+         * var; kapsam dışı personelin zimmet geçmişi (hangi alet,
+         * hangi tarih, hangi bedel) görünmemeli. Kapsam dışında 404 —
+         * kaydın varlığı da sızmasın.
+         */
+        var visiblePersonnel = await scoped.PersonnelAsync(cancellationToken);
+
+        var personnel = await visiblePersonnel
             .SingleOrDefaultAsync(x => x.Id == personnelId, cancellationToken);
 
         if (personnel is null)

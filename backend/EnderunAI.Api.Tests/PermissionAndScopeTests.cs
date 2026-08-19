@@ -544,4 +544,142 @@ public sealed class PermissionAndScopeTests(DatabaseFixture fixture)
 
         return Path.Combine(dir!, "EnderunAI.Api", "Security", fileName);
     }
+
+    /// <summary>
+    /// R3a YIĞIN 2 — İK AİLESİ KAPSAM DIŞINI SIZDIRMAZ.
+    ///
+    /// Bu uçların hepsi `personnel.view` ile korunuyor ve o izin
+    /// ŞANTİYE ŞEFİ ile FORMEN'de de var. Yığın 2'den önce hiçbiri
+    /// kapsam sormuyordu: şantiye şefi başka şantiyedeki personelin
+    /// görevlendirmesini, kariyer hareketini, zimmetini ve fazla mesai
+    /// bilgisini görebiliyordu.
+    ///
+    /// TEK EKRANDA GİZLEMEK YETMEZ — bu test doğrudan UÇLARI çağırıyor.
+    /// </summary>
+    [Fact]
+    public async Task SantiyeSefi_IkUclarindaKapsamDisiPersoneliGoremez()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        Guid assignedSiteId;
+        Guid mineId;
+        Guid theirsId;
+        string mineNumber;
+        string theirsNumber;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var project = await TestDataFactory.CreateProjectAsync(db, suffix);
+
+            var assignedSite = new ProjectSite
+            {
+                ProjectId = project.Id,
+                Code = $"IK-ATANAN-{suffix}",
+                Name = "Atanan Şantiye"
+            };
+            var otherSite = new ProjectSite
+            {
+                ProjectId = project.Id,
+                Code = $"IK-BASKA-{suffix}",
+                Name = "Başka Şantiye"
+            };
+            db.ProjectSites.AddRange(assignedSite, otherSite);
+            await db.SaveChangesAsync();
+
+            var mine = await TestDataFactory.CreatePersonnelAsync(
+                db, project.CompanyId, $"IKBENIM-{suffix}");
+            var theirs = await TestDataFactory.CreatePersonnelAsync(
+                db, project.CompanyId, $"IKBASKA-{suffix}");
+
+            db.ProjectSiteAssignments.AddRange(
+                new ProjectSiteAssignment
+                {
+                    PersonnelId = mine.Id,
+                    ProjectSiteId = assignedSite.Id,
+                    StartDate = DateTime.UtcNow.AddDays(-10)
+                },
+                new ProjectSiteAssignment
+                {
+                    PersonnelId = theirs.Id,
+                    ProjectSiteId = otherSite.Id,
+                    StartDate = DateTime.UtcNow.AddDays(-10)
+                });
+
+            // Kapsam dışı personele bir görevlendirme ve bir kariyer
+            // hareketi: süzgeç yoksa listede görünürler.
+            db.PersonnelDuties.Add(new PersonnelDuty
+            {
+                CompanyId = project.CompanyId,
+                PersonnelId = theirs.Id,
+                TargetProjectId = project.Id,
+                StartDate = DateTime.UtcNow.AddDays(-5),
+                Purpose = $"KAPSAMDISI-{suffix}",
+                Status = PersonnelDutyStatus.Requested
+            });
+
+            db.HrCareerHistories.Add(new HrCareerHistory
+            {
+                CompanyId = project.CompanyId,
+                PersonnelId = theirs.Id,
+                ActionType = HrCareerActionType.Promotion,
+                EffectiveDate = DateTime.UtcNow.AddDays(-3),
+                Reason = $"KAPSAMDISI-UNVAN-{suffix}"
+            });
+
+            await db.SaveChangesAsync();
+
+            assignedSiteId = assignedSite.Id;
+            mineId = mine.Id;
+            theirsId = theirs.Id;
+            mineNumber = mine.EmployeeNumber;
+            theirsNumber = theirs.EmployeeNumber;
+        }
+
+        var (client, _) = await CreateUserWithRolesAsync(
+            $"santiyesefi-ik-{suffix}",
+            "SantiyeSefiIk!2026Test",
+            ["Şantiye Şefi"],
+            [assignedSiteId]);
+
+        // 1) GÖREVLENDİRME LİSTESİ: kapsam dışı görev görünmemeli.
+        var duties = await client.GetAsync("/api/hr/gorevlendirmeler");
+        Assert.Equal(HttpStatusCode.OK, duties.StatusCode);
+
+        var dutyBody = await duties.Content.ReadAsStringAsync();
+        Assert.DoesNotContain($"KAPSAMDISI-{suffix}", dutyBody);
+
+        // 2) KARİYER LİSTESİ: kapsam dışı hareket görünmemeli.
+        var career = await client.GetAsync("/api/hr/career");
+        Assert.Equal(HttpStatusCode.OK, career.StatusCode);
+
+        var careerBody = await career.Content.ReadAsStringAsync();
+        Assert.DoesNotContain($"KAPSAMDISI-UNVAN-{suffix}", careerBody);
+        Assert.DoesNotContain(theirsNumber, careerBody);
+
+        // 3) KAPSAM DIŞI PERSONELİN KARİYER GEÇMİŞİ: 404 (403 değil —
+        //    kaydın varlığı da sızmamalı).
+        var theirHistory = await client.GetAsync(
+            $"/api/hr/career/personnel/{theirsId}");
+        Assert.Equal(HttpStatusCode.NotFound, theirHistory.StatusCode);
+
+        // 4) KENDİ ŞANTİYESİNDEKİ personelin geçmişi AÇILABİLİR —
+        //    kapsam süzgeci işi yapmayı engellememeli.
+        var myHistory = await client.GetAsync(
+            $"/api/hr/career/personnel/{mineId}");
+        Assert.Equal(HttpStatusCode.OK, myHistory.StatusCode);
+
+        // 5) FAZLA MESAİ: kapsam dışı personel 404.
+        var theirOvertime = await client.GetAsync(
+            $"/api/hr/personel/{theirsId}/fazla-mesai");
+        Assert.Equal(HttpStatusCode.NotFound, theirOvertime.StatusCode);
+
+        // 6) ZİMMET ANALİZİ: kapsam dışı personel 404.
+        var theirAssets = await client.GetAsync(
+            $"/api/hr/assets/analysis/{theirsId}");
+        Assert.Equal(HttpStatusCode.NotFound, theirAssets.StatusCode);
+
+        Assert.NotEqual(mineNumber, theirsNumber);
+    }
+
 }

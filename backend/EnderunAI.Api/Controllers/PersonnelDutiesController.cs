@@ -69,7 +69,8 @@ public sealed class PersonnelDutiesController(
     DutyExpensePostingService expensePosting,
     ICurrentUserService currentUser,
     IUserAuthorizationService authorization,
-    IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
+    IExtraPaymentVisibilityService extraPaymentVisibility,
+    IScopedData scoped) : ControllerBase
 {
     /// <summary>Görevi onaylayabilen roller.</summary>
     private static readonly string[] ApprovalRoles = ["Admin", "Genel Müdür"];
@@ -169,6 +170,21 @@ public sealed class PersonnelDutiesController(
         CancellationToken cancellationToken)
     {
         var query = db.PersonnelDuties.AsNoTracking();
+
+        /*
+         * KAPSAM: görevlendirme personele ait bir kayıt.
+         *
+         * Uç `personnel.view` ile korunuyor; şantiye kapsamlı roller
+         * (Şantiye Şefi, Formen) de bu izne sahip. Süzgeç olmadan
+         * başka şantiyelerin görevlendirmeleri — kim nereye, ne kadar
+         * süreyle gitti — görünüyordu.
+         *
+         * `companyId` çağırandan geliyor ve tek başına yetmez.
+         */
+        var visiblePersonnel = await scoped.PersonnelAsync(cancellationToken);
+
+        query = query.Where(x =>
+            visiblePersonnel.Any(person => person.Id == x.PersonnelId));
 
         if (companyId is Guid company) query = query.Where(x => x.CompanyId == company);
         if (personnelId is Guid person) query = query.Where(x => x.PersonnelId == person);
@@ -409,8 +425,10 @@ public sealed class PersonnelDutiesController(
         var allowance = canWriteAmounts ? request.DailyAllowance : 0m;
         var allowanceDeferred = !canWriteAmounts && request.DailyAllowance > 0m;
 
-        var personnel = await db.Personnel
-            .AsNoTracking()
+        // Kapsam dışı personele görev yazılamaz.
+        var assignable = await scoped.PersonnelAsync(cancellationToken);
+
+        var personnel = await assignable
             .Where(x => x.Id == request.PersonnelId)
             .Select(x => new { x.Id, x.CompanyId })
             .SingleOrDefaultAsync(cancellationToken);

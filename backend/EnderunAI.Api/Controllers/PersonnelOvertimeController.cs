@@ -42,7 +42,8 @@ public sealed class PersonnelOvertimeController(
     AppDbContext db,
     HrDbContext hrDb,
     SalaryTakeHomeService takeHome,
-    IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
+    IExtraPaymentVisibilityService extraPaymentVisibility,
+    IScopedData scoped) : ControllerBase
 {
     /// <summary>Sınıra yaklaşma eşiği — köprüdeki uyarıyla aynı.</summary>
     private const decimal NearLimitRatio = 0.9m;
@@ -70,8 +71,21 @@ public sealed class PersonnelOvertimeController(
         if (targetYear is < 2000 or > 2100)
             return BadRequest(new { message = "Geçersiz yıl." });
 
-        var personnel = await db.Personnel
-            .AsNoTracking()
+        /*
+         * KAPSAM DİKİŞİNDEN OKUNUYOR.
+         *
+         * Bu uç `personnel.view` ile korunuyor ve o izin ŞANTİYE ŞEFİ
+         * ile FORMEN'de de var (ikisi de SiteOnly kapsamlı). Ham
+         * `db.Personnel` okumak, kendi şantiyesinde olmayan bir
+         * personelin kimliğini ve fazla mesai onay durumunu
+         * gösterirdi.
+         *
+         * Kapsam dışı kayıt 404 döner (403 değil): kaydın VARLIĞINI
+         * sızdırmamak için — PersonnelController'daki desenin aynısı.
+         */
+        var scopedPersonnel = await scoped.PersonnelAsync(cancellationToken);
+
+        var personnel = await scopedPersonnel
             .Where(x => x.Id == personnelId)
             .Select(x => new
             {

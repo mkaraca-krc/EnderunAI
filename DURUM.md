@@ -108,6 +108,89 @@ süzgeç altında bu kontrol kapsam dışı kaydı göremez ve MÜKERRER TC
 sessizce oluşur. Ayrıca 151 mevcut global süzgeç var ve bordro/muhasebe/
 içe aktarma sorguları da süzülür → sessizce eksik rakam.
 
+### R3a YIĞIN 2 (İK ailesi) — TAMAMLANDI
+
+**Risk yüzeyi ölçümle daraltıldı.** Yığın 2'de 13 kontrolcü listelenmişti;
+hepsi aynı ağırlıkta değil. Şantiye Şefi ve Formen'in (tek `SiteOnly`
+kapsamlı roller) izin listesi okundu:
+
+`AiUse · DashboardView · Documents* · Inventory* (yalnız şef) ·
+**PersonnelView** · Purchasing* (yalnız şef) · ScheduleView ·
+SiteReports* · SitesView · VehicleView (yalnız şef)`
+
+Yani `AttendancePayrollView`, `ExtraPaymentView`, `PersonnelDocumentView`,
+`SalaryView` bu rollerde YOK. Dolayısıyla `LeaveBalance`,
+`PayrollReadiness`, `AttendanceSheet`, `PersonnelExtraPayments`,
+`PersonnelCashPayments`, `PersonnelDocuments` uçları o rollere kapalı —
+kapsam yine eklenmeli ama ACİL DEĞİL.
+
+**Acil olan altı uç `personnel.view` ile korunuyordu.** Beşi dikişe
+taşındı:
+
+| Kontrolcü | Kapatılan sızıntı |
+|---|---|
+| `PersonnelOvertimeController` | kapsam dışı personelin kimliği + fazla mesai onayı |
+| `HrCareerController` | terfi, ünvan, proje değişikliği geçmişinin TAMAMI |
+| `HrProjectLaborCostsController` | maliyet satırlarının isimle eşleşmesi |
+| `HrAssetsController` | zimmet geçmişi (hangi alet, tarih, bedel) |
+| `PersonnelDutiesController` | kim nereye, ne kadar süreyle görevlendirildi |
+
+`companyId` çağırandan geliyordu ve TEK BAŞINA YETMEZ: kullanıcının o
+şirketi görme hakkı ayrıca sorulmalı. Dikiş bunu personel üzerinden
+zorluyor; kapsam dışı kayıt **404** döner (403 değil — kaydın varlığı
+da sızmamalı).
+
+**Test altı ucu DOĞRUDAN çağırıyor** (`SantiyeSefi_IkUclarindaKapsam
+DisiPersoneliGoremez`): kapsam dışı görev/kariyer listede yok, kapsam
+dışı personelin geçmişi 404, KENDİ şantiyesindeki personel açılabiliyor
+(kapsam süzgeci işi engellemiyor), fazla mesai ve zimmet analizi 404.
+
+Üç sonda da yakaladı. `PersonnelTerminationsController` yığın 3'e
+kaldı — `db.PersonnelTerminations` üzerinden çalışıyor, personel
+varlığına dokunmuyor; ayrı bir süzgeç deseni gerekiyor.
+
+**Harness hatası (kayıt):** sonda betiğinin başındaki `: > "$R"` her
+çağrıda sonuç dosyasını sıfırlıyordu; A ve B'nin sonuçları C tarafından
+silindi ve tekrar koşuldu. Sondalar tek tek çağrılan bir betikte sonuç
+dosyası SIFIRLANMAZ, eklenir.
+
+### R3a YIĞIN 2 — İK ailesi (TAMAMLANDI, 2026-08-19)
+
+**Risk yüzeyi ÖLÇÜMLE daraltıldı.** Yığın 2'de 13 kontrolcü kayıtlıydı;
+hepsi aynı aciliyette değil. Dar kapsamlı roller (Şantiye Şefi, Formen —
+`RoleDataScopePolicy.SiteOnly`) yalnız şu izinleri taşıyor:
+`personnel.view` var, **`attendance-payroll.view` YOK**,
+**`extra_payment.view` YOK**, `personnel.document.view` YOK.
+
+Yani `LeaveBalance`, `PayrollReadiness`, `AttendanceSheet`,
+`PersonnelExtraPayments`, `PersonnelCashPayments`, `PersonnelDocuments`
+o rollere zaten KAPALI. Acil olan, `personnel.view` ile korunan altı
+kontrolcüydü.
+
+**Dikişe bağlananlar (5):** `PersonnelOvertime`, `HrCareer`,
+`HrProjectLaborCosts`, `HrAssets`, `PersonnelDuties`.
+(`PersonnelTerminations` ham erişimi `db.PersonnelTerminations`
+üzerinde — o varlık kapsam taşımıyor, ayrı ele alınacak.)
+
+**Kapatılan sızıntı somut:** şantiye şefi başka şantiyedeki personelin
+görevlendirmesini (kim nereye, ne kadar süreyle), kariyer hareketini
+(terfi, ünvan, proje değişikliği, maaş alanları), zimmet geçmişini ve
+fazla mesai onay durumunu görebiliyordu. `companyId` ÇAĞIRANDAN
+geliyordu ve tek başına yetmiyor — kullanıcının o şirketi görme hakkı
+ayrıca sorulmalı.
+
+**Test doğrudan UÇLARI çağırıyor** (`SantiyeSefi_IkUclarindaKapsam
+DisiPersoneliGoremez`): kapsam dışı görev listede yok, kariyer hareketi
+yok, kapsam dışı personelin geçmişi **404** (403 değil — kaydın varlığı
+da sızmasın), kendi şantiyesindeki personel AÇILABİLİYOR (kapsam
+süzgeci işi engellemiyor), fazla mesai ve zimmet analizi 404.
+
+Üç sonda da yakaladı. Tam tur **2258/2258**.
+
+**Testi yazarken iki kendi hatam çıktı:** kullanıcı adını `[..40]` ile
+keserken 23 karakterlik string'i patlattım; üç rotayı uydurmuşum
+(gerçekleri `hr/gorevlendirmeler` ve `hr/personel/{id}/fazla-mesai`).
+
 ### R3a kalan yığınlar
 
 Şantiye kapsamlı iki rol (`SiteOnly` = **Şantiye Şefi** 19 izin,
