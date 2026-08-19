@@ -276,6 +276,8 @@ export default function RetailReportsPage() {
               rowKey={(row) => row.userId ?? row.fullName}
               title="Personel Satış Performansı"
               emptyText="Bu dönemde satış yok."
+              /* Rapor dönemi değişince sayfa 1'e döner. */
+              resetKey={`${companyId}|${from}|${to}`}
             />
           </div>
         )}
@@ -300,6 +302,8 @@ export default function RetailReportsPage() {
               rowKey={(row) => row.id}
               title="Açık Tahsilatlar"
               emptyText="Açık tahsilat yok."
+              /* Rapor dönemi değişince sayfa 1'e döner. */
+              resetKey={`${companyId}|${from}|${to}`}
             />
           </div>
         )}

@@ -511,6 +511,10 @@ export default function WarehousesPage() {
               rowKey={(warehouse) => warehouse.id}
               title="Depolar"
               emptyText="Henüz depo tanımlanmamış."
+              /* FİLTRE DEĞİŞİNCE SAYFA 1'E DÖNER. Sayfalama F4'te eklendi
+                 ama bu bağ kurulmamıştı: kullanıcı 7. sayfadayken filtreyi
+                 daraltınca son sayfada kalıyordu. */
+              resetKey={`${companyId}|${projectId}|${type}`}
             />
           </div>
         )}

@@ -585,6 +585,10 @@ function ServiceRequestsContent() {
               rowKey={(request) => request.id}
               title="Servis Talepleri"
               emptyText="Servis talebi bulunmuyor."
+              /* FİLTRE DEĞİŞİNCE SAYFA 1'E DÖNER. Sayfalama F4'te eklendi
+                 ama bu bağ kurulmamıştı: kullanıcı 7. sayfadayken filtreyi
+                 daraltınca son sayfada kalıyordu. */
+              resetKey={`${projectId}`}
             />
           </div>
         )}

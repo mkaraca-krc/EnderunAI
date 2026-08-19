@@ -890,6 +890,10 @@ export default function CargoPage() {
               loading={loading}
               title="Kargo Takibi"
               emptyText="Kargo kaydı bulunamadı."
+              /* FİLTRE DEĞİŞİNCE SAYFA 1'E DÖNER. Sayfalama F4'te eklendi
+                 ama bu bağ kurulmamıştı: kullanıcı 7. sayfadayken filtreyi
+                 daraltınca son sayfada kalıyordu. */
+              resetKey={`${directionFilter}|${statusFilter}|${search}`}
             />
           </div>
         </section>

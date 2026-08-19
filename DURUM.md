@@ -244,7 +244,7 @@ Yani sunucu sayfalaması **5 ekranın** meselesi, 143'ün değil.
 | **F3** — büyük listelerde sunucu sayfalaması | **BİTTİ** (aşağıda) |
 | F4 — kalan tablo ekranları bileşene taşınır | **F4a BİTTİ**, yığınlar sürüyor |
 | **F5** — yazdır/Excel: kapsam seçimi + alt toplam | **BİTTİ** (aşağıda) |
-| F6 — arama/filtre sayfalamayla uyumlu | en son |
+| **F6** — arama/filtre sayfalamayla uyumlu | **BİTTİ** (aşağıda) |
 
 **F4 YIĞINLARA BÖLÜNDÜ** (R3a deseni). Kalan 70 ham tablolu ekranı tek
 fazda taşımak riskli; her yığın ayrı yayın.
@@ -274,6 +274,30 @@ Ham tablo sayısı **58 → 55**.
 
 **F4 kalan:** 55 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
 `cariler`, `finans/*`, `insan-kaynaklari/*` aileleri.
+
+**F6 ne yaptı — ve BU BOŞLUĞU BU PROGRAM AÇTI.**
+
+Ölçüm: `DataTable` kullanan 22 ekranın **10'unda filtre vardı ama
+`resetKey` yoktu**. Yani F4'te sayfalama eklerken bu bağı kurmayı
+atlamışım; sayfalamadan önce böyle bir hata YOKTU.
+
+Belirti sinsi: `DataTable` sayfa numarasını sayfa sayısına
+sıkıştırdığı için kullanıcı BOŞ ekran görmüyor — filtrelenmiş
+sonucun SON sayfasını görüyor. Ekran çalışıyor, sadece yanlış yerde
+duruyor ve kullanıcı "aradığım kayıt yok" diye düşünüyor.
+
+- 10 ekrana `resetKey` bağlandı (`perakende/raporlar`da iki tablo).
+- **Sözleşme testi** (`tests/filter-pagination-contract.test.ts`):
+  (a) filtre durumu taşıyan her `DataTable` ekranı `resetKey`
+  geçirmek zorunda; (b) sunucu kipindeki ekranlar ayrıca `setPage(1)`
+  yapmak zorunda — yalnız görünümü sıfırlamak yetmez, İSTEK de eski
+  sayfayla giderse boş sayfa döner ve görünüm 1. sayfayı gösterirken
+  içerik 7. sayfanın sonucudur.
+- İki sonda da yakaladı.
+
+**"Toplam filtrelenmiş kümeyi gösterir" kuralı** zaten sağlanıyor:
+istemci kipinde satırlar süzülmüş geliyor, sunucu kipinde uç toplamı
+süzgeçlerden SONRA sayıyor (F1'in garantisi, `PagedEndpointContractTests`).
 
 **F5 ne yaptı — çıktı dürüstlüğü.**
 

@@ -951,6 +951,10 @@ export default function VisitorsPage() {
               loading={loading}
               title="Ziyaretçi Kayıtları"
               emptyText="Ziyaretçi kaydı bulunamadı."
+              /* FİLTRE DEĞİŞİNCE SAYFA 1'E DÖNER. Sayfalama F4'te eklendi
+                 ama bu bağ kurulmamıştı: kullanıcı 7. sayfadayken filtreyi
+                 daraltınca son sayfada kalıyordu. */
+              resetKey={`${statusFilter}|${startDate}|${endDate}|${search}`}
             />
           </div>
         </section>

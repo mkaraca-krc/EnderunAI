@@ -373,6 +373,10 @@ export default function PurchaseReturnsPage() {
               rowKey={(row) => row.id}
               title="Satın Alma İadeleri"
               emptyText="İade kaydı bulunmuyor."
+              /* FİLTRE DEĞİŞİNCE SAYFA 1'E DÖNER. Sayfalama F4'te eklendi
+                 ama bu bağ kurulmamıştı: kullanıcı 7. sayfadayken filtreyi
+                 daraltınca son sayfada kalıyordu. */
+              resetKey={`${companyId}`}
             />
           </div>
         )}
