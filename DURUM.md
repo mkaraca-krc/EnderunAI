@@ -363,7 +363,18 @@ tanımlanıyor: bakiye sütunu `balances` haritası, eylem sütunu
 `actions`/`processingId` üzerine kapanıyor. F4b'deki desen kararı
 gereği belleğe ALINMIYOR.
 
-**F4 kalan:** 49 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
+**F4e (bitti):** `teklifler/takip`, `insan-kaynaklari/avanslar`,
+`isg/kazalar`. Ham tablo **49 → 46**.
+
+**F6 sözleşmesinde BOŞLUK bulundu ve kapatıldı: SEKME DE FİLTREDİR.**
+`teklifler/takip` süzgeci `tab` durumuyla yapıyor (açık / kazanılan /
+kaybedilen). F6'nın filtre deseni `tab`, `view`, `mode`, `kind`,
+`period` adlarını içermiyordu — yani sekmeyle süzen ekranlar
+`resetKey` zorunluluğunun DIŞINDA kalıyordu. Desen genişletildi; sonda
+doğruladı (ekrandan `resetKey` kaldırılınca test ekranı adıyla
+yakalıyor).
+
+**F4 kalan:** 46 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
 `cariler`, `finans/*`, `insan-kaynaklari/*` aileleri.
 
 **F6 ne yaptı — ve BU BOŞLUĞU BU PROGRAM AÇTI.**

@@ -7,6 +7,11 @@ import {
   useState,
 } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { currencyMoney } from "@/lib/format/turkish";
@@ -361,6 +366,132 @@ export default function AdvancePage() {
     }
   }
 
+
+  /* Sütunlar `personnelById` haritasına ve yetkilere kapanıyor. */
+  const columns: DataTableColumn<HrAdvanceItem>[] = [
+    {
+      key: "personel",
+      header: "Personel",
+      value: (item) => {
+        const person = personnelById.get(item.personnelId);
+        return `${person?.fullName ?? "—"} (${person?.employeeNumber ?? "—"})`;
+      },
+      render: (item) => {
+        const person = personnelById.get(item.personnelId);
+
+        return (
+          <>
+            <strong>{person?.fullName ?? "—"}</strong>
+            <small className="block text-slate-500">
+              {person?.employeeNumber ?? "—"}
+            </small>
+          </>
+        );
+      },
+    },
+    {
+      key: "talepTarihi",
+      header: "Talep Tarihi",
+      value: (item) => formatDate(item.requestDate),
+    },
+    {
+      key: "talep",
+      header: "Talep",
+      numeric: true,
+      value: (item) => item.requestedAmount,
+      render: (item) => (
+        <strong>{money(item.requestedAmount, item.currencyCode)}</strong>
+      ),
+    },
+    {
+      key: "onaylanan",
+      header: "Onaylanan",
+      numeric: true,
+      value: (item) => item.approvedAmount,
+      render: (item) => money(item.approvedAmount, item.currencyCode),
+    },
+    {
+      key: "taksit",
+      header: "Taksit",
+      numeric: true,
+      value: (item) => item.deductionInstallmentCount,
+    },
+    {
+      key: "ilkMahsup",
+      header: "İlk Mahsup",
+      value: (item) => formatDate(item.firstDeductionDate),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (item) => statusLabel(item.status),
+    },
+    {
+      key: "odeme",
+      header: "Ödeme",
+      value: (item) =>
+        item.paidAtUtc ? `Ödendi · ${formatDate(item.paidAtUtc)}` : "Ödenmedi",
+    },
+    {
+      key: "islemler",
+      header: "İşlemler",
+      align: "right",
+      value: () => "",
+      render: (item) => {
+        const busy = actionId === item.id;
+
+        return (
+          <div className="flex justify-end gap-2">
+            {actions.can("edit") && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => openEdit(item)}
+                className="rounded border px-3 py-1.5 text-xs"
+              >
+                Düzenle
+              </button>
+            )}
+
+            {item.status === 1 && actions.can("approve") && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setPending({ kind: "approve", item })}
+                className="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white"
+              >
+                Onayla
+              </button>
+            )}
+
+            {item.status === 2 && !item.paidAtUtc && actions.can("create") && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setPending({ kind: "pay", item })}
+                className="rounded bg-blue-700 px-3 py-1.5 text-xs text-white"
+              >
+                Ödendi
+              </button>
+            )}
+
+            {actions.can("delete") && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setPending({ kind: "delete", item })}
+                className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
+              >
+                Sil
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
+
+
   return (
     <ErpShell
       design="redwood"
@@ -685,115 +816,15 @@ export default function AdvancePage() {
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1150px]">
-            <thead className="bg-slate-50 text-left text-xs text-slate-500">
-              <tr>
-                <th className="p-4">Personel</th>
-                <th className="p-4">Talep Tarihi</th>
-                <th className="p-4">Talep</th>
-                <th className="p-4">Onaylanan</th>
-                <th className="p-4">Taksit</th>
-                <th className="p-4">İlk Mahsup</th>
-                <th className="p-4">Durum</th>
-                <th className="p-4">Ödeme</th>
-                <th className="p-4 text-right">İşlemler</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {visibleItems.map((item) => {
-                const person = personnelById.get(item.personnelId);
-                const busy = actionId === item.id;
-
-                return (
-                  <tr key={item.id} className="border-t text-sm">
-                    <td className="p-4">
-                      <strong>{person?.fullName ?? "—"}</strong>
-                      <small className="block text-slate-500">
-                        {person?.employeeNumber ?? "—"}
-                      </small>
-                    </td>
-                    <td className="p-4">{formatDate(item.requestDate)}</td>
-                    <td className="p-4 font-semibold">
-                      {money(item.requestedAmount, item.currencyCode)}
-                    </td>
-                    <td className="p-4">
-                      {money(item.approvedAmount, item.currencyCode)}
-                    </td>
-                    <td className="p-4">
-                      {item.deductionInstallmentCount}
-                    </td>
-                    <td className="p-4">
-                      {formatDate(item.firstDeductionDate)}
-                    </td>
-                    <td className="p-4">
-                      {statusLabel(item.status)}
-                    </td>
-                    <td className="p-4">
-                      {item.paidAtUtc
-                        ? `Ödendi · ${formatDate(item.paidAtUtc)}`
-                        : "Ödenmedi"}
-                    </td>
-                    <td className="p-4">
-                      <div className="flex justify-end gap-2">
-                        {actions.can("edit") && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => openEdit(item)}
-                            className="rounded border px-3 py-1.5 text-xs"
-                          >
-                            Düzenle
-                          </button>
-                        )}
-
-                        {item.status === 1 && actions.can("approve") && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setPending({ kind: "approve", item })}
-                            className="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white"
-                          >
-                            Onayla
-                          </button>
-                        )}
-
-                        {item.status === 2 && !item.paidAtUtc && actions.can("create") && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setPending({ kind: "pay", item })}
-                            className="rounded bg-blue-700 px-3 py-1.5 text-xs text-white"
-                          >
-                            Ödendi
-                          </button>
-                        )}
-
-                        {actions.can("delete") && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setPending({ kind: "delete", item })}
-                            className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
-                          >
-                            Sil
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {!loading && visibleItems.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="p-12 text-center text-slate-500">
-                    Kayıt bulunamadı.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <DataTable
+              rows={visibleItems}
+              columns={columns}
+              rowKey={(item) => item.id}
+              loading={loading}
+              title="Personel Avansları"
+              emptyText="Kayıt bulunamadı."
+              resetKey={`${companyFilter}|${personnelFilter}|${statusFilter}|${search}`}
+            />
         </div>
       </section>
       {pending && (

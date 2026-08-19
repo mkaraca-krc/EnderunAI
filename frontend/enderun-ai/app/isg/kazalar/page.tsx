@@ -2,6 +2,11 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
@@ -309,6 +314,132 @@ export default function IsgIncidentsPage() {
   const overdueCount = incidents.filter(
     (incident) => incident.sgkNotificationOverdue
   ).length;
+
+
+  /* SGK sütunu üç durumu birden anlatıyor: gerekmiyor / bildirildi /
+     süre geçti. Dosyaya giden değer o ayrımı korumalı. */
+  const columns: DataTableColumn<IsgIncidentListItem>[] = [
+    {
+      key: "tarih",
+      header: "Tarih",
+      value: (incident) => formatDateTime(incident.incidentDateTime),
+    },
+    { key: "tur", header: "Tür", value: (i) => i.incidentTypeName },
+    {
+      key: "agirlik",
+      header: "Ağırlık",
+      value: (incident) => incident.severityName,
+      render: (incident) => (
+        <span className={`erp-status ${incident.severityColor}`}>
+          {incident.severityName}
+        </span>
+      ),
+    },
+    {
+      key: "yer",
+      header: "Yer",
+      value: (incident) =>
+        [incident.projectCode ?? "—", incident.siteName]
+          .filter(Boolean)
+          .join(" / "),
+      render: (incident) => (
+        <>
+          {incident.projectCode ?? "—"}
+          {incident.siteName && <small>{incident.siteName}</small>}
+        </>
+      ),
+    },
+    {
+      key: "personel",
+      header: "Personel",
+      value: (incident) => incident.personnelName ?? "—",
+    },
+    {
+      key: "kayipGun",
+      header: "Kayıp Gün",
+      numeric: true,
+      value: (incident) => incident.lostWorkDays,
+    },
+    {
+      key: "sgk",
+      header: "SGK",
+      value: (incident) =>
+        incident.incidentType !== 0
+          ? "Gerekmiyor"
+          : incident.sgkNotified
+            ? "Bildirildi"
+            : incident.sgkNotificationOverdue
+              ? "Süre geçti"
+              : "Bekliyor",
+      render: (incident) =>
+        incident.incidentType !== 0 ? (
+          <span className="erp-status gray">Gerekmiyor</span>
+        ) : incident.sgkNotified ? (
+          <span className="erp-status green">Bildirildi</span>
+        ) : incident.sgkNotificationOverdue ? (
+          <span className="erp-status red">Süre geçti</span>
+        ) : (
+          <span className="erp-status yellow">Bekliyor</span>
+        ),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (incident) => incident.statusName,
+      render: (incident) => (
+        <span
+          className={`erp-status ${incident.status === 2 ? "green" : "yellow"}`}
+        >
+          {incident.statusName}
+        </span>
+      ),
+    },
+    {
+      key: "islem",
+      header: "",
+      value: () => "",
+      render: (incident) => (
+        <div className="erp-row-actions">
+          <button
+            type="button"
+            className="erp-secondary-button"
+            onClick={() =>
+              void isgService
+                .getIncident(incident.id)
+                .then(setDetail)
+                .catch((err: unknown) =>
+                  setError(
+                    err instanceof Error ? err.message : "Kayıt açılamadı."
+                  )
+                )
+            }
+          >
+            Detay
+          </button>
+
+          {canManage && (
+            <>
+              <button
+                type="button"
+                className="erp-secondary-button"
+                onClick={() => void startEdit(incident.id)}
+              >
+                Düzenle
+              </button>
+              <button
+                type="button"
+                className="erp-secondary-button"
+                onClick={() => setPendingDelete(incident.id)}
+              >
+                Sil
+              </button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
+
 
   return (
     <ErpShell
@@ -637,101 +768,14 @@ export default function IsgIncidentsPage() {
           </div>
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Tarih</th>
-                  <th>Tür</th>
-                  <th>Ağırlık</th>
-                  <th>Yer</th>
-                  <th>Personel</th>
-                  <th>Kayıp Gün</th>
-                  <th>SGK</th>
-                  <th>Durum</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {incidents.map((incident) => (
-                  <tr key={incident.id}>
-                    <td>{formatDateTime(incident.incidentDateTime)}</td>
-                    <td>{incident.incidentTypeName}</td>
-                    <td>
-                      <span className={`erp-status ${incident.severityColor}`}>
-                        {incident.severityName}
-                      </span>
-                    </td>
-                    <td>
-                      {incident.projectCode ?? "—"}
-                      {incident.siteName && <small>{incident.siteName}</small>}
-                    </td>
-                    <td>{incident.personnelName ?? "—"}</td>
-                    <td>{incident.lostWorkDays}</td>
-                    <td>
-                      {incident.incidentType !== 0 ? (
-                        <span className="erp-status gray">Gerekmiyor</span>
-                      ) : incident.sgkNotified ? (
-                        <span className="erp-status green">Bildirildi</span>
-                      ) : incident.sgkNotificationOverdue ? (
-                        <span className="erp-status red">Süre geçti</span>
-                      ) : (
-                        <span className="erp-status yellow">Bekliyor</span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`erp-status ${
-                          incident.status === 2 ? "green" : "yellow"
-                        }`}
-                      >
-                        {incident.statusName}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="erp-row-actions">
-                        <button
-                          type="button"
-                          className="erp-secondary-button"
-                          onClick={() =>
-                            void isgService
-                              .getIncident(incident.id)
-                              .then(setDetail)
-                              .catch((err: unknown) =>
-                                setError(
-                                  err instanceof Error
-                                    ? err.message
-                                    : "Kayıt açılamadı."
-                                )
-                              )
-                          }
-                        >
-                          Detay
-                        </button>
-
-                        {canManage && (
-                          <>
-                            <button
-                              type="button"
-                              className="erp-secondary-button"
-                              onClick={() => void startEdit(incident.id)}
-                            >
-                              Düzenle
-                            </button>
-                            <button
-                              type="button"
-                              className="erp-secondary-button"
-                              onClick={() => setPendingDelete(incident.id)}
-                            >
-                              Sil
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              rows={incidents}
+              columns={columns}
+              rowKey={(incident) => incident.id}
+              title="İş Kazası ve Ramak Kala Kayıtları"
+              emptyText="Kayıt bulunmuyor."
+              resetKey={`${companyId}|${filterType}|${filterStatus}|${filterProject}`}
+            />
           </div>
         )}
       </div>

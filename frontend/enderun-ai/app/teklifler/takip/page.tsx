@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { currencyMoney, moneyWhole, percent } from "@/lib/format/turkish";
@@ -366,6 +371,143 @@ export default function OfferTrackingPage() {
     }
   }
 
+
+  /* Eylem sütunu duruma, yetkiye ve sözleşme akışına bağlı. */
+  const columns: DataTableColumn<OfferListItem>[] = [
+    {
+      key: "teklif",
+      header: "Teklif",
+      value: (item) => `${item.offerNumber} — ${item.title}`,
+      render: (item) => (
+        <>
+          <strong>{item.offerNumber}</strong>
+          <small style={{ display: "block" }}>{item.title}</small>
+        </>
+      ),
+    },
+    {
+      key: "kime",
+      header: "Kime Verildi",
+      value: (item) =>
+        item.counterpartyName
+          ? `${item.counterpartyName} (${labelOf(OFFER_COUNTERPARTY_ROLES, item.counterpartyRole)})`
+          : "Belirtilmedi",
+      render: (item) => (
+        <>
+          {item.counterpartyName ?? (
+            <em className="rw-value-warning">Belirtilmedi</em>
+          )}
+          {item.counterpartyName && (
+            <small style={{ display: "block" }}>
+              {labelOf(OFFER_COUNTERPARTY_ROLES, item.counterpartyRole)}
+            </small>
+          )}
+        </>
+      ),
+    },
+    { key: "tip", header: "Tip", value: (item) => labelOf(OFFER_KINDS, item.kind) },
+    {
+      key: "tarih",
+      header: "Tarih",
+      value: (item) => dateFormat.format(new Date(item.offerDate)),
+    },
+    {
+      key: "tutar",
+      header: "Tutar",
+      numeric: true,
+      value: (item) => item.grandTotal,
+      render: (item) => currencyMoney(item.grandTotal, item.currency),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (item) => {
+        const ek =
+          item.status === OFFER_STATUS.Lost
+            ? ` (${labelOf(OFFER_LOST_REASONS, item.lostReason)})`
+            : item.status === OFFER_STATUS.Won && !item.projectId
+              ? " (sözleşme bekliyor)"
+              : "";
+
+        return OFFER_STATUS_LABELS[item.status] + ek;
+      },
+      render: (item) => (
+        <>
+          <span className={statusClass(item.status)}>
+            {OFFER_STATUS_LABELS[item.status]}
+          </span>
+          {item.status === OFFER_STATUS.Lost && (
+            <small style={{ display: "block" }}>
+              {labelOf(OFFER_LOST_REASONS, item.lostReason)}
+            </small>
+          )}
+          {item.status === OFFER_STATUS.Won && !item.projectId && (
+            <small className="rw-value-warning" style={{ display: "block" }}>
+              sözleşme bekliyor
+            </small>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "islem",
+      header: "İşlem",
+      value: () => "",
+      render: (item) => {
+        const next = OFFER_NEXT_STATUSES[item.status] ?? [];
+
+        return (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Link className="erp-secondary-button" href={`/teklifler/${item.id}`}>
+              Aç
+            </Link>
+
+            {next.length > 0 && actions.can("manage") && (
+              <>
+                <button
+                  type="button"
+                  className="erp-secondary-button"
+                  onClick={() => openTracking(item)}
+                >
+                  Künye
+                </button>
+                <button
+                  type="button"
+                  className="erp-primary-button"
+                  onClick={() => openStatus(item)}
+                >
+                  Durum
+                </button>
+              </>
+            )}
+
+            {item.status === OFFER_STATUS.Won &&
+              !item.projectId &&
+              actions.can("manage") && (
+                <button
+                  type="button"
+                  className="erp-primary-button"
+                  onClick={() => {
+                    setContractOffer(item);
+                    setContractForm((prev) => ({
+                      ...prev,
+                      name: item.title,
+                      contractAmount: String(item.grandTotal),
+                      contractType:
+                        item.kind === 2 ? "1" : item.kind === 1 ? "2" : "",
+                    }));
+                  }}
+                >
+                  Sözleşme Aç
+                </button>
+              )}
+          </div>
+        );
+      },
+    },
+  ];
+
+
   return (
     <ErpShell
       design="redwood"
@@ -486,120 +628,17 @@ export default function OfferTrackingPage() {
           </div>
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Teklif</th>
-                  <th>Kime Verildi</th>
-                  <th>Tip</th>
-                  <th>Tarih</th>
-                  <th>Tutar</th>
-                  <th>Durum</th>
-                  <th>İşlem</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((item) => {
-                  const next = OFFER_NEXT_STATUSES[item.status] ?? [];
-
-                  return (
-                    <tr key={item.id}>
-                      <td>
-                        <strong>{item.offerNumber}</strong>
-                        <small style={{ display: "block" }}>{item.title}</small>
-                      </td>
-                      <td>
-                        {item.counterpartyName ?? (
-                          <em className="rw-value-warning">Belirtilmedi</em>
-                        )}
-                        {item.counterpartyName && (
-                          <small style={{ display: "block" }}>
-                            {labelOf(
-                              OFFER_COUNTERPARTY_ROLES,
-                              item.counterpartyRole
-                            )}
-                          </small>
-                        )}
-                      </td>
-                      <td>{labelOf(OFFER_KINDS, item.kind)}</td>
-                      <td>{dateFormat.format(new Date(item.offerDate))}</td>
-                      <td className="num">{currencyMoney(item.grandTotal, item.currency)}</td>
-                      <td>
-                        <span className={statusClass(item.status)}>
-                          {OFFER_STATUS_LABELS[item.status]}
-                        </span>
-                        {item.status === OFFER_STATUS.Lost && (
-                          <small style={{ display: "block" }}>
-                            {labelOf(OFFER_LOST_REASONS, item.lostReason)}
-                          </small>
-                        )}
-                        {item.status === OFFER_STATUS.Won && !item.projectId && (
-                          <small className="rw-value-warning" style={{ display: "block" }}>
-                            sözleşme bekliyor
-                          </small>
-                        )}
-                      </td>
-                      <td>
-                        <div
-                          style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
-                        >
-                          <Link
-                            className="erp-secondary-button"
-                            href={`/teklifler/${item.id}`}
-                          >
-                            Aç
-                          </Link>
-
-                          {next.length > 0 && actions.can("manage") && (
-                            <>
-                              <button
-                                type="button"
-                                className="erp-secondary-button"
-                                onClick={() => openTracking(item)}
-                              >
-                                Künye
-                              </button>
-                              <button
-                                type="button"
-                                className="erp-primary-button"
-                                onClick={() => openStatus(item)}
-                              >
-                                Durum
-                              </button>
-                            </>
-                          )}
-
-                          {item.status === OFFER_STATUS.Won &&
-                            !item.projectId &&
-                            actions.can("manage") && (
-                              <button
-                                type="button"
-                                className="erp-primary-button"
-                                onClick={() => {
-                                  setContractOffer(item);
-                                  setContractForm((prev) => ({
-                                    ...prev,
-                                    name: item.title,
-                                    contractAmount: String(item.grandTotal),
-                                    contractType:
-                                      item.kind === 2
-                                        ? "1"
-                                        : item.kind === 1
-                                          ? "2"
-                                          : "",
-                                  }));
-                                }}
-                              >
-                                Sözleşme Aç
-                              </button>
-                            )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <DataTable
+              rows={visible}
+              columns={columns}
+              rowKey={(item) => item.id}
+              loading={loading}
+              title="Teklif Takibi"
+              emptyText="Teklif bulunmuyor."
+              /* SEKME DE FİLTREDİR: açık/kazanılan/kaybedilen arasında
+                 geçiş listeyi daraltır, sayfa 1'e dönmeli. */
+              resetKey={`${companyId}|${tab}`}
+            />
           </div>
         )}
       </section>

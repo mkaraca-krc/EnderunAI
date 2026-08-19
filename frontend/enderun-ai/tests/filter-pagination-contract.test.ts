@@ -22,9 +22,17 @@ import { describe, expect, it } from "vitest";
 const ROOT = join(__dirname, "..");
 const APP = join(ROOT, "app");
 
-/** Filtre durumu sayılan `useState` adları. */
+/**
+ * Filtre durumu sayılan `useState` adları.
+ *
+ * SEKME DE FİLTREDİR. İlk sürüm `tab` ve `view` adlarını dışarıda
+ * bırakıyordu; `teklifler/takip` gibi sekmeyle süzen ekranlar
+ * (açık / kazanılan / kaybedilen) bu yüzden zorunluluğun DIŞINDA
+ * kalıyordu — sekme değiştirmek de listeyi daraltır ve sayfa 1'e
+ * dönmesi gerekir.
+ */
 const FILTRE_DESENI =
-  /const \[\s*(search|query|status\w*|companyId|projectId|entityType|direction\w*|filter\w+|personnelId|startDate|endDate|from|to|type|month|year|siteId|discipline|source)\s*,/;
+  /const \[\s*(search|query|status\w*|companyId|projectId|entityType|direction\w*|filter\w+|personnelId|startDate|endDate|from|to|type|month|year|siteId|discipline|source|tab|activeTab|view|mode|kind|period)\s*,/;
 
 function pages(dir: string): string[] {
   const found: string[] = [];
