@@ -98,23 +98,17 @@ public sealed class InventoryController(
     }
 
     /// <summary>Kategori süzgecinin seçenekleri; serbest metin alandan türetilir.</summary>
-    [HttpGet("categories")]
-    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
-    public async Task<IActionResult> GetCategories(
-        [FromQuery] Guid? companyId, CancellationToken cancellationToken)
-    {
-        var query = db.InventoryItems.AsNoTracking();
-        if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
-
-        var categories = await query
-            .Where(x => x.Category != null && x.Category != "")
-            .Select(x => x.Category!)
-            .Distinct()
-            .OrderBy(x => x)
-            .ToListAsync(cancellationToken);
-
-        return Ok(categories);
-    }
+    /*
+     * ESKİ `GET categories` UCU KALDIRILDI (S1).
+     *
+     * Serbest metin `InventoryItem.Category` alanından DISTINCT
+     * çekiyordu. O alan artık kategori DEĞİL: canlıda bir kartın
+     * değeri "TURAN" (tedarikçi adı) yazıyordu ve dört kartta boştu.
+     *
+     * Kategori artık kendi varlığı — özellik şablonu, izin verilen
+     * birimler ve tip taşıyor. Tek kaynak:
+     * `InventoryCategoriesController` (aynı rota: api/inventory/categories).
+     */
 
     [HttpGet("items/{id:guid}")]
     [RequirePermission(PermissionCatalog.Keys.InventoryView)]

@@ -117,6 +117,42 @@ export interface CompanyOption {
   name: string;
 }
 
+
+/** Kategorinin tipi: 0 STANDART (özellikten ad üretilir), 1 SERBEST. */
+export type InventoryCategoryKind = 0 | 1;
+
+export type InventoryAttributeOption = {
+  id: string;
+  value: string;
+  /** Ada giren metin ("200mm"); yoksa `value` kullanılır. */
+  display: string;
+  sortOrder: number;
+};
+
+export type InventoryAttribute = {
+  id: string;
+  code: string;
+  name: string;
+  isRequired: boolean;
+  sortOrder: number;
+  options: InventoryAttributeOption[];
+};
+
+export type InventoryCategory = {
+  id: string;
+  code: string;
+  name: string;
+  kind: InventoryCategoryKind;
+  isActive: boolean;
+  sortOrder: number;
+  /**
+   * İZİN VERİLEN birimler. Kart açılırken biri seçilir ve BİR DAHA
+   * DEĞİŞMEZ; hareket girişi kartın birimini kullanır.
+   */
+  units: string[];
+  attributes: InventoryAttribute[];
+};
+
 export const inventoryService = {
   async getItems(params?: {
     companyId?: string;
@@ -148,11 +184,16 @@ export const inventoryService = {
     return apiClient<InventoryItemDetail>(`inventory/items/${id}`);
   },
 
-  getCategories(companyId?: string) {
-    const suffix = companyId
-      ? `?companyId=${encodeURIComponent(companyId)}`
-      : "";
-    return apiClient<string[]>(`inventory/categories${suffix}`);
+  /**
+   * STOK KATEGORİLERİ — özellik şablonu, izin verilen birimler ve tip.
+   *
+   * SİSTEM GENELİ: kategori şirkete bağlı değil, o yüzden `companyId`
+   * almıyor. Eski uç serbest metin `Category` alanından DISTINCT
+   * çekiyordu; o alan kategori değildi (canlıda bir kartta "TURAN"
+   * yazıyordu, tedarikçi adı).
+   */
+  getCategories() {
+    return apiClient<InventoryCategory[]>("inventory/categories");
   },
 
   async createItem(

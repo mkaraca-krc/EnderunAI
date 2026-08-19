@@ -272,6 +272,14 @@ export const MENU_GROUPS: MenuGroup[] = [
         icon: "▤",
       },
       {
+        // Kategori SİSTEM GENELİ: özellik şablonu, izin verilen
+        // birimler ve tip burada tanımlanır; kart açma ekranı
+        // şablonun tamamını buradan alır.
+        label: "Stok Kategorileri",
+        href: "/depo-stok/kategoriler",
+        icon: "≡",
+      },
+      {
         // Etiket "Yeni Depo" idi ama bağlantı MALZEME KARTI formuna
         // gidiyordu; depo açan kullanıcı yanlış ekrana düşüyordu.
         label: "Yeni Malzeme Kartı",

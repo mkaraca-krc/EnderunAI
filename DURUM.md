@@ -323,6 +323,42 @@ için silinemezdi.
 
 İki sonda da yakaladı. Tam tur 2262/2262.
 
+**S1 (bitti) — kategori + özellik sistemi.**
+
+KARAR: kategori SİSTEM GENELİ, kart şirkete ait. "Kablo tavası" her
+şirkette aynı şeydir; iki ayrı sette tutmak mükerrer bakım ve zamanla
+ayrışan özellik listeleri doğururdu.
+
+Beş yeni varlık: `InventoryCategory`, `InventoryCategoryUnit`,
+`InventoryAttribute`, `InventoryAttributeOption`,
+`InventoryItemAttributeValue`. Kart `InventoryCategoryId` ile bağlandı
+(nullable — arşivlenmiş eski kartlar kategorisiz).
+
+**14 kategori tohumlandı** (12 STANDART + 2 SERBEST). Kullanıcı
+kararları koda ve teste geçti:
+- **Çok birimli kategori**: kategori İZİN VERİLEN birim listesi tutar,
+  kart birini seçip sabitler. Topraklama `[adet, metre]` (bakır şerit
+  metre, toprak çubuğu adet), Sarf `[adet, paket, kg]`. Tek birimli
+  kategorilerde liste tek elemanlı — davranış aynı.
+- **Kaçak akım rölesi kutup 2P/4P**, otomatınki ayrı `1P/3P/1P+N`.
+  Şablonda verilmemişti; otomatınkini kopyalamak elektriksel olarak
+  yanlış veri üretirdi.
+- **Kablo merdiveni** ölçü/kaplama listelerini tavayla PAYLAŞIR.
+
+**Tohum sadece ekler, güncellemez** — kullanıcının ekrandan yaptığı
+değişiklik yeniden başlatmada ezilmiyor (testli).
+
+**ROTA ÇAKIŞMASI ÇÖZÜLDÜ:** eski `InventoryController` da
+`api/inventory/categories` sunuyordu — kartların serbest metin
+`Category` alanından DISTINCT. O uç kaldırıldı. Zaten ölmüştü: canlıda
+bir kartın kategorisi "TURAN" (tedarikçi adı) yazıyordu, dörtte boştu.
+Eski testi SİLİNMEDİ, yeniden kapsamlandı: aynı rotanın artık kategori
+VARLIKLARINI döndürdüğünü ve serbest metin değerlerinin gelmediğini
+doğruluyor.
+
+Yönetim ekranı `/depo-stok/kategoriler` (menü + rota yetkisi kayıtlı).
+Üç sonda da yakaladı. Tam tur 2270/2270.
+
 ---
 
 ## 3. Sıradaki paketler

@@ -64,6 +64,7 @@ public static class DatabaseSeeder
         await SeedCompanyFinanceSettingsAsync(db);
         await SeedCompanyPayrollSettingsAsync(db);
         await SeedExpenseCategoriesAsync(db);
+        await InventoryCategorySeed.SeedAsync(db);
     }
 
     /// <summary>

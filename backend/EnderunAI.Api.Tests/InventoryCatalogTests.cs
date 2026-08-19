@@ -173,17 +173,57 @@ public sealed class InventoryCatalogTests(DatabaseFixture fixture)
             items.EnumerateArray().Single().GetProperty("id").GetGuid());
     }
 
+    /// <summary>
+    /// KATEGORİ ARTIK SERBEST METİN DEĞİL (S1) — bu test o değişimi
+    /// kaydediyor.
+    ///
+    /// ESKİ DAVRANIŞ: uç, kartların `Category` metin alanından
+    /// DISTINCT çekiyordu. Kategori bir VARLIK değildi; canlıda bir
+    /// kartın değeri "TURAN" (tedarikçi adı) yazıyordu ve dört kartta
+    /// boştu. O listeden ne birim, ne özellik, ne mükerrer engeli
+    /// türetilebilirdi.
+    ///
+    /// YENİ DAVRANIŞ: aynı rota kategori VARLIKLARINI döndürüyor —
+    /// özellik şablonu, izin verilen birimler ve tip ile birlikte.
+    /// Kategori SİSTEM GENELİ olduğu için `companyId` de almıyor.
+    ///
+    /// Test SİLİNMEDİ, kapsamı değişti: eski sözleşmenin yerini yeni
+    /// sözleşme aldı ve bu geçiş görünür kaldı.
+    /// </summary>
     [Fact]
-    public async Task Categories_ReturnsDistinctValues()
+    public async Task Categories_KategoriVarligiDoner_SerbestMetinDegil()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var context = await CreateContextAsync(suffix);
         var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
 
-        var categories = await client.GetFromJsonAsync<List<string>>(
-            $"/api/inventory/categories?companyId={context.CompanyId}");
+        var categories = await client.GetFromJsonAsync<JsonElement>(
+            "/api/inventory/categories");
 
-        Assert.Equal(["Elektrik", "Mekanik"], categories);
+        var codes = categories.EnumerateArray()
+            .Select(x => x.GetProperty("code").GetString()!)
+            .ToList();
+
+        // Kartların serbest metin kategorileri ("Elektrik", "Mekanik")
+        // ARTIK BURADAN GELMİYOR.
+        Assert.DoesNotContain("Elektrik", codes);
+        Assert.DoesNotContain("Mekanik", codes);
+
+        // Tohumlanan gerçek kategoriler geliyor ve şablon taşıyorlar.
+        Assert.Contains("KABLO_TAVASI", codes);
+
+        var tava = categories.EnumerateArray()
+            .Single(x => x.GetProperty("code").GetString() == "KABLO_TAVASI");
+
+        Assert.NotEmpty(tava.GetProperty("units").EnumerateArray());
+        Assert.NotEmpty(tava.GetProperty("attributes").EnumerateArray());
+
+        // Bu şirketin kartları hâlâ okunabiliyor — kategori değişimi
+        // kart listesini bozmadı.
+        var items = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/inventory/items?companyId={context.CompanyId}");
+
+        Assert.True(items.GetArrayLength() > 0);
     }
 
     [Fact]

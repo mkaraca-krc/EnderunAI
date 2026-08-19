@@ -15,6 +15,28 @@ public sealed class InventoryItem : BaseEntity
 
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// KATEGORİ BAĞI (S1). Kartın özellik şablonunu, izin verilen
+    /// birimlerini ve tipini (STANDART/SERBEST) buradan alır.
+    ///
+    /// Zorunlu değil çünkü ARŞİVLENMİŞ eski kartlar kategorisiz:
+    /// onlar serbest metin <see cref="Category"/> alanıyla açılmıştı
+    /// ve geçmiş fatura kalemleri hâlâ onlara bağlı. Yeni kart
+    /// açılışında kategori zorunlu hâle gelecek (S2).
+    /// </summary>
+    public Guid? InventoryCategoryId { get; set; }
+    public InventoryCategory? InventoryCategory { get; set; }
+
+    public ICollection<InventoryItemAttributeValue> AttributeValues { get; set; }
+        = new List<InventoryItemAttributeValue>();
+
+    /// <summary>
+    /// ESKİ serbest metin kategori. S1'den itibaren yeni kartlarda
+    /// kullanılmıyor; arşivlenmiş kartların geçmişini okuyabilmek için
+    /// duruyor. Canlıda bir kartın değeri "TURAN" (tedarikçi adı)
+    /// yazıyordu — serbest metin kategorinin ne ürettiğinin kanıtı.
+    /// </summary>
     public string? Category { get; set; }
     public string? Brand { get; set; }
     public string? Model { get; set; }

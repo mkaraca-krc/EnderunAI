@@ -207,6 +207,11 @@ public sealed class AppDbContext(
     public DbSet<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
     public DbSet<GoodsReceiptItem> GoodsReceiptItems => Set<GoodsReceiptItem>();
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
+    public DbSet<InventoryCategory> InventoryCategories => Set<InventoryCategory>();
+    public DbSet<InventoryCategoryUnit> InventoryCategoryUnits => Set<InventoryCategoryUnit>();
+    public DbSet<InventoryAttribute> InventoryAttributes => Set<InventoryAttribute>();
+    public DbSet<InventoryAttributeOption> InventoryAttributeOptions => Set<InventoryAttributeOption>();
+    public DbSet<InventoryItemAttributeValue> InventoryItemAttributeValues => Set<InventoryItemAttributeValue>();
     public DbSet<WarehouseStock> WarehouseStocks => Set<WarehouseStock>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<RetailSale> RetailSales => Set<RetailSale>();
@@ -3181,6 +3186,79 @@ public sealed class AppDbContext(
 
     private static void ConfigureInventoryItems(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<InventoryCategory>(entity =>
+        {
+            entity.ToTable("inventory_categories");
+            entity.HasKey(x => x.Id);
+            // Kod SİSTEM GENELİNDE tekil: kategori şirkete bağlı değil.
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.Property(x => x.Code).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<InventoryCategoryUnit>(entity =>
+        {
+            entity.ToTable("inventory_category_units");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.InventoryCategoryId, x.Unit }).IsUnique();
+            entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
+            entity.HasOne(x => x.InventoryCategory)
+                .WithMany(x => x.AllowedUnits)
+                .HasForeignKey(x => x.InventoryCategoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<InventoryAttribute>(entity =>
+        {
+            entity.ToTable("inventory_attributes");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.InventoryCategoryId, x.Code }).IsUnique();
+            entity.Property(x => x.Code).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.HasOne(x => x.InventoryCategory)
+                .WithMany(x => x.Attributes)
+                .HasForeignKey(x => x.InventoryCategoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<InventoryAttributeOption>(entity =>
+        {
+            entity.ToTable("inventory_attribute_options");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.InventoryAttributeId, x.Value }).IsUnique();
+            entity.Property(x => x.Value).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Display).HasMaxLength(100);
+            entity.HasOne(x => x.InventoryAttribute)
+                .WithMany(x => x.Options)
+                .HasForeignKey(x => x.InventoryAttributeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<InventoryItemAttributeValue>(entity =>
+        {
+            entity.ToTable("inventory_item_attribute_values");
+            entity.HasKey(x => x.Id);
+            // Bir kartın bir özelliği YALNIZ BİR kez değer alır.
+            entity.HasIndex(x => new { x.InventoryItemId, x.InventoryAttributeId }).IsUnique();
+            entity.HasOne(x => x.InventoryItem)
+                .WithMany(x => x.AttributeValues)
+                .HasForeignKey(x => x.InventoryItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.InventoryAttribute)
+                .WithMany()
+                .HasForeignKey(x => x.InventoryAttributeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.InventoryAttributeOption)
+                .WithMany()
+                .HasForeignKey(x => x.InventoryAttributeOptionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
         modelBuilder.Entity<InventoryItem>(entity =>
         {
             entity.ToTable("inventory_items");

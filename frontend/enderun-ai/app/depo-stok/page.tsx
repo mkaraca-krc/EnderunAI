@@ -16,6 +16,7 @@ import { amount, money } from "@/lib/format/turkish";
 import {
   inventoryService,
   type InventoryItemListItem,
+  type InventoryCategory,
 } from "@/services/inventory.service";
 
 import {
@@ -129,7 +130,12 @@ export default function InventoryOperationsPage() {
   const [warehouseId, setWarehouseId] = useState("");
   const [criticalOnly, setCriticalOnly] = useState(false);
 
-  const [categories, setCategories] = useState<string[]>([]);
+  /*
+   * Kategori artık kendi varlığı (S1): ad, tip ve özellik şablonu
+   * taşıyor. Bu ekrandaki süzgeç yalnız ADI kullanıyor; kart açma
+   * ekranı şablonun tamamını kullanacak (S2).
+   */
+  const [categories, setCategories] = useState<InventoryCategory[]>([]);
   const [warehouses, setWarehouses] = useState<SelectOption[]>([]);
 
   /** Liste 20 satırda sessizce kesiliyordu; artık sayfalanıyor. */
@@ -819,9 +825,9 @@ export default function InventoryOperationsPage() {
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
               >
                 <option value="">Tüm kategoriler</option>
-                {categories.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
+                {categories.map((category) => (
+                  <option key={category.id} value={category.name}>
+                    {category.name}
                   </option>
                 ))}
               </select>

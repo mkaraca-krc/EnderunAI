@@ -131,6 +131,9 @@ const RULES: Rule[] = [
 
   // --- Depo ---
   { match: /^\/depo-stok\/yeni/, permission: "inventory.create" },
+  // Kategori/özellik bakımı depo YÖNETİMİ işi — hareket açma yetkisi
+  // (inventory.create) yetmez.
+  { match: /^\/depo-stok\/kategoriler/, permission: "inventory.view" },
   { match: /^\/depo-stok\/mal-kabul\/yeni/, permission: "purchasing-receipts.create" },
   {
     match: /^\/depo-stok\/malzeme-talepleri\/yeni/,
