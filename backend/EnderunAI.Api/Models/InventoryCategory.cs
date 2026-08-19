@@ -21,6 +21,31 @@ public enum InventoryCategoryKind
 }
 
 /// <summary>
+/// Kategorinin MUHASEBE karşılığı — stokun hangi hesapta durduğunu ve
+/// çıkışta hangi hesaba yazıldığını belirler.
+///
+/// Ağırlıklı olarak taahhüt işi yapıldığı için VARSAYILAN SARF'tır:
+/// yeni açılan hiçbir kategori kendiliğinden "ticari mal" olmaz.
+/// Satılabilir kategoriler sonradan, mali müşavir onayıyla ve ayrı
+/// bir izinle işaretlenir — yanlış hesaba yazılan stok, mali tabloyu
+/// sessizce bozar ve fark ancak mizanda görülür.
+/// </summary>
+public enum InventoryAccountingKind
+{
+    /// <summary>
+    /// SARF / PROJE MALZEMESİ — 150 İlk Madde ve Malzeme'de durur,
+    /// tüketildiğinde 740 Hizmet Üretim Maliyeti'ne yazılır.
+    /// </summary>
+    Consumable = 0,
+
+    /// <summary>
+    /// TİCARİ MAL — 153 Ticari Mallar'da durur, satıldığında
+    /// 621 Satılan Ticari Mallar Maliyeti'ne yazılır.
+    /// </summary>
+    TradeGood = 1
+}
+
+/// <summary>
 /// STOK KATEGORİSİ — SAP Classification benzeri özellik şablonu taşır.
 ///
 /// SİSTEM GENELİ: kategori şirkete bağlı DEĞİL, kart bağlı. "Kablo
@@ -36,6 +61,19 @@ public sealed class InventoryCategory : BaseEntity
     public string Name { get; set; } = string.Empty;
 
     public InventoryCategoryKind Kind { get; set; } = InventoryCategoryKind.Standard;
+
+    /// <summary>
+    /// Muhasebe karşılığı. VARSAYILAN SARF — bilinçli olarak en
+    /// dar/güvenli seçenek. Ticari mala geçiş ayrı bir uçtan ve ayrı
+    /// bir izinle yapılır; kategori oluşturma isteği bu alanı ALMAZ.
+    ///
+    /// Kategori sistem geneli olduğu halde bu alanın burada durması
+    /// sorun değil: 150/153 tekdüzen hesap planı kodlarıdır, her
+    /// şirkette aynı anlama gelir. Kod → hesap kimliği çözümü
+    /// şirket bazında yapılır.
+    /// </summary>
+    public InventoryAccountingKind AccountingKind { get; set; }
+        = InventoryAccountingKind.Consumable;
 
     /// <summary>Listede görünme sırası.</summary>
     public int SortOrder { get; set; }

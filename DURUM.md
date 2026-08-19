@@ -466,6 +466,68 @@ nesneye bakıyor · A3 transferde kontrol silindi · B serbest giriş geri
 geldi · C gerekçe kalktı · D maliyetsiz yeni yol · E isteğe birim
 eklendi). Şema değişmedi, migration yok.
 
+**KULLANICI KARARLARI (2026-08-19, stok paketi devamı):**
+1. SATIŞ BELGESİ: ikisi de olacak. Stoktan mal satışı perakende
+   ekranından, stoksuz/hizmet satışı faturadan; ama satış faturası da
+   stok bağı (`InventoryItemId`) alacak ki fatura üzerinden stoklu
+   satış da yapılabilsin. İkisi AYNI muhasebe mantığını kullanacak:
+   stoklu → 621 maliyet + 600 gelir, stoksuz → yalnız gelir.
+2. STOK HESABI: kategori bazında. Ticari mal → 153/621, sarf/proje
+   malzemesi → 150/740. VARSAYILAN HEPSİ SARF — ağırlıklı taahhüt işi.
+   Satılabilirler sonradan MALİ MÜŞAVİR ONAYIYLA ticari mal işaretlenir.
+3. SIRA: ÖNCE GİRİŞ (S6), sonra satış (S5). Gerekçe ölçümden çıktı.
+
+**ÖLÇÜM (2026-08-19): STOK İLE MUHASEBE ARASINDA HİÇ BAĞ YOK.**
+153 Ticari Mallar 0 fiş satırı · 621 Satılan Ticari Mallar Maliyeti 0 ·
+600 Yurt İçi Satışlar 0. Bugüne kadar üretilmiş TEK alış fişi 740
+Hizmet Üretim Maliyeti'ne gitmiş; 13 satış faturasının hiçbiri fişe
+dönmemiş. Yani S5 önce yapılsaydı ilk satışta 153 EKSİYE düşerdi:
+muhasebe "hiç malım yoktu ama sattım" derdi. Sıra bu yüzden değişti.
+
+Ayrıca: stok bağlı PERAKENDE SATIŞ AKIŞI ZATEN VAR (merkez depo
+kilidi, yeterlilik kontrolü, stok düşümü, 120/600/391 fişi) ama hiç
+kullanılmamış — 0 kayıt. Satış faturası kaleminde stok bağı yok.
+
+**S6a (bitti) — kategorinin muhasebe karşılığı.**
+
+- `InventoryAccountingKind`: Consumable (150/740) · TradeGood (153/621).
+  VARSAYILAN Consumable ve kategori oluşturma isteği bu alanı ALMIYOR —
+  alan olmadığı için "unutmak" da mümkün değil, yeni kategori her zaman
+  sarf doğar. Canlıda 14 kategorinin 14'ü sarf.
+- `InventoryAccountResolver`: kategori → hesap eşlemesinin TEK kaynağı.
+  Kod → hesap kimliği çözümü şirket bazında; ana hesap yoksa ilk alt
+  hesaba düşüyor (hesap planında kayıtlar "150.01.02" gibi alt
+  hesaplara yazılıyor, "150" ana hesabı hareket görmüyor).
+- Kategorisiz kart (S1 öncesinden kalan) SARF sayılır. Yanlış tarafa
+  düşülecekse ticari mal tarafı olmamalı: 153'e yazılan sarf malzeme
+  mali tabloda satılabilir mal gibi görünür.
+- `PUT categories/{id}/accounting-kind` AYRI UÇ, AYRI İZİN:
+  `accounting.manage`. Depo Sorumlusu kategori açabiliyor ama hesabı
+  değiştiremiyor — kart yönetimi depo işi, hangi hesaba yazılacağı
+  mali müşavir işi. Ekrandaki düğme de aynı izne bakıyor.
+- Sözleşme testleri (5): oluşturma isteği muhasebe alanı almaz ·
+  hesap kodları yalnız çözümleyicide geçer · çözümleyici doğru
+  hesaplara götürür · kategorisiz kart sarf sayılır · depo sorumlusu
+  değiştiremez (403) ama yetkili değiştirebilir.
+
+KURAL DARALTMASI (dürüstlük notu): "hesap kodu tek yerde" kuralı
+150/153/621'i kapsıyor, 740'ı KAPSAMIYOR. 740 stoka özgü değil —
+`SubcontractorInvoiceGenerator` ve `ProjectCostClassifier` da meşru
+olarak kullanıyor. Tekelleştirilebilen kod korunuyor, edilemeyen için
+sahte güvence verilmiyor. `AccountingIntegrationService` gerekçeli
+muafiyette: alış faturası hâlâ kendi eşlemesini kullanıyor, S6b'de
+çözümleyiciye bağlanınca muafiyet kalkacak.
+
+Altı sondanın hepsi yakaladı (oluşturma isteğine alan eklendi · izin
+depo iznine düşürüldü · varsayılan ticari mal yapıldı · 150↔153 takas ·
+kategorisiz kart ticari mal sayıldı · hesap kodu ikinci yere kopyalandı).
+
+**S6b (sıradaki) — GR/IR fişleri + stok↔muhasebe tutarlılık raporu.**
+AÇIK SORU: GR/IR (faturası gelmemiş mal) hangi hesapta duracak?
+159 Verilen Sipariş Avansları GERÇEK tedarikçi avanslarıyla dolu,
+yeniden kullanılamaz. 379 Diğer Borç ve Gider Karşılıkları boş ve
+uygun görünüyor ama bu mali müşavir kararı — kullanıcıya soruldu.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

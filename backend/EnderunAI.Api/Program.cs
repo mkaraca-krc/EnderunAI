@@ -472,6 +472,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddScoped<IDocumentNumberService, DocumentNumberService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IInventoryCodeService, EnderunAI.Api.Services.Inventory.InventoryCodeService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IInventoryAccountResolver, EnderunAI.Api.Services.Inventory.InventoryAccountResolver>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Purchasing.Automation.IPurchaseRequestGenerator, EnderunAI.Api.Services.Purchasing.Automation.PurchaseRequestGenerator>();
 builder.Services.AddScoped<EnderunAI.Api.Security.IUserAuthorizationService, EnderunAI.Api.Security.UserAuthorizationService>();
 builder.Services.AddScoped<EnderunAI.Api.Security.ICurrentDataScopeService, EnderunAI.Api.Security.CurrentDataScopeService>();

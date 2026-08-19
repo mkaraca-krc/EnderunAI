@@ -167,6 +167,14 @@ export type InventoryCategory = {
   code: string;
   name: string;
   kind: InventoryCategoryKind;
+  /**
+   * MUHASEBE KARŞILIĞI: 0 sarf (150 / 740), 1 ticari mal (153 / 621).
+   *
+   * Varsayılan sarftır — ağırlıklı taahhüt işi yapıldığı için yeni
+   * kategori kendiliğinden "satılabilir mal" sayılmaz. Ticari mal
+   * işareti mali müşavir izniyle (accounting.manage) verilir.
+   */
+  accountingKind: 0 | 1;
   isActive: boolean;
   sortOrder: number;
   /**
@@ -218,6 +226,21 @@ export const inventoryService = {
    */
   getCategories() {
     return apiClient<InventoryCategory[]>("inventory/categories");
+  },
+
+  /**
+   * Kategorinin muhasebe karşılığını değiştirir. Ayrı uç, ayrı izin:
+   * kategori açmak depo sorumlusunun, hangi hesaba yazılacağına karar
+   * vermek mali müşavirin işi.
+   */
+  async setCategoryAccountingKind(
+    categoryId: string,
+    accountingKind: 0 | 1
+  ): Promise<{ message: string; accountingKind: number }> {
+    return apiClient(`inventory/categories/${categoryId}/accounting-kind`, {
+      method: "PUT",
+      body: JSON.stringify({ accountingKind }),
+    });
   },
 
   async createItem(

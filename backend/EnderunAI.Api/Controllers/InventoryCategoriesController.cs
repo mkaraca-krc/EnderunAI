@@ -41,6 +41,7 @@ public sealed class InventoryCategoriesController(AppDbContext db) : ControllerB
                 x.Code,
                 x.Name,
                 Kind = (int)x.Kind,
+                AccountingKind = (int)x.AccountingKind,
                 x.IsActive,
                 x.SortOrder,
                 Units = x.AllowedUnits
@@ -138,6 +139,52 @@ public sealed class InventoryCategoriesController(AppDbContext db) : ControllerB
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new { message = "Kategori oluşturuldu.", category.Id, category.Code });
+    }
+
+    public sealed record AccountingKindRequest(int AccountingKind);
+
+    /// <summary>
+    /// KATEGORİNİN MUHASEBE KARŞILIĞINI DEĞİŞTİR.
+    ///
+    /// Kategori oluşturma ucundan AYRI ve İZNİ DE AYRI: kart/kategori
+    /// açmak depo sorumlusunun işi, hangi hesaba yazılacağına karar
+    /// vermek mali müşavirin. Yanlış işaretlenmiş bir kategori, stoku
+    /// yanlış hesaba taşır ve fark ancak mizanda görülür.
+    ///
+    /// Varsayılan SARF olduğu için "unutulursa" güvenli tarafta kalır;
+    /// ticari mal işareti bilinçli bir eylem gerektirir.
+    /// </summary>
+    [HttpPut("{categoryId:guid}/accounting-kind")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingManage)]
+    public async Task<IActionResult> SetAccountingKind(
+        Guid categoryId, AccountingKindRequest request, CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(typeof(InventoryAccountingKind), request.AccountingKind))
+            return BadRequest(new { message = "Geçersiz muhasebe karşılığı." });
+
+        var category = await db.InventoryCategories
+            .SingleOrDefaultAsync(x => x.Id == categoryId, cancellationToken);
+
+        if (category is null) return NotFound();
+
+        var kind = (InventoryAccountingKind)request.AccountingKind;
+        if (category.AccountingKind == kind)
+            return Ok(new { message = "Değişiklik yok.", AccountingKind = (int)kind });
+
+        category.AccountingKind = kind;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var ad = kind == InventoryAccountingKind.TradeGood
+            ? "ticari mal (153 / 621)"
+            : "sarf malzeme (150 / 740)";
+
+        return Ok(new
+        {
+            message = $"'{category.Name}' artık {ad} olarak muhasebeleşecek. "
+                + "Bu tarihten SONRAKİ hareketler yeni hesaba yazılır; "
+                + "geçmiş fişler değişmez.",
+            AccountingKind = (int)kind
+        });
     }
 
     public sealed record AttributeRequest(string Code, string Name, int SortOrder, bool IsRequired);

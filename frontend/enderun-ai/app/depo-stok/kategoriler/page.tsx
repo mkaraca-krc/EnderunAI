@@ -6,6 +6,7 @@ import ErpShell from "@/components/erp/erp-shell";
 import { Button } from "@/components/ui";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
+import { usePermissions } from "@/lib/use-permissions";
 import {
   inventoryService,
   type InventoryCategory,
@@ -25,11 +26,21 @@ import {
 export default function InventoryCategoriesPage() {
   const actions = useModuleActions("depo-stok");
 
+  /*
+   * Muhasebe karşılığını değiştirmek DEPO izni değil MUHASEBE izni
+   * ister — uç `accounting.manage` zorluyor, düğme de aynı izne
+   * bakmak zorunda. Depo modülü izniyle gösterseydik depo sorumlusu
+   * düğmeyi görür, basar ve 403 yerdi.
+   */
+  const { has } = usePermissions();
+  const canSetAccounting = has("accounting.manage");
+
   const [categories, setCategories] = useState<InventoryCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [savingAccounting, setSavingAccounting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,6 +61,31 @@ export default function InventoryCategoriesPage() {
 
   const selected = categories.find((x) => x.id === selectedId) ?? null;
 
+  async function toggleAccountingKind(category: InventoryCategory) {
+    setSavingAccounting(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const next = category.accountingKind === 1 ? 0 : 1;
+      const result = await inventoryService.setCategoryAccountingKind(
+        category.id,
+        next
+      );
+
+      setNotice(result.message);
+      // Listeyi ucun döndürdüğü değerle değil, yeniden okuyarak
+      // tazeliyoruz: ekranda görünen her zaman kayıtlı olan olsun.
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Muhasebe karşılığı değiştirilemedi."
+      );
+    } finally {
+      setSavingAccounting(false);
+    }
+  }
+
   const columns: DataTableColumn<InventoryCategory>[] = [
     { key: "kod", header: "Kod", value: (row) => row.code },
     {
@@ -65,6 +101,24 @@ export default function InventoryCategoriesPage() {
       render: (row) => (
         <span className={`erp-status ${row.kind === 0 ? "blue" : "gray"}`}>
           {row.kind === 0 ? "STANDART" : "SERBEST"}
+        </span>
+      ),
+    },
+    {
+      key: "muhasebe",
+      header: "Muhasebe",
+      value: (row) =>
+        row.accountingKind === 1 ? "TİCARİ MAL (153)" : "SARF (150)",
+      render: (row) => (
+        <span
+          className={`erp-status ${row.accountingKind === 1 ? "green" : "gray"}`}
+          title={
+            row.accountingKind === 1
+              ? "Stok 153 Ticari Mallar'da durur, satışta 621'e yazılır."
+              : "Stok 150 İlk Madde ve Malzeme'de durur, tüketimde 740'a yazılır."
+          }
+        >
+          {row.accountingKind === 1 ? "TİCARİ MAL" : "SARF"}
         </span>
       ),
     },
@@ -129,6 +183,40 @@ export default function InventoryCategoriesPage() {
         title="Stok Kategorileri"
         emptyText="Kategori bulunmuyor."
       />
+
+      {selected && canSetAccounting && (
+        <section className="erp-form-card">
+          <h2>{selected.name} — muhasebe karşılığı</h2>
+
+          <p>
+            Şu an <strong>
+              {selected.accountingKind === 1
+                ? "TİCARİ MAL — 153 Ticari Mallar, satışta 621"
+                : "SARF — 150 İlk Madde ve Malzeme, tüketimde 740"}
+            </strong>.
+          </p>
+
+          <p>
+            <small>
+              Varsayılan sarftır. Yalnızca gerçekten satılan kalemler
+              ticari mal işaretlenmeli; yanlış işaret stoku yanlış
+              hesaba taşır ve fark ancak mizanda görülür. Değişiklik
+              GEÇMİŞ fişleri etkilemez, bundan sonraki hareketlere
+              uygulanır.
+            </small>
+          </p>
+
+          <Button
+            variant="secondary"
+            disabled={savingAccounting}
+            onClick={() => void toggleAccountingKind(selected)}
+          >
+            {selected.accountingKind === 1
+              ? "Sarf malzemeye çevir (150 / 740)"
+              : "Ticari mal işaretle (153 / 621)"}
+          </Button>
+        </section>
+      )}
 
       {selected && (
         <section className="erp-form-card">
