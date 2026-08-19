@@ -7,6 +7,11 @@ import {
   useState,
 } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { decimal } from "@/lib/format/turkish";
@@ -345,6 +350,121 @@ export default function OvertimePage() {
     }
   }
 
+
+  const columns: DataTableColumn<HrOvertimeItem>[] = [
+    {
+      key: "personel",
+      header: "Personel",
+      value: (item) => {
+        const person = personnelById.get(item.personnelId);
+        return `${person?.fullName ?? "—"} (${person?.employeeNumber ?? "—"})`;
+      },
+      render: (item) => {
+        const person = personnelById.get(item.personnelId);
+
+        return (
+          <>
+            <strong>{person?.fullName ?? "—"}</strong>
+            <small className="block text-slate-500">
+              {person?.employeeNumber ?? "—"}
+            </small>
+          </>
+        );
+      },
+    },
+    { key: "tarih", header: "Tarih", value: (item) => formatDate(item.workDate) },
+    {
+      key: "talep",
+      header: "Talep",
+      numeric: true,
+      value: (item) => item.requestedHours,
+      render: (item) => `${item.requestedHours} saat`,
+    },
+    {
+      key: "onay",
+      header: "Onay",
+      numeric: true,
+      value: (item) => item.approvedHours,
+      render: (item) => `${item.approvedHours} saat`,
+    },
+    {
+      key: "calismaTuru",
+      header: "Çalışma Türü",
+      /* Pazar ve resmî tatil çalışması ZAM ORANINI değiştiriyor;
+         çıktıda "Normal" ile karışmaması önemli. */
+      value: (item) => {
+        const types = [
+          item.isSundayWork ? "Pazar" : "",
+          item.isPublicHolidayWork ? "Resmî Tatil" : "",
+        ].filter(Boolean);
+
+        return types.length ? types.join(", ") : "Normal";
+      },
+    },
+    { key: "neden", header: "Neden", value: (item) => item.reason },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (item) => statusLabel(item.status),
+      render: (item) => (
+        <span
+          className={`rounded-full border px-2 py-1 text-xs font-bold ${statusClass(
+            item.status
+          )}`}
+        >
+          {statusLabel(item.status)}
+        </span>
+      ),
+    },
+    {
+      key: "islemler",
+      header: "İşlemler",
+      align: "right",
+      value: () => "",
+      render: (item) => {
+        const busy = actionId === item.id;
+
+        return (
+          <div className="flex justify-end gap-2">
+            {actions.can("edit") && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => openEdit(item)}
+                className="rounded border px-3 py-1.5 text-xs"
+              >
+                Düzenle
+              </button>
+            )}
+
+            {item.status === 1 && actions.can("approve") && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setPending({ kind: "approve", item })}
+                className="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white"
+              >
+                Onayla
+              </button>
+            )}
+
+            {actions.can("delete") && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setPending({ kind: "delete", item })}
+                className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
+              >
+                Sil
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
+
+
   return (
     <ErpShell
       design="redwood"
@@ -659,105 +779,15 @@ export default function OvertimePage() {
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1050px]">
-            <thead className="bg-slate-50 text-left text-xs text-slate-500">
-              <tr>
-                <th className="p-4">Personel</th>
-                <th className="p-4">Tarih</th>
-                <th className="p-4">Talep</th>
-                <th className="p-4">Onay</th>
-                <th className="p-4">Çalışma Türü</th>
-                <th className="p-4">Neden</th>
-                <th className="p-4">Durum</th>
-                <th className="p-4 text-right">İşlemler</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {visibleItems.map((item) => {
-                const person = personnelById.get(item.personnelId);
-                const busy = actionId === item.id;
-
-                const types = [
-                  item.isSundayWork ? "Pazar" : "",
-                  item.isPublicHolidayWork ? "Resmî Tatil" : "",
-                ].filter(Boolean);
-
-                return (
-                  <tr key={item.id} className="border-t text-sm">
-                    <td className="p-4">
-                      <strong>{person?.fullName ?? "—"}</strong>
-                      <small className="block text-slate-500">
-                        {person?.employeeNumber ?? "—"}
-                      </small>
-                    </td>
-                    <td className="p-4">{formatDate(item.workDate)}</td>
-                    <td className="p-4">{item.requestedHours} saat</td>
-                    <td className="p-4">{item.approvedHours} saat</td>
-                    <td className="p-4">
-                      {types.length ? types.join(", ") : "Normal"}
-                    </td>
-                    <td className="max-w-[260px] p-4">
-                      <span className="block truncate">{item.reason}</span>
-                    </td>
-                    <td className="p-4">
-                      <span
-                        className={`rounded-full border px-2 py-1 text-xs font-bold ${statusClass(
-                          item.status
-                        )}`}
-                      >
-                        {statusLabel(item.status)}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex justify-end gap-2">
-                        {actions.can("edit") && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => openEdit(item)}
-                            className="rounded border px-3 py-1.5 text-xs"
-                          >
-                            Düzenle
-                          </button>
-                        )}
-
-                        {item.status === 1 && actions.can("approve") && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setPending({ kind: "approve", item })}
-                            className="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white"
-                          >
-                            Onayla
-                          </button>
-                        )}
-
-                        {actions.can("delete") && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setPending({ kind: "delete", item })}
-                            className="rounded bg-red-50 px-3 py-1.5 text-xs text-red-700"
-                          >
-                            Sil
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {!loading && visibleItems.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="p-12 text-center text-slate-500">
-                    Kayıt bulunamadı.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <DataTable
+              rows={visibleItems}
+              columns={columns}
+              rowKey={(item) => item.id}
+              loading={loading}
+              title="Fazla Mesai Kayıtları"
+              emptyText="Kayıt bulunamadı."
+              resetKey={`${companyFilter}|${personnelFilter}|${statusFilter}|${startDateFilter}|${endDateFilter}`}
+            />
         </div>
       </section>
       {pending && (

@@ -2,6 +2,11 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import { Button, ConfirmDialog } from "@/components/ui";
@@ -354,6 +359,187 @@ export default function PersonnelDutiesPage() {
     (x) => x.value === selectedType
   )?.hint;
 
+
+  const columns: DataTableColumn<PersonnelDutyItem>[] = [
+    {
+      key: "personel",
+      header: "Personel",
+      value: (item) => `${item.personnelFullName} — ${item.purpose}`,
+      render: (item) => (
+        <>
+          {item.personnelFullName}
+          <span className="mt-1 block text-xs font-normal text-slate-500">
+            {item.purpose}
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "tur",
+      header: "Tür",
+      /* "Gün maliyeti hedefe kayar" bilgisi maliyet muhasebesini
+         etkiliyor; çıktıda kaybolmaması gerekiyor. */
+      value: (item) =>
+        item.shiftsLaborCost
+          ? `${item.dutyTypeName} (gün maliyeti hedefe kayar)`
+          : item.dutyTypeName,
+      render: (item) => (
+        <>
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${dutyTypeClass(
+              item.dutyType
+            )}`}
+          >
+            {item.dutyTypeName}
+          </span>
+          {item.shiftsLaborCost && (
+            <span className="mt-1 block text-xs text-slate-500">
+              Gün maliyeti hedefe kayar
+            </span>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "hedef",
+      header: "Hedef Proje",
+      value: (item) => `${item.targetProjectCode} ${item.targetProjectName}`,
+      render: (item) => (
+        <>
+          {item.targetProjectCode}
+          <span className="mt-1 block text-xs text-slate-500">
+            {item.targetProjectName}
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "tarih",
+      header: "Tarih",
+      value: (item) =>
+        `${formatDate(item.startDate)} – ${formatDate(item.endDate)} (${item.dayCount} gün${item.isOutOfCity ? ", şehir dışı" : ""})`,
+      render: (item) => (
+        <>
+          {formatDate(item.startDate)} – {formatDate(item.endDate)}
+          <span className="mt-1 block text-xs text-slate-500">
+            {item.dayCount} gün
+            {item.isOutOfCity ? " · şehir dışı" : ""}
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "harcirah",
+      header: "Harcırah",
+      numeric: true,
+      value: (item) =>
+        item.totalAllowance === null || item.totalAllowance === undefined
+          ? "—"
+          : item.settlementPending
+            ? `${item.totalAllowance} (mahsup bekliyor)`
+            : item.totalAllowance,
+      render: (item) => (
+        <>
+          {item.totalAllowance === null || item.totalAllowance === undefined
+            ? "—"
+            : money(item.totalAllowance)}
+          {item.settlementPending && (
+            <span className="mt-1 block text-xs font-semibold text-amber-700">
+              Mahsup bekliyor
+            </span>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (item) =>
+        item.dutyType === 1 && item.status === 1 && !item.hasSurveyReport
+          ? `${item.statusName} (saha raporu bekliyor)`
+          : item.statusName,
+      render: (item) => (
+        <>
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(
+              item.status
+            )}`}
+          >
+            {item.statusName}
+          </span>
+          {item.dutyType === 1 &&
+            item.status === 1 &&
+            !item.hasSurveyReport && (
+              <span className="mt-1 block text-xs font-semibold text-violet-700">
+                Saha raporu bekliyor
+              </span>
+            )}
+        </>
+      ),
+    },
+    {
+      key: "islem",
+      header: "İşlem",
+      value: () => "",
+      render: (item) => (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              setSelectedId((current) => (current === item.id ? null : item.id))
+            }
+            className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-semibold"
+          >
+            {selectedId === item.id ? "Kapat" : "Detay"}
+          </button>
+
+          {canApprove && item.status === 0 && (
+            <>
+              <button
+                type="button"
+                disabled={actionId === item.id}
+                onClick={() => setPending(item)}
+                className="rounded-lg bg-emerald-700 px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
+              >
+                Onayla
+              </button>
+
+              <button
+                type="button"
+                disabled={actionId === item.id}
+                onClick={() => {
+                  setConfirmError("");
+                  setConfirmTarget({ item, mode: "reject" });
+                }}
+                className="rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"
+              >
+                Reddet
+              </button>
+            </>
+          )}
+
+          {/* İPTAL yalnız ONAYLI görevde ve yalnız onay makamına
+              görünüyor. Kapı zaten uçta (GM/Admin + gerekçe); buradaki
+              gizleme savunma derinliği. */}
+          {canApprove && item.status === 1 && (
+            <button
+              type="button"
+              disabled={actionId === item.id}
+              onClick={() => {
+                setConfirmError("");
+                setConfirmTarget({ item, mode: "cancel" });
+              }}
+              className="rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"
+            >
+              İptal Et
+            </button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+
   return (
     <ErpShell
       design="redwood"
@@ -673,171 +859,15 @@ export default function PersonnelDutiesPage() {
       )}
 
       <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1000px] text-left text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-500">
-            <tr>
-              <th className="p-4">Personel</th>
-              <th className="p-4">Tür</th>
-              <th className="p-4">Hedef Proje</th>
-              <th className="p-4">Tarih</th>
-              <th className="p-4">Harcırah</th>
-              <th className="p-4">Durum</th>
-              <th className="p-4">İşlem</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={7} className="p-6 text-center text-slate-500">
-                  Yükleniyor…
-                </td>
-              </tr>
-            )}
-
-            {!loading && visibleItems.length === 0 && (
-              <tr>
-                <td colSpan={7} className="p-6 text-center text-slate-500">
-                  Görevlendirme kaydı yok.
-                </td>
-              </tr>
-            )}
-
-            {!loading &&
-              visibleItems.map((item) => (
-                <tr
-                  key={item.id}
-                  className="border-b border-slate-100 last:border-0"
-                >
-                  <td className="p-4 font-semibold text-slate-800">
-                    {item.personnelFullName}
-                    <span className="mt-1 block text-xs font-normal text-slate-500">
-                      {item.purpose}
-                    </span>
-                  </td>
-
-                  <td className="p-4">
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${dutyTypeClass(
-                        item.dutyType
-                      )}`}
-                    >
-                      {item.dutyTypeName}
-                    </span>
-                    {item.shiftsLaborCost && (
-                      <span className="mt-1 block text-xs text-slate-500">
-                        Gün maliyeti hedefe kayar
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="p-4 text-slate-700">
-                    {item.targetProjectCode}
-                    <span className="mt-1 block text-xs text-slate-500">
-                      {item.targetProjectName}
-                    </span>
-                  </td>
-
-                  <td className="p-4 text-slate-700">
-                    {formatDate(item.startDate)} – {formatDate(item.endDate)}
-                    <span className="mt-1 block text-xs text-slate-500">
-                      {item.dayCount} gün
-                      {item.isOutOfCity ? " · şehir dışı" : ""}
-                    </span>
-                  </td>
-
-                  <td className="p-4 text-slate-700">
-                    {item.totalAllowance === null ||
-                    item.totalAllowance === undefined
-                      ? "—"
-                      : money(item.totalAllowance)}
-                    {item.settlementPending && (
-                      <span className="mt-1 block text-xs font-semibold text-amber-700">
-                        Mahsup bekliyor
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="p-4">
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(
-                        item.status
-                      )}`}
-                    >
-                      {item.statusName}
-                    </span>
-                    {item.dutyType === 1 &&
-                      item.status === 1 &&
-                      !item.hasSurveyReport && (
-                        <span className="mt-1 block text-xs font-semibold text-violet-700">
-                          Saha raporu bekliyor
-                        </span>
-                      )}
-                  </td>
-
-                  <td className="p-4">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelectedId((current) =>
-                            current === item.id ? null : item.id
-                          )
-                        }
-                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-semibold"
-                      >
-                        {selectedId === item.id ? "Kapat" : "Detay"}
-                      </button>
-
-                      {canApprove && item.status === 0 && (
-                        <>
-                          <button
-                            type="button"
-                            disabled={actionId === item.id}
-                            onClick={() => setPending(item)}
-                            className="rounded-lg bg-emerald-700 px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
-                          >
-                            Onayla
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={actionId === item.id}
-                            onClick={() => {
-                              setConfirmError("");
-                              setConfirmTarget({ item, mode: "reject" });
-                            }}
-                            className="rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"
-                          >
-                            Reddet
-                          </button>
-                        </>
-                      )}
-
-                      {/* İPTAL yalnız ONAYLI görevde ve yalnız onay
-                          makamına görünüyor. Kapı zaten uçta (GM/Admin
-                          + gerekçe); buradaki gizleme savunma
-                          derinliği — kullanıcıya çalışmayacak bir
-                          düğme göstermemek için. */}
-                      {canApprove && item.status === 1 && (
-                        <button
-                          type="button"
-                          disabled={actionId === item.id}
-                          onClick={() => {
-                            setConfirmError("");
-                            setConfirmTarget({ item, mode: "cancel" });
-                          }}
-                          className="rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-700 disabled:opacity-60"
-                        >
-                          İptal Et
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        <DataTable
+          rows={visibleItems}
+          columns={columns}
+          rowKey={(item) => item.id}
+          loading={loading}
+          title="Görevlendirmeler"
+          emptyText="Görevlendirme kaydı yok."
+          resetKey={`${companyFilter}|${personnelFilter}|${statusFilter}`}
+        />
       </section>
 
       <ConfirmDialog

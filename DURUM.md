@@ -374,7 +374,17 @@ kaybedilen). F6'nın filtre deseni `tab`, `view`, `mode`, `kind`,
 doğruladı (ekrandan `resetKey` kaldırılınca test ekranı adıyla
 yakalıyor).
 
-**F4 kalan:** 46 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
+**F4f (bitti):** `insan-kaynaklari/fazla-mesai`,
+`insan-kaynaklari/gorevlendirmeler`. Ham tablo **46 → 44**.
+
+Bu ikisinde ÇIKTIYA GİDEN DEĞER özellikle önemliydi:
+fazla mesaide "Pazar / Resmî Tatil" zam oranını belirliyor,
+görevlendirmede "gün maliyeti hedefe kayar" maliyet muhasebesini
+etkiliyor ve "mahsup bekliyor" / "saha raporu bekliyor" iş akışı
+uyarısı. Rozet rengiyle anlatılan bu ayrımların hepsi `value`
+metnine de yazıldı — kâğıtta ve dosyada kaybolmasınlar.
+
+**F4 kalan:** 44 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
 `cariler`, `finans/*`, `insan-kaynaklari/*` aileleri.
 
 **F6 ne yaptı — ve BU BOŞLUĞU BU PROGRAM AÇTI.**
