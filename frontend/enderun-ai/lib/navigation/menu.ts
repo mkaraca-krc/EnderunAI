@@ -280,6 +280,11 @@ export const MENU_GROUPS: MenuGroup[] = [
         icon: "≡",
       },
       {
+        label: "Etiket Yazdır",
+        href: "/depo-stok/etiket",
+        icon: "▣",
+      },
+      {
         // Etiket "Yeni Depo" idi ama bağlantı MALZEME KARTI formuna
         // gidiyordu; depo açan kullanıcı yanlış ekrana düşüyordu.
         label: "Yeni Malzeme Kartı",

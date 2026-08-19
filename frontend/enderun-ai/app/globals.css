@@ -4254,3 +4254,57 @@ body {
   color: var(--erp-text, #0f172a);
   background: var(--erp-surface-muted, #f8fafc);
 }
+
+/* =========================================================
+   STOK ETİKETİ (S3) — A4 çıktı.
+
+   Etiketler yalnız kâğıtta görünür; ekranda seçim tablosu vardır.
+   Yazdırma stili global @media print bloğundan gelir (F2): menü,
+   kenar çubuğu ve düğmeler basılmaz.
+   ========================================================= */
+.erp-label-sheet {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8mm;
+}
+
+.erp-label {
+  display: flex;
+  align-items: center;
+  gap: 6mm;
+  padding: 6mm;
+  border: 1px solid #000;
+  border-radius: 2mm;
+  /* Etiket ikiye bölünmesin: yarısı bir sayfada kalan malzeme
+     etiketi işe yaramaz. */
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.erp-label-qr {
+  width: 28mm;
+  height: 28mm;
+  flex: none;
+}
+
+.erp-label-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+  min-width: 0;
+}
+
+.erp-label-body strong {
+  font-size: 11pt;
+  line-height: 1.25;
+}
+
+.erp-label-code {
+  font-size: 14pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.erp-label-location {
+  font-size: 9pt;
+}

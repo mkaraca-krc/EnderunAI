@@ -393,6 +393,38 @@ tekrarında YAKALADI.
 
 Tam tur 2286/2286, frontend 354/354.
 
+**S3 (bitti) — konum/raf + QR etiket.**
+
+KARARLAR: varsayılan konum DEPO × KATEGORİ eşleşmesi · konum ÜÇ
+seviye (Bölge → Raf → Kat) ama AÇIK bölgede yalnız bölge.
+
+- `WarehouseZone` (raflı/açık) → `WarehouseShelf` → `WarehouseShelfLevel`.
+  Raflı bölge toplu kuruluyor: raf sayısı + her rafın kat sayısı.
+- `WarehouseCategoryLocation`: bu DEPODA bu KATEGORİ nereye gider.
+  Kategori sistem geneli olduğu için varsayılan konum kategoride
+  tutulamıyordu — ikinci şirket eklendiğinde YANLIŞ yeri gösterirdi.
+- Kart açılırken depoya göre konum otomatik; elle geçilen seçim
+  varsayılanın önüne geçer. AÇIK bölgede raf/kat elle gönderilse bile
+  TEMİZLENİR.
+- QR'a ham kimlik değil URL yazılıyor: telefon kamerasıyla okutunca
+  sayfa doğrudan açılsın, ayrı uygulama gerekmesin. Kart QR'ı →
+  malzeme sayfası; raf QR'ı → "bu rafta ne var" (yeni ekran).
+- A4 etiket ekranı (tek/toplu): QR + ad + kod + konum. QR'lar ÖNCEDEN
+  üretilip basılıyor — `window.print()` o an ekranda ne varsa onu
+  basar, bekleyemez; sonradan üretilseydi etiketler boş çıkardı.
+
+Mevcut bir sözleşme testi yakaladı: her liste ekranında tazeleme
+düğmesi olmalı; etiket ekranında yoktu, eklendi.
+
+Üç sonda da yakaladı. Tam tur 2292/2292, frontend 354/354.
+
+**MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
+migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
+DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.
+Şema uygulanmadan servis yeniden başlarsa AÇILIŞTA PATLAR. Sıra:
+`dotnet ef migrations script --no-build --idempotent` → yedek →
+psql ile uygula → sonra deploy.
+
 ---
 
 ## 3. Sıradaki paketler

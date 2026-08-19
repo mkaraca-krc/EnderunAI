@@ -72,6 +72,13 @@ public sealed class InventoryController(
         var items = await query.OrderBy(x => x.Name).Select(x => new
         {
             x.Id, x.CompanyId, CompanyName = x.Company.Name, x.Code, x.Name, x.Category,
+            // KONUM: etiket çıktısı ve raf araması bunları kullanıyor.
+            // Açık bölgede raf/kat null kalır — olmayan ayrıntı.
+            x.InventoryCategoryId,
+            CategoryLabel = x.InventoryCategory != null ? x.InventoryCategory.Name : x.Category,
+            ZoneName = x.WarehouseZone != null ? x.WarehouseZone.Name : null,
+            ShelfCode = x.WarehouseShelf != null ? x.WarehouseShelf.Code : null,
+            LevelCode = x.WarehouseShelfLevel != null ? x.WarehouseShelfLevel.Code : null,
             x.Brand, x.Model, x.Unit, x.Barcode, x.MinimumStock, x.MaximumStock,
             x.AverageUnitCost,
             x.LastPurchasePrice, x.LastPurchaseDate, x.VatRate,
@@ -162,6 +169,15 @@ public sealed class InventoryController(
         Guid CategoryId,
         string Unit,
         Guid[]? OptionIds,
+        /*
+         * KONUM. Depo verilirse o depodaki kategori varsayılanı
+         * uygulanır; kullanıcı elle değiştirmek isterse bölge/raf/kat
+         * doğrudan geçilir ve varsayılanın önüne geçer.
+         */
+        Guid? WarehouseId,
+        Guid? ZoneId,
+        Guid? ShelfId,
+        Guid? LevelId,
         /* SERBEST tipte zorunlu, STANDART tipte YOK SAYILIR. */
         string? Name,
         string? Brand,
@@ -309,10 +325,72 @@ public sealed class InventoryController(
             name = request.Name.Trim();
         }
 
+        /*
+         * KONUM ÇÖZÜMÜ.
+         *
+         * Öncelik ELLE SEÇİMDE: kullanıcı bölge geçtiyse o kullanılır.
+         * Geçmediyse ve depo verildiyse, o depodaki kategori
+         * varsayılanı uygulanır — "kart açılınca konum otomatik gelir".
+         *
+         * Hiçbiri yoksa konum boş kalır: depo bölgeleri henüz
+         * tanımlanmamış olabilir ve bu kart açmayı engellememeli.
+         */
+        Guid? zoneId = request.ZoneId;
+        Guid? shelfId = request.ShelfId;
+        Guid? levelId = request.LevelId;
+
+        if (zoneId is null && request.WarehouseId is Guid warehouseId)
+        {
+            var defaultLocation = await db.WarehouseCategoryLocations
+                .AsNoTracking()
+                .SingleOrDefaultAsync(
+                    x => x.WarehouseId == warehouseId &&
+                         x.InventoryCategoryId == category.Id,
+                    cancellationToken);
+
+            if (defaultLocation is not null)
+            {
+                zoneId = defaultLocation.WarehouseZoneId;
+                shelfId = defaultLocation.WarehouseShelfId;
+                levelId = defaultLocation.WarehouseShelfLevelId;
+            }
+        }
+
+        if (zoneId is Guid selectedZoneId)
+        {
+            var zone = await db.WarehouseZones
+                .Include(x => x.Shelves).ThenInclude(x => x.Levels)
+                .SingleOrDefaultAsync(x => x.Id == selectedZoneId, cancellationToken);
+
+            if (zone is null)
+                return BadRequest(new { message = "Bölge bulunamadı." });
+
+            // BÖLGE TİPİ BELİRLEYİCİ — açık bölgede raf/kat olmaz.
+            if (zone.Kind == WarehouseZoneKind.Open)
+            {
+                shelfId = null;
+                levelId = null;
+            }
+            else if (shelfId is Guid selectedShelfId)
+            {
+                var shelf = zone.Shelves.SingleOrDefault(x => x.Id == selectedShelfId);
+
+                if (shelf is null)
+                    return BadRequest(new { message = "Raf bu bölgeye ait değil." });
+
+                if (levelId is Guid selectedLevelId &&
+                    shelf.Levels.All(x => x.Id != selectedLevelId))
+                    return BadRequest(new { message = "Kat bu rafa ait değil." });
+            }
+        }
+
         var entity = new InventoryItem
         {
             CompanyId = request.CompanyId,
             InventoryCategoryId = category.Id,
+            WarehouseZoneId = zoneId,
+            WarehouseShelfId = shelfId,
+            WarehouseShelfLevelId = levelId,
             Code = await codes.NextCodeAsync(request.CompanyId, cancellationToken),
             Name = name,
             AttributeSignature = signature,

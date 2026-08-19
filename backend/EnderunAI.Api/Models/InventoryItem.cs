@@ -54,6 +54,26 @@ public sealed class InventoryItem : BaseEntity
     public string? AttributeSignature { get; set; }
 
     /// <summary>
+    /// MALZEMENİN KONUMU — tek konum, çok konum takibi yok (karar).
+    ///
+    /// Bölge zorunlu gibi görünse de nullable: arşivlenmiş eski
+    /// kartların konumu yok ve depo bölgeleri tanımlanmadan da kart
+    /// açılabilmeli.
+    ///
+    /// AÇIK bölgede raf ve kat NULL kalır — rafa sığmayan büyük
+    /// malzemeden raf/kat istemek olmayan bir ayrıntıyı zorunlu
+    /// kılmak olurdu.
+    /// </summary>
+    public Guid? WarehouseZoneId { get; set; }
+    public WarehouseZone? WarehouseZone { get; set; }
+
+    public Guid? WarehouseShelfId { get; set; }
+    public WarehouseShelf? WarehouseShelf { get; set; }
+
+    public Guid? WarehouseShelfLevelId { get; set; }
+    public WarehouseShelfLevel? WarehouseShelfLevel { get; set; }
+
+    /// <summary>
     /// ESKİ serbest metin kategori. S1'den itibaren yeni kartlarda
     /// kullanılmıyor; arşivlenmiş kartların geçmişini okuyabilmek için
     /// duruyor. Canlıda bir kartın değeri "TURAN" (tedarikçi adı)

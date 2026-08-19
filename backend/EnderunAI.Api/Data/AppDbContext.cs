@@ -208,6 +208,10 @@ public sealed class AppDbContext(
     public DbSet<GoodsReceiptItem> GoodsReceiptItems => Set<GoodsReceiptItem>();
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<InventoryCategory> InventoryCategories => Set<InventoryCategory>();
+    public DbSet<WarehouseZone> WarehouseZones => Set<WarehouseZone>();
+    public DbSet<WarehouseShelf> WarehouseShelves => Set<WarehouseShelf>();
+    public DbSet<WarehouseShelfLevel> WarehouseShelfLevels => Set<WarehouseShelfLevel>();
+    public DbSet<WarehouseCategoryLocation> WarehouseCategoryLocations => Set<WarehouseCategoryLocation>();
     public DbSet<InventoryCategoryUnit> InventoryCategoryUnits => Set<InventoryCategoryUnit>();
     public DbSet<InventoryAttribute> InventoryAttributes => Set<InventoryAttribute>();
     public DbSet<InventoryAttributeOption> InventoryAttributeOptions => Set<InventoryAttributeOption>();
@@ -3186,6 +3190,75 @@ public sealed class AppDbContext(
 
     private static void ConfigureInventoryItems(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<WarehouseZone>(entity =>
+        {
+            entity.ToTable("warehouse_zones");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique();
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.HasOne(x => x.Warehouse)
+                .WithMany()
+                .HasForeignKey(x => x.WarehouseId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<WarehouseShelf>(entity =>
+        {
+            entity.ToTable("warehouse_shelves");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.WarehouseZoneId, x.Code }).IsUnique();
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.HasOne(x => x.WarehouseZone)
+                .WithMany(x => x.Shelves)
+                .HasForeignKey(x => x.WarehouseZoneId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<WarehouseShelfLevel>(entity =>
+        {
+            entity.ToTable("warehouse_shelf_levels");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.WarehouseShelfId, x.Code }).IsUnique();
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.HasOne(x => x.WarehouseShelf)
+                .WithMany(x => x.Levels)
+                .HasForeignKey(x => x.WarehouseShelfId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<WarehouseCategoryLocation>(entity =>
+        {
+            entity.ToTable("warehouse_category_locations");
+            entity.HasKey(x => x.Id);
+            // Bir depoda bir kategorinin TEK varsayılan konumu olur.
+            entity.HasIndex(x => new { x.WarehouseId, x.InventoryCategoryId }).IsUnique();
+            entity.HasOne(x => x.Warehouse)
+                .WithMany()
+                .HasForeignKey(x => x.WarehouseId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.InventoryCategory)
+                .WithMany()
+                .HasForeignKey(x => x.InventoryCategoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WarehouseZone)
+                .WithMany()
+                .HasForeignKey(x => x.WarehouseZoneId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.WarehouseShelf)
+                .WithMany()
+                .HasForeignKey(x => x.WarehouseShelfId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.WarehouseShelfLevel)
+                .WithMany()
+                .HasForeignKey(x => x.WarehouseShelfLevelId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
         modelBuilder.Entity<InventoryCategory>(entity =>
         {
             entity.ToTable("inventory_categories");

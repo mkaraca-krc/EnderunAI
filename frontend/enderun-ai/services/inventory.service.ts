@@ -3,6 +3,13 @@ import { apiClient } from "@/lib/api/api-client";
 export type InventoryItemType = 0 | 1 | 2;
 
 export interface InventoryItemListItem {
+  /** Konum — açık bölgede raf ve kat null kalır. */
+  zoneName?: string | null;
+  shelfCode?: string | null;
+  levelCode?: string | null;
+  inventoryCategoryId?: string | null;
+  categoryLabel?: string | null;
+
   id: string;
   companyId: string;
   companyName: string;
