@@ -242,9 +242,42 @@ Yani sunucu sayfalaması **5 ekranın** meselesi, 143'ün değil.
 | **F1** — sayım doğruluğu: kırpan her uç toplam döndürür | **BİTTİ** (aşağıda) |
 | **F2** — standart tablo bileşeni + global `@media print` | **BİTTİ** (aşağıda) |
 | **F3** — büyük listelerde sunucu sayfalaması | **BİTTİ** (aşağıda) |
-| F4 — kalan tablo ekranları bileşene taşınır | modül modül |
+| F4 — kalan tablo ekranları bileşene taşınır | **F4a BİTTİ**, yığınlar sürüyor |
 | F5 — yazdır/Excel (tüm kayıtlar vs bu sayfa) | F4'ten sonra |
 | F6 — arama/filtre sayfalamayla uyumlu | en son |
+
+**F4 YIĞINLARA BÖLÜNDÜ** (R3a deseni). Kalan 70 ham tablolu ekranı tek
+fazda taşımak riskli; her yığın ayrı yayın.
+
+Ekranların türü (tarama ile):
+düz liste 60 · detay alt tablosu 23 · ızgara 6 · yazdırma sayfası 5 ·
+ağaç 1. Yalnız DÜZ LİSTELER hedef; diğerlerinde tablo bileşeni yanlış
+araç.
+
+**F4a (bitti):** `sirketler`, `subeler`, `kesifler`, `metrajlar`,
+`muhasebe/fisler`, `depo-stok/depolar`, `depo-stok/iadeler`.
+Ham tablo sayısı **70 → 63**.
+
+Yan fayda: `sirketler` ve `subeler` PASİF kaydı da YEŞİL rozetle
+gösteriyordu (`erp-status green` sabitti) — rozet renginin taşıdığını
+iddia ettiği bilgi yanlıştı, düzeltildi.
+
+**CIRCIR TESTİ** (`tests/list-component-ratchet.test.ts`): ham
+`<table>` kullanan liste ekranı sayısı ARTAMAZ; her yığın sınırı elle
+düşürür. 60 maddelik gerekçe listesi yerine sayı — burada karar tek
+("henüz taşınmadı"), altmış kez aynı gerekçeyi yazmak listeyi okunmaz
+yapardı. İkinci test sınırın gerçek sayıya yakın kalmasını zorluyor
+(gevşek sınır koruma görüntüsü olur, koruma olmaz).
+
+**Sonda cırcırı yakaladı:** ilk sürüm `code.includes("DataTable")`
+diyordu; ekran ham tabloya dönse bile `import` satırı ve
+`DataTableColumn` tipi dosyada kaldığı için sayımdan düşüyordu — yani
+cırcır hiçbir şey korumuyordu. Ölçüt JSX kullanımına (`<DataTable`)
+çevrildi.
+
+**BİLİNEN EKSİK — DataTable'da alt toplam satırı yok.** `muhasebe/yevmiye`
+gibi rapor tabloları borç/alacak toplamı gösteriyor; bunlar taşınmadan
+önce bileşene footer desteği gerekiyor. F5/F6'da ele alınacak.
 
 **F3 ne yaptı — ÖLÇÜMLE DARALTILMIŞ sunucu sayfalaması.**
 

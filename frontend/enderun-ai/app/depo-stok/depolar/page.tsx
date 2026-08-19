@@ -1,6 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
@@ -196,6 +201,103 @@ export default function WarehousesPage() {
     (sum, warehouse) => sum + warehouse.stockValue,
     0
   );
+
+
+  /*
+   * SÜTUNLAR YETKİYE BAĞLI. "Düzenle" sütunu yalnız yetkiliye
+   * gösterilir; dışa aktarmada da yer kaplamaz.
+   */
+  const columns = useMemo<DataTableColumn<WarehouseListItem>[]>(() => {
+    const base: DataTableColumn<WarehouseListItem>[] = [
+      {
+        key: "kod",
+        header: "Kod",
+        value: (warehouse) => warehouse.code,
+        render: (warehouse) => <strong>{warehouse.code}</strong>,
+      },
+      {
+        key: "depo",
+        header: "Depo",
+        value: (warehouse) =>
+          [warehouse.name, warehouse.address].filter(Boolean).join(" — "),
+        render: (warehouse) => (
+          <>
+            {warehouse.name}
+            {warehouse.address && <small>{warehouse.address}</small>}
+          </>
+        ),
+      },
+      {
+        key: "tip",
+        header: "Tip",
+        value: (warehouse: WarehouseListItem) => typeLabel(warehouse.type),
+      },
+      {
+        key: "yer",
+        header: "Proje / Şantiye",
+        value: (warehouse) =>
+          [warehouse.projectCode ?? "Merkez", warehouse.siteName]
+            .filter(Boolean)
+            .join(" / "),
+        render: (warehouse) => (
+          <>
+            {warehouse.projectCode ?? "Merkez"}
+            {warehouse.siteName && <small>{warehouse.siteName}</small>}
+          </>
+        ),
+      },
+      {
+        key: "kalem",
+        header: "Kalem",
+        numeric: true,
+        value: (warehouse) => warehouse.stockLineCount,
+      },
+      {
+        key: "deger",
+        header: "Stok Değeri",
+        numeric: true,
+        value: (warehouse) => warehouse.stockValue,
+        render: (warehouse) => money(warehouse.stockValue),
+      },
+      {
+        key: "durum",
+        header: "Durum",
+        value: (warehouse) => (warehouse.isActive ? "Aktif" : "Kapalı"),
+        render: (warehouse) => (
+          <span
+            className={`erp-status ${warehouse.isActive ? "green" : "gray"}`}
+          >
+            {warehouse.isActive ? "Aktif" : "Kapalı"}
+          </span>
+        ),
+      },
+    ];
+
+    if (!canManage) return base;
+
+    return [
+      ...base,
+      {
+        key: "duzenle",
+        header: "",
+        value: () => "",
+        render: (warehouse) => (
+          <button
+            type="button"
+            className="erp-secondary-button"
+            onClick={() => void startEdit(warehouse)}
+          >
+            Düzenle
+          </button>
+        ),
+      },
+    ];
+    // `startEdit` her render'da yeniden kuruluyor; bağımlılığa
+    // konsaydı sütunlar her render'da baştan hesaplanır ve useMemo
+    // hiçbir işe yaramazdı. Sütun tanımı yalnız YETKİYE bağlı.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManage]);
+
 
   return (
     <ErpShell
@@ -402,64 +504,13 @@ export default function WarehousesPage() {
           </div>
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Kod</th>
-                  <th>Depo</th>
-                  <th>Tip</th>
-                  <th>Proje / Şantiye</th>
-                  <th className="num">Kalem</th>
-                  <th className="num">Stok Değeri</th>
-                  <th>Durum</th>
-                  {canManage && <th></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {warehouses.map((warehouse) => (
-                  <tr key={warehouse.id}>
-                    <td>
-                      <strong>{warehouse.code}</strong>
-                    </td>
-                    <td>
-                      {warehouse.name}
-                      {warehouse.address && <small>{warehouse.address}</small>}
-                    </td>
-                    <td>{typeLabel(warehouse.type)}</td>
-                    <td>
-                      {warehouse.projectCode ?? "Merkez"}
-                      {warehouse.siteName && <small>{warehouse.siteName}</small>}
-                    </td>
-                    <td className="num">
-                      {warehouse.stockLineCount}
-                    </td>
-                    <td className="num">
-                      {money(warehouse.stockValue)}
-                    </td>
-                    <td>
-                      <span
-                        className={`erp-status ${
-                          warehouse.isActive ? "green" : "gray"
-                        }`}
-                      >
-                        {warehouse.isActive ? "Aktif" : "Kapalı"}
-                      </span>
-                    </td>
-                    {canManage && (
-                      <td>
-                        <button
-                          type="button"
-                          className="erp-secondary-button"
-                          onClick={() => void startEdit(warehouse)}
-                        >
-                          Düzenle
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              rows={warehouses}
+              columns={columns}
+              rowKey={(warehouse) => warehouse.id}
+              title="Depolar"
+              emptyText="Henüz depo tanımlanmamış."
+            />
           </div>
         )}
       </div>

@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { amount, currencyMoney } from "@/lib/format/turkish";
@@ -151,6 +155,138 @@ export default function PurchaseReturnsPage() {
     )
     .reduce((sum, x) => sum + x.totalAmount, 0);
 
+
+  /* Eylem sütunu duruma ve yetkiye bağlı; dosyaya yazılmaz. */
+  const columns = useMemo<DataTableColumn<PurchaseReturnListItem>[]>(
+    () => [
+      {
+        key: "no",
+        header: "İade No",
+        value: (row) => row.returnNumber,
+        render: (row) => (
+          <>
+            <strong>{row.returnNumber}</strong>
+            <small style={{ display: "block" }}>
+              {dateFormat.format(new Date(row.returnDate))}
+            </small>
+          </>
+        ),
+      },
+      { key: "tedarikci", header: "Tedarikçi", value: (row) => row.supplierName },
+      {
+        key: "malkabul",
+        header: "Mal Kabul",
+        value: (row) => `${row.receiptNumber} (sipariş ${row.orderNumber})`,
+        render: (row) => (
+          <>
+            <Link href={`/depo-stok/mal-kabul/${row.goodsReceiptId}`}>
+              {row.receiptNumber}
+            </Link>
+            <small style={{ display: "block" }}>sipariş {row.orderNumber}</small>
+          </>
+        ),
+      },
+      {
+        key: "proje",
+        header: "Proje",
+        value: (row) => `${row.projectCode} ${row.projectName}`.trim(),
+        render: (row) => (
+          <>
+            {row.projectCode}
+            <small style={{ display: "block" }}>{row.projectName}</small>
+          </>
+        ),
+      },
+      {
+        key: "miktar",
+        header: "Miktar",
+        numeric: true,
+        value: (row) => row.totalQuantity,
+        render: (row) => (
+          <>
+            {number(row.totalQuantity)}
+            <small style={{ display: "block" }}>{row.itemCount} kalem</small>
+          </>
+        ),
+      },
+      {
+        key: "tutar",
+        header: "Tutar",
+        numeric: true,
+        value: (row) => row.totalAmount,
+        render: (row) => money(row.totalAmount, row.currencyCode),
+      },
+      {
+        key: "durum",
+        header: "Durum",
+        value: (row) => row.statusName,
+        render: (row) => (
+          <span className={statusClass(row.status)}>{row.statusName}</span>
+        ),
+      },
+      {
+        key: "islem",
+        header: "İşlem",
+        value: () => "",
+        render: (row) => (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Link
+              className="erp-secondary-button"
+              href={`/depo-stok/iadeler/${row.id}`}
+            >
+              Aç
+            </Link>
+
+            {row.status === PURCHASE_RETURN_STATUS.Draft &&
+              actions.can("edit") && (
+                <button
+                  type="button"
+                  className="erp-primary-button"
+                  disabled={busy}
+                  onClick={() =>
+                    setPending({ row, status: PURCHASE_RETURN_STATUS.Sent })
+                  }
+                >
+                  Tedarikçiye Gönderildi
+                </button>
+              )}
+
+            {row.status === PURCHASE_RETURN_STATUS.Sent &&
+              actions.can("edit") && (
+                <button
+                  type="button"
+                  className="erp-primary-button"
+                  disabled={busy}
+                  onClick={() =>
+                    setPending({ row, status: PURCHASE_RETURN_STATUS.Completed })
+                  }
+                >
+                  Kapat
+                </button>
+              )}
+
+            {(row.status === PURCHASE_RETURN_STATUS.Draft ||
+              row.status === PURCHASE_RETURN_STATUS.Sent) &&
+              actions.can("edit") && (
+                <button
+                  type="button"
+                  className="erp-secondary-button"
+                  disabled={busy}
+                  onClick={() =>
+                    setPending({ row, status: PURCHASE_RETURN_STATUS.Cancelled })
+                  }
+                >
+                  İptal
+                </button>
+              )}
+          </div>
+        ),
+      },
+    ],
+    [actions, busy]
+  );
+
+
   return (
     <ErpShell
       design="redwood"
@@ -231,112 +367,13 @@ export default function PurchaseReturnsPage() {
           </div>
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>İade No</th>
-                  <th>Tedarikçi</th>
-                  <th>Mal Kabul</th>
-                  <th>Proje</th>
-                  <th>Miktar</th>
-                  <th>Tutar</th>
-                  <th>Durum</th>
-                  <th>İşlem</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <strong>{row.returnNumber}</strong>
-                      <small style={{ display: "block" }}>
-                        {dateFormat.format(new Date(row.returnDate))}
-                      </small>
-                    </td>
-                    <td>{row.supplierName}</td>
-                    <td>
-                      <Link href={`/depo-stok/mal-kabul/${row.goodsReceiptId}`}>
-                        {row.receiptNumber}
-                      </Link>
-                      <small style={{ display: "block" }}>
-                        sipariş {row.orderNumber}
-                      </small>
-                    </td>
-                    <td>
-                      {row.projectCode}
-                      <small style={{ display: "block" }}>
-                        {row.projectName}
-                      </small>
-                    </td>
-                    <td>
-                      {number(row.totalQuantity)}
-                      <small style={{ display: "block" }}>
-                        {row.itemCount} kalem
-                      </small>
-                    </td>
-                    <td>{money(row.totalAmount, row.currencyCode)}</td>
-                    <td>
-                      <span className={statusClass(row.status)}>
-                        {row.statusName}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <Link
-                          className="erp-secondary-button"
-                          href={`/depo-stok/iadeler/${row.id}`}
-                        >
-                          Aç
-                        </Link>
-
-                        {row.status === PURCHASE_RETURN_STATUS.Draft &&
-                          actions.can("edit") && (
-                          <button
-                            type="button"
-                            className="erp-primary-button"
-                            disabled={busy}
-                            onClick={() =>
-                              setPending({ row, status: PURCHASE_RETURN_STATUS.Sent })
-                            }
-                          >
-                            Tedarikçiye Gönderildi
-                          </button>
-                        )}
-
-                        {row.status === PURCHASE_RETURN_STATUS.Sent &&
-                          actions.can("edit") && (
-                          <button
-                            type="button"
-                            className="erp-primary-button"
-                            disabled={busy}
-                            onClick={() =>
-                              setPending({ row, status: PURCHASE_RETURN_STATUS.Completed })
-                            }
-                          >
-                            Kapat
-                          </button>
-                        )}
-
-                        {(row.status === PURCHASE_RETURN_STATUS.Draft ||
-                          row.status === PURCHASE_RETURN_STATUS.Sent) &&
-                          actions.can("edit") && (
-                          <button
-                            type="button"
-                            className="erp-secondary-button"
-                            disabled={busy}
-                            onClick={() =>
-                              setPending({ row, status: PURCHASE_RETURN_STATUS.Cancelled })
-                            }
-                          >
-                            İptal
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              rows={items}
+              columns={columns}
+              rowKey={(row) => row.id}
+              title="Satın Alma İadeleri"
+              emptyText="İade kaydı bulunmuyor."
+            />
           </div>
         )}
       </section>

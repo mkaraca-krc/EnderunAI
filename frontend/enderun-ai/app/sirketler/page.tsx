@@ -2,9 +2,50 @@
 import { FormEvent,useCallback,useEffect,useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { Button } from "@/components/ui";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 type Company={id:string;code:string;name:string;tradeName?:string;taxOffice?:string;taxNumber?:string;phone?:string;email?:string;isActive:boolean};
 const blank={code:"",name:"",tradeName:"",taxOffice:"",taxNumber:"",phone:"",email:"",website:"",address:""};
 async function api(path:string,options?:RequestInit){const r=await fetch(`/api/backend/${path}`,{cache:"no-store",...options});if(r.status===401){location.href="/login";throw new Error("Oturum süresi doldu.");}const j=await r.json().catch(()=>null);if(!r.ok)throw new Error(j?.message??`Hata ${r.status}`);return j;}
+
+/**
+ * SÜTUNLAR — dosyaya giden değer ekrandaki rozetten ayrı.
+ *
+ * Durum rozeti eskiden PASİF şirketi de YEŞİL gösteriyordu
+ * (`className="erp-status green"` sabitti). Rozet rengi bir bilgi
+ * taşıdığını iddia ediyorsa doğru taşımalı.
+ */
+const companyColumns: DataTableColumn<Company>[] = [
+  { key: "kod", header: "Kod", value: x => x.code },
+  {
+    key: "ad",
+    header: "Şirket",
+    value: x => x.tradeName ? `${x.name} (${x.tradeName})` : x.name,
+    render: x => <><strong>{x.name}</strong><small>{x.tradeName||"—"}</small></>,
+  },
+  {
+    key: "vergi",
+    header: "Vergi",
+    value: x => [x.taxOffice, x.taxNumber].filter(Boolean).join(" / ") || "—",
+    render: x => <>{x.taxOffice||"—"}<small>{x.taxNumber||"—"}</small></>,
+  },
+  {
+    key: "iletisim",
+    header: "İletişim",
+    value: x => [x.phone, x.email].filter(Boolean).join(" / ") || "—",
+    render: x => <>{x.phone||"—"}<small>{x.email||"—"}</small></>,
+  },
+  {
+    key: "durum",
+    header: "Durum",
+    value: x => x.isActive ? "Aktif" : "Pasif",
+    render: x => (
+      <span className={x.isActive ? "erp-status green" : "erp-status"}>
+        {x.isActive ? "Aktif" : "Pasif"}
+      </span>
+    ),
+  },
+];
+
 export default function Page(){
   const [items,setItems]=useState<Company[]>([]),[form,setForm]=useState(blank),[show,setShow]=useState(false),[msg,setMsg]=useState(""),[err,setErr]=useState("");
   const load=useCallback(async()=>{try{setItems(await api("companies"));}catch(e){setErr(e instanceof Error?e.message:"Liste alınamadı.");}},[]);
@@ -20,5 +61,5 @@ export default function Page(){
     <label><span>Telefon</span><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></label>
     <label><span>E-posta</span><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label>
   </div><div className="erp-actions"><button type="submit">Kaydet</button></div></form>}
-  <div className="erp-table-card"><table className="erp-table"><thead><tr><th>Kod</th><th>Şirket</th><th>Vergi</th><th>İletişim</th><th>Durum</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{x.code}</td><td><strong>{x.name}</strong><small>{x.tradeName||"—"}</small></td><td>{x.taxOffice||"—"}<small>{x.taxNumber||"—"}</small></td><td>{x.phone||"—"}<small>{x.email||"—"}</small></td><td><span className="erp-status green">{x.isActive?"Aktif":"Pasif"}</span></td></tr>)}</tbody></table></div></ErpShell>;
+  <div className="erp-table-card"><DataTable rows={items} columns={companyColumns} rowKey={x=>x.id} title="Şirketler" emptyText="Henüz şirket yok."/></div></ErpShell>;
 }

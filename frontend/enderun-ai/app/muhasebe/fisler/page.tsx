@@ -8,6 +8,11 @@ import {
   useState,
 } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import { Button } from "@/components/ui";
@@ -45,6 +50,70 @@ const statusClasses: Record<AccountingVoucherStatus, string> = {
   1: "green",
   2: "red",
 };
+
+const columns: DataTableColumn<AccountingVoucherListItem>[] = [
+  {
+    key: "no",
+    header: "Fiş No",
+    value: (item) => item.voucherNumber,
+    render: (item) => (
+      <>
+        <strong>{item.voucherNumber}</strong>
+        <small>{item.referenceNumber ?? "—"}</small>
+      </>
+    ),
+  },
+  {
+    key: "tarih",
+    header: "Tarih",
+    value: (item) => date.format(new Date(item.voucherDate)),
+  },
+  { key: "tip", header: "Tip", value: (item) => typeLabels[item.voucherType] },
+  {
+    key: "aciklama",
+    header: "Açıklama",
+    value: (item) => item.description ?? "—",
+  },
+  { key: "satir", header: "Satır", numeric: true, value: (item) => item.lineCount },
+  {
+    key: "borc",
+    header: "Borç",
+    numeric: true,
+    value: (item) => item.totalDebit,
+    render: (item) => money(item.totalDebit),
+  },
+  {
+    key: "alacak",
+    header: "Alacak",
+    numeric: true,
+    value: (item) => item.totalCredit,
+    render: (item) => money(item.totalCredit),
+  },
+  {
+    key: "durum",
+    header: "Durum",
+    value: (item) => statusLabels[item.status],
+    render: (item) => (
+      <span className={`erp-status ${statusClasses[item.status]}`}>
+        {statusLabels[item.status]}
+      </span>
+    ),
+  },
+  {
+    key: "islem",
+    header: "İşlem",
+    value: () => "",
+    render: (item) => (
+      <Link
+        href={`/muhasebe/fisler/${item.id}`}
+        className="erp-secondary-button"
+        style={{ textDecoration: "none" }}
+      >
+        Detay
+      </Link>
+    ),
+  },
+];
 
 export default function AccountingVouchersPage() {
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
@@ -262,87 +331,15 @@ export default function AccountingVouchersPage() {
       </section>
 
       <div className="erp-table-card">
-        <table className="erp-table">
-          <thead>
-            <tr>
-              <th>Fiş No</th>
-              <th>Tarih</th>
-              <th>Tip</th>
-              <th>Açıklama</th>
-              <th>Satır</th>
-              <th>Borç</th>
-              <th>Alacak</th>
-              <th>Durum</th>
-              <th>İşlem</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={9}>
-                  Muhasebe fişleri yükleniyor...
-                </td>
-              </tr>
-            )}
-
-            {!loading && items.length === 0 && (
-              <tr>
-                <td colSpan={9}>
-                  Muhasebe fişi bulunmuyor.
-                </td>
-              </tr>
-            )}
-
-            {!loading &&
-              items.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <strong>{item.voucherNumber}</strong>
-                    <small>
-                      {item.referenceNumber ?? "—"}
-                    </small>
-                  </td>
-
-                  <td>
-                    {date.format(
-                      new Date(item.voucherDate)
-                    )}
-                  </td>
-
-                  <td>{typeLabels[item.voucherType]}</td>
-
-                  <td>{item.description ?? "—"}</td>
-
-                  <td>{item.lineCount}</td>
-
-                  <td>{money(item.totalDebit)}</td>
-
-                  <td>{money(item.totalCredit)}</td>
-
-                  <td>
-                    <span
-                      className={`erp-status ${
-                        statusClasses[item.status]
-                      }`}
-                    >
-                      {statusLabels[item.status]}
-                    </span>
-                  </td>
-
-                  <td>
-                    <Link
-                      href={`/muhasebe/fisler/${item.id}`}
-                      className="erp-secondary-button"
-                      style={{ textDecoration: "none" }}
-                    >
-                      Detay
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        <DataTable
+          rows={items}
+          columns={columns}
+          rowKey={(item) => item.id}
+          loading={loading}
+          title="Muhasebe Fişleri"
+          emptyText="Muhasebe fişi bulunmuyor."
+          resetKey={`${companyId}|${status}|${voucherType}|${search}`}
+        />
       </div>
     </ErpShell>
   );

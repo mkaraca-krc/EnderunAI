@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { currencyMoney } from "@/lib/format/turkish";
 import { Button } from "@/components/ui";
@@ -40,6 +45,52 @@ function formatDate(value: string) {
     new Date(value)
   );
 }
+
+const columns: DataTableColumn<ProjectMeasurementListItem>[] = [
+  {
+    key: "no",
+    header: "Metraj No",
+    value: (item) => item.measurementNumber,
+    render: (item) => <strong>{item.measurementNumber}</strong>,
+  },
+  {
+    key: "tarih",
+    header: "Tarih",
+    value: (item) => formatDate(item.measurementDate),
+  },
+  {
+    key: "proje",
+    header: "Proje",
+    value: (item) => `${item.projectCode} — ${item.projectName}`,
+  },
+  { key: "kesif", header: "Keşif", value: (item) => item.boqNumber },
+  {
+    key: "durum",
+    header: "Durum",
+    value: (item) => statusLabels[item.status],
+  },
+  {
+    key: "kalem",
+    header: "Kalem",
+    numeric: true,
+    value: (item) => item.itemCount,
+  },
+  {
+    key: "tutar",
+    header: "Bu Dönem",
+    numeric: true,
+    value: (item) => item.totalAmount,
+    render: (item) => (
+      <strong>{formatMoney(item.totalAmount, item.currencyCode)}</strong>
+    ),
+  },
+  {
+    key: "ac",
+    header: "",
+    value: () => "",
+    render: (item) => <Link href={`/metrajlar/${item.id}`}>Aç</Link>,
+  },
+];
 
 export default function ProjectMeasurementListPage() {
   const [items, setItems] =
@@ -114,88 +165,14 @@ export default function ProjectMeasurementListPage() {
       )}
 
       <div className="erp-table-card">
-        <table className="erp-table">
-          <thead>
-            <tr>
-              <th>Metraj No</th>
-              <th>Tarih</th>
-              <th>Proje</th>
-              <th>Keşif</th>
-              <th>Durum</th>
-              <th>Kalem</th>
-              <th>Bu Dönem</th>
-              <th></th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={8}>
-                  Metrajlar yükleniyor...
-                </td>
-              </tr>
-            )}
-
-            {!loading && items.length === 0 && (
-              <tr>
-                <td colSpan={8}>
-                  Henüz metraj kaydı bulunmuyor.
-                </td>
-              </tr>
-            )}
-
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td>
-                  <strong>
-                    {item.measurementNumber}
-                  </strong>
-                </td>
-
-                <td>
-                  {formatDate(
-                    item.measurementDate
-                  )}
-                </td>
-
-                <td>
-                  {item.projectCode} —{" "}
-                  {item.projectName}
-                </td>
-
-                <td>
-                  {item.boqNumber}
-                </td>
-
-                <td>
-                  {statusLabels[item.status]}
-                </td>
-
-                <td>
-                  {item.itemCount}
-                </td>
-
-                <td>
-                  <strong>
-                    {formatMoney(
-                      item.totalAmount,
-                      item.currencyCode
-                    )}
-                  </strong>
-                </td>
-
-                <td>
-                  <Link
-                    href={`/metrajlar/${item.id}`}
-                  >
-                    Aç
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          rows={items}
+          columns={columns}
+          rowKey={(item) => item.id}
+          loading={loading}
+          title="Metrajlar"
+          emptyText="Henüz metraj kaydı bulunmuyor."
+        />
       </div>
     </ErpShell>
   );

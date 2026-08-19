@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import { Button } from "@/components/ui";
@@ -18,6 +23,42 @@ const statusLabels: Record<ProjectBoqStatus, string> = {
   [ProjectBoqStatus.Superseded]: "Eski Revizyon",
   [ProjectBoqStatus.Archived]: "Arşivlendi",
 };
+
+const columns: DataTableColumn<ProjectBoqListItem>[] = [
+  {
+    key: "no",
+    header: "Keşif No",
+    value: (item) => item.boqNumber,
+    render: (item) => <strong>{item.boqNumber}</strong>,
+  },
+  {
+    key: "proje",
+    header: "Proje",
+    value: (item) => `${item.projectCode} — ${item.projectName}`,
+  },
+  { key: "ad", header: "Adı", value: (item) => item.name },
+  { key: "revizyon", header: "Revizyon", value: (item) => item.revisionCode },
+  {
+    key: "durum",
+    header: "Durum",
+    value: (item) =>
+      statusLabels[item.status] + (item.isCurrentRevision ? " · Güncel" : ""),
+  },
+  { key: "kalem", header: "Kalem", numeric: true, value: (item) => item.itemCount },
+  {
+    key: "toplam",
+    header: "Toplam",
+    numeric: true,
+    value: (item) => item.totalAmount,
+    render: (item) => <strong>{money(item.totalAmount)}</strong>,
+  },
+  {
+    key: "ac",
+    header: "",
+    value: () => "",
+    render: (item) => <Link href={`/kesifler/${item.id}`}>Aç</Link>,
+  },
+];
 
 export default function ProjectBoqListPage() {
   const [items, setItems] = useState<ProjectBoqListItem[]>([]);
@@ -86,68 +127,14 @@ export default function ProjectBoqListPage() {
       )}
 
       <div className="erp-table-card">
-        <table className="erp-table">
-          <thead>
-            <tr>
-              <th>Keşif No</th>
-              <th>Proje</th>
-              <th>Adı</th>
-              <th>Revizyon</th>
-              <th>Durum</th>
-              <th>Kalem</th>
-              <th>Toplam</th>
-              <th></th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={8}>
-                  Keşifler yükleniyor...
-                </td>
-              </tr>
-            )}
-
-            {!loading && items.length === 0 && (
-              <tr>
-                <td colSpan={8}>
-                  Henüz keşif kaydı bulunmuyor.
-                </td>
-              </tr>
-            )}
-
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td>
-                  <strong>{item.boqNumber}</strong>
-                </td>
-                <td>
-                  {item.projectCode} — {item.projectName}
-                </td>
-                <td>{item.name}</td>
-                <td>{item.revisionCode}</td>
-                <td>
-                  {statusLabels[item.status]}
-                  {item.isCurrentRevision
-                    ? " · Güncel"
-                    : ""}
-                </td>
-                <td>{item.itemCount}</td>
-                <td>
-                  <strong>
-                    {money(item.totalAmount)}
-                  </strong>
-                </td>
-                <td>
-                  <Link href={`/kesifler/${item.id}`}>
-                    Aç
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          rows={items}
+          columns={columns}
+          rowKey={(item) => item.id}
+          loading={loading}
+          title="Keşifler"
+          emptyText="Henüz keşif kaydı bulunmuyor."
+        />
       </div>
     </ErpShell>
   );
