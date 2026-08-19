@@ -71,23 +71,40 @@ export interface InventoryItemDetail {
 
 export interface CreateInventoryItemRequest {
   companyId: string;
-  code: string;
-  name: string;
-  category?: string;
+
+  /**
+   * KATEGORİ ZORUNLU (S2). Kartın adı, birimi ve mükerrer imzası
+   * buradan türer.
+   */
+  categoryId: string;
+
+  /**
+   * Kategorinin İZİN VERDİĞİ birimlerden biri. Kart açıldıktan sonra
+   * DEĞİŞMEZ; hareket girişi bunu kullanır.
+   */
+  unit: string;
+
+  /**
+   * STANDART kategoride seçilen özellik değerleri. Ad ve mükerrer
+   * imzası bunlardan üretilir.
+   */
+  optionIds?: string[];
+
+  /**
+   * YALNIZ SERBEST kategoride (dekoratif, özel imalat) zorunlu.
+   * STANDART kategoride yok sayılır — ad özelliklerden üretilir.
+   */
+  name?: string;
+
   brand?: string;
   model?: string;
-  unit: string;
   barcode?: string;
   minimumStock: number;
-  maximumStock: number;
+  maximumStock?: number | null;
   type: InventoryItemType;
   preferredSupplierCurrentAccountId?: string | null;
   vatRate?: number | null;
   description?: string | null;
-  /**
-   * Birim başına bakır (kg). Bakır maruziyeti raporunun tek kaynağı;
-   * girilmediği sürece emtia riski boş çalışır.
-   */
   copperKgPerUnit?: number | null;
 }
 

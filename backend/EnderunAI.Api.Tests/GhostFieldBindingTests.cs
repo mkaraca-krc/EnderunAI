@@ -191,12 +191,33 @@ public sealed class GhostFieldBindingTests(DatabaseFixture fixture)
 
         var client = await ClientAsync();
 
+        // KART AÇMA ARTIK KATEGORİ GÜDÜMLÜ (S2): kod otomatik, ad
+        // özelliklerden üretiliyor. Bakır katsayısı bundan bağımsız
+        // bir alan ve hâlâ karta yazılıp okunabilmeli.
+        var categories = await client.GetFromJsonAsync<JsonElement>(
+            "/api/inventory/categories");
+
+        var kablo = categories.EnumerateArray()
+            .Single(x => x.GetProperty("code").GetString() == "KABLO");
+
+        Guid OptionOf(string attributeCode, string value) =>
+            kablo.GetProperty("attributes").EnumerateArray()
+                .Single(x => x.GetProperty("code").GetString() == attributeCode)
+                .GetProperty("options").EnumerateArray()
+                .Single(x => x.GetProperty("value").GetString() == value)
+                .GetProperty("id").GetGuid();
+
         var created = await client.PostAsJsonAsync("/api/inventory/items", new
         {
             companyId,
-            code = $"KBL-{suffix}",
-            name = "NYY 3x2.5 Kablo",
-            unit = "m",
+            categoryId = kablo.GetProperty("id").GetGuid(),
+            unit = "metre",
+            optionIds = new[]
+            {
+                OptionOf("TIP", "NYY"),
+                OptionOf("KESIT", "3x2.5"),
+                OptionOf("ILETKEN", "Bakır")
+            },
             minimumStock = 0m,
             type = 0,
             copperKgPerUnit = 0.0675m

@@ -3264,6 +3264,20 @@ public sealed class AppDbContext(
             entity.ToTable("inventory_items");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+
+            /*
+             * MÜKERRER ENGELİ ŞİRKET İÇİ ve VERİTABANI SEVİYESİNDE.
+             *
+             * Kısmi indeks: imza yalnız STANDART kartlarda dolu,
+             * SERBEST kartlarda null — null'lar kısıtlamaya girmez.
+             * Sorguyla kontrol yarışa açıktı: iki kullanıcı aynı anda
+             * aynı malzemeyi açarsa ikisi de "yok" görürdü.
+             */
+            entity.HasIndex(x => new { x.CompanyId, x.AttributeSignature })
+                .IsUnique()
+                .HasFilter("\"AttributeSignature\" IS NOT NULL");
+
+            entity.Property(x => x.AttributeSignature).HasMaxLength(600);
             entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(300).IsRequired();
             entity.Property(x => x.Category).HasMaxLength(150);

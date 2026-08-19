@@ -32,6 +32,28 @@ public sealed class InventoryItem : BaseEntity
         = new List<InventoryItemAttributeValue>();
 
     /// <summary>
+    /// MÜKERRER ENGELİNİN VERİTABANI DAYANAĞI (S2).
+    ///
+    /// Kategori kodu + seçilen özellik değerlerinden üretilen
+    /// deterministik imza: `KABLO_TAVASI|CINS=Perfore|KALINLIK=1.5|...`
+    /// Özellikler koda göre SIRALANIR ki seçim sırası imzayı
+    /// değiştirmesin.
+    ///
+    /// NEDEN KOLON, NEDEN SORGUYLA KONTROL DEĞİL: sorgu yarışa açık —
+    /// iki kullanıcı aynı anda aynı malzemeyi açarsa ikisi de "yok"
+    /// görür. Kolon üzerinde `(CompanyId, AttributeSignature)` tekil
+    /// indeksi var; ikinci kayıt veritabanı seviyesinde reddedilir.
+    ///
+    /// ŞİRKET İÇİ: iki farklı şirket aynı malzemeyi kendi kartıyla
+    /// tutabilir. Mükerrerin amacı BİR ŞİRKET İÇİNDE stok bölünmesini
+    /// engellemek.
+    ///
+    /// SERBEST tipte NULL: dekoratif aydınlatma ve özel imalatta her
+    /// ürün tekildir, mükerrer engeli uygulanmaz.
+    /// </summary>
+    public string? AttributeSignature { get; set; }
+
+    /// <summary>
     /// ESKİ serbest metin kategori. S1'den itibaren yeni kartlarda
     /// kullanılmıyor; arşivlenmiş kartların geçmişini okuyabilmek için
     /// duruyor. Canlıda bir kartın değeri "TURAN" (tedarikçi adı)

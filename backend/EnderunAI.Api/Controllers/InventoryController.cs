@@ -157,48 +157,211 @@ public sealed class InventoryController(
             : Ok(item);
     }
 
+    public sealed record CreateItemRequest(
+        Guid CompanyId,
+        Guid CategoryId,
+        string Unit,
+        Guid[]? OptionIds,
+        /* SERBEST tipte zorunlu, STANDART tipte YOK SAYILIR. */
+        string? Name,
+        string? Brand,
+        string? Model,
+        string? Barcode,
+        decimal MinimumStock,
+        decimal? MaximumStock,
+        decimal? CopperKgPerUnit,
+        int Type,
+        Guid? PreferredSupplierCurrentAccountId,
+        decimal? VatRate,
+        string? Description);
+
+    /// <summary>
+    /// STOK KARTI AÇMA — kategori güdümlü (S2).
+    ///
+    /// Kullanıcı KOD ve AD YAZMAZ:
+    ///   • KOD tam otomatik sıra (100001…), şirket başına, anlamsız.
+    ///     Kod bir kimliktir; ürünü tanımlayan ad ve özelliklerdir.
+    ///   • AD, STANDART kategoride özelliklerden üretilir. Elle yazılan
+    ///     ad aynı malzemeyi üç farklı isimle açtırır ve stoğu böler.
+    ///
+    /// BİRİM kategorinin izin verdiği listeden seçilir ve karta
+    /// sabitlenir; hareket girişi bunu kullanır, seçim sunmaz.
+    ///
+    /// MÜKERRER ENGELİ veritabanı seviyesinde: aynı kategori+özellik
+    /// kombinasyonu şirket içinde ikinci kez açılamaz.
+    /// </summary>
     [HttpPost("items")]
     [RequirePermission(PermissionCatalog.Keys.InventoryCreate)]
-    public async Task<IActionResult> CreateItem(CreateInventoryItemRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateItem(
+        CreateItemRequest request,
+        [FromServices] Services.Inventory.IInventoryCodeService codes,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Unit))
-            return BadRequest(new { message = "Malzeme kodu, adı ve birimi zorunludur." });
-
         if (!Enum.IsDefined(typeof(InventoryItemType), request.Type))
             return BadRequest(new { message = "Geçersiz malzeme tipi." });
 
-        var companyExists = await db.Companies.AnyAsync(x => x.Id == request.CompanyId && x.IsActive, cancellationToken);
-        if (!companyExists) return BadRequest(new { message = "Geçerli bir şirket seçilmelidir." });
+        if (request.VatRate is < 0m or > 100m)
+            return BadRequest(new { message = "KDV oranı 0-100 arasında olmalıdır." });
 
-        var code = request.Code.Trim().ToUpperInvariant();
-        if (await db.InventoryItems.AnyAsync(x => x.CompanyId == request.CompanyId && x.Code == code, cancellationToken))
-            return Conflict(new { message = "Bu malzeme kodu zaten kullanılıyor." });
+        var companyExists = await db.Companies
+            .AnyAsync(x => x.Id == request.CompanyId && x.IsActive, cancellationToken);
+
+        if (!companyExists)
+            return BadRequest(new { message = "Geçerli bir şirket seçilmelidir." });
+
+        var category = await db.InventoryCategories
+            .Include(x => x.AllowedUnits)
+            .Include(x => x.Attributes).ThenInclude(x => x.Options)
+            .SingleOrDefaultAsync(x => x.Id == request.CategoryId, cancellationToken);
+
+        if (category is null)
+            return BadRequest(new { message = "Kategori seçilmelidir." });
+
+        if (!category.IsActive)
+            return BadRequest(new { message = "Arşivlenmiş kategoriye kart açılamaz." });
+
+        // BİRİM KİLİDİ: kategorinin izin verdiği listeden olmalı.
+        var unit = request.Unit?.Trim();
+
+        var allowedUnits = category.AllowedUnits
+            .Where(x => x.IsActive)
+            .Select(x => x.Unit)
+            .ToList();
+
+        if (string.IsNullOrWhiteSpace(unit) ||
+            !allowedUnits.Contains(unit, StringComparer.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                message = $"Birim '{category.Name}' kategorisinin izin verdiği "
+                    + $"birimlerden biri olmalı: {string.Join(", ", allowedUnits)}."
+            });
+        }
+
+        string name;
+        string? signature = null;
+        var selectedOptions = new List<(InventoryAttribute Attribute, InventoryAttributeOption Option)>();
+
+        if (category.Kind == InventoryCategoryKind.Standard)
+        {
+            var optionIds = request.OptionIds ?? [];
+
+            var required = category.Attributes.Where(x => x.IsActive && x.IsRequired).ToList();
+
+            foreach (var attribute in category.Attributes.Where(x => x.IsActive))
+            {
+                var match = attribute.Options
+                    .Where(x => x.IsActive)
+                    .SingleOrDefault(x => optionIds.Contains(x.Id));
+
+                if (match is not null) selectedOptions.Add((attribute, match));
+            }
+
+            var missing = required
+                .Where(attribute => selectedOptions.All(x => x.Attribute.Id != attribute.Id))
+                .Select(x => x.Name)
+                .ToList();
+
+            if (missing.Count > 0)
+                return BadRequest(new
+                {
+                    message = "Şu özellikler seçilmeli: " + string.Join(", ", missing)
+                });
+
+            var selection = selectedOptions
+                .Select(x => new Services.Inventory.InventoryItemComposer.SelectedAttribute(
+                    x.Attribute.Code,
+                    x.Attribute.SortOrder,
+                    x.Option.Value,
+                    x.Option.Display ?? x.Option.Value))
+                .ToList();
+
+            name = Services.Inventory.InventoryItemComposer.BuildName(category.Name, selection);
+            signature = Services.Inventory.InventoryItemComposer.BuildSignature(category.Code, selection);
+
+            // MÜKERRER: dostça mesaj için ÖNCE bakılıyor; asıl garanti
+            // veritabanı indeksi (yarış durumunda o yakalar).
+            var duplicate = await db.InventoryItems
+                .Where(x => x.CompanyId == request.CompanyId && x.AttributeSignature == signature)
+                .Select(x => new { x.Code, x.Name, x.IsActive })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (duplicate is not null)
+            {
+                return Conflict(new
+                {
+                    message = duplicate.IsActive
+                        ? $"Bu malzeme zaten var: {duplicate.Name} ({duplicate.Code})"
+                        : $"Bu malzeme ARŞİVDE var: {duplicate.Name} ({duplicate.Code}). "
+                            + "Yeni kart açmak yerine arşivden geri açın."
+                });
+            }
+        }
+        else
+        {
+            // SERBEST tip: ad elle yazılır, mükerrer engeli uygulanmaz.
+            if (string.IsNullOrWhiteSpace(request.Name))
+                return BadRequest(new
+                {
+                    message = $"'{category.Name}' serbest bir kategori; malzeme adı yazılmalıdır."
+                });
+
+            name = request.Name.Trim();
+        }
 
         var entity = new InventoryItem
         {
             CompanyId = request.CompanyId,
-            Code = code,
-            Name = request.Name.Trim(),
-            Category = request.Category?.Trim(),
+            InventoryCategoryId = category.Id,
+            Code = await codes.NextCodeAsync(request.CompanyId, cancellationToken),
+            Name = name,
+            AttributeSignature = signature,
             Brand = request.Brand?.Trim(),
             Model = request.Model?.Trim(),
-            Unit = request.Unit.Trim(),
+            Unit = unit,
             Barcode = request.Barcode?.Trim(),
             MinimumStock = request.MinimumStock,
-            CopperKgPerUnit = request.CopperKgPerUnit,
             MaximumStock = request.MaximumStock,
+            CopperKgPerUnit = request.CopperKgPerUnit,
             Type = (InventoryItemType)request.Type,
             PreferredSupplierCurrentAccountId = request.PreferredSupplierCurrentAccountId,
             VatRate = request.VatRate,
             Description = request.Description?.Trim()
         };
 
-        if (entity.VatRate is < 0m or > 100m)
-            return BadRequest(new { message = "KDV oranı 0-100 arasında olmalıdır." });
+        foreach (var (attribute, option) in selectedOptions)
+        {
+            entity.AttributeValues.Add(new InventoryItemAttributeValue
+            {
+                InventoryAttributeId = attribute.Id,
+                InventoryAttributeOptionId = option.Id
+            });
+        }
 
         db.InventoryItems.Add(entity);
-        await db.SaveChangesAsync(cancellationToken);
-        return Ok(new { message = "Malzeme kartı oluşturuldu.", entity.Id, entity.Code, entity.Name });
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (signature is not null)
+        {
+            // YARIŞ: iki kullanıcı aynı anda aynı malzemeyi açtı.
+            // Kısmi tekil indeks ikincisini reddetti — çökme yerine
+            // aynı dostça mesaj.
+            return Conflict(new
+            {
+                message = "Bu malzeme az önce başka bir kullanıcı tarafından açıldı."
+            });
+        }
+
+        return Ok(new
+        {
+            message = "Malzeme kartı oluşturuldu.",
+            entity.Id,
+            entity.Code,
+            entity.Name
+        });
     }
 
     [HttpPut("items/{id:guid}")]

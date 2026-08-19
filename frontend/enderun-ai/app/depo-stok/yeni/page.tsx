@@ -1,105 +1,155 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
 import {
   inventoryService,
   type CompanyOption,
-  type CreateInventoryItemRequest,
+  type InventoryCategory,
   type InventoryItemType,
 } from "@/services/inventory.service";
 
-const initialForm: CreateInventoryItemRequest = {
-  companyId: "",
-  code: "",
-  name: "",
-  category: "",
-  brand: "",
-  model: "",
-  unit: "Adet",
-  barcode: "",
-  minimumStock: 0,
-  maximumStock: 0,
-  type: 0,
-};
-
-const UNITS = ["Adet", "Metre", "Kg", "Takım", "Kutu", "Paket", "Rulo"];
-
+/**
+ * STOK KARTI AÇMA — KATEGORİ GÜDÜMLÜ (S2).
+ *
+ * KULLANICI KOD VE AD YAZMAZ:
+ *   • Kod tam otomatik sıra (100001…). Kod bir kimliktir, tanım değil;
+ *     kullanıcının onu düşünmesi, ezberlemesi ya da bilmesi gerekmez.
+ *   • Ad, STANDART kategoride seçilen özelliklerden üretilir. Elle
+ *     yazılan ad aynı malzemeyi üç farklı isimle açtırır ("Kablo Tavası
+ *     200", "200lük kablo tavası", "KABLO TAVASI 200 MM") ve stok
+ *     üçe bölünür.
+ *
+ * SERBEST kategorilerde (dekoratif aydınlatma, özel imalat) ad elle
+ * yazılır ve mükerrer engeli uygulanmaz — her ürün tekildir.
+ */
 export default function CreateInventoryItemPage() {
   const router = useRouter();
 
-  const [form, setForm] = useState<CreateInventoryItemRequest>(initialForm);
-
-  // Ayrı metin durumu: boş bırakmak "bilinmiyor" demek, sıfır demek
-  // değil. Sayı durumunda tutulsaydı boş alan sıfıra düşer ve
-  // malzemenin bakır içermediği iddia edilmiş olurdu.
-  const [copperKgPerUnit, setCopperKgPerUnit] = useState("");
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
-  const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const [categories, setCategories] = useState<InventoryCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [companyId, setCompanyId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [unit, setUnit] = useState("");
+  const [freeName, setFreeName] = useState("");
+
+  /** Özellik kodu → seçilen seçenek kimliği. */
+  const [selection, setSelection] = useState<Record<string, string>>({});
+
+  const [brand, setBrand] = useState("");
+  const [model, setModel] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [minimumStock, setMinimumStock] = useState("0");
+  const [maximumStock, setMaximumStock] = useState("");
+  const [type, setType] = useState<InventoryItemType>(0);
+  const [vatRate, setVatRate] = useState("");
+  const [description, setDescription] = useState("");
+
+  // Ayrı metin durumu: boş bırakmak "bilinmiyor" demek, sıfır değil.
+  // Sayı durumunda tutulsaydı boş alan sıfıra düşer ve malzemenin
+  // bakır içermediği iddia edilmiş olurdu.
+  const [copperKgPerUnit, setCopperKgPerUnit] = useState("");
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     void (async () => {
       try {
-        const data = await inventoryService.getCompanies();
-        setCompanies(data);
+        const [companyData, categoryData] = await Promise.all([
+          inventoryService.getCompanies(),
+          inventoryService.getCategories(),
+        ]);
 
-        if (data.length === 1) {
-          setForm((current) => ({ ...current, companyId: data[0].id }));
-        }
+        setCompanies(companyData);
+        setCategories(categoryData);
+
+        if (companyData.length === 1) setCompanyId(companyData[0].id);
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Şirket listesi yüklenemedi."
-        );
+        setError(err instanceof Error ? err.message : "Veriler yüklenemedi.");
       } finally {
-        setLoadingCompanies(false);
+        setLoading(false);
       }
     })();
   }, []);
 
-  function update<K extends keyof CreateInventoryItemRequest>(
-    key: K,
-    value: CreateInventoryItemRequest[K]
-  ) {
-    setForm((current) => ({ ...current, [key]: value }));
+  const category = categories.find((x) => x.id === categoryId) ?? null;
+  const isFree = category?.kind === 1;
+
+  // Kategori değişince seçim ve birim sıfırlanır: önceki kategorinin
+  // özellikleri yeni kategoride anlamsız, birimi de izinli olmayabilir.
+  function changeCategory(nextId: string) {
+    setCategoryId(nextId);
+    setSelection({});
+    setFreeName("");
+
+    const next = categories.find((x) => x.id === nextId);
+    setUnit(next && next.units.length === 1 ? next.units[0] : "");
   }
 
-  const validationErrors: string[] = [];
-  if (!form.companyId) validationErrors.push("Şirket seçin.");
-  if (!form.code.trim()) validationErrors.push("Malzeme kodu girin.");
-  if (!form.name.trim()) validationErrors.push("Malzeme adı girin.");
-  if (!form.unit.trim()) validationErrors.push("Birim seçin.");
-  if (
-    form.maximumStock > 0 &&
-    form.minimumStock > 0 &&
-    form.maximumStock < form.minimumStock
-  ) {
-    validationErrors.push("Maksimum stok minimumdan küçük olamaz.");
-  }
+  /**
+   * AD ÖNİZLEMESİ — sunucudakiyle aynı kuralı izler: kategori adı +
+   * özellik gösterimleri, ÖZELLİK SIRASINA göre (seçim sırasına değil).
+   */
+  const namePreview = useMemo(() => {
+    if (!category || isFree) return "";
+
+    const parts = category.attributes
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((attribute) => {
+        const optionId = selection[attribute.code];
+        const option = attribute.options.find((x) => x.id === optionId);
+        return option?.display ?? "";
+      })
+      .filter((x) => x.length > 0);
+
+    return [category.name, ...parts].join(" ");
+  }, [category, isFree, selection]);
+
+  const missing = useMemo(() => {
+    if (!category || isFree) return [];
+
+    return category.attributes
+      .filter((attribute) => attribute.isRequired && !selection[attribute.code])
+      .map((attribute) => attribute.name);
+  }, [category, isFree, selection]);
+
+  const validation: string[] = [];
+  if (!companyId) validation.push("Şirket seçin.");
+  if (!categoryId) validation.push("Kategori seçin.");
+  if (categoryId && !unit) validation.push("Birim seçin.");
+  if (isFree && !freeName.trim()) validation.push("Malzeme adını yazın.");
+  if (missing.length > 0)
+    validation.push(`Şu özellikleri seçin: ${missing.join(", ")}`);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
 
-    // Buton pasif bırakılmıyor; eksik varsa ne eksik olduğu yazılıyor.
-    if (validationErrors.length > 0) {
-      setError(validationErrors.join(" "));
-      return;
-    }
+    if (validation.length > 0) return;
 
     setSaving(true);
     setError("");
 
     try {
       await inventoryService.createItem({
-        ...form,
-        code: form.code.trim(),
-        name: form.name.trim(),
-        unit: form.unit.trim(),
-        // Boş bırakılan katsayı sıfır değil "bilinmiyor" demek: sıfır
-        // yazmak, bakır içermediğini iddia etmek olurdu.
+        companyId,
+        categoryId,
+        unit,
+        optionIds: isFree ? [] : Object.values(selection),
+        name: isFree ? freeName.trim() : undefined,
+        brand: brand.trim() || undefined,
+        model: model.trim() || undefined,
+        barcode: barcode.trim() || undefined,
+        minimumStock: Number(minimumStock) || 0,
+        maximumStock: maximumStock.trim() === "" ? null : Number(maximumStock),
+        type,
+        vatRate: vatRate.trim() === "" ? null : Number(vatRate),
+        description: description.trim() || null,
         copperKgPerUnit:
           copperKgPerUnit.trim() === "" ? null : Number(copperKgPerUnit),
       });
@@ -119,30 +169,21 @@ export default function CreateInventoryItemPage() {
     <ErpShell
       design="redwood"
       title="Yeni Malzeme Kartı"
-      description="Şirket genelinde kullanılacak malzeme veya demirbaş kartı"
+      description="Kategori seçin, özellikleri işaretleyin — kod ve ad otomatik oluşur"
     >
       {error && <div className="erp-alert error">{error}</div>}
 
       <form className="erp-form-card" onSubmit={submit}>
-        <div className="erp-form-header">
-          <h2>Kart Bilgileri</h2>
-          <p>
-            Kod ve ad zorunlu. Minimum stok girilirse kalem, seviyenin altına
-            düştüğünde panelde ve Hızır brifinginde kritik olarak görünür.
-          </p>
-        </div>
-
         <div className="erp-form-grid">
           <label>
             <span>Şirket *</span>
             <select
-              value={form.companyId}
-              onChange={(event) => update("companyId", event.target.value)}
-              disabled={loadingCompanies}
+              required
+              value={companyId}
+              onChange={(event) => setCompanyId(event.target.value)}
+              disabled={loading}
             >
-              <option value="">
-                {loadingCompanies ? "Yükleniyor..." : "Şirket seçin"}
-              </option>
+              <option value="">Seçin</option>
               {companies.map((company) => (
                 <option key={company.id} value={company.id}>
                   {company.name}
@@ -152,91 +193,124 @@ export default function CreateInventoryItemPage() {
           </label>
 
           <label>
-            <span>Malzeme Tipi *</span>
+            <span>Kategori *</span>
             <select
-              value={form.type}
-              onChange={(event) =>
-                update("type", Number(event.target.value) as InventoryItemType)
-              }
+              required
+              value={categoryId}
+              onChange={(event) => changeCategory(event.target.value)}
+              disabled={loading}
             >
-              <option value={0}>Stok malzemesi</option>
-              <option value={1}>Sarf malzemesi</option>
-              <option value={2}>Demirbaş</option>
-            </select>
-          </label>
-
-          <label>
-            <span>Malzeme Kodu *</span>
-            <input
-              type="text"
-              value={form.code}
-              onChange={(event) => update("code", event.target.value)}
-              placeholder="Örn. ELK-KBL-0001"
-            />
-          </label>
-
-          <label>
-            <span>Malzeme Adı *</span>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(event) => update("name", event.target.value)}
-              placeholder="Örn. NYY 5x10 mm² kablo"
-            />
-          </label>
-
-          <label>
-            <span>Kategori</span>
-            <input
-              type="text"
-              value={form.category}
-              onChange={(event) => update("category", event.target.value)}
-              placeholder="Örn. Enerji kabloları"
-            />
-          </label>
-
-          <label>
-            <span>Birim *</span>
-            <select
-              value={form.unit}
-              onChange={(event) => update("unit", event.target.value)}
-            >
-              {UNITS.map((unit) => (
-                <option key={unit} value={unit}>
-                  {unit}
+              <option value="">Seçin</option>
+              {categories.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                  {option.kind === 1 ? " (serbest)" : ""}
                 </option>
               ))}
             </select>
           </label>
 
+          {category && (
+            <label>
+              <span>Birim *</span>
+              <select
+                required
+                value={unit}
+                onChange={(event) => setUnit(event.target.value)}
+                /* Tek birimli kategoride seçim yok — zaten sabit. */
+                disabled={category.units.length === 1}
+              >
+                {category.units.length !== 1 && <option value="">Seçin</option>}
+                {category.units.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <small>Kart açıldıktan sonra birim değişmez.</small>
+            </label>
+          )}
+        </div>
+
+        {category && !isFree && category.attributes.length > 0 && (
+          <>
+            <h2>Özellikler</h2>
+
+            <div className="erp-form-grid">
+              {category.attributes
+                .slice()
+                .sort((a, b) => a.sortOrder - b.sortOrder)
+                .map((attribute) => (
+                  <label key={attribute.id}>
+                    <span>
+                      {attribute.name}
+                      {attribute.isRequired ? " *" : ""}
+                    </span>
+
+                    <select
+                      value={selection[attribute.code] ?? ""}
+                      onChange={(event) =>
+                        setSelection((current) => ({
+                          ...current,
+                          [attribute.code]: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Seçin</option>
+                      {attribute.options.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.display}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+            </div>
+
+            {namePreview && (
+              <div className="erp-panel rw-panel-highlight">
+                <strong>Oluşacak ad:</strong> {namePreview}
+                <small style={{ display: "block" }}>
+                  Ad özelliklerden üretilir; elle yazılmaz. Aynı özellik
+                  kombinasyonu ikinci kez kart olamaz.
+                </small>
+              </div>
+            )}
+          </>
+        )}
+
+        {isFree && (
+          <label className="span-2">
+            <span>Malzeme Adı *</span>
+            <input
+              required
+              value={freeName}
+              onChange={(event) => setFreeName(event.target.value)}
+              placeholder="Lento Sarkıt 3'lü Siyah Gold"
+            />
+            <small>
+              Serbest kategori: ad elle yazılır ve mükerrer engeli
+              uygulanmaz — her ürün tekildir.
+            </small>
+          </label>
+        )}
+
+        <h2>Diğer bilgiler</h2>
+
+        <div className="erp-form-grid">
           <label>
             <span>Marka</span>
-            <input
-              type="text"
-              value={form.brand}
-              onChange={(event) => update("brand", event.target.value)}
-              placeholder="Örn. Öznur"
-            />
+            <input value={brand} onChange={(e) => setBrand(e.target.value)} />
           </label>
 
           <label>
             <span>Model</span>
-            <input
-              type="text"
-              value={form.model}
-              onChange={(event) => update("model", event.target.value)}
-              placeholder="Model veya üretici kodu"
-            />
+            <input value={model} onChange={(e) => setModel(e.target.value)} />
           </label>
 
           <label>
             <span>Barkod</span>
-            <input
-              type="text"
-              value={form.barcode}
-              onChange={(event) => update("barcode", event.target.value)}
-              placeholder="Barkod numarası"
-            />
+            <input value={barcode} onChange={(e) => setBarcode(e.target.value)} />
           </label>
 
           <label>
@@ -244,30 +318,10 @@ export default function CreateInventoryItemPage() {
             <input
               type="number"
               min="0"
-              step="0.01"
-              value={form.minimumStock}
-              onChange={(event) =>
-                update("minimumStock", Number(event.target.value))
-              }
-            />
-            <small>0 bırakılırsa kritik stok uyarısı üretilmez.</small>
-          </label>
-
-          <label>
-            <span>Bakır Katsayısı (kg/birim)</span>
-            <input
-              type="number"
-              min="0"
               step="0.0001"
-              value={copperKgPerUnit}
-              onChange={(event) => setCopperKgPerUnit(event.target.value)}
-              placeholder="Örn. 0,0675"
+              value={minimumStock}
+              onChange={(e) => setMinimumStock(e.target.value)}
             />
-            <small>
-              Birim başına bakır miktarı. Bakır maruziyeti raporu yalnızca bu
-              alandan beslenir; boş bırakılan malzeme emtia riskine hiç
-              girmez.
-            </small>
           </label>
 
           <label>
@@ -275,26 +329,75 @@ export default function CreateInventoryItemPage() {
             <input
               type="number"
               min="0"
+              step="0.0001"
+              value={maximumStock}
+              onChange={(e) => setMaximumStock(e.target.value)}
+            />
+          </label>
+
+          <label>
+            <span>Tip</span>
+            <select
+              value={type}
+              onChange={(e) => setType(Number(e.target.value) as InventoryItemType)}
+            >
+              <option value={0}>Malzeme</option>
+              <option value={1}>Ekipman</option>
+              <option value={2}>Sarf</option>
+              <option value={3}>Yedek Parça</option>
+            </select>
+          </label>
+
+          <label>
+            <span>KDV Oranı (%)</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
               step="0.01"
-              value={form.maximumStock}
-              onChange={(event) =>
-                update("maximumStock", Number(event.target.value))
-              }
+              value={vatRate}
+              onChange={(e) => setVatRate(e.target.value)}
+            />
+          </label>
+
+          <label>
+            <span>Birim Başına Bakır (kg)</span>
+            <input
+              type="number"
+              min="0"
+              step="0.0001"
+              value={copperKgPerUnit}
+              onChange={(e) => setCopperKgPerUnit(e.target.value)}
+            />
+            <small>Boş bırakmak &quot;bilinmiyor&quot; demek, sıfır değil.</small>
+          </label>
+
+          <label className="span-2">
+            <span>Açıklama</span>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
             />
           </label>
         </div>
 
-        <div className="erp-form-actions">
-          <button
-            type="button"
-            className="erp-secondary-button"
-            onClick={() => router.push("/depo-stok")}
-          >
-            Vazgeç
-          </button>
+        {validation.length > 0 && (
+          <div className="erp-alert warning">
+            <ul>
+              {validation.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-          <button type="submit" className="erp-primary-button" disabled={saving}>
-            {saving ? "Kaydediliyor..." : "Malzeme Kartını Oluştur"}
+        <div className="erp-actions">
+          <button
+            type="submit"
+            className="erp-primary-button"
+            disabled={saving || loading || validation.length > 0}
+          >
+            {saving ? "Kaydediliyor…" : "Kartı Oluştur"}
           </button>
         </div>
       </form>

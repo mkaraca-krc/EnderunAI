@@ -359,6 +359,40 @@ doğruluyor.
 Yönetim ekranı `/depo-stok/kategoriler` (menü + rota yetkisi kayıtlı).
 Üç sonda da yakaladı. Tam tur 2270/2270.
 
+**S2 (bitti) — otomatik kod, otomatik ad, mükerrer engeli.**
+
+KARARLAR: kod atomik düz sıra (100001+) şirket başına · ad kategori +
+özellik `Display` değerlerinden · mükerrer kontrolü ŞİRKET İÇİ.
+
+- **Kod**: `InventoryCodeService`, tek `INSERT … ON CONFLICT DO UPDATE
+  … RETURNING`. Mevcut `IDocumentNumberService` kullanılamadı: (1)
+  `ÖNEK-YIL-NNNNNN` üretiyor, ön ek istenmiyor; (2) sıra YILA BAĞLI —
+  2027'de açılan kart 2026'nın 100001'iyle çakışırdı; (3) artırması
+  KİLİTSİZ, eşzamanlı iki kart aynı numarayı alıp tekil indekste
+  çökerdi. Yıl kolonuna 0 yazılıyor: "yıl kırılımı yok".
+- **Ad**: kategori adı + özellik gösterimleri, ÖZELLİK sırasına göre.
+- **Mükerrer**: `InventoryItem.AttributeSignature` + `(CompanyId,
+  AttributeSignature)` KISMİ tekil indeks (SERBEST kartlarda null).
+  Sorguyla kontrol yarışa açıktı; şimdi dostça mesaj için önce sorgu,
+  asıl garanti indeks, yarışta `DbUpdateException` yakalanıyor.
+  **Arşivdeki mükerrer "geri açın" diyor** — yoksa arşivleme mükerrer
+  engelini delerdi.
+
+**KALDIRILAN YETENEK (bilerek):** fatura ekranındaki İKİ ALANLIK hızlı
+kart açma. Tam olarak o kısayol sınıflandırılmamış kart üretiyordu.
+Yerine yeni sekmede doğru ekrana yönlendirme kondu.
+
+**SONDANIN KAÇIRMASI EN DEĞERLİ BULGU OLDU:** `BuildSignature`'daki
+sıralama kaldırıldığında uçtan uca test yine geçti — çünkü kontrolcü
+seçenekleri kategori sırasına göre topluyor ve besleme sırası uca
+gelmeden normalleşiyor. O normalleştirme kontrolcünün TESADÜFİ
+davranışı; toplama biçimi değişirse imza seçim sırasına bağlı hale
+gelir ve mükerrer engeli sessizce delinir. Kural kaynağında saf birim
+testleriyle sabitlendi (`InventoryItemComposerTests`, 6 test); sonda
+tekrarında YAKALADI.
+
+Tam tur 2286/2286, frontend 354/354.
+
 ---
 
 ## 3. Sıradaki paketler

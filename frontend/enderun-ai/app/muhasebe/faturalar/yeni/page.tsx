@@ -146,11 +146,6 @@ export default function NewSupplierInvoicePage() {
   const [items, setItems] = useState<DraftItem[]>([emptyItem("20")]);
 
   const [newCardIndex, setNewCardIndex] = useState<number | null>(null);
-  const [newCardCode, setNewCardCode] = useState("");
-  const [newCardName, setNewCardName] = useState("");
-  const [newCardUnit, setNewCardUnit] = useState("adet");
-  const [newCardSaving, setNewCardSaving] = useState(false);
-  const [newCardError, setNewCardError] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -451,47 +446,6 @@ export default function NewSupplierInvoicePage() {
     });
   }
 
-  async function createInventoryCard() {
-    if (newCardIndex === null) return;
-
-    if (!newCardCode.trim() || !newCardName.trim()) {
-      setNewCardError("Kart kodu ve adı zorunludur.");
-      return;
-    }
-
-    setNewCardSaving(true);
-    setNewCardError("");
-
-    try {
-      const created = await inventoryService.createItem({
-        companyId,
-        code: newCardCode.trim(),
-        name: newCardName.trim(),
-        unit: newCardUnit.trim() || "adet",
-        minimumStock: 0,
-        maximumStock: 0,
-        type: 0,
-      });
-
-      // Listeyi yeniden çekmek yerine kartı ekliyoruz: kullanıcı
-      // faturanın ortasında, tüm stok listesinin yeniden yüklenmesini
-      // beklememeli.
-      const refreshed = await inventoryService.getItems({ companyId });
-      setInventoryItems(refreshed.filter((item) => item.isActive));
-
-      chooseInventoryItem(newCardIndex, created.id);
-      setNewCardIndex(null);
-      setNewCardCode("");
-      setNewCardName("");
-      setNewCardUnit("adet");
-    } catch (err) {
-      setNewCardError(
-        err instanceof Error ? err.message : "Stok kartı oluşturulamadı."
-      );
-    } finally {
-      setNewCardSaving(false);
-    }
-  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -828,13 +782,7 @@ export default function NewSupplierInvoicePage() {
                           onChange={(next) => chooseInventoryItem(index, next)}
                           placeholder="Kart ara (kod, isim, marka)"
                           emptyMessage="Eşleşen stok kartı yok."
-                          onCreate={(typed) => {
-                            setNewCardIndex(index);
-                            setNewCardName(typed || item.description);
-                            setNewCardCode("");
-                            setNewCardUnit(item.unit || "adet");
-                            setNewCardError("");
-                          }}
+                          onCreate={() => setNewCardIndex(index)}
                           createLabel="Yeni stok kartı"
                         />
                       ) : (
@@ -982,43 +930,28 @@ export default function NewSupplierInvoicePage() {
         <div className="erp-modal-backdrop" role="presentation">
           <div className="erp-modal" role="dialog" aria-modal="true">
             <div className="erp-form-header">
-              <h2>Yeni Stok Kartı</h2>
+              <h2>Stok Kartı Bulunamadı</h2>
               <p>
-                Kart oluşturulunca kalem otomatik olarak bu kartla eşleşir.
-                Ayrıntılar sonradan Depo ekranından tamamlanabilir.
+                Kart açmak artık <strong>kategori seçimi</strong> gerektiriyor:
+                birim, özellikler ve mükerrer engeli oradan geliyor.
               </p>
             </div>
 
-            {newCardError && <div className="erp-alert error">{newCardError}</div>}
+            {/*
+              HIZLI KART AÇMA KALDIRILDI (S2).
 
-            <div className="erp-form-grid">
-              <label>
-                <span>Kart Kodu *</span>
-                <input
-                  type="text"
-                  value={newCardCode}
-                  onChange={(e) => setNewCardCode(e.target.value)}
-                  placeholder="Örn. KBL-3X25"
-                />
-              </label>
+              Burada iki alan vardı — kod ve ad — ve tam olarak bu
+              kısayol sınıflandırılmamış kart üretiyordu: canlıda bir
+              kartın kategorisi "TURAN" (tedarikçi adı) yazıyordu,
+              dördünde kategori boştu.
 
-              <label>
-                <span>Kart Adı *</span>
-                <input
-                  type="text"
-                  value={newCardName}
-                  onChange={(e) => setNewCardName(e.target.value)}
-                />
-              </label>
-
-              <label>
-                <span>Birim</span>
-                <input
-                  type="text"
-                  value={newCardUnit}
-                  onChange={(e) => setNewCardUnit(e.target.value)}
-                />
-              </label>
+              Kod artık otomatik, ad özelliklerden üretiliyor ve aynı
+              malzeme ikinci kez açılamıyor. Bunların hiçbiri iki
+              alanlık bir kutuya sığmaz; sığdırmaya çalışmak yeni
+              "TURAN"lar üretirdi.
+            */}
+            <div className="erp-alert warning">
+              Faturayı kaybetmeden yeni sekmede kart açıp buraya dönebilirsiniz.
             </div>
 
             <div className="erp-form-actions">
@@ -1029,14 +962,15 @@ export default function NewSupplierInvoicePage() {
               >
                 Vazgeç
               </button>
-              <button
-                type="button"
+
+              <a
                 className="erp-primary-button"
-                disabled={newCardSaving}
-                onClick={() => void createInventoryCard()}
+                href="/depo-stok/yeni"
+                target="_blank"
+                rel="noreferrer"
               >
-                {newCardSaving ? "Oluşturuluyor..." : "Kartı Oluştur ve Seç"}
-              </button>
+                Yeni Sekmede Kart Aç
+              </a>
             </div>
           </div>
         </div>
