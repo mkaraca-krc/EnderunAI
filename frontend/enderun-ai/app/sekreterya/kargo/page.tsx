@@ -1,14 +1,12 @@
 "use client";
 
-import {
-  FormEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { useModuleActions } from "@/lib/auth/module-actions";
 
@@ -372,6 +370,119 @@ export default function CargoPage() {
       setProcessingId("");
     }
   }
+
+
+  /*
+   * Durum sütunu ETKİLEŞİMLİ (açılır liste ile durum değiştiriliyor);
+   * dosyaya giden değer yalnız durumun adı.
+   */
+  /*
+   * SÜTUNLAR HER RENDER'DA KURULUYOR — bilerek.
+   *
+   * `useMemo` ile belleğe almak, eylem işleyicilerini bağımlılıktan
+   * çıkarmayı gerektiriyordu; o da BAYAT KAPANIŞ demek: düğme eski
+   * durumu görüp yanlış kayıt üzerinde çalışabilirdi. Sütun dizisi
+   * ucuz bir nesne; doğruluğu hıza tercih ediyoruz.
+   */
+  const columns: DataTableColumn<CargoItem>[] = [
+      {
+        key: "yon",
+        header: "Yön",
+        value: (item) => directionLabels[item.direction],
+      },
+      {
+        key: "takip",
+        header: "Takip No",
+        value: (item) => item.trackingNumber,
+        render: (item) => (
+          <span className="font-medium">{item.trackingNumber}</span>
+        ),
+      },
+      { key: "firma", header: "Kargo Firması", value: (item) => item.cargoCompany },
+      {
+        key: "kurum",
+        header: "Kurum",
+        value: (item) => item.institutionName || "—",
+      },
+      {
+        key: "kisi",
+        header: "Gönderen / Alıcı",
+        value: (item) =>
+          item.direction === CargoDirection.Incoming
+            ? item.senderName || "—"
+            : item.recipientName || "—",
+      },
+      {
+        key: "tarih",
+        header: "Tarih",
+        value: (item) => formatDate(item.cargoDate),
+      },
+      {
+        key: "teslim",
+        header: "Beklenen Teslim",
+        value: (item) => formatDate(item.expectedDeliveryDate),
+      },
+      {
+        key: "durum",
+        header: "Durum",
+        value: (item) =>
+          item.deliveredToName
+            ? `${statusLabels[item.status]} (teslim alan: ${item.deliveredToName})`
+            : statusLabels[item.status],
+        render: (item) => (
+          <>
+            <select
+              disabled={processingId === item.id}
+              className="rounded-lg border px-2 py-1 text-sm"
+              value={item.status}
+              onChange={(event) => {
+                const next = Number(event.target.value) as CargoStatus;
+
+                // "Teslim edildi" kimin aldığını sorar; diğer
+                // geçişler doğrudan uygulanır.
+                if (next === CargoStatus.Delivered) {
+                  setHandoverName(item.deliveredToName || "");
+                  setDelivery(item);
+                  return;
+                }
+
+                void changeStatus(item, next);
+              }}
+            >
+              {Object.entries(statusLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+
+            {item.deliveredToName && (
+              <div className="mt-1 text-xs text-slate-500">
+                Teslim alan: {item.deliveredToName}
+              </div>
+            )}
+          </>
+        ),
+      },
+      {
+        key: "islemler",
+        header: "İşlemler",
+        align: "right",
+        value: () => "",
+        render: (item) =>
+          actions.can("manage") ? (
+            <button
+              type="button"
+              disabled={processingId === item.id}
+              onClick={() => setPending(item.id)}
+              className="text-sm font-medium text-red-600 disabled:opacity-50"
+            >
+              {processingId === item.id ? "İşleniyor..." : "Sil"}
+            </button>
+          ) : null,
+      },
+  ];
+
 
   return (
     <ErpShell
@@ -772,183 +883,14 @@ export default function CargoPage() {
 
         <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1200px] text-left text-sm">
-              <thead className="border-b bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3">
-                    Yön
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Takip No
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Kargo Firması
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Kurum
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Gönderen / Alıcı
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Tarih
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Beklenen Teslim
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Durum
-                  </th>
-
-                  <th className="px-4 py-3 text-right">
-                    İşlemler
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td
-                      className="px-4 py-8 text-center"
-                      colSpan={9}
-                    >
-                      Yükleniyor...
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td
-                      className="px-4 py-8 text-center"
-                      colSpan={9}
-                    >
-                      Kargo kaydı bulunamadı.
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b last:border-0"
-                    >
-                      <td className="px-4 py-3">
-                        {
-                          directionLabels[
-                            item.direction
-                          ]
-                        }
-                      </td>
-
-                      <td className="px-4 py-3 font-medium">
-                        {item.trackingNumber}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {item.cargoCompany}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {item.institutionName ||
-                          "—"}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {item.direction ===
-                        CargoDirection.Incoming
-                          ? item.senderName || "—"
-                          : item.recipientName ||
-                            "—"}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {formatDate(
-                          item.cargoDate
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {formatDate(
-                          item.expectedDeliveryDate
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <select
-                          disabled={
-                            processingId === item.id
-                          }
-                          className="rounded-lg border px-2 py-1 text-sm"
-                          value={item.status}
-                          onChange={(event) => {
-                            const next = Number(
-                              event.target.value
-                            ) as CargoStatus;
-
-                            // "Teslim edildi" kimin aldığını sorar;
-                            // diğer geçişler doğrudan uygulanır.
-                            if (next === CargoStatus.Delivered) {
-                              setHandoverName(
-                                item.deliveredToName || ""
-                              );
-                              setDelivery(item);
-                              return;
-                            }
-
-                            void changeStatus(item, next);
-                          }}
-                        >
-                          {Object.entries(
-                            statusLabels
-                          ).map(
-                            ([value, label]) => (
-                              <option
-                                key={value}
-                                value={value}
-                              >
-                                {label}
-                              </option>
-                            )
-                          )}
-                        </select>
-
-                        {item.deliveredToName && (
-                          <div className="mt-1 text-xs text-slate-500">
-                            Teslim alan:{" "}
-                            {item.deliveredToName}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3 text-right">
-                        {actions.can("manage") && (
-                          <button
-                            type="button"
-                            disabled={
-                              processingId === item.id
-                            }
-                            onClick={() =>
-                              setPending(item.id)
-                            }
-                            className="text-sm font-medium text-red-600 disabled:opacity-50"
-                          >
-                            {processingId === item.id
-                              ? "İşleniyor..."
-                              : "Sil"}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <DataTable
+              rows={items}
+              columns={columns}
+              rowKey={(item) => item.id}
+              loading={loading}
+              title="Kargo Takibi"
+              emptyText="Kargo kaydı bulunamadı."
+            />
           </div>
         </section>
       </div>

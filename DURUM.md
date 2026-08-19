@@ -258,6 +258,19 @@ araç.
 `muhasebe/fisler`, `depo-stok/depolar`, `depo-stok/iadeler`.
 Ham tablo sayısı **70 → 63**.
 
+**F4b (bitti):** `sekreterya/evrak`, `sekreterya/ziyaretciler`,
+`sekreterya/kargo`, `isg/belgeler`, `demirbas/servis`.
+Ham tablo sayısı **63 → 58**.
+
+F4b'de bir desen kararı: eylem sütunu taşıyan ekranlarda sütun dizisi
+`useMemo` ile belleğe ALINMIYOR. Bellek alma, işleyicileri
+bağımlılıktan çıkarmayı gerektiriyordu; o da BAYAT KAPANIŞ demek —
+düğme eski durumu görüp yanlış kayıt üzerinde çalışabilirdi. Sütun
+dizisi ucuz bir nesne; doğruluk hıza tercih edildi.
+
+**F4 kalan:** 58 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
+`cariler`, `finans/*`, `insan-kaynaklari/*` aileleri.
+
 Yan fayda: `sirketler` ve `subeler` PASİF kaydı da YEŞİL rozetle
 gösteriyordu (`erp-status green` sabitti) — rozet renginin taşıdığını
 iddia ettiği bilgi yanlıştı, düzeltildi.

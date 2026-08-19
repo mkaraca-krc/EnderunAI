@@ -1,14 +1,12 @@
 "use client";
 
-import {
-  FormEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { dateTime } from "@/lib/format/turkish";
 import { useModuleActions } from "@/lib/auth/module-actions";
@@ -390,6 +388,112 @@ export default function VisitorsPage() {
       setProcessingId("");
     }
   }
+
+
+  /* Eylem sütunu duruma ve yetkiye bağlı; çıktıya girmez. */
+  const columns = useMemo<DataTableColumn<VisitorItem>[]>(
+    () => [
+      {
+        key: "ziyaretci",
+        header: "Ziyaretçi",
+        value: (item) =>
+          [item.fullName, item.phoneNumber, item.vehiclePlate]
+            .filter(Boolean)
+            .join(" · "),
+        render: (item) => (
+          <>
+            <div className="font-medium">{item.fullName}</div>
+            <div className="text-xs text-slate-500">
+              {item.phoneNumber || "Telefon yok"}
+              {item.vehiclePlate ? ` · ${item.vehiclePlate}` : ""}
+            </div>
+          </>
+        ),
+      },
+      { key: "firma", header: "Firma", value: (item) => item.companyName || "—" },
+      {
+        key: "kisi",
+        header: "Ziyaret Edilecek",
+        value: (item) =>
+          [item.personToVisit, item.departmentName].filter(Boolean).join(" / "),
+        render: (item) => (
+          <>
+            <div>{item.personToVisit}</div>
+            <div className="text-xs text-slate-500">
+              {item.departmentName || ""}
+            </div>
+          </>
+        ),
+      },
+      { key: "amac", header: "Amaç", value: (item) => item.visitPurpose },
+      {
+        key: "planlanan",
+        header: "Planlanan Tarih",
+        value: (item) => formatDateTime(item.plannedVisitAtUtc),
+      },
+      {
+        key: "giris",
+        header: "Giriş",
+        value: (item) => formatDateTime(item.checkInAtUtc),
+      },
+      {
+        key: "cikis",
+        header: "Çıkış",
+        value: (item) => formatDateTime(item.checkOutAtUtc),
+      },
+      {
+        key: "durum",
+        header: "Durum",
+        value: (item) => statusLabels[item.status] ?? item.statusName,
+      },
+      {
+        key: "islemler",
+        header: "İşlemler",
+        align: "right",
+        value: () => "",
+        render: (item) => (
+          <div className="flex justify-end gap-3">
+            {item.status === VisitorStatus.Expected &&
+              actions.can("manage") && (
+                <button
+                  type="button"
+                  disabled={processingId === item.id}
+                  onClick={() => setPending({ kind: "check-in", item })}
+                  className="font-medium text-green-700 disabled:opacity-50"
+                >
+                  Giriş
+                </button>
+              )}
+
+            {item.status === VisitorStatus.CheckedIn &&
+              actions.can("manage") && (
+                <button
+                  type="button"
+                  disabled={processingId === item.id}
+                  onClick={() => setPending({ kind: "check-out", item })}
+                  className="font-medium text-blue-700 disabled:opacity-50"
+                >
+                  Çıkış
+                </button>
+              )}
+
+            {actions.can("manage") && (
+              <button
+                type="button"
+                disabled={processingId === item.id}
+                onClick={() => setPending({ kind: "delete", item })}
+                className="font-medium text-red-600 disabled:opacity-50"
+              >
+                {processingId === item.id ? "İşleniyor..." : "Sil"}
+              </button>
+            )}
+          </div>
+        ),
+      },
+    ],
+    [actions, processingId]
+  );
+
 
   return (
     <ErpShell
@@ -840,183 +944,14 @@ export default function VisitorsPage() {
 
         <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1300px] text-left text-sm">
-              <thead className="border-b bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3">
-                    Ziyaretçi
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Firma
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Ziyaret Edilecek
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Amaç
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Planlanan Tarih
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Giriş
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Çıkış
-                  </th>
-
-                  <th className="px-4 py-3">
-                    Durum
-                  </th>
-
-                  <th className="px-4 py-3 text-right">
-                    İşlemler
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td
-                      className="px-4 py-8 text-center"
-                      colSpan={9}
-                    >
-                      Yükleniyor...
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td
-                      className="px-4 py-8 text-center"
-                      colSpan={9}
-                    >
-                      Ziyaretçi kaydı bulunamadı.
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b last:border-0"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="font-medium">
-                          {item.fullName}
-                        </div>
-
-                        <div className="text-xs text-slate-500">
-                          {item.phoneNumber || "Telefon yok"}
-                          {item.vehiclePlate
-                            ? ` · ${item.vehiclePlate}`
-                            : ""}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {item.companyName || "—"}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div>
-                          {item.personToVisit}
-                        </div>
-
-                        <div className="text-xs text-slate-500">
-                          {item.departmentName || ""}
-                        </div>
-                      </td>
-
-                      <td className="max-w-xs px-4 py-3">
-                        {item.visitPurpose}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {formatDateTime(
-                          item.plannedVisitAtUtc
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {formatDateTime(
-                          item.checkInAtUtc
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {formatDateTime(
-                          item.checkOutAtUtc
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {statusLabels[item.status] ??
-                          item.statusName}
-                      </td>
-
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-3">
-                          {item.status ===
-                            VisitorStatus.Expected && actions.can("manage") && (
-                            <button
-                              type="button"
-                              disabled={
-                                processingId === item.id
-                              }
-                              onClick={() =>
-                                setPending({ kind: "check-in", item })
-                              }
-                              className="font-medium text-green-700 disabled:opacity-50"
-                            >
-                              Giriş
-                            </button>
-                          )}
-
-                          {item.status ===
-                            VisitorStatus.CheckedIn && actions.can("manage") && (
-                            <button
-                              type="button"
-                              disabled={
-                                processingId === item.id
-                              }
-                              onClick={() =>
-                                setPending({ kind: "check-out", item })
-                              }
-                              className="font-medium text-blue-700 disabled:opacity-50"
-                            >
-                              Çıkış
-                            </button>
-                          )}
-
-                          {actions.can("manage") && (
-                            <button
-                              type="button"
-                              disabled={
-                                processingId === item.id
-                              }
-                              onClick={() =>
-                                setPending({ kind: "delete", item })
-                              }
-                              className="font-medium text-red-600 disabled:opacity-50"
-                            >
-                              {processingId === item.id
-                                ? "İşleniyor..."
-                                : "Sil"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <DataTable
+              rows={items}
+              columns={columns}
+              rowKey={(item) => item.id}
+              loading={loading}
+              title="Ziyaretçi Kayıtları"
+              emptyText="Ziyaretçi kaydı bulunamadı."
+            />
           </div>
         </section>
       </div>

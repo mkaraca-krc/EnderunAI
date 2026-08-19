@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   DataTable,
@@ -207,7 +207,12 @@ export default function WarehousesPage() {
    * SÜTUNLAR YETKİYE BAĞLI. "Düzenle" sütunu yalnız yetkiliye
    * gösterilir; dışa aktarmada da yer kaplamaz.
    */
-  const columns = useMemo<DataTableColumn<WarehouseListItem>[]>(() => {
+  /*
+   * SÜTUNLAR HER RENDER'DA KURULUYOR — bilerek. `useMemo` ile
+   * belleğe almak `startEdit`i bağımlılıktan çıkarmayı gerektiriyordu;
+   * o da bayat kapanış demek.
+   */
+  const columns: DataTableColumn<WarehouseListItem>[] = (() => {
     const base: DataTableColumn<WarehouseListItem>[] = [
       {
         key: "kod",
@@ -292,11 +297,7 @@ export default function WarehousesPage() {
         ),
       },
     ];
-    // `startEdit` her render'da yeniden kuruluyor; bağımlılığa
-    // konsaydı sütunlar her render'da baştan hesaplanır ve useMemo
-    // hiçbir işe yaramazdı. Sütun tanımı yalnız YETKİYE bağlı.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canManage]);
+  })();
 
 
   return (

@@ -1,14 +1,12 @@
 "use client";
 
-import {
-  FormEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog } from "@/components/ui";
 import CorrespondenceDetailModal from "@/components/secretariat/correspondence-detail-modal";
@@ -294,6 +292,89 @@ export default function CorrespondencePage() {
       setProcessingId("");
     }
   }
+
+
+  /* Eylem sütunu yetkiye bağlı; dosyaya ve kâğıda yazılmaz. */
+  const columns = useMemo<DataTableColumn<CorrespondenceItem>[]>(
+    () => [
+      {
+        key: "yon",
+        header: "Yön",
+        value: (item) => directionLabels[item.direction],
+      },
+      {
+        key: "no",
+        header: "Evrak No",
+        value: (item) => item.documentNumber,
+        render: (item) => (
+          <span className="font-medium">{item.documentNumber}</span>
+        ),
+      },
+      { key: "konu", header: "Konu", value: (item) => item.subject },
+      {
+        key: "kurum",
+        header: "Kurum",
+        value: (item) => item.institutionName || "—",
+      },
+      {
+        key: "kisi",
+        header: "Gönderen / Alıcı",
+        value: (item) =>
+          item.direction === CorrespondenceDirection.Incoming
+            ? item.senderName || "—"
+            : item.recipientName || "—",
+      },
+      {
+        key: "tarih",
+        header: "Evrak Tarihi",
+        value: (item) => formatDate(item.documentDate),
+      },
+      {
+        key: "durum",
+        header: "Durum",
+        value: (item) => statusLabels[item.status] ?? item.statusName,
+      },
+      {
+        key: "islem",
+        header: "İşlem",
+        align: "right",
+        value: () => "",
+        render: (item) => (
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() =>
+                setDetailTarget({ id: item.id, direction: item.direction })
+              }
+              className="text-sm font-medium text-brand-700 underline"
+            >
+              Detay
+              {item.attachmentCount > 0 && ` (${item.attachmentCount} ek)`}
+            </button>
+
+            {actions.can("delete") && (
+              <button
+                type="button"
+                disabled={processingId === item.id}
+                onClick={() =>
+                  setPending({
+                    id: item.id,
+                    direction: item.direction,
+                    subject: item.subject,
+                  })
+                }
+                className="text-sm font-medium text-red-600 disabled:opacity-50"
+              >
+                {processingId === item.id ? "Siliniyor..." : "Sil"}
+              </button>
+            )}
+          </div>
+        ),
+      },
+    ],
+    [actions, processingId]
+  );
+
 
   return (
     <ErpShell design="redwood" title="Sekreterya">
@@ -637,110 +718,14 @@ export default function CorrespondencePage() {
 
         <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-left text-sm">
-              <thead className="border-b bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3">Yön</th>
-                  <th className="px-4 py-3">Evrak No</th>
-                  <th className="px-4 py-3">Konu</th>
-                  <th className="px-4 py-3">Kurum</th>
-                  <th className="px-4 py-3">Gönderen / Alıcı</th>
-                  <th className="px-4 py-3">Evrak Tarihi</th>
-                  <th className="px-4 py-3">Durum</th>
-                  <th className="px-4 py-3 text-right">İşlem</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td className="px-4 py-8 text-center" colSpan={8}>
-                      Yükleniyor...
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-8 text-center" colSpan={8}>
-                      Evrak kaydı bulunamadı.
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr key={item.id} className="border-b last:border-0">
-                      <td className="px-4 py-3">
-                        {directionLabels[item.direction]}
-                      </td>
-
-                      <td className="px-4 py-3 font-medium">
-                        {item.documentNumber}
-                      </td>
-
-                      <td className="max-w-xs px-4 py-3">
-                        {item.subject}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {item.institutionName || "—"}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {item.direction ===
-                        CorrespondenceDirection.Incoming
-                          ? item.senderName || "—"
-                          : item.recipientName || "—"}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {formatDate(item.documentDate)}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {statusLabels[item.status] ??
-                          item.statusName}
-                      </td>
-
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDetailTarget({
-                                id: item.id,
-                                direction: item.direction,
-                              })
-                            }
-                            className="text-sm font-medium text-brand-700 underline"
-                          >
-                            Detay
-                            {item.attachmentCount > 0 &&
-                              ` (${item.attachmentCount} ek)`}
-                          </button>
-
-                          {actions.can("delete") && (
-                            <button
-                              type="button"
-                              disabled={processingId === item.id}
-                              onClick={() =>
-                                setPending({
-                                  id: item.id,
-                                  direction: item.direction,
-                                  subject: item.subject,
-                                })
-                              }
-                              className="text-sm font-medium text-red-600 disabled:opacity-50"
-                            >
-                              {processingId === item.id
-                                ? "Siliniyor..."
-                                : "Sil"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <DataTable
+              rows={items}
+              columns={columns}
+              rowKey={(item) => item.id}
+              loading={loading}
+              title="Evrak Kayıt Defteri"
+              emptyText="Evrak kaydı bulunamadı."
+            />
           </div>
         </section>
       </div>

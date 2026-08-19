@@ -1,8 +1,12 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { decimal } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
@@ -213,6 +217,99 @@ export default function IsgSiteDocumentsPage() {
   const expiredCount = documents.filter(
     (document) => document.validityColor === "red"
   ).length;
+
+
+  /* Silme sütunu yetkiye bağlı; indirme bağlantısının dosyada
+     karşılığı dosya adı. */
+  const columns = useMemo<DataTableColumn<IsgSiteDocument>[]>(
+    () => [
+      {
+        key: "belge",
+        header: "Belge",
+        value: (document) =>
+          [document.title, document.notes].filter(Boolean).join(" — "),
+        render: (document) => (
+          <>
+            <strong>{document.title}</strong>
+            {document.notes && <small>{document.notes}</small>}
+          </>
+        ),
+      },
+      { key: "tur", header: "Tür", value: (d) => d.documentTypeName },
+      {
+        key: "yer",
+        header: "Proje / Şantiye",
+        value: (document) =>
+          `${document.projectCode} / ${document.siteName ?? "Proje geneli"}`,
+        render: (document) => (
+          <>
+            {document.projectCode}
+            <small>{document.siteName ?? "Proje geneli"}</small>
+          </>
+        ),
+      },
+      { key: "tarih", header: "Tarih", value: (d) => formatDate(d.issueDate) },
+      {
+        key: "gecerlilik",
+        header: "Geçerlilik",
+        value: (d) => formatDate(d.validUntil),
+      },
+      {
+        key: "durum",
+        header: "Durum",
+        value: (document) =>
+          typeof document.daysRemaining === "number"
+            ? `${document.validityStatusName} (${document.daysRemaining} gün)`
+            : document.validityStatusName,
+        render: (document) => (
+          <>
+            <span className={`erp-status ${document.validityColor}`}>
+              {document.validityStatusName}
+            </span>
+            {typeof document.daysRemaining === "number" && (
+              <small>{document.daysRemaining} gün</small>
+            )}
+          </>
+        ),
+      },
+      {
+        key: "dosya",
+        header: "Dosya",
+        value: (document) =>
+          `${document.originalFileName} (${formatSize(document.sizeBytes)})`,
+        render: (document) => (
+          <>
+            <a
+              className="erp-row-link"
+              href={isgService.siteDocumentDownloadUrl(document.id)}
+            >
+              İndir
+            </a>
+            <small>
+              {document.originalFileName} · {formatSize(document.sizeBytes)}
+            </small>
+          </>
+        ),
+      },
+      {
+        key: "sil",
+        header: "",
+        value: () => "",
+        render: (document) =>
+          canDelete ? (
+            <button
+              type="button"
+              className="erp-secondary-button"
+              onClick={() => setPendingDelete(document.id)}
+            >
+              Sil
+            </button>
+          ) : null,
+      },
+    ],
+    [canDelete]
+  );
+
 
   return (
     <ErpShell
@@ -445,67 +542,13 @@ export default function IsgSiteDocumentsPage() {
           </div>
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Belge</th>
-                  <th>Tür</th>
-                  <th>Proje / Şantiye</th>
-                  <th>Tarih</th>
-                  <th>Geçerlilik</th>
-                  <th>Durum</th>
-                  <th>Dosya</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((document) => (
-                  <tr key={document.id}>
-                    <td>
-                      <strong>{document.title}</strong>
-                      {document.notes && <small>{document.notes}</small>}
-                    </td>
-                    <td>{document.documentTypeName}</td>
-                    <td>
-                      {document.projectCode}
-                      <small>{document.siteName ?? "Proje geneli"}</small>
-                    </td>
-                    <td>{formatDate(document.issueDate)}</td>
-                    <td>{formatDate(document.validUntil)}</td>
-                    <td>
-                      <span className={`erp-status ${document.validityColor}`}>
-                        {document.validityStatusName}
-                      </span>
-                      {typeof document.daysRemaining === "number" && (
-                        <small>{document.daysRemaining} gün</small>
-                      )}
-                    </td>
-                    <td>
-                      <a
-                        className="erp-row-link"
-                        href={isgService.siteDocumentDownloadUrl(document.id)}
-                      >
-                        İndir
-                      </a>
-                      <small>
-                        {document.originalFileName} · {formatSize(document.sizeBytes)}
-                      </small>
-                    </td>
-                    <td>
-                      {canDelete && (
-                        <button
-                          type="button"
-                          className="erp-secondary-button"
-                          onClick={() => setPendingDelete(document.id)}
-                        >
-                          Sil
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              rows={documents}
+              columns={columns}
+              rowKey={(document) => document.id}
+              title="İSG Belgeleri"
+              emptyText="Belge bulunmuyor."
+            />
           </div>
         )}
       </div>

@@ -5,6 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { money } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
@@ -280,6 +284,120 @@ function ServiceRequestsContent() {
     (x) => x.status !== ToolAssetStatus.Scrapped
   );
 
+
+  /* Eylem sütunu duruma, karara ve İKİ AYRI yetkiye bağlı. */
+  /*
+   * SÜTUNLAR HER RENDER'DA KURULUYOR — bilerek.
+   *
+   * `useMemo` ile belleğe almak, eylem işleyicilerini bağımlılıktan
+   * çıkarmayı gerektiriyordu; o da BAYAT KAPANIŞ demek: düğme eski
+   * durumu görüp yanlış kayıt üzerinde çalışabilirdi. Sütun dizisi
+   * ucuz bir nesne; doğruluğu hıza tercih ediyoruz.
+   */
+  const columns: DataTableColumn<ToolServiceRequest>[] = [
+      {
+        key: "talep",
+        header: "Talep No",
+        value: (request) => request.requestNumber,
+        render: (request) => (
+          <>
+            {request.requestNumber}
+            <small>
+              {dateFormat.format(new Date(request.requestDate))}
+            </small>
+          </>
+        ),
+      },
+      {
+        key: "alet",
+        header: "Alet",
+        value: (request) => `${request.assetCode} ${request.assetName}`,
+        render: (request) => (
+          <>
+            {request.assetCode}
+            <small>{request.assetName}</small>
+          </>
+        ),
+      },
+      { key: "ariza", header: "Arıza", value: (r) => r.faultDescription },
+      { key: "proje", header: "Proje", value: (r) => r.projectCode ?? "Merkez" },
+      {
+        key: "durum",
+        header: "Durum",
+        value: (request) => labelOf(TOOL_SERVICE_STATUSES, request.status),
+        render: (request) => (
+          <span className={statusClass(request.status)}>
+            {labelOf(TOOL_SERVICE_STATUSES, request.status)}
+          </span>
+        ),
+      },
+      {
+        key: "karar",
+        header: "Karar",
+        value: (request) =>
+          request.decision === ToolServiceDecision.Pending
+            ? "—"
+            : labelOf(TOOL_SERVICE_DECISIONS, request.decision),
+      },
+      {
+        key: "bedel",
+        header: "Bedel",
+        numeric: true,
+        value: (request) => (request.serviceCost > 0 ? request.serviceCost : ""),
+        render: (request) =>
+          request.serviceCost > 0 ? money(request.serviceCost) : "—",
+      },
+      {
+        key: "islem",
+        header: "",
+        value: () => "",
+        render: (request) => (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {request.decision === ToolServiceDecision.Pending &&
+              request.status !== ToolServiceStatus.Completed &&
+              request.status !== ToolServiceStatus.Scrapped &&
+              actions.can("edit") && (
+                <button
+                  type="button"
+                  className="erp-secondary-button"
+                  onClick={() => {
+                    setDecidingId(request.id);
+                    setNotice("");
+                  }}
+                >
+                  Karar Ver
+                </button>
+              )}
+
+            {actions.can("edit") &&
+              nextStates(request.status).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className="erp-secondary-button"
+                  onClick={() => void handleAdvance(request.id, value)}
+                >
+                  {label}
+                </button>
+              ))}
+
+            {request.status === ToolServiceStatus.Scrapped &&
+              !request.replacementPurchaseRequestId &&
+              purchasingActions.can("create") && (
+                <button
+                  type="button"
+                  className="erp-secondary-button"
+                  onClick={() => void handleReplacement(request.id)}
+                >
+                  Yerine Talep Aç
+                </button>
+              )}
+          </div>
+        ),
+      },
+  ];
+
+
   return (
     <ErpShell
       design="redwood"
@@ -461,96 +579,13 @@ function ServiceRequestsContent() {
           </div>
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Talep No</th>
-                  <th>Alet</th>
-                  <th>Arıza</th>
-                  <th>Proje</th>
-                  <th>Durum</th>
-                  <th>Karar</th>
-                  <th>Bedel</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {requests.map((request) => (
-                  <tr key={request.id}>
-                    <td>
-                      {request.requestNumber}
-                      <small>
-                        {dateFormat.format(new Date(request.requestDate))}
-                      </small>
-                    </td>
-                    <td>
-                      {request.assetCode}
-                      <small>{request.assetName}</small>
-                    </td>
-                    <td>{request.faultDescription}</td>
-                    <td>{request.projectCode ?? "Merkez"}</td>
-                    <td>
-                      <span className={statusClass(request.status)}>
-                        {labelOf(TOOL_SERVICE_STATUSES, request.status)}
-                      </span>
-                    </td>
-                    <td>
-                      {request.decision === ToolServiceDecision.Pending
-                        ? "—"
-                        : labelOf(TOOL_SERVICE_DECISIONS, request.decision)}
-                    </td>
-                    <td>
-                      {request.serviceCost > 0
-                        ? money(request.serviceCost)
-                        : "—"}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {request.decision === ToolServiceDecision.Pending &&
-                          request.status !== ToolServiceStatus.Completed &&
-                          request.status !== ToolServiceStatus.Scrapped &&
-                          actions.can("edit") && (
-                            <button
-                              type="button"
-                              className="erp-secondary-button"
-                              onClick={() => {
-                                setDecidingId(request.id);
-                                setNotice("");
-                              }}
-                            >
-                              Karar Ver
-                            </button>
-                          )}
-
-                        {actions.can("edit") &&
-                          nextStates(request.status).map(([value, label]) => (
-                          <button
-                            key={value}
-                            type="button"
-                            className="erp-secondary-button"
-                            onClick={() => void handleAdvance(request.id, value)}
-                          >
-                            {label}
-                          </button>
-                        ))}
-
-                        {request.status === ToolServiceStatus.Scrapped &&
-                          !request.replacementPurchaseRequestId &&
-                          purchasingActions.can("create") && (
-                            <button
-                              type="button"
-                              className="erp-secondary-button"
-                              onClick={() => void handleReplacement(request.id)}
-                            >
-                              Yerine Talep Aç
-                            </button>
-                          )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              rows={requests}
+              columns={columns}
+              rowKey={(request) => request.id}
+              title="Servis Talepleri"
+              emptyText="Servis talebi bulunmuyor."
+            />
           </div>
         )}
       </div>
