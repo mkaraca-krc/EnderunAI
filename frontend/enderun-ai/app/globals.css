@@ -4079,6 +4079,11 @@ body {
     display: table-header-group;
   }
 
+  /* Alt toplam satırı her sayfanın sonunda görünsün. */
+  tfoot {
+    display: table-footer-group;
+  }
+
   tr,
   img {
     break-inside: avoid;
@@ -4230,4 +4235,22 @@ body {
   font-size: 1.125rem;
   font-weight: 600;
   margin: 0 0 8px;
+}
+
+/* Çıktı üst bilgisi ve alt toplam satırı (F5). */
+.erp-print-header {
+  margin-bottom: 12px;
+}
+
+.erp-print-meta {
+  font-size: 0.8125rem;
+  color: var(--erp-text-muted, #64748b);
+}
+
+.erp-data-table-grid tfoot td {
+  padding: 10px 16px;
+  border-top: 2px solid var(--erp-border-strong, #cbd5e1);
+  font-weight: 600;
+  color: var(--erp-text, #0f172a);
+  background: var(--erp-surface-muted, #f8fafc);
 }

@@ -243,7 +243,7 @@ Yani sunucu sayfalaması **5 ekranın** meselesi, 143'ün değil.
 | **F2** — standart tablo bileşeni + global `@media print` | **BİTTİ** (aşağıda) |
 | **F3** — büyük listelerde sunucu sayfalaması | **BİTTİ** (aşağıda) |
 | F4 — kalan tablo ekranları bileşene taşınır | **F4a BİTTİ**, yığınlar sürüyor |
-| F5 — yazdır/Excel (tüm kayıtlar vs bu sayfa) | F4'ten sonra |
+| **F5** — yazdır/Excel: kapsam seçimi + alt toplam | **BİTTİ** (aşağıda) |
 | F6 — arama/filtre sayfalamayla uyumlu | en son |
 
 **F4 YIĞINLARA BÖLÜNDÜ** (R3a deseni). Kalan 70 ham tablolu ekranı tek
@@ -274,6 +274,44 @@ Ham tablo sayısı **58 → 55**.
 
 **F4 kalan:** 55 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
 `cariler`, `finans/*`, `insan-kaynaklari/*` aileleri.
+
+**F5 ne yaptı — çıktı dürüstlüğü.**
+
+1. **ALT TOPLAM SATIRI** (`columns[].footer`). İstemci kipinde TÜM
+   satırlar üzerinden hesaplanır, görünen sayfa değil — "Toplam"
+   etiketli bir satırın yalnız o sayfayı toplaması, bu programın
+   baştan beri kovaladığı hatanın ta kendisi olurdu.
+   **Sunucu kipinde `server.totals` verilmediyse satır HİÇ
+   GÖSTERİLMEZ**: elde bir sayfa varken toplam hesaplanamaz, yanlış
+   toplam göstermektense hiç göstermemek.
+2. **YAZDIRMA KAPSAMI AÇIKÇA SEÇİLİYOR** — "Bu Sayfayı Yazdır" /
+   "Tümünü Yazdır". Sayfalama gelince yazdırma sessizce "yalnız bu
+   sayfa"ya dönmüştü; kullanıcı 12 sayfalık listeyi yazdırdığını
+   sanıp 1 sayfa alırdı. "Tümünü Yazdır" ancak gerçekten
+   verilebiliyorsa (`fetchAll` ya da istemci kipi) görünür.
+3. **ÇIKTI ÜST BİLGİSİ** — başlık, süzgeç özeti (`printMeta`), tarih
+   ve kayıt sayısı; yalnız kâğıtta. **Şirket adı BASILMIYOR**:
+   bileşen şirket bağlamını bilmiyor, uydurmak kaldırdığımız
+   hataların aynısı olurdu.
+4. **`muhasebe/yevmiye` TAŞINDI** — alt toplam desteği onun önündeki
+   engeldi. Borç/alacak toplamı raporun kendi `summary` değerinden
+   geliyor, satırlar yeniden toplanmıyor (iki ayrı gerçek üretme
+   riski). Ham tablo **55 → 54**.
+
+Üç sonda da yakaladı: alt toplam görünen sayfadan hesaplanırsa,
+sunucu kipinde toplamsız satır basılırsa, tümünü yazdırma tek sayfa
+basarsa.
+
+**Gerçek `.xlsx` KARARI: CSV'de kalınıyor.** Excel kütüphanesi yok
+(bağımlılıklar next · react · react-dom · qrcode); CSV UTF-8 BOM +
+noktalı virgülle Excel TR'de çift tıkla açılıyor. Biçimlendirme ya da
+formül gereken belirli bir çıktı istenirse ayrı iş.
+
+**YENİ BULGU (F5 kapsamı dışı, kayıt):** ErpShell üst çubuğundaki
+şirket seçici SABİT YAZILMIŞ — `▦ Enderun Enerji A.Ş.⌄`, tıklanınca
+hiçbir şey yapmıyor. Veritabanındaki tek şirketin adı ise "Enderun
+Elektrik Üretim Enerji A.Ş." — yani gösterilen ad kayıtla da
+uyuşmuyor.
 
 **F4'te taşınmayacaklar (karar):** `hakedis/takip` iki küçük DETAY
 PANELİ taşıyor (takas hareketleri, dönem özeti) — liste değil.

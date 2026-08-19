@@ -365,3 +365,158 @@ describe("DataTable — çıktı", () => {
     }
   });
 });
+
+describe("DataTable — alt toplam", () => {
+  const toplamli: DataTableColumn<Row>[] = [
+    { key: "ad", header: "Ad", value: (row) => row.ad },
+    {
+      key: "tutar",
+      header: "Tutar",
+      numeric: true,
+      value: (row) => row.tutar,
+      footer: (all) => all.reduce((sum, row) => sum + row.tutar, 0),
+    },
+  ];
+
+  it("İSTEMCİ kipinde toplam TÜM satırları kapsar, görünen sayfayı değil", () => {
+    // 60 satır, sayfa 25. Görünenlerin toplamı 3.000; hepsinin 17.700.
+    render(
+      <DataTable rows={rows(60)} columns={toplamli} rowKey={(r) => r.id} />
+    );
+
+    const tfoot = screen.getByRole("table").querySelector("tfoot");
+    expect(tfoot).not.toBeNull();
+
+    const beklenen = rows(60).reduce((sum, row) => sum + row.tutar, 0);
+    expect(tfoot!.textContent).toContain(String(beklenen));
+
+    // Yalnız ilk sayfanın toplamı YAZILMAMALI — asıl kusur bu olurdu.
+    const sayfaToplami = rows(25).reduce((sum, row) => sum + row.tutar, 0);
+    expect(tfoot!.textContent).not.toContain(String(sayfaToplami));
+  });
+
+  it("SUNUCU kipinde toplam verilmediyse alt toplam satırı GÖSTERİLMEZ", () => {
+    /*
+     * Elde yalnız bir sayfa var; toplamı oradan hesaplamak "Toplam"
+     * etiketiyle yanlış rakam basmak olurdu. Yanlış toplam
+     * göstermektense hiç göstermemek.
+     */
+    render(
+      <DataTable
+        rows={rows(25)}
+        columns={toplamli}
+        rowKey={(r) => r.id}
+        server={{ total: 1000, page: 1, pageSize: 25, onChange: vi.fn() }}
+      />
+    );
+
+    expect(screen.getByRole("table").querySelector("tfoot")).toBeNull();
+  });
+
+  it("SUNUCU kipinde toplam verilirse gösterilir", () => {
+    render(
+      <DataTable
+        rows={rows(25)}
+        columns={toplamli}
+        rowKey={(r) => r.id}
+        server={{
+          total: 1000,
+          page: 1,
+          pageSize: 25,
+          onChange: vi.fn(),
+          totals: { tutar: "1.234.567" },
+        }}
+      />
+    );
+
+    const tfoot = screen.getByRole("table").querySelector("tfoot");
+    expect(tfoot?.textContent).toContain("1.234.567");
+  });
+
+  it("kayıt yoksa alt toplam satırı gösterilmez", () => {
+    render(<DataTable rows={[]} columns={toplamli} rowKey={(r) => r.id} />);
+    expect(screen.getByRole("table").querySelector("tfoot")).toBeNull();
+  });
+});
+
+describe("DataTable — yazdırma kapsamı", () => {
+  it("kapsam açıkça seçiliyor: bu sayfa / tümü", () => {
+    const { rerender } = render(
+      <DataTable rows={rows(60)} columns={columns} rowKey={(r) => r.id} />
+    );
+
+    // İstemci kipinde bütün satırlar elde: iki seçenek de sunulur.
+    expect(screen.getByText("Bu Sayfayı Yazdır")).toBeInTheDocument();
+    expect(screen.getByText("Tümünü Yazdır")).toBeInTheDocument();
+
+    // Sunucu kipinde fetchAll yoksa "tümü" SÖZ VERİLEMEZ.
+    rerender(
+      <DataTable
+        rows={rows(25)}
+        columns={columns}
+        rowKey={(r) => r.id}
+        server={{ total: 5000, page: 1, pageSize: 25, onChange: vi.fn() }}
+      />
+    );
+
+    expect(screen.getByText("Bu Sayfayı Yazdır")).toBeInTheDocument();
+    expect(screen.queryByText("Tümünü Yazdır")).not.toBeInTheDocument();
+  });
+
+  it("tümü yazdırılırken TÜM satırlar basılır", async () => {
+    const orijinalPrint = window.print;
+    let basildigiAndakiSatir = 0;
+
+    window.print = () => {
+      basildigiAndakiSatir =
+        screen.getByRole("table").querySelectorAll("tbody tr").length;
+    };
+
+    try {
+      render(
+        <DataTable
+          rows={rows(25)}
+          columns={columns}
+          rowKey={(r) => r.id}
+          server={{ total: 120, page: 1, pageSize: 25, onChange: vi.fn() }}
+          fetchAll={async () => rows(120)}
+        />
+      );
+
+      fireEvent.click(screen.getByText("Tümünü Yazdır"));
+
+      await waitFor(() => expect(basildigiAndakiSatir).toBeGreaterThan(0));
+
+      // Tarayıcı yazdırma penceresi açıldığı anda 120 satır ekranda
+      // olmalı; 25 kalırsa kullanıcı tek sayfa alır.
+      expect(basildigiAndakiSatir).toBe(120);
+    } finally {
+      window.print = orijinalPrint;
+    }
+  });
+
+  it("yazdırma sonrası liste sayfaya geri döner", async () => {
+    const orijinalPrint = window.print;
+    window.print = () => {};
+
+    try {
+      render(
+        <DataTable
+          rows={rows(120)}
+          columns={columns}
+          rowKey={(r) => r.id}
+        />
+      );
+
+      fireEvent.click(screen.getByText("Tümünü Yazdır"));
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole("table").querySelectorAll("tbody tr").length
+        ).toBe(25)
+      );
+    } finally {
+      window.print = orijinalPrint;
+    }
+  });
+});

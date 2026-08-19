@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 
 import { whole } from "@/lib/format/turkish";
 
@@ -45,11 +46,30 @@ export type DataTableColumn<T> = {
   align?: "left" | "right" | "center";
   /** Sayı sütunlarında hizalı rakam için `tabular-nums` eklenir. */
   numeric?: boolean;
+  /**
+   * ALT TOPLAM.
+   *
+   * İSTEMCİ kipinde TÜM satırlar geçilir — görünen sayfa değil.
+   * "Toplam" diye etiketlenmiş bir satırın yalnız o sayfayı toplaması,
+   * bu programın baştan beri kovaladığı hatanın ta kendisi olurdu
+   * (poz ekranı 23.531 kayıt için "Toplam: 100" diyordu).
+   *
+   * SUNUCU kipinde bu çağrılmaz: elde yalnız bir sayfa var, toplam
+   * hesaplanamaz. Toplam sunucudan gelmeli
+   * (`server.totals`); gelmiyorsa alt toplam satırı HİÇ gösterilmez.
+   */
+  footer?: (rows: T[]) => ReactNode;
 };
 
 export type DataTableServerMode = {
   /** Süzgeçlere uyan TOPLAM kayıt — uçtan gelir, listeden sayılmaz. */
   total: number;
+  /**
+   * Sütun anahtarına göre alt toplamlar. Sunucu kipinde elde yalnız
+   * bir sayfa olduğu için toplam BURADAN gelmek zorunda; verilmezse
+   * alt toplam satırı gösterilmez. Uydurmaktansa göstermemek.
+   */
+  totals?: Record<string, ReactNode>;
   /** 1'den başlar. */
   page: number;
   pageSize: number;
@@ -92,6 +112,16 @@ type Props<T> = {
 
   /** Varsayılan sayfa boyutu (istemci kipi). */
   defaultPageSize?: number;
+
+  /**
+   * Çıktının üstüne basılacak bağlam — hangi süzgeçlerle alındığı
+   * gibi. Kâğıda çıkan bir liste "neyin listesi" olduğunu söylemezse
+   * bir hafta sonra kimse hatırlamıyor.
+   */
+  printMeta?: ReactNode;
+
+  /** Alt toplam satırının etiketi. */
+  footerLabel?: string;
 };
 
 const PAGE_SIZES = [25, 50, 100];
@@ -155,11 +185,25 @@ export function DataTable<T>({
   title,
   fetchAll,
   defaultPageSize = 25,
+  printMeta,
+  footerLabel = "Toplam",
 }: Props<T>) {
   const [clientPage, setClientPage] = useState(1);
   const [clientPageSize, setClientPageSize] = useState(defaultPageSize);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+
+  /*
+   * TÜMÜNÜ YAZDIRMA.
+   *
+   * Sayfalama gelince yazdırma sessizce "yalnız bu sayfa"ya döndü —
+   * kullanıcı 12 sayfalık listeyi yazdırdığını sanıp 1 sayfa alırdı.
+   * Bu yüzden kapsam AÇIKÇA seçiliyor. Tümü seçilince satırlar
+   * geçici olarak tam listeye çevriliyor, tarayıcı yazdırma penceresi
+   * ondan sonra açılıyor.
+   */
+  const [printAllRows, setPrintAllRows] = useState<T[] | null>(null);
+  const [preparingPrint, setPreparingPrint] = useState(false);
 
   const page = server ? server.page : clientPage;
   const pageSize = server ? server.pageSize : clientPageSize;
@@ -194,11 +238,47 @@ export function DataTable<T>({
   const safePage = Math.min(Math.max(1, page), pageCount);
 
   const visible = useMemo(() => {
+    // Tümünü yazdırma sırasında sayfa değil TAM liste basılır.
+    if (printAllRows) return printAllRows;
     if (server) return rows;
 
     const start = (safePage - 1) * pageSize;
     return rows.slice(start, start + pageSize);
-  }, [rows, server, safePage, pageSize]);
+  }, [rows, server, safePage, pageSize, printAllRows]);
+
+  async function printScope(scope: "page" | "all") {
+    if (scope === "page") {
+      window.print();
+      return;
+    }
+
+    setExportError("");
+    setPreparingPrint(true);
+
+    try {
+      const all = fetchAll ? await fetchAll() : rows;
+
+      /*
+       * `flushSync` ŞART: `window.print()` tarayıcıyı bloklar ve o an
+       * EKRANDA NE VARSA onu basar. Normal setState toplu güncelleme
+       * yapıyor, yani print hâlâ tek sayfayı görürdü — kullanıcı
+       * "tümünü yazdır" deyip 1 sayfa alırdı.
+       *
+       * Bunu bir effect'e taşımak da işe yarardı ama o zaman
+       * "effect içinde setState" oluyordu; burada akış düz ve
+       * okunur: tam listeyi bas, yazdır, geri al.
+       */
+      flushSync(() => setPrintAllRows(all));
+      window.print();
+    } catch (error) {
+      setExportError(
+        error instanceof Error ? error.message : "Kayıtlar alınamadı."
+      );
+    } finally {
+      setPrintAllRows(null);
+      setPreparingPrint(false);
+    }
+  }
 
   function goto(next: number) {
     const clamped = Math.min(Math.max(1, next), pageCount);
@@ -245,6 +325,21 @@ export function DataTable<T>({
   // "Tüm kayıtlar" ancak GERÇEKTEN verilebiliyorsa sunulur.
   const canExportAll = !server || Boolean(fetchAll);
 
+  /*
+   * Alt toplam hücresi. Sunucu kipinde ebeveynin verdiği değer,
+   * istemci kipinde sütunun kendi hesabı (TÜM satırlar üzerinden).
+   */
+  function footerCell(column: DataTableColumn<T>) {
+    if (server) return server.totals?.[column.key] ?? null;
+    return column.footer ? column.footer(rows) : null;
+  }
+
+  const showFooter =
+    total > 0 &&
+    (server
+      ? Boolean(server.totals)
+      : columns.some((column) => Boolean(column.footer)));
+
   const from = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const to = server
     ? from + visible.length - 1
@@ -280,11 +375,26 @@ export function DataTable<T>({
             <button
               type="button"
               className="erp-secondary-button"
-              onClick={() => window.print()}
+              onClick={() => printScope("page")}
               disabled={loading || total === 0}
             >
-              Yazdır
+              Bu Sayfayı Yazdır
             </button>
+
+            {/*
+              TÜMÜNÜ YAZDIRMA da ancak GERÇEKTEN verilebiliyorsa
+              sunulur — indirmedeki kuralın aynısı.
+            */}
+            {canExportAll && (
+              <button
+                type="button"
+                className="erp-secondary-button"
+                onClick={() => void printScope("all")}
+                disabled={loading || preparingPrint || total === 0}
+              >
+                {preparingPrint ? "Hazırlanıyor…" : "Tümünü Yazdır"}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -293,7 +403,25 @@ export function DataTable<T>({
         <div className="erp-alert error no-print">{exportError}</div>
       )}
 
-      {title && <h2 className="print-only erp-print-title">{title}</h2>}
+      {/*
+        ÇIKTI ÜST BİLGİSİ — yalnız kâğıtta görünür.
+        Kâğıda çıkmış bir liste hangi süzgeçlerle, ne zaman alındığını
+        söylemezse bir hafta sonra kimse hatırlamıyor.
+
+        ŞİRKET ADI BURAYA YAZILMIYOR: bileşen şirket bağlamını
+        bilmiyor ve uydurmak, bu programın kaldırdığı hataların
+        aynısı olurdu. Bağlamı olan ekran `printMeta` ile geçirir.
+      */}
+      {(title || printMeta) && (
+        <div className="print-only erp-print-header">
+          {title && <h2 className="erp-print-title">{title}</h2>}
+          {printMeta && <div className="erp-print-meta">{printMeta}</div>}
+          <div className="erp-print-meta">
+            {new Date().toLocaleString("tr-TR")} · {whole(total)} kayıt
+            {printAllRows ? " (tamamı)" : ` · sayfa ${whole(safePage)}/${whole(pageCount)}`}
+          </div>
+        </div>
+      )}
 
       <div className="erp-table-scroll">
         <table className="erp-data-table-grid">
@@ -341,6 +469,42 @@ export function DataTable<T>({
               ))
             )}
           </tbody>
+
+          {/*
+            ALT TOPLAM SATIRI.
+
+            İSTEMCİ kipinde TÜM satırlar üzerinden hesaplanır — görünen
+            sayfa değil. "Toplam" etiketli bir satırın yalnız o sayfayı
+            toplaması, bu programın baştan beri kovaladığı hatanın ta
+            kendisi olurdu.
+
+            SUNUCU kipinde elde yalnız bir sayfa var; toplam
+            hesaplanamaz. `server.totals` verilmediyse satır HİÇ
+            GÖSTERİLMEZ — yanlış toplam göstermektense hiç
+            göstermemek.
+          */}
+          {showFooter && (
+            <tfoot>
+              <tr>
+                {columns.map((column, index) => (
+                  <td
+                    key={column.key}
+                    style={{
+                      textAlign:
+                        column.align ?? (column.numeric ? "right" : "left"),
+                      fontVariantNumeric: column.numeric
+                        ? "tabular-nums"
+                        : undefined,
+                    }}
+                  >
+                    {index === 0 && !footerCell(column)
+                      ? footerLabel
+                      : footerCell(column)}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 

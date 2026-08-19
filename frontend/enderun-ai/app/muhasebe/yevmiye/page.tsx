@@ -8,12 +8,18 @@ import {
   useState,
 } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { amount, money } from "@/lib/format/turkish";
 import { Button } from "@/components/ui";
 
 import {
   accountingReportService,
+  type JournalReportLine,
   type JournalReportResponse,
 } from "@/services/accounting-report.service";
 
@@ -176,6 +182,141 @@ export default function JournalPage() {
       }
     );
   }, [report]);
+
+  /*
+   * ALT TOPLAM RAPORUN KENDİ ÖZETİNDEN GELİR, satırları toplayarak
+   * değil. Rapor borç/alacak toplamını sunucuda hesaplıyor; burada
+   * yeniden toplamak iki ayrı gerçek üretme riski taşırdı.
+   */
+  const columns: DataTableColumn<JournalReportLine>[] = [
+    {
+      key: "tarih",
+      header: "Tarih",
+      value: (line) => date.format(new Date(line.voucherDate)),
+    },
+    {
+      key: "fis",
+      header: "Fiş No",
+      value: (line) =>
+        line.referenceNumber
+          ? `${line.voucherNumber} (Ref: ${line.referenceNumber})`
+          : line.voucherNumber,
+      render: (line) => (
+        <>
+          <Link
+            href={`/muhasebe/fisler/${line.voucherId}`}
+            style={{ fontWeight: 700, textDecoration: "none" }}
+          >
+            {line.voucherNumber}
+          </Link>
+          {line.referenceNumber && <small>Ref: {line.referenceNumber}</small>}
+        </>
+      ),
+    },
+    {
+      key: "fisTipi",
+      header: "Fiş Tipi",
+      value: (line) => voucherTypeLabels[line.voucherType] ?? "Bilinmiyor",
+    },
+    { key: "satir", header: "Satır", numeric: true, value: (line) => line.lineNumber },
+    {
+      key: "hesap",
+      header: "Hesap",
+      value: (line) => `${line.accountCode} ${line.accountName}`,
+      render: (line) => (
+        <>
+          <strong>{line.accountCode}</strong>
+          <small>{line.accountName}</small>
+        </>
+      ),
+    },
+    {
+      key: "aciklama",
+      header: "Açıklama",
+      value: (line) =>
+        line.lineDescription ?? line.voucherDescription ?? "—",
+    },
+    {
+      key: "cari",
+      header: "Cari Hesap",
+      value: (line) =>
+        [line.currentAccountCode, line.currentAccountTitle]
+          .filter(Boolean)
+          .join(" ") || "—",
+      render: (line) => (
+        <>
+          {line.currentAccountCode && <strong>{line.currentAccountCode}</strong>}
+          <small>{line.currentAccountTitle ?? "—"}</small>
+        </>
+      ),
+    },
+    {
+      key: "proje",
+      header: "Proje",
+      value: (line) =>
+        [line.projectCode, line.projectName].filter(Boolean).join(" ") || "—",
+      render: (line) => (
+        <>
+          {line.projectCode && <strong>{line.projectCode}</strong>}
+          <small>{line.projectName ?? "—"}</small>
+        </>
+      ),
+    },
+    {
+      key: "masraf",
+      header: "Masraf Merkezi",
+      value: (line) => line.costCenterCode ?? "—",
+    },
+    {
+      key: "belgeNo",
+      header: "Belge No",
+      value: (line) => line.documentNumber ?? "—",
+    },
+    {
+      key: "belgeTarihi",
+      header: "Belge Tarihi",
+      value: (line) =>
+        line.documentDate ? date.format(new Date(line.documentDate)) : "—",
+    },
+    {
+      key: "kaynak",
+      header: "Kaynak",
+      value: (line) => line.sourceModule ?? "MANUAL",
+    },
+    {
+      key: "kur",
+      header: "Kur",
+      value: (line) => `${line.currencyCode} / ${amount(line.exchangeRate)}`,
+    },
+    {
+      key: "borc",
+      header: "Borç",
+      numeric: true,
+      value: (line) => (line.debitAmountLocal > 0 ? line.debitAmountLocal : ""),
+      render: (line) =>
+        line.debitAmountLocal > 0 ? (
+          <strong>{money(line.debitAmountLocal)}</strong>
+        ) : (
+          "—"
+        ),
+      footer: () => <strong>{money(summary.totalDebit)}</strong>,
+    },
+    {
+      key: "alacak",
+      header: "Alacak",
+      numeric: true,
+      value: (line) =>
+        line.creditAmountLocal > 0 ? line.creditAmountLocal : "",
+      render: (line) =>
+        line.creditAmountLocal > 0 ? (
+          <strong>{money(line.creditAmountLocal)}</strong>
+        ) : (
+          "—"
+        ),
+      footer: () => <strong>{money(summary.totalCredit)}</strong>,
+    },
+  ];
+
 
   return (
     <ErpShell
@@ -392,223 +533,23 @@ export default function JournalPage() {
         </div>
 
         <div style={{ overflowX: "auto" }}>
-          <table
-            className="erp-table"
-            style={{ minWidth: 1550 }}
-          >
-            <thead>
-              <tr>
-                <th>Tarih</th>
-                <th>Fiş No</th>
-                <th>Fiş Tipi</th>
-                <th>Satır</th>
-                <th>Hesap</th>
-                <th>Açıklama</th>
-                <th>Cari Hesap</th>
-                <th>Proje</th>
-                <th>Masraf Merkezi</th>
-                <th>Belge No</th>
-                <th>Belge Tarihi</th>
-                <th>Kaynak</th>
-                <th className="num">Kur</th>
-                <th className="num">Borç</th>
-                <th className="num">Alacak</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {!loadingReport &&
-                report?.lines.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={15}
-                      style={{
-                        textAlign: "center",
-                        padding: 30,
-                      }}
-                    >
-                      Seçilen filtrelerde kesinleşmiş
-                      muhasebe kaydı bulunamadı.
-                    </td>
-                  </tr>
-                )}
-
-              {loadingReport && (
-                <tr>
-                  <td
-                    colSpan={15}
-                    style={{
-                      textAlign: "center",
-                      padding: 30,
-                    }}
-                  >
-                    Yevmiye kayıtları yükleniyor...
-                  </td>
-                </tr>
-              )}
-
-              {report?.lines.map((line) => (
-                <tr
-                  key={`${line.voucherId}-${line.lineNumber}`}
-                >
-                  <td>
-                    {date.format(
-                      new Date(line.voucherDate)
-                    )}
-                  </td>
-
-                  <td>
-                    <Link
-                      href={`/muhasebe/fisler/${line.voucherId}`}
-                      style={{
-                        fontWeight: 700,
-                        textDecoration: "none",
-                      }}
-                    >
-                      {line.voucherNumber}
-                    </Link>
-
-                    {line.referenceNumber && (
-                      <small>
-                        Ref: {line.referenceNumber}
-                      </small>
-                    )}
-                  </td>
-
-                  <td>
-                    {voucherTypeLabels[
-                      line.voucherType
-                    ] ?? "Bilinmiyor"}
-                  </td>
-
-                  <td>{line.lineNumber}</td>
-
-                  <td>
-                    <strong>
-                      {line.accountCode}
-                    </strong>
-
-                    <small>
-                      {line.accountName}
-                    </small>
-                  </td>
-
-                  <td>
-                    {line.lineDescription ??
-                      line.voucherDescription ??
-                      "—"}
-                  </td>
-
-                  <td>
-                    {line.currentAccountCode && (
-                      <strong>
-                        {line.currentAccountCode}
-                      </strong>
-                    )}
-
-                    <small>
-                      {line.currentAccountTitle ??
-                        "—"}
-                    </small>
-                  </td>
-
-                  <td>
-                    {line.projectCode && (
-                      <strong>
-                        {line.projectCode}
-                      </strong>
-                    )}
-
-                    <small>
-                      {line.projectName ?? "—"}
-                    </small>
-                  </td>
-
-                  <td>
-                    {line.costCenterCode ?? "—"}
-                  </td>
-
-                  <td>
-                    {line.documentNumber ?? "—"}
-                  </td>
-
-                  <td>
-                    {line.documentDate
-                      ? date.format(
-                          new Date(
-                            line.documentDate
-                          )
-                        )
-                      : "—"}
-                  </td>
-
-                  <td>
-                    {line.sourceModule ?? "MANUAL"}
-                  </td>
-
-                  <td>
-                    {line.currencyCode} /{" "}
-                    {amount(
-                      line.exchangeRate
-                    )}
-                  </td>
-
-                  <td
-                    className="num"
-                    style={{ fontWeight: line.debitAmountLocal > 0 ? 700 : 400, }}
-                  >
-                    {line.debitAmountLocal > 0
-                      ? money(
-                          line.debitAmountLocal
-                        )
-                      : "—"}
-                  </td>
-
-                  <td
-                    className="num"
-                    style={{ fontWeight: line.creditAmountLocal > 0 ? 700 : 400, }}
-                  >
-                    {line.creditAmountLocal > 0
-                      ? money(
-                          line.creditAmountLocal
-                        )
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-
-            {report &&
-              report.lines.length > 0 && (
-                <tfoot>
-                  <tr>
-                    <td colSpan={13}>
-                      <strong>GENEL TOPLAM</strong>
-                    </td>
-
-                    <td
-                      className="num"
-                    >
-                      <strong>
-                        {money(
-                          summary.totalDebit
-                        )}
-                      </strong>
-                    </td>
-
-                    <td
-                      className="num"
-                    >
-                      <strong>
-                        {money(
-                          summary.totalCredit
-                        )}
-                      </strong>
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-          </table>
+          <DataTable
+              rows={report?.lines ?? []}
+              columns={columns}
+              rowKey={(line) => `${line.voucherId}-${line.lineNumber}`}
+              loading={loadingReport}
+              title="Yevmiye Defteri"
+              emptyText="Seçilen filtrelerde kesinleşmiş muhasebe kaydı bulunamadı."
+              footerLabel="GENEL TOPLAM"
+              printMeta={
+                <>
+                  {filters.startDate} – {filters.endDate}
+                  {filters.accountCode && ` · hesap ${filters.accountCode}`}
+                  {filters.search && ` · arama "${filters.search}"`}
+                </>
+              }
+              resetKey={`${filters.companyId}|${filters.startDate}|${filters.endDate}|${filters.accountCode}|${filters.search}`}
+            />
         </div>
       </section>
     </ErpShell>
