@@ -268,8 +268,18 @@ bağımlılıktan çıkarmayı gerektiriyordu; o da BAYAT KAPANIŞ demek —
 düğme eski durumu görüp yanlış kayıt üzerinde çalışabilirdi. Sütun
 dizisi ucuz bir nesne; doğruluk hıza tercih edildi.
 
-**F4 kalan:** 58 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
+**F4c (bitti):** `insan-kaynaklari/ek-odemeler`,
+`depo-stok/malzeme-talepleri`, `perakende/raporlar` (iki tablo).
+Ham tablo sayısı **58 → 55**.
+
+**F4 kalan:** 55 ham tablolu ekran. Sıradakiler `gorevler`, `filo`,
 `cariler`, `finans/*`, `insan-kaynaklari/*` aileleri.
+
+**F4'te taşınmayacaklar (karar):** `hakedis/takip` iki küçük DETAY
+PANELİ taşıyor (takas hareketleri, dönem özeti) — liste değil.
+`muhasebe/yevmiye` 15 sütunlu rapor ve borç/alacak TOPLAM satırı var;
+`DataTable`'da alt toplam desteği yok. `perakende/fiyatlar` hücrelerinde
+düzenlenebilir girdi taşıyor — liste değil düzenleme ızgarası.
 
 Yan fayda: `sirketler` ve `subeler` PASİF kaydı da YEŞİL rozetle
 gösteriyordu (`erp-status green` sabitti) — rozet renginin taşıdığını

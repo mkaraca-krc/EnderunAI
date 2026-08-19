@@ -2,6 +2,11 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { amount } from "@/lib/format/turkish";
@@ -32,6 +37,37 @@ function money(value: number) {
  * kullanıcı listeyi çekemez ve uyarı görür. Bu tutarlar resmi
  * muhasebeye hiçbir kayıt üretmez.
  */
+/**
+ * SÜTUNLAR. Elden ödeme resmi bordroya girmiyor; bu liste yalnız
+ * yetkili rollere görünüyor ve dışa aktarması da aynı yetkiye bağlı
+ * (ekran zaten kapılı).
+ */
+const columns: DataTableColumn<ExtraPayment>[] = [
+  { key: "personel", header: "Personel", value: (row) => row.personnelFullName },
+  {
+    key: "tutar",
+    header: "Aylık Tutar",
+    numeric: true,
+    value: (row) => row.monthlyAmount,
+    render: (row) => money(row.monthlyAmount),
+  },
+  {
+    key: "baslangic",
+    header: "Başlangıç",
+    value: (row) =>
+      new Date(row.effectiveStartDate).toLocaleDateString("tr-TR"),
+  },
+  {
+    key: "bitis",
+    header: "Bitiş",
+    value: (row) =>
+      row.effectiveEndDate
+        ? new Date(row.effectiveEndDate).toLocaleDateString("tr-TR")
+        : "Sürüyor",
+  },
+  { key: "not", header: "Not", value: (row) => row.note ?? "-" },
+];
+
 export default function ExtraPaymentsPage() {
   /**
    * Düğme -> uç -> izin:
@@ -230,36 +266,13 @@ export default function ExtraPaymentsPage() {
           <p className="mt-2 text-sm text-slate-500">Kayıt yok.</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-                  <th className="py-2">Personel</th>
-                  <th className="py-2 text-right">Aylık Tutar</th>
-                  <th className="py-2">Başlangıç</th>
-                  <th className="py-2">Bitiş</th>
-                  <th className="py-2">Not</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-100">
-                    <td className="py-2 text-slate-800">{row.personnelFullName}</td>
-                    <td className="py-2 text-right tabular-nums text-slate-800">
-                      {money(row.monthlyAmount)}
-                    </td>
-                    <td className="py-2 text-slate-600">
-                      {new Date(row.effectiveStartDate).toLocaleDateString("tr-TR")}
-                    </td>
-                    <td className="py-2 text-slate-600">
-                      {row.effectiveEndDate
-                        ? new Date(row.effectiveEndDate).toLocaleDateString("tr-TR")
-                        : "Sürüyor"}
-                    </td>
-                    <td className="py-2 text-slate-500">{row.note ?? "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              rows={records}
+              columns={columns}
+              rowKey={(row) => row.id}
+              title="Elden Ödemeler"
+              emptyText="Elden ödeme kaydı bulunmuyor."
+            />
           </div>
         )}
       </section>

@@ -8,6 +8,11 @@ import {
   useState,
 } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { Button } from "@/components/ui";
 import {
@@ -61,6 +66,99 @@ function statusClasses(status: number) {
       return "bg-violet-100 text-violet-800";
   }
 }
+
+const columns: DataTableColumn<PurchaseRequestListItem>[] = [
+  {
+    key: "talep",
+    header: "Talep",
+    value: (item) =>
+      `${item.requestNumber} — ${item.description || "Açıklama yok"}`,
+    render: (item) => (
+      <>
+        <Link
+          href={`/depo-stok/malzeme-talepleri/${item.id}`}
+          className="font-semibold text-slate-950 hover:underline"
+        >
+          {item.requestNumber}
+        </Link>
+        <div className="mt-1 text-xs text-slate-500">
+          {item.description || "Açıklama yok"}
+        </div>
+      </>
+    ),
+  },
+  {
+    key: "proje",
+    header: "Proje",
+    value: (item) => `${item.projectName} (${item.projectCode})`,
+    render: (item) => (
+      <>
+        <div className="font-medium text-slate-800">{item.projectName}</div>
+        <div className="text-xs text-slate-500">{item.projectCode}</div>
+      </>
+    ),
+  },
+  { key: "talepEden", header: "Talep Eden", value: (item) => item.requestedByName },
+  {
+    key: "tarih",
+    header: "Tarih",
+    value: (item) =>
+      `${formatDate(item.requestDate)} (ihtiyaç: ${formatDate(item.neededByDate)})`,
+    render: (item) => (
+      <>
+        <div>{formatDate(item.requestDate)}</div>
+        <div className="text-xs text-slate-500">
+          İhtiyaç: {formatDate(item.neededByDate)}
+        </div>
+      </>
+    ),
+  },
+  {
+    key: "kalem",
+    header: "Kalem",
+    align: "center",
+    value: (item) => item.itemCount,
+  },
+  {
+    key: "miktar",
+    header: "Miktar",
+    numeric: true,
+    value: (item) => item.totalQuantity,
+  },
+  {
+    key: "oncelik",
+    header: "Öncelik",
+    value: (item) => priorityLabels[item.priority] ?? "—",
+  },
+  {
+    key: "durum",
+    header: "Durum",
+    value: (item) => statusLabels[item.status] ?? "Bilinmiyor",
+    render: (item) => (
+      <span
+        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusClasses(
+          item.status
+        )}`}
+      >
+        {statusLabels[item.status] ?? "Bilinmiyor"}
+      </span>
+    ),
+  },
+  {
+    key: "detay",
+    header: "",
+    align: "right",
+    value: () => "",
+    render: (item) => (
+      <Link
+        href={`/depo-stok/malzeme-talepleri/${item.id}`}
+        className="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+      >
+        Detay
+      </Link>
+    ),
+  },
+];
 
 export default function MaterialRequestsPage() {
   const [items, setItems] = useState<
@@ -240,154 +338,14 @@ export default function MaterialRequestsPage() {
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-700">
-                    Talep
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-700">
-                    Proje
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-700">
-                    Talep Eden
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-700">
-                    Tarih
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-slate-700">
-                    Kalem
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-slate-700">
-                    Toplam Miktar
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-700">
-                    Öncelik
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-700">
-                    Durum
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-slate-700">
-                    İşlem
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-12 text-center text-slate-500"
-                    >
-                      Şantiye malzeme talepleri
-                      yükleniyor...
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-12 text-center"
-                    >
-                      <div className="font-medium text-slate-700">
-                        Şantiye malzeme talebi
-                        bulunamadı.
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        Yeni bir talep oluşturarak
-                        başlayabilirsiniz.
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/depo-stok/malzeme-talepleri/${item.id}`}
-                          className="font-semibold text-slate-950 hover:underline"
-                        >
-                          {item.requestNumber}
-                        </Link>
-
-                        <div className="mt-1 text-xs text-slate-500">
-                          {item.description ||
-                            "Açıklama yok"}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-800">
-                          {item.projectName}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {item.projectCode}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3 text-slate-700">
-                        {item.requestedByName}
-                      </td>
-
-                      <td className="px-4 py-3 text-slate-700">
-                        <div>
-                          {formatDate(
-                            item.requestDate,
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          İhtiyaç:{" "}
-                          {formatDate(
-                            item.neededByDate,
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3 text-center font-medium text-slate-700">
-                        {item.itemCount}
-                      </td>
-
-                      <td className="px-4 py-3 text-right font-medium text-slate-700">
-                        {item.totalQuantity.toLocaleString(
-                          "tr-TR",
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3 text-slate-700">
-                        {priorityLabels[
-                          item.priority
-                        ] ?? "—"}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusClasses(
-                            item.status,
-                          )}`}
-                        >
-                          {statusLabels[
-                            item.status
-                          ] ?? "Bilinmiyor"}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/depo-stok/malzeme-talepleri/${item.id}`}
-                          className="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          Detay
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <DataTable
+              rows={items}
+              columns={columns}
+              rowKey={(item) => item.id}
+              loading={loading}
+              title="Şantiye Malzeme Talepleri"
+              emptyText="Şantiye malzeme talebi bulunamadı."
+            />
           </div>
         </section>
       </div>

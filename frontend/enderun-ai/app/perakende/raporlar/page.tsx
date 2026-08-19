@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, EmptyState, Input, Select, StatCard } from "@/components/ui";
 import { money, percent, whole } from "@/lib/format/turkish";
@@ -34,6 +39,82 @@ function daysAgo(count: number) {
  * bir toplama kaynağı olsaydı iki rakam arasında hangisinin doğru
  * olduğu sorusu doğardı.
  */
+const staffColumns: DataTableColumn<StaffSalesRow>[] = [
+  { key: "personel", header: "Personel", value: (row) => row.fullName },
+  {
+    key: "satis",
+    header: "Satış",
+    numeric: true,
+    value: (row) => row.saleCount,
+    render: (row) => whole(row.saleCount),
+  },
+  {
+    key: "tutar",
+    header: "Tutar",
+    numeric: true,
+    value: (row) => row.total,
+    render: (row) => money(row.total),
+  },
+  {
+    key: "iskonto",
+    header: "İskonto",
+    numeric: true,
+    value: (row) => row.discountTotal,
+    render: (row) => money(row.discountTotal),
+  },
+  {
+    key: "iskontoOran",
+    header: "İskonto oranı",
+    numeric: true,
+    value: (row) => row.discountRate,
+    render: (row) => percent(row.discountRate),
+  },
+  {
+    key: "onay",
+    header: "Onaya düşen",
+    numeric: true,
+    value: (row) => row.approvalCount,
+    render: (row) => whole(row.approvalCount),
+  },
+];
+
+const receivableColumns: DataTableColumn<OpenReceivableRow>[] = [
+  { key: "fis", header: "Fiş No", value: (row) => row.documentNumber },
+  { key: "musteri", header: "Müşteri", value: (row) => row.customerTitle ?? "—" },
+  {
+    key: "odeme",
+    header: "Ödeme",
+    value: (row) => RETAIL_PAYMENT[row.paymentMethod],
+  },
+  {
+    key: "vade",
+    header: "Vade",
+    value: (row) =>
+      (row.dueDate
+        ? row.dueDate.slice(0, 10).split("-").reverse().join(".")
+        : "—") + (row.isOverdue ? " (vadesi geçti)" : ""),
+    render: (row) => (
+      <>
+        {row.dueDate
+          ? row.dueDate.slice(0, 10).split("-").reverse().join(".")
+          : "—"}
+        {row.isOverdue && (
+          <small className="rw-value-danger" style={{ display: "block" }}>
+            vadesi geçti
+          </small>
+        )}
+      </>
+    ),
+  },
+  {
+    key: "kalan",
+    header: "Kalan",
+    numeric: true,
+    value: (row) => row.remaining,
+    render: (row) => money(row.remaining),
+  },
+];
+
 export default function RetailReportsPage() {
   const [companyId, setCompanyId] = useState("");
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -189,30 +270,13 @@ export default function RetailReportsPage() {
           <EmptyState title="Satış yok" description="Seçilen aralıkta tamamlanmış satış bulunmuyor." />
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Personel</th>
-                  <th style={{ textAlign: "right" }}>Satış</th>
-                  <th style={{ textAlign: "right" }}>Tutar</th>
-                  <th style={{ textAlign: "right" }}>İskonto</th>
-                  <th style={{ textAlign: "right" }}>İskonto oranı</th>
-                  <th style={{ textAlign: "right" }}>Onaya düşen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {staff.map((row) => (
-                  <tr key={row.userId ?? row.fullName}>
-                    <td>{row.fullName}</td>
-                    <td style={{ textAlign: "right" }}>{whole(row.saleCount)}</td>
-                    <td style={{ textAlign: "right" }}>{money(row.total)}</td>
-                    <td style={{ textAlign: "right" }}>{money(row.discountTotal)}</td>
-                    <td style={{ textAlign: "right" }}>{percent(row.discountRate)}</td>
-                    <td style={{ textAlign: "right" }}>{whole(row.approvalCount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              rows={staff}
+              columns={staffColumns}
+              rowKey={(row) => row.userId ?? row.fullName}
+              title="Personel Satış Performansı"
+              emptyText="Bu dönemde satış yok."
+            />
           </div>
         )}
       </section>
@@ -230,35 +294,13 @@ export default function RetailReportsPage() {
           <EmptyState title="Açık alacak yok" description="Vadesi gelmemiş ya da geçmiş alacak bulunmuyor." />
         ) : (
           <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Fiş No</th>
-                  <th>Müşteri</th>
-                  <th>Ödeme</th>
-                  <th>Vade</th>
-                  <th style={{ textAlign: "right" }}>Kalan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {receivables.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.documentNumber}</td>
-                    <td>{row.customerTitle ?? "—"}</td>
-                    <td>{RETAIL_PAYMENT[row.paymentMethod]}</td>
-                    <td>
-                      {row.dueDate ? row.dueDate.slice(0, 10).split("-").reverse().join(".") : "—"}
-                      {row.isOverdue && (
-                        <small className="rw-value-danger" style={{ display: "block" }}>
-                          vadesi geçti
-                        </small>
-                      )}
-                    </td>
-                    <td style={{ textAlign: "right" }}>{money(row.remaining)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              rows={receivables}
+              columns={receivableColumns}
+              rowKey={(row) => row.id}
+              title="Açık Tahsilatlar"
+              emptyText="Açık tahsilat yok."
+            />
           </div>
         )}
       </section>

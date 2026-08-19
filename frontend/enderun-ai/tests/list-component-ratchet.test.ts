@@ -38,7 +38,7 @@ const APP = join(ROOT, "app");
  * Bu sayı yalnızca AŞAĞI iner. Bir faz ekran taşıdığında elle
  * düşürülür; yükseltmek için gerekçe yazılmalıdır.
  */
-const HAM_TABLO_UST_SINIRI = 58;
+const HAM_TABLO_UST_SINIRI = 55;
 
 function pages(dir: string): string[] {
   const found: string[] = [];
@@ -141,6 +141,10 @@ describe("liste bileşeni cırcırı", () => {
       "sekreterya/kargo",
       "isg/belgeler",
       "demirbas/servis",
+      // F4c
+      "insan-kaynaklari/ek-odemeler",
+      "depo-stok/malzeme-talepleri",
+      "perakende/raporlar",
     ];
 
     const ham = new Set(hamTabloEkranlari());
