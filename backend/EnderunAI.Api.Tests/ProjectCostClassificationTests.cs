@@ -79,6 +79,11 @@ public sealed class ProjectCostClassificationTests(DatabaseFixture fixture)
         var project = await TestDataFactory.CreateProjectAsync(db, suffix);
         var otherProject = await TestDataFactory.CreateProjectAsync(db, $"{suffix}x");
 
+        // S6c: depo çıkışı artık muhasebe fişi kesiyor; 150/153, 740
+        // ve 770 olmadan çıkış BİLİNÇLİ olarak durur (mal muhasebesiz
+        // çıkmasın diye). Bu testler çıkış yapıyor, hesapları kuruyor.
+        await TestDataFactory.EnsureStockAccountsAsync(db, project.CompanyId);
+
         var section = new ProjectHakedisSection
         {
             ProjectId = project.Id,

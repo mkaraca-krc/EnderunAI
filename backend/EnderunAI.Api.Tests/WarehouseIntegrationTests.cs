@@ -174,8 +174,19 @@ public sealed class WarehouseIntegrationTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var (company, branch, _) = await TestDataFactory.CreateCompanyStackAsync(db, suffix);
+        // PROJE İLE DEPO AYNI ŞİRKETTE. Önceden `CreateProjectAsync`
+        // kendi şirketini açıyordu ve bu test farkında olmadan BAŞKA
+        // şirketin projesine sarf yazıyordu. Fiş kesilmediği için
+        // görünmüyordu; S6c'de fiş satırı projeyi taşıyınca ortaya
+        // çıktı ve uca da kontrol eklendi.
         var project = await TestDataFactory.CreateProjectAsync(db, suffix + "P");
+        var company = await db.Companies.SingleAsync(x => x.Id == project.CompanyId);
+        var branch = await db.Branches.FirstAsync(x => x.CompanyId == company.Id);
+
+        // S6c: depo çıkışı artık muhasebe fişi kesiyor; 150/153, 740
+        // ve 770 olmadan çıkış BİLİNÇLİ olarak durur (mal muhasebesiz
+        // çıkmasın diye).
+        await TestDataFactory.EnsureStockAccountsAsync(db, company.Id);
 
         var warehouse = new Warehouse
         {
@@ -267,6 +278,10 @@ public sealed class WarehouseIntegrationTests(DatabaseFixture fixture)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var (company, branch, _) = await TestDataFactory.CreateCompanyStackAsync(db, suffix);
+
+        // S6c: projesiz çıkış 770'e yazılıyor; hesap yoksa çıkış
+        // BİLİNÇLİ olarak durur.
+        await TestDataFactory.EnsureStockAccountsAsync(db, company.Id);
 
         var warehouse = new Warehouse
         {

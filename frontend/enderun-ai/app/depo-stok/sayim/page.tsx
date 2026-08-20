@@ -106,10 +106,18 @@ export default function StockCountPage() {
         description: description.trim(),
       });
 
+      // Sayım farkının mali karşılığı da işlem anında söyleniyor:
+      // noksan bir gider, fazla bir gelir doğuruyor ve bunu gören
+      // kişinin gerekçeyi doğru yazması gerekiyor.
       setNotice(
         `Kaydedildi — belge no: ${result.referenceNumber}, ` +
           `fark: ${result.delta > 0 ? "+" : ""}${result.delta}, ` +
-          `yeni miktar: ${result.newQuantity}`
+          `yeni miktar: ${result.newQuantity}. ` +
+          (result.accountingVoucherId
+            ? result.delta > 0
+              ? "Muhasebe fişi kesildi (150-153 stok / 649 sayım fazlası)."
+              : "Muhasebe fişi kesildi (689 sayım noksanı / 150-153 stok)."
+            : "MUHASEBE FİŞİ KESİLMEDİ: kartın ortalama maliyeti sıfır.")
       );
 
       setCurrentQuantity(result.newQuantity);

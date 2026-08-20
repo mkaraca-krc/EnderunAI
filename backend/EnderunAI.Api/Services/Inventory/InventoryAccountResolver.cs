@@ -40,6 +40,45 @@ public interface IInventoryAccountResolver
     Task<Guid> ResolveCostOfGoodsSoldAccountAsync(
         Guid companyId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// PROJEYE/ŞANTİYEYE çıkan malzemenin gideri — 740.03.09
+    /// KULLANILAN MALZEMELER, yoksa 740 ana hesabı.
+    ///
+    /// Alt hesap ÖNCE deneniyor: canlı hesap planında 740 altında
+    /// işçilik, dışarıdan hizmet ve amortisman ayrı ayrı duruyor.
+    /// Malzemeyi ana hesaba yazmak, mali müşavirin kurduğu bu ayrımı
+    /// bozar ve "projeye ne kadar malzeme gitti" sorusu ancak hareket
+    /// kayıtlarına inilerek cevaplanabilirdi.
+    ///
+    /// TÜRDEN BAĞIMSIZ: ticari mal da projeye giderse 740'a yazılır —
+    /// satılmamış, projede tüketilmiştir. Ayrılan yalnız ALACAK
+    /// tarafıdır (150 / 153).
+    /// </summary>
+    Task<Guid> ResolveProjectConsumptionAccountAsync(
+        Guid companyId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// PROJESİZ çıkan malzemenin gideri — 770 Genel Yönetim Giderleri.
+    ///
+    /// KULLANICI KARARI. Ofis/merkez sarfiyatı bir üretim maliyeti
+    /// değildir; 740'a yazılsaydı hiç iş yapılmamışken üretim maliyeti
+    /// doğar, proje kârlılık raporları ve hakediş maliyet kıyasları
+    /// şişerdi.
+    /// </summary>
+    Task<Guid> ResolveGeneralAdminExpenseAccountAsync(
+        Guid companyId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// SAYIM NOKSANI — 689.02. Alt hesap ZORUNLU: canlı planda 689 ana
+    /// hesabına fiş kesilemiyor (ölçüldü).
+    /// </summary>
+    Task<Guid> ResolveInventoryShortageAccountAsync(
+        Guid companyId, CancellationToken cancellationToken);
+
+    /// <summary>SAYIM FAZLASI — 649.03.</summary>
+    Task<Guid> ResolveInventorySurplusAccountAsync(
+        Guid companyId, CancellationToken cancellationToken);
+
     /// <summary>Bir kartın kategorisinden muhasebe karşılığı.</summary>
     Task<InventoryAccountingKind> ResolveKindAsync(
         Guid inventoryItemId, CancellationToken cancellationToken);
@@ -68,6 +107,21 @@ public sealed class InventoryAccountResolver(AppDbContext db) : IInventoryAccoun
     /// olduğu için hareket buraya yazılır.
     /// </summary>
     public const string GoodsReceivedNotInvoicedCode = "379.01";
+
+    /// <summary>
+    /// Projede kullanılan malzeme. Canlı planda mali müşavirin açtığı
+    /// alt hesap; yoksa 740 ana hesabına düşülür.
+    /// </summary>
+    public const string ProjectMaterialExpenseCode = "740.03.09";
+
+    /// <summary>Projesiz (merkez/ofis) sarfiyat.</summary>
+    public const string GeneralAdminExpenseCode = "770";
+
+    /// <summary>Sayım noksanı. 689 ana hesabı fiş kesmeye kapalı.</summary>
+    public const string InventoryShortageCode = "689.02";
+
+    /// <summary>Sayım fazlası.</summary>
+    public const string InventorySurplusCode = "649.03";
 
     public Task<Guid> ResolveStockAccountAsync(
         Guid companyId, InventoryAccountingKind kind, CancellationToken cancellationToken) =>
@@ -114,6 +168,38 @@ public sealed class InventoryAccountResolver(AppDbContext db) : IInventoryAccoun
         return kind ?? InventoryAccountingKind.Consumable;
     }
 
+    public Task<Guid> ResolveProjectConsumptionAccountAsync(
+        Guid companyId, CancellationToken cancellationToken) =>
+        FindFirstAsync(
+            companyId,
+            [ProjectMaterialExpenseCode, ConsumableExpenseCode],
+            "Projede kullanılan malzeme gideri hesabı (740.03.09 ya da 740)",
+            cancellationToken);
+
+    public Task<Guid> ResolveGeneralAdminExpenseAccountAsync(
+        Guid companyId, CancellationToken cancellationToken) =>
+        FindAsync(
+            companyId,
+            GeneralAdminExpenseCode,
+            "Genel yönetim giderleri hesabı (770)",
+            cancellationToken);
+
+    public Task<Guid> ResolveInventoryShortageAccountAsync(
+        Guid companyId, CancellationToken cancellationToken) =>
+        FindAsync(
+            companyId,
+            InventoryShortageCode,
+            "Stok sayım noksanları hesabı (689.02)",
+            cancellationToken);
+
+    public Task<Guid> ResolveInventorySurplusAccountAsync(
+        Guid companyId, CancellationToken cancellationToken) =>
+        FindAsync(
+            companyId,
+            InventorySurplusCode,
+            "Stok sayım fazlaları hesabı (649.03)",
+            cancellationToken);
+
     public Task<Guid> ResolveGoodsReceivedNotInvoicedAccountAsync(
         Guid companyId, CancellationToken cancellationToken) =>
         FindAsync(
@@ -121,6 +207,30 @@ public sealed class InventoryAccountResolver(AppDbContext db) : IInventoryAccoun
             GoodsReceivedNotInvoicedCode,
             "Faturası gelmemiş mal alımları hesabı (379.01)",
             cancellationToken);
+
+    /// <summary>
+    /// Kodları SIRAYLA dener, ilk bulduğunu döndürür. Tercih edilen
+    /// alt hesap yoksa ana hesaba düşmek için — hesap planı her
+    /// şirkette birebir aynı derinlikte değil.
+    /// </summary>
+    private async Task<Guid> FindFirstAsync(
+        Guid companyId, string[] codes, string label, CancellationToken cancellationToken)
+    {
+        foreach (var code in codes)
+        {
+            var id = await db.AccountingAccounts
+                .Where(x => x.CompanyId == companyId
+                    && x.Code == code
+                    && x.IsPostingAllowed)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (id is not null) return id.Value;
+        }
+
+        throw new InvalidOperationException(
+            $"{label} hesap planında bulunamadı. Muhasebe → Hesap Planı'ndan açılmalı.");
+    }
 
     private async Task<Guid> FindAsync(
         Guid companyId, string code, string label, CancellationToken cancellationToken)

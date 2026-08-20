@@ -141,9 +141,18 @@ export function InventoryMovementForm({ mode }: { mode: MovementMode }) {
           ...common,
         });
 
+        // MUHASEBE FİŞİ KESİLDİ Mİ, AÇIKÇA SÖYLENİYOR. Fişsiz çıkış
+        // stok ile muhasebeyi ayırır; kullanıcı bunu işlem anında
+        // görmeli, ay sonunda mutabakat raporunda değil.
         setNotice(
           `Kaydedildi — belge no: ${result.referenceNumber}, ` +
-            `tutar: ${money(result.totalCost)}`
+            `tutar: ${money(result.totalCost)}. ` +
+            (result.accountingVoucherId
+              ? projectId
+                ? "Muhasebe fişi kesildi (740 proje maliyeti / 150-153 stok)."
+                : "Muhasebe fişi kesildi (770 genel yönetim gideri / 150-153 stok)."
+              : "MUHASEBE FİŞİ KESİLMEDİ: kartın ortalama maliyeti sıfır — " +
+                "malzeme hiç faturalı girmemiş olabilir.")
         );
       } else {
         const result = await inventoryMovementService.transfer({

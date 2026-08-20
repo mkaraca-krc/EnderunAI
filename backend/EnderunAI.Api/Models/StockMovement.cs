@@ -84,4 +84,15 @@ public sealed class StockMovement : BaseEntity
     public decimal? UnitCost { get; set; }
 
     public decimal? TotalCost { get; set; }
+
+    /// <summary>
+    /// Bu hareketin muhasebe fişi. Çıkışta (740/770) ve sayım
+    /// farkında (689.02/649.03) dolar.
+    ///
+    /// BOŞ OLMASI BİLGİDİR: maliyeti sıfır olan hareket fiş kesmez —
+    /// kart hiç faturalı girmemiş, maliyeti bilinmiyor demektir.
+    /// Girişte de boştur; orada fiş belgenin kendisine (mal kabul ya
+    /// da fatura) bağlıdır, harekete değil.
+    /// </summary>
+    public Guid? AccountingVoucherId { get; set; }
 }

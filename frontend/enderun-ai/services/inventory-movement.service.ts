@@ -89,11 +89,24 @@ export const inventoryMovementService = {
   /** Bir deponun stok satırları; sayım ekranı mevcut miktarı buradan okur. */
   getWarehouseStocks: (warehouseId: string) =>
     request<WarehouseStockRow[]>(`/api/inventory/warehouses/${warehouseId}/stocks`),
-  issue: (body: unknown) => request<{ referenceNumber: string; unitCost: number; totalCost: number }>(
-    "/api/inventory/issues", { method: "POST", body: JSON.stringify(body) }),
+  /**
+   * Depo çıkışı. `accountingVoucherId` BOŞ dönebilir ve bu bilgidir:
+   * ortalama maliyeti sıfır olan kart hiç faturalı girmemiş demektir,
+   * maliyeti bilinmiyordur ve sıfır tutarlı fiş kesilmez.
+   */
+  issue: (body: unknown) => request<{
+    referenceNumber: string;
+    unitCost: number;
+    totalCost: number;
+    accountingVoucherId?: string | null;
+  }>("/api/inventory/issues", { method: "POST", body: JSON.stringify(body) }),
   transfer: (body: unknown) => request<{ referenceNumber: string }>(
     "/api/inventory/transfers", { method: "POST", body: JSON.stringify(body) }),
-  adjustment: (body: unknown) => request<{ referenceNumber: string; delta: number; newQuantity: number }>(
-    "/api/inventory/adjustments", { method: "POST", body: JSON.stringify(body) }),
+  adjustment: (body: unknown) => request<{
+    referenceNumber: string;
+    delta: number;
+    newQuantity: number;
+    accountingVoucherId?: string | null;
+  }>("/api/inventory/adjustments", { method: "POST", body: JSON.stringify(body) }),
   updateItem: (id: string, body: unknown) => request(`/api/inventory/items/${id}`, { method: "PUT", body: JSON.stringify(body) }),
 };

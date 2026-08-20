@@ -17,7 +17,8 @@ public sealed class InventoryController(
     AppDbContext db,
     IDocumentNumberService documentNumbers,
     ICurrentUserService currentUser,
-    Services.Inventory.IStockAccountingConsistencyService consistency) : ControllerBase
+    Services.Inventory.IStockAccountingConsistencyService consistency,
+    Services.Inventory.IStockConsumptionPoster consumptionPoster) : ControllerBase
 {
     /// <summary>
     /// STOK ↔ MUHASEBE TUTARLILIK RAPORU.
@@ -639,6 +640,30 @@ public sealed class InventoryController(
         if (request.ProjectSiteId.HasValue && !request.ProjectId.HasValue)
             return BadRequest(new { message = "Şantiye seçildiyse proje de belirtilmelidir." });
 
+        // PROJE DEPOYLA AYNI ŞİRKETTE OLMALI.
+        //
+        // Bu kontrol S6c'de eklendi ve eksikliğini muhasebe fişi
+        // ortaya çıkardı: fiş satırı projeyi taşıyor ve fiş servisi
+        // "başka şirkete ait proje" diyerek 500 veriyordu. Kontrol
+        // olmadan da hatalıydı — başka şirketin projesine yazılan sarf
+        // iki şirketin de maliyet analizini bozar — ama fiş kesilmediği
+        // için kimse fark etmezdi.
+        if (request.ProjectId.HasValue)
+        {
+            var projectInCompany = await db.Projects.AnyAsync(
+                x => x.Id == request.ProjectId.Value
+                     && x.CompanyId == stock.Warehouse.CompanyId,
+                cancellationToken);
+
+            if (!projectInCompany)
+            {
+                return BadRequest(new
+                {
+                    message = "Seçilen proje bu deponun şirketine ait değil."
+                });
+            }
+        }
+
         // Kısım seçildiyse projeye ait olmalı: başka projenin kısmına
         // yazılan sarf, iki projenin de maliyet analizini bozar.
         Guid? sectionId = null;
@@ -789,9 +814,50 @@ public sealed class InventoryController(
             });
         }
 
+        // MUHASEBE FİŞİ — çıkışın mali karşılığı.
+        //
+        // Proje varsa borç 740 (projede tüketildi), yoksa borç 770
+        // (merkez sarfiyatı); alacak kartın kategorisine göre 150/153.
+        // Fiş, stokla AYNI transaction içinde ve SaveChanges'ten ÖNCE
+        // kesiliyor: kesilemezse stok da düşmemeli, yoksa mal
+        // muhasebesiz çıkardı ve mutabakat raporu sapardı.
+        //
+        // MALİYETSİZ ÇIKIŞ FİŞ KESTİRMEZ ve bu bilinçli: ortalama
+        // maliyeti sıfır olan kart hiç faturalı girmemiş demektir,
+        // maliyeti bilinmiyordur. Sıfır tutarlı fiş kesmek bilgi
+        // üretmez, kesmemekse farkı mutabakat raporunda görünür bırakır.
+        var projectCode = request.ProjectId.HasValue
+            ? await db.Projects
+                .Where(x => x.Id == request.ProjectId.Value)
+                .Select(x => x.Code)
+                .SingleOrDefaultAsync(cancellationToken)
+            : null;
+
+        if (totalCost > 0)
+        {
+            movement.AccountingVoucherId = await consumptionPoster.PostIssueAsync(
+                stock.Warehouse.CompanyId,
+                new Services.Inventory.StockSaleCost(
+                    stock.InventoryItemId, unitCost, decimal.Round(totalCost, 2)),
+                request.ProjectId,
+                projectCode,
+                referenceNumber,
+                ToUtc(request.MovementDate),
+                movement.Id,
+                cancellationToken);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         await dbTransaction.CommitAsync(cancellationToken);
-        return Ok(new { message = "Depo çıkışı kaydedildi.", stock.Quantity, referenceNumber, unitCost, totalCost });
+        return Ok(new
+        {
+            message = "Depo çıkışı kaydedildi.",
+            stock.Quantity,
+            referenceNumber,
+            unitCost,
+            totalCost,
+            accountingVoucherId = movement.AccountingVoucherId
+        });
     }
 
     [HttpPost("transfers")]
@@ -911,12 +977,18 @@ public sealed class InventoryController(
         var referenceNumber = await documentNumbers.GenerateAsync(
             stock.Warehouse.CompanyId, "STOCK_ADJUSTMENT", "SAYIM", cancellationToken);
 
+        // STOK VE FİŞ AYNI TRANSACTION'DA. Bu uçta daha önce hiç
+        // transaction yoktu — fiş kesmediği için gerekmiyordu da.
+        // Artık kesiyor: fiş patlarsa stok da düzeltilmemeli, yoksa
+        // sayım farkı muhasebesiz kalır ve mutabakat raporu sapardı.
+        await using var dbTransaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
         stock.Quantity = request.CountedQuantity;
         stock.UpdatedAtUtc = DateTime.UtcNow;
 
         var unitCost = stock.InventoryItem.AverageUnitCost;
 
-        db.StockMovements.Add(new StockMovement
+        var movement = new StockMovement
         {
             CompanyId = stock.Warehouse.CompanyId,
             WarehouseId = stock.WarehouseId,
@@ -930,15 +1002,52 @@ public sealed class InventoryController(
             MovementDate = ToUtc(request.MovementDate),
             Description = request.Description?.Trim(),
             CreatedByUserId = currentUser.UserId
-        });
+        };
+        db.StockMovements.Add(movement);
+
+        // SAYIM FARKININ MALİ KARŞILIĞI.
+        //
+        // KULLANICI KARARI: noksan 689.02, fazla 649.03. Sayım farkı
+        // bir üretim maliyeti değil; 740'a karışsaydı kayıp ile
+        // maliyet ayrımı kaybolur ve fire oranı bir daha ölçülemezdi.
+        //
+        // `delta` işaretli: pozitifse fazla, negatifse noksan. Fişe
+        // MUTLAK değer gidiyor, yönü ayrı taşınıyor — negatif tutarlı
+        // bir fiş satırı borç/alacak dengesini okunmaz hale getirirdi.
+        var varianceCost = decimal.Round(Math.Abs(unitCost * delta), 2);
+
+        if (varianceCost > 0)
+        {
+            var projectCode = request.ProjectId.HasValue
+                ? await db.Projects
+                    .Where(x => x.Id == request.ProjectId.Value)
+                    .Select(x => x.Code)
+                    .SingleOrDefaultAsync(cancellationToken)
+                : null;
+
+            movement.AccountingVoucherId = await consumptionPoster.PostAdjustmentAsync(
+                stock.Warehouse.CompanyId,
+                new Services.Inventory.StockSaleCost(
+                    stock.InventoryItemId, unitCost, varianceCost),
+                surplus: delta > 0,
+                request.ProjectId,
+                projectCode,
+                referenceNumber,
+                ToUtc(request.MovementDate),
+                movement.Id,
+                cancellationToken);
+        }
 
         await db.SaveChangesAsync(cancellationToken);
+        await dbTransaction.CommitAsync(cancellationToken);
+
         return Ok(new
         {
             message = delta > 0 ? "Sayım fazlası kaydedildi." : "Sayım eksiği kaydedildi.",
             referenceNumber,
             delta,
-            newQuantity = stock.Quantity
+            newQuantity = stock.Quantity,
+            accountingVoucherId = movement.AccountingVoucherId
         });
     }
 

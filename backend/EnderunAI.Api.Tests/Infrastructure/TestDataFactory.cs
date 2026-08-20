@@ -88,11 +88,25 @@ public static class TestDataFactory
         // bu yüzden alt hesap şart.
         Ensure("379", "DİĞER BORÇ VE GİDER KARŞILIKLARI", posting: false, nature: 1);
 
+        // S6c — depodan çıkış ve sayım farkı hesapları.
+        //
+        // 740.03.09 canlı hesap planında var (KULLANILAN MALZEMELER);
+        // çözümleyici önce onu, yoksa 740'ı deniyor. Test ikisini de
+        // kuruyor ki tercih sırası gerçekten sınansın.
+        Ensure("740", "Hizmet Üretim Maliyeti");
+        Ensure("740.03.09", "KULLANILAN MALZEMELER");
+        Ensure("770", "Genel Yönetim Giderleri");
+
+        // Canlıdaki gerçek durum: 689 ana hesabına da fiş kesilemiyor.
+        Ensure("689", "DİĞER OLAĞANDIŞI GİDER VE ZARARLAR (-)", posting: false);
+        Ensure("649", "Diğer Olağan Gelir ve Kârlar", nature: 1);
+
         await db.SaveChangesAsync();
 
-        // 379.01'i üretimdeki tohumun kendisi açsın ki testler tohumla
-        // aynı yoldan geçsin.
+        // Alt hesapları ÜRETİMDEKİ tohumların kendisi açsın ki testler
+        // tohumla aynı yoldan geçsin.
         await GoodsReceivedNotInvoicedAccountSeed.SeedAsync(db);
+        await StockVarianceAccountSeed.SeedAsync(db);
     }
 
     public static async Task<Project> CreateProjectAsync(AppDbContext db, string suffix)

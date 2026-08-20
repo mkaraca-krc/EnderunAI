@@ -42,7 +42,7 @@ public interface IRetailSaleVoucherPoster
 public sealed class RetailSaleVoucherPoster(
     IAccountingIntegrationService integration,
     IAccountingVoucherService vouchers,
-    ISaleCostLineBuilder saleCostLines) : IRetailSaleVoucherPoster
+    IStockOutflowLineBuilder saleCostLines) : IRetailSaleVoucherPoster
 {
     public async Task<Guid?> PostAsync(
         RetailSale sale,
@@ -60,7 +60,7 @@ public sealed class RetailSaleVoucherPoster(
             CostCenterCode: null);
 
         var lines = new List<AccountingVoucherLineRequest>(
-            await saleCostLines.BuildAsync(
+            await saleCostLines.BuildSaleCostAsync(
                 sale.CompanyId, costs, context, cancellationToken));
 
         var recorded = decimal.Round(sale.RecordedAmount, 2);

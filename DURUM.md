@@ -654,6 +654,90 @@ HİÇBİR YERDEN ÇAĞRILMIYOR (ölçüldü). Yani malzeme projeye verildiğinde
 ettirecek: ilk proje çıkışında fark gösterir. Satış tarafı kapandı,
 tüketim tarafı kendi fazını bekliyor.
 
+**S6c (bitti) — depodan çıkış muhasebesi: stok ↔ muhasebe halkası kapandı.**
+
+KULLANICI GEREKÇESİ: taahhüt firmasında malzemenin çoğu satılmaz,
+projeye gider. Yani bu EN SIK kullanılan yol ve açık kaldığı sürece
+stok ile muhasebe ilk çıkışta ayrışırdı.
+
+ÖLÇÜM: 0 stok hareketi (S0 temizliğinden beri hiç çıkış yapılmamış),
+740'ta 1 fiş satırı — o da tedarikçi faturasından. `ProjectCostTransactions`
+tablosunda 3 kayıt vardı ama HİÇBİRİ stok hareketinden doğmamıştı.
+`ResolveConsumptionAccountAsync` tanımlıydı ve hiçbir yerden
+çağrılmıyordu.
+
+KULLANICININ TARİF ETTİĞİ DIŞINDA İKİ DELİK DAHA BULUNDU ve soruldu —
+ikisi de kapanmadan "sıfır fark" hedefi tutmazdı:
+
+1. **PROJESİZ ÇIKIŞ → 770 Genel Yönetim Giderleri** (kullanıcı kararı).
+   Kod merkez/ofis sarfiyatını açıkça destekliyordu ve proje
+   seçilmediğinde hiçbir maliyet kaydı oluşmuyordu. 740'a yazılsaydı
+   hiç iş yapılmamışken üretim maliyeti doğar, proje kârlılık
+   raporları ve hakediş maliyet kıyasları şişerdi.
+2. **SAYIM FARKI → noksan 689.02, fazla 649.03** (kullanıcı kararı).
+   Düzeltme stoğu değiştiriyor ama hiç fiş kesmiyordu. 740'a
+   karışsaydı kayıp ile maliyet ayrımı kaybolur, fire oranı bir daha
+   ölçülemezdi.
+
+- PROJEYE ÇIKIŞ: borç **740.03.09 KULLANILAN MALZEMELER**, alacak
+  kategoriye göre 150/153. Alt hesap ÖNCE deneniyor, yoksa 740 ana
+  hesabına düşülüyor: canlı planda 740 altında işçilik, dışarıdan
+  hizmet ve amortisman ayrı ayrı duruyor; malzemeyi ana hesaba yazmak
+  mali müşavirin kurduğu ayrımı bozardı.
+- TİCARİ MAL PROJEYE GİDERSE DE 740 — 621 değil. Satılmamış, projede
+  tüketilmiştir. Ayrılan yalnız ALACAK tarafı (153).
+- PROJE ETİKETİ ÇIKIŞTA TAŞINIYOR, girişin tersine. Mal kabulde proje
+  yazılmıyordu çünkü depoya giren mal bilanço kalemiydi; çıkışta
+  maliyet DOĞUYOR ve hangi projede doğduğu tam da o satırın anlattığı
+  şey. Mevcut `ProjectCostTransaction` bağı korundu (malzeme sınıfı).
+- 689 ana hesabı canlıda FİŞ KESİLEMEZ (ölçüldü) — 689.02 alt hesabı
+  tohumla açılıyor, 379.01 deseninin aynısı. 649 kesilebilir olmasına
+  rağmen 649.03 de açıldı: aynı olayın iki yakası biri adlı biri genel
+  hesapta dursaydı raporu okuyan neden farklı olduklarını arardı.
+- SAYIM UCUNDA TRANSACTION YOKTU, eklendi: fiş kesmediği için
+  gerekmiyordu. Artık kesiyor, fiş patlarsa stok da düzeltilmemeli.
+- STOK ÇIKIŞ SATIRI TEK KAYNAKTA: `SaleCostLineBuilder` →
+  `StockOutflowLineBuilder` olarak genelleştirildi. Alacak tarafının
+  kategoriye göre ayrılması artık satış, tüketim ve sayım farkı için
+  TEK yerde; değişen sadece borç tarafı ve yön.
+- MALİYETSİZ ÇIKIŞ FİŞ KESTİRMEZ (bilinçli): ortalama maliyeti sıfır
+  olan kart hiç faturalı girmemiş demektir. Sıfır tutarlı fiş bilgi
+  üretmez; kesmemek farkı mutabakat raporunda görünür bırakır. Ekran
+  bunu işlem anında AÇIKÇA söylüyor — kullanıcı ay sonunu beklemesin.
+
+ASIL İDDİA BİR TESTLE BAĞLANDI: `GirisCikisVeSayimSonrasi_Mutabakat
+SifirFarkVerir` — giriş (150/379.01), çıkış (740/150) ve sayım noksanı
+(689.02/150) arka arkaya koşuyor, sonra rapor SIFIR fark veriyor. Tek
+tek hesap kontrolleri değil, üçü bir arada tutuyor mu sorusu.
+
+KURAL DARALTMASI (dürüstlük notu): "hesap kodu tek yerde" kuralı
+**689 ve 649'u** kapsıyor, **740 ve 770'i KAPSAMIYOR**. Ölçüldü: 770'i
+`SubcontractorInvoiceGenerator`, `ProjectCostClassifier`,
+`AccountingIntegrationService` ve `DatabaseSeeder` meşru olarak
+kullanıyor; 740'ı da ilk ikisi. Tekelleştirilemeyen kod için sahte
+güvence verilmiyor. 689.02 ve 649.03 bu fazda açıldı, yalnız stok
+sayım farkına ait ve tekelleştiriliyor.
+
+Sekiz sondanın hepsi yakalıyor (çıkış fiş kesmiyor · projesiz çıkış
+740'a · ticari mal 621'e · sayım yönü ters · sayım fiş kesmiyor · alt
+hesap tercihi kaldırıldı · proje etiketi taşınmıyor · 689 kodu ikinci
+yere kopyalandı).
+
+TAM TUR İKİ ŞEY DAHA ORTAYA ÇIKARDI (ikisi de düzeltildi):
+1. **Çıkış ucu projenin depoyla aynı şirkette olduğunu doğrulamıyordu.**
+   Fiş satırı projeyi taşıyınca fiş servisi "başka şirkete ait proje"
+   diyerek patladı. Kontrol olmadan da hatalıydı — başka şirketin
+   projesine yazılan sarf iki şirketin de maliyet analizini bozar —
+   ama fiş kesilmediği için kimse fark etmezdi. Uca kontrol eklendi
+   (400, açık mesaj).
+2. **`WarehouseIntegrationTests` farkında olmadan başka şirketin
+   projesine sarf yazıyordu**: `CreateProjectAsync` kendi şirketini
+   açıyor, test ise depoyu ayrı bir şirkette kuruyordu. Test düzeltildi.
+
+STOK ARTIK HER YÖNDEN MUHASEBEYE BAĞLI: giriş S6b, satış S5, çıkış ve
+sayım farkı S6c. Depolar arası transfer bilinçli olarak fiş kesmiyor —
+aynı hesabın içinde yer değiştirme, net etkisi sıfır.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

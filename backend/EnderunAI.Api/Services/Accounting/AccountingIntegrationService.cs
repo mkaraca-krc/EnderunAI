@@ -186,7 +186,7 @@ public sealed class AccountingIntegrationService(
     Market.IInvoiceExchangeRateResolver exchangeRateResolver,
     CurrentAccountCurrencyService currencyService,
     Inventory.IInventoryAccountResolver inventoryAccounts,
-    Inventory.ISaleCostLineBuilder saleCostLines)
+    Inventory.IStockOutflowLineBuilder saleCostLines)
     : IAccountingIntegrationService
 {
     public async Task<CompanyFinanceSettings> GetOrCreateFinanceSettingsAsync(
@@ -751,7 +751,7 @@ public sealed class AccountingIntegrationService(
 
         if (stockedCosts.Count > 0)
         {
-            var costLines = await saleCostLines.BuildAsync(
+            var costLines = await saleCostLines.BuildSaleCostAsync(
                 invoice.CompanyId,
                 stockedCosts
                     .Select(x => new Inventory.StockSaleCost(
