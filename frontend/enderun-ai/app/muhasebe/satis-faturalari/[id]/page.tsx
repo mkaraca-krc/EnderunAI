@@ -33,6 +33,18 @@ export default function SalesInvoiceDetailPage() {
   const invoiceId = params.id;
 
   const [invoice, setInvoice] = useState<SalesInvoiceDetail | null>(null);
+
+  /**
+   * MALİYET SÜTUNLARI: sunucu maliyeti yetkisiz kullanıcıya zaten null
+   * döndürüyor ve kaç satırın gizlendiğini `hiddenCostCount` ile
+   * bildiriyor. Ekran o sayıyı okuyup sütunu hiç açmıyor — boş bir
+   * "Maliyet" sütunu göstermek, verinin olmadığı izlenimi verirdi;
+   * oysa veri var, görme yetkisi yok.
+   */
+  const showCost = Boolean(
+    invoice && invoice.hiddenCostCount === 0 &&
+      invoice.items.some((item) => item.inventoryItemId),
+  );
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
@@ -237,6 +249,12 @@ export default function SalesInvoiceDetailPage() {
               {invoice.projectCode ? `${invoice.projectCode} — ${invoice.projectName}` : "Projesiz"}
             </strong>
           </div>
+          {invoice.warehouseName && (
+            <div>
+              <small>Malın çıktığı depo</small>
+              <strong>{invoice.warehouseName}</strong>
+            </div>
+          )}
           <div>
             <small>Resmi Fatura No</small>
             <strong>{invoice.officialInvoiceNumber ?? "Girilmedi"}</strong>
@@ -384,18 +402,22 @@ export default function SalesInvoiceDetailPage() {
             <thead>
               <tr>
                 <th>#</th>
+                <th>Stok</th>
                 <th>Açıklama</th>
                 <th>Miktar</th>
                 <th>Birim Fiyat</th>
                 <th>KDV %</th>
                 <th>Tutar</th>
                 <th>KDV</th>
+                {showCost && <th>Maliyet</th>}
+                {showCost && <th>Kâr</th>}
               </tr>
             </thead>
             <tbody>
               {invoice.items.map((item) => (
                 <tr key={item.id}>
                   <td>{item.lineNumber}</td>
+                  <td>{item.inventoryItemCode ?? "—"}</td>
                   <td>{item.description}</td>
                   <td>
                     {item.quantity} {item.unit}
@@ -404,6 +426,20 @@ export default function SalesInvoiceDetailPage() {
                   <td>{item.vatRate}</td>
                   <td>{money(item.lineSubtotal)}</td>
                   <td>{money(item.vatAmount)}</td>
+                  {showCost && (
+                    <td>
+                      {item.lineCost === null || item.lineCost === undefined
+                        ? "—"
+                        : money(item.lineCost)}
+                    </td>
+                  )}
+                  {showCost && (
+                    <td>
+                      {item.lineProfit === null || item.lineProfit === undefined
+                        ? "—"
+                        : money(item.lineProfit)}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

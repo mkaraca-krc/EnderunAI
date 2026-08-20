@@ -17,6 +17,8 @@ import {
   salesInvoiceService,
   type SalesInvoiceItemPayload,
 } from "@/services/sales-invoice.service";
+import { warehouseService, type WarehouseListItem } from "@/services/warehouse.service";
+import { inventoryService, type InventoryItemListItem } from "@/services/inventory.service";
 
 type DraftItem = {
   description: string;
@@ -24,10 +26,24 @@ type DraftItem = {
   unit: string;
   unitPrice: string;
   vatRate: string;
+  /**
+   * Seçiliyse satır STOKLUDUR: kesinleştirmede depodan mal çıkar ve
+   * fişe 621 maliyet satırı eklenir. Boş bırakılırsa hizmet satırıdır.
+   * İkisi aynı faturada karışabilir — inşaatta malzeme + işçilik aynı
+   * belgede faturalanıyor.
+   */
+  inventoryItemId: string;
 };
 
 function emptyItem(vatRate: string): DraftItem {
-  return { description: "", quantity: "1", unit: "adet", unitPrice: "", vatRate };
+  return {
+    description: "",
+    quantity: "1",
+    unit: "adet",
+    unitPrice: "",
+    vatRate,
+    inventoryItemId: "",
+  };
 }
 
 export default function NewSalesInvoicePage() {
@@ -48,6 +64,10 @@ export default function NewSalesInvoicePage() {
   const [withholdingAmount, setWithholdingAmount] = useState("0");
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
+
+  const [warehouses, setWarehouses] = useState<WarehouseListItem[]>([]);
+  const [warehouseId, setWarehouseId] = useState("");
+  const [stockCards, setStockCards] = useState<InventoryItemListItem[]>([]);
 
   const [defaultVatRate, setDefaultVatRate] = useState("20");
   const [items, setItems] = useState<DraftItem[]>([emptyItem("20")]);
@@ -87,8 +107,12 @@ export default function NewSalesInvoicePage() {
     void Promise.all([
       currentAccountService.getAll(companyId),
       projectService.getAll(companyId),
+      // Stoklu satış için depolar ve kartlar. DEPO KISITI YOK:
+      // şantiyede artan malzeme de doğrudan satılabilmeli.
+      warehouseService.getAll({ companyId }).catch(() => []),
+      inventoryService.getItems({ companyId }).catch(() => []),
     ])
-      .then(([accountList, projectList]) => {
+      .then(([accountList, projectList, warehouseList, cardList]) => {
         if (!active) return;
         // Yalnızca onaylı (status=2) müşteri rolündeki cariler.
         setCustomers(
@@ -97,6 +121,8 @@ export default function NewSalesInvoicePage() {
           )
         );
         setProjects(projectList);
+        setWarehouses(warehouseList);
+        setStockCards(cardList);
       })
       .catch((err) => {
         if (active) {
@@ -108,6 +134,16 @@ export default function NewSalesInvoicePage() {
       active = false;
     };
   }, [companyId]);
+
+  /**
+   * Stoklu satır sayısı. Bir tane bile varsa depo ZORUNLU: malın
+   * nereden çıkacağı bilinmeden stok düşülemez, tahmin edilseydi
+   * yanlış depodan mal eksilirdi. Sunucu da aynı kontrolü yapıyor.
+   */
+  const stockedLineCount = useMemo(
+    () => items.filter((item) => item.inventoryItemId).length,
+    [items],
+  );
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -151,6 +187,7 @@ export default function NewSalesInvoicePage() {
         unit: item.unit.trim() || "adet",
         unitPrice: Number(item.unitPrice),
         vatRate: Number(item.vatRate),
+        inventoryItemId: item.inventoryItemId || null,
       }));
 
       const created = await salesInvoiceService.create({
@@ -166,6 +203,7 @@ export default function NewSalesInvoicePage() {
         description: description.trim() || null,
         notes: notes.trim() || null,
         items: payloadItems,
+        warehouseId: warehouseId || null,
       });
 
       router.push(`/muhasebe/satis-faturalari/${created.id}`);
@@ -301,13 +339,40 @@ export default function NewSalesInvoicePage() {
 
         <div className="erp-form-header" style={{ marginTop: "20px" }}>
           <h2>Kalemler</h2>
-          <p>KDV oranı kalem bazında değiştirilebilir.</p>
+          <p>
+            KDV oranı kalem bazında değiştirilebilir. Stok kartı seçilen
+            satırda mal kesinleştirmede depodan düşer ve maliyeti 621&apos;e
+            yazılır; boş bırakılan satır hizmet satışıdır.
+          </p>
         </div>
+
+        {stockedLineCount > 0 && (
+          <label className="erp-field" style={{ maxWidth: 360 }}>
+            <span>Malın çıkacağı depo *</span>
+            <select
+              value={warehouseId}
+              onChange={(e) => setWarehouseId(e.target.value)}
+              required
+            >
+              <option value="">Seçin</option>
+              {warehouses.map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name}
+                </option>
+              ))}
+            </select>
+            <small>
+              {stockedLineCount} stoklu satır var. Şantiye deposu da
+              seçilebilir.
+            </small>
+          </label>
+        )}
 
         <div className="erp-table-wrap">
           <table className="erp-table">
             <thead>
               <tr>
+                <th>Stok Kartı</th>
                 <th>Açıklama *</th>
                 <th>Miktar *</th>
                 <th>Birim</th>
@@ -324,6 +389,32 @@ export default function NewSalesInvoicePage() {
 
                 return (
                   <tr key={index}>
+                    <td>
+                      <select
+                        value={item.inventoryItemId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const card = stockCards.find((x) => x.id === id);
+
+                          // Kart seçilince açıklama ve birim ondan
+                          // gelir: elle yazılan ad, faturada satılan
+                          // malın kartıyla tutmayabilirdi.
+                          updateItem(index, {
+                            inventoryItemId: id,
+                            ...(card
+                              ? { description: card.name, unit: card.unit }
+                              : {}),
+                          });
+                        }}
+                      >
+                        <option value="">Hizmet / stoksuz</option>
+                        {stockCards.map((card) => (
+                          <option key={card.id} value={card.id}>
+                            {card.code} — {card.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td>
                       <input
                         type="text"

@@ -570,6 +570,90 @@ SONDADA İKİ KAÇIRMA (ikisi de düzeltildi):
 Dokuz sondanın hepsi yakalıyor. Migration canlıya yedekle uygulandı
 (db_20260820_001203.dump).
 
+**S5 (bitti) — stoklu satış: 621 maliyet, satır kârı, QR hızlı giriş.**
+
+ÖLÇÜM: 13 satış faturası vardı, **hiçbirinin muhasebe fişi yoktu**
+(12'si taslak, 49,6M TL; 1'i iptal). 600 ve 621 hesaplarında SIFIR fiş
+satırı. `retail_sales` boştu. Satış faturası kaleminde stok bağı hiç
+yoktu ve fiş yalnız 120/600/391 yazıyordu. Yani mal depodan çıkıyor,
+150/153 hiç alacaklanmıyordu — S6b'de kurulan mutabakat raporu ilk
+satışta sapardı.
+
+ÜÇ KULLANICI KARARI:
+1. **Elden satışta TAM maliyet 621'e.** Mal tamamen depodan çıkıyor,
+   dolayısıyla maliyetin tamamı yazılır ve 150/153 tam kapanır.
+   Görünen bedeli: elden satış yapılan fiş resmi defterde düşük kârlı
+   görünür. Alternatifi (maliyeti kayıtlı oranla ölçeklemek) marjı
+   gerçekçi gösterirdi ama stok hesabı hiç kapanmaz, mutabakat her
+   elden satışta biraz daha sapar ve muhasebesiz stok birikirdi.
+2. **Stoklu satış faturası HER depodan** yapılabilir, merkezle sınırlı
+   değil — şantiyede artan malzemenin oradan satılması olağan.
+   (Perakende ekranı merkez kısıtını koruyor, o ayrı bir akış.)
+3. **İsimsiz satış artık fiş kesiyor.** Öncesinde cari seçilmezse HİÇ
+   kayıt oluşmuyordu: mal çıkıyor, gelir de maliyet de yazılmıyordu.
+
+- SATIŞ MALİYETİ HESABI 621, TÜR NE OLURSA OLSUN. `ResolveConsumption
+  AccountAsync` (sarf→740) bilinçli olarak AYRI bırakıldı: 740 projede
+  TÜKETİLEN malzemenin üretim maliyetidir, satılan mal tüketilmemiştir.
+  Sarf 740'a yazılsaydı satış, hiç yapılmamış bir işin üretim maliyeti
+  gibi görünür ve proje maliyet raporları şişerdi. Alacak tarafı yine
+  kategoriden geliyor (150 / 153).
+- İKİ SATIŞ YOLU TEK KAPIDAN: `IStockSaleIssuer` stok çıkışının,
+  `ISaleCostLineBuilder` maliyet fiş satırlarının tek kaynağı.
+  Perakende kendi düşüş döngüsünü bıraktı. Ayrı kalsalardı negatif
+  stok yasağı ve maliyet dondurma kuralı zamanla ayrışırdı.
+- NEGATİF STOK YASAĞI SATIŞTA DA: kontrol düşüşten önce ve aynı
+  değişken üzerinde. `.Quantity -=` noktası sayısı 4'te kaldı, S4
+  sözleşmesindeki `checkedSites >= 4` koruması bozulmadı.
+- MALİYET ÇIKIŞ ANINDA DONDURULUYOR (`UnitCostAtSale`, `LineCost`).
+  Taslakta boş: taslak günündeki maliyet yazılsaydı, araya giren bir
+  mal kabulü ortalamayı değiştirdiğinde fişteki maliyet stoktan
+  düşülenle tutmazdı.
+- STOK VE FİŞ AYNI TRANSACTION'DA. İlk yazımda ikiye bölmüştüm; stok
+  çıkıp fiş kesilemezse muhasebesiz çıkış kalırdı — S6b'de mal
+  kabulünde kapatılan deliğin satış tarafındaki eşi. Düzeltildi.
+- MÜŞTERİ İADESİNDE ORTALAMA MALİYET GÜNCELLENİYOR. Yalnız miktar
+  artırmak yetmezdi: mal satıldığı maliyetle geri giriyor, arada
+  ortalama değiştiyse stok DEĞERİ bugünkü ortalamayla artar ama
+  muhasebeye dondurulmuş maliyet yazılır.
+- SATIR KÂRI `inventory.view` İZNİNE BAĞLI. "Satış ekranı maliyeti
+  görmez" bilinçli bir karardı ve korunuyor — satır kârı maliyeti ele
+  verdiği için aynı kapıya bağlandı. YENİ ANAHTAR AÇILMADI: stok
+  maliyetini bugün fiilen o izin koruyor ve fiyatlandırma ekranı da
+  onu kullanıyor; ikinci anahtar iki ekranın ayrışmasına yol açardı.
+  Yetkisize null döner, gizlenen satır sayısı ayrıca bildirilir.
+- QR HIZLI GİRİŞ: okuyucu bir klavyedir. Kasada üç şey okutulabiliyor
+  (bizim etiketimizdeki kart URL'i, üretici barkodu, elle yazılan kod)
+  ve `parseScannedItem` üçünü ayırıyor. Kimlik ile arama terimi
+  ayrılmasaydı bir GUID metin olarak aratılır, hiçbir sonuç dönmez ve
+  etiket okutmak SESSİZCE çalışmazdı. Aynı kart ikinci kez okutulunca
+  miktar artıyor, ikinci satır açılmıyor.
+
+SONDADA İKİ OLAY:
+1. Sonda D önce KAÇIRDI görünüyordu — ama sebep kural değil, sondanın
+   kendisiydi: `UnitCostAtSale` ataması `SalesInvoiceService`'te,
+   ben `AccountingIntegrationService`'i sabote etmiştim, dosya hiç
+   değişmemişti. Sonda betiğine artık "sabotaj dosyayı gerçekten
+   değiştirdi mi" kontrolü eklendi; değiştirmediyse sonda GEÇERSİZ
+   yazıyor. Doğru dosyada tekrarlandı, yakaladı.
+2. Sonda H GERÇEKTEN KAÇIRDI: perakende iadesinde dondurulmuş maliyeti
+   yoksayıp bugünkü ortalamaya döndüğümde 22 testin hiçbiri düşmedi —
+   kuralın hiç kapsaması yoktu. Yazdığım test **gerçek bir hatayı da
+   buldu**: iade fişinin kalemleri yeni oluşturuluyor ve dondurulmuş
+   maliyeti taşımıyordu, o yüzden zaten bugünkü ortalamaya düşüyordu.
+   Maliyet artık orijinal satırdan kopyalanıyor.
+
+Dokuz sonda (A–I) yakalıyor. DÜRÜSTLÜK NOTU: sonda I zayıf — kodu
+değil test iddiasını ters çevirdim, yani yalnız iddianın yük taşıdığını
+kanıtlıyor, sıralamanın kendisini değil.
+
+**AÇIK KALAN DELİK (S5 kapsamı dışı, bilinçli):** depodan PROJEYE
+çıkış hâlâ fiş kesmiyor — `ResolveConsumptionAccountAsync` tanımlı ama
+HİÇBİR YERDEN ÇAĞRILMIYOR (ölçüldü). Yani malzeme projeye verildiğinde
+150 alacaklanmıyor, 740 borçlanmıyor. Mutabakat raporu bunu fark
+ettirecek: ilk proje çıkışında fark gösterir. Satış tarafı kapandı,
+tüketim tarafı kendi fazını bekliyor.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

@@ -43,3 +43,38 @@ export function formatLocation(
 ) {
   return [zoneName, shelfCode, levelCode].filter(Boolean).join(" · ") || "—";
 }
+
+/**
+ * OKUTULAN DEĞERİ ÇÖZER.
+ *
+ * QR okuyucu bir klavyedir: okuduğu metni yazar ve Enter'a basar.
+ * Kasada üç farklı şey okutulabiliyor ve üçü de aynı kutuya düşüyor:
+ *
+ * 1. Bizim ürettiğimiz stok etiketi — içinde kart sayfasının URL'i var
+ *    (`.../depo-stok/malzeme/{id}`). Kimliği oradan söküyoruz.
+ * 2. Üreticinin barkodu — kartın `barcode` alanıyla eşleşir.
+ * 3. Elle yazılan stok kodu.
+ *
+ * Kimlik ile arama terimi AYRILIYOR: kimlikle eşleşme kesindir, terim
+ * ise birden çok karta uyabilir. İkisi karıştırılsaydı, bir GUID'i
+ * metin olarak aratmak hiçbir sonuç döndürmezdi ve etiket okutmak
+ * sessizce çalışmazdı.
+ */
+export function parseScannedItem(
+  raw: string
+): { kind: "id"; id: string } | { kind: "term"; term: string } | null {
+  const value = raw.trim();
+  if (!value) return null;
+
+  const fromUrl = value.match(
+    /\/depo-stok\/malzeme\/([0-9a-fA-F-]{36})/
+  );
+  if (fromUrl) return { kind: "id", id: fromUrl[1].toLowerCase() };
+
+  // Çıplak GUID de okutulabilir (eski etiketler, elle kopyalama).
+  if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)) {
+    return { kind: "id", id: value.toLowerCase() };
+  }
+
+  return { kind: "term", term: value };
+}

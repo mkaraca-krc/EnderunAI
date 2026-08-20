@@ -37,6 +37,12 @@ export type SalesInvoiceItem = {
   lineSubtotal: number;
   vatAmount: number;
   lineTotal: number;
+  /** Doluysa STOKLU satır: kesinleştirmede depodan mal çıkar. */
+  inventoryItemId?: string | null;
+  inventoryItemCode?: string | null;
+  /** Dondurulmuş maliyet ve kâr — yetki yoksa null gelir. */
+  lineCost?: number | null;
+  lineProfit?: number | null;
 };
 
 export type SalesInvoiceListItem = {
@@ -92,6 +98,11 @@ export type SalesInvoiceDetail = {
   hasSourceXml: boolean;
   accountingVoucherId?: string | null;
   accountingVoucherNumber?: string | null;
+  /** Stoklu satırların çıktığı depo. */
+  warehouseId?: string | null;
+  warehouseName?: string | null;
+  /** Maliyeti yetki nedeniyle gizlenen satır sayısı. */
+  hiddenCostCount: number;
   items: SalesInvoiceItem[];
   /** Bu belge bir iade faturası mı. */
   isReturn: boolean;
@@ -108,6 +119,12 @@ export type SalesInvoiceItemPayload = {
   unit: string;
   unitPrice: number;
   vatRate: number;
+  /**
+   * Stok kartı — doluysa satır STOKLUDUR: kesinleştirmede depodan mal
+   * çıkar ve fişe 621 maliyet satırı eklenir. Boşsa hizmet satırıdır,
+   * yalnız gelir yazılır. İkisi aynı faturada karışabilir.
+   */
+  inventoryItemId?: string | null;
 };
 
 export type CreateSalesInvoicePayload = {
@@ -123,6 +140,8 @@ export type CreateSalesInvoicePayload = {
   description?: string | null;
   notes?: string | null;
   items: SalesInvoiceItemPayload[];
+  /** Stoklu kalem varsa zorunlu. Merkez depoyla sınırlı değil. */
+  warehouseId?: string | null;
 };
 
 export type UpdateSalesInvoicePayload = Omit<CreateSalesInvoicePayload, "companyId">;

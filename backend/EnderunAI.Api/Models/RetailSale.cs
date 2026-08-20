@@ -145,6 +145,17 @@ public sealed class RetailSale : BaseEntity
     public Guid? CashTransactionId { get; set; }
 
     /// <summary>
+    /// FATURASIZ satışta kesilen muhasebe fişi — isimsiz nakit satış
+    /// ya da tamamı elden satış. Faturalı satışta boş kalır: orada fiş
+    /// faturanın kendisine bağlıdır ve <see cref="SalesInvoiceId"/>
+    /// üzerinden bulunur.
+    ///
+    /// İki alan aynı anda dolu OLAMAZ; hangisinin dolu olduğu satışın
+    /// hangi yoldan muhasebeleştiğini de söyler.
+    /// </summary>
+    public Guid? AccountingVoucherId { get; set; }
+
+    /// <summary>
     /// Bu fiş bir İADE fişi mi.
     ///
     /// İade AYRI BİR VARLIK DEĞİL, aynı fiş türünün ters yönlüsü —
@@ -200,4 +211,17 @@ public sealed class RetailSaleItem : BaseEntity
     public decimal LineSubtotal { get; set; }
     public decimal VatAmount { get; set; }
     public decimal LineTotal { get; set; }
+
+    /// <summary>
+    /// Fiş tamamlanırken dondurulan ağırlıklı ortalama birim maliyet.
+    ///
+    /// Taslakta BOŞTUR: maliyet, malın fiilen çıktığı anda ne ise odur.
+    /// Taslak açıldığı gündeki maliyet yazılsaydı, araya giren bir mal
+    /// kabulü ortalamayı değiştirdiğinde fişteki maliyet stoktan
+    /// düşülenle tutmaz ve 621 ile 153 birbirini kapatmazdı.
+    /// </summary>
+    public decimal? UnitCostAtSale { get; set; }
+
+    /// <summary>Miktar × <see cref="UnitCostAtSale"/>.</summary>
+    public decimal? LineCost { get; set; }
 }

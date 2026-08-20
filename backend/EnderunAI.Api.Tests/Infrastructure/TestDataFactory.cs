@@ -79,6 +79,11 @@ public static class TestDataFactory
         Ensure("150", "İlk Madde ve Malzeme");
         Ensure("153", "Ticari Mallar");
 
+        // Satılan malın maliyeti — stoklu satış bu hesaba yazıyor.
+        // Sarf da ticari mal da satılınca 621'e gider; 740 projede
+        // TÜKETİLEN malzemenin hesabıdır, satışın değil.
+        Ensure("621", "Satılan Ticari Mallar Maliyeti");
+
         // Canlıdaki gerçek durum: 379 ana hesabına fiş kesilemiyor,
         // bu yüzden alt hesap şart.
         Ensure("379", "DİĞER BORÇ VE GİDER KARŞILIKLARI", posting: false, nature: 1);

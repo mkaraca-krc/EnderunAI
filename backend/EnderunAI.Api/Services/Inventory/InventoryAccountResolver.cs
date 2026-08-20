@@ -23,6 +23,23 @@ public interface IInventoryAccountResolver
     Task<Guid> ResolveConsumptionAccountAsync(
         Guid companyId, InventoryAccountingKind kind, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// SATIŞTA yazılan maliyet hesabı: TÜR NE OLURSA OLSUN 621.
+    ///
+    /// Bilinçli olarak <see cref="ResolveConsumptionAccountAsync"/>'ten
+    /// AYRI: o metot malzemenin PROJEDE TÜKETİLMESİNİ karşılıyor ve
+    /// sarfı 740 Hizmet Üretim Maliyeti'ne yazıyor. Satılan malzeme
+    /// tüketilmemiştir — üretim maliyeti değil, satılan malın
+    /// maliyetidir. Sarf malzeme 740'a yazılsaydı satış, hiç
+    /// yapılmamış bir işin üretim maliyeti gibi görünür ve proje
+    /// maliyet raporları şişerdi.
+    ///
+    /// Alacak tarafı yine kartın kategorisinden gelir (150 / 153);
+    /// ayrılan yalnız borç tarafıdır.
+    /// </summary>
+    Task<Guid> ResolveCostOfGoodsSoldAccountAsync(
+        Guid companyId, CancellationToken cancellationToken);
+
     /// <summary>Bir kartın kategorisinden muhasebe karşılığı.</summary>
     Task<InventoryAccountingKind> ResolveKindAsync(
         Guid inventoryItemId, CancellationToken cancellationToken);
@@ -70,6 +87,14 @@ public sealed class InventoryAccountResolver(AppDbContext db) : IInventoryAccoun
             kind == InventoryAccountingKind.TradeGood
                 ? "Satılan ticari mallar maliyeti (621)"
                 : "Hizmet üretim maliyeti (740)",
+            cancellationToken);
+
+    public Task<Guid> ResolveCostOfGoodsSoldAccountAsync(
+        Guid companyId, CancellationToken cancellationToken) =>
+        FindAsync(
+            companyId,
+            TradeGoodCostCode,
+            "Satılan ticari mallar maliyeti (621)",
             cancellationToken);
 
     public async Task<InventoryAccountingKind> ResolveKindAsync(

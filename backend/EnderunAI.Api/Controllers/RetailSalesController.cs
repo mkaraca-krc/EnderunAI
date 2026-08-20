@@ -86,6 +86,7 @@ public sealed class RetailSalesController(
     public async Task<IActionResult> SearchProducts(
         [FromQuery] Guid warehouseId,
         [FromQuery] string? search,
+        [FromQuery] Guid? itemId,
         CancellationToken cancellationToken)
     {
         var term = search?.Trim();
@@ -97,7 +98,16 @@ public sealed class RetailSalesController(
             // "temiz başlangıç" ilk gün bozulur.
             .Where(x => x.IsActive && x.SalesPrice != null);
 
-        if (!string.IsNullOrWhiteSpace(term))
+        // QR ETİKETİ KİMLİKLE GELİR. Bizim bastığımız stok etiketinde
+        // kart sayfasının URL'i var; kasada okutulunca oradan çıkan
+        // kimlik buraya düşüyor. Kimlik METİN OLARAK aratılsaydı kod,
+        // ad ve barkodun hiçbiriyle eşleşmez, etiket okutmak sessizce
+        // çalışmazdı.
+        if (itemId is Guid id)
+        {
+            query = query.Where(x => x.Id == id);
+        }
+        else if (!string.IsNullOrWhiteSpace(term))
         {
             query = query.Where(x =>
                 EF.Functions.ILike(x.Code, $"%{term}%")
@@ -221,7 +231,15 @@ public sealed class RetailSalesController(
                 x.CashAmount,
                 x.ApprovalReason,
                 x.DecisionReason,
-                x.SalesInvoiceId
+                x.SalesInvoiceId,
+
+                // FİŞ KÂRI: satır matrahları toplamı eksi dondurulmuş
+                // maliyetler toplamı. Maliyeti yazılmamış satır varsa
+                // (S5 öncesi fişler) kâr hesaplanmaz — eksik veriden
+                // üretilen bir kâr rakamı, hiç göstermemekten kötüdür.
+                Profit = x.Items.All(i => i.LineCost != null)
+                    ? x.Items.Sum(i => i.LineSubtotal) - x.Items.Sum(i => i.LineCost!.Value)
+                    : (decimal?)null
             })
             .ToListAsync(cancellationToken);
 
@@ -229,6 +247,9 @@ public sealed class RetailSalesController(
         // kaç kayıtta gizlendiği ayrıca bildirilir — tutar sızmaz ama
         // eksik olduğu belli olur. Desen VehiclesController ile aynı.
         var hiddenCount = canSeeCash ? 0 : rows.Count(x => x.CashAmount > 0);
+
+        var canSeeProfit = await HasAsync(
+            PermissionCatalog.Keys.InventoryView, cancellationToken);
 
         return Ok(new
         {
@@ -246,9 +267,16 @@ public sealed class RetailSalesController(
                 CashAmount = canSeeCash ? x.CashAmount : (decimal?)null,
                 x.ApprovalReason,
                 x.DecisionReason,
-                x.SalesInvoiceId
+                x.SalesInvoiceId,
+
+                // Kâr maliyeti ele verir; elden maskesinden AYRI bir
+                // kapıya bağlı (`inventory.view`), çünkü koruduğu şey
+                // farklı: biri kayıt dışı parayı, diğeri malın alış
+                // fiyatını gizliyor.
+                Profit = canSeeProfit ? x.Profit : null
             }),
-            hiddenCount
+            hiddenCount,
+            profitHidden = !canSeeProfit
         });
     }
 
@@ -416,9 +444,23 @@ public sealed class RetailSalesController(
                 x.Quantity,
                 x.UnitPrice,
                 x.DiscountRate,
-                x.LineTotal
+                x.LineTotal,
+                x.LineSubtotal,
+                x.LineCost
             })
             .ToListAsync(cancellationToken);
+
+        // SATIR KÂRI MALİYETİ ELE VERİR, bu yüzden maliyetle AYNI
+        // kapıya bağlı: `inventory.view`.
+        //
+        // Satış ekranının maliyeti görmemesi bilinçli bir karardı ve
+        // korunuyor — satış personelinde bu izin yok, kâr sütunu ona
+        // boş gelir. Yeni bir izin anahtarı açılmadı: stok maliyetini
+        // bugün fiilen bu izin koruyor (fiyatlandırma ekranı da aynı
+        // kapıyı kullanıyor) ve ikinci bir anahtar iki ekranın zamanla
+        // ayrışmasına yol açardı.
+        var canSeeCost = await HasAsync(
+            PermissionCatalog.Keys.InventoryView, cancellationToken);
 
         // Daha önce iade edilen miktar: ekran kalan iade edilebiliri
         // göstersin diye. Sunucu ayrıca kendi kontrolünü yapıyor.
@@ -440,6 +482,10 @@ public sealed class RetailSalesController(
             x.UnitPrice,
             x.DiscountRate,
             x.LineTotal,
+            LineCost = canSeeCost ? x.LineCost : null,
+            LineProfit = canSeeCost && x.LineCost is decimal cost
+                ? decimal.Round(x.LineSubtotal - cost, 2)
+                : (decimal?)null,
             AlreadyReturned = returned.GetValueOrDefault(x.Description, 0m)
         }));
     }

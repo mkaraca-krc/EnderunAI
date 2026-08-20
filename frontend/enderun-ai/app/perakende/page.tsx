@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { Button, ConfirmDialog, EmptyState, Input, Modal, Select } from "@/components/ui";
 import { money, quantity as formatQuantity, unitPrice } from "@/lib/format/turkish";
+import { parseScannedItem } from "@/lib/inventory/qr";
 import { usePermissions } from "@/lib/use-permissions";
 import {
   RETAIL_PAYMENT,
@@ -40,6 +41,7 @@ export default function RetailSalesPage() {
   const [resources, setResources] = useState<Resources | null>(null);
   const [sales, setSales] = useState<RetailSaleRow[]>([]);
   const [hiddenCount, setHiddenCount] = useState(0);
+  const [profitHidden, setProfitHidden] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -47,6 +49,8 @@ export default function RetailSalesPage() {
 
   const [warehouseId, setWarehouseId] = useState("");
   const [search, setSearch] = useState("");
+  const [scan, setScan] = useState("");
+  const [scanError, setScanError] = useState("");
   const [products, setProducts] = useState<RetailProduct[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
 
@@ -79,6 +83,7 @@ export default function RetailSalesPage() {
       setResources(resourceData);
       setSales(saleData.items);
       setHiddenCount(saleData.hiddenCount);
+      setProfitHidden(Boolean(saleData.profitHidden));
 
       if (!warehouseId && resourceData.warehouses.length > 0) {
         setWarehouseId(resourceData.warehouses[0].id);
@@ -160,6 +165,85 @@ export default function RetailSalesPage() {
         { key: product.id, product, quantity: "1", discountRate: "0" },
       ];
     });
+  }
+
+  /**
+   * QR / BARKOD OKUTULDU.
+   *
+   * Okuyucu bir klavyedir: metni yazar ve Enter'a basar. Üç şey
+   * okutulabiliyor — bizim stok etiketimiz (içinde kart URL'i), üretici
+   * barkodu ve elle yazılan kod — üçü de bu kutuya düşüyor.
+   *
+   * AYNI KART İKİNCİ KEZ OKUTULURSA MİKTAR ARTAR, ikinci satır
+   * açılmaz: kasada aynı üründen üç tane okutmak olağan ve her
+   * seferinde satır eklemek fişi okunmaz hale getirirdi.
+   */
+  async function handleScan() {
+    const parsed = parseScannedItem(scan);
+    if (!parsed || !warehouseId) return;
+
+    setScanError("");
+
+    try {
+      const found =
+        parsed.kind === "id"
+          ? await retailSaleService.productById(warehouseId, parsed.id)
+          : await retailSaleService.products(warehouseId, parsed.term);
+
+      // Terim birden çok karta uyabilir; TEK eşleşme yoksa otomatik
+      // eklemiyoruz. Yanlış ürünü sessizce fişe koymaktansa kullanıcıya
+      // listeyi gösterip seçtirmek doğru.
+      if (found.length !== 1) {
+        setSearch(parsed.kind === "term" ? parsed.term : "");
+        setScanError(
+          found.length === 0
+            ? "Okutulan kod bir ürüne uymadı."
+            : `${found.length} ürün eşleşti; listeden seçin.`,
+        );
+        setScan("");
+        return;
+      }
+
+      const product = found[0];
+
+      if (product.available <= 0) {
+        setScanError(`${product.name}: satılabilir stok yok.`);
+        setScan("");
+        return;
+      }
+
+      setLines((current) => {
+        const existing = current.find((line) => line.product.id === product.id);
+
+        if (!existing) {
+          return [
+            ...current,
+            { key: product.id, product, quantity: "1", discountRate: "0" },
+          ];
+        }
+
+        const next = (Number(existing.quantity) || 0) + 1;
+
+        // Stoktan fazlasını okutmak sessizce geçmemeli.
+        if (next > product.available) {
+          setScanError(
+            `${product.name}: satılabilir ${formatQuantity(product.available)} ${product.unit}.`,
+          );
+          return current;
+        }
+
+        return current.map((line) =>
+          line.product.id === product.id
+            ? { ...line, quantity: String(next) }
+            : line,
+        );
+      });
+
+      setScan("");
+    } catch {
+      setScanError("Ürün okunamadı.");
+      setScan("");
+    }
   }
 
   function updateLine(key: string, patch: Partial<Line>) {
@@ -312,7 +396,25 @@ export default function RetailSalesPage() {
               <span>Ürün ara (kod, ad, barkod)</span>
               <Input value={search} onChange={(event) => setSearch(event.target.value)} />
             </label>
+
+            <label>
+              <span>QR / barkod okut</span>
+              <Input
+                value={scan}
+                placeholder="Okutun veya kodu yazıp Enter'a basın"
+                onChange={(event) => setScan(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  // Okuyucu Enter'ı kendisi gönderiyor; formun
+                  // gönderilmesini engellemezsek fiş yarım kaydedilir.
+                  event.preventDefault();
+                  void handleScan();
+                }}
+              />
+            </label>
           </div>
+
+          {scanError && <p className="erp-form-error">{scanError}</p>}
 
           {products.length > 0 && (
             <div className="erp-table-wrap">
@@ -527,6 +629,7 @@ export default function RetailSalesPage() {
                   <th style={{ textAlign: "right" }}>Toplam</th>
                   <th style={{ textAlign: "right" }}>Kayıtlı</th>
                   <th style={{ textAlign: "right" }}>Elden</th>
+                  {!profitHidden && <th style={{ textAlign: "right" }}>Kâr</th>}
                   <th>Durum</th>
                   <th />
                 </tr>
@@ -544,6 +647,13 @@ export default function RetailSalesPage() {
                         ? "—"
                         : money(sale.cashAmount)}
                     </td>
+                    {!profitHidden && (
+                      <td style={{ textAlign: "right" }}>
+                        {sale.profit === null || sale.profit === undefined
+                          ? "—"
+                          : money(sale.profit)}
+                      </td>
+                    )}
                     <td>
                       {RETAIL_STATUS[sale.status]}
                       {sale.approvalReason && sale.status === 1 && (
@@ -640,6 +750,7 @@ export default function RetailSalesPage() {
                 <th>Kalem</th>
                 <th style={{ textAlign: "right" }}>Satılan</th>
                 <th style={{ textAlign: "right" }}>İade edilen</th>
+                {!profitHidden && <th style={{ textAlign: "right" }}>Satır kârı</th>}
                 <th style={{ width: 120 }}>İade</th>
               </tr>
             </thead>
@@ -656,6 +767,13 @@ export default function RetailSalesPage() {
                     <td style={{ textAlign: "right" }}>
                       {formatQuantity(item.alreadyReturned)}
                     </td>
+                    {!profitHidden && (
+                      <td style={{ textAlign: "right" }}>
+                        {item.lineProfit === null || item.lineProfit === undefined
+                          ? "—"
+                          : money(item.lineProfit)}
+                      </td>
+                    )}
                     <td>
                       <Input
                         value={returnQuantities[item.id] ?? "0"}

@@ -31,6 +31,18 @@ public sealed class SalesInvoice : BaseEntity
     public Guid? ProjectId { get; set; }
     public Project? Project { get; set; }
 
+    /// <summary>
+    /// STOKLU SATIŞTA MALIN ÇIKTIĞI DEPO. Kalemlerden en az biri stok
+    /// kartına bağlıysa ZORUNLU, tamamen hizmet/stoksuz faturada boş.
+    ///
+    /// KULLANICI KARARI: perakende ekranının aksine merkez depoyla
+    /// SINIRLI DEĞİL — taahhüt işinde şantiyede artan malzemenin
+    /// oradan satılması olağan, önce merkeze transfer şartı gereksiz
+    /// bir adım olurdu.
+    /// </summary>
+    public Guid? WarehouseId { get; set; }
+    public Warehouse? Warehouse { get; set; }
+
     /// <summary>Sistem içi numara (SAT-2026-000001).</summary>
     public string InternalNumber { get; set; } = string.Empty;
 
@@ -113,6 +125,28 @@ public sealed class SalesInvoiceItem : BaseEntity
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal VatRate { get; set; }
+
+    /// <summary>
+    /// STOK KARTI — doluysa bu satır STOKLU SATIŞTIR: kesinleştirmede
+    /// depodan mal çıkar ve fişe 621 maliyet satırı eklenir.
+    ///
+    /// BOŞSA hizmet/stoksuz satırdır: yalnız gelir yazılır, stok
+    /// hareketi doğmaz. İkisi AYNI FATURADA karışabilir — inşaatta
+    /// malzeme + işçilik aynı belgede faturalanır.
+    /// </summary>
+    public Guid? InventoryItemId { get; set; }
+    public InventoryItem? InventoryItem { get; set; }
+
+    /// <summary>
+    /// Kesinleştirme anındaki ağırlıklı ortalama birim maliyet —
+    /// DONDURULUR. Kart maliyeti sonraki alımlarla değişse bile bu
+    /// satırın kârı ve iadesi sabit kalır; iadede bugünkü ortalama
+    /// kullanılsaydı mal aynı malken hayali kâr/zarar doğardı.
+    /// </summary>
+    public decimal? UnitCostAtSale { get; set; }
+
+    /// <summary>Miktar × <see cref="UnitCostAtSale"/>.</summary>
+    public decimal? LineCost { get; set; }
 
     /// <summary>Miktar × birim fiyat (KDV hariç).</summary>
     public decimal LineSubtotal { get; set; }

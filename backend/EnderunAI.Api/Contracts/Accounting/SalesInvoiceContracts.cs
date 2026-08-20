@@ -5,7 +5,13 @@ public sealed record SalesInvoiceItemRequest(
     decimal Quantity,
     string Unit,
     decimal UnitPrice,
-    decimal VatRate);
+    decimal VatRate,
+    /// <summary>
+    /// Doluysa STOKLU satır: kesinleştirmede depodan mal çıkar ve
+    /// fişe 621 maliyet satırı eklenir. Boşsa hizmet/stoksuz satır —
+    /// yalnız gelir yazılır. İkisi aynı faturada karışabilir.
+    /// </summary>
+    Guid? InventoryItemId = null);
 
 public sealed record CreateSalesInvoiceRequest(
     Guid CompanyId,
@@ -21,7 +27,12 @@ public sealed record CreateSalesInvoiceRequest(
     decimal WithholdingAmount,
     string? Description,
     string? Notes,
-    IReadOnlyCollection<SalesInvoiceItemRequest> Items);
+    IReadOnlyCollection<SalesInvoiceItemRequest> Items,
+    /// <summary>
+    /// Stoklu kalem varsa malın çıkacağı depo — ZORUNLU. Tamamen
+    /// hizmet faturasında boş kalır. Merkez depoyla sınırlı değil.
+    /// </summary>
+    Guid? WarehouseId = null);
 
 public sealed record UpdateSalesInvoiceRequest(
     Guid CustomerCurrentAccountId,
@@ -34,7 +45,12 @@ public sealed record UpdateSalesInvoiceRequest(
     decimal WithholdingAmount,
     string? Description,
     string? Notes,
-    IReadOnlyCollection<SalesInvoiceItemRequest> Items);
+    IReadOnlyCollection<SalesInvoiceItemRequest> Items,
+    /// <summary>
+    /// Stoklu kalem varsa malın çıkacağı depo — ZORUNLU. Tamamen
+    /// hizmet faturasında boş kalır. Merkez depoyla sınırlı değil.
+    /// </summary>
+    Guid? WarehouseId = null);
 
 public sealed record CancelSalesInvoiceRequest(string Reason);
 
@@ -48,7 +64,16 @@ public sealed record SalesInvoiceItemResponse(
     decimal VatRate,
     decimal LineSubtotal,
     decimal VatAmount,
-    decimal LineTotal);
+    decimal LineTotal,
+    Guid? InventoryItemId,
+    string? InventoryItemCode,
+    /// <summary>
+    /// Dondurulmuş satır maliyeti ve kârı. MALİYET GÖRME YETKİSİ
+    /// YOKSA NULL döner — tutar sızmaz, gizlenen satır sayısı
+    /// faturanın hiddenCostCount alanında bildirilir.
+    /// </summary>
+    decimal? LineCost,
+    decimal? LineProfit);
 
 public sealed record SalesInvoiceListItemResponse(
     Guid Id,
@@ -102,6 +127,11 @@ public sealed record SalesInvoiceDetailResponse(
     bool HasSourceXml,
     Guid? AccountingVoucherId,
     string? AccountingVoucherNumber,
+    /// <summary>Stoklu satırların çıktığı depo.</summary>
+    Guid? WarehouseId,
+    string? WarehouseName,
+    /// <summary>Maliyeti gizlenen satır sayısı — yetkisiz kullanıcıya.</summary>
+    int HiddenCostCount,
     IReadOnlyCollection<SalesInvoiceItemResponse> Items,
     /// <summary>Bu belge bir iade faturası mı.</summary>
     bool IsReturn,

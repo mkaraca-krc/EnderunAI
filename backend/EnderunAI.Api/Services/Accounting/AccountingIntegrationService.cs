@@ -185,7 +185,8 @@ public sealed class AccountingIntegrationService(
     IAccountingVoucherService voucherService,
     Market.IInvoiceExchangeRateResolver exchangeRateResolver,
     CurrentAccountCurrencyService currencyService,
-    Inventory.IInventoryAccountResolver inventoryAccounts)
+    Inventory.IInventoryAccountResolver inventoryAccounts,
+    Inventory.ISaleCostLineBuilder saleCostLines)
     : IAccountingIntegrationService
 {
     public async Task<CompanyFinanceSettings> GetOrCreateFinanceSettingsAsync(
@@ -728,8 +729,55 @@ public sealed class AccountingIntegrationService(
                 DueDate: null));
         }
 
+        // SATILAN MALIN MALİYETİ — yalnız stok kartına bağlı kalemler
+        // için. Hizmet/stoksuz satırlar maliyet satırı üretmez: ortada
+        // depodan çıkan bir mal yoktur, 621'e yazılacak bir şey de.
+        //
+        // Maliyet kesinleştirmede DONDURULMUŞ değerden okunuyor, kartın
+        // bugünkü ortalamasından değil; belge sonradan yeniden fişlense
+        // bile aynı tutarı üretir.
+        var stockedCosts = await db.SalesInvoiceItems
+            .AsNoTracking()
+            .Where(x => x.SalesInvoiceId == invoice.Id
+                && x.InventoryItemId != null
+                && x.LineCost != null
+                && x.LineCost > 0m)
+            .Select(x => new
+            {
+                InventoryItemId = x.InventoryItemId!.Value,
+                LineCost = x.LineCost!.Value
+            })
+            .ToListAsync(cancellationToken);
+
+        if (stockedCosts.Count > 0)
+        {
+            var costLines = await saleCostLines.BuildAsync(
+                invoice.CompanyId,
+                stockedCosts
+                    .Select(x => new Inventory.StockSaleCost(
+                        x.InventoryItemId, 0m, x.LineCost))
+                    .ToList(),
+                new Inventory.SaleCostLineContext(
+                    Reference: reference,
+                    DocumentDate: invoice.InvoiceDate,
+                    CurrencyCode: invoice.CurrencyCode,
+                    ExchangeRate: invoice.ExchangeRate,
+                    // Proje etiketi gelir satırıyla SİMETRİK taşınıyor:
+                    // satışın geliri bir projeye yazılıyorsa maliyeti de
+                    // oraya yazılmalı, yoksa proje kâr/zararı yalnız
+                    // gelir tarafını görür ve olduğundan kârlı görünürdü.
+                    ProjectId: invoice.ProjectId,
+                    CostCenterCode: project?.Code),
+                cancellationToken);
+
+            lines.AddRange(costLines);
+        }
+
         if (reverse)
         {
+            // İADEDE MALİYET DE TERS DÖNER: mal geri geldiği için
+            // borç 153/150, alacak 621. Aynı çevirme bloğundan geçiyor
+            // ki gelir ve maliyet asla farklı yönlere gitmesin.
             lines = lines
                 .Select(line => line with
                 {

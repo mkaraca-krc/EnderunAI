@@ -35,12 +35,20 @@ export interface RetailSaleRow {
   approvalReason?: string | null;
   decisionReason?: string | null;
   salesInvoiceId?: string | null;
+  /**
+   * Fiş kârı (matrah − dondurulmuş maliyet). İki hâlde null gelir:
+   * maliyet görme yetkisi yoksa MASKELENMİŞTİR, S5 öncesi fişlerde ise
+   * maliyet hiç yazılmamıştır. İkisini `profitHidden` ayırır.
+   */
+  profit?: number | null;
 }
 
 export interface RetailSaleListResponse {
   items: RetailSaleRow[];
   /** Elden tutarı gizlenen kayıt sayısı. */
   hiddenCount: number;
+  /** Kâr sütunu yetki nedeniyle tamamen gizlendi mi. */
+  profitHidden?: boolean;
 }
 
 export interface RetailSaleLineRequest {
@@ -99,6 +107,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const retailSaleService = {
+  /**
+   * QR ETİKETİNDEN TEK KART. Etikette kart sayfasının URL'i var;
+   * okutulunca oradan çıkan kimlik buraya geliyor. Kimlik metin olarak
+   * aratılsaydı kod/ad/barkodun hiçbiriyle eşleşmez, etiket sessizce
+   * çalışmazdı.
+   */
+  productById(warehouseId: string, itemId: string) {
+    const query = new URLSearchParams({ warehouseId, itemId }).toString();
+    return request<RetailProduct[]>(`/api/perakende/urunler?${query}`);
+  },
+
   products(warehouseId: string, search: string) {
     const query = new URLSearchParams({ warehouseId });
     if (search.trim()) query.set("search", search.trim());
@@ -163,6 +182,10 @@ export interface RetailSaleItemRow {
   unitPrice: number;
   discountRate: number;
   lineTotal: number;
+  /** Dondurulmuş satır maliyeti. Yetki yoksa null. */
+  lineCost?: number | null;
+  /** Matrah − maliyet. Yetki yoksa null. */
+  lineProfit?: number | null;
   /** Daha önce iade edilen miktar — kalan iade edilebilir buradan çıkar. */
   alreadyReturned: number;
 }

@@ -1,3 +1,4 @@
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Contracts.Accounting;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
@@ -47,7 +48,9 @@ public sealed class SalesInvoiceService(
     IDocumentNumberService documentNumberService,
     IAccountingIntegrationService accountingIntegration,
     ICurrentUserService currentUser,
-    Market.IInvoiceExchangeRateResolver rateResolver) : ISalesInvoiceService
+    Market.IInvoiceExchangeRateResolver rateResolver,
+    Inventory.IStockSaleIssuer stockIssuer,
+    Security.IUserAuthorizationService authorization) : ISalesInvoiceService
 {
     /// <summary>
     /// Faturaya uygulanacak kuru çözer. Kur bulunamıyorsa kaydetmeyi
@@ -117,9 +120,12 @@ public sealed class SalesInvoiceService(
     {
         var invoice = await LoadDetailAsync(id, cancellationToken);
 
-        return invoice is null
-            ? throw new KeyNotFoundException("Satış faturası bulunamadı.")
-            : MapDetail(invoice);
+        if (invoice is null)
+            throw new KeyNotFoundException("Satış faturası bulunamadı.");
+
+        return MapDetail(
+            invoice,
+            await HasAsync(PermissionCatalog.Keys.InventoryView, cancellationToken));
     }
 
     public async Task<SalesInvoiceDetailResponse> CreateAsync(
@@ -146,6 +152,7 @@ public sealed class SalesInvoiceService(
             CompanyId = request.CompanyId,
             CustomerCurrentAccountId = request.CustomerCurrentAccountId,
             ProjectId = request.ProjectId,
+            WarehouseId = request.WarehouseId,
             InternalNumber = internalNumber,
             OfficialInvoiceNumber = Normalize(request.OfficialInvoiceNumber),
             InvoiceDate = AsUtc(request.InvoiceDate),
@@ -187,6 +194,7 @@ public sealed class SalesInvoiceService(
 
         invoice.CustomerCurrentAccountId = request.CustomerCurrentAccountId;
         invoice.ProjectId = request.ProjectId;
+        invoice.WarehouseId = request.WarehouseId;
         invoice.OfficialInvoiceNumber = Normalize(request.OfficialInvoiceNumber);
         invoice.InvoiceDate = AsUtc(request.InvoiceDate);
         invoice.DueDate = request.DueDate.HasValue ? AsUtc(request.DueDate.Value) : null;
@@ -226,7 +234,106 @@ public sealed class SalesInvoiceService(
             throw new InvalidOperationException(
                 "Resmi fatura numarası girilmeden fatura kesinleştirilemez.");
 
+        // STOKLU SATIŞ — mal kesinleştirmede çıkar, taslakta değil.
+        //
+        // Taslak bir plandır; belge kesinleşene kadar mal depoda durur
+        // ve başka bir satışa da açıktır. Taslakta düşülseydi, hiç
+        // kesinleşmeyen faturalar stoğu süresiz kilitlerdi.
+        var stockedItems = invoice.Items
+            .Where(x => x.InventoryItemId is not null)
+            .OrderBy(x => x.LineNumber)
+            .ToList();
+
+        // Hareket numaraları transaction DIŞINDA üretilir:
+        // DocumentNumberService kendi transaction'ını açıyor ve iç içe
+        // transaction hatası verirdi.
+        var movementNumbers = new Dictionary<Guid, string>();
+
+        if (stockedItems.Count > 0)
+        {
+            if (invoice.WarehouseId is null)
+            {
+                throw new InvalidOperationException(
+                    "Faturada stok kartına bağlı kalem var; malın çıkacağı "
+                    + "depo seçilmeden fatura kesinleştirilemez.");
+            }
+
+            foreach (var item in stockedItems)
+            {
+                movementNumbers[item.Id] = await documentNumberService.GenerateAsync(
+                    invoice.CompanyId, "STOCK_ISSUE", "CIKIS", cancellationToken);
+            }
+        }
+
+        // STOK VE FİŞ AYNI TRANSACTION'DA. Ayrı olsaydı stok çıkıp fiş
+        // kesilemediğinde mal muhasebesiz gitmiş olurdu — S6b'de mal
+        // kabulünde kapatılan deliğin satış tarafındaki eşi.
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        if (stockedItems.Count > 0)
+        {
+            var warehouseId = invoice.WarehouseId!.Value;
+            var label = invoice.IsReturn ? "Satış iadesi" : "Satış faturası";
+            var reference = invoice.OfficialInvoiceNumber ?? invoice.InternalNumber;
+
+            var saleLines = stockedItems
+                .Select(x => new Inventory.StockSaleLine(
+                    x.InventoryItemId!.Value,
+                    x.Quantity,
+                    $"{label} {reference} — {x.Description}",
+                    movementNumbers[x.Id]))
+                .ToList();
+
+            if (invoice.IsReturn)
+            {
+                // MÜŞTERİDEN İADE: mal geri girer, maliyet ORİJİNAL
+                // satırdan alınır. Bugünkü ortalama kullanılsaydı aynı
+                // mal geri geldiğinde hayali kâr/zarar doğardı.
+                var originalCosts = await db.SalesInvoiceItems
+                    .AsNoTracking()
+                    .Where(x => x.SalesInvoice.Id == invoice.OriginalInvoiceId
+                        && x.InventoryItemId != null
+                        && x.UnitCostAtSale != null)
+                    .ToDictionaryAsync(
+                        x => x.InventoryItemId!.Value,
+                        x => x.UnitCostAtSale!.Value,
+                        cancellationToken);
+
+                await stockIssuer.ReturnAsync(
+                    invoice.CompanyId, warehouseId, saleLines, originalCosts,
+                    invoice.InvoiceDate, currentUser.UserId, cancellationToken);
+
+                foreach (var item in stockedItems)
+                {
+                    var unitCost = originalCosts.TryGetValue(
+                        item.InventoryItemId!.Value, out var frozen) ? frozen : 0m;
+
+                    item.UnitCostAtSale = unitCost;
+                    item.LineCost = decimal.Round(unitCost * item.Quantity, 2);
+                }
+            }
+            else
+            {
+                var costs = await stockIssuer.IssueAsync(
+                    invoice.CompanyId, warehouseId, saleLines,
+                    invoice.InvoiceDate, currentUser.UserId, cancellationToken);
+
+                var costByItem = costs.ToDictionary(x => x.InventoryItemId);
+
+                foreach (var item in stockedItems)
+                {
+                    if (!costByItem.TryGetValue(item.InventoryItemId!.Value, out var cost))
+                        continue;
+
+                    item.UnitCostAtSale = cost.UnitCost;
+                    item.LineCost = decimal.Round(cost.UnitCost * item.Quantity, 2);
+                }
+            }
+
+            // Maliyetler fiş kurulmadan ÖNCE yazılmalı: fiş satırları
+            // veritabanındaki LineCost'tan okunuyor.
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         var voucherId = await accountingIntegration.CreateSalesInvoiceVoucherAsync(
             invoice, cancellationToken, reverse: invoice.IsReturn);
@@ -404,7 +511,8 @@ public sealed class SalesInvoiceService(
                 VatRate = request.VatRate,
                 LineSubtotal = subtotal,
                 VatAmount = vat,
-                LineTotal = subtotal + vat
+                LineTotal = subtotal + vat,
+                InventoryItemId = request.InventoryItemId
             });
         }
 
@@ -562,11 +670,26 @@ public sealed class SalesInvoiceService(
             .Include(x => x.AccountingVoucher)
             .Include(x => x.ReversalVoucher)
             .Include(x => x.OriginalInvoice)
+            .Include(x => x.Warehouse)
             .Include(x => x.Items.OrderBy(item => item.LineNumber))
+                .ThenInclude(item => item.InventoryItem)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
-    private static SalesInvoiceDetailResponse MapDetail(SalesInvoice invoice) =>
+    /// <summary>
+    /// MALİYET GÖRÜNÜRLÜĞÜ mevcut `inventory.view` iznine bağlı —
+    /// yeni anahtar açılmadı. Stok maliyetini bugün fiilen o izin
+    /// koruyor (InventoryController AverageUnitCost'u onunla
+    /// döndürüyor) ve fiyatlandırma ekranı da aynı kapıyı kullanıyor.
+    /// Tek kaynak o; ikinci bir anahtar iki ekranın zamanla
+    /// ayrışmasına yol açardı.
+    ///
+    /// Yetkisiz kullanıcıya maliyet ve kâr NULL döner, gizlenen satır
+    /// sayısı ayrıca bildirilir: tutar sızmaz ama bir şeyin gizlendiği
+    /// saklanmaz da.
+    /// </summary>
+    private static SalesInvoiceDetailResponse MapDetail(
+        SalesInvoice invoice, bool canSeeCost = true) =>
         new(
             invoice.Id,
             invoice.CompanyId,
@@ -597,11 +720,22 @@ public sealed class SalesInvoiceService(
             !string.IsNullOrWhiteSpace(invoice.SourceXmlPath),
             invoice.AccountingVoucherId,
             invoice.AccountingVoucher?.VoucherNumber,
+            invoice.WarehouseId,
+            invoice.Warehouse?.Name,
+            canSeeCost
+                ? 0
+                : invoice.Items.Count(x => x.LineCost is not null),
             invoice.Items
                 .OrderBy(x => x.LineNumber)
                 .Select(x => new SalesInvoiceItemResponse(
                     x.Id, x.LineNumber, x.Description, x.Quantity, x.Unit,
-                    x.UnitPrice, x.VatRate, x.LineSubtotal, x.VatAmount, x.LineTotal))
+                    x.UnitPrice, x.VatRate, x.LineSubtotal, x.VatAmount, x.LineTotal,
+                    x.InventoryItemId,
+                    x.InventoryItem?.Code,
+                    canSeeCost ? x.LineCost : null,
+                    canSeeCost && x.LineCost is decimal cost
+                        ? decimal.Round(x.LineSubtotal - cost, 2)
+                        : null))
                 .ToList(),
             invoice.IsReturn,
             invoice.OriginalInvoiceId,
@@ -609,6 +743,18 @@ public sealed class SalesInvoiceService(
                 ?? invoice.OriginalInvoice?.InternalNumber,
             invoice.ReversalVoucherId,
             invoice.ReversalVoucher?.VoucherNumber);
+
+    private async Task<bool> HasAsync(string permission, CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid userId)
+            return false;
+
+        var snapshot = await authorization.GetAsync(userId, cancellationToken);
+
+        return snapshot is not null
+            && snapshot.IsActive
+            && snapshot.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase);
+    }
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

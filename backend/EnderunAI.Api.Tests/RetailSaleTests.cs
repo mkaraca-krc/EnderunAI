@@ -138,6 +138,11 @@ public sealed class RetailSaleTests(DatabaseFixture fixture)
 
         await db.SaveChangesAsync();
 
+        // S5: satış artık 621 maliyet + 150/153 stok çıkışı da yazıyor.
+        // O hesaplar olmadan fiş kesilemez ve satış tamamlanamaz —
+        // bilinçli davranış: mal muhasebesiz çıkmasın.
+        await TestDataFactory.EnsureStockAccountsAsync(db, companyId);
+
         db.WarehouseStocks.Add(new WarehouseStock
         {
             WarehouseId = warehouse.Id,
@@ -652,6 +657,67 @@ public sealed class RetailSaleTests(DatabaseFixture fixture)
     /// KISMİ İADE doğru miktarı döndürür ve FİNANS ONAYINA bağlıdır:
     /// onaydan önce stok değişmez.
     /// </summary>
+    /// <summary>
+    /// İADEDE SATIŞTAKİ MALİYET KULLANILIR, bugünkü ortalama değil.
+    ///
+    /// Satıştan sonra araya pahalı bir alım girip ortalamayı
+    /// yükseltirse, aynı malın iadesi güncel ortalamayla işlenirse
+    /// depoya çıktığından PAHALI mal geri girer: stok değeri şişer,
+    /// muhasebeye yazılan 621 tutarıyla tutmaz ve mutabakat raporu
+    /// her iadede biraz daha sapar.
+    ///
+    /// BU KURAL SONDADA KAÇIRILDI: dondurulmuş maliyeti yoksayıp
+    /// güncel ortalamaya döndüğümde 22 testin hiçbiri düşmedi —
+    /// kuralın hiç kapsaması yoktu. Bu test o boşluğu kapatıyor.
+    /// </summary>
+    [Fact]
+    public async Task Return_UsesTheCostFrozenAtSale_NotTodaysAverage()
+    {
+        var context = await CreateContextAsync($"F{Guid.NewGuid():N}"[..8]);
+
+        // Kurulumda kartın ortalaması 60.
+        var saleId = await CompleteSaleAsync(context, quantity: 10m);
+
+        Guid returnItemId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var soldLine = await db.RetailSaleItems
+                .SingleAsync(x => x.RetailSaleId == saleId);
+
+            // Satışta 60 donduruldu.
+            Assert.Equal(60m, soldLine.UnitCostAtSale);
+            returnItemId = soldLine.Id;
+
+            // Araya pahalı bir alım giriyor: ortalama 60 -> 200.
+            var card = await db.InventoryItems.SingleAsync(x => x.Id == context.ItemId);
+            card.AverageUnitCost = 200m;
+            await db.SaveChangesAsync();
+        }
+
+        var retur = await WithServiceAsync(service => service.CreateReturnAsync(
+            saleId, [new RetailReturnLineInput(returnItemId, 4m)], "Ürün kusurlu",
+            CancellationToken.None));
+
+        await WithServiceAsync(service => service.ApproveAsync(retur.Id, CancellationToken.None));
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var returnMovement = await db.StockMovements
+                .Where(x => x.InventoryItemId == context.ItemId
+                    && x.Type == StockMovementType.Return)
+                .SingleAsync();
+
+            // 200 DEĞİL 60: mal satıldığı maliyetle geri giriyor.
+            Assert.Equal(60m, returnMovement.UnitCost);
+            Assert.Equal(240m, returnMovement.TotalCost);
+        }
+    }
+
     [Fact]
     public async Task PartialReturn_NeedsApproval_ThenRestoresExactQuantity()
     {

@@ -73,7 +73,9 @@ public sealed class RetailSaleService(
     IDocumentNumberService documentNumbers,
     IAccountingIntegrationService accounting,
     ISalesInvoiceService salesInvoices,
-    IUserAuthorizationService authorization) : IRetailSaleService
+    IUserAuthorizationService authorization,
+    Services.Inventory.IStockSaleIssuer stockIssuer,
+    IRetailSaleVoucherPoster retailVouchers) : IRetailSaleService
 {
     /// <summary>
     /// SANAL REZERV: fiili stoktan, henüz sonuçlanmamış fişlerdeki
@@ -555,7 +557,21 @@ public sealed class RetailSaleService(
                 VatRate = source.VatRate,
                 LineSubtotal = Round(source.LineSubtotal * ratio),
                 VatAmount = Round(source.VatAmount * ratio),
-                LineTotal = Round(source.LineTotal * ratio)
+                LineTotal = Round(source.LineTotal * ratio),
+
+                // MALİYET ORİJİNAL SATIŞTAN TAŞINIR — iade fişi kendi
+                // maliyetini hesaplamaz. Taşınmasaydı iade, malın
+                // BUGÜNKÜ ortalamasıyla işlenir; araya pahalı bir alım
+                // girmişse depoya çıktığından pahalı mal geri girer,
+                // stok değeri şişer ve 621'e yazılan tutarla tutmaz.
+                //
+                // Miktar oranı burada UYGULANMAZ: birim maliyet zaten
+                // birim başınadır, iade edilen miktarla çarpımı çıkış
+                // anında yapılır.
+                UnitCostAtSale = source.UnitCostAtSale,
+                LineCost = source.UnitCostAtSale is decimal unitCost
+                    ? Round(unitCost * requested.Quantity)
+                    : null
             });
         }
 
@@ -701,7 +717,11 @@ public sealed class RetailSaleService(
             stock.Quantity += amount;
             stock.UpdatedAtUtc = DateTime.UtcNow;
 
-            var unitCost = stock.InventoryItem.AverageUnitCost;
+            // İADEDE SATIŞTAKİ MALİYET KULLANILIR, bugünkü ortalama
+            // değil: aynı mal geri gelirken arada değişen ortalama
+            // hayali kâr/zarar yaratmasın. Eski fişlerde dondurulmuş
+            // değer yoksa (S5 öncesi) güncel ortalamaya düşülür.
+            var unitCost = item.UnitCostAtSale ?? stock.InventoryItem.AverageUnitCost;
 
             db.StockMovements.Add(new StockMovement
             {
@@ -760,42 +780,35 @@ public sealed class RetailSaleService(
 
         // 1) STOK — mal çıktığı için TAM miktar düşer. Elden/kayıtlı
         //    ayrımı yalnız paranın kaydında; malın kendisinde değil.
+        //
+        //    Çıkış PAYLAŞILAN kapıdan (IStockSaleIssuer) yapılıyor:
+        //    stoklu satış faturası da aynı kapıyı kullanıyor, böylece
+        //    negatif stok yasağı ve maliyet dondurma kuralı iki belgede
+        //    ayrışamaz.
+        var issueCosts = await stockIssuer.IssueAsync(
+            sale.CompanyId,
+            sale.WarehouseId,
+            sale.Items
+                .Select(x => new Services.Inventory.StockSaleLine(
+                    x.InventoryItemId,
+                    x.Quantity,
+                    $"Perakende satış {sale.DocumentNumber} — {x.Description}",
+                    issueNumbers[x.Id]))
+                .ToList(),
+            sale.SaleDate,
+            currentUser.UserId,
+            cancellationToken);
+
+        // MALİYET FİŞ SATIRINA DONDURULUR — satır kârı ve iade bundan
+        // hesaplanır.
+        var costByItem = issueCosts.ToDictionary(x => x.InventoryItemId);
+
         foreach (var item in sale.Items)
         {
-            var stock = await db.WarehouseStocks
-                .Include(x => x.InventoryItem)
-                .SingleOrDefaultAsync(
-                    x => x.WarehouseId == sale.WarehouseId
-                        && x.InventoryItemId == item.InventoryItemId,
-                    cancellationToken)
-                ?? throw new InvalidOperationException(
-                    $"{item.Description}: merkez depoda stok kaydı yok.");
+            if (!costByItem.TryGetValue(item.InventoryItemId, out var cost)) continue;
 
-            if (stock.Quantity < item.Quantity)
-            {
-                throw new InvalidOperationException(
-                    $"{item.Description}: stok yetersiz, satış tamamlanamadı.");
-            }
-
-            stock.Quantity -= item.Quantity;
-            stock.UpdatedAtUtc = DateTime.UtcNow;
-
-            var unitCost = stock.InventoryItem.AverageUnitCost;
-
-            db.StockMovements.Add(new StockMovement
-            {
-                CompanyId = sale.CompanyId,
-                WarehouseId = sale.WarehouseId,
-                InventoryItemId = item.InventoryItemId,
-                Type = StockMovementType.Issue,
-                Quantity = item.Quantity,
-                UnitCost = unitCost,
-                TotalCost = unitCost * item.Quantity,
-                ReferenceNumber = issueNumbers[item.Id],
-                MovementDate = sale.SaleDate,
-                Description = $"Perakende satış {sale.DocumentNumber}",
-                CreatedByUserId = currentUser.UserId
-            });
+            item.UnitCostAtSale = cost.UnitCost;
+            item.LineCost = decimal.Round(cost.UnitCost * item.Quantity, 2);
         }
 
         // 2) GELİR — YALNIZ KAYITLI TUTAR. Elden kısım faturaya, muhasebe
@@ -814,6 +827,17 @@ public sealed class RetailSaleService(
             invoice.PostedByUserId = currentUser.UserId;
 
             sale.SalesInvoiceId = invoice.Id;
+        }
+        else
+        {
+            // FATURASIZ AMA MAL ÇIKMIŞ: isimsiz nakit satış (cari yok)
+            // ya da tamamı elden satış (kayıtlı tutar sıfır).
+            //
+            // S5 ÖNCESİ BURASI TAMAMEN BOŞTU: mal depodan çıkıyor, ne
+            // gelir ne maliyet yazılıyordu. Mutabakat raporu her böyle
+            // satışta sapardı.
+            sale.AccountingVoucherId = await retailVouchers.PostAsync(
+                sale, issueCosts, cancellationToken);
         }
 
         // 3) TAHSİLAT — yalnız peşin ve kartta, YALNIZ KAYITLI TUTAR.
@@ -908,7 +932,27 @@ public sealed class RetailSaleService(
                 VatRate = item.VatRate,
                 LineSubtotal = lineSubtotal,
                 VatAmount = lineVat,
-                LineTotal = lineSubtotal + lineVat
+                LineTotal = lineSubtotal + lineVat,
+
+                // STOK BAĞI VE MALİYET FATURAYA TAŞINIYOR ki fiş 621
+                // maliyet satırını üretebilsin.
+                InventoryItemId = item.InventoryItemId,
+                UnitCostAtSale = item.UnitCostAtSale,
+
+                // MALİYET ÖLÇEKLENMEZ — `ratio` yalnız GELİRE uygulanır.
+                //
+                // KULLANICI KARARI: elden satışta malın TAMAMI depodan
+                // çıkıyor, dolayısıyla maliyetin tamamı 621'e yazılır ve
+                // 150/153 tam kapanır. Maliyet de kayıtlı oranla
+                // ölçeklenseydi resmi defterde kâr marjı gerçekçi
+                // görünürdü ama stok hesabı hiç kapanmaz, mutabakat
+                // raporu her elden satışta biraz daha sapar ve muhasebesiz
+                // stok birikirdi.
+                //
+                // Bunun görünen bedeli: elden satış yapılan fiş resmi
+                // defterde düşük kârlı görünür. Gerçek kâr (elden dahil)
+                // yalnız yetkiliye açık iç raporda gösterilir.
+                LineCost = item.LineCost
             });
         }
 
