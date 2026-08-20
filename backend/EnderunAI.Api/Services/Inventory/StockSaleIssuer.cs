@@ -63,7 +63,9 @@ public interface IStockSaleIssuer
         CancellationToken cancellationToken);
 }
 
-public sealed class StockSaleIssuer(AppDbContext db) : IStockSaleIssuer
+public sealed class StockSaleIssuer(
+    AppDbContext db,
+    IStockCountLockService countLock) : IStockSaleIssuer
 {
     public async Task<IReadOnlyList<StockSaleCost>> IssueAsync(
         Guid companyId,
@@ -82,6 +84,10 @@ public sealed class StockSaleIssuer(AppDbContext db) : IStockSaleIssuer
                 throw new InvalidOperationException(
                     $"{line.Description}: satış miktarı sıfırdan büyük olmalıdır.");
             }
+
+            // SAYIM KİLİDİ: sayılan bölgeye hareket girmez.
+            await countLock.EnsureNotLockedAsync(
+                warehouseId, line.InventoryItemId, cancellationToken);
 
             var stock = await db.WarehouseStocks
                 .Include(x => x.InventoryItem)
@@ -140,6 +146,9 @@ public sealed class StockSaleIssuer(AppDbContext db) : IStockSaleIssuer
         foreach (var line in lines)
         {
             if (line.Quantity <= 0m) continue;
+
+            await countLock.EnsureNotLockedAsync(
+                warehouseId, line.InventoryItemId, cancellationToken);
 
             var stock = await db.WarehouseStocks
                 .Include(x => x.InventoryItem)

@@ -18,7 +18,8 @@ public sealed class InventoryController(
     IDocumentNumberService documentNumbers,
     ICurrentUserService currentUser,
     Services.Inventory.IStockAccountingConsistencyService consistency,
-    Services.Inventory.IStockConsumptionPoster consumptionPoster) : ControllerBase
+    Services.Inventory.IStockConsumptionPoster consumptionPoster,
+    Services.Inventory.IStockCountLockService countLock) : ControllerBase
 {
     /// <summary>
     /// STOK ↔ MUHASEBE TUTARLILIK RAPORU.
@@ -756,6 +757,10 @@ public sealed class InventoryController(
 
         await using var dbTransaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
+        // SAYIM KİLİDİ: sayılan bölgeye hareket girmez.
+        await countLock.EnsureNotLockedAsync(
+            stock.WarehouseId, stock.InventoryItemId, cancellationToken);
+
         stock.Quantity -= request.Quantity;
         stock.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -891,6 +896,14 @@ public sealed class InventoryController(
             db.WarehouseStocks.Add(target);
         }
 
+        // TRANSFERDE İKİ DEPO DA KONTROL EDİLİR: mal birinden çıkıp
+        // ötekine giriyor; yalnız kaynağa bakılsaydı sayılan bir depoya
+        // transferle mal sokulabilirdi.
+        await countLock.EnsureNotLockedAsync(
+            source.WarehouseId, source.InventoryItemId, cancellationToken);
+        await countLock.EnsureNotLockedAsync(
+            target.WarehouseId, target.InventoryItemId, cancellationToken);
+
         source.Quantity -= request.Quantity;
         target.Quantity += request.Quantity;
         source.UpdatedAtUtc = DateTime.UtcNow;
@@ -982,6 +995,12 @@ public sealed class InventoryController(
         // Artık kesiyor: fiş patlarsa stok da düzeltilmemeli, yoksa
         // sayım farkı muhasebesiz kalır ve mutabakat raporu sapardı.
         await using var dbTransaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        // Tekil düzeltme de kilide tabi: dönemsel sayım sürerken aynı
+        // kalemi ayrıca düzeltmek, oturumun dondurulmuş miktarını
+        // geçersiz kılardı.
+        await countLock.EnsureNotLockedAsync(
+            stock.WarehouseId, stock.InventoryItemId, cancellationToken);
 
         stock.Quantity = request.CountedQuantity;
         stock.UpdatedAtUtc = DateTime.UtcNow;

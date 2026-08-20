@@ -477,6 +477,9 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IGoodsReceiptAccount
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockSaleIssuer, EnderunAI.Api.Services.Inventory.StockSaleIssuer>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockOutflowLineBuilder, EnderunAI.Api.Services.Inventory.StockOutflowLineBuilder>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockConsumptionPoster, EnderunAI.Api.Services.Inventory.StockConsumptionPoster>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountLockService, EnderunAI.Api.Services.Inventory.StockCountLockService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountVoucherPoster, EnderunAI.Api.Services.Inventory.StockCountVoucherPoster>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountService, EnderunAI.Api.Services.Inventory.StockCountService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Retail.IRetailSaleVoucherPoster, EnderunAI.Api.Services.Retail.RetailSaleVoucherPoster>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockAccountingConsistencyService, EnderunAI.Api.Services.Inventory.StockAccountingConsistencyService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Purchasing.Automation.IPurchaseRequestGenerator, EnderunAI.Api.Services.Purchasing.Automation.PurchaseRequestGenerator>();

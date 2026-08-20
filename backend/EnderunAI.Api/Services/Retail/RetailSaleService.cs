@@ -75,7 +75,8 @@ public sealed class RetailSaleService(
     ISalesInvoiceService salesInvoices,
     IUserAuthorizationService authorization,
     Services.Inventory.IStockSaleIssuer stockIssuer,
-    IRetailSaleVoucherPoster retailVouchers) : IRetailSaleService
+    IRetailSaleVoucherPoster retailVouchers,
+    Services.Inventory.IStockCountLockService countLock) : IRetailSaleService
 {
     /// <summary>
     /// SANAL REZERV: fiili stoktan, henüz sonuçlanmamış fişlerdeki
@@ -713,6 +714,10 @@ public sealed class RetailSaleService(
                     cancellationToken)
                 ?? throw new InvalidOperationException(
                     $"{item.Description}: depoda stok kaydı yok, iade işlenemedi.");
+
+            // SAYIM KİLİDİ: sayılan bölgeye hareket girmez.
+            await countLock.EnsureNotLockedAsync(
+                sale.WarehouseId, item.InventoryItemId, cancellationToken);
 
             stock.Quantity += amount;
             stock.UpdatedAtUtc = DateTime.UtcNow;

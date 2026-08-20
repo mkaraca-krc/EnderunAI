@@ -18,7 +18,8 @@ public sealed class GoodsReceiptService(
     IDocumentNumberService documentNumbers,
     ICurrentDataScopeService dataScope,
     ICurrentUserService currentUser,
-    Services.Inventory.IGoodsReceiptAccountingPoster accountingPoster)
+    Services.Inventory.IGoodsReceiptAccountingPoster accountingPoster,
+    Services.Inventory.IStockCountLockService countLock)
     : IGoodsReceiptService
 {
     public async Task<IReadOnlyList<GoodsReceiptListItemResponse>> GetAllAsync(
@@ -540,6 +541,10 @@ public sealed class GoodsReceiptService(
                 warehouseStocks.Add(inventoryItemId, stock);
                 db.WarehouseStocks.Add(stock);
             }
+
+            // SAYIM KİLİDİ: sayılan bölgeye hareket girmez.
+            await countLock.EnsureNotLockedAsync(
+                receipt.WarehouseId, inventoryItemId, cancellationToken);
 
             stock.Quantity += item.AcceptedQuantity;
             stock.UpdatedAtUtc = now;

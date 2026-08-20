@@ -738,6 +738,66 @@ STOK ARTIK HER YÖNDEN MUHASEBEYE BAĞLI: giriş S6b, satış S5, çıkış ve
 sayım farkı S6c. Depolar arası transfer bilinçli olarak fiş kesmiyor —
 aynı hesabın içinde yer değiştirme, net etkisi sıfır.
 
+**S7 (bitti) — dönemsel sayım: oturum, kilit, gerekçe, onay, fark raporu.**
+
+ÖLÇÜM: 0 bölge, 0 stok satırı, 9 kart, 6 depo. Konum STOK SATIRINDA
+DEĞİL KARTTA duruyor (`InventoryItem.WarehouseZoneId`); bölge filtresi
+oradan uygulanıyor.
+
+KULLANICI KARARI (tehlikeli olan): fiziki miktarı GİRİLMEMİŞ satır
+onayda **ATLANIR**, stoğu değişmez. Sıfır sayılsaydı unutulan tek bir
+satır o malzemenin tüm stoğunu siler ve karşılığında gider yazardı.
+Atlanması sessiz değil: fark raporu kaç satırın sayılmadığını yazıyor.
+
+- OTURUM SİSTEM MİKTARLARINI DONDURUYOR. Sayım sırasında stok
+  değişirse fark "sayım anındaki" gerçeği yansıtmaz. Bölge zaten
+  kilitli; dondurma o kilidin ikinci savunma hattı.
+- KİLİT SERT VE TEK KAPIDAN: `IStockCountLockService`. Stok değiştiren
+  ALTI yol da buradan geçiyor — depo çıkışı, transfer (İKİ TARAF),
+  tekil düzeltme, mal kabul, alış faturası (giriş ve iade), satış
+  çıkışı ve satış iadesi. Bir yol atlansaydı kilit "çoğu zaman"
+  çalışırdı; en kötü güvence türü, çünkü kimse hangi yolun atladığını
+  bilmez.
+- KİLİT BÖLGE BAZLI: bölgesiz oturum tüm depoyu kapatıyor, bölgeli
+  oturum yalnız o bölgeyi. Kartın bölgesi yoksa bölgesel sayım onu
+  kapsamıyor ve hareketi durdurulmuyor — o kart zaten listeye
+  girmemişti.
+- ONAY BEKLERKEN DE KİLİTLİ: sayılan miktarlar henüz stoğa işlenmedi;
+  araya giren hareket onay anında uygulanacak farkı yanlış yapardı.
+- GEREKÇE ZORUNLU ve SAYILABİLİR (fire/kayıp/sayım hatası/kırılma).
+  Serbest metin olsaydı aynı sebep on farklı şekilde yazılır, "hangi
+  depoda ne kadar fire var" sorusu hiç cevaplanamazdı.
+- SAYMAK İLE ONAYLAMAK AYRI İZİNDE: sayım `inventory.edit`, onay
+  `accounting.approve` (Genel Müdür + Finans Sorumlusu). Aynı kişi hem
+  sayıp hem onaylayabilseydi fark, gerekçesi hiç sorgulanmadan stoğa
+  ve gidere işlenirdi.
+- OTURUM BAŞINA TEK FİŞ. Satır başına kesilseydi mizan yüzlerce
+  satırlık anlamsız bir yığına dönerdi.
+- NOKSAN VE FAZLA NETLEŞTİRİLMİYOR, aynı fişte ayrı satırlarda duruyor.
+  Net 100 TL fark, 500 kayıp ve 400 fazlanın toplamı da olabilir; bu
+  iki tablo aynı şey değil.
+- FARK HESABI FİNANS AYARINDAN (kullanıcı isteği):
+  `StockCountShortageAccountId` / `StockCountSurplusAccountId`. Boşsa
+  S6c'de açılan 689.02 / 649.03. Mali müşavir isterse 157'ye
+  yönlendirebiliyor; sistem dayatmıyor ama boş bırakılırsa da durmuyor.
+- AYNI DEPO/BÖLGEDE İKİNCİ OTURUM AÇILMIYOR: iki oturum, iki farklı
+  dondurulmuş miktar demektir; ikisi de onaylanırsa aynı fark stoğa iki
+  kez uygulanırdı.
+- FARK RAPORU bölge / kategori / gerekçe kırılımında. Tekrar eden kayıp
+  aynı bölgede toplanıyorsa sebebi oradadır; satır satır bakarak bu
+  görülmez.
+- QR HIZLI SAYIM: S5'te yazılan `parseScannedItem` yeniden kullanıldı.
+  Okutulan kod satırı bulup işaretliyor ve miktar kutusuna odaklanıyor.
+- TEKİL DÜZELTME UCU DURUYOR (`POST adjustments`): o, tek kalemin anlık
+  düzeltmesi. İkisi aynı uca sıkıştırılsaydı ya anlık düzeltme onay
+  kapısına takılır ya dönemsel sayım onaysız stok değiştirirdi. Tekil
+  uç da kilide tabi.
+
+İKİ MEVCUT SÖZLEŞME TESTİ YENİ EKRANLARI YAKALADI ve ikisi de
+ekranı düzelterek kapatıldı, limit YÜKSELTİLMEDİ: (1) ham `<table>`
+cırcırı 43→44 oldu, liste `DataTable`'a çevrildi; (2) redwood
+sözleşmesi `design="redwood"` ve tazeleme düğmesi istedi.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

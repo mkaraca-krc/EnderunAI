@@ -66,6 +66,11 @@ export const warehouseService = {
     return apiClient<WarehouseListItem[]>(`warehouses${suffix}`);
   },
 
+  /** Deponun bölgeleri — dönemsel sayımda kapsam seçimi için. */
+  getZones(warehouseId: string) {
+    return apiClient<WarehouseZoneListItem[]>(`warehouses/${warehouseId}/locations`);
+  },
+
   create(payload: CreateWarehouseRequest) {
     return apiClient<{ message: string; id: string }>("warehouses", {
       method: "POST",
@@ -80,3 +85,11 @@ export const warehouseService = {
     });
   },
 };
+
+export interface WarehouseZoneListItem {
+  id: string;
+  code: string;
+  name: string;
+  kind: number;
+  sortOrder: number;
+}

@@ -107,6 +107,24 @@ public sealed class CompanyFinanceSettings : BaseEntity
     public Guid? ReceivablesAccountId { get; set; }
     public AccountingAccount? ReceivablesAccount { get; set; }
 
+    /// <summary>
+    /// SAYIM NOKSANI hesabı. Boşsa 689.02 Stok Sayım Noksanları
+    /// kullanılır (S6c'de açıldı).
+    ///
+    /// SEÇİLEBİLİR OLMASI KULLANICI İSTEĞİ: kimi firma noksanı
+    /// doğrudan gidere, kimi 157 Stok Değer Düşüklüğü Karşılığı'na
+    /// yazmayı tercih ediyor. Karar mali müşavirin; sistem dayatmıyor
+    /// ama boş bırakılırsa da durmuyor.
+    /// </summary>
+    public Guid? StockCountShortageAccountId { get; set; }
+    public AccountingAccount? StockCountShortageAccount { get; set; }
+
+    /// <summary>
+    /// SAYIM FAZLASI hesabı. Boşsa 649.03 Stok Sayım Fazlaları.
+    /// </summary>
+    public Guid? StockCountSurplusAccountId { get; set; }
+    public AccountingAccount? StockCountSurplusAccount { get; set; }
+
     /// <summary>Faktoring komisyon/masraf kesintileri için finansman gideri hesabı (ör. 780).</summary>
     public Guid? FactoringExpenseAccountId { get; set; }
     public AccountingAccount? FactoringExpenseAccount { get; set; }

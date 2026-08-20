@@ -312,9 +312,15 @@ export const MENU_GROUPS: MenuGroup[] = [
         icon: "○",
       },
       {
-        // Sayfa vardı ama menüde hiç yoktu; kimse ulaşamıyordu.
+        // TEKİL düzeltme: tek kalemin anlık sayımı. Dönemsel sayım
+        // ayrı bir belge akışı ve aşağıda.
         label: "Stok Sayımı",
         href: "/depo-stok/sayim",
+        icon: "○",
+      },
+      {
+        label: "Dönemsel Sayım",
+        href: "/depo-stok/donemsel-sayim",
         icon: "○",
       },
       {

@@ -209,6 +209,8 @@ public sealed class AppDbContext(
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<InventoryCategory> InventoryCategories => Set<InventoryCategory>();
     public DbSet<WarehouseZone> WarehouseZones => Set<WarehouseZone>();
+    public DbSet<StockCountSession> StockCountSessions => Set<StockCountSession>();
+    public DbSet<StockCountLine> StockCountLines => Set<StockCountLine>();
     public DbSet<WarehouseShelf> WarehouseShelves => Set<WarehouseShelf>();
     public DbSet<WarehouseShelfLevel> WarehouseShelfLevels => Set<WarehouseShelfLevel>();
     public DbSet<WarehouseCategoryLocation> WarehouseCategoryLocations => Set<WarehouseCategoryLocation>();
@@ -364,6 +366,7 @@ public sealed class AppDbContext(
         ConfigureProjectBoq(modelBuilder);
         ConfigureProjectSites(modelBuilder);
         ConfigureProjectCostTransactions(modelBuilder);
+        ConfigureStockCounts(modelBuilder);
         ConfigureHrProjectLaborCosts(modelBuilder);
         ConfigureWorkTasks(modelBuilder);
         ConfigureAttendanceRecords(modelBuilder);
@@ -4829,6 +4832,53 @@ public sealed class AppDbContext(
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureStockCounts(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<StockCountSession>(entity =>
+        {
+            entity.ToTable("stock_count_sessions");
+
+            entity.HasIndex(x => new { x.CompanyId, x.DocumentNumber }).IsUnique();
+
+            // Kilit sorgusu her stok hareketinde koşuyor; depo + durum
+            // üzerinden indeks olmadan her hareket tam tarama yapardı.
+            entity.HasIndex(x => new { x.WarehouseId, x.Status });
+
+            entity.HasOne(x => x.Warehouse)
+                .WithMany()
+                .HasForeignKey(x => x.WarehouseId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.WarehouseZone)
+                .WithMany()
+                .HasForeignKey(x => x.WarehouseZoneId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.DocumentNumber).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<StockCountLine>(entity =>
+        {
+            entity.ToTable("stock_count_lines");
+
+            entity.HasIndex(x => new { x.StockCountSessionId, x.InventoryItemId }).IsUnique();
+
+            entity.HasOne(x => x.StockCountSession)
+                .WithMany(x => x.Lines)
+                .HasForeignKey(x => x.StockCountSessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.InventoryItem)
+                .WithMany()
+                .HasForeignKey(x => x.InventoryItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Hesaplanmış özellik; veritabanına yazılmaz.
+            entity.Ignore(x => x.Difference);
         });
     }
 

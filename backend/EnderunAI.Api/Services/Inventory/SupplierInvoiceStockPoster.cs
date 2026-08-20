@@ -42,7 +42,8 @@ public interface ISupplierInvoiceStockPoster
 /// </summary>
 public sealed class SupplierInvoiceStockPoster(
     AppDbContext db,
-    ICurrentUserService currentUser) : ISupplierInvoiceStockPoster
+    ICurrentUserService currentUser,
+    IStockCountLockService countLock) : ISupplierInvoiceStockPoster
 {
     public async Task<int> PostAsync(
         SupplierInvoice invoice, CancellationToken cancellationToken)
@@ -110,6 +111,10 @@ public sealed class SupplierInvoiceStockPoster(
                 warehouseStocks.Add(stock);
                 db.WarehouseStocks.Add(stock);
             }
+
+            // SAYIM KİLİDİ: sayılan bölgeye hareket girmez.
+            await countLock.EnsureNotLockedAsync(
+                warehouseId, inventoryItemId, cancellationToken);
 
             stock.Quantity += item.Quantity;
             stock.UpdatedAtUtc = now;
@@ -223,6 +228,10 @@ public sealed class SupplierInvoiceStockPoster(
                     $"{TurkishFormat.Quantity(item.Quantity)} iade edilemez. Malzeme kullanıldıysa " +
                     "iade yerine stok düzeltmesi yapın.");
             }
+
+            // SAYIM KİLİDİ: sayılan bölgeye hareket girmez.
+            await countLock.EnsureNotLockedAsync(
+                warehouseId, inventoryItemId, cancellationToken);
 
             stock.Quantity -= item.Quantity;
             stock.UpdatedAtUtc = now;
