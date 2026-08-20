@@ -26,6 +26,13 @@ public interface IInventoryAccountResolver
     /// <summary>Bir kartın kategorisinden muhasebe karşılığı.</summary>
     Task<InventoryAccountingKind> ResolveKindAsync(
         Guid inventoryItemId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Faturası gelmemiş mal alımları (GR/IR) — 379.01. Mal kabulde
+    /// borç burada bekler, fatura gelince 320'ye devreder.
+    /// </summary>
+    Task<Guid> ResolveGoodsReceivedNotInvoicedAccountAsync(
+        Guid companyId, CancellationToken cancellationToken);
 }
 
 public sealed class InventoryAccountResolver(AppDbContext db) : IInventoryAccountResolver
@@ -38,6 +45,12 @@ public sealed class InventoryAccountResolver(AppDbContext db) : IInventoryAccoun
     public const string TradeGoodStockCode = "153";
     public const string ConsumableExpenseCode = "740";
     public const string TradeGoodCostCode = "621";
+
+    /// <summary>
+    /// GR/IR ara hesabı. Alt hesap: 379 ana hesabı fiş kesilemez
+    /// olduğu için hareket buraya yazılır.
+    /// </summary>
+    public const string GoodsReceivedNotInvoicedCode = "379.01";
 
     public Task<Guid> ResolveStockAccountAsync(
         Guid companyId, InventoryAccountingKind kind, CancellationToken cancellationToken) =>
@@ -75,6 +88,14 @@ public sealed class InventoryAccountResolver(AppDbContext db) : IInventoryAccoun
         // sarf malzeme mali tabloda satılabilir mal gibi görünür.
         return kind ?? InventoryAccountingKind.Consumable;
     }
+
+    public Task<Guid> ResolveGoodsReceivedNotInvoicedAccountAsync(
+        Guid companyId, CancellationToken cancellationToken) =>
+        FindAsync(
+            companyId,
+            GoodsReceivedNotInvoicedCode,
+            "Faturası gelmemiş mal alımları hesabı (379.01)",
+            cancellationToken);
 
     private async Task<Guid> FindAsync(
         Guid companyId, string code, string label, CancellationToken cancellationToken)

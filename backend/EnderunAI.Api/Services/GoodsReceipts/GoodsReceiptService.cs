@@ -17,7 +17,9 @@ public sealed class GoodsReceiptService(
     AppDbContext db,
     IDocumentNumberService documentNumbers,
     ICurrentDataScopeService dataScope,
-    ICurrentUserService currentUser) : IGoodsReceiptService
+    ICurrentUserService currentUser,
+    Services.Inventory.IGoodsReceiptAccountingPoster accountingPoster)
+    : IGoodsReceiptService
 {
     public async Task<IReadOnlyList<GoodsReceiptListItemResponse>> GetAllAsync(
         Guid? companyId,
@@ -522,6 +524,8 @@ public sealed class GoodsReceiptService(
             .ToDictionaryAsync(x => x.InventoryItemId, cancellationToken);
 
         var now = DateTime.UtcNow;
+        var costByInventoryItem = new Dictionary<Guid, decimal>();
+
         foreach (var item in acceptedItems)
         {
             var inventoryItemId = item.InventoryItemId!.Value;
@@ -577,6 +581,13 @@ public sealed class GoodsReceiptService(
             // ortalaması da (aynı üründen birden fazla kalem olması ihtimaline
             // karşı) güncel miktar üzerinden hesaplansın.
             priorTotalQuantities[inventoryItemId] = priorQuantity + item.AcceptedQuantity;
+
+            // Muhasebe fişi için kalem maliyetleri biriktiriliyor:
+            // aynı karttan birden fazla satır olabilir, hesap bazında
+            // tek satır yazılsın diye kart kimliğinde toplanıyor.
+            costByInventoryItem[inventoryItemId] =
+                costByInventoryItem.GetValueOrDefault(inventoryItemId)
+                + unitCostTry * item.AcceptedQuantity;
 
             db.StockMovements.Add(new StockMovement
             {
@@ -680,6 +691,18 @@ public sealed class GoodsReceiptService(
             : PurchaseOrderStatus.PartiallyReceived;
         purchaseOrder.UpdatedAtUtc = now;
         purchaseOrder.UpdatedByUserId = currentUser.UserId;
+
+        /*
+         * STOK MUHASEBEYE BURADA GİRER.
+         *
+         * Fiş kesilmezse stok fiziken artar ama mali tabloda görünmez;
+         * sayım ile mizan ilk günden ayrışır ve fark aylar sonra,
+         * kimsenin sebebini hatırlamadığı bir tutarsızlık olarak
+         * çıkar. Aynı transaction içinde: fiş kesilemezse stok da
+         * işlenmez.
+         */
+        receipt.AccountingVoucherId = await accountingPoster.PostAsync(
+            receipt, costByInventoryItem, cancellationToken);
 
         receipt.Status = GoodsReceiptStatus.Posted;
         receipt.PostedAtUtc = now;

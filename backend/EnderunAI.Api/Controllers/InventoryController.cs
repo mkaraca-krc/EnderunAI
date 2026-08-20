@@ -16,8 +16,49 @@ namespace EnderunAI.Api.Controllers;
 public sealed class InventoryController(
     AppDbContext db,
     IDocumentNumberService documentNumbers,
-    ICurrentUserService currentUser) : ControllerBase
+    ICurrentUserService currentUser,
+    Services.Inventory.IStockAccountingConsistencyService consistency) : ControllerBase
 {
+    /// <summary>
+    /// STOK ↔ MUHASEBE TUTARLILIK RAPORU.
+    ///
+    /// Depodaki değer (miktar × ağırlıklı ortalama) ile 150/153
+    /// hesaplarının mizan bakiyesini karşılaştırır. Fark varsa bir
+    /// yerde stok muhasebeye yazılmadan hareket etmiştir.
+    ///
+    /// 379.01 bakiyesi ayrı gösterilir: o tutarsızlık değil, "malı
+    /// aldık faturası gelmedi" demektir.
+    /// </summary>
+    [HttpGet("accounting-consistency")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingView)]
+    public async Task<IActionResult> GetAccountingConsistency(
+        [FromQuery] Guid? companyId, CancellationToken cancellationToken)
+    {
+        var resolvedCompanyId = companyId;
+
+        if (resolvedCompanyId is null)
+        {
+            var companies = await db.Companies
+                .Where(x => x.IsActive)
+                .Select(x => x.Id)
+                .Take(2)
+                .ToListAsync(cancellationToken);
+
+            if (companies.Count == 0)
+                return BadRequest(new { message = "Aktif şirket bulunamadı." });
+
+            // Birden fazla şirket varsa hangisinin sorulduğu
+            // TAHMİN EDİLMEZ: yanlış şirketin mizanı "tutarsızlık"
+            // gibi görünür ve boş yere alarm verir.
+            if (companies.Count > 1)
+                return BadRequest(new { message = "Şirket seçilmelidir." });
+
+            resolvedCompanyId = companies[0];
+        }
+
+        return Ok(await consistency.BuildAsync(resolvedCompanyId.Value, cancellationToken));
+    }
+
     [HttpGet("items")]
     [RequirePermission(PermissionCatalog.Keys.InventoryView)]
     public async Task<IActionResult> GetItems(

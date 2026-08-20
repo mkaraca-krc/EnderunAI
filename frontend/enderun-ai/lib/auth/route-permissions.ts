@@ -134,6 +134,9 @@ const RULES: Rule[] = [
   // Kategori/özellik bakımı depo YÖNETİMİ işi — hareket açma yetkisi
   // (inventory.create) yetmez.
   { match: /^\/depo-stok\/kategoriler/, permission: "inventory.view" },
+  // Mutabakat mizan okuyor: depo değil MUHASEBE izni. Uç de
+  // accounting.view zorluyor, rota kapısı onunla aynı olmalı.
+  { match: /^\/depo-stok\/muhasebe-mutabakat/, permission: "accounting.view" },
   { match: /^\/depo-stok\/etiket/, permission: "inventory.view" },
   // Raf QR'ı okutulunca açılır; görüntüleme yetkisi yeterli.
   { match: /^\/depo-stok\/raf\//, permission: "inventory.view" },

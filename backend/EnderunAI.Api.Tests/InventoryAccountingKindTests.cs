@@ -72,11 +72,10 @@ public sealed class InventoryAccountingKindTests(DatabaseFixture fixture)
     [Fact]
     public void HesapKodlari_YalnizCozumleyicideGecer()
     {
-        // Gerekçeli muafiyet — her fazda küçülür:
-        // AccountingIntegrationService alış faturasını hâlâ kendi
-        // eşlemesiyle ("153", "150") yazıyor. S6b'de çözümleyiciye
-        // bağlanacak ve bu muafiyet kalkacak.
-        var exemptions = new[] { "AccountingIntegrationService.cs" };
+        // MUAFİYET LİSTESİ BOŞ. S6a'da AccountingIntegrationService
+        // buradaydı: alış faturasını kendi ("153", "150") eşlemesiyle
+        // yazıyordu. S6b'de çözümleyiciye bağlandı ve muafiyet kalktı.
+        var exemptions = Array.Empty<string>();
 
         var offenders = new List<string>();
         var root = ApiPath();

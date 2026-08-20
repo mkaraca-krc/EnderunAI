@@ -162,6 +162,28 @@ export type InventoryAttribute = {
   options: InventoryAttributeOption[];
 };
 
+export type StockAccountingLine = {
+  kind: string;
+  stockAccountCode: string;
+  /** Depodaki değer: miktar × ağırlıklı ortalama maliyet. */
+  stockValue: number;
+  /** Mizandaki bakiye: yalnız KESİNLEŞMİŞ fişlerden. */
+  accountBalance: number;
+  difference: number;
+};
+
+export type StockAccountingConsistencyReport = {
+  asOfUtc: string;
+  lines: StockAccountingLine[];
+  /**
+   * 379.01 bakiyesi — TUTARSIZLIK DEĞİL: "malı aldık, faturası
+   * gelmedi" demek. Kalıcı bakiye eksik fatura takibidir.
+   */
+  pendingInvoiceBalance: number;
+  isConsistent: boolean;
+  summary: string;
+};
+
 export type InventoryCategory = {
   id: string;
   code: string;
@@ -226,6 +248,18 @@ export const inventoryService = {
    */
   getCategories() {
     return apiClient<InventoryCategory[]>("inventory/categories");
+  },
+
+  /**
+   * STOK ↔ MUHASEBE TUTARLILIK RAPORU.
+   *
+   * Depodaki değer (miktar × ağırlıklı ortalama) ile 150/153
+   * hesaplarının mizan bakiyesini karşılaştırır.
+   */
+  getAccountingConsistency() {
+    return apiClient<StockAccountingConsistencyReport>(
+      "inventory/accounting-consistency"
+    );
   },
 
   /**

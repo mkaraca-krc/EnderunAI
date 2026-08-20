@@ -69,13 +69,29 @@ public sealed class SupplierInvoiceTypeTests(DatabaseFixture fixture)
             };
 
         var stock = Account("153", "Ticari Mallar", AccountingAccountNature.Debit);
+
+        /*
+         * 150 ve 379 S6b ile ZORUNLU oldu.
+         *
+         * Kartın kategorisi hangi stok hesabına yazılacağını
+         * belirliyor ve VARSAYILAN SARF (150) — kategorisiz kartlar da
+         * oraya düşüyor. Mal kabul ayrıca 379.01 "faturası gelmemiş
+         * mal alımları" hesabını kullanıyor.
+         *
+         * Hesap yoksa uç HAKLI OLARAK duruyor: stokun muhasebesiz
+         * girmesindense işlem durmalı.
+         */
+        var sarf = Account("150", "İlk Madde ve Malzeme", AccountingAccountNature.Debit);
+        var grir = Account("379", "Diğer Borç ve Gider Karşılıkları", AccountingAccountNature.Credit);
+        grir.IsPostingAllowed = false;
         var vatIn = Account("191", "İndirilecek KDV", AccountingAccountNature.Debit);
         var payable = Account("320", "Satıcılar", AccountingAccountNature.Credit);
         var cost = Account("740", "Hizmet Üretim Maliyeti", AccountingAccountNature.Debit);
         var elektrik = Account("770.03.10", "Elektrik Su Doğalgaz", AccountingAccountNature.Debit);
         var kirtasiye = Account("770.03.03", "Kırtasiye", AccountingAccountNature.Debit);
 
-        db.AccountingAccounts.AddRange(stock, vatIn, payable, cost, elektrik, kirtasiye);
+        db.AccountingAccounts.AddRange(
+            stock, sarf, grir, vatIn, payable, cost, elektrik, kirtasiye);
 
         var merkezWarehouse = new Warehouse
         {
@@ -119,6 +135,10 @@ public sealed class SupplierInvoiceTypeTests(DatabaseFixture fixture)
         });
 
         await db.SaveChangesAsync();
+
+        // 379.01 alt hesabını üretimdeki tohum açsın: testler de
+        // gerçek şirketle aynı yoldan geçsin.
+        await GoodsReceivedNotInvoicedAccountSeed.SeedAsync(db);
 
         return new Context(
             company.Id, project.Id, supplier.Id,
@@ -670,7 +690,16 @@ public sealed class SupplierInvoiceTypeTests(DatabaseFixture fixture)
             .Include(x => x.Lines).ThenInclude(x => x.AccountingAccount)
             .SingleAsync(x => x.Id == invoice.AccountingVoucherId);
 
-        var stockLine = voucher.Lines.Single(x => x.AccountingAccount.Code == "153");
+        /*
+         * 153 DEĞİL 150 (S6b).
+         *
+         * Stok hesabını artık kartın KATEGORİSİ belirliyor ve
+         * varsayılan SARF — kategorisiz "Enerji Kablosu" kartı da
+         * oraya düşüyor. Önceden hepsi finans ayarındaki tek
+         * `InventoryAccountId` (153) hesabına gidiyordu; kullanıcı
+         * kararı gereği taahhüt malzemesi ticari mal sayılmıyor.
+         */
+        var stockLine = voucher.Lines.Single(x => x.AccountingAccount.Code == "150");
 
         Assert.Equal(40_000m, stockLine.DebitAmount);
         Assert.Equal(context.ProjectCode, stockLine.CostCenterCode);

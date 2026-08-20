@@ -184,7 +184,8 @@ public sealed class AccountingIntegrationService(
     AppDbContext db,
     IAccountingVoucherService voucherService,
     Market.IInvoiceExchangeRateResolver exchangeRateResolver,
-    CurrentAccountCurrencyService currencyService)
+    CurrentAccountCurrencyService currencyService,
+    Inventory.IInventoryAccountResolver inventoryAccounts)
     : IAccountingIntegrationService
 {
     public async Task<CompanyFinanceSettings> GetOrCreateFinanceSettingsAsync(
@@ -209,10 +210,16 @@ public sealed class AccountingIntegrationService(
             ReverseChargeVatInputAccountId = await FindAccountIdAsync(companyId, cancellationToken, "191.05"),
             ReverseChargeVatPayableAccountId = await FindAccountIdAsync(companyId, cancellationToken, "360.002"),
             ExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "740"),
-            // Stok alışı 153'e yazılır; boş bırakılsaydı yeni şirkette
-            // malzeme alışı doğrudan 740 maliyete düşer ve depodaki mal
-            // hiç bilançoya girmezdi.
-            InventoryAccountId = await FindAccountIdAsync(companyId, cancellationToken, "153", "150"),
+            // KARTSIZ satırların düşeceği stok hesabı. Kategorisi olan
+            // kalemler artık InventoryAccountResolver'dan geçiyor;
+            // burası yalnız serbest metin satırlar için kalıyor.
+            // Kodlar çözümleyicinin sabitlerinden okunuyor ki eşleme
+            // ikinci bir yerde tekrar tanımlanmasın.
+            InventoryAccountId = await FindAccountIdAsync(
+                companyId,
+                cancellationToken,
+                Inventory.InventoryAccountResolver.TradeGoodStockCode,
+                Inventory.InventoryAccountResolver.ConsumableStockCode),
             PayablesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "320"),
             ReceivablesAccountId = await FindAccountIdAsync(companyId, cancellationToken, "120"),
             FactoringExpenseAccountId = await FindAccountIdAsync(companyId, cancellationToken, "780.01.01", "780"),
@@ -307,6 +314,41 @@ public sealed class AccountingIntegrationService(
             return invoice.ProjectId;
         }
 
+        /*
+         * MAL KABULE BAĞLI FATURA STOKU İKİNCİ KEZ YAZMAZ.
+         *
+         * Mal kabulde stok zaten 150/153'e girdi ve karşılığı 379.01
+         * "faturası gelmemiş mal alımları"nda bekliyor. Fatura o borcu
+         * KAPATIR: 379.01 borç / 320 alacak. Fatura yine stoku
+         * borçlandırsaydı aynı mal iki kez bilançoya girer, stok
+         * değeri iki katına çıkardı.
+         *
+         * Mal kabule bağlanmamış stok faturası (doğrudan alım) ise
+         * stoku ilk kez yazıyor demektir; hesabı kartın KATEGORİSİ
+         * belirler — sarf 150, ticari mal 153.
+         */
+        var goodsReceiptLinked = invoice.InvoiceType != SupplierInvoiceType.Expense
+            && invoice.GoodsReceiptId is not null;
+
+        var grirAccountId = goodsReceiptLinked
+            ? await inventoryAccounts.ResolveGoodsReceivedNotInvoicedAccountAsync(
+                invoice.CompanyId, cancellationToken)
+            : (Guid?)null;
+
+        var stockAccountByItem = new Dictionary<Guid, Guid>();
+
+        if (!goodsReceiptLinked && invoice.InvoiceType != SupplierInvoiceType.Expense)
+        {
+            foreach (var item in items.Where(x => x.InventoryItemId is not null))
+            {
+                var kind = await inventoryAccounts.ResolveKindAsync(
+                    item.InventoryItemId!.Value, cancellationToken);
+
+                stockAccountByItem[item.Id] = await inventoryAccounts
+                    .ResolveStockAccountAsync(invoice.CompanyId, kind, cancellationToken);
+            }
+        }
+
         Guid ResolveAccount(SupplierInvoiceItem item)
         {
             if (invoice.InvoiceType == SupplierInvoiceType.Expense)
@@ -317,8 +359,14 @@ public sealed class AccountingIntegrationService(
                         $"Kalem {item.LineNumber}: gider hesabı seçilmemiş.");
             }
 
-            // Stok hesabı ayarlanmamışsa maliyet hesabına düşülür ki
-            // ayar yapılmamış şirkette fatura onayı kilitlenmesin.
+            if (grirAccountId is Guid grir) return grir;
+
+            if (stockAccountByItem.TryGetValue(item.Id, out var byCategory))
+                return byCategory;
+
+            // Stok kartı seçilmemiş serbest satır. Stok hesabı
+            // ayarlanmamışsa maliyet hesabına düşülür ki ayar
+            // yapılmamış şirkette fatura onayı kilitlenmesin.
             return settings.InventoryAccountId
                 ?? settings.ExpenseAccountId
                 ?? throw new InvalidOperationException(

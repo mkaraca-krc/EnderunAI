@@ -297,6 +297,11 @@ export const MENU_GROUPS: MenuGroup[] = [
         icon: "○",
       },
       {
+        label: "Muhasebe Mutabakatı",
+        href: "/depo-stok/muhasebe-mutabakat",
+        icon: "○",
+      },
+      {
         label: "Stok Hareketleri",
         href: "/depo-stok/hareketler",
         icon: "○",

@@ -53,6 +53,10 @@ public sealed class PurchaseReturnTests(DatabaseFixture fixture)
 
         var project = await TestDataFactory.CreateProjectAsync(db, suffix);
 
+        // Mal kabul artık muhasebe fişi kesiyor (S6b): stok hesapları
+        // ve 379.01 GR/IR hesabı olmadan kesinleşemez.
+        await TestDataFactory.EnsureStockAccountsAsync(db, project.CompanyId);
+
         var supplier = new CurrentAccount
         {
             CompanyId = project.CompanyId,

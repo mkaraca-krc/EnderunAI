@@ -1,3 +1,5 @@
+using EnderunAI.Api.Models;
+
 namespace EnderunAI.Api.Models.GoodsReceipt;
 
 public enum GoodsReceiptStatus
@@ -36,6 +38,24 @@ public sealed class GoodsReceipt : BaseEntity
     public DateTime? CancelledAtUtc { get; set; }
     public Guid? CancelledByUserId { get; set; }
     public string? CancellationReason { get; set; }
+
+    /// <summary>
+    /// Mal kabul fişi: stok hesabı borç (150/153, kategoriye göre),
+    /// 379.01 faturası gelmemiş mal alımları alacak.
+    ///
+    /// Stokun muhasebeye girdiği andır. Bu bağ olmadan stok fiziken
+    /// artar ama mali tabloda görünmez; sayım ile mizan ilk günden
+    /// ayrışır.
+    /// </summary>
+    public Guid? AccountingVoucherId { get; set; }
+    public AccountingVoucher? AccountingVoucher { get; set; }
+
+    /*
+     * Ters fiş alanı YOK: `CancelAsync` yalnız TASLAK kabulü iptal
+     * ediyor, kesinleşmiş kabul iptal edilemiyor. Kullanılmayan bir
+     * kolon, ileride "iptal ters fiş kesiyor herhalde" varsayımına
+     * yol açardı.
+     */
 
     public ICollection<GoodsReceiptItem> Items { get; set; } =
         new List<GoodsReceiptItem>();

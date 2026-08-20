@@ -70,9 +70,26 @@ public sealed class InvoiceReturnTests(DatabaseFixture fixture)
             {
                 CompanyId = companyId, Code = "740", Name = "Hizmet Üretim Maliyeti",
                 Nature = AccountingAccountNature.Debit, Level = 3, IsPostingAllowed = true
+            },
+            // 150 ve 379 S6b ile zorunlu: stok hesabını kartın
+            // KATEGORİSİ belirliyor ve varsayılan sarf (150). Mal kabul
+            // ayrıca 379.01 GR/IR hesabını kullanıyor. Hesap yoksa uç
+            // haklı olarak duruyor.
+            new AccountingAccount
+            {
+                CompanyId = companyId, Code = "150", Name = "İlk Madde ve Malzeme",
+                Nature = AccountingAccountNature.Debit, Level = 3, IsPostingAllowed = true
+            },
+            new AccountingAccount
+            {
+                CompanyId = companyId, Code = "379", Name = "Diğer Borç ve Gider Karşılıkları",
+                Nature = AccountingAccountNature.Credit, Level = 3, IsPostingAllowed = false
             });
 
         await db.SaveChangesAsync();
+
+        // 379.01 alt hesabını üretimdeki tohum açsın.
+        await GoodsReceivedNotInvoicedAccountSeed.SeedAsync(db);
     }
 
     private async Task<TestContext> CreateContextAsync(string suffix)

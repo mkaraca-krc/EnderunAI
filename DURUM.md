@@ -522,11 +522,53 @@ Altı sondanın hepsi yakaladı (oluşturma isteğine alan eklendi · izin
 depo iznine düşürüldü · varsayılan ticari mal yapıldı · 150↔153 takas ·
 kategorisiz kart ticari mal sayıldı · hesap kodu ikinci yere kopyalandı).
 
-**S6b (sıradaki) — GR/IR fişleri + stok↔muhasebe tutarlılık raporu.**
-AÇIK SORU: GR/IR (faturası gelmemiş mal) hangi hesapta duracak?
-159 Verilen Sipariş Avansları GERÇEK tedarikçi avanslarıyla dolu,
-yeniden kullanılamaz. 379 Diğer Borç ve Gider Karşılıkları boş ve
-uygun görünüyor ama bu mali müşavir kararı — kullanıcıya soruldu.
+**S6b (bitti) — GR/IR fişleri + stok↔muhasebe mutabakatı.**
+
+KULLANICI KARARI: GR/IR hesabı **379.01 FATURASI GELMEMİŞ MAL
+ALIMLARI**. 159 kullanılamazdı (gerçek tedarikçi avanslarıyla dolu),
+379 ana hesabı da canlıda FİŞ KESİLEMEZ (`IsPostingAllowed = false`) —
+alt hesap açmak zorunluydu, tohum ekliyor ve var olanı ezmiyor.
+
+- MAL KABUL ARTIK FİŞ KESİYOR: borç 150/153 (kartın kategorisine göre),
+  alacak 379.01. Fiş kesinleşmeden ÖNCE üretiliyor ve aynı transaction
+  içinde: fiş kesilemezse stok da işlenmiyor. Stokun mali tabloya
+  girdiği an burası.
+- FİŞTE KDV YOK: mal kabulde fatura yoktur. KDV yazılsaydı beyan
+  edilecek vergi elde belge olmadan doğardı.
+- FİŞTE PROJE ETİKETİ YOK: depoya giren mal henüz proje maliyeti değil,
+  bilanço kalemi. Proje maliyeti malzeme depodan ÇIKARKEN doğuyor ve
+  stok çıkışı projeyi zaten yazıyor; girişte de yazılsaydı aynı
+  malzeme projeye iki kez bağlanırdı. (Bunu bir test düşüşü gösterdi —
+  fiş satırındaki proje başka şirkete aitti.)
+- MAL KABULE BAĞLI ALIŞ FATURASI STOKU İKİNCİ KEZ YAZMIYOR: 379.01'i
+  kapatıp 320'ye devrediyor. Yine stoku borçlandırsaydı aynı mal iki
+  kez bilançoya girer, stok değeri iki katına çıkardı.
+- Mal kabule bağlanmamış stok faturası stoku ilk kez yazıyor demektir;
+  hesabı kartın KATEGORİSİ belirliyor (sarf 150, ticari mal 153).
+- MUAFİYET LİSTESİ BOŞALDI: `AccountingIntegrationService` artık
+  çözümleyiciden geçiyor, "153"/"150" sabitleri dosyadan kalktı.
+- YENİ EKRAN `/depo-stok/muhasebe-mutabakat` (accounting.view):
+  depodaki değer (miktar × ağırlıklı ortalama) ile 150/153 mizan
+  bakiyesi yan yana. 379.01 bakiyesi AYRI gösteriliyor — o tutarsızlık
+  değil, "malı aldık faturası gelmedi" demek.
+- Mizan YALNIZ kesinleşmiş fişlerden hesaplanıyor: taslak fiş mizanda
+  yoktur, sayılsaydı rapor sahte bir denklik gösterip muhasebesiz
+  stoku örterdi.
+
+DAVRANIŞ DEĞİŞİKLİĞİ (bilinçli): hesap planında 150/153 ya da 379.01
+yoksa MAL KABUL DURUYOR. Stokun sessizce muhasebesiz girmesindense
+işlem durmalı. Canlı şirkette üçü de var.
+
+SONDADA İKİ KAÇIRMA (ikisi de düzeltildi):
+1. "Fişte KDV olmasın" kuralı BÜYÜK/KÜÇÜK HARFE DUYARLIYDI; sonda
+   `vatAmount` ekleyince kaçırdı. Artık harf duyarsız ve 191/391
+   kodlarını da arıyor.
+2. "Mizan yalnız kesinleşmiş fişlerden" kuralı HİÇ KAPSANMIYORDU —
+   `Posted` filtresini kaldırdığımda hiçbir test düşmedi, çünkü testte
+   taslak fiş senaryosu yoktu. Teste taslak fiş eklendi.
+
+Dokuz sondanın hepsi yakalıyor. Migration canlıya yedekle uygulandı
+(db_20260820_001203.dump).
 
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic

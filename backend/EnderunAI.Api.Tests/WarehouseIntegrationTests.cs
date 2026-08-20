@@ -24,6 +24,10 @@ public sealed class WarehouseIntegrationTests(DatabaseFixture fixture)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var (company, branch, _) = await TestDataFactory.CreateCompanyStackAsync(db, suffix);
+
+        // Mal kabul artık muhasebe fişi kesiyor: hesap planı olmadan
+        // kesinleşemez (S6b).
+        await TestDataFactory.EnsureStockAccountsAsync(db, company.Id);
         var project = await TestDataFactory.CreateProjectAsync(db, suffix + "P");
 
         var supplier = new CurrentAccount
