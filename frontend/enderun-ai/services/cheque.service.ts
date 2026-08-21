@@ -164,6 +164,14 @@ export type ChequeDetail = ChequeListItem & {
   voidReasonName?: string | null;
 
   changeLog: ChequeChangeLogEntry[];
+
+  /**
+   * BU ÇEK İPTAL EDİLİRSE AÇILACAK ORİJİNAL ÇEK — yoksa null.
+   * Erteleme zincirinde, yerine geçen çek iptal edilince orijinal
+   * önceki durumuna dönüyor. Kullanıcı bunu iptalden ÖNCE görmeli.
+   */
+  voidRestoresChequeNumber?: string | null;
+  voidRestoresStatusName?: string | null;
 };
 
 /** Alan bazlı düzeltme kaydı — "Değişiklik geçmişi" sekmesi. */
@@ -239,6 +247,15 @@ export type ReplaceChequePayload = {
   drawer?: string | null;
   issueDate?: string | null;
   description?: string | null;
+  /**
+   * EŞZAMANLI DEĞİŞİKLİK DAMGASI — ZORUNLU.
+   *
+   * Çekin durumunu değiştiren HER uç bunu istiyor. Bir uçta eksik
+   * olması korumanın hiç olmaması demek: iki kullanıcı aynı çeke aynı
+   * anda işlem yaparsa biri diğerininkini görmeden üzerine yazar ve
+   * çekte bu, aynı parayı iki kez işlemek anlamına gelir.
+   */
+  rowVersion: string;
 };
 
 export type ChequeStatusChangePayload = {
@@ -246,6 +263,15 @@ export type ChequeStatusChangePayload = {
   movementDate: string;
   cashAccountId?: string | null;
   description?: string | null;
+  /**
+   * EŞZAMANLI DEĞİŞİKLİK DAMGASI — ZORUNLU.
+   *
+   * Çekin durumunu değiştiren HER uç bunu istiyor. Bir uçta eksik
+   * olması korumanın hiç olmaması demek: iki kullanıcı aynı çeke aynı
+   * anda işlem yaparsa biri diğerininkini görmeden üzerine yazar ve
+   * çekte bu, aynı parayı iki kez işlemek anlamına gelir.
+   */
+  rowVersion: string;
 };
 
 export type UpdateChequePayload = {
@@ -334,10 +360,14 @@ export const chequeService = {
     return apiClient<ChequeDetail>("cheques", { method: "POST", body: payload });
   },
 
-  replaceAllocations(id: string, allocations: ChequeAllocationPayload[]) {
+  replaceAllocations(
+    id: string,
+    allocations: ChequeAllocationPayload[],
+    rowVersion: string
+  ) {
     return apiClient<ChequeDetail>(`cheques/${id}/allocations`, {
       method: "PUT",
-      body: { allocations },
+      body: { allocations, rowVersion },
     });
   },
 
@@ -360,10 +390,10 @@ export const chequeService = {
    * Silmez: fişi ters kayıtla kapatır, banka hareketini karşıt bir
    * hareketle dengeler ve iz bırakır.
    */
-  reverseStatus(id: string, reason: string) {
+  reverseStatus(id: string, reason: string, rowVersion: string) {
     return apiClient<ChequeDetail>(`cheques/${id}/durum-geri-al`, {
       method: "POST",
-      body: { reason },
+      body: { reason, rowVersion },
     });
   },
 

@@ -113,6 +113,233 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
             .GetProperty("id").GetGuid();
     }
 
+    private static async Task<JsonElement> DetailAsync(HttpClient client, Guid id) =>
+        await client.GetFromJsonAsync<JsonElement>($"/api/cheques/{id}");
+
+    /// <summary>Çeki erteler, yerine geçen çekin kimliğini döndürür.</summary>
+    private static async Task<Guid> ReplaceAsync(
+        HttpClient client, Guid chequeId, string newNumber, int dueInDays)
+    {
+        var response = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/replace", chequeId,
+            new
+            {
+                chequeNumber = newNumber,
+                dueDate = DateTime.UtcNow.Date.AddDays(dueInDays),
+                movementDate = DateTime.UtcNow.Date,
+                description = "vade uzatması"
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        return (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+    }
+
+    private static async Task<HttpResponseMessage> VoidAsync(
+        HttpClient client, Guid chequeId, JsonElement detail) =>
+        await client.PostChequeAsync($"/api/cheques/{chequeId}/iptal", chequeId, new
+        {
+            reason = "yerine geçen çek geçersiz",
+            reasonKind = (int)ChequeVoidReason.Other,
+            rowVersion = detail.GetProperty("rowVersion").GetDateTime()
+        });
+
+    // ---------------------------------------------------------------
+    // ERTELEME ZİNCİRİ — YERİNE GEÇEN İPTAL EDİLİRSE
+    // ---------------------------------------------------------------
+
+    /// <summary>
+    /// YERİNE GEÇEN ÇEK İPTAL EDİLİNCE ORİJİNAL AÇILIR.
+    ///
+    /// Yoksa ortada geçerli bir çek kalmadığı hâlde borç duruyor ve
+    /// orijinal "Ertelendi"de kaldığı için portföyden, vade raporundan
+    /// ve defterden birden düşüyor — gerçek bir alacak sistemde
+    /// görünmez oluyor. Bu, çek numarası sorunundan daha tehlikeli:
+    /// kimse fark etmiyor.
+    ///
+    /// ÖNCEKİ DURUM TAHMİN EDİLMİYOR: çek bankada tahsildeyken
+    /// ertelendiyse "Bankada"ya döner, "Portföyde"ye değil.
+    /// </summary>
+    [Fact]
+    public async Task YerineGecenCekIptalEdilince_OrijinalOncekiDurumunaDoner()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var originalId = await CreateChequeAsync(
+            client, context, ChequeDirection.Received);
+
+        // Çek BANKAYA VERİLİYOR: geri dönüşün "Portföyde" değil
+        // "Bankada" olması gerektiğini bu adım kanıtlıyor.
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var bankAccountingId = await db.AccountingAccounts
+                .Where(x => x.CompanyId == context.CompanyId && x.Code == "101.01")
+                .Select(x => x.Id)
+                .SingleAsync();
+
+            // "Tahsildeki çekler" hesabı bu senaryoya özel: bankaya
+            // verme geçişi 101.02'ye yazıyor.
+            db.AccountingAccounts.Add(new AccountingAccount
+            {
+                CompanyId = context.CompanyId,
+                Code = "101.02",
+                Name = "Tahsildeki Çekler",
+                Nature = AccountingAccountNature.Debit,
+                Level = 4,
+                IsPostingAllowed = true
+            });
+
+            var bank = new CashAccount
+            {
+                CompanyId = context.CompanyId,
+                Type = CashAccountType.Bank,
+                Code = $"BNK-{suffix}",
+                Name = $"Test Banka {suffix}",
+                BankName = "Test Bankası",
+                CurrencyCode = "TRY",
+                OpeningBalance = 0m,
+                AccountingAccountId = bankAccountingId
+            };
+
+            db.CashAccounts.Add(bank);
+            await db.SaveChangesAsync();
+
+            var moved = await client.PostChequeAsync($"/api/cheques/{originalId}/status", originalId, new
+            {
+                toStatus = (int)ChequeStatus.AtBank,
+                movementDate = DateTime.UtcNow.Date,
+                cashAccountId = bank.Id,
+                description = "tahsile verildi"
+            });
+
+            Assert.True(
+                moved.StatusCode == HttpStatusCode.OK,
+                await moved.Content.ReadAsStringAsync());
+        }
+
+        var replacementId = await ReplaceAsync(
+            client, originalId, $"ERT{suffix}", dueInDays: 60);
+
+        var beforeVoid = await DetailAsync(client, originalId);
+        Assert.Equal((int)ChequeStatus.Replaced, beforeVoid.GetProperty("status").GetInt32());
+
+        // İPTAL EKRANI ÖNCEDEN UYARABİLSİN: yanıt neyin açılacağını
+        // söylüyor. Kural sunucudaki geri dönüşle aynı kaynaktan.
+        var replacementDetail = await DetailAsync(client, replacementId);
+
+        Assert.Equal(
+            beforeVoid.GetProperty("chequeNumber").GetString(),
+            replacementDetail.GetProperty("voidRestoresChequeNumber").GetString());
+        Assert.Equal(
+            "Bankada (tahsilde)",
+            replacementDetail.GetProperty("voidRestoresStatusName").GetString());
+
+        var voided = await VoidAsync(client, replacementId, replacementDetail);
+        Assert.Equal(HttpStatusCode.OK, voided.StatusCode);
+
+        var afterVoid = await DetailAsync(client, originalId);
+
+        Assert.Equal((int)ChequeStatus.AtBank, afterVoid.GetProperty("status").GetInt32());
+        Assert.Equal(
+            JsonValueKind.Null,
+            afterVoid.GetProperty("replacedByChequeId").ValueKind);
+
+        // SESSİZ DEĞİL: hareket kaydı ve denetim kaydı bırakıyor.
+        var restoreMovement = afterVoid.GetProperty("movements").EnumerateArray()
+            .Last();
+
+        Assert.Equal("Ertelendi (değiştirildi)", restoreMovement.GetProperty("fromStatusName").GetString());
+        Assert.Contains("Erteleme geri alındı", restoreMovement.GetProperty("description").GetString()!);
+
+        var log = afterVoid.GetProperty("changeLog").EnumerateArray()
+            .Single(x => x.GetProperty("fieldName").GetString() == "Status");
+
+        Assert.True(log.GetProperty("affectsAccounting").GetBoolean());
+        Assert.Equal("Bankada (tahsilde)", log.GetProperty("newValue").GetString());
+    }
+
+    /// <summary>
+    /// DEFTER DE GERİ GELİR. Erteleme orijinali ters kayıtla defterden
+    /// çıkarıyor; yalnız durumu geri almak çeki raporlarda gösterip
+    /// mizanda göstermezdi — iki kaynak sessizce ayrışırdı.
+    /// </summary>
+    [Fact]
+    public async Task YerineGecenIptalEdilince_OrijinalinDefterKaydiGeriGelir()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var originalId = await CreateChequeAsync(
+            client, context, ChequeDirection.Received);
+
+        var replacementId = await ReplaceAsync(
+            client, originalId, $"DFT{suffix}", dueInDays: 45);
+
+        await VoidAsync(client, replacementId, await DetailAsync(client, replacementId));
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // Ertelenme hareketi ters kayıtla kapanmış olmalı.
+        var replacedMovement = await db.ChequeMovements
+            .AsNoTracking()
+            .Where(x => x.ChequeId == originalId && x.ToStatus == ChequeStatus.Replaced)
+            .SingleAsync();
+
+        Assert.NotNull(replacedMovement.ReversedAtUtc);
+        Assert.NotNull(replacedMovement.ReversalVoucherId);
+
+        // 101 ailesinin bakiyesi orijinal çeğin tutarına eşit: çek
+        // yeniden defterde, yerine geçen çek defterden çıkmış.
+        var lines = await db.AccountingVoucherLines
+            .AsNoTracking()
+            .Where(x => x.AccountingAccount.CompanyId == context.CompanyId
+                        && x.AccountingAccount.Code.StartsWith("101"))
+            .Select(x => new { x.DebitAmountLocal, x.CreditAmountLocal })
+            .ToListAsync();
+
+        var balance = lines.Sum(x => x.DebitAmountLocal - x.CreditAmountLocal);
+
+        var original = await db.Cheques.AsNoTracking().SingleAsync(x => x.Id == originalId);
+
+        Assert.Equal(original.AmountTry, balance);
+    }
+
+    /// <summary>
+    /// ZİNCİRE DOKUNULMAZ: A→B→C zincirinde C iptal edilirse B açılır,
+    /// A "Ertelendi" kalır. A zaten B'yi işaret ediyor; onu da açmak
+    /// aynı borcu iki çekle birden göstermek olurdu.
+    /// </summary>
+    [Fact]
+    public async Task ZincirliErteleme_YalnizSonHalkaninOncekiCekiAcilir()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var context = await CreateContextAsync(suffix);
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var aId = await CreateChequeAsync(client, context, ChequeDirection.Received);
+        var bId = await ReplaceAsync(client, aId, $"B{suffix}", dueInDays: 30);
+        var cId = await ReplaceAsync(client, bId, $"C{suffix}", dueInDays: 60);
+
+        await VoidAsync(client, cId, await DetailAsync(client, cId));
+
+        var a = await DetailAsync(client, aId);
+        var b = await DetailAsync(client, bId);
+
+        // B açıldı.
+        Assert.Equal((int)ChequeStatus.Portfolio, b.GetProperty("status").GetInt32());
+
+        // A'ya DOKUNULMADI ve hâlâ B'yi işaret ediyor.
+        Assert.Equal((int)ChequeStatus.Replaced, a.GetProperty("status").GetInt32());
+        Assert.Equal(bId, a.GetProperty("replacedByChequeId").GetGuid());
+    }
+
     /// <summary>
     /// Verilen çek ertelendiğinde: eski çek "Ertelendi" olur, ters kaydı
     /// kesilir; yeni çek yeni vadeyle açılır ve zincire bağlanır.
@@ -129,8 +356,8 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
         var newNumber = $"YENI{Guid.NewGuid():N}"[..10];
         var newDueDate = DateTime.UtcNow.Date.AddDays(90);
 
-        var response = await client.PostAsJsonAsync(
-            $"/api/cheques/{oldChequeId}/replace",
+        var response = await client.PostChequeAsync(
+            $"/api/cheques/{oldChequeId}/replace", oldChequeId,
             new
             {
                 chequeNumber = newNumber,
@@ -199,8 +426,8 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
 
         var oldChequeId = await CreateChequeAsync(client, context, ChequeDirection.Received);
 
-        var response = await client.PostAsJsonAsync(
-            $"/api/cheques/{oldChequeId}/replace",
+        var response = await client.PostChequeAsync(
+            $"/api/cheques/{oldChequeId}/replace", oldChequeId,
             new
             {
                 chequeNumber = $"YENI{Guid.NewGuid():N}"[..10],
@@ -231,8 +458,8 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
 
         for (var round = 1; round <= 3; round++)
         {
-            var response = await client.PostAsJsonAsync(
-                $"/api/cheques/{currentId}/replace",
+            var response = await client.PostChequeAsync(
+                $"/api/cheques/{currentId}/replace", currentId,
                 new
                 {
                     chequeNumber = $"Y{round}{Guid.NewGuid():N}"[..10],
@@ -265,8 +492,8 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
 
         var newDueDate = DateTime.UtcNow.Date.AddDays(200);
 
-        var response = await client.PostAsJsonAsync(
-            $"/api/cheques/{oldChequeId}/replace",
+        var response = await client.PostChequeAsync(
+            $"/api/cheques/{oldChequeId}/replace", oldChequeId,
             new
             {
                 chequeNumber = $"YENI{Guid.NewGuid():N}"[..10],
@@ -308,8 +535,8 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
                 new { amount = 30_000m, costCenterCode = "MERKEZ" }
             ]);
 
-        var response = await client.PostAsJsonAsync(
-            $"/api/cheques/{oldChequeId}/replace",
+        var response = await client.PostChequeAsync(
+            $"/api/cheques/{oldChequeId}/replace", oldChequeId,
             new
             {
                 chequeNumber = $"YENI{Guid.NewGuid():N}"[..10],
@@ -356,8 +583,8 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
 
         var oldChequeId = await CreateChequeAsync(client, context, ChequeDirection.Issued);
 
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
-            $"/api/cheques/{oldChequeId}/replace",
+        Assert.Equal(HttpStatusCode.OK, (await client.PostChequeAsync(
+            $"/api/cheques/{oldChequeId}/replace", oldChequeId,
             new
             {
                 chequeNumber = $"YENI{Guid.NewGuid():N}"[..10],
@@ -365,8 +592,8 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
                 movementDate = DateTime.UtcNow.Date
             })).StatusCode);
 
-        var second = await client.PostAsJsonAsync(
-            $"/api/cheques/{oldChequeId}/replace",
+        var second = await client.PostChequeAsync(
+            $"/api/cheques/{oldChequeId}/replace", oldChequeId,
             new
             {
                 chequeNumber = $"BASKA{Guid.NewGuid():N}"[..10],
@@ -391,8 +618,8 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
 
         var chequeId = await CreateChequeAsync(client, context, ChequeDirection.Issued);
 
-        var response = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/status",
+        var response = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/status", chequeId,
             new
             {
                 toStatus = (int)ChequeStatus.Replaced,
@@ -445,8 +672,8 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
             cashAccountId = bank.Id;
         }
 
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/status",
+        Assert.Equal(HttpStatusCode.OK, (await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/status", chequeId,
             new
             {
                 toStatus = (int)ChequeStatus.Collected,
@@ -455,8 +682,8 @@ public sealed class ChequeReplacementTests(DatabaseFixture fixture)
                 description = "Tahsil edildi"
             })).StatusCode);
 
-        var replace = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/replace",
+        var replace = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/replace", chequeId,
             new
             {
                 chequeNumber = $"YENI{Guid.NewGuid():N}"[..10],

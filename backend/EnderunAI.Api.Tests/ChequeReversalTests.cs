@@ -121,7 +121,7 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
             .Parse(await created.Content.ReadAsStringAsync())
             .RootElement.GetProperty("id").GetGuid();
 
-        var paid = await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        var paid = await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.Paid,
             movementDate = DateTime.UtcNow.Date,
@@ -252,8 +252,8 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
         // Ödeme bakiyeyi düşürdü.
         Assert.Equal(-100_000m, await BalanceAsync(context));
 
-        var response = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/durum-geri-al",
+        var response = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/durum-geri-al", chequeId,
             new { reason = "Banka dekontu başka çeke aitmiş" });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -280,8 +280,8 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         var chequeId = await CreatePaidChequeAsync(client, context);
 
-        await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/durum-geri-al",
+        await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/durum-geri-al", chequeId,
             new { reason = "Yanlış işaretlendi" });
 
         using var scope = fixture.Factory.Services.CreateScope();
@@ -323,15 +323,15 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         var chequeId = await CreatePaidChequeAsync(client, context);
 
-        await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/durum-geri-al", new { reason = "İlk" });
+        await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/durum-geri-al", chequeId, new { reason = "İlk" });
 
         var balance = await BalanceAsync(context);
 
         // İkinci geri alma artık ödeme hareketini değil, geri almanın
         // kendisini hedefler; giriş kaydı geri alınamaz.
-        var second = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/durum-geri-al", new { reason = "İkinci" });
+        var second = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/durum-geri-al", chequeId, new { reason = "İkinci" });
 
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
 
@@ -349,8 +349,8 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         var chequeId = await CreatePaidChequeAsync(client, context);
 
-        var response = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/durum-geri-al", new { reason = "  " });
+        var response = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/durum-geri-al", chequeId, new { reason = "  " });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -373,8 +373,8 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         Assert.Equal(-100_000m, await BalanceAsync(context));
 
-        var response = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/iptal",
+        var response = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/iptal", chequeId,
             new
             {
                 reason = "Test kaydı, yanlışlıkla girildi",
@@ -424,8 +424,8 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         var chequeId = await CreatePaidChequeAsync(client, context);
 
-        await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/iptal", new
+        await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/iptal", chequeId, new
             {
                 reason = "İlk iptal",
                 rowVersion = await RowVersionAsync(client, chequeId),
@@ -437,8 +437,8 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         var balance = await BalanceAsync(context);
 
-        var second = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/iptal", new
+        var second = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/iptal", chequeId, new
             {
                 reason = "İkinci iptal",
                 rowVersion = await RowVersionAsync(client, chequeId),
@@ -467,8 +467,8 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         var chequeId = await CreatePaidChequeAsync(client, context);
 
-        await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/durum-geri-al",
+        await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/durum-geri-al", chequeId,
             new { reason = "Tutar düzeltilecek" });
 
         var before = await LoadChequeAsync(chequeId);
@@ -555,12 +555,12 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
         var limited = await ClientWithAsync(
             [PermissionCatalog.Keys.FinanceView, PermissionCatalog.Keys.FinanceEdit]);
 
-        Assert.Equal(HttpStatusCode.Forbidden, (await limited.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/durum-geri-al",
+        Assert.Equal(HttpStatusCode.Forbidden, (await limited.PostChequeAsync(
+            $"/api/cheques/{chequeId}/durum-geri-al", chequeId,
             new { reason = "Yetkisiz deneme" })).StatusCode);
 
-        Assert.Equal(HttpStatusCode.Forbidden, (await limited.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/iptal",
+        Assert.Equal(HttpStatusCode.Forbidden, (await limited.PostChequeAsync(
+            $"/api/cheques/{chequeId}/iptal", chequeId,
             new { reason = "Yetkisiz deneme" })).StatusCode);
 
         // Çek hâlâ ödenmiş: yetkisiz istek hiçbir şeyi değiştirmedi.
@@ -592,8 +592,8 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
         Assert.Equal(125_000m, before.GetProperty("issuedOpenAmount").GetDecimal());
         Assert.Equal(3, before.GetProperty("issuedOpenCount").GetInt32());
 
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
-            $"/api/cheques/{voided}/iptal",
+        Assert.Equal(HttpStatusCode.OK, (await client.PostChequeAsync(
+            $"/api/cheques/{voided}/iptal", voided,
             new
             {
                 reason = "Yanlışlıkla girildi",
@@ -625,8 +625,8 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         var voided = await CreateIssuedChequeAsync(client, context, 10_000m);
 
-        await client.PostAsJsonAsync(
-            $"/api/cheques/{voided}/iptal", new
+        await client.PostChequeAsync(
+            $"/api/cheques/{voided}/iptal", voided, new
             {
                 reason = "Test kaydı",
                 rowVersion = await RowVersionAsync(client, voided),
@@ -671,8 +671,8 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
             before.GetProperty("outflows").EnumerateArray(),
             x => x.GetProperty("kind").GetString() == "IssuedCheque");
 
-        await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/iptal", new
+        await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/iptal", chequeId, new
             {
                 reason = "İptal",
                 rowVersion = await RowVersionAsync(client, chequeId),

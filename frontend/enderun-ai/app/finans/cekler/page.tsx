@@ -660,6 +660,9 @@ export default function ChequeRegisterPage() {
         bankName: replaceForm.bankName.trim() || null,
         bankBranch: replaceForm.bankBranch.trim() || null,
         description: replaceForm.description.trim() || null,
+
+        // Damga: erteleme de çekin durumunu değiştiriyor.
+        rowVersion: detail.rowVersion,
       });
 
       setNotice(
@@ -672,7 +675,13 @@ export default function ChequeRegisterPage() {
       setDetail(replacement);
       await loadItems();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Çek ertelenemedi.");
+      // Damga reddedildiyse yenileme teklif ediliyor: ekrandaki veri
+      // artık eski, aynı isteği tekrarlamak aynı hataya çarpar.
+      if (await handleStale(err)) {
+        setShowReplaceForm(false);
+      } else {
+        setError(err instanceof Error ? err.message : "Çek ertelenemedi.");
+      }
     } finally {
       setSaving(false);
     }
@@ -726,7 +735,8 @@ export default function ChequeRegisterPage() {
     setNotice("");
 
     try {
-      const updated = await chequeService.reverseStatus(detail.id, reason);
+      const updated = await chequeService.reverseStatus(
+        detail.id, reason, detail.rowVersion);
 
       setDetail(updated);
       setNotice("Durum geri alındı; banka hareketi ve fiş ters kayıtla dengelendi.");
@@ -738,7 +748,11 @@ export default function ChequeRegisterPage() {
     } catch (err) {
       // Hata MODALDA kalıyor: kullanıcı gerekçeyi yeniden yazmadan
       // düzeltip tekrar deneyebilsin.
-      setConfirmError(err instanceof Error ? err.message : "İşlem başarısız.");
+      if (await handleStale(err)) {
+        setConfirmMode(null);
+      } else {
+        setConfirmError(err instanceof Error ? err.message : "İşlem başarısız.");
+      }
     } finally {
       setSaving(false);
     }
@@ -965,6 +979,7 @@ export default function ChequeRegisterPage() {
         movementDate: statusForm.movementDate,
         cashAccountId: statusForm.cashAccountId || null,
         description: statusForm.description.trim() || null,
+        rowVersion: detail.rowVersion,
       });
 
       setDetail(updated);
@@ -979,7 +994,9 @@ export default function ChequeRegisterPage() {
       setNotice("Çek durumu güncellendi.");
       await loadItems();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Durum güncellenemedi.");
+      if (!(await handleStale(err))) {
+        setError(err instanceof Error ? err.message : "Durum güncellenemedi.");
+      }
     } finally {
       setSaving(false);
     }
@@ -2407,6 +2424,8 @@ export default function ChequeRegisterPage() {
         open={showVoidDialog}
         fromClosedState={voidFromClosedState}
         statusName={detail?.statusName ?? ""}
+        restoresChequeNumber={detail?.voidRestoresChequeNumber}
+        restoresStatusName={detail?.voidRestoresStatusName}
         busy={saving}
         error={voidError}
         onCancel={() => {

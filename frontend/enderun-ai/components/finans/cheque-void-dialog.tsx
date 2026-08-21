@@ -23,6 +23,8 @@ export function ChequeVoidDialog({
   /** Çek açık durumdan mı iptal ediliyor (portföy / yeni verilen). */
   fromClosedState,
   statusName,
+  restoresChequeNumber,
+  restoresStatusName,
   busy = false,
   error,
   onCancel,
@@ -31,6 +33,9 @@ export function ChequeVoidDialog({
   open: boolean;
   fromClosedState: boolean;
   statusName: string;
+  /** Bu iptal bir ertelemeyi geri alıyorsa açılacak orijinal çek. */
+  restoresChequeNumber?: string | null;
+  restoresStatusName?: string | null;
   busy?: boolean;
   error?: string;
   onCancel: () => void;
@@ -83,6 +88,21 @@ export function ChequeVoidDialog({
         </>
       }
     >
+      {/*
+        ERTELEME ZİNCİRİ UYARISI — İPTALDEN ÖNCE.
+        Yerine geçen çek iptal edilince orijinal açılıyor. Kullanıcı
+        bunu sonradan öğrenirse iptal kararını bilerek almamış olur;
+        üstelik "sildiğim çek geri geldi" diye algılanır.
+      */}
+      {restoresChequeNumber && (
+        <p className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+          Bu çek, <strong>{restoresChequeNumber}</strong> numaralı çekin
+          ertelemesi olarak oluşturuldu. İptal ederseniz orijinal çek{" "}
+          <strong>{restoresStatusName}</strong> durumuna geri dönecek ve
+          muhasebe kaydı da yeniden açılacak.
+        </p>
+      )}
+
       {fromClosedState && (
         <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           Bu çek <strong>{statusName}</strong> durumunda. Gerçekleşmiş bir

@@ -214,7 +214,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
         var chequeId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        var toBank = await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        var toBank = await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.AtBank,
             movementDate = DateTime.UtcNow.Date,
@@ -223,7 +223,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
         });
         Assert.Equal(HttpStatusCode.OK, toBank.StatusCode);
 
-        var collect = await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        var collect = await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.Collected,
             movementDate = DateTime.UtcNow.Date,
@@ -267,7 +267,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
         var chequeId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        var bounce = await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        var bounce = await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.Bounced,
             movementDate = DateTime.UtcNow.Date,
@@ -310,7 +310,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
 
         Assert.Equal((int)ChequeStatus.Issued, created.GetProperty("status").GetInt32());
 
-        var pay = await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        var pay = await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.Paid,
             movementDate = DateTime.UtcNow.Date,
@@ -345,7 +345,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
             .GetProperty("id").GetGuid();
 
         // Alınan çek "Ödendi" (verilen çek durumu) olamaz.
-        var invalid = await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        var invalid = await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.Paid,
             movementDate = DateTime.UtcNow.Date,
@@ -356,7 +356,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
 
         // Portföyden doğrudan faktoringe geçilemez — kırdırma faktoring
         // modülünden, kesinti matematiğiyle birlikte yapılır.
-        var toFactoring = await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        var toFactoring = await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.AtFactoring,
             movementDate = DateTime.UtcNow.Date,
@@ -378,7 +378,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
         var chequeId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        var response = await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        var response = await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.Collected,
             movementDate = DateTime.UtcNow.Date,
@@ -401,7 +401,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
         var chequeId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.Collected,
             movementDate = DateTime.UtcNow.Date,
@@ -409,7 +409,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
             description = "Tahsil"
         });
 
-        var again = await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        var again = await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.Bounced,
             movementDate = DateTime.UtcNow.Date,
@@ -478,7 +478,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
         var chequeId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        var response = await client.PostAsJsonAsync("/api/factoring", new
+        var response = await client.PostChequeAsync("/api/factoring", chequeId, new
         {
             chequeId,
             cashAccountId = context.BankAccountId,
@@ -545,7 +545,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
         var chequeId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        await client.PostAsJsonAsync($"/api/cheques/{chequeId}/status", new
+        await client.PostChequeAsync($"/api/cheques/{chequeId}/status", chequeId, new
         {
             toStatus = (int)ChequeStatus.Collected,
             movementDate = DateTime.UtcNow.Date,
@@ -553,7 +553,7 @@ public sealed class ChequeAndFactoringTests(DatabaseFixture fixture)
             description = "Tahsil"
         });
 
-        var response = await client.PostAsJsonAsync("/api/factoring", new
+        var response = await client.PostChequeAsync("/api/factoring", chequeId, new
         {
             chequeId,
             cashAccountId = context.BankAccountId,

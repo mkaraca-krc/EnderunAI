@@ -15,7 +15,12 @@ public sealed record CreateFactoringTransactionRequest(
     decimal? CommissionAmount,
     decimal? BsmvRate,
     decimal ExpenseAmount,
-    string? Description);
+    string? Description,
+    /// <summary>
+    /// EŞZAMANLI DEĞİŞİKLİK DAMGASI — ZORUNLU. Kırdırma da çekin
+    /// durumunu değiştiriyor; koruma tek uçta eksikse yok demektir.
+    /// </summary>
+    DateTime? RowVersion = null);
 
 /// <summary>Kaydetmeden önce kesinti matematiğini önizleme isteği.</summary>
 public sealed record FactoringPreviewRequest(

@@ -131,8 +131,22 @@ public sealed class ChequesController(
     {
         try
         {
+            /*
+             * KAPANMIŞ DURUMDAN GERİ ALMA AYRI YETKİDE — iptaldeki
+             * ayrımın aynısı. Tahsil edilmiş bir çeki geri almak da
+             * gerçekleşmiş bir para hareketini storno ediyor; aynı mali
+             * etkinin daha düşük bir yetkiyle üretilebilmesi bir açıktı.
+             */
             return Ok(await service.ReverseLastMovementAsync(
-                id, request, currentUser.UserId, cancellationToken));
+                id, request, currentUser.UserId,
+                currentUser.HasPermission(PermissionCatalog.Keys.ChequeVoidClosed),
+                cancellationToken));
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            // Yetki eksikliği 403 — "beklenmeyen hata" değil.
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { message = exception.Message });
         }
         catch (KeyNotFoundException exception)
         {

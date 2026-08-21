@@ -121,7 +121,7 @@ public sealed class ChequeUniquenessTests(DatabaseFixture fixture)
     private static Task<HttpResponseMessage> VoidAsync(
         HttpClient client, Guid id, DateTime rowVersion,
         int reasonKind = (int)ChequeVoidReason.DataEntryError, string? reason = null) =>
-        client.PostAsJsonAsync($"/api/cheques/{id}/iptal", new
+        client.PostChequeAsync($"/api/cheques/{id}/iptal", id, new
         {
             reason,
             rowVersion,

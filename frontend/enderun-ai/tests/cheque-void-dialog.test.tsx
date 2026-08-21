@@ -74,6 +74,28 @@ describe("çek iptal diyaloğu", () => {
     expect(screen.getByText(/storno/i)).toBeInTheDocument();
   });
 
+  /*
+   * ERTELEME ZİNCİRİ UYARISI. Kullanıcı "yerine geçen çeki iptal
+   * ediyorum" derken orijinalin hangi duruma döneceğini İPTALDEN ÖNCE
+   * görmeli; sonradan öğrenilirse karar bilerek alınmamış olur ve
+   * "sildiğim çek geri geldi" diye algılanır.
+   */
+  it("erteleme zincirinde orijinalin açılacağını önceden söyler", () => {
+    setup({
+      restoresChequeNumber: "VCK-2026-000018",
+      restoresStatusName: "Bankada (tahsilde)",
+    });
+
+    expect(screen.getByText(/VCK-2026-000018/)).toBeInTheDocument();
+    expect(screen.getByText(/Bankada \(tahsilde\)/)).toBeInTheDocument();
+  });
+
+  it("erteleme söz konusu değilse uyarı çıkmaz", () => {
+    setup();
+
+    expect(screen.queryByText(/ertelemesi olarak oluşturuldu/)).toBeNull();
+  });
+
   it("\"Diğer\" seçilince açıklama zorunlu", () => {
     const { onConfirm, button } = setup();
 

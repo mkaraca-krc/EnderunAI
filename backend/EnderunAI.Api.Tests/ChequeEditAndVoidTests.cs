@@ -181,7 +181,7 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
         var id = await CreateAsync(client, Payload(scene, $"CK{suffix}"));
 
         // Bankaya tahsile ver → artık işlem görmüş sayılır.
-        var moved = await client.PostAsJsonAsync($"/api/cheques/{id}/status", new
+        var moved = await client.PostChequeAsync($"/api/cheques/{id}/status", id, new
         {
             toStatus = (int)ChequeStatus.AtBank,
             movementDate = DateTime.UtcNow.Date,
@@ -475,7 +475,7 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
         var rowVersion = (await DetailAsync(admin, id))
             .GetProperty("rowVersion").GetDateTime();
 
-        var response = await admin.PostAsJsonAsync($"/api/cheques/{id}/iptal", new
+        var response = await admin.PostChequeAsync($"/api/cheques/{id}/iptal", id, new
         {
             reason = "yanlış girildi",
             rowVersion,
@@ -505,7 +505,7 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
         var client = await AdminAsync();
         var id = await CreateAsync(client, Payload(scene, $"CK{suffix}"));
 
-        await client.PostAsJsonAsync($"/api/cheques/{id}/status", new
+        await client.PostChequeAsync($"/api/cheques/{id}/status", id, new
         {
             toStatus = (int)ChequeStatus.AtBank,
             movementDate = DateTime.UtcNow.Date,
@@ -516,7 +516,7 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
         var rowVersion = (await DetailAsync(client, id))
             .GetProperty("rowVersion").GetDateTime();
 
-        var response = await client.PostAsJsonAsync($"/api/cheques/{id}/iptal", new
+        var response = await client.PostChequeAsync($"/api/cheques/{id}/iptal", id, new
         {
             reason = (string?)null,
             rowVersion,
@@ -547,7 +547,7 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
         var rowVersion = (await DetailAsync(client, id))
             .GetProperty("rowVersion").GetDateTime();
 
-        var response = await client.PostAsJsonAsync($"/api/cheques/{id}/iptal", new
+        var response = await client.PostChequeAsync($"/api/cheques/{id}/iptal", id, new
         {
             reason = "bir sebep yazdım ama neden seçmedim",
             rowVersion
@@ -575,7 +575,7 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
         var rowVersion = (await DetailAsync(client, id))
             .GetProperty("rowVersion").GetDateTime();
 
-        var response = await client.PostAsJsonAsync($"/api/cheques/{id}/iptal", new
+        var response = await client.PostChequeAsync($"/api/cheques/{id}/iptal", id, new
         {
             reason = (string?)null,
             rowVersion,
@@ -602,7 +602,7 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
         var client = await AdminAsync();
         var id = await CreateAsync(client, Payload(scene, $"CK{suffix}"));
 
-        await client.PostAsJsonAsync($"/api/cheques/{id}/status", new
+        await client.PostChequeAsync($"/api/cheques/{id}/status", id, new
         {
             toStatus = (int)ChequeStatus.AtBank,
             movementDate = DateTime.UtcNow.Date,
@@ -613,7 +613,7 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
         var rowVersion = (await DetailAsync(client, id))
             .GetProperty("rowVersion").GetDateTime();
 
-        var response = await client.PostAsJsonAsync($"/api/cheques/{id}/iptal", new
+        var response = await client.PostChequeAsync($"/api/cheques/{id}/iptal", id, new
         {
             reason = "müşteri geri istedi",
             rowVersion,

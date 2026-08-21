@@ -394,8 +394,8 @@ public sealed class ForeignCurrencyChequeTests(DatabaseFixture fixture)
                 .Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        var collect = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/status",
+        var collect = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/status", chequeId,
             new
             {
                 toStatus = (int)ChequeStatus.Collected,
@@ -446,8 +446,8 @@ public sealed class ForeignCurrencyChequeTests(DatabaseFixture fixture)
                 .Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/status",
+        await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/status", chequeId,
             new
             {
                 toStatus = (int)ChequeStatus.Collected,
@@ -486,8 +486,8 @@ public sealed class ForeignCurrencyChequeTests(DatabaseFixture fixture)
                 .Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        var pay = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/status",
+        var pay = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/status", chequeId,
             new
             {
                 toStatus = (int)ChequeStatus.Paid,
@@ -529,8 +529,8 @@ public sealed class ForeignCurrencyChequeTests(DatabaseFixture fixture)
                 .Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        var toBank = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/status",
+        var toBank = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/status", chequeId,
             new
             {
                 toStatus = (int)ChequeStatus.AtBank,
@@ -568,8 +568,8 @@ public sealed class ForeignCurrencyChequeTests(DatabaseFixture fixture)
                 .Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/status",
+        await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/status", chequeId,
             new
             {
                 toStatus = (int)ChequeStatus.Collected,

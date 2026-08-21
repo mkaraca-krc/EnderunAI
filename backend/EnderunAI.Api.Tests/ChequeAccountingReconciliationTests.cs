@@ -157,7 +157,7 @@ public sealed class ChequeAccountingReconciliationTests(DatabaseFixture fixture)
         // 2) Üçüncü çek iptal ediliyor.
         var thirdDetail = await DetailAsync(client, third);
 
-        var voided = await client.PostAsJsonAsync($"/api/cheques/{third}/iptal", new
+        var voided = await client.PostChequeAsync($"/api/cheques/{third}/iptal", third, new
         {
             reason = "mükerrer kayıt",
             reasonKind = (int)ChequeVoidReason.DataEntryError,
@@ -214,7 +214,7 @@ public sealed class ChequeAccountingReconciliationTests(DatabaseFixture fixture)
 
         var detail = await DetailAsync(client, doomed);
 
-        var voided = await client.PostAsJsonAsync($"/api/cheques/{doomed}/iptal", new
+        var voided = await client.PostChequeAsync($"/api/cheques/{doomed}/iptal", doomed, new
         {
             reason = "yanlış müşteriye işlenmiş",
             reasonKind = (int)ChequeVoidReason.DataEntryError,
@@ -249,7 +249,7 @@ public sealed class ChequeAccountingReconciliationTests(DatabaseFixture fixture)
         var doomed = await CreateAsync(client, Payload(scene, $"GIZ{suffix}", 5_000m));
         var detail = await DetailAsync(client, doomed);
 
-        await client.PostAsJsonAsync($"/api/cheques/{doomed}/iptal", new
+        await client.PostChequeAsync($"/api/cheques/{doomed}/iptal", doomed, new
         {
             reason = "hatalı",
             reasonKind = (int)ChequeVoidReason.DataEntryError,

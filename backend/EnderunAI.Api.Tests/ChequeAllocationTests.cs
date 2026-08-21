@@ -435,8 +435,8 @@ public sealed class ChequeAllocationTests(DatabaseFixture fixture)
         var chequeId = (await created.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        var response = await client.PutAsJsonAsync(
-            $"/api/cheques/{chequeId}/allocations",
+        var response = await client.PutChequeAsync(
+            $"/api/cheques/{chequeId}/allocations", chequeId,
             new
             {
                 allocations = new object[]
@@ -498,8 +498,8 @@ public sealed class ChequeAllocationTests(DatabaseFixture fixture)
         var chequeId = (await created.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        var statusResponse = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/status",
+        var statusResponse = await client.PostChequeAsync(
+            $"/api/cheques/{chequeId}/status", chequeId,
             new
             {
                 toStatus = (int)ChequeStatus.Returned,
@@ -510,8 +510,8 @@ public sealed class ChequeAllocationTests(DatabaseFixture fixture)
 
         Assert.Equal(HttpStatusCode.OK, statusResponse.StatusCode);
 
-        var response = await client.PutAsJsonAsync(
-            $"/api/cheques/{chequeId}/allocations",
+        var response = await client.PutChequeAsync(
+            $"/api/cheques/{chequeId}/allocations", chequeId,
             new
             {
                 allocations = new object[]

@@ -166,6 +166,12 @@ public sealed class FactoringService(
         if (cheque is null)
             throw new ArgumentException("Çek bulunamadı.");
 
+        // KIRDIRMA DA ÇEKİN DURUMUNU DEĞİŞTİRİYOR: damga burada da
+        // zorunlu. Kural ChequeService'ten geliyor — iki ayrı kontrol
+        // zamanla ayrışır ve aynı istek bir uçta geçip diğerinde
+        // reddedilirdi.
+        ChequeService.EnsureRowVersionMatches(cheque, request.RowVersion);
+
         if (cheque.Direction != ChequeDirection.Received)
             throw new InvalidOperationException("Yalnızca alınan çekler kırdırılabilir.");
 
@@ -272,6 +278,10 @@ public sealed class FactoringService(
 
             cheque.Status = ChequeStatus.AtFactoring;
             cheque.CashAccountId = cashAccount.Id;
+
+            // Damga ilerliyor: ilerlemeseydi aynı damgayla gelen ikinci
+            // istek de geçer, koruma fiilen çalışmazdı.
+            cheque.UpdatedAtUtc = DateTime.UtcNow;
 
             db.ChequeMovements.Add(new ChequeMovement
             {

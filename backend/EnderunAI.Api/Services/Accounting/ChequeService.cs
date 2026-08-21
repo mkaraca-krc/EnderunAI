@@ -45,6 +45,8 @@ public interface IChequeService
 
     Task<ChequeDetailResponse> ReverseLastMovementAsync(
         Guid id, ChequeReversalRequest request, Guid? userId,
+        /// <summary>Kapanmış durumdan geri alma yetkisi (cheque.void-closed).</summary>
+        bool hasClosedReversePermission,
         CancellationToken cancellationToken);
 
     Task<ChequeDetailResponse> VoidAsync(
@@ -419,7 +421,14 @@ public sealed class ChequeService(
     /// JSON gidiş-dönüşündeki mikrosaniye kaybını tolere ederken
     /// milisaniye farkını görüyor.
     /// </summary>
-    private static void EnsureRowVersionMatches(Cheque cheque, DateTime? rowVersion)
+    /// <summary>
+    /// Damga kontrolü TEK KAYNAK: faktoring gibi çekin durumunu
+    /// değiştiren diğer servisler de buradan çağırıyor. Her servis
+    /// kendi kontrolünü yazsaydı biri milisaniye, diğeri saniye
+    /// karşılaştırır ve aynı istek bir uçta geçip diğerinde
+    /// reddedilirdi.
+    /// </summary>
+    public static void EnsureRowVersionMatches(Cheque cheque, DateTime? rowVersion)
     {
         if (rowVersion is not DateTime expected)
         {
@@ -653,6 +662,8 @@ public sealed class ChequeService(
                 x.Reason))
             .ToListAsync(cancellationToken);
 
+        var restores = await DescribeVoidRestoreAsync(cheque, cancellationToken);
+
         return new ChequeDetailResponse(
             cheque.Id,
             cheque.CompanyId,
@@ -713,7 +724,47 @@ public sealed class ChequeService(
             cheque.VoidedFromClosedState,
             cheque.VoidReasonKind is ChequeVoidReason vk ? (int)vk : null,
             cheque.VoidReasonKind is ChequeVoidReason vk2 ? VoidReasonName(vk2) : null,
-            changeLog);
+            changeLog,
+            restores?.Number,
+            restores?.StatusName);
+    }
+
+    /// <summary>
+    /// Bu çek iptal edilirse hangi orijinal çek, hangi duruma dönecek.
+    /// Ekran iptalden ÖNCE uyarabilsin diye hesaplanıyor; kural
+    /// <see cref="RestoreReplacedOriginalAsync"/> ile AYNI olmak
+    /// zorunda — ayrışırsa ekran bir şey vaat eder, sunucu başkasını
+    /// yapar.
+    /// </summary>
+    private async Task<(string Number, string StatusName)?> DescribeVoidRestoreAsync(
+        Cheque cheque, CancellationToken cancellationToken)
+    {
+        if (cheque.Status == ChequeStatus.Voided) return null;
+        if (cheque.ReplacesChequeId is not Guid originalId) return null;
+
+        var original = await db.Cheques
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == originalId, cancellationToken);
+
+        if (original is null ||
+            original.Status != ChequeStatus.Replaced ||
+            original.ReplacedByChequeId != cheque.Id)
+        {
+            return null;
+        }
+
+        var previous = await db.ChequeMovements
+            .AsNoTracking()
+            .Where(x => x.ChequeId == original.Id &&
+                        x.ToStatus == ChequeStatus.Replaced &&
+                        x.ReversedAtUtc == null)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Select(x => x.FromStatus)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return previous is ChequeStatus status
+            ? (original.ChequeNumber, StatusName(status))
+            : null;
     }
 
     public async Task<ChequeSummaryResponse> GetSummaryAsync(
@@ -1323,6 +1374,7 @@ public sealed class ChequeService(
     /// </summary>
     public async Task<ChequeDetailResponse> ReverseLastMovementAsync(
         Guid id, ChequeReversalRequest request, Guid? userId,
+        bool hasClosedReversePermission,
         CancellationToken cancellationToken)
     {
         var reason = request.Reason?.Trim();
@@ -1333,8 +1385,32 @@ public sealed class ChequeService(
         var cheque = await db.Cheques.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Çek bulunamadı.");
 
+        EnsureRowVersionMatches(cheque, request.RowVersion);
+
         if (cheque.Status == ChequeStatus.Voided)
             throw new InvalidOperationException("İptal edilmiş çekte geri alma yapılmaz.");
+
+        /*
+         * KAPANMIŞ DURUMDAN GERİ ALMA AYRI YETKİ — İPTALDEKİ AYRIMIN
+         * AYNISI.
+         *
+         * Tahsil edilmiş ya da ödenmiş bir çeki geri almak, iptal etmek
+         * kadar ağır: gerçekleşmiş bir para hareketini storno ediyor.
+         * İptalde bu ayrım konmuş, geri almada unutulmuştu — yani aynı
+         * mali etki daha düşük bir yetkiyle üretilebiliyordu. Kötü
+         * niyet gerekmiyor, yanlış satıra tıklamak yetiyor.
+         */
+        var openStatus = cheque.Direction == ChequeDirection.Received
+            ? ChequeStatus.Portfolio
+            : ChequeStatus.Issued;
+
+        if (cheque.Status != openStatus && !hasClosedReversePermission)
+        {
+            throw new UnauthorizedAccessException(
+                $"Bu çek \"{StatusName(cheque.Status)}\" durumunda. Kapanmış bir " +
+                "durumdan geri alma ayrı bir yetki gerektiriyor " +
+                "(Çek — Kapanmış İptal).");
+        }
 
         var movement = await db.ChequeMovements
             .Where(x => x.ChequeId == cheque.Id && x.ReversedAtUtc == null)
@@ -1359,6 +1435,22 @@ public sealed class ChequeService(
             await ReverseMovementAsync(cheque, movement, reason, userId, cancellationToken);
 
             cheque.Status = previous;
+            cheque.UpdatedAtUtc = DateTime.UtcNow;
+            cheque.UpdatedByUserId = userId;
+
+            // GERİ ALMA DA DENETİM KAYDINA DÜŞER: mali etkisi olan bir
+            // durum değişikliği gerekçesiyle birlikte kayda geçmeli.
+            db.ChequeChangeLogs.Add(new ChequeChangeLog
+            {
+                ChequeId = cheque.Id,
+                FieldName = "Status",
+                FieldLabel = "Durum",
+                OldValue = StatusName(movement.ToStatus),
+                NewValue = StatusName(previous),
+                AffectsAccounting = true,
+                ChangedByUserId = userId,
+                Reason = $"Durum geri alındı — {reason}"
+            });
 
             db.ChequeMovements.Add(new ChequeMovement
             {
@@ -1530,6 +1622,10 @@ public sealed class ChequeService(
                 CreatedByUserId = userId
             });
 
+            // ERTELEME ZİNCİRİ: yerine geçen çek iptal ediliyorsa
+            // orijinal çek açılır (bkz. RestoreReplacedOriginalAsync).
+            await RestoreReplacedOriginalAsync(cheque, reason, userId, cancellationToken);
+
             await db.SaveChangesAsync(cancellationToken);
 
             if (dbTransaction is not null)
@@ -1559,6 +1655,111 @@ public sealed class ChequeService(
     /// (SourceModule + SourceEntityId): aynı hareket iki kez geri
     /// alınmaya çalışılsa bile ikinci karşıt kayıt açılmıyor.
     /// </summary>
+    /// <summary>
+    /// ERTELENEN ÇEK, YERİNE GEÇEN İPTAL EDİLİNCE YENİDEN AÇILIR.
+    ///
+    /// NEDEN ŞART: erteleme, orijinal çeki "Ertelendi" durumuna alıp
+    /// defterden ters kayıtla ÇIKARIYOR. Yerine geçen çek iptal
+    /// edildiğinde ortada geçerli bir çek kalmıyor ama BORÇ DURUYOR.
+    /// Orijinal "Ertelendi"de bırakılırsa alacak/borç portföyden,
+    /// vade raporundan ve nakit projeksiyonundan birden düşer —
+    /// üstelik defterde de yok, çünkü ertelemenin ters kaydı orada
+    /// duruyor. Yani gerçek bir alacak sistemde tamamen görünmez olur
+    /// ve kimse fark etmez. Çek numarası sorunundan daha tehlikeli.
+    ///
+    /// ÖNCEKİ DURUM TAHMİN EDİLMİYOR: erteleme hareketinin
+    /// <c>FromStatus</c> alanı çekin ertelemeden önceki durumunu zaten
+    /// taşıyor. Körlemesine "Portföyde" yazmak yanlış olurdu — çek
+    /// bankada tahsilde ya da teminatta olabilirdi.
+    ///
+    /// ZİNCİRE DOKUNULMAZ: geri dönüş yalnızca orijinal HÂLÂ
+    /// "Ertelendi" durumundaysa VE tam olarak bu iptal edilen çeki
+    /// işaret ediyorsa yapılır. A→B→C zincirinde C iptal edilirse B
+    /// açılır, A'ya dokunulmaz (A zaten B'yi işaret ediyor).
+    ///
+    /// SESSİZ DEĞİL: durum değişimi hareket kaydı ve denetim kaydı
+    /// bırakır; defter de ertelemenin ters kaydı geri alınarak
+    /// düzelir.
+    /// </summary>
+    private async Task RestoreReplacedOriginalAsync(
+        Cheque voided, string reason, Guid? userId,
+        CancellationToken cancellationToken)
+    {
+        if (voided.ReplacesChequeId is not Guid originalId)
+            return;
+
+        var original = await db.Cheques
+            .SingleOrDefaultAsync(x => x.Id == originalId, cancellationToken);
+
+        if (original is null)
+            return;
+
+        // ZİNCİR KORUMASI: orijinal başka bir çekle yeniden
+        // ertelendiyse artık bu iptalin konusu değil.
+        if (original.Status != ChequeStatus.Replaced ||
+            original.ReplacedByChequeId != voided.Id)
+        {
+            return;
+        }
+
+        var replacementMovement = await db.ChequeMovements
+            .Where(x => x.ChequeId == original.Id &&
+                        x.ToStatus == ChequeStatus.Replaced &&
+                        x.ReversedAtUtc == null)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (replacementMovement?.FromStatus is not ChequeStatus previous)
+        {
+            // Hareket yoksa durum güvenilir şekilde türetilemiyor.
+            // Sessizce "Portföyde" yazmak yerine kullanıcıya söylüyoruz:
+            // bu bir veri tutarsızlığıdır ve elle incelenmeli.
+            throw new InvalidOperationException(
+                $"{voided.InternalNumber} numaralı çek {original.InternalNumber} " +
+                "numaralı çekin ertelemesi ama ertelenme hareketi bulunamadı; " +
+                "orijinal çekin hangi duruma döneceği belirlenemiyor. Kaydı " +
+                "muhasebeyle birlikte inceleyin.");
+        }
+
+        // DEFTER DE GERİ GELİR: ertelemenin ters kaydı geri alınıyor,
+        // yani orijinal çek yeniden defterde. Yalnız durumu
+        // değiştirmek, çeki raporlarda gösterip mizanda göstermezdi.
+        await ReverseMovementAsync(
+            original, replacementMovement,
+            $"Erteleme iptali — {voided.InternalNumber} iptal edildi ({reason})",
+            userId, cancellationToken);
+
+        original.Status = previous;
+        original.ReplacedByChequeId = null;
+        original.UpdatedAtUtc = DateTime.UtcNow;
+        original.UpdatedByUserId = userId;
+
+        db.ChequeMovements.Add(new ChequeMovement
+        {
+            ChequeId = original.Id,
+            MovementDate = DateTime.UtcNow.Date,
+            FromStatus = ChequeStatus.Replaced,
+            ToStatus = previous,
+            Description =
+                $"Erteleme geri alındı — yerine geçen {voided.ChequeNumber} " +
+                $"numaralı çek iptal edildi ({reason})",
+            CreatedByUserId = userId
+        });
+
+        db.ChequeChangeLogs.Add(new ChequeChangeLog
+        {
+            ChequeId = original.Id,
+            FieldName = "Status",
+            FieldLabel = "Durum",
+            OldValue = StatusName(ChequeStatus.Replaced),
+            NewValue = StatusName(previous),
+            AffectsAccounting = true,
+            ChangedByUserId = userId,
+            Reason =
+                $"Yerine geçen {voided.ChequeNumber} numaralı çek iptal edildi"
+        });
+    }
+
     private async Task ReverseMovementAsync(
         Cheque cheque,
         ChequeMovement movement,
@@ -1624,6 +1825,11 @@ public sealed class ChequeService(
         var cheque = await db.Cheques.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (cheque is null)
             throw new KeyNotFoundException("Çek bulunamadı.");
+
+        // DURUM DEĞİŞTİREN HER UÇTA DAMGA. Bu uç ciro, bankaya verme,
+        // tahsil, ödeme, karşılıksız ve iadenin HEPSİNİ taşıyor;
+        // korumasız kalsaydı çekin en sık kullanılan yolu açıkta olurdu.
+        EnsureRowVersionMatches(cheque, request.RowVersion);
 
         var toStatus = (ChequeStatus)request.ToStatus;
         var fromStatus = cheque.Status;
@@ -1701,6 +1907,12 @@ public sealed class ChequeService(
             }
 
             cheque.Status = toStatus;
+
+            // DAMGA HER DURUM DEĞİŞİKLİĞİNDE İLERLER. İlerlemeseydi
+            // koruma fiilen çalışmazdı: aynı damgayla gelen ikinci
+            // istek de geçerdi ve iki kullanıcı aynı çeki arka arkaya
+            // işleyebilirdi.
+            cheque.UpdatedAtUtc = DateTime.UtcNow;
             if (cashAccount is not null)
                 cheque.CashAccountId = cashAccount.Id;
 
@@ -1743,6 +1955,8 @@ public sealed class ChequeService(
             .Include(x => x.Allocations)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Çek bulunamadı.");
+
+        EnsureRowVersionMatches(cheque, request.RowVersion);
 
         if (!NextStatuses(cheque.Status).Contains(ChequeStatus.Replaced))
         {
@@ -1932,6 +2146,8 @@ public sealed class ChequeService(
         var cheque = await db.Cheques.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Çek bulunamadı.");
 
+        EnsureRowVersionMatches(cheque, request.RowVersion);
+
         var movements = await db.ChequeMovements
             .Where(x => x.ChequeId == id)
             .OrderBy(x => x.CreatedAtUtc)
@@ -1966,7 +2182,12 @@ public sealed class ChequeService(
             if (allocations.Count > 0)
                 db.ChequeAllocations.AddRange(allocations);
 
-            await db.SaveChangesAsync(cancellationToken);
+            // Damga ilerliyor: dağılım da çekin mali kırılımını
+        // değiştiriyor ve eşzamanlı ikinci bir isteğin üzerine
+        // yazmasına izin verilmemeli.
+        cheque.UpdatedAtUtc = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
 
             // Giriş fişi dağılıma göre yeniden üretilir. Eskisi SİLİNMEZ,
             // iptal edilir: muhasebede yazılan fişin izi kalmalı.

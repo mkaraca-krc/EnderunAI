@@ -13,7 +13,16 @@ public sealed record ChequeAllocationRequest(
     string? Description = null);
 
 public sealed record ChequeAllocationsRequest(
-    IReadOnlyCollection<ChequeAllocationRequest> Allocations);
+    IReadOnlyCollection<ChequeAllocationRequest> Allocations,
+    /// <summary>
+    /// EŞZAMANLI DEĞİŞİKLİK DAMGASI — ZORUNLU.
+    ///
+    /// Çekin durumunu değiştiren HER uç bunu ister. Bir uçta eksik
+    /// olması korumanın hiç olmaması demektir: iki kullanıcı aynı çeke
+    /// aynı anda işlem yaparsa biri diğerininkini görmeden üzerine
+    /// yazar ve çekte bu, aynı parayı iki kez işlemek anlamına gelir.
+    /// </summary>
+    DateTime? RowVersion = null);
 
 public sealed record ChequeAllocationResponse(
     Guid Id,
@@ -120,7 +129,16 @@ public sealed record ChequeStatusChangeRequest(
     int ToStatus,
     DateTime MovementDate,
     Guid? CashAccountId,
-    string? Description);
+    string? Description,
+    /// <summary>
+    /// EŞZAMANLI DEĞİŞİKLİK DAMGASI — ZORUNLU.
+    ///
+    /// Çekin durumunu değiştiren HER uç bunu ister. Bir uçta eksik
+    /// olması korumanın hiç olmaması demektir: iki kullanıcı aynı çeke
+    /// aynı anda işlem yaparsa biri diğerininkini görmeden üzerine
+    /// yazar ve çekte bu, aynı parayı iki kez işlemek anlamına gelir.
+    /// </summary>
+    DateTime? RowVersion = null);
 
 /// <summary>
 /// Çek erteleme/değişim. Tutar YENİDEN ALINMAZ: yeni çek eski çekle
@@ -135,7 +153,16 @@ public sealed record ReplaceChequeRequest(
     string? BankBranch = null,
     string? Drawer = null,
     DateTime? IssueDate = null,
-    string? Description = null);
+    string? Description = null,
+    /// <summary>
+    /// EŞZAMANLI DEĞİŞİKLİK DAMGASI — ZORUNLU.
+    ///
+    /// Çekin durumunu değiştiren HER uç bunu ister. Bir uçta eksik
+    /// olması korumanın hiç olmaması demektir: iki kullanıcı aynı çeke
+    /// aynı anda işlem yaparsa biri diğerininkini görmeden üzerine
+    /// yazar ve çekte bu, aynı parayı iki kez işlemek anlamına gelir.
+    /// </summary>
+    DateTime? RowVersion = null);
 
 public sealed record ChequeMovementResponse(
     Guid Id,
@@ -249,7 +276,19 @@ public sealed record ChequeDetailResponse(
     string? VoidReasonName,
 
     /// <summary>Alan bazlı düzeltme geçmişi.</summary>
-    IReadOnlyCollection<ChequeChangeLogResponse> ChangeLog);
+    IReadOnlyCollection<ChequeChangeLogResponse> ChangeLog,
+
+    /// <summary>
+    /// BU ÇEK İPTAL EDİLİRSE AÇILACAK ORİJİNAL ÇEK — yoksa null.
+    ///
+    /// Ekran iptalden ÖNCE uyarıyor: kullanıcı "yerine geçen çeki
+    /// iptal ediyorum" derken orijinalin hangi duruma döneceğini
+    /// görsün. Sonradan öğrenilen bir durum değişimi, iptal kararını
+    /// bilerek almayı imkânsız kılardı.
+    /// </summary>
+    string? VoidRestoresChequeNumber = null,
+    /// <summary>Orijinalin döneceği durumun adı — "Bankada (tahsilde)".</summary>
+    string? VoidRestoresStatusName = null);
 
 /// <summary>Tek alanın düzeltme kaydı — "Değişiklik geçmişi" sekmesi.</summary>
 public sealed record ChequeChangeLogResponse(
