@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui";
 import HrAssetInventoryDialog from "@/components/hr/hr-asset-inventory-dialog";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -127,6 +128,18 @@ function Field({
   );
 }
 
+/**
+ * Rozetin DÜZ METNİ — dışa aktarma ve yazdırma bunu kullanıyor.
+ *
+ * Rozet bileşeninden metin kazımak kırılgan olurdu; iki yerde ayrı
+ * yazılsaydı dosyadaki durum ile ekrandaki durum zamanla ayrışırdı.
+ */
+function statusText(item: AssetAssignment): string {
+  return item.isOverdue
+    ? `Gecikmiş · ${item.overdueDays ?? 0} gün`
+    : item.statusName || statusNames[item.status];
+}
+
 function StatusBadge({ item }: { item: AssetAssignment }) {
   const color = statusColors[item.status] ?? statusColors[4];
   return (
@@ -141,9 +154,7 @@ function StatusBadge({ item }: { item: AssetAssignment }) {
         fontSize: 12,
       }}
     >
-      {item.isOverdue
-        ? `Gecikmiş · ${item.overdueDays ?? 0} gün`
-        : item.statusName || statusNames[item.status]}
+      {statusText(item)}
     </span>
   );
 }
@@ -520,6 +531,147 @@ export default function HrAssetsPage() {
     ["Geciken", dashboard?.overdueCount ?? 0, "var(--color-semantic-warning)"],
   ] as const;
 
+  const filterKey = `${companyId}|${personnelId}|${projectId}|${status}|${assetType}|${search}|${overdueOnly}`;
+
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4o). İşlem sütunu on ayrı düğme taşıyor ve
+   * `actions`, `busyId`, `openAction` üzerine kapanıyor; dizi belleğe
+   * ALINMIYOR (F4b desen kararı) — bayat kapanış, "Kayıp" ya da "Sil"
+   * düğmesini yanlış zimmet üzerinde çalıştırabilirdi.
+   */
+  const assignmentColumns: DataTableColumn<AssetAssignment>[] = [
+    {
+      key: "personel",
+      header: "Personel",
+      value: (row) => personnelMap.get(row.personnelId)?.fullName ?? "Personel",
+      render: (row) => (
+        <strong>{personnelMap.get(row.personnelId)?.fullName ?? "Personel"}</strong>
+      ),
+    },
+    {
+      key: "proje",
+      header: "Proje",
+      value: (row) =>
+        row.projectId ? projectMap.get(row.projectId)?.name ?? "Proje" : "-",
+    },
+    { key: "tur", header: "Tür", value: (row) => row.assetType },
+    {
+      key: "ekipman",
+      header: "Kod / Ekipman",
+      value: (row) => `${row.assetCode} — ${row.assetName}`,
+      render: (row) => (
+        <>
+          <strong>{row.assetCode}</strong>
+          <br />
+          <span style={{ color: "var(--erp-muted)", fontSize: 12 }}>
+            {row.assetName}
+          </span>
+        </>
+      ),
+    },
+    { key: "seri", header: "Seri No", value: (row) => row.serialNumber || "-" },
+    { key: "teslim", header: "Teslim", value: (row) => formatDate(row.assignmentDate) },
+    {
+      key: "iade",
+      header: "Planlanan İade",
+      value: (row) => formatDate(row.plannedReturnDate),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => statusText(row),
+      render: (row) => <StatusBadge item={row} />,
+    },
+    {
+      key: "islem",
+      header: "İşlemler",
+      value: () => "",
+      render: (row) => {
+        const active = row.status === HrAssetAssignmentStatus.Assigned;
+
+        return (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {actions.can("edit") && (
+              <button
+                onClick={() => openEdit(row)}
+                disabled={busyId === row.id}
+                style={actionButton("var(--erp-muted)")}
+              >
+                Düzenle
+              </button>
+            )}
+            <a
+              href={`/insan-kaynaklari/zimmetler/${row.id}/tutanak`}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                ...actionButton("var(--erp-primary)"),
+                display: "inline-flex",
+                alignItems: "center",
+                textDecoration: "none",
+              }}
+            >
+              Tutanak
+            </a>
+            <button onClick={() => void openQr(row)} style={actionButton("var(--erp-muted)")}>
+              QR
+            </button>
+            <button
+              onClick={() => void openPersonnelAnalysis(row.personnelId)}
+              style={actionButton("var(--erp-muted)")}
+            >
+              Risk
+            </button>
+            {active && (
+              <>
+                <button onClick={() => openAction("return", row)} style={actionButton("var(--color-semantic-info)")}>
+                  İade
+                </button>
+                <button onClick={() => openAction("transfer", row)} style={actionButton("var(--erp-muted)")}>
+                  Personel Devri
+                </button>
+                <button onClick={() => openAction("project", row)} style={actionButton("var(--erp-primary)")}>
+                  Proje
+                </button>
+                <button onClick={() => openAction("damaged", row)} style={actionButton("var(--color-semantic-warning)")}>
+                  Hasarlı
+                </button>
+                <button onClick={() => openAction("lost", row)} style={actionButton("var(--color-semantic-danger)")}>
+                  Kayıp
+                </button>
+                <button onClick={() => openAction("cancel", row)} style={actionButton("var(--erp-muted)")}>
+                  İptal
+                </button>
+              </>
+            )}
+            {row.status === HrAssetAssignmentStatus.Cancelled &&
+              actions.can("delete") && (
+                <button
+                  onClick={() => setPending(row)}
+                  style={actionButton("var(--color-semantic-danger)")}
+                >
+                  Sil
+                </button>
+              )}
+          </div>
+        );
+      },
+    },
+  ];
+
+  const historyColumns: DataTableColumn<AssetAssignment>[] = [
+    { key: "kod", header: "Kod", value: (row) => row.assetCode },
+    { key: "ekipman", header: "Ekipman", value: (row) => row.assetName },
+    { key: "teslim", header: "Teslim", value: (row) => formatDate(row.assignmentDate) },
+    { key: "iade", header: "İade", value: (row) => formatDate(row.actualReturnDate) },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => statusText(row),
+      render: (row) => <StatusBadge item={row} />,
+    },
+  ];
+
   return (
     <ErpShell
       design="redwood"
@@ -645,69 +797,14 @@ export default function HrAssetsPage() {
         )}
 
         <section style={{ ...panel, overflow: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1350 }}>
-            <thead>
-              <tr style={{ background: "var(--erp-bg)" }}>
-                {["Personel","Proje","Tür","Kod / Ekipman","Seri No","Teslim","Planlanan İade","Durum","İşlemler"].map((h) => (
-                  <th key={h} style={{ padding: 13, textAlign: "left", borderBottom: "1px solid var(--erp-border)" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => {
-                const active = item.status === HrAssetAssignmentStatus.Assigned;
-                return (
-                  <tr key={item.id}>
-                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)", fontWeight: 800 }}>
-                      {personnelMap.get(item.personnelId)?.fullName ?? "Personel"}
-                    </td>
-                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>
-                      {item.projectId ? projectMap.get(item.projectId)?.name ?? "Proje" : "-"}
-                    </td>
-                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>{item.assetType}</td>
-                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>
-                      <strong>{item.assetCode}</strong><br/><span style={{ color: "var(--erp-muted)", fontSize: 12 }}>{item.assetName}</span>
-                    </td>
-                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>{item.serialNumber || "-"}</td>
-                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>{formatDate(item.assignmentDate)}</td>
-                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>{formatDate(item.plannedReturnDate)}</td>
-                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}><StatusBadge item={item}/></td>
-                    <td style={{ padding: 13, borderBottom: "1px solid var(--erp-border)" }}>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {actions.can("edit") && (
-                          <button onClick={() => openEdit(item)} disabled={busyId === item.id} style={actionButton("var(--erp-muted)")}>Düzenle</button>
-                        )}
-                        <a
-                          href={`/insan-kaynaklari/zimmetler/${item.id}/tutanak`}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ ...actionButton("var(--erp-primary)"), display: "inline-flex", alignItems: "center", textDecoration: "none" }}
-                        >
-                          Tutanak
-                        </a>
-                        <button onClick={() => void openQr(item)} style={actionButton("var(--erp-muted)")}>QR</button>
-                        <button onClick={() => void openPersonnelAnalysis(item.personnelId)} style={actionButton("var(--erp-muted)")}>Risk</button>
-                        {active && <>
-                          <button onClick={() => openAction("return", item)} style={actionButton("var(--color-semantic-info)")}>İade</button>
-                          <button onClick={() => openAction("transfer", item)} style={actionButton("var(--erp-muted)")}>Personel Devri</button>
-                          <button onClick={() => openAction("project", item)} style={actionButton("var(--erp-primary)")}>Proje</button>
-                          <button onClick={() => openAction("damaged", item)} style={actionButton("var(--color-semantic-warning)")}>Hasarlı</button>
-                          <button onClick={() => openAction("lost", item)} style={actionButton("var(--color-semantic-danger)")}>Kayıp</button>
-                          <button onClick={() => openAction("cancel", item)} style={actionButton("var(--erp-muted)")}>İptal</button>
-                        </>}
-                        {item.status === HrAssetAssignmentStatus.Cancelled && actions.can("delete") && (
-                          <button onClick={() => setPending(item)} style={actionButton("var(--color-semantic-danger)")}>Sil</button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {!loading && items.length === 0 && (
-                <tr><td colSpan={9} style={{ padding: 36, textAlign: "center", color: "var(--erp-muted)" }}>Filtrelere uygun zimmet kaydı bulunmuyor.</td></tr>
-              )}
-            </tbody>
-          </table>
+          <DataTable
+            rows={items}
+            columns={assignmentColumns}
+            rowKey={(row) => row.id}
+            title="Zimmet Listesi"
+            emptyText="Filtrelere uygun zimmet kaydı bulunmuyor."
+            resetKey={filterKey}
+          />
         </section>
       </div>
 
@@ -797,22 +894,12 @@ export default function HrAssetsPage() {
                   <article style={{ ...panel, padding: 16 }}>
                     <h3 style={{ marginTop: 0 }}>Zimmet Geçmişi</h3>
                     <div style={{ overflow: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
-                        <thead><tr style={{ background: "var(--erp-bg)" }}>
-                          {["Kod","Ekipman","Teslim","İade","Durum"].map((x) => <th key={x} style={{ padding: 10, textAlign: "left" }}>{x}</th>)}
-                        </tr></thead>
-                        <tbody>
-                          {analysis.assets.map((x) => (
-                            <tr key={x.id}>
-                              <td style={{ padding: 10, borderTop: "1px solid var(--erp-border)" }}>{x.assetCode}</td>
-                              <td style={{ padding: 10, borderTop: "1px solid var(--erp-border)" }}>{x.assetName}</td>
-                              <td style={{ padding: 10, borderTop: "1px solid var(--erp-border)" }}>{formatDate(x.assignmentDate)}</td>
-                              <td style={{ padding: 10, borderTop: "1px solid var(--erp-border)" }}>{formatDate(x.actualReturnDate)}</td>
-                              <td style={{ padding: 10, borderTop: "1px solid var(--erp-border)" }}><StatusBadge item={x}/></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      <DataTable
+                        rows={analysis.assets}
+                        columns={historyColumns}
+                        rowKey={(row) => row.id}
+                        title="Zimmet Geçmişi"
+                      />
                     </div>
                   </article>
                 </div>
