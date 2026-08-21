@@ -3,8 +3,15 @@
 import { useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { ApiError } from "@/lib/api/api-client";
-import { isgService, type IsgPersonnelCard } from "@/services/isg.service";
+import {
+  isgService,
+  type IsgCertificate,
+  type IsgHealthReport,
+  type IsgPersonnelCard,
+  type IsgTraining,
+} from "@/services/isg.service";
 import { Button } from "@/components/ui";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
@@ -55,6 +62,91 @@ export default function MyIsgRecordsPage() {
       active = false;
     };
   }, [reloadKey]);
+
+  /* SÜTUNLAR VERİ OLARAK (F4l). Rozet basan sütunda `value` ayrı. */
+  const reportColumns: DataTableColumn<
+    IsgHealthReport
+  >[] = [
+    { key: "tur", header: "Tür", value: (row) => row.reportTypeName },
+    { key: "muayene", header: "Muayene Tarihi", value: (row) => formatDate(row.examDate) },
+    { key: "gecerlilik", header: "Geçerlilik Bitişi", value: (row) => formatDate(row.validUntil) },
+    { key: "sonuc", header: "Sonuç", value: (row) => row.resultName },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) =>
+        typeof row.daysRemaining === "number" && row.daysRemaining >= 0
+          ? `${row.validityStatusName} · ${row.daysRemaining} gün kaldı`
+          : row.validityStatusName,
+      render: (row) => (
+        <>
+          <span className={`erp-status ${row.validityColor}`}>
+            {row.validityStatusName}
+          </span>
+          {typeof row.daysRemaining === "number" && row.daysRemaining >= 0 && (
+            <small>{row.daysRemaining} gün kaldı</small>
+          )}
+        </>
+      ),
+    },
+  ];
+
+  const trainingColumns: DataTableColumn<
+    IsgTraining
+  >[] = [
+    { key: "tur", header: "Tür", value: (row) => row.trainingTypeName },
+    {
+      key: "konu",
+      header: "Konu",
+      value: (row) => row.topic,
+      render: (row) => <strong>{row.topic}</strong>,
+    },
+    { key: "tarih", header: "Tarih", value: (row) => formatDate(row.trainingDate) },
+    {
+      key: "sure",
+      header: "Süre",
+      numeric: true,
+      value: (row) => `${row.durationHours} saat`,
+      footer: (rows) =>
+        `${rows.reduce((sum, row) => sum + row.durationHours, 0)} saat`,
+    },
+    { key: "gecerlilik", header: "Geçerlilik", value: (row) => formatDate(row.validUntil) },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => row.validityStatusName,
+      render: (row) => (
+        <span className={`erp-status ${row.validityColor}`}>
+          {row.validityStatusName}
+        </span>
+      ),
+    },
+  ];
+
+  const certificateColumns: DataTableColumn<
+    IsgCertificate
+  >[] = [
+    {
+      key: "belge",
+      header: "Belge",
+      value: (row) => row.certificateTypeName,
+      render: (row) => <strong>{row.certificateTypeName}</strong>,
+    },
+    { key: "no", header: "Belge No", value: (row) => row.certificateNumber ?? "—" },
+    { key: "kurum", header: "Veren Kurum", value: (row) => row.issuedBy ?? "—" },
+    { key: "tarih", header: "Tarih", value: (row) => formatDate(row.issueDate) },
+    { key: "gecerlilik", header: "Geçerlilik", value: (row) => formatDate(row.expiryDate) },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => row.validityStatusName,
+      render: (row) => (
+        <span className={`erp-status ${row.validityColor}`}>
+          {row.validityStatusName}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <ErpShell
@@ -119,38 +211,12 @@ export default function MyIsgRecordsPage() {
                 <p>Kayıtlı sağlık raporunuz yok.</p>
               </div>
             ) : (
-              <div className="erp-table-wrap">
-                <table className="erp-table">
-                  <thead>
-                    <tr>
-                      <th>Tür</th>
-                      <th>Muayene Tarihi</th>
-                      <th>Geçerlilik Bitişi</th>
-                      <th>Sonuç</th>
-                      <th>Durum</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {card.healthReports.map((report) => (
-                      <tr key={report.id}>
-                        <td>{report.reportTypeName}</td>
-                        <td>{formatDate(report.examDate)}</td>
-                        <td>{formatDate(report.validUntil)}</td>
-                        <td>{report.resultName}</td>
-                        <td>
-                          <span className={`erp-status ${report.validityColor}`}>
-                            {report.validityStatusName}
-                          </span>
-                          {typeof report.daysRemaining === "number" &&
-                            report.daysRemaining >= 0 && (
-                              <small>{report.daysRemaining} gün kaldı</small>
-                            )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                rows={card.healthReports}
+                columns={reportColumns}
+                rowKey={(row) => row.id}
+                title="Sağlık Raporlarım"
+              />
             )}
           </div>
 
@@ -164,38 +230,12 @@ export default function MyIsgRecordsPage() {
                 <p>Kayıtlı eğitiminiz yok.</p>
               </div>
             ) : (
-              <div className="erp-table-wrap">
-                <table className="erp-table">
-                  <thead>
-                    <tr>
-                      <th>Tür</th>
-                      <th>Konu</th>
-                      <th>Tarih</th>
-                      <th>Süre</th>
-                      <th>Geçerlilik</th>
-                      <th>Durum</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {card.trainings.map((training) => (
-                      <tr key={training.id}>
-                        <td>{training.trainingTypeName}</td>
-                        <td>
-                          <strong>{training.topic}</strong>
-                        </td>
-                        <td>{formatDate(training.trainingDate)}</td>
-                        <td>{training.durationHours} saat</td>
-                        <td>{formatDate(training.validUntil)}</td>
-                        <td>
-                          <span className={`erp-status ${training.validityColor}`}>
-                            {training.validityStatusName}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                rows={card.trainings}
+                columns={trainingColumns}
+                rowKey={(row) => row.id}
+                title="İSG Eğitimlerim"
+              />
             )}
           </div>
 
@@ -209,38 +249,12 @@ export default function MyIsgRecordsPage() {
                 <p>Kayıtlı yetki belgeniz yok.</p>
               </div>
             ) : (
-              <div className="erp-table-wrap">
-                <table className="erp-table">
-                  <thead>
-                    <tr>
-                      <th>Belge</th>
-                      <th>Belge No</th>
-                      <th>Veren Kurum</th>
-                      <th>Tarih</th>
-                      <th>Geçerlilik</th>
-                      <th>Durum</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {card.certificates.map((certificate) => (
-                      <tr key={certificate.id}>
-                        <td>
-                          <strong>{certificate.certificateTypeName}</strong>
-                        </td>
-                        <td>{certificate.certificateNumber ?? "—"}</td>
-                        <td>{certificate.issuedBy ?? "—"}</td>
-                        <td>{formatDate(certificate.issueDate)}</td>
-                        <td>{formatDate(certificate.expiryDate)}</td>
-                        <td>
-                          <span className={`erp-status ${certificate.validityColor}`}>
-                            {certificate.validityStatusName}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                rows={card.certificates}
+                columns={certificateColumns}
+                rowKey={(row) => row.id}
+                title="Yetki Belgelerim"
+              />
             )}
           </div>
         </>

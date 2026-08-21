@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { Button } from "@/components/ui";
 import {
@@ -84,6 +85,72 @@ export default function IsgDashboardPage() {
         b.expiredCount - a.expiredCount ||
         b.expiringSoonCount - a.expiringSoonCount
     );
+
+  /* SÜTUNLAR VERİ OLARAK (F4l). */
+  const attentionColumns: DataTableColumn<(typeof attention)[number]>[] = [
+    {
+      key: "personel",
+      header: "Personel",
+      value: (row) => `${row.personnelName} (${row.employeeNumber ?? "—"})`,
+      render: (row) => (
+        <>
+          <strong>{row.personnelName}</strong>
+          <small>{row.employeeNumber ?? "—"}</small>
+        </>
+      ),
+    },
+    { key: "gorev", header: "Görev", value: (row) => row.jobTitle ?? "—" },
+    {
+      key: "saglik",
+      header: "Sağlık Raporu",
+      value: (row) =>
+        row.hasValidHealthReport
+          ? formatDate(row.healthReportValidUntil)
+          : "Geçerli rapor yok",
+      render: (row) =>
+        row.hasValidHealthReport ? (
+          <span className="erp-status green">
+            {formatDate(row.healthReportValidUntil)}
+          </span>
+        ) : (
+          <span className="erp-status red">Geçerli rapor yok</span>
+        ),
+    },
+    {
+      key: "egitim",
+      header: "Temel Eğitim",
+      value: (row) => (row.hasValidBasicTraining ? "Var" : "Yok"),
+      render: (row) =>
+        row.hasValidBasicTraining ? (
+          <span className="erp-status green">Var</span>
+        ) : (
+          <span className="erp-status red">Yok</span>
+        ),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) =>
+        [
+          row.expiredCount > 0 ? `${row.expiredCount} süresi doldu` : "",
+          row.expiringSoonCount > 0 ? `${row.expiringSoonCount} yakında` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ") || "—",
+      render: (row) => (
+        <>
+          {row.expiredCount > 0 && (
+            <span className="erp-status red">{row.expiredCount} süresi doldu</span>
+          )}
+          {row.expiringSoonCount > 0 && (
+            <span className="erp-status yellow" style={{ marginLeft: "6px" }}>
+              {row.expiringSoonCount} yakında
+            </span>
+          )}
+        </>
+      ),
+    },
+  ];
 
   return (
     <ErpShell
@@ -241,61 +308,22 @@ export default function IsgDashboardPage() {
                 <p>Süresi dolan veya eksik kaydı olan personel yok.</p>
               </div>
             ) : (
-              <div className="erp-table-wrap">
-                <table className="erp-table">
-                  <thead>
-                    <tr>
-                      <th>Personel</th>
-                      <th>Görev</th>
-                      <th>Sağlık Raporu</th>
-                      <th>Temel Eğitim</th>
-                      <th>Durum</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {attention.slice(0, 25).map((person) => (
-                      <tr key={person.personnelId}>
-                        <td>
-                          <strong>{person.personnelName}</strong>
-                          <small>{person.employeeNumber ?? "—"}</small>
-                        </td>
-                        <td>{person.jobTitle ?? "—"}</td>
-                        <td>
-                          {person.hasValidHealthReport ? (
-                            <span className="erp-status green">
-                              {formatDate(person.healthReportValidUntil)}
-                            </span>
-                          ) : (
-                            <span className="erp-status red">Geçerli rapor yok</span>
-                          )}
-                        </td>
-                        <td>
-                          {person.hasValidBasicTraining ? (
-                            <span className="erp-status green">Var</span>
-                          ) : (
-                            <span className="erp-status red">Yok</span>
-                          )}
-                        </td>
-                        <td>
-                          {person.expiredCount > 0 && (
-                            <span className="erp-status red">
-                              {person.expiredCount} süresi doldu
-                            </span>
-                          )}
-                          {person.expiringSoonCount > 0 && (
-                            <span
-                              className="erp-status yellow"
-                              style={{ marginLeft: "6px" }}
-                            >
-                              {person.expiringSoonCount} yakında
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              /*
+               * SESSİZ KIRPMA KALDIRILDI (F4l): burada
+               * `attention.slice(0, 25)` vardı — ilk 25 personel
+               * gösteriliyor, kalanın var olduğu HİÇBİR YERDE
+               * söylenmiyordu. F0'da kapatılan "eksik liste, doğru
+               * sayı kılığında" hatasının aynısı. Bileşen gerçek
+               * sayfalama veriyor: sayı da doğru, liste de tam.
+               */
+              <DataTable
+                rows={attention}
+                columns={attentionColumns}
+                rowKey={(row) => row.personnelId}
+                title="İSG Takibi Gereken Personel"
+                /* Şirket değişince veri değişiyor; sayfa 1'e dönmeli. */
+                resetKey={companyId}
+              />
             )}
           </div>
         </>
