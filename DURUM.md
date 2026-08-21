@@ -989,6 +989,62 @@ BU TURDAN ÇIKAN İKİ KURAL (§5'e):
     her sondadan sonra TEK DOSYA değil, fazın BÜTÜN korumaları
     taranır (S9'da dokuz koruma, `grep -Fc` ile tek tek).
 
+**F4 DURAKLATILDI (kullanıcı kararı) — kalan 23 ekran.**
+
+Ham tablo sayısı **43 → 23**; cırcır sınırı da 23'e indirildi, yani
+sayı bir daha yükselemez. Tamamlanan gruplar:
+
+| Grup | Ekranlar |
+|---|---|
+| F4f | hakedis/takip (3 tablo), depo-stok (2), projeler, taseronlar |
+| F4g | finans/vergi (4), finans/finansal-araclar (3) |
+| F4h | **DataTable `groupBy` yeteneği** + finans/cekler ana listesi |
+| F4i | finans/gider-merkezi (5) |
+| F4j | muhasebe/buyuk-defter, insan-kaynaklari/izinler |
+| F4k | demirbas, perakende/fiyatlar |
+| F4l | isg, isg/benim (3) |
+| F4m | isg/personel (4) |
+| F4n | muhendislik/pozlar/ozel, muhasebe/kur-degerlemesi |
+| F4o | insan-kaynaklari/zimmetler (2) |
+| F4p | insan-kaynaklari/cikis-tazminat (2) |
+| F4q | insan-kaynaklari/maliyet-raporu (3) |
+
+KALAN 23 EKRANIN TÜRÜ — hepsi "liste" DEĞİL:
+- **~7 gerçek liste:** `perakende`, `isg/osgb`, `fiyat-farki`,
+  `finans/piyasa`, `finans/nakit-akis`, `insan-kaynaklari/ek-ucretler`,
+  `insan-kaynaklari/ucret-kartlari`, `insan-kaynaklari/onay-merkezi`.
+- **~11 form/sihirbaz** (`/yeni`, `/ice-aktar`, `/aktar`): tablo orada
+  liste değil KALEM GİRİŞİ. Sayfalama bir fatura satırı listesinde
+  zarar verir — kullanıcı 2. sayfadaki satırı görmeden kaydeder.
+- **~4 ızgara/matris** (`puantaj`, `gunluk-puantaj`, `puantaj-cetveli`,
+  `yetki-matrisi`): satır sayısı personel, sütunlar gün; sayfalama
+  ilişkiyi kırar.
+
+Cırcır testi bu ayrımı yapmıyor (yalnız `<table` sayıyor). Devam
+edildiğinde form/ızgara olanlar tek tek okunup, gerçekten liste
+olmayanlar gerekçesiyle cırcırın belgelenmiş kapsam-dışı kümesine
+eklenmeli (bugün ağaç ve yazdırma sayfaları için yapıldığı gibi) —
+sessizce atlanmamalı.
+
+BİLEŞENE EKLENEN YETENEK (F4h): `groupBy` — satırlar bir anahtara göre
+öbekleniyor, her öbeğin başına kendi ALT TOPLAMINI taşıyan başlık
+giriyor. Sayfalama satıra uygulanıyor; grup sayfa sınırını aşarsa
+başlık tekrar ediyor. Dört testle bağlı.
+
+YOL BOYUNCA KAPATILAN İKİ SESSİZ VERİ KAYBI:
+1. `depo-stok`ta elle yazılmış "Daha fazla göster" sayfalaması ve
+   sayfa-bazlı toplam riski.
+2. `isg` panelinde `attention.slice(0, 25)` — İSG takibi gereken ilk
+   25 personel gösteriliyor, kalanın varlığı hiçbir yerde
+   söylenmiyordu. F0'da kapatılan hatanın aynısı; konusu İSG
+   uyumluluğu olduğu için sonucu daha ağır.
+
+ALT TOPLAM BİR SÜTUN KARARIDIR, dayatma değil — üç kez ayrıştı:
+büyük defterde YÜRÜYEN BAKİYE toplanmadı (anlamsız rakam üretirdi),
+kur değerlemesinde farklı para birimlerindeki bakiyeler toplanmadı ama
+"bu turda kesilecek fiş" toplandı, bordro özetinde toplanmadı (liste
+zaten kendi içinde toplamlar taşıyor).
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.
