@@ -1060,7 +1060,7 @@ düzeltmesi ters kaydı `DateTime.UtcNow.Date` ile CARİ döneme atıyor,
 geçmişe yazmıyor (`ChequeService` → `CreateReversalVoucherAsync`).
 Yani çek tarafı doğru davranıyor; eksik olan sistem geneli bir kural.
 
-**ÇEK PAKETİ (2026-08-21) — kod tamam, DEPLOY BEKLİYOR.**
+**ÇEK PAKETİ (2026-08-21) — YAYINDA** (`8b64067b`, `f63131eb`).
 
 Şikâyet: *"iptal ettiğim çekin numarasını bir daha giremiyorum"* ve
 *"çekte proje seçerken Merkez görünmüyor."*
@@ -1136,6 +1136,92 @@ AÇIK KALAN İKİ SORU (kullanıcı kararı gerekir, kod değiştirilmedi):
 İptalin GERİ ALINMASI yok ve bu bilinçli: `Voided` durum matrisinde
 hiçbir geçişe sahip değil, geri alma reddediliyor. Yanlış iptal edilen
 çek artık YENİDEN GİRİLEBİLİR — numara serbest kaldığı için.
+
+**G1.1 — DİYALOG ODAK KAYBI + TUTAR GİRİŞİ (2026-08-21) — YAYINDA**
+(`9e8fef79`, `8043fd9a`).
+
+ODAK KAYBININ KÖK SEBEBİ — `components/ui/use-dialog-behavior.ts`.
+Belirti: "çek düzenlemede tutar alanına bir rakam yazınca odak
+kaçıyor". Sebep MASKELEME DEĞİLDİ (maskeleme hiç yoktu): effect
+`onRequestClose`e bağımlıydı, Modal/Drawer o geri çağrıyı
+`useCallback(..., [busy, onClose])` ile kuruyor ve çağıran taraflar
+satır içi ok fonksiyonu veriyor — yani bağımlılık her renderda yeni
+kimlik alıyor ve effect HER TUŞ VURUŞUNDA sökülüp kuruluyordu. Odak iki
+yoldan kaçıyordu: temizlikteki `restore?.focus?.()` ve yeni kurulumun
+paneldeki İLK odaklanabilir elemana (başlıktaki ✕) odaklanması.
+
+ÖLÇÜLDÜ, TAHMİN EDİLMEDİ: test önce yazıldı, düştü ve sebebi gösterdi —
+bir rakam yazıldıktan sonra `document.activeElement` ✕ düğmesiydi.
+
+ÇÖZÜM: geri çağrı ref'te, effect yalnız `open`a bağlı. KAPSAM: hata çek
+ekranına özgü değildi — 71 dosya bu bileşenleri kullanıyor, 96 çağrı
+yeri satır içi geri çağrı veriyor; tek düzeltme hepsini kapattı.
+Tarama: bağımlılığında geri çağrı taşıyan diğer effect'ler incelendi
+(`hakedis-editor.tsx:592` → `setSummary`, React state setter, stabil;
+`recipe-editor.tsx:117` → `useCallback(..., [])`, stabil). Başka canlı
+örnek YOK. Odak çalan tek diğer `.focus()` barkod okutmada, olay
+işleyicisinde — doğru davranış.
+
+TUTAR GİRİŞİ (`TutarInput`). Giriş mantığı GÖSTERİMLE AYNI DOSYADA
+(`lib/format/turkish.ts`): `formatAmountInput`, `normalizeAmountInput`,
+`digitsBeforeCaret`, `caretAfterDigits`. Ayrı dosya olsaydı iki
+biçimleme mantığı doğar ve listedeki tutar ile formdaki tutar zamanla
+ayrışırdı.
+
+- `type="text"` + `inputMode="decimal"` — `type="number"` maskeli metni
+  geçersiz sayıp value'yu boşaltıyor ve `setSelectionRange`
+  desteklemiyor, yani imleç korunamıyor.
+- İmleç `useLayoutEffect` içinde ve RAKAM SAYISIYLA hesaplanıyor;
+  karakter indeksi ayıraç girip çıktıkça kayar.
+- `onChange` ref'te, effect bağımlılığında DEĞİL — yukarıdaki hatanın
+  aynısı burada doğmasın.
+
+YAZARKEN ÇIKAN İKİ AÇIK (ikisi de testle yakalandı): (1) ayıraç
+yazılınca imleç virgülün soluna düşüyordu — "1234," + "5" → 12.345;
+(2) nokta ayrımını "nokta sayısı" ile yapmak yanlıştı, alan yazdıkça
+biçimlendiği için ekranda zaten binlik noktaları var.
+
+TUZAK VE KAPATAN KURAL (kullanıcı yakaladı): tek virgül KOŞULSUZ
+ondalıktır. "Ardındaki rakam sayısı" kuralına tabi olsaydı 1,50 yazıp
+fazladan sıfır basan kullanıcının metni "1,500" olur ve tutar sessizce
+BİN KATINA çıkardı. Üçüncü hane yorumu değiştirmiyor, iki hane
+sınırında düşüyor. İki testle bağlı; SONDA ile doğrulandı — kural
+gevşetilince ikisi de düşüyor, yapıştırma testi düşmüyor.
+
+KAPSAM: yalnız çek ekranları (giriş, düzenleme, dağılım satırları).
+Erteleme formunda tutar alanı YOK — yeni çek eski çekle aynı tutarda
+olmak zorunda. Diğer modüllere yayma canlı doğrulamadan sonra
+konuşulacak.
+
+**ÇEK PAKETİ CANLI DOĞRULAMA (2026-08-21).**
+
+ASIL KABUL TESTİ — 8051359: engelleyen kayıt `VCK-2026-000022`,
+VERİLEN çek, durum 90 (iptal), GARANTİ BANKASI / ÇANKAYA. Yani
+kullanıcıyı bloke eden şey kendi iptal ettiği çekti. Canlı
+veritabanında GERİ ALINAN bir işlem içinde denendi: aynı anahtarla
+INSERT GEÇTİ; hemen ardından ikinci aktif kayıt denemesi
+`IX_cheques_aktif_benzersizlik` ile REDDEDİLDİ. İptal numarayı
+bırakıyor, aktif kayıt bırakmıyor. Canlıya tek satır yazılmadı.
+
+Sayılar: boş normalize kayıt 0/23, aktif çakışan grup 0, portföy çek
+toplamı 7.664.000,00 = 101 hesap bakiyesi 7.664.000,00 (fark 0,00),
+test kaydı 0.
+
+EKRANDAN DOĞRULANAMAYAN İKİ ADIM: Merkez seçicinin görünümü ve tahsil
+edilmiş çekte iptal yetki uyarısı. Canlı API'ye kimlik doğrulamalı
+istek için token üretme girişimi GÜVENLİK SINIFLANDIRICISI TARAFINDAN
+ENGELLENDİ (doğrusu da bu). İkisi de testlerle bağlı ama kullanıcı
+onayı bekliyor.
+
+MÜKERRER MESAJI EKSİKTİ, DÜZELTİLDİ (`f63131eb`): yön ve banka yoktu —
+tam da "ama ben bunu girmedim ki" denen yer, çünkü aynı numara
+alınan/verilen çekte ve farklı bankada ayrı ayrı kaydedilebiliyor.
+Yeni metin yön + numara + banka/şube + kayıt no + durum + vade
+taşıyor.
+
+KARARSIZLIK TARAMASI: düzenleme yolunun mükerrer kontrolünün TESTİ
+YOKTU (kısıt koddaydı, hiçbir test tutmuyordu) — test yazıldı, eksik
+mesaj zaten o test yazılırken çıktı.
 
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
