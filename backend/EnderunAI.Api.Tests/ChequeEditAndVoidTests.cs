@@ -372,6 +372,82 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
         Assert.Null(entryMovements[0].ReversedAtUtc);
     }
 
+    /// <summary>
+    /// DÜZENLEME YOLUYLA MÜKERRER NUMARA ÜRETİLEMEZ.
+    ///
+    /// Kararsızlık taramasında bulundu: mükerrer engeli KAYIT yolunda
+    /// sınanıyordu, DÜZENLEME yolunda hiç sınanmıyordu. Kısıt kodda
+    /// vardı ama hiçbir test onu tutmuyordu — sessizce kaldırılabilir
+    /// bir korumaydı. Numara değişince normalize kolonun da güncellendiği
+    /// aynı testte doğrulanıyor: güncellenmeseydi indeks eski numarayı
+    /// korur, yenisini hiç görmezdi.
+    /// </summary>
+    [Fact]
+    public async Task DuzenlemeyleBaskaCekinNumarasi_Alinamaz()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var scene = await BuildAsync(db, suffix);
+
+        var client = await AdminAsync();
+
+        var first = await CreateAsync(client, Payload(scene, $"AAA{suffix}"));
+        var second = await CreateAsync(client, Payload(scene, $"BBB{suffix}"));
+
+        var detail = await DetailAsync(client, second);
+        var rowVersion = detail.GetProperty("rowVersion").GetDateTime();
+
+        // İkinci çeki birincinin numarasına çevirmeye çalış.
+        var clash = await client.PutAsJsonAsync(
+            $"/api/cheques/{second}",
+            EditPayload(scene, $"AAA{suffix}", rowVersion));
+
+        Assert.Equal(HttpStatusCode.Conflict, clash.StatusCode);
+
+        // MESAJ ANAHTARIN TAMAMINI SÖYLÜYOR: yön, numara, banka,
+        // kayıt no, durum ve vade. Eksik bir mesaj kullanıcıyı
+        // engelleyen kaydı ararken kör bırakıyordu.
+        var message = await clash.Content.ReadAsStringAsync();
+
+        Assert.Contains("Alınan çek", message);
+        Assert.Contains($"AAA{suffix}", message);
+        Assert.Contains("Test Bankası", message);
+        Assert.Contains("Portföyde", message);
+        Assert.Contains("Kayıt No:", message);
+        Assert.Contains("Vade:", message);
+
+        // KENDİ numarasıyla kaydetmek engellenmemeli: kayıt kendisi
+        // hariç tutulmasaydı hiçbir düzenleme kaydedilemezdi.
+        var same = await client.PutAsJsonAsync(
+            $"/api/cheques/{second}",
+            EditPayload(scene, $"BBB{suffix}", rowVersion, description: "açıklama"));
+
+        Assert.Equal(HttpStatusCode.OK, same.StatusCode);
+
+        // Numara gerçekten değiştirilebiliyor ve normalize kolon da
+        // onunla birlikte güncelleniyor.
+        var afterDetail = await DetailAsync(client, second);
+
+        var renamed = await client.PutAsJsonAsync(
+            $"/api/cheques/{second}",
+            EditPayload(scene, $"CCC {suffix}",
+                afterDetail.GetProperty("rowVersion").GetDateTime()));
+
+        Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
+
+        var stored = await db.Cheques.AsNoTracking()
+            .SingleAsync(x => x.Id == second);
+
+        Assert.Equal($"CCC {suffix}", stored.ChequeNumber);
+        Assert.Equal($"CCC{suffix}".ToUpperInvariant(), stored.NormalizedChequeNumber);
+
+        // Birinci çek etkilenmemiş olmalı.
+        var untouched = await db.Cheques.AsNoTracking().SingleAsync(x => x.Id == first);
+        Assert.Equal($"AAA{suffix}", untouched.ChequeNumber);
+    }
+
     // ---------------------------------------------------------------
     // İPTAL SINIRI
     // ---------------------------------------------------------------

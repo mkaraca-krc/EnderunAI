@@ -370,6 +370,7 @@ public sealed class ChequeService(
             {
                 x.Id,
                 x.InternalNumber,
+                x.ChequeNumber,
                 x.Status,
                 x.DueDate,
                 x.BankName,
@@ -384,8 +385,23 @@ public sealed class ChequeService(
         if (clash is null)
             return;
 
+        /*
+         * MESAJ ANAHTARIN TAMAMINI SÖYLÜYOR.
+         *
+         * Önce yalnız kayıt no + durum + vade yazıyordu. Eksik olan
+         * YÖN ve BANKA tam da kullanıcının "ama ben bunu girmedim ki"
+         * dediği yerdi: aynı numara alınan ve verilen çekte ayrı ayrı
+         * kaydedilebiliyor, farklı bankada da öyle. Hangi kaydın
+         * engellediği söylenmezse kullanıcı doğru kaydı arayamıyor.
+         */
+        var bankLabel = string.IsNullOrWhiteSpace(clash.BankBranch)
+            ? clash.BankName
+            : $"{clash.BankName} / {clash.BankBranch}";
+
         throw new InvalidOperationException(
-            $"Bu çek zaten kayıtlı — Kayıt No: {clash.InternalNumber}, " +
+            $"Bu çek zaten kayıtlı — {DirectionName(direction)}, " +
+            $"No: {clash.ChequeNumber}, Banka: {bankLabel}, " +
+            $"Kayıt No: {clash.InternalNumber}, " +
             $"Durum: {StatusName(clash.Status)}, Vade: {clash.DueDate:dd.MM.yyyy}");
     }
 
