@@ -8,6 +8,7 @@ export { Modal } from "./modal";
 export { Drawer } from "./drawer";
 export { Select } from "./select";
 export { StatCard } from "./stat-card";
+export { TutarInput } from "./tutar-input";
 export {
   Table,
   TableBody,

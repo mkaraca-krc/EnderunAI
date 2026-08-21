@@ -16,7 +16,14 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { amount as formatAmount, money, number as formatNumber } from "@/lib/format/turkish";
 import { chequeMonthKey, summarizeCheques } from "@/lib/cheques/totals";
 import { useModuleActions } from "@/lib/auth/module-actions";
-import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
+import {
+  Button,
+  ConfirmDialog,
+  Input,
+  Modal,
+  Select,
+  TutarInput,
+} from "@/components/ui";
 import { branchService, type BranchListItem } from "@/services/branch.service";
 import {
   cashAccountService,
@@ -1238,15 +1245,21 @@ export default function ChequeRegisterPage() {
                 </small>
               </label>
 
+              {/* TUTAR ORTAK BİLEŞENLE: Türkçe biçim, imleç korumalı,
+                  hem virgül hem nokta ondalık. Alan durumu HAM sayının
+                  metni olarak tutuluyor — kaydetme yolundaki
+                  `Number(...)` çağrıları olduğu gibi çalışıyor. */}
               <label>
                 Tutar
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
+                <TutarInput
                   required
-                  value={chequeForm.amount}
-                  onChange={(e) => setChequeForm({ ...chequeForm, amount: e.target.value })}
+                  value={chequeForm.amount === "" ? null : Number(chequeForm.amount)}
+                  onChange={(next) =>
+                    setChequeForm({
+                      ...chequeForm,
+                      amount: next === null ? "" : String(next),
+                    })
+                  }
                 />
               </label>
 
@@ -1344,15 +1357,17 @@ export default function ChequeRegisterPage() {
                       return (
                         <tr key={index}>
                           <td>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={row.amount}
-                              onChange={(e) =>
+                            <TutarInput
+                              value={row.amount === "" ? null : Number(row.amount)}
+                              onChange={(next) =>
                                 setAllocationRows((current) =>
                                   current.map((item, i) =>
-                                    i === index ? { ...item, amount: e.target.value } : item
+                                    i === index
+                                      ? {
+                                          ...item,
+                                          amount: next === null ? "" : String(next),
+                                        }
+                                      : item
                                   )
                                 )
                               }
@@ -2483,14 +2498,14 @@ export default function ChequeRegisterPage() {
             ]}
           />
 
-          <Input
+          <TutarInput
             label="Tutar"
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={editForm.amount}
-            onChange={(e) =>
-              setEditForm({ ...editForm, amount: e.target.value })
+            value={editForm.amount === "" ? null : Number(editForm.amount)}
+            onChange={(next) =>
+              setEditForm({
+                ...editForm,
+                amount: next === null ? "" : String(next),
+              })
             }
           />
 

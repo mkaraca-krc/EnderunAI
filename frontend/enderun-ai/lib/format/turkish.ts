@@ -362,6 +362,209 @@ export function dateTime(value: string | Date | null | undefined): string {
   )}`;
 }
 
+/* =================================================================
+ * GİRİŞ TARAFI — metin → sayı, canlı biçimleme, imleç hesabı.
+ *
+ * NEDEN AYNI DOSYADA: yukarısı gösterimin tek kaynağı. Giriş tarafı
+ * ayrı bir dosyaya yazılsaydı iki biçimleme mantığı doğardı ve
+ * zamanla ayrışırlardı — listedeki tutar ile formdaki tutar farklı
+ * davranmaya başlardı. Aynı kural, aynı yer.
+ *
+ * BURASI GÖSTERİMİN TERSİ: yukarıdaki işlevler sayıyı metne çevirir,
+ * buradakiler kullanıcının yazdığı metni sayıya. İkisi birbirinin
+ * aynası olmak zorunda.
+ * ================================================================= */
+
+/** Çözümleme sonucu: ekranda görünecek metin ve makineye gidecek sayı. */
+export type AmountInputState = {
+  /** Kullanıcıya gösterilecek biçimli metin — "2.814.000,00". */
+  text: string;
+  /**
+   * Sunucuya gidecek HAM sayı. Alan boşsa null.
+   *
+   * BOŞ İLE SIFIR FARKLIDIR: boş "girilmedi", sıfır "sıfır lira"
+   * demek. Boşu 0 saymak, girilmemiş bir tutarı sıfır tutar gibi
+   * kaydetmek olurdu.
+   */
+  value: number | null;
+};
+
+/** Tutar alanında en fazla iki ondalık — kuruş. */
+const AMOUNT_INPUT_MAX_DECIMALS = 2;
+
+/**
+ * Ondalık ayıracını BULUR — hem virgül hem NOKTA kabul edilir.
+ *
+ * NOKTA ŞART: sayısal tuş takımında virgül yok, muhasebeci noktaya
+ * basar. Kabul edilmezse "1234.5" yazan kullanıcı 12.345 kaydeder ve
+ * bunu fark etmez — on kat hata, sessizce.
+ *
+ * Ama nokta Türkçe gösterimde BİNLİK ayıracı da. Ayrım kuralı:
+ *   - hem virgül hem nokta varsa: SONRA gelen ondalıktır
+ *     ("2.814.000,00" ve "2,814,000.00" ikisi de doğru okunur),
+ *   - tek virgül varsa: virgül ondalıktır (Türkçe yazım),
+ *   - birden çok virgül varsa: hepsi binliktir (ABD yazımı),
+ *   - tek nokta varsa: ARDINDA 1-2 rakam varsa ondalık, 3 rakam
+ *     varsa binlik ("1234.5" → 1234,5 ama "1.234" → 1234).
+ *
+ * Son kural yapıştırma için: Türkçe biçimli "1.234" metni binlik
+ * taşır, elle yazılan "1234.5" ise kuruş.
+ */
+function findDecimalSeparator(raw: string): number {
+  const lastComma = raw.lastIndexOf(",");
+  const lastDot = raw.lastIndexOf(".");
+
+  const digitsAfter = (at: number) =>
+    raw.slice(at + 1).replace(/\D/g, "").length;
+
+  // İkisi birden varsa SONRA gelen ondalıktır: "1.234,5" (Türkçe) ve
+  // "2,814,000.00" (ABD) aynı kuralla doğru okunur.
+  if (lastComma >= 0 && lastDot >= 0) return Math.max(lastComma, lastDot);
+
+  if (lastComma >= 0) {
+    /*
+     * TEK VİRGÜL KOŞULSUZ ONDALIKTIR — "ardındaki rakam sayısı"
+     * kuralına TABİ DEĞİL. Tuzağı kapatan şey bu.
+     *
+     * Alan ondalık ayıracını her zaman virgülle yazdığı için, kullanıcı
+     * noktaya bassa bile sonraki tuşta metin "1,5" oluyor. Virgül de
+     * rakam sayısı kuralına tabi olsaydı, 1,50 yazıp fazladan bir sıfır
+     * basan kullanıcının metni "1,500" olur, kural onu BİNLİĞE çevirir
+     * ve tutar sessizce BİN KATINA çıkardı. Üçüncü hane yorumu
+     * değiştirmez; iki hane sınırında düşer.
+     *
+     * Bu iki testle bağlı ("...üçüncü hane tutarı bin katına
+     * çıkarmaz"); sonda ile doğrulandı — kural gevşetilince ikisi de
+     * düşüyor.
+     */
+    const commaCount = raw.split(",").length - 1;
+    if (commaCount === 1) return lastComma;
+
+    return digitsAfter(lastComma) <= AMOUNT_INPUT_MAX_DECIMALS ? lastComma : -1;
+  }
+
+  if (lastDot >= 0) {
+    /*
+     * NOKTA: ardında ÜÇ rakam varsa binliktir, 0-2 rakam varsa
+     * ondalıktır.
+     *
+     * Nokta SAYISINA bakılamaz — alan yazdıkça biçimlendiği için
+     * ekranda zaten binlik noktaları duruyor: "1.234" yazıp nokta
+     * basan kullanıcının metni "1.234." oluyor ve "birden çok nokta
+     * varsa hepsi binliktir" kuralı o noktayı yutuyordu. Sonuç:
+     * "1234.5" yazan kullanıcı 12.345 kaydediyordu — düzeltmeye
+     * çalıştığımız hatanın ta kendisi.
+     *
+     * Binlik öbeği HER ZAMAN üç rakamdır; bu yüzden "ardındaki rakam
+     * sayısı" ayrımı güvenli.
+     */
+    return digitsAfter(lastDot) <= AMOUNT_INPUT_MAX_DECIMALS ? lastDot : -1;
+  }
+
+  return -1;
+}
+
+/**
+ * Yazılan metni biçimli metne ve ham sayıya çevirir.
+ *
+ * YAZDIKÇA BİÇİMLENİR: binlik noktaları anında girer. Yalnız blur'da
+ * biçimlenseydi kullanıcı yazarken rakamları sayamaz, 2.814.000 ile
+ * 28.140.000'i gözle ayıramazdı.
+ *
+ * ÜÇÜNCÜ ONDALIK YAZILAMAZ, YUVARLANMAZ. Sessizce yuvarlamak
+ * kullanıcının yazdığından farklı bir tutar kaydeder; alan onu hiç
+ * kabul etmeyerek durumu görünür kılıyor.
+ */
+export function formatAmountInput(raw: string): AmountInputState {
+  if (raw === null || raw === undefined) return { text: "", value: null };
+
+  const separatorAt = findDecimalSeparator(raw);
+
+  const integerPart = separatorAt >= 0 ? raw.slice(0, separatorAt) : raw;
+  const fractionPart = separatorAt >= 0 ? raw.slice(separatorAt + 1) : "";
+
+  const integerDigits = integerPart.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  const fractionDigits = fractionPart
+    .replace(/\D/g, "")
+    .slice(0, AMOUNT_INPUT_MAX_DECIMALS);
+
+  const hasSeparator = separatorAt >= 0;
+
+  if (integerDigits === "" && fractionDigits === "" && !hasSeparator) {
+    return { text: "", value: null };
+  }
+
+  const grouped = integerDigits === ""
+    ? "0"
+    : formatter({ minimumFractionDigits: 0, maximumFractionDigits: 0 })
+        .format(Number(integerDigits));
+
+  // Ayıraç YAZILDIĞI ANDA korunuyor: "1234," yazan kullanıcı bir
+  // sonraki tuşta kuruşu yazacak. Silinseydi virgül ekranda hiç
+  // durmaz, kuruş yazmak imkânsızlaşırdı.
+  const text = hasSeparator ? `${grouped},${fractionDigits}` : grouped;
+
+  const value = Number(`${integerDigits === "" ? "0" : integerDigits}.${fractionDigits || "0"}`);
+
+  return { text, value: Number.isFinite(value) ? value : null };
+}
+
+/**
+ * Alan odaktan çıkınca tutarı TAM biçime tamamlar — "1.234,5" →
+ * "1.234,50". Boş alan boş kalır (bkz. AmountInputState.value).
+ */
+export function normalizeAmountInput(value: number | null): string {
+  return value === null ? "" : amount(value);
+}
+
+/**
+ * İmleçten önceki RAKAM sayısı.
+ *
+ * Karakter indeksi kullanılamaz: biçimleme ayıraç ekleyip çıkardıkça
+ * indeks kayar ve imleç her tuşta bir hane sağa/sola atlar. Rakam
+ * sayısı ise biçimlemeden ETKİLENMEZ — sabit olan tek şey odur.
+ */
+export function digitsBeforeCaret(text: string, caret: number): number {
+  return text.slice(0, caret).replace(/\D/g, "").length;
+}
+
+/**
+ * Verilen rakam sayısına denk gelen imleç konumu.
+ *
+ * `afterSeparator`: kullanıcı AZ ÖNCE ondalık ayıracı yazdıysa imleç
+ * ayıracın SAĞINA konur. Yoksa rakam sayısı ayıracı saymadığı için
+ * imleç virgülün soluna düşüyor ve bir sonraki tuş kuruş yerine
+ * tam kısma giriyordu: "1234," yazıp "5" basan kullanıcı 1.234,50
+ * yerine 12.345 kaydediyordu.
+ */
+export function caretAfterDigits(
+  text: string,
+  digitCount: number,
+  afterSeparator = false,
+): number {
+  if (afterSeparator) {
+    const separator = text.indexOf(",");
+    return separator < 0 ? text.length : separator + 1;
+  }
+
+  if (digitCount <= 0) {
+    // Baştaki ayıraçların önüne değil, ilk rakamın önüne konumlan.
+    const firstDigit = text.search(/\d/);
+    return firstDigit < 0 ? text.length : firstDigit;
+  }
+
+  let seen = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    if (/\d/.test(text[index])) {
+      seen += 1;
+      if (seen === digitCount) return index + 1;
+    }
+  }
+
+  return text.length;
+}
+
 export const turkishFormat = {
   amount,
   coefficient,
@@ -378,4 +581,10 @@ export const turkishFormat = {
   number,
   date,
   dateTime,
+
+  // Giriş tarafı — aynı kuralın tersi.
+  formatAmountInput,
+  normalizeAmountInput,
+  digitsBeforeCaret,
+  caretAfterDigits,
 };
