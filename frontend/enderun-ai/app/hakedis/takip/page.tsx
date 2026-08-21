@@ -6,6 +6,7 @@ import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
 import { amount, percent } from "@/lib/format/turkish";
 import { Button, Input, Modal } from "@/components/ui";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { ApiError } from "@/lib/api/api-client";
 import { usePermissions } from "@/lib/use-permissions";
 import {
@@ -132,6 +133,161 @@ export default function HakedisTrackingPage() {
     })();
   }, [load, projectId]);
 
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4f). `render` ekrana, `value` dosyaya ve
+   * kâğıda gidiyor: rozet basan hücrede ikisi ayrılmak zorunda —
+   * dışa aktarmada renkli etiket değil durumun ADI yazmalı.
+   */
+  const barterColumns: DataTableColumn<BarterLedger["entries"][number]>[] = [
+    {
+      key: "tarih",
+      header: "Tarih",
+      value: (row) => new Date(row.entryDate).toLocaleDateString("tr-TR"),
+    },
+    {
+      key: "tur",
+      header: "Tür",
+      value: (row) =>
+        row.entryType === 0 ? "kesinti — alacak doğdu" : "teslim alındı — alacak düştü",
+      render: (row) =>
+        row.entryType === 0 ? (
+          <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[11px] text-violet-800">
+            kesinti — alacak doğdu
+          </span>
+        ) : (
+          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-800">
+            teslim alındı — alacak düştü
+          </span>
+        ),
+    },
+    {
+      key: "aciklama",
+      header: "Açıklama",
+      value: (row) =>
+        row.progressPaymentNumber
+          ? `${row.description} (${row.progressPaymentNumber})`
+          : row.description,
+    },
+    {
+      key: "tutar",
+      header: "Tutar",
+      numeric: true,
+      value: (row) => money(row.amount),
+      /*
+       * ALT TOPLAM AÇIK BAKİYEYİ GÖSTERİYOR, satırların toplamını
+       * DEĞİL: kesinti alacak doğurur, teslim alma düşürür; ikisini
+       * toplamak anlamsız bir sayı verirdi. Bakiye sunucudan geliyor.
+       */
+      footer: () => (barter ? money(barter.openBalance) : ""),
+    },
+  ];
+
+  const periodColumns: DataTableColumn<HakedisTracking["periods"][number]>[] = [
+    {
+      key: "donem",
+      header: "Dönem",
+      value: (row) => `${row.periodNumber}. ${row.progressPaymentNumber}`,
+      render: (row) => (
+        <Link
+          href={`/hakedis/${row.id}`}
+          className="font-bold text-cyan-700 hover:underline"
+        >
+          {row.periodNumber}. {row.progressPaymentNumber}
+        </Link>
+      ),
+    },
+    {
+      key: "tarih",
+      header: "Tarih",
+      value: (row) => new Date(row.progressPaymentDate).toLocaleDateString("tr-TR"),
+    },
+    {
+      key: "kumulatif",
+      header: "Kümülatif İmalat",
+      numeric: true,
+      value: (row) => money(row.cumulativeWorkAmount),
+    },
+    {
+      key: "ihzarat",
+      header: "Açık İhzarat",
+      numeric: true,
+      value: (row) => money(row.cumulativeAdvanceMaterialAmount),
+    },
+    {
+      key: "bu",
+      header: "Bu Hakediş",
+      numeric: true,
+      value: (row) => money(row.currentAmount),
+      footer: (rows) => money(rows.reduce((sum, x) => sum + x.currentAmount, 0)),
+    },
+    {
+      key: "kdv",
+      header: "KDV",
+      numeric: true,
+      value: (row) => money(row.vatAmount),
+      footer: (rows) => money(rows.reduce((sum, x) => sum + x.vatAmount, 0)),
+    },
+    {
+      key: "tevkifat",
+      header: "Tevkifat",
+      numeric: true,
+      value: (row) => money(row.withholdingAmount),
+      footer: (rows) => money(rows.reduce((sum, x) => sum + x.withholdingAmount, 0)),
+    },
+    {
+      key: "stopaj",
+      header: "Stopaj",
+      numeric: true,
+      value: (row) => money(row.incomeTaxWithholdingAmount),
+      footer: (rows) =>
+        money(rows.reduce((sum, x) => sum + x.incomeTaxWithholdingAmount, 0)),
+    },
+    {
+      key: "kesinti",
+      header: "Kesinti",
+      numeric: true,
+      value: (row) => money(row.totalDeductionAmount),
+      footer: (rows) =>
+        money(rows.reduce((sum, x) => sum + x.totalDeductionAmount, 0)),
+    },
+    {
+      key: "tahsil",
+      header: "Tahsil Edilecek",
+      numeric: true,
+      value: (row) => money(row.netPayableAmount),
+      footer: (rows) => money(rows.reduce((sum, x) => sum + x.netPayableAmount, 0)),
+    },
+  ];
+
+  /*
+   * ÇAPRAZ TABLO: satır kesinti türü, SÜTUNLAR DÖNEMLERDEN ÜRETİLİYOR.
+   * Sütunlar veri olduğu için bu da bileşene sığıyor; dışa aktarma da
+   * kendiliğinden doğru çalışıyor.
+   */
+  const deductionColumns: DataTableColumn<
+    HakedisTracking["deductionTypes"][number]
+  >[] = [
+    { key: "kesinti", header: "Kesinti", value: (row) => row.name },
+    ...(tracking?.periods ?? []).map((period) => ({
+      key: `donem-${period.id}`,
+      header: `${period.periodNumber}. dönem`,
+      numeric: true,
+      value: (row: HakedisTracking["deductionTypes"][number]) => {
+        const line = period.deductions.find(
+          (x) => x.deductionType === row.deductionType
+        );
+        return line ? money(line.amount) : "-";
+      },
+    })),
+    {
+      key: "toplam",
+      header: "Toplam",
+      numeric: true,
+      value: (row) => money(row.totalAmount),
+      footer: (rows) => money(rows.reduce((sum, x) => sum + x.totalAmount, 0)),
+    },
+  ];
+
   return (
     <ErpShell
       design="redwood"
@@ -223,59 +379,13 @@ export default function HakedisTrackingPage() {
                 Bu projede barter hareketi yok.
               </p>
             ) : (
-              <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                    <tr>
-                      <th className="px-3 py-2">Tarih</th>
-                      <th className="px-3 py-2">Tür</th>
-                      <th className="px-3 py-2">Açıklama</th>
-                      <th className="px-3 py-2 text-right">Tutar</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {barter.entries.map((entry) => (
-                      <tr key={entry.id} className="border-t border-slate-100">
-                        <td className="px-3 py-2">
-                          {new Date(entry.entryDate).toLocaleDateString("tr-TR")}
-                        </td>
-                        <td className="px-3 py-2">
-                          {entry.entryType === 0 ? (
-                            <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[11px] text-violet-800">
-                              kesinti — alacak doğdu
-                            </span>
-                          ) : (
-                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-800">
-                              teslim alındı — alacak düştü
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-slate-600">
-                          {entry.description}
-                          {entry.progressPaymentNumber ? (
-                            <span className="ml-1 text-xs text-slate-400">
-                              ({entry.progressPaymentNumber})
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          {money(entry.amount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-slate-200 bg-slate-50 font-medium">
-                      <td className="px-3 py-2" colSpan={3}>
-                        Açık barter alacağı
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {money(barter.openBalance)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+              <DataTable
+                rows={barter.entries}
+                columns={barterColumns}
+                rowKey={(row) => row.id}
+                title="Barter Defteri"
+                resetKey={projectId}
+              />
             )}
           </section>
 
@@ -287,65 +397,13 @@ export default function HakedisTrackingPage() {
                 Bu projede henüz hakediş yok.
               </p>
             ) : (
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[1100px] text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-                      <th className="py-2">Dönem</th>
-                      <th className="py-2">Tarih</th>
-                      <th className="py-2 text-right">Kümülatif İmalat</th>
-                      <th className="py-2 text-right">Açık İhzarat</th>
-                      <th className="py-2 text-right">Bu Hakediş</th>
-                      <th className="py-2 text-right">KDV</th>
-                      <th className="py-2 text-right">Tevkifat</th>
-                      <th className="py-2 text-right">Stopaj</th>
-                      <th className="py-2 text-right">Kesinti</th>
-                      <th className="py-2 text-right">Tahsil Edilecek</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tracking.periods.map((period) => (
-                      <tr key={period.id} className="border-b border-slate-100">
-                        <td className="py-2">
-                          <Link
-                            href={`/hakedis/${period.id}`}
-                            className="font-bold text-cyan-700 hover:underline"
-                          >
-                            {period.periodNumber}. {period.progressPaymentNumber}
-                          </Link>
-                        </td>
-                        <td className="py-2 text-slate-600">
-                          {new Date(period.progressPaymentDate).toLocaleDateString("tr-TR")}
-                        </td>
-                        <td className="py-2 text-right tabular-nums">
-                          {money(period.cumulativeWorkAmount)}
-                        </td>
-                        <td className="py-2 text-right tabular-nums">
-                          {money(period.cumulativeAdvanceMaterialAmount)}
-                        </td>
-                        <td className="py-2 text-right font-bold tabular-nums">
-                          {money(period.currentAmount)}
-                        </td>
-                        <td className="py-2 text-right tabular-nums">
-                          {money(period.vatAmount)}
-                        </td>
-                        <td className="py-2 text-right tabular-nums">
-                          {money(period.withholdingAmount)}
-                        </td>
-                        <td className="py-2 text-right tabular-nums">
-                          {money(period.incomeTaxWithholdingAmount)}
-                        </td>
-                        <td className="py-2 text-right tabular-nums">
-                          {money(period.totalDeductionAmount)}
-                        </td>
-                        <td className="py-2 text-right font-bold tabular-nums">
-                          {money(period.netPayableAmount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                rows={tracking.periods}
+                columns={periodColumns}
+                rowKey={(row) => row.id}
+                title="Hakediş Dönemleri"
+                resetKey={projectId}
+              />
             )}
           </section>
 
@@ -355,45 +413,13 @@ export default function HakedisTrackingPage() {
             <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-sm font-bold text-slate-900">Kesinti Geçmişi</h2>
 
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-                      <th className="py-2">Kesinti</th>
-                      {tracking.periods.map((period) => (
-                        <th key={period.id} className="py-2 text-right">
-                          {period.periodNumber}. dönem
-                        </th>
-                      ))}
-                      <th className="py-2 text-right">Toplam</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tracking.deductionTypes.map((type) => (
-                      <tr key={type.deductionType} className="border-b border-slate-100">
-                        <td className="py-2 text-slate-800">{type.name}</td>
-                        {tracking.periods.map((period) => {
-                          const line = period.deductions.find(
-                            (x) => x.deductionType === type.deductionType
-                          );
-
-                          return (
-                            <td
-                              key={period.id}
-                              className="py-2 text-right tabular-nums text-slate-600"
-                            >
-                              {line ? money(line.amount) : "-"}
-                            </td>
-                          );
-                        })}
-                        <td className="py-2 text-right font-bold tabular-nums">
-                          {money(type.totalAmount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                rows={tracking.deductionTypes}
+                columns={deductionColumns}
+                rowKey={(row) => String(row.deductionType)}
+                title="Kesinti Geçmişi"
+                resetKey={projectId}
+              />
             </section>
           )}
         </>

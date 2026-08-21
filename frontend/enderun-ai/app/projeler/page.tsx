@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, Drawer } from "@/components/ui";
 import { amount } from "@/lib/format/turkish";
@@ -79,6 +80,102 @@ export default function ProjectsPage() {
    * ya da kodu bilinen bir kaydı bulmanın yolu, listeyi gözle taramaktı.
    * Kod, ad, işveren, şube ve sözleşme no birlikte aranıyor.
    */
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4f). Eylem sütunu `actions` ve
+   * `editProject` üzerine kapandığı için dizi BELLEĞE ALINMIYOR
+   * (F4b desen kararı): bayat kapanış, düğmenin yanlış kayıt üzerinde
+   * çalışması demek olurdu.
+   */
+  const projectColumns: DataTableColumn<ProjectListItem>[] = [
+    { key: "kod", header: "Kod", value: (row) => row.code },
+    {
+      key: "proje",
+      header: "Proje",
+      value: (row) => `${row.name} — ${row.companyName}`,
+      render: (row) => (
+        <>
+          <strong>{row.name}</strong>
+          <small>{row.companyName}</small>
+        </>
+      ),
+    },
+    {
+      key: "statu",
+      header: "Statü",
+      value: (row) =>
+        (PROJECT_STATUS_LABELS[row.status] ?? "Bilinmiyor") +
+        (row.isArchived ? " (Arşiv)" : ""),
+      render: (row) => (
+        <>
+          <span
+            className={`erp-status ${
+              PROJECT_STATUS_BADGE_COLOR[row.status] ?? "gray"
+            }`}
+          >
+            {PROJECT_STATUS_LABELS[row.status] ?? "Bilinmiyor"}
+          </span>
+          {row.isArchived && (
+            <span className="erp-status gray" style={{ marginLeft: 4 }}>
+              Arşiv
+            </span>
+          )}
+        </>
+      ),
+    },
+    { key: "isveren", header: "İşveren", value: (row) => row.employerName || "—" },
+    { key: "sube", header: "Şube", value: (row) => row.branchName },
+    {
+      key: "sozlesme",
+      header: "Sözleşme",
+      numeric: true,
+      /*
+       * `toLocaleString` ondalık hane sayısını sabitlemiyordu:
+       * 1.500.000 ile 1.500.000,5 aynı sütunda yan yana çıkıyordu.
+       * Paylaşılan biçimleyici iki hane yazar.
+       */
+      value: (row) =>
+        row.contractAmount === null || row.contractAmount === undefined
+          ? "—"
+          : `${amount(row.contractAmount)} ${row.currencyCode}`,
+      render: (row) => (
+        <>
+          <span>
+            {row.contractAmount === null || row.contractAmount === undefined
+              ? "—"
+              : `${amount(row.contractAmount)} ${row.currencyCode}`}
+          </span>
+          <small>{row.contractNumber || "—"}</small>
+        </>
+      ),
+    },
+    {
+      key: "depo",
+      header: "Depo",
+      value: (row) => `${row.warehouseCount} depo`,
+      render: (row) => (
+        <span className="erp-status blue">{row.warehouseCount} depo</span>
+      ),
+    },
+    {
+      key: "islem",
+      header: "İşlem",
+      value: () => "",
+      render: (row) => (
+        <div className="erp-actions">
+          {actions.can("edit") && (
+            <button type="button" onClick={() => editProject(row.id)}>
+              Düzenle
+            </button>
+          )}
+
+          <Link className="erp-row-link" href={`/projeler/${row.id}`}>
+            Proje Merkezini Aç →
+          </Link>
+        </div>
+      ),
+    },
+  ];
+
   const visibleProjects = useMemo(
     () =>
       projects.filter((project) => {
@@ -771,89 +868,13 @@ export default function ProjectsPage() {
             <p>Arama metnini kısaltın ya da statü süzgecini temizleyin.</p>
           </div>
         ) : (
-          <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Kod</th>
-                  <th>Proje</th>
-                  <th>Statü</th>
-                  <th>İşveren</th>
-                  <th>Şube</th>
-                  <th className="num">Sözleşme</th>
-                  <th>Depo</th>
-                  <th>İşlem</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleProjects.map((project) => (
-                  <tr key={project.id}>
-                    <td>
-                      <strong>{project.code}</strong>
-                    </td>
-                    <td>
-                      <strong>{project.name}</strong>
-                      <small>{project.companyName}</small>
-                    </td>
-                    <td>
-                      <span
-                        className={`erp-status ${
-                          PROJECT_STATUS_BADGE_COLOR[project.status] ?? "gray"
-                        }`}
-                      >
-                        {PROJECT_STATUS_LABELS[project.status] ?? "Bilinmiyor"}
-                      </span>
-                      {project.isArchived && (
-                        <span className="erp-status gray" style={{ marginLeft: 4 }}>
-                          Arşiv
-                        </span>
-                      )}
-                    </td>
-                    <td>{project.employerName || "—"}</td>
-                    <td>{project.branchName}</td>
-                    <td className="num">
-                      {/*
-                        toLocaleString ondalık hane sayısını sabitlemiyordu:
-                        1.500.000 ile 1.500.000,5 aynı sütunda yan yana
-                        çıkıyordu. Paylaşılan biçimleyici iki hane yazar.
-                      */}
-                      <span>
-                        {project.contractAmount === null ||
-                        project.contractAmount === undefined
-                          ? "—"
-                          : `${amount(project.contractAmount)} ${project.currencyCode}`}
-                      </span>
-                      <small>{project.contractNumber || "—"}</small>
-                    </td>
-                    <td>
-                      <span className="erp-status blue">
-                        {project.warehouseCount} depo
-                      </span>
-                    </td>
-                    <td>
-                      <div className="erp-actions">
-                        {actions.can("edit") && (
-                          <button
-                            type="button"
-                            onClick={() => editProject(project.id)}
-                          >
-                            Düzenle
-                          </button>
-                        )}
-
-                        <Link
-                          className="erp-row-link"
-                          href={`/projeler/${project.id}`}
-                        >
-                          Proje Merkezini Aç →
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={visibleProjects}
+            columns={projectColumns}
+            rowKey={(row) => row.id}
+            title="Projeler"
+            resetKey={`${search}|${statusFilter}|${includeArchived}`}
+          />
         )}
       </div>
     </ErpShell>

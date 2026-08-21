@@ -40,6 +40,7 @@ import {
 } from "@/services/stock-level.service";
 
 import { projectService, type ProjectListItem } from "@/services/project.service";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 
 function formatNumber(value: number): string {
   return amount(value);
@@ -165,7 +166,6 @@ export default function InventoryOperationsPage() {
   const [warehouses, setWarehouses] = useState<SelectOption[]>([]);
 
   /** Liste 20 satırda sessizce kesiliyordu; artık sayfalanıyor. */
-  const [visibleCount, setVisibleCount] = useState(25);
 
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -243,7 +243,6 @@ export default function InventoryOperationsPage() {
         });
 
         setItems(data);
-        setVisibleCount(25);
       } catch (err) {
         setError(
           err instanceof Error
@@ -413,6 +412,193 @@ export default function InventoryOperationsPage() {
     () => new Set(criticalLevels.map((level) => level.inventoryItemId)),
     [criticalLevels],
   );
+
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4f). Eylem ve rozet taşıyan sütunlarda
+   * `value` ayrı veriliyor: dışa aktarmada "Kartı Aç" düğmesi değil
+   * kalemin kendisi yazmalı.
+   *
+   * BELLEĞE ALINMIYOR (F4b'deki desen kararı): sütunlar `criticalItemIds`
+   * ve `criticalLevels` üzerine kapanıyor; bağımlılıktan çıkarmak bayat
+   * kapanış demek olurdu.
+   */
+  const movementColumns: DataTableColumn<DashboardInventoryMovement>[] = [
+    {
+      key: "tarih",
+      header: "Tarih",
+      value: (row) => formatDateTime(row.movementDate),
+    },
+    {
+      key: "hareket",
+      header: "Hareket",
+      value: (row) => movementLabel(row.type),
+      render: (row) => (
+        <span
+          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${movementClass(
+            row.type,
+          )}`}
+        >
+          {movementLabel(row.type)}
+        </span>
+      ),
+    },
+    {
+      key: "malzeme",
+      header: "Malzeme",
+      value: (row) => `${row.itemCode} — ${row.itemName}`,
+      render: (row) => (
+        <>
+          <strong className="block text-slate-900">{row.itemName}</strong>
+          <span className="mt-1 block text-xs text-slate-500">{row.itemCode}</span>
+        </>
+      ),
+    },
+    { key: "depo", header: "Depo", value: (row) => row.warehouseName },
+    { key: "proje", header: "Proje", value: (row) => row.projectName || "—" },
+    {
+      key: "miktar",
+      header: "Miktar",
+      numeric: true,
+      value: (row) => formatNumber(row.quantity),
+    },
+    { key: "referans", header: "Referans", value: (row) => row.referenceNumber },
+  ];
+
+  const itemColumns: DataTableColumn<InventoryItemListItem>[] = [
+    { key: "kod", header: "Kod", value: (row) => row.code },
+    {
+      key: "malzeme",
+      header: "Malzeme",
+      value: (row) =>
+        [row.name, row.brand, row.model].filter(Boolean).join(" · "),
+      render: (row) => (
+        <div className="flex items-center gap-3">
+          {row.coverPhotoId && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={inventoryService.photoUrl(row.coverPhotoId)}
+              alt=""
+              className="h-10 w-10 shrink-0 rounded object-cover"
+            />
+          )}
+
+          <div className="min-w-0">
+            <div className="font-medium text-slate-900">{row.name}</div>
+
+            <div className="text-xs text-slate-500">
+              {[row.brand, row.model].filter(Boolean).join(" · ") ||
+                "Marka/model belirtilmedi"}
+            </div>
+
+            {row.projectName && (
+              <div className="text-xs text-amber-700">
+                {row.projectName} projesine bağlı
+              </div>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    { key: "kategori", header: "Kategori", value: (row) => row.category || "—" },
+    { key: "tip", header: "Tip", value: (row) => typeLabel(row.type) },
+    {
+      key: "stok",
+      header: "Toplam Stok",
+      numeric: true,
+      value: (row) => `${formatNumber(row.totalStock)} ${row.unit}`,
+    },
+    {
+      key: "asgari",
+      header: "Asgari Takip",
+      numeric: true,
+      value: (row) => {
+        const levels = criticalLevels.filter(
+          (level) => level.inventoryItemId === row.id,
+        );
+
+        return levels.length === 0
+          ? "—"
+          : levels
+              .map(
+                (level) =>
+                  `${level.warehouseCode || level.warehouseName}: ` +
+                  `${formatNumber(level.currentQuantity)} / ` +
+                  `${formatNumber(level.minimumQuantity)}`,
+              )
+              .join(" · ");
+      },
+      render: (row) => {
+        const levels = criticalLevels.filter(
+          (level) => level.inventoryItemId === row.id,
+        );
+
+        if (levels.length === 0)
+          return <span className="text-xs text-slate-400">—</span>;
+
+        return (
+          <>
+            {levels.map((level) => (
+              <div key={level.id} className="text-xs">
+                <span className="text-slate-500">
+                  {level.warehouseCode || level.warehouseName}:
+                </span>{" "}
+                <span className="font-medium text-amber-700">
+                  {formatNumber(level.currentQuantity)}
+                </span>
+                {" / "}
+                {formatNumber(level.minimumQuantity)}
+              </div>
+            ))}
+          </>
+        );
+      },
+    },
+    {
+      key: "deger",
+      header: "Stok Değeri",
+      numeric: true,
+      value: (row) => money(row.stockValue),
+      render: (row) => (
+        <>
+          {money(row.stockValue)}
+          <div className="text-xs text-slate-500">
+            birim {money(row.averageUnitCost)}
+          </div>
+        </>
+      ),
+      // TÜM satırlar üzerinden: görünen sayfanın toplamı yanıltırdı.
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.stockValue, 0)),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => (criticalItemIds.has(row.id) ? "Kritik" : "Normal"),
+      render: (row) => (
+        <span
+          className={
+            criticalItemIds.has(row.id)
+              ? "inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800"
+              : "inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800"
+          }
+        >
+          {criticalItemIds.has(row.id) ? "Kritik" : "Normal"}
+        </span>
+      ),
+    },
+    {
+      key: "ac",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <Link
+          href={`/depo-stok/malzeme/${row.id}`}
+          className="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Kartı Aç
+        </Link>
+      ),
+    },
+  ];
 
   return (
     <ErpShell
@@ -715,96 +901,22 @@ export default function InventoryOperationsPage() {
             </Link>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <TableHead>Tarih</TableHead>
-                  <TableHead>Hareket</TableHead>
-                  <TableHead>Malzeme</TableHead>
-                  <TableHead>Depo</TableHead>
-                  <TableHead>Proje</TableHead>
-                  <TableHead right>Miktar</TableHead>
-                  <TableHead>Referans</TableHead>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-10 text-center text-slate-500"
-                    >
-                      Stok hareketleri yükleniyor...
-                    </td>
-                  </tr>
-                ) : recentMovements.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-10 text-center text-slate-500"
-                    >
-                      Henüz stok hareketi bulunmuyor.
-                    </td>
-                  </tr>
-                ) : (
-                  recentMovements.map((movement) => (
-                    <tr
-                      key={movement.id}
-                      className="hover:bg-slate-50"
-                    >
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDateTime(
-                          movement.movementDate,
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${movementClass(
-                            movement.type,
-                          )}`}
-                        >
-                          {movementLabel(
-                            movement.type,
-                          )}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <strong className="block text-slate-900">
-                          {movement.itemName}
-                        </strong>
-
-                        <span className="mt-1 block text-xs text-slate-500">
-                          {movement.itemCode}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 text-slate-700">
-                        {movement.warehouseName}
-                      </td>
-
-                      <td className="px-4 py-3 text-slate-700">
-                        {movement.projectName || "—"}
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3 text-right font-medium text-slate-900">
-                        {formatNumber(
-                          movement.quantity,
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3 text-slate-600">
-                        {movement.referenceNumber}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          {loading ? (
+            <p className="px-5 py-10 text-center text-slate-500">
+              Stok hareketleri yükleniyor...
+            </p>
+          ) : recentMovements.length === 0 ? (
+            <p className="px-5 py-10 text-center text-slate-500">
+              Henüz stok hareketi bulunmuyor.
+            </p>
+          ) : (
+            <DataTable
+              rows={recentMovements}
+              columns={movementColumns}
+              rowKey={(row) => row.id}
+              title="Son Stok Hareketleri"
+            />
+          )}
         </section>
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -922,207 +1034,31 @@ export default function InventoryOperationsPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <TableHead>Kod</TableHead>
-                  <TableHead>Malzeme</TableHead>
-                  <TableHead>Kategori</TableHead>
-                  <TableHead>Tip</TableHead>
-                  <TableHead right>
-                    Toplam Stok
-                  </TableHead>
-                  <TableHead right>
-                    Kullanılabilir
-                  </TableHead>
-                  <TableHead right>
-                    Asgari Takip
-                  </TableHead>
-                  <TableHead right>
-                    Stok Değeri
-                  </TableHead>
-                  <TableHead>Durum</TableHead>
-                  <TableHead>{""}</TableHead>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100">
-                {loadingItems ? (
-                  <tr>
-                    <td
-                      colSpan={10}
-                      className="px-4 py-10 text-center text-slate-500"
-                    >
-                      Malzeme kartları yükleniyor...
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={10}
-                      className="px-4 py-10 text-center text-slate-500"
-                    >
-                      Kayıt bulunamadı.
-                    </td>
-                  </tr>
-                ) : (
-                  items.slice(0, visibleCount).map((item) => {
-                    // Kritiklik depo seviyesinden geliyor (S8): seviye
-                    // tanımlı olmayan kart kritik olamaz — takip
-                    // edilmeyen bir kalemin eşiği de yoktur.
-                    const critical = criticalItemIds.has(item.id);
-
-                    const itemLevels = criticalLevels.filter(
-                      (level) => level.inventoryItemId === item.id,
-                    );
-
-                    return (
-                      <tr
-                        key={item.id}
-                        className="hover:bg-slate-50"
-                      >
-                        <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-950">
-                          {item.code}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            {/*
-                              * KAPAK GÖRSELİ: dekoratif ve özel imalat
-                              * ürünlerde ad tek başına hangi ürün olduğunu
-                              * söylemiyor. Görseli olmayan kartta yer
-                              * tutucu da basılmıyor — satır şişerdi.
-                              */}
-                            {item.coverPhotoId && (
-                              /* eslint-disable-next-line @next/next/no-img-element */
-                              <img
-                                src={inventoryService.photoUrl(item.coverPhotoId)}
-                                alt=""
-                                className="h-10 w-10 shrink-0 rounded object-cover"
-                              />
-                            )}
-
-                            <div className="min-w-0">
-                              <div className="font-medium text-slate-900">
-                                {item.name}
-                              </div>
-
-                              <div className="text-xs text-slate-500">
-                                {[item.brand, item.model]
-                                  .filter(Boolean)
-                                  .join(" · ") ||
-                                  "Marka/model belirtilmedi"}
-                              </div>
-
-                              {item.projectName && (
-                                <div className="text-xs text-amber-700">
-                                  {item.projectName} projesine bağlı
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-3 text-slate-600">
-                          {item.category || "—"}
-                        </td>
-
-                        <td className="px-4 py-3 text-slate-600">
-                          {typeLabel(item.type)}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 text-right font-medium text-slate-900">
-                          {formatNumber(
-                            item.totalStock,
-                          )}{" "}
-                          {item.unit}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
-                          {formatNumber(
-                            item.totalStock,
-                          )}{" "}
-                          {item.unit}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
-                          {itemLevels.length === 0 ? (
-                            <span className="text-xs text-slate-400">—</span>
-                          ) : (
-                            itemLevels.map((level) => (
-                              <div key={level.id} className="text-xs">
-                                <span className="text-slate-500">
-                                  {level.warehouseCode || level.warehouseName}:
-                                </span>{" "}
-                                <span className="font-medium text-amber-700">
-                                  {formatNumber(level.currentQuantity)}
-                                </span>
-                                {" / "}
-                                {formatNumber(level.minimumQuantity)}
-                              </div>
-                            ))
-                          )}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
-                          {money(item.stockValue)}
-                          <div className="text-xs text-slate-500">
-                            birim {money(item.averageUnitCost)}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <span
-                            className={
-                              critical
-                                ? "inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800"
-                                : "inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800"
-                            }
-                          >
-                            {critical
-                              ? "Kritik"
-                              : "Normal"}
-                          </span>
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 text-right">
-                          <Link
-                            href={`/depo-stok/malzeme/${item.id}`}
-                            className="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                          >
-                            Kartı Aç
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {items.length > 0 ? (
-            <div className="flex flex-col items-center gap-2 border-t border-slate-200 px-5 py-3 text-sm text-slate-500 sm:flex-row sm:justify-between">
-              <span>
-                {Math.min(visibleCount, items.length)} / {items.length} malzeme
-                {" · "}
-                Toplam stok değeri: {money(
-                  items.reduce((sum, item) => sum + item.stockValue, 0),
-                )}
-              </span>
-
-              {items.length > visibleCount ? (
-                <button
-                  type="button"
-                  onClick={() => setVisibleCount((current) => current + 25)}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Daha fazla göster
-                </button>
-              ) : null}
-            </div>
-          ) : null}
+          {loadingItems ? (
+            <p className="px-5 py-10 text-center text-slate-500">
+              Malzeme kartları yükleniyor...
+            </p>
+          ) : items.length === 0 ? (
+            <p className="px-5 py-10 text-center text-slate-500">
+              Kayıt bulunamadı.
+            </p>
+          ) : (
+            /*
+             * ELLE YAZILMIŞ "Daha fazla göster" SAYFALAMASI KALDIRILDI
+             * (F4f). Bileşen gerçek sayfalama, dışa aktarma ve yazdırma
+             * getiriyor. Toplam stok değeri artık ALT TOPLAM sütununda:
+             * istemci kipinde bileşen TÜM satırları geçiriyor, yani
+             * "Toplam" etiketi görünen sayfayı değil listenin tamamını
+             * topluyor — bu programın baştan beri kovaladığı hata.
+             */
+            <DataTable
+              rows={items}
+              columns={itemColumns}
+              rowKey={(row) => row.id}
+              title="Malzeme Kartları"
+              resetKey={`${appliedSearch}|${category}|${warehouseId}|${projectId}|${criticalOnly}`}
+            />
+          )}
         </section>
       </div>
     </ErpShell>
@@ -1253,20 +1189,7 @@ function EmptyRow({
  * /depo-stok/stok-seviyeleri
  */
 
-function TableHead({
-  children,
-  right = false,
-}: {
-  children: React.ReactNode;
-  right?: boolean;
-}) {
-  return (
-    <th
-      className={`whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-600 ${
-        right ? "text-right" : "text-left"
-      }`}
-    >
-      {children}
-    </th>
-  );
-}
+/*
+ * `TableHead` KALDIRILDI (F4f): tablo başlıkları artık `DataTable`
+ * sütun tanımlarından geliyor.
+ */

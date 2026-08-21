@@ -7,6 +7,7 @@ import ErpShell from "@/components/erp/erp-shell";
 import { currencyMoney } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { Button } from "@/components/ui";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   companyService,
@@ -420,6 +421,76 @@ export default function SubcontractorsPage() {
     }
   }
 
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4f). "Kapsam" sütunu satır başına
+   * hesaplanıyor (bizde olan işler); `value` de aynı hesabı kullanıyor
+   * ki dışa aktarma ekranla aynı şeyi yazsın.
+   *
+   * Eylem sütunu `actions` ve `openEdit` üzerine kapandığı için dizi
+   * belleğe ALINMIYOR (F4b desen kararı).
+   */
+  const contractColumns: DataTableColumn<SubcontractorContractListItem>[] = [
+    { key: "no", header: "Sözleşme No", value: (row) => row.contractNumber },
+    { key: "taseron", header: "Taşeron", value: (row) => row.subcontractorTitle },
+    {
+      key: "proje",
+      header: "Proje / Şantiye",
+      value: (row) =>
+        row.projectSiteName ? `${row.projectName} — ${row.projectSiteName}` : row.projectName,
+      render: (row) => (
+        <>
+          {row.projectName}
+          {row.projectSiteName && (
+            <div style={{ fontSize: 12, color: "var(--erp-muted)" }}>
+              {row.projectSiteName}
+            </div>
+          )}
+        </>
+      ),
+    },
+    { key: "is", header: "İş Tanımı", value: (row) => row.workDescription },
+    { key: "tip", header: "Tip", value: (row) => row.contractTypeName },
+    {
+      key: "bedel",
+      header: "Bedel",
+      numeric: true,
+      value: (row) => money(row.contractAmount, row.currencyCode),
+    },
+    {
+      key: "kapsam",
+      header: "Kapsam",
+      value: (row) => {
+        const ours = scopeFields
+          .filter((field) => row[field.key] === SubcontractorResponsibility.Us)
+          .map((field) => field.label);
+
+        return ours.length === 0 ? "tamamı taşeronda" : `bizde: ${ours.join(", ")}`;
+      },
+    },
+    { key: "durum", header: "Durum", value: (row) => row.statusName },
+    {
+      key: "islem",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <div style={{ display: "flex", gap: 6 }}>
+          <Link href={`/taseronlar/${row.id}`} style={linkButton}>
+            Aç
+          </Link>
+          {actions.can("manage") && (
+            <button
+              type="button"
+              onClick={() => void openEdit(row.id)}
+              style={smallButton}
+            >
+              Düzenle
+            </button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   if (denied) {
     return (
       <ErpShell design="redwood" title="Taşeronlar">
@@ -474,91 +545,18 @@ export default function SubcontractorsPage() {
         {notice && <div style={{ ...box, color: "var(--color-semantic-success)" }}>{notice}</div>}
 
         <section style={{ ...card, padding: 0, overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
-            <thead>
-              <tr style={{ background: "var(--erp-bg)" }}>
-                {[
-                  "Sözleşme No",
-                  "Taşeron",
-                  "Proje / Şantiye",
-                  "İş Tanımı",
-                  "Tip",
-                  "Bedel",
-                  "Kapsam",
-                  "Durum",
-                  "",
-                ].map((title) => (
-                  <th key={title} style={th}>
-                    {title}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {!loading && items.length === 0 && (
-                <tr>
-                  <td colSpan={9} style={{ ...td, textAlign: "center", color: "var(--erp-muted)" }}>
-                    Taşeron sözleşmesi bulunamadı.
-                  </td>
-                </tr>
-              )}
-
-              {items.map((item) => {
-                const ours = scopeFields
-                  .filter(
-                    (field) =>
-                      item[field.key] === SubcontractorResponsibility.Us
-                  )
-                  .map((field) => field.label);
-
-                return (
-                  <tr key={item.id}>
-                    <td style={td}>
-                      <strong>{item.contractNumber}</strong>
-                    </td>
-                    <td style={td}>{item.subcontractorTitle}</td>
-                    <td style={td}>
-                      {item.projectName}
-                      {item.projectSiteName && (
-                        <div style={{ fontSize: 12, color: "var(--erp-muted)" }}>
-                          {item.projectSiteName}
-                        </div>
-                      )}
-                    </td>
-                    <td style={td}>{item.workDescription}</td>
-                    <td style={td}>{item.contractTypeName}</td>
-                    <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>
-                      {money(item.contractAmount, item.currencyCode)}
-                    </td>
-                    <td style={td}>
-                      {ours.length === 0 ? (
-                        <span style={{ color: "var(--erp-muted)" }}>tamamı taşeronda</span>
-                      ) : (
-                        <span>bizde: {ours.join(", ")}</span>
-                      )}
-                    </td>
-                    <td style={td}>{item.statusName}</td>
-                    <td style={td}>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <Link href={`/taseronlar/${item.id}`} style={linkButton}>
-                          Aç
-                        </Link>
-                        {actions.can("manage") && (
-                          <button
-                            type="button"
-                            onClick={() => void openEdit(item.id)}
-                            style={smallButton}
-                          >
-                            Düzenle
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {!loading && items.length === 0 ? (
+            <p style={{ textAlign: "center", color: "var(--erp-muted)" }}>
+              Taşeron sözleşmesi bulunamadı.
+            </p>
+          ) : (
+            <DataTable
+              rows={items}
+              columns={contractColumns}
+              rowKey={(row) => row.id}
+              title="Taşeron Sözleşmeleri"
+            />
+          )}
         </section>
 
         {formOpen && (
