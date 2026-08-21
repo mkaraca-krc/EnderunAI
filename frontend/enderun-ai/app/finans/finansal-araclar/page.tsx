@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { money } from "@/lib/format/turkish";
 import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
@@ -877,65 +878,102 @@ function LoansView({
           </div>
 
           {openLoanId === loan.id ? (
-            <div className="overflow-x-auto border-t border-slate-100">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">#</th>
-                    <th className="px-3 py-2">Vade</th>
-                    <th className="px-3 py-2 text-right">Anapara</th>
-                    <th className="px-3 py-2 text-right">Faiz</th>
-                    <th className="px-3 py-2 text-right">Taksit</th>
-                    <th className="px-3 py-2">Durum</th>
-                    {canEdit ? <th className="px-3 py-2" /> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {installments.map((installment) => (
-                    <tr key={installment.id} className="border-t border-slate-100">
-                      <td className="px-3 py-2">{installment.number}</td>
-                      <td className="px-3 py-2">
-                        {dateFormat.format(new Date(installment.dueDate))}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {money(installment.principalAmount)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {money(installment.interestAmount)}
-                      </td>
-                      <td className="px-3 py-2 text-right font-medium tabular-nums">
-                        {money(installment.totalAmount)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {installment.isPaid ? (
-                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-800">
-                            ödendi
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-500">bekliyor</span>
-                        )}
-                      </td>
-                      {canEdit ? (
-                        <td className="px-3 py-2 text-right">
-                          <button
-                            type="button"
-                            onClick={() => onEditInstallment(installment)}
-                            className="text-xs text-slate-700 hover:underline"
-                          >
-                            Düzelt
-                          </button>
-                        </td>
-                      ) : null}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="border-t border-slate-100">
+              <DataTable
+                rows={installments}
+                columns={installmentColumns(canEdit, onEditInstallment)}
+                rowKey={(row) => row.id}
+                title="Kredi Taksit Planı"
+                /*
+                 * Açılan kredi değişince sayfa 1'e döner. Sekme
+                 * değişiminde alt bileşen zaten yeniden bağlanıyor;
+                 * asıl gereken yer burası — 60 taksitlik bir planın
+                 * 3. sayfasındayken başka krediyi açmak, kullanıcıyı
+                 * yeni planın ortasında bırakırdı.
+                 */
+                resetKey={loan.id}
+              />
             </div>
           ) : null}
         </div>
       ))}
     </div>
   );
+}
+
+/*
+ * TAKSİT SÜTUNLARI FONKSİYON: yetki ve düzenleme işleyicisi PARAMETRE
+ * olarak geliyor. Modül düzeyinde sabit bir dizi olsaydı işleyiciyi
+ * kapanışa almak gerekirdi ve o da bayat kapanış demekti — düğme eski
+ * durumu görüp yanlış taksit üzerinde çalışabilirdi (F4b desen kararı).
+ */
+function installmentColumns(
+  canEdit: boolean,
+  onEditInstallment: (installment: BankLoanInstallment) => void
+): DataTableColumn<BankLoanInstallment>[] {
+  const columns: DataTableColumn<BankLoanInstallment>[] = [
+    { key: "no", header: "#", value: (row) => row.number },
+    {
+      key: "vade",
+      header: "Vade",
+      value: (row) => dateFormat.format(new Date(row.dueDate)),
+    },
+    {
+      key: "anapara",
+      header: "Anapara",
+      numeric: true,
+      value: (row) => money(row.principalAmount),
+      footer: (rows) =>
+        money(rows.reduce((sum, row) => sum + row.principalAmount, 0)),
+    },
+    {
+      key: "faiz",
+      header: "Faiz",
+      numeric: true,
+      value: (row) => money(row.interestAmount),
+      footer: (rows) =>
+        money(rows.reduce((sum, row) => sum + row.interestAmount, 0)),
+    },
+    {
+      key: "taksit",
+      header: "Taksit",
+      numeric: true,
+      value: (row) => money(row.totalAmount),
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.totalAmount, 0)),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => (row.isPaid ? "ödendi" : "bekliyor"),
+      render: (row) =>
+        row.isPaid ? (
+          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-800">
+            ödendi
+          </span>
+        ) : (
+          <span className="text-xs text-slate-500">bekliyor</span>
+        ),
+    },
+  ];
+
+  if (canEdit) {
+    columns.push({
+      key: "duzelt",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => onEditInstallment(row)}
+          className="text-xs text-slate-700 hover:underline"
+        >
+          Düzelt
+        </button>
+      ),
+    });
+  }
+
+  return columns;
 }
 
 function CardsView({
@@ -945,6 +983,100 @@ function CardsView({
   cards: CreditCard[];
   statements: CreditCardStatement[];
 }) {
+  const cardColumns: DataTableColumn<CreditCard>[] = [
+    {
+      key: "kart",
+      header: "Kart",
+      value: (row) =>
+        row.lastFourDigits ? `${row.name} ···· ${row.lastFourDigits}` : row.name,
+      render: (row) => (
+        <>
+          {row.name}
+          {row.lastFourDigits ? (
+            <span className="ml-1 text-xs text-slate-400">
+              ···· {row.lastFourDigits}
+            </span>
+          ) : null}
+        </>
+      ),
+    },
+    { key: "banka", header: "Banka", value: (row) => row.bankName ?? "—" },
+    {
+      key: "sahibi",
+      header: "Sahibi",
+      value: (row) =>
+        row.ownership === "Personal"
+          ? `şahıs · ${row.partnerName ?? "—"}`
+          : "Şirket",
+      render: (row) =>
+        row.ownership === "Personal" ? (
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+            şahıs · {row.partnerName ?? "—"}
+          </span>
+        ) : (
+          "Şirket"
+        ),
+    },
+    {
+      key: "kesim",
+      header: "Kesim / Son ödeme",
+      value: (row) => `Ayın ${row.statementDay}'i / ${row.dueDay}'i`,
+    },
+  ];
+
+  const statementColumns: DataTableColumn<CreditCardStatement>[] = [
+    { key: "kart", header: "Kart", value: (row) => row.cardName },
+    {
+      key: "donem",
+      header: "Dönem",
+      value: (row) =>
+        `${dateFormat.format(new Date(row.periodStart))} – ` +
+        `${dateFormat.format(new Date(row.periodEnd))} (${row.itemCount} harcama)`,
+      render: (row) => (
+        <>
+          {dateFormat.format(new Date(row.periodStart))} –{" "}
+          {dateFormat.format(new Date(row.periodEnd))}
+          <span className="ml-1 text-xs text-slate-400">
+            ({row.itemCount} harcama)
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "vade",
+      header: "Son ödeme",
+      value: (row) => dateFormat.format(new Date(row.dueDate)),
+    },
+    {
+      key: "borc",
+      header: "Dönem borcu",
+      numeric: true,
+      value: (row) => money(row.amount),
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.amount, 0)),
+    },
+    {
+      key: "nakit",
+      header: "Nakit etkisi",
+      /*
+       * ŞAHIS KARTI ŞİRKET NAKDİNİ ÇIKARMAZ. Dışa aktarmada da bu ayrım
+       * görünmeli: nakit akış tahminine giren ile girmeyen aynı sütunda
+       * duruyor ve karışırsa tahmin şişer.
+       */
+      value: (row) =>
+        row.producesCashOutflow
+          ? "nakit akışta çıkış"
+          : "şahıs ödüyor — şirket nakdi çıkmaz",
+      render: (row) =>
+        row.producesCashOutflow ? (
+          <span className="text-xs text-slate-600">nakit akışta çıkış</span>
+        ) : (
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+            şahıs ödüyor — şirket nakdi çıkmaz
+          </span>
+        ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -958,43 +1090,12 @@ function CardsView({
             girilir, nakit çıkışı ekstre gününde görünür.
           </p>
         ) : (
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Kart</th>
-                <th className="px-3 py-2">Banka</th>
-                <th className="px-3 py-2">Sahibi</th>
-                <th className="px-3 py-2">Kesim / Son ödeme</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cards.map((card) => (
-                <tr key={card.id} className="border-t border-slate-100">
-                  <td className="px-3 py-2">
-                    {card.name}
-                    {card.lastFourDigits ? (
-                      <span className="ml-1 text-xs text-slate-400">
-                        ···· {card.lastFourDigits}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2 text-slate-600">{card.bankName ?? "—"}</td>
-                  <td className="px-3 py-2">
-                    {card.ownership === "Personal" ? (
-                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
-                        şahıs · {card.partnerName ?? "—"}
-                      </span>
-                    ) : (
-                      "Şirket"
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-slate-600">
-                    Ayın {card.statementDay}&apos;i / {card.dueDay}&apos;i
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            rows={cards}
+            columns={cardColumns}
+            rowKey={(row) => row.id}
+            title="Kredi Kartları"
+          />
         )}
       </div>
 
@@ -1008,51 +1109,12 @@ function CardsView({
             Bu dönemde kart harcaması yok.
           </p>
         ) : (
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Kart</th>
-                <th className="px-3 py-2">Dönem</th>
-                <th className="px-3 py-2">Son ödeme</th>
-                <th className="px-3 py-2 text-right">Dönem borcu</th>
-                <th className="px-3 py-2">Nakit etkisi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {statements.map((statement) => (
-                <tr
-                  key={`${statement.creditCardId}-${statement.periodEnd}`}
-                  className="border-t border-slate-100"
-                >
-                  <td className="px-3 py-2">{statement.cardName}</td>
-                  <td className="px-3 py-2 text-slate-600">
-                    {dateFormat.format(new Date(statement.periodStart))} –{" "}
-                    {dateFormat.format(new Date(statement.periodEnd))}
-                    <span className="ml-1 text-xs text-slate-400">
-                      ({statement.itemCount} harcama)
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    {dateFormat.format(new Date(statement.dueDate))}
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium tabular-nums">
-                    {money(statement.amount)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {statement.producesCashOutflow ? (
-                      <span className="text-xs text-slate-600">
-                        nakit akışta çıkış
-                      </span>
-                    ) : (
-                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
-                        şahıs ödüyor — şirket nakdi çıkmaz
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            rows={statements}
+            columns={statementColumns}
+            rowKey={(row) => `${row.creditCardId}-${row.periodEnd}`}
+            title="Kredi Kartı Ekstreleri"
+          />
         )}
       </div>
     </div>

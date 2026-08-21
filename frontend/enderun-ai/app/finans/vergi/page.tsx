@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog, Modal } from "@/components/ui";
 import { money, moneyWhole } from "@/lib/format/turkish";
@@ -243,6 +244,248 @@ export default function TaxPage() {
     }
   }
 
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4g).
+   *
+   * VERGİ TAKVİMİ TEK DİZİ: ekran daha önce aynı `tbody` içinde iki
+   * ayrı küme basıyordu (bekleyenler + isteğe bağlı ödenenler). Bileşen
+   * tek dizi alıyor; ayrım zaten satırdaki `isPaid` alanında olduğu için
+   * ayırt edici bir alan uydurmaya gerek kalmadı.
+   */
+  const calendarRows = showPaid ? [...upcoming, ...paid] : upcoming;
+
+  const calendarColumns: DataTableColumn<TaxObligation>[] = [
+    { key: "tur", header: "Tür", value: (row) => row.kindName },
+    { key: "donem", header: "Dönem", value: (row) => row.periodLabel },
+    {
+      key: "vade",
+      header: "Vade",
+      value: (row) => dateFormat.format(new Date(row.dueDate)),
+    },
+    {
+      key: "tutar",
+      header: "Tahmini tutar",
+      numeric: true,
+      value: (row) => money(row.estimatedAmount),
+      render: (row) => <strong>{money(row.estimatedAmount)}</strong>,
+      // Alt toplam TÜM satırlar üzerinden: görünen sayfa yanıltırdı.
+      footer: (rows) =>
+        money(rows.reduce((sum, row) => sum + row.estimatedAmount, 0)),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) =>
+        row.isPaid ? "Ödendi" : row.isOverdue ? "Gecikti" : "Bekliyor",
+      render: (row) =>
+        row.isPaid ? (
+          <span className="erp-status green">Ödendi</span>
+        ) : (
+          <span className={`erp-status ${row.isOverdue ? "red" : "yellow"}`}>
+            {row.isOverdue ? "Gecikti" : "Bekliyor"}
+          </span>
+        ),
+    },
+    {
+      key: "islem",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <div className="erp-actions">
+          {row.isPaid
+            ? actions.can("delete") && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setUndoingItem(row)}
+                >
+                  Geri Al
+                </button>
+              )
+            : actions.can("edit") && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => requestMarkPaid(row)}
+                >
+                  Ödendi
+                </button>
+              )}
+        </div>
+      ),
+    },
+  ];
+
+  const vatColumns: DataTableColumn<(typeof vatRows)[number]>[] = [
+    { key: "donem", header: "Dönem", value: (row) => row.label },
+    {
+      key: "hesaplanan",
+      header: "Hesaplanan",
+      numeric: true,
+      value: (row) => moneyWhole(row.outputVat),
+    },
+    {
+      key: "indirilecek",
+      header: "İndirilecek",
+      numeric: true,
+      value: (row) => moneyWhole(row.inputVat),
+    },
+    {
+      key: "devreden-onceki",
+      header: "Devreden (önceki)",
+      numeric: true,
+      value: (row) => moneyWhole(row.carryForwardIn),
+    },
+    {
+      key: "odenecek",
+      header: "Ödenecek",
+      numeric: true,
+      value: (row) => moneyWhole(row.payableVat),
+      /*
+       * Ham hex yerine anlamsal sınıf: ödenecek KDV "dikkat",
+       * devreden KDV "iyi haber". Renk tokenlardan geliyor ki marka
+       * rengi değiştiğinde bu iki hücre geride kalmasın.
+       */
+      render: (row) => (
+        <strong className={row.payableVat > 0 ? "rw-value-danger" : ""}>
+          {moneyWhole(row.payableVat)}
+        </strong>
+      ),
+      footer: (rows) =>
+        moneyWhole(rows.reduce((sum, row) => sum + row.payableVat, 0)),
+    },
+    {
+      key: "devreden-sonraki",
+      header: "Devreden (sonraki)",
+      numeric: true,
+      value: (row) => moneyWhole(row.carryForwardOut),
+      render: (row) => (
+        <span className={row.carryForwardOut > 0 ? "rw-value-success" : ""}>
+          {moneyWhole(row.carryForwardOut)}
+        </span>
+      ),
+    },
+    {
+      key: "sorumlu",
+      header: "Sorumlu sıfatıyla",
+      numeric: true,
+      value: (row) =>
+        row.reverseChargeVat > 0 ? moneyWhole(row.reverseChargeVat) : "—",
+    },
+    {
+      key: "tahakkuk",
+      header: "Tahakkuk",
+      value: (row) => (row.isAccrued ? row.accrualVoucherNumber ?? "edildi" : "—"),
+      render: (row) =>
+        row.isAccrued ? (
+          <span className="erp-status green">{row.accrualVoucherNumber}</span>
+        ) : (
+          actions.can("manage") && (
+            <button
+              type="button"
+              className="erp-secondary-button"
+              disabled={saving}
+              onClick={() => void accrue(row.month)}
+            >
+              Fiş Kes
+            </button>
+          )
+        ),
+    },
+  ];
+
+  const payrollColumns: DataTableColumn<
+    NonNullable<TaxOverview>["payroll"][number]
+  >[] = [
+    { key: "donem", header: "Dönem", value: (row) => row.label },
+    {
+      key: "personel",
+      header: "Personel",
+      numeric: true,
+      value: (row) => row.personnelCount,
+    },
+    {
+      key: "gelir",
+      header: "Gelir vergisi",
+      numeric: true,
+      value: (row) => moneyWhole(row.incomeTaxWithholding),
+    },
+    {
+      key: "damga",
+      header: "Damga",
+      numeric: true,
+      value: (row) => moneyWhole(row.stampTax),
+    },
+    {
+      key: "sgk",
+      header: "SGK (işçi+işveren)",
+      numeric: true,
+      value: (row) => moneyWhole(row.sgkTotal),
+    },
+    {
+      key: "toplam",
+      header: "Toplam",
+      numeric: true,
+      value: (row) => moneyWhole(row.totalBurden),
+      render: (row) => <strong>{moneyWhole(row.totalBurden)}</strong>,
+      footer: (rows) =>
+        moneyWhole(rows.reduce((sum, row) => sum + row.totalBurden, 0)),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => (row.isAccrued ? "Tahakkuk edildi" : "Tahakkuk edilmedi"),
+      render: (row) => (
+        <span className={`erp-status ${row.isAccrued ? "green" : "yellow"}`}>
+          {row.isAccrued ? "Tahakkuk edildi" : "Tahakkuk edilmedi"}
+        </span>
+      ),
+    },
+  ];
+
+  const advanceTaxColumns: DataTableColumn<
+    NonNullable<TaxOverview>["advanceTax"][number]
+  >[] = [
+    { key: "donem", header: "Dönem", value: (row) => row.label },
+    {
+      key: "gelir",
+      header: "Gelir",
+      numeric: true,
+      value: (row) => moneyWhole(row.revenue),
+    },
+    {
+      key: "gider",
+      header: "Gider",
+      numeric: true,
+      value: (row) => moneyWhole(row.expense),
+    },
+    {
+      key: "kar",
+      header: "Vergi öncesi kâr",
+      numeric: true,
+      value: (row) => moneyWhole(row.profitBeforeTax),
+      render: (row) => (
+        <span className={row.profitBeforeTax < 0 ? "rw-value-danger" : ""}>
+          {moneyWhole(row.profitBeforeTax)}
+        </span>
+      ),
+    },
+    {
+      key: "vergi",
+      header: "Tahmini vergi",
+      numeric: true,
+      value: (row) => moneyWhole(row.estimatedTax),
+      render: (row) => <strong>{moneyWhole(row.estimatedTax)}</strong>,
+      footer: (rows) =>
+        moneyWhole(rows.reduce((sum, row) => sum + row.estimatedTax, 0)),
+    },
+    {
+      key: "vade",
+      header: "Vade",
+      value: (row) => dateFormat.format(new Date(row.dueDate)),
+    },
+  ];
+
   return (
     <ErpShell
       design="redwood"
@@ -370,80 +613,15 @@ export default function TaxPage() {
               </div>
             ) : (
               <div className="erp-table-wrap">
-                <table className="erp-table">
-                  <thead>
-                    <tr>
-                      <th>Tür</th>
-                      <th>Dönem</th>
-                      <th>Vade</th>
-                      <th className="num">Tahmini tutar</th>
-                      <th>Durum</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {upcoming.map((item) => (
-                      <tr key={`${item.kind}-${item.periodYear}-${item.periodNumber}`}>
-                        <td>{item.kindName}</td>
-                        <td>{item.periodLabel}</td>
-                        <td>{dateFormat.format(new Date(item.dueDate))}</td>
-                        <td className="num">
-                          <strong>{money(item.estimatedAmount)}</strong>
-                        </td>
-                        <td>
-                          <span
-                            className={`erp-status ${item.isOverdue ? "red" : "yellow"}`}
-                          >
-                            {item.isOverdue ? "Gecikti" : "Bekliyor"}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="erp-actions">
-                            {actions.can("edit") && (
-                              <button
-                                type="button"
-                                disabled={saving}
-                                onClick={() => requestMarkPaid(item)}
-                              >
-                                Ödendi
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-
-                    {showPaid &&
-                      paid.map((item) => (
-                        <tr
-                          key={`odendi-${item.kind}-${item.periodYear}-${item.periodNumber}`}
-                        >
-                          <td>{item.kindName}</td>
-                          <td>{item.periodLabel}</td>
-                          <td>{dateFormat.format(new Date(item.dueDate))}</td>
-                          <td className="num">
-                            <strong>{money(item.estimatedAmount)}</strong>
-                          </td>
-                          <td>
-                            <span className="erp-status green">Ödendi</span>
-                          </td>
-                          <td>
-                            <div className="erp-actions">
-                              {actions.can("delete") && (
-                                <button
-                                  type="button"
-                                  disabled={saving}
-                                  onClick={() => setUndoingItem(item)}
-                                >
-                                  Geri Al
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
+                <DataTable
+                  rows={calendarRows}
+                  columns={calendarColumns}
+                  rowKey={(row) =>
+                    `${row.kind}-${row.periodYear}-${row.periodNumber}`
+                  }
+                  title="Vergi Takvimi"
+                  resetKey={`${companyId}|${year}|${showPaid}`}
+                />
               </div>
             )}
           </section>
@@ -465,73 +643,13 @@ export default function TaxPage() {
               </div>
             ) : (
               <div className="erp-table-wrap">
-                <table className="erp-table">
-                  <thead>
-                    <tr>
-                      <th>Dönem</th>
-                      <th>Hesaplanan</th>
-                      <th>İndirilecek</th>
-                      <th>Devreden (önceki)</th>
-                      <th>Ödenecek</th>
-                      <th>Devreden (sonraki)</th>
-                      <th>Sorumlu sıfatıyla</th>
-                      <th>Tahakkuk</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vatRows.map((row) => (
-                      <tr key={row.month}>
-                        <td>{row.label}</td>
-                        <td>{moneyWhole(row.outputVat)}</td>
-                        <td>{moneyWhole(row.inputVat)}</td>
-                        <td>{moneyWhole(row.carryForwardIn)}</td>
-                        {/*
-                          Ham hex yerine anlamsal sınıf: ödenecek KDV
-                          "dikkat", devreden KDV "iyi haber". Renk
-                          tokenlardan geliyor ki marka rengi
-                          değiştiğinde bu iki hücre geride kalmasın.
-                        */}
-                        <td className="num">
-                          <strong
-                            className={row.payableVat > 0 ? "rw-value-danger" : ""}
-                          >
-                            {moneyWhole(row.payableVat)}
-                          </strong>
-                        </td>
-                        <td
-                          className={`num ${
-                            row.carryForwardOut > 0 ? "rw-value-success" : ""
-                          }`}
-                        >
-                          {moneyWhole(row.carryForwardOut)}
-                        </td>
-                        <td>
-                          {row.reverseChargeVat > 0
-                            ? moneyWhole(row.reverseChargeVat)
-                            : "—"}
-                        </td>
-                        <td>
-                          {row.isAccrued ? (
-                            <span className="erp-status green">
-                              {row.accrualVoucherNumber}
-                            </span>
-                          ) : (
-                            actions.can("manage") && (
-                              <button
-                                type="button"
-                                className="erp-secondary-button"
-                                disabled={saving}
-                                onClick={() => void accrue(row.month)}
-                              >
-                                Fiş Kes
-                              </button>
-                            )
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <DataTable
+                  rows={vatRows}
+                  columns={vatColumns}
+                  rowKey={(row) => String(row.month)}
+                  title="Aylık KDV Netleştirme"
+                  resetKey={`${companyId}|${year}`}
+                />
               </div>
             )}
           </section>
@@ -553,40 +671,13 @@ export default function TaxPage() {
               </div>
             ) : (
               <div className="erp-table-wrap">
-                <table className="erp-table">
-                  <thead>
-                    <tr>
-                      <th>Dönem</th>
-                      <th>Personel</th>
-                      <th>Gelir vergisi</th>
-                      <th>Damga</th>
-                      <th>SGK (işçi+işveren)</th>
-                      <th>Toplam</th>
-                      <th>Durum</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {overview.payroll.map((row) => (
-                      <tr key={row.month}>
-                        <td>{row.label}</td>
-                        <td>{row.personnelCount}</td>
-                        <td>{moneyWhole(row.incomeTaxWithholding)}</td>
-                        <td>{moneyWhole(row.stampTax)}</td>
-                        <td>{moneyWhole(row.sgkTotal)}</td>
-                        <td>
-                          <strong>{moneyWhole(row.totalBurden)}</strong>
-                        </td>
-                        <td>
-                          <span
-                            className={`erp-status ${row.isAccrued ? "green" : "yellow"}`}
-                          >
-                            {row.isAccrued ? "Tahakkuk edildi" : "Tahakkuk edilmedi"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <DataTable
+                  rows={overview.payroll}
+                  columns={payrollColumns}
+                  rowKey={(row) => String(row.month)}
+                  title="Bordro Kaynaklı Yük"
+                  resetKey={`${companyId}|${year}`}
+                />
               </div>
             )}
           </section>
@@ -603,38 +694,13 @@ export default function TaxPage() {
             </div>
 
             <div className="erp-table-wrap">
-              <table className="erp-table">
-                <thead>
-                  <tr>
-                    <th>Dönem</th>
-                    <th>Gelir</th>
-                    <th>Gider</th>
-                    <th>Vergi öncesi kâr</th>
-                    <th>Tahmini vergi</th>
-                    <th>Ödeme tarihi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {overview.advanceTax.map((row) => (
-                    <tr key={row.quarter}>
-                      <td>{row.label}</td>
-                      <td className="num">{moneyWhole(row.revenue)}</td>
-                      <td className="num">{moneyWhole(row.expense)}</td>
-                      <td
-                        className={`num ${
-                          row.profitBeforeTax < 0 ? "rw-value-danger" : ""
-                        }`}
-                      >
-                        {moneyWhole(row.profitBeforeTax)}
-                      </td>
-                      <td className="num">
-                        <strong>{moneyWhole(row.estimatedTax)}</strong>
-                      </td>
-                      <td>{dateFormat.format(new Date(row.dueDate))}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <DataTable
+                rows={overview.advanceTax}
+                columns={advanceTaxColumns}
+                rowKey={(row) => String(row.quarter)}
+                title="Geçici Vergi Tahmini"
+                resetKey={`${companyId}|${year}`}
+              />
             </div>
           </section>
 
