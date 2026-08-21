@@ -197,6 +197,22 @@ public static class PermissionCatalog
         public const string FinanceEdit = "finance.edit";
         public const string FinanceDelete = "finance.delete";
 
+        // Çek — iki ayrı riski iki ayrı anahtara bağlıyoruz.
+        //
+        // ÇEK DÜZENLEME: yanlış giriş için ASIL yol. İptal, numarayı
+        // serbest bıraktığı ve muhasebeyi storno ile geri aldığı için
+        // düzeltmeye göre çok daha ağır bir işlem; "yanlış yazdım"
+        // vakası düzenleme ile çözülmeli.
+        public const string ChequeEdit = "cheque.edit";
+
+        // KAPANMIŞ ÇEK İPTALİ: tahsil edilmiş, ödenmiş, bankada,
+        // faktoringde, karşılıksız ya da iade alınmış çekin iptali.
+        // Portföydeki çeki iptal etmekle bunlar aynı şey değil:
+        // kapanmış bir çekin iptali gerçekleşmiş bir para hareketini
+        // geri alır VE numarayı yeniden kullanıma açar. Yanlış satıra
+        // tıklamak yetiyor, kötü niyet gerekmiyor.
+        public const string ChequeVoidClosed = "cheque.void-closed";
+
         // Cari
         public const string CurrentAccountsView = "current-accounts.view";
         public const string CurrentAccountsCreate = "current-accounts.create";
@@ -404,6 +420,15 @@ public static class PermissionCatalog
         new(Keys.VehicleManage, "Filo", "Araç yönetimi", "Araç kartı açar, günceller ve araçları projelere atar."),
         new(Keys.FinanceEdit, "Finans", "Finans kaydı düzenleme", "Finans kaydını günceller."),
         new(Keys.FinanceDelete, "Finans", "Finans kaydı silme", "Finans kaydını siler."),
+
+        // ÇEK — iki hassas yetki. Tanım listesine de girmeleri ŞART:
+        // tohumlayıcı izin satırlarını buradan üretiyor ve "tüm
+        // yetkiler" kısayolu da bu listeyi okuyor. Yalnız `Keys`e
+        // eklenirse anahtar kodda var ama sistemde YOK olur.
+        new(Keys.ChequeEdit, "Finans", "Çek düzenleme",
+            "Portföydeki/yeni verilen çekin alanlarını düzeltir; tutar, para birimi ya da cari değişirse muhasebe fişi ters kayıtla kapatılıp yenisi kesilir."),
+        new(Keys.ChequeVoidClosed, "Finans", "Çek — kapanmış iptal",
+            "Tahsil edilmiş, ödenmiş, bankada/faktoringde, karşılıksız ya da iade alınmış çeki iptal eder. Gerçekleşmiş para hareketini storno ile geri alır ve çek numarasını yeniden kullanıma açar."),
 
         new(Keys.CurrentAccountsView, "Cari", "Cari kartları görüntüleme", "Cari hesap kartlarını ve hareketlerini görüntüler."),
         new(Keys.CurrentAccountsCreate, "Cari", "Cari kart oluşturma", "Yeni cari hesap kartı oluşturur."),

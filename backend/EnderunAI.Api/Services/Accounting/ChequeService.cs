@@ -16,7 +16,16 @@ public interface IChequeService
         int? status,
         Guid? currentAccountId,
         Guid? projectId,
+        /// <summary>
+        /// MERKEZ SÜZGECİ. Proje seçimi projeye, bu kod merkeze
+        /// (ya da proje dışı bir masraf merkezine) işlenmiş çekleri
+        /// getiriyor — merkeze işlenen çekler yalnız "projesi yok"
+        /// diye süzgeçsiz kalıyordu.
+        /// </summary>
+        string? costCenterCode,
         string? search,
+        /// <summary>İptal edilen çekler varsayılan olarak listelenmez.</summary>
+        bool includeVoided,
         CancellationToken cancellationToken);
 
     Task<ChequeDetailResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken);
@@ -28,7 +37,8 @@ public interface IChequeService
         CreateChequeRequest request, CancellationToken cancellationToken);
 
     Task<ChequeDetailResponse> UpdateAsync(
-        Guid id, UpdateChequeRequest request, CancellationToken cancellationToken);
+        Guid id, UpdateChequeRequest request, Guid? userId,
+        CancellationToken cancellationToken);
 
     Task<ChequeDetailResponse> ChangeStatusAsync(
         Guid id, ChequeStatusChangeRequest request, CancellationToken cancellationToken);
@@ -39,6 +49,8 @@ public interface IChequeService
 
     Task<ChequeDetailResponse> VoidAsync(
         Guid id, ChequeReversalRequest request, Guid? userId,
+        /// <summary>Kapanmış çek iptali yetkisi var mı (cheque.void-closed).</summary>
+        bool hasClosedVoidPermission,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -163,6 +175,265 @@ public sealed class ChequeService(
         _ => status.ToString()
     };
 
+    /// <summary>
+    /// ÇEK DÜZENLENEBİLİR Mİ — TEK KARAR NOKTASI.
+    ///
+    /// Hem API doğrulaması hem detay yanıtındaki "düzenle düğmesi açık
+    /// mı" bilgisi buradan geliyor. UI'da düğmeyi gizlemek yetmez;
+    /// aynı kural API'de de çalışmalı ve İKİSİ AYNI METODU sormalı,
+    /// yoksa zamanla ayrışırlar.
+    ///
+    /// KURAL: çek yalnız kendi ilk durumundayken ve hiçbir alt işleme
+    /// girmemişken düzenlenebilir. Bankaya verilmiş, faktoringe
+    /// kırdırılmış, tahsil edilmiş, ödenmiş, karşılıksız çıkmış, iade
+    /// alınmış, ertelenmiş ya da iptal edilmiş çekte düzeltme yolu
+    /// kapalıdır — o noktadan sonra gerçekleşmiş bir para hareketi
+    /// vardır ve onu "düzeltmek" defteri sessizce değiştirmek olurdu.
+    /// </summary>
+    public async Task<ChequeEditability> GetEditabilityAsync(
+        Cheque cheque, CancellationToken cancellationToken)
+    {
+        /*
+         * HAREKETLERİ METOT KENDİSİ YÜKLÜYOR (F-çek/2/D).
+         *
+         * Önce dışarıdan parametre alıyordu ve bu sessiz bir delikti:
+         * bir çağrı yeri boş liste geçse metot "düzenlenebilir" der,
+         * kural hiçbir uyarı vermeden delinirdi. Yükleme burada olunca
+         * yanlış çağrı ihtimali ortadan kalkıyor.
+         */
+        var movements = await db.ChequeMovements
+            .AsNoTracking()
+            .Where(x => x.ChequeId == cheque.Id)
+            .ToListAsync(cancellationToken);
+
+        /*
+         * HAREKETSİZ ÇEK OLMAZ: her çek doğduğunda bir giriş hareketi
+         * yazılıyor. Liste boşsa ya kayıt bozuk ya da yanlış çek
+         * yüklenmiş demektir; "düzenlenebilir" demek yerine duruyoruz.
+         */
+        if (movements.Count == 0)
+        {
+            return ChequeEditability.Blocked(
+                "Çekin hareket geçmişi bulunamadı; düzenleme güvenli değil. " +
+                "Kaydı inceleyin.");
+        }
+
+        return EvaluateEditability(cheque, movements);
+    }
+
+    /// <summary>Saf karar — hareketler yüklenmiş hâlde verilir.</summary>
+    private static ChequeEditability EvaluateEditability(
+        Cheque cheque, IReadOnlyCollection<ChequeMovement> movements)
+    {
+        var openStatus = cheque.Direction == ChequeDirection.Received
+            ? ChequeStatus.Portfolio
+            : ChequeStatus.Issued;
+
+        if (cheque.Status != openStatus)
+        {
+            // Durumu hangi hareket getirdiyse onu söylüyoruz: kullanıcı
+            // "neden düzenleyemiyorum" sorusunun cevabını tarihiyle
+            // birlikte görmeli.
+            var cause = movements
+                .Where(x => x.ToStatus == cheque.Status)
+                .OrderByDescending(x => x.MovementDate)
+                .FirstOrDefault();
+
+            var when = cause is not null
+                ? $"{cause.MovementDate:dd.MM.yyyy} tarihinde "
+                : string.Empty;
+
+            return ChequeEditability.Blocked(
+                $"Bu çek {when}\"{StatusName(cheque.Status)}\" durumuna geçtiği için " +
+                "düzenlenemez. İptal edip yeniden girin.");
+        }
+
+        /*
+         * DURUM AÇIK OLSA BİLE HAREKET GÖRMÜŞ OLABİLİR: bankaya verilip
+         * geri alınan bir çek yeniden portföye döner. O çekin geçmişinde
+         * gerçekleşmiş fişler vardır; alanlarını değiştirmek onları
+         * sessizce tutarsız bırakırdı.
+         *
+         * İlk kayıt hareketi (FromStatus == null) sayılmıyor — o çekin
+         * doğuşu, bir alt işlem değil.
+         */
+        /*
+         * GERİ ALINMIŞ İŞLEM "İŞLEM GÖRMÜŞ" SAYILMAZ.
+         *
+         * "Durum geri al" tam da düzeltmeye izin vermek için var:
+         * yanlış işaretlenen "Ödendi" geri alınıyor, çek açık duruma
+         * dönüyor ve düzeltiliyor. İlk yazımda bu akışı kırmıştım —
+         * geri almanın KENDİ hareketini de alt işlem sayıyordum ve
+         * mevcut test bunu yakaladı.
+         *
+         * İki eleme:
+         *   - ters kaydı alınmış hareketler (ReversedAtUtc dolu),
+         *   - çeki AÇIK duruma geri getiren hareketler (ToStatus ==
+         *     openStatus) — bunlar bir alt işlem değil, geri dönüştür.
+         */
+        var processed = movements
+            .Where(x => x.FromStatus != null
+                && x.ReversedAtUtc == null
+                && x.ToStatus != openStatus)
+            .OrderByDescending(x => x.MovementDate)
+            .FirstOrDefault();
+
+        if (processed is not null)
+        {
+            return ChequeEditability.Blocked(
+                $"Bu çek {processed.MovementDate:dd.MM.yyyy} tarihinde " +
+                $"\"{StatusName(processed.ToStatus)}\" işlemi gördüğü için düzenlenemez. " +
+                "İptal edip yeniden girin.");
+        }
+
+        return ChequeEditability.Allowed();
+    }
+
+    /// <summary>
+    /// Kısmi tekil çek indeksinin ihlali mi.
+    ///
+    /// İNDEKS ADINA BAKILIYOR: başka bir tekil kısıt (ör. iç numara)
+    /// da 23505 üretir ve onu "bu çek zaten kayıtlı" diye çevirmek
+    /// kullanıcıyı yanlış yere bakmaya gönderirdi.
+    /// </summary>
+    private static bool IsChequeUniquenessViolation(DbUpdateException ex) =>
+        ex.InnerException is Npgsql.PostgresException
+        {
+            SqlState: Npgsql.PostgresErrorCodes.UniqueViolation,
+            ConstraintName: ChequeUniquenessIndexName
+        };
+
+    /// <summary>Kısmi tekil indeksin adı — migration ile aynı olmalı.</summary>
+    public const string ChequeUniquenessIndexName = "IX_cheques_aktif_benzersizlik";
+
+    /// <summary>
+    /// Çakışan AKTİF çeki bulup kullanıcıya ne olduğunu söyleyen bir
+    /// istisna üretir. Yarışı kaybeden istek buraya düşüyor; kayıt
+    /// artık var olduğu için mesaj somut olabiliyor.
+    /// </summary>
+    private async Task<InvalidOperationException> DescribeChequeClashAsync(
+        Guid companyId, ChequeDirection direction, string bankName, string? bankBranch,
+        string normalizedNumber, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await EnsureChequeNumberAvailableAsync(
+                companyId, direction, bankName, bankBranch,
+                normalizedNumber, excludeChequeId: null, cancellationToken);
+        }
+        catch (InvalidOperationException described)
+        {
+            return described;
+        }
+
+        // Kayıt arada silinmiş/iptal edilmiş olabilir; yine de ham hata
+        // dönmüyoruz.
+        return new InvalidOperationException(
+            "Bu çek aynı anda başka bir yerden kaydedildi. " +
+            "Sayfayı yenileyip tekrar deneyin.");
+    }
+
+    /// <summary>
+    /// Aynı çek zaten AKTİF olarak kayıtlı mı — kullanıcı dostu mesaj
+    /// üretmek için. Asıl güvence veritabanındaki kısmi tekil indeks.
+    /// </summary>
+    private async Task EnsureChequeNumberAvailableAsync(
+        Guid companyId,
+        ChequeDirection direction,
+        string bankName,
+        string? bankBranch,
+        string normalizedNumber,
+        Guid? excludeChequeId,
+        CancellationToken cancellationToken)
+    {
+        /*
+         * ANAHTAR VERİTABANINDAKİ İNDEKSLE BİREBİR AYNI OLMAK ZORUNDA:
+         * şirket + yön + banka + şube + normalize no. İkisi ayrışırsa
+         * uygulama "boş" der, indeks "dolu" der ve kullanıcı ham 500
+         * görür — bu kontrolün tek işi zaten anlaşılır mesaj üretmek.
+         *
+         * Keşideci anahtarda YOK: çek numarası banka ve şube bazında
+         * zaten tekil; keşideciyi eklemek aynı çekin, o alan farklı
+         * yazılarak ikinci kez girilmesine kapı açardı.
+         */
+        var bank = (bankName ?? string.Empty).Trim().ToUpperInvariant();
+        var branch = (bankBranch ?? string.Empty).Trim().ToUpperInvariant();
+
+        var candidates = await db.Cheques
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId
+                && x.Direction == direction
+                && x.NormalizedChequeNumber == normalizedNumber
+                && x.Status != ChequeStatus.Voided
+                && (excludeChequeId == null || x.Id != excludeChequeId.Value))
+            .Select(x => new
+            {
+                x.Id,
+                x.InternalNumber,
+                x.Status,
+                x.DueDate,
+                x.BankName,
+                x.BankBranch
+            })
+            .ToListAsync(cancellationToken);
+
+        var clash = candidates.FirstOrDefault(x =>
+            (x.BankName ?? string.Empty).Trim().ToUpperInvariant() == bank
+            && (x.BankBranch ?? string.Empty).Trim().ToUpperInvariant() == branch);
+
+        if (clash is null)
+            return;
+
+        throw new InvalidOperationException(
+            $"Bu çek zaten kayıtlı — Kayıt No: {clash.InternalNumber}, " +
+            $"Durum: {StatusName(clash.Status)}, Vade: {clash.DueDate:dd.MM.yyyy}");
+    }
+
+    /// <summary>
+    /// EŞZAMANLI DEĞİŞİKLİK KORUMASI — DAMGA ZORUNLU.
+    ///
+    /// Opsiyonel bırakılsaydı koruma fiilen olmazdı: atlatmak için
+    /// alanı göndermemek yeterdi. Tek istemci kendi ön yüzümüz, geriye
+    /// dönük uyumluluk kaygısı yok.
+    ///
+    /// KARŞILAŞTIRMA MİLİSANİYEYE YUVARLANARAK yapılıyor, tolerans
+    /// aralığıyla değil. Önce 1 saniyelik tolerans vardı ve GERÇEK BİR
+    /// DELİKTİ: art arda yapılan iki düzenleme aynı saniyeye düşünce
+    /// bayat damga geçerli sayılıyordu — test bunu yakaladı. Yuvarlama,
+    /// JSON gidiş-dönüşündeki mikrosaniye kaybını tolere ederken
+    /// milisaniye farkını görüyor.
+    /// </summary>
+    private static void EnsureRowVersionMatches(Cheque cheque, DateTime? rowVersion)
+    {
+        if (rowVersion is not DateTime expected)
+        {
+            throw new ArgumentException(
+                "İstek geçersiz, sayfayı yenileyin. (Değişiklik damgası eksik.)");
+        }
+
+        var current = cheque.UpdatedAtUtc ?? cheque.CreatedAtUtc;
+
+        static long ToMilliseconds(DateTime value) =>
+            value.Ticks / TimeSpan.TicksPerMillisecond;
+
+        if (ToMilliseconds(current) != ToMilliseconds(expected))
+        {
+            throw new InvalidOperationException(
+                "Bu çek siz düzenlerken başka bir kullanıcı tarafından " +
+                "güncellendi. Sayfayı yenileyip tekrar deneyin.");
+        }
+    }
+
+    /// <summary>İptal nedeninin insan diliyle adı — açıklama boşsa yerine geçer.</summary>
+    public static string VoidReasonName(ChequeVoidReason kind) => kind switch
+    {
+        ChequeVoidReason.DataEntryError => "Yanlış giriş",
+        ChequeVoidReason.Bounced => "Karşılıksız",
+        ChequeVoidReason.ReturnedToParty => "Müşteriye iade",
+        ChequeVoidReason.Other => "Diğer",
+        _ => kind.ToString()
+    };
+
     public static string DirectionName(ChequeDirection direction) =>
         direction == ChequeDirection.Received ? "Alınan çek" : "Verilen çek";
 
@@ -172,10 +443,29 @@ public sealed class ChequeService(
         int? status,
         Guid? currentAccountId,
         Guid? projectId,
+        string? costCenterCode,
         string? search,
+        bool includeVoided,
         CancellationToken cancellationToken)
     {
         var query = db.Cheques.AsNoTracking().AsQueryable();
+
+        /*
+         * İPTAL EDİLEN ÇEKLER VARSAYILAN OLARAK GİZLİ.
+         *
+         * Denetim izi için defterde duruyorlar ama günlük listede
+         * gürültü yapıyorlardı: kullanıcı iptal ettiği çeki her açılışta
+         * yeniden görüyor ve "silinmemiş mi" diye tereddüt ediyordu.
+         * Açıkça istenirse geliyorlar ve ekranda üstü çizili/soluk
+         * gösteriliyorlar — gizlemek yok saymak değil.
+         *
+         * DURUM SÜZGECİ AÇIKÇA İPTAL SEÇİLDİYSE bu kural devreye
+         * girmiyor: kullanıcı zaten iptalleri istemiştir.
+         */
+        var voidedRequested = status == (int)ChequeStatus.Voided;
+
+        if (!includeVoided && !voidedRequested)
+            query = query.Where(x => x.Status != ChequeStatus.Voided);
 
         if (companyId is not null)
             query = query.Where(x => x.CompanyId == companyId.Value);
@@ -187,6 +477,12 @@ public sealed class ChequeService(
             query = query.Where(x => x.CurrentAccountId == currentAccountId.Value);
         if (projectId is not null)
             query = query.Where(x => x.ProjectId == projectId.Value);
+
+        if (!string.IsNullOrWhiteSpace(costCenterCode))
+        {
+            var center = costCenterCode.Trim();
+            query = query.Where(x => x.CostCenterCode == center);
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -314,6 +610,33 @@ public sealed class ChequeService(
                 x.Description))
             .ToListAsync(cancellationToken);
 
+        /*
+         * DÜZENLENEBİLİRLİK VE GEÇMİŞ DETAYLA BİRLİKTE GELİYOR.
+         *
+         * Ekran ayrı bir uç çağırmıyor: düğmenin durumu ile kaydın
+         * kendisi tek yanıtta gelmezse ikisi arasında yarış doğar —
+         * kullanıcı açık düğmeyi tıklar, API reddeder.
+         */
+        var editability = await GetEditabilityAsync(cheque, cancellationToken);
+
+        var changeLog = await db.ChequeChangeLogs
+            .AsNoTracking()
+            .Where(x => x.ChequeId == cheque.Id)
+            .OrderByDescending(x => x.ChangedAtUtc)
+            .Select(x => new ChequeChangeLogResponse(
+                x.Id,
+                x.FieldName,
+                x.FieldLabel,
+                x.OldValue,
+                x.NewValue,
+                x.AffectsAccounting,
+                x.ChangedAtUtc,
+                x.ChangedByUserId,
+                db.Users.Where(u => u.Id == x.ChangedByUserId)
+                    .Select(u => u.FullName).FirstOrDefault(),
+                x.Reason))
+            .ToListAsync(cancellationToken);
+
         return new ChequeDetailResponse(
             cheque.Id,
             cheque.CompanyId,
@@ -363,7 +686,18 @@ public sealed class ChequeService(
             cheque.ReplacedByCheque?.ChequeNumber,
             cheque.ReplacesChequeId,
             cheque.ReplacesCheque?.ChequeNumber,
-            await CountRenewalsAsync(cheque.Id, cancellationToken));
+            await CountRenewalsAsync(cheque.Id, cancellationToken),
+
+            // Damga: ekran bunu alıp düzenleme/iptal isteğinde geri
+            // yolluyor. Kayıt hiç güncellenmediyse doğuş zamanı.
+            cheque.UpdatedAtUtc ?? cheque.CreatedAtUtc,
+
+            editability.CanEdit,
+            editability.Reason,
+            cheque.VoidedFromClosedState,
+            cheque.VoidReasonKind is ChequeVoidReason vk ? (int)vk : null,
+            cheque.VoidReasonKind is ChequeVoidReason vk2 ? VoidReasonName(vk2) : null,
+            changeLog);
     }
 
     public async Task<ChequeSummaryResponse> GetSummaryAsync(
@@ -450,15 +784,26 @@ public sealed class ChequeService(
         RequireAttribution(request.ProjectId, request.CostCenterCode,
             request.Allocations is { Count: > 0 });
 
-        if (await db.Cheques.AnyAsync(
-                x => x.CompanyId == request.CompanyId
-                    && x.Direction == direction
-                    && x.ChequeNumber == request.ChequeNumber.Trim(),
-                cancellationToken))
-        {
-            throw new InvalidOperationException(
-                $"'{request.ChequeNumber.Trim()}' numaralı çek zaten kayıtlı.");
-        }
+        /*
+         * MÜKERRER ENGELİ — İPTAL EDİLENLER HARİÇ.
+         *
+         * Eski kontrol `(şirket, yön, çek no)` bakıyordu ve DURUM
+         * SÜZGECİ YOKTU: yanlış girilip iptal edilen bir çek numarayı
+         * kalıcı olarak bloke ediyordu, aynı numara bir daha
+         * girilemiyordu. Bildirilen hata buydu.
+         *
+         * Anahtar da genişledi: aynı çek numarası FARKLI bankada,
+         * farklı şubede ya da farklı keşidecide gerçekten farklı bir
+         * çektir. Dar anahtar, meşru kayıtları da reddediyordu.
+         *
+         * BU KONTROL YALNIZ KULLANICI DOSTU MESAJ İÇİN. Asıl savunma
+         * veritabanındaki kısmi tekil indeks (bkz. migration); iki
+         * eşzamanlı istek bu sorguyu da geçebilir, indeks geçemez.
+         */
+        await EnsureChequeNumberAvailableAsync(
+            request.CompanyId, direction, request.BankName, request.BankBranch,
+            Cheque.NormalizeChequeNumber(request.ChequeNumber),
+            excludeChequeId: null, cancellationToken);
 
         var internalNumber = await documentNumberService.GenerateAsync(
             request.CompanyId,
@@ -494,6 +839,7 @@ public sealed class ChequeService(
                 : ChequeStatus.Issued,
             InternalNumber = internalNumber,
             ChequeNumber = request.ChequeNumber.Trim(),
+            NormalizedChequeNumber = Cheque.NormalizeChequeNumber(request.ChequeNumber),
             BankName = request.BankName.Trim(),
             BankBranch = Normalize(request.BankBranch),
             Drawer = Normalize(request.Drawer),
@@ -519,7 +865,27 @@ public sealed class ChequeService(
         try
         {
             db.Cheques.Add(cheque);
-            await db.SaveChangesAsync(cancellationToken);
+
+            /*
+             * YARIŞ KORUMASI — ASIL SAVUNMA VERİTABANI (stok modülündeki
+             * desenin aynısı).
+             *
+             * Yukarıdaki ön kontrol iki eşzamanlı isteğin İKİSİNE DE
+             * "yok" diyebilir; kısmi tekil indeks diyemez. Kaybeden
+             * istek burada yakalanıp anlaşılır Türkçe mesaja çevriliyor
+             * — kullanıcıya ham 500 dönmüyor.
+             */
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex)
+                when (IsChequeUniquenessViolation(ex))
+            {
+                throw await DescribeChequeClashAsync(
+                    cheque.CompanyId, cheque.Direction, cheque.BankName,
+                    cheque.BankBranch, cheque.NormalizedChequeNumber, cancellationToken);
+            }
 
             // Dağılım fişten ÖNCE yazılır: fiş cari tarafını bu satırlara
             // göre böler, sonradan eklenirse fiş dağılımı görmezdi.
@@ -567,18 +933,100 @@ public sealed class ChequeService(
     }
 
     public async Task<ChequeDetailResponse> UpdateAsync(
-        Guid id, UpdateChequeRequest request, CancellationToken cancellationToken)
+        Guid id, UpdateChequeRequest request, Guid? userId,
+        CancellationToken cancellationToken)
     {
         var cheque = await db.Cheques.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (cheque is null)
             throw new KeyNotFoundException("Çek bulunamadı.");
 
-        var isOpen = cheque.Status is ChequeStatus.Portfolio or ChequeStatus.Issued;
-        if (!isOpen)
+        /*
+         * DÜZENLENEBİLİRLİK TEK YERDEN SORULUYOR (F-çek/2).
+         *
+         * Eskiden burada yalnız duruma bakan bir kontrol vardı ve
+         * mesajı genel bir cümleydi. Artık `GetEditability` karar
+         * veriyor — aynı metot detay yanıtındaki "düzenle düğmesi açık
+         * mı" bilgisini de üretiyor, yani UI ile API ayrışamıyor.
+         * Reddedilirse kullanıcı SOMUT sebebi görüyor: hangi işlem,
+         * hangi tarih.
+         */
+        var editability = await GetEditabilityAsync(cheque, cancellationToken);
+
+        if (!editability.CanEdit)
+            throw new InvalidOperationException(editability.Reason!);
+
+        /*
+         * EŞZAMANLI DEĞİŞİKLİK KORUMASI.
+         *
+         * Ekran çeki açtığında satırın son güncelleme damgasını alıyor;
+         * kaydederken damga değişmişse başka biri araya girmiş demektir.
+         * Sessizce üzerine yazmak, o kullanıcının değişikliğini iz
+         * bırakmadan siler — çek gibi mali bir kayıtta kabul edilemez.
+         *
+         * DAMGA ZORUNLU: yollanmayan istek reddediliyor. Opsiyonel
+         * bırakılsaydı koruma fiilen olmazdı — atlatmak için alanı
+         * hiç göndermemek yeterdi. Tek istemci kendi ön yüzümüz.
+         */
+        EnsureRowVersionMatches(cheque, request.RowVersion);
+
+        /*
+         * DENETİM KAYDI — DEĞİŞİKLİKLER ESKİ HÂLLERİ SİLİNMEDEN ÖNCE
+         * TOPLANIYOR. Aşağıdaki atamalardan sonra eski değerler
+         * kaybolur; buradan sonra "ne değişti" sorusu cevapsız kalırdı.
+         */
+        var changes = new List<ChequeChangeLog>();
+
+        void Track(string field, string label, string? before, string? after,
+            bool affectsAccounting = false)
         {
-            throw new InvalidOperationException(
-                "Çek işlem gördüğü için yalnızca portföydeki/yeni verilen çekler düzenlenebilir.");
+            if (string.Equals(before, after, StringComparison.Ordinal))
+                return;
+
+            changes.Add(new ChequeChangeLog
+            {
+                ChequeId = cheque.Id,
+                FieldName = field,
+                FieldLabel = label,
+                OldValue = before,
+                NewValue = after,
+                AffectsAccounting = affectsAccounting,
+                Reason = Normalize(request.EditReason)
+            });
         }
+
+        Track("ChequeNumber", "Çek numarası",
+            cheque.ChequeNumber, request.ChequeNumber.Trim());
+        Track("BankName", "Banka", cheque.BankName,
+            string.IsNullOrWhiteSpace(request.BankName) ? cheque.BankName : request.BankName.Trim());
+        Track("BankBranch", "Şube", cheque.BankBranch, Normalize(request.BankBranch));
+        Track("Drawer", "Keşideci", cheque.Drawer, Normalize(request.Drawer));
+        Track("Description", "Açıklama", cheque.Description, Normalize(request.Description));
+        // MASRAF MERKEZİ DE MUHASEBEYİ ETKİLER (kullanıcı kararı):
+        // fişin masraf merkezi kırılımı bu iki alandan çözülüyor.
+        Track("ProjectId", "Proje",
+            cheque.ProjectId?.ToString(), request.ProjectId?.ToString(),
+            affectsAccounting: true);
+        Track("CostCenterCode", "Masraf merkezi",
+            cheque.CostCenterCode, Normalize(request.CostCenterCode),
+            affectsAccounting: true);
+
+        // MUHASEBEYİ ETKİLEYEN ALANLAR ayrıca işaretleniyor: bunlar
+        // değişince bağlı fiş ters kayıtla kapanıp yenisi kesiliyor.
+        // Rapor bu bayrakla süzülüyor.
+        //
+        // VADE İSTİSNA: işaretli ama fişi yenilemiyor — giriş fişi vade
+        // taşımıyor (ölçüldü), vade takibi çekin kendi alanından
+        // besleniyor. Yine de mali sonucu olan bir düzeltme olduğu için
+        // denetim süzgecinde görünüyor.
+        Track("Amount", "Tutar",
+            cheque.Amount.ToString("0.00"), decimal.Round(request.Amount, 2).ToString("0.00"),
+            affectsAccounting: true);
+        Track("DueDate", "Vade",
+            cheque.DueDate.ToString("yyyy-MM-dd"), AsUtc(request.DueDate).ToString("yyyy-MM-dd"),
+            affectsAccounting: true);
+        Track("CurrentAccountId", "Cari",
+            cheque.CurrentAccountId?.ToString(), request.CurrentAccountId?.ToString(),
+            affectsAccounting: true);
 
         // TUTAR VE CARİ DÜZELTİLEBİLİR ama bedeli var: ikisi de giriş
         // fişine yazıldığı için fiş ters kayıtla kapatılıp yenisi
@@ -592,6 +1040,40 @@ public sealed class ChequeService(
             decimal.Round(request.Amount, 2) != decimal.Round(cheque.Amount, 2);
 
         var accountChanged = request.CurrentAccountId != cheque.CurrentAccountId;
+
+        /*
+         * PARA BİRİMİ DE DÜZENLENEBİLİR (F-çek/2).
+         *
+         * Eskiden hiç düzenlenemiyordu: yanlış para biriminde girilen
+         * çekin tek çaresi iptal + yeniden girişti. Değişince KUR
+         * YENİDEN ÇÖZÜLÜYOR (belge/elle → TCMB arşivi) ve defter değeri
+         * yeniden hesaplanıyor; eski kurla bırakmak 10.000 doları
+         * 10.000 TL göstermek olurdu.
+         */
+        var requestedCurrency = string.IsNullOrWhiteSpace(request.CurrencyCode)
+            ? cheque.CurrencyCode
+            : request.CurrencyCode.Trim().ToUpperInvariant();
+
+        var currencyChanged = !string.Equals(
+            requestedCurrency, cheque.CurrencyCode, StringComparison.OrdinalIgnoreCase);
+
+        /*
+         * MASRAF MERKEZİ DEĞİŞİMİ DE FİŞİ YENİLETİR (kullanıcı kararı,
+         * 2026-08-21).
+         *
+         * Fiş satırlarındaki masraf merkezi kodu çekin `ProjectId` ve
+         * `CostCenterCode` alanlarından çözülüyor
+         * (`ResolveChequeCostCenterAsync`). Yenilenmeseydi çek yeni
+         * merkezi gösterirken defter eskisinde kalırdı: masraf merkezi
+         * bazlı rapor ile çek listesi birbirini tutmaz, üstelik fark
+         * hiçbir yerde görünmezdi. Bu paketin tamamı tam olarak bu
+         * sınıf ayrışmayı kapatmak için yazıldı.
+         */
+        var costCenterChanged =
+            request.ProjectId != cheque.ProjectId ||
+            !string.Equals(
+                Normalize(request.CostCenterCode), cheque.CostCenterCode,
+                StringComparison.Ordinal);
 
         if (amountChanged && request.Amount <= 0m)
             throw new ArgumentException("Çek tutarı sıfırdan büyük olmalıdır.");
@@ -611,7 +1093,23 @@ public sealed class ChequeService(
         if (string.IsNullOrWhiteSpace(request.ChequeNumber))
             throw new ArgumentException("Çek numarası zorunludur.");
 
+        /*
+         * DÜZENLEMEDE DE MÜKERRER KONTROLÜ (F-çek/1).
+         *
+         * Eskiden yoktu: çek numarası düzenleme yoluyla başka bir aktif
+         * çekin numarasına çevrilebiliyordu ve engel yalnız YENİ kayıtta
+         * çalışıyordu. Kaydın kendisi hariç tutuluyor, yoksa çek kendi
+         * numarasıyla çakışır ve hiçbir düzenleme kaydedilemezdi.
+         */
+        await EnsureChequeNumberAvailableAsync(
+            cheque.CompanyId, cheque.Direction,
+            string.IsNullOrWhiteSpace(request.BankName) ? cheque.BankName : request.BankName,
+            request.BankBranch,
+            Cheque.NormalizeChequeNumber(request.ChequeNumber),
+            excludeChequeId: cheque.Id, cancellationToken);
+
         cheque.ChequeNumber = request.ChequeNumber.Trim();
+        cheque.NormalizedChequeNumber = Cheque.NormalizeChequeNumber(request.ChequeNumber);
         cheque.BankName = string.IsNullOrWhiteSpace(request.BankName)
             ? cheque.BankName
             : request.BankName.Trim();
@@ -629,13 +1127,71 @@ public sealed class ChequeService(
         cheque.SupplierInvoiceId = request.SupplierInvoiceId;
         cheque.Description = Normalize(request.Description);
 
-        if (amountChanged || accountChanged)
+        /*
+         * FİŞİ BOZAN ALANLAR: tutar, para birimi, cari, masraf merkezi.
+         *
+         * VADE FİŞİ BOZMUYOR — ölçüldü: çek giriş fişi vade taşımıyor.
+         * Nakit projeksiyonu ve vade takibi `cheque.DueDate`'i canlı
+         * okuduğu için vade değişimi oralarda kendiliğinden doğru
+         * yansıyor. Vadeyi de fiş yenilemeye sokmak, hiçbir şeyi
+         * düzeltmeyen ama defteri iki fişle şişiren bir işlem olurdu.
+         */
+        if (amountChanged || accountChanged || currencyChanged || costCenterChanged)
         {
+            if (currencyChanged)
+            {
+                var newRate = await exchangeRateResolver.ResolveAsync(
+                    requestedCurrency,
+                    AsUtc(request.IssueDate),
+                    request.ExchangeRate,
+                    cancellationToken);
+
+                if (!newRate.Success)
+                    throw new InvalidOperationException(newRate.Error ?? "Çek kuru belirlenemedi.");
+
+                cheque.CurrencyCode = requestedCurrency;
+                cheque.ExchangeRate = newRate.Rate;
+            }
+
             await ReissueEntryVoucherAsync(
                 cheque, request, amountChanged, cancellationToken);
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        /*
+         * DAMGA ELLE İLERLETİLİYOR — otomatik değil.
+         *
+         * `UpdatedAtUtc` bu kod tabanında `SaveChanges` tarafından
+         * KENDİLİĞİNDEN yazılmıyor (ölçüldü: AppDbContext'te böyle bir
+         * kanca yok). Yazılmasaydı damga hiç değişmez, eşzamanlılık
+         * koruması sessizce hiçbir şey yapmazdı — test bunu yakaladı:
+         * bayat damgayla ikinci istek sorunsuz geçiyordu.
+         */
+        cheque.UpdatedAtUtc = DateTime.UtcNow;
+        cheque.UpdatedByUserId = userId;
+
+        // DEĞİŞİKLİK YOKSA KAYIT DA YOK: her açıp kapatmada satır
+        // yazılsaydı geçmiş, gerçek düzeltmelerin kaybolduğu bir
+        // gürültüye dönerdi.
+        if (changes.Count > 0)
+        {
+            foreach (var change in changes)
+                change.ChangedByUserId = userId;
+
+            db.ChequeChangeLogs.AddRange(changes);
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsChequeUniquenessViolation(ex))
+        {
+            // Düzenleme sırasında da yarış olabilir: başka bir istek
+            // aynı anda aynı numarayı almış olabilir.
+            throw await DescribeChequeClashAsync(
+                cheque.CompanyId, cheque.Direction, cheque.BankName,
+                cheque.BankBranch, cheque.NormalizedChequeNumber, cancellationToken);
+        }
 
         return await GetByIdAsync(cheque.Id, cancellationToken);
     }
@@ -673,17 +1229,47 @@ public sealed class ChequeService(
         if (request.CurrentAccountId is Guid account)
             cheque.CurrentAccountId = account;
 
-        if (entry?.AccountingVoucherId is not Guid voucherId)
-            return;
+        /*
+         * BAĞLI FİŞ YOKSA SESSİZCE GEÇMEZ.
+         *
+         * Eskiden burada `return` vardı: giriş fişi bulunamazsa
+         * düzenleme sorunsuz görünüyor, çek yeni tutarla kaydediliyor
+         * ama muhasebe eski tutarda kalıyordu. Çek toplamı ile mizan
+         * sessizce ayrışırdı — bu programın en pahalı hata sınıfı.
+         *
+         * Fiş gerçekten yoksa bu bir veri tutarsızlığıdır ve
+         * kullanıcının haberi olmalı.
+         */
+        if (entry is null || entry.AccountingVoucherId is not Guid voucherId)
+        {
+            throw new InvalidOperationException(
+                $"{cheque.InternalNumber} numaralı çekin giriş muhasebe fişi bulunamadı; " +
+                "tutar/para birimi/cari/masraf merkezi düzeltmesi yapılamaz. Kaydı " +
+                "muhasebeyle birlikte inceleyin.");
+        }
+
+        /*
+         * AÇIKLAMALAR ORİJİNAL FİŞİ REFERANS VERİYOR.
+         *
+         * Düzeltme mizanda ÜÇ fiş bırakıyor: orijinal, ters kayıt, yeni
+         * fiş. Açıklamalar yalnız "çek düzeltmesi" deseydi altı ay sonra
+         * bakan kişi hangisinin neyi kapattığını ayıramazdı. Numara
+         * yazılınca zincir tek bakışta okunuyor.
+         */
+        var originalNumber = await db.AccountingVouchers
+            .AsNoTracking()
+            .Where(x => x.Id == voucherId)
+            .Select(x => x.VoucherNumber)
+            .SingleOrDefaultAsync(cancellationToken) ?? "?";
 
         entry.ReversalVoucherId = await accountingIntegration.CreateReversalVoucherAsync(
             voucherId,
-            $"Çek düzeltmesi — {cheque.InternalNumber}",
+            $"Çek düzeltmesi — {originalNumber} no'lu fişin iptali ({cheque.InternalNumber})",
             DateTime.UtcNow.Date,
             cancellationToken);
 
         entry.ReversedAtUtc = DateTime.UtcNow;
-        entry.ReversalReason = "Tutar/cari düzeltmesi";
+        entry.ReversalReason = "Tutar/para birimi/cari/masraf merkezi düzeltmesi";
 
         var replacementVoucherId = await accountingIntegration.CreateChequeVoucherAsync(
             cheque, null, cheque.Status, cheque.IssueDate, null, cancellationToken);
@@ -694,7 +1280,7 @@ public sealed class ChequeService(
             MovementDate = DateTime.UtcNow.Date,
             FromStatus = null,
             ToStatus = cheque.Status,
-            Description = "Düzeltme sonrası yeniden giriş fişi",
+            Description = $"Çek düzeltmesi — {originalNumber} yerine yeniden giriş fişi",
             AccountingVoucherId = replacementVoucherId
         });
     }
@@ -806,18 +1392,79 @@ public sealed class ChequeService(
     /// </summary>
     public async Task<ChequeDetailResponse> VoidAsync(
         Guid id, ChequeReversalRequest request, Guid? userId,
+        bool hasClosedVoidPermission,
         CancellationToken cancellationToken)
     {
         var reason = request.Reason?.Trim();
-
-        if (string.IsNullOrWhiteSpace(reason))
-            throw new ArgumentException("İptal gerekçesi zorunludur.");
 
         var cheque = await db.Cheques.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Çek bulunamadı.");
 
         if (cheque.Status == ChequeStatus.Voided)
             throw new InvalidOperationException("Çek zaten iptal edilmiş.");
+
+        // İPTALDE DE EŞZAMANLI DEĞİŞİKLİK KORUMASI: kullanıcı ekranı
+        // açtıktan sonra çek ciro edilmiş olabilir; o hâlde iptal artık
+        // "kapanmış çek iptali"dir ve farklı yetki ister.
+        EnsureRowVersionMatches(cheque, request.RowVersion);
+
+        /*
+         * İPTALİN SINIRI — İKİ AYRI RİSK, İKİ AYRI YETKİ (F-çek/2).
+         *
+         * Portföydeki (ya da yeni verilmiş) çeki iptal etmek düşük
+         * riskli: henüz para hareketi yok. Tahsil edilmiş, ödenmiş,
+         * bankaya/faktoringe verilmiş, karşılıksız çıkmış ya da iade
+         * alınmış çeki iptal etmek ise GERÇEKLEŞMİŞ bir hareketi storno
+         * ile geri alır — üstelik artık numarayı da yeniden kullanıma
+         * açar (kısmi tekil indeks iptalleri saymıyor). Kötü niyet
+         * gerekmiyor, yanlış satıra tıklamak yetiyor.
+         */
+        var openStatus = cheque.Direction == ChequeDirection.Received
+            ? ChequeStatus.Portfolio
+            : ChequeStatus.Issued;
+
+        var fromClosedState = cheque.Status != openStatus;
+
+        if (fromClosedState && !hasClosedVoidPermission)
+        {
+            throw new UnauthorizedAccessException(
+                $"Bu çek \"{StatusName(cheque.Status)}\" durumunda. Kapanmış çekin " +
+                "iptali ayrı bir yetki gerektiriyor (Çek — Kapanmış İptal).");
+        }
+
+        /*
+         * NEDEN SAYILABİLİR OLMAK ZORUNDA. Serbest metin bırakıldığında
+         * "yanlış", "hata", "iptal" gibi on farklı yazım doğuyor ve
+         * "kaç çek karşılıksız çıktı" sorusu hiç cevaplanamıyor.
+         */
+        if (request.ReasonKind is not int rawKind ||
+            !Enum.IsDefined(typeof(ChequeVoidReason), rawKind))
+        {
+            throw new ArgumentException("İptal nedeni seçilmelidir.");
+        }
+
+        var kind = (ChequeVoidReason)rawKind;
+
+        /*
+         * "YANLIŞ GİRİŞ" KAPANMIŞ ÇEKTE SEÇİLEMEZ: o çek gerçekten
+         * tahsil edilmiş/ödenmiştir. Yazım hatası varsa yol DÜZENLEME,
+         * iptal değil. Seçenek zaten ekranda gösterilmiyor ama API de
+         * kendi başına reddediyor — düğmeyi gizlemek yetmez.
+         */
+        if (fromClosedState && kind == ChequeVoidReason.DataEntryError)
+        {
+            throw new ArgumentException(
+                "Kapanmış bir çek \"yanlış giriş\" nedeniyle iptal edilemez. " +
+                "Yazım hatası için çeki düzenleyin.");
+        }
+
+        // "Diğer" seçildiyse açıklama zorunlu; yoksa neden yine
+        // sayılabilir görünür ama içi boş kalır.
+        if (kind == ChequeVoidReason.Other && string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("\"Diğer\" seçildiğinde açıklama zorunludur.");
+
+        if (string.IsNullOrWhiteSpace(reason))
+            reason = VoidReasonName(kind);
 
         // Ertelenen çekin yerine yenisi açılmıştır; onu iptal etmek
         // zinciri kopuk bırakırdı.
@@ -849,6 +1496,13 @@ public sealed class ChequeService(
             cheque.VoidedAtUtc = DateTime.UtcNow;
             cheque.VoidedByUserId = userId;
             cheque.VoidReason = reason;
+            cheque.VoidReasonKind = kind;
+            cheque.VoidedFromClosedState = fromClosedState;
+
+            // Damga iptalde de ilerliyor: aynı çeki iki kez iptal etmeye
+            // çalışan ikinci istek bayat damgayla gelir ve reddedilir.
+            cheque.UpdatedAtUtc = DateTime.UtcNow;
+            cheque.UpdatedByUserId = userId;
 
             db.ChequeMovements.Add(new ChequeMovement
             {
@@ -1094,15 +1748,13 @@ public sealed class ChequeService(
                 "Yeni çek numarası eskisiyle aynı olamaz; erteleme yeni bir çektir.");
         }
 
-        if (await db.Cheques.AnyAsync(
-                x => x.CompanyId == cheque.CompanyId &&
-                     x.Direction == cheque.Direction &&
-                     x.ChequeNumber == newChequeNumber,
-                cancellationToken))
-        {
-            throw new InvalidOperationException(
-                $"'{newChequeNumber}' numaralı çek zaten kayıtlı.");
-        }
+        // Erteleme de yeni bir çek açıyor; aynı kural geçerli
+        // (iptal edilmişler engellemez, banka/şube/keşideci ayırır).
+        await EnsureChequeNumberAvailableAsync(
+            cheque.CompanyId, cheque.Direction, request.BankName ?? cheque.BankName,
+            request.BankBranch ?? cheque.BankBranch,
+            Cheque.NormalizeChequeNumber(newChequeNumber),
+            excludeChequeId: null, cancellationToken);
 
         var movementDate = AsUtc(request.MovementDate);
         var newIssueDate = AsUtc(request.IssueDate ?? request.MovementDate);
@@ -1126,6 +1778,7 @@ public sealed class ChequeService(
                 : ChequeStatus.Issued,
             InternalNumber = internalNumber,
             ChequeNumber = newChequeNumber,
+            NormalizedChequeNumber = Cheque.NormalizeChequeNumber(newChequeNumber),
             BankName = Normalize(request.BankName) ?? cheque.BankName,
             BankBranch = Normalize(request.BankBranch) ?? cheque.BankBranch,
             Drawer = Normalize(request.Drawer) ?? cheque.Drawer,

@@ -144,7 +144,50 @@ export type ChequeDetail = ChequeListItem & {
   replacesChequeNumber?: string | null;
   /** Zincirde kaç kez ertelendiği — risk sinyali. */
   renewalCount: number;
+
+  /** Eşzamanlı değişiklik damgası; düzenleme ve iptal isteğinde geri gider. */
+  rowVersion: string;
+
+  /** Düzenle düğmesi açık mı — karar SUNUCUDAN gelir. */
+  canEdit: boolean;
+
+  /**
+   * Kapalıysa nedeni. Ekran bu cümleyi AYNEN gösteriyor; kendi metnini
+   * uydursaydı API ile ekran zamanla ayrışırdı.
+   */
+  editBlockedReason?: string | null;
+
+  /** Kapanmış bir durumdan mı iptal edildi (rozet). */
+  voidedFromClosedState: boolean;
+
+  voidReasonKind?: number | null;
+  voidReasonName?: string | null;
+
+  changeLog: ChequeChangeLogEntry[];
 };
+
+/** Alan bazlı düzeltme kaydı — "Değişiklik geçmişi" sekmesi. */
+export type ChequeChangeLogEntry = {
+  id: string;
+  fieldName: string;
+  fieldLabel: string;
+  oldValue?: string | null;
+  newValue?: string | null;
+  /** Muhasebeyi etkileyen alan mı (tutar, vade, cari) — süzgeç için. */
+  affectsAccounting: boolean;
+  changedAtUtc: string;
+  changedByUserId?: string | null;
+  changedByUserName?: string | null;
+  reason?: string | null;
+};
+
+/** İptal nedenleri — sunucudaki ChequeVoidReason ile birebir. */
+export const CHEQUE_VOID_REASONS = [
+  { value: 0, label: "Yanlış giriş", onlyOpen: true },
+  { value: 1, label: "Karşılıksız", onlyOpen: false },
+  { value: 2, label: "Müşteriye iade", onlyOpen: false },
+  { value: 90, label: "Diğer", onlyOpen: false },
+] as const;
 
 export type ChequeSummary = {
   receivedPortfolioAmount: number;
@@ -219,6 +262,17 @@ export type UpdateChequePayload = {
   supplierInvoiceId?: string | null;
   description?: string | null;
   costCenterCode?: string | null;
+  /**
+   * EŞZAMANLI DEĞİŞİKLİK DAMGASI — ZORUNLU.
+   *
+   * Detay yanıtından alınıp aynen geri gönderiliyor. Arada başkası
+   * kaydettiyse sunucu reddediyor; sessizce üzerine yazmıyor.
+   */
+  rowVersion: string;
+  /** Düzeltme gerekçesi — denetim kaydına yazılır. */
+  editReason?: string | null;
+  /** Para birimi; değişirse kur yeniden çözülür ve fiş yeniden kesilir. */
+  currencyCode?: string | null;
 };
 
 export const chequeService = {
@@ -229,7 +283,15 @@ export const chequeService = {
       status?: number;
       currentAccountId?: string;
       projectId?: string;
+      /** Merkez (ya da proje dışı masraf merkezi) süzgeci. */
+      costCenterCode?: string;
       search?: string;
+      /**
+       * İptaller VARSAYILAN OLARAK GİZLİ. Denetim izi için kayıt
+       * silinmiyor ama günlük listede iptal edilmiş çek gürültü;
+       * kullanıcı açıkça isterse geliyor.
+       */
+      includeVoided?: boolean;
     } = {}
   ) {
     const query = new URLSearchParams();
@@ -238,7 +300,10 @@ export const chequeService = {
     if (params.status !== undefined) query.set("status", String(params.status));
     if (params.currentAccountId) query.set("currentAccountId", params.currentAccountId);
     if (params.projectId) query.set("projectId", params.projectId);
+    if (params.costCenterCode)
+      query.set("costCenterCode", params.costCenterCode);
     if (params.search) query.set("search", params.search);
+    if (params.includeVoided) query.set("includeVoided", "true");
 
     const suffix = query.toString();
     return apiClient<ChequeListItem[]>(`cheques${suffix ? `?${suffix}` : ""}`);
@@ -307,10 +372,23 @@ export const chequeService = {
    * geri alır. Mali kayıt olduğu için silme yok — geçmiş defterde
    * kalıyor.
    */
-  void(id: string, reason: string) {
+  /**
+   * İPTAL — NEDEN LİSTEDEN, DAMGA ZORUNLU.
+   *
+   * `reasonKind` sayılabilir neden (0 yanlış giriş, 1 karşılıksız,
+   * 2 müşteriye iade, 90 diğer). Serbest metin nedenin yerine geçmiyor:
+   * "kaç çek karşılıksız çıktı" ancak sayılabilir nedenle cevaplanır.
+   *
+   * `rowVersion` eşzamanlı değişiklik damgası; sunucu zorunlu tutuyor.
+   * Opsiyonel olsaydı korumayı atlatmak için alanı göndermemek yeterdi.
+   */
+  void(
+    id: string,
+    input: { reason?: string | null; reasonKind: number; rowVersion: string }
+  ) {
     return apiClient<ChequeDetail>(`cheques/${id}/iptal`, {
       method: "POST",
-      body: { reason },
+      body: input,
     });
   },
 };

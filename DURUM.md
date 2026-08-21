@@ -1045,6 +1045,98 @@ kur değerlemesinde farklı para birimlerindeki bakiyeler toplanmadı ama
 "bu turda kesilecek fiş" toplandı, bordro özetinde toplanmadı (liste
 zaten kendi içinde toplamlar taşıyor).
 
+**AÇIK KAPI — MUHASEBE DÖNEM KİLİDİ YOK (ayrı paket olarak açılacak).**
+
+Sistemde "kapalı dönem" kavramı hiç yok: `ClosedPeriod`, `PeriodClosed`,
+`LockDate` aramaları kod tabanında SIFIR sonuç veriyor. Geçmiş aya fiş
+kesilmesi hiçbir yerde engellenmiyor.
+
+Bu şu an bir hata üretmiyor ama beyanla mizanın ayrışmasına açık bir
+kapı: beyan verilmiş bir dönemin fişleri sonradan değiştirilebilir ya
+da o döneme yeni fiş eklenebilir, ve sistem uyarmaz.
+
+Çek paketinde ölçüldü ve o paket için sorun ÇIKARMADI — çek iptali ve
+düzeltmesi ters kaydı `DateTime.UtcNow.Date` ile CARİ döneme atıyor,
+geçmişe yazmıyor (`ChequeService` → `CreateReversalVoucherAsync`).
+Yani çek tarafı doğru davranıyor; eksik olan sistem geneli bir kural.
+
+**ÇEK PAKETİ (2026-08-21) — kod tamam, DEPLOY BEKLİYOR.**
+
+Şikâyet: *"iptal ettiğim çekin numarasını bir daha giremiyorum"* ve
+*"çekte proje seçerken Merkez görünmüyor."*
+
+TEŞHİS: mükerrer kontrolü yalnız UYGULAMA katmandaydı, durum süzgeci
+YOKTU ve veritabanında çek numarası için hiçbir indeks yoktu. Yani
+iptal edilmiş çek numarayı bloke ediyordu (bildirilen hata) ve aynı
+anda gelen iki istek mükerrer kaydı yine de geçirebiliyordu
+(bildirilmemiş, daha ağır hata).
+
+Ne değişti:
+- **Kısmi tekil indeks** `IX_cheques_aktif_benzersizlik` —
+  şirket + yön + banka + şube + normalize çek no,
+  `WHERE "Status" <> 90 AND "IsDeleted" = false`. İptal numarayı
+  bloke etmiyor; mükerrer engeli artık veritabanında.
+- **Keşideci anahtarda YOK** (kullanıcı kararı, ölçümle): canlıda 21
+  çekin yalnız 4'ünde dolu; anahtara konsaydı kısıt gevşerdi.
+- `NormalizedChequeNumber` kolonu + `ToUpperInvariant` normalizasyon.
+  BAŞTAKİ SIFIR KORUNUYOR ("0012345" ≠ "12345"). DB kültürü C.UTF-8
+  (ölçüldü) — `upper()` ile C# aynı davranıyor, Türkçe "i" tuzağı yok.
+- **Çek düzenleme** (`cheque.edit`): düzenlenebilirlik kararı
+  SUNUCUDAN geliyor (`canEdit` + `editBlockedReason`); tutar / para
+  birimi / cari değişirse giriş fişi ters kayıtla kapanıp yenisi
+  kesiliyor, açıklamalar hangi fişin yerine geçtiğini yazıyor.
+- **Alan bazlı denetim kaydı** (`cheque_change_logs`): alan, eski,
+  yeni, kim, ne zaman, gerekçe + "muhasebeyi etkiler" işareti.
+- **RowVersion ZORUNLU** (düzenleme ve iptal): milisaniye
+  karşılaştırması. Opsiyonel olsaydı korumayı atlatmak için alanı
+  göndermemek yeterdi.
+- **İptal nedeni SAYILABİLİR** (yanlış giriş / karşılıksız / müşteriye
+  iade / diğer). Kapanmış çekte "yanlış giriş" hem ekranda yok hem uç
+  reddediyor; kapanmış çek iptali ayrı yetki (`cheque.void-closed`).
+- **İzinler migration ile dağıtılıyor** (Admin, Genel Müdür, Finans
+  Sorumlusu), yansımayla değil.
+- **MERKEZ**: `api/masraf-merkezleri` ucu + tek ortak seçici
+  (`CostCenterSelect`). Merkez en üstte ayrı grupta, projeler altında;
+  kapalı proje listede yok ama mevcut kayıttaki geliyor. Çekte masraf
+  merkezi ZORUNLU ve varsayılan Merkez. Liste `costCenterCode` ile
+  süzülebiliyor ve "Masraf merkezi" sütununda merkez artık "—" değil
+  **Merkez (KOD)** yazıyor.
+- Yan fayda: `DocumentNumberService` oku-sonra-yaz yarışı tek atomik
+  upsert'e çevrildi — bütün modüllerin belge numaralarını etkiliyor.
+
+MUHASEBE FİŞİNE GİDEN MASRAF MERKEZİ KODU (ölçüldü,
+`ResolveChequeCostCenterAsync`): 1) çekin `CostCenterCode`'u (Merkez
+seçilince merkez şubenin `CostCenterCode ?? Code` değeri), yoksa
+2) proje kodu, yoksa 3) şirket kodu. Merkez ve proje için ayrı ayrı
+test edildi.
+
+MIGRATION PROVASI (canlı verinin kopyasında, 2026-08-21):
+`enderun_ai_migprova` (23 çek) üzerinde up → boş normalize kayıt **0**,
+indeks kuruldu, izin ve rol satırları yazıldı; down → kolon, indeks,
+log tablosu ve izinler temizlendi, **23 çek kaydı olduğu gibi durdu**.
+Boş veritabanında up → down → up da koşuldu. Prova veritabanları
+silindi.
+
+KARARA BAĞLANDI (2026-08-21, kullanıcı): **masraf merkezi değişimi
+fişi yeniler.** Proje ↔ Merkez taşıması artık tutar/para birimi/cari
+ile aynı muamele görüyor: giriş fişi ters kayıtla kapanıyor, yenisi
+YENİ masraf merkezi koduyla kesiliyor ve denetim kaydında "muhasebeyi
+etkiler" işaretleniyor. İki testle bağlı (değişince yenilenir /
+aynı kalırsa yenilenmez); sonda ile doğrulandı.
+
+AÇIK KALAN İKİ SORU (kullanıcı kararı gerekir, kod değiştirilmedi):
+1. **Ertelenmiş çekin yerine geçen çek iptal edilirse** orijinal çek
+   "Ertelendi" durumunda kalıyor ve hiçbir açık duruma dönmüyor;
+   alacak iki listeden de düşüyor. Orijinalin eski durumuna dönmesi mi
+   gerekir, yoksa bu bilinçli mi?
+2. **Durum geri alma (`durum-geri-al`) RowVersion istemiyor.**
+   Düzenleme ve iptal istiyor. Aynı korumanın oraya da konması
+   davranış değişikliği; sorulmadan yapılmadı.
+
+İptalin GERİ ALINMASI yok ve bu bilinçli: `Voided` durum matrisinde
+hiçbir geçişe sahip değil, geri alma reddediliyor. Yanlış iptal edilen
+çek artık YENİDEN GİRİLEBİLİR — numara serbest kaldığı için.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

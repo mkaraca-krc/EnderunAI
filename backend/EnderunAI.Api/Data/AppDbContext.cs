@@ -221,6 +221,7 @@ public sealed class AppDbContext(
     public DbSet<WarehouseStock> WarehouseStocks => Set<WarehouseStock>();
     public DbSet<WarehouseStockLevel> WarehouseStockLevels => Set<WarehouseStockLevel>();
     public DbSet<InventoryItemPhoto> InventoryItemPhotos => Set<InventoryItemPhoto>();
+    public DbSet<ChequeChangeLog> ChequeChangeLogs => Set<ChequeChangeLog>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<RetailSale> RetailSales => Set<RetailSale>();
     public DbSet<RetailSaleItem> RetailSaleItems => Set<RetailSaleItem>();
@@ -358,6 +359,7 @@ public sealed class AppDbContext(
         ConfigureWarehouseStocks(modelBuilder);
         ConfigureWarehouseStockLevels(modelBuilder);
         ConfigureInventoryItemPhotos(modelBuilder);
+        ConfigureChequeChangeLogs(modelBuilder);
         ConfigureRetailSales(modelBuilder);
         ConfigureStockMovements(modelBuilder);
         ConfigureDocumentNumberSequences(modelBuilder);
@@ -2031,6 +2033,21 @@ public sealed class AppDbContext(
             entity.Property(x => x.Status).HasConversion<int>().IsRequired();
             entity.Property(x => x.InternalNumber).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ChequeNumber).HasMaxLength(50).IsRequired();
+
+            /*
+             * NORMALİZE ÇEK NUMARASI — mükerrer engelinin dayandığı değer.
+             *
+             * BENZERSİZLİK KISITI BURADA DEĞİL, MIGRATION'DA ham SQL ile
+             * kuruluyor: kısıt kısmi (yalnız iptal edilmemiş ve silinmemiş
+             * çekler) ve nullable alanlar için COALESCE içeriyor. Şube ya
+             * da keşideci NULL bırakılsaydı Postgres NULL'ları
+             * ÇAKIŞTIRMAZ ve kısıt sessizce hiç çalışmazdı — canlıda
+             * keşideci 21 çekin yalnız 4'ünde dolu, yani bu gerçek bir
+             * tehlikeydi. EF ifade tabanlı indeksi modelleyemediği için
+             * indeks modele YAZILMIYOR; böylece sonraki migration'lar da
+             * onu düşürmeye kalkmıyor.
+             */
+            entity.Property(x => x.NormalizedChequeNumber).HasMaxLength(50).IsRequired();
             entity.Property(x => x.BankName).HasMaxLength(150).IsRequired();
             entity.Property(x => x.BankBranch).HasMaxLength(150);
             entity.Property(x => x.Drawer).HasMaxLength(200);
@@ -3382,6 +3399,35 @@ public sealed class AppDbContext(
 
             // Proje süzgeci ve bağlayıcı çıkış kontrolü buradan okuyor.
             entity.HasIndex(x => x.ProjectId);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureChequeChangeLogs(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ChequeChangeLog>(entity =>
+        {
+            entity.ToTable("cheque_change_logs");
+            entity.HasKey(x => x.Id);
+
+            // Detaydaki "Değişiklik geçmişi" sekmesi bu indeksten okuyor.
+            entity.HasIndex(x => new { x.ChequeId, x.ChangedAtUtc });
+
+            // "Hangi düzeltmeler mizanı oynattı" raporu bununla süzülüyor.
+            entity.HasIndex(x => x.AffectsAccounting);
+
+            entity.Property(x => x.FieldName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.FieldLabel).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.OldValue).HasMaxLength(500);
+            entity.Property(x => x.NewValue).HasMaxLength(500);
+            entity.Property(x => x.Reason).HasMaxLength(500);
+
+            // Çek silinirse izi de gider; kaydın çekten ayrı ömrü yok.
+            entity.HasOne(x => x.Cheque)
+                .WithMany()
+                .HasForeignKey(x => x.ChequeId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
         });

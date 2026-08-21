@@ -467,7 +467,13 @@ describe("eleman seviyesi yetki (R2/1)", () => {
     ["app/projeler/[id]/page.tsx", "İptal Et", "delete"],
     ["app/projeler/[id]/page.tsx", "E-posta ile Gönder", "edit"],
     ["app/finans/cekler/page.tsx", "Durumu Güncelle", "edit"],
-    ["app/finans/cekler/page.tsx", "Çeki Düzenle", "edit"],
+    /*
+     * ÇEK DÜZENLEME AYRI ANAHTARDA: uç artık `cheque.edit` istiyor,
+     * `finance.edit` DEĞİL — düzeltme, çeki görebilen herkesin işi
+     * değil. Beklenti kanca adıyla birlikte yazılıyor ki düğme
+     * sessizce `finance.edit` kapısına geri kaymasın.
+     */
+    ["app/finans/cekler/page.tsx", "Çeki Düzenle", "chequeActions.edit"],
   ];
 
   it.each(BUTTON_GATES)("%s -> \"%s\" düğmesi %s kapısında", (relative, label, action) => {

@@ -80,15 +80,42 @@ public sealed record UpdateChequeRequest(
     Guid? ProgressPaymentId,
     Guid? SupplierInvoiceId,
     string? Description,
-    string? CostCenterCode = null);
+    string? CostCenterCode = null,
+    /// <summary>
+    /// EŞZAMANLI DEĞİŞİKLİK DAMGASI — ZORUNLU.
+    ///
+    /// Opsiyonel bırakılsaydı koruma fiilen olmazdı: atlatmak için
+    /// alanı göndermemek yeterdi. Tek istemci kendi ön yüzümüz;
+    /// korunacak eski istemci yok.
+    /// </summary>
+    DateTime? RowVersion = null,
+    /// <summary>Düzeltme gerekçesi — denetim kaydına yazılır.</summary>
+    string? EditReason = null,
+    /// <summary>
+    /// Para birimi. Değişirse kur YENİDEN ÇÖZÜLÜR ve giriş fişi ters
+    /// kayıtla kapanıp yenisi kesilir — dövizli bir çeki eski kurla
+    /// bırakmak defteri sessizce yanlışlardı.
+    /// </summary>
+    string? CurrencyCode = null,
+    /// <summary>Elle kur; boşsa çözümleyici (belge/TCMB arşivi) kullanılır.</summary>
+    decimal? ExchangeRate = null);
+
+/// <summary>Geri alma / iptal isteği — gerekçe her ikisinde de zorunlu.</summary>
+public sealed record ChequeReversalRequest(
+    string? Reason,
+    /// <summary>Eşzamanlı değişiklik damgası — ZORUNLU (bkz. UpdateChequeRequest).</summary>
+    DateTime? RowVersion = null,
+    /// <summary>
+    /// İptal nedeni — 0 Yanlış giriş, 1 Karşılıksız, 2 Müşteriye iade,
+    /// 90 Diğer (açıklama zorunlu). Serbest metin nedenin YERİNE geçmez:
+    /// "kaç çek karşılıksız çıktı" ancak sayılabilir nedenle cevaplanır.
+    /// </summary>
+    int? ReasonKind = null);
 
 /// <summary>
 /// Durum geçişi. CashAccountId yalnızca para hareketi doğuran
 /// geçişlerde zorunlu (bankaya verme, tahsil, ödeme, rücu).
 /// </summary>
-/// <summary>Geri alma / iptal isteği — gerekçe her ikisinde de zorunlu.</summary>
-public sealed record ChequeReversalRequest(string? Reason);
-
 public sealed record ChequeStatusChangeRequest(
     int ToStatus,
     DateTime MovementDate,
@@ -196,7 +223,47 @@ public sealed record ChequeDetailResponse(
     /// Zincirde kaç kez ertelendiği. Risk sinyali: sürekli ertelenen
     /// çek tahsilat sorununun habercisidir.
     /// </summary>
-    int RenewalCount);
+    int RenewalCount,
+
+    /// <summary>
+    /// EŞZAMANLI DEĞİŞİKLİK DAMGASI. Ekran bunu alıp düzenleme ve
+    /// iptal isteğinde geri yolluyor; arada başkası değiştirmişse
+    /// istek reddediliyor.
+    /// </summary>
+    DateTime RowVersion,
+
+    /// <summary>Düzenleme düğmesi açık mı — karar sunucudan gelir.</summary>
+    bool CanEdit,
+
+    /// <summary>
+    /// Kapalıysa NEDEN kapalı. Ekran bu cümleyi AYNEN gösteriyor;
+    /// kendi metnini uydursaydı API ile ekran zamanla ayrışırdı.
+    /// </summary>
+    string? EditBlockedReason,
+
+    /// <summary>Çek kapanmış bir durumdan mı iptal edildi (rozet için).</summary>
+    bool VoidedFromClosedState,
+
+    /// <summary>İptal nedeni — sayılabilir; eski kayıtlarda boş.</summary>
+    int? VoidReasonKind,
+    string? VoidReasonName,
+
+    /// <summary>Alan bazlı düzeltme geçmişi.</summary>
+    IReadOnlyCollection<ChequeChangeLogResponse> ChangeLog);
+
+/// <summary>Tek alanın düzeltme kaydı — "Değişiklik geçmişi" sekmesi.</summary>
+public sealed record ChequeChangeLogResponse(
+    Guid Id,
+    string FieldName,
+    string FieldLabel,
+    string? OldValue,
+    string? NewValue,
+    /// <summary>Muhasebeyi etkileyen alan mı (tutar, vade, cari) — süzgeç için.</summary>
+    bool AffectsAccounting,
+    DateTime ChangedAtUtc,
+    Guid? ChangedByUserId,
+    string? ChangedByUserName,
+    string? Reason);
 
 public sealed record ChequeSummaryResponse(
     decimal ReceivedPortfolioAmount,

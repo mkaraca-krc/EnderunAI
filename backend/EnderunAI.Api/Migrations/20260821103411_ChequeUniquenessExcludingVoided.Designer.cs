@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using EnderunAI.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EnderunAI.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260821103411_ChequeUniquenessExcludingVoided")]
+    partial class ChequeUniquenessExcludingVoided
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1164,17 +1167,11 @@ namespace EnderunAI.Api.Migrations
                     b.Property<string>("VoidReason")
                         .HasColumnType("text");
 
-                    b.Property<int?>("VoidReasonKind")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime?>("VoidedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("VoidedByUserId")
                         .HasColumnType("uuid");
-
-                    b.Property<bool>("VoidedFromClosedState")
-                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 
@@ -1267,79 +1264,6 @@ namespace EnderunAI.Api.Migrations
                     b.HasIndex("SupplierInvoiceId");
 
                     b.ToTable("cheque_allocations", (string)null);
-                });
-
-            modelBuilder.Entity("EnderunAI.Api.Models.ChequeChangeLog", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("AffectsAccounting")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("ChangedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ChangedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ChequeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("DeletedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("FieldLabel")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<string>("FieldName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("NewValue")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("OldValue")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AffectsAccounting");
-
-                    b.HasIndex("ChequeId", "ChangedAtUtc");
-
-                    b.ToTable("cheque_change_logs", (string)null);
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.ChequeMovement", b =>
@@ -15907,17 +15831,6 @@ namespace EnderunAI.Api.Migrations
                     b.Navigation("SalesInvoice");
 
                     b.Navigation("SupplierInvoice");
-                });
-
-            modelBuilder.Entity("EnderunAI.Api.Models.ChequeChangeLog", b =>
-                {
-                    b.HasOne("EnderunAI.Api.Models.Cheque", "Cheque")
-                        .WithMany()
-                        .HasForeignKey("ChequeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Cheque");
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.ChequeMovement", b =>

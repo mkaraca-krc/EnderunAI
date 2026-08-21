@@ -27,11 +27,17 @@ public sealed class ChequesController(
         [FromQuery] int? status,
         [FromQuery] Guid? currentAccountId,
         [FromQuery] Guid? projectId,
+        /// <summary>Merkez (ya da proje dışı masraf merkezi) süzgeci.</summary>
+        [FromQuery] string? costCenterCode,
         [FromQuery] string? search,
+        /// <summary>İptal edilen çekler varsayılan olarak gelmez.</summary>
+        [FromQuery] bool includeVoided,
         CancellationToken cancellationToken)
     {
         return Ok(await service.GetAllAsync(
-            companyId, direction, status, currentAccountId, projectId, search,
+            companyId, direction, status, currentAccountId, projectId,
+            costCenterCode, search,
+            includeVoided,
             cancellationToken));
     }
 
@@ -76,14 +82,24 @@ public sealed class ChequesController(
         }
     }
 
+    /*
+     * ÇEK DÜZENLEME AYRI YETKİDE (F-çek/2).
+     *
+     * `finance.edit` yetmiyor: düzenleme geçmişe dönük bir düzeltme ve
+     * tutar/vade değişirse muhasebe fişi yeniden kesiliyor. Bu, sıradan
+     * bir finans kaydı güncellemesinden farklı bir güven seviyesi
+     * istiyor — varsayılan olarak yalnız GM ve Finans Sorumlusu'nda
+     * açık.
+     */
     [HttpPut("{id:guid}")]
-    [RequirePermission(PermissionCatalog.Keys.FinanceEdit)]
+    [RequirePermission(PermissionCatalog.Keys.ChequeEdit)]
     public async Task<IActionResult> Update(
         Guid id, UpdateChequeRequest request, CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await service.UpdateAsync(id, request, cancellationToken));
+            return Ok(await service.UpdateAsync(
+                id, request, currentUser.UserId, cancellationToken));
         }
         catch (KeyNotFoundException exception)
         {
@@ -143,8 +159,35 @@ public sealed class ChequesController(
     {
         try
         {
+            /*
+             * KAPANMIŞ ÇEK İPTALİ AYRI YETKİDE.
+             *
+             * Uç `finance.approve` ile açık kalıyor — portföydeki çeki
+             * iptal etmek sıradan bir finans işlemi. Ama tahsil edilmiş
+             * ya da ödenmiş bir çeki iptal etmek gerçekleşmiş bir para
+             * hareketini geri alır ve numarayı yeniden kullanıma açar;
+             * onun kapısı `cheque.void-closed`.
+             *
+             * KARAR SERVİSTE VERİLİYOR, burada değil: hangi durumun
+             * "kapanmış" sayıldığını tek yer bilmeli.
+             */
             return Ok(await service.VoidAsync(
-                id, request, currentUser.UserId, cancellationToken));
+                id, request, currentUser.UserId,
+                currentUser.HasPermission(PermissionCatalog.Keys.ChequeVoidClosed),
+                cancellationToken));
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            /*
+             * YETKİ EKSİKLİĞİ 403, 500 DEĞİL.
+             *
+             * Kapanmış çek iptali ayrı yetki istiyor ve servis bunu
+             * `UnauthorizedAccessException` ile söylüyor. Haritalanmasaydı
+             * kullanıcı "beklenmeyen hata" görürdü — oysa olan şey
+             * sıradan ve anlatılabilir: bu işlem için yetkisi yok.
+             */
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { message = exception.Message });
         }
         catch (KeyNotFoundException exception)
         {

@@ -53,6 +53,52 @@ public enum ChequeStatus
 }
 
 /// <summary>
+/// İPTAL NEDENİ — serbest metin DEĞİL, sayılabilir liste.
+///
+/// Serbest metin bırakıldığında "yanlış", "hata", "iptal" gibi on
+/// farklı yazım doğuyor ve "kaç çek karşılıksız çıktı" sorusu hiç
+/// cevaplanamıyor. Açıklama alanı DURUYOR ama nedenin yerine geçmiyor.
+/// </summary>
+public enum ChequeVoidReason
+{
+    /// <summary>
+    /// YANLIŞ GİRİŞ — yalnız henüz işlem görmemiş çekte seçilebilir.
+    ///
+    /// Kapanmış bir çek yanlış giriş nedeniyle iptal edilmez: o çek
+    /// gerçekten tahsil edilmiş/ödenmiştir. Yazım hatası varsa yol
+    /// DÜZENLEMEDİR, iptal değil.
+    /// </summary>
+    DataEntryError = 0,
+
+    /// <summary>Karşılıksız çıktı.</summary>
+    Bounced = 1,
+
+    /// <summary>Müşteriye/tedarikçiye iade edildi.</summary>
+    ReturnedToParty = 2,
+
+    /// <summary>Diğer — açıklama zorunlu.</summary>
+    Other = 90
+}
+
+/// <summary>
+/// ÇEKİN DÜZENLENEBİLİRLİĞİ — TEK TANIM.
+///
+/// UI düğmesi, API doğrulaması ve toplu işlemler HEPSİ buradan
+/// soruyor. İki ayrı yerde yazılsaydı biri gevşer, diğeri sıkı kalır
+/// ve kullanıcı düğmeyi görüp tıkladığında reddedilirdi — ya da
+/// daha kötüsü, UI kapatır API açık kalırdı.
+///
+/// `Reason` kullanıcıya SOMUT sebebi söylemek için: hangi işlem,
+/// hangi tarih, hangi taraf. "Düzenlenemez" tek başına kullanıcıyı
+/// ne yapacağını bilmeden bırakır.
+/// </summary>
+public sealed record ChequeEditability(bool CanEdit, string? Reason)
+{
+    public static ChequeEditability Allowed() => new(true, null);
+    public static ChequeEditability Blocked(string reason) => new(false, reason);
+}
+
+/// <summary>
 /// Çift yönlü çek defteri. Alınan çekler işverenden gelen tahsilat
 /// aracı (101 Alınan Çekler), verilen çekler tedarikçiye karşı vade
 /// yükümlülüğümüz (103 Verilen Çekler). Her durum geçişi bir
@@ -70,8 +116,54 @@ public sealed class Cheque : BaseEntity
     /// <summary>Sistem içi takip numarası (ACK-2026-000001 / VCK-2026-000001).</summary>
     public string InternalNumber { get; set; } = string.Empty;
 
-    /// <summary>Çekin üzerindeki seri/çek numarası.</summary>
-    public string ChequeNumber { get; set; } = string.Empty;
+    private string _chequeNumber = string.Empty;
+
+    /// <summary>
+    /// Çekin üzerindeki seri/çek numarası — kullanıcının yazdığı hâli.
+    ///
+    /// NORMALİZE DEĞER BURADAN TÜRÜYOR. İki ayrı atama olsaydı bir
+    /// çağrı yeri birini yazıp diğerini unutabilir, kayıt normalize
+    /// değeri BOŞ kalırdı — o hâlde kısmi tekil indekste bütün boşlar
+    /// çakışır ve ikinci çek hiç kaydedilemezdi. Setter'a bağlamak bu
+    /// sınıf hatayı tümden kapatıyor.
+    /// </summary>
+    public string ChequeNumber
+    {
+        get => _chequeNumber;
+        set
+        {
+            _chequeNumber = value ?? string.Empty;
+            NormalizedChequeNumber = NormalizeChequeNumber(_chequeNumber);
+        }
+    }
+
+    /// <summary>
+    /// MÜKERRER ENGELİNİN DAYANDIĞI NORMALİZE NUMARA.
+    ///
+    /// Boşluklar (aradakiler dahil) atılır ve büyük harfe çevrilir;
+    /// böylece "12 345", "12345" ve "12345 " aynı çek sayılır — canlıda
+    /// aynı çekin iki kez girilmesinin en sık yolu buydu.
+    ///
+    /// BAŞTAKİ SIFIRLAR KORUNUR: "0012345" ile "12345" FARKLI çeklerdir.
+    /// Sayıya çevirip karşılaştırmak (ya da TrimStart('0')) iki ayrı
+    /// çeki tek çek sanmaya yol açardı.
+    ///
+    /// AYRI KOLON, ifade indeksi değil: uygulamanın ön kontrolü ile
+    /// veritabanı kısıtı AYNI değeri kullanabilsin diye. İfadeye
+    /// gömülseydi ikisi zamanla ayrışabilirdi.
+    /// </summary>
+    public string NormalizedChequeNumber { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Çek numarasını mükerrer engeli için normalize eder.
+    ///
+    /// TEK TANIM: kaydetme, düzenleme, erteleme ve ön kontrol hepsi
+    /// buradan geçiyor. İkinci bir kopya yazılsaydı kurallar zamanla
+    /// ayrışır ve kısıt "bazen" çalışırdı.
+    /// </summary>
+    public static string NormalizeChequeNumber(string? value) =>
+        new string((value ?? string.Empty).Where(c => !char.IsWhiteSpace(c)).ToArray())
+            .ToUpperInvariant();
 
     /// <summary>Çekin ait olduğu banka (keşide bankası).</summary>
     public string BankName { get; set; } = string.Empty;
@@ -142,8 +234,26 @@ public sealed class Cheque : BaseEntity
     public DateTime? VoidedAtUtc { get; set; }
     public Guid? VoidedByUserId { get; set; }
 
-    /// <summary>İptal gerekçesi; gerekçesiz iptal denetlenemez.</summary>
+    /// <summary>İptal gerekçesi (serbest açıklama); gerekçesiz iptal denetlenemez.</summary>
     public string? VoidReason { get; set; }
+
+    /// <summary>
+    /// İptal nedeni — sayılabilir. Eski kayıtlarda boş olabilir.
+    /// </summary>
+    public ChequeVoidReason? VoidReasonKind { get; set; }
+
+    /// <summary>
+    /// KAPANMIŞ ÇEK İPTALİ Mİ.
+    ///
+    /// Tahsil edilmiş, ödenmiş, bankada/faktoringde olan, karşılıksız
+    /// çıkan ya da iade alınmış bir çekin iptali portföydeki bir çeki
+    /// iptal etmekle aynı şey değil: gerçekleşmiş bir para hareketini
+    /// storno ile geri alır VE numarayı yeniden kullanıma açar.
+    ///
+    /// Ayrı bayrak, listede rozetle gösterilebilsin ve "bu para nereye
+    /// gitti" sorusu geldiğinde tek bakışta görülebilsin diye.
+    /// </summary>
+    public bool VoidedFromClosedState { get; set; }
 
     public string? Description { get; set; }
 

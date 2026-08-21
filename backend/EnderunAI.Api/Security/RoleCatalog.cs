@@ -19,16 +19,46 @@ public sealed record RoleSeedDefinition(
 /// </summary>
 public static class RoleCatalog
 {
+    /// <summary>
+    /// HASSAS ANAHTARLAR — YANSIMANIN DIŞINDA.
+    ///
+    /// `K` tüm izin anahtarlarını yansımayla topluyor ve Admin ile
+    /// Genel Müdür'e veriyor. Bu, kolaylık olarak başladı ama bir
+    /// yan etkisi var: kod tabanına eklenen HER yeni anahtar, sonraki
+    /// servis açılışında o iki role KİMSEYE SORULMADAN düşüyor.
+    ///
+    /// Gerçekleşmiş bir para hareketini geri alan ya da geçmişe dönük
+    /// düzeltme yapan yetkiler bu yolla dağıtılmamalı; her biri ayrı
+    /// bir karar olmalı ve rol tanımında AÇIKÇA görünmeli.
+    ///
+    /// Buradaki anahtarlar `K`'ye girmez; isteyen rol onları kendi
+    /// listesinde tek tek sayar.
+    /// </summary>
+    private static readonly HashSet<string> SensitiveKeys =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            PermissionCatalog.Keys.ChequeEdit,
+            PermissionCatalog.Keys.ChequeVoidClosed
+        };
+
     private static readonly string[] K = typeof(PermissionCatalog.Keys)
         .GetFields()
         .Select(f => (string)f.GetValue(null)!)
+        .Where(key => !SensitiveKeys.Contains(key))
         .ToArray();
+
+    /// <summary>
+    /// Hassas anahtarları da içeren tam küme — yalnız Admin ve Genel
+    /// Müdür için, ve AÇIKÇA yazılarak.
+    /// </summary>
+    private static readonly string[] KWithSensitive =
+        [.. K, .. SensitiveKeys];
 
     public static readonly IReadOnlyList<RoleSeedDefinition> Roles =
     [
-        new("Admin", "Tam sistem yetkisi.", K),
+        new("Admin", "Tam sistem yetkisi.", KWithSensitive),
 
-        new("Genel Müdür", "Tüm iş modülleri, kullanıcı yönetimi ve ek ödeme dahil tam yetki.", K),
+        new("Genel Müdür", "Tüm iş modülleri, kullanıcı yönetimi ve ek ödeme dahil tam yetki.", KWithSensitive),
 
         new("Finans Sorumlusu", "Finans, kasa, çek, cari ve muhasebe tam yetki; raporlar.",
         [
@@ -36,6 +66,12 @@ public static class RoleCatalog
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.FinanceView, PermissionCatalog.Keys.FinanceCreate, PermissionCatalog.Keys.FinanceEdit,
             PermissionCatalog.Keys.FinanceDelete, PermissionCatalog.Keys.FinanceApprove, PermissionCatalog.Keys.FinanceManage,
+
+            // ÇEK DÜZENLEME ve KAPANMIŞ ÇEK İPTALİ yalnız burada ve
+            // GM/Admin'de (onlar tüm anahtarları alıyor). Diğer roller
+            // çeki görebilir ve normal akışını yürütebilir ama geçmişe
+            // dönük düzeltme ya da kapanmış çeki iptal edemez.
+            PermissionCatalog.Keys.ChequeEdit, PermissionCatalog.Keys.ChequeVoidClosed,
             // Nakit akış projeksiyonu: elden dahil bordro çıkışını
             // taşıdığı için ayrı anahtar. Admin ve Genel Müdür bütün
             // anahtarları aldığı için burada tekrar listelenmiyor.

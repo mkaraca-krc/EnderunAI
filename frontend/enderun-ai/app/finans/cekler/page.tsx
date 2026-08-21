@@ -3,6 +3,15 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import {
+  CostCenterSelect,
+  optionKey,
+} from "@/components/finans/cost-center-select";
+import { ChequeVoidDialog } from "@/components/finans/cheque-void-dialog";
+import {
+  COST_CENTER_KIND,
+  resolveCostCenter,
+} from "@/services/cost-center.service";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { amount as formatAmount, money, number as formatNumber } from "@/lib/format/turkish";
 import { chequeMonthKey, summarizeCheques } from "@/lib/cheques/totals";
@@ -38,6 +47,12 @@ import {
 } from "@/services/supplier-invoice.service";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
+
+/** Düzeltme kaydında SAAT de gerekiyor: aynı gün iki düzeltme olabilir. */
+const dateTimeFormat = new Intl.DateTimeFormat("tr-TR", {
+  dateStyle: "short",
+  timeStyle: "short",
+});
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -97,13 +112,34 @@ export default function ChequeRegisterPage() {
    */
   const actions = useModuleActions("finance");
 
+  /*
+   * ÇEK İZİNLERİ AYRI ANAHTARLARDA. Düzenleme uçta artık
+   * `cheque.edit` istiyor, `finance.edit` değil; kapanmış çekin
+   * iptali ise `cheque.void-closed`. Düğmeyi ucun İSTEDİĞİ izinle
+   * eşleştirmek zorunlu — ayrışırsa ya "görünür ama 403" ya da
+   * "yetkisi var ama düğmeyi göremiyor" doğuyor.
+   */
+  const chequeActions = useModuleActions("cheque");
+  const canVoidClosed = chequeActions.can("void-closed");
+
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [companyId, setCompanyId] = useState("");
 
   const [direction, setDirection] = useState<number>(ChequeDirection.Received);
   const [statusFilter, setStatusFilter] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
+
+  /** Merkez süzgeci — proje seçilmediğinde masraf merkezi kodu. */
+  const [costCenterFilter, setCostCenterFilter] = useState("");
+  const [costCenterFilterKey, setCostCenterFilterKey] = useState("");
   const [search, setSearch] = useState("");
+
+  /*
+   * Seçili masraf merkezinin anahtarı. Form projeyi ve kodu ayrı
+   * tutmaya devam ediyor (sunucu sözleşmesi değişmedi); bu yalnız
+   * seçicinin hangi satırda durduğunu biliyor.
+   */
+  const [costCenterKey, setCostCenterKey] = useState("");
 
   const [items, setItems] = useState<ChequeListItem[]>([]);
   const [summary, setSummary] = useState<ChequeSummary | null>(null);
@@ -143,12 +179,39 @@ export default function ChequeRegisterPage() {
    * yerde gösteremiyor. Modal açıkken arkadaki liste DOM'da kalıyor —
    * kullanıcı kapatınca bıraktığı yerde buluyor.
    */
-  const [confirmMode, setConfirmMode] = useState<"reverse" | "void" | null>(null);
+  const [confirmMode, setConfirmMode] = useState<"reverse" | null>(null);
   const [confirmError, setConfirmError] = useState("");
+
+  /*
+   * İPTAL AYRI DİYALOG. Geri almada gerekçe serbest metin yeter; iptalde
+   * neden SAYILABİLİR olmak zorunda (bkz. ChequeVoidDialog). Aynı
+   * diyaloğa iki farklı sözleşme sığdırmak yerine ayrıldı.
+   */
+  const [showVoidDialog, setShowVoidDialog] = useState(false);
+  const [voidError, setVoidError] = useState("");
+
+  /** İptaller varsayılan gizli; kullanıcı açıkça isterse listeye girer. */
+  const [showVoided, setShowVoided] = useState(false);
+
+  /** Detayda "Değişiklik geçmişi" sekmesi ve muhasebe süzgeci. */
+  const [showChangeLog, setShowChangeLog] = useState(false);
+  const [onlyAccountingChanges, setOnlyAccountingChanges] = useState(false);
+
+  /**
+   * EŞZAMANLI DEĞİŞİKLİK UYARISI. Sunucu damgayı reddettiğinde hata
+   * metnini göstermek yetmiyor — kullanıcının elindeki veri artık
+   * eski; yenileme AÇIKÇA teklif ediliyor.
+   */
+  const [staleWarning, setStaleWarning] = useState("");
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState(emptyChequeForm);
   const [editError, setEditError] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [editCostCenterKey, setEditCostCenterKey] = useState("");
+
+  /** Muhasebeyi etkileyen değişiklik onaylandı mı (iki aşamalı kayıt). */
+  const [accountingConfirmed, setAccountingConfirmed] = useState(false);
 
   const [showFactoringForm, setShowFactoringForm] = useState(false);
   const [factoringForm, setFactoringForm] = useState({
@@ -191,7 +254,9 @@ export default function ChequeRegisterPage() {
           direction,
           status: statusFilter === "" ? undefined : Number(statusFilter),
           projectId: projectFilter || undefined,
+          costCenterCode: costCenterFilter || undefined,
           search: search.trim() || undefined,
+          includeVoided: showVoided,
         }),
         chequeService.getSummary(companyId),
       ]);
@@ -204,7 +269,15 @@ export default function ChequeRegisterPage() {
     } finally {
       setLoading(false);
     }
-  }, [companyId, direction, statusFilter, projectFilter, search]);
+  }, [
+    companyId,
+    direction,
+    statusFilter,
+    projectFilter,
+    costCenterFilter,
+    search,
+    showVoided,
+  ]);
 
   const loadLookups = useCallback(async () => {
     if (!companyId) return;
@@ -350,7 +423,17 @@ export default function ChequeRegisterPage() {
       ),
     },
     { key: "cari", header: "Cari", value: (row) => row.currentAccountTitle ?? "—" },
-    { key: "proje", header: "Proje", value: (row) => row.projectCode ?? "—" },
+    {
+      key: "proje",
+      header: "Masraf merkezi",
+      /*
+        MERKEZ KENDİ ADIYLA GÖRÜNÜR. Önce yalnız proje kodu yazılıyordu
+        ve merkeze işlenmiş çek "—" olarak duruyordu: rapor okuyan
+        kişi bunu "atanmamış" sanıyordu, oysa masraf merkezi belliydi.
+      */
+      value: (row) =>
+        row.projectCode ?? (row.costCenterCode ? `Merkez (${row.costCenterCode})` : "—"),
+    },
     {
       key: "vade",
       header: "Vade",
@@ -594,9 +677,39 @@ export default function ChequeRegisterPage() {
    * sunucu hatasıyla karşılaştırmamak için.
    */
   /**
-   * Modaldan gelen onay: geri alma ya da iptal. İkisi de aynı yoldan
-   * geçiyor çünkü fark yalnız çağrılan uç ve mesaj.
+   * EŞZAMANLI DEĞİŞİKLİK Mİ. Sunucu damga uyuşmazlığında kendi
+   * cümlesini yolluyor; ekran onu tanıyıp AYRICA yenileme teklif
+   * ediyor — kullanıcının elindeki veri artık eski, sadece hatayı
+   * göstermek onu aynı hataya tekrar sürüklerdi.
    */
+  function isStaleError(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : "";
+    return (
+      message.includes("başka bir kullanıcı") ||
+      message.includes("Değişiklik damgası")
+    );
+  }
+
+  async function handleStale(err: unknown): Promise<boolean> {
+    if (!isStaleError(err)) return false;
+
+    setStaleWarning(
+      "Bu çek siz açıkken güncellendi. Ekrandaki bilgiler eski; " +
+        "yenileyip tekrar deneyin."
+    );
+
+    return true;
+  }
+
+  /** Uyarıdan gelen yenileme: detay ve liste birlikte tazeleniyor. */
+  async function refreshFromServer() {
+    setStaleWarning("");
+
+    if (detail) await openDetail(detail.id);
+    await loadItems();
+  }
+
+  /** Son durum değişikliğini geri alır; gerekçe uçta da zorunlu. */
   async function runConfirmedAction(reason: string) {
     if (!detail || !confirmMode) return;
 
@@ -606,17 +719,10 @@ export default function ChequeRegisterPage() {
     setNotice("");
 
     try {
-      const updated = confirmMode === "reverse"
-        ? await chequeService.reverseStatus(detail.id, reason)
-        : await chequeService.void(detail.id, reason);
+      const updated = await chequeService.reverseStatus(detail.id, reason);
 
       setDetail(updated);
-      setNotice(
-        confirmMode === "reverse"
-          ? "Durum geri alındı; banka hareketi ve fiş ters kayıtla dengelendi."
-          : "Çek iptal edildi; banka hareketi ve fişler ters kayıtla geri alındı."
-      );
-
+      setNotice("Durum geri alındı; banka hareketi ve fiş ters kayıtla dengelendi.");
       setConfirmMode(null);
 
       // Modal kapanınca liste tazeleniyor: toplamlar ve durum rozeti
@@ -631,8 +737,59 @@ export default function ChequeRegisterPage() {
     }
   }
 
+  /**
+   * ÇEK İPTALİ. Neden sayılabilir, damga zorunlu.
+   *
+   * Damga çekin AÇILDIĞI andaki hâlini taşıyor: arada çek ciro
+   * edilmişse iptal artık "kapanmış çek iptali"dir ve ayrı yetki
+   * ister — sunucu isteği reddediyor, sessizce uygulamıyor.
+   */
+  async function runVoid(input: { reasonKind: number; reason: string }) {
+    if (!detail) return;
+
+    setSaving(true);
+    setVoidError("");
+    setError("");
+    setNotice("");
+
+    try {
+      const updated = await chequeService.void(detail.id, {
+        reasonKind: input.reasonKind,
+        reason: input.reason || null,
+        rowVersion: detail.rowVersion,
+      });
+
+      setDetail(updated);
+      setNotice("Çek iptal edildi; banka hareketi ve fişler ters kayıtla geri alındı.");
+      setShowVoidDialog(false);
+
+      await loadItems();
+    } catch (err) {
+      if (await handleStale(err)) {
+        setShowVoidDialog(false);
+      } else {
+        setVoidError(err instanceof Error ? err.message : "Çek iptal edilemedi.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function openEditModal() {
     if (!detail) return;
+
+    // Masraf merkezi anahtarı kayıttan kuruluyor: proje varsa proje,
+    // yoksa merkez kodu. Boş bırakılsaydı düzenlemeye giren her çek
+    // merkezini kaybederdi.
+    setEditCostCenterKey(
+      detail.projectId
+        ? `${COST_CENTER_KIND.Project}:${detail.projectId}`
+        : detail.costCenterCode
+          ? `${COST_CENTER_KIND.Center}:${detail.costCenterCode}`
+          : ""
+    );
+
+    setAccountingConfirmed(false);
 
     setEditForm({
       chequeNumber: detail.chequeNumber,
@@ -651,11 +808,93 @@ export default function ChequeRegisterPage() {
     });
 
     setEditError("");
+    setEditReason("");
     setShowEditModal(true);
   }
 
+  /**
+   * MUHASEBEYİ ETKİLEYEN DEĞİŞİKLİKLER. Tutar, para birimi ve cari
+   * değişince giriş fişi ters kayıtla kapanıp yenisi kesiliyor —
+   * kullanıcı bunu bilerek onaylasın. Vade ya da açıklama
+   * değişikliğinde fiş dokunulmadan kalıyor; orada onay sormak
+   * yalnızca gürültü olurdu ve zamanla hiç okunmayan bir tıklamaya
+   * dönüşürdü.
+   */
+  /**
+   * İPTAL "KAPANMIŞ DURUMDAN" MI. Portföydeki (ya da yeni verilmiş)
+   * çekte henüz para hareketi yok; tahsil/ödeme/karşılıksız hâlinde
+   * ise iptal GERÇEKLEŞMİŞ bir hareketi storno eder. Uçtaki kuralın
+   * aynısı — burada yalnız düğmeyi doğru göstermek için.
+   */
+  const voidFromClosedState = useMemo(() => {
+    if (!detail) return false;
+
+    const openStatus =
+      detail.direction === ChequeDirection.Received
+        ? ChequeStatus.Portfolio
+        : ChequeStatus.Issued;
+
+    return detail.status !== openStatus;
+  }, [detail]);
+
+  const accountingChanges = useMemo(() => {
+    if (!detail) return [] as string[];
+
+    const changes: string[] = [];
+    const nextAmount = Number(editForm.amount);
+
+    if (Number.isFinite(nextAmount) && nextAmount !== detail.amount) {
+      changes.push(`Tutar: ${money(detail.amount)} → ${money(nextAmount)}`);
+    }
+
+    if (editForm.currencyCode !== detail.currencyCode) {
+      changes.push(
+        `Para birimi: ${detail.currencyCode} → ${editForm.currencyCode}`
+      );
+    }
+
+    if ((editForm.currentAccountId || null) !== (detail.currentAccountId ?? null)) {
+      const next = currentAccounts.find(
+        (account) => account.id === editForm.currentAccountId
+      );
+
+      changes.push(
+        `Cari: ${detail.currentAccountTitle ?? "—"} → ${next?.title ?? "—"}`
+      );
+    }
+
+    /*
+     * MASRAF MERKEZİ DE FİŞİ YENİLİYOR (kullanıcı kararı, 2026-08-21).
+     * Fişin masraf merkezi kırılımı çekin proje/merkez alanlarından
+     * çözülüyor; değişince giriş fişi ters kayıtla kapanıp yenisi
+     * yeni kodla kesiliyor.
+     */
+    const centerBefore = detail.projectCode ?? detail.costCenterCode ?? "—";
+    const centerAfter = editForm.projectId
+      ? projects.find((project) => project.id === editForm.projectId)?.code ??
+        "seçilen proje"
+      : editForm.costCenterCode || "—";
+
+    if (
+      (editForm.projectId || null) !== (detail.projectId ?? null) ||
+      (editForm.costCenterCode || null) !== (detail.costCenterCode ?? null)
+    ) {
+      changes.push(`Masraf merkezi: ${centerBefore} → ${centerAfter}`);
+    }
+
+    return changes;
+  }, [detail, editForm, currentAccounts, projects]);
+
   async function submitEdit() {
     if (!detail) return;
+
+    // Fişi ters kayıtla kapatacak bir değişiklik varsa ilk tıklama
+    // KAYDETMİYOR: ne olacağını yazıp onay istiyor.
+    if (accountingChanges.length > 0 && !accountingConfirmed) {
+      setAccountingConfirmed(true);
+      setEditError("");
+      return;
+    }
 
     setSaving(true);
     setEditError("");
@@ -681,14 +920,25 @@ export default function ChequeRegisterPage() {
         supplierInvoiceId: detail.supplierInvoiceId ?? null,
         description: editForm.description.trim() || null,
         costCenterCode: editForm.costCenterCode || null,
+        currencyCode: editForm.currencyCode,
+
+        // Damga: çek ekranda açıldığı andaki hâlini taşıyor. Arada
+        // başkası kaydettiyse uç reddediyor; üzerine sessizce yazmıyor.
+        rowVersion: detail.rowVersion,
+        editReason: editReason.trim() || null,
       });
 
       setDetail(updated);
       setShowEditModal(false);
+      setAccountingConfirmed(false);
       setNotice("Çek güncellendi.");
       await loadItems();
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : "Güncelleme başarısız.");
+      if (await handleStale(err)) {
+        setShowEditModal(false);
+      } else {
+        setEditError(err instanceof Error ? err.message : "Güncelleme başarısız.");
+      }
     } finally {
       setSaving(false);
     }
@@ -869,6 +1119,23 @@ export default function ChequeRegisterPage() {
       {error && <div className="erp-alert error">{error}</div>}
       {notice && <div className="erp-alert success">{notice}</div>}
 
+      {/* EŞZAMANLI DEĞİŞİKLİK: hata metnini göstermek yetmiyor —
+          ekrandaki veri artık eski. Yenileme AÇIKÇA teklif ediliyor,
+          yoksa kullanıcı aynı hataya tekrar tekrar çarpar. */}
+      {staleWarning && (
+        <div className="erp-alert warning">
+          {staleWarning}{" "}
+          <button
+            type="button"
+            className="erp-secondary-button"
+            style={{ marginLeft: "8px" }}
+            onClick={() => void refreshFromServer()}
+          >
+            Sayfayı Yenile
+          </button>
+        </div>
+      )}
+
       {showChequeForm && (
         <div className="erp-table-card" style={{ marginBottom: "16px" }}>
           <div className="erp-table-header">
@@ -936,40 +1203,38 @@ export default function ChequeRegisterPage() {
               </label>
 
               <label>
-                Proje
-                <select
-                  value={chequeForm.projectId}
-                  onChange={(e) => setChequeForm({ ...chequeForm, projectId: e.target.value })}
-                >
-                  <option value="">—</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.code} — {project.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                Masraf Merkezi *
+                {/*
+                  * TEK ALAN (çek paketi ek maddesi).
+                  *
+                  * Eskiden "Proje" ve "Masraf merkezi" AYRI iki alandı
+                  * ve kullanıcı proje listesinde "Merkez"i arayıp
+                  * bulamıyordu — Merkez ikinci alandaydı. Artık tek
+                  * liste: Merkez en üstte, projeler altında.
+                  *
+                  * ZORUNLU ve varsayılan MERKEZ: çeklerin çoğu projeye
+                  * özel değil, ofis giderleri merkeze yazılır.
+                  */}
+                <CostCenterSelect
+                  companyId={companyId}
+                  value={costCenterKey}
+                  includeProjectId={chequeForm.projectId || undefined}
+                  required
+                  onChange={(option) => {
+                    const resolved = resolveCostCenter(option);
 
-              <label>
-                Masraf merkezi
-                <select
-                  value={chequeForm.costCenterCode}
-                  onChange={(e) =>
-                    setChequeForm({ ...chequeForm, costCenterCode: e.target.value })
-                  }
-                >
-                  <option value="">Proje kodu kullanılsın</option>
-                  {costCenterOptions.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                    setCostCenterKey(option ? optionKey(option) : "");
+                    setChequeForm({
+                      ...chequeForm,
+                      projectId: resolved.projectId ?? "",
+                      costCenterCode: resolved.costCenterCode ?? "",
+                    });
+                  }}
+                />
                 <small>
-                  Proje ya da masraf merkezinden BİRİ zorunlu: her çek bir
-                  yere yazılmalı, yoksa proje bazlı nakit akışında hiç
-                  görünmez. Ofis kirası gibi projesi olmayan çekler
-                  Merkez&apos;e yazılır.
+                  Her çek bir masraf merkezine yazılır; yoksa proje bazlı
+                  nakit akışında hiç görünmez. Ofis kirası gibi projesi
+                  olmayan çekler Merkez&apos;e yazılır.
                 </small>
               </label>
 
@@ -1290,18 +1555,21 @@ export default function ChequeRegisterPage() {
               />
             </div>
 
+            {/* SÜZGEÇ DE MASRAF MERKEZİ: liste yalnız projeye göre
+                süzülüyordu, merkeze işlenen çekler hiçbir süzgeçle
+                ayrılamıyordu — "merkezin çekleri" sorusu cevapsızdı. */}
             <div className="w-56">
-              <Select
-                aria-label="Proje"
-                value={projectFilter}
-                onChange={(e) => setProjectFilter(e.target.value)}
-                options={[
-                  { value: "", label: "Tüm projeler" },
-                  ...projects.map((project) => ({
-                    value: project.id,
-                    label: `${project.code} — ${project.name}`,
-                  })),
-                ]}
+              <CostCenterSelect
+                companyId={companyId}
+                value={costCenterFilterKey}
+                emptyLabel="Tüm masraf merkezleri"
+                onChange={(option) => {
+                  const resolved = resolveCostCenter(option);
+
+                  setCostCenterFilterKey(option ? optionKey(option) : "");
+                  setProjectFilter(resolved.projectId ?? "");
+                  setCostCenterFilter(resolved.costCenterCode ?? "");
+                }}
               />
             </div>
 
@@ -1332,6 +1600,18 @@ export default function ChequeRegisterPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+
+            {/* İPTALLER VARSAYILAN GİZLİ. Kayıt denetim izi için
+                silinmiyor ama günlük listede gürültü; kullanıcı
+                açıkça isterse geliyor ve üstü çizili görünüyor. */}
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={showVoided}
+                onChange={(e) => setShowVoided(e.target.checked)}
+              />
+              İptalleri göster
+            </label>
           </div>
         </div>
 
@@ -1348,7 +1628,7 @@ export default function ChequeRegisterPage() {
             columns={chequeColumns}
             rowKey={(row) => row.id}
             title="Çek Listesi"
-            resetKey={`${direction}|${statusFilter}|${projectFilter}|${search}`}
+            resetKey={`${direction}|${statusFilter}|${projectFilter}|${costCenterFilter}|${search}|${showVoided}`}
             rowProps={(row) => ({
               onClick: () => void openDetail(row.id),
               style: {
@@ -1659,11 +1939,18 @@ export default function ChequeRegisterPage() {
                 </small>
 
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {actions.can("edit") && (
+                  {/*
+                    DÜZENLENEBİLİRLİK KARARI SUNUCUDAN. Ekran kendi
+                    kuralını yazsaydı (ör. "hareketi varsa kapalı") uçla
+                    zamanla ayrışırdı; kapalıysa NEDENİ de sunucunun
+                    cümlesiyle gösteriliyor.
+                  */}
+                  {chequeActions.can("edit") && (
                     <button
                       type="button"
                       className="erp-secondary-button"
-                      disabled={saving}
+                      disabled={saving || !detail.canEdit}
+                      title={detail.canEdit ? undefined : detail.editBlockedReason ?? undefined}
                       onClick={openEditModal}
                     >
                       Çeki Düzenle
@@ -1687,25 +1974,64 @@ export default function ChequeRegisterPage() {
                     </button>
                   )}
 
+                  {/*
+                    KAPANMIŞ ÇEK İPTALİ AYRI YETKİ. Düğme gizlenmiyor,
+                    KAPALI gösteriliyor ve nedeni yazıyor: gizlenseydi
+                    kullanıcı işi yapamadığını görür ama sebebini
+                    bilemez, destek çağrısı doğar.
+                  */}
                   {actions.can("approve") && (
                     <button
                       type="button"
                       className="erp-secondary-button"
-                      disabled={saving}
+                      disabled={saving || (voidFromClosedState && !canVoidClosed)}
+                      title={
+                        voidFromClosedState && !canVoidClosed
+                          ? `Bu çek "${detail.statusName}" durumunda. ` +
+                            "Kapanmış çekin iptali ayrı bir yetki gerektiriyor " +
+                            "(Çek — Kapanmış İptal)."
+                          : undefined
+                      }
                       onClick={() => {
-                        setConfirmError("");
-                        setConfirmMode("void");
+                        setVoidError("");
+                        setShowVoidDialog(true);
                       }}
                     >
                       Çeki İptal Et
                     </button>
                   )}
                 </div>
+
+                {voidFromClosedState && !canVoidClosed && (
+                  <small className="rw-value-muted">
+                    Çek &quot;{detail.statusName}&quot; durumunda; iptali
+                    &quot;Çek — Kapanmış İptal&quot; yetkisi gerektiriyor.
+                  </small>
+                )}
+
+                {chequeActions.can("edit") && !detail.canEdit && detail.editBlockedReason && (
+                  <small className="rw-value-muted">
+                    {detail.editBlockedReason}
+                  </small>
+                )}
               </div>
             ) : (
               <div className="erp-alert" style={{ marginTop: "16px" }}>
-                Bu çek iptal edilmiş. Mali etkileri ters kayıtla geri
-                alındı; kayıt geçmiş için defterde duruyor.
+                Bu çek iptal edilmiş
+                {detail.voidReasonName ? ` (${detail.voidReasonName})` : ""}.
+                Mali etkileri ters kayıtla geri alındı; kayıt geçmiş için
+                defterde duruyor.
+                {/*
+                  KAPANMIŞ DURUMDAN İPTAL AYRI ROZET: gerçekleşmiş bir
+                  hareket storno edilmiş demektir. Sıradan bir iptalle
+                  aynı görünseydi denetimde ayırt edilemezdi.
+                */}
+                {detail.voidedFromClosedState && (
+                  <strong style={{ display: "block", marginTop: "6px" }}>
+                    Kapanmış durumdan iptal — gerçekleşmiş hareket storno
+                    edildi.
+                  </strong>
+                )}
               </div>
             )}
 
@@ -1942,6 +2268,98 @@ export default function ChequeRegisterPage() {
                 </table>
               </div>
             </div>
+
+            {/*
+              DEĞİŞİKLİK GEÇMİŞİ — ALAN BAZINDA.
+              Hareket geçmişi çekin DURUMUNU anlatıyor; burası
+              DÜZELTMELERİ. İkisi ayrı: "vade 15 Mart'tan 30 Mart'a
+              çekildi" bir durum değişikliği değil ve hareket
+              listesinde hiç görünmezdi.
+            */}
+            <div>
+              <button
+                type="button"
+                className="erp-secondary-button"
+                onClick={() => setShowChangeLog((current) => !current)}
+              >
+                Değişiklik Geçmişi ({detail.changeLog.length})
+              </button>
+
+              {showChangeLog && (
+                <div style={{ marginTop: "12px" }}>
+                  {detail.changeLog.length === 0 ? (
+                    <div className="erp-alert">
+                      Bu çekte kayıtlı bir düzeltme yok.
+                    </div>
+                  ) : (
+                    <>
+                      {/* MUHASEBEYİ ETKİLEYEN SÜZGECİ: denetimde sorulan
+                          soru "fişi değiştiren ne oldu"; açıklama
+                          düzeltmeleri o listeyi boğuyor. */}
+                      <label className="mb-2 flex items-center gap-2 text-sm text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={onlyAccountingChanges}
+                          onChange={(e) =>
+                            setOnlyAccountingChanges(e.target.checked)
+                          }
+                        />
+                        Yalnız muhasebeyi etkileyenler
+                      </label>
+
+                      <div className="erp-table-wrap">
+                        <table className="erp-table">
+                          <thead>
+                            <tr>
+                              <th>Tarih</th>
+                              <th>Alan</th>
+                              <th>Eski</th>
+                              <th>Yeni</th>
+                              <th>Kullanıcı</th>
+                              <th>Gerekçe</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {detail.changeLog
+                              .filter(
+                                (entry) =>
+                                  !onlyAccountingChanges || entry.affectsAccounting
+                              )
+                              .map((entry) => (
+                                <tr key={entry.id}>
+                                  <td>
+                                    {dateTimeFormat.format(
+                                      new Date(entry.changedAtUtc)
+                                    )}
+                                  </td>
+                                  <td>
+                                    {entry.fieldLabel}
+                                    {entry.affectsAccounting && (
+                                      <strong
+                                        style={{
+                                          display: "block",
+                                          fontSize: "11px",
+                                          color: "var(--erp-accent)",
+                                        }}
+                                      >
+                                        Muhasebeyi etkiler
+                                      </strong>
+                                    )}
+                                  </td>
+                                  <td>{entry.oldValue ?? "—"}</td>
+                                  <td>{entry.newValue ?? "—"}</td>
+                                  <td>{entry.changedByUserName ?? "—"}</td>
+                                  <td>{entry.reason ?? "—"}</td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1954,19 +2372,9 @@ export default function ChequeRegisterPage() {
         // gerekçesi yenisine yapışmasın.
         key={confirmMode ?? "kapali"}
         open={confirmMode !== null}
-        title={
-          confirmMode === "reverse"
-            ? "Son durumu geri al"
-            : "Çeki iptal et"
-        }
-        description={
-          confirmMode === "reverse"
-            ? "Çek bir önceki durumuna döner. Muhasebe fişi ters kayıtla kapanır ve banka hareketi karşıt bir hareketle dengelenir; kayıtlar silinmez."
-            : "Çekin ürettiği bütün mali etkiler geri alınır ve çek iptal durumuna geçer. Kayıt denetim izi için listede kalır."
-        }
-        confirmLabel={
-          confirmMode === "reverse" ? "Geri Al" : "İptal Et"
-        }
+        title="Son durumu geri al"
+        description="Çek bir önceki durumuna döner. Muhasebe fişi ters kayıtla kapanır ve banka hareketi karşıt bir hareketle dengelenir; kayıtlar silinmez."
+        confirmLabel="Geri Al"
         requireReason
         busy={saving}
         error={confirmError}
@@ -1975,6 +2383,22 @@ export default function ChequeRegisterPage() {
           setConfirmError("");
         }}
         onConfirm={(reason) => void runConfirmedAction(reason)}
+      />
+
+      {/* İPTAL: nedeni SAYILABİLİR olmak zorunda, o yüzden ayrı
+          diyalog. key ile her açılışta temiz kuruluyor. */}
+      <ChequeVoidDialog
+        key={showVoidDialog ? `iptal-${detail?.id ?? ""}` : "iptal-kapali"}
+        open={showVoidDialog}
+        fromClosedState={voidFromClosedState}
+        statusName={detail?.statusName ?? ""}
+        busy={saving}
+        error={voidError}
+        onCancel={() => {
+          setShowVoidDialog(false);
+          setVoidError("");
+        }}
+        onConfirm={(input) => void runVoid(input)}
       />
 
       {/* DÜZELTME: işlem görmüş çekte uç reddediyor — önce durumu geri
@@ -2002,7 +2426,11 @@ export default function ChequeRegisterPage() {
               disabled={saving}
               onClick={() => void submitEdit()}
             >
-              {saving ? "Kaydediliyor…" : "Kaydet"}
+              {saving
+                ? "Kaydediliyor…"
+                : accountingChanges.length > 0 && accountingConfirmed
+                  ? "Onayla ve Kaydet"
+                  : "Kaydet"}
             </Button>
           </>
         }
@@ -2066,20 +2494,30 @@ export default function ChequeRegisterPage() {
             }
           />
 
-          <Select
-            label="Proje"
-            value={editForm.projectId}
-            onChange={(e) =>
-              setEditForm({ ...editForm, projectId: e.target.value })
-            }
-            options={[
-              { value: "", label: "—" },
-              ...projects.map((project) => ({
-                value: project.id,
-                label: `${project.code} — ${project.name}`,
-              })),
-            ]}
-          />
+          {/* MASRAF MERKEZİ TEK ALAN: proje ya da Merkez. Girişte
+              böyle soruluyor; düzenlemede "Proje" diye sorulsaydı
+              merkeze işlenmiş çek düzenlenirken merkezini kaybederdi. */}
+          <label className="block text-sm font-medium text-slate-700">
+            Masraf merkezi
+            <div className="mt-1.5">
+              <CostCenterSelect
+                companyId={companyId}
+                value={editCostCenterKey}
+                includeProjectId={detail?.projectId ?? null}
+                required
+                onChange={(option) => {
+                  const resolved = resolveCostCenter(option);
+
+                  setEditCostCenterKey(option ? optionKey(option) : "");
+                  setEditForm((current) => ({
+                    ...current,
+                    projectId: resolved.projectId ?? "",
+                    costCenterCode: resolved.costCenterCode ?? "",
+                  }));
+                }}
+              />
+            </div>
+          </label>
 
           <Input
             label="Keşide tarihi"
@@ -2108,7 +2546,44 @@ export default function ChequeRegisterPage() {
               }
             />
           </div>
+
+          <div className="md:col-span-2">
+            {/* Gerekçe denetim kaydına yazılıyor: aylar sonra "bu tutar
+                neden değişmiş" sorusunun tek cevabı burası. */}
+            <Input
+              label="Düzeltme gerekçesi"
+              value={editReason}
+              onChange={(e) => setEditReason(e.target.value)}
+            />
+          </div>
         </div>
+
+        {/*
+          MUHASEBEYİ ETKİLEYEN DEĞİŞİKLİK ONAYI.
+          Tutar / para birimi / cari değişince giriş fişi ters kayıtla
+          kapanıp yenisi kesiliyor. Ne olacağı SAYIYLA yazılıyor; genel
+          bir "emin misiniz" cümlesi okunmadan tıklanırdı.
+        */}
+        {accountingChanges.length > 0 && (
+          <div
+            className={accountingConfirmed ? "erp-alert warning" : "erp-alert"}
+            style={{ marginTop: "12px" }}
+          >
+            <strong>Bu değişiklik muhasebe kaydını etkiliyor:</strong>
+            <ul style={{ margin: "6px 0 0 18px" }}>
+              {accountingChanges.map((change) => (
+                <li key={change}>{change}</li>
+              ))}
+            </ul>
+            <small className="rw-value-muted">
+              Giriş fişi ters kayıtla kapanacak ve yeni tutarla yenisi
+              kesilecek.
+              {accountingConfirmed
+                ? " Onaylamak için tekrar Kaydet'e basın."
+                : ""}
+            </small>
+          </div>
+        )}
 
         {editError && (
           <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

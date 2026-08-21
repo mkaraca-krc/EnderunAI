@@ -375,7 +375,12 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         var response = await client.PostAsJsonAsync(
             $"/api/cheques/{chequeId}/iptal",
-            new { reason = "Test kaydı, yanlışlıkla girildi" });
+            new
+            {
+                reason = "Test kaydı, yanlışlıkla girildi",
+                rowVersion = await RowVersionAsync(client, chequeId),
+                reasonKind = (int)ChequeVoidReason.ReturnedToParty
+            });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -420,12 +425,28 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
         var chequeId = await CreatePaidChequeAsync(client, context);
 
         await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/iptal", new { reason = "İlk iptal" });
+            $"/api/cheques/{chequeId}/iptal", new
+            {
+                reason = "İlk iptal",
+                rowVersion = await RowVersionAsync(client, chequeId),
+                // KAPANMIŞ çek: "Yanlış giriş" bu grupta reddediliyor
+                // (ödenmiş bir çek yanlış giriş nedeniyle iptal edilmez),
+                // gerçek bir neden seçiliyor.
+                reasonKind = (int)ChequeVoidReason.ReturnedToParty
+            });
 
         var balance = await BalanceAsync(context);
 
         var second = await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/iptal", new { reason = "İkinci iptal" });
+            $"/api/cheques/{chequeId}/iptal", new
+            {
+                reason = "İkinci iptal",
+                rowVersion = await RowVersionAsync(client, chequeId),
+                // KAPANMIŞ çek: "Yanlış giriş" bu grupta reddediliyor
+                // (ödenmiş bir çek yanlış giriş nedeniyle iptal edilmez),
+                // gerçek bir neden seçiliyor.
+                reasonKind = (int)ChequeVoidReason.ReturnedToParty
+            });
 
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
         Assert.Equal(balance, await BalanceAsync(context));
@@ -466,7 +487,10 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
             progressPaymentId = (Guid?)null,
             supplierInvoiceId = (Guid?)null,
             description = "Tutar düzeltildi",
-            costCenterCode = (string?)null
+            costCenterCode = (string?)null,
+            // Damga artık ZORUNLU: eşzamanlı değişiklik koruması
+            // opsiyonel olsaydı atlatmak için alanı göndermemek yeterdi.
+            rowVersion = await RowVersionAsync(client, chequeId)
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -570,7 +594,12 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
             $"/api/cheques/{voided}/iptal",
-            new { reason = "Yanlışlıkla girildi" })).StatusCode);
+            new
+            {
+                reason = "Yanlışlıkla girildi",
+                rowVersion = await RowVersionAsync(client, voided),
+                reasonKind = (int)ChequeVoidReason.ReturnedToParty
+            })).StatusCode);
 
         var after = await SummaryAsync(client, context);
 
@@ -597,7 +626,15 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
         var voided = await CreateIssuedChequeAsync(client, context, 10_000m);
 
         await client.PostAsJsonAsync(
-            $"/api/cheques/{voided}/iptal", new { reason = "Test kaydı" });
+            $"/api/cheques/{voided}/iptal", new
+            {
+                reason = "Test kaydı",
+                rowVersion = await RowVersionAsync(client, voided),
+                // KAPANMIŞ çek: "Yanlış giriş" bu grupta reddediliyor
+                // (ödenmiş bir çek yanlış giriş nedeniyle iptal edilmez),
+                // gerçek bir neden seçiliyor.
+                reasonKind = (int)ChequeVoidReason.ReturnedToParty
+            });
 
         var all = await ListAsync(client, context, status: null);
 
@@ -635,7 +672,15 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
             x => x.GetProperty("kind").GetString() == "IssuedCheque");
 
         await client.PostAsJsonAsync(
-            $"/api/cheques/{chequeId}/iptal", new { reason = "İptal" });
+            $"/api/cheques/{chequeId}/iptal", new
+            {
+                reason = "İptal",
+                rowVersion = await RowVersionAsync(client, chequeId),
+                // KAPANMIŞ çek: "Yanlış giriş" bu grupta reddediliyor
+                // (ödenmiş bir çek yanlış giriş nedeniyle iptal edilmez),
+                // gerçek bir neden seçiliyor.
+                reasonKind = (int)ChequeVoidReason.ReturnedToParty
+            });
 
         var after = await (await client.GetAsync(
             $"/api/cash-flow?companyId={context.CompanyId}&days=365"))
@@ -682,6 +727,14 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
             $"/api/cheques/summary?companyId={context.CompanyId}"))
             .Content.ReadFromJsonAsync<JsonElement>();
 
+    /*
+     * İPTALLER ARTIK VARSAYILAN OLARAK GİZLİ (çek paketi).
+     *
+     * Bu testlerin iddiası değişmedi — "iptal edilen çek denetim izi
+     * için defterde kalır" hâlâ doğru; yalnızca listede açıkça
+     * istenmesi gerekiyor. Test bu yüzden silinmedi, `includeVoided`
+     * ile güncellendi.
+     */
     private static async Task<List<JsonElement>> ListAsync(
         HttpClient client, Context context, int? status)
     {
@@ -689,9 +742,14 @@ public sealed class ChequeReversalTests(DatabaseFixture fixture)
 
         var payload = await (await client.GetAsync(
             $"/api/cheques?companyId={context.CompanyId}" +
-            $"&direction={(int)ChequeDirection.Issued}{suffix}"))
+            $"&direction={(int)ChequeDirection.Issued}&includeVoided=true{suffix}"))
             .Content.ReadFromJsonAsync<JsonElement>();
 
         return payload.EnumerateArray().ToList();
     }
+
+    /// <summary>Çekin güncel eşzamanlılık damgası — iptal isteği bunu taşıyor.</summary>
+    private static async Task<DateTime> RowVersionAsync(HttpClient client, Guid id) =>
+        (await client.GetFromJsonAsync<JsonElement>($"/api/cheques/{id}"))
+            .GetProperty("rowVersion").GetDateTime();
 }
