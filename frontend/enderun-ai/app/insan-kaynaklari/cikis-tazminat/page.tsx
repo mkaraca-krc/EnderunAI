@@ -4,6 +4,7 @@ import RehireAssessmentPanel from "@/components/hr/rehire-assessment-panel";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { amount } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
@@ -176,6 +177,86 @@ export default function TerminationPage() {
     }
   }
 
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4p). Eylem sütunu `assessing`, `finalize` ve
+   * `payrollActions` üzerine kapandığı için dizi belleğe ALINMIYOR
+   * (F4b desen kararı) — "Kesinleştir" geri alınamayan bir işlem,
+   * bayat kapanış onu yanlış çıkış üzerinde çalıştırabilirdi.
+   */
+  const terminationColumns: DataTableColumn<(typeof terminations)[number]>[] = [
+    { key: "personel", header: "Personel", value: (row) => row.personnelFullName },
+    {
+      key: "tarih",
+      header: "Tarih",
+      value: (row) => new Date(row.terminationDate).toLocaleDateString("tr-TR"),
+    },
+    {
+      key: "kidem",
+      header: "Kıdem (gün)",
+      numeric: true,
+      value: (row) => row.serviceDays,
+    },
+    {
+      key: "net",
+      header: "Resmi Net",
+      numeric: true,
+      value: (row) => money(row.officialNetTotal),
+      footer: (rows) =>
+        money(rows.reduce((sum, row) => sum + row.officialNetTotal, 0)),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) =>
+        row.status === TerminationStatus.Finalized ? "Kesinleşti" : "Taslak",
+      render: (row) =>
+        row.status === TerminationStatus.Finalized ? (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
+            Kesinleşti
+          </span>
+        ) : (
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
+            Taslak
+          </span>
+        ),
+    },
+    {
+      key: "islem",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <div className="flex justify-end gap-2">
+          {/* Değerlendirme geçmiş çıkışlara da eklenebilir: çıkış
+              anında yapılamamış olabilir. */}
+          <button
+            type="button"
+            onClick={() =>
+              setAssessing(
+                assessing?.id === row.id
+                  ? null
+                  : { id: row.id, name: row.personnelFullName }
+              )
+            }
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+          >
+            {assessing?.id === row.id ? "Kapat" : "Ayrılış Değerlendirmesi"}
+          </button>
+
+          {row.status !== TerminationStatus.Finalized &&
+            payrollActions.can("approve") && (
+              <button
+                type="button"
+                onClick={() => void finalize(row.id)}
+                className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800"
+              >
+                Kesinleştir
+              </button>
+            )}
+        </div>
+      ),
+    },
+  ];
+
   return (
     <ErpShell
       design="redwood"
@@ -313,77 +394,14 @@ export default function TerminationPage() {
         {terminations.length === 0 ? (
           <p className="mt-2 text-sm text-slate-500">Henüz çıkış kaydı yok.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-                  <th className="py-2">Personel</th>
-                  <th className="py-2">Tarih</th>
-                  <th className="py-2">Kıdem (gün)</th>
-                  <th className="py-2 text-right">Resmi Net</th>
-                  <th className="py-2">Durum</th>
-                  <th className="py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {terminations.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-100">
-                    <td className="py-2 text-slate-800">{row.personnelFullName}</td>
-                    <td className="py-2 text-slate-600">
-                      {new Date(row.terminationDate).toLocaleDateString("tr-TR")}
-                    </td>
-                    <td className="py-2 text-slate-600">{row.serviceDays}</td>
-                    <td className="py-2 text-right tabular-nums text-slate-800">
-                      {money(row.officialNetTotal)}
-                    </td>
-                    <td className="py-2">
-                      {row.status === TerminationStatus.Finalized ? (
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                          Kesinleşti
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
-                          Taslak
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="flex justify-end gap-2">
-                        {/* Değerlendirme geçmiş çıkışlara da eklenebilir:
-                            çıkış anında yapılamamış olabilir. */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAssessing(
-                              assessing?.id === row.id
-                                ? null
-                                : { id: row.id, name: row.personnelFullName }
-                            )
-                          }
-                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                        >
-                          {assessing?.id === row.id
-                            ? "Kapat"
-                            : "Ayrılış Değerlendirmesi"}
-                        </button>
-
-                        {row.status !== TerminationStatus.Finalized &&
-                          payrollActions.can("approve") && (
-                            <button
-                              type="button"
-                              onClick={() => void finalize(row.id)}
-                              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800"
-                            >
-                              Kesinleştir
-                            </button>
-                          )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={terminations}
+            columns={terminationColumns}
+            rowKey={(row) => row.id}
+            title="Çıkış ve Tazminat Kayıtları"
+            /* Personel seçimi listeyi daraltıyor; sayfa 1'e dönmeli. */
+            resetKey={personnelId}
+          />
         )}
 
         {assessing ? (
@@ -414,35 +432,73 @@ function RightBadge({ label, granted }: { label: string; granted: boolean }) {
   );
 }
 
-function ComponentRow({
-  label,
-  component,
-}: {
-  label: string;
-  component: TerminationComponent;
-}) {
-  if (component.gross === 0) {
-    return (
-      <tr className="border-b border-slate-100 text-slate-400">
-        <td className="py-2">{label}</td>
-        <td className="py-2 text-right" colSpan={5}>
-          Hak doğmadı
-        </td>
-      </tr>
-    );
-  }
-
-  return (
-    <tr className="border-b border-slate-100">
-      <td className="py-2 text-slate-800">{label}</td>
-      <td className="py-2 text-right tabular-nums">{money(component.gross)}</td>
-      <td className="py-2 text-right tabular-nums">{money(component.sgkAmount)}</td>
-      <td className="py-2 text-right tabular-nums">{money(component.incomeTax)}</td>
-      <td className="py-2 text-right tabular-nums">{money(component.stampTax)}</td>
-      <td className="py-2 text-right font-bold tabular-nums">{money(component.net)}</td>
-    </tr>
-  );
+/*
+ * HESAP DÖKÜMÜ SÜTUNLARI (F4p) — `ComponentRow` bileşeninin yerine.
+ *
+ * "Hak doğmadı" durumu artık satırın kendisinden okunuyor: brüt sıfırsa
+ * tutar sütunları tire basıyor. Eskiden o satır `colSpan={5}` ile tek
+ * hücreye çöküyordu; sütun tabanlı tabloda bu mümkün değil ve gerekli
+ * de değil — dışa aktarmada da "Hak doğmadı" açıkça yazılıyor.
+ */
+function componentRows(calculation: TerminationCalculation) {
+  return [
+    { label: "Kıdem tazminatı", component: calculation.officialSeverance },
+    { label: "İhbar tazminatı", component: calculation.officialNotice },
+    { label: "Kullanılmayan yıllık izin", component: calculation.officialLeave },
+  ];
 }
+
+type ComponentRowData = ReturnType<typeof componentRows>[number];
+
+function moneyOrDash(row: ComponentRowData, pick: (c: TerminationComponent) => number) {
+  return row.component.gross === 0 ? "Hak doğmadı" : money(pick(row.component));
+}
+
+const componentColumns: DataTableColumn<ComponentRowData>[] = [
+  { key: "kalem", header: "Kalem", value: (row) => row.label },
+  {
+    key: "brut",
+    header: "Brüt",
+    numeric: true,
+    value: (row) => moneyOrDash(row, (c) => c.gross),
+    footer: (rows) =>
+      money(rows.reduce((sum, row) => sum + row.component.gross, 0)),
+  },
+  {
+    key: "sgk",
+    header: "SGK",
+    numeric: true,
+    value: (row) => moneyOrDash(row, (c) => c.sgkAmount),
+    footer: (rows) =>
+      money(rows.reduce((sum, row) => sum + row.component.sgkAmount, 0)),
+  },
+  {
+    key: "gelir",
+    header: "Gelir V.",
+    numeric: true,
+    value: (row) => moneyOrDash(row, (c) => c.incomeTax),
+    footer: (rows) =>
+      money(rows.reduce((sum, row) => sum + row.component.incomeTax, 0)),
+  },
+  {
+    key: "damga",
+    header: "Damga",
+    numeric: true,
+    value: (row) => moneyOrDash(row, (c) => c.stampTax),
+    footer: (rows) =>
+      money(rows.reduce((sum, row) => sum + row.component.stampTax, 0)),
+  },
+  {
+    key: "net",
+    header: "Net",
+    numeric: true,
+    value: (row) => moneyOrDash(row, (c) => c.net),
+    render: (row) => <strong>{moneyOrDash(row, (c) => c.net)}</strong>,
+    // RESMİ TOPLAM (belgelenen) — kalemlerin netlerinin toplamı.
+    footer: (rows) => money(rows.reduce((sum, row) => sum + row.component.net, 0)),
+  },
+];
+
 
 function CalculationResult({ calculation }: { calculation: TerminationCalculation }) {
   return (
@@ -473,36 +529,12 @@ function CalculationResult({ calculation }: { calculation: TerminationCalculatio
       )}
 
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-              <th className="py-2">Kalem</th>
-              <th className="py-2 text-right">Brüt</th>
-              <th className="py-2 text-right">SGK</th>
-              <th className="py-2 text-right">Gelir V.</th>
-              <th className="py-2 text-right">Damga</th>
-              <th className="py-2 text-right">Net</th>
-            </tr>
-          </thead>
-          <tbody>
-            <ComponentRow label="Kıdem tazminatı" component={calculation.officialSeverance} />
-            <ComponentRow label="İhbar tazminatı" component={calculation.officialNotice} />
-            <ComponentRow
-              label="Kullanılmayan yıllık izin"
-              component={calculation.officialLeave}
-            />
-          </tbody>
-          <tfoot>
-            <tr>
-              <td className="pt-3 text-sm font-bold text-slate-900" colSpan={5}>
-                RESMİ TOPLAM (belgelenen)
-              </td>
-              <td className="pt-3 text-right text-sm font-bold tabular-nums text-slate-900">
-                {money(calculation.officialNetTotal)}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+        <DataTable
+          rows={componentRows(calculation)}
+          columns={componentColumns}
+          rowKey={(row) => row.label}
+          title="Tazminat Hesap Dökümü"
+        />
       </div>
 
       {/* Elden kısım: yalnızca yetkili kullanıcıya gelir. */}
