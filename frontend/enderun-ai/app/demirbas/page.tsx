@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { amount } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
@@ -194,6 +195,106 @@ export default function ToolAssetsPage() {
       setSaving(false);
     }
   }
+
+  const filterKey = `${companyId}|${status}|${search}`;
+
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4k). Eylem sütunu `actions` ve `openEdit`
+   * üzerine kapandığı için dizi belleğe ALINMIYOR (F4b desen kararı).
+   */
+  const assetColumns: DataTableColumn<(typeof assets)[number]>[] = [
+    { key: "kod", header: "Kod", value: (row) => row.code },
+    {
+      key: "alet",
+      header: "Alet",
+      value: (row) =>
+        [row.name, row.brand, row.model].filter(Boolean).join(" · "),
+      render: (row) => (
+        <>
+          {row.name}
+          {(row.brand || row.model) && (
+            <small>{[row.brand, row.model].filter(Boolean).join(" ")}</small>
+          )}
+        </>
+      ),
+    },
+    { key: "seri", header: "Seri No", value: (row) => row.serialNumber ?? "—" },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => row.statusName,
+      render: (row) => (
+        <span className={statusClass(row.status)}>{row.statusName}</span>
+      ),
+    },
+    {
+      key: "zimmet",
+      header: "Zimmetli",
+      value: (row) =>
+        [row.assignedPersonnelName ?? "—", row.siteName].filter(Boolean).join(" · "),
+      render: (row) => (
+        <>
+          {row.assignedPersonnelName ?? "—"}
+          {row.siteName && <small>{row.siteName}</small>}
+        </>
+      ),
+    },
+    {
+      key: "garanti",
+      header: "Garanti",
+      value: (row) => {
+        if (!row.warrantyEndDate) return "—";
+
+        const active = new Date(row.warrantyEndDate) >= new Date();
+
+        return `${dateFormat.format(new Date(row.warrantyEndDate))} · ${
+          active ? "sürüyor" : "doldu"
+        }`;
+      },
+      render: (row) => {
+        if (!row.warrantyEndDate) return "—";
+
+        const active = new Date(row.warrantyEndDate) >= new Date();
+
+        return (
+          <>
+            {dateFormat.format(new Date(row.warrantyEndDate))}
+            <small>{active ? "sürüyor" : "doldu"}</small>
+          </>
+        );
+      },
+    },
+    {
+      key: "bedel",
+      header: "Bedel",
+      numeric: true,
+      value: (row) => (row.purchaseCost != null ? amount(row.purchaseCost) : "—"),
+      // Demirbaş yatırımının toplamı: listenin tamamından.
+      footer: (rows) =>
+        amount(rows.reduce((sum, row) => sum + (row.purchaseCost ?? 0), 0)),
+    },
+    {
+      key: "islem",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <div style={{ display: "flex", gap: 6 }}>
+          <Link className="erp-secondary-button" href={`/demirbas/${row.id}`}>
+            Kart
+          </Link>
+          {actions.can("edit") && (
+            <button
+              type="button"
+              className="erp-secondary-button"
+              onClick={() => openEdit(row)}
+            >
+              Düzenle
+            </button>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <ErpShell
@@ -392,87 +493,13 @@ export default function ToolAssetsPage() {
             </p>
           </div>
         ) : (
-          <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Kod</th>
-                  <th>Alet</th>
-                  <th>Seri No</th>
-                  <th>Durum</th>
-                  <th>Zimmetli</th>
-                  <th>Garanti</th>
-                  <th>Bedel</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {assets.map((asset) => {
-                  const warrantyActive =
-                    asset.warrantyEndDate != null &&
-                    new Date(asset.warrantyEndDate) >= new Date();
-
-                  return (
-                    <tr key={asset.id}>
-                      <td>{asset.code}</td>
-                      <td>
-                        {asset.name}
-                        {(asset.brand || asset.model) && (
-                          <small>
-                            {[asset.brand, asset.model].filter(Boolean).join(" ")}
-                          </small>
-                        )}
-                      </td>
-                      <td>{asset.serialNumber ?? "—"}</td>
-                      <td>
-                        <span className={statusClass(asset.status)}>
-                          {asset.statusName}
-                        </span>
-                      </td>
-                      <td>
-                        {asset.assignedPersonnelName ?? "—"}
-                        {asset.siteName && <small>{asset.siteName}</small>}
-                      </td>
-                      <td>
-                        {asset.warrantyEndDate ? (
-                          <>
-                            {dateFormat.format(new Date(asset.warrantyEndDate))}
-                            <small>{warrantyActive ? "sürüyor" : "doldu"}</small>
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td>
-                        {asset.purchaseCost != null
-                          ? amount(asset.purchaseCost)
-                          : "—"}
-                      </td>
-                      <td>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <Link
-                            className="erp-secondary-button"
-                            href={`/demirbas/${asset.id}`}
-                          >
-                            Kart
-                          </Link>
-                          {actions.can("edit") && (
-                            <button
-                              type="button"
-                              className="erp-secondary-button"
-                              onClick={() => openEdit(asset)}
-                            >
-                              Düzenle
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={assets}
+            columns={assetColumns}
+            rowKey={(row) => row.id}
+            title="Demirbaş ve Aletler"
+            resetKey={filterKey}
+          />
         )}
       </div>
     </ErpShell>
