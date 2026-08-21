@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -142,6 +143,44 @@ type Props<T> = {
    * sayfalama/çıktı kazanamazdı.
    */
   rowProps?: (row: T) => HTMLAttributes<HTMLTableRowElement>;
+
+  /**
+   * GRUPLAMA — satırlar bir anahtara göre öbeklenir ve her öbeğin
+   * başına kendi ALT TOPLAMINI taşıyan bir başlık satırı girer.
+   *
+   * NEDEN VAR: çek listesi aya göre gruplu ve ay toplamı bir nakit
+   * planlama sayısı ("bu ay ne kadar çek ödeyeceğim"). Bileşen bunu
+   * desteklemeseydi o ekranlar ham tabloda kalır, sayfalama ve dışa
+   * aktarma kazanamazdı — ya da gruplama düşürülüp bilgi kaybedilirdi.
+   *
+   * SIRA KORUNUR: gruplar, satırların GELİŞ SIRASINDA ilk göründükleri
+   * yere göre sıralanır. Yeniden sıralamak, ekranın kendi sıralamasını
+   * (vade, tarih) sessizce bozardı.
+   *
+   * SAYFALAMA SATIRA UYGULANIR, gruba değil: bir grup sayfa sınırını
+   * aşarsa başlığı sonraki sayfanın başında TEKRAR EDER. Gruplar
+   * sayfalansaydı "sayfa başına 25 kayıt" ayarı anlamını yitirirdi.
+   */
+  groupBy?: {
+    /** Satırı gruba bağlayan anahtar. */
+    key: (row: T) => string;
+
+    /**
+     * Grup başlığının DÜZ metni — dosyaya ve kâğıda bu gider.
+     * Sütunlardaki `value`/`render` ayrımının aynısı: zengin içerik
+     * dışa aktarmada saçmalamasın diye metin ayrı veriliyor.
+     */
+    label: (rows: T[], key: string) => string;
+
+    /** Ekranda görünen zengin başlık; verilmezse `label` basılır. */
+    render?: (rows: T[], key: string) => ReactNode;
+
+    /** Grubun alt toplamı — düz metin, dosyaya da girer. */
+    summary?: (rows: T[], key: string) => string;
+
+    /** Alt toplamın ekran karşılığı; verilmezse `summary` basılır. */
+    renderSummary?: (rows: T[], key: string) => ReactNode;
+  };
 };
 
 const PAGE_SIZES = [25, 50, 100];
@@ -167,16 +206,46 @@ function cellText<T>(column: DataTableColumn<T>, row: T): string {
  * ya da formül gereken yerler ayrı bir iş; 143 ekrana dışa aktarma
  * yaymanın bedeli sıfır bağımlılıkla karşılanıyor.
  */
-function toCsv<T>(columns: DataTableColumn<T>[], rows: T[]): string {
+function toCsv<T>(
+  columns: DataTableColumn<T>[],
+  rows: T[],
+  /*
+   * GRUP BAŞLIKLARI DOSYAYA DA GİRER. Girmeseydi dışa aktarılan liste
+   * ekrandan FARKLI bir şey anlatırdı: ay toplamları kaybolur, satırlar
+   * hangi aya ait belirsizleşirdi. Etiket ilk sütuna, özet SON sütuna
+   * yazılıyor — ekrandaki yerleşimin aynısı.
+   */
+  groups?: {
+    keyOf: (row: T) => string;
+    line: (rows: T[], key: string) => { label: string; summary: string };
+    members: Map<string, T[]>;
+  }
+): string {
   const escape = (value: string) =>
     /[";\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 
-  const lines = [
-    columns.map((column) => escape(column.header)).join(";"),
-    ...rows.map((row) =>
-      columns.map((column) => escape(cellText(column, row))).join(";")
-    ),
-  ];
+  const lines = [columns.map((column) => escape(column.header)).join(";")];
+
+  let lastKey: string | undefined;
+
+  for (const row of rows) {
+    if (groups) {
+      const key = groups.keyOf(row);
+
+      if (key !== lastKey) {
+        lastKey = key;
+
+        const { label, summary } = groups.line(groups.members.get(key) ?? [], key);
+        const cells = columns.map(() => "");
+        cells[0] = escape(label);
+        if (summary) cells[cells.length - 1] = escape(summary);
+
+        lines.push(cells.join(";"));
+      }
+    }
+
+    lines.push(columns.map((column) => escape(cellText(column, row))).join(";"));
+  }
 
   return `﻿${lines.join("\r\n")}\r\n`;
 }
@@ -208,6 +277,7 @@ export function DataTable<T>({
   printMeta,
   footerLabel = "Toplam",
   rowProps,
+  groupBy,
 }: Props<T>) {
   const [clientPage, setClientPage] = useState(1);
   const [clientPageSize, setClientPageSize] = useState(defaultPageSize);
@@ -228,6 +298,56 @@ export function DataTable<T>({
 
   const page = server ? server.page : clientPage;
   const pageSize = server ? server.pageSize : clientPageSize;
+  /*
+   * GRUPLAR BİTİŞİK OLMAK ZORUNDA, yoksa sayfalama aynı grubu ikiye
+   * bölüp arada başka grup gösterirdi. Sıra, grubun İLK GÖRÜNDÜĞÜ yere
+   * göre kuruluyor; grup içinde satırların kendi sırası korunuyor —
+   * ekranın vade/tarih sıralamasını sessizce bozmamak için.
+   */
+  const groupedRows = useMemo(() => {
+    if (!groupBy) return rows;
+
+    const buckets = new Map<string, T[]>();
+
+    for (const row of rows) {
+      const key = groupBy.key(row);
+      const bucket = buckets.get(key);
+
+      if (bucket) bucket.push(row);
+      else buckets.set(key, [row]);
+    }
+
+    return [...buckets.values()].flat();
+  }, [rows, groupBy]);
+
+  /** Grup başlığındaki alt toplam TÜM grubu görür, görünen sayfayı değil. */
+  const groupMembers = useMemo(() => {
+    const map = new Map<string, T[]>();
+    if (!groupBy) return map;
+
+    for (const row of groupedRows) {
+      const key = groupBy.key(row);
+      const bucket = map.get(key);
+
+      if (bucket) bucket.push(row);
+      else map.set(key, [row]);
+    }
+
+    return map;
+  }, [groupedRows, groupBy]);
+
+  /** CSV'ye grup satırı basmak için düz metin köprüsü. */
+  const csvGroups = groupBy
+    ? {
+        keyOf: groupBy.key,
+        members: groupMembers,
+        line: (members: T[], key: string) => ({
+          label: groupBy.label(members, key),
+          summary: groupBy.summary ? groupBy.summary(members, key) : "",
+        }),
+      }
+    : undefined;
+
   const total = server ? server.total : rows.length;
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -264,8 +384,8 @@ export function DataTable<T>({
     if (server) return rows;
 
     const start = (safePage - 1) * pageSize;
-    return rows.slice(start, start + pageSize);
-  }, [rows, server, safePage, pageSize, printAllRows]);
+    return groupedRows.slice(start, start + pageSize);
+  }, [groupedRows, server, safePage, pageSize, printAllRows]);
 
   async function printScope(scope: "page" | "all") {
     if (scope === "page") {
@@ -325,7 +445,10 @@ export function DataTable<T>({
     setExportError("");
 
     if (scope === "page") {
-      download(`${fileBase}-sayfa-${safePage}.csv`, toCsv(columns, visible));
+      download(
+        `${fileBase}-sayfa-${safePage}.csv`,
+        toCsv(columns, visible, csvGroups)
+      );
       return;
     }
 
@@ -333,7 +456,7 @@ export function DataTable<T>({
 
     try {
       const all = fetchAll ? await fetchAll() : rows;
-      download(`${fileBase}-tum-kayitlar.csv`, toCsv(columns, all));
+      download(`${fileBase}-tum-kayitlar.csv`, toCsv(columns, all, csvGroups));
     } catch (error) {
       setExportError(
         error instanceof Error ? error.message : "Kayıtlar indirilemedi."
@@ -473,21 +596,69 @@ export function DataTable<T>({
                 </td>
               </tr>
             ) : (
-              visible.map((row) => (
-                <tr key={rowKey(row)} {...rowProps?.(row)}>
-                  {columns.map((column) => (
-                    <td
-                      key={column.key}
-                      style={{
-                        textAlign: column.align ?? (column.numeric ? "right" : "left"),
-                        fontVariantNumeric: column.numeric ? "tabular-nums" : undefined,
-                      }}
-                    >
-                      {column.render ? column.render(row) : cellText(column, row)}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              visible.map((row, index) => {
+                /*
+                 * GRUP BAŞLIĞI: grubun İLK satırından önce basılır.
+                 * Bir grup sayfa sınırını aşarsa sonraki sayfanın ilk
+                 * satırı da "yeni grup" sayılır ve başlık TEKRAR EDER —
+                 * aksi halde ikinci sayfa hangi aya ait olduğunu
+                 * söylemeyen bir satır yığını olurdu.
+                 */
+                const groupKey = groupBy?.key(row);
+
+                const startsGroup =
+                  groupBy !== undefined &&
+                  (index === 0 || groupBy.key(visible[index - 1]) !== groupKey);
+
+                const members = groupKey ? groupMembers.get(groupKey) ?? [] : [];
+
+                return (
+                  <Fragment key={rowKey(row)}>
+                    {startsGroup && groupBy && groupKey !== undefined && (
+                      <tr className="erp-data-table-group">
+                        <td
+                          colSpan={
+                            groupBy.summary || groupBy.renderSummary
+                              ? columns.length - 1
+                              : columns.length
+                          }
+                        >
+                          {groupBy.render
+                            ? groupBy.render(members, groupKey)
+                            : groupBy.label(members, groupKey)}
+                        </td>
+
+                        {(groupBy.summary || groupBy.renderSummary) && (
+                          <td
+                            style={{
+                              textAlign: "right",
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          >
+                            {groupBy.renderSummary
+                              ? groupBy.renderSummary(members, groupKey)
+                              : groupBy.summary?.(members, groupKey)}
+                          </td>
+                        )}
+                      </tr>
+                    )}
+
+                    <tr {...rowProps?.(row)}>
+                      {columns.map((column) => (
+                        <td
+                          key={column.key}
+                          style={{
+                            textAlign: column.align ?? (column.numeric ? "right" : "left"),
+                            fontVariantNumeric: column.numeric ? "tabular-nums" : undefined,
+                          }}
+                        >
+                          {column.render ? column.render(row) : cellText(column, row)}
+                        </td>
+                      ))}
+                    </tr>
+                  </Fragment>
+                );
+              })
             )}
           </tbody>
 

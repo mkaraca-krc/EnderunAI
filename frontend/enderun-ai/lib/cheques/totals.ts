@@ -60,11 +60,23 @@ export interface ChequeTotals {
  * gerek yok. `listTotal` grupların toplamından türetiliyor — ayrı
  * bir `reduce` yazılsaydı ikisi yine ayrışabilirdi.
  */
+/**
+ * ÇEKİN AY ANAHTARI — gruplamanın TEK tanımı.
+ *
+ * Dışa açıldı çünkü ekran da aynı anahtara ihtiyaç duyuyor (tablo
+ * bileşenine grup anahtarı olarak geçiyor). İkinci bir `slice(0, 7)`
+ * yazılsaydı iki tanım zamanla ayrışır ve ekrandaki gruplama ile
+ * toplamların dayandığı gruplama farklı olurdu.
+ */
+export function chequeMonthKey(item: Pick<ChequeListItem, "dueDate">): string {
+  return item.dueDate.slice(0, 7);
+}
+
 export function summarizeCheques(items: ChequeListItem[]): ChequeTotals {
   const groups = new Map<string, ChequeMonthGroup>();
 
   for (const item of items) {
-    const key = item.dueDate.slice(0, 7);
+    const key = chequeMonthKey(item);
 
     let group = groups.get(key);
 

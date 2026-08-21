@@ -555,3 +555,129 @@ describe("DataTable — seçilebilir satır", () => {
     expect(bodyRows()[0]).not.toHaveAttribute("tabindex");
   });
 });
+
+/**
+ * GRUPLAMA (F4h).
+ *
+ * Çek listesi aya göre gruplu ve ay toplamı bir NAKİT PLANLAMA sayısı
+ * ("bu ay ne kadar çek ödeyeceğim"). Bileşen bunu desteklemeseydi o
+ * ekranlar ham tabloda kalır ya da gruplama düşürülüp bilgi
+ * kaybedilirdi.
+ *
+ * Buradaki dört söz:
+ * - gruplar BİTİŞİK durur (sayfalama aynı grubu bölüp araya başkasını
+ *   sokmaz),
+ * - grup başlığı sayfa sınırını aşan grupta TEKRAR EDER,
+ * - grup alt toplamı TÜM grubu görür, görünen sayfayı değil,
+ * - dışa aktarma grup satırlarını da yazar — yoksa dosya ekrandan
+ *   farklı bir şey anlatırdı.
+ */
+describe("DataTable — gruplama", () => {
+  type Satir = { id: string; ay: string; tutar: number };
+
+  const gruplu: DataTableColumn<Satir>[] = [
+    { key: "id", header: "Kod", value: (row) => row.id },
+    { key: "tutar", header: "Tutar", numeric: true, value: (row) => String(row.tutar) },
+  ];
+
+  const groupBy = {
+    key: (row: Satir) => row.ay,
+    label: (rows: Satir[], key: string) => `${key} · ${rows.length} kayıt`,
+    summary: (rows: Satir[]) =>
+      String(rows.reduce((sum, row) => sum + row.tutar, 0)),
+  };
+
+  /** Araya serpiştirilmiş iki ay: giriş sırası bilerek karışık. */
+  function karisikSatirlar(): Satir[] {
+    return [
+      { id: "a1", ay: "2026-01", tutar: 10 },
+      { id: "b1", ay: "2026-02", tutar: 100 },
+      { id: "a2", ay: "2026-01", tutar: 20 },
+      { id: "b2", ay: "2026-02", tutar: 200 },
+    ];
+  }
+
+  it("aynı grubun satırlarını bitişik gösterir", () => {
+    render(
+      <DataTable
+        rows={karisikSatirlar()}
+        columns={gruplu}
+        rowKey={(row) => row.id}
+        groupBy={groupBy}
+      />
+    );
+
+    const metin = bodyRows().map((row) => row.textContent ?? "");
+
+    // Sıra: [ocak başlığı, a1, a2, şubat başlığı, b1, b2]
+    expect(metin[0]).toContain("2026-01");
+    expect(metin[1]).toContain("a1");
+    expect(metin[2]).toContain("a2");
+    expect(metin[3]).toContain("2026-02");
+    expect(metin[4]).toContain("b1");
+    expect(metin[5]).toContain("b2");
+  });
+
+  it("grup alt toplamı TÜM grubu kapsar, görünen sayfayı değil", () => {
+    // Sayfa boyutu 1: ocak grubunun yalnız ilk satırı görünür.
+    render(
+      <DataTable
+        rows={karisikSatirlar()}
+        columns={gruplu}
+        rowKey={(row) => row.id}
+        groupBy={groupBy}
+        defaultPageSize={1}
+      />
+    );
+
+    // 10 + 20 = 30; görünen tek satır 10 olsa da toplam 30 yazmalı.
+    expect(screen.getByText("30")).toBeInTheDocument();
+    expect(screen.getByText(/2026-01 · 2 kayıt/)).toBeInTheDocument();
+  });
+
+  it("grup sayfa sınırını aşınca başlık sonraki sayfada TEKRAR EDER", () => {
+    render(
+      <DataTable
+        rows={karisikSatirlar()}
+        columns={gruplu}
+        rowKey={(row) => row.id}
+        groupBy={groupBy}
+        defaultPageSize={1}
+      />
+    );
+
+    expect(screen.getByText(/2026-01 · 2 kayıt/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Sonraki/ }));
+
+    // İkinci sayfa da ocak grubunun devamı: başlık yine görünmeli,
+    // yoksa sayfa hangi aya ait olduğunu söylemeyen bir satır olurdu.
+    expect(screen.getByText(/2026-01 · 2 kayıt/)).toBeInTheDocument();
+    expect(bodyRows().some((row) => row.textContent?.includes("a2"))).toBe(true);
+  });
+
+  it("dışa aktarma grup satırlarını da yazar", () => {
+    render(
+      <DataTable
+        rows={karisikSatirlar()}
+        columns={gruplu}
+        rowKey={(row) => row.id}
+        groupBy={groupBy}
+        title="Gruplu Liste"
+      />
+    );
+
+    const { content } = captureDownload(() => {
+      fireEvent.click(screen.getByRole("button", { name: /Bu Sayfayı İndir/ }));
+    });
+
+    const satirlar = content.trim().split("\r\n");
+
+    // Başlık + ocak grubu + 2 satır + şubat grubu + 2 satır
+    expect(satirlar).toHaveLength(7);
+    expect(satirlar[1]).toContain("2026-01");
+    expect(satirlar[1]).toContain("30");
+    expect(satirlar[4]).toContain("2026-02");
+    expect(satirlar[4]).toContain("300");
+  });
+});

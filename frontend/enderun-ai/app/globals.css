@@ -4182,6 +4182,22 @@ body {
   color: var(--erp-text-muted, #64748b);
 }
 
+/*
+ * GRUP BAŞLIĞI SATIRI (F4h).
+ *
+ * Ay/dönem bandı: bağırmıyor ama detay satırlarından net ayrışıyor ve
+ * tablo aynı ızgarada duruyor. Renk tokenlardan — ham hex yazılsaydı
+ * marka rengi değiştiğinde bu satır geride kalır, koyu temada da
+ * okunmazdı.
+ */
+.erp-data-table-group > td {
+  background: var(--erp-bg);
+  border-top: 2px solid var(--erp-border-strong, var(--erp-border));
+  font-weight: 700;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
 .erp-data-table-footer {
   display: flex;
   flex-wrap: wrap;

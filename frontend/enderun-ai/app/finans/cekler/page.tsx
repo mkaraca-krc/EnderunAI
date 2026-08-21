@@ -3,8 +3,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { amount as formatAmount, money, number as formatNumber } from "@/lib/format/turkish";
-import { summarizeCheques } from "@/lib/cheques/totals";
+import { chequeMonthKey, summarizeCheques } from "@/lib/cheques/totals";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
 import { branchService, type BranchListItem } from "@/services/branch.service";
@@ -269,6 +270,142 @@ export default function ChequeRegisterPage() {
     () => summarizeCheques(items),
     [items]
   );
+
+  /*
+   * GRUPLU LİSTE (F4h). Satırlar grup sırasında düzleştiriliyor;
+   * gruplama kuralı ve ay toplamı `lib/cheques/totals.ts`ten geliyor —
+   * ekran kendi hesabını yazsaydı üst toplamla ay toplamları yine
+   * ayrışabilirdi (bu ekranda bir kez yaşandı).
+   */
+  const chequeRows = useMemo(
+    () => monthGroups.flatMap((group) => group.rows),
+    [monthGroups]
+  );
+
+  const groupIndex = useMemo(
+    () => new Map(monthGroups.map((group) => [group.key, group])),
+    [monthGroups]
+  );
+
+  const chequeGroupBy = {
+    key: chequeMonthKey,
+    label: (_rows: ChequeListItem[], key: string) => {
+      const group = groupIndex.get(key);
+      if (!group) return key;
+
+      const voided = group.rows.length - group.count;
+
+      return (
+        `${group.label} · ${group.count} çek` +
+        (voided > 0 ? ` · ${voided} iptal (toplam dışı)` : "")
+      );
+    },
+    render: (_rows: ChequeListItem[], key: string) => {
+      const group = groupIndex.get(key);
+      if (!group) return key;
+
+      const voided = group.rows.length - group.count;
+
+      return (
+        <>
+          {group.label}
+          <small className="!mt-0.5 block font-normal">
+            {group.count} çek
+            {voided > 0 ? ` · ${voided} iptal (toplam dışı)` : ""}
+            {projectFilter
+              ? ` · ${
+                  projects.find((x) => x.id === projectFilter)?.code ??
+                  "seçili proje"
+                }`
+              : ""}
+          </small>
+        </>
+      );
+    },
+    summary: (_rows: ChequeListItem[], key: string) =>
+      money(groupIndex.get(key)?.total ?? 0),
+  };
+
+  const chequeColumns: DataTableColumn<ChequeListItem>[] = [
+    {
+      key: "cek",
+      header: "Çek No",
+      value: (row) => `${row.chequeNumber} (${row.internalNumber})`,
+      render: (row) => (
+        <>
+          <strong>{row.chequeNumber}</strong>
+          <small>{row.internalNumber}</small>
+        </>
+      ),
+    },
+    {
+      key: "banka",
+      header: "Banka",
+      value: (row) => (row.drawer ? `${row.bankName} — ${row.drawer}` : row.bankName),
+      render: (row) => (
+        <>
+          {row.bankName}
+          {row.drawer && <small>{row.drawer}</small>}
+        </>
+      ),
+    },
+    { key: "cari", header: "Cari", value: (row) => row.currentAccountTitle ?? "—" },
+    { key: "proje", header: "Proje", value: (row) => row.projectCode ?? "—" },
+    {
+      key: "vade",
+      header: "Vade",
+      value: (row) =>
+        `${dateFormat.format(new Date(row.dueDate))} · ` +
+        (row.isOverdue
+          ? `${Math.abs(row.daysToDue)} gün gecikmiş`
+          : `${row.daysToDue} gün`),
+      render: (row) => (
+        <>
+          {dateFormat.format(new Date(row.dueDate))}
+          <small>
+            {row.isOverdue
+              ? `${Math.abs(row.daysToDue)} gün gecikmiş`
+              : `${row.daysToDue} gün`}
+          </small>
+        </>
+      ),
+    },
+    {
+      key: "tutar",
+      header: "Tutar",
+      numeric: true,
+      value: (row) =>
+        row.currencyCode === "TRY"
+          ? money(row.amount)
+          : `${formatAmount(row.amount)} ${row.currencyCode} (${money(row.amountTry)})`,
+      render: (row) => (
+        <>
+          <strong>
+            {row.currencyCode === "TRY"
+              ? money(row.amount)
+              : `${formatAmount(row.amount)} ${row.currencyCode}`}
+          </strong>
+          {/* Dövizli çekte defter değeri de görünmeli: yalnızca döviz
+              tutarı gösterilseydi liste toplamıyla satırlar tutmazdı. */}
+          {row.currencyCode !== "TRY" && (
+            <small className="rw-value-muted">
+              {money(row.amountTry)} · kur {formatNumber(row.exchangeRate, 4)}
+            </small>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => CHEQUE_STATUS_LABELS[row.status] ?? row.statusName,
+      render: (row) => (
+        <span className={`erp-status ${CHEQUE_STATUS_COLORS[row.status] ?? "gray"}`}>
+          {CHEQUE_STATUS_LABELS[row.status] ?? row.statusName}
+        </span>
+      ),
+    },
+  ];
 
   const statusOptions = useMemo(
     () =>
@@ -1206,116 +1343,27 @@ export default function ChequeRegisterPage() {
             <p>Bu filtreye uyan çek kaydı yok.</p>
           </div>
         ) : (
-          <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Çek No</th>
-                  <th>Banka</th>
-                  <th>Cari</th>
-                  <th>Proje</th>
-                  <th>Vade</th>
-                  <th className="num">Tutar</th>
-                  <th>Durum</th>
-                </tr>
-              </thead>
-              <tbody>
-                {monthGroups.map((group) => (
-                  <Fragment key={group.key}>
-                    {/* AY BAŞLIĞI: proje filtresiyle birlikte
-                        "bu projeye bu ay ne kadar" sorusunu
-                        cevaplıyor. */}
-                    {/* Ay bandı: marka turkuazının en açık tonu
-                        (brand-50/100). Bağırmıyor ama detay
-                        satırlarından net ayrışıyor; tablo yine aynı
-                        ızgarada duruyor. */}
-                    <tr className="bg-brand-50">
-                      <td
-                        colSpan={5}
-                        className="border-t-2 border-brand-200 !py-2 font-bold text-brand-900"
-                      >
-                        {group.label}
-                        <small className="!mt-0.5 block font-normal text-brand-800">
-                          {group.count} çek
-                          {group.rows.length > group.count
-                            ? ` · ${group.rows.length - group.count} iptal (toplam dışı)`
-                            : ""}
-                          {projectFilter
-                            ? ` · ${
-                                projects.find((x) => x.id === projectFilter)?.code ??
-                                "seçili proje"
-                              }`
-                            : ""}
-                        </small>
-                      </td>
-                      <td className="border-t-2 border-brand-200 !py-2 text-right font-bold tabular-nums text-brand-900">
-                        {money(group.total)}
-                      </td>
-                      <td className="border-t-2 border-brand-200 !py-2" />
-                    </tr>
+          <DataTable
+            rows={chequeRows}
+            columns={chequeColumns}
+            rowKey={(row) => row.id}
+            title="Çek Listesi"
+            resetKey={`${direction}|${statusFilter}|${projectFilter}|${search}`}
+            rowProps={(row) => ({
+              onClick: () => void openDetail(row.id),
+              style: {
+                cursor: "pointer",
+                fontWeight: row.id === detail?.id ? 600 : undefined,
+                // İptal edilen kayıt denetim izi için listede kalıyor
+                // ama toplam dışı olduğu belli olsun.
+                opacity: row.status === ChequeStatus.Voided ? 0.55 : undefined,
+                textDecoration:
+                  row.status === ChequeStatus.Voided ? "line-through" : undefined,
+              },
+            })}
+            groupBy={chequeGroupBy}
+          />
 
-                    {group.rows.map((item) => (
-                  <tr
-                    key={item.id}
-                    onClick={() => void openDetail(item.id)}
-                    style={{
-                      cursor: "pointer",
-                      fontWeight: item.id === detail?.id ? 600 : undefined,
-                      // İptal edilen kayıt denetim izi için listede
-                      // kalıyor ama toplam dışı olduğu belli olsun.
-                      opacity: item.status === ChequeStatus.Voided ? 0.55 : undefined,
-                      textDecoration:
-                        item.status === ChequeStatus.Voided
-                          ? "line-through"
-                          : undefined,
-                    }}
-                  >
-                    <td>
-                      <strong>{item.chequeNumber}</strong>
-                      <small>{item.internalNumber}</small>
-                    </td>
-                    <td>
-                      {item.bankName}
-                      {item.drawer && <small>{item.drawer}</small>}
-                    </td>
-                    <td>{item.currentAccountTitle ?? "—"}</td>
-                    <td>{item.projectCode ?? "—"}</td>
-                    <td>
-                      {dateFormat.format(new Date(item.dueDate))}
-                      <small>
-                        {item.isOverdue
-                          ? `${Math.abs(item.daysToDue)} gün gecikmiş`
-                          : `${item.daysToDue} gün`}
-                      </small>
-                    </td>
-                    <td className="num">
-                      <strong>
-                        {item.currencyCode === "TRY"
-                          ? money(item.amount)
-                          : `${formatAmount(item.amount)} ${item.currencyCode}`}
-                      </strong>
-                      {/* Dövizli çekte defter değeri de görünmeli:
-                          yalnızca döviz tutarı gösterilseydi liste
-                          toplamıyla satırlar tutmazdı. */}
-                      {item.currencyCode !== "TRY" && (
-                        <small className="rw-value-muted">
-                          {money(item.amountTry)} · kur{" "}
-                          {formatNumber(item.exchangeRate, 4)}
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`erp-status ${CHEQUE_STATUS_COLORS[item.status] ?? "gray"}`}>
-                        {CHEQUE_STATUS_LABELS[item.status] ?? item.statusName}
-                      </span>
-                    </td>
-                  </tr>
-                    ))}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
         )}
       </div>
 
