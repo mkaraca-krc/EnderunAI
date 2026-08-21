@@ -19,7 +19,8 @@ public sealed class InventoryController(
     ICurrentUserService currentUser,
     Services.Inventory.IStockAccountingConsistencyService consistency,
     Services.Inventory.IStockConsumptionPoster consumptionPoster,
-    Services.Inventory.IStockCountLockService countLock) : ControllerBase
+    Services.Inventory.IStockCountLockService countLock,
+    Services.Inventory.InventoryItemPhotoService photos) : ControllerBase
 {
     /// <summary>
     /// STOK ↔ MUHASEBE TUTARLILIK RAPORU.
@@ -68,6 +69,8 @@ public sealed class InventoryController(
         [FromQuery] string? search,
         [FromQuery] string? category,
         [FromQuery] Guid? warehouseId,
+        [FromQuery] Guid? projectId,
+        [FromQuery] int? supplyKind,
         [FromQuery] bool? criticalOnly,
         [FromQuery] bool includeInactive,
         CancellationToken cancellationToken)
@@ -112,6 +115,17 @@ public sealed class InventoryController(
                 x.WarehouseStocks.Any(s => s.WarehouseId == warehouseId.Value));
         }
 
+        /*
+         * PROJE SÜZGECİ (S9). "Bu iş için hangi kartlar açıldı"
+         * sorusunun cevabı: özel imalat ve dekoratif ürünler projeye
+         * bağlı doğuyor, katalog kalemleri bağsız kalıyor.
+         */
+        if (projectId.HasValue)
+            query = query.Where(x => x.ProjectId == projectId.Value);
+
+        if (supplyKind.HasValue)
+            query = query.Where(x => (int)x.SupplyKind == supplyKind.Value);
+
         var items = await query.OrderBy(x => x.Name).Select(x => new
         {
             x.Id, x.CompanyId, CompanyName = x.Company.Name, x.Code, x.Name, x.Category,
@@ -123,6 +137,15 @@ public sealed class InventoryController(
             ShelfCode = x.WarehouseShelf != null ? x.WarehouseShelf.Code : null,
             LevelCode = x.WarehouseShelfLevel != null ? x.WarehouseShelfLevel.Code : null,
             x.Brand, x.Model, x.Unit, x.Barcode,
+            x.ProjectId,
+            ProjectName = x.Project != null ? x.Project.Name : null,
+            SupplyKind = (int)x.SupplyKind,
+            // Kapak görseli: listede ve seçicilerde bu gösterilir.
+            CoverPhotoId = x.Photos
+                .Where(p => p.IsCover)
+                .Select(p => (Guid?)p.Id)
+                .FirstOrDefault(),
+            PhotoCount = x.Photos.Count,
             x.AverageUnitCost,
             x.LastPurchasePrice, x.LastPurchaseDate, x.VatRate,
             x.PreferredSupplierCurrentAccountId,
@@ -215,7 +238,11 @@ public sealed class InventoryController(
                 x.VatRate,
                 x.Description,
                 x.CopperKgPerUnit,
-                x.ImagePath,
+                x.ProjectId,
+                x.Project != null ? x.Project.Name : null,
+                (int)x.SupplyKind,
+                x.Photos.Where(p => p.IsCover).Select(p => (Guid?)p.Id).FirstOrDefault(),
+                x.Photos.Count,
                 x.WarehouseStocks.Sum(s => s.Quantity),
                 x.WarehouseStocks.Sum(s => s.Quantity) * x.AverageUnitCost,
                 x.WarehouseStocks.Select(s => new InventoryItemWarehouseStock(
@@ -251,6 +278,10 @@ public sealed class InventoryController(
         string? Barcode,
         decimal? CopperKgPerUnit,
         int Type,
+        /// <summary>Kartın açıldığı proje — bağlayıcıdır (S9).</summary>
+        Guid? ProjectId,
+        /// <summary>0 Stoklu, 1 Özel imalat, 2 Sipariş üzerine.</summary>
+        int SupplyKind,
         Guid? PreferredSupplierCurrentAccountId,
         decimal? VatRate,
         string? Description);
@@ -448,6 +479,12 @@ public sealed class InventoryController(
             }
         }
 
+        var validationError = await ValidateProjectAndSupplyAsync(
+            request.CompanyId, request.ProjectId, request.SupplyKind, cancellationToken);
+
+        if (validationError is not null)
+            return BadRequest(new { message = validationError });
+
         var entity = new InventoryItem
         {
             CompanyId = request.CompanyId,
@@ -463,6 +500,8 @@ public sealed class InventoryController(
             Unit = unit,
             Barcode = request.Barcode?.Trim(),
             CopperKgPerUnit = request.CopperKgPerUnit,
+            ProjectId = request.ProjectId,
+            SupplyKind = (InventorySupplyKind)request.SupplyKind,
             Type = (InventoryItemType)request.Type,
             PreferredSupplierCurrentAccountId = request.PreferredSupplierCurrentAccountId,
             VatRate = request.VatRate,
@@ -518,12 +557,45 @@ public sealed class InventoryController(
         if (item is null) return NotFound(new { message = "Malzeme kartı bulunamadı." });
 
         item.Name = request.Name.Trim();
+        var validationError = await ValidateProjectAndSupplyAsync(
+            item.CompanyId, request.ProjectId, request.SupplyKind, cancellationToken);
+
+        if (validationError is not null)
+            return BadRequest(new { message = validationError });
+
+        /*
+         * STOKLU'DAN ÇIKARKEN SEVİYE TAKİBİ KALMAMALI (S9).
+         *
+         * Kart "sipariş üzerine"ye çevrilirse asgari seviyesi anlamını
+         * yitirir ama satır durmaya devam eder ve her gün "eksik" diye
+         * uyarı üretir. Sessizce silmek de doğru değil: takibi kim
+         * kaldırdı sorusu cevapsız kalırdı. Bu yüzden ENGELLENİYOR,
+         * kullanıcı önce seviyeyi kendisi kaldırıyor.
+         */
+        if ((InventorySupplyKind)request.SupplyKind is not InventorySupplyKind.Stocked)
+        {
+            var hasLevels = await db.WarehouseStockLevels
+                .AnyAsync(x => x.InventoryItemId == item.Id, cancellationToken);
+
+            if (hasLevels)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "Bu kartta tanımlı asgari/azami stok seviyesi var. Tedarik tipini " +
+                        "değiştirmeden önce Stok Seviyeleri ekranından takibi kaldırın."
+                });
+            }
+        }
+
         item.Category = request.Category?.Trim();
         item.Brand = request.Brand?.Trim();
         item.Model = request.Model?.Trim();
         item.Unit = request.Unit.Trim();
         item.Barcode = request.Barcode?.Trim();
         item.CopperKgPerUnit = request.CopperKgPerUnit;
+        item.ProjectId = request.ProjectId;
+        item.SupplyKind = (InventorySupplyKind)request.SupplyKind;
         item.Type = (InventoryItemType)request.Type;
         item.IsActive = request.IsActive;
         item.PreferredSupplierCurrentAccountId = request.PreferredSupplierCurrentAccountId;
@@ -644,11 +716,137 @@ public sealed class InventoryController(
      * yani kaldırmak veri kaybetmedi.
      */
 
+    /*
+     * STOK KARTI GÖRSEL GALERİSİ (S9).
+     *
+     * SERBEST kartlarda (dekoratif aydınlatma, özel imalat) ürünün
+     * kendisi tarifle anlatılamaz; montaj öncesi/sonrası, detay ve ölçü
+     * krokisi AYRI görsellerdir. Bu yüzden tekil `ImagePath` yerine
+     * galeri var ve biri kapak olarak işaretleniyor.
+     *
+     * İZİN: okumak `inventory.view`, değiştirmek `inventory.edit`.
+     * Görsel de kartın verisidir; kartı düzenleyemeyen ona görsel
+     * ekleyememeli.
+     */
+
+    [HttpGet("items/{id:guid}/fotograflar")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
+    public async Task<IActionResult> GetPhotos(Guid id, CancellationToken cancellationToken) =>
+        Ok(await photos.ListAsync(id, cancellationToken));
+
+    [HttpPost("items/{id:guid}/fotograflar")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryEdit)]
+    public async Task<IActionResult> AddPhoto(
+        Guid id,
+        IFormFile file,
+        [FromForm] string? caption,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await photos.AddAsync(id, file, caption, currentUser.UserId, cancellationToken));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            // Tip/boyut reddi buradan geliyor.
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    [HttpGet("fotograflar/{photoId:guid}/dosya")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
+    public async Task<IActionResult> DownloadPhoto(Guid photoId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var file = await photos.GetFileAsync(photoId, cancellationToken);
+            return PhysicalFile(file.FullPath, file.ContentType);
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+    }
+
+    [HttpPut("fotograflar/{photoId:guid}/kapak")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryEdit)]
+    public async Task<IActionResult> SetCoverPhoto(Guid photoId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await photos.SetCoverAsync(photoId, currentUser.UserId, cancellationToken);
+            return Ok(new { message = "Kapak görseli değiştirildi." });
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+    }
+
+    [HttpDelete("fotograflar/{photoId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.InventoryEdit)]
+    public async Task<IActionResult> DeletePhoto(Guid photoId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await photos.DeleteAsync(photoId, currentUser.UserId, cancellationToken);
+            return Ok(new { message = "Görsel silindi." });
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+    }
+
+    /// <summary>
+    /// Kartın proje bağı ve tedarik tipi doğrulaması (S9).
+    ///
+    /// TEK YERDE: oluşturma ve güncelleme aynı kuralı uyguluyor. İki
+    /// kopya olsaydı biri güncellenir, diğeri geride kalırdı — kartın
+    /// kuralı hangi kapıdan girdiğine göre değişirdi.
+    /// </summary>
+    private async Task<string?> ValidateProjectAndSupplyAsync(
+        Guid companyId,
+        Guid? projectId,
+        int supplyKind,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(typeof(InventorySupplyKind), supplyKind))
+            return "Geçersiz tedarik tipi.";
+
+        if (projectId.HasValue)
+        {
+            var projectInCompany = await db.Projects
+                .AnyAsync(x => x.Id == projectId.Value && x.CompanyId == companyId,
+                    cancellationToken);
+
+            if (!projectInCompany)
+                return "Seçilen proje bu kartın şirketine ait değil.";
+        }
+
+        return null;
+    }
+
     [HttpPost("issues")]
     [RequirePermission(PermissionCatalog.Keys.InventoryCreate)]
     public async Task<IActionResult> Issue(StockIssueRequest request, CancellationToken cancellationToken)
     {
         if (request.Quantity <= 0) return BadRequest(new { message = "Miktar sıfırdan büyük olmalıdır." });
+
+        /*
+         * HAREKET TARİHİ ZORUNLU — ve eksikse 400, 500 DEĞİL.
+         *
+         * Alan zorunluydu ama doğrulanmıyordu: boş gelince akış muhasebe
+         * fişine kadar iniyor ve fiş servisi "Fiş tarihi zorunludur" diye
+         * ArgumentException fırlatıyordu; kullanıcı Türkçe bir uyarı
+         * yerine 500 görüyordu. S9'da test yazarken ortaya çıktı.
+         */
+        if (request.MovementDate == default)
+            return BadRequest(new { message = "Hareket tarihi zorunludur." });
 
         var stock = await db.WarehouseStocks.Include(x => x.Warehouse).Include(x => x.InventoryItem).SingleOrDefaultAsync(
             x => x.WarehouseId == request.WarehouseId && x.InventoryItemId == request.InventoryItemId, cancellationToken);
@@ -659,6 +857,38 @@ public sealed class InventoryController(
 
         if (request.ProjectSiteId.HasValue && !request.ProjectId.HasValue)
             return BadRequest(new { message = "Şantiye seçildiyse proje de belirtilmelidir." });
+
+        /*
+         * KARTIN PROJE BAĞI BAĞLAYICIDIR (S9).
+         *
+         * X projesi için özel imal edilmiş bir armatür kataloğa ait
+         * değildir, o işe aittir; Y projesine çıkarılması o işi
+         * malzemesiz bırakır ve iki projenin de maliyetini bozar.
+         * Projesiz çıkış da aynı kapıya çıkar: kart bir işe bağlıyken
+         * genel gidere yazılamaz.
+         *
+         * UYARI DEĞİL ENGEL: uyarı zamanla görmezden gelinir. Malzeme
+         * gerçekten başka işe gerekiyorsa önce KARTIN BAĞI değiştirilir
+         * — böylece karar kaydedilmiş olur, çıkış anında sessizce
+         * alınmaz.
+         */
+        if (stock.InventoryItem.ProjectId is Guid boundProjectId &&
+            request.ProjectId != boundProjectId)
+        {
+            var boundProjectName = await db.Projects
+                .AsNoTracking()
+                .Where(x => x.Id == boundProjectId)
+                .Select(x => x.Name)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            return BadRequest(new
+            {
+                message =
+                    $"Bu kart \"{boundProjectName}\" projesi için açıldı ve başka bir işe " +
+                    "çıkarılamaz. Gerçekten gerekiyorsa önce malzeme kartındaki proje " +
+                    "bağını değiştirin."
+            });
+        }
 
         // PROJE DEPOYLA AYNI ŞİRKETTE OLMALI.
         //

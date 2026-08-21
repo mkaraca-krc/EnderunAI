@@ -220,6 +220,7 @@ public sealed class AppDbContext(
     public DbSet<InventoryItemAttributeValue> InventoryItemAttributeValues => Set<InventoryItemAttributeValue>();
     public DbSet<WarehouseStock> WarehouseStocks => Set<WarehouseStock>();
     public DbSet<WarehouseStockLevel> WarehouseStockLevels => Set<WarehouseStockLevel>();
+    public DbSet<InventoryItemPhoto> InventoryItemPhotos => Set<InventoryItemPhoto>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<RetailSale> RetailSales => Set<RetailSale>();
     public DbSet<RetailSaleItem> RetailSaleItems => Set<RetailSaleItem>();
@@ -356,6 +357,7 @@ public sealed class AppDbContext(
         ConfigureInventoryItems(modelBuilder);
         ConfigureWarehouseStocks(modelBuilder);
         ConfigureWarehouseStockLevels(modelBuilder);
+        ConfigureInventoryItemPhotos(modelBuilder);
         ConfigureRetailSales(modelBuilder);
         ConfigureStockMovements(modelBuilder);
         ConfigureDocumentNumberSequences(modelBuilder);
@@ -3371,6 +3373,42 @@ public sealed class AppDbContext(
             entity.Property(x => x.SalesPrice).HasPrecision(18, 6);
             entity.Property(x => x.MaxDiscountRate).HasPrecision(5, 2);
             entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+
+            // KARTIN AÇILDIĞI PROJE (S9). Silme davranışı Restrict:
+            // projesi silinmiş bir kart, bağının ne olduğu bilinmeyen
+            // bir kart olurdu ve bağlayıcı çıkış kuralı anlamını
+            // yitirirdi.
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+
+            // Proje süzgeci ve bağlayıcı çıkış kontrolü buradan okuyor.
+            entity.HasIndex(x => x.ProjectId);
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureInventoryItemPhotos(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InventoryItemPhoto>(entity =>
+        {
+            entity.ToTable("inventory_item_photos");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.StoredName).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.OriginalName).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Caption).HasMaxLength(300);
+
+            // Galeri okuması kart bazında; kapak da buradan bulunuyor.
+            entity.HasIndex(x => new { x.InventoryItemId, x.IsCover });
+
+            // Kart silinince görselleri de gider: görselin karttan ayrı
+            // bir ömrü yok, öksüz satır bırakmanın anlamı olmazdı.
+            entity.HasOne(x => x.InventoryItem)
+                .WithMany(x => x.Photos)
+                .HasForeignKey(x => x.InventoryItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }

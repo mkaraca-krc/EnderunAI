@@ -39,6 +39,8 @@ import {
   type StockLevelRow,
 } from "@/services/stock-level.service";
 
+import { projectService, type ProjectListItem } from "@/services/project.service";
+
 function formatNumber(value: number): string {
   return amount(value);
 }
@@ -147,6 +149,14 @@ export default function InventoryOperationsPage() {
   const [criticalOnly, setCriticalOnly] = useState(false);
 
   /*
+   * PROJE SÜZGECİ (S9): "bu iş için hangi kartlar açıldı". Özel imalat
+   * ve dekoratif ürünler projeye bağlı doğuyor; katalog kalemleri
+   * bağsız kalıyor.
+   */
+  const [projectId, setProjectId] = useState("");
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+
+  /*
    * Kategori artık kendi varlığı (S1): ad, tip ve özellik şablonu
    * taşıyor. Bu ekrandaki süzgeç yalnız ADI kullanıyor; kart açma
    * ekranı şablonun tamamını kullanacak (S2).
@@ -183,6 +193,8 @@ export default function InventoryOperationsPage() {
           inventoryMovementService.getWarehouses().catch(() => []),
         ]);
 
+      setProjects(await projectService.getAll().catch(() => []));
+
       const levelData = await stockLevelService
         .list({ belowMinimumOnly: true })
         .catch(() => [] as StockLevelRow[]);
@@ -215,6 +227,7 @@ export default function InventoryOperationsPage() {
       selectedCategory: string,
       selectedWarehouseId: string,
       onlyCritical: boolean,
+      selectedProjectId: string,
     ) => {
       try {
         setLoadingItems(true);
@@ -225,6 +238,7 @@ export default function InventoryOperationsPage() {
           category: selectedCategory || undefined,
           warehouseId: selectedWarehouseId || undefined,
           criticalOnly: onlyCritical || undefined,
+          projectId: selectedProjectId || undefined,
           includeInactive: true,
         });
 
@@ -249,7 +263,7 @@ export default function InventoryOperationsPage() {
     const term = search.trim();
     setAppliedSearch(term);
 
-    void loadItems(term, category, warehouseId, criticalOnly);
+    void loadItems(term, category, warehouseId, criticalOnly, projectId);
   }
 
   function clearSearch() {
@@ -258,7 +272,7 @@ export default function InventoryOperationsPage() {
     setCategory("");
     setWarehouseId("");
     setCriticalOnly(false);
-    void loadItems("", "", "", false);
+    void loadItems("", "", "", false, "");
   }
 
   /** Süzgeç değişince listeyi hemen tazele — ayrı "Ara" tıklaması gerekmesin. */
@@ -266,22 +280,26 @@ export default function InventoryOperationsPage() {
     category?: string;
     warehouseId?: string;
     criticalOnly?: boolean;
+    projectId?: string;
   }) {
     const next = {
       category: patch.category ?? category,
       warehouseId: patch.warehouseId ?? warehouseId,
       criticalOnly: patch.criticalOnly ?? criticalOnly,
+      projectId: patch.projectId ?? projectId,
     };
 
     setCategory(next.category);
     setWarehouseId(next.warehouseId);
     setCriticalOnly(next.criticalOnly);
+    setProjectId(next.projectId);
 
     void loadItems(
       appliedSearch,
       next.category,
       next.warehouseId,
       next.criticalOnly,
+      next.projectId,
     );
   }
 
@@ -876,6 +894,21 @@ export default function InventoryOperationsPage() {
                 ))}
               </select>
 
+              <select
+                value={projectId}
+                onChange={(event) =>
+                  applyFilter({ projectId: event.target.value })
+                }
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">Tüm projeler</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
@@ -954,15 +987,40 @@ export default function InventoryOperationsPage() {
                         </td>
 
                         <td className="px-4 py-3">
-                          <div className="font-medium text-slate-900">
-                            {item.name}
-                          </div>
+                          <div className="flex items-center gap-3">
+                            {/*
+                              * KAPAK GÖRSELİ: dekoratif ve özel imalat
+                              * ürünlerde ad tek başına hangi ürün olduğunu
+                              * söylemiyor. Görseli olmayan kartta yer
+                              * tutucu da basılmıyor — satır şişerdi.
+                              */}
+                            {item.coverPhotoId && (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                src={inventoryService.photoUrl(item.coverPhotoId)}
+                                alt=""
+                                className="h-10 w-10 shrink-0 rounded object-cover"
+                              />
+                            )}
 
-                          <div className="text-xs text-slate-500">
-                            {[item.brand, item.model]
-                              .filter(Boolean)
-                              .join(" · ") ||
-                              "Marka/model belirtilmedi"}
+                            <div className="min-w-0">
+                              <div className="font-medium text-slate-900">
+                                {item.name}
+                              </div>
+
+                              <div className="text-xs text-slate-500">
+                                {[item.brand, item.model]
+                                  .filter(Boolean)
+                                  .join(" · ") ||
+                                  "Marka/model belirtilmedi"}
+                              </div>
+
+                              {item.projectName && (
+                                <div className="text-xs text-amber-700">
+                                  {item.projectName} projesine bağlı
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
 

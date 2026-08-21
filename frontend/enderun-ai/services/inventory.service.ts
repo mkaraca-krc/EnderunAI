@@ -2,6 +2,32 @@ import { apiClient } from "@/lib/api/api-client";
 
 export type InventoryItemType = 0 | 1 | 2;
 
+/**
+ * TEDARİK TİPİ (S9) — üçü birbirini dışlar.
+ *
+ * Asgari/azami seviye takibi (S8) yalnız STOKLU kartlarda anlamlı:
+ * siparişe göre üretilen bir üründe stok bulundurMAMAK bilinçli
+ * karardır, uyarı her gün "eksik" diye bağırırdı.
+ */
+export type InventorySupplyKind = 0 | 1 | 2;
+
+export const SUPPLY_KIND_LABELS: Record<InventorySupplyKind, string> = {
+  0: "Stoklu",
+  1: "Özel imalat",
+  2: "Sipariş üzerine",
+};
+
+export interface InventoryItemPhoto {
+  id: string;
+  originalName: string;
+  contentType: string;
+  size: number;
+  /** Listede ve etikette gösterilen görsel. Galeri doluysa tam bir tane. */
+  isCover: boolean;
+  caption?: string | null;
+  uploadedAtUtc: string;
+}
+
 export interface InventoryItemListItem {
   /** Konum — açık bölgede raf ve kat null kalır. */
   zoneName?: string | null;
@@ -22,6 +48,13 @@ export interface InventoryItemListItem {
   barcode?: string | null;
   type: InventoryItemType;
   isActive: boolean;
+  /** Kartın açıldığı proje — bağlayıcıdır (S9). */
+  projectId?: string | null;
+  projectName?: string | null;
+  /** 0 Stoklu, 1 Özel imalat, 2 Sipariş üzerine. */
+  supplyKind: InventorySupplyKind;
+  coverPhotoId?: string | null;
+  photoCount: number;
   totalStock: number;
   /** Ağırlıklı ortalama birim maliyet (TRY). */
   averageUnitCost: number;
@@ -54,6 +87,11 @@ export interface InventoryItemDetail {
   barcode?: string | null;
   type: InventoryItemType;
   isActive: boolean;
+  projectId?: string | null;
+  projectName?: string | null;
+  supplyKind: InventorySupplyKind;
+  coverPhotoId?: string | null;
+  photoCount: number;
   averageUnitCost: number;
   lastPurchasePrice?: number | null;
   lastPurchaseDate?: string | null;
@@ -103,6 +141,8 @@ export interface CreateInventoryItemRequest {
   model?: string;
   barcode?: string;
   type: InventoryItemType;
+  projectId?: string | null;
+  supplyKind?: InventorySupplyKind;
   preferredSupplierCurrentAccountId?: string | null;
   vatRate?: number | null;
   description?: string | null;
@@ -118,6 +158,8 @@ export interface UpdateInventoryItemRequest {
   barcode?: string | null;
   type: InventoryItemType;
   isActive: boolean;
+  projectId?: string | null;
+  supplyKind?: InventorySupplyKind;
   preferredSupplierCurrentAccountId?: string | null;
   vatRate?: number | null;
   /**
@@ -206,6 +248,8 @@ export const inventoryService = {
     category?: string;
     warehouseId?: string;
     criticalOnly?: boolean;
+    projectId?: string;
+    supplyKind?: number;
     /**
      * ARŞİVLENMİŞ kartları da getirir. Varsayılan KAPALI: seçiciler
      * arşivi görmemeli. Yalnız stok kartı YÖNETİM ekranı açar —
@@ -220,6 +264,9 @@ export const inventoryService = {
     if (params?.category) query.set("category", params.category);
     if (params?.warehouseId) query.set("warehouseId", params.warehouseId);
     if (params?.criticalOnly) query.set("criticalOnly", "true");
+    if (params?.projectId) query.set("projectId", params.projectId);
+    if (params?.supplyKind !== undefined)
+      query.set("supplyKind", String(params.supplyKind));
     if (params?.includeInactive) query.set("includeInactive", "true");
 
     const suffix = query.size > 0 ? `?${query.toString()}` : "";
@@ -275,6 +322,49 @@ export const inventoryService = {
     return apiClient("inventory/items", {
       method: "POST",
       body: payload,
+    });
+  },
+
+  getPhotos(itemId: string) {
+    return apiClient<InventoryItemPhoto[]>(`inventory/items/${itemId}/fotograflar`);
+  },
+
+  /** Görselin ham dosyası — <img src> bunu kullanır. */
+  photoUrl(photoId: string) {
+    return `/api/backend/inventory/fotograflar/${photoId}/dosya`;
+  },
+
+  async addPhoto(itemId: string, file: File, caption?: string) {
+    const form = new FormData();
+    form.append("file", file);
+    if (caption) form.append("caption", caption);
+
+    // FormData gönderiliyor: Content-Type'ı TARAYICI koymalı ki
+    // multipart sınırı (boundary) doğru yazılsın. Elle "application/json"
+    // yazılsaydı sunucu dosyayı hiç göremezdi.
+    const response = await fetch(`/api/backend/inventory/items/${itemId}/fotograflar`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message ?? "Görsel yüklenemedi.");
+    }
+
+    return (await response.json()) as InventoryItemPhoto;
+  },
+
+  setCoverPhoto(photoId: string) {
+    return apiClient<{ message: string }>(`inventory/fotograflar/${photoId}/kapak`, {
+      method: "PUT",
+    });
+  },
+
+  deletePhoto(photoId: string) {
+    return apiClient<{ message: string }>(`inventory/fotograflar/${photoId}`, {
+      method: "DELETE",
     });
   },
 

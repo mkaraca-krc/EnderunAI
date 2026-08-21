@@ -20,6 +20,9 @@ import {
   stockLevelService,
   type StockLevelRow,
 } from "@/services/stock-level.service";
+import { projectService, type ProjectListItem } from "@/services/project.service";
+import { InventoryPhotoGallery } from "@/components/inventory/photo-gallery";
+import { SUPPLY_KIND_LABELS } from "@/services/inventory.service";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -50,6 +53,7 @@ export default function InventoryItemDetailPage() {
    * yerine satır listesi okunuyor.
    */
   const [levels, setLevels] = useState<StockLevelRow[]>([]);
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,6 +61,8 @@ export default function InventoryItemDetailPage() {
   const [notice, setNotice] = useState("");
 
   const [form, setForm] = useState({
+    projectId: "",
+    supplyKind: "0",
     name: "",
     category: "",
     brand: "",
@@ -83,6 +89,8 @@ export default function InventoryItemDetailPage() {
       setItem(detail);
 
       setForm({
+        projectId: detail.projectId ?? "",
+        supplyKind: String(detail.supplyKind ?? 0),
         name: detail.name,
         category: detail.category ?? "",
         brand: detail.brand ?? "",
@@ -100,6 +108,10 @@ export default function InventoryItemDetailPage() {
       setLevels(
         (await stockLevelService.list().catch(() => [] as StockLevelRow[]))
           .filter((level) => level.inventoryItemId === detail.id)
+      );
+
+      setProjects(
+        await projectService.getAll(detail.companyId).catch(() => [])
       );
 
       const accounts = await currentAccountService
@@ -157,6 +169,8 @@ export default function InventoryItemDetailPage() {
         barcode: form.barcode.trim() || null,
         type: Number(form.type) as InventoryItemType,
         isActive: form.isActive,
+        projectId: form.projectId || null,
+        supplyKind: Number(form.supplyKind) as 0 | 1 | 2,
         preferredSupplierCurrentAccountId:
           form.preferredSupplierCurrentAccountId || null,
         vatRate: form.vatRate === "" ? null : Number(form.vatRate),
@@ -226,7 +240,21 @@ export default function InventoryItemDetailPage() {
             Stok: {quantity(item.totalStock)} {item.unit}
             {" · "}
             Stok değeri: {money(item.stockValue)}
+            {" · "}
+            {SUPPLY_KIND_LABELS[item.supplyKind] ?? "Stoklu"}
           </small>
+
+          {/*
+            * PROJE BAĞI BAŞLIKTA: bu kartın kaderini belirleyen bilgi
+            * formun içinde gizli kalmamalı — çıkışta reddedilen kullanıcı
+            * sebebi burada görmeli.
+            */}
+          {item.projectName && (
+            <small style={{ display: "block", marginTop: "4px" }}>
+              <strong>{item.projectName}</strong> projesine bağlı — başka bir işe
+              çıkarılamaz ve satılamaz.
+            </small>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -275,6 +303,8 @@ export default function InventoryItemDetailPage() {
           girmez.
         </p>
       </div>
+
+      <InventoryPhotoGallery itemId={item.id} canEdit={canEdit} />
 
       <div className="erp-table-card erp-mt">
         <div className="erp-table-header">
@@ -456,6 +486,42 @@ export default function InventoryItemDetailPage() {
               </small>
             </label>
 
+
+            <label>
+              <span>Tedarik Tipi</span>
+              <select
+                value={form.supplyKind}
+                onChange={(event) => update("supplyKind", event.target.value)}
+              >
+                <option value="0">Stoklu</option>
+                <option value="1">Özel imalat</option>
+                <option value="2">Sipariş üzerine</option>
+              </select>
+              <small>
+                Asgari/azami seviye takibi yalnız <strong>stoklu</strong>
+                kartlarda tanımlanır.
+              </small>
+            </label>
+
+            <label>
+              <span>Proje Bağı</span>
+              <select
+                value={form.projectId}
+                onChange={(event) => update("projectId", event.target.value)}
+              >
+                <option value="">Bağsız (katalog malzemesi)</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+              <small>
+                <strong>Bağlayıcıdır:</strong> bağı olan kart başka bir işe
+                çıkarılamaz ve satılamaz. Gerçekten gerekiyorsa önce bu alan
+                değiştirilir — böylece karar kayıtlı olur.
+              </small>
+            </label>
 
             <label className="erp-check-label">
               <input

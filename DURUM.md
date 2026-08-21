@@ -918,6 +918,77 @@ düzelterek kapatıldı: (1) öneri listesi ham tablo ile yazılmıştı, cırc�
 (2) redwood sözleşmesi ham hex rengi reddetti (`#b45309` iki dosyada),
 `rw-value-warning` sınıfına bağlandı.
 
+**S9 (bitti) — SERBEST kart: proje bağı, tedarik tipi, görsel galerisi.**
+
+ÖLÇÜM: 14 kategori (2'si SERBEST: Dekoratif Aydınlatma, Özel İmalat),
+**kategorisi olan kart 0**, **`ImagePath` dolu kart 0**, kartta proje
+bağı yok, özel/sipariş işareti yok, listede proje süzgeci yok.
+`InventoryCategoryKind.Free` tanımı "fotoğraf ve proje bağı taşır"
+diyordu — S9'a kadar KARŞILIKSIZ BİR SÖZDÜ.
+
+KULLANICI KARARLARI:
+1. **Proje bağı BAĞLAYICI** — bağı olan kart başka projeye ya da
+   projesiz çıkarılamaz. Uyarı değil ENGEL: uyarı zamanla görmezden
+   gelinir. Gerçekten gerekiyorsa önce KARTIN BAĞI değiştirilir,
+   böylece karar kaydedilmiş olur.
+2. **Üç durumlu tek alan**: Stoklu / Özel imalat / Sipariş üzerine.
+   Üçü birbirini dışladığı için tek alan; iki ayrı işaret kutusu
+   olsaydı "ikisi de işaretli" diye cevapsız bir durum doğardı.
+3. **Çoklu görsel + kapak** — dekoratif üründe montaj öncesi/sonrası,
+   detay ve ölçü krokisi AYRI görsellerdir.
+
+- **KURAL SATIŞTA DA GEÇERLİ**: satış da bir çıkıştır. X için imal
+  edilmiş armatürün tezgâhtan satılması o işi malzemesiz bırakır ve
+  kimse fark etmez — stok düşmüş, muhasebe tutmuş, yalnız malzeme
+  yanlış yere gitmiştir. Engel tek satış kapısında (`IStockSaleIssuer`,
+  S5), böylece perakende ve fatura yollarının İKİSİNİ birden kapsıyor.
+- **S8 İLE TUTARLILIK**: asgari/azami seviye yalnız STOKLU kartta
+  tanımlanabiliyor. "Sipariş üzerine" bir üründe asgari seviye kendi
+  kendisiyle çelişir — orada stok BULUNDURMAMAK bilinçli karardır.
+  Stoklu'dan çıkarken tanımlı seviye varsa değişiklik ENGELLENİYOR;
+  sessizce silmek "takibi kim kaldırdı" sorusunu cevapsız bırakırdı.
+- **KAPAK GÜVENCESİ TEK YERDE**: ilk yüklenen kendiliğinden kapak olur,
+  kapak silinince sıradaki devralır. Üç ayrı yerde (yükleme, silme,
+  kapak seçme) tekrarlansaydı bir yol atlanır ve liste görselsiz
+  kalırdı. Ekran bu kuralı YENİDEN UYGULAMIYOR, sunucudan okuyor.
+- **GALERİ YALNIZ GÖRSEL ALIR**: paylaşılan `IUploadService` PDF ve
+  Excel'e de izin veriyor (belge modülleri onu kullanıyor); daraltmak
+  onları kırardı, bu yüzden şart galeri servisinde.
+- **KOLON DÜŞÜŞÜ VERİ KAYBI DEĞİL, ÖLÇÜLDÜ**: `ImagePath` dolu kart
+  sayısı sıfırdı; kolon vardı ama hiçbir uç yazmıyordu.
+- **SERBEST KATEGORİDE VARSAYILAN "ÖZEL İMALAT"**: varsayılanı
+  "stoklu" bırakmak kullanıcıyı her seferinde düzeltmeye zorlar,
+  unutulduğunda kart yanlış tipte doğardı.
+
+S9'DA ÇIKAN ÜÇ GERÇEK KUSUR (hiçbiri istenmemişti):
+1. **`MovementDate` doğrulanmıyordu** — zorunlu alandı ama boş gelince
+   akış muhasebe fişine kadar inip orada patlıyordu; kullanıcı Türkçe
+   uyarı yerine **500** görüyordu. Artık 400, testle bağlı.
+2. **Galeri bileşeninde olmayan CSS değişkenleri** (`--rw-accent`,
+   `--rw-border`) uydurulmuştu; kapak çerçevesi sessizce ham hex
+   yedeğine düşecekti. İki sözleşme testi birden yakaladı.
+3. **Kartın proje-şirket kontrolü TESTSİZDİ** — sonda turunda çıktı:
+   kontrol kaldırıldığında 12 testin hiçbiri düşmüyordu. 13. test
+   eklendi.
+
+SONDA TURU: 11 sonda, **11'i de yakalıyor** (K önce kaçırdı, boşluk
+kapatılıp yeniden koşuldu). Turda dört "serbest olmalı" sondası var
+(D dahil): bir engelin FAZLA GENİŞ yazılmış olması, yalnız
+engellediğini test ederek görülemez.
+
+BU TURDAN ÇIKAN İKİ KURAL (§5'e):
+
+18. **Sondayı `setsid` ile koşturma.** Süreç ayrılınca harness görevi
+    "tamamlandı" sayıp süreç grubunu öldürüyor; `trap` çalışmadan ölen
+    betik SABOTAJI KAYNAKTA BIRAKIYOR. `setsid`siz koşuda kesinti
+    gelse bile `trap` çalışıyor.
+19. **Kesilen bir tur, sabotajını sonraki sondalara BULAŞTIRIR.**
+    Kesilen tur `InventoryController.cs`'e K sabotajını bıraktı;
+    sonraki sondalar o ZATEN SABOTAJLI dosyayı yedek alıp sadakatle
+    geri koydu. Yani harness kusuru kendi kendine yayıldı. Bu yüzden
+    her sondadan sonra TEK DOSYA değil, fazın BÜTÜN korumaları
+    taranır (S9'da dokuz koruma, `grep -Fc` ile tek tek).
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

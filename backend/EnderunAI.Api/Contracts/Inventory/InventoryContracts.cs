@@ -10,6 +10,8 @@ public sealed record CreateInventoryItemRequest(
     string Unit,
     string? Barcode,
     int Type,
+    Guid? ProjectId = null,
+    int SupplyKind = 0,
     Guid? PreferredSupplierCurrentAccountId = null,
     decimal? VatRate = null,
     string? Description = null,
@@ -89,7 +91,11 @@ public sealed record UpdateInventoryItemRequest(
     // Malzemenin birim başına içerdiği bakır (kg). Bakır maruziyeti
     // raporu YALNIZCA bu alandan besleniyor; girilmediği sürece emtia
     // modülünün proje ayağı boş çalışır.
-    decimal? CopperKgPerUnit = null);
+    decimal? CopperKgPerUnit = null,
+    /// <summary>Kartın açıldığı proje — bağlayıcıdır (S9).</summary>
+    Guid? ProjectId = null,
+    /// <summary>0 Stoklu, 1 Özel imalat, 2 Sipariş üzerine.</summary>
+    int SupplyKind = 0);
 
 /// <summary>Malzeme kartı detayı — düzenleme ekranı bunu okur.</summary>
 public sealed record InventoryItemDetail(
@@ -114,7 +120,14 @@ public sealed record InventoryItemDetail(
     string? Description,
     /// <summary>Birim başına bakır (kg) — bakır maruziyeti raporunun tek kaynağı.</summary>
     decimal? CopperKgPerUnit,
-    string? ImagePath,
+    /// <summary>Kartın açıldığı proje — bağlayıcıdır (S9).</summary>
+    Guid? ProjectId,
+    string? ProjectName,
+    /// <summary>0 Stoklu, 1 Özel imalat, 2 Sipariş üzerine.</summary>
+    int SupplyKind,
+    /// <summary>Kapak görselinin kimliği; galeri boşsa null.</summary>
+    Guid? CoverPhotoId,
+    int PhotoCount,
     decimal TotalStock,
     /// <summary>Toplam stok × ağırlıklı ortalama maliyet.</summary>
     decimal StockValue,

@@ -10,6 +10,7 @@ import {
   type InventoryCategory,
   type InventoryItemType,
 } from "@/services/inventory.service";
+import { projectService, type ProjectListItem } from "@/services/project.service";
 
 /**
  * STOK KARTI AÇMA — KATEGORİ GÜDÜMLÜ (S2).
@@ -33,6 +34,16 @@ export default function CreateInventoryItemPage() {
   const [loading, setLoading] = useState(true);
 
   const [companyId, setCompanyId] = useState("");
+
+  /*
+   * PROJE BAĞI ve TEDARİK TİPİ (S9). SERBEST kategorilerde asıl anlamlı
+   * olan ikisi: özel imal edilen ürün bir işe aittir ve stokta
+   * bulundurulmaz. Bu yüzden SERBEST seçilince varsayılanlar oraya
+   * kayıyor — kullanıcı isterse değiştirir.
+   */
+  const [projectId, setProjectId] = useState("");
+  const [supplyKind, setSupplyKind] = useState("0");
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [categoryId, setCategoryId] = useState("");
   const [unit, setUnit] = useState("");
   const [freeName, setFreeName] = useState("");
@@ -77,6 +88,39 @@ export default function CreateInventoryItemPage() {
 
   const category = categories.find((x) => x.id === categoryId) ?? null;
   const isFree = category?.kind === 1;
+
+  useEffect(() => {
+    if (!companyId) {
+      setProjects([]);
+      return;
+    }
+
+    let active = true;
+
+    void projectService
+      .getAll(companyId)
+      .then((list) => {
+        if (active) setProjects(list);
+      })
+      .catch(() => {
+        if (active) setProjects([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [companyId]);
+
+  /*
+   * SERBEST KATEGORİDE VARSAYILAN "ÖZEL İMALAT". Dekoratif aydınlatma ve
+   * özel imalat kategorilerinde ürün tekildir ve stokta bulundurulmaz;
+   * varsayılanı "stoklu" bırakmak, kullanıcıyı her seferinde düzeltmeye
+   * zorlar ve unutulduğunda kart yanlış tipte doğardı.
+   */
+  useEffect(() => {
+    setSupplyKind(isFree ? "1" : "0");
+    if (!isFree) setProjectId("");
+  }, [isFree]);
 
   // Kategori değişince seçim ve birim sıfırlanır: önceki kategorinin
   // özellikleri yeni kategoride anlamsız, birimi de izinli olmayabilir.
@@ -144,6 +188,8 @@ export default function CreateInventoryItemPage() {
         model: model.trim() || undefined,
         barcode: barcode.trim() || undefined,
         type,
+        projectId: projectId || null,
+        supplyKind: Number(supplyKind) as 0 | 1 | 2,
         vatRate: vatRate.trim() === "" ? null : Number(vatRate),
         description: description.trim() || null,
         copperKgPerUnit:
@@ -315,6 +361,42 @@ export default function CreateInventoryItemPage() {
             * henüz belli olmaz; tanım /depo-stok/stok-seviyeleri
             * ekranından yapılır.
             */}
+
+          <label>
+            <span>Tedarik Tipi</span>
+            <select
+              value={supplyKind}
+              onChange={(e) => setSupplyKind(e.target.value)}
+            >
+              <option value="0">Stoklu</option>
+              <option value="1">Özel imalat</option>
+              <option value="2">Sipariş üzerine</option>
+            </select>
+            <small>
+              Asgari/azami seviye takibi yalnız <strong>stoklu</strong>
+              kartlarda tanımlanabilir.
+            </small>
+          </label>
+
+          <label>
+            <span>Proje Bağı</span>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              disabled={!companyId}
+            >
+              <option value="">Bağsız (katalog malzemesi)</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+            <small>
+              <strong>Bağlayıcıdır:</strong> bağı olan kart başka bir işe
+              çıkarılamaz ve satılamaz.
+            </small>
+          </label>
 
           <label>
             <span>Tip</span>

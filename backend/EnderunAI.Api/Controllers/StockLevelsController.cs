@@ -85,7 +85,7 @@ public sealed class StockLevelsController(
         var item = await db.InventoryItems
             .AsNoTracking()
             .Where(x => x.Id == request.InventoryItemId)
-            .Select(x => new { x.Id, x.CompanyId, x.IsActive })
+            .Select(x => new { x.Id, x.CompanyId, x.IsActive, x.SupplyKind, x.Name })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (item is null)
@@ -98,6 +98,25 @@ public sealed class StockLevelsController(
             return BadRequest(new
             {
                 message = "Malzeme kartı bu deponun şirketine ait değil."
+            });
+        }
+
+        /*
+         * SEVİYE YALNIZ STOKLU KARTTA (S9).
+         *
+         * "Siparişe göre üretilen" bir üründe asgari seviye tanımlamak
+         * kendi kendisiyle çelişir: o kartta stok BULUNDURMAMAK bilinçli
+         * karardır, uyarı her gün "eksik" diye bağırırdı. Özel imalat da
+         * tekildir; ikmal edilecek bir seviyesi yoktur.
+         */
+        if (item.SupplyKind is not InventorySupplyKind.Stocked)
+        {
+            return BadRequest(new
+            {
+                message =
+                    $"\"{item.Name}\" stoklu bir malzeme değil (tedarik tipi: " +
+                    $"{(item.SupplyKind == InventorySupplyKind.CustomManufacture ? "özel imalat" : "sipariş üzerine")}). " +
+                    "Asgari/azami seviye yalnız stokta bulundurulan malzemelerde tanımlanır."
             });
         }
 

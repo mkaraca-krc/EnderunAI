@@ -137,8 +137,39 @@ public sealed class InventoryItem : BaseEntity
     /// <summary>Teknik özellik, kullanım notu vb.</summary>
     public string? Description { get; set; }
 
-    /// <summary>Yüklenen görselin dosya yolu (uploads/stok-kartlari).</summary>
-    public string? ImagePath { get; set; }
+    /*
+     * TEKİL `ImagePath` KALDIRILDI (S9).
+     *
+     * Kolon vardı ama HİÇBİR uç yazmıyordu ve ekranda karşılığı yoktu;
+     * canlıda dolu kart sayısı ölçüldü: SIFIR. Yani kaybedilen veri yok.
+     *
+     * Yerine `InventoryItemPhoto` galerisi geldi: dekoratif bir armatürde
+     * montaj öncesi/sonrası, detay ve ölçü krokisi ayrı görsellerdir; tek
+     * alan bunları anlatamıyordu ve ikinci açı gerektiğinde kullanıcıyı
+     * eskisini silmeye zorlardı.
+     */
+
+    /// <summary>
+    /// Kartın AÇILDIĞI proje. SERBEST kartlarda anlamlı: X projesi için
+    /// özel imal edilmiş bir armatür kataloğa ait değildir, o işe aittir.
+    ///
+    /// BAĞLAYICIDIR: bağı olan kart başka projeye — ya da projesiz —
+    /// çıkarılamaz (bkz. InventoryController.Issue). Gerçekten başka
+    /// işe gerekiyorsa önce kartın bağı değiştirilir; böyle bir karar
+    /// kaydedilmiş olur, çıkış anında sessizce alınmaz.
+    /// </summary>
+    public Guid? ProjectId { get; set; }
+    public Project? Project { get; set; }
+
+    /// <summary>
+    /// Malzemenin nasıl tedarik edildiği. Min/max takibi (S8) yalnız
+    /// STOKLU kartlarda anlamlı — siparişe göre üretilen bir üründe
+    /// "asgari seviye" diye bir şey yoktur.
+    /// </summary>
+    public InventorySupplyKind SupplyKind { get; set; } = InventorySupplyKind.Stocked;
+
+    public ICollection<InventoryItemPhoto> Photos { get; set; }
+        = new List<InventoryItemPhoto>();
 
     /// <summary>
     /// Perakende liste fiyatı (KDV hariç, TRY). Satış ekranı birim fiyatı

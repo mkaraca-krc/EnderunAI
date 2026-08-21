@@ -98,6 +98,26 @@ public sealed class StockSaleIssuer(
                 ?? throw new InvalidOperationException(
                     $"{line.Description}: bu depoda stok kaydı yok, satılamaz.");
 
+            /*
+             * PROJEYE BAĞLI KART SATILAMAZ (S9).
+             *
+             * Bağ, kartın hangi işe ait olduğunu söyler. Satış da bir
+             * çıkıştır: X projesi için özel imal edilmiş armatürün
+             * tezgâhtan satılması o işi malzemesiz bırakır ve kimse
+             * fark etmez — çünkü stok düşmüş, muhasebe tutmuş, yalnız
+             * malzeme yanlış yere gitmiştir.
+             *
+             * Depodan projeye çıkışta uygulanan kuralın (bkz.
+             * InventoryController.Issue) aynısı: bağı olan kart, kendi
+             * projesi dışına çıkamaz.
+             */
+            if (stock.InventoryItem.ProjectId.HasValue)
+            {
+                throw new InvalidOperationException(
+                    $"{line.Description}: bu kart bir projeye bağlı ve satılamaz. "
+                    + "Satılacaksa önce malzeme kartındaki proje bağı kaldırılmalı.");
+            }
+
             // NEGATİF STOK KESİN YASAK — olmayan mal satılamaz.
             if (stock.Quantity < line.Quantity)
             {
