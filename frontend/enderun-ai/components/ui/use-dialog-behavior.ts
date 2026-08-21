@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 /** Odak tuzağının döneceği elemanlar. */
 export const FOCUSABLE = [
@@ -53,6 +53,28 @@ export function useDialogBehavior({
   onRequestClose,
   initialFocusScopeRef,
 }: DialogBehaviorOptions) {
+  /*
+   * KAPATMA GERİ ÇAĞRISI REF'TE TUTULUYOR — BAĞIMLILIKTA DEĞİL.
+   *
+   * ÖLÇÜLDÜ (canlı belirti: "tutar alanına bir rakam yazınca odak
+   * kaçıyor"): effect `onRequestClose`e bağımlıyken, çağıran taraf
+   * `onClose={() => setOpen(false)}` gibi SATIR İÇİ bir ok fonksiyonu
+   * verdiği için bağımlılık HER RENDERDA değişiyordu — uygulamadaki
+   * bütün çağrı yerleri böyle. Sonuç: her tuş vuruşunda effect
+   * sökülüp yeniden kuruluyordu.
+   *
+   * İki ayrı yoldan odak kaçıyordu: temizlik `restore?.focus?.()` ile
+   * odağı diyalog açılmadan önceki elemana veriyor, yeni kurulum da
+   * paneldeki İLK odaklanabilir elemana (başlıktaki ✕ düğmesi)
+   * odaklanıyordu. Test tam olarak bunu gösterdi: bir rakam
+   * yazıldıktan sonra `document.activeElement` ✕ düğmesiydi.
+   *
+   * Ref deseni davranışı değiştirmiyor — Esc yine EN GÜNCEL geri
+   * çağrıyı çağırıyor — yalnız effect'i "aç/kapa" olayına bağlıyor.
+   */
+  const closeRef = useRef(onRequestClose);
+  closeRef.current = onRequestClose;
+
   useEffect(() => {
     if (!open) return;
 
@@ -64,7 +86,7 @@ export function useDialogBehavior({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onRequestClose();
+        closeRef.current();
         return;
       }
 
@@ -121,5 +143,10 @@ export function useDialogBehavior({
       window.clearTimeout(timer);
       restore?.focus?.();
     };
-  }, [open, onRequestClose, panelRef, initialFocusScopeRef]);
+    // BAĞIMLILIK YALNIZ `open`: ref nesneleri (panelRef,
+    // initialFocusScopeRef) render boyunca sabit kimlikte, geri çağrı
+    // ise ref üzerinden en güncel hâliyle okunuyor. Buraya değişken
+    // kimlikli bir değer eklenirse odak kaybı GERİ GELİR.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 }
