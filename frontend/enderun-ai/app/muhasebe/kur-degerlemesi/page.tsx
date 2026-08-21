@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { amount, money, number as formatNumber } from "@/lib/format/turkish";
 import { Button } from "@/components/ui";
 import { useModuleActions } from "@/lib/auth/module-actions";
@@ -135,6 +136,105 @@ export default function CurrencyValuationPage() {
     postableLines.length > 0 &&
     !posting;
 
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4n).
+   *
+   * "Bu Turda" sütununda alt toplam VAR: bu turda kesilecek fişin
+   * toplam tutarı, kullanıcının fişi onaylamadan önce görmesi gereken
+   * sayı. Diğer para sütunlarında yok — farklı para birimlerindeki
+   * bakiyeleri toplamak anlamsız bir rakam üretirdi.
+   */
+  const valuationColumns: DataTableColumn<
+    NonNullable<typeof preview>["lines"][number]
+  >[] = [
+    {
+      key: "cari",
+      header: "Cari",
+      value: (row) => `${row.currentAccountTitle} (${row.currentAccountCode})`,
+      render: (row) => (
+        <>
+          {row.currentAccountTitle}
+          <small>{row.currentAccountCode}</small>
+        </>
+      ),
+    },
+    {
+      key: "para",
+      header: "Para Birimi",
+      value: (row) => row.currencyCode,
+      render: (row) => <strong>{row.currencyCode}</strong>,
+    },
+    {
+      key: "bakiye",
+      header: "Bakiye",
+      numeric: true,
+      value: (row) => amount(row.balance),
+    },
+    {
+      key: "defter",
+      header: "Defter (TL)",
+      numeric: true,
+      value: (row) => money(row.bookValueLocal),
+    },
+    {
+      key: "kur",
+      header: "Kur",
+      numeric: true,
+      value: (row) =>
+        row.rateAvailable && row.valuationRate != null
+          ? `${formatNumber(row.valuationRate, 4)} (${row.rateSource})`
+          : "Kur yok",
+      render: (row) =>
+        row.rateAvailable && row.valuationRate != null ? (
+          <>
+            {formatNumber(row.valuationRate, 4)}
+            <small>{row.rateSource}</small>
+          </>
+        ) : (
+          <span className="erp-status red">Kur yok</span>
+        ),
+    },
+    {
+      key: "degerlenmis",
+      header: "Değerlenmiş (TL)",
+      numeric: true,
+      value: (row) => (row.valuedLocal != null ? money(row.valuedLocal) : "—"),
+    },
+    {
+      key: "fark",
+      header: "Toplam Fark",
+      numeric: true,
+      value: (row) =>
+        row.totalDifference != null ? money(row.totalDifference) : "—",
+    },
+    {
+      key: "onceki",
+      header: "Önce Yazılan",
+      numeric: true,
+      value: (row) => money(row.previouslyPosted),
+    },
+    {
+      key: "bu-tur",
+      header: "Bu Turda",
+      numeric: true,
+      value: (row) =>
+        row.postableDifference !== 0
+          ? `${money(row.postableDifference)} (${row.postableDifference > 0 ? "646" : "656"})`
+          : row.message ?? "—",
+      render: (row) =>
+        row.postableDifference !== 0 ? (
+          <strong>
+            {money(row.postableDifference)}
+            <small>{row.postableDifference > 0 ? "646" : "656"}</small>
+          </strong>
+        ) : (
+          <small>{row.message ?? "—"}</small>
+        ),
+      footer: (rows) =>
+        money(rows.reduce((sum, row) => sum + row.postableDifference, 0)),
+    },
+  ];
+
   return (
     <ErpShell
       design="redwood"
@@ -263,71 +363,14 @@ export default function CurrencyValuationPage() {
             </p>
           </div>
         ) : (
-          <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Cari</th>
-                  <th>Para Birimi</th>
-                  <th>Bakiye</th>
-                  <th>Defter (TL)</th>
-                  <th>Kur</th>
-                  <th>Değerlenmiş (TL)</th>
-                  <th>Toplam Fark</th>
-                  <th>Önce Yazılan</th>
-                  <th>Bu Turda</th>
-                </tr>
-              </thead>
-              <tbody>
-                {preview.lines.map((line) => (
-                  <tr key={`${line.currentAccountId}-${line.currencyCode}`}>
-                    <td>
-                      {line.currentAccountTitle}
-                      <small>{line.currentAccountCode}</small>
-                    </td>
-                    <td>
-                      <strong>{line.currencyCode}</strong>
-                    </td>
-                    <td>{amount(line.balance)}</td>
-                    <td>{money(line.bookValueLocal)}</td>
-                    <td>
-                      {line.rateAvailable && line.valuationRate != null ? (
-                        <>
-                          {formatNumber(line.valuationRate, 4)}
-                          <small>{line.rateSource}</small>
-                        </>
-                      ) : (
-                        <span className="erp-status red">Kur yok</span>
-                      )}
-                    </td>
-                    <td>
-                      {line.valuedLocal != null
-                        ? money(line.valuedLocal)
-                        : "—"}
-                    </td>
-                    <td>
-                      {line.totalDifference != null
-                        ? money(line.totalDifference)
-                        : "—"}
-                    </td>
-                    <td>{money(line.previouslyPosted)}</td>
-                    <td>
-                      {line.postableDifference !== 0 ? (
-                        <strong>
-                          {money(line.postableDifference)}
-                          <small>
-                            {line.postableDifference > 0 ? "646" : "656"}
-                          </small>
-                        </strong>
-                      ) : (
-                        <small>{line.message ?? "—"}</small>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={preview.lines}
+            columns={valuationColumns}
+            rowKey={(row) => `${row.currentAccountId}-${row.currencyCode}`}
+            title="Kur Değerlemesi Önizleme"
+            /* Şirket ya da değerleme tarihi değişince sayfa 1'e döner. */
+            resetKey={`${companyId}|${valuationDate}`}
+          />
         )}
       </div>
     </ErpShell>

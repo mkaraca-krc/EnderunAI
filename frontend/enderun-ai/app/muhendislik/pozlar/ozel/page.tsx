@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { unitPrice } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
 import { Button } from "@/components/ui";
@@ -278,6 +279,117 @@ export default function CustomPositionsPage() {
     }
   }
 
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4n). Fiyat sütunu SATIR İÇİ DÜZENLEME
+   * taşıyor; `priceEditId` ve `savePrice` üzerine kapandığı için dizi
+   * belleğe ALINMIYOR (F4b desen kararı).
+   *
+   * Dışa aktarmada düzenleme kutusu değil KAYITLI fiyat yazılıyor.
+   */
+  const positionColumns: DataTableColumn<EngineeringPositionListItem>[] = [
+    {
+      key: "kod",
+      header: "Kod",
+      value: (row) => row.code,
+      render: (row) => (
+        <Link href={`/muhendislik/pozlar/${row.id}`}>
+          <strong>{row.code}</strong>
+        </Link>
+      ),
+    },
+    { key: "tanim", header: "Tanım", value: (row) => row.name },
+    { key: "birim", header: "Birim", value: (row) => row.unit },
+    { key: "kategori", header: "Kategori", value: (row) => row.category ?? "—" },
+    {
+      key: "fiyat",
+      header: `${currentYear} Birim Fiyatı`,
+      numeric: true,
+      value: (row) => money(prices[row.id]),
+      render: (row) =>
+        priceEditId === row.id ? (
+          <span style={{ display: "flex", gap: 6 }}>
+            <input
+              className="erp-input"
+              value={priceEditValue}
+              onChange={(event) => setPriceEditValue(event.target.value)}
+              inputMode="decimal"
+              style={{ width: 130 }}
+            />
+            <button
+              type="button"
+              className="erp-primary-button"
+              disabled={saving}
+              onClick={() => void savePrice(row.id)}
+            >
+              Kaydet
+            </button>
+            <button
+              type="button"
+              className="erp-secondary-button"
+              onClick={() => setPriceEditId(null)}
+            >
+              Vazgeç
+            </button>
+          </span>
+        ) : (
+          <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {money(prices[row.id])}
+            <button
+              type="button"
+              className="erp-secondary-button"
+              onClick={() => {
+                setPriceEditId(row.id);
+                setPriceEditValue(
+                  prices[row.id] != null ? String(prices[row.id]) : ""
+                );
+              }}
+            >
+              {prices[row.id] == null ? "Fiyat gir" : "Değiştir"}
+            </button>
+          </span>
+        ),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => statusLabels[row.status] ?? String(row.status),
+      render: (row) => (
+        <span className={`erp-status ${row.status === 1 ? "green" : "gray"}`}>
+          {statusLabels[row.status] ?? row.status}
+        </span>
+      ),
+    },
+    {
+      key: "islem",
+      header: "",
+      value: () => "",
+      /*
+       * Poz SİLİNMİYOR, pasife alınıyor: silinseydi onu kullanan geçmiş
+       * keşif ve hakediş satırlarının bağı kopardı.
+       */
+      render: (row) =>
+        row.status === 1 ? (
+          <button
+            type="button"
+            className="erp-secondary-button"
+            disabled={saving}
+            onClick={() => void changeStatus(row.id, 2)}
+          >
+            Pasife al
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="erp-secondary-button"
+            disabled={saving}
+            onClick={() => void changeStatus(row.id, 1)}
+          >
+            Aktifleştir
+          </button>
+        ),
+    },
+  ];
+
   return (
     <ErpShell
       design="redwood"
@@ -472,125 +584,17 @@ export default function CustomPositionsPage() {
             </form>
           )}
 
-          <div className="erp-table-wrapper">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Kod</th>
-                  <th>Tanım</th>
-                  <th>Birim</th>
-                  <th>Kategori</th>
-                  <th>{currentYear} Birim Fiyatı</th>
-                  <th>Durum</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {!loading && items.length === 0 && (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: 28 }}>
-                      Şirkete özel poz yok. Resmî kitaplarda karşılığı olmayan
-                      bir imalat için &quot;Yeni Özel Poz&quot; ile açabilirsiniz.
-                    </td>
-                  </tr>
-                )}
-
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <Link href={`/muhendislik/pozlar/${item.id}`}>
-                        <strong>{item.code}</strong>
-                      </Link>
-                    </td>
-                    <td>{item.name}</td>
-                    <td>{item.unit}</td>
-                    <td>{item.category ?? "—"}</td>
-                    <td style={{ fontVariantNumeric: "tabular-nums" }}>
-                      {priceEditId === item.id ? (
-                        <span style={{ display: "flex", gap: 6 }}>
-                          <input
-                            className="erp-input"
-                            value={priceEditValue}
-                            onChange={(event) =>
-                              setPriceEditValue(event.target.value)
-                            }
-                            inputMode="decimal"
-                            style={{ width: 130 }}
-                          />
-                          <button
-                            type="button"
-                            className="erp-primary-button"
-                            disabled={saving}
-                            onClick={() => void savePrice(item.id)}
-                          >
-                            Kaydet
-                          </button>
-                          <button
-                            type="button"
-                            className="erp-secondary-button"
-                            onClick={() => setPriceEditId(null)}
-                          >
-                            Vazgeç
-                          </button>
-                        </span>
-                      ) : (
-                        <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          {money(prices[item.id])}
-                          <button
-                            type="button"
-                            className="erp-secondary-button"
-                            onClick={() => {
-                              setPriceEditId(item.id);
-                              setPriceEditValue(
-                                prices[item.id] != null
-                                  ? String(prices[item.id])
-                                  : ""
-                              );
-                            }}
-                          >
-                            {prices[item.id] == null ? "Fiyat gir" : "Değiştir"}
-                          </button>
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`erp-status ${
-                          item.status === 1 ? "green" : "gray"
-                        }`}
-                      >
-                        {statusLabels[item.status] ?? item.status}
-                      </span>
-                    </td>
-                    <td>
-                      {/* Poz SİLİNMİYOR, pasife alınıyor: silinseydi onu
-                          kullanan geçmiş keşif ve hakediş satırlarının
-                          bağı kopardı. */}
-                      {item.status === 1 ? (
-                        <button
-                          type="button"
-                          className="erp-secondary-button"
-                          disabled={saving}
-                          onClick={() => void changeStatus(item.id, 2)}
-                        >
-                          Pasife al
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="erp-secondary-button"
-                          disabled={saving}
-                          onClick={() => void changeStatus(item.id, 1)}
-                        >
-                          Aktifleştir
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={items}
+            columns={positionColumns}
+            rowKey={(row) => row.id}
+            title="Şirkete Özel Pozlar"
+            emptyText={
+              "Şirkete özel poz yok. Resmî kitaplarda karşılığı olmayan " +
+              "bir imalat için “Yeni Özel Poz” ile açabilirsiniz."
+            }
+            resetKey={companyId}
+          />
         </section>
       </div>
     </ErpShell>
