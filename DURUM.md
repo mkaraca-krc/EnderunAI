@@ -1223,6 +1223,71 @@ KARARSIZLIK TARAMASI: düzenleme yolunun mükerrer kontrolünün TESTİ
 YOKTU (kısıt koddaydı, hiçbir test tutmuyordu) — test yazıldı, eksik
 mesaj zaten o test yazılırken çıktı.
 
+**ÇEK FAZ A + FAZ B (2026-08-21) — YAYINDA** (`64664fa6`).
+
+FAZ A — ERTELEME ZİNCİRİ (kullanıcı kararı). Yerine geçen çek iptal
+edilince orijinal "Ertelendi"de BIRAKILMIYOR, ertelemeden önceki
+durumuna dönüyor.
+
+Erteleme, orijinali "Ertelendi" yapıp defterden ters kayıtla çıkarıyor.
+Yerine geçen iptal edilince ortada geçerli çek kalmıyor ama borç
+duruyor; orijinal öylece bırakılınca alacak portföyden, vade raporundan
+VE defterden birden düşüyordu.
+
+ÖLÇÜM (sorulan kontrol — cevap HAYIR'dı): `VoidAsync` hareket bazlı
+storno yapıyor ama yalnız iptal edilen çekin KENDİ hareketlerini.
+Ertelemenin ters kaydı ORİJİNAL çekin hareketinde duruyor ve
+dokunulmuyordu — muhasebe tarafı kapsanmıyordu. Artık ertelenme
+hareketi de ters kayıtla kapanıyor.
+
+- Önceki durum TAHMİN EDİLMİYOR: erteleme hareketinin `FromStatus`
+  alanından geliyor. Bankada tahsildeyken ertelenen çek "Bankada"ya
+  döner (sonda: körlemesine "Portföyde" yazınca test düşüyor).
+- Zincire dokunulmuyor: yalnız orijinal HÂLÂ "Ertelendi" ve tam olarak
+  bu iptal edilen çeki işaret ediyorsa. A→B→C'de C iptal edilince B
+  açılır, A'ya dokunulmaz.
+- Hareket kaydı yoksa sessizce tahmin etmiyor, açık hata veriyor.
+- Hareket kaydı + denetim kaydı bırakıyor; iptalden ÖNCE ekranda uyarı
+  (`voidRestoresChequeNumber` / `voidRestoresStatusName`).
+
+FAZ B — RowVersion DURUM DEĞİŞTİREN HER UÇTA.
+
+| Uç | Önce | Sonra |
+|---|---|---|
+| `PUT /cheques/{id}` | var | var |
+| `POST /iptal` | var | var |
+| `POST /status` (ciro, bankaya verme, tahsil, ödeme, karşılıksız, iade) | **YOK** | var |
+| `POST /durum-geri-al` | **YOK** | var + `cheque.void-closed` |
+| `POST /replace` | **YOK** | var |
+| `PUT /allocations` | **YOK** | var |
+| `POST /factoring` | **YOK** | var |
+
+Damga İLERLEMİYORDU da: `ChangeStatus`, kırdırma ve dağılım
+`UpdatedAtUtc` yazmıyordu; koruma eklense bile aynı damgayla gelen
+ikinci istek geçerdi. Hepsinde ilerletildi. Kontrol tek kaynakta
+(`ChequeService.EnsureRowVersionMatches`) — faktoring de oradan
+çağırıyor.
+
+`durum-geri-al`: iptaldeki ayrımın aynısı — portföy/verildi dışındaki
+durumlardan geri alma `cheque.void-closed` istiyor (403 + neden).
+Gerekçe zaten zorunluydu, artık denetim kaydına da yazılıyor.
+
+BULGU: `finance.approve` taşıyan tek hazır rol (Finans Sorumlusu) zaten
+`cheque.void-closed` de taşıyor; ayrım hazır rollerde görünmüyor, ÖZEL
+rollerde görünüyor. Test de özel rol kurarak yazıldı.
+
+KANITLAR (canlı, deploy sonrası): indeks tanımı
+`WHERE ("Status" <> 90) AND ("IsDeleted" = false)`, boş normalize kayıt
+0/23, çakışan aktif grup 0, çek 7.664.000,00 = defter 7.664.000,00
+(fark 0,00), test kaydı 0. 8051359 hâlâ tek satır ve durumu 90 (iptal),
+silinmemiş — yani kayıt duruyor, numara serbest.
+
+TARAYICI GEREKTİREN ADIMLAR KULLANICIDA: tutar alanına yazma ve imleç
+davranışı, diyalog içi form, iki sekme çakışması, mükerrer mesajının
+ekrandaki metni, Merkez seçicinin görünümü, yetki uyarısının ekranda
+çıkışı. Bunlar için token üretilmedi — kendi başına erişim kimliği
+üretmek doğru değil ve kullanıcı da vermeyeceğini söyledi.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.
