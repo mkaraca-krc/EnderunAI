@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { money } from "@/lib/format/turkish";
 import { Button } from "@/components/ui";
 
@@ -208,6 +209,108 @@ export default function GeneralLedgerPage() {
       },
     [report]
   );
+
+  /** Süzgeç değişince sayfa 1'e döner. */
+  const filterKey = JSON.stringify(filters);
+
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4j).
+   *
+   * BAKİYE SÜTUNUNDA ALT TOPLAM YOK: bu YÜRÜYEN bakiye, satır satır
+   * devreden bir sayı. Toplamak matematiksel olarak anlamsız bir
+   * rakam üretirdi. Borç ve alacak toplanır, bakiye toplanmaz.
+   */
+  const ledgerColumns: DataTableColumn<
+    GeneralLedgerReportResponse["accounts"][number]["lines"][number]
+  >[] = [
+    {
+      key: "tarih",
+      header: "Tarih",
+      value: (row) => date.format(new Date(row.voucherDate)),
+    },
+    {
+      key: "fis",
+      header: "Fiş No",
+      value: (row) =>
+        row.referenceNumber
+          ? `${row.voucherNumber} (Ref: ${row.referenceNumber})`
+          : row.voucherNumber,
+      render: (row) => (
+        <>
+          <Link
+            href={`/muhasebe/fisler/${row.voucherId}`}
+            style={{ fontWeight: 700, textDecoration: "none" }}
+          >
+            {row.voucherNumber}
+          </Link>
+
+          {row.referenceNumber && <small>Ref: {row.referenceNumber}</small>}
+        </>
+      ),
+    },
+    {
+      key: "tip",
+      header: "Fiş Tipi",
+      value: (row) => voucherTypeLabels[row.voucherType] ?? "Bilinmiyor",
+    },
+    { key: "aciklama", header: "Açıklama", value: (row) => row.description ?? "—" },
+    {
+      key: "cari",
+      header: "Cari",
+      value: (row) =>
+        [row.currentAccountCode, row.currentAccountTitle]
+          .filter(Boolean)
+          .join(" — ") || "—",
+      render: (row) => (
+        <>
+          {row.currentAccountCode && <strong>{row.currentAccountCode}</strong>}
+          <small>{row.currentAccountTitle ?? "—"}</small>
+        </>
+      ),
+    },
+    {
+      key: "proje",
+      header: "Proje",
+      value: (row) =>
+        [row.projectCode, row.projectName].filter(Boolean).join(" — ") || "—",
+      render: (row) => (
+        <>
+          {row.projectCode && <strong>{row.projectCode}</strong>}
+          <small>{row.projectName ?? "—"}</small>
+        </>
+      ),
+    },
+    {
+      key: "masraf",
+      header: "Masraf Merkezi",
+      value: (row) => row.costCenterCode ?? "—",
+    },
+    { key: "belge", header: "Belge No", value: (row) => row.documentNumber ?? "—" },
+    { key: "kaynak", header: "Kaynak", value: (row) => row.sourceModule ?? "MANUAL" },
+    {
+      key: "borc",
+      header: "Borç",
+      numeric: true,
+      value: (row) => (row.debitAmount > 0 ? money(row.debitAmount) : "—"),
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.debitAmount, 0)),
+    },
+    {
+      key: "alacak",
+      header: "Alacak",
+      numeric: true,
+      value: (row) => (row.creditAmount > 0 ? money(row.creditAmount) : "—"),
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.creditAmount, 0)),
+    },
+    {
+      key: "bakiye",
+      header: "Bakiye",
+      numeric: true,
+      value: (row) => balanceLabel(row.balance),
+      render: (row) => (
+        <strong>{balanceLabel(row.balance)}</strong>
+      ),
+    },
+  ];
 
   return (
     <ErpShell
@@ -528,146 +631,13 @@ export default function GeneralLedgerPage() {
                   </div>
 
                   <div style={{ overflowX: "auto" }}>
-                    <table
-                      className="erp-table"
-                      style={{ minWidth: 1450 }}
-                    >
-                      <thead>
-                        <tr>
-                          <th>Tarih</th>
-                          <th>Fiş No</th>
-                          <th>Fiş Tipi</th>
-                          <th>Açıklama</th>
-                          <th>Cari</th>
-                          <th>Proje</th>
-                          <th>Masraf Merkezi</th>
-                          <th>Belge No</th>
-                          <th>Kaynak</th>
-                          <th className="num">Borç</th>
-                          <th className="num">Alacak</th>
-                          <th className="num">Bakiye</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {account.lines.map((line) => (
-                          <tr
-                            key={`${line.voucherId}-${line.lineNumber}`}
-                          >
-                            <td>
-                              {date.format(
-                                new Date(
-                                  line.voucherDate
-                                )
-                              )}
-                            </td>
-
-                            <td>
-                              <Link
-                                href={`/muhasebe/fisler/${line.voucherId}`}
-                                style={{
-                                  fontWeight: 700,
-                                  textDecoration:
-                                    "none",
-                                }}
-                              >
-                                {line.voucherNumber}
-                              </Link>
-
-                              {line.referenceNumber && (
-                                <small>
-                                  Ref:{" "}
-                                  {
-                                    line.referenceNumber
-                                  }
-                                </small>
-                              )}
-                            </td>
-
-                            <td>
-                              {voucherTypeLabels[
-                                line.voucherType
-                              ] ?? "Bilinmiyor"}
-                            </td>
-
-                            <td>
-                              {line.description ?? "—"}
-                            </td>
-
-                            <td>
-                              {line.currentAccountCode && (
-                                <strong>
-                                  {
-                                    line.currentAccountCode
-                                  }
-                                </strong>
-                              )}
-
-                              <small>
-                                {line.currentAccountTitle ??
-                                  "—"}
-                              </small>
-                            </td>
-
-                            <td>
-                              {line.projectCode && (
-                                <strong>
-                                  {line.projectCode}
-                                </strong>
-                              )}
-
-                              <small>
-                                {line.projectName ?? "—"}
-                              </small>
-                            </td>
-
-                            <td>
-                              {line.costCenterCode ??
-                                "—"}
-                            </td>
-
-                            <td>
-                              {line.documentNumber ??
-                                "—"}
-                            </td>
-
-                            <td>
-                              {line.sourceModule ??
-                                "MANUAL"}
-                            </td>
-
-                            <td
-                              className="num"
-                            >
-                              {line.debitAmount > 0
-                                ? money(
-                                    line.debitAmount
-                                  )
-                                : "—"}
-                            </td>
-
-                            <td
-                              className="num"
-                            >
-                              {line.creditAmount > 0
-                                ? money(
-                                    line.creditAmount
-                                  )
-                                : "—"}
-                            </td>
-
-                            <td
-                              className="num"
-                              style={{ fontWeight: 700, }}
-                            >
-                              {balanceLabel(
-                                line.balance
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <DataTable
+                      rows={account.lines}
+                      columns={ledgerColumns}
+                      rowKey={(row) => `${row.voucherId}-${row.lineNumber}`}
+                      title={`Büyük Defter — ${account.accountCode}`}
+                      resetKey={`${account.accountCode}|${filterKey}`}
+                    />
                   </div>
                 </>
               )}

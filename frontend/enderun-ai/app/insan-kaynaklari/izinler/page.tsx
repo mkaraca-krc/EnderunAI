@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui";
 import { useModuleActions } from "@/lib/auth/module-actions";
 
@@ -285,6 +286,146 @@ export default function HrLeaveManagementPage() {
       (person) => person.companyId === form.companyId
     );
   }, [form.companyId, personnel]);
+
+  const filterKey = `${personnelFilter}|${statusFilter}|${search}`;
+
+  /*
+   * SÜTUNLAR VERİ OLARAK (F4j). Eylem sütunu `actions`, `actionId` ve
+   * `setPending` üzerine kapandığı için dizi belleğe ALINMIYOR
+   * (F4b desen kararı) — bayat kapanış, onay düğmesinin yanlış izin
+   * kaydı üzerinde çalışması demek olurdu.
+   */
+  const leaveColumns: DataTableColumn<(typeof items)[number]>[] = [
+    {
+      key: "personel",
+      header: "Personel",
+      value: (row) => {
+        const person = personnelById.get(row.personnelId);
+        return person
+          ? `${person.fullName} (${person.employeeNumber ?? "—"})`
+          : "Personel bulunamadı";
+      },
+      render: (row) => {
+        const person = personnelById.get(row.personnelId);
+
+        return (
+          <>
+            <strong className="block text-slate-800">
+              {person?.fullName ?? "Personel bulunamadı"}
+            </strong>
+            <small className="mt-1 block text-slate-500">
+              {person?.employeeNumber ?? "—"}
+            </small>
+          </>
+        );
+      },
+    },
+    { key: "tur", header: "İzin Türü", value: (row) => leaveTypeLabel(row.leaveType) },
+    { key: "baslangic", header: "Başlangıç", value: (row) => formatDate(row.startDate) },
+    { key: "bitis", header: "Bitiş", value: (row) => formatDate(row.endDate) },
+    {
+      key: "gun",
+      header: "Gün",
+      numeric: true,
+      value: (row) => row.totalDays,
+      footer: (rows) => rows.reduce((sum, row) => sum + row.totalDays, 0),
+    },
+    {
+      key: "neden",
+      header: "Neden",
+      value: (row) =>
+        row.approvalNote ? `${row.reason} · Not: ${row.approvalNote}` : row.reason,
+      render: (row) => (
+        <>
+          <span className="block truncate" title={row.reason}>
+            {row.reason}
+          </span>
+          {row.approvalNote && (
+            <small className="mt-1 block text-slate-500">
+              Not: {row.approvalNote}
+            </small>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => statusLabel(row.status),
+      render: (row) => (
+        <span
+          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${statusClasses(
+            row.status
+          )}`}
+        >
+          {statusLabel(row.status)}
+        </span>
+      ),
+    },
+    {
+      key: "olusturma",
+      header: "Oluşturma",
+      value: (row) => formatDate(row.createdAtUtc),
+    },
+    {
+      key: "islem",
+      header: "",
+      value: () => "",
+      render: (row) => {
+        const busy = actionId === row.id;
+
+        return (
+          <div className="flex justify-end gap-2">
+            {actions.can("edit") && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => openEditForm(row)}
+                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Düzenle
+              </button>
+            )}
+
+            {row.status === 1 && (
+              <>
+                {actions.can("approve") && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setPending({ kind: "approve", item: row })}
+                    className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    Onayla
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setPending({ kind: "reject", item: row })}
+                  className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  Reddet
+                </button>
+              </>
+            )}
+
+            {actions.can("delete") && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setPending({ kind: "delete", item: row })}
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+              >
+                {busy ? "…" : "Sil"}
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
 
   const visibleItems = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("tr-TR");
@@ -1124,177 +1265,23 @@ export default function HrLeaveManagementPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-[1150px] w-full border-collapse">
-            <thead>
-              <tr className="bg-slate-50 text-left text-xs font-bold text-slate-500">
-                <th className="px-4 py-3">Personel</th>
-                <th className="px-4 py-3">İzin Türü</th>
-                <th className="px-4 py-3">Başlangıç</th>
-                <th className="px-4 py-3">Bitiş</th>
-                <th className="px-4 py-3">Gün</th>
-                <th className="px-4 py-3">Neden</th>
-                <th className="px-4 py-3">Durum</th>
-                <th className="px-4 py-3">Oluşturma</th>
-                <th className="px-4 py-3 text-right">
-                  İşlemler
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {loading && (
-                <tr>
-                  <td
-                    colSpan={9}
-                    className="px-4 py-12 text-center text-sm text-slate-500"
-                  >
-                    İzin kayıtları yükleniyor…
-                  </td>
-                </tr>
-              )}
-
-              {!loading && visibleItems.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={9}
-                    className="px-4 py-12 text-center text-sm text-slate-500"
-                  >
-                    Filtrelere uygun izin kaydı bulunamadı.
-                  </td>
-                </tr>
-              )}
-
-              {!loading &&
-                visibleItems.map((item) => {
-                  const person = personnelById.get(
-                    item.personnelId
-                  );
-
-                  const busy = actionId === item.id;
-
-                  return (
-                    <tr
-                      key={item.id}
-                      className="border-t border-slate-100 text-sm text-slate-700 hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-4">
-                        <strong className="block text-slate-800">
-                          {person?.fullName ??
-                            "Personel bulunamadı"}
-                        </strong>
-
-                        <small className="mt-1 block text-slate-500">
-                          {person?.employeeNumber ?? "—"}
-                        </small>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        {leaveTypeLabel(item.leaveType)}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        {formatDate(item.startDate)}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        {formatDate(item.endDate)}
-                      </td>
-
-                      <td className="px-4 py-4 font-semibold">
-                        {item.totalDays}
-                      </td>
-
-                      <td className="max-w-[280px] px-4 py-4">
-                        <span
-                          className="block truncate"
-                          title={item.reason}
-                        >
-                          {item.reason}
-                        </span>
-
-                        {item.approvalNote && (
-                          <small className="mt-1 block text-slate-500">
-                            Not: {item.approvalNote}
-                          </small>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <span
-                          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${statusClasses(
-                            item.status
-                          )}`}
-                        >
-                          {statusLabel(item.status)}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        {formatDate(item.createdAtUtc)}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="flex justify-end gap-2">
-                          {actions.can("edit") && (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => openEditForm(item)}
-                              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                            >
-                              Düzenle
-                            </button>
-                          )}
-
-                          {item.status === 1 && (
-                            <>
-                              {actions.can("approve") && (
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    setPending({ kind: "approve", item })
-                                  }
-                                  className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                                >
-                                  Onayla
-                                </button>
-                              )}
-
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() =>
-                                  setPending({ kind: "reject", item })
-                                }
-                                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
-                              >
-                                Reddet
-                              </button>
-                            </>
-                          )}
-
-                          {actions.can("delete") && (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() =>
-                                setPending({ kind: "delete", item })
-                              }
-                              className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
-                            >
-                              {busy ? "…" : "Sil"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
+          {loading ? (
+            <p className="px-4 py-12 text-center text-sm text-slate-500">
+              İzin kayıtları yükleniyor…
+            </p>
+          ) : visibleItems.length === 0 ? (
+            <p className="px-4 py-12 text-center text-sm text-slate-500">
+              Filtrelere uygun izin kaydı bulunamadı.
+            </p>
+          ) : (
+            <DataTable
+              rows={visibleItems}
+              columns={leaveColumns}
+              rowKey={(row) => row.id}
+              title="İzin Kayıtları"
+              resetKey={filterKey}
+            />
+          )}
       </section>
       {pending && (
         <ConfirmDialog
