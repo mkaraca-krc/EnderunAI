@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { money, moneyWhole } from "@/lib/format/turkish";
 import { Button, ConfirmDialog, Input, Modal, Select } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
@@ -504,12 +505,13 @@ export default function ExpenseCentrePage() {
         {loading ? (
           <div className="text-sm text-slate-500">Yükleniyor…</div>
         ) : view === "report" ? (
-          <ReportView report={report} />
+          <ReportView report={report} periodKey={`${from}|${to}`} />
         ) : view === "entries" ? (
           <EntriesView
             data={entries}
             canManage={canManage}
             onDelete={(id, label) => setDeleteTarget({ id, label })}
+            periodKey={`${from}|${to}`}
           />
         ) : view === "partners" ? (
           <PartnersView data={partners} canSeeCash={canSeeCash} />
@@ -521,6 +523,7 @@ export default function ExpenseCentrePage() {
               setConfirmPeriod(period);
               setActualAmount(String(period.estimated));
             }}
+            periodKey={`${from}|${to}`}
           />
         )}
       </div>
@@ -967,7 +970,169 @@ export default function ExpenseCentrePage() {
   );
 }
 
-function ReportView({ report }: { report: ExpenseReport | null }) {
+/*
+ * SÜTUN TANIMLARI (F4i).
+ *
+ * Yetki ve işleyici gerektiren tablolarda sütunlar FONKSİYON: modül
+ * düzeyinde sabit dizi olsaydı işleyici kapanışa alınır ve bayat
+ * kapanış düğmeyi yanlış kayıt üzerinde çalıştırabilirdi (F4b kararı).
+ */
+const reportColumns: DataTableColumn<ExpenseReport["rows"][number]>[] = [
+  { key: "merkez", header: "Merkez", value: (row) => row.centerName },
+  { key: "kategori", header: "Kategori", value: (row) => row.categoryName },
+  {
+    key: "kaynak",
+    header: "Kaynak",
+    value: (row) =>
+      row.source +
+      (row.isEstimated ? " · tahmini" : "") +
+      (!row.isEditableHere ? " · otomatik" : ""),
+    render: (row) => (
+      <>
+        <span className="text-slate-600">{row.source}</span>
+        {row.isEstimated ? (
+          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+            tahmini
+          </span>
+        ) : null}
+        {/* Otomatik kalem: kaynağından düzeltilir. */}
+        {!row.isEditableHere ? (
+          <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
+            otomatik
+          </span>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    key: "tutar",
+    header: "Tutar",
+    numeric: true,
+    value: (row) => money(row.amount),
+    footer: (rows) => money(rows.reduce((sum, row) => sum + row.amount, 0)),
+  },
+];
+
+function totalsColumns(
+  total: number
+): DataTableColumn<{ key: string; label: string; amount: number }>[] {
+  return [
+    { key: "kalem", header: "Kalem", value: (row) => row.label },
+    {
+      key: "pay",
+      header: "Pay",
+      numeric: true,
+      value: (row) => `%${total > 0 ? Math.round((row.amount / total) * 100) : 0}`,
+    },
+    {
+      key: "tutar",
+      header: "Tutar",
+      numeric: true,
+      value: (row) => moneyWhole(row.amount),
+      footer: (rows) => moneyWhole(rows.reduce((sum, row) => sum + row.amount, 0)),
+    },
+  ];
+}
+
+function entryColumns(
+  canManage: boolean,
+  onDelete: (id: string, label: string) => void,
+  hiddenCount: number
+): DataTableColumn<ExpenseEntryList["items"][number]>[] {
+  const columns: DataTableColumn<ExpenseEntryList["items"][number]>[] = [
+    {
+      key: "tarih",
+      header: "Tarih",
+      value: (row) => dateFormat.format(new Date(row.expenseDate)),
+    },
+    { key: "merkez", header: "Merkez", value: (row) => row.centerName },
+    { key: "kategori", header: "Kategori", value: (row) => row.categoryName },
+    {
+      key: "aciklama",
+      header: "Açıklama",
+      value: (row) => row.description + (row.isRecurring ? " · tekrarlayan" : ""),
+      render: (row) => (
+        <>
+          {row.description}
+          {row.isRecurring ? (
+            <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[11px] text-sky-800">
+              tekrarlayan
+            </span>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      key: "odeme",
+      header: "Ödeme",
+      value: (row) =>
+        row.paymentMethod === "Cash"
+          ? "elden"
+          : row.paymentMethod === "PartnerAccount"
+            ? `faturasız · ${row.partnerName ?? "şahıs"}`
+            : row.paymentMethod === "CreditCard"
+              ? `kart · ${row.cardName ?? "—"}`
+              : "Banka",
+      render: (row) =>
+        row.paymentMethod === "Cash" ? (
+          <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[11px] text-violet-800">
+            elden
+          </span>
+        ) : row.paymentMethod === "PartnerAccount" ? (
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+            faturasız · {row.partnerName ?? "şahıs"}
+          </span>
+        ) : row.paymentMethod === "CreditCard" ? (
+          <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[11px] text-sky-800">
+            kart · {row.cardName ?? "—"}
+          </span>
+        ) : (
+          "Banka"
+        ),
+    },
+    {
+      key: "tutar",
+      header: "Tutar",
+      numeric: true,
+      value: (row) => money(row.amount),
+      /*
+       * GİZLENEN KALEM VARSA TOPLAM BUNU SÖYLER. Sessizce eksik bir
+       * toplam göstermek, tam olarak bu programın kovaladığı hata.
+       */
+      footer: (rows) =>
+        `${money(rows.reduce((sum, row) => sum + row.amount, 0))}` +
+        (hiddenCount > 0 ? " (yalnız görünen kalemler)" : ""),
+    },
+  ];
+
+  if (canManage) {
+    columns.push({
+      key: "sil",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => onDelete(row.id, row.description)}
+          className="text-xs text-rose-600 hover:underline"
+        >
+          Sil
+        </button>
+      ),
+    });
+  }
+
+  return columns;
+}
+
+function ReportView({
+  report,
+  periodKey,
+}: {
+  report: ExpenseReport | null;
+  /** Tarih aralığı değişince sayfa 1'e döner. */
+  periodKey: string;
+}) {
   if (!report || report.rows.length === 0) {
     return (
       <div className="rounded-lg border border-slate-200 p-6 text-sm text-slate-500">
@@ -1010,44 +1175,15 @@ function ReportView({ report }: { report: ExpenseReport | null }) {
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-            <tr>
-              <th className="px-3 py-2">Merkez</th>
-              <th className="px-3 py-2">Kategori</th>
-              <th className="px-3 py-2">Kaynak</th>
-              <th className="px-3 py-2 text-right">Tutar</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.rows.map((row, index) => (
-              <tr
-                key={`${row.centerId}-${row.categoryCode}-${row.source}-${index}`}
-                className="border-t border-slate-100"
-              >
-                <td className="px-3 py-2">{row.centerName}</td>
-                <td className="px-3 py-2">{row.categoryName}</td>
-                <td className="px-3 py-2">
-                  <span className="text-slate-600">{row.source}</span>
-                  {row.isEstimated ? (
-                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
-                      tahmini
-                    </span>
-                  ) : null}
-                  {/* Otomatik kalem: kaynağından düzeltilir. */}
-                  {!row.isEditableHere ? (
-                    <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
-                      otomatik
-                    </span>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {money(row.amount)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          rows={report.rows}
+          columns={reportColumns}
+          rowKey={(row) =>
+            `${row.centerId}-${row.categoryCode}-${row.source}-${row.amount}`
+          }
+          title="Gider Merkezi Raporu"
+          resetKey={periodKey}
+        />
       </div>
     </div>
   );
@@ -1067,25 +1203,12 @@ function TotalsTable({
       <h2 className="border-b border-slate-100 px-3 py-2 text-sm font-medium text-slate-800">
         {title}
       </h2>
-      <table className="min-w-full text-sm">
-        <tbody>
-          {rows.map((row) => {
-            const share = total > 0 ? Math.round((row.amount / total) * 100) : 0;
-
-            return (
-              <tr key={row.key} className="border-t border-slate-100">
-                <td className="px-3 py-2">{row.label}</td>
-                <td className="w-24 px-3 py-2 text-right text-xs text-slate-500">
-                  %{share}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {moneyWhole(row.amount)}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <DataTable
+        rows={rows}
+        columns={totalsColumns(total)}
+        rowKey={(row) => row.key}
+        title={title}
+      />
     </div>
   );
 }
@@ -1094,10 +1217,12 @@ function EntriesView({
   data,
   canManage,
   onDelete,
+  periodKey,
 }: {
   data: ExpenseEntryList | null;
   canManage: boolean;
   onDelete: (id: string, label: string) => void;
+  periodKey: string;
 }) {
   if (!data || data.items.length === 0) {
     return (
@@ -1109,91 +1234,174 @@ function EntriesView({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200">
-      <table className="min-w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-          <tr>
-            <th className="px-3 py-2">Tarih</th>
-            <th className="px-3 py-2">Merkez</th>
-            <th className="px-3 py-2">Kategori</th>
-            <th className="px-3 py-2">Açıklama</th>
-            <th className="px-3 py-2">Ödeme</th>
-            <th className="px-3 py-2 text-right">Tutar</th>
-            {canManage ? <th className="px-3 py-2" /> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {data.items.map((item) => (
-            <tr key={item.id} className="border-t border-slate-100">
-              <td className="px-3 py-2">
-                {dateFormat.format(new Date(item.expenseDate))}
-              </td>
-              <td className="px-3 py-2">{item.centerName}</td>
-              <td className="px-3 py-2">{item.categoryName}</td>
-              <td className="px-3 py-2">
-                {item.description}
-                {item.isRecurring ? (
-                  <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[11px] text-sky-800">
-                    tekrarlayan
-                  </span>
-                ) : null}
-              </td>
-              <td className="px-3 py-2">
-                {item.paymentMethod === "Cash" ? (
-                  <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[11px] text-violet-800">
-                    elden
-                  </span>
-                ) : item.paymentMethod === "PartnerAccount" ? (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
-                    faturasız · {item.partnerName ?? "şahıs"}
-                  </span>
-                ) : item.paymentMethod === "CreditCard" ? (
-                  <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[11px] text-sky-800">
-                    kart · {item.cardName ?? "—"}
-                  </span>
-                ) : (
-                  "Banka"
-                )}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {money(item.amount)}
-              </td>
-              {canManage ? (
-                <td className="px-3 py-2 text-right">
-                  <button
-                    type="button"
-                    onClick={() => onDelete(item.id, item.description)}
-                    className="text-xs text-rose-600 hover:underline"
-                  >
-                    Sil
-                  </button>
-                </td>
-              ) : null}
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t border-slate-200 bg-slate-50 font-medium">
-            <td className="px-3 py-2" colSpan={5}>
-              Toplam {data.hiddenCount > 0 ? "(yalnız görünen kalemler)" : ""}
-            </td>
-            <td className="px-3 py-2 text-right tabular-nums">
-              {money(data.total)}
-            </td>
-            {canManage ? <td /> : null}
-          </tr>
-        </tfoot>
-      </table>
+      <DataTable
+        rows={data.items}
+        columns={entryColumns(canManage, onDelete, data.hiddenCount)}
+        rowKey={(row) => row.id}
+        title="Elle Girilen Giderler"
+        resetKey={periodKey}
+      />
     </div>
   );
 }
+
+function templateColumns(
+  canManage: boolean,
+  periods: RecurringExpenseList["periods"],
+  onConfirm: (input: {
+    templateId: string;
+    year: number;
+    month: number;
+    description: string;
+    estimated: number;
+  }) => void
+): DataTableColumn<RecurringExpenseList["templates"][number]>[] {
+  const periodOf = (templateId: string) =>
+    periods?.find((x) => x.templateId === templateId);
+
+  const columns: DataTableColumn<RecurringExpenseList["templates"][number]>[] = [
+    {
+      key: "aciklama",
+      header: "Açıklama",
+      value: (row) => row.description + (row.isStopped ? " · durduruldu" : ""),
+      render: (row) => (
+        <>
+          {row.description}
+          {row.isStopped ? (
+            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
+              durduruldu
+            </span>
+          ) : null}
+        </>
+      ),
+    },
+    { key: "merkez", header: "Merkez", value: (row) => row.centerName },
+    { key: "kategori", header: "Kategori", value: (row) => row.categoryName },
+    {
+      key: "tahmini",
+      header: "Aylık tahmini",
+      numeric: true,
+      value: (row) => money(row.estimatedAmount),
+      footer: (rows) =>
+        money(rows.reduce((sum, row) => sum + row.estimatedAmount, 0)),
+    },
+    {
+      key: "donem",
+      header: "Seçili dönem",
+      value: (row) => {
+        const period = periodOf(row.id);
+
+        if (!period) return "kapsam dışı";
+
+        return period.isConfirmed
+          ? `kesinleşti · ${money(period.actualAmount ?? 0)}`
+          : "gerçekleşen bekleniyor";
+      },
+      render: (row) => {
+        const period = periodOf(row.id);
+
+        if (!period)
+          return <span className="text-xs text-slate-400">kapsam dışı</span>;
+
+        return period.isConfirmed ? (
+          <span className="text-xs text-emerald-700">
+            kesinleşti · {money(period.actualAmount ?? 0)}
+          </span>
+        ) : (
+          <span className="text-xs text-amber-700">gerçekleşen bekleniyor</span>
+        );
+      },
+    },
+  ];
+
+  if (canManage) {
+    columns.push({
+      key: "gir",
+      header: "",
+      value: () => "",
+      render: (row) => {
+        const period = periodOf(row.id);
+
+        if (!period || period.isConfirmed) return null;
+
+        return (
+          <button
+            type="button"
+            onClick={() =>
+              onConfirm({
+                templateId: row.id,
+                year: period.year,
+                month: period.month,
+                description: row.description,
+                estimated: period.estimatedAmount,
+              })
+            }
+            className="text-xs text-slate-700 hover:underline"
+          >
+            Gerçekleşeni gir
+          </button>
+        );
+      },
+    });
+  }
+
+  return columns;
+}
+
+const partnerColumns: DataTableColumn<PartnerAccountBalance>[] = [
+  { key: "kisi", header: "Kişi", value: (row) => row.fullName },
+  { key: "unvan", header: "Ünvan", value: (row) => row.title ?? "—" },
+  {
+    key: "avans",
+    header: "Verilen (avans)",
+    numeric: true,
+    value: (row) => money(row.advanceTotal),
+    footer: (rows) => money(rows.reduce((sum, row) => sum + row.advanceTotal, 0)),
+  },
+  {
+    key: "mahsup",
+    header: "Mahsup (faturasız gider)",
+    numeric: true,
+    value: (row) => money(row.settlementTotal),
+    footer: (rows) =>
+      money(rows.reduce((sum, row) => sum + row.settlementTotal, 0)),
+  },
+  {
+    key: "geri",
+    header: "Geri ödeme",
+    numeric: true,
+    value: (row) => money(row.repaymentTotal),
+    footer: (rows) =>
+      money(rows.reduce((sum, row) => sum + row.repaymentTotal, 0)),
+  },
+  {
+    key: "bakiye",
+    header: "Bakiye",
+    numeric: true,
+    value: (row) => money(row.balance),
+    /*
+     * Pozitif bakiye kişinin ŞİRKETE OLAN BORCU — anlamsal renk
+     * tokendan geliyor, ham hex değil.
+     */
+    render: (row) => (
+      <span className={row.balance > 0 ? "rw-value-danger" : ""}>
+        {money(row.balance)}
+      </span>
+    ),
+    footer: (rows) => money(rows.reduce((sum, row) => sum + row.balance, 0)),
+  },
+];
 
 function RecurringView({
   data,
   canManage,
   onConfirm,
+  periodKey,
 }: {
   data: RecurringExpenseList | null;
   canManage: boolean;
+  /** Tarih aralığı değişince sayfa 1'e döner. */
+  periodKey: string;
   onConfirm: (period: {
     templateId: string;
     year: number;
@@ -1215,75 +1423,13 @@ function RecurringView({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200">
-      <table className="min-w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-          <tr>
-            <th className="px-3 py-2">Açıklama</th>
-            <th className="px-3 py-2">Merkez</th>
-            <th className="px-3 py-2">Kategori</th>
-            <th className="px-3 py-2 text-right">Aylık tahmini</th>
-            <th className="px-3 py-2">Seçili dönem</th>
-            {canManage ? <th className="px-3 py-2" /> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {data.templates.map((template) => {
-            const period = periods.find((x) => x.templateId === template.id);
-
-            return (
-              <tr key={template.id} className="border-t border-slate-100">
-                <td className="px-3 py-2">
-                  {template.description}
-                  {template.isStopped ? (
-                    <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
-                      durduruldu
-                    </span>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2">{template.centerName}</td>
-                <td className="px-3 py-2">{template.categoryName}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {money(template.estimatedAmount)}
-                </td>
-                <td className="px-3 py-2">
-                  {!period ? (
-                    <span className="text-xs text-slate-400">kapsam dışı</span>
-                  ) : period.isConfirmed ? (
-                    <span className="text-xs text-emerald-700">
-                      kesinleşti · {money(period.actualAmount ?? 0)}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-amber-700">
-                      gerçekleşen bekleniyor
-                    </span>
-                  )}
-                </td>
-                {canManage ? (
-                  <td className="px-3 py-2 text-right">
-                    {period && !period.isConfirmed ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onConfirm({
-                            templateId: template.id,
-                            year: period.year,
-                            month: period.month,
-                            description: template.description,
-                            estimated: period.estimatedAmount,
-                          })
-                        }
-                        className="text-xs text-slate-700 hover:underline"
-                      >
-                        Gerçekleşeni gir
-                      </button>
-                    ) : null}
-                  </td>
-                ) : null}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <DataTable
+        rows={data.templates}
+        columns={templateColumns(canManage, periods, onConfirm)}
+        rowKey={(row) => row.id}
+        title="Tekrarlayan Giderler"
+        resetKey={periodKey}
+      />
     </div>
   );
 }
@@ -1315,44 +1461,12 @@ function PartnersView({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200">
-      <table className="min-w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-          <tr>
-            <th className="px-3 py-2">Kişi</th>
-            <th className="px-3 py-2">Ünvan</th>
-            <th className="px-3 py-2 text-right">Verilen (avans)</th>
-            <th className="px-3 py-2 text-right">Mahsup (faturasız gider)</th>
-            <th className="px-3 py-2 text-right">Geri ödeme</th>
-            <th className="px-3 py-2 text-right">Bakiye</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((partner) => (
-            <tr key={partner.id} className="border-t border-slate-100">
-              <td className="px-3 py-2">{partner.fullName}</td>
-              <td className="px-3 py-2 text-slate-500">{partner.title ?? "—"}</td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {money(partner.advanceTotal)}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {money(partner.settlementTotal)}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {money(partner.repaymentTotal)}
-              </td>
-              <td
-                className={
-                  partner.balance > 0
-                    ? "px-3 py-2 text-right font-medium tabular-nums text-rose-700"
-                    : "px-3 py-2 text-right font-medium tabular-nums text-slate-900"
-                }
-              >
-                {money(partner.balance)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <DataTable
+        rows={data}
+        columns={partnerColumns}
+        rowKey={(row) => row.id}
+        title="Ortak Cari Hesapları"
+      />
       <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
         Bakiye = verilen − (mahsup + geri ödeme). Pozitif bakiye, kişinin
         şirkete olan borcudur.
