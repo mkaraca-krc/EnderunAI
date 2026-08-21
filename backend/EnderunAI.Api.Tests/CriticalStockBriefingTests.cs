@@ -45,8 +45,7 @@ public sealed class CriticalStockBriefingTests(DatabaseFixture fixture)
                 CompanyId = company.Id,
                 Code = $"KRT{index:00}-{suffix}",
                 Name = $"Kritik Malzeme {index:00} {suffix}",
-                Unit = "Adet",
-                MinimumStock = 100m
+                Unit = "Adet"
             };
 
             items.Add(item);
@@ -62,6 +61,14 @@ public sealed class CriticalStockBriefingTests(DatabaseFixture fixture)
                 WarehouseId = warehouse.Id,
                 InventoryItemId = item.Id,
                 Quantity = 1m
+            });
+
+            // Asgari seviye DEPOYA ait (S8): kartın kendi eşiği yok.
+            db.WarehouseStockLevels.Add(new WarehouseStockLevel
+            {
+                WarehouseId = warehouse.Id,
+                InventoryItemId = item.Id,
+                MinimumQuantity = 100m
             });
         }
 
@@ -82,12 +89,12 @@ public sealed class CriticalStockBriefingTests(DatabaseFixture fixture)
 
         var item = briefing.GetProperty("items").EnumerateArray()
             .Single(x => (x.GetProperty("title").GetString() ?? "")
-                .Contains("minimum stok seviyesinin altında"));
+                .Contains("asgari stok seviyesinin altında"));
 
         var title = item.GetProperty("title").GetString()!;
 
         // En az 7 kritik kalem var; "5 malzeme" yazamaz.
-        Assert.DoesNotContain("5 malzeme minimum", title);
+        Assert.DoesNotContain("5 depo kalemi asgari", title);
 
         var count = int.Parse(title.Split(' ')[0]);
         Assert.True(count >= 7, $"Kritik kalem sayısı en az 7 olmalıydı, {count} yazdı.");
@@ -109,9 +116,10 @@ public sealed class CriticalStockBriefingTests(DatabaseFixture fixture)
 
         var item = briefing.GetProperty("items").EnumerateArray()
             .Single(x => (x.GetProperty("title").GetString() ?? "")
-                .Contains("minimum stok seviyesinin altında"));
+                .Contains("asgari stok seviyesinin altında"));
 
         // /stok diye bir sayfa yok; bağlantı 404 veriyordu.
-        Assert.Equal("/depo-stok", item.GetProperty("targetPath").GetString());
+        // S8: hedef artık seviye ekranı — uyarıya oradan müdahale ediliyor.
+        Assert.Equal("/depo-stok/stok-seviyeleri", item.GetProperty("targetPath").GetString());
     }
 }

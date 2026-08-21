@@ -1,3 +1,4 @@
+using EnderunAI.Api.Contracts.Inventory;
 using EnderunAI.Api.Contracts.Purchasing;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
@@ -283,6 +284,153 @@ public sealed class PurchaseRequestGenerator(
             decimal.Round(
                 entity.Items.Sum(x => x.Quantity),
                 4));
+    }
+
+    public async Task<GeneratePurchaseRequestFromStockLevelsResponse>
+        GenerateFromStockLevelsAsync(
+            GeneratePurchaseRequestFromStockLevelsRequest request,
+            Guid? requestedByUserId,
+            CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.RequestedByName))
+            throw new ArgumentException("Talep eden kişi zorunludur.");
+
+        if (!Enum.IsDefined(typeof(PurchaseRequestPriority), request.Priority))
+            throw new ArgumentException("Geçersiz satın alma talebi önceliği.");
+
+        if (request.Lines is null || request.Lines.Count == 0)
+            throw new ArgumentException("Talebe alınacak en az bir malzeme seçilmelidir.");
+
+        if (request.Lines.Any(x => x.Quantity <= 0m))
+            throw new ArgumentException("Talep miktarı sıfırdan büyük olmalıdır.");
+
+        // Aynı malzeme iki kez seçilirse tek satırda toplanmaz, HATA
+        // verilir: hangisinin geçerli olduğu kullanıcının kararı,
+        // sessizce toplamak istemediği bir miktar sipariş ettirebilir.
+        var duplicate = request.Lines
+            .GroupBy(x => x.InventoryItemId)
+            .Any(x => x.Count() > 1);
+
+        if (duplicate)
+            throw new ArgumentException("Aynı malzeme talepte birden fazla kez yer alamaz.");
+
+        var warehouse = await db.Warehouses
+            .AsNoTracking()
+            .Where(x => x.Id == request.WarehouseId)
+            .Select(x => new { x.Id, x.Name, x.CompanyId })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (warehouse is null)
+            throw new KeyNotFoundException("Talebin açılacağı depo bulunamadı.");
+
+        var project = await db.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == request.ProjectId && x.CompanyId == warehouse.CompanyId)
+            .Select(x => new { x.Id, x.Name })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        // Depo ikmali gerçekte projesiz bir iştir; ama talep kaydı
+        // projeye bağlı (bütçe onayı ve raporlama oradan besleniyor).
+        // Bu yüzden proje ZORUNLU ve deponun şirketiyle aynı olmalı —
+        // başka şirketin bütçesine yazılan bir ikmal talebi sessiz bir
+        // maliyet kayması olurdu.
+        if (project is null)
+            throw new KeyNotFoundException("Proje bulunamadı veya deponun şirketine ait değil.");
+
+        var itemIds = request.Lines.Select(x => x.InventoryItemId).ToList();
+
+        var levels = await db.WarehouseStockLevels
+            .AsNoTracking()
+            .Where(x => x.WarehouseId == request.WarehouseId &&
+                        itemIds.Contains(x.InventoryItemId))
+            .Select(x => new
+            {
+                x.InventoryItemId,
+                Code = x.InventoryItem.Code,
+                Name = x.InventoryItem.Name,
+                x.InventoryItem.Unit,
+                x.MinimumQuantity,
+                x.MaximumQuantity
+            })
+            .ToListAsync(cancellationToken);
+
+        // Seviye tanımı olmayan kalem bu yoldan talep edilemez: bu uç
+        // "asgarinin altına düştü" gerekçesiyle talep açıyor. Gerekçesi
+        // olmayan kalem serbest talep ekranından istenmeli, yoksa
+        // otomasyon kapısı elle talep kapısına dönüşürdü.
+        var missing = itemIds
+            .Where(id => levels.All(x => x.InventoryItemId != id))
+            .ToList();
+
+        if (missing.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Seçilen kalemlerden bazılarının bu depoda stok seviyesi tanımlı değil: " +
+                string.Join(", ", missing));
+        }
+
+        var requestNumber = await documentNumbers.GenerateAsync(
+            warehouse.CompanyId,
+            "PURCHASE_REQUEST",
+            "PR",
+            cancellationToken);
+
+        var entity = new PurchaseRequest
+        {
+            CompanyId = warehouse.CompanyId,
+            ProjectId = project.Id,
+            RequestNumber = requestNumber,
+            RequestDate = DateTime.UtcNow.Date,
+            NeededByDate = request.NeededByDate?.Date,
+            RequestedByName = request.RequestedByName.Trim(),
+            RequestedByUserId = requestedByUserId,
+            Description = string.IsNullOrWhiteSpace(request.Description)
+                ? $"Stok seviyesi uyarısından otomatik oluşturuldu: {warehouse.Name}"
+                : request.Description.Trim(),
+            Priority = (PurchaseRequestPriority)request.Priority,
+            Status = PurchaseRequestStatus.Draft
+        };
+
+        var lineNumber = 1;
+
+        foreach (var line in request.Lines)
+        {
+            var level = levels.Single(x => x.InventoryItemId == line.InventoryItemId);
+
+            var maximumText = level.MaximumQuantity is decimal max
+                ? $", azami {max:0.####}"
+                : ", azami tanımsız";
+
+            entity.Items.Add(new PurchaseRequestItem
+            {
+                LineNumber = lineNumber++,
+                InventoryItemId = level.InventoryItemId,
+                MaterialDescription = $"{level.Code} | {level.Name}",
+                Quantity = line.Quantity,
+                Unit = level.Unit,
+
+                // Marka serbest: ikmal talebinde marka kararı satın
+                // almanın; kart üzerinde tercihli tedarikçi varsa o
+                // zaten teklif aşamasında görünür.
+                BrandIrrelevant = true,
+
+                RequestedDeliveryDate = request.NeededByDate?.Date,
+                Notes =
+                    $"Kaynak: {warehouse.Name} deposu stok seviyesi " +
+                    $"(asgari {level.MinimumQuantity:0.####}{maximumText})."
+            });
+        }
+
+        db.PurchaseRequests.Add(entity);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new GeneratePurchaseRequestFromStockLevelsResponse(
+            entity.Id,
+            entity.RequestNumber,
+            warehouse.Id,
+            warehouse.Name,
+            entity.Items.Count,
+            decimal.Round(entity.Items.Sum(x => x.Quantity), 4));
     }
 
     private static Guid ResolvePositionId(

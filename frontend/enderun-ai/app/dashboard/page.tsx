@@ -84,6 +84,10 @@ import {
 } from "@/services/rfq.service";
 
 import {
+  stockLevelService,
+  type StockLevelRow,
+} from "@/services/stock-level.service";
+import {
   inventoryService,
   type InventoryItemListItem,
 } from "@/services/inventory.service";
@@ -149,6 +153,13 @@ export default function DashboardPage() {
     InventoryItemListItem[]
   >([]);
 
+  /*
+   * KRİTİK STOK DEPO SEVİYESİNDEN (S8): kartta artık asgari alanı yok.
+   * Sayım kart değil SATIR bazında — aynı malzeme iki deposunda birden
+   * eksikse iki ayrı iş demektir.
+   */
+  const [criticalLevels, setCriticalLevels] = useState<StockLevelRow[]>([]);
+
   const [personnel, setPersonnel] = useState<
     PersonnelListItem[]
   >([]);
@@ -182,6 +193,7 @@ export default function DashboardPage() {
       dashboardInventoryMovementService.getAll(),
       rfqService.getAll(),
       inventoryService.getItems(),
+      stockLevelService.list({ belowMinimumOnly: true }),
       personnelService.getAll(),
       aiAnalysisService.getDashboard(),
       financeDashboardService.getDashboard(),
@@ -199,6 +211,7 @@ export default function DashboardPage() {
       stockMovementResult,
       rfqResult,
       inventoryResult,
+      stockLevelResult,
       personnelResult,
       aiResult,
       financeResult,
@@ -270,6 +283,13 @@ export default function DashboardPage() {
     } else {
       setInventory([]);
       newWarnings.push("Stok verileri alınamadı.");
+    }
+
+    if (stockLevelResult.status === "fulfilled") {
+      setCriticalLevels(stockLevelResult.value);
+    } else {
+      setCriticalLevels([]);
+      newWarnings.push("Stok seviyesi uyarıları alınamadı.");
     }
 
     if (personnelResult.status === "fulfilled") {
@@ -432,10 +452,12 @@ export default function DashboardPage() {
       (x) => x.status < 4
     );
 
-    const criticalStock = inventory.filter(
-      (x) =>
-        x.isActive &&
-        x.totalStock <= x.minimumStock
+    const activeItemIds = new Set(
+      inventory.filter((x) => x.isActive).map((x) => x.id)
+    );
+
+    const criticalStock = criticalLevels.filter((x) =>
+      activeItemIds.has(x.inventoryItemId)
     );
 
     const activePersonnel = personnel.filter(
@@ -464,6 +486,7 @@ export default function DashboardPage() {
     purchaseOrders,
     rfqs,
     inventory,
+    criticalLevels,
     personnel,
   ]);
 
@@ -514,8 +537,8 @@ export default function DashboardPage() {
         type: "red",
         title: "Kritik stok",
         description:
-          `${metrics.criticalStock.length} stok kalemi minimum seviyede veya altında.`,
-        href: "/depo-stok",
+          `${metrics.criticalStock.length} depo kalemi asgari seviyede veya altında.`,
+        href: "/depo-stok/stok-seviyeleri",
       });
     }
 

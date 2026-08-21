@@ -300,6 +300,11 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Notifications.INotificationSource,
     EnderunAI.Api.Services.Notifications.Sources.VehicleRenewalNotificationSource>();
 
+// Stok tetikleyicisi: asgari seviyenin altına düşen depo kalemleri.
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.INotificationSource,
+    EnderunAI.Api.Services.Notifications.Sources.StockLevelNotificationSource>();
+
 // Finansal araçlar ortak sözleşmeyi uyguluyor; nakit akış hepsini
 // IEnumerable<IFinancialInstrumentSource> olarak okuyor. Yeni bir
 // araç eklemek, projeksiyonu değiştirmeden bu listeye kayıt olmak.
@@ -478,6 +483,7 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockSaleIssuer, En
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockOutflowLineBuilder, EnderunAI.Api.Services.Inventory.StockOutflowLineBuilder>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockConsumptionPoster, EnderunAI.Api.Services.Inventory.StockConsumptionPoster>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountLockService, EnderunAI.Api.Services.Inventory.StockCountLockService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.StockLevelAlertService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountVoucherPoster, EnderunAI.Api.Services.Inventory.StockCountVoucherPoster>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountService, EnderunAI.Api.Services.Inventory.StockCountService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Retail.IRetailSaleVoucherPoster, EnderunAI.Api.Services.Retail.RetailSaleVoucherPoster>();

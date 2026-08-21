@@ -138,6 +138,7 @@ const RULES: Rule[] = [
   // accounting.view zorluyor, rota kapısı onunla aynı olmalı.
   { match: /^\/depo-stok\/muhasebe-mutabakat/, permission: "accounting.view" },
   { match: /^\/depo-stok\/donemsel-sayim/, permission: "inventory.view" },
+  { match: /^\/depo-stok\/stok-seviyeleri/, permission: "inventory.view" },
   { match: /^\/depo-stok\/etiket/, permission: "inventory.view" },
   // Raf QR'ı okutulunca açılır; görüntüleme yetkisi yeterli.
   { match: /^\/depo-stok\/raf\//, permission: "inventory.view" },

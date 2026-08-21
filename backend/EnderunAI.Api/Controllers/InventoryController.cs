@@ -122,7 +122,7 @@ public sealed class InventoryController(
             ZoneName = x.WarehouseZone != null ? x.WarehouseZone.Name : null,
             ShelfCode = x.WarehouseShelf != null ? x.WarehouseShelf.Code : null,
             LevelCode = x.WarehouseShelfLevel != null ? x.WarehouseShelfLevel.Code : null,
-            x.Brand, x.Model, x.Unit, x.Barcode, x.MinimumStock, x.MaximumStock,
+            x.Brand, x.Model, x.Unit, x.Barcode,
             x.AverageUnitCost,
             x.LastPurchasePrice, x.LastPurchaseDate, x.VatRate,
             x.PreferredSupplierCurrentAccountId,
@@ -139,8 +139,33 @@ public sealed class InventoryController(
 
         if (criticalOnly == true)
         {
+            /*
+             * KRİTİK ARTIK DEPO SEVİYESİNDEN OKUNUYOR (S8).
+             *
+             * Eskiden kart üzerindeki tek `MinimumStock` TÜM depoların
+             * TOPLAMIYLA kıyaslanıyordu; aynı alan `critical-stock-alerts`
+             * ucunda TEK deponun miktarıyla kıyaslanıyordu. Aynı sayıdan
+             * iki farklı "kritik" tanımı çıkıyordu.
+             *
+             * Kart listesinde bir malzeme, HERHANGİ bir deposunda asgarinin
+             * altındaysa kritiktir: merkez deposu boşken şantiyede duran mal
+             * merkezin eksiğini kapatmaz.
+             */
+            var criticalItemIds = await db.WarehouseStockLevels
+                .AsNoTracking()
+                .Where(level =>
+                    (db.WarehouseStocks
+                        .Where(stock => stock.WarehouseId == level.WarehouseId &&
+                                        stock.InventoryItemId == level.InventoryItemId)
+                        .Sum(stock => (decimal?)stock.Quantity) ?? 0m) <= level.MinimumQuantity)
+                .Select(level => level.InventoryItemId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var criticalSet = criticalItemIds.ToHashSet();
+
             items = items
-                .Where(x => x.MinimumStock > 0m && x.TotalStock <= x.MinimumStock)
+                .Where(x => criticalSet.Contains(x.Id))
                 .ToList();
         }
 
@@ -178,8 +203,6 @@ public sealed class InventoryController(
                 x.Model,
                 x.Unit,
                 x.Barcode,
-                x.MinimumStock,
-                x.MaximumStock,
                 (int)x.Type,
                 x.IsActive,
                 x.AverageUnitCost,
@@ -226,8 +249,6 @@ public sealed class InventoryController(
         string? Brand,
         string? Model,
         string? Barcode,
-        decimal MinimumStock,
-        decimal? MaximumStock,
         decimal? CopperKgPerUnit,
         int Type,
         Guid? PreferredSupplierCurrentAccountId,
@@ -441,8 +462,6 @@ public sealed class InventoryController(
             Model = request.Model?.Trim(),
             Unit = unit,
             Barcode = request.Barcode?.Trim(),
-            MinimumStock = request.MinimumStock,
-            MaximumStock = request.MaximumStock,
             CopperKgPerUnit = request.CopperKgPerUnit,
             Type = (InventoryItemType)request.Type,
             PreferredSupplierCurrentAccountId = request.PreferredSupplierCurrentAccountId,
@@ -504,9 +523,7 @@ public sealed class InventoryController(
         item.Model = request.Model?.Trim();
         item.Unit = request.Unit.Trim();
         item.Barcode = request.Barcode?.Trim();
-        item.MinimumStock = request.MinimumStock;
         item.CopperKgPerUnit = request.CopperKgPerUnit;
-        item.MaximumStock = request.MaximumStock;
         item.Type = (InventoryItemType)request.Type;
         item.IsActive = request.IsActive;
         item.PreferredSupplierCurrentAccountId = request.PreferredSupplierCurrentAccountId;
@@ -523,34 +540,19 @@ public sealed class InventoryController(
         return Ok(new { message = "Malzeme kartı güncellendi." });
     }
 
-    [HttpGet("critical-stock-alerts")]
-    [RequirePermission(PermissionCatalog.Keys.InventoryView)]
-    public async Task<IActionResult> GetCriticalStockAlerts([FromQuery] Guid? companyId, CancellationToken cancellationToken)
-    {
-        var query = db.WarehouseStocks.AsNoTracking()
-            .Where(x => x.InventoryItem.MinimumStock > 0 &&
-                        x.Quantity <= x.InventoryItem.MinimumStock);
-
-        if (companyId.HasValue)
-            query = query.Where(x => x.InventoryItem.CompanyId == companyId.Value);
-
-        var alerts = await query
-            .OrderBy(x => x.InventoryItem.Name)
-            .Select(x => new
-            {
-                x.WarehouseId,
-                WarehouseName = x.Warehouse.Name,
-                x.InventoryItemId,
-                ItemCode = x.InventoryItem.Code,
-                ItemName = x.InventoryItem.Name,
-                x.InventoryItem.Unit,
-                x.Quantity,
-                x.InventoryItem.MinimumStock
-            })
-            .ToListAsync(cancellationToken);
-
-        return Ok(alerts);
-    }
+    /*
+     * `GET critical-stock-alerts` KALDIRILDI (S8).
+     *
+     * Kart üzerindeki tek `MinimumStock` alanını TEK deponun miktarıyla
+     * kıyaslıyordu; aynı alanı kart listesi TÜM depoların TOPLAMIYLA
+     * kıyaslıyordu. Aynı sayıdan iki farklı "kritik" tanımı çıkıyordu ve
+     * hangisinin doğru olduğu hiçbir yerde yazmıyordu.
+     *
+     * Tek kaynak artık `GET api/stock-levels?belowMinimumOnly=true`
+     * (StockLevelAlertService) — ekran, bildirim ve Hızır brifingi
+     * aynı hesabı okuyor. Bu uç canlıda hiçbir ekrandan çağrılmıyordu;
+     * kaybedilen davranış yok.
+     */
 
     [HttpGet("warehouses/{warehouseId:guid}/stocks")]
     [RequirePermission(PermissionCatalog.Keys.InventoryView)]
@@ -567,9 +569,26 @@ public sealed class InventoryController(
                 x.InventoryItemId, x.InventoryItem.Code, x.InventoryItem.Name,
                 x.InventoryItem.Category, x.InventoryItem.Brand, x.InventoryItem.Model,
                 x.InventoryItem.Unit, x.Quantity,
-                x.InventoryItem.MinimumStock,
                 x.InventoryItem.AverageUnitCost,
-                IsCritical = x.Quantity <= x.InventoryItem.MinimumStock
+
+                /*
+                 * KRİTİK, O DEPONUN KENDİ ASGARİSİNE GÖRE (S8).
+                 *
+                 * Eski hâli `x.Quantity <= x.InventoryItem.MinimumStock`
+                 * idi ve kartların asgarisi 0 olduğu için stoğu biten HER
+                 * kalemi kritik gösteriyordu (0 <= 0). Seviye tanımlı
+                 * değilse kritiklik de tanımsızdır — false döner.
+                 */
+                MinimumQuantity = db.WarehouseStockLevels
+                    .Where(level => level.WarehouseId == x.WarehouseId &&
+                                    level.InventoryItemId == x.InventoryItemId)
+                    .Select(level => (decimal?)level.MinimumQuantity)
+                    .FirstOrDefault(),
+
+                IsCritical = db.WarehouseStockLevels
+                    .Any(level => level.WarehouseId == x.WarehouseId &&
+                                  level.InventoryItemId == x.InventoryItemId &&
+                                  x.Quantity <= level.MinimumQuantity)
             }).ToListAsync(cancellationToken);
 
         return Ok(stocks);

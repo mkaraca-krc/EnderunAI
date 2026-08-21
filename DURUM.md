@@ -798,6 +798,126 @@ ekranı düzelterek kapatıldı, limit YÜKSELTİLMEDİ: (1) ham `<table>`
 cırcırı 43→44 oldu, liste `DataTable`'a çevrildi; (2) redwood
 sözleşmesi `design="redwood"` ve tazeleme düğmesi istedi.
 
+**S8 (bitti) — min/max uyarısı → satın alma talebi önerisi.**
+
+ÖLÇÜM (işe başlamadan): 9 kart, **`MinimumStock > 0` olan 0 kart**,
+`MaximumStock` dolu 9 kart ama **hepsinin değeri 0,0000**, 0 stok
+satırı, 0 tercihli tedarikçi, 0 satın alma talebi. Yani min/max
+tümüyle ÖLÜ VERİYDİ — hiçbir kart uyarı üretemezdi.
+
+ÖLÇÜMÜN AÇIĞA ÇIKARDIĞI ASIL SORUN: aynı alan iki uçta İKİ FARKLI
+ANLAMDA kullanılıyordu. `criticalOnly` süzgeci kart minimumunu TÜM
+depoların TOPLAMIYLA, `critical-stock-alerts` ucu ise TEK deponun
+miktarıyla kıyaslıyordu. Hangisinin doğru olduğu hiçbir yerde
+yazmıyordu. Üçüncüsü de vardı: `GetWarehouseStocks` içindeki
+`IsCritical`'da "asgari > 0" koşulu yoktu, bu yüzden asgarisi
+tanımsız (0) ve stoğu biten HER kalem kritik görünüyordu (`0 <= 0`).
+
+KULLANICI KARARLARI:
+1. **Seviye DEPO BAZINDA** — kart üzerindeki alanlar kaldırıldı, tek
+   kaynak `warehouse_stock_levels`. Merkez deposunda 100 metre kablo
+   bulundurmak isteriz, biten bir şantiye deposunda aynı kalem için
+   sıfır doğrudur; tek sayı bu ikisini anlatamıyordu.
+2. **Öneri = AZAMİ − MEVCUT.** Azami tanımlı değilse öneri
+   ÜRETİLMEZ (uyarı yine çıkar). "Asgarinin iki katı" gibi bir
+   katsayı uydurulsaydı sistem, kimsenin vermediği bir sipariş
+   kararını vermiş olurdu.
+3. **Talebin projesi ekranda seçilir.** Depo ikmali gerçekte
+   projesizdir ama `PurchaseRequest.ProjectId` zorunlu ve bütçe
+   onayı/raporlama oradan besleniyor; nullable yapmak o üç akışın da
+   projesiz dalını yazmayı gerektirirdi.
+
+- **KOLONLARIN KALDIRILMASI VERİ KAYBI DEĞİL, ÖLÇÜLDÜ**: migration
+  `MinimumStock`/`MaximumStock` kolonlarını düşürüyor. Veri taşıyan
+  bir adım YAZILMADI çünkü taşınacak veri yoktu (yukarıdaki ölçüm).
+  Uydurma bir eşik üretmek, kimsenin koymadığı bir kararı geriye
+  yüklemek olurdu.
+- **SATIRIN VARLIĞI TAKİBİN KENDİSİ**: asgarisi sıfır olan seviye
+  kabul edilmiyor ("her zaman kritik" demek olurdu). Takibi bırakmanın
+  yolu satırı silmek. Azami de asgariden büyük olmak zorunda, yoksa
+  öneri negatif çıkardı.
+- **SEVİYE, BAKİYE SATIRINA KOLON DEĞİL AYRI TABLO**: bakiye satırı
+  yalnızca malzeme o depoya bir kez girdiyse var; oysa seviye takibine
+  en çok stok SIFIRKEN ihtiyaç duyulur. Politika ayrı durduğu için
+  bakiyesi hiç olmayan kalem de uyarı üretiyor — sol birleşim, mevcut
+  yoksa sıfır.
+- **TAKİP BIRAKILIP YENİDEN AÇILABİLİR**: seviye satırı yumuşak
+  siliniyor, tekil indeks ise KISMİ (`"IsDeleted" = false`). İndeks
+  silinmişleri de kapsasaydı aynı malzeme için takip bir daha
+  açılamazdı — silinmiş satır sorgu süzgeci yüzünden görünmez ama
+  indekste durmaya devam ederdi. Kusur yazarken yakalandı ve testle
+  bağlandı (`Seviye_SilindiktenSonraYenidenTanimlanabilir`).
+- **EŞİK "<=" ve TEK YERDE**: `StockLevelAlertService`. Ekran,
+  bildirim ve Hızır brifingi aynı hesabı okuyor. Brifing S8'de kendi
+  sorgusunu taşıyordu; bu turda o kopya kaldırıldı ve ortak servise
+  bağlandı — üç kopya kalsaydı aynı malzeme için üç farklı "kritik"
+  tanımı doğardı.
+- **UYARI BİLDİRİM MERKEZİNE DE DÜŞÜYOR**: `StockLevelNotificationSource`
+  (`inventory.below_minimum`). Dönem anahtarı SABİT ("acik") çünkü
+  asgari stok bir VADE değil bir DURUM; güne bağlansaydı her gece yeni
+  kayıt açılır, "okundu" bilgisi her gece kaybolurdu. Mal girince aday
+  üretilmez ve motor kaydı kendiliğinden kapatır.
+- **TÜKENMİŞ ile AZALMIŞ AYRI KADEMEDE**: sıfır stok Kritik, asgari
+  altı Uyarı. Tek kademe olsaydı "3 adet kaldı" ile "hiç kalmadı" aynı
+  renkte görünürdü.
+- **TALEP TASLAK DOĞAR** ve normal onay yolundan geçer. Doğrudan
+  onaylı açılsaydı stok uyarısı, kimsenin bakmadığı bir harcama emrine
+  dönerdi. İzin `purchasing-requests.create` — depoyu GÖREN değil,
+  talep AÇABİLEN kişi.
+- **MİKTAR İSTEMCİDEN GELİYOR**: öneri bir öneridir; kullanıcı
+  azalttıysa azalttığı miktar sipariş edilmeli. Sunucu yeniden
+  hesaplasaydı ekranda görülen sayı ile kaydedilen ayrışırdı.
+- **SEVİYESİ TANIMSIZ KALEM BU YOLDAN TALEP EDİLEMEZ** (409): bu uç
+  "asgarinin altına düştü" gerekçesiyle talep açıyor; gerekçesizi de
+  kabul etseydi otomasyon kapısı denetimsiz bir elle talep kapısına
+  dönerdi. Aynı malzeme iki kez seçilirse sessizce TOPLANMAZ, hata
+  verir.
+- **KALDIRILAN UÇ**: `GET api/inventory/critical-stock-alerts`. Canlıda
+  hiçbir ekrandan çağrılmıyordu (frontend'de sıfır tüketici) ve ikinci
+  "kritik" tanımının kaynağıydı. Tek kaynak `GET api/stock-levels`.
+- **KALDIRILAN HÜCRE**: kart listesindeki satır içi asgari düzenleme
+  (`MinimumStockCell` + `updateMinimumStock`). Bir kartın birden çok
+  deposu olabildiği için tek hücreye sığmıyor; tanım
+  `/depo-stok/stok-seviyeleri` ekranında.
+
+SONDA TURU (13 sonda): 11'i doğrudan yakaladı, 2'si kaçırdı ve
+ikisinin de sebebi ÖLÇÜLDÜ — kaçırma açıklanmadan faz kapatılmadı.
+
+- **H GERÇEK BOŞLUKTU, TEST GÜÇLENDİRİLDİ.** "Seviyesi tanımsız kalem
+  talebe giremez" korumasını kaldırınca akış birkaç satır sonra
+  `levels.Single()` üzerinde patlıyor ve denetleyici o istisnayı da
+  409'a çeviriyor. Test yalnız DURUM KODUNA baktığı için kasıtlı
+  korumayı kazara çökmeden ayıramıyordu. Fark kullanıcıda: açıklayıcı
+  Türkçe gerekçe yerine "Sequence contains no elements" okurdu. Test
+  artık mesajı da denetliyor.
+- **B BOŞLUK DEĞİLDİ, SONDA AYIRICI DEĞİLDİ.** `?? 0m` → `?? 999999m`
+  hiçbir testi düşürmedi. Sebep: EF boş kümedeki `SUM`'ı zaten kendi
+  `COALESCE(...,0)`'ı ile sarıyor, yani `??` hiç tetiklenmiyor —
+  sabotaj anlamsızdı. Kanıt sabotajın kendisi: test o hâlde bile
+  `currentQuantity == 0` iddiasını geçti. Kuralı taşıyan şey sorgunun
+  BİÇİMİ (sol birleşim); onu hedefleyen sonda (iç birleşime çevir)
+  testi 2 saniyede düşürdü. Sonda betiğindeki B kalıcı olarak bununla
+  değiştirildi.
+
+BU TURDAN ÇIKAN İKİ KURAL (§5'e):
+
+16. **Sabotaj ANLAMLI olmalı, yalnız derlenebilir değil.** Davranışı
+    değiştirmeyen bir sabotajın "kaçırması" testi değil sondayı
+    suçlar. Kaçırma görünce ilk soru "test zayıf mı" değil, "bu
+    sabotaj gerçekten davranışı değiştiriyor mu".
+17. **`dotnet test` çocukları harness görevi öldürülünce hayatta
+    kalıyor.** Arkada kalan derleyici 4,3 GB tutup OOM killer'ı
+    tetikledi ve sonraki turların derlemeleri yarıda kesildi
+    (belirti: `Duration: < 1 ms`). Tur öncesi `dotnet build-server
+    shutdown` + `MSBUILDDISABLENODEREUSE=1`, sonrasında artık süreç
+    taraması.
+
+MEVCUT SÖZLEŞME TESTLERİ YENİ EKRANI YAKALADI, ikisi de ekranı
+düzelterek kapatıldı: (1) öneri listesi ham tablo ile yazılmıştı, cırcır
+43→44 olacaktı — `DataTable`'a çevrildi, sınır **43'te kaldı**;
+(2) redwood sözleşmesi ham hex rengi reddetti (`#b45309` iki dosyada),
+`rw-value-warning` sınıfına bağlandı.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

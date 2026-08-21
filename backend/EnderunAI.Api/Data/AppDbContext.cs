@@ -219,6 +219,7 @@ public sealed class AppDbContext(
     public DbSet<InventoryAttributeOption> InventoryAttributeOptions => Set<InventoryAttributeOption>();
     public DbSet<InventoryItemAttributeValue> InventoryItemAttributeValues => Set<InventoryItemAttributeValue>();
     public DbSet<WarehouseStock> WarehouseStocks => Set<WarehouseStock>();
+    public DbSet<WarehouseStockLevel> WarehouseStockLevels => Set<WarehouseStockLevel>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<RetailSale> RetailSales => Set<RetailSale>();
     public DbSet<RetailSaleItem> RetailSaleItems => Set<RetailSaleItem>();
@@ -354,6 +355,7 @@ public sealed class AppDbContext(
         ConfigurePurchaseRequestItems(modelBuilder);
         ConfigureInventoryItems(modelBuilder);
         ConfigureWarehouseStocks(modelBuilder);
+        ConfigureWarehouseStockLevels(modelBuilder);
         ConfigureRetailSales(modelBuilder);
         ConfigureStockMovements(modelBuilder);
         ConfigureDocumentNumberSequences(modelBuilder);
@@ -3361,8 +3363,6 @@ public sealed class AppDbContext(
             entity.Property(x => x.Model).HasMaxLength(150);
             entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
             entity.Property(x => x.Barcode).HasMaxLength(100);
-            entity.Property(x => x.MinimumStock).HasPrecision(18, 4);
-            entity.Property(x => x.MaximumStock).HasPrecision(18, 4);
             entity.Property(x => x.CopperKgPerUnit).HasPrecision(18, 4);
             entity.Property(x => x.AverageUnitCost).HasPrecision(18, 4);
             // Satış fiyatı BİRİM FİYAT ölçeğinde (6): gösterim tarafındaki
@@ -3450,6 +3450,43 @@ public sealed class AppDbContext(
             entity.Property(x => x.Quantity).HasPrecision(18, 4);
             entity.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.InventoryItem).WithMany(x => x.WarehouseStocks).HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    private static void ConfigureWarehouseStockLevels(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<WarehouseStockLevel>(entity =>
+        {
+            entity.ToTable("warehouse_stock_levels");
+            entity.HasKey(x => x.Id);
+
+            /*
+             * Bir depoda bir malzemenin TEK seviyesi olur. Veritabanı
+             * seviyesinde: iki kullanıcı aynı anda seviye tanımlarsa
+             * sorguyla kontrol ikisine de "yok" derdi.
+             *
+             * KISMİ İNDEKS — SİLİNMİŞLER HARİÇ. Takibi bırakmak satırı
+             * yumuşak silmek demek; kısıt silinmişleri de kapsasaydı
+             * aynı malzeme için takip bir daha AÇILAMAZDI (silinmiş
+             * satır sorgu süzgeci yüzünden görünmez, ama indekste
+             * durmaya devam ederdi). Kim ne zaman takibi bıraktı
+             * bilgisi de kayıtta kalıyor.
+             */
+            entity.HasIndex(x => new { x.WarehouseId, x.InventoryItemId })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            // Uyarı taraması depo bazında dönüyor; süzgeç bu indeksten
+            // besleniyor.
+            entity.HasIndex(x => x.WarehouseId);
+
+            entity.Property(x => x.MinimumQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.MaximumQuantity).HasPrecision(18, 4);
+            entity.Property(x => x.Note).HasMaxLength(500);
+
+            entity.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.InventoryItem).WithMany().HasForeignKey(x => x.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }

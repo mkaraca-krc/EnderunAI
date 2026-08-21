@@ -43,8 +43,6 @@ export default function CreateInventoryItemPage() {
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [barcode, setBarcode] = useState("");
-  const [minimumStock, setMinimumStock] = useState("0");
-  const [maximumStock, setMaximumStock] = useState("");
   const [type, setType] = useState<InventoryItemType>(0);
   const [vatRate, setVatRate] = useState("");
   const [description, setDescription] = useState("");
@@ -145,8 +143,6 @@ export default function CreateInventoryItemPage() {
         brand: brand.trim() || undefined,
         model: model.trim() || undefined,
         barcode: barcode.trim() || undefined,
-        minimumStock: Number(minimumStock) || 0,
-        maximumStock: maximumStock.trim() === "" ? null : Number(maximumStock),
         type,
         vatRate: vatRate.trim() === "" ? null : Number(vatRate),
         description: description.trim() || null,
@@ -313,27 +309,12 @@ export default function CreateInventoryItemPage() {
             <input value={barcode} onChange={(e) => setBarcode(e.target.value)} />
           </label>
 
-          <label>
-            <span>Minimum Stok</span>
-            <input
-              type="number"
-              min="0"
-              step="0.0001"
-              value={minimumStock}
-              onChange={(e) => setMinimumStock(e.target.value)}
-            />
-          </label>
-
-          <label>
-            <span>Maksimum Stok</span>
-            <input
-              type="number"
-              min="0"
-              step="0.0001"
-              value={maximumStock}
-              onChange={(e) => setMaximumStock(e.target.value)}
-            />
-          </label>
+          {/*
+            * ASGARİ/AZAMİ BURADA SORULMUYOR (S8): eşik depoya ait, karta
+            * değil. Kart açılırken hangi depoda ne kadar bulundurulacağı
+            * henüz belli olmaz; tanım /depo-stok/stok-seviyeleri
+            * ekranından yapılır.
+            */}
 
           <label>
             <span>Tip</span>

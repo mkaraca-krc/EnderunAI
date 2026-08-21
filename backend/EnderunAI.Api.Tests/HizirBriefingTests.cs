@@ -192,11 +192,13 @@ public sealed class HizirBriefingTests(DatabaseFixture fixture)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         // Kritik stok yoksa madde çıkmamalı.
-        var hasCriticalStock = await db.InventoryItems
-            .AnyAsync(item => item.MinimumStock > 0m &&
-                              db.WarehouseStocks
-                                  .Where(stock => stock.InventoryItemId == item.Id)
-                                  .Sum(stock => (decimal?)stock.Quantity) < item.MinimumStock);
+        // S8: eşik depo satırında; kaynakla AYNI karşılaştırma ("<=").
+        var hasCriticalStock = await db.WarehouseStockLevels
+            .AnyAsync(level =>
+                (db.WarehouseStocks
+                    .Where(stock => stock.WarehouseId == level.WarehouseId &&
+                                    stock.InventoryItemId == level.InventoryItemId)
+                    .Sum(stock => (decimal?)stock.Quantity) ?? 0m) <= level.MinimumQuantity);
 
         var source = Sources(scope).Single(x => x.Key == "kritik_stok");
         var items = await source.BuildAsync(context, CancellationToken.None);

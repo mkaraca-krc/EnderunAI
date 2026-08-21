@@ -69,7 +69,6 @@ public sealed class InventoryCatalogTests(DatabaseFixture fixture)
             Name = "Enerji Kablosu",
             Category = "Elektrik",
             Unit = "Metre",
-            MinimumStock = 5m,
             AverageUnitCost = 100m
         };
 
@@ -81,7 +80,6 @@ public sealed class InventoryCatalogTests(DatabaseFixture fixture)
             Name = "Çelik Boru",
             Category = "Mekanik",
             Unit = "Metre",
-            MinimumStock = 10m,
             AverageUnitCost = 50m
         };
 
@@ -100,6 +98,22 @@ public sealed class InventoryCatalogTests(DatabaseFixture fixture)
                 WarehouseId = warehouseB.Id,
                 InventoryItemId = boru.Id,
                 Quantity = 2m
+            });
+
+        // ASGARİ SEVİYE DEPOYA AİT (S8). Kablo A deposunda 10 > 5,
+        // boru B deposunda 2 <= 10 — kritik olan yalnız boru.
+        db.WarehouseStockLevels.AddRange(
+            new WarehouseStockLevel
+            {
+                WarehouseId = warehouseA.Id,
+                InventoryItemId = kablo.Id,
+                MinimumQuantity = 5m
+            },
+            new WarehouseStockLevel
+            {
+                WarehouseId = warehouseB.Id,
+                InventoryItemId = boru.Id,
+                MinimumQuantity = 10m
             });
 
         await db.SaveChangesAsync();
@@ -167,7 +181,7 @@ public sealed class InventoryCatalogTests(DatabaseFixture fixture)
         var items = await client.GetFromJsonAsync<JsonElement>(
             $"/api/inventory/items?companyId={context.CompanyId}&criticalOnly=true");
 
-        // Boru 2 < 10 kritik; kablo 10 > 5 değil.
+        // Boru B deposunda 2 <= 10 kritik; kablo A deposunda 10 > 5 değil.
         Assert.Equal(1, items.GetArrayLength());
         Assert.Equal(context.BoruId,
             items.EnumerateArray().Single().GetProperty("id").GetGuid());

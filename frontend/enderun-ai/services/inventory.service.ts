@@ -20,8 +20,6 @@ export interface InventoryItemListItem {
   model?: string | null;
   unit: string;
   barcode?: string | null;
-  minimumStock: number;
-  maximumStock: number;
   type: InventoryItemType;
   isActive: boolean;
   totalStock: number;
@@ -54,8 +52,6 @@ export interface InventoryItemDetail {
   model?: string | null;
   unit: string;
   barcode?: string | null;
-  minimumStock: number;
-  maximumStock?: number | null;
   type: InventoryItemType;
   isActive: boolean;
   averageUnitCost: number;
@@ -106,8 +102,6 @@ export interface CreateInventoryItemRequest {
   brand?: string;
   model?: string;
   barcode?: string;
-  minimumStock: number;
-  maximumStock?: number | null;
   type: InventoryItemType;
   preferredSupplierCurrentAccountId?: string | null;
   vatRate?: number | null;
@@ -122,8 +116,6 @@ export interface UpdateInventoryItemRequest {
   model?: string | null;
   unit: string;
   barcode?: string | null;
-  minimumStock: number;
-  maximumStock?: number | null;
   type: InventoryItemType;
   isActive: boolean;
   preferredSupplierCurrentAccountId?: string | null;
@@ -300,38 +292,5 @@ export const inventoryService = {
 
     if (Array.isArray(result)) return result;
     return result.items ?? result.data ?? [];
-  },
-
-  /**
-   * Listedeki satır içi minimum stok düzenlemesi.
-   *
-   * PUT tüm kartı yazdığı için gönderilmeyen alanlar null'a düşer;
-   * tercih edilen tedarikçi, KDV oranı ve açıklama bu yüzden önce
-   * karttan okunup aynen geri gönderiliyor. Aksi halde minimum stoğu
-   * değiştiren kişi farkında olmadan o üç alanı silerdi.
-   */
-  async updateMinimumStock(
-    item: InventoryItemListItem,
-    minimumStock: number
-  ): Promise<void> {
-    const detail = await inventoryService.getItem(item.id);
-
-    await inventoryService.updateItem(item.id, {
-      name: detail.name,
-      category: detail.category ?? null,
-      brand: detail.brand ?? null,
-      model: detail.model ?? null,
-      unit: detail.unit,
-      barcode: detail.barcode ?? null,
-      minimumStock,
-      maximumStock: detail.maximumStock ?? null,
-      type: detail.type,
-      isActive: detail.isActive,
-      preferredSupplierCurrentAccountId:
-        detail.preferredSupplierCurrentAccountId ?? null,
-      vatRate: detail.vatRate ?? null,
-      description: detail.description ?? null,
-      copperKgPerUnit: detail.copperKgPerUnit ?? null,
-    });
   },
 };

@@ -1,6 +1,7 @@
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Inventory;
 using Microsoft.EntityFrameworkCore;
 using EnderunAI.Api.Formatting;
 
@@ -181,8 +182,16 @@ public sealed class MissingSiteReportBriefingSource(AppDbContext db)
     }
 }
 
-/// <summary>Kritik seviyenin altına düşen stoklar.</summary>
-public sealed class CriticalStockBriefingSource(AppDbContext db)
+/// <summary>
+/// Asgari seviyenin altına düşen depo kalemleri.
+///
+/// HESAP BURADA YAPILMIYOR: eşik ve öneri
+/// <see cref="StockLevelAlertService"/>'ten okunuyor — ekranın,
+/// bildirimin ve bu brifingin kullandığı TEK hesap. Kendi sorgusunu
+/// yazsaydı (S8 öncesi öyleydi) aynı malzeme için üç farklı "kritik"
+/// tanımı doğar, hangisinin doğru olduğu hiçbir yerde yazmazdı.
+/// </summary>
+public sealed class CriticalStockBriefingSource(StockLevelAlertService alerts)
     : IHizirBriefingSource
 {
     public string Key => "kritik_stok";
@@ -191,40 +200,34 @@ public sealed class CriticalStockBriefingSource(AppDbContext db)
     public async Task<IReadOnlyList<BriefingItem>> BuildAsync(
         HizirToolContext context, CancellationToken cancellationToken)
     {
-        // Minimum stok tanımlanmamış (0) kalemler uyarı üretmemeli;
-        // aksi halde her kalem kritik görünürdü.
-        var criticalQuery = db.InventoryItems
-            .AsNoTracking()
-            .Where(item => item.MinimumStock > 0m &&
-                           db.WarehouseStocks
-                               .Where(stock => stock.InventoryItemId == item.Id)
-                               .Sum(stock => (decimal?)stock.Quantity) < item.MinimumStock);
+        var critical = await alerts.BuildAsync(
+            companyId: null,
+            warehouseId: null,
+            belowMinimumOnly: true,
+            cancellationToken);
+
+        if (critical.Count == 0)
+            return [];
 
         // Sayım Take'ten ÖNCE alınıyor: daha önce ilk 5 kayıt çekilip
         // "critical.Count" raporlandığı için 30 malzeme kritikken de
         // "5 malzeme" yazıyordu.
-        var criticalCount = await criticalQuery.CountAsync(cancellationToken);
-
-        if (criticalCount == 0)
-            return [];
-
-        var names = await criticalQuery
-            .OrderBy(item => item.Name)
-            .Select(item => item.Name)
+        var names = critical
+            .OrderBy(row => row.ItemName)
             .Take(5)
-            .ToListAsync(cancellationToken);
+            .Select(row => $"{row.ItemName} ({row.WarehouseName})")
+            .ToList();
 
         var detail = string.Join(", ", names);
-        if (criticalCount > names.Count)
-            detail += $" ve {criticalCount - names.Count} kalem daha";
+        if (critical.Count > names.Count)
+            detail += $" ve {critical.Count - names.Count} kalem daha";
 
         return
         [
             new BriefingItem(
-                $"{criticalCount} malzeme minimum stok seviyesinin altında",
+                $"{critical.Count} depo kalemi asgari stok seviyesinin altında",
                 detail,
-                // Bağlantı /stok idi; böyle bir sayfa yok, 404 veriyordu.
-                BriefingSeverity.Warning, "/depo-stok")
+                BriefingSeverity.Warning, "/depo-stok/stok-seviyeleri")
         ];
     }
 }

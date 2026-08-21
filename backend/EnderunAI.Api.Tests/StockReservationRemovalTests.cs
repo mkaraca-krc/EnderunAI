@@ -53,8 +53,7 @@ public sealed class StockReservationRemovalTests(DatabaseFixture fixture)
             CompanyId = company.Id,
             Code = $"MLZ-{suffix}",
             Name = "Bol Stoklu Malzeme",
-            Unit = "Adet",
-            MinimumStock = 10m
+            Unit = "Adet"
         };
 
         var otherItem = new InventoryItem
@@ -62,8 +61,7 @@ public sealed class StockReservationRemovalTests(DatabaseFixture fixture)
             CompanyId = company.Id,
             Code = $"KRT-{suffix}",
             Name = "Kritik Malzeme",
-            Unit = "Adet",
-            MinimumStock = 10m
+            Unit = "Adet"
         };
 
         db.Warehouses.Add(warehouse);
@@ -82,6 +80,21 @@ public sealed class StockReservationRemovalTests(DatabaseFixture fixture)
                 WarehouseId = warehouse.Id,
                 InventoryItemId = otherItem.Id,
                 Quantity = 5m
+            });
+
+        // Asgari eşik depoya ait (S8); ikisi de aynı depoda takipli.
+        db.WarehouseStockLevels.AddRange(
+            new WarehouseStockLevel
+            {
+                WarehouseId = warehouse.Id,
+                InventoryItemId = item.Id,
+                MinimumQuantity = 10m
+            },
+            new WarehouseStockLevel
+            {
+                WarehouseId = warehouse.Id,
+                InventoryItemId = otherItem.Id,
+                MinimumQuantity = 10m
             });
 
         await db.SaveChangesAsync();
@@ -125,8 +138,13 @@ public sealed class StockReservationRemovalTests(DatabaseFixture fixture)
 
     /// <summary>
     /// Kritik stok kümesi değişmiyor: rezerve miktar her zaman sıfır
-    /// olduğu için eşik karşılaştırması zaten toplam stok üzerinden
+    /// olduğu için eşik karşılaştırması zaten fiili miktar üzerinden
     /// yürüyordu.
+    ///
+    /// UÇ DEĞİŞTİ (S8), İDDİA DEĞİŞMEDİ: `critical-stock-alerts`
+    /// kaldırıldı çünkü kart üzerindeki tek eşiği tek deponun
+    /// miktarıyla kıyaslıyor, aynı alanı kart listesi toplamla
+    /// kıyaslıyordu. Tek kaynak artık `api/stock-levels`.
     /// </summary>
     [Fact]
     public async Task CriticalStockAlerts_MatchTotalQuantityThreshold()
@@ -137,7 +155,7 @@ public sealed class StockReservationRemovalTests(DatabaseFixture fixture)
         var client = await ClientAsync();
 
         var response = await client.GetAsync(
-            $"/api/inventory/critical-stock-alerts?companyId={context.CompanyId}");
+            $"/api/stock-levels?companyId={context.CompanyId}&belowMinimumOnly=true");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 

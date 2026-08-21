@@ -11,11 +11,6 @@ export interface WarehouseStockRow {
   inventoryItemId: string;
   quantity: number;
 }
-export interface CriticalStockAlert {
-  warehouseId: string; warehouseName: string;
-  inventoryItemId: string; itemCode: string; itemName: string; unit: string;
-  minimumStock: number;
-}
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const backendPath = path.replace(/^\/api\//, "");
   const response = await fetch(`/api/backend/${backendPath}`, {
@@ -85,7 +80,6 @@ export const inventoryMovementService = {
       return [] as SelectOption[];
     }
   },
-  getCriticalStockAlerts: () => request<CriticalStockAlert[]>("/api/inventory/critical-stock-alerts"),
   /** Bir deponun stok satırları; sayım ekranı mevcut miktarı buradan okur. */
   getWarehouseStocks: (warehouseId: string) =>
     request<WarehouseStockRow[]>(`/api/inventory/warehouses/${warehouseId}/stocks`),

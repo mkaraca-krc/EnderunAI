@@ -1264,9 +1264,24 @@ describe("eleman seviyesi yetki (R2/1)", () => {
    *
    * Bu test yedeğin silinip düğmenin tamamen gizlenmesini yakalar.
    */
+  /*
+   * DEPO-STOK ARTIK BU LİSTEDE DEĞİL (S8) — kural gevşetilmedi,
+   * KONUSU KALMADI.
+   *
+   * Buradaki madde kart listesindeki satır içi asgari stok hücresiydi:
+   * hem değeri gösteren hem düzenleten bir düğme. Asgari seviye artık
+   * karta değil DEPOYA ait (`warehouse_stock_levels`) ve bir kartın
+   * birden çok deposu olabildiği için tek hücreye sığmıyordu; hücre
+   * kaldırıldı. Değer o sütunda artık HER kullanıcıya düz metin olarak
+   * basılıyor — yani kuralın istediğinden daha fazlası sağlanıyor,
+   * gizlenecek bir düğme yok. Tanım ekranı ayrı:
+   * /depo-stok/stok-seviyeleri (POST api/stock-levels -> inventory.edit).
+   *
+   * Piyasa ekranındaki tonaj hücresi duruyor ve kural onu korumaya
+   * devam ediyor.
+   */
   const DEGER_GOSTEREN_HUCRELER: Array<[string, string]> = [
     ["app/finans/piyasa/page.tsx", 'actions.can("manage") ? ('],
-    ["app/depo-stok/page.tsx", "if (!canEdit) {"],
   ];
 
   it.each(DEGER_GOSTEREN_HUCRELER)("%s değer yedeği duruyor", (relative, marker) => {

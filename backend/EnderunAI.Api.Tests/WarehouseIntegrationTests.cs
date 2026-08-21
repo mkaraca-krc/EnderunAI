@@ -45,8 +45,7 @@ public sealed class WarehouseIntegrationTests(DatabaseFixture fixture)
             CompanyId = company.Id,
             Code = $"MLZ-{suffix}",
             Name = $"Test Malzeme {suffix}",
-            Unit = "adet",
-            MinimumStock = 0
+            Unit = "adet"
         };
         db.InventoryItems.Add(item);
 

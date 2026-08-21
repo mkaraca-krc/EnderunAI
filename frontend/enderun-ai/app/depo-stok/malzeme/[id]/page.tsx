@@ -16,6 +16,10 @@ import {
   type InventoryItemDetail,
   type InventoryItemType,
 } from "@/services/inventory.service";
+import {
+  stockLevelService,
+  type StockLevelRow,
+} from "@/services/stock-level.service";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
@@ -40,6 +44,13 @@ export default function InventoryItemDetailPage() {
   const [item, setItem] = useState<InventoryItemDetail | null>(null);
   const [suppliers, setSuppliers] = useState<CurrentAccountListItem[]>([]);
 
+  /*
+   * ASGARİ/AZAMİ KARTTA DEĞİL, DEPODA (S8). Bir kart birden çok depoda
+   * bulunabildiği ve her deponun eşiği farklı olduğu için tek alan
+   * yerine satır listesi okunuyor.
+   */
+  const [levels, setLevels] = useState<StockLevelRow[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -52,8 +63,6 @@ export default function InventoryItemDetailPage() {
     model: "",
     unit: "Adet",
     barcode: "",
-    minimumStock: "0",
-    maximumStock: "",
     type: "0",
     isActive: true,
     preferredSupplierCurrentAccountId: "",
@@ -80,9 +89,6 @@ export default function InventoryItemDetailPage() {
         model: detail.model ?? "",
         unit: detail.unit,
         barcode: detail.barcode ?? "",
-        minimumStock: String(detail.minimumStock),
-        maximumStock:
-          detail.maximumStock == null ? "" : String(detail.maximumStock),
         type: String(detail.type),
         isActive: detail.isActive,
         preferredSupplierCurrentAccountId:
@@ -90,6 +96,11 @@ export default function InventoryItemDetailPage() {
         vatRate: detail.vatRate == null ? "" : String(detail.vatRate),
         description: detail.description ?? "",
       });
+
+      setLevels(
+        (await stockLevelService.list().catch(() => [] as StockLevelRow[]))
+          .filter((level) => level.inventoryItemId === detail.id)
+      );
 
       const accounts = await currentAccountService
         .getAll(detail.companyId)
@@ -100,6 +111,7 @@ export default function InventoryItemDetailPage() {
       );
     } catch (err) {
       setItem(null);
+      setLevels([]);
       setError(err instanceof Error ? err.message : "Malzeme kartı açılamadı.");
     } finally {
       setLoading(false);
@@ -119,13 +131,6 @@ export default function InventoryItemDetailPage() {
     if (!(rate >= 0 && rate <= 100)) {
       validationErrors.push("KDV oranı 0-100 arasında olmalı.");
     }
-  }
-  if (
-    form.maximumStock !== "" &&
-    Number(form.maximumStock) > 0 &&
-    Number(form.maximumStock) < Number(form.minimumStock)
-  ) {
-    validationErrors.push("Maksimum stok minimumdan küçük olamaz.");
   }
 
   async function submit(event: React.FormEvent) {
@@ -150,8 +155,6 @@ export default function InventoryItemDetailPage() {
         model: form.model.trim() || null,
         unit: form.unit.trim(),
         barcode: form.barcode.trim() || null,
-        minimumStock: Number(form.minimumStock) || 0,
-        maximumStock: form.maximumStock === "" ? null : Number(form.maximumStock),
         type: Number(form.type) as InventoryItemType,
         isActive: form.isActive,
         preferredSupplierCurrentAccountId:
@@ -197,7 +200,13 @@ export default function InventoryItemDetailPage() {
     );
   }
 
-  const critical = item.minimumStock > 0 && item.totalStock <= item.minimumStock;
+  /*
+   * KRİTİKLİK DEPO SEVİYESİNDEN (S8): kartın kendi asgarisi yok.
+   * Kart birden çok depoda bulunabildiği için "kritik" tek bir kart
+   * özelliği değil; hangi deponun eksik olduğu bilgisiyle anlamlı.
+   */
+  const criticalLevels = levels.filter((level) => level.isBelowMinimum);
+  const critical = criticalLevels.length > 0;
 
   return (
     <ErpShell
@@ -283,29 +292,45 @@ export default function InventoryItemDetailPage() {
                 <tr>
                   <th>Depo</th>
                   <th className="num">Miktar</th>
-                  <th className="num">Kullanılabilir</th>
+                  <th className="num">Asgari</th>
+                  <th className="num">Azami</th>
                   <th className="num">Değer</th>
                 </tr>
               </thead>
               <tbody>
-                {item.warehouses.map((warehouse) => (
-                  <tr key={warehouse.warehouseId}>
-                    <td>
-                      <strong>{warehouse.warehouseName}</strong>
-                      <small>{warehouse.warehouseCode}</small>
-                    </td>
-                    <td className="num">
-                      {quantity(warehouse.quantity)} {item.unit}
-                    </td>
-                    <td className="num">
-                    </td>
-                    <td className="num">
-                    </td>
-                    <td className="num">
-                      {money(warehouse.quantity * item.averageUnitCost)}
-                    </td>
-                  </tr>
-                ))}
+                {item.warehouses.map((warehouse) => {
+                  const level = levels.find(
+                    (row) => row.warehouseId === warehouse.warehouseId
+                  );
+
+                  return (
+                    <tr key={warehouse.warehouseId}>
+                      <td>
+                        <strong>{warehouse.warehouseName}</strong>
+                        <small>{warehouse.warehouseCode}</small>
+                      </td>
+                      <td className="num">
+                        {quantity(warehouse.quantity)} {item.unit}
+                        {level?.isBelowMinimum ? (
+                          <small className="rw-value-warning">
+                            asgarinin altında
+                          </small>
+                        ) : null}
+                      </td>
+                      <td className="num">
+                        {level ? quantity(level.minimumQuantity) : "—"}
+                      </td>
+                      <td className="num">
+                        {level?.maximumQuantity != null
+                          ? quantity(level.maximumQuantity)
+                          : "—"}
+                      </td>
+                      <td className="num">
+                        {money(warehouse.quantity * item.averageUnitCost)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -431,27 +456,6 @@ export default function InventoryItemDetailPage() {
               </small>
             </label>
 
-            <label>
-              <span>Minimum Stok</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.minimumStock}
-                onChange={(event) => update("minimumStock", event.target.value)}
-              />
-            </label>
-
-            <label>
-              <span>Maksimum Stok</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.maximumStock}
-                onChange={(event) => update("maximumStock", event.target.value)}
-              />
-            </label>
 
             <label className="erp-check-label">
               <input

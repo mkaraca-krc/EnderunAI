@@ -84,8 +84,18 @@ public sealed class InventoryItem : BaseEntity
     public string? Model { get; set; }
     public string Unit { get; set; } = string.Empty;
     public string? Barcode { get; set; }
-    public decimal MinimumStock { get; set; }
-    public decimal? MaximumStock { get; set; }
+    /*
+     * ASGARİ/AZAMİ STOK BURADAN KALDIRILDI (S8).
+     *
+     * Kart üzerinde tek bir sayıydı ve iki uç onu farklı anlamda
+     * kullanıyordu: kart listesi TÜM depoların toplamıyla, uyarı ucu
+     * TEK deponun miktarıyla kıyaslıyordu. Aynı alandan iki farklı
+     * "kritik" tanımı çıkıyordu.
+     *
+     * Seviye artık depo bazında: `WarehouseStockLevel`. Canlıda
+     * `MinimumStock > 0` olan kart sayısı ölçüldü — SIFIR; yani
+     * taşınacak veri yoktu, kaybedilen bilgi yok.
+     */
     /// <summary>
     /// Stok kartının birimi başına bakır içeriği (kg). İcmal kalemi bu
     /// karta bağlıysa ve kalemde katsayı yoksa buradaki değer kullanılır.

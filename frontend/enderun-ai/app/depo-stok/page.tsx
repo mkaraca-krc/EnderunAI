@@ -34,6 +34,11 @@ import {
   type SelectOption,
 } from "@/services/inventory-movement.service";
 
+import {
+  stockLevelService,
+  type StockLevelRow,
+} from "@/services/stock-level.service";
+
 function formatNumber(value: number): string {
   return amount(value);
 }
@@ -114,8 +119,9 @@ export default function InventoryOperationsPage() {
    * Düğme -> uç -> izin:
    *   PUT inventory/items/{id} -> inventory.edit
    *
-   * Asgari stok hücresi `updateMinimumStock` çağırıyor; o da kalemi
-   * okuyup `updateItem` ile geri yazıyor, yani uç inventory.edit.
+   * Asgari seviye bu ekranda düzenlenmiyor; tanımı
+   * /depo-stok/stok-seviyeleri ekranında (POST api/stock-levels ->
+   * inventory.edit).
    */
   const actions = useModuleActions("inventory");
 
@@ -123,6 +129,16 @@ export default function InventoryOperationsPage() {
   const [requests, setRequests] = useState<PurchaseRequestListItem[]>([]);
   const [movements, setMovements] =
     useState<DashboardInventoryMovement[]>([]);
+
+  /*
+   * KRİTİK LİSTESİNİN KAYNAĞI DEPO SEVİYESİ (S8).
+   *
+   * Eskiden kart üzerindeki tek `minimumStock` ile toplam stok
+   * karşılaştırılıyordu; şantiye deposunda duran mal merkezin eksiğini
+   * kapatıyormuş gibi görünüyordu. Artık uyarı hangi DEPODA eksik
+   * olduğunu söylüyor.
+   */
+  const [criticalLevels, setCriticalLevels] = useState<StockLevelRow[]>([]);
 
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -166,6 +182,12 @@ export default function InventoryOperationsPage() {
           inventoryService.getCategories().catch(() => []),
           inventoryMovementService.getWarehouses().catch(() => []),
         ]);
+
+      const levelData = await stockLevelService
+        .list({ belowMinimumOnly: true })
+        .catch(() => [] as StockLevelRow[]);
+
+      setCriticalLevels(levelData);
 
       setItems(inventoryData);
       setRequests(requestData);
@@ -264,10 +286,14 @@ export default function InventoryOperationsPage() {
   }
 
   const summary = useMemo(() => {
-    const criticalItems = items.filter(
-      (item) =>
-        item.isActive &&
-        item.totalStock <= item.minimumStock,
+    // Kritik kalem = herhangi bir deposunda asgarinin altında olan
+    // AKTİF kart. Arşivlenmiş kartın seviyesi uyarı üretmemeli.
+    const activeIds = new Set(
+      items.filter((item) => item.isActive).map((item) => item.id),
+    );
+
+    const criticalItems = criticalLevels.filter((level) =>
+      activeIds.has(level.inventoryItemId),
     );
 
     const totalStock = items.reduce(
@@ -322,7 +348,7 @@ export default function InventoryOperationsPage() {
       todayMovements,
       todayIssues,
     };
-  }, [items, movements, requests]);
+  }, [criticalLevels, items, movements, requests]);
 
   const recentMovements = useMemo(
     () =>
@@ -352,16 +378,22 @@ export default function InventoryOperationsPage() {
     [requests],
   );
 
+  // Önce tamamen tükenenler, sonra asgariye en yakın olanlar.
   const criticalItems = useMemo(
     () =>
       [...summary.criticalItems]
-        .sort(
-          (a, b) =>
-            a.totalStock -
-            b.totalStock,
-        )
+        .sort((a, b) => {
+          if (a.isDepleted !== b.isDepleted) return a.isDepleted ? -1 : 1;
+          return a.currentQuantity - b.currentQuantity;
+        })
         .slice(0, 8),
     [summary.criticalItems],
+  );
+
+  /** Kart listesindeki durum rozeti bu kümeden okunuyor. */
+  const criticalItemIds = useMemo(
+    () => new Set(criticalLevels.map((level) => level.inventoryItemId)),
+    [criticalLevels],
   );
 
   return (
@@ -596,7 +628,7 @@ export default function InventoryOperationsPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Kullanılabilir stok seviyesi minimumun altında olan kartlar.
+                  Deposundaki miktar asgari seviyeye inmiş kalemler.
                 </p>
               </div>
 
@@ -611,35 +643,31 @@ export default function InventoryOperationsPage() {
               ) : criticalItems.length === 0 ? (
                 <EmptyRow text="Kritik seviyede malzeme bulunmuyor." />
               ) : (
-                criticalItems.map((item) => (
+                criticalItems.map((level) => (
                   <div
-                    key={item.id}
+                    key={level.id}
                     className="flex items-center justify-between gap-4 px-5 py-4"
                   >
                     <div className="min-w-0">
                       <strong className="block truncate text-sm text-slate-950">
-                        {item.name}
+                        {level.itemName}
                       </strong>
 
                       <span className="mt-1 block text-xs text-slate-500">
-                        {item.code} ·{" "}
-                        {item.category || typeLabel(item.type)}
+                        {level.itemCode} · {level.warehouseName}
                       </span>
                     </div>
 
                     <div className="shrink-0 text-right">
                       <strong className="block text-sm text-red-700">
-                        {formatNumber(
-                          item.totalStock,
-                        )}{" "}
-                        {item.unit}
+                        {formatNumber(level.currentQuantity)} {level.unit}
                       </strong>
 
                       <span className="mt-1 block text-xs text-slate-500">
-                        Minimum:{" "}
-                        {formatNumber(
-                          item.minimumStock,
-                        )}
+                        Asgari: {formatNumber(level.minimumQuantity)}
+                        {level.suggestedQuantity != null
+                          ? ` · öneri ${formatNumber(level.suggestedQuantity)}`
+                          : " · azami tanımsız"}
                       </span>
                     </div>
                   </div>
@@ -876,7 +904,7 @@ export default function InventoryOperationsPage() {
                     Kullanılabilir
                   </TableHead>
                   <TableHead right>
-                    Min. Stok
+                    Asgari Takip
                   </TableHead>
                   <TableHead right>
                     Stok Değeri
@@ -907,11 +935,14 @@ export default function InventoryOperationsPage() {
                   </tr>
                 ) : (
                   items.slice(0, visibleCount).map((item) => {
-                    // Minimum stok tanımlanmamışsa (0) kritik sayılmaz;
-                    // aksi halde stoğu biten her kalem kırmızı görünürdü.
-                    const critical =
-                      item.minimumStock > 0 &&
-                      item.totalStock <= item.minimumStock;
+                    // Kritiklik depo seviyesinden geliyor (S8): seviye
+                    // tanımlı olmayan kart kritik olamaz — takip
+                    // edilmeyen bir kalemin eşiği de yoktur.
+                    const critical = criticalItemIds.has(item.id);
+
+                    const itemLevels = criticalLevels.filter(
+                      (level) => level.inventoryItemId === item.id,
+                    );
 
                     return (
                       <tr
@@ -957,12 +988,23 @@ export default function InventoryOperationsPage() {
                           {item.unit}
                         </td>
 
-                        <td className="whitespace-nowrap px-4 py-3 text-right">
-                          <MinimumStockCell
-                            item={item}
-                            onSaved={loadDashboard}
-                            canEdit={actions.can("edit")}
-                          />
+                        <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                          {itemLevels.length === 0 ? (
+                            <span className="text-xs text-slate-400">—</span>
+                          ) : (
+                            itemLevels.map((level) => (
+                              <div key={level.id} className="text-xs">
+                                <span className="text-slate-500">
+                                  {level.warehouseCode || level.warehouseName}:
+                                </span>{" "}
+                                <span className="font-medium text-amber-700">
+                                  {formatNumber(level.currentQuantity)}
+                                </span>
+                                {" / "}
+                                {formatNumber(level.minimumQuantity)}
+                              </div>
+                            ))
+                          )}
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
@@ -1144,92 +1186,14 @@ function EmptyRow({
   );
 }
 
-function MinimumStockCell({
-  item,
-  onSaved,
-  canEdit,
-}: {
-  item: InventoryItemListItem;
-  onSaved: () => void;
-  /**
-   * İzin PROP olarak geliyor: bu hücre SATIR BAŞINA render ediliyor.
-   */
-  canEdit: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(item.minimumStock);
-  const [saving, setSaving] = useState(false);
-
-  if (!editing) {
-    /*
-     * YETKİSİZ KULLANICIDA DEĞER GİZLENMEZ. Bu düğme aynı zamanda
-     * kritik stok seviyesini GÖSTERİYOR; gizlemek okuma yetkisi olan
-     * kullanıcıdan veriyi de saklardı. Sadece düzenleme girişi kapanıyor
-     * (piyasa ekranındaki tonaj hücresiyle aynı gerekçe).
-     */
-    if (!canEdit) {
-      return (
-        <span className="text-slate-700">
-          {formatNumber(item.minimumStock)} {item.unit}
-        </span>
-      );
-    }
-
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setValue(item.minimumStock);
-          setEditing(true);
-        }}
-        className="text-slate-700 underline decoration-dotted hover:text-slate-950"
-        title="Kritik stok seviyesini düzenle"
-      >
-        {formatNumber(item.minimumStock)} {item.unit}
-      </button>
-    );
-  }
-
-  return (
-    <div className="flex items-center justify-end gap-1">
-      <input
-        type="number"
-        min="0"
-        step="0.01"
-        value={value}
-        onChange={(event) => setValue(Number(event.target.value))}
-        className="w-20 rounded border border-slate-300 px-2 py-1 text-right text-sm"
-        autoFocus
-      />
-      <button
-        type="button"
-        disabled={saving}
-        onClick={async () => {
-          setSaving(true);
-          try {
-            await inventoryService.updateMinimumStock(item, value);
-            onSaved();
-            setEditing(false);
-          } catch {
-            // sessizce bırak, kullanıcı tekrar deneyebilir
-          } finally {
-            setSaving(false);
-          }
-        }}
-        className="rounded bg-brand-700 px-2 py-1 text-xs text-white disabled:opacity-50"
-      >
-        ✓
-      </button>
-      <button
-        type="button"
-        onClick={() => setEditing(false)}
-        className="rounded border border-slate-300 px-2 py-1 text-xs"
-      >
-        ✕
-      </button>
-    </div>
-  );
-}
+/*
+ * `MinimumStockCell` KALDIRILDI (S8).
+ *
+ * Kart üzerindeki tek asgari değeri satır içinde düzenliyordu. Asgari
+ * artık depo bazında (`warehouse_stock_levels`) ve bir kartın birden
+ * çok deposu olabildiği için tek hücreye sığmıyor. Tanım ekranı:
+ * /depo-stok/stok-seviyeleri
+ */
 
 function TableHead({
   children,
