@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { money } from "@/lib/format/turkish";
 import { companyService, type CompanyListItem } from "@/services/company.service";
 import { Button } from "@/components/ui";
@@ -30,36 +31,57 @@ const PAYROLL_STATUS_COLORS: Record<number, string> = {
   3: "green",
 };
 
-function Row({
-  label,
-  value,
-  strong,
-  negative,
-}: {
-  label: string;
-  value: number;
-  strong?: boolean;
-  negative?: boolean;
-}) {
-  return (
-    <tr>
-      <td>{strong ? <strong>{label}</strong> : label}</td>
-      <td style={{ textAlign: "right" }}>
-        {strong ? (
-          <strong>
-            {negative ? "−" : ""}
-            {money(value)}
-          </strong>
-        ) : (
-          <>
-            {negative ? "−" : ""}
-            {money(value)}
-          </>
-        )}
-      </td>
-    </tr>
-  );
+/*
+ * BORDRO ÖZETİ SÜTUNLARI (F4q) — `Row` bileşeninin yerine.
+ *
+ * Özet başlıksız etiket/tutar çiftleriydi. Sütuna çevrilince dışa
+ * aktarma da kazandı: aylık bordro özetinin kırılımı artık dosyaya
+ * çıkıyor ve eksi kalemler işaretiyle birlikte yazılıyor.
+ *
+ * ALT TOPLAM YOK: bu liste kendi içinde zaten toplamlar içeriyor
+ * (brüt, kesinti, net, işveren maliyeti). Hepsini bir kez daha
+ * toplamak anlamsız — hatta yanıltıcı — bir rakam verirdi.
+ */
+type SummaryRow = { label: string; value: number; strong?: boolean; negative?: boolean };
+
+function summaryRows(totals: PayrollCostReport["totals"]): SummaryRow[] {
+  return [
+    { label: "Normal ücret", value: totals.normalWorkAmount },
+    { label: "Fazla mesai", value: totals.overtimeAmount },
+    { label: "Tatil çalışması", value: totals.holidayAmount },
+    { label: "Toplam brüt kazanç", value: totals.totalEarnings, strong: true },
+    { label: "SGK işçi payı", value: totals.sgkEmployee, negative: true },
+    { label: "İşsizlik işçi payı", value: totals.unemploymentEmployee, negative: true },
+    { label: "Gelir vergisi", value: totals.incomeTax, negative: true },
+    { label: "Damga vergisi", value: totals.stampTax, negative: true },
+    { label: "Avans ve diğer kesintiler", value: totals.advanceAndOther, negative: true },
+    { label: "Toplam kesinti", value: totals.totalDeductions, strong: true, negative: true },
+    { label: "Net ödenecek", value: totals.netPayable, strong: true },
+    { label: "SGK işveren payı", value: totals.sgkEmployer },
+    { label: "İşsizlik işveren payı", value: totals.unemploymentEmployer },
+    { label: "İşverene toplam maliyet", value: totals.totalEmployerCost, strong: true },
+  ];
 }
+
+const summaryColumns: DataTableColumn<SummaryRow>[] = [
+  {
+    key: "kalem",
+    header: "Kalem",
+    value: (row) => row.label,
+    render: (row) => (row.strong ? <strong>{row.label}</strong> : row.label),
+  },
+  {
+    key: "tutar",
+    header: "Tutar",
+    numeric: true,
+    value: (row) => `${row.negative ? "−" : ""}${money(row.value)}`,
+    render: (row) => {
+      const text = `${row.negative ? "−" : ""}${money(row.value)}`;
+      return row.strong ? <strong>{text}</strong> : text;
+    },
+  },
+];
+
 
 export default function PayrollCostReportPage() {
   const now = new Date();
@@ -112,6 +134,138 @@ export default function PayrollCostReportPage() {
   }, [loadReport]);
 
   const totals = report?.totals;
+
+  /* SÜTUNLAR VERİ OLARAK (F4q). */
+  const personnelColumns: DataTableColumn<
+    NonNullable<typeof report>["personnel"][number]
+  >[] = [
+    {
+      key: "personel",
+      header: "Personel",
+      value: (row) => `${row.fullName ?? "—"} (${row.employeeNumber})`,
+      render: (row) => (
+        <>
+          <strong>{row.fullName ?? "—"}</strong>
+          <small>{row.employeeNumber}</small>
+        </>
+      ),
+    },
+    { key: "gorev", header: "Görev", value: (row) => row.jobTitle ?? "—" },
+    {
+      key: "brut",
+      header: "Brüt",
+      numeric: true,
+      value: (row) => money(row.grossSalary),
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.grossSalary, 0)),
+    },
+    {
+      key: "mesai",
+      header: "Fazla Mesai",
+      numeric: true,
+      value: (row) => (row.overtimeAmount > 0 ? money(row.overtimeAmount) : "—"),
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.overtimeAmount, 0)),
+    },
+    {
+      key: "kesinti",
+      header: "Kesinti",
+      numeric: true,
+      value: (row) => money(row.totalDeductions),
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.totalDeductions, 0)),
+    },
+    {
+      key: "net",
+      header: "Net",
+      numeric: true,
+      value: (row) => money(row.officialNetPayableAmount),
+      render: (row) => <strong>{money(row.officialNetPayableAmount)}</strong>,
+      footer: (rows) =>
+        money(rows.reduce((sum, row) => sum + row.officialNetPayableAmount, 0)),
+    },
+    {
+      key: "maliyet",
+      header: "İşveren Maliyeti",
+      numeric: true,
+      value: (row) => money(row.totalEmployerCost),
+      footer: (rows) =>
+        money(rows.reduce((sum, row) => sum + row.totalEmployerCost, 0)),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => PAYROLL_STATUS_LABELS[row.status] ?? "—",
+      render: (row) => (
+        <span className={`erp-status ${PAYROLL_STATUS_COLORS[row.status] ?? "gray"}`}>
+          {PAYROLL_STATUS_LABELS[row.status] ?? "—"}
+        </span>
+      ),
+    },
+  ];
+
+  const breakdownColumns: DataTableColumn<
+    NonNullable<typeof report>["projectBreakdown"][number]
+  >[] = [
+    {
+      key: "proje",
+      header: "Proje",
+      value: (row) => `${row.projectCode ?? "—"} — ${row.projectName}`,
+      render: (row) => (
+        <>
+          <strong>{row.projectCode ?? "—"}</strong>
+          <small>{row.projectName}</small>
+        </>
+      ),
+    },
+    {
+      key: "santiye",
+      header: "Şantiye",
+      value: (row) => (row.siteCode ? `${row.siteCode} — ${row.siteName}` : "Şantiyesiz"),
+      render: (row) =>
+        row.siteCode ? (
+          <>
+            {row.siteCode}
+            <small>{row.siteName}</small>
+          </>
+        ) : (
+          "Şantiyesiz"
+        ),
+    },
+    {
+      key: "gun",
+      header: "Gün",
+      numeric: true,
+      value: (row) => row.dayCount,
+      footer: (rows) => rows.reduce((sum, row) => sum + row.dayCount, 0),
+    },
+    {
+      key: "normal",
+      header: "Normal",
+      numeric: true,
+      value: (row) => money(row.normalCost),
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.normalCost, 0)),
+    },
+    {
+      key: "mesai",
+      header: "Fazla Mesai",
+      numeric: true,
+      value: (row) => money(row.overtimeCost),
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.overtimeCost, 0)),
+    },
+    {
+      key: "tatil",
+      header: "Tatil",
+      numeric: true,
+      value: (row) => money(row.holidayCost),
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.holidayCost, 0)),
+    },
+    {
+      key: "toplam",
+      header: "Toplam",
+      numeric: true,
+      value: (row) => money(row.totalCost),
+      render: (row) => <strong>{money(row.totalCost)}</strong>,
+      footer: (rows) => money(rows.reduce((sum, row) => sum + row.totalCost, 0)),
+    },
+  ];
 
   return (
     <ErpShell
@@ -191,44 +345,12 @@ export default function PayrollCostReportPage() {
               </h2>
             </div>
 
-            <div className="erp-table-wrap">
-              <table className="erp-table">
-                <tbody>
-                  <Row label="Normal ücret" value={totals.normalWorkAmount} />
-                  <Row label="Fazla mesai" value={totals.overtimeAmount} />
-                  <Row label="Tatil çalışması" value={totals.holidayAmount} />
-                  <Row label="Toplam brüt kazanç" value={totals.totalEarnings} strong />
-
-                  <Row label="SGK işçi payı" value={totals.sgkEmployee} negative />
-                  <Row
-                    label="İşsizlik işçi payı"
-                    value={totals.unemploymentEmployee}
-                    negative
-                  />
-                  <Row label="Gelir vergisi" value={totals.incomeTax} negative />
-                  <Row label="Damga vergisi" value={totals.stampTax} negative />
-                  <Row
-                    label="Avans ve diğer kesintiler"
-                    value={totals.advanceAndOther}
-                    negative
-                  />
-                  <Row label="Toplam kesinti" value={totals.totalDeductions} strong negative />
-
-                  <Row label="Net ödenecek" value={totals.netPayable} strong />
-
-                  <Row label="SGK işveren payı" value={totals.sgkEmployer} />
-                  <Row
-                    label="İşsizlik işveren payı"
-                    value={totals.unemploymentEmployer}
-                  />
-                  <Row
-                    label="İşverene toplam maliyet"
-                    value={totals.totalEmployerCost}
-                    strong
-                  />
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              rows={summaryRows(totals)}
+              columns={summaryColumns}
+              rowKey={(row) => row.label}
+              title={`${MONTHS[month - 1]} ${year} Bordro Özeti`}
+            />
 
             {(totals.incomeTaxExemption > 0 || totals.stampTaxExemption > 0) && (
               <div style={{ padding: "0 16px 16px" }}>
@@ -246,59 +368,13 @@ export default function PayrollCostReportPage() {
               <h2>Personel Kırılımı</h2>
             </div>
 
-            <div className="erp-table-wrap">
-              <table className="erp-table">
-                <thead>
-                  <tr>
-                    <th>Personel</th>
-                    <th>Görev</th>
-                    <th style={{ textAlign: "right" }}>Brüt</th>
-                    <th style={{ textAlign: "right" }}>Fazla Mesai</th>
-                    <th style={{ textAlign: "right" }}>Kesinti</th>
-                    <th style={{ textAlign: "right" }}>Net</th>
-                    <th style={{ textAlign: "right" }}>İşveren Maliyeti</th>
-                    <th>Durum</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.personnel.map((person) => (
-                    <tr key={person.personnelId}>
-                      <td>
-                        <strong>{person.fullName ?? "—"}</strong>
-                        <small>{person.employeeNumber}</small>
-                      </td>
-                      <td>{person.jobTitle ?? "—"}</td>
-                      <td style={{ textAlign: "right" }}>
-                        {money(person.grossSalary)}
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        {person.overtimeAmount > 0
-                          ? money(person.overtimeAmount)
-                          : "—"}
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        {money(person.totalDeductions)}
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <strong>{money(person.officialNetPayableAmount)}</strong>
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        {money(person.totalEmployerCost)}
-                      </td>
-                      <td>
-                        <span
-                          className={`erp-status ${
-                            PAYROLL_STATUS_COLORS[person.status] ?? "gray"
-                          }`}
-                        >
-                          {PAYROLL_STATUS_LABELS[person.status] ?? "—"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              rows={report.personnel}
+              columns={personnelColumns}
+              rowKey={(row) => row.personnelId}
+              title="Personel Kırılımı"
+              resetKey={`${companyId}|${year}|${month}`}
+            />
           </div>
 
           <div className="erp-table-card">
@@ -315,54 +391,13 @@ export default function PayrollCostReportPage() {
                 </p>
               </div>
             ) : (
-              <div className="erp-table-wrap">
-                <table className="erp-table">
-                  <thead>
-                    <tr>
-                      <th>Proje</th>
-                      <th>Şantiye</th>
-                      <th style={{ textAlign: "right" }}>Gün</th>
-                      <th style={{ textAlign: "right" }}>Normal</th>
-                      <th style={{ textAlign: "right" }}>Fazla Mesai</th>
-                      <th style={{ textAlign: "right" }}>Tatil</th>
-                      <th style={{ textAlign: "right" }}>Toplam</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.projectBreakdown.map((row) => (
-                      <tr key={`${row.projectId}-${row.projectSiteId ?? "genel"}`}>
-                        <td>
-                          <strong>{row.projectCode ?? "—"}</strong>
-                          <small>{row.projectName}</small>
-                        </td>
-                        <td>
-                          {row.siteCode ? (
-                            <>
-                              {row.siteCode}
-                              <small>{row.siteName}</small>
-                            </>
-                          ) : (
-                            "Şantiyesiz"
-                          )}
-                        </td>
-                        <td style={{ textAlign: "right" }}>{row.dayCount}</td>
-                        <td style={{ textAlign: "right" }}>
-                          {money(row.normalCost)}
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          {money(row.overtimeCost)}
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          {money(row.holidayCost)}
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          <strong>{money(row.totalCost)}</strong>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                rows={report.projectBreakdown}
+                columns={breakdownColumns}
+                rowKey={(row) => `${row.projectId}-${row.projectSiteId ?? "genel"}`}
+                title="Proje / Şantiye İşçilik Dağılımı"
+                resetKey={`${companyId}|${year}|${month}`}
+              />
             )}
           </div>
         </>
