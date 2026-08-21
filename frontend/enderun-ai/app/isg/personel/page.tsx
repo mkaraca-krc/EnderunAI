@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Button, ConfirmDialog } from "@/components/ui";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -12,8 +13,11 @@ import {
   ISG_HEALTH_RESULTS,
   ISG_TRAINING_TYPES,
   isgService,
+  type IsgCertificate,
+  type IsgHealthReport,
   type IsgPersonnelCard,
   type IsgPersonnelSummary,
+  type IsgTraining,
 } from "@/services/isg.service";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
@@ -27,6 +31,190 @@ function today() {
 }
 
 type Tab = "saglik" | "egitim" | "sertifika";
+
+/*
+ * SÜTUN TANIMLARI FONKSİYON (F4m): yetkiye göre sütun EKLENİYOR ya da
+ * çıkarılıyor ve silme işleyicisi parametre geçiyor. Sabit dizi olsaydı
+ * işleyici kapanışa alınır, bayat kapanış silme düğmesini yanlış kayıt
+ * üzerinde çalıştırabilirdi (F4b desen kararı).
+ *
+ * TIBBİ DETAY SÜTUNU YETKİYE BAĞLI: kısıtlama ve hekim notu yalnız
+ * `canSeeHealthDetail` ile geliyor. Sütunu her zaman basıp içini
+ * boşaltmak yetmezdi — dışa aktarmada başlık yine görünür, "veri yok"
+ * sanılırdı.
+ */
+function reportColumns(
+  canSeeHealthDetail: boolean,
+  canDelete: boolean,
+  onDelete: (target: { kind: "saglik"; id: string }) => void
+): DataTableColumn<IsgHealthReport>[] {
+  const columns: DataTableColumn<IsgHealthReport>[] = [
+    { key: "tur", header: "Tür", value: (row) => row.reportTypeName },
+    { key: "muayene", header: "Muayene", value: (row) => formatDate(row.examDate) },
+    { key: "gecerlilik", header: "Geçerlilik", value: (row) => formatDate(row.validUntil) },
+    { key: "sonuc", header: "Sonuç", value: (row) => row.resultName },
+    { key: "hekim", header: "Hekim", value: (row) => row.doctorName ?? "—" },
+  ];
+
+  if (canSeeHealthDetail) {
+    columns.push({
+      key: "kisitlama",
+      header: "Kısıtlama",
+      value: (row) =>
+        [row.restrictions ?? "—", row.doctorNotes].filter(Boolean).join(" · "),
+      render: (row) => (
+        <>
+          {row.restrictions ?? "—"}
+          {row.doctorNotes && <small>{row.doctorNotes}</small>}
+        </>
+      ),
+    });
+  }
+
+  columns.push({
+    key: "durum",
+    header: "Durum",
+    value: (row) =>
+      [
+        row.validityStatusName,
+        typeof row.daysRemaining === "number" ? `${row.daysRemaining} gün` : "",
+        row.healthDetailHidden ? "Tıbbi detay gizli" : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    render: (row) => (
+      <>
+        <span className={`erp-status ${row.validityColor}`}>
+          {row.validityStatusName}
+        </span>
+        {typeof row.daysRemaining === "number" && (
+          <small>{row.daysRemaining} gün</small>
+        )}
+        {row.healthDetailHidden && <small>Tıbbi detay gizli</small>}
+      </>
+    ),
+  });
+
+  if (canDelete) {
+    columns.push({
+      key: "sil",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <button
+          type="button"
+          className="erp-secondary-button"
+          onClick={() => onDelete({ kind: "saglik", id: row.id })}
+        >
+          Sil
+        </button>
+      ),
+    });
+  }
+
+  return columns;
+}
+
+function trainingColumns(
+  canDelete: boolean,
+  onDelete: (target: { kind: "egitim"; id: string }) => void
+): DataTableColumn<IsgTraining>[] {
+  const columns: DataTableColumn<IsgTraining>[] = [
+    { key: "tur", header: "Tür", value: (row) => row.trainingTypeName },
+    {
+      key: "konu",
+      header: "Konu",
+      value: (row) => row.topic,
+      render: (row) => <strong>{row.topic}</strong>,
+    },
+    { key: "tarih", header: "Tarih", value: (row) => formatDate(row.trainingDate) },
+    {
+      key: "sure",
+      header: "Süre",
+      numeric: true,
+      value: (row) => `${row.durationHours} saat`,
+      footer: (rows) => `${rows.reduce((sum, row) => sum + row.durationHours, 0)} saat`,
+    },
+    { key: "gecerlilik", header: "Geçerlilik", value: (row) => formatDate(row.validUntil) },
+    { key: "egitmen", header: "Eğitmen", value: (row) => row.trainerName ?? "—" },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => row.validityStatusName,
+      render: (row) => (
+        <span className={`erp-status ${row.validityColor}`}>
+          {row.validityStatusName}
+        </span>
+      ),
+    },
+  ];
+
+  if (canDelete) {
+    columns.push({
+      key: "sil",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <button
+          type="button"
+          className="erp-secondary-button"
+          onClick={() => onDelete({ kind: "egitim", id: row.id })}
+        >
+          Sil
+        </button>
+      ),
+    });
+  }
+
+  return columns;
+}
+
+function certificateColumns(
+  canDelete: boolean,
+  onDelete: (target: { kind: "sertifika"; id: string }) => void
+): DataTableColumn<IsgCertificate>[] {
+  const columns: DataTableColumn<IsgCertificate>[] = [
+    {
+      key: "belge",
+      header: "Belge",
+      value: (row) => row.certificateTypeName,
+      render: (row) => <strong>{row.certificateTypeName}</strong>,
+    },
+    { key: "no", header: "Belge No", value: (row) => row.certificateNumber ?? "—" },
+    { key: "kurum", header: "Veren Kurum", value: (row) => row.issuedBy ?? "—" },
+    { key: "tarih", header: "Tarih", value: (row) => formatDate(row.issueDate) },
+    { key: "gecerlilik", header: "Geçerlilik", value: (row) => formatDate(row.expiryDate) },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => row.validityStatusName,
+      render: (row) => (
+        <span className={`erp-status ${row.validityColor}`}>
+          {row.validityStatusName}
+        </span>
+      ),
+    },
+  ];
+
+  if (canDelete) {
+    columns.push({
+      key: "sil",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <button
+          type="button"
+          className="erp-secondary-button"
+          onClick={() => onDelete({ kind: "sertifika", id: row.id })}
+        >
+          Sil
+        </button>
+      ),
+    });
+  }
+
+  return columns;
+}
 
 export default function IsgPersonnelPage() {
   const { has } = usePermissions();
@@ -270,6 +458,99 @@ export default function IsgPersonnelPage() {
     }
   }
 
+  const peopleColumns: DataTableColumn<(typeof people)[number]>[] = [
+    {
+      key: "personel",
+      header: "Personel",
+      value: (row) => `${row.personnelName} (${row.employeeNumber ?? "—"})`,
+      render: (row) => (
+        <>
+          <strong>{row.personnelName}</strong>
+          <small>{row.employeeNumber ?? "—"}</small>
+        </>
+      ),
+    },
+    { key: "gorev", header: "Görev", value: (row) => row.jobTitle ?? "—" },
+    {
+      key: "saglik",
+      header: "Sağlık Raporu",
+      value: (row) =>
+        row.hasValidHealthReport
+          ? formatDate(row.healthReportValidUntil)
+          : "Yok / süresi doldu",
+      render: (row) =>
+        row.hasValidHealthReport ? (
+          <span className="erp-status green">
+            {formatDate(row.healthReportValidUntil)}
+          </span>
+        ) : (
+          <span className="erp-status red">Yok / süresi doldu</span>
+        ),
+    },
+    {
+      key: "egitim",
+      header: "Temel Eğitim",
+      value: (row) => (row.hasValidBasicTraining ? "Geçerli" : "Yok"),
+      render: (row) => (
+        <span
+          className={`erp-status ${row.hasValidBasicTraining ? "green" : "red"}`}
+        >
+          {row.hasValidBasicTraining ? "Geçerli" : "Yok"}
+        </span>
+      ),
+    },
+    {
+      key: "belge",
+      header: "Yetki Belgesi",
+      numeric: true,
+      value: (row) => row.certificateCount,
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      value: (row) => {
+        if (row.expiredCount === 0 && row.expiringSoonCount === 0 && !row.hasMissingRecords)
+          return "Tamam";
+
+        return [
+          row.expiredCount > 0 ? `${row.expiredCount} süresi doldu` : "",
+          row.expiringSoonCount > 0 ? `${row.expiringSoonCount} yakında` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+      },
+      render: (row) => (
+        <>
+          {row.expiredCount > 0 && (
+            <span className="erp-status red">{row.expiredCount} süresi doldu</span>
+          )}
+          {row.expiringSoonCount > 0 && (
+            <span className="erp-status yellow" style={{ marginLeft: "6px" }}>
+              {row.expiringSoonCount} yakında
+            </span>
+          )}
+          {row.expiredCount === 0 &&
+            row.expiringSoonCount === 0 &&
+            !row.hasMissingRecords && <span className="erp-status green">Tamam</span>}
+        </>
+      ),
+    },
+    {
+      key: "ac",
+      header: "",
+      value: () => "",
+      render: (row) => (
+        <button
+          type="button"
+          className="erp-secondary-button"
+          onClick={() => void openCard(row.personnelId)}
+        >
+          Kartı Aç
+        </button>
+      ),
+    },
+  ];
+
   return (
     <ErpShell
       design="redwood"
@@ -328,80 +609,13 @@ export default function IsgPersonnelPage() {
             <p>Kayıt bulunamadı.</p>
           </div>
         ) : (
-          <div className="erp-table-wrap">
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>Personel</th>
-                  <th>Görev</th>
-                  <th>Sağlık Raporu</th>
-                  <th>Temel Eğitim</th>
-                  <th>Yetki Belgesi</th>
-                  <th>Durum</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {people.map((person) => (
-                  <tr key={person.personnelId}>
-                    <td>
-                      <strong>{person.personnelName}</strong>
-                      <small>{person.employeeNumber ?? "—"}</small>
-                    </td>
-                    <td>{person.jobTitle ?? "—"}</td>
-                    <td>
-                      {person.hasValidHealthReport ? (
-                        <span className="erp-status green">
-                          {formatDate(person.healthReportValidUntil)}
-                        </span>
-                      ) : (
-                        <span className="erp-status red">Yok / süresi doldu</span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`erp-status ${
-                          person.hasValidBasicTraining ? "green" : "red"
-                        }`}
-                      >
-                        {person.hasValidBasicTraining ? "Geçerli" : "Yok"}
-                      </span>
-                    </td>
-                    <td>{person.certificateCount}</td>
-                    <td>
-                      {person.expiredCount > 0 && (
-                        <span className="erp-status red">
-                          {person.expiredCount} süresi doldu
-                        </span>
-                      )}
-                      {person.expiringSoonCount > 0 && (
-                        <span
-                          className="erp-status yellow"
-                          style={{ marginLeft: "6px" }}
-                        >
-                          {person.expiringSoonCount} yakında
-                        </span>
-                      )}
-                      {person.expiredCount === 0 &&
-                        person.expiringSoonCount === 0 &&
-                        !person.hasMissingRecords && (
-                          <span className="erp-status green">Tamam</span>
-                        )}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="erp-secondary-button"
-                        onClick={() => void openCard(person.personnelId)}
-                      >
-                        Kartı Aç
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <DataTable
+              rows={people}
+              columns={peopleColumns}
+              rowKey={(row) => row.personnelId}
+              title="İSG Personel Durumu"
+              resetKey={`${companyId}|${search}`}
+            />
         )}
       </div>
 
@@ -747,181 +961,36 @@ export default function IsgPersonnelPage() {
           )}
 
           {tab === "saglik" && (
-            <div className="erp-table-wrap">
-              <table className="erp-table">
-                <thead>
-                  <tr>
-                    <th>Tür</th>
-                    <th>Muayene</th>
-                    <th>Geçerlilik</th>
-                    <th>Sonuç</th>
-                    <th>Hekim</th>
-                    {canSeeHealthDetail && <th>Kısıtlama</th>}
-                    <th>Durum</th>
-                    {canDelete && <th></th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {card.healthReports.length === 0 && (
-                    <tr>
-                      <td colSpan={8}>Sağlık raporu kaydı yok.</td>
-                    </tr>
-                  )}
-
-                  {card.healthReports.map((report) => (
-                    <tr key={report.id}>
-                      <td>{report.reportTypeName}</td>
-                      <td>{formatDate(report.examDate)}</td>
-                      <td>{formatDate(report.validUntil)}</td>
-                      <td>{report.resultName}</td>
-                      <td>{report.doctorName ?? "—"}</td>
-                      {canSeeHealthDetail && (
-                        <td>
-                          {report.restrictions ?? "—"}
-                          {report.doctorNotes && (
-                            <small>{report.doctorNotes}</small>
-                          )}
-                        </td>
-                      )}
-                      <td>
-                        <span className={`erp-status ${report.validityColor}`}>
-                          {report.validityStatusName}
-                        </span>
-                        {typeof report.daysRemaining === "number" && (
-                          <small>{report.daysRemaining} gün</small>
-                        )}
-                        {report.healthDetailHidden && (
-                          <small>Tıbbi detay gizli</small>
-                        )}
-                      </td>
-                      {canDelete && (
-                        <td>
-                          <button
-                            type="button"
-                            className="erp-secondary-button"
-                            onClick={() => setPendingDelete({ kind: "saglik", id: report.id })}
-                          >
-                            Sil
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              rows={card.healthReports}
+              columns={reportColumns(canSeeHealthDetail, canDelete, setPendingDelete)}
+              rowKey={(row) => row.id}
+              title="Sağlık Raporları"
+              emptyText="Sağlık raporu kaydı yok."
+              resetKey={card.personnelId}
+            />
           )}
 
           {tab === "egitim" && (
-            <div className="erp-table-wrap">
-              <table className="erp-table">
-                <thead>
-                  <tr>
-                    <th>Tür</th>
-                    <th>Konu</th>
-                    <th>Tarih</th>
-                    <th>Süre</th>
-                    <th>Geçerlilik</th>
-                    <th>Eğitmen</th>
-                    <th>Durum</th>
-                    {canDelete && <th></th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {card.trainings.length === 0 && (
-                    <tr>
-                      <td colSpan={8}>Eğitim kaydı yok.</td>
-                    </tr>
-                  )}
-
-                  {card.trainings.map((training) => (
-                    <tr key={training.id}>
-                      <td>{training.trainingTypeName}</td>
-                      <td>
-                        <strong>{training.topic}</strong>
-                      </td>
-                      <td>{formatDate(training.trainingDate)}</td>
-                      <td>{training.durationHours} saat</td>
-                      <td>{formatDate(training.validUntil)}</td>
-                      <td>{training.trainerName ?? "—"}</td>
-                      <td>
-                        <span className={`erp-status ${training.validityColor}`}>
-                          {training.validityStatusName}
-                        </span>
-                      </td>
-                      {canDelete && (
-                        <td>
-                          <button
-                            type="button"
-                            className="erp-secondary-button"
-                            onClick={() =>
-                              setPendingDelete({ kind: "egitim", id: training.id })
-                            }
-                          >
-                            Sil
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              rows={card.trainings}
+              columns={trainingColumns(canDelete, setPendingDelete)}
+              rowKey={(row) => row.id}
+              title="İSG Eğitimleri"
+              emptyText="Eğitim kaydı yok."
+              resetKey={card.personnelId}
+            />
           )}
 
           {tab === "sertifika" && (
-            <div className="erp-table-wrap">
-              <table className="erp-table">
-                <thead>
-                  <tr>
-                    <th>Belge</th>
-                    <th>Belge No</th>
-                    <th>Veren Kurum</th>
-                    <th>Tarih</th>
-                    <th>Geçerlilik</th>
-                    <th>Durum</th>
-                    {canDelete && <th></th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {card.certificates.length === 0 && (
-                    <tr>
-                      <td colSpan={7}>Yetki belgesi kaydı yok.</td>
-                    </tr>
-                  )}
-
-                  {card.certificates.map((certificate) => (
-                    <tr key={certificate.id}>
-                      <td>
-                        <strong>{certificate.certificateTypeName}</strong>
-                      </td>
-                      <td>{certificate.certificateNumber ?? "—"}</td>
-                      <td>{certificate.issuedBy ?? "—"}</td>
-                      <td>{formatDate(certificate.issueDate)}</td>
-                      <td>{formatDate(certificate.expiryDate)}</td>
-                      <td>
-                        <span className={`erp-status ${certificate.validityColor}`}>
-                          {certificate.validityStatusName}
-                        </span>
-                      </td>
-                      {canDelete && (
-                        <td>
-                          <button
-                            type="button"
-                            className="erp-secondary-button"
-                            onClick={() =>
-                              setPendingDelete({ kind: "sertifika", id: certificate.id })
-                            }
-                          >
-                            Sil
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              rows={card.certificates}
+              columns={certificateColumns(canDelete, setPendingDelete)}
+              rowKey={(row) => row.id}
+              title="Yetki Belgeleri"
+              emptyText="Yetki belgesi kaydı yok."
+              resetKey={card.personnelId}
+            />
           )}
         </div>
       )}
