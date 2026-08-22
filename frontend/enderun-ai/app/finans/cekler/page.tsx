@@ -21,6 +21,7 @@ import {
   ConfirmDialog,
   Input,
   Modal,
+  SearchableSelect,
   Select,
   TutarInput,
 } from "@/components/ui";
@@ -858,6 +859,22 @@ export default function ChequeRegisterPage() {
     return detail.status !== openStatus;
   }, [detail]);
 
+  /**
+   * Cari seçenekleri TEK YERDE kuruluyor: üç alan da aynı listeyi
+   * kullanıyor ve arama alanları (kod, ünvan, kısa ad, vergi no)
+   * ekrandan ekrana değişmemeli.
+   */
+  const cariOptions = useMemo(
+    () =>
+      currentAccounts.map((account) => ({
+        id: account.id,
+        code: account.code,
+        title: account.title,
+        extra: [account.shortName, account.taxNumber],
+      })),
+    [currentAccounts]
+  );
+
   const accountingChanges = useMemo(() => {
     if (!detail) return [] as string[];
 
@@ -1210,20 +1227,16 @@ export default function ChequeRegisterPage() {
 
               <label>
                 {direction === ChequeDirection.Received ? "Çeki veren cari" : "Çekin verildiği cari"}
-                <select
+                {/* ARANABİLİR: canlıda 150 cari var, düz açılır listede
+                    tarayıcı yalnız ilk harfe atlıyordu. */}
+                <SearchableSelect
                   required
                   value={chequeForm.currentAccountId}
-                  onChange={(e) =>
-                    setChequeForm({ ...chequeForm, currentAccountId: e.target.value })
+                  onChange={(next) =>
+                    setChequeForm({ ...chequeForm, currentAccountId: next })
                   }
-                >
-                  <option value="">Seçin...</option>
-                  {currentAccounts.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.code} — {item.title}
-                    </option>
-                  ))}
-                </select>
+                  options={cariOptions}
+                />
               </label>
 
               <label>
@@ -2092,22 +2105,17 @@ export default function ChequeRegisterPage() {
 
                   <label>
                     Faktoring şirketi (opsiyonel)
-                    <select
+                    <SearchableSelect
                       value={factoringForm.factoringCurrentAccountId}
-                      onChange={(e) =>
+                      onChange={(next) =>
                         setFactoringForm({
                           ...factoringForm,
-                          factoringCurrentAccountId: e.target.value,
+                          factoringCurrentAccountId: next,
                         })
                       }
-                    >
-                      <option value="">—</option>
-                      {currentAccounts.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.code} — {item.title}
-                        </option>
-                      ))}
-                    </select>
+                      options={cariOptions}
+                      emptyLabel="—"
+                    />
                   </label>
 
                   <label>
@@ -2502,19 +2510,13 @@ export default function ChequeRegisterPage() {
             }
           />
 
-          <Select
+          <SearchableSelect
             label="Cari"
             value={editForm.currentAccountId}
-            onChange={(e) =>
-              setEditForm({ ...editForm, currentAccountId: e.target.value })
+            onChange={(next) =>
+              setEditForm({ ...editForm, currentAccountId: next })
             }
-            options={[
-              { value: "", label: "Seçin" },
-              ...currentAccounts.map((account) => ({
-                value: account.id,
-                label: account.title,
-              })),
-            ]}
+            options={cariOptions}
           />
 
           <TutarInput

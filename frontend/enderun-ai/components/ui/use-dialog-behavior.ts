@@ -85,6 +85,23 @@ export function useDialogBehavior({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        /*
+         * İÇ İÇE KONTROL ESC'İ SAHİPLENEBİLİR.
+         *
+         * Aranabilir seçici gibi kendi listesini açan bir kontrol
+         * açıkken Esc ÖNCE o listeyi kapatmalı, diyaloğu değil. Bu
+         * dinleyici document üzerinde YAKALAMA evresinde çalıştığı için
+         * iç kontrolün kendi işleyicisinden ÖNCE geliyor; yani iç
+         * kontrol "ben hallederim" diyemezdi ve kullanıcı listeyi
+         * kapatmak isterken yazdığı formu kaybederdi.
+         *
+         * Sözleşme: açıkken `data-dialog-escape="hold"` taşıyan bir
+         * atanın içindeki olayda diyalog Esc'e karışmıyor.
+         */
+        const target = event.target as HTMLElement | null;
+
+        if (target?.closest?.('[data-dialog-escape="hold"]')) return;
+
         event.stopPropagation();
         closeRef.current();
         return;
