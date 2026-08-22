@@ -9,7 +9,11 @@ import {
 
 import ErpShell from "@/components/erp/erp-shell";
 import { useModuleActions } from "@/lib/auth/module-actions";
-import { Button, Drawer } from "@/components/ui";
+import {
+  Button,
+  Drawer,
+  SearchableSelect,
+} from "@/components/ui";
 import { date as formatDate, money } from "@/lib/format/turkish";
 import {
   accountingAccountService,
@@ -380,6 +384,22 @@ export default function CashAccountsPage() {
     }
   }
 
+  /**
+   * Cari seçenekleri TEK YERDE: kod, ünvan ve vergi no üzerinden
+   * aranıyor. Her çağrı yeri kendi eşlemesini yazsaydı bir ekranda
+   * vergi numarasıyla bulunan cari diğerinde bulunamazdı.
+   */
+  const cariOptions = useMemo(
+    () =>
+      currentAccounts.map((account) => ({
+        id: account.id,
+        code: account.code,
+        title: account.title,
+        extra: [account.shortName, account.taxNumber],
+      })),
+    [currentAccounts]
+  );
+
   return (
     <ErpShell
       title="Kasa / Banka"
@@ -710,23 +730,17 @@ export default function CashAccountsPage() {
 
                 <label>
                   <span>Cari</span>
-                  <select
+                  <SearchableSelect
                     required
                     value={transactionForm.currentAccountId}
-                    onChange={(e) =>
+                    onChange={(next) =>
                       setTransactionForm({
                         ...transactionForm,
-                        currentAccountId: e.target.value,
+                        currentAccountId: next,
                       })
                     }
-                  >
-                    <option value="">Seçin...</option>
-                    {currentAccounts.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.code} — {item.title}
-                      </option>
-                    ))}
-                  </select>
+                    options={cariOptions}
+                  />
                 </label>
 
                 <label>

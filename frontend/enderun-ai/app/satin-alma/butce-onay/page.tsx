@@ -104,7 +104,13 @@ function formatTry(value?: number | null) {
 
 function hasPermission(session: CurrentSession | null, permission: string) {
   return Boolean(
-    session?.roles.some((role) => role.toLocaleLowerCase("tr-TR") === "admin") ||
+    // ROL ADI KÜLTÜR BAĞIMSIZ KARŞILAŞTIRILIYOR.
+    // `toLocaleLowerCase("tr-TR")` rolü "ADMIN" yazılmış bir kullanıcıda
+    // "admın" üretiyordu — eşleşme kaçıyor ve YETKİLİ kullanıcı bütçe
+    // onay düğmesini hiç göremiyordu. Bir onay akışının tıkanması demek.
+    session?.roles.some(
+      (role) => role.toLowerCase() === "admin"
+    ) ||
       session?.permissions.includes(permission),
   );
 }

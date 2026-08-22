@@ -6,7 +6,10 @@ import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
 import { currencyMoney } from "@/lib/format/turkish";
 import { ApiError } from "@/lib/api/api-client";
-import { Button } from "@/components/ui";
+import {
+  Button,
+  SearchableSelect,
+} from "@/components/ui";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import {
@@ -503,6 +506,22 @@ export default function SubcontractorsPage() {
     );
   }
 
+  /**
+   * Cari seçenekleri TEK YERDE: kod, ünvan ve vergi no üzerinden
+   * aranıyor. Her çağrı yeri kendi eşlemesini yazsaydı bir ekranda
+   * vergi numarasıyla bulunan cari diğerinde bulunamazdı.
+   */
+  const cariOptions = useMemo(
+    () =>
+      projectAccounts.map((account) => ({
+        id: account.id,
+        code: account.code,
+        title: account.title,
+        extra: [account.shortName, account.taxNumber],
+      })),
+    [projectAccounts]
+  );
+
   return (
     <ErpShell design="redwood" title="Taşeronlar">
       <main style={{ padding: 24, display: "grid", gap: 18 }}>
@@ -586,22 +605,13 @@ export default function SubcontractorsPage() {
 
               <label style={fieldLabel}>
                 Taşeron Carisi
-                <select
+                <SearchableSelect
                   value={form.currentAccountId}
-                  onChange={(event) =>
-                    update("currentAccountId", event.target.value)
-                  }
-                  style={input}
+                  onChange={(next) => update("currentAccountId", next)}
+                  options={cariOptions}
                   disabled={Boolean(editingId)}
                   required
-                >
-                  <option value="">Seçiniz</option>
-                  {projectAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.title}
-                    </option>
-                  ))}
-                </select>
+                />
                 {projectAccounts.length === 0 && form.companyId && (
                   <small style={{ color: "var(--color-semantic-warning)" }}>
                     Bu şirkette &quot;taşeron&quot; işaretli cari yok. Cari kartında

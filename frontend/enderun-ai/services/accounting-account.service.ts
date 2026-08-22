@@ -102,6 +102,39 @@ export const accountingAccountService = {
     );
   },
 
+  /**
+   * ARANABİLİR SEÇİCİNİN UCU — sınırlı satır + TOPLAM eşleşme sayısı.
+   *
+   * Hesap planı canlıda 1.114 satır (~168 KB). Tamamını her ekran
+   * açılışında indirmek yerine yazdıkça buradan aranıyor. `signal`
+   * zorunlu değil ama seçici her zaman veriyor: hızlı yazarken geç
+   * dönen eski isteğin yeni sonucu ezmesi, kullanıcıya YANLIŞ hesabı
+   * seçtirir.
+   */
+  search(
+    params: { companyId?: string; isActive?: boolean; search: string; limit?: number },
+    signal?: AbortSignal
+  ) {
+    const query = new URLSearchParams();
+
+    if (params.companyId) query.set("companyId", params.companyId);
+    if (params.isActive !== undefined)
+      query.set("isActive", String(params.isActive));
+
+    query.set("search", params.search);
+    query.set("limit", String(params.limit ?? 50));
+
+    // PagedResult<T> — kod tabanının kırpılmış liste sözleşmesi:
+    // dönen kayıtlar, TOPLAM eşleşme ve "daha var mı". Ekran toplamı
+    // buradan okuyor; kendi saymıyor.
+    return apiClient<{
+      items: AccountingAccountListItem[];
+      total: number;
+      take: number;
+      hasMore: boolean;
+    }>(`accounting-accounts/arama?${query.toString()}`, { signal });
+  },
+
   getById(id: string) {
     return apiClient<AccountingAccountDetail>(
       `accounting-accounts/${id}`

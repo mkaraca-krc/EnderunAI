@@ -5,7 +5,11 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ErpShell from "@/components/erp/erp-shell";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
-import { Button, Drawer } from "@/components/ui";
+import {
+  Button,
+  Drawer,
+  SearchableSelect,
+} from "@/components/ui";
 import { amount } from "@/lib/format/turkish";
 import { matchesSearch } from "@/lib/search/fold";
 import { companyService, CompanyListItem } from "@/services/company.service";
@@ -416,6 +420,22 @@ export default function ProjectsPage() {
     }
   }
 
+  /**
+   * Cari seçenekleri TEK YERDE: kod, ünvan ve vergi no üzerinden
+   * aranıyor. Her çağrı yeri kendi eşlemesini yazsaydı bir ekranda
+   * vergi numarasıyla bulunan cari diğerinde bulunamazdı.
+   */
+  const cariOptions = useMemo(
+    () =>
+      approvedCustomers.map((account) => ({
+        id: account.id,
+        code: account.code,
+        title: account.title,
+        extra: [account.shortName, account.taxNumber],
+      })),
+    [approvedCustomers]
+  );
+
   return (
     <ErpShell
       title="Projeler"
@@ -545,27 +565,22 @@ export default function ProjectsPage() {
                 İşveren Cari Kartı
                 {Number(form.status) !== ProjectStatus.Kesif ? " *" : ""}
               </span>
-              <select
+              <SearchableSelect
                 required={Number(form.status) !== ProjectStatus.Kesif}
                 value={form.employerCurrentAccountId}
-                onChange={(event) =>
+                onChange={(next) =>
                   setForm({
                     ...form,
-                    employerCurrentAccountId: event.target.value,
+                    employerCurrentAccountId: next,
                   })
                 }
-              >
-                <option value="">
-                  {Number(form.status) === ProjectStatus.Kesif
+                options={cariOptions}
+                emptyLabel={
+                  Number(form.status) === ProjectStatus.Kesif
                     ? "Henüz belirlenmedi (opsiyonel)"
-                    : "Onaylı müşteri seçin"}
-                </option>
-                {approvedCustomers.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.code} — {account.title}
-                  </option>
-                ))}
-              </select>
+                    : "Onaylı müşteri seçin"
+                }
+              />
               {Number(form.status) === ProjectStatus.Kesif && (
                 <small>
                   Keşif/Teklif aşamasında işveren henüz kesinleşmemiş

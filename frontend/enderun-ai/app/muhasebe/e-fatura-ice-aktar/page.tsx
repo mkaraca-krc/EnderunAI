@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import {
+  SearchableSelect,
+  type SearchableOption,
+} from "@/components/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { money, unitPrice } from "@/lib/format/turkish";
-import ErpSearchSelect, {
-  type SearchSelectOption,
-} from "@/components/erp/erp-search-select";
 import {
   accountingAccountService,
   type AccountingAccountListItem,
@@ -204,11 +205,31 @@ export default function EInvoiceImportPage() {
     });
   };
 
-  const expenseAccountOptions = useMemo<SearchSelectOption[]>(
+  const searchExpenseAccounts = useCallback(
+    async (query: string, signal: AbortSignal) => {
+      const result = await accountingAccountService.search(
+        { companyId, isActive: true, search: query, limit: 50 },
+        signal
+      );
+
+      return {
+        options: result.items.map((account) => ({
+          id: account.id,
+          code: account.code,
+          title: account.name,
+        })),
+        total: result.total,
+      };
+    },
+    [companyId]
+  );
+
+  const expenseAccountOptions = useMemo<SearchableOption[]>(
     () =>
       expenseAccounts.map((account) => ({
-        value: account.id,
-        label: `${account.code} — ${account.name}`,
+        id: account.id,
+        code: account.code,
+        title: account.name,
       })),
     [expenseAccounts]
   );
@@ -330,6 +351,22 @@ export default function EInvoiceImportPage() {
       setSaving(false);
     }
   };
+
+  /**
+   * Cari seçenekleri TEK YERDE: kod, ünvan ve vergi no üzerinden
+   * aranıyor. Her çağrı yeri kendi eşlemesini yazsaydı bir ekranda
+   * vergi numarasıyla bulunan cari diğerinde bulunamazdı.
+   */
+  const cariOptions = useMemo(
+    () =>
+      accounts.map((account) => ({
+        id: account.id,
+        code: account.code,
+        title: account.title,
+        extra: [account.shortName, account.taxNumber],
+      })),
+    [accounts]
+  );
 
   return (
     <ErpShell
@@ -550,7 +587,9 @@ export default function EInvoiceImportPage() {
                       decision={decision}
                       projects={projects}
                       accounts={accounts}
+                      cariOptions={cariOptions}
                       expenseAccountOptions={expenseAccountOptions}
+                      searchExpenseAccounts={searchExpenseAccounts}
                       costCenterOptions={costCenterOptions}
                       warehouses={warehouses}
                       expanded={expanded === rowKey}
@@ -638,7 +677,9 @@ function PreviewRow({
   decision,
   projects,
   accounts,
+  cariOptions,
   expenseAccountOptions,
+  searchExpenseAccounts,
   costCenterOptions,
   warehouses,
   expanded,
@@ -649,7 +690,14 @@ function PreviewRow({
   decision?: RowDecision;
   projects: ProjectListItem[];
   accounts: CurrentAccountListItem[];
-  expenseAccountOptions: SearchSelectOption[];
+  /** Aranabilir seçicinin seçenekleri — sayfada TEK yerde kuruluyor. */
+  cariOptions: SearchableOption[];
+  expenseAccountOptions: SearchableOption[];
+  /** Hesap planı sunucudan aranıyor (1.114 satır). */
+  searchExpenseAccounts: (
+    query: string,
+    signal: AbortSignal
+  ) => Promise<{ options: SearchableOption[]; total: number }>;
   costCenterOptions: { code: string; label: string }[];
   warehouses: WarehouseListItem[];
   expanded: boolean;
@@ -722,23 +770,17 @@ function PreviewRow({
         <td>
           {item.canImport ? (
             <>
-              <select
+              <SearchableSelect
                 value={decision?.currentAccountId ?? ""}
-                onChange={(e) =>
+                onChange={(next) =>
                   onChange({
-                    currentAccountId: e.target.value,
-                    createCurrentAccount: e.target.value === "",
+                    currentAccountId: next,
+                    createCurrentAccount: next === "",
                   })
                 }
-              >
-                <option value="">Yeni cari oluştur</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.title}
-                    {account.taxNumber ? ` (${account.taxNumber})` : ""}
-                  </option>
-                ))}
-              </select>
+                options={cariOptions}
+                emptyLabel="Yeni cari oluştur"
+              />
               {!decision?.currentAccountId && (
                 <small>
                   {item.counterpartyName ?? "—"} / {item.counterpartyTaxNumber ?? "—"}
@@ -781,12 +823,12 @@ function PreviewRow({
             "—"
           ) : isExpense ? (
             <>
-              <ErpSearchSelect
+              <SearchableSelect
                 options={expenseAccountOptions}
+                loadOptions={searchExpenseAccounts}
                 value={decision?.expenseAccountId ?? ""}
                 onChange={(next) => onChange({ expenseAccountId: next })}
                 placeholder="Gider hesabı ara"
-                emptyMessage="Eşleşen gider hesabı yok."
               />
               {item.suggestedExpenseAccountCode &&
                 decision?.expenseAccountId === item.suggestedExpenseAccountId && (

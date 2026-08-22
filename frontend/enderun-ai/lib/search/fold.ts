@@ -17,7 +17,11 @@
  */
 const FOLD: Record<string, string> = {
   ı: "i",
-  i̇: "i",
+  // "İ" (U+0130): toLowerCase() bunu "i" + BİRLEŞİK NOKTA (U+0307)
+  // yapıyor ve nokta katlanmadan kalıyordu. Ölçüldü: "insaat" yazan
+  // "İnşaat"ı BULAMIYORDU — bu sektörde neredeyse her cari unvanında
+  // geçen kelime. Nokta aşağıda ayrıca siliniyor.
+  "\u0130": "i",
   ş: "s",
   ğ: "g",
   ü: "u",
@@ -29,9 +33,19 @@ const FOLD: Record<string, string> = {
 };
 
 export function foldTurkish(text: string) {
-  return text
-    .toLowerCase()
-    .replace(/[ıi̇şğüöçâîû]/g, (character) => FOLD[character] ?? character);
+  return (
+    text
+      .toLowerCase()
+      // BİRLEŞİK NOKTA ÖNCE SİLİNİYOR. "İ".toLowerCase() iki kod
+      // noktası üretiyor ("i" + U+0307) ve aşağıdaki karakter sınıfı
+      // ikisini AYRI AYRI görüyor — hiçbiri eşleşmediği için nokta
+      // metinde kalıyor ve "istanbul" ile "i̇stanbul" eşleşmiyordu.
+      //
+      // Veritabanı tarafı (lower + translate) noktayı hiç üretmiyor;
+      // yani silinmezse ekran ile sunucu FARKLI sonuç verir.
+      .replace(/\u0307/g, "")
+      .replace(/[\u0130ışğüöçâîû]/g, (character) => FOLD[character] ?? character)
+  );
 }
 
 /**

@@ -245,8 +245,16 @@ export default function ProjectDangerZone({
                           className="erp-btn danger"
                           disabled={
                             busy ||
-                            confirmCode.trim().toLocaleUpperCase("tr-TR") !==
-                              projectCode.toLocaleUpperCase("tr-TR")
+                            /*
+                              KOD KARŞILAŞTIRMASI KÜLTÜR BAĞIMSIZ.
+                              `toLocaleUpperCase("tr-TR")` kullanılıyordu:
+                              kodunda "I" geçen bir projede (IST-01 →
+                              İST-01) kullanıcı DOĞRU kodu yazsa bile
+                              eşleşmiyor ve proje silinemiyordu —
+                              kullanıcıyı çıkmaza sokan bir hata.
+                            */
+                            confirmCode.trim().toUpperCase() !==
+                              projectCode.toUpperCase()
                           }
                           onClick={handleDelete}
                         >

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SearchableSelect } from "@/components/ui";
 import {
   FormEvent,
   useEffect,
@@ -373,6 +374,22 @@ export default function NewAccountingVoucherPage() {
     }
   }
 
+  /**
+   * Cari seçenekleri TEK YERDE. Fiş satırı TABLO HÜCRESİNDE olduğu için
+   * seçicinin listesi sabit konumlu çiziliyor — `.rw .erp-table-wrap`
+   * `overflow: auto` taşıyor ve mutlak konumlu bir liste kırpılırdı.
+   */
+  const cariOptions = useMemo(
+    () =>
+      currentAccounts.map((account) => ({
+        id: account.id,
+        code: account.code,
+        title: account.title,
+        extra: [account.shortName, account.taxNumber],
+      })),
+    [currentAccounts]
+  );
+
   return (
     <ErpShell
       design="redwood"
@@ -639,32 +656,18 @@ export default function NewAccountingVoucherPage() {
                     </td>
 
                     <td>
-                      <select
+                      <SearchableSelect
                         value={line.currentAccountId}
-                        onChange={(event) =>
+                        onChange={(next) =>
                           updateLine(
                             line.key,
                             "currentAccountId",
-                            event.target.value
+                            next
                           )
                         }
-                      >
-                        <option value="">
-                          Cari yok
-                        </option>
-
-                        {currentAccounts.map(
-                          (account) => (
-                            <option
-                              key={account.id}
-                              value={account.id}
-                            >
-                              {account.code} -{" "}
-                              {account.title}
-                            </option>
-                          )
-                        )}
-                      </select>
+                        options={cariOptions}
+                        emptyLabel="Cari yok"
+                      />
                     </td>
 
                     <td>

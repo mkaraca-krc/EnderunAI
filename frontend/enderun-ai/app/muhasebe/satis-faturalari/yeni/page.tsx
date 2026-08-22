@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { SearchableSelect } from "@/components/ui";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
@@ -223,6 +224,22 @@ export default function NewSalesInvoicePage() {
       (item) => item.description.trim() && Number(item.quantity) > 0
     );
 
+  /**
+   * Cari seçenekleri TEK YERDE: kod, ünvan ve vergi no üzerinden
+   * aranıyor. Her çağrı yeri kendi eşlemesini yazsaydı bir ekranda
+   * vergi numarasıyla bulunan cari diğerinde bulunamazdı.
+   */
+  const cariOptions = useMemo(
+    () =>
+      customers.map((account) => ({
+        id: account.id,
+        code: account.code,
+        title: account.title,
+        extra: [account.shortName, account.taxNumber],
+      })),
+    [customers]
+  );
+
   return (
     <ErpShell
       design="redwood"
@@ -254,14 +271,12 @@ export default function NewSalesInvoicePage() {
 
           <label>
             <span>Müşteri *</span>
-            <select required value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-              <option value="">Onaylı müşteri seçin</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.code} — {customer.title}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              required
+              value={customerId}
+              onChange={(next) => setCustomerId(next)}
+              options={cariOptions}
+            />
           </label>
 
           <label>

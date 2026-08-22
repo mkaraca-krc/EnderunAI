@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   DataTable,
@@ -18,7 +18,10 @@ import {
   type CurrentAccountListItem,
 } from "@/services/current-account.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
-import { Button } from "@/components/ui";
+import {
+  Button,
+  SearchableSelect,
+} from "@/components/ui";
 import {
   OFFER_COUNTERPARTY_ROLES,
   OFFER_KINDS,
@@ -508,6 +511,22 @@ export default function OfferTrackingPage() {
   ];
 
 
+  /**
+   * Cari seçenekleri TEK YERDE: kod, ünvan ve vergi no üzerinden
+   * aranıyor. Her çağrı yeri kendi eşlemesini yazsaydı bir ekranda
+   * vergi numarasıyla bulunan cari diğerinde bulunamazdı.
+   */
+  const cariOptions = useMemo(
+    () =>
+      accounts.map((account) => ({
+        id: account.id,
+        code: account.code,
+        title: account.title,
+        extra: [account.shortName, account.taxNumber],
+      })),
+    [accounts]
+  );
+
   return (
     <ErpShell
       design="redwood"
@@ -655,22 +674,16 @@ export default function OfferTrackingPage() {
             <div className="erp-form-grid">
               <label>
                 Kime Verildi (cari)
-                <select
+                <SearchableSelect
                   value={trackingForm.counterpartyCurrentAccountId}
-                  onChange={(event) =>
+                  onChange={(next) =>
                     setTrackingForm((prev) => ({
                       ...prev,
-                      counterpartyCurrentAccountId: event.target.value,
+                      counterpartyCurrentAccountId: next,
                     }))
                   }
-                >
-                  <option value="">Seçiniz</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.code} · {account.title}
-                    </option>
-                  ))}
-                </select>
+                  options={cariOptions}
+                />
               </label>
 
               <label>

@@ -836,147 +836,23 @@ body {
 }
 
 /* Aramalı seçim (stok kartı, gider hesabı) */
-.erp-search-select {
-  position: relative;
-  width: 100%;
-}
 
-.erp-search-select > input {
-  width: 100%;
-  border: 1px solid var(--erp-border);
-  border-radius: 8px;
-  background: var(--erp-panel);
-  padding: 11px 12px;
-  color: var(--erp-text);
-  font: inherit;
-  outline: none;
-}
 
-.erp-search-select > input:focus {
-  border-color: var(--erp-primary);
-  box-shadow: 0 0 0 3px rgba(85, 125, 167, .12);
-}
 
-.erp-search-select-clear {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--erp-muted);
-  cursor: pointer;
-  padding: 2px 7px;
-  font-size: 16px;
-  line-height: 1;
-}
 
-.erp-search-select-clear:hover {
-  background: var(--color-brand-primary-tint);
-  color: var(--erp-text);
-}
 
-.erp-search-select-menu {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  max-height: 280px;
-  overflow-y: auto;
-  border: 1px solid var(--erp-border);
-  border-radius: 10px;
-  background: var(--erp-panel);
-  box-shadow: 0 12px 28px rgba(15, 70, 72, .14);
-}
 
-.erp-search-select-option {
-  display: grid;
-  gap: 2px;
-  width: 100%;
-  border: 0;
-  border-bottom: 1px solid var(--erp-border);
-  background: transparent;
-  padding: 9px 12px;
-  text-align: left;
-  cursor: pointer;
-}
 
-.erp-search-select-option:hover,
-.erp-search-select-option.selected {
-  background: var(--color-brand-primary-tint);
-}
 
-.erp-search-select-option strong {
-  color: var(--erp-text);
-  font-size: 13px;
-  font-weight: 600;
-}
 
-.erp-search-select-option small {
-  color: var(--erp-muted);
-  font-size: 12px;
-}
 
-.erp-search-select-empty {
-  margin: 0;
-  padding: 12px;
-  color: var(--erp-muted);
-  font-size: 13px;
-}
 
-.erp-search-select-quick {
-  border-bottom: 1px solid var(--erp-border);
-  padding: 9px 12px;
-}
 
-.erp-search-select-quick > span {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--erp-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
 
-.erp-search-select-quick > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
 
-.erp-search-select-quick button {
-  border: 1px solid var(--erp-border);
-  border-radius: 999px;
-  background: var(--color-brand-primary-tint);
-  color: var(--erp-primary);
-  cursor: pointer;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 600;
-}
 
-.erp-search-select-quick button:hover {
-  background: var(--color-brand-primary-tint);
-}
 
-.erp-search-select-create {
-  width: 100%;
-  border: 0;
-  background: var(--color-brand-primary-tint);
-  color: var(--erp-primary);
-  cursor: pointer;
-  padding: 10px 12px;
-  text-align: left;
-  font-size: 13px;
-  font-weight: 600;
-}
 
-.erp-search-select-create:hover {
-  background: var(--color-brand-primary-tint);
-}
 
 .erp-table-card {
   overflow: hidden;

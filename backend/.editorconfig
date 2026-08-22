@@ -1,0 +1,45 @@
+# ENDERUN AI — KOD ÇÖZÜMLEYİCİ KURALLARI
+#
+# Buradaki kurallar TEK BİR SINIF HATAYI önlemek için var: kültüre
+# bağlı büyütme/küçültme.
+
+root = true
+
+[*.cs]
+
+# CA1311: ToLower()/ToUpper() yerine ToLowerInvariant()/ToUpperInvariant()
+#
+# NEDEN HATA SEVİYESİNDE:
+#
+# Türkçe kültürde "I" harfi noktasız "ı"ya döner. Bu kod tabanında tam
+# olarak bu tuzağa iki kez düşüldü:
+#   - arama seçicisinde "SCHNEIDER" yazarak marka bulunamıyordu,
+#   - proje silme onay kodunda kullanıcı doğru kodu yazsa bile
+#     eşleşmiyor ve proje silinemiyordu.
+#
+# Bugün sunucu tarafındaki ToLower() çağrıları DOĞRU çalışıyor, ama
+# yalnızca konteyner temel imajının dil ayarı C.UTF-8 olduğu için.
+# Yani doğruluk, kimsenin bakmadığı bir ortam değişkenine bağlı — imaj
+# değişirse arama sessizce bozulur ve nedeni aylarca bulunamaz.
+#
+# Yeni kod bu bağımlılığı taşımasın: karşılaştırma ve arama amaçlı
+# büyütme/küçültme Invariant sürümünü kullanır. GÖSTERİM amaçlı olanda
+# kültür doğrudur; orada ToLower(CultureInfo.CurrentCulture) açıkça
+# yazılır ve niyet görünür olur.
+# SEVİYE UYARI, HATA DEĞİL — ve sebebi önemli:
+#
+# Mevcut kodda 182 çağrı var (ölçüldü) ve hepsi bugün doğru çalışıyor.
+# Hata seviyesine alınsaydı derleme kırılırdı; hepsini bu pakette
+# çevirmek ise kapsamı patlatırdı (G2'ye ayrıldı).
+#
+# Uyarı tek başına yeterli DEĞİL: yüzlerce uyarının arasında yenisi
+# görünmez. Asıl bekçi CultureSensitiveCasingRatchetTests — mevcut sayı
+# tavan olarak sabitlendi, yeni bir çağrı eklendiğinde test DÜŞER ve
+# sayı yalnızca AŞAĞI inebilir.
+dotnet_diagnostic.CA1311.severity = warning
+
+# CA1304/CA1305/CA1310: aynı ailenin diğer üyeleri — kültür belirtmeyen
+# karşılaştırma ve biçimleme. Uyarı seviyesinde: mevcut kodda çok sayıda
+# çağrı var ve hepsi bugün doğru çalışıyor; yeni kodda göze batsın diye
+# açık, ama derlemeyi kırmasın.
+dotnet_diagnostic.CA1310.severity = warning

@@ -1,7 +1,9 @@
 using EnderunAI.Api.Contracts.Accounting;
+using EnderunAI.Api.Contracts.Core;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Search;
 
 namespace EnderunAI.Api.Services.Accounting;
 
@@ -28,13 +30,7 @@ public sealed class AccountingAccountService(
         if (isActive.HasValue)
             query = query.Where(x => x.IsActive == isActive.Value);
 
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var normalized = search.Trim().ToLower();
-            query = query.Where(x =>
-                x.Code.ToLower().Contains(normalized) ||
-                x.Name.ToLower().Contains(normalized));
-        }
+        query = ApplySearch(query, search);
 
         return await query
             .OrderBy(x => x.Code)
@@ -53,6 +49,87 @@ public sealed class AccountingAccountService(
                 x.IsActive,
                 x.ChildAccounts.Count))
             .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// KATLANMIŞ ARAMA — kural `lib/search/fold.ts` ile aynı.
+    ///
+    /// Eskiden `x.Code.ToLower().Contains(...)` yazıyordu: küçültme
+    /// doğruydu (veritabanı kültürü C.UTF-8) ama TÜRKÇE KATLAMA YOKTU —
+    /// "sube" yazan "Şube"yi bulamıyordu. Ekranda bulunan bir kaydın
+    /// sunucuda bulunamaması, sayfalı aramada kaydın hiç yokmuş gibi
+    /// görünmesi demek.
+    ///
+    /// Katlama üretilmiş kolonda hazır duruyor; burada yalnızca ARANAN
+    /// metin aynı kuralla katlanıyor.
+    /// </summary>
+    private static IQueryable<AccountingAccount> ApplySearch(
+        IQueryable<AccountingAccount> query, string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search)) return query;
+
+        var folded = TurkishSearch.Fold(search);
+
+        return query.Where(x => x.SearchFold.Contains(folded));
+    }
+
+    /// <summary>
+    /// Aranabilir seçicinin ucu: en fazla <paramref name="limit"/> satır
+    /// ve TOPLAM eşleşme sayısı.
+    /// </summary>
+    public async Task<PagedResult<AccountingAccountListItemResponse>> SearchAsync(
+        Guid? companyId,
+        bool? isActive,
+        string? search,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.AccountingAccounts.AsNoTracking();
+
+        if (companyId.HasValue)
+            query = query.Where(x => x.CompanyId == companyId.Value);
+
+        if (isActive.HasValue)
+            query = query.Where(x => x.IsActive == isActive.Value);
+
+        query = ApplySearch(query, search);
+
+        // Toplam sayı AYRI sorgulanıyor: satırlarla birlikte alınsaydı
+        // limit toplamı da kırpardı ve "kaç kayıt daha var" cevabı
+        // kendi kendini yanlışlardı.
+        var total = await query.CountAsync(cancellationToken);
+
+        var take = Math.Clamp(limit, 1, 200);
+
+        var items = await query
+            .OrderBy(x => x.Code)
+            .Take(take)
+            .Select(x => new AccountingAccountListItemResponse(
+                x.Id,
+                x.CompanyId,
+                x.ParentAccountId,
+                x.Code,
+                x.Name,
+                (int)x.Nature,
+                x.Level,
+                x.IsPostingAllowed,
+                x.RequiresProject,
+                x.RequiresCostCenter,
+                x.CurrencyCode,
+                x.IsActive,
+                x.ChildAccounts.Count))
+            .ToListAsync(cancellationToken);
+
+        /*
+         * PagedResult — KOD TABANININ MEVCUT SÖZLEŞMESİ.
+         *
+         * Önce buraya özel bir yanıt tipi yazılmıştı (Items +
+         * TotalCount). Sözleşme testi yakaladı: çağıranın tavan
+         * verebildiği her uç PagedResult döndürmek zorunda. Paralel bir
+         * şekil, arayüzde ikinci bir "kırpıldı mı" okuma biçimi
+         * demekti — poz ekranındaki hatanın tekrar doğmasına açık kapı.
+         */
+        return PagedResult<AccountingAccountListItemResponse>.From(items, total, take);
     }
 
     public async Task<AccountingAccountDetailResponse> GetByIdAsync(

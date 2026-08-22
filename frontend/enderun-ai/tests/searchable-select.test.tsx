@@ -167,6 +167,138 @@ describe("aranabilir seçici", () => {
     expect(screen.getByText("Eşleşen kayıt yok.")).toBeInTheDocument();
   });
 
+  /*
+   * TABLO HÜCRESİNDE KIRPILMA. Bu seçiciler fiş ve fatura kalem
+   * tablolarında da kullanılıyor; `.rw .erp-table-wrap` kuralı
+   * `overflow: auto` taşıyor ve MUTLAK konumlu bir liste o kutu
+   * tarafından kesilir — kullanıcı yazar, hiçbir şey görmez. Eski
+   * ErpSearchSelect fatura kalem tablosunda tam olarak bunu yaşıyordu.
+   */
+  it("liste SABİT konumlu çiziliyor (tablo kutusu kırpmasın)", () => {
+    render(<Sahne />);
+
+    const input = screen.getByLabelText("Cari");
+    fireEvent.focus(input);
+
+    const list = screen.getByRole("listbox");
+
+    expect(list.style.position).toBe("fixed");
+    expect(list.className).not.toContain("absolute");
+  });
+
+  it("ikinci satır (hint) gösteriliyor ve ARANIYOR", () => {
+    const options = [
+      { id: "1", code: "150.01", title: "Ticari Mal", hint: "Proje gerektirir" },
+      { id: "2", code: "150.02", title: "Hammadde" },
+    ];
+
+    function S() {
+      const [value, setValue] = useState("");
+      return (
+        <SearchableSelect
+          label="Hesap"
+          value={value}
+          onChange={setValue}
+          options={options}
+        />
+      );
+    }
+
+    render(<S />);
+    const input = screen.getByLabelText("Hesap");
+    fireEvent.focus(input);
+
+    // Aynı isimde iki kart olduğunda seçimi bu satır belirliyor.
+    expect(screen.getByText("Proje gerektirir")).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "proje gerektirir" } });
+    expect(
+      within(screen.getByRole("listbox")).getByText(/Ticari Mal/)
+    ).toBeInTheDocument();
+  });
+
+  it("KESİLEN SATIR SAYISI YAZILIYOR, sessizce kırpılmıyor", () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      id: String(i),
+      code: `K-${i}`,
+      title: `Kayıt ${i}`,
+    }));
+
+    function S() {
+      const [value, setValue] = useState("");
+      return (
+        <SearchableSelect
+          label="Kart"
+          value={value}
+          onChange={setValue}
+          options={many}
+          maxVisible={10}
+        />
+      );
+    }
+
+    render(<S />);
+    fireEvent.focus(screen.getByLabelText("Kart"));
+
+    // Sessizce kırpmak kullanıcıya "kaydım yok" dedirtir.
+    expect(screen.getByText(/50 kayıt daha var/)).toBeInTheDocument();
+  });
+
+  it("sık kullanılanlar yalnız arama boşken görünür", () => {
+    function S() {
+      const [value, setValue] = useState("");
+      return (
+        <SearchableSelect
+          label="Hesap"
+          value={value}
+          onChange={setValue}
+          options={OPTIONS}
+          quickPicks={[OPTIONS[2]]}
+          quickPickLabel="Son kullanılanlar"
+        />
+      );
+    }
+
+    render(<S />);
+    const input = screen.getByLabelText("Hesap");
+
+    fireEvent.focus(input);
+    expect(screen.getByText("Son kullanılanlar")).toBeInTheDocument();
+
+    // Kullanıcı yazmaya başlayınca kısayollar sonucu boğmamalı.
+    fireEvent.change(input, { target: { value: "yıl" } });
+    expect(screen.queryByText("Son kullanılanlar")).toBeNull();
+  });
+
+  it("\"yeni kayıt oluştur\" yazılan metni taşıyor", () => {
+    const onCreate = vi.fn();
+
+    function S() {
+      const [value, setValue] = useState("");
+      return (
+        <SearchableSelect
+          label="Kart"
+          value={value}
+          onChange={setValue}
+          options={OPTIONS}
+          onCreate={onCreate}
+          createLabel="Yeni stok kartı"
+        />
+      );
+    }
+
+    render(<S />);
+    const input = screen.getByLabelText("Kart");
+
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "NYAF kablo" } });
+
+    fireEvent.mouseDown(screen.getByText(/Yeni stok kartı/));
+
+    // Yazdığı metin kayboluyorsa kullanıcı adı ikinci kez yazar.
+    expect(onCreate).toHaveBeenCalledWith("NYAF kablo");
+  });
+
   it("DİYALOG İÇİNDE Esc önce listeyi kapatır, formu değil", async () => {
     const onClose = vi.fn();
 

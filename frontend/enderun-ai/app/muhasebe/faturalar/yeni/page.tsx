@@ -1,14 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import {
+  SearchableSelect,
+  type SearchableOption,
+} from "@/components/ui";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
 import { money } from "@/lib/format/turkish";
 import CurrencyRateFields from "@/components/accounting/currency-rate-fields";
-import ErpSearchSelect, {
-  type SearchSelectOption,
-} from "@/components/erp/erp-search-select";
 import {
   accountingAccountService,
   type AccountingAccountListItem,
@@ -247,32 +248,61 @@ export default function NewSupplierInvoicePage() {
     [orders, supplierId, projectId]
   );
 
-  const inventoryOptions = useMemo<SearchSelectOption[]>(
+  const inventoryOptions = useMemo<SearchableOption[]>(
     () =>
       inventoryItems.map((item) => ({
-        value: item.id,
-        label: `${item.code} — ${item.name}`,
+        id: item.id,
+        code: item.code,
+        title: item.name,
         hint: `${item.unit}${item.category ? ` · ${item.category}` : ""} · stok ${item.totalStock}`,
-        keywords: `${item.brand ?? ""} ${item.model ?? ""} ${item.barcode ?? ""}`,
+        // Marka/model/barkod ARAMAYA girer: "NYAF" yazan kabloyu
+        // bulmalı. (Eski seçicide bu alanlar aranıyordu ama Türkçe
+        // katlama yanlış olduğu için "SCHNEIDER" bulunamıyordu.)
+        extra: [item.brand, item.model, item.barcode],
       })),
     [inventoryItems]
   );
 
-  const accountOptions = useMemo<SearchSelectOption[]>(
+  const accountOptions = useMemo<SearchableOption[]>(
     () =>
       expenseAccounts.map((account) => ({
-        value: account.id,
-        label: `${account.code} — ${account.name}`,
+        id: account.id,
+        code: account.code,
+        title: account.name,
         hint: account.requiresProject ? "Proje gerektirir" : undefined,
       })),
     [expenseAccounts]
   );
 
-  const recentAccountOptions = useMemo<SearchSelectOption[]>(
+  /**
+   * Hesap planı SUNUCUDAN aranıyor (1.114 satır). Bileşen her çağrıda
+   * iptal işaretini veriyor; geç dönen eski yanıt hiç işlenmiyor.
+   */
+  const searchExpenseAccounts = useCallback(
+    async (query: string, signal: AbortSignal) => {
+      const result = await accountingAccountService.search(
+        { companyId, isActive: true, search: query, limit: 50 },
+        signal
+      );
+
+      return {
+        options: result.items.map((account) => ({
+          id: account.id,
+          code: account.code,
+          title: account.name,
+          hint: account.requiresProject ? "Proje gerektirir" : undefined,
+        })),
+        total: result.total,
+      };
+    },
+    [companyId]
+  );
+
+  const recentAccountOptions = useMemo<SearchableOption[]>(
     () =>
       recentAccountIds
-        .map((id) => accountOptions.find((option) => option.value === id))
-        .filter((option): option is SearchSelectOption => option !== undefined),
+        .map((id) => accountOptions.find((option) => option.id === id))
+        .filter((option): option is SearchableOption => option !== undefined),
     [recentAccountIds, accountOptions]
   );
 
@@ -501,6 +531,22 @@ export default function NewSupplierInvoicePage() {
     }
   }
 
+  /**
+   * Cari seçenekleri TEK YERDE: kod, ünvan ve vergi no üzerinden
+   * aranıyor. Her çağrı yeri kendi eşlemesini yazsaydı bir ekranda
+   * vergi numarasıyla bulunan cari diğerinde bulunamazdı.
+   */
+  const cariOptions = useMemo(
+    () =>
+      suppliers.map((account) => ({
+        id: account.id,
+        code: account.code,
+        title: account.title,
+        extra: [account.shortName, account.taxNumber],
+      })),
+    [suppliers]
+  );
+
   return (
     <ErpShell
       design="redwood"
@@ -587,23 +633,17 @@ export default function NewSupplierInvoicePage() {
 
           <label>
             <span>Tedarikçi *</span>
-            <select
+            <SearchableSelect
               required
               value={supplierId}
-              onChange={(e) => {
+              onChange={(next) => {
                 // Sipariş listesi tedarikçiye göre süzülüyor; seçili sipariş
                 // artık bu tedarikçiye ait olmayabilir.
-                setSupplierId(e.target.value);
+                setSupplierId(next);
                 setPurchaseOrderId("");
               }}
-            >
-              <option value="">Onaylı tedarikçi seçin</option>
-              {suppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.code} — {supplier.title}
-                </option>
-              ))}
-            </select>
+              options={cariOptions}
+            />
             {companyId && suppliers.length === 0 && (
               <small>
                 Bu şirkette onaylı tedarikçi cari kartı yok. Cari kartı önce
@@ -776,22 +816,27 @@ export default function NewSupplierInvoicePage() {
                   <tr key={index}>
                     <td>
                       {isStock ? (
-                        <ErpSearchSelect
+                        <SearchableSelect
                           options={inventoryOptions}
                           value={item.inventoryItemId}
                           onChange={(next) => chooseInventoryItem(index, next)}
                           placeholder="Kart ara (kod, isim, marka)"
-                          emptyMessage="Eşleşen stok kartı yok."
                           onCreate={() => setNewCardIndex(index)}
                           createLabel="Yeni stok kartı"
                         />
                       ) : (
-                        <ErpSearchSelect
+                        <SearchableSelect
+                          /*
+                            SUNUCU KİPİ: hesap planı 1.114 satır.
+                            `options` yalnız SEÇİLİ kaydın etiketini
+                            yazabilmek için veriliyor — liste yazdıkça
+                            sunucudan geliyor.
+                          */
                           options={accountOptions}
+                          loadOptions={searchExpenseAccounts}
                           value={item.expenseAccountId}
                           onChange={(next) => chooseExpenseAccount(index, next)}
                           placeholder="Hesap ara (kod veya ad)"
-                          emptyMessage="Eşleşen gider hesabı yok."
                           quickPicks={recentAccountOptions}
                           quickPickLabel="Son kullanılanlar"
                         />

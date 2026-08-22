@@ -1,9 +1,13 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import ErpShell from "@/components/erp/erp-shell";
-import { Button, ConfirmDialog } from "@/components/ui";
+import {
+  Button,
+  ConfirmDialog,
+  SearchableSelect,
+} from "@/components/ui";
 import { money } from "@/lib/format/turkish";
 import { usePermissions } from "@/lib/use-permissions";
 import { companyService, type CompanyListItem } from "@/services/company.service";
@@ -293,6 +297,22 @@ export default function IsgOsgbPage() {
     }
   }
 
+  /**
+   * Cari seçenekleri TEK YERDE: kod, ünvan ve vergi no üzerinden
+   * aranıyor. Her çağrı yeri kendi eşlemesini yazsaydı bir ekranda
+   * vergi numarasıyla bulunan cari diğerinde bulunamazdı.
+   */
+  const cariOptions = useMemo(
+    () =>
+      accounts.map((account) => ({
+        id: account.id,
+        code: account.code,
+        title: account.title,
+        extra: [account.shortName, account.taxNumber],
+      })),
+    [accounts]
+  );
+
   return (
     <ErpShell
       design="redwood"
@@ -355,17 +375,12 @@ export default function IsgOsgbPage() {
           <div className="erp-form-grid">
             <label>
               <span>OSGB Carisi *</span>
-              <select
+              <SearchableSelect
                 value={currentAccountId}
-                onChange={(event) => setCurrentAccountId(event.target.value)}
-              >
-                <option value="">Onaylı cari seçin</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.code} — {account.title}
-                  </option>
-                ))}
-              </select>
+                onChange={(next) => setCurrentAccountId(next)}
+                options={cariOptions}
+                emptyLabel="Onaylı cari seçin"
+              />
               {accounts.length === 0 && (
                 <small>
                   Bu şirkette onaylı cari kartı yok. OSGB firmasını önce cari

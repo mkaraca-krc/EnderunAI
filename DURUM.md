@@ -1288,6 +1288,88 @@ ekrandaki metni, Merkez seçicinin görünümü, yetki uyarısının ekranda
 çıkışı. Bunlar için token üretilmedi — kendi başına erişim kimliği
 üretmek doğru değil ve kullanıcı da vermeyeceğini söyledi.
 
+**G1.2 — ARANABİLİR SEÇİCİ (2026-08-22) — DEPLOY BEKLİYOR.**
+
+Cari seçimi 12 ekranda düz `<select>` ile yapılıyordu; canlıda 150 cari
+var ve tarayıcının kendi davranışı yalnız İLK HARFE atlıyor.
+
+TEK BİLEŞEN: `components/ui/searchable-select.tsx`. Kodda ZATEN bir
+arama seçicisi vardı (`ErpSearchSelect`, 2 ekranda) — ikisi
+birleştirildi, eskisi silindi (177 satır + 18 CSS bloğu). Korunan
+yetenekler: ikinci satır (hint), sık kullanılanlar, "yeni kayıt
+oluştur", görünür satır sınırı.
+
+**İSTEMCİ / SUNUCU EŞİĞİ: 500 KAYIT.** Ölçüm (2026-08-22):
+
+| Liste | Kayıt | Ham veri | Kip |
+|---|---|---|---|
+| Hesap planı | 1.114 | ~168 KB | **SUNUCU** |
+| Cari | 150 | ~35 KB | istemci |
+| Personel | 81 | — | istemci |
+| Stok kartı | 9 | — | istemci |
+| Proje | 4 | — | istemci |
+
+Bileşen İKİ KİPİ DE taşıyor (`loadOptions` verilince sunucu kipi):
+eşik aşıldığında geçiş tek satır, ikinci bir bileşen yazılmayacak.
+
+Sunucu kipi: 300 ms bekleme, en az 2 karakter, `AbortController` ile
+YARIŞ KORUMASI (geç dönen eski yanıt hiç işlenmiyor), "N kayıt daha
+var" sayısı sunucunun saydığı toplamdan.
+
+HESAP PLANI ARAMASI: `SearchFold` üretilmiş kolonu (veritabanı
+hesaplıyor, uygulama yazmıyor) + pg_trgm GIN indeksi. Ölçüm: katlamayı
+satır satır hesaplayan sıralı tarama 5,0 ms → üretilmiş kolonla
+**0,9 ms**. İndeks bu boyutta planlayıcı tarafından seçilmiyor (1.114
+satır küçük) ama kullanılabilir olduğu doğrulandı (`enable_seqscan=off`
+ile bitmap index scan) ve tablo büyüdükçe devreye girecek.
+
+**TÜRKÇE KATLAMADA ÜÇ KATMAN AYRIŞIYORDU — hizalandı.** Ölçüm:
+
+- `fold.ts`: "İ" → "i" + BİRLEŞİK NOKTA (U+0307), nokta katlanmıyordu
+- .NET `ToLowerInvariant()`: "İ"yi hiç küçültmüyor ("İSTANBUL" → "İstanbul")
+- PostgreSQL `lower()` (C.UTF-8): doğru, "istanbul"
+
+Sonuç: **"insaat" yazan "İnşaat"ı BULAMIYORDU** — bu sektörde neredeyse
+her cari unvanında geçen kelime. Veritabanı buluyordu, ekran
+bulamıyordu. Üçü de hizalandı ve eşitlik testle sabit
+(`TurkishSearchFoldingTests`).
+
+**BLOKE EDİCİ İKİ KARŞILAŞTIRMA HATASI DÜZELTİLDİ:**
+1. `project-danger-zone.tsx` — proje silme onay kodu `tr-TR` büyütmeyle
+   karşılaştırılıyordu; kodunda "I" geçen projede (IST-01 → İST-01)
+   kullanıcı DOĞRU kodu yazsa bile eşleşmiyor, proje silinemiyordu.
+2. `satin-alma/butce-onay` — rol adı karşılaştırması; rol "ADMIN"
+   yazılmışsa "admın" üretiyor ve YETKİLİ kullanıcı bütçe onay
+   düğmesini göremiyordu.
+
+**YAZMA YOLU:** `insan-kaynaklari/organizasyon` kod alanı veriye
+tr-büyütülmüş değer yazıyordu (backend Invariant büyütüyor). Düzeltildi.
+Canlı veri tarandı: **bozuk kayıt YOK** (0 satır) — hata veri üretmeden
+kapatıldı.
+
+**BACKEND BUGÜN DOĞRU AMA TESADÜFEN.** 91 kültüre bağlı
+`ToLower()/ToUpper()` çağrısı var; doğru çalışmalarının tek sebebi
+konteyner temel imajının dil ayarının C.UTF-8 olması ve EF sorgularının
+küçültmeyi PostgreSQL'e çevirmesi. İmaj değişirse arama SESSİZCE
+bozulur. Önlem: `backend/.editorconfig` içinde CA1311 açık (uyarı) +
+`CultureSensitiveCasingRatchetTests` cırcırı — sayı 91'de sabit, yalnız
+aşağı iner. Mevcut çağrıların çevrilmesi G2'de.
+
+**BİLİNEN İSTİSNA — `satin-alma/[id]`:** cari seçimi tek seçim değil,
+çoklu onay kutusu listesi (`selectedSupplierIds`). Aranabilir seçici
+deseni uymuyor; kapsam dışı bırakıldı. Bu ekranda arama gerekirse ayrı
+bir çoklu-seçim deseni gerekir.
+
+**SIRADAKİ PAKET — G2: TÜRKÇE KATLAMA TEMİZLİĞİ.** ~18 ekranda arama
+`toLocaleLowerCase("tr-TR")` ile yapılıyor (personeller, puantaj,
+izinler, işe alım, bordro, avanslar, fazla mesai, izin bakiye,
+görevlendirmeler, personel-360, mal kabul, etiket, hesap planı, zimmet
+diyaloğu, poz/reçete içe aktarma, BOQ eşleme). Hepsi `fold.ts`e
+geçecek; nokta düzeltmesi değil, tek yardımcıya taşıma. Kalan
+karşılaştırmalar da dahil (`projeler/[id]/kisimlar` mükerrer isim
+kontrolü). Bitince arama amaçlı ham `toLocaleLowerCase("tr-TR")`
+kalmayacak.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

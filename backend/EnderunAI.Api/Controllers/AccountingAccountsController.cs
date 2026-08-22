@@ -3,6 +3,7 @@ using EnderunAI.Api.Security;
 using EnderunAI.Api.Services.Accounting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using EnderunAI.Api.Contracts.Core;
 
 namespace EnderunAI.Api.Controllers;
 
@@ -28,6 +29,34 @@ public sealed class AccountingAccountsController(
             isActive,
             search,
             cancellationToken));
+    }
+
+    /// <summary>
+    /// ARANABİLİR SEÇİCİNİN UCU — sınırlı satır + toplam eşleşme.
+    ///
+    /// Hesap planı canlıda 1.114 satır; tamamını her ekran açılışında
+    /// indirmek yerine yazdıkça buradan aranıyor. Toplam sayı da
+    /// dönüyor ki ekran "kaç kayıt daha var" derken tahmin yürütmesin.
+    /// </summary>
+    [HttpGet("arama")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingView)]
+    public async Task<IActionResult> Search(
+        [FromQuery] Guid? companyId,
+        [FromQuery] bool? isActive,
+        [FromQuery] string? search,
+        [FromQuery] int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        // ŞEKİL AÇIKÇA YAZILIYOR: uç, kırpılmış liste sözleşmesini
+        // (kayıtlar + TOPLAM + daha var mı) döndürdüğünü kendi
+        // imzasında söylüyor. Yalnız `Ok(await ...)` yazılsaydı sözleşme
+        // servise gömülü kalır, uca bakan kişi kırpma olduğunu
+        // göremezdi — sözleşme testi de bunu yakaladı.
+        PagedResult<AccountingAccountListItemResponse> sonuc =
+            await service.SearchAsync(
+                companyId, isActive, search, limit, cancellationToken);
+
+        return Ok(sonuc);
     }
 
     [HttpGet("{id:guid}")]

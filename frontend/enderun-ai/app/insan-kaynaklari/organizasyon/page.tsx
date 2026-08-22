@@ -1256,7 +1256,12 @@ export default function OrganizationPage() {
                       onChange={(event) =>
                         setDepartmentForm((current) => ({
                           ...current,
-                          code: event.target.value.toLocaleUpperCase("tr-TR"),
+                          // KOD VERİYE YAZILIYOR: büyütme kültür
+                          // bağımsız olmalı. "tr-TR" ile "istanbul"
+                          // → "İSTANBUL" oluyordu; backend Invariant
+                          // büyüttüğü için ("ISTANBUL") aynı kod iki
+                          // ayrı değer gibi davranıyordu.
+                          code: event.target.value.toUpperCase(),
                         }))
                       }
                     />
@@ -1376,7 +1381,12 @@ export default function OrganizationPage() {
                       onChange={(event) =>
                         setPositionForm((current) => ({
                           ...current,
-                          code: event.target.value.toLocaleUpperCase("tr-TR"),
+                          // KOD VERİYE YAZILIYOR: büyütme kültür
+                          // bağımsız olmalı. "tr-TR" ile "istanbul"
+                          // → "İSTANBUL" oluyordu; backend Invariant
+                          // büyüttüğü için ("ISTANBUL") aynı kod iki
+                          // ayrı değer gibi davranıyordu.
+                          code: event.target.value.toUpperCase(),
                         }))
                       }
                     />

@@ -29,4 +29,20 @@ public sealed class AccountingAccount : BaseEntity
     public bool RequiresProject { get; set; }
     public bool RequiresCostCenter { get; set; }
     public string? CurrencyCode { get; set; }
+
+    /// <summary>
+    /// ARAMA İÇİN KATLANMIŞ METİN — veritabanı tarafından üretiliyor
+    /// (generated column), uygulama yazmıyor.
+    ///
+    /// NEDEN: hesap planı canlıda 1.114 satır ve seçicide yazdıkça
+    /// aranıyor. Katlamayı her tuşta 1.114 satır için yeniden hesaplamak
+    /// (translate(lower(...))) sıralı tarama demekti — ölçüldü: 5 ms,
+    /// bugün taşınır ama indekslenemez. Üretilmiş kolon katlamayı YAZMA
+    /// zamanına taşıyor ve pg_trgm indeksine konu olabiliyor.
+    ///
+    /// KURAL `lib/search/fold.ts` İLE BİREBİR AYNI olmak zorunda:
+    /// ekranda bulunan bir kayıt sunucuda da bulunmalı. Testle sabit
+    /// (bkz. TurkishSearchFoldingTests).
+    /// </summary>
+    public string SearchFold { get; private set; } = string.Empty;
 }

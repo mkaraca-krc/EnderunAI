@@ -2377,6 +2377,24 @@ public sealed class AppDbContext(
             entity.Property(x => x.CurrencyCode)
                 .HasMaxLength(3);
 
+            /*
+             * ARAMA KOLONU VERİTABANINDA ÜRETİLİYOR.
+             *
+             * Uygulama yazmıyor: iki yerde (giriş ve düzenleme) elle
+             * doldurulsaydı biri unutulduğunda o kayıt aramada hiç
+             * çıkmazdı ve sebebi görünmezdi. Üretilmiş kolonda böyle bir
+             * yol yok — satır ne şekilde yazılırsa yazılsın katlama
+             * doğru.
+             *
+             * Kural `lib/search/fold.ts` ile aynı: küçült, sonra Türkçe
+             * harfleri ASCII karşılığına katla.
+             */
+            entity.Property(x => x.SearchFold)
+                .HasComputedColumnSql(
+                    "translate(lower(\"Code\" || ' ' || \"Name\"), " +
+                    "'ışğüöçâîû', 'isguocaiu')",
+                    stored: true);
+
             entity.Property(x => x.Nature)
                 .HasConversion<int>()
                 .IsRequired();
