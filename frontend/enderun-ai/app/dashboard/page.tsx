@@ -258,7 +258,9 @@ export default function DashboardPage() {
     }
 
     if (goodsReceiptResult.status === "fulfilled") {
-      setGoodsReceipts(goodsReceiptResult.value);
+      // Uç artık sayfalı yanıt döndürüyor; gösterge paneli yalnız son
+      // kayıtları özetliyor, ilk sayfa yeterli.
+      setGoodsReceipts(goodsReceiptResult.value.items);
     } else {
       setGoodsReceipts([]);
       newWarnings.push("Mal kabul verileri alınamadı.");

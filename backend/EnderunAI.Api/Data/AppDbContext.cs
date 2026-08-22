@@ -308,6 +308,27 @@ public sealed class AppDbContext(
     public DbSet<UserDataScope> UserDataScopes => Set<UserDataScope>();
     public DbSet<UserUiPreference> UserUiPreferences => Set<UserUiPreference>();
 
+    /// <summary>
+    /// TÜRKÇE ARAMA KATLAMASI — VERİTABANI TARAFI, TEK KAYNAK.
+    ///
+    /// `lib/search/fold.ts` (ekran) ve `Search.TurkishSearch.Fold`
+    /// (sunucu bellek içi) ile AYNI kuralı uygular: küçült, sonra
+    /// Türkçe harfleri ASCII karşılığına katla.
+    ///
+    /// NEDEN VERİTABANI FONKSİYONU: arama çoğu listede BİRLEŞTİRİLMİŞ
+    /// alanları da kapsıyor (tedarikçi unvanı, depo adı, teslim alan).
+    /// Tek tabloya üretilmiş kolon eklemek onları kapsamazdı. Fonksiyon
+    /// her sorguda kullanılabiliyor ve ifade indeksine konu olabiliyor.
+    ///
+    /// Gövdesi burada değil migration'da; buradaki bildirim yalnız
+    /// EF'in çağrıyı SQL'e çevirebilmesi için.
+    /// </summary>
+    [DbFunction("enderun_fold", IsBuiltIn = false)]
+    public static string Fold(string? value) =>
+        throw new NotSupportedException(
+            "Yalnızca sorgu içinde kullanılır; bellek içi katlama için " +
+            "Search.TurkishSearch.Fold kullanın.");
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

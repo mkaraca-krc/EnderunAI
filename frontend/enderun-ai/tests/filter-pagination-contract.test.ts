@@ -96,14 +96,68 @@ describe("filtre ↔ sayfalama sözleşmesi", () => {
 
       const rel = relative(APP, path).replace("/page.tsx", "");
 
+      /*
+       * İKİ MEŞRU DESEN VAR:
+       *  - sayfa bileşen durumunda tutuluyorsa `setPage(1)`,
+       *  - sayfa URL'de tutuluyorsa sorgu parametresi 1'e çekilir
+       *    (`sayfa: 1`). URL deseni daha güçlü: yenilemede ve
+       *    paylaşılan bağlantıda da aynı yerde kalınır.
+       *
+       * Ölçüt "hangi yazım" değil, "istek 1. sayfaya dönüyor mu".
+       */
+      const sayfaSifirlaniyor =
+        /setPage\(1\)/.test(code) || /sayfa:\s*1\b/.test(code);
+
       expect(
-        /setPage\(1\)/.test(code),
-        `${rel} sunucu kipinde; filtre değişince isteğin sayfasını da ` +
-          `1'e çekmeli (setPage(1)).`
+        sayfaSifirlaniyor,
+        `${rel} sunucu kipinde; filtre değişince İSTEĞİN sayfasını da ` +
+          `1'e çekmeli — durum bileşendeyse setPage(1), URL'deyse ` +
+          `sorgu parametresi (sayfa: 1).`
       ).toBe(true);
     }
 
     // Testin boşa dönmediğini garanti et.
     expect(sunucuKipli.length).toBeGreaterThan(0);
+  });
+
+  /*
+   * GERÇEK LİSTE EKRANLARI SUNUCU KİPİNDE KALMALI.
+   *
+   * Yukarıdaki test yalnız `server={{` BİLDİREN ekranlara bakıyor;
+   * sunucu kipini tamamen bırakan bir ekran kuralın dışına çıkıyordu.
+   * Sonda gösterdi: mal kabul ekranından `server` bloğunu sildim,
+   * iki sözleşme testi de geçmeye devam etti.
+   *
+   * "Gerçek liste" = kayıt sayısı zamanla büyüyen küme. Bu ekranlarda
+   * tümünü çekip ön yüzde dilimlemek, listeyi sessizce kırpar ya da
+   * tarayıcıyı kilitler — poz kütüphanesinde (23.531 kayıt) tam olarak
+   * bu yaşandı.
+   *
+   * Liste F4 ilerledikçe UZAR; kısalması ancak bir ekranın gerçekten
+   * liste olmadığına karar verilirse ve gerekçesi yazılırsa meşrudur.
+   */
+  const SUNUCU_KIPI_ZORUNLU = [
+    "depo-stok/mal-kabul",
+  ];
+
+  it("gerçek liste ekranları sunucu kipini bırakmıyor", () => {
+    const eksik: string[] = [];
+
+    for (const rel of SUNUCU_KIPI_ZORUNLU) {
+      const code = readFileSync(join(APP, rel, "page.tsx"), "utf8");
+
+      const sunucuKipi =
+        /<DataTable[\s/>]/.test(code) && code.includes("server={{");
+
+      if (!sunucuKipi) eksik.push(rel);
+    }
+
+    expect(
+      eksik,
+      "Bu ekranlar GERÇEK LİSTE ve sunucu kipinde olmak zorunda: " +
+        eksik.join(", ") +
+        ". Tümünü çekip ön yüzde dilimlemek listeyi sessizce kırpar. " +
+        "Ekran gerçekten liste değilse listeden GEREKÇESİYLE çıkarın."
+    ).toEqual([]);
   });
 });

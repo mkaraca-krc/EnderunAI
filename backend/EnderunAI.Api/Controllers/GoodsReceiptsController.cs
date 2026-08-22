@@ -4,6 +4,7 @@ using EnderunAI.Api.Services.GoodsReceipts;
 using EnderunAI.Api.Services.Procurement;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using EnderunAI.Api.Contracts.Core;
 
 namespace EnderunAI.Api.Controllers;
 
@@ -19,13 +20,38 @@ public sealed class GoodsReceiptsController(IGoodsReceiptService service) : Cont
         [FromQuery] Guid? warehouseId,
         [FromQuery] Guid? purchaseOrderId,
         [FromQuery] int? status,
+        /// <summary>Katlanmış arama — ekranla aynı kural (enderun_fold).</summary>
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default) =>
+        // Şekil AÇIKÇA yazılıyor: uç, kırpılmış liste sözleşmesini
+        // (kayıtlar + TOPLAM + daha var mı) döndürdüğünü söylüyor.
+        await ExecuteAsync<PagedResult<GoodsReceiptListItemResponse>>(
+            () => service.GetAllAsync(
+                companyId,
+                warehouseId,
+                purchaseOrderId,
+                status,
+                search,
+                page,
+                pageSize,
+                cancellationToken));
+
+    /// <summary>
+    /// Özet kartları. Sayfadan hesaplanamaz: 10.000 kayıtlık listede
+    /// "Toplam 50" yazardı.
+    /// </summary>
+    [HttpGet("ozet")]
+    [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsView)]
+    public async Task<IActionResult> GetSummary(
+        [FromQuery] Guid? companyId,
+        [FromQuery] Guid? warehouseId,
+        [FromQuery] Guid? purchaseOrderId,
+        [FromQuery] string? search,
         CancellationToken cancellationToken) =>
-        await ExecuteAsync(() => service.GetAllAsync(
-            companyId,
-            warehouseId,
-            purchaseOrderId,
-            status,
-            cancellationToken));
+        await ExecuteAsync(() => service.GetSummaryAsync(
+            companyId, warehouseId, purchaseOrderId, search, cancellationToken));
 
     [HttpGet("{id:guid}")]
     [RequirePermission(PermissionCatalog.Keys.PurchasingReceiptsView)]

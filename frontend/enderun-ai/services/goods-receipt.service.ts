@@ -183,15 +183,52 @@ function buildQuery(params?: {
 }
 
 export const goodsReceiptService = {
-  getAll(params?: {
-    companyId?: string;
-    warehouseId?: string;
-    purchaseOrderId?: string;
-    status?: number;
-  }) {
-    return apiClient<GoodsReceiptListItem[]>(
-      `goods-receipts${buildQuery(params)}`,
-    );
+  /**
+   * SAYFALANMIŞ mal kabul listesi.
+   *
+   * Tümünü çekip ön yüzde dilimlemek yerine sunucu kırpıyor: kayıt
+   * sayısı zamanla büyüyen bir küme ve taşınan veri de tarayıcıdaki
+   * dizi de doğrusal büyürdü. Arama da sunucuda ve katlanmış —
+   * ekranla aynı kural (bkz. enderun_fold / lib/search/fold.ts).
+   */
+  getAll(
+    params?: {
+      companyId?: string;
+      warehouseId?: string;
+      purchaseOrderId?: string;
+      status?: number;
+      search?: string;
+      page?: number;
+      pageSize?: number;
+    },
+    signal?: AbortSignal,
+  ) {
+    return apiClient<{
+      items: GoodsReceiptListItem[];
+      total: number;
+      take: number;
+      hasMore: boolean;
+      page: number;
+    }>(`goods-receipts${buildQuery(params)}`, { signal });
+  },
+
+  /** Özet kartları — süzgeçlere uyan TÜM kayıtlardan, sayfadan değil. */
+  getSummary(
+    params?: {
+      companyId?: string;
+      warehouseId?: string;
+      purchaseOrderId?: string;
+      search?: string;
+    },
+    signal?: AbortSignal,
+  ) {
+    return apiClient<{
+      total: number;
+      draft: number;
+      posted: number;
+      cancelled: number;
+      acceptedQuantity: number;
+    }>(`goods-receipts/ozet${buildQuery(params)}`, { signal });
   },
 
   getById(id: string) {

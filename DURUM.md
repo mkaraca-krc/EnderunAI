@@ -1416,6 +1416,54 @@ Koruma: `backend/.editorconfig` CA1311 (uyarı) +
 iner. Çevrilmeleri acil değil; ayrı bir temizlik paketi olarak
 açılacak.
 
+**F4 — EKRAN STANDARDI: ÖZET KARTI KURALI (kalıcı).**
+
+Sayfalı bir listenin üstündeki toplam/özet kartları HER ZAMAN
+sunucudan, süzgeçlere uyan TÜM kayıt kümesi üzerinden hesaplanır.
+SAYFADAN HESAPLANAN ÖZET YASAK.
+
+Neden: elde yalnız bir sayfa var. `items.length` üzerinden hesaplanan
+kart, 10.000 kayıtlık bir listede "Toplam Mal Kabul: 50" yazar ve
+kimse yanlış olduğunu anlamaz — poz kütüphanesinde yaşanan hatanın
+(23.531 poz varken ekranda "Toplam Poz: 100") aynısı.
+
+Uygulama: liste ve özet AYNI süzgeç metodunu kullanır
+(`ApplySearch`), yoksa kullanıcı 12 satır görürken kartta 47 yazar ve
+hangisinin doğru olduğunu bilemez.
+
+**F4 — GERÇEK LİSTE SUNUCU KİPİNDE KALIR (sözleşme testi).**
+
+`tests/filter-pagination-contract.test.ts` içinde
+`SUNUCU_KIPI_ZORUNLU` listesi: buradaki ekranlar `DataTable` +
+`server={{` kullanmak zorunda. Liste F4 ilerledikçe UZAR.
+
+Neden eklendi: mevcut sözleşme testi yalnız `server={{` BİLDİREN
+ekranlara bakıyordu; sunucu kipini tamamen bırakan bir ekran kuralın
+dışına çıkıyordu. Sonda gösterdi — mal kabul ekranından `server`
+bloğu silindiğinde iki sözleşme testi de geçmeye devam etti.
+
+**F4 — İLK GERÇEK LİSTE BİTTİ: `depo-stok/mal-kabul` (2026-08-22).**
+
+- Sunucu sayfalaması (COUNT + LIMIT/OFFSET), sunucu araması, şirket ve
+  yetki süzgeci sorgunun İÇİNDE (`ApplyScope`).
+- Sayfa/boyut/süzgeç/arama URL'de; 300 ms bekleme; yarış koruması
+  (`AbortController`).
+- Özet kartları sunucudan (yukarıdaki kural).
+- İNDEKS `IX_goods_receipts_liste` (şirket + tarih↓ + oluşturma↓ +
+  kimlik). ÖLÇÜLDÜ, 10.000 satır: 1. sayfa 4,5 ms → **0,056 ms**,
+  son sayfa 7,5 ms → 3,9 ms.
+
+**ORTAK KATLAMA FONKSİYONU `enderun_fold` (veritabanı).**
+
+`lib/search/fold.ts` (ekran) ve `Search.TurkishSearch.Fold` (sunucu)
+ile AYNI kural. Neden veritabanı fonksiyonu: arama çoğu listede
+BİRLEŞTİRİLMİŞ alanları da kapsıyor (tedarikçi unvanı, depo adı);
+tek tabloya üretilmiş kolon eklemek onları dışarıda bırakırdı.
+IMMUTABLE olduğu için ifade indeksine de konu olabilir.
+Üç katmanın eşitliği `TurkishFoldFunctionTests` ile kanıtlı —
+veritabanındaki fonksiyon GERÇEKTEN çağrılıp sunucu sürümüyle
+karşılaştırılıyor.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

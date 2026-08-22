@@ -10,6 +10,8 @@ using EnderunAI.Api.Services.Procurement;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using GoodsReceiptEntity = EnderunAI.Api.Models.GoodsReceipt.GoodsReceipt;
+using EnderunAI.Api.Contracts.Core;
+using EnderunAI.Api.Search;
 
 namespace EnderunAI.Api.Services.GoodsReceipts;
 
@@ -22,11 +24,14 @@ public sealed class GoodsReceiptService(
     Services.Inventory.IStockCountLockService countLock)
     : IGoodsReceiptService
 {
-    public async Task<IReadOnlyList<GoodsReceiptListItemResponse>> GetAllAsync(
+    public async Task<PagedResult<GoodsReceiptListItemResponse>> GetAllAsync(
         Guid? companyId,
         Guid? warehouseId,
         Guid? purchaseOrderId,
         int? status,
+        string? search,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken)
     {
         var scope = await GetScopeAsync(cancellationToken);
@@ -49,9 +54,36 @@ public sealed class GoodsReceiptService(
             query = query.Where(x => x.Status == (GoodsReceiptStatus)status.Value);
         }
 
-        return await query
+        /*
+         * ARAMA SUNUCUDA VE KATLANMIŞ.
+         *
+         * Eskiden tüm liste indirilip ön yüzde süzülüyordu; kayıt
+         * sayısı büyüdükçe hem taşınan veri hem tarayıcıdaki dizi
+         * doğrusal büyür. Katlama `enderun_fold` ile veritabanında
+         * yapılıyor — ekranla AYNI kural (bkz. lib/search/fold.ts).
+         *
+         * BİRLEŞTİRİLMİŞ ALANLAR DA KAPSANIYOR: tedarikçi unvanı, depo
+         * adı ve teslim alan bu tabloda değil; tek tabloya üretilmiş
+         * kolon eklemek onları dışarıda bırakırdı.
+         */
+        query = ApplySearch(query, search);
+
+        /*
+         * TOPLAM AYRI SORGULANIYOR: sayfayla birlikte alınsaydı LIMIT
+         * toplamı da kırpardı ve "kaç kayıt var" cevabı kendi kendini
+         * yanlışlardı. Ekran bu sayıyı "Toplam X kayıt" diye yazıyor.
+         */
+        var total = await query.CountAsync(cancellationToken);
+
+        var take = Math.Clamp(pageSize, 1, 200);
+        var currentPage = Math.Max(page, 1);
+
+        var items = await query
             .OrderByDescending(x => x.ReceiptDate)
             .ThenByDescending(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id)
+            .Skip((currentPage - 1) * take)
+            .Take(take)
             .Select(x => new GoodsReceiptListItemResponse(
                 x.Id,
                 x.CompanyId,
@@ -73,6 +105,88 @@ public sealed class GoodsReceiptService(
                 x.Items.Sum(i => i.RejectedQuantity),
                 x.Items.Sum(i => i.DamagedQuantity)))
             .ToListAsync(cancellationToken);
+
+        return PagedResult<GoodsReceiptListItemResponse>.FromPage(
+            items, total, take, currentPage);
+    }
+
+    /// <summary>
+    /// KATLANMIŞ ARAMA — liste ve özet AYNI süzgeci kullanır.
+    ///
+    /// İki yerde ayrı yazılsaydı özet kartları listeyle farklı bir
+    /// kümeyi sayardı: kullanıcı 12 satır görürken kartta 47 yazardı
+    /// ve hangisinin doğru olduğunu bilemezdi.
+    ///
+    /// Katlama veritabanında (`enderun_fold`) — ekranla aynı kural.
+    /// BİRLEŞTİRİLMİŞ ALANLAR da kapsanıyor (tedarikçi unvanı, depo
+    /// adı, teslim alan); tek tabloya üretilmiş kolon eklemek onları
+    /// dışarıda bırakırdı.
+    /// </summary>
+    private static IQueryable<GoodsReceipt> ApplySearch(
+        IQueryable<GoodsReceipt> query, string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search)) return query;
+
+        var folded = TurkishSearch.Fold(search);
+
+        return query.Where(x =>
+            AppDbContext.Fold(x.ReceiptNumber).Contains(folded) ||
+            AppDbContext.Fold(x.PurchaseOrder.OrderNumber).Contains(folded) ||
+            AppDbContext.Fold(x.PurchaseOrder.SupplierCurrentAccount.Title).Contains(folded) ||
+            AppDbContext.Fold(x.Warehouse.Code).Contains(folded) ||
+            AppDbContext.Fold(x.Warehouse.Name).Contains(folded) ||
+            (x.DispatchNoteNumber != null &&
+             AppDbContext.Fold(x.DispatchNoteNumber).Contains(folded)) ||
+            (x.ReceivedByName != null &&
+             AppDbContext.Fold(x.ReceivedByName).Contains(folded)));
+    }
+
+    /// <summary>
+    /// Özet kartları — SÜZGEÇLERE UYAN TÜM kayıtlardan sayılıyor.
+    /// Sayfadan hesaplansaydı 10.000 kayıtlık listede "Toplam 50"
+    /// yazardı.
+    /// </summary>
+    public async Task<GoodsReceiptSummaryResponse> GetSummaryAsync(
+        Guid? companyId,
+        Guid? warehouseId,
+        Guid? purchaseOrderId,
+        string? search,
+        CancellationToken cancellationToken)
+    {
+        var scope = await GetScopeAsync(cancellationToken);
+        var query = db.GoodsReceipts.AsNoTracking().ApplyScope(scope);
+
+        if (companyId.HasValue)
+            query = query.Where(x => x.CompanyId == companyId.Value);
+
+        if (warehouseId.HasValue)
+            query = query.Where(x => x.WarehouseId == warehouseId.Value);
+
+        if (purchaseOrderId.HasValue)
+            query = query.Where(x => x.PurchaseOrderId == purchaseOrderId.Value);
+
+        query = ApplySearch(query, search);
+
+        // Tek turda sayılıyor: dört ayrı COUNT dört tur demekti.
+        var gruplar = await query
+            .GroupBy(x => x.Status)
+            .Select(g => new
+            {
+                Status = g.Key,
+                Adet = g.Count(),
+                Kabul = g.Sum(x => x.Items.Sum(i => i.AcceptedQuantity))
+            })
+            .ToListAsync(cancellationToken);
+
+        int SayiFor(GoodsReceiptStatus durum) =>
+            gruplar.FirstOrDefault(x => x.Status == durum)?.Adet ?? 0;
+
+        return new GoodsReceiptSummaryResponse(
+            gruplar.Sum(x => x.Adet),
+            SayiFor(GoodsReceiptStatus.Draft),
+            SayiFor(GoodsReceiptStatus.Posted),
+            SayiFor(GoodsReceiptStatus.Cancelled),
+            gruplar.Sum(x => x.Kabul));
     }
 
     public async Task<GoodsReceiptDetailResponse> GetByIdAsync(

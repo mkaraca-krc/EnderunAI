@@ -1,14 +1,31 @@
 using EnderunAI.Api.Contracts.GoodsReceipts;
+using EnderunAI.Api.Contracts.Core;
 
 namespace EnderunAI.Api.Services.GoodsReceipts;
 
 public interface IGoodsReceiptService
 {
-    Task<IReadOnlyList<GoodsReceiptListItemResponse>> GetAllAsync(
+    /// <summary>
+    /// Sayfalanmış mal kabul listesi. Arama SUNUCUDA ve katlanmış
+    /// (bkz. enderun_fold); toplam sayı ayrı sorgulanıyor ki ekran
+    /// "kaç kayıt var" derken tahmin yürütmesin.
+    /// </summary>
+    Task<PagedResult<GoodsReceiptListItemResponse>> GetAllAsync(
         Guid? companyId,
         Guid? warehouseId,
         Guid? purchaseOrderId,
         int? status,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken);
+
+    /// <summary>Özet kartları — süzgeçlere uyan TÜM kayıtlardan.</summary>
+    Task<GoodsReceiptSummaryResponse> GetSummaryAsync(
+        Guid? companyId,
+        Guid? warehouseId,
+        Guid? purchaseOrderId,
+        string? search,
         CancellationToken cancellationToken);
 
     Task<GoodsReceiptDetailResponse> GetByIdAsync(

@@ -1,4 +1,8 @@
 using EnderunAI.Api.Search;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Tests.Infrastructure;
+using EnderunAI.Api.Data;
 using Xunit;
 
 namespace EnderunAI.Api.Tests;
@@ -69,5 +73,41 @@ public sealed class TurkishSearchFoldingTests
         {
             Thread.CurrentThread.CurrentCulture = onceki;
         }
+    }
+}
+
+/// <summary>
+/// ÜÇÜNCÜ KATMAN: VERİTABANI.
+///
+/// Katlama üç yerde yaşıyor — ekran (`lib/search/fold.ts`), sunucu
+/// belleği (`TurkishSearch.Fold`) ve veritabanı (`enderun_fold`).
+/// Küçük listeler ekranda, büyük listeler sunucuda süzülüyor; üçü
+/// ayrışırsa aynı arama bir listede kaydı bulur, ötekinde bulamaz.
+///
+/// Bu test veritabanındaki fonksiyonu GERÇEKTEN çağırıp sunucu
+/// sürümüyle karşılaştırıyor. Aynı beklenen değerleri iki yere elle
+/// yazmak yeterli olmazdı: ikisi birlikte yanlış olabilirdi.
+/// </summary>
+[Collection("Integration")]
+public sealed class TurkishFoldFunctionTests(DatabaseFixture fixture)
+{
+    [Theory]
+    [InlineData("YILMAZ İNŞAAT")]
+    [InlineData("SCHNEIDER Elektrik")]
+    [InlineData("Şube Müdürlüğü")]
+    [InlineData("Çınar Yapı A.Ş.")]
+    [InlineData("İSTANBUL")]
+    [InlineData("ISPARTA")]
+    [InlineData("Ağrı Dağı")]
+    public async Task VeritabaniKatlamasi_SunucuylaAyni(string girdi)
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var veritabani = await db.Database
+            .SqlQuery<string>($"SELECT enderun_fold({girdi}) AS \"Value\"")
+            .SingleAsync();
+
+        Assert.Equal(TurkishSearch.Fold(girdi), veritabani);
     }
 }

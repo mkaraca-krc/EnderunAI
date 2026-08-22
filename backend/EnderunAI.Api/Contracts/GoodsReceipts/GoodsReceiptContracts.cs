@@ -1,5 +1,20 @@
 namespace EnderunAI.Api.Contracts.GoodsReceipts;
 
+/// <summary>
+/// LİSTE ÖZETİ — SÜZGEÇLERE UYAN TÜM KAYITLARDAN, sayfadan değil.
+///
+/// Ekranın üstündeki kartlar önce elde duran diziden hesaplanıyordu.
+/// Sayfalama gelince o dizi yalnız BİR SAYFA olacaktı: 10.000 kayıtlık
+/// bir listede "Toplam Mal Kabul: 50" yazardı ve kimse yanlış olduğunu
+/// anlamazdı. Poz ekranında yaşanan hatanın aynısı.
+/// </summary>
+public sealed record GoodsReceiptSummaryResponse(
+    int Total,
+    int Draft,
+    int Posted,
+    int Cancelled,
+    decimal AcceptedQuantity);
+
 public sealed record GoodsReceiptListItemResponse(
     Guid Id,
     Guid CompanyId,
