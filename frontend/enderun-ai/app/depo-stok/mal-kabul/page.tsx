@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import ErpShell from "@/components/erp/erp-shell";
@@ -38,7 +38,34 @@ function statusClass(status: number) {
   return "bg-amber-100 text-amber-800";
 }
 
+/**
+ * SUSPENSE SINIRI ŞART.
+ *
+ * Sayfa durumu (sayfa/boyut/süzgeç/arama) URL'de tutuluyor ve
+ * `useSearchParams()` ile okunuyor. Next.js bu kancayı taşıyan bir
+ * ekranı ön-render ederken Suspense sınırı olmadan derlemeyi
+ * DURDURUYOR — deploy tam olarak burada kırıldı.
+ *
+ * Aynı desen `mal-kabul/yeni` ekranında da var; ikisi de aynı şekilde
+ * sarmalanıyor.
+ */
 export default function GoodsReceiptListPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-6">
+          <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500 shadow-sm">
+            Mal kabul listesi hazırlanıyor...
+          </div>
+        </div>
+      }
+    >
+      <GoodsReceiptListContent />
+    </Suspense>
+  );
+}
+
+function GoodsReceiptListContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 

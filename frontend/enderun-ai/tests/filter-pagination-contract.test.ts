@@ -140,6 +140,52 @@ describe("filtre ↔ sayfalama sözleşmesi", () => {
     "depo-stok/mal-kabul",
   ];
 
+  /*
+   * useSearchParams TAŞIYAN SAYFA SUSPENSE SINIRI İSTER.
+   *
+   * Next.js bu kancayı taşıyan bir ekranı ön-render ederken sınır
+   * yoksa DERLEMEYİ DURDURUYOR. Testler yeşilken deploy bu yüzden
+   * kırıldı: hata yalnız `next build` sırasında çıkıyor ve o da
+   * deploy'un ortasında.
+   *
+   * Sayfa durumunu URL'de tutmak F4'ün standardı olduğu için bu
+   * kanca yayılacak; tuzağı derlemeye bırakmak yerine burada
+   * yakalıyoruz.
+   */
+  it("useSearchParams kullanan sayfalarda Suspense sınırı var", () => {
+    const eksik: string[] = [];
+
+    for (const path of pages(APP)) {
+      const ham = readFileSync(path, "utf8");
+
+      /*
+       * YORUMLAR SOYULUYOR. `zimmetler` ekranı kancayı KULLANMIYOR,
+       * yalnız yorumda "useSearchParams yerine adres çubuğu okunuyor"
+       * diye anlatıyor. Soyulmasaydı bekçi kendi belgesini ihlal
+       * sanardı — katlama bekçisinde de aynı hata yapılmıştı.
+       */
+      const code = ham
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/\/\/[^\n]*/g, " ");
+
+      if (!code.includes("useSearchParams")) continue;
+      if (ham.includes("<Suspense")) continue;
+
+      // `export const dynamic = "force-dynamic"` da ön-renderı kapatır.
+      if (/export const dynamic\s*=/.test(code)) continue;
+
+      eksik.push(relative(APP, path).replace("/page.tsx", ""));
+    }
+
+    expect(
+      eksik,
+      "Bu sayfalar useSearchParams kullanıyor ama Suspense sınırı yok: " +
+        eksik.join(", ") +
+        ". Next.js ön-render sırasında derlemeyi durdurur ve hata " +
+        "ancak deploy'da görünür. Sayfayı <Suspense> ile sarmalayın."
+    ).toEqual([]);
+  });
+
   it("gerçek liste ekranları sunucu kipini bırakmıyor", () => {
     const eksik: string[] = [];
 
