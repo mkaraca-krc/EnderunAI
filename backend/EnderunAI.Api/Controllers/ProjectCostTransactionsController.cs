@@ -11,8 +11,15 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/projects/{projectId:guid}")]
-public sealed class ProjectCostTransactionsController(AppDbContext db) : ControllerBase
+public sealed class ProjectCostTransactionsController(
+    AppDbContext db,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
+    private async Task<CurrentDataScopeSnapshot> GetScopeAsync(
+        CancellationToken cancellationToken) =>
+        await dataScope.GetAsync(cancellationToken) ??
+        throw new UnauthorizedAccessException("Kullanıcı veri kapsamı bulunamadı.");
+
     [HttpGet("cost-transactions")]
     [RequirePermission(PermissionCatalog.Keys.ProjectsView)]
     public async Task<IActionResult> GetAll(
@@ -20,7 +27,19 @@ public sealed class ProjectCostTransactionsController(AppDbContext db) : Control
         [FromQuery] Guid? siteId,
         CancellationToken cancellationToken)
     {
+        /*
+         * KAPSAM VARLIK KONTROLÜNDE.
+         *
+         * `projectId` çağırandan geliyor: kontrol kapsamsız olsaydı
+         * kullanıcı başka bir şirketin proje kimliğini yazarak o
+         * projenin MALİYET hareketlerini görebilirdi. Kapsam dışı
+         * proje "yok" sayılıyor — 404, çünkü "yetkin yok" demek bile
+         * o projenin var olduğunu ele verir.
+         */
+        var scope = await GetScopeAsync(cancellationToken);
+
         var projectExists = await db.Projects.AsNoTracking()
+            .ApplyScope(scope)
             .AnyAsync(x => x.Id == projectId, cancellationToken);
 
         if (!projectExists)
@@ -83,7 +102,19 @@ public sealed class ProjectCostTransactionsController(AppDbContext db) : Control
         Guid projectId,
         CancellationToken cancellationToken)
     {
+        /*
+         * KAPSAM VARLIK KONTROLÜNDE.
+         *
+         * `projectId` çağırandan geliyor: kontrol kapsamsız olsaydı
+         * kullanıcı başka bir şirketin proje kimliğini yazarak o
+         * projenin MALİYET hareketlerini görebilirdi. Kapsam dışı
+         * proje "yok" sayılıyor — 404, çünkü "yetkin yok" demek bile
+         * o projenin var olduğunu ele verir.
+         */
+        var scope = await GetScopeAsync(cancellationToken);
+
         var projectExists = await db.Projects.AsNoTracking()
+            .ApplyScope(scope)
             .AnyAsync(x => x.Id == projectId, cancellationToken);
 
         if (!projectExists)
@@ -140,7 +171,19 @@ public sealed class ProjectCostTransactionsController(AppDbContext db) : Control
         Guid projectId,
         CancellationToken cancellationToken)
     {
+        /*
+         * KAPSAM VARLIK KONTROLÜNDE.
+         *
+         * `projectId` çağırandan geliyor: kontrol kapsamsız olsaydı
+         * kullanıcı başka bir şirketin proje kimliğini yazarak o
+         * projenin MALİYET hareketlerini görebilirdi. Kapsam dışı
+         * proje "yok" sayılıyor — 404, çünkü "yetkin yok" demek bile
+         * o projenin var olduğunu ele verir.
+         */
+        var scope = await GetScopeAsync(cancellationToken);
+
         var projectExists = await db.Projects.AsNoTracking()
+            .ApplyScope(scope)
             .AnyAsync(x => x.Id == projectId, cancellationToken);
 
         if (!projectExists)

@@ -52,8 +52,14 @@ public sealed class RetailSalesController(
     IRetailSaleService sales,
     IExtraPaymentVisibilityService cashVisibility,
     ICurrentUserService currentUser,
-    IUserAuthorizationService authorization) : ControllerBase
+    IUserAuthorizationService authorization,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
+    private async Task<CurrentDataScopeSnapshot> GetScopeAsync(
+        CancellationToken cancellationToken) =>
+        await dataScope.GetAsync(cancellationToken) ??
+        throw new UnauthorizedAccessException("Kullanıcı veri kapsamı bulunamadı.");
+
     /// <summary>
     /// Kullanıcının izni var mı. Görünürlük servisleriyle aynı desen:
     /// karar rolden değil İZİNDEN türetiliyor, böylece kullanıcı bazlı
@@ -93,6 +99,7 @@ public sealed class RetailSalesController(
 
         var query = db.InventoryItems
             .AsNoTracking()
+            .ApplyScope(await GetScopeAsync(cancellationToken))
             // ARŞİVLENMİŞ KART SATIŞA ÇIKMAZ. Fiyatı olması yetmez;
             // arşivden çıkarılmış bir malzeme yeni satışa girerse
             // "temiz başlangıç" ilk gün bozulur.
@@ -173,8 +180,11 @@ public sealed class RetailSalesController(
     [RequirePermission(PermissionCatalog.Keys.SalesView)]
     public async Task<IActionResult> GetResources(CancellationToken cancellationToken)
     {
+        var scope = await GetScopeAsync(cancellationToken);
+
         var warehouses = await db.Warehouses
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x => x.Type == WarehouseType.Central)
             .OrderBy(x => x.Name)
             .Select(x => new { x.Id, x.Code, x.Name, x.CompanyId })
@@ -182,6 +192,7 @@ public sealed class RetailSalesController(
 
         var cashAccounts = await db.CashAccounts
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x => x.IsActive)
             .OrderBy(x => x.Name)
             .Select(x => new { x.Id, x.Code, x.Name, Type = (int)x.Type, x.CompanyId })
@@ -189,6 +200,7 @@ public sealed class RetailSalesController(
 
         var customers = await db.CurrentAccounts
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x => x.Roles.HasFlag(CurrentAccountRoles.Customer)
                 && x.Status == CurrentAccountStatus.Approved)
             .OrderBy(x => x.Title)
@@ -207,7 +219,9 @@ public sealed class RetailSalesController(
     {
         var canSeeCash = await cashVisibility.CanViewExtraPaymentAsync(cancellationToken);
 
-        var query = db.RetailSales.AsNoTracking();
+        var query = db.RetailSales
+            .AsNoTracking()
+            .ApplyScope(await GetScopeAsync(cancellationToken));
 
         if (status.HasValue)
             query = query.Where(x => (int)x.Status == status.Value);
@@ -516,6 +530,15 @@ public sealed class RetailSalesController(
         // Sorgudan gelen tarih Kind=Unspecified geliyor; PostgreSQL
         // 'timestamp with time zone' yalnız UTC kabul ediyor. İşaretleme
         // yapılmazsa uç 500 veriyor.
+        /*
+         * `companyId` ZORUNLU PARAMETRE AMA KAPSAM DEĞİL: kullanıcının
+         * yazdığı bir değer. Kapsam süzgeci olmadan, A şirketinin
+         * kullanıcısı adres çubuğuna B'nin kimliğini yazarak B'nin GÜN
+         * SONU KASASINI görebiliyordu. Rapor uçları liste uçlarından
+         * ayrı kod; listeyi süzmek burayı süzmedi.
+         */
+        var raporKapsami = await GetScopeAsync(cancellationToken);
+
         var day = AsUtcDate(date ?? DateTime.UtcNow);
         var next = day.AddDays(1);
         var canSeeCash = await cashVisibility.CanViewExtraPaymentAsync(cancellationToken);
@@ -526,6 +549,7 @@ public sealed class RetailSalesController(
         // peşin kasaya, POS tahsilatı bankaya düşüyor.
         var movements = await db.CashTransactions
             .AsNoTracking()
+            .ApplyScope(raporKapsami)
             .Where(x => retailModules.Contains(x.SourceModule!)
                 && x.CashAccount.CompanyId == companyId
                 && x.TransactionDate >= day && x.TransactionDate < next)
@@ -543,6 +567,7 @@ public sealed class RetailSalesController(
         // okunuyor ve iade fişleri ters işaretle giriyor.
         var openSales = await db.RetailSales
             .AsNoTracking()
+            .ApplyScope(raporKapsami)
             .Where(x => x.CompanyId == companyId
                 && x.Status == RetailSaleStatus.Completed
                 && x.SaleDate >= day && x.SaleDate < next
@@ -560,6 +585,7 @@ public sealed class RetailSalesController(
 
         var cashSideRows = await db.RetailSales
             .AsNoTracking()
+            .ApplyScope(raporKapsami)
             .Where(x => x.CompanyId == companyId
                 && x.Status == RetailSaleStatus.Completed
                 && x.SaleDate >= day && x.SaleDate < next
@@ -569,12 +595,12 @@ public sealed class RetailSalesController(
 
         var offBook = cashSideRows.Sum(x => x.IsReturn ? -x.CashAmount : x.CashAmount);
 
-        var saleCount = await db.RetailSales.CountAsync(
+        var saleCount = await db.RetailSales.ApplyScope(raporKapsami).CountAsync(
             x => x.CompanyId == companyId && x.Status == RetailSaleStatus.Completed
                 && x.SaleDate >= day && x.SaleDate < next && !x.IsReturn,
             cancellationToken);
 
-        var returnCount = await db.RetailSales.CountAsync(
+        var returnCount = await db.RetailSales.ApplyScope(raporKapsami).CountAsync(
             x => x.CompanyId == companyId && x.Status == RetailSaleStatus.Completed
                 && x.SaleDate >= day && x.SaleDate < next && x.IsReturn,
             cancellationToken);
@@ -612,11 +638,14 @@ public sealed class RetailSalesController(
         [FromQuery] DateTime? to,
         CancellationToken cancellationToken)
     {
+        var raporKapsami = await GetScopeAsync(cancellationToken);
+
         var start = AsUtcDate(from ?? DateTime.UtcNow.AddDays(-30));
         var end = AsUtcDate(to ?? DateTime.UtcNow).AddDays(1);
 
         var rows = await db.RetailSales
             .AsNoTracking()
+            .ApplyScope(raporKapsami)
             .Where(x => x.CompanyId == companyId
                 && x.Status == RetailSaleStatus.Completed
                 && x.SaleDate >= start && x.SaleDate < end
@@ -673,8 +702,11 @@ public sealed class RetailSalesController(
         [FromQuery] Guid companyId,
         CancellationToken cancellationToken)
     {
+        var raporKapsami = await GetScopeAsync(cancellationToken);
+
         var sales = await db.RetailSales
             .AsNoTracking()
+            .ApplyScope(raporKapsami)
             .Where(x => x.CompanyId == companyId
                 && x.Status == RetailSaleStatus.Completed
                 && !x.IsReturn
@@ -702,11 +734,13 @@ public sealed class RetailSalesController(
 
         var invoices = await db.SalesInvoices
             .AsNoTracking()
+            .ApplyScope(raporKapsami)
             .Where(x => invoiceIds.Contains(x.Id) && x.Status == SalesInvoiceStatus.Posted)
             .ToDictionaryAsync(x => x.Id, x => x.NetReceivableAmount, cancellationToken);
 
         var collected = await db.CashTransactions
             .AsNoTracking()
+            .ApplyScope(raporKapsami)
             .Where(x => x.SourceModule == "SalesInvoice"
                 && x.SourceEntityId != null
                 && invoiceIds.Contains(x.SourceEntityId!.Value)
@@ -763,7 +797,9 @@ public sealed class RetailSalesController(
 
         var term = search?.Trim();
 
-        var query = db.InventoryItems.AsNoTracking();
+        var query = db.InventoryItems
+            .AsNoTracking()
+            .ApplyScope(await GetScopeAsync(cancellationToken));
 
         if (!string.IsNullOrWhiteSpace(term))
         {

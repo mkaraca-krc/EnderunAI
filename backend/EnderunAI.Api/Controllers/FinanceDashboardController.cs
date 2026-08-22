@@ -23,8 +23,20 @@ public sealed class FinanceDashboardController(
     AppDbContext db,
     Services.Projects.IProjectRealizedCostReader realizedCosts,
     Services.Expenses.ExpenseCenterReportService expenseCenterReport,
-    IExtraPaymentVisibilityService extraPaymentVisibility) : ControllerBase
+    IExtraPaymentVisibilityService extraPaymentVisibility,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
+    /// <summary>
+    /// Kullanıcının veri kapsamı. Pano uçlarında sızıntı SATIR değil
+    /// RAKAM olarak olur: kapsam dışı bir şirketin cirosu sessizce
+    /// toplama karışır ve kimse fark etmez. Bu yüzden her toplama
+    /// sorgusu kapsamdan geçiyor.
+    /// </summary>
+    private async Task<CurrentDataScopeSnapshot> GetScopeAsync(
+        CancellationToken cancellationToken) =>
+        await dataScope.GetAsync(cancellationToken) ??
+        throw new UnauthorizedAccessException("Kullanıcı veri kapsamı bulunamadı.");
+
     private static readonly ProgressPaymentStatus[] RealizedProgressPaymentStatuses =
     [
         ProgressPaymentStatus.Approved,
@@ -44,18 +56,21 @@ public sealed class FinanceDashboardController(
     [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public async Task<IActionResult> Dashboard(CancellationToken cancellationToken)
     {
-        var activeProjectCount = await db.Projects
-            .AsNoTracking()
+        var scope = await GetScopeAsync(cancellationToken);
+
+        var scopedProjects = db.Projects.AsNoTracking().ApplyScope(scope);
+
+        var activeProjectCount = await scopedProjects
             .Where(x => !x.IsDeleted && x.Status == ProjectStatus.Active)
             .CountAsync(cancellationToken);
 
-        var totalContractAmount = await db.Projects
-            .AsNoTracking()
+        var totalContractAmount = await scopedProjects
             .Where(x => !x.IsDeleted && x.ContractAmount != null)
             .SumAsync(x => x.ContractAmount!.Value, cancellationToken);
 
         var realizedPayments = db.ProgressPayments
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x =>
                 !x.IsDeleted &&
                 RealizedProgressPaymentStatuses.Contains(x.Status));
@@ -94,8 +109,11 @@ public sealed class FinanceDashboardController(
         var rangeStart = UtcDate(startDate ?? new DateTime(now.Year, 1, 1));
         var rangeEndExclusive = UtcDate(endDate ?? now).AddDays(1);
 
+        var scope = await GetScopeAsync(cancellationToken);
+
         var paymentQuery = db.ProgressPayments
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x =>
                 !x.IsDeleted &&
                 RealizedProgressPaymentStatuses.Contains(x.Status) &&
@@ -115,7 +133,7 @@ public sealed class FinanceDashboardController(
         // proje maliyet analizi kirayı sayarken pano saymaz ve iki ekran
         // aynı dönem için farklı gider gösterirdi.
         var projectExpense = await realizedCosts.ReadProjectCostTotalAsync(
-            companyId, rangeStart, rangeEndExclusive, canSeeCash, cancellationToken);
+            companyId, scope, rangeStart, rangeEndExclusive, canSeeCash, cancellationToken);
 
         // MERKEZ/ŞUBE GİDERİ GİDER MERKEZİ RAPORUNDAN OKUNUYOR — burada
         // yeniden toplanmıyor. İkinci bir sorgu yazılsaydı rapor ile
@@ -132,8 +150,15 @@ public sealed class FinanceDashboardController(
         // merkez maliyet karşılaştırması finansman yapısıyla bulanırdı;
         // dışarıda bırakmak da sessiz dışlama olurdu — bu yüzden ayrı
         // gösteriliyor.
+        /*
+         * MERKEZ GİDERİ ŞİRKET ŞİRKET DOLAŞILARAK TOPLANIYOR: kapsam
+         * bu döngünün GİRDİSİNDE olmak zorunda. Toplandıktan sonra
+         * ayıklamak imkânsız — rapor tek bir rakam döndürüyor, içinden
+         * başka şirketin kirası çıkarılamaz.
+         */
         var reportCompanyIds = await db.Companies
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x => companyId == null || x.Id == companyId)
             .Select(x => x.Id)
             .ToListAsync(cancellationToken);
@@ -152,7 +177,13 @@ public sealed class FinanceDashboardController(
                 cancellationToken);
 
             foreach (var row in report.Rows.Where(x =>
-                         x.CenterType == ExpenseCenterType.Branch && !x.IsEstimated))
+                         x.CenterType == ExpenseCenterType.Branch &&
+                         !x.IsEstimated &&
+                         // Rapor şirketin BÜTÜN şubelerini döndürüyor;
+                         // şube kapsamlı kullanıcı yalnız kendi şubesini
+                         // saymalı. Satır kimliği burada şube kimliği.
+                         (scope.HasGlobalAccess ||
+                          scope.VisibleBranchIds.Contains(x.CenterId))))
             {
                 if (row.CategoryCode == Services.Expenses.ExpenseCategoryCatalog.Financing)
                     financingExpense += row.Amount;
@@ -224,8 +255,11 @@ public sealed class FinanceDashboardController(
     [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public async Task<IActionResult> CurrentAccountSummary(CancellationToken cancellationToken)
     {
+        var scope = await GetScopeAsync(cancellationToken);
+
         var accountCount = await db.CurrentAccounts
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x => !x.IsDeleted)
             .CountAsync(cancellationToken);
 
@@ -244,8 +278,11 @@ public sealed class FinanceDashboardController(
     [RequirePermission(PermissionCatalog.Keys.FinanceView)]
     public async Task<IActionResult> ProjectsSummary(CancellationToken cancellationToken)
     {
+        var scope = await GetScopeAsync(cancellationToken);
+
         var projects = await db.Projects
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x => !x.IsDeleted && x.Status == ProjectStatus.Active)
             .Select(x => new
             {
@@ -260,6 +297,7 @@ public sealed class FinanceDashboardController(
 
         var paymentTotals = await db.ProgressPayments
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x =>
                 !x.IsDeleted &&
                 projectIds.Contains(x.ProjectId) &&

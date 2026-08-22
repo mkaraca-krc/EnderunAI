@@ -22,8 +22,24 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/hakedis-export")]
-public sealed class HakedisExportController(AppDbContext db) : ControllerBase
+public sealed class HakedisExportController(
+    AppDbContext db,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
+    /*
+     * DIŞA AKTARIM UCU LİSTE UCUNDAN AYRI KOD.
+     *
+     * Liste ucunu kapsamlamak burayı kapsamlamaz: bu uç kendi
+     * sorgusunu kuruyor ve hakedişi doğrudan KİMLİKLE çekiyor.
+     * Kapsam eksik olsaydı kullanıcı listede hiç göremediği bir
+     * hakedişin Excel'ini — birim fiyatları, kesintileri, ödeme
+     * planıyla birlikte — indirebilirdi.
+     */
+    private async Task<CurrentDataScopeSnapshot> GetScopeAsync(
+        CancellationToken cancellationToken) =>
+        await dataScope.GetAsync(cancellationToken) ??
+        throw new UnauthorizedAccessException("Kullanıcı veri kapsamı bulunamadı.");
+
     private const string MoneyFormat = "#,##0.00";
 
     [HttpGet("{id:guid}/excel")]
@@ -32,6 +48,7 @@ public sealed class HakedisExportController(AppDbContext db) : ControllerBase
     {
         var payment = await db.ProgressPayments
             .AsNoTracking()
+            .ApplyScope(await GetScopeAsync(cancellationToken))
             .Include(x => x.Sections)
             .Include(x => x.Items)
             .Include(x => x.Deductions).ThenInclude(x => x.Lines)
@@ -45,6 +62,7 @@ public sealed class HakedisExportController(AppDbContext db) : ControllerBase
 
         var company = await db.Companies
             .AsNoTracking()
+            .ApplyScope(await GetScopeAsync(cancellationToken))
             .Where(x => x.Id == payment.CompanyId)
             .Select(x => new { x.Name })
             .SingleOrDefaultAsync(cancellationToken);

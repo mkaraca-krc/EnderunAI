@@ -160,8 +160,26 @@ public sealed class CoverageBaselineTests
     {
         var ctx = File.ReadAllText(Path.Combine(api, "Data", "AppDbContext.cs"));
 
-        return Regex.Matches(ctx, @"DbSet<(\w+)>\s+(\w+)\s*=>")
-            .ToDictionary(m => m.Groups[2].Value, m => m.Groups[1].Value);
+        /*
+         * NİTELİKLİ AD DA YAKALANIR — BEKÇİNİN KÖR NOKTASIYDI.
+         *
+         * İlk sürüm `DbSet<(\w+)>` arıyordu. `\w` NOKTA İÇERMEZ, yani
+         * `DbSet<Models.Expenses.ExpenseEntry> ExpenseEntries` biçiminde
+         * yazılmış 22 tablo haritaya HİÇ girmiyordu. Bekçi onları
+         * görmediği için o tablolardaki 40 kapsamsız okuma temel
+         * çizgide de yoktu: borç 418 görünüyordu, gerçekte 458'di.
+         *
+         * Kaçanların arasında PARA tabloları vardı — ExpenseEntries,
+         * BankLoans, BankLoanInstallments, CreditCards, PartnerAccounts.
+         * Yani bekçi tam da korumakla görevli olduğu yeri saymıyordu.
+         *
+         * Varlık adı son parçadan alınıyor: `Models.Expenses.ExpenseEntry`
+         * → `ExpenseEntry`. Model taraması sınıf adıyla çalışıyor.
+         */
+        return Regex.Matches(ctx, @"DbSet<([\w.]+)>\s+(\w+)\s*=>")
+            .ToDictionary(
+                m => m.Groups[2].Value,
+                m => m.Groups[1].Value.Split('.')[^1]);
     }
 
     private static HashSet<string> SirketTasiyanVarliklar(string api)

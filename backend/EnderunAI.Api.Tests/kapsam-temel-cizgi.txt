@@ -15,7 +15,19 @@
 # ve sebebi şu".
 #
 # Satır biçimi: dosya:satır:DbSet
+#
+# 2026-08-22 — BEKÇİ DÜZELTİLDİ, BORÇ BÜYÜMEDİ: GÖRÜNÜR OLDU.
+#   Tarayıcının DbSet regex'i `DbSet<(\w+)>` idi ve `\w` NOKTA
+#   İÇERMEZ. `DbSet<Models.Expenses.ExpenseEntry> ExpenseEntries`
+#   biçiminde yazılmış 22 tablo haritaya hiç girmiyordu; o tablolardaki
+#   40 kapsamsız okuma bu dosyada da yoktu.
+#   Kaçanların arasında PARA tabloları vardı: ExpenseEntries (8 okuma),
+#   CreditCards (5), BankLoans (2), PartnerAccounts (1).
+#   G3/1b 21 okuma kapattı (439 -> 418); bekçi düzelince gizli 40 okuma
+#   listeye eklendi (418 -> 458; perakende rapor uçları da kapatılınca 453). Yani "yalnızca küçülür" kuralı
+#   ÇİĞNENMEDİ — ölçüm aracı düzeldi, ölçülen şey aynı kaldı.
 Controllers/AttendanceSheetController.cs:497:CompanyPayrollSettings
+Controllers/AttendanceSheetController.cs:503:CompanyHolidayCalendars
 Controllers/AttendanceSheetController.cs:566:PersonnelDuties
 Controllers/AttendanceSheetController.cs:625:Personnel
 Controllers/AttendanceSheetController.cs:87:AttendanceRecords
@@ -39,19 +51,16 @@ Controllers/EngineeringPositionsController.cs:117:EngineeringPositions
 Controllers/EngineeringPositionsController.cs:530:EngineeringPositions
 Controllers/EngineeringPositionsController.cs:60:EngineeringPositions
 Controllers/EngineeringRecipesController.cs:105:EngineeringPositions
-Controllers/FinanceDashboardController.cs:135:Companies
-Controllers/FinanceDashboardController.cs:227:CurrentAccounts
-Controllers/FinanceDashboardController.cs:247:Projects
-Controllers/FinanceDashboardController.cs:261:ProgressPayments
-Controllers/FinanceDashboardController.cs:47:Projects
-Controllers/FinanceDashboardController.cs:52:Projects
-Controllers/FinanceDashboardController.cs:57:ProgressPayments
-Controllers/FinanceDashboardController.cs:97:ProgressPayments
+Controllers/ExpenseCategoriesController.cs:42:ExpenseCategories
+Controllers/ExpenseEntriesController.cs:341:CreditCards
+Controllers/ExpenseEntriesController.cs:67:ExpenseEntries
+Controllers/FinancialInstrumentsController.cs:105:BankLoans
+Controllers/FinancialInstrumentsController.cs:311:CreditCards
+Controllers/FinancialInstrumentsController.cs:363:CreditCards
 Controllers/HakedisDeductionAccountsController.cs:37:HakedisDeductionAccountMappings
-Controllers/HakedisExportController.cs:33:ProgressPayments
-Controllers/HakedisExportController.cs:46:Companies
 Controllers/HakedisTrackingController.cs:29:Projects
 Controllers/HakedisTrackingController.cs:47:ProgressPayments
+Controllers/HolidayCalendarController.cs:44:CompanyHolidayCalendars
 Controllers/HolidayCalendarController.cs:59:CompanyPayrollSettings
 Controllers/HrAssetsController.cs:28:HrAssetAssignments
 Controllers/HrAssetsController.cs:317:HrAssetAssignments
@@ -106,16 +115,20 @@ Controllers/OffersController.cs:928:ProgressPayments
 Controllers/OffersController.cs:991:Offers
 Controllers/PayrollReadinessController.cs:101:AttendanceRecords
 Controllers/PayrollReadinessController.cs:109:CompanyPayrollSettings
+Controllers/PayrollReadinessController.cs:123:CompanyHolidayCalendars
 Controllers/PayrollReadinessController.cs:181:HrCompensationComponents
 Controllers/PayrollReadinessController.cs:260:AttendanceRecords
 Controllers/PayrollReadinessController.cs:305:Personnel
 Controllers/PayrollReadinessController.cs:389:Personnel
+Controllers/PayrollReadinessController.cs:434:PersonnelDocuments
 Controllers/PayrollReadinessController.cs:50:Personnel
 Controllers/PersonnelCashPaymentsController.cs:102:PersonnelExtraPayments
 Controllers/PersonnelCashPaymentsController.cs:116:PersonnelCashPayments
 Controllers/PersonnelCashPaymentsController.cs:173:Personnel
 Controllers/PersonnelCashPaymentsController.cs:55:PersonnelCashPayments
+Controllers/PersonnelDocumentsController.cs:150:PersonnelDocuments
 Controllers/PersonnelDocumentsController.cs:209:Personnel
+Controllers/PersonnelDocumentsController.cs:47:PersonnelDocuments
 Controllers/PersonnelDutiesController.cs:172:PersonnelDuties
 Controllers/PersonnelDutiesController.cs:280:PersonnelDuties
 Controllers/PersonnelDutiesController.cs:439:Projects
@@ -130,13 +143,11 @@ Controllers/PortalController.cs:76:Projects
 Controllers/PortalController.cs:94:Companies
 Controllers/PriceDifferenceController.cs:22:PriceDifferenceProfiles
 Controllers/PriceDifferenceController.cs:46:PriceDifferenceProfiles
-Controllers/ProgressPaymentsController.cs:1366:Projects
-Controllers/ProgressPaymentsController.cs:1549:ProgressPayments
-Controllers/ProgressPaymentsController.cs:163:ProgressPayments
-Controllers/ProgressPaymentsController.cs:32:ProgressPayments
-Controllers/ProgressPaymentsController.cs:385:Projects
-Controllers/ProgressPaymentsController.cs:431:ProgressPayments
-Controllers/ProgressPaymentsController.cs:552:ProgressPayments
+Controllers/ProgressPaymentsController.cs:1379:Projects
+Controllers/ProgressPaymentsController.cs:1562:ProgressPayments
+Controllers/ProgressPaymentsController.cs:398:Projects
+Controllers/ProgressPaymentsController.cs:444:ProgressPayments
+Controllers/ProgressPaymentsController.cs:565:ProgressPayments
 Controllers/ProjectBoqController.cs:35:ProjectBoqs
 Controllers/ProjectBoqController.cs:454:ProjectBoqs
 Controllers/ProjectBoqController.cs:491:ProjectBoqs
@@ -144,9 +155,6 @@ Controllers/ProjectBoqController.cs:779:Projects
 Controllers/ProjectBoqController.cs:798:EngineeringPositions
 Controllers/ProjectBoqController.cs:93:ProjectBoqs
 Controllers/ProjectBoqController.cs:944:Projects
-Controllers/ProjectCostTransactionsController.cs:143:Projects
-Controllers/ProjectCostTransactionsController.cs:23:Projects
-Controllers/ProjectCostTransactionsController.cs:86:Projects
 Controllers/ProjectDocumentsController.cs:366:Projects
 Controllers/ProjectExtraWorksController.cs:236:Projects
 Controllers/ProjectExtraWorksController.cs:288:ProgressPayments
@@ -175,19 +183,12 @@ Controllers/PurchaseRequestsController.cs:177:Projects
 Controllers/PurchaseRequestsController.cs:29:PurchaseRequests
 Controllers/PurchaseRequestsController.cs:789:EngineeringPositions
 Controllers/PurchaseRequestsController.cs:97:PurchaseRequests
+Controllers/PurchaseReturnsController.cs:38:PurchaseReturns
+Controllers/PurchaseReturnsController.cs:95:PurchaseReturns
+Controllers/RecurringExpensesController.cs:310:RecurringExpenseTemplates
+Controllers/RecurringExpensesController.cs:76:RecurringExpenseTemplates
 Controllers/RehireCheckController.cs:56:Personnel
 Controllers/RehireCheckController.cs:86:PersonnelTerminations
-Controllers/RetailSalesController.cs:176:Warehouses
-Controllers/RetailSalesController.cs:183:CashAccounts
-Controllers/RetailSalesController.cs:190:CurrentAccounts
-Controllers/RetailSalesController.cs:210:RetailSales
-Controllers/RetailSalesController.cs:544:RetailSales
-Controllers/RetailSalesController.cs:561:RetailSales
-Controllers/RetailSalesController.cs:618:RetailSales
-Controllers/RetailSalesController.cs:676:RetailSales
-Controllers/RetailSalesController.cs:703:SalesInvoices
-Controllers/RetailSalesController.cs:766:InventoryItems
-Controllers/RetailSalesController.cs:94:InventoryItems
 Controllers/StockCountsController.cs:139:StockCountSessions
 Controllers/StockCountsController.cs:42:StockCountSessions
 Controllers/StockCountsController.cs:77:StockCountSessions
@@ -219,6 +220,9 @@ Controllers/ToolAssetsController.cs:82:ToolAssets
 Controllers/ToolServiceRequestsController.cs:67:ToolServiceRequests
 Controllers/UserManagementController.cs:464:UserDataScopes
 Controllers/UserManagementController.cs:99:UserDataScopes
+Controllers/VehiclesController.cs:117:Vehicles
+Controllers/VehiclesController.cs:284:ExpenseEntries
+Controllers/VehiclesController.cs:42:Vehicles
 Controllers/WarehouseLocationsController.cs:268:InventoryItems
 Controllers/WarehousesController.cs:24:Warehouses
 Controllers/WorkTasksController.cs:29:WorkTasks
@@ -245,6 +249,8 @@ Services/Accounting/CashFlowProjectionService.cs:763:Personnel
 Services/Accounting/CashFlowProjectionService.cs:784:CompanyFinanceSettings
 Services/Accounting/CashFlowProjectionService.cs:829:AttendanceRecords
 Services/Accounting/CashFlowProjectionService.cs:848:CompanyPayrollSettings
+Services/Accounting/CashFlowProjectionService.cs:923:RecurringExpenseTemplates
+Services/Accounting/CashFlowProjectionService.cs:973:ExpenseEntries
 Services/Accounting/CashFlowService.cs:189:Cheques
 Services/Accounting/CashFlowService.cs:241:ProgressPayments
 Services/Accounting/CashFlowService.cs:286:Cheques
@@ -296,15 +302,29 @@ Services/Engineering/PositionMatchService.cs:374:EngineeringPositions
 Services/Engineering/PositionMatchService.cs:383:EngineeringPositions
 Services/Engineering/PositionMatchService.cs:437:EngineeringPositions
 Services/Engineering/PositionMatchService.cs:467:EngineeringPositions
+Services/Expenses/ExpenseCenterReportService.cs:112:ExpenseEntries
+Services/Expenses/ExpenseCenterReportService.cs:164:RecurringExpenseTemplates
 Services/Expenses/ExpenseCenterReportService.cs:252:HrProjectLaborCosts
 Services/Expenses/ExpenseCenterReportService.cs:293:SupplierInvoices
 Services/Expenses/ExpenseCenterReportService.cs:401:CompanyPayrollSettings
+Services/Expenses/ExpenseCenterReportService.cs:90:ExpenseCategories
 Services/Expenses/ExpenseCenterResolver.cs:105:Projects
 Services/Expenses/ExpenseCenterResolver.cs:34:Branches
 Services/Expenses/ExpenseCenterResolver.cs:41:Projects
 Services/Expenses/ExpenseCenterResolver.cs:91:Branches
+Services/Expenses/ExpenseEntryService.cs:125:ExpenseCategories
+Services/Expenses/ExpenseEntryService.cs:172:CreditCards
+Services/Expenses/ExpenseEntryService.cs:253:ExpenseEntries
+Services/Expenses/PartnerAccountService.cs:101:PartnerAccounts
+Services/Expenses/RecurringExpenseService.cs:41:RecurringExpenseTemplates
+Services/Expenses/RecurringExpenseService.cs:54:ExpenseEntries
+Services/FinancialInstruments/BankLoanService.cs:31:BankLoans
+Services/FinancialInstruments/CreditCardService.cs:104:ExpenseEntries
+Services/FinancialInstruments/CreditCardService.cs:85:CreditCards
+Services/Fleet/VehicleExpenseService.cs:104:Vehicles
 Services/Fleet/VehicleExpenseService.cs:151:Branches
 Services/Fleet/VehicleExpenseService.cs:199:Branches
+Services/Fleet/VehicleExpenseService.cs:276:Vehicles
 Services/Fleet/VehicleExpenseService.cs:309:Projects
 Services/GoodsReceipts/GoodsReceiptService.cs:299:Warehouses
 Services/GoodsReceipts/GoodsReceiptService.cs:402:InventoryItems
@@ -364,14 +384,18 @@ Services/Market/CommodityAlertService.cs:202:CommodityAlertThresholds
 Services/Market/CopperExposureService.cs:32:Projects
 Services/Market/CopperExposureService.cs:44:Projects
 Services/Notifications/NotificationScanner.cs:47:Companies
+Services/Notifications/NotificationStore.cs:174:Notifications
 Services/Notifications/Sources/FinanceNotificationSources.cs:108:SupplierInvoices
 Services/Notifications/Sources/FinanceNotificationSources.cs:143:SalesInvoices
 Services/Notifications/Sources/FinanceNotificationSources.cs:323:PersonnelDuties
 Services/Notifications/Sources/FinanceNotificationSources.cs:48:Cheques
+Services/Notifications/Sources/FleetNotificationSources.cs:57:Vehicles
 Services/Notifications/Sources/HrNotificationSources.cs:108:IsgTrainings
 Services/Notifications/Sources/HrNotificationSources.cs:135:IsgCertificates
 Services/Notifications/Sources/HrNotificationSources.cs:334:PersonnelDuties
 Services/Notifications/Sources/HrNotificationSources.cs:374:CompanyPayrollSettings
+Services/Notifications/Sources/HrNotificationSources.cs:397:CompanyHolidayCalendars
+Services/Notifications/Sources/HrNotificationSources.cs:54:PersonnelDocuments
 Services/Notifications/Sources/HrNotificationSources.cs:81:IsgHealthReports
 Services/Offers/OfferBoqTransferService.cs:191:ProjectBoqs
 Services/Offers/OfferBoqTransferService.cs:201:ProjectBoqs
@@ -394,6 +418,7 @@ Services/Projects/ProjectCostAnalysisService.cs:526:ProgressPayments
 Services/Projects/ProjectDeletionService.cs:184:Projects
 Services/Projects/ProjectDeletionService.cs:79:Projects
 Services/Projects/ProjectProfitabilitySummaryService.cs:56:Projects
+Services/Projects/ProjectRealizedCostReader.cs:135:ExpenseEntries
 Services/Purchasing/Automation/PurchaseRequestGenerator.cs:24:Offers
 Services/Purchasing/Automation/PurchaseRequestGenerator.cs:317:Warehouses
 Services/Purchasing/Automation/PurchaseRequestGenerator.cs:326:Projects

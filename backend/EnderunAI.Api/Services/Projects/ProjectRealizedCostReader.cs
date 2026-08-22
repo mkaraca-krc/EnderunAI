@@ -1,3 +1,4 @@
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.Expenses;
@@ -60,6 +61,7 @@ public interface IProjectRealizedCostReader
     /// </summary>
     Task<decimal> ReadProjectCostTotalAsync(
         Guid? companyId,
+        CurrentDataScopeSnapshot scope,
         DateTime from,
         DateTime toExclusive,
         bool includeMaskedExpenses,
@@ -183,19 +185,31 @@ public sealed class ProjectRealizedCostReader(AppDbContext db)
 
     public async Task<decimal> ReadProjectCostTotalAsync(
         Guid? companyId,
+        CurrentDataScopeSnapshot scope,
         DateTime from,
         DateTime toExclusive,
         bool includeMaskedExpenses,
         CancellationToken cancellationToken)
     {
+        /*
+         * KAPSAM ÇAĞIRANDAN GELİYOR, BURADA ÜRETİLMİYOR.
+         *
+         * Okuyucu bir servis; kendi başına kullanıcıya bakmıyor.
+         * Kapsamı parametre yapmak, çağıran her yerin bunu vermeye
+         * MECBUR olmasını sağlıyor — unutulursa derlenmez. Servis
+         * içinde sessizce global kapsam varsaymak, tam da fark
+         * edilmeyen sızıntıyı üretirdi.
+         */
         var ledgerQuery = db.ProjectCostTransactions
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x => x.CostDate >= from && x.CostDate < toExclusive);
 
         // Yalnız PROJEYE yazılmış gider kayıtları: merkez/şube gideri
         // proje maliyeti değildir.
         var expenseQuery = db.ExpenseEntries
             .AsNoTracking()
+            .ApplyScope(scope)
             .Where(x =>
                 x.ProjectId != null &&
                 x.ExpenseDate >= from &&

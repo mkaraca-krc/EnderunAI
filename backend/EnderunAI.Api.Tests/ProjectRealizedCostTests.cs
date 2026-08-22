@@ -1,3 +1,4 @@
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.Expenses;
@@ -41,6 +42,20 @@ public sealed class ProjectRealizedCostTests(DatabaseFixture fixture)
 
         return new Context(project.CompanyId, project.Id);
     }
+
+    /*
+     * Bu testler OKUYUCUNUN kendisini ölçüyor, kapsam süzgecini değil:
+     * kapsam sınaması FinanceScopeTests içinde. Burada global kapsam
+     * veriliyor ki ölçülen şey maliyet toplamı olsun.
+     */
+    private static readonly CurrentDataScopeSnapshot TumKapsam = new(
+        HasGlobalAccess: true,
+        CompanyIds: new HashSet<Guid>(),
+        BranchIds: new HashSet<Guid>(),
+        ProjectIds: new HashSet<Guid>(),
+        VisibleCompanyIds: new HashSet<Guid>(),
+        VisibleBranchIds: new HashSet<Guid>(),
+        SiteIds: new HashSet<Guid>());
 
     private async Task<Guid> CategoryIdAsync(Guid companyId, string code)
     {
@@ -321,7 +336,7 @@ public sealed class ProjectRealizedCostTests(DatabaseFixture fixture)
         var dashboardTotal = await scope.ServiceProvider
             .GetRequiredService<IProjectRealizedCostReader>()
             .ReadProjectCostTotalAsync(
-                context.CompanyId, D(1), D(28), true, CancellationToken.None);
+                context.CompanyId, TumKapsam, D(1), D(28), true, CancellationToken.None);
 
         Assert.Equal(8_000m, analysis!.TotalCost);
         Assert.Equal(analysis.TotalCost, dashboardTotal);
@@ -372,7 +387,7 @@ public sealed class ProjectRealizedCostTests(DatabaseFixture fixture)
         var total = await readScope.ServiceProvider
             .GetRequiredService<IProjectRealizedCostReader>()
             .ReadProjectCostTotalAsync(
-                context.CompanyId, D(1), D(28), true, CancellationToken.None);
+                context.CompanyId, TumKapsam, D(1), D(28), true, CancellationToken.None);
 
         Assert.Equal(3_000m, total);
     }
@@ -397,10 +412,10 @@ public sealed class ProjectRealizedCostTests(DatabaseFixture fixture)
         var reader = scope.ServiceProvider.GetRequiredService<IProjectRealizedCostReader>();
 
         var masked = await reader.ReadProjectCostTotalAsync(
-            context.CompanyId, D(1), D(28), false, CancellationToken.None);
+            context.CompanyId, TumKapsam, D(1), D(28), false, CancellationToken.None);
 
         var full = await reader.ReadProjectCostTotalAsync(
-            context.CompanyId, D(1), D(28), true, CancellationToken.None);
+            context.CompanyId, TumKapsam, D(1), D(28), true, CancellationToken.None);
 
         Assert.Equal(4_000m, masked);
         Assert.Equal(5_500m, full);

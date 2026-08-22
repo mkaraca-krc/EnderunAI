@@ -18,9 +18,15 @@ public sealed class ProgressPaymentsController(
     AppDbContext db,
     IAccountingIntegrationService accountingIntegration,
     IChequeService chequeService,
-    IContractSummaryProgressService progressService)
+    IContractSummaryProgressService progressService,
+    ICurrentDataScopeService dataScope)
     : ControllerBase
 {
+    private async Task<CurrentDataScopeSnapshot> GetScopeAsync(
+        CancellationToken cancellationToken) =>
+        await dataScope.GetAsync(cancellationToken) ??
+        throw new UnauthorizedAccessException("Kullanıcı veri kapsamı bulunamadı.");
+
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.HakedisView)]
     public async Task<IActionResult> GetAll(
@@ -29,9 +35,15 @@ public sealed class ProgressPaymentsController(
         [FromQuery] ProgressPaymentStatus? status,
         CancellationToken cancellationToken)
     {
+        /*
+         * `companyId` süzgeci KAPSAM DEĞİLDİR: kullanıcının yazdığı
+         * bir tercih. Kapsam süzgeci ondan bağımsız ve her zaman
+         * uygulanıyor — kullanıcı başka şirketin kimliğini yazsa bile
+         * sonuç boş döner.
+         */
         var query = db.ProgressPayments
             .AsNoTracking()
-            .AsQueryable();
+            .ApplyScope(await GetScopeAsync(cancellationToken));
 
         if (companyId.HasValue)
             query = query.Where(x => x.CompanyId == companyId.Value);
@@ -162,6 +174,7 @@ public sealed class ProgressPaymentsController(
     {
         var payments = db.ProgressPayments
             .AsNoTracking()
+            .ApplyScope(await GetScopeAsync(cancellationToken))
             .Where(x => x.ProjectId == projectId &&
                         x.Status != ProgressPaymentStatus.Cancelled &&
                         x.PeriodNumber < periodNumber);

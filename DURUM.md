@@ -1983,6 +1983,38 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     (b) `.probe-bak` görüldüğünde önce "sonda betiği HÂLÂ KOŞUYOR MU"
     sorulur, sonra geri konur. Kalıntı ile canlı yedek aynı görünür.
 
+19. **PANO/ÖZET UÇLARINDA KAPSAM TESTİ, SATIR KÜMESİNİ DEĞİL HER
+    METRİĞİ AYRI AYRI DOĞRULAR.** Tek bir toplam kontrolü yeterli
+    değildir — bir metrik süzgeçten kaçarsa diğerleri doğru olduğu için
+    gözden kaçar.
+
+    G3/1b'de ölçüldü: `financial-dashboard` ucunda ciro doğru çıkarken
+    gider 25.000 yerine 85.000 gösteriyordu. Ciro `ProgressPayments`
+    üzerinden, gider ise `ProjectCostTransactions` + `ExpenseEntries`
+    üzerinden geliyor — üç ayrı sorgu yolu, üçü de ayrı ayrı sızabilir.
+    Test yalnız ciroyu doğrulasaydı yeşil kalırdı.
+
+    Panoda sızıntı SATIR olarak görünmez, RAKAM olarak görünür: ekranda
+    tanımadığın bir kayıt durmaz, yalnız toplam sessizce büyür. Bu
+    yüzden pano uçlarında süzgeç, TOPLAMA SORGUSUNUN İÇİNDE olmak
+    zorundadır; sonuç üzerinde ayıklama yapılamaz.
+
+    Test biçimi: A şirketinin rakamları okunur → B şirketine veri
+    EKLENİR → A'nın rakamları yeniden okunur ve HİÇBİRİ DEĞİŞMEMELİDİR.
+    "Toplam şu sayıya eşit" demek kırılgandır (veritabanında başka
+    testlerin kayıtları da var); DEĞİŞMEZLİK kesindir. Yanına bir de
+    "süzgeç her şeyi silmiyor" kontrolü konur — yoksa her zaman 0
+    döndüren bir sorgu da testi geçerdi.
+
+20. **DIŞA AKTARIM UCU LİSTE UCUNDAN AYRI KODDUR — AYRI SÜZGEÇ, AYRI
+    TEST.** Liste ucunu kapsamlamak dışa aktarımı kapsamlamaz: dışa
+    aktarım kendi sorgusunu kurar ve kaydı çoğu zaman doğrudan KİMLİKLE
+    çeker. G3/1b'de `hakedis-export` tam olarak böyleydi — liste
+    süzülmüş olsa bile kullanıcı listede hiç göremediği bir hakedişin
+    Excel'ini indirebiliyordu. Her modülde ikisi ayrı ayrı kontrol
+    edilir ve ayrı testleri olur. Sonda ile kanıtlandı: yalnız dışa
+    aktarımın süzgeci kaldırıldığında liste testi YEŞİL kalıyor.
+
 ---
 
 ## 6. Ölçüm araçlarına dair uyarı
