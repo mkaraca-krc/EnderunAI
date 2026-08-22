@@ -124,10 +124,29 @@ function buildQuery(
 }
 
 export const hrCompensationService = {
-  getAll(filters?: CompensationFilters) {
-    return apiClient<CompensationComponent[]>(
-      `hr/compensation-components${buildQuery(filters)}`
-    );
+  /**
+   * SAYFALANMIŞ ek ücret listesi.
+   *
+   * Uç artık kırpılmış liste sözleşmesi döndürüyor (kayıtlar + TOPLAM
+   * + daha var mı) ve KAPSAM SÜZGECİ sorgunun içinde: `companyId`
+   * gönderilmese bile kullanıcı yalnız kendi kapsamındaki kayıtları
+   * görür.
+   */
+  getAll(
+    filters?: CompensationFilters & {
+      search?: string;
+      page?: number;
+      pageSize?: number;
+    },
+    signal?: AbortSignal
+  ) {
+    return apiClient<{
+      items: CompensationComponent[];
+      total: number;
+      take: number;
+      hasMore: boolean;
+      page: number;
+    }>(`hr/compensation-components${buildQuery(filters)}`, { signal });
   },
 
   getById(id: string) {

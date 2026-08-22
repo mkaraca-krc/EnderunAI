@@ -4,14 +4,45 @@ using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Contracts.Core;
+using EnderunAI.Api.Search;
 
 namespace EnderunAI.Api.Controllers;
 
 [ApiController]
 [Authorize]
 [Route("api/hr/compensation-components")]
-public sealed class HrCompensationComponentsController(AppDbContext db) : ControllerBase
+public sealed class HrCompensationComponentsController(
+    AppDbContext db,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
+    /// <summary>
+    /// KAPSAM SÜZGECİ — SORGUNUN İÇİNDE, İSTEMCİDEN BAĞIMSIZ.
+    ///
+    /// Eskiden şirket izolasyonu yalnız isteğe bağlı `companyId`
+    /// parametresine dayanıyordu: parametre gönderilmezse BÜTÜN
+    /// şirketlerin ek ücret kayıtları dönüyordu. Ek ücret maaş
+    /// bilgisidir; adres çubuğundan parametresiz çağıran biri hepsini
+    /// görebiliyordu.
+    ///
+    /// Kapsamlı kullanıcı yalnız kendi şirket/şube/proje kayıtlarını
+    /// görür; global erişimli kullanıcı (bugün canlıdaki dört
+    /// kullanıcının hepsi) hepsini görmeye devam eder.
+    /// </summary>
+    private static IQueryable<HrCompensationComponent> ApplyScope(
+        IQueryable<HrCompensationComponent> query,
+        CurrentDataScopeSnapshot scope) =>
+        scope.HasGlobalAccess
+            ? query
+            : query.Where(x =>
+                scope.CompanyIds.Contains(x.CompanyId) ||
+                (x.ProjectId != null && scope.ProjectIds.Contains(x.ProjectId.Value)));
+
+    private async Task<CurrentDataScopeSnapshot> GetScopeAsync(
+        CancellationToken cancellationToken) =>
+        await dataScope.GetAsync(cancellationToken) ??
+        throw new UnauthorizedAccessException("Kullanıcı veri kapsamı bulunamadı.");
+
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetAll(
@@ -20,9 +51,15 @@ public sealed class HrCompensationComponentsController(AppDbContext db) : Contro
         [FromQuery] Guid? projectId,
         [FromQuery] bool? isActive,
         [FromQuery] DateTime? effectiveDate,
-        CancellationToken cancellationToken)
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
     {
-        var query = db.HrCompensationComponents.AsNoTracking().AsQueryable();
+        var scope = await GetScopeAsync(cancellationToken);
+
+        var query = ApplyScope(
+            db.HrCompensationComponents.AsNoTracking(), scope);
 
         if (companyId.HasValue) query = query.Where(x => x.CompanyId == companyId.Value);
         if (personnelId.HasValue) query = query.Where(x => x.PersonnelId == personnelId.Value);
@@ -37,18 +74,48 @@ public sealed class HrCompensationComponentsController(AppDbContext db) : Contro
                 (!x.EffectiveEndDate.HasValue || x.EffectiveEndDate.Value >= date));
         }
 
+        /*
+         * ARAMA SUNUCUDA VE KATLANMIŞ — ekranla aynı kural
+         * (`enderun_fold`). Kod ve ad üzerinden arıyor.
+         */
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var folded = TurkishSearch.Fold(search);
+
+            query = query.Where(x =>
+                AppDbContext.Fold(x.Code).Contains(folded) ||
+                AppDbContext.Fold(x.Name).Contains(folded));
+        }
+
+        // Toplam AYRI sorgulanıyor: sayfayla alınsaydı LIMIT toplamı da
+        // kırpar ve "kaç kayıt var" cevabı kendi kendini yanlışlardı.
+        var total = await query.CountAsync(cancellationToken);
+
+        var take = Math.Clamp(pageSize, 1, 200);
+        var currentPage = Math.Max(page, 1);
+
         var items = await query
             .OrderByDescending(x => x.EffectiveStartDate)
+            .ThenBy(x => x.Id)
+            .Skip((currentPage - 1) * take)
+            .Take(take)
             .ToListAsync(cancellationToken);
 
-        return Ok(items.Select(ToDto));
+        return Ok(PagedResult<object>.FromPage(
+            items.Select(ToDto).ToList(), total, take, currentPage));
     }
 
     [HttpGet("{id:guid}")]
     [RequirePermission(PermissionCatalog.Keys.AttendancePayrollView)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var item = await db.HrCompensationComponents.AsNoTracking()
+        // TEKİL KAYIT DA KAPSAMLI: liste süzülüp tekil uç açık
+        // bırakılsaydı, kullanıcı kimliği elle yazarak kapsam dışı
+        // kaydı yine görebilirdi.
+        var scope = await GetScopeAsync(cancellationToken);
+
+        var item = await ApplyScope(
+                db.HrCompensationComponents.AsNoTracking(), scope)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         return item is null

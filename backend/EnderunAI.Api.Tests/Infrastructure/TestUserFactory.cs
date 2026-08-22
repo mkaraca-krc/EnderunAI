@@ -20,8 +20,23 @@ namespace EnderunAI.Api.Tests.Infrastructure;
 /// </summary>
 public static class TestUserFactory
 {
+    /// <summary>
+    /// KAPSAMI SINIRLI kullanıcı — yalnız verilen şirketi görür.
+    ///
+    /// Kapsam testleri için şart: varsayılan yardımcı `All` kapsamı
+    /// veriyor ve o kullanıcıyla yapılan test kapsam süzgecini HİÇ
+    /// çalıştırmaz, yani hiçbir şey kanıtlamaz.
+    /// </summary>
+    public static Task<HttpClient> CreateCompanyScopedClientAsync(
+        DatabaseFixture fixture,
+        string usernameSuffix,
+        string[] roleNames,
+        Guid companyId) =>
+        CreateClientWithRolesAsync(fixture, usernameSuffix, roleNames, companyId);
+
     public static async Task<HttpClient> CreateClientWithRolesAsync(
-        DatabaseFixture fixture, string usernameSuffix, string[] roleNames)
+        DatabaseFixture fixture, string usernameSuffix, string[] roleNames,
+        Guid? scopedCompanyId = null)
     {
         const string password = "TestRole!2026Secure";
 
@@ -68,7 +83,10 @@ public static class TestUserFactory
         db.UserDataScopes.Add(new UserDataScope
         {
             UserId = user.Id,
-            ScopeType = DataScopeType.All
+            ScopeType = scopedCompanyId is null
+                ? DataScopeType.All
+                : DataScopeType.Company,
+            CompanyId = scopedCompanyId
         });
 
         await db.SaveChangesAsync();

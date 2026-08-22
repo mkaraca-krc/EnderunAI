@@ -1464,6 +1464,57 @@ IMMUTABLE olduğu için ifade indeksine de konu olabilir.
 veritabanındaki fonksiyon GERÇEKTEN çağrılıp sunucu sürümüyle
 karşılaştırılıyor.
 
+**G3 — KAPSAM (ŞİRKET İZOLASYONU) AÇIĞI (2026-08-22).**
+
+TARAMA: `CompanyId` taşıyan 96 varlık var; kontrolcü ve servislerde bu
+varlıklara 462 okuma yapılıyor ve **439'unda kapsam süzgeci
+(`ApplyScope`) YOK**. Kapsam pratikte yalnız satın alma ailesinde
+uygulanıyordu. GET uçları: 2 yeşil, 26 sarı (zorunlu parametre ya da
+rota kimliği), **22 kırmızı** (isteğe bağlı/süzgeçsiz).
+
+**G3/1a — YAYINDA.** Cırcır bekçisi + ek ücret ucu.
+
+- `CoverageBaselineTests` + `kapsam-temel-cizgi.txt` (**439 satır**).
+  Üç test: (a) temel çizgide olmayan yeni kapsamsız okuma eklenemez,
+  (b) toplam sayı artamaz, (c) kapatılan satır çizgiden silinmezse
+  düşer — dosya borcun GERÇEK boyutunu göstermek zorunda, yoksa araya
+  sessizce yenisi girer. Gerekçeli istisnalar AYRI listede ve gerekçe
+  alanı zorunlu.
+- `hr-compensation-components` (ek ücret = maaş bilgisi): kapsam
+  süzgeci liste VE tekil kayıt ucunda; sunucu sayfalaması; katlanmış
+  sunucu araması; `IX_hr_compensation_components_liste`.
+  ÖLÇÜLDÜ (10.000 satır): 1. sayfa 5,3 ms → **0,068 ms**.
+
+**G3/1b — SIRADAKİ:** para/maaş uçları (FinanceDashboard ×3,
+RetailSales ×2, ProgressPayments/previous-context,
+ProjectCostTransactions ×2) ve para/maaş dışa aktarımları
+(HakedisExport ve `File(` uçları). Her uç için A/B şirketi testi
+(liste + tekil + dışa aktarım) ve "kim ne kaybedecek" listesi.
+
+**G3/2, G3/3, G3/4 — ERTELENDİ (Mehmet Karacabey kararı).**
+
+Kapsam açığı gerçek ama bugün GİZİL: canlıda tek şirket ve dört
+kullanıcı var, dördü de global kapsamlı. Kapsam süzgeci bugün fiilen
+hiçbir veriyi ayırmıyor; kapsamsız uçlardan şu an kimseye sızan bir şey
+yok. Sızıntı, ikinci şirket eklendiği ya da kapsamı sınırlı bir
+kullanıcı tanımlandığı gün başlayacak.
+
+Bu nedenle: G3/1a çıktı (bugünden itibaren YENİ kapsamsız okuma
+eklenemiyor, borç 439'da sabit), G3/1b yapılıyor (ikinci şirket
+eklendiği gün en pahalıya patlayacak olanlar bunlar; ücret ve para
+verisi sızdığında geri alınamaz), G3/2-3-4 cırcırın koruması altında
+bekliyor.
+
+**ERTELEMEYİ SONA ERDİRECEK KOŞUL** — ikisinden biri gerçekleşirse
+G3/2-3-4 derhal öne alınır ve F4 dahil her şeyin önüne geçer:
+  1) Sisteme ikinci bir şirket eklenmesi,
+  2) Kapsamı sınırlı (global erişimi olmayan) bir kullanıcı tanımlanması.
+Bu iki olay TETİKLEYİCİDİR; kapsam paketleri tamamlanmadan ikinci
+şirket canlıya ALINMAMALIDIR.
+
+Erteleme "bu iş gereksiz" demek değildir; "bugün zarar üretmiyor ve
+cırcır büyümesini durdurdu, sırası bekleyebilir" demektir.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

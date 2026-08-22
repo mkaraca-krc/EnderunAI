@@ -5197,6 +5197,28 @@ public sealed class AppDbContext(
             entity.ToTable("hr_compensation_components");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.PersonnelId, x.IsActive, x.EffectiveStartDate, x.EffectiveEndDate });
+
+            /*
+             * LİSTE SIRALAMASININ İNDEKSİ.
+             *
+             * ÖLÇÜLDÜ (10.000 satır): sıralı tarama + sıralama ile
+             * 1. sayfa 5,3 ms, son sayfa 6,0 ms. Mevcut indekslerin
+             * hiçbiri ekranın sıralamasıyla aynı sırada değil, bu
+             * yüzden planlayıcı hepsini atlayıp tabloyu baştan sona
+             * tarıyordu.
+             *
+             * Anahtar ekranın sıralamasıyla BİREBİR aynı: şirket +
+             * geçerlilik başlangıcı (azalan) + kimlik.
+             */
+            entity
+                .HasIndex(x => new
+                {
+                    x.CompanyId,
+                    x.EffectiveStartDate,
+                    x.Id
+                })
+                .HasDatabaseName("IX_hr_compensation_components_liste")
+                .IsDescending(false, true, false);
             entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Amount).HasPrecision(18, 2);
