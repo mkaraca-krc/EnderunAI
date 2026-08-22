@@ -28,6 +28,7 @@ import {
   type LeaveBalance,
   type LeaveBalanceSummary,
 } from "@/services/leave-balance.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 /**
  * Yıllık izin bakiyesi.
@@ -141,12 +142,12 @@ export default function LeaveBalancePage() {
       items = items.filter((x) => x.availableDays > 0);
     }
 
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
     if (term) {
       items = items.filter(
         (x) =>
-          x.fullName.toLocaleLowerCase("tr-TR").includes(term) ||
-          (x.employeeNumber ?? "").toLocaleLowerCase("tr-TR").includes(term)
+          foldTurkish(x.fullName).includes(term) ||
+          foldTurkish(x.employeeNumber ?? "").includes(term)
       );
     }
 

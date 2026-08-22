@@ -21,6 +21,7 @@ import {
   companyService,
   type CompanyListItem,
 } from "@/services/company.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 const natureLabels: Record<
   AccountingAccountNature,
@@ -52,9 +53,7 @@ type VisibleRow = {
 };
 
 function normalizeSearch(value: string) {
-  return value
-    .trim()
-    .toLocaleLowerCase("tr-TR");
+  return foldTurkish(value);
 }
 
 function compareCodes(left: string, right: string) {
@@ -271,7 +270,7 @@ export default function AccountingAccountsPage() {
     for (const item of items) {
       const haystack =
         `${item.code} ${item.name}`
-          .toLocaleLowerCase("tr-TR");
+          ;
 
       if (!haystack.includes(normalized)) {
         continue;

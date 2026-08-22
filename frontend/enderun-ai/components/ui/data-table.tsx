@@ -436,6 +436,7 @@ export function DataTable<T>({
     }
   }
 
+  // GÖSTERİM: indirilen CSV'nin dosya adı; arama değil.
   const fileBase = (title ?? "liste")
     .toLocaleLowerCase("tr-TR")
     .replace(/[^a-z0-9ğüşıöç]+/gi, "-")

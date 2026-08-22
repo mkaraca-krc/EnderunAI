@@ -32,6 +32,7 @@ import {
   type JobPosting,
   type RecruitmentPayload,
 } from "@/services/hr-recruitment.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 type Tab = "postings" | "candidates" | "applications" | "interviews";
 type EditorState =
@@ -310,7 +311,7 @@ export default function HrRecruitmentPage() {
   );
 
   const visiblePostings = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
     return postings.filter((item) => {
       const haystack = [
         item.title,
@@ -323,14 +324,13 @@ export default function HrRecruitmentPage() {
         item.workLocation,
       ]
         .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR");
-      return (!term || haystack.includes(term)) && (!status || item.status === Number(status));
+        .join(" ");
+      return (!term || foldTurkish(haystack).includes(term)) && (!status || item.status === Number(status));
     });
   }, [postings, search, status]);
 
   const visibleCandidates = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
     return candidates.filter((item) => {
       const haystack = [
         fullName(item),
@@ -340,14 +340,13 @@ export default function HrRecruitmentPage() {
         item.identityNumber,
       ]
         .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR");
-      return (!term || haystack.includes(term)) && (!status || item.status === Number(status));
+        .join(" ");
+      return (!term || foldTurkish(haystack).includes(term)) && (!status || item.status === Number(status));
     });
   }, [candidates, search, status]);
 
   const visibleApplications = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
     return applications.filter((item) => {
       const haystack = [
         applicationCandidate(item, candidates),
@@ -355,14 +354,13 @@ export default function HrRecruitmentPage() {
         item.source,
       ]
         .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR");
-      return (!term || haystack.includes(term)) && (!status || item.status === Number(status));
+        .join(" ");
+      return (!term || foldTurkish(haystack).includes(term)) && (!status || item.status === Number(status));
     });
   }, [applications, candidates, postings, search, status]);
 
   const visibleInterviews = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
     return interviews.filter((item) => {
       const application = interviewApplication(item, applications);
       const haystack = [
@@ -374,9 +372,8 @@ export default function HrRecruitmentPage() {
         application && applicationPosting(application, postings),
       ]
         .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR");
-      return (!term || haystack.includes(term)) && (!status || item.status === Number(status));
+        .join(" ");
+      return (!term || foldTurkish(haystack).includes(term)) && (!status || item.status === Number(status));
     });
   }, [applications, candidates, interviews, postings, search, status]);
 

@@ -37,6 +37,7 @@ import {
   type PermissionDefinition,
   type UserManagementCatalog,
 } from "@/services/user-management.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 const SITE_ONLY_POLICY = 1;
 
@@ -75,7 +76,7 @@ const emptyForm: UserForm = {
 };
 
 function normalized(value?: string | null) {
-  return (value ?? "").trim().toLocaleLowerCase("tr-TR");
+  return foldTurkish(value ?? "");
 }
 
 function getErrorMessage(error: unknown) {
@@ -102,6 +103,7 @@ function initials(fullName: string) {
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
+    // GÖSTERİM: avatar rozetindeki baş harfler.
     .map((part) => part.charAt(0).toLocaleUpperCase("tr-TR"))
     .join("");
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { foldTurkish } from "@/lib/search/fold";
 import {
   rehireCheckService,
   type RehireCheckResult,
@@ -138,6 +139,7 @@ function displayDate(value?: string | null) {
 }
 
 function initials(item: Pick<PersonnelListItem, "firstName" | "lastName">) {
+  // GÖSTERİM: avatar rozetindeki baş harfler.
   return `${item.firstName?.[0] ?? ""}${item.lastName?.[0] ?? ""}`.toLocaleUpperCase("tr-TR");
 }
 
@@ -366,7 +368,10 @@ export default function HrPersonnelPage() {
   );
 
   const filteredItems = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    // TÜRKÇE KATLAMA TEK KAYNAKTAN: "SCHNEIDER" yazan schneider'ı,
+    // "İNŞAAT" yazan insaat'ı bulmalı. Kültüre bağlı küçültme "I"yı
+    // noktasız "ı" yapıp bunları kaçırıyordu.
+    const term = foldTurkish(search);
 
     return items.filter((item) => {
       const searchable = [
@@ -377,10 +382,9 @@ export default function HrPersonnelPage() {
         item.email,
       ]
         .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR");
+        .join(" ");
 
-      if (term && !searchable.includes(term)) return false;
+      if (term && !foldTurkish(searchable).includes(term)) return false;
       if (activity === "active" && !item.isActive) return false;
       if (activity === "passive" && item.isActive) return false;
       if (companyId && item.companyId !== companyId) return false;

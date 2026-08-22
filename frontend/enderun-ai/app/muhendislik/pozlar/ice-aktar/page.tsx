@@ -20,6 +20,7 @@ import {
   type SpreadsheetInspection,
 } from "@/services/position-import.service";
 import { useEffect } from "react";
+import { foldTurkish } from "@/lib/search/fold";
 
 const DISCIPLINES: Record<number, string> = {
   0: "Elektrik",
@@ -231,7 +232,7 @@ export default function PositionImportPage() {
       const guess = (patterns: string[]) => {
         const index = result.headers.findIndex((header) =>
           patterns.some((pattern) =>
-            header.toLocaleLowerCase("tr-TR").includes(pattern)
+            foldTurkish(header).includes(pattern)
           )
         );
 

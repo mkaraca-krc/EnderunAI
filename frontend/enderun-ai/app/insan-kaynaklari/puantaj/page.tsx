@@ -31,6 +31,7 @@ import {
   projectService,
   ProjectListItem,
 } from "@/services/project.service";
+import { foldTurkish, matchesSearch } from "@/lib/search/fold";
 
 type TabKey = "shifts" | "assignments";
 
@@ -163,7 +164,7 @@ export default function WorkforceShiftPage() {
   );
 
   const visibleShifts = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
 
     return shifts.filter((item) => {
       if (companyFilter && item.companyId !== companyFilter) {
@@ -174,20 +175,17 @@ export default function WorkforceShiftPage() {
         return true;
       }
 
-      return [
+      return matchesSearch(
+        search,
         item.code,
         item.name,
         item.description,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR")
-        .includes(term);
+      );
     });
   }, [shifts, companyFilter, search]);
 
   const visibleAssignments = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
 
     return assignments.filter((item) => {
       if (companyFilter && item.companyId !== companyFilter) {
@@ -204,18 +202,15 @@ export default function WorkforceShiftPage() {
         ? projectById.get(item.projectId)
         : undefined;
 
-      return [
+      return matchesSearch(
+        search,
         person?.fullName,
         person?.employeeNumber,
         shift?.name,
         shift?.code,
         project?.name,
         item.teamName,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR")
-        .includes(term);
+      );
     });
   }, [
     assignments,

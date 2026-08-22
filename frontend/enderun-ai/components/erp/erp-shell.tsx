@@ -153,6 +153,7 @@ export default function ErpShell({
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
+    // GÖSTERİM: üst çubuktaki kullanıcı avatarı.
     .map((part) => part.charAt(0).toLocaleUpperCase("tr-TR"))
     .join("");
 

@@ -7,6 +7,7 @@ import type { CompanyListItem } from "@/services/company.service";
 import type { PersonnelListItem } from "@/services/personnel.service";
 import type { ProjectListItem } from "@/services/project.service";
 import { hrAssetService } from "@/services/hr-asset.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 type WarehouseOption = {
   id: string;
@@ -122,7 +123,7 @@ export default function HrAssetInventoryDialog({
   );
 
   const equipmentItems = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
 
     return inventoryItems
       .filter(
@@ -137,7 +138,7 @@ export default function HrAssetInventoryDialog({
         return [x.code, x.name, x.category, x.brand, x.model, x.barcode]
           .filter(Boolean)
           .some((value) =>
-            String(value).toLocaleLowerCase("tr-TR").includes(term)
+            foldTurkish(String(value)).includes(term)
           );
       });
   }, [companyId, inventoryItems, search]);

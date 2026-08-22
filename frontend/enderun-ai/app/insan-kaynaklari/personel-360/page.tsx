@@ -13,6 +13,7 @@ import {
   type Personnel360Response,
 } from "@/services/personnel-360.service";
 import { extraPaymentService } from "@/services/termination.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 type PersonnelOption = {
   id: string;
@@ -90,12 +91,10 @@ export default function Personnel360Page() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const filteredPersonnel = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
     return personnel.filter((x) => {
       if (!term) return true;
-      return `${x.employeeNumber} ${x.fullName}`
-        .toLocaleLowerCase("tr-TR")
-        .includes(term);
+      return foldTurkish(`${x.employeeNumber} ${x.fullName}`).includes(term);
     });
   }, [personnel, search]);
 

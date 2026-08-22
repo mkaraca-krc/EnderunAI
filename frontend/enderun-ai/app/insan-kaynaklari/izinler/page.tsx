@@ -26,6 +26,7 @@ import {
   companyService,
   CompanyListItem,
 } from "@/services/company.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 type LeaveForm = {
   companyId: string;
@@ -428,7 +429,7 @@ export default function HrLeaveManagementPage() {
   ];
 
   const visibleItems = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
 
     if (!term) {
       return items;
@@ -445,8 +446,7 @@ export default function HrLeaveManagementPage() {
         statusLabel(item.status),
       ]
         .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR");
+        .join(" ");
 
       return values.includes(term);
     });

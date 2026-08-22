@@ -11,6 +11,7 @@ import {
   projectBoqService,
   type HakedisSectionTemplate,
 } from "@/services/project-boq.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 type SectionRow = {
   key: string;
@@ -99,15 +100,18 @@ export default function ProjectSectionsPage() {
 
     setNotice("");
 
-    const existingNames = new Set(
-      rows.map((row) => row.name.trim().toLocaleLowerCase("tr-TR"))
-    );
+    /*
+     * MÜKERRER KONTROLÜ KATLANMIŞ KARŞILAŞTIRMAYLA (kullanıcı kararı).
+     *
+     * "İnşaat" ile "inşaat" AYNI kısımdır; aynı kısmın iki kez
+     * açılması engellenmeli. Kültüre bağlı küçültme "I" harfini
+     * noktasız "ı" yaptığı için "INŞAAT" ile "inşaat" farklı sayılıyor
+     * ve mükerrer kayıt geçiyordu.
+     */
+    const existingNames = new Set(rows.map((row) => foldTurkish(row.name)));
 
     const additions = template.sections
-      .filter(
-        (section) =>
-          !existingNames.has(section.name.trim().toLocaleLowerCase("tr-TR"))
-      )
+      .filter((section) => !existingNames.has(foldTurkish(section.name)))
       .map((section, index) => ({
         key: crypto.randomUUID(),
         id: null,
@@ -136,12 +140,24 @@ export default function ProjectSectionsPage() {
     }
   });
 
+  /*
+   * UYARI KULLANICININ YAZDIĞI HÂLİ GÖSTERİR (kullanıcı kararı).
+   * Karşılaştırma katlanmış yapılıyor ama mesajda katlanmış metin
+   * ("insaat") yazsaydı kullanıcı kendi yazdığını tanıyamazdı.
+   */
+  const katlanmisAdlar = rows.map((row) => foldTurkish(row.name));
+
   const duplicateNames = rows
-    .map((row) => row.name.trim().toLocaleLowerCase("tr-TR"))
-    .filter((name, index, all) => name && all.indexOf(name) !== index);
+    .map((row) => row.name.trim())
+    .filter(
+      (name, index) =>
+        name && katlanmisAdlar.indexOf(katlanmisAdlar[index]) !== index
+    );
 
   if (duplicateNames.length > 0) {
-    validationErrors.push("Aynı isimde birden fazla kısım var.");
+    validationErrors.push(
+      `Aynı isimde birden fazla kısım var: ${[...new Set(duplicateNames)].join(", ")}`
+    );
   }
 
   async function save() {

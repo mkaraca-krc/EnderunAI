@@ -28,6 +28,7 @@ import {
   companyService,
   CompanyListItem,
 } from "@/services/company.service";
+import { foldTurkish, matchesSearch } from "@/lib/search/fold";
 
 type OvertimeForm = {
   companyId: string;
@@ -135,23 +136,20 @@ export default function OvertimePage() {
   );
 
   const visibleItems = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
 
     if (!term) return items;
 
     return items.filter((item) => {
       const person = personnelById.get(item.personnelId);
 
-      return [
+      return matchesSearch(
+        search,
         person?.fullName,
         person?.employeeNumber,
         item.reason,
         statusLabel(item.status),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR")
-        .includes(term);
+      );
     });
   }, [items, personnelById, search]);
 

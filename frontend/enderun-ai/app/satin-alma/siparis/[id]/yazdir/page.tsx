@@ -122,6 +122,7 @@ export default function PurchaseOrderPrintPage() {
               )}
               <div>
                 <h1 className="text-2xl font-bold tracking-wide">
+                  {/* GÖSTERİM: antette şirket unvanı; Türkçe kip burada doğru. */}
                   {(company?.tradeName || company?.name || "ENDERUN ENERJİ").toLocaleUpperCase("tr-TR")}
                 </h1>
 

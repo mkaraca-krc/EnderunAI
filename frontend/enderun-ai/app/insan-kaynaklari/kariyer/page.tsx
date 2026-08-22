@@ -56,6 +56,7 @@ import {
   projectService,
   type ProjectListItem,
 } from "@/services/project.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 type ViewMode = "table" | "timeline";
 
@@ -148,7 +149,7 @@ const emptyForm: MovementForm = {
 };
 
 const normalized = (value?: string | null) =>
-  (value ?? "").trim().toLocaleLowerCase("tr-TR");
+  foldTurkish(value ?? "");
 
 function personName(personnel?: PersonnelListItem) {
   if (!personnel) {

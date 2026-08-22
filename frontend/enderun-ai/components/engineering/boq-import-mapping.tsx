@@ -5,6 +5,7 @@ import {
   type BoqImportMapping,
   type BoqSpreadsheetInspection,
 } from "@/services/project-boq.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 type Props = {
   inspection: BoqSpreadsheetInspection;
@@ -37,7 +38,7 @@ const sectionRules = [
 
 function guessColumn(headers: string[], include: string[], exclude: string[] = []) {
   const index = headers.findIndex((header) => {
-    const value = header.toLocaleLowerCase("tr-TR");
+    const value = foldTurkish(header);
 
     return (
       include.some((needle) => value.includes(needle)) &&
@@ -105,7 +106,7 @@ function guessAlias(inspection: BoqSpreadsheetInspection) {
   const candidate = inspection.sheetNames.find(
     (name) =>
       name !== inspection.sheetName &&
-      name.toLocaleLowerCase("tr-TR").includes("icmal")
+      foldTurkish(name).includes("icmal")
   );
 
   if (!candidate) {

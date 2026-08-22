@@ -9,6 +9,7 @@ import {
   goodsReceiptService,
   type GoodsReceiptListItem,
 } from "@/services/goods-receipt.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 const statusLabels: Record<number, string> = {
   0: "Taslak",
@@ -74,7 +75,7 @@ export default function GoodsReceiptListPage() {
   }, []);
 
   const filteredItems = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
 
     if (!term) {
       return items;
@@ -92,9 +93,7 @@ export default function GoodsReceiptListPage() {
       ]
         .filter(Boolean)
         .some((value) =>
-          String(value)
-            .toLocaleLowerCase("tr-TR")
-            .includes(term),
+          foldTurkish(String(value)).includes(term),
         ),
     );
   }, [items, search]);

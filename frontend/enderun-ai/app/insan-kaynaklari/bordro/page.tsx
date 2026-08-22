@@ -40,6 +40,7 @@ import {
   PayrollCashAccount,
   payrollPaymentAccountService,
 } from "@/services/payroll-payment-account.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 const MONTHS = [
   { value: 1, label: "Ocak" },
@@ -445,7 +446,7 @@ export default function PayrollManagementPage() {
 
   const filteredRecords = useMemo(() => {
     const keyword =
-      search.trim().toLocaleLowerCase("tr-TR");
+      foldTurkish(search);
 
     if (!keyword) {
       return records;
@@ -464,7 +465,7 @@ export default function PayrollManagementPage() {
       ]
         .filter(Boolean)
         .join(" ")
-        .toLocaleLowerCase("tr-TR");
+        ;
 
       return searchable.includes(keyword);
     });

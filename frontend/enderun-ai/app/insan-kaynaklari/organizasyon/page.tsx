@@ -46,6 +46,7 @@ import {
   personnelService,
   type PersonnelListItem,
 } from "@/services/personnel.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 type OrganizationTab = "chart" | "departments" | "positions";
 type StatusFilter = "all" | "active" | "inactive";
@@ -91,7 +92,7 @@ const emptyPositionForm: PositionForm = {
 };
 
 const normalized = (value?: string | null) =>
-  (value ?? "").trim().toLocaleLowerCase("tr-TR");
+  foldTurkish(value ?? "");
 
 const positionTitle = (position: HrPosition) =>
   position.title || position.name || "Tanımsız pozisyon";
@@ -183,6 +184,7 @@ function OrganizationNode({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-700 text-lg font-semibold text-white">
+              {/* GÖSTERİM: rozetteki baş harf. */}
               {department.name.charAt(0).toLocaleUpperCase("tr-TR")}
             </div>
             <div className="min-w-0">

@@ -881,8 +881,12 @@ function DraftGoodsReceiptItemRow({
     draft.damagedQuantity;
   const matchingOptions = inventoryOptions.filter(
     (option) =>
-      option.unit.toLocaleLowerCase("tr-TR") ===
-      item.unit.toLocaleLowerCase("tr-TR"),
+      // BİRİM BİR ANAHTARDIR (kullanıcı kararı): sabit listeden geliyor
+      // ve "iki kaydın birimi aynı mı" diye bakılıyor, arama
+      // yapılmıyor. Kültüre bağlı küçültme yerine dile bağımsız
+      // karşılaştırma — "LT" ile "lt" eşleşir, "LİTRE" ile "litre"
+      // ayrı anahtar sayılır.
+      option.unit.toLowerCase() === item.unit.toLowerCase(),
   );
   const selectedIsMissing =
     Boolean(draft.inventoryItemId) &&

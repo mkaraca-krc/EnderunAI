@@ -24,6 +24,7 @@ import {
 } from "@/services/personnel.service";
 import { companyService, CompanyListItem } from "@/services/company.service";
 import { projectService, ProjectListItem } from "@/services/project.service";
+import { foldTurkish, matchesSearch } from "@/lib/search/fold";
 
 type DutyForm = {
   companyId: string;
@@ -166,23 +167,20 @@ export default function PersonnelDutiesPage() {
   );
 
   const visibleItems = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
 
     if (!term) return items;
 
     return items.filter((item) =>
-      [
+      matchesSearch(
+          search,
         item.personnelFullName,
         item.targetProjectCode,
         item.targetProjectName,
         item.purpose,
         item.statusName,
         item.dutyTypeName,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr-TR")
-        .includes(term)
+        )
     );
   }, [items, search]);
 

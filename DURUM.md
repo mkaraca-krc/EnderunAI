@@ -1370,6 +1370,52 @@ karşılaştırmalar da dahil (`projeler/[id]/kisimlar` mükerrer isim
 kontrolü). Bitince arama amaçlı ham `toLocaleLowerCase("tr-TR")`
 kalmayacak.
 
+**G2 — TÜRKÇE KATLAMA TEMİZLİĞİ (2026-08-22).**
+
+Başlangıç 58 kullanım / 28 dosya → **9 kullanım / 7 dosya**, hepsi
+GÖSTERİM ya da yorum metni. Arama ve karşılaştırmada ham kültür kipi
+KALMADI.
+
+DÖNÜŞEN 19 DOSYA — hepsi `lib/search/fold.ts`e bağlandı:
+ise-alim (4 liste), puantaj (2 liste), avanslar, fazla-mesai,
+gorevlendirmeler, personeller, izinler, bordro, izin-bakiye,
+personel-360, kariyer, organizasyon, sistem-yonetimi/kullanicilar,
+muhasebe/hesap-plani, depo-stok/etiket, depo-stok/mal-kabul,
+hr-asset-inventory-dialog, boq-import-mapping, pozlar/ice-aktar,
+receteler/ice-aktar.
+
+AMACA GÖRE AYRIM KORUNDU — hepsi aynı işleve bağlanmadı:
+- kullanıcı metni araması → `foldTurkish` / `matchesSearch`
+- kod/anahtar/rol karşılaştırması → dile bağımsız (`toLowerCase()` /
+  `toUpperCase()` kültürsüz), çünkü "LT"="lt" ama "LİTRE"≠"litre"
+  farklı anahtar yazımlarıdır.
+
+MÜKERRER KURALI (kullanıcı kararı): `projeler/[id]/kisimlar` mükerrer
+kısım adı KATLANMIŞ karşılaştırmayla yakalanıyor ("İnşaat" = "inşaat"),
+ama uyarı kullanıcının YAZDIĞI hâli gösteriyor ve çakışan adları
+listeliyor. Aynı kural uygulanan tek yer burası.
+
+BİRİM EŞİTLİĞİ (kullanıcı kararı): `depo-stok/mal-kabul/[id]` biriminde
+anahtar muamelesi — dile bağımsız karşılaştırma, katlama yok.
+
+GERİLEME BEKÇİSİ: `tests/turkish-folding-contract.test.ts`.
+`app/`, `components/`, `lib/` taranıyor; arama/karşılaştırma amaçlı ham
+`toLocale(Lower|Upper)Case("tr-TR")` bulunursa test DÜŞER ve dosyayı
+söyler. 7 gösterim istisnası GEREKÇESİYLE listede (baş harfler ×4,
+antet unvanı, bildirim metni, CSV dosya adı). Ayrıca kova başına gerçek
+senaryo testi: SCHNEIDER, sube/ŞUBE, ÇANKAYA, insaat↔İNŞAAT,
+istanbul↔İSTANBUL, mükerrer isim, anahtar karşılaştırması.
+
+**BACKEND'DE KALAN 91 ÇAĞRI — AYRI TEMİZLİĞE KALDI.**
+`EnderunAI.Api` içinde 91 kültüre bağlı `ToLower()/ToUpper()` çağrısı
+var. Bugün DOĞRU çalışıyorlar ama yalnızca konteyner temel imajının dil
+ayarı C.UTF-8 olduğu ve EF sorgularının küçültmeyi PostgreSQL'e
+çevirdiği için. İmaj değişirse arama SESSİZCE bozulur.
+Koruma: `backend/.editorconfig` CA1311 (uyarı) +
+`CultureSensitiveCasingRatchetTests` cırcırı — tavan 91, yalnız aşağı
+iner. Çevrilmeleri acil değil; ayrı bir temizlik paketi olarak
+açılacak.
+
 **MIGRATION UYARISI (S1'den beri geçerli kural):** `safe-deploy`
 migration'ı otomatik UYGULAMAZ ve `MigrationRecovery:AllowAutomatic
 DatabaseUpdate` canlıda tanımlı değil; ama tohum koşulsuz çalışıyor.

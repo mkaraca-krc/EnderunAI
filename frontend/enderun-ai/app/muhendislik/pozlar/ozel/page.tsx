@@ -270,6 +270,7 @@ export default function CustomPositionsPage() {
 
     try {
       await engineeringPositionStatusService.change(positionId, status);
+      // GÖSTERİM: kullanıcıya okunan bildirim metni.
       setNotice(`Poz ${statusLabels[status]?.toLocaleLowerCase("tr-TR")} yapıldı.`);
       setRefreshKey((current) => current + 1);
     } catch (statusError) {

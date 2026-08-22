@@ -9,6 +9,7 @@ import {
   inventoryService,
   type InventoryItemListItem,
 } from "@/services/inventory.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 /**
  * A4 ETİKET ÇIKTISI — QR + ad + kod + konum.
@@ -48,11 +49,11 @@ export default function InventoryLabelsPage() {
   }, [load]);
 
   const visible = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
+    const term = foldTurkish(search);
     if (!term) return items;
 
     return items.filter((item) =>
-      `${item.code} ${item.name}`.toLocaleLowerCase("tr-TR").includes(term)
+      foldTurkish(`${item.code} ${item.name}`).includes(term)
     );
   }, [items, search]);
 

@@ -15,6 +15,7 @@ import {
   recipeImportService,
   type RecipeImportPreview,
 } from "@/services/recipe-import.service";
+import { foldTurkish } from "@/lib/search/fold";
 
 function ColumnSelect({
   label,
@@ -137,7 +138,7 @@ export default function RecipeImportPage() {
       const guess = (patterns: string[]) => {
         const index = result.headers.findIndex((header) =>
           patterns.some((pattern) =>
-            header.toLocaleLowerCase("tr-TR").includes(pattern)
+            foldTurkish(header).includes(pattern)
           )
         );
 
