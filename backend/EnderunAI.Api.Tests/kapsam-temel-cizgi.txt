@@ -161,7 +161,6 @@ Controllers/VehiclesController.cs:ExpenseEntries:1
 Controllers/VehiclesController.cs:Vehicles:2
 Controllers/WarehouseLocationsController.cs:InventoryItems:1
 Controllers/WarehousesController.cs:Warehouses:1
-Controllers/WorkTasksController.cs:WorkTasks:3
 Services/Accounting/AccountingAccountService.cs:AccountingAccounts:4
 Services/Accounting/AccountingIntegrationService.cs:HakedisDeductionAccountMappings:1
 Services/Accounting/AccountingIntegrationService.cs:Warehouses:1
