@@ -1,4 +1,8 @@
+using System.Net;
+using System.Net.Http.Json;
 using EnderunAI.Api.Data;
+using EnderunAI.Api.Models;
+using Microsoft.EntityFrameworkCore;
 using EnderunAI.Api.Services.DocumentNumbers;
 using EnderunAI.Api.Tests.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -264,5 +268,155 @@ public sealed class BelgeNumarasiSozlesmeTests
 
         return dizin?.FullName
             ?? throw new InvalidOperationException("Çözüm kökü bulunamadı.");
+    }
+}
+
+/// <summary>
+/// MUHASEBE FİŞİ NUMARASINDA BOŞLUK OLMAZ.
+///
+/// AYRI TEST, AYRI İDDİA. Genel eşzamanlılık testinin iddiası
+/// "hepsi farklı"; burada iddia "BOŞLUKSUZ" ve YALNIZ MHS için
+/// geçerli. İkisini tek teste sıkıştırmak, zamanla birinin
+/// diğerinin arkasına saklanması demek olurdu — bir gün genel test
+/// yeşil diye MHS'nin de korunduğu sanılırdı.
+///
+/// NEDEN YALNIZ MHS: fiş numarasında boşluk resmi bir sorun,
+/// denetimde "12345 nerede" sorusunun cevabı "sistem yakmış" olamaz.
+/// Fatura numaraları (SAT/SFT) zaten transaction içindeydi. Teklif,
+/// malzeme talebi, sekreterya ve e-fatura iç takip numarası —
+/// onlarda boşluk kimseyi ilgilendirmiyor ve BİLEREK dokunulmadı
+/// (Mehmet Karacabey kararı, 2026-08-23).
+/// </summary>
+[Collection("Integration")]
+public sealed class MuhasebeFisiNumaraBoslugTests(DatabaseFixture fixture)
+{
+    /// <summary>
+    /// Fiş kaydı BAŞARISIZ olduğunda numara geri alınır: sonraki
+    /// başarılı fiş aynı numarayı alır, sırada boşluk kalmaz.
+    ///
+    /// Hata bilerek üretiliyor: geçersiz satır (borç/alacak dengesiz)
+    /// ile fiş reddediliyor. Numara o sırada zaten üretilmiş oluyor —
+    /// transaction olmasaydı yanardı.
+    /// </summary>
+    /// <summary>
+    /// Fiş kaydı BAŞARISIZ olduğunda numara geri alınır: sayaç
+    /// ilerlemez, sırada boşluk kalmaz.
+    ///
+    /// HATA NUMARA ÜRETİMİNDEN SONRA ÜRETİLİYOR — bu testin can alıcı
+    /// noktası. İlk sürümde dengesiz satırlarla fiş reddettiriyordum
+    /// ve sonda testi hiçbir şey kanıtlamadı: doğrulama
+    /// (`ValidateAndPrepareLinesAsync`) numara üretiminden ÖNCE
+    /// çalışıyor, yani numara hiç üretilmiyordu ve sayaç zaten sıfır
+    /// kalıyordu.
+    ///
+    /// Şimdi hata veritabanı katmanında: `ReferenceNumber` alanı 100
+    /// karakterle sınırlı, daha uzunu `SaveChangesAsync` sırasında
+    /// patlıyor. O noktada numara ÜRETİLMİŞ oluyor — transaction
+    /// olmasaydı yanardı.
+    /// </summary>
+    [Fact]
+    public async Task NumaraUretildiktenSonraKayitPatlarsa_NumaraYanmaz()
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var proje = await TestDataFactory.CreateProjectAsync(
+            db, Guid.NewGuid().ToString("N")[..8]);
+
+        /*
+         * HESAP TESTİN KENDİSİ TARAFINDAN AÇILIYOR.
+         *
+         * İlk sürümde hesabı arayıp bulamazsam `return` ediyordum:
+         * test veritabanında hiç hesap yok (ölçüldü: 0 satır), yani
+         * test HER KOŞUDA sessizce erken dönüyor ve hiçbir şey
+         * ölçmüyordu. Sonda bunu yakaladı — transaction kaldırıldığı
+         * hâlde test yeşil kalıyordu.
+         *
+         * Sessiz kaçış kapısı, yeşil görünen ölü bir testtir.
+         */
+        var hesap = new AccountingAccount
+        {
+            CompanyId = proje.CompanyId,
+            Code = $"900{Guid.NewGuid().ToString("N")[..5]}",
+            Name = "Sonda hesabı",
+            Nature = AccountingAccountNature.Debit,
+            Level = 1,
+            IsPostingAllowed = true
+        };
+
+        db.AccountingAccounts.Add(hesap);
+        await db.SaveChangesAsync();
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var istek = new
+        {
+            companyId = proje.CompanyId,
+            voucherType = 1,
+            voucherDate = DateTime.UtcNow,
+            currencyCode = "TRY",
+            exchangeRate = 1m,
+            description = "Sonda: kayıt katmanında patlayacak fiş",
+
+            // 100 KARAKTER SINIRINI AŞIYOR: doğrulamadan geçer,
+            // SaveChangesAsync sırasında veritabanı reddeder.
+            referenceNumber = new string('X', 400),
+
+            sourceModule = (string?)null,
+            sourceEntityId = (Guid?)null,
+
+            // DENGELİ: doğrulama katmanını geçsin.
+            lines = new[]
+            {
+                new
+                {
+                    accountingAccountId = hesap.Id,
+                    description = "sonda borç",
+                    debitAmount = 100m,
+                    creditAmount = 0m,
+                    currencyCode = "TRY",
+                    exchangeRate = 1m
+                },
+                new
+                {
+                    accountingAccountId = hesap.Id,
+                    description = "sonda alacak",
+                    debitAmount = 0m,
+                    creditAmount = 100m,
+                    currencyCode = "TRY",
+                    exchangeRate = 1m
+                }
+            }
+        };
+
+        var yanit = await client.PostAsJsonAsync("/api/accounting-vouchers", istek);
+        var govde = await yanit.Content.ReadAsStringAsync();
+
+        /*
+         * FİŞ REDDEDİLMELİ AMA DOĞRU SEBEPLE.
+         *
+         * İlk sürümde yalnız "Created değil" diye bakıyordum ve test
+         * her hatada yeşil kalıyordu — satırlarda `currencyCode`
+         * eksik olduğu için istek MODEL DOĞRULAMASINDA (400)
+         * reddediliyordu, controller'a bile ulaşmıyordu. Numara hiç
+         * üretilmediği için sayaç da sıfırdı ve test "boşluk yok"
+         * sanıyordu.
+         *
+         * Şimdi model doğrulaması hatası AÇIKÇA dışlanıyor: istek
+         * kusurluysa test yanlış şeyi ölçüyor demektir.
+         */
+        Assert.NotEqual(HttpStatusCode.Created, yanit.StatusCode);
+        Assert.DoesNotContain("validation errors", govde);
+
+        // SIRA GERİ ALINDI MI: sayaç ilerlememiş olmalı.
+        var sayac = await db.Database
+            .SqlQuery<int>($"""
+                SELECT COALESCE(MAX("LastNumber"), 0) AS "Value"
+                FROM document_number_sequences
+                WHERE "CompanyId" = {proje.CompanyId}
+                  AND "DocumentType" = 'ACCOUNTING_VOUCHER'
+                """)
+            .SingleAsync();
+
+        Assert.Equal(0, sayac);
     }
 }

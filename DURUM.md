@@ -423,9 +423,44 @@ korunuyor. Kalan B grubunda tek kritik kalem MUHASEBE FİŞİ: fiş
 numarasında boşluk denetimde "12345 nerede" sorusunu doğurur ve
 cevabı "sistem yakmış" olur.
 
-  - **MHS:** fiş oluşturma akışı numara üretimiyle AYNI transaction'a
-    alınacak. Küçük bir ek — ayrı büyük paket kurulmayacak.
-    Sıra: M1/1 deploy → MHS düzeltmesi → M1/2.
+  - **MHS: DÜZELTİLDİ (2026-08-23).** Fiş oluşturma akışı numara
+    üretimiyle aynı transaction'a alındı. `DocumentNumberService`
+    çağıranın transaction'ına zaten katılıyordu, yani servise
+    dokunulmadı — yalnız `AccountingVoucherService.CreateAsync`
+    sarmalandı.
+
+    SONDA İLE KANITLANDI: transaction kaldırıldığında sayaç 0 yerine
+    1 oluyor (numara yanıyor) ve test kırmızı veriyor.
+
+    **İLK DENEMEM 163 TESTİ KIRDI — İÇ İÇE TRANSACTION.**
+    Koşulsuz `BeginTransactionAsync` koymuştum. Ama
+    `AccountingVoucherService.CreateAsync` BEŞ YERDEN çağrılıyor —
+    stok sarfı, sayım, mal kabul, perakende satış, KDV tahakkuku — ve
+    o çağıranların hepsi kendi transaction'ını açıyor. İç içe
+    transaction denemesi bütün o akışları 500'e düşürdü.
+
+    HEDEFLİ TESTLERİM BUNU GÖRMEDİ (23 test yeşildi), çünkü hepsi
+    doğrudan fiş ucunu çağırıyordu. **Tam suite gösterdi.** Ders:
+    bir servisi sarmalarken "beni kim çağırıyor" sorusu, "ben ne
+    yapıyorum" sorusundan önce gelir.
+
+    Düzeltme, üretecin kendi desenini izliyor: mevcut transaction
+    varsa ona KATIL, yoksa aç; katılındıysa commit etme (dış
+    transaction'ı yarıda kapatmak olurdu). İki katman aynı kuralı
+    paylaşmalı, yoksa biri diğerinin varsayımını bozar.
+
+    **Bu testi yazarken ÜÇ KEZ zayıf test ürettim, sonda üçünü de
+    yakaladı** — hepsi "yeşil görünen ölü test" sınıfından:
+      1. Fişi dengesiz satırlarla reddettiriyordum; doğrulama numara
+         üretiminden ÖNCE çalışıyor, yani numara hiç üretilmiyordu.
+      2. Hesap bulunamazsa `return` eden sessiz kaçış kapısı vardı;
+         test veritabanında hiç hesap yok (ölçüldü: 0 satır), yani
+         test HER KOŞUDA erken dönüyordu.
+      3. Satırlarda `currencyCode` eksikti; istek model
+         doğrulamasında (400) reddediliyor, controller'a bile
+         ulaşmıyordu.
+      Üçünde de sabotaj testi kırmadı. Ders: "test yeşil" ile "test
+      bir şey ölçüyor" ayrı şeyler; sonda bu farkı gösteren tek araç.
   - **Teklif (TKL), malzeme talebi (PR), sekreterya, e-fatura içe
     aktarım:** bunlar İÇ TAKİP NUMARASI; boşluk kimseyi
     ilgilendirmiyor. Açık madde olarak kalıyor, DOKUNULMAYACAK.
@@ -2441,6 +2476,92 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     Excel'ini indirebiliyordu. Her modülde ikisi ayrı ayrı kontrol
     edilir ve ayrı testleri olur. Sonda ile kanıtlandı: yalnız dışa
     aktarımın süzgeci kaldırıldığında liste testi YEŞİL kalıyor.
+
+21. **VERİ DÜZELTEN HER MIGRATION ETKİ SAYISINI DOĞRULAR.**
+
+    ŞEMA migration'ı çalıştıysa çalışmıştır: kolon ya eklenir ya
+    hata verir. VERİ migration'ı ise çalışıp HİÇBİR ŞEY YAPMAMIŞ
+    olabilir ve yine "SUCCESS" döner.
+
+    2026-08-23'te tam olarak bu oldu: M1/1 migration'ı mevcut tek
+    görev kaydını iptal edecekti, `WHERE` koşuluna
+    `AssignedByUserId IS NULL` de koymuştum, Hızır kaydı oluştururken
+    göndereni DOLDURUYOR — güncelleme 0 satıra dokundu, migration
+    başarıyla tamamlandı ve kayıt bozuk kaldı. Uygulama sonrası
+    canlıda ölçmeseydim sessizce onay kuyruğunda, kimin bitirdiği
+    belirsiz bir satır olarak duracaktı.
+
+    KURAL — UPDATE/INSERT içeren her migration için:
+
+      a) **Beklenen satır sayısı migration dosyasına yorum olarak
+         ÖNCEDEN yazılır.** Sayıyı sonradan "her neyse o" diye kabul
+         etmek, doğrulamayı doğrulama olmaktan çıkarır.
+
+      b) **Migration'ın KENDİSİ doğrular** ve tutmazsa patlar:
+
+         ```sql
+         DO $$
+         DECLARE etkilenen integer;
+         BEGIN
+             UPDATE ... ;
+             GET DIAGNOSTICS etkilenen = ROW_COUNT;
+
+             -- IDEMPOTENT TEKRAR: ikinci çalıştırmada 0 beklenir,
+             -- çünkü iş zaten yapılmıştır. Ayrım "hedef durumda
+             -- kaç satır var" ile yapılır, etkilenen sayısıyla değil.
+             IF etkilenen <> BEKLENEN
+                AND NOT EXISTS (SELECT 1 FROM ... WHERE hedef_durum)
+             THEN
+                 RAISE EXCEPTION
+                     'VERİ MIGRATION DOĞRULAMASI: beklenen %, etkilenen %.',
+                     BEKLENEN, etkilenen;
+             END IF;
+         END $$;
+         ```
+
+         Desen denendi: koşulu tutmayan bir UPDATE ile migration
+         gerçekten patlıyor.
+
+      c) **Uygulandıktan sonra gerçek sayı ÖLÇÜLÜR ve rapora yazılır.**
+
+      d) **Beklenen ile gerçek tutmuyorsa bu bir HATADIR** — "geçti"
+         denmez, migration başarılı görünse bile.
+
+22. **MIGRATION `postgres` İLE UYGULANIRSA YENİ TABLOLARIN SAHİBİ
+    YANLIŞ OLUR — VE YEDEK ALINAMAZ HALE GELİR.**
+
+    2026-08-23: M1/1 migration'ını `sudo -u postgres psql` ile
+    uyguladım. Yeni üç tablonun (`attachments`, `task_comments`,
+    `notification_recipients`) sahibi `postgres` oldu; sistemdeki
+    diğer 229 tablonun sahibi `enderun_user`.
+
+    SONUÇ: `enderun-backup.sh` yedeği `enderun_user` ile alıyor ve
+    `pg_dump` bir sonraki çalıştırmada **"permission denied for table
+    attachments"** ile PATLADI. Yani canlı sistem birkaç saat boyunca
+    YEDEKSİZ kaldı — ve bunu ancak bir sonraki deploy'un yedek adımı
+    gösterdi.
+
+    Daha önceki migration'larda sorun çıkmamasının sebebi yalnızca
+    KOLON eklemiş olmam; sahiplik yalnız yeni TABLO oluşturulduğunda
+    devreye giriyor.
+
+    KURAL — tablo oluşturan bir migration `postgres` ile uygulandıysa:
+
+      a) Uygulama biter bitmez sahiplik düzeltilir:
+         `ALTER TABLE <tablo> OWNER TO enderun_user;`
+
+      b) Doğrulama sorgusu koşulur — sıfır dönmeli:
+         ```sql
+         SELECT count(*) FROM pg_tables
+         WHERE schemaname = 'public' AND tableowner <> 'enderun_user';
+         ```
+
+      c) **Yedek deploy'dan ÖNCE bir kez alınır ve BAŞARILI olduğu
+         görülür.** Yedeğin kendisi de bir doğrulama adımıdır: bu
+         hatayı yakalayan tek şey oydu.
+
+      d) Aynı düzeltme TEST veritabanında da yapılır; yoksa aynı hata
+         orada uykuda bekler.
 
 ---
 

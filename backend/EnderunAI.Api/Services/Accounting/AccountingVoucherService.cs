@@ -133,6 +133,51 @@ public sealed class AccountingVoucherService(
         var voucherType =
             (AccountingVoucherType)request.VoucherType;
 
+        /*
+         * NUMARA VE FİŞ AYNI TRANSACTION'DA — BOŞLUK OLUŞMAZ.
+         *
+         * Eskiden burada transaction yoktu: numara ham SQL ile kendi
+         * implicit transaction'ında commit oluyor, ardından
+         * SaveChangesAsync geliyordu. Kayıt patlarsa numara YANIYOR ve
+         * sırada boşluk kalıyordu.
+         *
+         * FİŞ NUMARASINDA BOŞLUK RESMİ BİR SORUN: denetimde "12345
+         * nerede" sorusunun cevabı "sistem yakmış" olamaz. Fatura
+         * numaraları zaten transaction içindeydi (SalesInvoiceService,
+         * SupplierInvoiceService); açıkta kalan muhasebe fişiydi.
+         *
+         * `DocumentNumberService` çağıranın transaction'ına KATILIYOR
+         * (CurrentTransaction varsa komuta atanıyor), yani servise
+         * dokunmak gerekmedi — yalnız çağıran taraf sarmalandı.
+         *
+         * DİĞER B GRUBU KALEMLERİ (teklif, malzeme talebi, sekreterya,
+         * e-fatura) BİLEREK DOKUNULMADI: onlar iç takip numarası,
+         * boşluk kimseyi ilgilendirmiyor (Mehmet Karacabey kararı).
+         */
+        /*
+         * ÇAĞIRAN ZATEN TRANSACTION AÇMIŞSA ONA KATILIYORUZ.
+         *
+         * `CreateAsync` beş yerden çağrılıyor — stok sarfı, sayım,
+         * mal kabul, perakende satış, KDV tahakkuku — ve bunların
+         * çağıranları kendi transaction'larını açıyor. Koşulsuz
+         * `BeginTransactionAsync`, iç içe transaction denemesi olur
+         * ve o akışların HEPSİ 500 verir. İlk denemede tam olarak bu
+         * oldu: 163 test kırmızıya döndü.
+         *
+         * `DocumentNumberService` de aynı deseni izliyor; iki katman
+         * aynı kuralı paylaşmalı, yoksa biri diğerinin varsayımını
+         * bozar.
+         *
+         * `transaction` null ise commit de yapılmıyor: dış
+         * transaction'ı burada kapatmak, çağıranın işini yarıda
+         * commit etmek olurdu.
+         */
+        var mevcutTransaction = dbContext.Database.CurrentTransaction;
+
+        await using var transaction = mevcutTransaction is null
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         var voucherNumber =
             await documentNumberService.GenerateAsync(
                 request.CompanyId,
@@ -165,6 +210,9 @@ public sealed class AccountingVoucherService(
 
         dbContext.AccountingVouchers.Add(voucher);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
 
         return await GetByIdAsync(
             voucher.Id,
