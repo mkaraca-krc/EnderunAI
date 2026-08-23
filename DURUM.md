@@ -352,6 +352,142 @@ söylüyor.
 
 312 satır, toplam 453 okuma — eski biçimle birebir aynı sayı.
 
+### M1/1 — İŞ AKIŞI ÇEKİRDEĞİ, VERİ MODELİ (2026-08-23)
+
+**WorkTasks GENİŞLETİLDİ, yeniden kurulmadı.** Canlıda 1 kayıtlık bir
+tabloyu atıp aynı şemayı ikinci kez yazmak israf olurdu; şema zaten
+`CompanyId`, `ProjectId`, `TaskNumber`, `Priority`, `AssignedTo/By`,
+`DueDate`, `SourceModule`+`SourceEntityId` taşıyordu.
+
+**KALDIRILAN İKİ DURUM — anlamı belirsiz durum bırakılmadı:**
+  - `Draft` kodda hiç kullanılmıyordu. Taslak görev gelen kutusunu
+    bulandırırdı: "bana atandı" denen şey henüz gönderilmemiş olurdu.
+  - `Waiting` tek bir listede geçiyordu. "Bekliyor" KİMİN İŞİ olduğunu
+    belirsizleştirir; bekleme zaten `Completed` (top gönderende) ve
+    `Returned` (top yapanda) ile temsil ediliyor.
+  Sayılar kaydırılmadı: kaldırılan değerlerin yerine yeni durum
+  konmadı, yoksa veritabanındaki eski bir sayı sessizce başka bir
+  duruma dönüşürdü.
+
+**EKLENENLER:** `Approved`/`Returned`, `ReturnCount` (iade sayısı
+görevde görünür), devretme izi (`DelegatedFromUserId`,
+`DelegatedAtUtc`, `DelegationCount`), masraf merkezi
+(`CenterType` + `BranchId` + `ProjectSiteId` — gider kaydıyla AYNI
+desen, ikinci bir "masraf merkezi" kavramı uydurulmadı).
+
+**ÜÇ YENİ TABLO, KAPSAM İLK GÜNDEN İÇERİDE:** `task_comments`,
+`attachments`, `notification_recipients`. Cırcır çizgisine **tek satır
+borç eklenmedi** (test yeşil, ölçüldü).
+
+**MEVCUT TEK KAYIT:** `GRV-2026-00001` "Test görev", atanmamış,
+durumu Completed. Yeni akışta Completed "gönderenin onayı bekleniyor"
+demek; ne atanan ne gönderen olduğu için sonsuza kadar onay
+kuyruğunda asılı kalırdı. Migration'da GEREKÇESİYLE iptal edildi
+(silinmedi — silme yok kuralı görevler için de ilk günden geçerli).
+
+#### BELGE NUMARASI YARIŞI — ÜÇ YER, İKİSİ YENİ BULGU
+
+`DocumentNumberService`'in KENDİSİ sağlam: numara tek SQL ifadesinde
+üretiliyor (`INSERT ... ON CONFLICT DO UPDATE ... RETURNING`), artırım
+veritabanında atomik, benzersiz kısıt canlıda doğrulandı. Ama adanmış
+testi yoktu — tek güvencesi çek modülünün kendi testiydi.
+`DocumentNumberConcurrencyTests` eklendi.
+
+GRV numarası Hızır'da `CountAsync() + 1` ile üretiliyordu; taşındı.
+**Sonda taşımanın testsiz olduğunu gösterdi** (sabotaj hiçbir testi
+kırmadı) ve eklenen sözleşme bekçisi
+(`BelgeNumarasiSozlesmeTests`) İKİ YER DAHA buldu:
+  - `WorkTasksController` — görev oluşturma ucu, aynı hata
+  - `HrRecruitmentController` — iş ilanı numarası (ILN)
+Üçü de merkezî üretece taşındı.
+
+#### AÇIK MADDE — BELGE NUMARASINDA BOŞLUK (MHS DAHİL)
+
+ÖLÇÜLDÜ, iddia değil. Üreteç çağıranın transaction'ına KATILIYOR;
+boşluksuzluk çağırana bağlı:
+
+  **A grubu (transaction açan):** çek (VCK/ACK), satış/alış faturası
+  (SAT/SFT), mal kabul, sayım, perakende. Geri alma numarayı da geri
+  alıyor — testle kanıtlandı (`TransactionGeriAlinirsa_...`).
+
+  **B grubu (transaction AÇMAYAN):** **MUHASEBE FİŞİ (MHS)**,
+  teklif/RFQ, malzeme talebi, sekreterya, e-fatura içe aktarım.
+  Numara ham SQL ile kendi implicit transaction'ında commit oluyor;
+  sonraki `SaveChanges` patlarsa numara YANAR ve sırada boşluk kalır.
+  Testle ölçüldü (`TransactionYoksa_BasarisizKayittanSonraNumaraYanar`).
+
+**KARAR (Mehmet Karacabey, 2026-08-23): YALNIZ MHS ÖNEMLİ.**
+
+Asıl endişe fatura numaralarıydı; onlar A grubunda çıktı, yani zaten
+korunuyor. Kalan B grubunda tek kritik kalem MUHASEBE FİŞİ: fiş
+numarasında boşluk denetimde "12345 nerede" sorusunu doğurur ve
+cevabı "sistem yakmış" olur.
+
+  - **MHS:** fiş oluşturma akışı numara üretimiyle AYNI transaction'a
+    alınacak. Küçük bir ek — ayrı büyük paket kurulmayacak.
+    Sıra: M1/1 deploy → MHS düzeltmesi → M1/2.
+  - **Teklif (TKL), malzeme talebi (PR), sekreterya, e-fatura içe
+    aktarım:** bunlar İÇ TAKİP NUMARASI; boşluk kimseyi
+    ilgilendirmiyor. Açık madde olarak kalıyor, DOKUNULMAYACAK.
+
+**İKİ İDDİA KARIŞTIRILMAYACAK:** MHS düzeltmesinden sonra test o tip
+için "boşluksuz" diyebilir; diğer tipler için iddia "hepsi farklı"
+olarak kalır. Tek bir testin iki farklı güvence vermesi, birinin
+zamanla diğerinin arkasına saklanması demektir.
+
+#### AÇIK MADDE — MOBİL: 94 TABLO EKRANI
+
+183 ekranın 94'ü tablo kullanıyor. `erp-table-wrap` üzerinde
+`overflow-x: auto` var, yani tablo yatay kayıyor ve taşmıyor — ama
+globals.css'teki 29 medya sorgusunun incelenen kırılımları yalnız
+GÖSTERGE PANELİ kartlarını düzenliyor; iş ekranları uyarlanmamış.
+Telefonda 8 sütunlu bir tabloyu yatay kaydırarak kullanmak "çalışıyor"
+sayılmaz. M1 ekranları (gelen kutusu, görev detayı, yorum akışı,
+fotoğraf) mobil öncelikli KART düzeniyle yazılıyor; mevcut 94 ekran
+BU PAKETİN İŞİ DEĞİL.
+
+#### AÇIK MADDE — HAKEDİŞ DOSYALARI DB KAYDI OLMADAN DİSKTE
+
+`hakedis/files/{storedName}` diskteki gevşek dosyaları veriyor;
+hiçbir tabloda kaydı yok, dolayısıyla kapsam bağlanamıyor. Portal
+denetiminde bulundu. `Attachment` tablosu (M1/1) bu sorunun yolunu
+açıyor: varlık tipi + kayıt kimliği + yükleyen. Diğer modüllerin
+(`ProjectDocument`, `PersonnelDocument`, `DutySurveyPhoto`) buraya
+taşınması AYRI İŞ.
+
+#### AÇIK MADDE — BİLDİRİMDE İKİLİ MODEL GEÇİCİ
+
+`Notification` satırı ŞİRKETE ait ve tek `ReadAtUtc` taşıyor; bu
+tasarım tarama kaynakları için doğru (bir çek vadesi herkesi
+ilgilendirir). M1 olayları KİŞİSEL: `TargetUserId` + ayrı
+`NotificationRecipient` okuma durumu.
+
+**KURAL:** bundan sonra eklenecek HER yeni bildirim kişisel modelde
+doğar. Şirket satırı modeli yalnız mevcut DÖRT tarama kaynağı için,
+GEÇİCİ olarak duruyor. Olay tabanlı bildirim 24 saatlik taramaya
+bağlanmayacak; anında yazılacak.
+
+#### M2a KARARI (Mehmet Karacabey, 2026-08-23) — M2a bloke olmasın
+
+**"İş olayı" sayılacak varlıklar** (audit_logs'a yazılacak): çek,
+satış ve alış faturası, muhasebe fişi, stok hareketi, mal kabul,
+hakediş, satın alma talebi ve siparişi, teklif, proje, cari,
+perakende satış, puantaj, ek ücret, görev. (Senet yok, atlandı.)
+
+**security_audit_events'te KALACAKLAR** (yetki/kullanıcı tarafı):
+`RolePermission`, `UserPermissionOverride`, `AppUser`,
+`RoleWorkHourWindow`, `UserDataScope`, `AccessRequest`.
+
+**`Personnel` İKİSİNE DE GİRER** — ama iş kaydına yalnız
+"güncellendi" olarak, ALAN DEĞERİ YAZILMADAN.
+
+Bugünkü durum ölçüldü: `audit_logs` **0 satır**,
+`security_audit_events` 1644 satır. Kesici 17 varlık tipi izliyor ve
+hepsini security tarafına yazıyor; dağılım ağırlıklı yetki/kullanıcı
+(RolePermission 559, UserPermissionOverride 328, AppUser 234).
+**İş tarafı neredeyse hiç kayıtlı değil** — M2a'nın işi kesiciye tip
+eklemekten çok, hangi varlığın "iş olayı" sayıldığına karar vermek.
+
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 
 **Neden R3 ikiye ayrıldı:** merdivende R3 "UserDataScope arayüzü" diye

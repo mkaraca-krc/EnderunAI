@@ -130,6 +130,25 @@ public sealed class Notification : BaseEntity
     public DateTime FirstSeenAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime LastSeenAtUtc { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// KİŞİSEL BİLDİRİM: doluysa bu satır TEK BİR KULLANICIYA ait ve
+    /// okunma durumu <see cref="NotificationRecipient"/> üzerinden
+    /// izlenir.
+    ///
+    /// Boşsa satır ŞİRKETE aittir ve görünürlük
+    /// <see cref="RequiredPermission"/> ile belirlenir — mevcut dört
+    /// tarama kaynağının davranışı bu ve değişmiyor.
+    ///
+    /// İKİ MODEL GEÇİCİ OLARAK YAN YANA: bundan sonra eklenecek her
+    /// yeni bildirim KİŞİSEL doğar. Şirket satırı yalnız o dört
+    /// kaynak için duruyor.
+    /// </summary>
+    public Guid? TargetUserId { get; set; }
+
+    /// <summary>
+    /// Şirket satırlarının okunma damgası. KİŞİSEL satırlarda
+    /// kullanılmaz — orada okuma durumu alıcı tablosunda.
+    /// </summary>
     public DateTime? ReadAtUtc { get; set; }
     public DateTime? DismissedAtUtc { get; set; }
     public DateTime? ClosedAtUtc { get; set; }

@@ -10,7 +10,10 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/hr/recruitment")]
-public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
+public sealed class HrRecruitmentController(
+    AppDbContext db,
+    EnderunAI.Api.Services.DocumentNumbers.IDocumentNumberService documentNumbers)
+    : ControllerBase
 {
     private static readonly string[] EmploymentTypeNames =
         { "Tam Zamanlı", "Yarı Zamanlı", "Sözleşmeli", "Staj", "Mevsimlik" };
@@ -63,12 +66,14 @@ public sealed class HrRecruitmentController(AppDbContext db) : ControllerBase
         if (companyId is null)
             return BadRequest(new { message = "Geçerli bir şirket bulunamadı." });
 
-        var sequence = await db.JobPostings.CountAsync(x => x.CompanyId == companyId.Value, cancellationToken);
+        // NUMARA MERKEZÎ ÜRETEÇTEN — aynı yarış hatası buradaydı.
+        var postingNumber = await documentNumbers.GenerateAsync(
+            companyId.Value, "JOB_POSTING", "ILN", cancellationToken);
 
         var item = new JobPosting
         {
             CompanyId = companyId.Value,
-            PostingNumber = $"ILN-{DateTime.UtcNow:yyyy}-{sequence + 1:D4}"
+            PostingNumber = postingNumber
         };
         ApplyPosting(item, request);
 

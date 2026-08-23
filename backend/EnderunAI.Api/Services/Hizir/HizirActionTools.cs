@@ -30,7 +30,8 @@ namespace EnderunAI.Api.Services.Hizir;
 /// </summary>
 public sealed class HizirActionTools(
     AppDbContext db,
-    IHizirPendingActionStore pendingActions)
+    IHizirPendingActionStore pendingActions,
+    EnderunAI.Api.Services.DocumentNumbers.IDocumentNumberService documentNumbers)
 {
     private const int RowLimit = 25;
     private static readonly CultureInfo Tr = new("tr-TR");
@@ -160,12 +161,27 @@ public sealed class HizirActionTools(
         if (DateTime.TryParse(Text(args, "son_tarih"), out var parsed))
             dueDate = DateTime.SpecifyKind(parsed.Date, DateTimeKind.Utc);
 
-        var sequence = await db.WorkTasks.CountAsync(cancellationToken);
+        /*
+         * NUMARA MERKEZÎ ÜRETEÇTEN — YARIŞ HATASI KAPATILDI.
+         *
+         * Eskiden `db.WorkTasks.CountAsync() + 1` idi: iki eşzamanlı
+         * istek aynı sayıyı okur ve AYNI görev numarasını alırdı.
+         * Sayım ayrıca SİLİNMİŞ kayıtları saymadığı için numara
+         * geriye de gidebiliyordu.
+         *
+         * `DocumentNumberService` numarayı tek bir SQL ifadesinde
+         * üretiyor (INSERT ... ON CONFLICT DO UPDATE ... RETURNING);
+         * artırım veritabanında atomik, kilit ya da yeniden deneme
+         * gerekmiyor. MHS, VCK, TKL sıralarının hepsi aynı yerden
+         * geçiyor.
+         */
+        var taskNumber = await documentNumbers.GenerateAsync(
+            companyId, "WORK_TASK", "GRV", cancellationToken);
 
         db.WorkTasks.Add(new WorkTask
         {
             CompanyId = companyId,
-            TaskNumber = $"GRV-{DateTime.UtcNow:yyyy}-{sequence + 1:D5}",
+            TaskNumber = taskNumber,
             Title = title.Trim(),
             Description = Text(args, "aciklama"),
             Priority = WorkTaskPriority.Normal,

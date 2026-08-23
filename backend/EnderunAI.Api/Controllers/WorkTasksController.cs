@@ -13,7 +13,9 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/tasks")]
 public sealed class WorkTasksController(
     AppDbContext db,
-    ICurrentUserService currentUser) : ControllerBase
+    ICurrentUserService currentUser,
+    EnderunAI.Api.Services.DocumentNumbers.IDocumentNumberService documentNumbers)
+    : ControllerBase
 {
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.TasksView)]
@@ -91,7 +93,27 @@ public sealed class WorkTasksController(
 
         var now = DateTime.UtcNow;
         var today = now.Date;
-        var openStatuses = new[] { WorkTaskStatus.Open, WorkTaskStatus.InProgress, WorkTaskStatus.Waiting };
+        /*
+         * "AÇIK" SAYILAN DURUMLAR — ÇİFT ADIMLI KAPANIŞA GÖRE.
+         *
+         * `Completed` DE AÇIK SAYILIYOR: yapan bitirdi ama gönderen
+         * henüz onaylamadı, yani iş HÂLÂ BİRİNİN ÖNÜNDE. Kapanmış
+         * saymak, onay kuyruğunda bekleyen işleri gözden kaçırırdı.
+         *
+         * `Returned` de açık: iade edilmiş görev yapana geri döndü.
+         *
+         * Kapanmış olanlar yalnız `Approved` ve `Cancelled`.
+         *
+         * (`Waiting` kaldırıldı — kimin işi olduğunu belirsizleştiriyordu;
+         * bkz. WorkTaskStatus.)
+         */
+        var openStatuses = new[]
+        {
+            WorkTaskStatus.Open,
+            WorkTaskStatus.InProgress,
+            WorkTaskStatus.Completed,
+            WorkTaskStatus.Returned
+        };
 
         return Ok(new
         {
@@ -125,14 +147,26 @@ public sealed class WorkTasksController(
         if (string.IsNullOrWhiteSpace(request.Title))
             return BadRequest(new { message = "Görev başlığı zorunludur." });
 
-        var sequence = await db.WorkTasks.CountAsync(
-            x => x.CompanyId == request.CompanyId, cancellationToken);
+        /*
+         * NUMARA MERKEZÎ ÜRETEÇTEN — YARIŞ HATASI KAPATILDI.
+         *
+         * `CountAsync + 1` iki eşzamanlı isteğe AYNI numarayı verir.
+         * Ayrıca sayım silinmiş kayıtları saymadığı için numara
+         * geriye bile gidebiliyordu.
+         *
+         * Bu hata Hızır'ın görev üretiminde düzeltilmişti ama BURADA
+         * da vardı; sözleşme bekçisi (BelgeNumarasiSozlesmeTests)
+         * yakaladı — sonda "GRV taşımasının testi yok" dediğinde
+         * eklenen bekçi.
+         */
+        var taskNumber = await documentNumbers.GenerateAsync(
+            request.CompanyId, "WORK_TASK", "GRV", cancellationToken);
 
         var item = new WorkTask
         {
             CompanyId = request.CompanyId,
             ProjectId = request.ProjectId,
-            TaskNumber = $"GRV-{DateTime.UtcNow:yyyy}-{sequence + 1:D5}",
+            TaskNumber = taskNumber,
             Title = request.Title.Trim(),
             Description = request.Description?.Trim(),
             Priority = request.Priority,

@@ -138,4 +138,39 @@ public static class FinanceScopeExtensions
         scope.HasGlobalAccess
             ? query
             : query.Where(x => scope.CompanyIds.Contains(x.CompanyId));
+
+    // ---------------------------------------------------------------
+    // M1 — İŞ AKIŞI ÇEKİRDEĞİ
+    // ---------------------------------------------------------------
+
+    /*
+     * YENİ TABLOLAR KAPSAMLI DOĞUYOR.
+     *
+     * G3 paketinin tamamı, şirket kimliği olan tablolara sonradan
+     * kapsam süzgeci takmakla geçti: 480 kapsamsız okuma o yüzden
+     * birikmişti. M1'in üç tablosu ilk günden süzgeçli — cırcır
+     * çizgisine tek satır borç eklenmiyor.
+     */
+
+    public static IQueryable<WorkTask> ApplyScope(
+        this IQueryable<WorkTask> query, CurrentDataScopeSnapshot scope) =>
+        scope.HasGlobalAccess
+            ? query
+            : query.Where(x =>
+                scope.CompanyIds.Contains(x.CompanyId) ||
+                (x.BranchId != null && scope.BranchIds.Contains(x.BranchId.Value)) ||
+                (x.ProjectId != null && scope.ProjectIds.Contains(x.ProjectId.Value)) ||
+                (x.ProjectSiteId != null && scope.SiteIds.Contains(x.ProjectSiteId.Value)));
+
+    public static IQueryable<TaskComment> ApplyScope(
+        this IQueryable<TaskComment> query, CurrentDataScopeSnapshot scope) =>
+        scope.HasGlobalAccess
+            ? query
+            : query.Where(x => scope.CompanyIds.Contains(x.CompanyId));
+
+    public static IQueryable<Attachment> ApplyScope(
+        this IQueryable<Attachment> query, CurrentDataScopeSnapshot scope) =>
+        scope.HasGlobalAccess
+            ? query
+            : query.Where(x => scope.CompanyIds.Contains(x.CompanyId));
 }

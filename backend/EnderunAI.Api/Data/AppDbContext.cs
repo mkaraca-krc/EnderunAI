@@ -249,6 +249,10 @@ public sealed class AppDbContext(
     public DbSet<ProjectCostTransaction> ProjectCostTransactions => Set<ProjectCostTransaction>();
     public DbSet<HrProjectLaborCost> HrProjectLaborCosts => Set<HrProjectLaborCost>();
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
+    public DbSet<TaskComment> TaskComments => Set<TaskComment>();
+    public DbSet<Attachment> Attachments => Set<Attachment>();
+    public DbSet<Models.Notifications.NotificationRecipient> NotificationRecipients =>
+        Set<Models.Notifications.NotificationRecipient>();
     public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
     public DbSet<HrCompensationComponent> HrCompensationComponents => Set<HrCompensationComponent>();
     public DbSet<HrCareerHistory> HrCareerHistories => Set<HrCareerHistory>();
@@ -5181,6 +5185,107 @@ public sealed class AppDbContext(
             entity.HasKey(x => x.Id);
             entity.Property(x => x.TaskNumber).IsRequired();
             entity.Property(x => x.Title).IsRequired();
+            entity.Property(x => x.ReturnReason).HasMaxLength(1000);
+            entity.HasQueryFilter(x => !x.IsDeleted);
+
+            /*
+             * KEYSET SAYFALAMA İÇİN İNDEKSLER.
+             *
+             * Görev tablosu HIZLI BÜYÜYEN tablolardan: her kayıt
+             * altında görev açılabiliyor ve kapanmış görevler
+             * silinmiyor. LIMIT/OFFSET burada yanlış olurdu —
+             * veritabanı atlanan satırları yine de okumak zorunda
+             * ve maliyet tablo büyüdükçe artıyor.
+             *
+             * Sıralama anahtarı (CreatedAtUtc, Id): tarih tek başına
+             * benzersiz değil, aynı saniyede açılan iki görev sayfa
+             * sınırında birbirini gizlerdi.
+             */
+            entity.HasIndex(x => new { x.CompanyId, x.AssignedToUserId, x.CreatedAtUtc, x.Id })
+                .HasDatabaseName("IX_WorkTasks_bana_atananlar");
+
+            entity.HasIndex(x => new { x.CompanyId, x.AssignedByUserId, x.CreatedAtUtc, x.Id })
+                .HasDatabaseName("IX_WorkTasks_gonderdiklerim");
+
+            // KAYDA BAĞLI GÖREV: ortak bileşen bu ikiliyle sorguluyor.
+            entity.HasIndex(x => new { x.SourceModule, x.SourceEntityId })
+                .HasDatabaseName("IX_WorkTasks_kaynak_kayit");
+        });
+
+        modelBuilder.Entity<TaskComment>(entity =>
+        {
+            entity.ToTable("task_comments");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.EntityType).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Body).HasMaxLength(4000).IsRequired();
+            entity.Property(x => x.MentionedUserIds).HasMaxLength(2000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            /*
+             * ZAMAN ÇİZELGESİ SORGUSU: bir kaydın altındaki yorumlar,
+             * en yeniden eskiye, keyset ile. Yorum sayısı görevden de
+             * hızlı büyür.
+             */
+            entity.HasIndex(x => new { x.EntityType, x.EntityId, x.CreatedAtUtc, x.Id })
+                .HasDatabaseName("IX_task_comments_zaman_cizelgesi");
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Attachment>(entity =>
+        {
+            entity.ToTable("attachments");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.EntityType).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Category).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.StoredName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.OriginalName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(200).IsRequired();
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.EntityType, x.EntityId })
+                .HasDatabaseName("IX_attachments_kayit");
+
+            // Diskteki dosya BİR KEZ bağlanır: aynı kategoride aynı
+            // saklama adı iki kayda birden ait olamaz.
+            entity.HasIndex(x => new { x.Category, x.StoredName })
+                .IsUnique()
+                .HasDatabaseName("IX_attachments_dosya");
+
+            entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<Models.Notifications.NotificationRecipient>(entity =>
+        {
+            entity.ToTable("notification_recipients");
+            entity.HasKey(x => x.Id);
+
+            entity.HasOne(x => x.Notification)
+                .WithMany()
+                .HasForeignKey(x => x.NotificationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Bir bildirim bir kullanıcıya BİR KEZ düşer: tekrar
+            // yazım okunma durumunu sıfırlardı.
+            entity.HasIndex(x => new { x.NotificationId, x.UserId })
+                .IsUnique()
+                .HasDatabaseName("IX_notification_recipients_tekil");
+
+            // ZİL SAYACI: kullanıcının okunmamışları. Sayaç her sayfa
+            // yüklemesinde okunuyor, indeks şart.
+            entity.HasIndex(x => new { x.UserId, x.ReadAtUtc })
+                .HasDatabaseName("IX_notification_recipients_okunmamis");
+
             entity.HasQueryFilter(x => !x.IsDeleted);
         });
     }
