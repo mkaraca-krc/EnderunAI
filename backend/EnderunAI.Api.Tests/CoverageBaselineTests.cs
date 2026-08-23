@@ -28,6 +28,29 @@ namespace EnderunAI.Api.Tests;
 /// </summary>
 public sealed class CoverageBaselineTests
 {
+    /*
+     * ÇİZGİ NEDEN SATIR NUMARASIZ.
+     *
+     * İlk biçim `dosya:satır:DbSet` idi. Alakasız bir kod eklemesi
+     * satırları kaydırıyor, aynı okumalar "yeni" ve "kapanmış"
+     * görünüyor, test düşüyordu. Düzeltmesi de hep aynı: çizgiyi
+     * yeniden üret. 2026-08-23'te bu iki kez üst üste yaşandı ve
+     * ikisinde de elle doğrulandı (aynı araçla iki uçtan ölçüm:
+     * 453 = 453, gerçek artış yok).
+     *
+     * TEHLİKE BURADA: üçüncüsünde kimse doğrulamaz. "Tazeleyeyim
+     * geçsin" alışkanlığı bekçiyi işlevsiz bırakır — üstelik yeşil
+     * görünerek. Bir bekçinin güvenilirliği, koruduğu şeyden daha
+     * önemlidir.
+     *
+     * BUGÜNKÜ BİÇİM: `dosya : DbSet : adet`. Satır numarası hiç
+     * geçmiyor, karşılaştırma yalnız bu üçlü kümesi üzerinde.
+     * Kaydırma gürültüsü tamamen kayboluyor; gerçek artış ise
+     * ADETTEN yakalanıyor — aynı dosyaya ikinci bir kapsamsız
+     * `db.Projects.AsNoTracking()` eklenirse adet artar ve test
+     * düşer.
+     */
+
     /// <summary>
     /// KAPSAM SÜZGECİ GEREKMEYEN okumalar ve GEREKÇELERİ.
     /// Gerekçe zorunlu: boş bırakılan bir istisna, sessiz bir karardır.
@@ -51,17 +74,27 @@ public sealed class CoverageBaselineTests
 
         Assert.True(
             yeni.Count == 0,
-            "KAPSAM SÜZGECİ OLMAYAN YENİ OKUMA eklenmiş:\n  " +
-            string.Join("\n  ", yeni) +
+            "KAPSAM SÜZGECİ OLMAYAN YENİ OKUMA eklenmiş " +
+            "(dosya : DbSet : adet):\n  " +
+            string.Join("\n  ", yeni.Select(Anlat)) +
             "\n\nŞirket taşıyan bir varlığı okurken kapsam süzgeci " +
             "uygulayın (ApplyScope). Gerçekten gerekmiyorsa " +
             "CoverageBaselineTests içindeki İstisnalar listesine " +
             "GEREKÇESİYLE ekleyin. Bu liste yalnızca küçülür.");
 
+        /*
+         * TOPLAM, SATIR SAYISI DEĞİL ADETLERİN TOPLAMI.
+         *
+         * Çizgi artık gruplanmış olduğu için dosya satırı sayısı
+         * gerçek borcu vermiyor: tek bir satır "6 okuma" anlamına
+         * gelebilir. Toplamı adetlerden hesaplamak zorunlu — aksi
+         * halde altı okumayı bir okumaya indirgeyen bir düzenleme
+         * borç düştü gibi görünürdü.
+         */
         Assert.True(
-            suanki.Count <= temel.Count,
-            $"Kapsamsız okuma sayısı {suanki.Count}, temel çizgi " +
-            $"{temel.Count}. Sayı artamaz.");
+            ToplamAdet(suanki) <= ToplamAdet(temel),
+            $"Kapsamsız okuma sayısı {ToplamAdet(suanki)}, temel çizgi " +
+            $"{ToplamAdet(temel)}. Sayı artamaz.");
     }
 
     /// <summary>
@@ -80,8 +113,9 @@ public sealed class CoverageBaselineTests
 
         Assert.True(
             kapanmis.Count == 0,
-            "Bu satırlar artık kapsamlı (ya da silinmiş) ama temel " +
-            "çizgide duruyor:\n  " + string.Join("\n  ", kapanmis) +
+            "Bu okumalar artık kapsamlı (ya da silinmiş/azalmış) ama " +
+            "temel çizgide duruyor:\n  " +
+            string.Join("\n  ", kapanmis.Select(Anlat)) +
             "\n\nkapsam-temel-cizgi.txt dosyasından silin — dosya " +
             "borcun GERÇEK boyutunu göstermeli.");
     }
@@ -99,6 +133,27 @@ public sealed class CoverageBaselineTests
     }
 
     // ---------------------------------------------------------------
+
+    /// <summary>
+    /// Çizgi satırlarındaki adetleri toplar. Biçim `dosya:DbSet:adet`.
+    /// </summary>
+    private static int ToplamAdet(IEnumerable<string> satirlar) =>
+        satirlar.Sum(x =>
+            int.TryParse(x[(x.LastIndexOf(':') + 1)..], out var adet) ? adet : 0);
+
+    /// <summary>
+    /// Hata mesajı için okunur biçim: hangi dosyada, hangi DbSet,
+    /// kaç kez. Karşılaştırmada ham satır kullanılıyor; bu yalnız
+    /// insanın okuduğu yer.
+    /// </summary>
+    private static string Anlat(string satir)
+    {
+        var parcalar = satir.Split(':');
+
+        return parcalar.Length == 3
+            ? $"{parcalar[0]}  ->  {parcalar[1]} ({parcalar[2]} kapsamsız okuma)"
+            : satir;
+    }
 
     private static List<string> OkuTemelCizgi(string kok)
     {
@@ -146,14 +201,30 @@ public sealed class CoverageBaselineTests
 
                     if (pencere.Contains("ApplyScope")) continue;
 
-                    var satir = kod[..m.Index].Count(c => c == '\n') + 1;
-                    sonuc.Add($"{goreli}:{satir}:{ad}");
+                    // SATIR NUMARASI YAZILMIYOR — bkz. sınıf başındaki
+                    // "ÇİZGİ NEDEN SATIR NUMARASIZ" notu.
+                    sonuc.Add($"{goreli}:{ad}");
                 }
             }
         }
 
-        sonuc.Sort(StringComparer.Ordinal);
-        return sonuc;
+        /*
+         * ÜÇLÜYE İNDİRGEME: dosya : DbSet : ADET.
+         *
+         * Aynı dosyada aynı DbSet'in kaç kez kapsamsız okunduğu
+         * sayılıyor. Böylece kaydırma gürültüsü tamamen kayboluyor
+         * ama gerçek artış yakalanmaya devam ediyor: aynı dosyaya
+         * ikinci bir kapsamsız `db.Projects.AsNoTracking()` eklenirse
+         * adet 6'dan 7'ye çıkar ve test düşer.
+         *
+         * Sıralama Ordinal ve kararlı: çizgi dosyasının diff'i
+         * okunabilir kalsın, alakasız satırlar yer değiştirmesin.
+         */
+        return sonuc
+            .GroupBy(x => x, StringComparer.Ordinal)
+            .Select(g => $"{g.Key}:{g.Count()}")
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
     }
 
     private static Dictionary<string, string> DbSetHaritasi(string api)

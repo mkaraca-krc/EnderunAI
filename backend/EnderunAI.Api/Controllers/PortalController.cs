@@ -15,7 +15,8 @@ namespace EnderunAI.Api.Controllers;
 public sealed class PortalController(
     AppDbContext db,
     IUploadService uploadService,
-    EnderunAI.Api.Services.Hakedis.IContractSummaryProgressService progressService)
+    EnderunAI.Api.Services.Hakedis.IContractSummaryProgressService progressService,
+    EnderunAI.Api.Services.Portal.IPortalLinkResolver linkResolver)
     : ControllerBase
 {
     private const string PhotoCategory = "site-daily-reports";
@@ -196,23 +197,24 @@ public sealed class PortalController(
         return File(stream, file.ContentType, enableRangeProcessing: true);
     }
 
-    private async Task<Models.EmployerPortalLink?> ResolveActiveLink(string token, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(token))
-            return null;
-
-        // İki şart birden: IsActive VE iptal damgasının boş olması.
-        // Önceden yalnızca IsActive bakılıyordu, RevokedAtUtc karar
-        // vermede hiç kullanılmıyordu. Uygulama ikisini birlikte
-        // yazdığı için pratikte sorun çıkmamıştı; ama yalnızca iptal
-        // damgası basılan bir kayıt (veri düzeltmesi, başka bir kod
-        // yolu) portalı açık bırakırdı. Kimliği doğrulanmamış bir uçta
-        // bu farkı bırakmamak gerekir.
-        return await db.EmployerPortalLinks.AsNoTracking()
-            .SingleOrDefaultAsync(
-                x => x.Token == token && x.IsActive && x.RevokedAtUtc == null,
-                cancellationToken);
-    }
+    /*
+     * KARAR SERVİSTE, BURADA DEĞİL.
+     *
+     * Süre kontrolü, erişim sayacı ve başarısız deneme kaydı dört ucun
+     * her birinde ayrı yazılsaydı biri unutulduğunda o uç sessizce
+     * korumasız kalırdı — RetailSalesController'da [Authorize]
+     * unutulduğunda olan tam olarak buydu. Tek nokta.
+     *
+     * DÖNEN null'da 404 verilir, 401 DEĞİL: 401 "böyle bir bağlantı
+     * vardı ama artık geçerli değil" bilgisini ele verirdi.
+     */
+    private Task<Models.EmployerPortalLink?> ResolveActiveLink(
+        string token, CancellationToken cancellationToken) =>
+        linkResolver.ResolveAsync(
+            token,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString(),
+            cancellationToken);
 
     private static DateTime ToUtcDate(DateTime value) =>
         DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);

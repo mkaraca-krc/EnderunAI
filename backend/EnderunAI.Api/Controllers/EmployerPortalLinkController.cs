@@ -19,6 +19,20 @@ public sealed class EmployerPortalLinkController(
     ICurrentUserService currentUser,
     IEmailService emailService) : ControllerBase
 {
+    /// <summary>
+    /// VARSAYILAN GEÇERLİLİK: 6 AY.
+    ///
+    /// Bağlantı e-postayla paylaşılıyor ve kimlik doğrulaması yok.
+    /// Süresiz bırakılırsa e-posta kutusu yıllar sonra başkasının
+    /// eline geçse bile kapı açık kalır. Altı ay, bir inşaat
+    /// projesinin işveren raporlaması için makul bir dönem; yetmezse
+    /// UZATMA var ve uzatma denetim kaydına yazılıyor.
+    /// </summary>
+    private const int VarsayilanGecerlilikAyi = 6;
+
+    /// <summary>Ekranın "sarı" göstereceği eşik.</summary>
+    private const int YaklasiyorGunu = 30;
+
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.EmployerPortalView)]
     public async Task<IActionResult> Get(Guid projectId, CancellationToken cancellationToken)
@@ -34,13 +48,58 @@ public sealed class EmployerPortalLinkController(
                 x.CreatedAtUtc,
                 x.RevokedAtUtc,
                 x.EmployerName,
-                x.EmployerEmail
+                x.EmployerEmail,
+                x.ExpiresAtUtc,
+                x.LastAccessedAtUtc,
+                x.AccessCount,
+                x.LastExtendedAtUtc,
+                x.ExtensionCount
             })
             .FirstOrDefaultAsync(cancellationToken);
 
+        if (link is null)
+        {
+            return Ok(new
+            {
+                link = (object?)null,
+                emailConfigured = emailService.IsConfigured
+            });
+        }
+
+        /*
+         * DURUMU SUNUCU SÖYLÜYOR, EKRAN HESAPLAMIYOR.
+         *
+         * "Süresi geçti mi" kararı tarayıcının saatine bırakılsaydı,
+         * saati geri alınmış bir makinede bağlantı geçerli görünürdü.
+         * Görünen durum ile ucun uyguladığı kural aynı yerden gelmeli.
+         */
+        var simdi = DateTime.UtcNow;
+
+        var durum =
+            link.RevokedAtUtc != null || !link.IsActive ? "iptal" :
+            link.ExpiresAtUtc <= simdi ? "suresi_gecti" :
+            link.ExpiresAtUtc <= simdi.AddDays(YaklasiyorGunu) ? "yaklasiyor" :
+            "aktif";
+
         return Ok(new
         {
-            link,
+            link = new
+            {
+                link.Id,
+                link.Token,
+                link.IsActive,
+                link.CreatedAtUtc,
+                link.RevokedAtUtc,
+                link.EmployerName,
+                link.EmployerEmail,
+                link.ExpiresAtUtc,
+                link.LastAccessedAtUtc,
+                link.AccessCount,
+                link.LastExtendedAtUtc,
+                link.ExtensionCount,
+                durum,
+                kalanGun = (int)Math.Floor((link.ExpiresAtUtc - simdi).TotalDays)
+            },
             emailConfigured = emailService.IsConfigured
         });
     }
@@ -68,10 +127,15 @@ public sealed class EmployerPortalLinkController(
         {
             ProjectId = projectId,
             Token = GenerateToken(),
-            CreatedByUserId = currentUser.UserId
+            CreatedByUserId = currentUser.UserId,
+            ExpiresAtUtc = DateTime.UtcNow.AddMonths(VarsayilanGecerlilikAyi)
         };
 
         db.EmployerPortalLinks.Add(link);
+        DenetimYaz("PortalLinkCreated", link,
+            $"İşveren portalı bağlantısı oluşturuldu. " +
+            $"Geçerlilik: {link.ExpiresAtUtc:yyyy-MM-dd}.");
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new
@@ -84,7 +148,10 @@ public sealed class EmployerPortalLinkController(
 
     [HttpPost("revoke")]
     [RequirePermission(PermissionCatalog.Keys.EmployerPortalDelete)]
-    public async Task<IActionResult> Revoke(Guid projectId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Revoke(
+        Guid projectId,
+        [FromBody] PortalLinkActionRequest? request,
+        CancellationToken cancellationToken)
     {
         var link = await db.EmployerPortalLinks
             .SingleOrDefaultAsync(x => x.ProjectId == projectId && x.IsActive, cancellationToken);
@@ -97,9 +164,106 @@ public sealed class EmployerPortalLinkController(
         link.RevokedByUserId = currentUser.UserId;
         link.UpdatedAtUtc = DateTime.UtcNow;
 
+        DenetimYaz("PortalLinkRevoked", link,
+            "İşveren portalı bağlantısı iptal edildi.",
+            request?.Reason);
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new { message = "İşveren portalı linki iptal edildi." });
+    }
+
+    /// <summary>
+    /// UZATMA — YENİ TOKEN ÜRETMEZ.
+    ///
+    /// Uzatma yeni token üretseydi işverene gönderilmiş bağlantı
+    /// ölür ve e-postanın yeniden gönderilmesi gerekirdi; "uzatma"
+    /// adı altında sessizce bir iptal olurdu. Burada yalnız son
+    /// geçerlilik ileri alınıyor.
+    /// </summary>
+    [HttpPost("extend")]
+    [RequirePermission(PermissionCatalog.Keys.EmployerPortalCreate)]
+    public async Task<IActionResult> Extend(
+        Guid projectId,
+        [FromBody] PortalLinkExtendRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var link = await db.EmployerPortalLinks
+            .SingleOrDefaultAsync(x => x.ProjectId == projectId && x.IsActive, cancellationToken);
+
+        if (link is null)
+            return NotFound(new { message = "Aktif bir işveren portalı linki bulunamadı." });
+
+        if (link.RevokedAtUtc != null)
+            return BadRequest(new { message = "İptal edilmiş bağlantı uzatılamaz." });
+
+        var ay = request?.Months ?? VarsayilanGecerlilikAyi;
+
+        if (ay is < 1 or > 24)
+            return BadRequest(new { message = "Uzatma süresi 1 ile 24 ay arasında olmalıdır." });
+
+        /*
+         * BUGÜNDEN İLERİ, ESKİ TARİHTEN DEĞİL.
+         *
+         * Süresi geçmiş bir bağlantıda eski tarihe eklemek, uzatma
+         * yapıldığı halde bağlantının hâlâ ölü kalmasına yol açardı —
+         * kullanıcı "uzattım" der, portal 404 dönmeye devam ederdi.
+         */
+        var taban = link.ExpiresAtUtc > DateTime.UtcNow
+            ? link.ExpiresAtUtc
+            : DateTime.UtcNow;
+
+        var eskiTarih = link.ExpiresAtUtc;
+        link.ExpiresAtUtc = taban.AddMonths(ay);
+        link.LastExtendedAtUtc = DateTime.UtcNow;
+        link.LastExtendedByUserId = currentUser.UserId;
+        link.ExtensionCount += 1;
+        link.UpdatedAtUtc = DateTime.UtcNow;
+
+        DenetimYaz("PortalLinkExtended", link,
+            $"İşveren portalı bağlantısı uzatıldı: " +
+            $"{eskiTarih:yyyy-MM-dd} -> {link.ExpiresAtUtc:yyyy-MM-dd} ({ay} ay).",
+            request?.Reason);
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "İşveren portalı bağlantısı uzatıldı.",
+            link.ExpiresAtUtc
+        });
+    }
+
+    /// <summary>
+    /// Denetim kaydı: KİM, NE ZAMAN, NEDEN.
+    ///
+    /// TOKEN YAZILMIYOR — yalnız bağlantı kimliği. Denetim kaydı,
+    /// koruduğu sırrı ele veren bir yer olamaz.
+    /// </summary>
+    private void DenetimYaz(
+        string action,
+        EmployerPortalLink link,
+        string ozet,
+        string? gerekce = null)
+    {
+        db.SecurityAuditEvents.Add(new SecurityAuditEvent
+        {
+            ActorUserId = currentUser.UserId,
+            ActorUsername = currentUser.Username,
+            Action = action,
+            EntityType = "EmployerPortalLink",
+            EntityId = link.Id,
+            DetailsJson = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                summary = ozet,
+                projeId = link.ProjectId,
+                gerekce,
+                sonGecerlilik = link.ExpiresAtUtc
+            }),
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            UserAgent = Request.Headers.UserAgent.ToString(),
+            OccurredAtUtc = DateTime.UtcNow
+        });
     }
 
     [HttpPost("send-email")]
@@ -240,3 +404,7 @@ public sealed record SendPortalEmailRequest(
     string? EmployerName,
     string EmployerEmail,
     string PortalUrl);
+
+public sealed record PortalLinkActionRequest(string? Reason);
+
+public sealed record PortalLinkExtendRequest(int? Months, string? Reason);

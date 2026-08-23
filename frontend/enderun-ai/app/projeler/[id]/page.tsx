@@ -473,6 +473,30 @@ export default function ProjectCenterPage() {
     }
   }
 
+  /**
+   * UZATMA — YENİ TOKEN ÜRETMEZ. İşverene gönderilmiş bağlantı
+   * çalışmaya devam eder; yalnız son geçerlilik ileri alınır.
+   * Yeni token isteniyorsa "Yeni Link Üret" ayrı bir düğme ve
+   * eskisini bilerek geçersiz kılıyor.
+   */
+  async function extendPortalLink() {
+    setPortalLoading(true);
+    setPortalError("");
+
+    try {
+      await employerPortalService.extend(params.id, 6);
+      const status = await employerPortalService.get(params.id);
+      setPortalLink(status.link);
+      setEmailConfigured(status.emailConfigured);
+    } catch (err) {
+      setPortalError(
+        err instanceof Error ? err.message : "İşveren portalı linki uzatılamadı."
+      );
+    } finally {
+      setPortalLoading(false);
+    }
+  }
+
   async function sendPortalEmail(event: React.FormEvent) {
     event.preventDefault();
     if (!portalLink) return;
@@ -884,6 +908,43 @@ export default function ProjectCenterPage() {
               </div>
             ) : (
               <div className="erp-form-card">
+                {/*
+                  DURUM SUNUCUDAN GELİYOR, BURADA HESAPLANMIYOR.
+                  Tarayıcının saatine bakılsaydı saati geri alınmış bir
+                  makinede süresi geçmiş bağlantı geçerli görünürdü.
+                */}
+                <div className={`erp-portal-status ${portalLink.durum}`}>
+                  <div className="erp-portal-status-main">
+                    <strong>
+                      {portalLink.durum === "aktif" && "Aktif"}
+                      {portalLink.durum === "yaklasiyor" && "Süresi yaklaşıyor"}
+                      {portalLink.durum === "suresi_gecti" && "Süresi geçti"}
+                      {portalLink.durum === "iptal" && "İptal edildi"}
+                    </strong>
+                    <span>
+                      Son geçerlilik:{" "}
+                      {new Date(portalLink.expiresAtUtc).toLocaleDateString("tr-TR")}
+                      {portalLink.durum !== "suresi_gecti" &&
+                        portalLink.durum !== "iptal" &&
+                        ` (${portalLink.kalanGun} gün)`}
+                    </span>
+                  </div>
+
+                  <div className="erp-portal-status-meta">
+                    <span>
+                      Son erişim:{" "}
+                      {portalLink.lastAccessedAtUtc
+                        ? new Date(portalLink.lastAccessedAtUtc).toLocaleString("tr-TR")
+                        : "hiç açılmadı"}
+                    </span>
+                    <span>
+                      {portalLink.accessCount} kez açıldı
+                      {portalLink.extensionCount > 0 &&
+                        ` · ${portalLink.extensionCount} kez uzatıldı`}
+                    </span>
+                  </div>
+                </div>
+
                 <label>
                   <span>Portal Linki</span>
                   <input
@@ -914,6 +975,19 @@ export default function ProjectCenterPage() {
                       disabled={portalLoading}
                     >
                       Yeni Link Üret (Eskisini Geçersiz Kılar)
+                    </button>
+                  )}
+                  {/* UZATMA YENİ TOKEN ÜRETMEZ: üretseydi işverene
+                      gönderilmiş bağlantı ölürdü. "Yeni Link Üret"
+                      ayrı bir iş — o eskisini bilerek geçersiz kılıyor. */}
+                  {portalActions.can("create") && (
+                    <button
+                      type="button"
+                      className="erp-button secondary"
+                      onClick={() => void extendPortalLink()}
+                      disabled={portalLoading}
+                    >
+                      6 Ay Uzat
                     </button>
                   )}
                   {/* Linki iptal etmek işverenin erişimini kesiyor:

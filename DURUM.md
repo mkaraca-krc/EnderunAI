@@ -176,8 +176,109 @@ girmiyor (unvan, vergi no, adres, banka bilgisi YOK) — `LogoPath`
 okunup yalnız dosya dönüyor. Canlıda logo yüklenmemiş olduğu için
 şu an 404 + standart `problem+json` (tek yan bilgi `traceId`).
 
-**KARAR BEKLİYOR:** iki eksiğin M1'den önce mi kapatılacağı, yoksa
-açık madde olarak mı taşınacağı — Mehmet Karacabey kararı.
+**KAPATILDI (2026-08-23, Mehmet Karacabey kararı: M1'den önce).**
+
+- **Süre:** `ExpiresAtUtc`, varsayılan 6 ay. Süresi geçen bağlantı
+  **404** döner — 401 DEĞİL: 401 "böyle bir bağlantı vardı ama artık
+  geçerli değil" bilgisini ele verirdi.
+- **Uzatma:** `POST .../extend`, YENİ TOKEN ÜRETMEZ. Üretseydi
+  işverene gönderilmiş bağlantı ölür, "uzatma" adı altında sessizce
+  bir iptal olurdu. Süresi geçmiş bağlantıda tarih BUGÜNDEN ileri
+  alınır; eski tarihe eklenseydi kullanıcı "uzattım" der, portal 404
+  dönmeye devam ederdi.
+- **Denetim:** oluşturma / uzatma / iptal → `security_audit_events`
+  (kim, ne zaman, neden). Token bu kayıtlara GİRMEZ, yalnız bağlantı
+  kimliği.
+- **Başarısız denemeler:** `PortalTokenRejected` — zaman, IP,
+  User-Agent, sebep (`bilinmeyen_token` / `suresi_gecmis` /
+  `iptal_edilmis`) ve token'ın YALNIZ İLK 8 KARAKTERİ. Sebep ayrımı
+  yalnız kayda girer; dışarıya dönen yanıt her durumda 404.
+- **Tarama eşiği:** aynı IP'den 10 dakikada 10 başarısız deneme →
+  `PortalTokenScanSuspected`, pencere başına BİR KEZ (her istekte
+  yazılsaydı kayıt aynı olayın kopyalarıyla dolar, asıl bilgi
+  görünmez olurdu).
+- **Karar tek noktada:** `Services/Portal/PortalLinkResolver.cs`.
+  Dört ucun dördü de oradan geçiyor. Dört yerde ayrı yazılsaydı biri
+  unutulduğunda o uç sessizce korumasız kalırdı — RetailSalesController
+  dersinin doğrudan uygulaması.
+- **Migration tuzağı:** EF'in ürettiği `ExpiresAtUtc` varsayılanı
+  `0001-01-01` idi ve uygulandığı anda MEVCUT BÜTÜN BAĞLANTILARI —
+  aktif olan dahil — öldürürdü. `now() + interval '6 months'` olarak
+  değiştirildi: eski kayıtlar oluşturma tarihinden değil MIGRATION
+  tarihinden süre alıyor.
+- **Ekran:** durum şeridi (aktif / sarı "yaklaşıyor" / gri "süresi
+  geçti" / gri "iptal"), son geçerlilik + kalan gün, son erişim,
+  açılma sayısı, uzatma sayısı, "6 Ay Uzat". Durum SUNUCUDAN geliyor —
+  tarayıcının saatine bırakılsaydı saati geri alınmış bir makinede
+  süresi geçmiş bağlantı geçerli görünürdü. Renk tek başına bilgi
+  taşımıyor, yazılı karşılığı da şeritte.
+
+### NGINX TOKEN MASKELEMESİ (2026-08-23, uygulandı)
+
+Token `/portal/{token}` biçiminde URL YOLUNDA taşınıyor ve nginx
+varsayılan olarak istek satırının tamamını kaydediyor: 256 bitlik
+anahtar düz metin olarak erişim kaydına ve oradan log yedeklerine
+düşerdi. Uygulamada maskeleyip kaydın sızdırmasına göz yummak
+anlamsız olurdu.
+
+`deploy/nginx/portal-token-maskeleme.conf` — **repoda**, çünkü sunucu
+yeniden kurulduğunda ya da yapılandırma elle değiştiğinde koruma
+sessizce kaybolmasın. Repoda değilse yoktur.
+
+DİKKAT: `log_format maskeli` conf.d içinde tanımlı olduğu için
+`access_log` satırı `include /etc/nginx/conf.d/*.conf;` SATIRINDAN
+SONRA olmak zorunda — nginx bir log biçimini tanımlanmadan önce
+kullanamıyor ve "unknown log format" ile başlamayı reddediyor. İlk
+denemede tam olarak bu oldu, `nginx -t` yakaladı.
+
+Canlı doğrulama (kod okuyarak değil, GÖREREK):
+`GET /portal/*** HTTP/1.1 200` — token kayıtta 0 kez geçiyor.
+Arşiv dahil tüm eski kayıtlar tarandı: hiçbir gerçek token düz metin
+geçmiyor, temizlenmesi gereken kayıt YOK. (Eski `/portal/...`
+satırları bot taramaları: `.env`, `config.env` vb.)
+
+#### AÇIK MADDE — TOKEN URL'DEN ÇEREZE TAŞINMALI
+
+Maskeleme YALNIZCA sunucu kaydını korur. Token URL yolunda taşındığı
+sürece:
+  - tarayıcı geçmişine,
+  - `Referer` başlığına,
+  - paylaşılan ekran görüntülerine
+de düşer.
+
+KALICI ÇÖZÜM: bağlantı ilk açıldığında token kısa ömürlü bir OTURUM
+ÇEREZİNE dönüştürülsün, sonraki isteklerde URL'de taşınmasın. Mevcut
+bağlantılar çalışmaya devam eder (ilk açılış yine URL ile olur).
+Mehmet Karacabey kararı: ŞİMDİ YAPILMAYACAK, açık madde olarak
+taşınıyor.
+
+### CIRCIR ÇİZGİSİ SATIR NUMARASINDAN KURTARILDI (2026-08-23)
+
+**Sorun:** çizgi `dosya:satır:DbSet` biçimindeydi. Alakasız bir kod
+eklemesi satırları kaydırınca aynı okumalar "yeni" ve "kapanmış"
+görünüyor, test düşüyordu. Düzeltmesi hep aynıydı: çizgiyi yeniden
+üret. Bu 2026-08-23'te İKİ KEZ üst üste yaşandı; ikisinde de elle
+doğrulandı (aynı araçla iki uçtan ölçüm, 453 = 453, gerçek artış yok).
+
+**Tehlike üçüncüsündeydi:** kimse doğrulamaz. "Tazeleyeyim geçsin"
+alışkanlığı bekçiyi YEŞİL GÖRÜNEREK işlevsiz bırakır. Bir bekçinin
+güvenilirliği, koruduğu şeyden daha önemlidir.
+
+**Yeni biçim:** `dosya : DbSet : adet`. Satır numarası hiç geçmiyor;
+karşılaştırma yalnız bu üçlü kümesi üzerinde. Toplam borç, dosya
+satırı sayısından DEĞİL adetlerin toplamından hesaplanıyor — aksi
+halde altı okumayı bir satıra indirgeyen bir düzenleme "borç düştü"
+gibi görünürdü. Hata mesajı hangi dosya/DbSet olduğunu ve adedi
+söylüyor.
+
+**Üç sonda ile kanıtlandı:**
+  1. Kapsamsız yeni okuma eklendi → DÜŞTÜ.
+  2. Alakasız 50 satır eklendi (satırların kaydığı `diff` ile
+     doğrulandı) → DÜŞMEDİ. **Asıl kanıt bu.**
+  3. Mevcut çiftin adedi artırıldı (DocumentAttachments 4 → 5) →
+     DÜŞTÜ.
+
+312 satır, toplam 453 okuma — eski biçimle birebir aynı sayı.
 
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 

@@ -1,5 +1,18 @@
 import { apiClient } from "@/lib/api/api-client";
 
+/**
+ * Bağlantı durumu SUNUCUDAN gelir, burada hesaplanmaz.
+ *
+ * "Süresi geçti mi" kararı tarayıcının saatine bırakılsaydı, saati
+ * geri alınmış bir makinede bağlantı geçerli görünürdü. Ekranda
+ * görünen durum ile ucun uyguladığı kural aynı yerden gelmeli.
+ */
+export type EmployerPortalLinkStatusCode =
+  | "aktif"
+  | "yaklasiyor"
+  | "suresi_gecti"
+  | "iptal";
+
 export type EmployerPortalLink = {
   id: string;
   token: string;
@@ -8,6 +21,13 @@ export type EmployerPortalLink = {
   revokedAtUtc?: string | null;
   employerName?: string | null;
   employerEmail?: string | null;
+  expiresAtUtc: string;
+  lastAccessedAtUtc?: string | null;
+  accessCount: number;
+  lastExtendedAtUtc?: string | null;
+  extensionCount: number;
+  durum: EmployerPortalLinkStatusCode;
+  kalanGun: number;
 } | null;
 
 export type EmployerPortalLinkStatus = {
@@ -38,10 +58,22 @@ export const employerPortalService = {
     );
   },
 
-  revoke(projectId: string) {
+  revoke(projectId: string, reason?: string) {
     return apiClient<{ message: string }>(
       `projects/${projectId}/employer-portal-link/revoke`,
-      { method: "POST" }
+      { method: "POST", body: { reason } }
+    );
+  },
+
+  /**
+   * Uzatma YENİ TOKEN ÜRETMEZ: üretseydi işverene gönderilmiş
+   * bağlantı ölür ve e-postanın yeniden gönderilmesi gerekirdi —
+   * "uzatma" adı altında sessizce bir iptal olurdu.
+   */
+  extend(projectId: string, months: number, reason?: string) {
+    return apiClient<{ message: string; expiresAtUtc: string }>(
+      `projects/${projectId}/employer-portal-link/extend`,
+      { method: "POST", body: { months, reason } }
     );
   },
 

@@ -4200,3 +4200,59 @@ body {
 .erp-label-location {
   font-size: 9pt;
 }
+
+/*
+  İŞVEREN PORTALI BAĞLANTI DURUMU.
+
+  Renk TEK BAŞINA bilgi taşımıyor: her durumun yazılı karşılığı da
+  şeritte duruyor ("Süresi yaklaşıyor", "Süresi geçti"). Renk körü bir
+  kullanıcı ya da gri basılmış bir çıktı, bilgiyi yine de okuyabilir.
+*/
+.erp-portal-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6pt 18pt;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8pt 10pt;
+  margin-bottom: 10pt;
+  border: 1px solid var(--color-border-subtle);
+  border-left-width: 3pt;
+  border-radius: 3pt;
+  background: var(--color-surface-card);
+  font-size: 9pt;
+}
+
+.erp-portal-status-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2pt;
+}
+
+.erp-portal-status-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2pt;
+  text-align: right;
+  color: var(--erp-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.erp-portal-status.aktif {
+  border-left-color: var(--color-semantic-success);
+}
+
+/* Süresi yaklaşan: SARI. */
+.erp-portal-status.yaklasiyor {
+  border-left-color: var(--color-semantic-warning);
+  background: var(--color-semantic-warning-tint);
+}
+
+/* Süresi geçmiş ve iptal: GRİ — artık çalışmıyor, dikkat çekmesi
+   değil, sönük durması gerekiyor. */
+.erp-portal-status.suresi_gecti,
+.erp-portal-status.iptal {
+  border-left-color: var(--erp-muted);
+  color: var(--erp-muted);
+  opacity: 0.75;
+}

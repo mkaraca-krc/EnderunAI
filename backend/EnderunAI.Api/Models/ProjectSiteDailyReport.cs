@@ -79,6 +79,39 @@ public sealed class EmployerPortalLink : BaseEntity
 
     public DateTime? RevokedAtUtc { get; set; }
     public Guid? RevokedByUserId { get; set; }
+
+    /// <summary>
+    /// SON GEÇERLİLİK — ZORUNLU, VARSAYILAN 6 AY.
+    ///
+    /// Bağlantı e-postayla paylaşılıyor ve kimlik doğrulaması yok:
+    /// süresiz bırakıldığında elle iptal edilene kadar kalıcı bir
+    /// kapı oluyor. E-posta kutusu yıllar sonra başkasının eline
+    /// geçse bile bağlantı çalışmaya devam ederdi.
+    ///
+    /// Süresi geçen bağlantı 404 dönüyor, 401 DEĞİL: 401 "böyle bir
+    /// bağlantı var ama artık geçerli değil" bilgisini verirdi ve
+    /// geçerli token aramaya çalışan birine "bu token bir zamanlar
+    /// vardı" ipucu olurdu.
+    /// </summary>
+    public DateTime ExpiresAtUtc { get; set; }
+
+    /// <summary>
+    /// Son açılma zamanı ve toplam açılma sayısı — yönetim ekranında
+    /// "bu bağlantı kullanılıyor mu" sorusunun cevabı. Kullanılmayan
+    /// bir bağlantıyı iptal etmek, kullanılanı uzatmak için gerekli.
+    /// </summary>
+    public DateTime? LastAccessedAtUtc { get; set; }
+
+    public int AccessCount { get; set; }
+
+    /// <summary>
+    /// Uzatma izi: kaç kez, en son ne zaman, en son kim uzattı.
+    /// Denetim kaydı ayrıca security_audit_events'e yazılıyor; bu
+    /// alanlar ekranda göstermek için kayıt üzerinde duruyor.
+    /// </summary>
+    public DateTime? LastExtendedAtUtc { get; set; }
+    public Guid? LastExtendedByUserId { get; set; }
+    public int ExtensionCount { get; set; }
 }
 
 public sealed class EmployerPortalEmailLog : BaseEntity

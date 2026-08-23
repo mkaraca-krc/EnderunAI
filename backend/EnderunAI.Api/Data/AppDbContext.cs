@@ -4966,6 +4966,12 @@ public sealed class AppDbContext(
             entity.Property(x => x.EmployerName).HasMaxLength(200);
             entity.Property(x => x.EmployerEmail).HasMaxLength(300);
 
+            // Kolonu doldurmayan bir kod yolu çıkarsa geçerli bir
+            // tarih yazılsın: varsayılan sessizce 0001-01-01 olursa
+            // bağlantı doğduğu anda ölü olurdu.
+            entity.Property(x => x.ExpiresAtUtc)
+                .HasDefaultValueSql("now() + interval '6 months'");
+
             entity.HasOne(x => x.Project)
                 .WithMany()
                 .HasForeignKey(x => x.ProjectId)
