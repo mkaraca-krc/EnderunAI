@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -473,7 +474,41 @@ builder.Services
             };
     });
 
-builder.Services.AddAuthorization();
+/*
+ * VARSAYILAN: KİMLİK DOĞRULAMA ZORUNLU.
+ *
+ * NEDEN: `RequirePermission` düz bir attribute, filtre değil;
+ * zorlamayı PermissionAuthorizationMiddleware yapıyor ve o middleware
+ * kimlik doğrulanmamış isteği kontrol etmeden geçiriyor. Yani izin
+ * kontrolü YALNIZCA giriş yapmış kullanıcılar için çalışıyor ve
+ * kimlik zorlaması tek başına [Authorize]'dan geliyordu.
+ *
+ * 2026-08-15 ile 2026-08-23 arasında RetailSalesController'da o
+ * [Authorize] eksikti: perakende modülünün tamamı anonim çağrılabilir
+ * durumdaydı — üstelik uçlarda [RequirePermission(...)] yazdığı için
+ * KORUNUYOR GİBİ görünüyordu.
+ *
+ * FallbackPolicy varsayılanı TERSİNE ÇEVİRİYOR: işareti olmayan her
+ * uç kimlik doğrulama ister. Artık [Authorize] unutmak açık değil
+ * HATA üretiyor — anonim olması gereken uç açıkça [AllowAnonymous]
+ * taşımak zorunda.
+ *
+ * BİLEREK ANONİM KALANLAR (2026-08-23 itibarıyla tamamı):
+ *   POST /api/auth/login              — girişin kendisi
+ *   POST /api/auth/access-requests    — hesabı olmayanın erişim talebi
+ *   GET  /api/portal/{token}/*        — kendi paylaşım anahtarı modeli
+ *   GET  /api/company-settings/logo   — giriş ekranı logosu
+ *   GET  /api/health                  — safe-deploy sağlık kontrolü
+ *
+ * AuthorizeGuardTests ikinci savunma hattı olarak duruyor: fallback
+ * bir gün kaldırılırsa o test controller'ları yakalar.
+ */
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 builder.Services.AddControllers();
 builder.Services.AddScoped<IDocumentNumberService, DocumentNumberService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IInventoryCodeService, EnderunAI.Api.Services.Inventory.InventoryCodeService>();
@@ -598,6 +633,12 @@ app.UseRateLimiter();
 
 app.MapControllers();
 
+/*
+ * SAĞLIK KONTROLÜ ANONİM KALMAK ZORUNDA: safe-deploy servisleri
+ * yeniden başlattıktan sonra bu uca bakıyor ve token taşımıyor.
+ * FallbackPolicy açıldığında işaretsiz bırakılsaydı 401 dönerdi ve
+ * HER DEPLOY sağlık kontrolünde patlardı.
+ */
 app.MapGet("/api/health", () =>
 {
     return Results.Ok(new
@@ -606,7 +647,7 @@ app.MapGet("/api/health", () =>
         service = "EnderunAI.Api",
         utc = DateTime.UtcNow,
     });
-});
+}).AllowAnonymous();
 
 app.Run();
 
