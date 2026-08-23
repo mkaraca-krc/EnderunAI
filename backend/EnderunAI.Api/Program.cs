@@ -517,6 +517,17 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Collaboration.IEntityContextResolver,
     EnderunAI.Api.Services.Collaboration.EntityContextResolver>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.ITaskNotificationWriter,
+    EnderunAI.Api.Services.Notifications.TaskNotificationWriter>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.TaskDueNotificationScanner>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.DailySummaryService>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.ScopeDeferralWatchdog>();
+builder.Services.AddHostedService<
+    EnderunAI.Api.Services.Notifications.DailySummaryBackgroundService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IInventoryCodeService, EnderunAI.Api.Services.Inventory.InventoryCodeService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IInventoryAccountResolver, EnderunAI.Api.Services.Inventory.InventoryAccountResolver>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IGoodsReceiptAccountingPoster, EnderunAI.Api.Services.Inventory.GoodsReceiptAccountingPoster>();

@@ -31,7 +31,9 @@ public sealed class CollaborationController(
     ICurrentUserService currentUser,
     ICurrentDataScopeService dataScope,
     IEntityContextResolver entityResolver,
-    IUploadService uploadService) : ControllerBase
+    IUploadService uploadService,
+    EnderunAI.Api.Services.Notifications.ITaskNotificationWriter notifications)
+    : ControllerBase
 {
     /// <summary>
     /// DÜZENLEME PENCERESİ: 15 dakika.
@@ -199,6 +201,41 @@ public sealed class CollaborationController(
 
         db.TaskComments.Add(yorum);
         await db.SaveChangesAsync(cancellationToken);
+
+        /*
+         * @ İLE ANILANLARA HABER — YORUM KAYDEDİLDİKTEN SONRA.
+         *
+         * Bildirim yazımı asıl işlemi çökertmiyor: yazıcı hatayı
+         * kendi sınırında karşılıyor ve kayda düşürüyor. Yorum
+         * yazıldıysa yazılmıştır; bildirim gitmese bile.
+         *
+         * KENDİNİ ANMA BİLDİRİM ÜRETMEZ: kişi zaten yazan.
+         */
+        if (request.MentionedUserIds is { Count: > 0 })
+        {
+            foreach (var anilan in request.MentionedUserIds.Distinct())
+            {
+                if (anilan == currentUser.UserId)
+                    continue;
+
+                await notifications.WriteAsync(
+                    baglam.CompanyId,
+                    anilan,
+                    EnderunAI.Api.Services.Notifications.TaskNotificationTypes.Mentioned,
+
+                    // KAYNAK YORUMUN KENDİSİ: aynı kayıtta ikinci kez
+                    // anılmak yeni bildirim üretmeli, o yüzden görev
+                    // değil YORUM kimliği.
+                    yorum.Id,
+                    "-",
+
+                    "Bir yorumda anıldınız",
+                    metin.Length > 160 ? metin[..160] + "…" : metin,
+                    null,
+                    Models.Notifications.NotificationSeverity.Info,
+                    cancellationToken);
+            }
+        }
 
         return Ok(YorumDto(yorum));
     }

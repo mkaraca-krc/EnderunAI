@@ -470,6 +470,90 @@ için "boşluksuz" diyebilir; diğer tipler için iddia "hepsi farklı"
 olarak kalır. Tek bir testin iki farklı güvence vermesi, birinin
 zamanla diğerinin arkasına saklanması demektir.
 
+#### E-POSTA ALTYAPISI — ÖLÇÜLDÜ, ÖNCEKİ RAPORUM YANLIŞTI
+
+**İKİ e-posta servisi var** ve `EMAIL_PROVIDER` ile seçiliyor:
+
+  - `SmtpEmailService` — `SMTP_HOST/USER/PASS/PORT/FROM` okuyor
+  - `EmailService` — Brevo API, `BREVO_API_KEY/SMTP_FROM/SMTP_FROM_NAME`
+
+**VARSAYILAN `smtp`** (Program.cs: `EMAIL_PROVIDER ?? "smtp"`). Canlıda
+değişken TANIMSIZ, yani **aktif olan SMTP servisi** ve SMTP
+değişkenleri **canlı olarak okunuyor**.
+
+İlk raporumda `EmailService.cs`'in (Brevo) `IsConfigured`'ına bakıp
+"false, özellik ölü doğacak" demiştim — YANLIŞTI, DI'da kayıtlı olan o
+değil. Ölü sandığım `SMTP_HOST/USER/PASS` değişkenlerini silmek
+üzereydim; silseydim e-posta tamamen bozulurdu. "Silmeden önce
+gerçekten okunmadığını bir kez daha tara" talimatı bunu yakaladı.
+
+**Gerçek durum: `IsConfigured` TRUE.** Özellik ölü doğmuyor.
+
+#### GÜNLÜK E-POSTA ÖZETİ — DÖRT KADEMELİ BAYRAK
+
+`DAILY_SUMMARY_MODE` (tek değişken, dört durum):
+
+| Mod | Davranış |
+|---|---|
+| `off` | Tarama HİÇ koşmaz. **VARSAYILAN** — deploy bu durumda çıktı. Değişken tanımsızsa da bu geçerli. |
+| `dryrun` | Koşar, e-posta GÖNDERMEZ; kime ne gideceğini sunucu günlüğüne yazar. |
+| `test` | Yalnız `DAILY_SUMMARY_TEST_RECIPIENTS` listesine gönderir. |
+| `on` | Herkese gönderir. |
+
+**KURU KOŞU KAYDI** sunucu günlüğüne yazılıyor (kalıcı tabloya değil —
+bir kez okunup atılacak bilgi): kullanıcı adı, açık görev, termini
+geçen, onay bekleyen, okunmamış bildirim, gönderilecek miydi.
+**E-POSTA ADRESİ KAYDA YAZILMIYOR** — günlük, adres listesi tutulacak
+yer değil.
+
+**SAAT: 04:00 UTC = 07:00 Türkiye.** Sunucu `Etc/UTC` (ölçüldü),
+Türkiye sabit UTC+3, yaz saati YOK. Kodda "07:00" yazıp sunucunun UTC
+olduğunu unutmak, özetin sabah 10'da gitmesi demekti. Test sabiti
+doğrudan sınıyor, yerel makine ayarına güvenmiyor.
+
+**BOŞ ÖZET GÖNDERİLMİYOR:** yapacak işi olmayana "0 açık göreviniz
+var" e-postası, zilin kapatılmasıyla aynı sonucu doğurur.
+
+**KULLANICI KAPATABİLİR:** `UserUiPreference.DailySummaryEmailEnabled`
+(varsayılan true). Zil ve uygulama içi bildirim ETKİLENMİYOR, yalnız
+e-posta. Bu seçenek olmasaydı istemeyen kişi e-postayı filtreye atar,
+sonra gerçekten önemli bir e-posta da aynı filtreye düşerdi.
+
+**KİŞİ BAZINDA HATA SINIRI:** bir kişinin gönderimi patlarsa tur
+diğerlerine devam eder ve hata `DailySummaryEmailFailed` olarak kayda
+düşer. Tek kişinin bozuk adresi yüzünden kimsenin özet almaması,
+sessizce yutmaktan farksız bir arıza olurdu.
+
+**MOD DEĞİŞTİRME (Mehmet Karacabey yapacak):**
+```bash
+sudo nano /etc/enderunai/backend.env      # DAILY_SUMMARY_MODE=dryrun
+sudo systemctl restart enderunai-backend  # ŞART: EnvironmentFile systemd'den okunuyor
+```
+`test` modu için ayrıca:
+`DAILY_SUMMARY_TEST_RECIPIENTS=adres1@ornek.com,adres2@ornek.com`
+
+**BREVO'YA GEÇİŞ:** yalnız `BREVO_API_KEY` yazmak YETMEZ —
+`EMAIL_PROVIDER=brevo` da gerekir. Karar: Brevo'da kalınacak ama geçiş
+henüz yapılmadı; bugün SMTP aktif.
+
+#### ⚠️ SMTP DEĞİŞKENLERİNİ SİLMEYİN — CANLI OLARAK OKUNUYOR
+
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`: bunlar ÖLÜ AYAR
+DEĞİL. `EMAIL_PROVIDER` tanımsız olduğu için varsayılan `smtp` ve
+aktif servis `SmtpEmailService` — bu dört değişkeni doğrudan okuyor.
+Silinirse `IsConfigured` false olur ve SİSTEMDE HİÇ E-POSTA GİTMEZ.
+
+2026-08-23'te bunları "ölü ayar" sanıp silmek üzereydim. Yanlış
+teşhisin sebebi: `IsConfigured`'ı `EmailService.cs` (Brevo) içinde
+okumuştum, ama DI'da kayıtlı olan `SmtpEmailService`. İki servis aynı
+arayüzü uyguluyor ve seçim Program.cs'te bir ortam değişkenine bağlı;
+dosyaya bakmak yetmiyor, KAYDIN HANGİSİ OLDUĞUNA bakmak gerekiyor.
+
+Silme talimatı verilmişti; "silmeden önce gerçekten hiçbir yerde
+okunmadığını bir kez daha tara" uyarısı yakaladı. Ders: bir ayarın
+ölü olduğunu, onu okuyan dosyayı bulamadığın için değil, KAYITLI
+SERVİSİN okumadığını görerek söyleyebilirsin.
+
 #### AÇIK MADDE — HEIC DÖNÜŞTÜRME: ÖLÇÜM BEKLİYOR
 
 **Bugünkü durum (M1/3):** HEIC yüklenebiliyor (iPhone varsayılanı,

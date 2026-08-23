@@ -173,7 +173,19 @@ public sealed class NotificationStore(AppDbContext db)
     {
         var query = db.Notifications
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId);
+            /*
+             * YALNIZ ŞİRKET SATIRLARI — KİŞİSEL OLANLAR HARİÇ.
+             *
+             * Kişisel bildirimler (`TargetUserId` dolu) aynı tabloda
+             * duruyor ama başka bir kapıdan okunuyor: görünürlükleri
+             * izne değil KİŞİYE bağlı, okunma durumları
+             * `NotificationRecipient` üzerinden.
+             *
+             * Bu süzgeç olmasaydı kişisel satır İKİ KEZ sayılırdı —
+             * hem burada hem kişisel sayaçta. Zil sayacı testi tam
+             * olarak bunu yakaladı (beklenen 2, gelen 3).
+             */
+            .Where(x => x.CompanyId == companyId && x.TargetUserId == null);
 
         if (!includeHandled)
         {

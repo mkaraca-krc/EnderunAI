@@ -17,7 +17,8 @@ public sealed class WorkTasksController(
     ICurrentUserService currentUser,
     EnderunAI.Api.Services.DocumentNumbers.IDocumentNumberService documentNumbers,
     ICurrentDataScopeService dataScope,
-    IUserAuthorizationService authorization)
+    IUserAuthorizationService authorization,
+    EnderunAI.Api.Services.Notifications.ITaskNotificationWriter notifications)
     : ControllerBase
 {
     /// <summary>Sayfa boyutu tavanı — istemci daha fazlasını isteyemez.</summary>
@@ -319,6 +320,31 @@ public sealed class WorkTasksController(
         db.WorkTasks.Add(item);
         await db.SaveChangesAsync(cancellationToken);
 
+        /*
+         * BİLDİRİM ASIL İŞLEMDEN SONRA VE AYRI.
+         *
+         * Görev KAYDEDİLDİ; bildirim yazımı bundan sonra ve kendi
+         * hata sınırı içinde. Yazıcı hatayı yutmuyor ama fırlatmıyor
+         * da — kayda düşürüyor. Aynı transaction'da olsaydı bildirim
+         * yüzünden görev atanamazdı; sessizce yutulsaydı görev
+         * atanır, kimse haber almaz ve kimse fark etmezdi.
+         */
+        if (item.AssignedToUserId is Guid yeniSorumlu &&
+            yeniSorumlu != currentUser.UserId)
+        {
+            await notifications.WriteAsync(
+                item.CompanyId,
+                yeniSorumlu,
+                Services.Notifications.TaskNotificationTypes.Assigned,
+                item.Id,
+                "-",
+                $"Yeni görev: {item.TaskNumber}",
+                item.Title,
+                $"/gorevler/{item.Id}",
+                Models.Notifications.NotificationSeverity.Info,
+                cancellationToken);
+        }
+
         return Ok(ToDto(item));
     }
 
@@ -415,6 +441,24 @@ public sealed class WorkTasksController(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+
+        // GÖNDERENE HABER: onayı bekleyen bir iş var. Kendine açtıysa
+        // bildirim yok — kendi işini kendine duyurmak gürültüdür.
+        if (!kendineAcmis && item.AssignedByUserId is Guid gonderen)
+        {
+            await notifications.WriteAsync(
+                item.CompanyId,
+                gonderen,
+                Services.Notifications.TaskNotificationTypes.Completed,
+                item.Id,
+                "-",
+                $"Onay bekliyor: {item.TaskNumber}",
+                item.Title,
+                $"/gorevler/{item.Id}",
+                Models.Notifications.NotificationSeverity.Info,
+                cancellationToken);
+        }
+
         return Ok(ToDto(item));
     }
 
@@ -517,6 +561,30 @@ public sealed class WorkTasksController(
         item.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
+
+        // YAPANA HABER: iş geri döndü, gerekçesiyle.
+        if (item.AssignedToUserId is Guid yapan)
+        {
+            await notifications.WriteAsync(
+                item.CompanyId,
+                yapan,
+                Services.Notifications.TaskNotificationTypes.Returned,
+                item.Id,
+
+                /*
+                 * PERİYOT ANAHTARI İADE SAYISI: aynı görev ikinci kez
+                 * iade edilirse YENİ bildirim yazılabilsin. Sabit
+                 * anahtar olsaydı ikinci iade sessiz kalırdı.
+                 */
+                item.ReturnCount.ToString(),
+
+                $"Görev iade edildi: {item.TaskNumber}",
+                gerekce,
+                $"/gorevler/{item.Id}",
+                Models.Notifications.NotificationSeverity.Warning,
+                cancellationToken);
+        }
+
         return Ok(ToDto(item));
     }
 
@@ -587,6 +655,24 @@ public sealed class WorkTasksController(
         });
 
         await db.SaveChangesAsync(cancellationToken);
+
+        // DEVRALANA HABER: onun için bu bir "yeni görev".
+        await notifications.WriteAsync(
+            item.CompanyId,
+            request.ToUserId,
+            Services.Notifications.TaskNotificationTypes.Assigned,
+            item.Id,
+
+            // Devretme sayısı: aynı görev tekrar devredilirse yeni
+            // bildirim yazılabilsin.
+            $"devir-{item.DelegationCount}",
+
+            $"Görev devredildi: {item.TaskNumber}",
+            item.Title,
+            $"/gorevler/{item.Id}",
+            Models.Notifications.NotificationSeverity.Info,
+            cancellationToken);
+
         return Ok(ToDto(item));
     }
 

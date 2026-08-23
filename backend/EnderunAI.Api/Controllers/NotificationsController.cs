@@ -48,9 +48,36 @@ public sealed class NotificationsController(
         var canSeeCash = await extraPaymentVisibility
             .CanViewExtraPaymentAsync(cancellationToken);
 
+        /*
+         * ZİLDE TEK SAYAÇ — İKİ MODEL BİRLİKTE OKUNUYOR.
+         *
+         * ŞİRKET SATIRLARI (`TargetUserId` boş): mevcut dört tarama
+         * kaynağı. Görünürlük izne göre, okunma damgası satırın
+         * kendisinde — bir çek vadesi herkesi ilgilendirdiği için o
+         * tasarım doğru.
+         *
+         * KİŞİSEL SATIRLAR (`TargetUserId` dolu): M1 olayları.
+         * Görünürlük kişiye, okunma durumu `NotificationRecipient`
+         * üzerinden. Şirket satırında tek `ReadAtUtc` olduğu için
+         * "bana atandı" bildirimini bir kişi okuyunca herkes için
+         * okunmuş sayılırdı.
+         *
+         * KULLANICI İKİ AYRI SAYI GÖRMEMELİ: iki liste ve iki sayaç,
+         * hangisine bakacağını bilemez hale getirir.
+         */
+        var kisiselOkunmamis = await KisiselOkunmamisSayisiAsync(
+            companyId, cancellationToken);
+
+        var kisiselSatirlar = await KisiselSatirlariGetirAsync(
+            companyId, includeHandled, cancellationToken);
+
         return Ok(new
         {
-            unreadCount = rows.Count(x => x.Status == NotificationStatus.Open),
+            unreadCount =
+                rows.Count(x => x.Status == NotificationStatus.Open) +
+                kisiselOkunmamis,
+
+            personalItems = kisiselSatirlar,
             items = rows.Select(x => new
             {
                 id = x.Id,
@@ -178,6 +205,99 @@ public sealed class NotificationsController(
         await db.SaveChangesAsync(cancellationToken);
 
         return Ok(new { id, status = notification.Status.ToString() });
+    }
+
+    /// <summary>
+    /// Kullanıcının OKUNMAMIŞ kişisel bildirim sayısı.
+    ///
+    /// Okuma durumu ALICI TABLOSUNDA: şirket satırındaki tek
+    /// `ReadAtUtc` kişiye özel olamazdı — bir kişi okuyunca herkes
+    /// için okunmuş sayılırdı.
+    /// </summary>
+    private async Task<int> KisiselOkunmamisSayisiAsync(
+        Guid companyId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid userId)
+            return 0;
+
+        return await db.NotificationRecipients
+            .AsNoTracking()
+            .CountAsync(
+                x => x.UserId == userId &&
+                     x.ReadAtUtc == null &&
+                     x.DismissedAtUtc == null &&
+                     x.Notification.CompanyId == companyId &&
+                     x.Notification.Status != NotificationStatus.Closed,
+                cancellationToken);
+    }
+
+    private async Task<List<object>> KisiselSatirlariGetirAsync(
+        Guid companyId,
+        bool includeHandled,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid userId)
+            return [];
+
+        var query = db.NotificationRecipients
+            .AsNoTracking()
+            .Where(x =>
+                x.UserId == userId &&
+                x.Notification.CompanyId == companyId);
+
+        if (!includeHandled)
+        {
+            query = query.Where(x =>
+                x.ReadAtUtc == null &&
+                x.DismissedAtUtc == null &&
+                x.Notification.Status != NotificationStatus.Closed);
+        }
+
+        var satirlar = await query
+            .OrderByDescending(x => x.Notification.FirstSeenAtUtc)
+            .Take(100)
+            .Select(x => new
+            {
+                x.Id,
+                NotificationId = x.NotificationId,
+                x.Notification.Type,
+                x.Notification.Title,
+                x.Notification.Detail,
+                x.Notification.TargetPath,
+                Severity = (int)x.Notification.Severity,
+                x.Notification.SourceId,
+                OccurredAtUtc = x.Notification.FirstSeenAtUtc,
+                IsRead = x.ReadAtUtc != null
+            })
+            .ToListAsync(cancellationToken);
+
+        return satirlar.Cast<object>().ToList();
+    }
+
+    /// <summary>Kişisel bildirimi okundu işaretler.</summary>
+    [HttpPost("kisisel/{recipientId:guid}/okundu")]
+    public async Task<IActionResult> MarkPersonalRead(
+        Guid recipientId,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not Guid userId)
+            return Unauthorized();
+
+        // KENDİ BİLDİRİMİ: başkasının satırını okundu işaretleyemez.
+        var alici = await db.NotificationRecipients
+            .SingleOrDefaultAsync(
+                x => x.Id == recipientId && x.UserId == userId, cancellationToken);
+
+        if (alici is null)
+            return NotFound(new { message = "Bildirim bulunamadı." });
+
+        alici.ReadAtUtc ??= DateTime.UtcNow;
+        alici.UpdatedAtUtc = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { alici.Id, isRead = true });
     }
 
     private async Task<List<string>> ResolvePermissionsAsync(

@@ -57,6 +57,37 @@ public sealed class CoverageBaselineTests
     /// </summary>
     private static readonly Dictionary<string, string> Istisnalar = new()
     {
+        ["Services/Notifications/ScopeDeferralWatchdog.cs"] =
+            "KAPSAM ERTELEMESİNİN BEKÇİSİ — İŞİ ZATEN TÜMÜNÜ SAYMAK. " +
+            "Kapsamı sınırlı AKTİF kullanıcı var mı ve kaç aktif şirket " +
+            "var diye bakıyor; kapsam süzgeci uygulasaydı kendi " +
+            "sorusunu cevaplayamazdı — süzgeç, saymaya çalıştığı şeyi " +
+            "gizlerdi. Dışarıya hiçbir veri döndürmüyor: sonuç yalnız " +
+            "denetim kaydına yazılan bir SAYI.",
+
+        ["Services/Notifications/DailySummaryService.cs"] =
+            "ARKA PLAN ÖZET SERVİSİ — KULLANICI BAĞLAMI YOK. Sistem " +
+            "adına çalışıyor ve HER KULLANICI İÇİN AYRI sayım yapıyor; " +
+            "kapsam süzgeci çağıranın (yani hiç kimsenin) kapsamına " +
+            "göre daraltırdı. Sızıntı riski yok: her sayı zaten " +
+            "`AssignedToUserId == kullanici.Id` ile o kişinin kendi " +
+            "işine kilitli ve e-posta yalnız o kişiye gidiyor.",
+
+        ["Services/Notifications/TaskDueNotificationScanner.cs"] =
+            "ARKA PLAN TARAYICISI — KULLANICI BAĞLAMI YOK. Sistem adına " +
+            "çalışıyor; `ICurrentDataScopeService` bir kullanıcıya bağlı " +
+            "ve burada çağrılamaz (null döner). Kapsam süzgeci " +
+            "uygulanabilseydi bile YANLIŞ olurdu: tarayıcı BÜTÜN " +
+            "şirketlerin görevlerine bakmak zorunda. Sızıntı riski yok — " +
+            "üretilen bildirim görevin ATANANINA gidiyor ve kişisel " +
+            "satır olarak yalnız ona görünüyor.",
+
+        ["Services/Notifications/TaskNotificationWriter.cs"] =
+            "ARKA PLAN YAZICISI — aynı gerekçe. Okuduğu tek şey " +
+            "mükerrer kontrolü: '(şirket, tip, kaynak, dönem) zaten var " +
+            "mı'. Kapsam süzgeci uygulansaydı mükerrer kontrolü " +
+            "delinir ve aynı bildirim iki kez yazılırdı.",
+
         ["Services/Collaboration/EntityContextResolver.cs"] =
             "KAPSAMI BULMAK İÇİN OKUYOR. Bu servisin tek işi 'şu kayıt " +
             "hangi şirkete ait' sorusunu cevaplamak; kapsam süzgeci " +
