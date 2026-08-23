@@ -57,6 +57,15 @@ public sealed class CoverageBaselineTests
     /// </summary>
     private static readonly Dictionary<string, string> Istisnalar = new()
     {
+        ["Services/Collaboration/EntityContextResolver.cs"] =
+            "KAPSAMI BULMAK İÇİN OKUYOR. Bu servisin tek işi 'şu kayıt " +
+            "hangi şirkete ait' sorusunu cevaplamak; kapsam süzgeci " +
+            "uygulasaydı cevabı hiç bulamaz ve KAPSAM KONTROLÜNÜN " +
+            "KENDİSİ imkânsız olurdu. Okunan tek şey CompanyId ve " +
+            "ProjectId; sonuç, çağıranın kapsamıyla karşılaştırılmadan " +
+            "hiçbir yerde kullanılmıyor (CanAccessAsync). Erişimi olmayan " +
+            "kullanıcı 404 alıyor — kaydın varlığı bile sızmıyor.",
+
         ["Services/DocumentNumbers/DocumentNumberService.cs"] =
             "BELGE NUMARASI ÜRETİMİ. Şirket kimliği çağıranın verdiği " +
             "parametreden geliyor ve satır zaten o şirkete yazılıyor; " +

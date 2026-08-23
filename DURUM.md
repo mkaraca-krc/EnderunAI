@@ -470,6 +470,40 @@ için "boşluksuz" diyebilir; diğer tipler için iddia "hepsi farklı"
 olarak kalır. Tek bir testin iki farklı güvence vermesi, birinin
 zamanla diğerinin arkasına saklanması demektir.
 
+#### AÇIK MADDE — HEIC DÖNÜŞTÜRME: ÖLÇÜM BEKLİYOR
+
+**Bugünkü durum (M1/3):** HEIC yüklenebiliyor (iPhone varsayılanı,
+izinli uzantı listesinde) ama Chrome ve Firefox GÖSTEREMİYOR. Ek dosya
+yanıtında `isBrowserViewable=false` dönüyor ve ekran "bu dosya
+tarayıcıda görüntülenemiyor, indirin" diyor — bozuk resim simgesi
+göstermiyor. Bu kadarı M1/3'te yapıldı.
+
+**DÖNÜŞTÜRME ERTELENDİ, ÇÜNKÜ SORUN OLMAYABİLİR** (Mehmet Karacabey
+kararı): iOS, fotoğraf kütüphanesinden web formuna dosya seçildiğinde
+çoğu durumda HEIC'i kendisi JPEG'e çeviriyor. Yani sunucuya hiç HEIC
+gelmiyor olabilir.
+
+ÖLÇÜM YOLU HAZIR: `attachments.ContentType` her yüklemede gerçek tipi
+kaydediyor. Bir süre sonra tek sorgu yeter:
+```sql
+SELECT "ContentType", count(*) FROM attachments GROUP BY 1;
+```
+Sıfır HEIC çıkarsa dönüştürme hiç gerekmez ve sunucuya kütüphane
+kurmamış oluruz.
+
+**GEREKİRSE MAGICK.NET — SİSTEM PAKETİ (heif-convert) DEĞİL.**
+Gerekçe: NuGet paketi proje dosyasında SÜRÜMLENİR, sunucu yeniden
+kurulduğunda kendiliğinden gelir. Sistem paketi repoda değildir;
+nginx token maskelemesinde tam olarak bu tuzağa düşmemek için
+yapılandırmayı `deploy/nginx/` altına aldık. Aynı disiplin burada da
+geçerli: sunucuya elle kurulan hiçbir şeye bağımlı olmayalım.
+40 MB'lık yerel kütüphane bedeli, "sunucu yeniden kurulunca
+fotoğraflar açılmıyor" sürprizinden ucuz.
+
+Bugünkü ölçüm: sunucuda `convert`/`magick`/`heif-convert`/`vips`
+YOK, .NET tarafında görüntü kütüphanesi YOK, canlıda yüklenmiş HEIC
+YOK (0 dosya).
+
 #### AÇIK MADDE — MOBİL: 94 TABLO EKRANI
 
 183 ekranın 94'ü tablo kullanıyor. `erp-table-wrap` üzerinde

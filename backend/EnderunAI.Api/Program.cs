@@ -514,6 +514,9 @@ builder.Services.AddScoped<IDocumentNumberService, DocumentNumberService>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Portal.IPortalLinkResolver,
     EnderunAI.Api.Services.Portal.PortalLinkResolver>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Collaboration.IEntityContextResolver,
+    EnderunAI.Api.Services.Collaboration.EntityContextResolver>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IInventoryCodeService, EnderunAI.Api.Services.Inventory.InventoryCodeService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IInventoryAccountResolver, EnderunAI.Api.Services.Inventory.InventoryAccountResolver>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IGoodsReceiptAccountingPoster, EnderunAI.Api.Services.Inventory.GoodsReceiptAccountingPoster>();
