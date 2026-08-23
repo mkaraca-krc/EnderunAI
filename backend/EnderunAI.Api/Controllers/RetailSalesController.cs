@@ -3,6 +3,7 @@ using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Retail;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,6 +47,22 @@ public sealed record CreateRetailReturnRequest(
 /// muhasebe ekranları maliyeti görmek zorunda.
 /// </summary>
 [ApiController]
+/*
+ * [Authorize] ZORUNLU — EKSİKTİ.
+ *
+ * `RequirePermission` düz bir ATTRIBUTE'tur, filtre değil: zorlamayı
+ * PermissionAuthorizationMiddleware yapıyor ve o middleware kimlik
+ * doğrulanmamış isteği kontrol etmeden `next`'e geçiriyor. Yani izin
+ * kontrolü YALNIZCA giriş yapmış kullanıcılar için çalışıyor.
+ *
+ * Bu sınıfta [Authorize] yoktu: perakende modülünün TAMAMI —
+ * satış listesi, ürün fiyatları, gün sonu kasa raporu — kimlik
+ * doğrulaması olmadan çağrılabiliyordu. Sistemdeki diğer bütün
+ * controller'lar ya [Authorize] ya [Authorize(Roles=...)] taşıyor;
+ * bilinçli anonim olanlar yalnız AuthController (giriş) ve
+ * PortalController (kendi token modeli).
+ */
+[Authorize]
 [Route("api/perakende")]
 public sealed class RetailSalesController(
     AppDbContext db,
