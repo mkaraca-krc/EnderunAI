@@ -113,6 +113,21 @@ public sealed class EmployerPortalLinkController(
         if (!projectExists)
             return NotFound(new { message = "Proje bulunamadı." });
 
+        /*
+         * PASİFTEN AKTİFE DÖNEN BAĞLANTI HER ZAMAN YENİ TOKEN ALIR.
+         *
+         * Eski bir bağlantı "yeniden açılamaz": burada yalnız yeni
+         * kayıt üretiliyor, var olan kayıt aktifleştirilmiyor. Kural
+         * yapısal olarak sağlanıyor ama BİLEREK böyle — bir gün
+         * "iptal edileni geri al" özelliği eklenmek istenirse burada
+         * durması gereken şey şudur:
+         *
+         * Bir token bir kez yandıysa (denetim kaydına düz metin
+         * yazıldığı 2026-08-23'te olduğu gibi, ya da e-postayla
+         * dolaştığı için) o token bir daha güvenli sayılamaz.
+         * Pasif bir bağlantıyı eski tokenıyla canlandırmak, yanmış
+         * sırrı yeniden kullanıma sokmak olur.
+         */
         var existingActive = await db.EmployerPortalLinks
             .SingleOrDefaultAsync(x => x.ProjectId == projectId && x.IsActive, cancellationToken);
 
@@ -121,6 +136,10 @@ public sealed class EmployerPortalLinkController(
             existingActive.IsActive = false;
             existingActive.RevokedAtUtc = DateTime.UtcNow;
             existingActive.RevokedByUserId = currentUser.UserId;
+
+            DenetimYaz("PortalLinkRevoked", existingActive,
+                "Yeni bağlantı üretildiği için önceki bağlantı iptal edildi.",
+                "Yeniden üretim");
         }
 
         var link = new EmployerPortalLink

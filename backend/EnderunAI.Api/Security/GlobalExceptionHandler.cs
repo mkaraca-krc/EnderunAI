@@ -15,7 +15,10 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             exception,
             "İşlenmeyen hata. TraceId={TraceId} Path={Path} Method={Method}",
             traceId,
-            httpContext.Request.Path,
+            // YOL MASKELENEREK YAZILIR: portal bağlantısı sırrı
+            // yolun kendisinde taşıyor ve ham hâliyle loglanırsa
+            // ilk işlenmeyen hatada anahtar günlüğe düşer.
+            SensitivePathMasker.Mask(httpContext.Request.Path.Value),
             httpContext.Request.Method);
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;

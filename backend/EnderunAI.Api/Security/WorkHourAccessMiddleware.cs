@@ -65,7 +65,10 @@ public sealed class WorkHourAccessMiddleware(RequestDelegate next)
             DetailsJson = System.Text.Json.JsonSerializer.Serialize(new
             {
                 summary = "Aktif oturum mesai penceresi kapandığı için kesildi.",
-                path
+                // Bu ara katman portal yolunu zaten muaf tutuyor ama
+                // maskeleme yine de uygulanıyor: muafiyet listesi bir
+                // gün değişirse koruma kendiliğinden devrede olsun.
+                path = SensitivePathMasker.Mask(path)
             }),
             IpAddress = context.Connection.RemoteIpAddress?.ToString(),
             UserAgent = context.Request.Headers.UserAgent.ToString(),

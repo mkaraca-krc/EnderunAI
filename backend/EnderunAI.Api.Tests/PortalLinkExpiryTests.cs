@@ -405,4 +405,160 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
             "yaklasiyor",
             govde.GetProperty("link").GetProperty("durum").GetString());
     }
+
+    // ---------------------------------------------------------------
+    // 5) TOKEN HİÇBİR KAYDA DÜŞMEZ — denetim kesicisi dahil
+    // ---------------------------------------------------------------
+
+    /// <summary>
+    /// DENETİM KESİCİSİ DE TOKEN YAZMAZ.
+    ///
+    /// `AuditSaveChangesInterceptor` EmployerPortalLink'i izliyor ve
+    /// özet alanı `EmployerEmail ?? Token` idi: e-postası olmayan
+    /// bağlantılarda 256 bitlik anahtarın TAMAMI düz metin olarak
+    /// security_audit_events'e yazılıyordu. Canlıda 4 kayıtta
+    /// bulundu (2026-08-23).
+    ///
+    /// Token üç yerde maskeleniyor artık: nginx erişim kaydı,
+    /// PortalTokenRejected olayı ve BURASI. Üçü de ayrı kod yolu;
+    /// biri düzeltilince diğeri kendiliğinden düzelmiyor — bu yüzden
+    /// ayrı test.
+    /// </summary>
+    [Fact]
+    public async Task BaglantiOlusturuldugunda_TokenDenetimKaydinaYazilmaz()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var proje = await TestDataFactory.CreateProjectAsync(db, $"TKN{suffix}");
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        await client.PostAsync(
+            $"/api/projects/{proje.Id}/employer-portal-link", null);
+
+        var link = await db.EmployerPortalLinks
+            .AsNoTracking()
+            .SingleAsync(x => x.ProjectId == proje.Id && x.IsActive);
+
+        // E-POSTA YOK: eski kodda tam token yazılan durum tam buydu.
+        Assert.Null(link.EmployerEmail);
+
+        var kayitlar = await db.SecurityAuditEvents
+            .AsNoTracking()
+            .Where(x => x.EntityType == "EmployerPortalLink" &&
+                        x.EntityId == link.Id)
+            .ToListAsync();
+
+        Assert.NotEmpty(kayitlar);
+
+        foreach (var kayit in kayitlar)
+        {
+            Assert.DoesNotContain(link.Token, kayit.DetailsJson ?? string.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Portal açılışı DENETİM KAYDI ÜRETMEZ.
+    ///
+    /// Erişim sayacı bir denetim olayı değildir. SaveChanges ile
+    /// güncellenseydi kesici her açılışta bir "Updated" satırı yazar,
+    /// kayıt bu gürültüyle dolar ve asıl olaylar (oluşturma, uzatma,
+    /// iptal) içinde kaybolurdu.
+    /// </summary>
+    [Fact]
+    public async Task PortalAcilisi_DenetimKaydiUretmez()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var link = await BaglantiKurAsync(
+            db, suffix, DateTime.UtcNow.AddMonths(6));
+
+        var once = await db.SecurityAuditEvents
+            .CountAsync(x => x.EntityType == "EmployerPortalLink");
+
+        var client = fixture.Factory.CreateClient();
+        await client.GetAsync($"/api/portal/{link.Token}");
+        await client.GetAsync($"/api/portal/{link.Token}");
+
+        var sonra = await db.SecurityAuditEvents
+            .CountAsync(x => x.EntityType == "EmployerPortalLink");
+
+        Assert.Equal(once, sonra);
+
+        // Sayaç YİNE DE ilerlemiş olmalı — gürültüyü kesmek izi
+        // kaybetmek anlamına gelmemeli.
+        var guncel = await db.EmployerPortalLinks
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == link.Id);
+
+        Assert.Equal(2, guncel.AccessCount);
+    }
+
+    /// <summary>
+    /// YENİDEN ÜRETİLEN BAĞLANTI YENİ TOKEN ALIR, ESKİSİ ÖLÜR.
+    ///
+    /// Bir token bir kez yandıysa (denetim kaydına düz metin
+    /// yazıldığı 2026-08-23 olayında olduğu gibi, ya da e-postayla
+    /// dolaştığı için) bir daha güvenli sayılamaz. Pasif bir
+    /// bağlantıyı eski tokenıyla canlandırmak, yanmış sırrı yeniden
+    /// kullanıma sokmak olurdu.
+    /// </summary>
+    [Fact]
+    public async Task YenidenUretim_YeniTokenVerir_EskisiOlur()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var proje = await TestDataFactory.CreateProjectAsync(db, $"YEN{suffix}");
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+        var portalClient = fixture.Factory.CreateClient();
+
+        await client.PostAsync($"/api/projects/{proje.Id}/employer-portal-link", null);
+
+        var eski = await db.EmployerPortalLinks
+            .AsNoTracking()
+            .SingleAsync(x => x.ProjectId == proje.Id && x.IsActive);
+
+        Assert.Equal(
+            HttpStatusCode.OK,
+            (await portalClient.GetAsync($"/api/portal/{eski.Token}")).StatusCode);
+
+        // İkinci üretim.
+        await client.PostAsync($"/api/projects/{proje.Id}/employer-portal-link", null);
+
+        var yeni = await db.EmployerPortalLinks
+            .AsNoTracking()
+            .SingleAsync(x => x.ProjectId == proje.Id && x.IsActive);
+
+        Assert.NotEqual(eski.Token, yeni.Token);
+
+        // ESKİ TOKEN ARTIK ÇALIŞMIYOR.
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await portalClient.GetAsync($"/api/portal/{eski.Token}")).StatusCode);
+
+        Assert.Equal(
+            HttpStatusCode.OK,
+            (await portalClient.GetAsync($"/api/portal/{yeni.Token}")).StatusCode);
+
+        // İki tokenın hiçbiri denetim kaydına düz metin girmemeli.
+        var kayitlar = await db.SecurityAuditEvents
+            .AsNoTracking()
+            .Where(x => x.EntityType == "EmployerPortalLink")
+            .Select(x => x.DetailsJson)
+            .ToListAsync();
+
+        foreach (var kayit in kayitlar)
+        {
+            Assert.DoesNotContain(eski.Token, kayit ?? string.Empty);
+            Assert.DoesNotContain(yeni.Token, kayit ?? string.Empty);
+        }
+    }
 }

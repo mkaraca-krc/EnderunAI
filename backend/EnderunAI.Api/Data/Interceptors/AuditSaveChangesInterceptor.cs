@@ -160,7 +160,25 @@ public sealed class AuditSaveChangesInterceptor(
         PurchaseOrderEntity po => (po.Id, po.OrderNumber),
         PurchaseRequest req => (req.Id, req.RequestNumber),
         AccountingVoucher v => (v.Id, v.VoucherNumber),
-        EmployerPortalLink link => (link.Id, link.EmployerEmail ?? link.Token),
+        /*
+         * TOKEN DENETİM KAYDINA YAZILMAZ.
+         *
+         * Eski hali `link.EmployerEmail ?? link.Token` idi: e-posta
+         * boş olan bağlantılarda 256 bitlik anahtarın TAMAMI düz metin
+         * olarak security_audit_events'e yazılıyordu. Portal, sistemin
+         * kimlik doğrulaması olmayan tek veri kapısı; o kaydı
+         * okuyabilen herkes çalışan bir anahtar elde ederdi.
+         *
+         * Denetim kaydı, koruduğu sırrı ele veren bir yer olamaz —
+         * nginx erişim kaydında ve PortalTokenRejected olayında token
+         * zaten maskeleniyordu; burası açıkta kalmıştı.
+         *
+         * Kim/hangi proje sorusuna cevap vermeye devam ediyor:
+         * e-posta varsa o, yoksa proje kimliği.
+         */
+        EmployerPortalLink link => (
+            link.Id,
+            link.EmployerEmail ?? $"ProjectId={link.ProjectId}"),
         RolePermission rp => ((Guid?)null, $"RoleId={rp.RoleId} PermissionId={rp.PermissionId}"),
         UserPermissionOverride upo => (upo.Id, $"UserId={upo.UserId} PermissionId={upo.PermissionId} Effect={upo.Effect}"),
         UserDataScope uds => (uds.Id, $"UserId={uds.UserId} ScopeType={uds.ScopeType}"),

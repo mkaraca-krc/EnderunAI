@@ -105,10 +105,33 @@ public sealed class PortalLinkResolver(AppDbContext db) : IPortalLinkResolver
          * ekranı "bu bağlantı kullanılıyor mu" sorusunu buradan
          * cevaplıyor — kullanılmayanı iptal etmek, kullanılanı
          * uzatmak için.
+         *
+         * SaveChanges DEĞİL, DOĞRUDAN UPDATE. İki sebep:
+         *
+         * 1. DENETİM GÜRÜLTÜSÜ: AuditSaveChangesInterceptor
+         *    EmployerPortalLink'i izliyor ve her SaveChanges bir
+         *    "Updated" kaydı üretiyordu. Erişim sayacı bir denetim
+         *    olayı değildir; her portal açılışı bir satır yazsaydı
+         *    kayıt bu gürültüyle dolar ve asıl olaylar (oluşturma,
+         *    uzatma, iptal) içinde kaybolurdu.
+         *
+         * 2. SAYAÇ YARIŞI: `link.AccessCount += 1` oku-sonra-yaz'dır.
+         *    İki eşzamanlı açılışta ikisi de aynı değeri okur ve
+         *    sayaç bir artar. `x.AccessCount + 1` ifadesi veritabanında
+         *    değerlendiriliyor, artırım atomik.
          */
+        await db.EmployerPortalLinks
+            .Where(x => x.Id == link.Id)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.LastAccessedAtUtc, simdi)
+                    .SetProperty(x => x.AccessCount, x => x.AccessCount + 1),
+                cancellationToken);
+
+        // Çağırana dönen nesne de tazelensin: aynı istek içinde
+        // okunursa eski sayacı göstermesin.
         link.LastAccessedAtUtc = simdi;
         link.AccessCount += 1;
-        await db.SaveChangesAsync(cancellationToken);
 
         return link;
     }
