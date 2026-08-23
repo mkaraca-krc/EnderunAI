@@ -212,6 +212,16 @@ export default function ProjectCenterPage() {
   const [portalError, setPortalError] = useState("");
   const [portalCopied, setPortalCopied] = useState(false);
 
+  /*
+   * BAĞLANTI ADRESİ YALNIZ BU OTURUMDA.
+   *
+   * Token sunucuda saklanmıyor (yalnız SHA-256 özeti duruyor), yani
+   * sayfa yenilenince geri getirilemez. Oluşturma yanıtından alınıp
+   * burada tutuluyor; kopyalama ve e-posta gönderimi yalnız o sürede
+   * çalışıyor. Parolada olduğu gibi: bir kez gösterilir.
+   */
+  const [freshToken, setFreshToken] = useState<string | null>(null);
+
   const [emailForm, setEmailForm] = useState({ employerName: "", employerEmail: "" });
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailNotice, setEmailNotice] = useState("");
@@ -435,7 +445,8 @@ export default function ProjectCenterPage() {
     setPortalCopied(false);
 
     try {
-      await employerPortalService.create(params.id);
+      const olusan = await employerPortalService.create(params.id);
+      setFreshToken(olusan.token);
       const status = await employerPortalService.get(params.id);
       setPortalLink(status.link);
       setEmailConfigured(status.emailConfigured);
@@ -506,7 +517,15 @@ export default function ProjectCenterPage() {
     setEmailNotice("");
 
     try {
-      const portalUrl = `${window.location.origin}/portal/${portalLink.token}`;
+      if (!freshToken) {
+        setPortalError(
+          "Bağlantı adresi artık görüntülenemiyor. E-posta göndermek " +
+          "için yeni bağlantı üretin."
+        );
+        return;
+      }
+
+      const portalUrl = `${window.location.origin}/portal/${freshToken}`;
 
       await employerPortalService.sendEmail(params.id, {
         employerName: emailForm.employerName || undefined,
@@ -526,8 +545,8 @@ export default function ProjectCenterPage() {
   }
 
   async function copyPortalLink() {
-    if (!portalLink) return;
-    const url = `${window.location.origin}/portal/${portalLink.token}`;
+    if (!portalLink || !freshToken) return;
+    const url = `${window.location.origin}/portal/${freshToken}`;
 
     try {
       await navigator.clipboard.writeText(url);
@@ -945,28 +964,52 @@ export default function ProjectCenterPage() {
                   </div>
                 </div>
 
-                <label>
-                  <span>Portal Linki</span>
-                  <input
-                    className="erp-input"
-                    readOnly
-                    value={
-                      typeof window !== "undefined"
-                        ? `${window.location.origin}/portal/${portalLink.token}`
-                        : `/portal/${portalLink.token}`
-                    }
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                </label>
+                {/*
+                  ADRES YALNIZ BİR KEZ GÖSTERİLİR.
+
+                  Token sunucuda saklanmıyor; sayfa yenilenince geri
+                  getirilemez. Bunu gizlemek yerine AÇIKÇA söylüyoruz —
+                  kullanıcı "linki sonra alırım" diye kapatmasın.
+                */}
+                {freshToken ? (
+                  <label>
+                    <span>Portal Linki — bu adres yalnız şimdi görünür</span>
+                    <input
+                      className="erp-input"
+                      readOnly
+                      value={
+                        typeof window !== "undefined"
+                          ? `${window.location.origin}/portal/${freshToken}`
+                          : `/portal/${freshToken}`
+                      }
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                    <small>
+                      Kaydetmezseniz geri getirilemez; yeni bağlantı üretmek
+                      gerekir. Bağlantı adresi sunucuda saklanmıyor.
+                    </small>
+                  </label>
+                ) : (
+                  <div className="erp-alert erp-mt">
+                    Bağlantı adresi yalnız oluşturulduğu anda görüntülenir ve
+                    sunucuda saklanmaz. Bu bağlantı{" "}
+                    <strong>{portalLink.tokenPrefix ?? "—"}…</strong> önekiyle
+                    kayıtlı. Adrese yeniden ihtiyacınız varsa
+                    &quot;Yeni Link Üret&quot; ile yenisini oluşturun —
+                    eskisi geçersiz olur.
+                  </div>
+                )}
 
                 <div className="erp-actions">
-                  <button
-                    type="button"
-                    className="erp-button secondary"
-                    onClick={() => void copyPortalLink()}
-                  >
-                    {portalCopied ? "Kopyalandı ✓" : "Linki Kopyala"}
-                  </button>
+                  {freshToken && (
+                    <button
+                      type="button"
+                      className="erp-button secondary"
+                      onClick={() => void copyPortalLink()}
+                    >
+                      {portalCopied ? "Kopyalandı ✓" : "Linki Kopyala"}
+                    </button>
+                  )}
                   {portalActions.can("create") && (
                     <button
                       type="button"

@@ -4959,10 +4959,36 @@ public sealed class AppDbContext(
             entity.ToTable("employer_portal_links");
             entity.HasKey(x => x.Id);
 
-            entity.HasIndex(x => x.Token).IsUnique();
+            /*
+             * `Token` ÜZERİNDE BENZERSİZ İNDEKS YOK — KALDIRILDI.
+             *
+             * Alan artık yeni kayıtlarda BOŞ doğuyor (yalnız özeti
+             * saklanıyor), yani ikinci bağlantı boş dizgiyle çakışıp
+             * "duplicate key" hatası veriyordu. Testler bunu yakaladı.
+             *
+             * Benzersizlik `TokenHash` üzerine taşındı; anlamlı olan
+             * yer orası.
+             */
             entity.HasIndex(x => x.ProjectId);
 
+            /*
+             * ARAMA ÖZET ÜZERİNDEN: her portal isteği bir kez buraya
+             * bakıyor. Benzersizlik veritabanında — iki bağlantının
+             * aynı özeti taşıması imkânsıza yakın ama kısıt
+             * uygulamanın iyi niyetine bırakılmıyor.
+             *
+             * FİLTRELİ: eski 7 satırın özeti yok (token gitti).
+             * NULL'lar benzersiz indekste birbirinden ayrı sayılır
+             * ama filtre niyeti açık yazıyor: özet yoksa satır bu
+             * indeksin konusu değil.
+             */
+            entity.HasIndex(x => x.TokenHash)
+                .IsUnique()
+                .HasFilter("\"TokenHash\" IS NOT NULL");
+
             entity.Property(x => x.Token).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.TokenHash).HasMaxLength(64);
+            entity.Property(x => x.TokenPrefix).HasMaxLength(16);
             entity.Property(x => x.EmployerName).HasMaxLength(200);
             entity.Property(x => x.EmployerEmail).HasMaxLength(300);
 

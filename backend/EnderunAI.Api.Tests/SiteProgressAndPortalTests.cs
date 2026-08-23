@@ -4,6 +4,7 @@ using System.Text.Json;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Services.Hakedis;
+using EnderunAI.Api.Services.Portal;
 using EnderunAI.Api.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -106,10 +107,22 @@ public sealed class SiteProgressAndPortalTests(DatabaseFixture fixture)
         boq.Items.Add(tava);
         db.ProjectBoqs.Add(boq);
 
+        var portalToken = $"TEST-{Guid.NewGuid():N}";
+
         var link = new EmployerPortalLink
         {
             ProjectId = project.Id,
-            Token = $"tok-{Guid.NewGuid():N}",
+
+            /*
+             * TOKEN TABLOYA GİRMİYOR — ÖZETİ GİRİYOR.
+             * Testin isteği atmak için düz metne ihtiyacı var; kayıt
+             * yalnız SHA-256 özetini tutuyor. "TEST-" öneki zorunlu:
+             * SecretInSourceGuardTests uydurma veriyi bu önekten
+             * tanıyor.
+             */
+            Token = string.Empty,
+            TokenHash = PortalTokenHasher.Hash(portalToken),
+            TokenPrefix = PortalTokenHasher.Prefix(portalToken),
             EmployerName = "Test İşveren"
         };
         db.EmployerPortalLinks.Add(link);
@@ -117,7 +130,7 @@ public sealed class SiteProgressAndPortalTests(DatabaseFixture fixture)
         await db.SaveChangesAsync();
 
         return new Context(
-            project.Id, site.Id, boq.Id, pano.Id, tava.Id, section.Id, link.Token);
+            project.Id, site.Id, boq.Id, pano.Id, tava.Id, section.Id, portalToken);
     }
 
     /// <summary>Belirtilen kalemden bir günlük rapor girer.</summary>
@@ -289,10 +302,14 @@ public sealed class SiteProgressAndPortalTests(DatabaseFixture fixture)
 
         var project = await TestDataFactory.CreateProjectAsync(db, suffix);
 
+        var portalToken2 = $"TEST-{Guid.NewGuid():N}";
+
         var link = new EmployerPortalLink
         {
             ProjectId = project.Id,
-            Token = $"tok-{Guid.NewGuid():N}"
+            Token = string.Empty,
+            TokenHash = PortalTokenHasher.Hash(portalToken2),
+            TokenPrefix = PortalTokenHasher.Prefix(portalToken2)
         };
         db.EmployerPortalLinks.Add(link);
         await db.SaveChangesAsync();
@@ -300,7 +317,7 @@ public sealed class SiteProgressAndPortalTests(DatabaseFixture fixture)
         var client = fixture.Factory.CreateClient();
 
         var progress = await client.GetFromJsonAsync<JsonElement>(
-            $"/api/portal/{link.Token}/ilerleme");
+            $"/api/portal/{portalToken2}/ilerleme");
 
         // İcmalsiz projede yüzde uydurulmuyor.
         Assert.False(progress.GetProperty("hasProgress").GetBoolean());
@@ -316,7 +333,7 @@ public sealed class SiteProgressAndPortalTests(DatabaseFixture fixture)
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var link = await db.EmployerPortalLinks
-                .SingleAsync(x => x.Token == context.PortalToken);
+                .SingleAsync(x => x.TokenHash == PortalTokenHasher.Hash(context.PortalToken));
 
             link.RevokedAtUtc = DateTime.UtcNow;
             await db.SaveChangesAsync();

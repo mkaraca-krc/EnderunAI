@@ -74,9 +74,19 @@ public sealed class PortalLinkResolver(AppDbContext db) : IPortalLinkResolver
          * "bulundu ama geçersiz" ile "hiç yok" ayrımı kodun akışında
          * görünür hale gelirdi; zamanlama farkı bile bilgi sızdırır.
          */
+        /*
+         * ARAMA ÖZETLE — TOKEN TABLODA YOK.
+         *
+         * Token yalnız üretildiği an bellekte vardı; tabloda SHA-256
+         * özeti duruyor. Gelen tokenın özeti alınıp karşılaştırılıyor.
+         * Bir sızıntı denetim kaydına ya da log satırına token
+         * düşürse bile tabloyla eşleşmez.
+         */
+        var hash = PortalTokenHasher.Hash(token);
+
         var link = await db.EmployerPortalLinks
             .SingleOrDefaultAsync(
-                x => x.Token == token &&
+                x => x.TokenHash == hash &&
                      x.IsActive &&
                      x.RevokedAtUtc == null &&
                      x.ExpiresAtUtc > simdi,
@@ -139,9 +149,20 @@ public sealed class PortalLinkResolver(AppDbContext db) : IPortalLinkResolver
     private async Task<string> SebepBulAsync(
         string token, DateTime simdi, CancellationToken cancellationToken)
     {
+        /*
+         * SEBEP AYRIMI ÖZETLE KORUNUYOR.
+         *
+         * Token karartma döneminde bu ayrım kaybolmuştu: iptal edilen
+         * bağlantının tokenı tablodan silindiği için "iptal edilmiş
+         * bağlantı denendi" ile "bilinmeyen token" birbirine
+         * karışıyordu. Özet iptalden sonra da tabloda durduğu için
+         * ayrım geri geldi — muhatabın elindeki eski bağlantıyı
+         * denemesiyle yabancının anahtar aramasını ayırt edebilmek,
+         * kaydın asıl değeri.
+         */
         var kayit = await db.EmployerPortalLinks
             .AsNoTracking()
-            .Where(x => x.Token == token)
+            .Where(x => x.TokenHash == PortalTokenHasher.Hash(token))
             .Select(x => new
             {
                 x.IsActive,

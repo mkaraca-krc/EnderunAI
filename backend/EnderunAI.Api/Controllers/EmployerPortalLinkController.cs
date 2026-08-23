@@ -5,6 +5,7 @@ using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Email;
+using EnderunAI.Api.Services.Portal;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -43,7 +44,10 @@ public sealed class EmployerPortalLinkController(
             .Select(x => new
             {
                 x.Id,
-                x.Token,
+
+                // TOKEN OKUNMUYOR: tabloda zaten yok, yalnız özeti
+                // var. Bağlantı önekle tanıtılıyor.
+                x.TokenPrefix,
                 x.IsActive,
                 x.CreatedAtUtc,
                 x.RevokedAtUtc,
@@ -86,7 +90,15 @@ public sealed class EmployerPortalLinkController(
             link = new
             {
                 link.Id,
-                link.Token,
+
+                /*
+                 * TOKEN DÖNDÜRÜLMEZ — SAKLANMIYOR Kİ DÖNDÜRÜLSÜN.
+                 *
+                 * Tabloda yalnız özeti var. Ekran bağlantıyı ÖNEKLE
+                 * tanıtıyor; adresin kendisi yalnız oluşturma anında
+                 * bir kez gösterildi.
+                 */
+                link.TokenPrefix,
                 link.IsActive,
                 link.CreatedAtUtc,
                 link.RevokedAtUtc,
@@ -137,15 +149,32 @@ public sealed class EmployerPortalLinkController(
             existingActive.RevokedAtUtc = DateTime.UtcNow;
             existingActive.RevokedByUserId = currentUser.UserId;
 
+            // İptal edilen tokenın düz metin durmasının faydası yok:
+            // çalışmıyor ama yanmış bir sır olarak bekliyor.
+            existingActive.Karart();
+
             DenetimYaz("PortalLinkRevoked", existingActive,
                 "Yeni bağlantı üretildiği için önceki bağlantı iptal edildi.",
                 "Yeniden üretim");
         }
 
+        /*
+         * TOKEN YALNIZ BURADA VAR — TABLOYA ÖZETİ GİRİYOR.
+         *
+         * Bu değişken metodun sonunda yanıtla birlikte gidiyor ve
+         * bir daha hiçbir yerde durmuyor. "Linki kopyala" YALNIZ bu
+         * anda çalışır; adres kaybedilirse geri getirilemez, yeni
+         * bağlantı üretilir. Parolada olduğu gibi: bir sırrı
+         * saklamanın en güvenli yolu onu hiç saklamamaktır.
+         */
+        var token = GenerateToken();
+
         var link = new EmployerPortalLink
         {
             ProjectId = projectId,
-            Token = GenerateToken(),
+            Token = string.Empty,
+            TokenHash = PortalTokenHasher.Hash(token),
+            TokenPrefix = PortalTokenHasher.Prefix(token),
             CreatedByUserId = currentUser.UserId,
             ExpiresAtUtc = DateTime.UtcNow.AddMonths(VarsayilanGecerlilikAyi)
         };
@@ -161,7 +190,13 @@ public sealed class EmployerPortalLinkController(
         {
             message = "İşveren portalı linki oluşturuldu.",
             link.Id,
-            link.Token
+
+            // TOKEN YALNIZ BU YANITTA. Sonraki hiçbir okuma onu
+            // döndüremez, çünkü saklanmıyor.
+            token,
+            link.TokenPrefix,
+            uyari = "Bağlantı adresi yalnız şimdi görüntülenebilir. " +
+                    "Kaydedilmezse geri getirilemez; yeni bağlantı üretmek gerekir."
         });
     }
 
@@ -182,6 +217,7 @@ public sealed class EmployerPortalLinkController(
         link.RevokedAtUtc = DateTime.UtcNow;
         link.RevokedByUserId = currentUser.UserId;
         link.UpdatedAtUtc = DateTime.UtcNow;
+        link.Karart();
 
         DenetimYaz("PortalLinkRevoked", link,
             "İşveren portalı bağlantısı iptal edildi.",

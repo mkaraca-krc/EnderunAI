@@ -22,13 +22,24 @@ namespace EnderunAI.Api.Tests;
 /// </summary>
 public sealed class SensitivePathMaskingTests
 {
+    /*
+     * TEST VERİSİ UYDURMADIR — GERÇEK BİR TOKEN DEĞİL.
+     *
+     * İlk sürümde buraya canlıdaki bağlantının tokenı yazılmıştı.
+     * O token o sırada geçerliydi; yani bu paketin bütün konusu olan
+     * hatayı testin kendisi tekrarlıyordu: sır, kaynak koda ve
+     * oradan git geçmişine düz metin olarak girmişti.
+     *
+     * Test verisi asla gerçek sırdan türetilmez. Biçimin doğru
+     * olması yeter: 43 karakterlik URL-safe base64.
+     */
     [Theory]
     // Gerçek biçim: 43 karakterlik URL-safe base64.
-    [InlineData("/api/portal/QAp5r7xs_sEr9h_YqyUOJbmZk1U799MkVWlJEcRnlzw",
+    [InlineData("/api/portal/TEST-UCAvFXVun49KKN9VCoMF9ReiYItde-Oy1imc09",
                 "/api/portal/***")]
-    [InlineData("/api/portal/QAp5r7xs_sEr9h_YqyUOJbmZk1U799MkVWlJEcRnlzw/reports",
+    [InlineData("/api/portal/TEST-UCAvFXVun49KKN9VCoMF9ReiYItde-Oy1imc09/reports",
                 "/api/portal/***/reports")]
-    [InlineData("/portal/QAp5r7xs_sEr9h_YqyUOJbmZk1U799MkVWlJEcRnlzw",
+    [InlineData("/portal/TEST-UCAvFXVun49KKN9VCoMF9ReiYItde-Oy1imc09",
                 "/portal/***")]
     [InlineData("/api/portal/abc/photos/8f14e45f-ceea-467a-9b3d-2b6c8c7a1111",
                 "/api/portal/***/photos/8f14e45f-ceea-467a-9b3d-2b6c8c7a1111")]
@@ -72,7 +83,7 @@ public sealed class SensitivePathMaskingTests
     [Fact]
     public void MaskelenmisYolda_TokenHicGecmez()
     {
-        const string token = "QAp5r7xs_sEr9h_YqyUOJbmZk1U799MkVWlJEcRnlzw";
+        const string token = "TEST-UCAvFXVun49KKN9VCoMF9ReiYItde-Oy1imc09";
 
         var maskeli = SensitivePathMasker.Mask($"/api/portal/{token}/ilerleme");
 
@@ -126,7 +137,7 @@ public sealed class GlobalExceptionHandlerMaskingTests
     [Fact]
     public async Task PortalUcundaIslenmeyenHata_TokenGunlugeYazilmaz()
     {
-        const string token = "QAp5r7xs_sEr9h_YqyUOJbmZk1U799MkVWlJEcRnlzw";
+        const string token = "TEST-UCAvFXVun49KKN9VCoMF9ReiYItde-Oy1imc09";
 
         var logger = new YakalayanLogger();
         var handler = new GlobalExceptionHandler(logger);

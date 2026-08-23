@@ -15,7 +15,17 @@ export type EmployerPortalLinkStatusCode =
 
 export type EmployerPortalLink = {
   id: string;
-  token: string;
+
+  /**
+   * Bağlantı adresi BURADA YOKTUR.
+   *
+   * Token tabloda saklanmıyor; yalnız SHA-256 özeti duruyor. Adres
+   * yalnız oluşturma yanıtında bir kez görünür — parolada olduğu
+   * gibi. Kaybedilirse geri getirilemez, yeni bağlantı üretilir.
+   *
+   * Ekran bağlantıyı ÖNEKLE tanıtıyor; önek sır değildir.
+   */
+  tokenPrefix?: string | null;
   isActive: boolean;
   createdAtUtc: string;
   revokedAtUtc?: string | null;
@@ -52,7 +62,14 @@ export const employerPortalService = {
   },
 
   create(projectId: string) {
-    return apiClient<{ message: string; id: string; token: string }>(
+    // TOKEN YALNIZ BU YANITTA — sonraki hiçbir okuma döndüremez.
+    return apiClient<{
+      message: string;
+      id: string;
+      token: string;
+      tokenPrefix: string;
+      uyari: string;
+    }>(
       `projects/${projectId}/employer-portal-link`,
       { method: "POST" }
     );

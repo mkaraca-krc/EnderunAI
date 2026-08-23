@@ -237,6 +237,78 @@ Arşiv dahil tüm eski kayıtlar tarandı: hiçbir gerçek token düz metin
 geçmiyor, temizlenmesi gereken kayıt YOK. (Eski `/portal/...`
 satırları bot taramaları: `.env`, `config.env` vb.)
 
+#### PORTAL TOKENI ARTIK SAKLANMIYOR — ÖZET MODELİ (2026-08-23, KAPANDI)
+
+**Önce bir sızıntı bulundu.** Canlı doğrulamada (kod okuyarak değil,
+veritabanında gerçek tokenları arayarak) DÖRT denetim kaydında düz
+metin token çıktı. Kaynak `AuditSaveChangesInterceptor` idi:
+`EmployerPortalLink link => (link.Id, link.EmployerEmail ?? link.Token)`.
+E-postası olmayan bağlantılarda 256 bitlik anahtarın TAMAMI
+`security_audit_events`'e yazılıyordu; canlıdaki bağlantıların
+hiçbirinde e-posta yoktu. 2026-08-02'den beri böyleydi.
+
+ÜSTELİK BİR ÖNCEKİ PAKETTE EKLEDİĞİM erişim sayacı `SaveChanges` ile
+çalıştığı için HER PORTAL AÇILIŞI token içeren bir "Updated" kaydı
+üretiyordu — yani mevcut sızıntıyı tekrarlanır hale getirmiştim.
+
+**Dört yerde maskeleme, sonra kökten çözüm.** Token sırayla nginx
+erişim kaydında, denetim kesicisinde, `PortalTokenRejected` olayında
+ve hata günlüğünde (`GlobalExceptionHandler` `Path=` yazıyordu)
+maskelendi. Dördü ayrı kod yolu; biri düzeltilince diğeri
+düzelmiyordu.
+
+Ama maskeleme sırrı korumaz, yalnız görünmesini engeller. **Asıl
+çözüm: token artık HİÇ SAKLANMIYOR.**
+
+  - Tabloda `TokenHash` (SHA-256, benzersiz + filtreli indeks) ve
+    `TokenPrefix` (ilk 8 karakter, sır değil) duruyor.
+  - Token yalnız ÜRETİLDİĞİ AN bellekte var; oluşturma yanıtıyla bir
+    kez gidiyor ve bir daha hiçbir okuma döndürmüyor.
+  - "Linki kopyala" yalnız o an çalışır. Adres kaybedilirse geri
+    getirilemez; yeni bağlantı üretilir. Ekran bunu gizlemiyor,
+    açıkça yazıyor.
+  - Arama özetle yapılıyor: denetim kaydına ya da bir log satırına
+    token sızsa bile tabloyla eşleşmez.
+
+**TUZ (SALT) YOK — PAROLADAN FARKI:** parola özetlerinde tuz ve yavaş
+algoritma şart, çünkü parola insan seçimidir (kısa, tekrar eden,
+sözlükten tahmin edilebilir). Portal tokenı 256 bit kriptografik
+rastgelelik: sözlüğü yok, gökkuşağı tablosu kurulamaz. Yavaş algoritma
+burada yalnızca her portal isteğini yavaşlatırdı.
+
+**KAYBEDİLEN AYRIM GERİ GELDİ.** Karartma döneminde iptal edilen
+bağlantının tokenı tablodan siliniyordu ve "muhatabın elindeki eski
+bağlantıyı denemesi" ile "yabancının anahtar araması" birbirine
+karışıyordu. Özet iptalden sonra da durduğu için `iptal_edilmis` ile
+`bilinmeyen_token` yeniden ayrılabiliyor — kaydın asıl değeri bu
+ayrımda.
+
+**`Karart()` GEREKSİZLEŞTİ AMA DURUYOR.** Yeni bağlantılarda `Token`
+alanı boş doğuyor, karartacak bir şey yok. Metot 2026-08-23 öncesi
+doğmuş 7 satır için duruyor: onların karartılmış değerleri tabloda ve
+benzer bir veri düzeltmesi gerekirse kural orada yazılı. Eski
+satırların `TokenHash`'i null ("eski kayıt, özet yok"), hiçbir istekle
+eşleşmiyorlar — zaten hepsi iptal edilmiş.
+
+**BİR TASARIM EKSİĞİNİ TESTLER YAKALADI:** `Token` üzerindeki eski
+benzersiz indeks duruyordu ve alan artık boş kaldığı için ikinci
+bağlantı "duplicate key" hatası veriyordu. İndeks düşürüldü;
+benzersizlik anlamlı olduğu yere, `TokenHash` üzerine taşındı.
+
+**KENDİ HATAM — KAYDA GEÇİYOR:** bu paketi yazarken canlıda o sırada
+GEÇERLİ olan tokenı test verisi olarak `SensitivePathMaskingTests`
+içine yazdım; commit ve push edildi. Yani paketin bütün konusu olan
+hatayı testin kendisi tekrarlıyordu. Kendim buldum ve düzelttim
+(uydurma değerle değiştirdim), git geçmişine dokunmadım — geçmişi
+yeniden yazmak repoyu bozar.
+
+Tekrarını engellemek için `SecretInSourceGuardTests` kondu: kaynak
+kodda 43 karakterlik base64 DİZGİ SABİTİ arıyor. İlk sürümü uzun metot
+adlarını ve EF migration adlarını yakalıyordu; yalnız tırnak içine
+bakacak şekilde daraltıldı, gömülü dosya verisi (PNG/PDF imzası) ve
+`TEST-` öneki (harf duyarsız) elendi. Uydurma test verisi bundan sonra
+`TEST-` ile başlamak zorunda.
+
 #### AÇIK MADDE — TOKEN URL'DEN ÇEREZE TAŞINMALI
 
 Maskeleme YALNIZCA sunucu kaydını korur. Token URL yolunda taşındığı

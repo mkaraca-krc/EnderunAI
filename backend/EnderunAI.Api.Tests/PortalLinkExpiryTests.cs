@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Services.Portal;
 using EnderunAI.Api.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,7 +28,13 @@ namespace EnderunAI.Api.Tests;
 [Collection("Integration")]
 public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
 {
-    private static async Task<EmployerPortalLink> BaglantiKurAsync(
+    /// <summary>
+    /// Kurulan bağlantı ve tokenı. Token yalnız burada var: tabloda
+    /// özeti duruyor, testin isteği atmak için düz metne ihtiyacı var.
+    /// </summary>
+    private sealed record KurulanBaglanti(EmployerPortalLink Link, string Token);
+
+    private static async Task<KurulanBaglanti> BaglantiKurAsync(
         AppDbContext db,
         string suffix,
         DateTime expiresAtUtc,
@@ -35,10 +42,21 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
     {
         var proje = await TestDataFactory.CreateProjectAsync(db, $"PORT{suffix}");
 
+        /*
+         * TOKEN TABLOYA GİRMİYOR — ÖZETİ GİRİYOR.
+         *
+         * Testin tokena ihtiyacı var (istek atacak), ama kayıt yalnız
+         * özeti tutuyor. Üretilen değer çağırana `KurulanBaglanti`
+         * içinde ayrıca dönüyor.
+         */
+        var token = $"TEST-{suffix}-{Guid.NewGuid():N}";
+
         var link = new EmployerPortalLink
         {
             ProjectId = proje.Id,
-            Token = $"test-token-{suffix}-{Guid.NewGuid():N}",
+            Token = string.Empty,
+            TokenHash = PortalTokenHasher.Hash(token),
+            TokenPrefix = PortalTokenHasher.Prefix(token),
             EmployerName = "Test İşveren",
             ExpiresAtUtc = expiresAtUtc,
             IsActive = !revoked,
@@ -48,7 +66,7 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         db.EmployerPortalLinks.Add(link);
         await db.SaveChangesAsync();
 
-        return link;
+        return new KurulanBaglanti(link, token);
     }
 
     private static async Task<int> DenetimSayisiAsync(
@@ -67,12 +85,12 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var link = await BaglantiKurAsync(
+        var (link, token) = await BaglantiKurAsync(
             db, suffix, DateTime.UtcNow.AddDays(-1));
 
         var client = fixture.Factory.CreateClient();
 
-        var yanit = await client.GetAsync($"/api/portal/{link.Token}");
+        var yanit = await client.GetAsync($"/api/portal/{token}");
 
         // 404 — 401 DEĞİL. Varlığını da ele vermemeli.
         Assert.Equal(HttpStatusCode.NotFound, yanit.StatusCode);
@@ -87,12 +105,12 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var link = await BaglantiKurAsync(
+        var (link, token) = await BaglantiKurAsync(
             db, suffix, DateTime.UtcNow.AddMonths(6), revoked: true);
 
         var client = fixture.Factory.CreateClient();
 
-        var yanit = await client.GetAsync($"/api/portal/{link.Token}");
+        var yanit = await client.GetAsync($"/api/portal/{token}");
 
         Assert.Equal(HttpStatusCode.NotFound, yanit.StatusCode);
     }
@@ -109,12 +127,12 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var link = await BaglantiKurAsync(
+        var (link, token) = await BaglantiKurAsync(
             db, suffix, DateTime.UtcNow.AddMonths(6));
 
         var client = fixture.Factory.CreateClient();
 
-        var yanit = await client.GetAsync($"/api/portal/{link.Token}");
+        var yanit = await client.GetAsync($"/api/portal/{token}");
 
         Assert.Equal(HttpStatusCode.OK, yanit.StatusCode);
     }
@@ -131,14 +149,14 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var link = await BaglantiKurAsync(
+        var (link, token) = await BaglantiKurAsync(
             db, suffix, DateTime.UtcNow.AddMonths(6));
 
         Assert.Equal(0, link.AccessCount);
 
         var client = fixture.Factory.CreateClient();
-        await client.GetAsync($"/api/portal/{link.Token}");
-        await client.GetAsync($"/api/portal/{link.Token}");
+        await client.GetAsync($"/api/portal/{token}");
+        await client.GetAsync($"/api/portal/{token}");
 
         var guncel = await db.EmployerPortalLinks
             .AsNoTracking()
@@ -201,11 +219,11 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var link = await BaglantiKurAsync(
+        var (link, token) = await BaglantiKurAsync(
             db, suffix, DateTime.UtcNow.AddDays(-1));
 
         var client = fixture.Factory.CreateClient();
-        await client.GetAsync($"/api/portal/{link.Token}");
+        await client.GetAsync($"/api/portal/{token}");
 
         var kayit = await db.SecurityAuditEvents
             .AsNoTracking()
@@ -214,7 +232,7 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
             .FirstAsync();
 
         Assert.Contains("suresi_gecmis", kayit.DetailsJson!);
-        Assert.DoesNotContain(link.Token, JsonSerializer.Serialize(kayit));
+        Assert.DoesNotContain(token, JsonSerializer.Serialize(kayit));
     }
 
     // ---------------------------------------------------------------
@@ -229,7 +247,7 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var link = await BaglantiKurAsync(
+        var (link, token) = await BaglantiKurAsync(
             db, suffix, DateTime.UtcNow.AddDays(10));
 
         var eskiTarih = link.ExpiresAtUtc;
@@ -264,7 +282,7 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         Assert.Contains("İşveren raporlaması sürüyor.", kayit.DetailsJson!);
 
         // Token denetim kaydına GİRMİYOR.
-        Assert.DoesNotContain(link.Token, JsonSerializer.Serialize(kayit));
+        Assert.DoesNotContain(token, JsonSerializer.Serialize(kayit));
     }
 
     [Fact]
@@ -275,7 +293,7 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var link = await BaglantiKurAsync(
+        var (link, token) = await BaglantiKurAsync(
             db, suffix, DateTime.UtcNow.AddMonths(6));
 
         var once = await DenetimSayisiAsync(db, "PortalLinkRevoked");
@@ -301,7 +319,7 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         // İptal sonrası portal gerçekten kapanmalı — kayıt tutmak
         // tek başına yetmez.
         var portalClient = fixture.Factory.CreateClient();
-        var portalYanit = await portalClient.GetAsync($"/api/portal/{link.Token}");
+        var portalYanit = await portalClient.GetAsync($"/api/portal/{token}");
 
         Assert.Equal(HttpStatusCode.NotFound, portalYanit.StatusCode);
     }
@@ -319,13 +337,13 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var link = await BaglantiKurAsync(
+        var (link, token) = await BaglantiKurAsync(
             db, suffix, DateTime.UtcNow.AddMonths(-8));
 
         var portalClient = fixture.Factory.CreateClient();
         Assert.Equal(
             HttpStatusCode.NotFound,
-            (await portalClient.GetAsync($"/api/portal/{link.Token}")).StatusCode);
+            (await portalClient.GetAsync($"/api/portal/{token}")).StatusCode);
 
         var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
 
@@ -335,7 +353,7 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
 
         Assert.Equal(
             HttpStatusCode.OK,
-            (await portalClient.GetAsync($"/api/portal/{link.Token}")).StatusCode);
+            (await portalClient.GetAsync($"/api/portal/{token}")).StatusCode);
     }
 
     // ---------------------------------------------------------------
@@ -393,7 +411,7 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var link = await BaglantiKurAsync(
+        var (link, token) = await BaglantiKurAsync(
             db, suffix, DateTime.UtcNow.AddDays(10));
 
         var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
@@ -435,8 +453,12 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
 
         var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
 
-        await client.PostAsync(
+        var olustur = await client.PostAsync(
             $"/api/projects/{proje.Id}/employer-portal-link", null);
+
+        // TOKEN YALNIZ BU YANITTA — başka hiçbir yerde yok.
+        var govde = await olustur.Content.ReadFromJsonAsync<JsonElement>();
+        var token = govde.GetProperty("token").GetString()!;
 
         var link = await db.EmployerPortalLinks
             .AsNoTracking()
@@ -444,6 +466,11 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
 
         // E-POSTA YOK: eski kodda tam token yazılan durum tam buydu.
         Assert.Null(link.EmployerEmail);
+
+        // TABLODA DÜZ METİN TOKEN YOK — yalnız özeti ve öneki var.
+        Assert.Equal(string.Empty, link.Token);
+        Assert.Equal(PortalTokenHasher.Hash(token), link.TokenHash);
+        Assert.Equal(token[..8], link.TokenPrefix);
 
         var kayitlar = await db.SecurityAuditEvents
             .AsNoTracking()
@@ -455,7 +482,7 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
 
         foreach (var kayit in kayitlar)
         {
-            Assert.DoesNotContain(link.Token, kayit.DetailsJson ?? string.Empty);
+            Assert.DoesNotContain(token, kayit.DetailsJson ?? string.Empty);
         }
     }
 
@@ -475,15 +502,15 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var link = await BaglantiKurAsync(
+        var (link, token) = await BaglantiKurAsync(
             db, suffix, DateTime.UtcNow.AddMonths(6));
 
         var once = await db.SecurityAuditEvents
             .CountAsync(x => x.EntityType == "EmployerPortalLink");
 
         var client = fixture.Factory.CreateClient();
-        await client.GetAsync($"/api/portal/{link.Token}");
-        await client.GetAsync($"/api/portal/{link.Token}");
+        await client.GetAsync($"/api/portal/{token}");
+        await client.GetAsync($"/api/portal/{token}");
 
         var sonra = await db.SecurityAuditEvents
             .CountAsync(x => x.EntityType == "EmployerPortalLink");
@@ -520,35 +547,45 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
         var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
         var portalClient = fixture.Factory.CreateClient();
 
-        await client.PostAsync($"/api/projects/{proje.Id}/employer-portal-link", null);
+        // TOKEN YALNIZ OLUŞTURMA YANITINDAN OKUNUR — tabloda yok.
+        var ilk = await (await client.PostAsync(
+            $"/api/projects/{proje.Id}/employer-portal-link", null))
+            .Content.ReadFromJsonAsync<JsonElement>();
 
-        var eski = await db.EmployerPortalLinks
-            .AsNoTracking()
-            .SingleAsync(x => x.ProjectId == proje.Id && x.IsActive);
+        var eskiToken = ilk.GetProperty("token").GetString()!;
 
         Assert.Equal(
             HttpStatusCode.OK,
-            (await portalClient.GetAsync($"/api/portal/{eski.Token}")).StatusCode);
+            (await portalClient.GetAsync($"/api/portal/{eskiToken}")).StatusCode);
 
         // İkinci üretim.
-        await client.PostAsync($"/api/projects/{proje.Id}/employer-portal-link", null);
+        var ikinci = await (await client.PostAsync(
+            $"/api/projects/{proje.Id}/employer-portal-link", null))
+            .Content.ReadFromJsonAsync<JsonElement>();
 
-        var yeni = await db.EmployerPortalLinks
-            .AsNoTracking()
-            .SingleAsync(x => x.ProjectId == proje.Id && x.IsActive);
+        var yeniToken = ikinci.GetProperty("token").GetString()!;
 
-        Assert.NotEqual(eski.Token, yeni.Token);
+        Assert.NotEqual(eskiToken, yeniToken);
 
         // ESKİ TOKEN ARTIK ÇALIŞMIYOR.
         Assert.Equal(
             HttpStatusCode.NotFound,
-            (await portalClient.GetAsync($"/api/portal/{eski.Token}")).StatusCode);
+            (await portalClient.GetAsync($"/api/portal/{eskiToken}")).StatusCode);
 
         Assert.Equal(
             HttpStatusCode.OK,
-            (await portalClient.GetAsync($"/api/portal/{yeni.Token}")).StatusCode);
+            (await portalClient.GetAsync($"/api/portal/{yeniToken}")).StatusCode);
 
-        // İki tokenın hiçbiri denetim kaydına düz metin girmemeli.
+        // İKİ TOKEN DA HİÇBİR YERDE DÜZ METİN DURMAMALI: ne tabloda
+        // ne denetim kaydında.
+        var tabloda = await db.EmployerPortalLinks
+            .AsNoTracking()
+            .Where(x => x.ProjectId == proje.Id)
+            .Select(x => x.Token)
+            .ToListAsync();
+
+        Assert.All(tabloda, x => Assert.Equal(string.Empty, x));
+
         var kayitlar = await db.SecurityAuditEvents
             .AsNoTracking()
             .Where(x => x.EntityType == "EmployerPortalLink")
@@ -557,8 +594,130 @@ public sealed class PortalLinkExpiryTests(DatabaseFixture fixture)
 
         foreach (var kayit in kayitlar)
         {
-            Assert.DoesNotContain(eski.Token, kayit ?? string.Empty);
-            Assert.DoesNotContain(yeni.Token, kayit ?? string.Empty);
+            Assert.DoesNotContain(eskiToken, kayit ?? string.Empty);
+            Assert.DoesNotContain(yeniToken, kayit ?? string.Empty);
         }
+    }
+
+    // ---------------------------------------------------------------
+    // 6) ÖZET MODELİ — SEBEP AYRIMI GERİ GELDİ
+    // ---------------------------------------------------------------
+
+    /// <summary>
+    /// İPTAL EDİLEN BAĞLANTININ ÖZETİ TABLODA KALIR.
+    ///
+    /// Karartma döneminde bu ayrım kaybolmuştu: iptal edilen
+    /// bağlantının tokenı tablodan silindiği için "muhatabın elindeki
+    /// eski bağlantıyı denemesi" ile "yabancının anahtar araması"
+    /// birbirine karışıyordu. Özet iptalden sonra da durduğu için
+    /// ayrım geri geldi — kaydın asıl değeri bu ayrımda.
+    /// </summary>
+    [Fact]
+    public async Task IptalEdilmisBaglantiDenemesi_IptalOlarakKaydedilir()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var (link, token) = await BaglantiKurAsync(
+            db, suffix, DateTime.UtcNow.AddMonths(6));
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        await client.PostAsJsonAsync(
+            $"/api/projects/{link.ProjectId}/employer-portal-link/revoke",
+            new { reason = "Sebep ayrımı testi." });
+
+        var portalClient = fixture.Factory.CreateClient();
+        var yanit = await portalClient.GetAsync($"/api/portal/{token}");
+
+        Assert.Equal(HttpStatusCode.NotFound, yanit.StatusCode);
+
+        var kayit = await db.SecurityAuditEvents
+            .AsNoTracking()
+            .Where(x => x.Action == "PortalTokenRejected")
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .FirstAsync();
+
+        // "iptal_edilmis" — "bilinmeyen_token" DEĞİL.
+        Assert.Contains("iptal_edilmis", kayit.DetailsJson!);
+        Assert.DoesNotContain("bilinmeyen_token", kayit.DetailsJson!);
+
+        // Özet duruyor, düz metin token yok.
+        var guncel = await db.EmployerPortalLinks
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == link.Id);
+
+        Assert.NotNull(guncel.TokenHash);
+        Assert.Equal(string.Empty, guncel.Token);
+    }
+
+    /// <summary>
+    /// Hiç var olmamış token "bilinmeyen" olarak kaydedilir — yukarıdaki
+    /// testin karşı kutbu. İkisi birlikte ayrımın gerçekten çalıştığını
+    /// gösteriyor; tek başına biri "her şeye aynı sebebi yazan" bir
+    /// kodu da geçirirdi.
+    /// </summary>
+    [Fact]
+    public async Task BilinmeyenToken_BilinmeyenOlarakKaydedilir()
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var client = fixture.Factory.CreateClient();
+        var sahte = $"TEST-{Guid.NewGuid():N}{Guid.NewGuid():N}"[..43];
+
+        await client.GetAsync($"/api/portal/{sahte}");
+
+        var kayit = await db.SecurityAuditEvents
+            .AsNoTracking()
+            .Where(x => x.Action == "PortalTokenRejected")
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .FirstAsync();
+
+        Assert.Contains("bilinmeyen_token", kayit.DetailsJson!);
+    }
+
+    /// <summary>
+    /// TOKEN YALNIZ OLUŞTURMA YANITINDA GÖRÜNÜR.
+    ///
+    /// Sonraki hiçbir okuma onu döndüremez, çünkü saklanmıyor.
+    /// "Linki kopyala" yalnız o an çalışır; adres kaybedilirse yeni
+    /// bağlantı üretilir.
+    /// </summary>
+    [Fact]
+    public async Task Token_YalnizOlusturmaYanitinda_SonraGeriGetirilemez()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var proje = await TestDataFactory.CreateProjectAsync(db, $"BIR{suffix}");
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var olustur = await client.PostAsync(
+            $"/api/projects/{proje.Id}/employer-portal-link", null);
+
+        var yanit = await olustur.Content.ReadFromJsonAsync<JsonElement>();
+        var token = yanit.GetProperty("token").GetString()!;
+
+        Assert.False(string.IsNullOrWhiteSpace(token));
+
+        // Bağlantı gerçekten çalışıyor.
+        var portalClient = fixture.Factory.CreateClient();
+        Assert.Equal(
+            HttpStatusCode.OK,
+            (await portalClient.GetAsync($"/api/portal/{token}")).StatusCode);
+
+        // SONRAKİ OKUMA TOKENI VERMİYOR — yalnız önek.
+        var oku = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/projects/{proje.Id}/employer-portal-link");
+
+        var govde = oku.GetProperty("link").GetRawText();
+
+        Assert.DoesNotContain(token, govde);
+        Assert.Contains(token[..8], govde);
     }
 }
