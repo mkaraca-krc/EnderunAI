@@ -61,6 +61,124 @@ Kapanış sözleşmesi testi var (`tests/module-actions.test.ts`,
 "yazan aksiyonu olan her ekran bir kapı taşıyor"): yeni bir kapısız
 ekran eklenirse düşer.
 
+### G3/1b — para/maaş uçlarında şirket kapsamı (2026-08-23, KAPANDI)
+
+Commit `71018e6d` (kapsam) + `dd2f6463` (kimlik doğrulama açığı) +
+`aa7a2568` (kök çözüm). Üçü de yayında, tam suite 2463/2463.
+
+**Kapatılan uçlar:** finance/dashboard (5 rakam), financial-dashboard
+(ciro, proje/merkez/finansman gideri, kâr/zarar), cari-summary,
+projects-summary, progress-payments liste + previous-context,
+hakedis-export/{id}/excel, projects/{id}/cost-transactions |
+cost-breakdown | cost-reconciliation, perakende liste + kaynaklar +
+fiyatlar + urunler, perakende/raporlar/gun-sonu | personel | acik-vade.
+
+**Kim ne kaybetti: kimse.** 13 kullanıcının 12'si `All` kapsamlı
+(`HasGlobalAccess`), tek kapsamlı kullanıcı `ccihan` (Site kapsamı,
+Formen) ve Formen'de FinanceView/HakedisView/SalesView yok.
+
+**Kapsam borcu (ölçüm aracı düzeltildikten sonra): 480 -> 453.**
+Kalan dağılım: para/muhasebe 152, İK/İSG 101, diğer 91,
+proje/operasyon 72, satın alma/stok 42.
+
+#### G3/1b'de öğrenilen üç şey
+
+1. **Ön yüz taraması yanlış ölçüttü.** "Arayüzden erişilebiliyor mu"
+   diye bakınca tek dışa aktarım ucu göründü. Doğru ölçüt "kimlik
+   doğrulamış bir kullanıcı çağırabiliyor mu": sunucu tarafı taramada
+   ön yüzde düğmesi olmayan ÜÇ para raporu çıktı (gun-sonu, personel,
+   acik-vade) ve üçü de kapsamsızdı.
+
+2. **Bekçinin kendisi kördü.** `CoverageBaselineTests` DbSet regex'i
+   `DbSet<(\w+)>` idi; `\w` nokta içermez, yani
+   `DbSet<Models.Expenses.ExpenseEntry>` biçimindeki 22 tablo haritaya
+   hiç girmiyordu — ExpenseEntries, BankLoans, CreditCards,
+   PartnerAccounts dahil. Borç 418 görünüyordu, gerçekte 458'di.
+   ARAÇ DÜZELTİLDİ. Ders: bekçi de ölçülmelidir; "sayı düşüyor" tek
+   başına güven vermez, aynı araçla iki uçtan ölçmek gerekir.
+
+3. **Zaman damgası tuzağına yeniden düşüldü (§5 kural 17).** Sonda
+   geri konduktan sonra `touch` yapılmadığı için MSBuild sabotajlı
+   assembly'i güncel saydı ve bir koşu YANLIŞ sonuç verdi. `trap`'e
+   `touch` eklendi.
+
+### KİMLİK DOĞRULAMA AÇIĞI VE KÖK ÇÖZÜM (2026-08-23)
+
+**Açık:** `RetailSalesController` sınıfında `[Authorize]` yoktu.
+`RequirePermission` düz bir attribute, filtre değil; zorlamayı
+`PermissionAuthorizationMiddleware` yapıyor ve o middleware kimlik
+doğrulanmamış isteği kontrol etmeden `next`'e geçiriyor. Yani izin
+kontrolü YALNIZCA giriş yapmış kullanıcılar için çalışıyordu.
+
+Sonuç: perakende modülünün tamamı — satış listesi, ürün fiyatları,
+gün sonu kasa raporu, satış oluşturma/onaylama POST'ları — anonim
+çağrılabiliyordu. Üstelik uçlarda `[RequirePermission(...)]` yazdığı
+için KORUNUYOR GİBİ görünüyordu.
+
+**Süre:** 2026-08-15 (`215453cd`, PERAKENDE V1) — 2026-08-23. Sekiz gün.
+Dosya ilk commit'inde `[Authorize]`'sız doğdu, 7 commit boyunca
+eklenmedi.
+
+**Kullanıldı mı: HAYIR.** nginx kayıtlarında (10 Ağustos'tan bugüne,
+17.955 `/api/` isteği) perakende geçen istek 0. Uygulama kayıtlarında
+yalnız 7 kayıt, hepsi kendi doğrulama isteklerim. `retail_sales`
+tablosu 0 satır. Ayrıca `ufw` aktif (INPUT DROP; yalnız 23422, 80,
+443 açık) — backend 5155'te dinliyor ama dışarıdan erişilemiyor,
+dış dünyadan tek yol nginx.
+
+**Kök çözüm:** `FallbackPolicy = RequireAuthenticatedUser`. İşareti
+olmayan her uç artık kimlik doğrulama ister; `[Authorize]` unutmak
+açık değil HATA üretiyor. `/api/health`'e açıkça `.AllowAnonymous()`
+eklendi — eklenmeseydi safe-deploy'un sağlık kontrolü 401 alır ve
+KORUMANIN KENDİSİ her deploy'u kilitlerdi.
+
+**Bilerek anonim kalanlar (tamamı):** auth/login, auth/access-requests,
+portal/{token}/*, company-settings/logo, health.
+
+**İki savunma hattı:** `FallbackAuthPolicyTests` çalışan uygulamaya
+sorar (anonim istek reddediliyor mu), `AuthorizeGuardTests` kaynağı
+tarar (her controller `[Authorize]` taşıyor mu). Sonda ile ayrıldılar:
+yalnız `[Authorize]` kaldırıldığında fallback tek başına koruyor
+(8/8 yeşil); ikisi birden kaldırıldığında 4 test kırmızı.
+
+#### AÇIK MADDE — PORTAL, SİSTEMİN TEK KİMLİK DOĞRULAMASIZ VERİ KAPISI
+
+`portal/{token}/*` (4 uç) denetlendi. Beş başlıktan **üçü tam**:
+
+- **Token rastgeleliği: YETERLİ.** `RandomNumberGenerator.GetBytes(32)`
+  = 256 bit, URL-safe base64 (43 karakter, canlıda ölçüldü). `Token`
+  üzerinde `IsUnique()` indeksi var.
+- **Hız sınırı: VAR.** `[EnableRateLimiting("portal")]`, 1 dakika /
+  60 istek, bölüm anahtarı `{token}:{ip}`, kuyruk yok, 429.
+- **Veri kapsamı: KAPALI.** Dört ucun dördü de ilk iş
+  `ResolveActiveLink` çağırıyor; tüm sorgular `link.ProjectId`'ye
+  bağlı. `photoId` ve `siteId` ile başka projeye geçiş denendi:
+  `photoId` sorgusunda
+  `x.DailyReport.ProjectSite.ProjectId == link.ProjectId` şartı var,
+  `siteId` yalnız zaten süzülmüş kümeyi daraltıyor. Ayrıca sadece
+  `Approved` raporlar ve `IsVisibleToEmployer` fotoğraflar dönüyor.
+
+**EKSİK İKİ ŞEY:**
+
+1. **SÜRE YOK.** İptal var ve sıkı (`IsActive && RevokedAtUtc == null`,
+   ikisi birden), ama `EmployerPortalLink` modelinde `ExpiresAt` /
+   `ValidUntil` alanı hiç yok. E-postayla paylaşılan bağlantı elle
+   iptal edilene kadar SÜRESİZ geçerli.
+2. **BAŞARISIZ TOKEN DENEMESİ KAYDA GEÇMİYOR.** `PortalController`
+   `security_audit_events`'e hiç yazmıyor; geçersiz token sessizce
+   404 dönüyor. Canlı tabloda portal kaynaklı tek kayıt yok. Hız
+   sınırı deneme yanılmayı YAVAŞLATIYOR ama DENENDİĞİNİ GÖSTERMİYOR.
+
+Canlı durum: 6 portal bağlantısı, **1'i aktif**.
+
+`company-settings/logo` ayrıca denetlendi: gövdeye hiçbir şirket alanı
+girmiyor (unvan, vergi no, adres, banka bilgisi YOK) — `LogoPath`
+okunup yalnız dosya dönüyor. Canlıda logo yüklenmemiş olduğu için
+şu an 404 + standart `problem+json` (tek yan bilgi `traceId`).
+
+**KARAR BEKLİYOR:** iki eksiğin M1'den önce mi kapatılacağı, yoksa
+açık madde olarak mı taşınacağı — Mehmet Karacabey kararı.
+
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 
 **Neden R3 ikiye ayrıldı:** merdivende R3 "UserDataScope arayüzü" diye
