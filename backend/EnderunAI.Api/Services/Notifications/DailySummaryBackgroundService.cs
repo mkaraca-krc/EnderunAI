@@ -94,7 +94,7 @@ public sealed class DailySummaryBackgroundService(
             return;
         }
 
-        var ozet = scope.ServiceProvider.GetRequiredService<DailySummaryService>();
+        var ozet = scope.ServiceProvider.GetRequiredService<IDailySummaryRunner>();
 
         var gonderilen = await ozet.RunAsync(mod, cancellationToken);
 
@@ -110,25 +110,81 @@ public sealed class DailySummaryBackgroundService(
     /// </summary>
     private DailySummaryMode ModuOku()
     {
-        var ham = configuration["DAILY_SUMMARY_MODE"]?.Trim();
+        var ham = configuration["DAILY_SUMMARY_MODE"];
+        var mod = ModCozumle(ham, out var taninmadi);
 
-        /*
-         * DEĞER ORTAM DEĞİŞKENİNDEN — KAYNAK KODA GÖMÜLÜ DEĞİL.
-         *
-         * Tanınmayan bir değer de `Kapali` sayılıyor: yazım hatası
-         * yüzünden e-posta gönderilmeye başlanması, tanımsız
-         * değişkenden daha kötü olurdu.
-         *
-         * Eski İngilizce değerler (`off`/`on`) da kabul ediliyor:
-         * deploy sırasında ortam değişkeni eski değerde kalmışsa
-         * davranış SESSİZCE değişmesin.
-         */
-        return ham?.ToLowerInvariant() switch
+        if (taninmadi)
         {
-            "dryrun" => DailySummaryMode.DryRun,
-            "acik" or "on" => DailySummaryMode.Acik,
-            _ => DailySummaryMode.Kapali
-        };
+            /*
+             * TANINMAYAN DEĞER SESSİZ KALMAZ.
+             *
+             * `Kapali`'ya düşmek doğru davranış, ama SESSİZCE düşmek
+             * değil: `DAILY_SUMMARY_MODE=dryrunn` yazan kişi
+             * özetin koştuğunu sanır ve haftalarca boş kayda bakar.
+             * Ham değer sır değil, kapı adı — kayda yazılabilir.
+             */
+            logger.LogWarning(
+                "DAILY_SUMMARY_MODE tanınmayan bir değer taşıyor: " +
+                "\"{Ham}\". Güvenli tarafa düşüldü: {Mod}. Geçerli " +
+                "değerler: kapali, dryrun, acik.",
+                ham, mod);
+        }
+
+        return mod;
+    }
+
+    /// <summary>
+    /// HAM DEĞER → MOD. Saf fonksiyon; testler doğrudan çağırıyor.
+    ///
+    /// EŞLEME TABLOSU (büyük/küçük harf ve baştaki/sondaki boşluk
+    /// önemsiz):
+    ///   "kapali", "off"        → <see cref="DailySummaryMode.Kapali"/>
+    ///   "dryrun"               → <see cref="DailySummaryMode.DryRun"/>
+    ///   "acik", "on"           → <see cref="DailySummaryMode.Acik"/>
+    ///   null, "", "   "        → Kapali (tanımsız)
+    ///   başka her şey          → Kapali + UYARI KAYDI
+    ///
+    /// EN ÖNEMLİ KURAL: <see cref="DailySummaryMode.Acik"/>'a YALNIZ
+    /// açıkça "acik"/"on" yazılırsa düşülür. Hiçbir yazım hatası,
+    /// hiçbir boş değer, hiçbir tanımsız değişken gerçek insanlara
+    /// e-posta göndermeye başlatamaz. Varsayılanın yanlış tarafı
+    /// geri alınamaz bir hata olurdu.
+    ///
+    /// `off`/`on` geriye uyum için duruyor: deploy sırasında ortam
+    /// değişkeni eski değerde kalmışsa davranış SESSİZCE değişmesin.
+    /// </summary>
+    public static DailySummaryMode ModCozumle(string? ham, out bool taninmadi)
+    {
+        var temiz = ham?.Trim();
+
+        if (string.IsNullOrEmpty(temiz))
+        {
+            // Tanımsız/boş: uyarı YAZILIR ama yalnızca değişken
+            // TANIMLIYSA — hiç tanımlanmamış olmak beklenen durum.
+            taninmadi = ham is not null;
+            return DailySummaryMode.Kapali;
+        }
+
+        switch (temiz.ToLowerInvariant())
+        {
+            case "dryrun":
+                taninmadi = false;
+                return DailySummaryMode.DryRun;
+
+            case "acik":
+            case "on":
+                taninmadi = false;
+                return DailySummaryMode.Acik;
+
+            case "kapali":
+            case "off":
+                taninmadi = false;
+                return DailySummaryMode.Kapali;
+
+            default:
+                taninmadi = true;
+                return DailySummaryMode.Kapali;
+        }
     }
 
 

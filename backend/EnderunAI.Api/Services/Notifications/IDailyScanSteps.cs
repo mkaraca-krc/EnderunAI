@@ -28,3 +28,23 @@ public interface IScopeDeferralWatchdog
 {
     Task CheckAsync(CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// ÖZET/GÖNDERİM YOLU — moddan ETKİLENEN tek adım.
+///
+/// Bu arayüz de sayaç içindir. Önce "test kapsayıcısına
+/// `DailySummaryService`'i hiç kaydetmem, girilirse
+/// `GetRequiredService` fırlar" diye dolaylı bir kanıt kullanılmıştı.
+/// O kanıt GEÇERSİZ: üretim zincirinde
+/// `DailySummaryBackgroundService.ExecuteAsync` (satır 38) turu
+/// `catch (Exception)` ile sarıyor, yani fırlatmaya dayanan kanıt
+/// yalnızca testin o sarmalayıcıyı atlaması sayesinde çalışıyordu —
+/// biri testi `ExecuteAsync` üzerinden koşturmaya çevirse kanıt
+/// sessizce buharlaşırdı.
+///
+/// Artık tek kanıt ÇAĞRI SAYACI. (DURUM.md §5 kural 23)
+/// </summary>
+public interface IDailySummaryRunner
+{
+    Task<int> RunAsync(DailySummaryMode mode, CancellationToken cancellationToken);
+}

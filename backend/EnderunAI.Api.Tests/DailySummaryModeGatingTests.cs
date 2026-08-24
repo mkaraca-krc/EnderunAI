@@ -10,18 +10,22 @@ namespace EnderunAI.Api.Tests;
 ///
 /// `DAILY_SUMMARY_MODE` bir ANA ŞALTER DEĞİL, GÖNDERİM KAPISIDIR.
 /// `kapali` modda bile termin taraması ve G3 erteleme nöbetçisi
-/// koşar; kesilen yalnızca e-postadır.
+/// koşar; kesilen yalnızca özet/e-posta yoludur.
 ///
-/// BU TEST NEDEN VAR: bu kural bir kez yalnızca YORUMDA duruyordu
-/// ve yorum koddaki davranışla çelişiyordu ("Tarama HİÇ KOŞMAZ").
-/// Çelişki, ikisi de aynı commit'te (9212d291) doğduğu için bir
-/// regresyon değil, doğuştan bir tutarsızlıktı — yani hiçbir test
-/// onu tutmuyordu. Artık iddia yorumda değil burada.
+/// BU TEST NEDEN VAR: bu kural bir süre yalnızca YORUMDA durdu ve
+/// yorum koddaki davranışla çelişiyordu ("Tarama HİÇ KOŞMAZ").
+/// `git log`: ikisi de aynı commit'te (9212d291) doğmuş — regresyon
+/// değil, doğuştan tutarsızlık; hiçbir test onu tutmuyordu.
 ///
-/// NEDEN ÇAĞRI SAYACI, NEDEN ETKİ DEĞİL: tur `ExecuteAsync` içinde
-/// `catch (Exception)` ile sarılı ("bir günün hatası ertesi günü
-/// kaybettirmesin"). Yutulan bir hata, etkiye bakan bir testi
-/// sessizce yanıltabilirdi. Sayaç yutulamaz. (DURUM.md §5 kural 23)
+/// TEK KANIT ÇAĞRI SAYACIDIR. İlk sürümde ikinci bir "kanıt" daha
+/// vardı: `DailySummaryService` kapsayıcıya hiç kaydedilmiyordu,
+/// gönderim yoluna girilirse `GetRequiredService` fırlasın diye.
+/// O kanıt GEÇERSİZ ilan edildi — üretim zincirinde
+/// `DailySummaryBackgroundService.ExecuteAsync:38` turu
+/// `catch (Exception)` ile sarıyor. Fırlatmaya dayanan kanıt yalnızca
+/// bu test o sarmalayıcıyı atladığı için çalışıyordu; biri testi
+/// `ExecuteAsync` üzerinden koşturmaya çevirse sessizce buharlaşırdı.
+/// Sayaç yutulamaz. (DURUM.md §5 kural 23)
 /// </summary>
 public sealed class DailySummaryModeGatingTests
 {
@@ -47,24 +51,36 @@ public sealed class DailySummaryModeGatingTests
         }
     }
 
-    /// <summary>
-    /// KASITLI OLARAK EKSİK KAPSAYICI.
-    ///
-    /// `DailySummaryService` BİLEREK kaydedilmedi. Böylece gönderim
-    /// yoluna girilirse `GetRequiredService` fırlatır — yani
-    /// "e-posta yolu hiç açılmadı" iddiası, sayacın yanında ikinci
-    /// bir kanıtla daha korunur.
-    /// </summary>
-    private static (DailySummaryBackgroundService Servis,
-                    SayanTarayici Tarayici,
-                    SayanBekci Bekci) Kur(string? modDegeri)
+    private sealed class SayanOzet : IDailySummaryRunner
+    {
+        public int CagriSayisi { get; private set; }
+
+        public DailySummaryMode? GelenMod { get; private set; }
+
+        public Task<int> RunAsync(DailySummaryMode mode, CancellationToken cancellationToken)
+        {
+            CagriSayisi++;
+            GelenMod = mode;
+            return Task.FromResult(0);
+        }
+    }
+
+    private sealed record Kurulum(
+        DailySummaryBackgroundService Servis,
+        SayanTarayici Tarayici,
+        SayanBekci Bekci,
+        SayanOzet Ozet);
+
+    private static Kurulum Kur(string? modDegeri)
     {
         var tarayici = new SayanTarayici();
         var bekci = new SayanBekci();
+        var ozet = new SayanOzet();
 
         var koleksiyon = new ServiceCollection();
         koleksiyon.AddScoped<ITaskDueNotificationScanner>(_ => tarayici);
         koleksiyon.AddScoped<IScopeDeferralWatchdog>(_ => bekci);
+        koleksiyon.AddScoped<IDailySummaryRunner>(_ => ozet);
 
         var yapilandirma = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -78,7 +94,7 @@ public sealed class DailySummaryModeGatingTests
             yapilandirma,
             NullLogger<DailySummaryBackgroundService>.Instance);
 
-        return (servis, tarayici, bekci);
+        return new Kurulum(servis, tarayici, bekci, ozet);
     }
 
     [Theory]
@@ -88,34 +104,101 @@ public sealed class DailySummaryModeGatingTests
     [InlineData(null)]       // değişken tanımsız
     public async Task Kapali_TaramaVeBekciyiYineDeKosturur(string? modDegeri)
     {
-        var (servis, tarayici, bekci) = Kur(modDegeri);
+        var k = Kur(modDegeri);
 
-        // Gönderim yoluna girilseydi `DailySummaryService` çözülemez
-        // ve burası fırlardı.
-        await servis.BirTurAsync(CancellationToken.None);
+        await k.Servis.BirTurAsync(CancellationToken.None);
 
-        Assert.Equal(1, tarayici.CagriSayisi);
-        Assert.Equal(1, bekci.CagriSayisi);
+        Assert.Equal(1, k.Tarayici.CagriSayisi);
+        Assert.Equal(1, k.Bekci.CagriSayisi);
+
+        // ÖZET YOLUNA HİÇ GİRİLMEDİ — sayaç, tek kanıt.
+        Assert.Equal(0, k.Ozet.CagriSayisi);
     }
 
     /// <summary>
-    /// Ters yön: mod kapalı DEĞİLSE gönderim yolu gerçekten
-    /// aranıyor. Bu olmasaydı yukarıdaki test, bayrak tamamen
-    /// işlevsizleşse bile yeşil kalırdı.
+    /// Ters yön: mod kapalı DEĞİLSE özet yolu gerçekten koşuyor ve
+    /// doğru mod aşağı geçiyor. Bu olmasaydı yukarıdaki test, bayrak
+    /// tamamen işlevsizleşse bile yeşil kalırdı.
     /// </summary>
     [Theory]
-    [InlineData("dryrun")]
-    [InlineData("acik")]
-    [InlineData("on")]
-    public async Task KapaliDegilse_GonderimYoluAranir(string modDegeri)
+    [InlineData("dryrun", DailySummaryMode.DryRun)]
+    [InlineData("acik", DailySummaryMode.Acik)]
+    [InlineData("on", DailySummaryMode.Acik)]
+    public async Task KapaliDegilse_OzetYoluKosar(string modDegeri, DailySummaryMode beklenen)
     {
-        var (servis, tarayici, bekci) = Kur(modDegeri);
+        var k = Kur(modDegeri);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => servis.BirTurAsync(CancellationToken.None));
+        await k.Servis.BirTurAsync(CancellationToken.None);
 
-        // Tarama ve nöbetçi, gönderim yolundan ÖNCE koşmuş olmalı.
-        Assert.Equal(1, tarayici.CagriSayisi);
-        Assert.Equal(1, bekci.CagriSayisi);
+        Assert.Equal(1, k.Ozet.CagriSayisi);
+        Assert.Equal(beklenen, k.Ozet.GelenMod);
+
+        // Tarama ve nöbetçi, özet yolundan bağımsız olarak yine koştu.
+        Assert.Equal(1, k.Tarayici.CagriSayisi);
+        Assert.Equal(1, k.Bekci.CagriSayisi);
+    }
+
+    // ---------------------------------------------------------------
+    // MOD AYRIŞTIRMA EMNİYETİ
+    // ---------------------------------------------------------------
+
+    /// <summary>
+    /// EN ÖNEMLİ KURAL: `Acik`'a YALNIZ açıkça "acik"/"on" yazılırsa
+    /// düşülür. Yazım hatası, boş değer ya da tanımsız değişken
+    /// gerçek insanlara e-posta göndermeye BAŞLATAMAZ.
+    /// </summary>
+    [Theory]
+    [InlineData(null, DailySummaryMode.Kapali, false)]
+    [InlineData("", DailySummaryMode.Kapali, true)]
+    [InlineData("   ", DailySummaryMode.Kapali, true)]
+    [InlineData("offf", DailySummaryMode.Kapali, true)]
+    [InlineData("Off", DailySummaryMode.Kapali, false)]
+    [InlineData("off", DailySummaryMode.Kapali, false)]
+    [InlineData("kapali", DailySummaryMode.Kapali, false)]
+    [InlineData("KAPALI", DailySummaryMode.Kapali, false)]
+    [InlineData("DRYRUN", DailySummaryMode.DryRun, false)]
+    [InlineData(" dryrun ", DailySummaryMode.DryRun, false)]
+    [InlineData("dryrunn", DailySummaryMode.Kapali, true)]
+    [InlineData("acik", DailySummaryMode.Acik, false)]
+    [InlineData("ACIK", DailySummaryMode.Acik, false)]
+    [InlineData("on", DailySummaryMode.Acik, false)]
+    [InlineData("açık", DailySummaryMode.Kapali, true)]  // Türkçe harf: TANINMAZ
+    [InlineData("true", DailySummaryMode.Kapali, true)]
+    [InlineData("1", DailySummaryMode.Kapali, true)]
+    [InlineData("enabled", DailySummaryMode.Kapali, true)]
+    public void ModCozumle_EslemeTablosu(
+        string? ham, DailySummaryMode beklenen, bool taninmamaliDeger)
+    {
+        var mod = DailySummaryBackgroundService.ModCozumle(ham, out var taninmadi);
+
+        Assert.Equal(beklenen, mod);
+        Assert.Equal(taninmamaliDeger, taninmadi);
+    }
+
+    /// <summary>
+    /// KAPSAYICI KURAL, TEK TEK ÖRNEKTEN GÜÇLÜDÜR: "acik"/"on"
+    /// DIŞINDA hiçbir değer Acik üretemez. Yukarıdaki tablo
+    /// örnekleri sayar; bu, kuralı sayar.
+    /// </summary>
+    [Fact]
+    public void ModCozumle_AcikDisindaHicbirDegerAcikUretmez()
+    {
+        string?[] adaylar =
+        [
+            null, "", " ", "off", "OFF", "kapali", "dryrun", "DryRun",
+            "offf", "onn", "no", "yes", "true", "false", "1", "0",
+            "enabled", "disabled", "açık", "aç1k", "ac1k", "an", "o n",
+            "acikk", "aciik", "send", "mail", "prod", "production"
+        ];
+
+        foreach (var aday in adaylar)
+        {
+            var mod = DailySummaryBackgroundService.ModCozumle(aday, out _);
+
+            Assert.True(
+                mod != DailySummaryMode.Acik,
+                $"\"{aday ?? "(null)"}\" değeri Acik'a düştü — gerçek " +
+                "insanlara e-posta gönderilmesine yol açardı.");
+        }
     }
 }

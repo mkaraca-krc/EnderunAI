@@ -531,6 +531,10 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Notifications.DailySummaryService>();
 builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.IDailySummaryRunner>(
+    sp => sp.GetRequiredService<
+        EnderunAI.Api.Services.Notifications.DailySummaryService>());
+builder.Services.AddScoped<
     EnderunAI.Api.Services.Notifications.ScopeDeferralWatchdog>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Notifications.IScopeDeferralWatchdog>(

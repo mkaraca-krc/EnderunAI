@@ -50,7 +50,7 @@ public sealed class DailySummaryService(
     AppDbContext db,
     IEmailService email,
     IUserAuthorizationService authorization,
-    ILogger<DailySummaryService> logger)
+    ILogger<DailySummaryService> logger) : IDailySummaryRunner
 {
     /// <summary>Türkiye saatiyle 07:00 — sunucu UTC olduğu için 04:00.</summary>
     public const int GonderimSaatiUtc = 4;

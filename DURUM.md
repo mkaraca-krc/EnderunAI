@@ -600,11 +600,68 @@ gönderim kapısıdır, servisin tamamının şalteri değil.
 > Sonda: tarama çağrısı erken `return`'ün ALTINA taşındı → dört
 > `kapali` durumu da kırmızıya döndü (`Failed: 4`). Geri alındı.
 >
-> Test bunun için `ITaskDueNotificationScanner` ve
-> `IScopeDeferralWatchdog` arayüzlerine dayanıyor
-> (`Services/Notifications/IDailyScanSteps.cs`). Somut sınıflar
-> `sealed` KALDI — sırf test için mühür açmak yerine dar arayüz
-> eklendi; DI'da arayüz **aynı scoped örneğe** bağlanıyor.
+> Test bunun için `ITaskDueNotificationScanner`,
+> `IScopeDeferralWatchdog` ve `IDailySummaryRunner` arayüzlerine
+> dayanıyor (`Services/Notifications/IDailyScanSteps.cs`). Somut
+> sınıflar `sealed` KALDI — sırf test için mühür açmak yerine dar
+> arayüz eklendi; DI'da arayüz **aynı scoped örneğe** bağlanıyor.
+
+#### KURU KOŞU PAKETİNDE KAPATILAN ÜÇ EK AÇIK (2026-08-24)
+
+**1) "FIRLATIR" KANITI GEÇERSİZ İLAN EDİLDİ.** Sayaç testinin ilk
+sürümünde ikinci bir kanıt vardı: test kapsayıcısına
+`DailySummaryService` hiç kaydedilmiyordu, gönderim yoluna girilirse
+`GetRequiredService` fırlasın diye. Bu kanıt yalnızca testin üretim
+sarmalayıcısını ATLAMASI sayesinde çalışıyordu —
+`DailySummaryBackgroundService.ExecuteAsync:38` turu
+`catch (Exception)` ile sarıyor. Biri testi `ExecuteAsync` üzerinden
+koşturmaya çevirse kanıt sessizce buharlaşırdı. **Kural 23'ün kendi
+testimize uygulanması:** özet yolu da `IDailySummaryRunner` arayüzüne
+alındı ve tek kanıt ÇAĞRI SAYACI oldu (`Kapali` modda
+`Ozet.CagriSayisi == 0`).
+
+**2) ÜRETİM KAPSAYICISI AYRICA SINANIYOR.** Sahtelerle koşan test,
+üretimde kaydın var olduğunu KANITLAMAZ: `IDailySummaryRunner` kaydı
+unutulsa sahte testler yeşil kalır, üretimde tur her gece
+`GetRequiredService` ile fırlar ve `ExecuteAsync:38` bunu yutar —
+arıza kimseye görünmeden günlerce sürer.
+`DailyNotificationWiringTests` günlük turun dokunduğu her şeyi
+üretim kapsayıcısından gerçekten çözüyor.
+
+**3) ARAYÜZ = AYNI ÖRNEK, TESTE BAĞLANDI.**
+`AddScoped<IArayuz, Somut>()` derlenir ve testlerin çoğu yeşil kalır,
+ama tek scope içinde İKİ AYRI örnek doğurur — tarayıcı ve nöbetçi
+`AppDbContext` üzerinden yazdığı için bu, aynı turda ikinci bir
+değişiklik izleyicisi demek. `Arayuzler_SomutSiniflarlaAyniOrnegeBagli`
+`Assert.Same` ile tutuyor; `AyriScopelar_AyriOrnekAlir` de testin
+"her şey singleton olmuş" kazasıyla yeşil kalmadığını gösteriyor.
+Sonda: forwarding ayrı `AddScoped`'a çevrildi → kırmızı.
+
+#### MOD AYRIŞTIRMA TABLOSU — `ModCozumle` (saf fonksiyon)
+
+Büyük/küçük harf ve baştaki/sondaki boşluk önemsiz:
+
+| Ham değer | Mod | Uyarı kaydı |
+|---|---|---|
+| `kapali`, `off` | Kapali | — |
+| `dryrun` | DryRun | — |
+| `acik`, `on` | Acik | — |
+| tanımsız (null) | Kapali | — (beklenen durum) |
+| `""`, `"   "` | Kapali | **UYARI** |
+| başka her şey (`offf`, `dryrunn`, `açık`, `true`, `1`, `enabled`…) | Kapali | **UYARI** |
+
+**`Acik`'A YALNIZ AÇIKÇA DÜŞÜLÜR.** Hiçbir yazım hatası, boş değer
+veya tanımsız değişken gerçek insanlara e-posta göndermeye
+başlatamaz. Varsayılanın yanlış tarafı geri alınamaz bir hata olurdu.
+Bunu iki test tutuyor: `ModCozumle_EslemeTablosu` (18 örnek) ve
+`ModCozumle_AcikDisindaHicbirDegerAcikUretmez` — ikincisi örnek
+değil KURAL sayıyor. Sonda: varsayılan `Acik` yapıldı → 8 test
+kırmızı.
+
+**TANINMAYAN DEĞER SESSİZ KALMIYOR.** `Kapali`'ya düşmek doğru ama
+sessizce düşmek değil: `DAILY_SUMMARY_MODE=dryrunn` yazan kişi
+özetin koştuğunu sanır ve haftalarca boş kayda bakar. Artık
+`LogWarning` ham değeri ve düşülen modu yazıyor.
 
 **KURU KOŞU KAYDI — YALNIZCA TOPLAM, KİŞİSEL VERİ YOK.**
 Günlüğe yazılan alanların TAMAMI:
