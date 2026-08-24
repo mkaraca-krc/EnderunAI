@@ -1,0 +1,130 @@
+# react-hooks/set-state-in-effect — ÇİZGİ
+#
+# Biçim: dosya:adet
+#
+# ADET = RAPORLANAN İHLAL + SUSTURULMUŞ İHLAL.
+# `eslint-disable` yorumu ihlali ORTADAN KALDIRMAZ, yalnız gizler —
+# bu yüzden cırcır onu da sayar. Susturma kaçış yolu değildir;
+# olsaydı çizgi bir gün "0" görünür ve hiçbir şey ölçmezdi.
+#
+# Çift yönlü (CoverageBaselineTests deseni):
+#   - toplam ÇİZGİYİ AŞAMAZ
+#   - çizgide artık ihlal taşımayan dosya KALAMAZ
+#
+# NEDEN BU KADAR YÜKSEK: kural, efektin çağırdığı fonksiyonun İÇİNE
+# bakıyor. Efektten veri çekip durum yazmanın kuralla uyumlu bir
+# biçimi yok; düzgün çözüm bir veri çekme katmanı (SWR/React Query)
+# ya da ilk veriyi sunucu bileşeninden props ile geçirmek. İkisi de
+# mimari değişiklik. Borç DURUM.md'de "veri çekme katmanı" paketine
+# bağlı.
+
+app/ai-asistan/page.tsx:1
+app/cariler/[id]/ekstre/page.tsx:1
+app/cariler/page.tsx:1
+app/dashboard/page.tsx:1
+app/depo-stok/donemsel-sayim/[id]/page.tsx:1
+app/depo-stok/donemsel-sayim/page.tsx:2
+app/depo-stok/etiket/page.tsx:1
+app/depo-stok/kategoriler/page.tsx:1
+app/depo-stok/mal-kabul/[id]/page.tsx:1
+app/depo-stok/mal-kabul/page.tsx:1
+app/depo-stok/mal-kabul/yeni/page.tsx:1
+app/depo-stok/malzeme-talepleri/[id]/page.tsx:1
+app/depo-stok/malzeme-talepleri/page.tsx:1
+app/depo-stok/muhasebe-mutabakat/page.tsx:1
+app/depo-stok/page.tsx:1
+app/depo-stok/raf/[warehouseId]/[shelfId]/page.tsx:1
+app/depo-stok/stok-seviyeleri/page.tsx:2
+app/depo-stok/yeni/page.tsx:2
+app/filo/[id]/page.tsx:1
+app/filo/page.tsx:1
+app/finans/cekler/page.tsx:1
+app/finans/kasa-banka/page.tsx:4
+app/finans/nakit-akis/page.tsx:3
+app/finans/page.tsx:1
+app/finans/vergi/page.tsx:1
+app/fiyat-farki/page.tsx:1
+app/gorevler/[id]/page.tsx:1
+app/gorevler/page.tsx:3
+app/hakedis/[id]/duzenle/page.tsx:1
+app/hakedis/[id]/page.tsx:1
+app/hakedis/[id]/yazdir/page.tsx:1
+app/hakedis/page.tsx:2
+app/hakedis/yeni/page.tsx:1
+app/insan-kaynaklari/bordro/page.tsx:3
+app/insan-kaynaklari/cikis-tazminat/page.tsx:1
+app/insan-kaynaklari/ek-odemeler/page.tsx:1
+app/insan-kaynaklari/ek-ucretler/page.tsx:1
+app/insan-kaynaklari/gunluk-puantaj/page.tsx:4
+app/insan-kaynaklari/ise-alim/page.tsx:2
+app/insan-kaynaklari/izinler/page.tsx:1
+app/insan-kaynaklari/kariyer/page.tsx:1
+app/insan-kaynaklari/maliyet-raporu/page.tsx:2
+app/insan-kaynaklari/onay-merkezi/page.tsx:3
+app/insan-kaynaklari/organizasyon/page.tsx:1
+app/insan-kaynaklari/page.tsx:2
+app/insan-kaynaklari/personeller/page.tsx:2
+app/insan-kaynaklari/puantaj/page.tsx:1
+app/insan-kaynaklari/ucret-kartlari/page.tsx:2
+app/insan-kaynaklari/zimmetler/page.tsx:3
+app/kesifler/page.tsx:1
+app/login/page.tsx:1
+app/metrajlar/[id]/page.tsx:1
+app/metrajlar/page.tsx:1
+app/muhasebe/buyuk-defter/page.tsx:1
+app/muhasebe/e-fatura-ice-aktar/page.tsx:1
+app/muhasebe/faturalar/[id]/page.tsx:1
+app/muhasebe/faturalar/page.tsx:1
+app/muhasebe/faturalar/yeni/page.tsx:1
+app/muhasebe/fisler/[id]/page.tsx:1
+app/muhasebe/fisler/page.tsx:2
+app/muhasebe/hesap-plani/page.tsx:3
+app/muhasebe/satis-faturalari/[id]/page.tsx:1
+app/muhasebe/satis-faturalari/yeni/page.tsx:1
+app/muhasebe/yevmiye/page.tsx:1
+app/muhendislik/pozlar/[id]/page.tsx:1
+app/muhendislik/receteler/page.tsx:1
+app/perakende/fiyatlar/page.tsx:1
+app/perakende/page.tsx:1
+app/perakende/raporlar/page.tsx:1
+app/projeler/[id]/maliyet-analizi/page.tsx:1
+app/projeler/[id]/malzeme-ihtiyaci/page.tsx:1
+app/projeler/[id]/metraj-takip/page.tsx:1
+app/projeler/[id]/santiyeler/[siteId]/page.tsx:3
+app/projeler/page.tsx:2
+app/satin-alma/[id]/page.tsx:1
+app/satin-alma/rfq/[id]/page.tsx:1
+app/satin-alma/rfq/[id]/tedarikci/[supplierId]/page.tsx:1
+app/satin-alma/rfq/page.tsx:1
+app/satin-alma/siparis/[id]/page.tsx:1
+app/satin-alma/siparis/[id]/yazdir/page.tsx:1
+app/satin-alma/siparis/page.tsx:1
+app/sekreterya/evrak/page.tsx:3
+app/sekreterya/kargo/page.tsx:3
+app/sekreterya/ziyaretciler/page.tsx:3
+app/sirketler/page.tsx:1
+app/sistem-yonetimi/erisim-talepleri/page.tsx:1
+app/sistem-yonetimi/kullanicilar/page.tsx:1
+app/sistem-yonetimi/sirket-ayarlari/page.tsx:2
+app/sistem-yonetimi/yetki-matrisi/page.tsx:1
+app/subeler/page.tsx:1
+app/teklifler/[id]/page.tsx:1
+app/yapilacaklar/page.tsx:1
+components/collaboration/attachment-panel.tsx:1
+components/collaboration/comment-thread.tsx:1
+components/engineering/recipe-editor.tsx:1
+components/erp/command-palette.tsx:2
+components/erp/erp-shell.tsx:1
+components/finans/cost-center-select.tsx:1
+components/hakedis/hakedis-editor.tsx:2
+components/hizir/hizir-chat.tsx:1
+components/hr/hr-asset-inventory-dialog.tsx:1
+components/hr/payroll-settings-card.tsx:1
+components/inventory/inventory-movement-form.tsx:1
+components/inventory/photo-gallery.tsx:1
+components/projects/project-danger-zone.tsx:1
+components/secretariat/secretariat-registry-page.tsx:3
+components/ui/data-table.tsx:1
+components/ui/searchable-select.tsx:3
+components/work-hour-session-watcher.tsx:1
+lib/data/use-refreshable.ts:1

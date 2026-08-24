@@ -76,6 +76,26 @@ export function AttachmentPanel({
 
   useEffect(() => {
     // İZİN YOKSA İSTEK DE YOK.
+    /*
+     * SUSTURMA — GEREKÇELİ VE BORÇ OLARAK KAYITLI.
+     *
+     * `react-hooks/set-state-in-effect` bu satırı işaretliyor.
+     * ÖLÇÜLDÜ: kural, efektin çağırdığı fonksiyonun İÇİNE bakıyor;
+     * setState'in senkron olup olmaması fark etmiyor. Senkron
+     * çağrıları efekt yolundan çıkardım (gösterge zaten
+     * `useState(true)` ile açık) ve ihlal 1'den 1'e kaldı —
+     * DÜŞMEDİ. Yani efektten veri çekip durum yazmanın bu kuralla
+     * uyumlu bir biçimi YOK.
+     *
+     * Düzgün çözüm bir veri çekme katmanı (SWR/React Query) ya da
+     * ilk veriyi sunucu bileşeninden props ile geçirmek — ikisi de
+     * mimari değişiklik ve 107 dosya zaten bu desende.
+     *
+     * BU SUSTURMA KAÇIŞ YOLU DEĞİL: cırcır `eslint-disable`
+     * yorumlarını da İHLAL SAYIYOR, yani çizgi düşmüyor.
+     * Borç DURUM.md'de "veri çekme katmanı" paketine bağlı.
+     */
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (canRead) void yukle();
   }, [yukle, canRead]);
 
