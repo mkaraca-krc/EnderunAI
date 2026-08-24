@@ -87,7 +87,24 @@ export default function YapilacaklarSayfasi() {
      * kimliksiz çalıştırmak demek — sonuç ya boş ya yanlış olurdu.
      */
     const kullaniciId = user?.id;
-    if (!kullaniciId) return;
+
+    if (!kullaniciId) {
+      /*
+       * ERKEN ÇIKIŞTA YÜKLEME KAPANIR.
+       *
+       * Önce düz `return` vardı ve `yukleniyor` başlangıç değeri
+       * `true`. Kimlik hiç gelmezse ekran SONSUZA KADAR
+       * "Yükleniyor…" derdi — hata da göstermeden, çünkü ortada
+       * bir hata yok.
+       *
+       * `auth/me` başarısız olursa `use-current-user.ts` hatayı
+       * YUTUYOR ve `user` null kalıyor; yani bu yol teorik değil.
+       * DURUM.md §5 kural 26: bir sayfa yükleme durumundan çıkışı
+       * GARANTİ etmelidir — erken çıkış ve hata yollarında da.
+       */
+      setYukleniyor(false);
+      return;
+    }
 
     setYukleniyor(true);
 
@@ -153,7 +170,7 @@ export default function YapilacaklarSayfasi() {
         izin: raporVar,
         cagri: async () => {
           const yanit = await apiClient<RawReport[]>(
-            "project-sites/daily-reports/pending-approval",
+            "site-reports/pending-approval",
           );
           return (yanit ?? []).map(raporToItem);
         },

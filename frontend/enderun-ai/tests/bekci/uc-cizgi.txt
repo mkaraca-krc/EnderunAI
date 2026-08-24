@@ -1,0 +1,22 @@
+# ÇÖZÜLMEYEN SERVİS ÇAĞRISI YOLLARI — ÇİZGİ
+#
+# Biçim: dosya|normalize-yol|gerekçe
+#
+# Yeni çözülmeyen yol EKLENEMEZ. Buradaki bir satır düzeltilirse
+# SATIR SİLİNİR ve dosya küçülür. Çift yönlü.
+#
+# İLK SEKİZİ GERÇEK KIRIK ÇAĞRIDIR — kullanıcı o ekranda 404 alır.
+# Mehmet Karacabey'in kararını bekliyor: uçları yazmak mı, çağrıları
+# kaldırmak mı, yoksa çizgi olarak tutmak mı.
+
+app/muhasebe/hesap-plani/aktar/page.tsx|api/accounting-accounts/import|UÇ YOK — backend'in hiçbir yerinde "accounting-accounts/import" geçmiyor
+services/hr-asset.service.ts|api/hr/assets/from-inventory|UÇ YOK — "from-inventory" backend'de yok
+services/hr-asset.service.ts|api/hr/assets/X/return-to-warehouse|UÇ YOK — "return-to-warehouse" backend'de yok
+services/payroll-payment-account.service.ts|api/bank-accounts|YANLIŞ YOL — gerçek uç api/company-settings/bank-accounts (CompanySettingsController.cs:129)
+services/price-difference.service.ts|api/price-difference-calculations/calculate|UÇ YOK — "price-difference-calculations" backend'de yok
+services/price-difference.service.ts|api/price-difference-calculations/progress-payment/X|UÇ YOK — aynı denetleyici hiç yazılmamış
+services/project-ai-analysis.service.ts|api/projects/X/ai-analysis|UÇ YOK — "ai-analysis" backend'de yok
+services/project-site-analysis.service.ts|api/projects/X/site-analysis|UÇ YOK — "site-analysis" backend'de yok
+services/secretariat-planner.service.ts|api/secretariat/X|AYRIŞTIRICI SINIRI — ${path} ORTA segmentte ve kaynak adını taşıyor; statik olarak açılamıyor
+services/secretariat-planner.service.ts|api/secretariat/X/X/status|AYRIŞTIRICI SINIRI — aynı ${path}
+services/secretariat-planner.service.ts|api/secretariat/X/X|AYRIŞTIRICI SINIRI — aynı ${path}

@@ -1,0 +1,37 @@
+# HESAPLANMIŞ ÖNEKLİ SERVİS ÇAĞRILARI — ÇİZGİ
+#
+# Biçim: dosya:adet
+#
+# Yol bir DEĞİŞKENLE BAŞLIYOR (`apiClient(`${root}/logo`)`), yani
+# önek çalışma zamanında belli oluyor ve statik olarak çözülemez.
+# Bekçinin kör noktası; büyümemesi için sayılıyor.
+#
+# KURAL: yeni hesaplanmış önekli çağrı EKLENEMEZ. Yol sabit yazılır,
+# değişken yalnız SEGMENT olarak kullanılır.
+
+app/cariler/page.tsx:1
+app/sirketler/page.tsx:1
+app/subeler/page.tsx:1
+lib/api/api-client.ts:1
+services/access-request.service.ts:2
+services/company-settings.service.ts:6
+services/e-invoice.service.ts:2
+services/employer-portal.service.ts:1
+services/hakedis-deduction-account.service.ts:2
+services/hakedis-file.service.ts:2
+services/hr-career.service.ts:3
+services/hr-organization.service.ts:10
+services/hr-recruitment.service.ts:17
+services/inventory-movement.service.ts:1
+services/isg-deduction-suggestion.service.ts:1
+services/leave-balance.service.ts:1
+services/management-kpi.service.ts:1
+services/payroll-readiness.service.ts:2
+services/personnel-document.service.ts:6
+services/position-import.service.ts:1
+services/project-boq.service.ts:1
+services/project-document.service.ts:5
+services/retail-sale.service.ts:1
+services/sales-invoice.service.ts:6
+services/supplier-invoice.service.ts:7
+services/user-management.service.ts:9

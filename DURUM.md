@@ -3315,6 +3315,68 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     Kural 23'ün akrabası: orada hata YUTULUYORDU, burada sonuç
     GÖLGELENİYOR. İkisinde de "test yeşil" bilgi taşımıyor.
 
+26. **BİR SAYFA YÜKLEME DURUMUNDAN ÇIKIŞI GARANTİ ETMELİDİR.**
+    Erken çıkış ve hata yollarında da yükleme kapanır; kapanmıyorsa
+    KUSURDUR. 2026-08-24, `/yapilacaklar` canlıda "Yükleniyor…"
+    durumunda kilitlendi.
+
+    **KÖK NEDEN — ÖLÇÜLDÜ, TAHMİN EDİLMEDİ.** Üç şüpheli testle
+    ayrıldı:
+
+    | Şüpheli | Kararlı mı | Kilitliyor mu |
+    |---|---|---|
+    | `useModuleActions` nesnesi | KARARSIZ | **EVET** |
+    | `useModuleActions.can` | kararlı | — |
+    | `usePermissions.has` | kararlı | hayır — taşınmıyor |
+    | `usePermissions` nesnesi | KARARSIZ | hayır |
+    | Erken çıkışta sıfırlama yok | — | gizli ikinci kilit |
+    | Yanlış servis yolu (404) | — | hayır (yalıtım tuttu) |
+
+    Mekanizma: ekranın `useCallback` bağımlılık dizisinde NESNENİN
+    KENDİSİ vardı, alanları değil. `can` `useCallback` ile sarılıydı
+    ama SARMALAYAN NESNE değildi; her render'da yenilenen nesne
+    callback'i, callback efekti, efekt yeni bir render'ı doğurdu.
+    Ölçüm: 1,5 saniyede 1831 istek. Ekran hata göstermedi çünkü
+    ORTADA HATA YOKTU — istekler 200 dönüyordu.
+
+    **İKİ TEST HATASI DA BURADAN ÇIKTI:**
+
+    a) **Gecikmesiz taklit yanıltır.** Anında dönen sahte uçla her
+       turun `setLoading(false)` çağrısı bir sonrakinin `true`'sundan
+       önce yetişiyor ve test "yükleme bitti" görüyordu. Canlıda
+       uçlar 30-250 ms sürüyor. Zamanlamaya bağlı kusurlar
+       GERÇEKÇİ GECİKMEYLE sınanır.
+
+    b) **`waitFor` insanın gördüğünü ölçmez.** DOM'u doğrudan
+       yokluyor ve mikro pencereleri yakalıyor; tarayıcı 60 fps'te
+       boyuyor ve 16 ms'den kısa pencereyi kullanıcıya HİÇ
+       göstermiyor. "Bir an kayboldu" ile "kullanıcı görmedi" aynı
+       şey değil. Doğru iddia: kaybolmalı VE KAYBOLMUŞ KALMALI
+       (sürekli örnekleme).
+
+    **SÜPÜRME:** aynı desen (yükleyici, kapanıştan önce çıplak
+    `return` ile dönebiliyor) 5 ekranda, 10 çıkış yolunda daha var.
+    `tests/silent-loading-ratchet.test.ts` sayıyı donduruyor; yeni
+    ekran bu desenle doğamaz. Düzeltme bu turda YAPILMADI, karar
+    beklemede.
+
+27. **BİR BEKÇİYİ KAPSAM DIŞI BIRAKMAK, KAPSAM DIŞINI GÜVENLİ
+    YAPMAZ.** 7a'da rota bekçisi yazılırken API uçları bilerek
+    dışarıda bırakıldı ve TEMIZLIK-TARAMASI.md'ye "sonraki tur"
+    kalemi olarak yazıldı. **Aynı gün** `/yapilacaklar` ekranı
+    `project-sites/daily-reports/pending-approval` çağırırken canlıda
+    404 aldı; doğrusu `site-reports/pending-approval` idi.
+
+    Erteleme kararı yanlış değildi — kapsamı bölmek doğru. Yanlış
+    olan, ertelenen kapsamın **hangi hataları serbest bıraktığını
+    yazmamaktı**. Bir bekçi kapsamı daraltılıyorsa, dışarıda kalan
+    sınıfın SOMUT hata örneği not edilir; "sonraki tur" demek
+    yetmez.
+
+    Karşılığı: `tests/endpoint-guard.test.ts`. İlk ölçümde
+    **8 gerçek kırık servis çağrısı** buldu (var olmayan uçlar ve
+    bir yanlış yol) — hepsi canlıda duruyordu.
+
 ---
 
 ## 6. Ölçüm araçlarına dair uyarı

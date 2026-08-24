@@ -29,5 +29,18 @@ export function usePermissions() {
     [granted, isSuperUser]
   );
 
-  return { has, loading, user };
+  /*
+   * NESNE KİMLİĞİ SABİTLENİYOR.
+   *
+   * Bugün bu kancanın kararsızlığı YUKARI TAŞINMIYOR: tüketicisi
+   * `useModuleActions` nesnenin ALANLARINI (`has`, `loading`)
+   * okuyor, nesneyi değil. Ölçüldü — `/yapilacaklar` kilidinde payı
+   * yoktu.
+   *
+   * Yine de sabitleniyor: bir ekran bir gün `usePermissions()`
+   * dönüşünü doğrudan bir bağımlılık dizisine koyarsa aynı sonsuz
+   * döngü buradan doğar. Kusur aynı sınıftan; nedeni ortadan
+   * kalkmadan beklemenin bir gerekçesi yok.
+   */
+  return useMemo(() => ({ has, loading, user }), [has, loading, user]);
 }

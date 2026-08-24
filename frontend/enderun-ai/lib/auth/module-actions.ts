@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 import { usePermissions } from "@/lib/use-permissions";
 
@@ -40,8 +40,26 @@ export function useModuleActions(module: string) {
     [has, module],
   );
 
-  return {
-    can,
+  /*
+   * NESNE KİMLİĞİ SABİTLENİYOR — SÜS DEĞİL, KUSUR DÜZELTMESİ.
+   *
+   * Bu kanca her render'da YENİ bir nesne döndürüyordu. `can` zaten
+   * `useCallback` ile sarılıydı ama SARMALAYAN NESNE değildi.
+   *
+   * Sonucu 2026-08-24'te canlıda görüldü: `/yapilacaklar` ekranı
+   * beş `useModuleActions` çağrısının dönüşünü bir `useCallback`
+   * bağımlılık dizisine koyuyor; nesneler her render'da yenilendiği
+   * için o callback de yenileniyor, ona bağlı efekt her render'da
+   * tetikleniyor ve sonsuz istek döngüsü doğuyordu. Ölçüm: 1,5
+   * saniyede 1831 istek. Ekran "Yükleniyor…" durumundan hiç
+   * çıkmıyordu ve gösterilecek bir HATA da yoktu — istekler 200
+   * dönüyordu.
+   *
+   * `tests/hook-referans-kararliligi.test.tsx` bunu kilitliyor.
+   */
+  return useMemo(
+    () => ({
+      can,
     /**
      * İzinler HENÜZ YÜKLENMEDİ.
      *
@@ -50,6 +68,8 @@ export function useModuleActions(module: string) {
      * kullanıcıya olmayan yetkiyi bir an için göstermekti. Düğmede de
      * aynısı geçerli — üstelik orada kullanıcı tıklamaya da yetişir.
      */
-    loading,
-  };
+      loading,
+    }),
+    [can, loading]
+  );
 }

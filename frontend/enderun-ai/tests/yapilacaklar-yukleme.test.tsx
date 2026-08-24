@@ -22,8 +22,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiCagrilari: string[] = [];
 
-/** Saha raporu ucu canlıda 404 dönüyor — taklit de öyle davranır. */
-const YOK_UCLARI = ["project-sites/daily-reports/pending-approval"];
+/*
+ * BİR KAYNAK HATA VERİYOR — EKRAN YİNE DE AÇILMALI.
+ *
+ * Başta buraya canlıda 404 dönen yol yazılmıştı
+ * (`project-sites/daily-reports/pending-approval`). O yol
+ * düzeltilince (doğrusu `site-reports/pending-approval`) test kendi
+ * kurgusunu yakaladı: artık 404 dönen bir kaynak yoktu ve
+ * "hiç çağrılmadı" iddiası düştü.
+ *
+ * Testin amacı YOLA DEĞİL, DAVRANIŞA ait: kaynaklardan biri
+ * patlarsa ekran kilitlenmemeli. O yüzden taklit artık düzeltilmiş
+ * yolu patlatıyor — iddia yaşamaya devam ediyor.
+ */
+const YOK_UCLARI = ["site-reports/pending-approval"];
 
 vi.mock("@/lib/api/api-client", () => ({
   ApiError: class ApiError extends Error {},
@@ -159,8 +171,9 @@ describe("yapılacaklar — yükleme durumundan çıkış", () => {
 
     // Hata yalıtımı çalışıyorsa 404 veren kaynak çağrılmış olmalı.
     expect(
-      apiCagrilari.some((p) => p.startsWith("project-sites/daily-reports")),
-      "Saha raporu ucu hiç çağrılmadı — testin kurgusu yanlış."
+      apiCagrilari.some((p) => p.startsWith("site-reports/pending-approval")),
+      "Hata veren kaynak hiç çağrılmadı — testin kurgusu yanlış, " +
+        "iddia bir şey ölçmüyor."
     ).toBe(true);
   });
 

@@ -1,0 +1,25 @@
+# "SESSİZ YÜKLENİYOR" — ÇİZGİ
+#
+# Biçim: dosya:adet
+#
+# DESEN: `useState(true)` ile açılan bir yükleme durumu var ve
+# yükleyici, `setLoading(false)` hiç çağrılmadan ÖNCE çıplak
+# `return;` ile dönebiliyor. O yoldan dönülürse ekran sonsuza kadar
+# "Yükleniyor…" der — hata da göstermez, çünkü ortada hata yoktur.
+#
+# 2026-08-24'te `/yapilacaklar` bu sınıftan bir kusurla canlıda
+# kilitlendi. Orada asıl sebep kararsız referans döngüsüydü ama bu
+# desen İKİNCİ ve bağımsız bir kilit yolu olarak duruyordu:
+# `auth/me` düşerse `user` null kalır (hatası use-current-user.ts
+# içinde YUTULUYOR) ve ekran hiç açılmaz.
+#
+# KURAL: yeni ekran bu desenle DOĞAMAZ. Sayı artamaz; bir dosya
+# düzeltilirse satır SİLİNİR.
+#
+# DÜZELTME BU TURDA YAPILMADI — karar Mehmet Karacabey'de.
+
+app/hakedis/yeni/page.tsx:3
+app/insan-kaynaklari/gunluk-puantaj/page.tsx:4
+app/isg/benim/page.tsx:1
+app/metrajlar/[id]/page.tsx:1
+app/satin-alma/butce-onay/page.tsx:1
