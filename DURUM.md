@@ -1086,6 +1086,109 @@ kolay yolu tam olarak budur. Sonda ile doğrulandı.
 403 "bu kayıt VAR ama sana kapalı" der ve kayıt kimliği deneyerek
 varlık taraması yapmayı mümkün kılar.
 
+### 7a — ÜÇ BEKÇİ: ROTA, LINT, 404 KAYDI (2026-08-24)
+
+#### A) ROTA BEKÇİSİ
+
+`tests/route-guard.test.ts` + `tests/bekci/rota-envanteri.ts`.
+
+**NEDEN:** M1/5'te Yapılacaklar satırları `/gorevler/{id}`'ye
+bağlandı ama o dinamik rota hiç oluşturulmamıştı; kullanıcı boş
+sayfa gördü ve bu SEKİZ GÜN canlıda durdu. Kural: **bir bağlantı
+hedefinin varlığı, önekinin varlığıyla kanıtlanmaz.**
+
+**ROTALAR KAYNAKTAN TÜRETİLİYOR, `.next/routes-manifest.json`'DAN
+DEĞİL.** Manifest bir yapı artığı: bayat olabilir, CI'da hiç
+bulunmayabilir, ve "bekçi yeşil çünkü dosya yok" durumu sessizce
+oluşur. `app/**/page.tsx` tek gerçek kaynak.
+
+**ÜÇ SINIF:**
+| Sınıf | Örnek | Doğrulama |
+|---|---|---|
+| Değişmez | `href="/hakedis"` | Rotaya çözülmeli |
+| Şablon | `` href={`/hakedis/${id}`} `` | Segment biçimi dinamik rotayla eşleşmeli |
+| Hesaplanmış | `href={item.href}` | Doğrulanamaz — SAYILIYOR, cırcırlı |
+
+**ÖLÇÜM (ilk koşu):** 406 dosya, 185 rota (45 dinamik), 549 hedef
+(412 değişmez + 137 şablon), 29 hesaplanmış hedef (25 dosya).
+
+**KAPSAM YALNIZ SAYFA ROTALARI.** `app/api/**` altındaki route
+handler'lar bu turda DIŞARIDA — ayrı bekçi işi, açık madde.
+
+**ÇÖZÜLMEYEN 4 HEDEF ÇİZGİDE, KARAR BEKLİYOR** (temizlik mi çizgi
+mi): üçü `status:"Planlandı"` veri satırı (ekran `active ? <Link> :
+<button disabled>` ile kapılıyor, tıklanamıyorlar), biri iki
+değişkenli şablon (`/projeler/${project.id}/${module.href}` — 14
+açılımın hepsi tek tek doğrulandı ve çözülüyor, bekçi iki değişkenli
+şablonu açamıyor).
+
+#### B) LINT CIRCIRI — ÇİZGİ 154
+
+`tests/lint-ratchet.test.ts` + `tests/bekci/lint-cizgi.txt`.
+
+**"DÜZGÜN ÇÖZÜLEBİLİR Mİ" SORUSUNUN CEVABI: HAYIR — ÖLÇÜLDÜ.**
+Senkron `setState` çağrıları efekt yolundan çıkarıldı (gösterge
+zaten `useState(true)` ile açık) ve ihlal **1'den 1'e kaldı**.
+Kural, efektin çağırdığı fonksiyonun İÇİNE bakıyor; senkronluk fark
+etmiyor. Efektten veri çekip durum yazmanın kuralla uyumlu bir
+biçimi YOK. Düzgün çözüm bir veri çekme katmanı (SWR/React Query) ya
+da ilk veriyi sunucu bileşeninden props ile geçirmek — ikisi de
+mimari değişiklik, **110 dosya bu desende**.
+
+**AÇIK BORÇ:** M1/6'nın 3 ihlali gerekçeli susturma aldı ve
+**veri çekme katmanı paketine bağlı** borç olarak duruyor.
+
+**SUSTURMA İHLAL SAYILIR — KAÇIŞ YOLU YOK.** Çizgi = raporlanan
+ihlal + `eslint-disable` yorumu. Sayılmasaydı çizgi bir gün "0"
+görünür ve hiçbir şey ölçmezdi. Aritmetik değişmedi: önce
+151 + 3 = 154, şimdi 148 + 6 = 154.
+
+**ESLINT TESTTEN ÇAĞRILIYOR.** safe-deploy `npm run test` koşuyor
+ama `npm run lint` KOŞMUYOR; cırcır lint adımında dursaydı otomatik
+kapı olmazdı. eslint hata bulunca çıkış kodu 1 döndürüp fırlatıyor —
+çıktı `stdout`'tan alınıyor, ama çıktı da yoksa test FIRLAR:
+ölçemeyen cırcır yeşil kalmamalı.
+
+#### C) 404 KAYDI — JOURNALD, TABLO YOK
+
+`app/not-found.tsx` (önce YOKTU — 404'lerin hiçbir yere düşmemesinin
+sebebi buydu) + `app/kayit/404/route.ts`.
+
+**YOL NEDEN `/api/` ALTINDA DEĞİL:** nginx `location /api/` bloğunu
+BACKEND'e (5155) veriyor; yalnız `/api/auth/` ve `/api/backend/`
+Next.js'e gidiyor. Uç `/api/not-found` olsaydı backend'e düşer ve
+404 kaydı sessizce hiç yazılmazdı.
+
+**BOT SÜZGECİ İKİ KATMANLI:**
+1. **Oturum şartı** — `enderun_token` çerezi yoksa kayıt YAZILMAZ.
+   Tarayıcı botları ve zafiyet tarayıcıları oturum açmaz. Bu aynı
+   zamanda kararın kendisi: yalnız oturum açmış kullanıcıların
+   uygulama içi 404'leri.
+2. **User-agent** — oturumlu istekte bile bilinen tarama imzaları
+   elenir (`bot, crawl, spider, curl, sqlmap, nmap, headlesschrome`…).
+   User-agent kayda YAZILMAZ, yalnız süzgeçte kullanılır.
+
+**KAYIT ALANLARI:** zaman (journald ekler), kullanıcı KİMLİĞİ, yol,
+geldiği yol. **Ad ve e-posta YOK** — `journalctl` okuyabilen herkes
+okur, orası kişi listesi tutulacak yer değil.
+
+**HAFTALIK ÖZET SORGUSU (tek satır):**
+```bash
+sudo journalctl -u enderunai-frontend --since '7 days ago' --no-pager | grep '404-KAYDI' | grep -oP 'yol=\S+' | sort | uniq -c | sort -rn
+```
+
+#### SONDA 5'İN GÖSTERDİĞİ ŞEY — KAYDA DEĞER
+
+Tarayıcıyı yanlış dizine baktırdım (`app` → `uygulama`). Sonuç:
+**"her değişmez hedef çözülüyor" testi YEŞİL kaldı.** Boş küme her
+iddiayı doğrular. Yalnız tarama-sağlığı testi (dosya/rota/hedef
+sayılarının alt sınırı) ve çift yönlü çizgi testleri kırmızıya döndü.
+
+Kural 25'in ("iki bariyer aynı sonucu üretirse test hangisinin
+çalıştığını kanıtlamaz") kaynak taramasındaki karşılığı: **bir kaynak
+tarayıcısı, taradığını ayrıca kanıtlamalıdır.** Sıfır bulgu "her şey
+yolunda" ile "hiçbir şey taranmadı" arasında ayrım yapmaz.
+
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 
 **Neden R3 ikiye ayrıldı:** merdivende R3 "UserDataScope arayüzü" diye

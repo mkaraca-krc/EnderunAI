@@ -1002,3 +1002,49 @@ HasMore); toplam **süzgeçten sonra, tavandan önce** sayılıyor;
 **F3 borcu:** `teklifler/yeni` açılır listesi arama tabanlı poz
 seçiciye (`components/engineering/position-picker.tsx`) geçmeli —
 bileşen zaten var ve keşif ile satın almada kullanılıyor.
+
+## Veri çekme katmanı — 154 `set-state-in-effect` ihlali
+
+**Ne:** `react-hooks/set-state-in-effect` kuralı 110 dosyada 154 kez
+ihlal ediliyor (148 raporlanan + 6 `eslint-disable` ile susturulmuş).
+Çizgi `frontend/enderun-ai/tests/bekci/lint-cizgi.txt` içinde donuk
+ve `tests/lint-ratchet.test.ts` artışı engelliyor.
+
+**Neden riskli:** Kural gerçek bir sorunu işaret ediyor — efekt
+içinde senkron `setState`, kademeli yeniden çizim üretiyor. Ölçüldü
+ki tek tek düzeltilemiyor: kural, efektin çağırdığı fonksiyonun
+İÇİNE bakıyor, yani "efektten veri çek, sonucu duruma yaz" deseninin
+kuralla uyumlu bir biçimi yok. Senkron çağrıları efekt yolundan
+çıkarma denendi, ihlal sayısı 1'den 1'e kaldı.
+
+Bugünkü zarar teorik (ekranlar çalışıyor), ama desen 110 dosyaya
+yayıldığı için ileride bir veri çekme kütüphanesine geçiş tek tek
+dosya düzeltmesi değil, toplu bir taşıma işi olacak.
+
+**O turda değerlendirilecek:** SWR ya da React Query getirmek; ya da
+liste ekranlarında ilk veriyi sunucu bileşeninden props ile geçirip
+istemci bileşenini yalnız etkileşime bırakmak. İkincisi Next.js app
+router ile doğal ama `apiClient` bugün tarayıcı tarafına yazılmış
+(`/api/backend/` proxy'sine gidiyor), yani sunucu tarafı bir
+istemci de gerekir. Karar verilince çizgi 154'ten aşağı çekilir ve
+`lint-cizgi.txt` küçülür.
+
+**Bağlı:** M1/6'da eklenen 3 ihlal gerekçeli susturma taşıyor ve bu
+pakete bağlı borç olarak işaretli.
+
+## Rota bekçisi — API uçları kapsam dışı
+
+**Ne:** `tests/route-guard.test.ts` yalnız SAYFA rotalarını
+(`app/**/page.tsx`) doğruluyor. `app/api/**` altındaki route
+handler'lar ve backend uçları taranmıyor.
+
+**Neden riskli:** Bir servis dosyası var olmayan bir uca istek
+atarsa bekçi bunu görmez; kullanıcı ekranda "yüklenemedi" görür ve
+sebebi ancak ağ sekmesinden anlaşılır. Sayfa rotalarındaki aynı
+hata sekiz gün canlıda durmuştu.
+
+**O turda değerlendirilecek:** `services/**` içindeki `apiClient()`
+çağrılarının yol argümanlarını toplayıp backend denetleyicilerinin
+`[Route]`/`[Http*]` niteliklerinden türetilen uç listesiyle
+karşılaştırmak. Şablon yollar (`tasks/${id}/approve`) sayfa
+bekçisindeki aynı normalleştirmeyle çözülebilir.
