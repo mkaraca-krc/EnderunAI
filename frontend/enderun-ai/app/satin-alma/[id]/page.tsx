@@ -364,7 +364,12 @@ export default function PurchaseRequestDetailPage() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-3">
+                {/*
+                  ONAY ÇAPASI — Yapılacaklar ekranındaki satır buraya
+                  götürüyor: kullanıcı kararı vereceği yerde açılıyor,
+                  sayfanın başında değil.
+                */}
+                <div className="flex flex-wrap gap-3" id="onay">
                   {(item.status === 0 || item.status === 8) &&
                     actions.can("edit") && (
                     <Button

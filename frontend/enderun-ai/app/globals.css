@@ -4256,3 +4256,154 @@ body {
   color: var(--erp-muted);
   opacity: 0.75;
 }
+
+/*
+  YAPILACAKLAR — MOBİL ÖNCELİKLİ KART DÜZENİ.
+
+  Tablo değil kart: saha personeli bu ekranı telefondan açacak ve
+  8 sütunlu bir tabloyu yatay kaydırarak kullanmak "çalışıyor"
+  sayılmaz. Kartlar dar ekranda alt alta, geniş ekranda ızgarada.
+*/
+.erp-todo-list {
+  display: grid;
+  gap: 8pt;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 900px) {
+  .erp-todo-list {
+    grid-template-columns: repeat(auto-fill, minmax(280pt, 1fr));
+  }
+}
+
+.erp-todo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4pt;
+  padding: 9pt 11pt;
+  border: 1px solid var(--color-border-subtle);
+  border-left-width: 3pt;
+  border-left-color: var(--erp-muted);
+  border-radius: 3pt;
+  background: var(--color-surface-card);
+  text-decoration: none;
+  color: inherit;
+}
+
+/*
+  TERMİNİ GEÇEN KIRMIZI, BUGÜN BİTEN İŞARETLİ.
+
+  Renk TEK BAŞINA bilgi taşımıyor: kartın üstünde "Termini geçti" /
+  "Bugün" yazısı da duruyor. Renk körü bir kullanıcı ya da gri
+  basılmış bir çıktı bilgiyi yine okuyabilir.
+*/
+.erp-todo-card.overdue {
+  border-left-color: var(--color-semantic-danger, #c0392b);
+  background: var(--color-semantic-danger-tint, var(--color-surface-card));
+}
+
+.erp-todo-card.due-today {
+  border-left-color: var(--color-semantic-warning);
+}
+
+.erp-todo-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5pt;
+  align-items: center;
+  font-size: 8pt;
+}
+
+.erp-todo-kind {
+  padding: 1pt 5pt;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8pt;
+  color: var(--erp-muted);
+}
+
+.erp-todo-flag {
+  padding: 1pt 5pt;
+  border-radius: 8pt;
+  font-weight: 600;
+}
+
+.erp-todo-flag.overdue {
+  background: var(--color-semantic-danger-tint, transparent);
+  color: var(--color-semantic-danger, #c0392b);
+}
+
+.erp-todo-flag.today {
+  background: var(--color-semantic-warning-tint);
+  color: var(--color-semantic-warning);
+}
+
+.erp-todo-flag.returned {
+  border: 1px solid var(--color-semantic-warning-border);
+  color: var(--color-semantic-warning);
+}
+
+.erp-todo-card-title {
+  font-weight: 600;
+  font-size: 10pt;
+}
+
+.erp-todo-card-sub {
+  font-size: 9pt;
+  color: var(--erp-muted);
+}
+
+.erp-todo-card-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4pt 12pt;
+  justify-content: space-between;
+  font-size: 9pt;
+  font-variant-numeric: tabular-nums;
+}
+
+.erp-todo-amount {
+  font-weight: 600;
+}
+
+.erp-todo-due {
+  color: var(--erp-muted);
+}
+
+/* TÜR ROZETİYLE SÜZME: isteyen gruplu görünüm elde eder. */
+.erp-todo-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5pt;
+  margin-bottom: 9pt;
+}
+
+.erp-todo-chip {
+  padding: 3pt 9pt;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12pt;
+  background: transparent;
+  color: inherit;
+  font-size: 9pt;
+  cursor: pointer;
+}
+
+.erp-todo-chip.active {
+  border-color: var(--color-brand-primary);
+  background: var(--color-brand-primary-tint);
+}
+
+.erp-todo-chip.failed {
+  border-color: var(--color-semantic-warning-border);
+  color: var(--color-semantic-warning);
+}
+
+.erp-todo-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--erp-muted);
+  font-weight: 600;
+}
+
+.erp-todo-warning {
+  color: var(--color-semantic-warning);
+  font-size: 9pt;
+}

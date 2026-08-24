@@ -30,6 +30,23 @@ export const MENU_GROUPS: MenuGroup[] = [
     key: "management",
     label: "YÖNETİM",
     items: [
+      /*
+       * YAPILACAKLAR EN ÜSTTE.
+       *
+       * Kullanıcının güne başlarken açacağı ekran bu: onayını
+       * bekleyenler, kendisine atananlar, gönderdikleri. Menünün
+       * dibinde duran bir ekran açılmaz.
+       *
+       * VARSAYILAN SAYFA DEĞİŞTİRİLMEDİ (bugün /dashboard). Ekran
+       * bir hafta kullanılsın, gerçekten işe yaradığı görülsün;
+       * kimsenin görmediği bir ekranı herkesin açılış sayfası
+       * yapmayalım.
+       */
+      {
+        label: "Yapılacaklar",
+        href: "/yapilacaklar",
+        icon: "☑",
+      },
       {
         label: "Göstergeler",
         href: "/yonetim",

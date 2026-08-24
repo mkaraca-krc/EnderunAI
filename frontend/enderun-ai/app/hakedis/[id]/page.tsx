@@ -314,7 +314,15 @@ export default function ProgressPaymentDetailPage() {
           </small>
         </div>
 
-        <div className="erp-actions">
+        {/*
+          ONAY ÇAPASI.
+
+          Yapılacaklar ekranındaki satır buraya götürüyor: kullanıcı
+          sayfanın başında değil, KARARI VERECEĞİ yerde açılıyor.
+          Bir tık daha var ama o tık, bakmadan onaylamayı engelleyen
+          tık — bilinçli bedel.
+        */}
+        <div className="erp-actions" id="onay">
           <Link href="/hakedis">
             Listeye Dön
           </Link>

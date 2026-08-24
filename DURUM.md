@@ -470,6 +470,66 @@ için "boşluksuz" diyebilir; diğer tipler için iddia "hepsi farklı"
 olarak kalır. Tek bir testin iki farklı güvence vermesi, birinin
 zamanla diğerinin arkasına saklanması demektir.
 
+### M1/5 — YAPILACAKLAR EKRANI (2026-08-24)
+
+`/yapilacaklar`: üstte "Onayımı bekleyenler" (görev onayları + eski
+onay merkezinin dört kuyruğu, TEK LİSTEDE), altta "Bana atananlar" ve
+"Gönderdiklerim".
+
+**ACİLİYET SIRASI — TARİH DEĞİL:**
+  1. Termini geçmiş (kırmızı, en üstte)
+  2. Bugün biten (işaretli)
+  3. Kalanlar: **bekleme süresi uzun olan üstte** — en kolay unutulan
+     iş, uzun süredir bekleyendir; yeni gelenler zaten göz önünde.
+
+Aciliyet bekleme süresini EZER: yeni ama gecikmiş bir iş, eski ama
+zamanı gelmemiş bir işten önce gelir. Sekiz test bu kuralı
+sabitliyor.
+
+**KAYNAK BAZINDA HATA YALITIMI:** biri patlarsa o bölüm "yüklenemedi,
+tekrar dene" der, diğerleri görünmeye devam eder, sayaç "3+" olur ve
+altında uyarı çıkar. Sessizce eksik sayı göstermek, olmayan sayıdan
+kötüdür. İzni olmayan kaynak HİÇ ÇAĞRILMAZ — boş dönmesi beklenmez.
+
+**MOBİL ÖNCELİKLİ KART DÜZENİ:** tablo değil kart. Renk tek başına
+bilgi taşımıyor; "Termini geçti" / "Bugün" yazısı da kartta.
+
+#### KASITLI KISIT — TOPLU ONAY/RET KALDIRILDI
+
+Onay merkezindeki toplu onay/ret kaldırıldı. Onay artık kaydın kendi
+ekranından veriliyor.
+
+**Gerekçe:** listeden tek tıkla onaylamak, kaydı GÖRMEDEN onaylamayı
+kolaylaştırıyordu; hakediş ve satın alma onayları bakılmadan
+verilecek kararlar değil. Geri istenirse Yapılacaklar'a onay düğmesi
+eklenebilir — ama BİLİNÇLİ OLARAK eklenmedi.
+
+**Bedeli hafifletildi:** satır kaydın doğru yerine götürüyor —
+`#onay` çapasıyla doğrudan onay bölümünün göründüğü noktaya. Bir tık
+daha var ama o tık, bakmadan onaylamayı engelleyen tık.
+
+`/onay-merkezi` adresi korundu ve yönlendirmeye çevrildi; yer imi
+kırılmıyor. Sözleşme testi (`module-actions`) yeni ekrana taşındı:
+"onay ekranı tek anahtara bağlanamaz" kuralı aynen sürüyor.
+
+**MENÜ:** Yapılacaklar YÖNETİM grubunun en üstünde. VARSAYILAN SAYFA
+DEĞİŞTİRİLMEDİ (hâlâ `/dashboard`) — ekran bir hafta kullanılsın,
+gerçekten işe yaradığı görülsün. Kimsenin görmediği bir ekranı
+herkesin açılış sayfası yapmayalım. Sonra ayrı madde: kullanıcı
+tercihi + rol bazlı varsayılan (GM/Admin dashboard, diğerleri
+yapılacaklar); `UserUiPreference` deseni zaten kurulu.
+
+**İKİ SÖZLEŞME TESTİ BULGUSU — ikisi de gerçekti:**
+  1. Kendi `Intl.NumberFormat`'ımı kurmuşum. Bu, G1.1'de tam olarak
+     önlemeye çalıştığımız şeydi: iki ekranın aynı tutarı farklı
+     göstermesi. `redwood-contract` yakaladı; ortak `currencyMoney`e
+     çevrildi.
+  2. `useModuleActions` yerine `has()` kullanmışım; proje deseni
+     ilkiydi. `module-actions` yakaladı.
+
+Sözleşme testlerinin ikisini de yakalaması, o kuralların gerçekten
+koruduğunu gösteriyor.
+
 #### E-POSTA ALTYAPISI — ÖLÇÜLDÜ, ÖNCEKİ RAPORUM YANLIŞTI
 
 **İKİ e-posta servisi var** ve `EMAIL_PROVIDER` ile seçiliyor:

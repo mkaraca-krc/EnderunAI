@@ -878,7 +878,18 @@ describe("eleman seviyesi yetki (R2/1)", () => {
     ["app/muhendislik/pozlar/[id]/page.tsx", "Değişiklikleri Kaydet", "manage"],
     ["app/taseronlar/[id]/page.tsx", "Yeni Hakediş", "actions.manage"],
     ["app/taseronlar/[id]/page.tsx", "Ekibe Ekle", "actions.manage"],
-    ["app/onay-merkezi/page.tsx", "Reddet", "orderActions.approve"],
+    /*
+     * ONAY MERKEZİ ARTIK YÖNLENDİRME (M1/5).
+     *
+     * Onay kuyrukları /yapilacaklar ekranının üst bölümüne taşındı.
+     * Toplu onay/ret o taşımayla kalktı: onay artık kaydın kendi
+     * ekranından yapılıyor, orada kararın dayandığı ayrıntı görünüyor.
+     * Listeden tek tıkla onaylamak, BAKMADAN onaylamayı
+     * kolaylaştırıyordu.
+     *
+     * Bu yüzden "Reddet" düğmesi beklentisi kaldırıldı; yerine
+     * aşağıdaki "yapılacaklar bölüm bölüm kapılı" testi geçti.
+     */
   ];
 
   it.each(R2_4D3)("%s -> \"%s\" %s kapısında", (relative, label, action) => {
@@ -983,8 +994,8 @@ describe("eleman seviyesi yetki (R2/1)", () => {
    * yalnız satın alma onayı olan kullanıcıya hakediş bölümünü de
    * gösterirdi (ya da tersine sipariş bölümünü gizlerdi).
    */
-  it("onay merkezi bölüm bölüm kapılı", () => {
-    const text = readFileSync(join(ROOT, "app/onay-merkezi/page.tsx"), "utf8");
+  it("yapılacaklar ekranı bölüm bölüm kapılı", () => {
+    const text = readFileSync(join(ROOT, "app/yapilacaklar/page.tsx"), "utf8");
 
     for (const hook of [
       'useModuleActions("hakedis")',
@@ -995,9 +1006,15 @@ describe("eleman seviyesi yetki (R2/1)", () => {
       expect(text, `${hook} yok`).toContain(hook);
     }
 
-    // iptaller delete'te, onaylar approve'da
-    expect(text).toContain('hakedisActions.can("delete")');
-    expect(text).toContain('requestActions.can("delete")');
+    /*
+     * YENİ EKRANDA TOPLU ONAY/RET YOK: her satır kaydın kendi
+     * ekranına götürüyor. Bu yüzden "iptal delete'te, onay
+     * approve'da" ayrımı burada aranmıyor — o ayrım artık kaydın
+     * kendi ekranının sorumluluğu ve orada zaten sınanıyor.
+     *
+     * ARANAN ŞEY DEĞİŞMEDİ: ekran tek anahtara bağlanmamalı.
+     */
+    expect(text).toContain('taskActions.can("view")');
     expect(text).toContain('hakedisActions.can("approve")');
   });
 
