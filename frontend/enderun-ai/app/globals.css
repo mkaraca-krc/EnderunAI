@@ -4407,3 +4407,138 @@ body {
   color: var(--color-semantic-warning);
   font-size: 9pt;
 }
+
+/* ---------------------------------------------------------------
+   ORTAK YORUM VE EK DOSYA BLOĞU (M1/6)
+
+   Bu sınıflar `components/collaboration/` altındaki iki ortak
+   bileşene ait. Modüle özel değiller: yorum dizisi hangi ekrana
+   takılırsa aynı görünür — ekran başına ayrı stil yazmak, ortak
+   bileşenin amacını ortadan kaldırırdı.
+   --------------------------------------------------------------- */
+
+.erp-comment-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.erp-comment-compose textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--erp-border);
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.erp-comment-compose textarea:focus-visible {
+  outline: 2px solid var(--erp-accent);
+  outline-offset: 1px;
+}
+
+.erp-comment-compose > button {
+  align-self: flex-start;
+}
+
+.erp-comment-list,
+.erp-attachment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.erp-comment {
+  padding: 12px 14px;
+  border: 1px solid var(--erp-border);
+  border-radius: 10px;
+}
+
+.erp-comment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--erp-muted);
+}
+
+.erp-comment-head strong {
+  color: var(--erp-text);
+  font-size: 14px;
+}
+
+/* Satır sonlarını koru: yorum düz metin, girilen biçim kaybolmasın. */
+.erp-comment-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Gizlenen yorumun YERİ durur — silinmiş gibi görünmez. */
+.erp-comment-hidden {
+  margin: 0;
+  font-style: italic;
+  color: var(--erp-muted);
+}
+
+.erp-comment-actions,
+.erp-attachment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.erp-attachment-actions {
+  margin: 0 0 16px;
+}
+
+.erp-attachment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--erp-border);
+  border-radius: 10px;
+}
+
+.erp-attachment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.erp-attachment-info a {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.erp-attachment-info span {
+  font-size: 13px;
+  color: var(--erp-muted);
+}
+
+/*
+   FOTOĞRAF ÇEK yalnızca dar ekranda görünür.
+
+   Masaüstünde `capture` niteliğinin karşılığı yok: tarayıcı yine
+   dosya seçiciyi açar ve kullanıcı iki aynı düğme görür.
+*/
+.erp-only-mobile {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  .erp-only-mobile {
+    display: inline-flex;
+  }
+}

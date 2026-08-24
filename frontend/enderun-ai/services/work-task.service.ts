@@ -40,6 +40,37 @@ export type WorkTask = {
   tags?: string | null;
   isOverdue: boolean;
   createdAtUtc: string;
+
+  /*
+   * ÇİFT ADIMLI KAPANIŞ İZİ.
+   *
+   * Yapanın "bitti" demesi görevi kapatmaz; gönderen onaylayınca
+   * kapanır ya da gerekçeyle iade eder. Bu alanlar olmadan ekran
+   * "tamamlandı" ile "onaylandı"yı ayırt edemez.
+   */
+  approvedAtUtc?: string | null;
+  approvedByUserId?: string | null;
+  returnedAtUtc?: string | null;
+  returnReason?: string | null;
+
+  /** Üçüncü kez iade edilen iş, tek seferde bitenle aynı görünmemeli. */
+  returnCount: number;
+
+  delegatedFromUserId?: string | null;
+  delegatedAtUtc?: string | null;
+  delegationCount: number;
+
+  /*
+   * ADLAR SUNUCUDAN GELİYOR, TEK SORGUDA.
+   *
+   * Ekran kimlikten ada kendi çevirseydi satır başına bir istek
+   * atardı. Ad çözülemezse "(bilinmeyen kullanıcı)" gelir — boş
+   * değil: yazarsız görünen bir kayıt, arızayı gizler.
+   */
+  assignedToName?: string | null;
+  assignedByName?: string | null;
+  approvedByName?: string | null;
+  delegatedFromName?: string | null;
 };
 
 export type WorkTaskDashboard = {
@@ -183,6 +214,34 @@ export const workTaskService = {
         },
       }
     );
+  },
+
+  /**
+   * ONAY — YALNIZ GÖNDEREN.
+   *
+   * Başkası onaylasaydı çift adımlı kapanış tören olurdu: işi
+   * isteyen kişi sonucu görmeden görev kapanırdı. Kural uçta;
+   * ekran yalnızca düğmeyi doğru kişiye gösteriyor.
+   */
+  approve(id: string) {
+    return apiClient<WorkTask>(`tasks/${id}/approve`, {
+      method: "POST",
+    });
+  },
+
+  /**
+   * İADE — GEREKÇE ZORUNLU.
+   *
+   * Gerekçesiz iade, yapan kişiye neyi düzelteceğini söylemez ve
+   * aynı işin ikinci kez aynı eksikle gelmesine yol açar.
+   * Termin KORUNUR: iade edilen görev yeniden açılır, terminini
+   * geçmişse hemen gecikmiş görünür.
+   */
+  returnTask(id: string, reason: string) {
+    return apiClient<WorkTask>(`tasks/${id}/return`, {
+      method: "POST",
+      body: { reason },
+    });
   },
 
   cancel(id: string, reason: string) {

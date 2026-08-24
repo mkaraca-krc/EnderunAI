@@ -826,6 +826,101 @@ hepsini security tarafına yazıyor; dağılım ağırlıklı yetki/kullanıcı
 **İş tarafı neredeyse hiç kayıtlı değil** — M2a'nın işi kesiciye tip
 eklemekten çok, hangi varlığın "iş olayı" sayıldığına karar vermek.
 
+### M1/6 — ORTAK YORUM BİLEŞENİ + GÖREV DETAY EKRANI (2026-08-24)
+
+**ÖNCE BİR CANLI HATA KAPANDI: `/gorevler/{id}` ROTASI YOKTU.**
+M1/5'te Yapılacaklar satırları `todo.service.ts:501`'de
+`/gorevler/{id}`'ye bağlanmıştı ama o dinamik rota hiç
+oluşturulmamıştı — kullanıcı bir göreve tıklayınca boş sayfa
+görüyordu. Canlı derleme bildirgesinden doğrulandı: `/gorevler`
+statik rota olarak vardı, `/gorevler/[id]` yoktu. Diğer beş hedef
+(`hakedis/[id]`, `satin-alma/[id]`, `satin-alma/siparis/[id]`,
+`projeler/[id]/santiyeler/[siteId]`, `projeler`) sağlamdı.
+
+M1/5'te iki uydurma rotayı yakalayıp düzeltmiştim; bu üçüncüsünü
+kaçırdım çünkü `/gorevler` ekranının varlığını görüp `{id}`
+biçiminin de olduğunu VARSAYDIM — dinamik rotanın kendisini
+doğrulamadım. **Bir bağlantı hedefinin varlığı, önekinin varlığıyla
+kanıtlanmaz.**
+
+**İKİNCİ ÖLÇÜM: YORUM/EK İÇİN ÖN YÜZDE HİÇBİR ŞEY YOKTU.**
+`CollaborationController` yedi ucu (M1/2, M1/3) sunucuda hazırdı ama
+`frontend/` içinde `collaboration` kelimesi hiç geçmiyordu. Yani
+M1/6 "mevcut bileşeni ortaklaştırma" değil SIFIRDAN YAZMA işiydi ve
+yorumun asılacağı bir görev detay ekranı da yoktu. Karar (onaylandı):
+detay ekranı + yorum + ek dosya TEK PAKET — ayrı çıksalardı ya ekran
+boş ya bileşen ölü doğardı.
+
+#### ADLAR DTO'YA GİRDİ — TEK SORGUDA
+
+Yorum, ek dosya ve görev DTO'ları yalnız `CreatedByUserId` /
+`UploadedByUserId` / `AssignedToUserId` döndürüyordu. Ekranda GUID
+gösteren bir yorum dizisi, kimin ne dediği okunamadığı için yorum
+değildir; ekran adı çözmek için satır başına istek atmak zorunda
+kalırdı.
+
+Adlar artık çağıran tarafta TEK `IN (...)` sorgusunda toplanıp DTO'ya
+PARAMETRE olarak geçiyor. Çözülemeyen ad sessizce boş geçmiyor,
+`(bilinmeyen kullanıcı)` yazıyor — yazarsız görünen bir kayıt arızayı
+gizler.
+
+**N+1 YAPISAL OLARAK ENGELLİ.** DTO üreticileri (`YorumDto`, `EkDto`,
+`ToDto`, `AdBul`) `static`. Bir `static` metodun `db` alanına erişimi
+YOKTUR, yani satır başına sorgu ATAMAZ. Bunu
+`DtoUreticileri_StaticKalmali` bekçisi yansımayla kilitliyor: biri
+"sadece adı buradan çekiveririm" diye üreticiyi örnek metoduna
+çevirirse test düşer.
+
+Sorgu SAYAN test yazılmadı ve bu bilinçli: sayaç, paylaşılan test
+fabrikasına araya girici eklemeyi gerektiriyor ve o fabrika 2500'den
+fazla testin altında. Yapısal kilit aynı şeyi garanti ediyor —
+erişim yoksa sorgu da yok.
+
+**GEÇİŞ UÇLARI DA ADLARLA DÖNÜYOR.** `start`/`complete`/`approve`/
+`return` önce adsız DTO dönüyordu; ekran işlem sonrası adları
+kaybederdi. Sekiz dönüşün hepsi bağlandı.
+
+#### ORTAK BİLEŞEN — MODÜL BİLMEZ
+
+`services/collaboration.service.ts` ve `components/collaboration/`
+(yorum dizisi + ek dosya bloğu) yalnızca `(entityType, entityId)` ile
+çalışıyor. Modüle özel bir dal açılırsa ortaklık biter ve her ekran
+kendi kopyasını taşımaya başlar — bu dosyaların varlık sebebi o dalın
+hiç açılmamasıdır. Varlık tipleri `EntityContextResolver` ile aynı
+olmak zorunda; `CommentEntityTypeGuardTests` bunu 444 dosyalık kaynak
+taramasıyla koruyor (sonda ile doğrulandı).
+
+**MOBİLDE KAMERA DOĞRUDAN AÇILIYOR** (`capture="environment"`).
+Sahadaki kişi için "dosya seç" akışı, çekilmiş fotoğrafı galeriden
+bulmak demek. Ayrı düğme, çünkü galeriden seçmek de gerekiyor. Düğme
+yalnız dar ekranda görünür: masaüstünde `capture`'ın karşılığı yok ve
+kullanıcı iki aynı düğme görürdü.
+
+**GİZLENEN YORUMUN YERİ DURUR.** Silinmiş gibi görünmez; kim
+gizlediği yazar. Cevap verilmiş bir cümle konuşmadan çıkarılırsa
+kalan cevaplar anlamsızlaşır.
+
+**DÜZENLEME PENCERESİ EKRANDA DA KAPANIYOR.** `Date.now()` doğrudan
+render içinde okunsaydı, 15 dakika dolduğunda düğme ekranda kalmaya
+devam ederdi (React yeniden çizmez) ve kullanıcı tıklayıp uçtan hata
+yerdi. Şimdiki zaman durumda tutuluyor, dakikada bir tazeleniyor.
+
+#### İKİ UYDURMA SINIF — ÖLÇÜMLE YAKALANDI
+
+`erp-card` / `erp-card-head` diye sınıflar UYDURMUŞTUM; yoklar.
+`erp-panel` / `erp-panel-header` var, onlara çevrildi. `erp-detail-grid`
+de `dt`/`dd` değil `span`/`strong` bekliyor — `dl` yazmak anlamsal
+olarak daha doğru ama GÖRSEL OLARAK BİÇİMSİZ çıkardı. Kural: yeni bir
+sınıf yazmadan önce `globals.css`'te ARANIR.
+
+#### AÇIK BORÇ: `react-hooks/set-state-in-effect`
+
+Yeni dosyalar bu kuralı 3 yerde ihlal ediyor. SUSTURULMADI. Ölçüldü:
+kuralın projede **107 dosyada 151 ihlali** var ve `npx eslint .`
+bugün 166 hatayla düşüyor. Lint deploy kapısı DEĞİL — safe-deploy
+`npm run test` + `npm run build` koşuyor. Doğru çözüm bir veri çekme
+katmanı; M1/6'nın kapsamı değil, **ayrı paket olarak konuşulmalı**.
+
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 
 **Neden R3 ikiye ayrıldı:** merdivende R3 "UserDataScope arayüzü" diye
@@ -2889,6 +2984,45 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     ancak hatanın yukarı çıktığı kanıtlanmış yollarda geçerlidir.
     Genel biçim: bir iddiayı sınayan sahte, iddianın ihlalini
     başarısızlık yoluyla değil, GÖZLEM yoluyla göstermelidir.
+
+24. **SONDA TUZAĞINDA YOLLAR MUTLAK OLUR — `cd` GERİ ALMAYI SESSİZCE
+    ÖLDÜRÜR.** 2026-08-24, M1/6. Sonda düzeneğim şuydu:
+
+    ```bash
+    cd frontend/enderun-ai && F="app/gorevler/[id]/page.tsx"
+    cp "$F" "$F.probe-bak"
+    trap 'mv -f "$F.probe-bak" "$F" 2>/dev/null; echo GERI-ALINDI' EXIT
+    sed -i '...' "$F"
+    cd /var/www/enderun-ai/backend && dotnet test ...
+    ```
+
+    `trap` EXIT'te koşuyor, ama o an ÇALIŞMA DİZİNİ `backend`.
+    Göreli yol oradan çözülüyor, `mv` hedefi bulamıyor,
+    `2>/dev/null` hatayı yutuyor ve **`echo GERI-ALINDI` yine de
+    basılıyor**. Yani düzenek "geri aldım" diye rapor ederken
+    sabotaj ağaçta kalıyor.
+
+    Sonuç iki katmanlı oldu:
+      - Sabotaj ağaçta kaldı ve SONRAKİ iki sonda üstüne yazdı;
+        ikincisinin `cp ... .probe-bak` yedeği artık KİRLİ bir
+        kopyaydı, yani geri alma noktası da bozulmuştu.
+      - Bekçi testi "yakalamıyor" sanıldı. Yakalıyordu: ilk sabotaj
+        `entityType={"X" as never}` biçimindeydi ve bekçinin deseni
+        `entityType="X"` arıyor. İkinci sabotaj hiç uygulanmadı
+        (aradığı metin ilk sabotaj yüzünden dosyada yoktu) ama
+        `grep -c` ilk sabotajın metnini sayıp "indi" dedi.
+
+    **KURALLAR:**
+      a) `trap` içindeki HER YOL MUTLAK olur — değişken atanırken
+         mutlak yazılır, `cd` sonrası da doğru çözülsün.
+      b) `mv`'nin çıkış kodu KONTROL EDİLİR; `2>/dev/null` ile
+         susturulup ardından koşulsuz "GERİ-ALINDI" basılmaz.
+      c) Sonda turundan sonra `grep` ile SABOTAJ METNİ değil,
+         `git status` + `git diff` ile AĞACIN KENDİSİ doğrulanır
+         (kural 14 bunu zaten söylüyordu; ihlal edilen oydu).
+      d) Sabotajın "indiğinin" kanıtı `diff -q` ile ESKİ YEDEĞE
+         karşı alınır ve yedeğin TEMİZ olduğu ayrıca bilinmelidir —
+         kirli bir yedeğe karşı alınan diff hiçbir şey söylemez.
 
 ---
 

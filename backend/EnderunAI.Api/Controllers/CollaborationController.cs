@@ -105,6 +105,52 @@ public sealed class CollaborationController(
         return erisebilir ? baglam : null;
     }
 
+    /// <summary>
+    /// KULLANICI ADLARINI TEK SORGUDA TOPLAR.
+    ///
+    /// Satır başına arama yapmak elli yorumluk bir sayfada elli
+    /// sorgu demekti (M1/3'te varlık çözümleyicide aynı hata
+    /// yakalanmıştı). Burada tüm kimlikler biriktirilip TEK
+    /// `IN (...)` sorgusuna gidiyor.
+    ///
+    /// Silinmiş kullanıcı sözlükte yer almaz; çağıran taraf onu
+    /// "(bilinmeyen kullanıcı)" olarak gösterir — boş ad, kaydın
+    /// yazarsız görünmesi demek olurdu.
+    /// </summary>
+    /// <summary>
+    /// Kimlikten ada. Kullanıcı silinmişse sessizce boş geçmiyor:
+    /// yazarsız görünen bir yorum, yazarı belirsiz bir yorumdan daha
+    /// kötüdür.
+    /// </summary>
+    private static string? AdBul(
+        IReadOnlyDictionary<Guid, string> adlar, Guid? kimlik)
+    {
+        if (kimlik is null)
+            return null;
+
+        return adlar.TryGetValue(kimlik.Value, out var ad)
+            ? ad
+            : "(bilinmeyen kullanıcı)";
+    }
+
+    private async Task<Dictionary<Guid, string>> AdlariGetirAsync(
+        IEnumerable<Guid?> kimlikler, CancellationToken cancellationToken)
+    {
+        var liste = kimlikler
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+
+        if (liste.Count == 0)
+            return [];
+
+        return await db.Users
+            .AsNoTracking()
+            .Where(x => liste.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
+    }
+
     // ---------------------------------------------------------------
     // YORUM
     // ---------------------------------------------------------------
@@ -159,9 +205,13 @@ public sealed class CollaborationController(
         var sayfa = devamVar ? satirlar.Take(alinacak).ToList() : satirlar;
         var son = sayfa.LastOrDefault();
 
+        var adlar = await AdlariGetirAsync(
+            sayfa.SelectMany(x => new Guid?[] { x.CreatedByUserId, x.HiddenByUserId }),
+            cancellationToken);
+
         return Ok(new
         {
-            items = sayfa.Select(YorumDto),
+            items = sayfa.Select(x => YorumDto(x, AdBul(adlar, x.CreatedByUserId), AdBul(adlar, x.HiddenByUserId))),
             hasMore = devamVar,
             nextCursor = devamVar && son is not null
                 ? new { createdAtUtc = son.CreatedAtUtc, id = son.Id }
@@ -237,7 +287,9 @@ public sealed class CollaborationController(
             }
         }
 
-        return Ok(YorumDto(yorum));
+        // Yazar her zaman oturum sahibi — ekleme ve düzenleme
+        // yalnız yazana açık; ad için ikinci sorgu gereksiz.
+        return Ok(YorumDto(yorum, currentUser.FullName));
     }
 
     /// <summary>
@@ -290,7 +342,9 @@ public sealed class CollaborationController(
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return Ok(YorumDto(yorum));
+        // Yazar her zaman oturum sahibi — ekleme ve düzenleme
+        // yalnız yazana açık; ad için ikinci sorgu gereksiz.
+        return Ok(YorumDto(yorum, currentUser.FullName));
     }
 
     /// <summary>
@@ -325,7 +379,9 @@ public sealed class CollaborationController(
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return Ok(YorumDto(yorum));
+        // Yazan ve gizleyen AYNI kişi: yukarıdaki kontrol yalnız
+        // yazanın gizlemesine izin veriyor.
+        return Ok(YorumDto(yorum, currentUser.FullName, currentUser.FullName));
     }
 
     // ---------------------------------------------------------------
@@ -350,7 +406,10 @@ public sealed class CollaborationController(
             .OrderByDescending(x => x.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return Ok(ekler.Select(EkDto));
+        var adlar = await AdlariGetirAsync(
+            ekler.Select(x => (Guid?)x.UploadedByUserId), cancellationToken);
+
+        return Ok(ekler.Select(x => EkDto(x, AdBul(adlar, x.UploadedByUserId))));
     }
 
     [HttpPost("attachments")]
@@ -387,7 +446,7 @@ public sealed class CollaborationController(
             db.Attachments.Add(ek);
             await db.SaveChangesAsync(cancellationToken);
 
-            return Ok(EkDto(ek));
+            return Ok(EkDto(ek, currentUser.FullName));
         }
         catch (InvalidOperationException exception)
         {
@@ -439,7 +498,15 @@ public sealed class CollaborationController(
 
     // ---------------------------------------------------------------
 
-    private static object YorumDto(TaskComment x) => new
+    /*
+     * YAZAR ADI DTO'YA PARAMETRE OLARAK GİRİYOR, İÇERİDE
+     * ÇÖZÜLMÜYOR.
+     *
+     * DTO'nun kendisi veritabanına gitseydi her satır için bir sorgu
+     * olurdu — elli yorumluk bir sayfa elli sorgu. Adlar çağıran
+     * tarafta TEK sorguda toplanıp buraya geçiliyor.
+     */
+    private static object YorumDto(TaskComment x, string? yazarAdi = null, string? gizleyenAdi = null) => new
     {
         x.Id,
         x.EntityType,
@@ -452,14 +519,26 @@ public sealed class CollaborationController(
 
         x.CreatedAtUtc,
         x.CreatedByUserId,
+
+        /*
+         * YAZAR ADI ZORUNLU BİLGİ.
+         *
+         * Yalnız `CreatedByUserId` dönseydi ekranda GUID görünürdü —
+         * kimin ne dediği okunamayan bir yorum dizisi, yorum
+         * değildir. Ad çözülemezse (kullanıcı silinmişse) boş
+         * geçmiyor, açık bir metin dönüyor.
+         */
+        CreatedByName = yazarAdi ?? "(bilinmeyen kullanıcı)",
+
         x.EditedAtUtc,
         x.EditCount,
         x.HiddenAtUtc,
         x.HiddenByUserId,
+        HiddenByName = gizleyenAdi,
         MentionedUserIds = x.MentionedUserIds
     };
 
-    private static object EkDto(Attachment x) => new
+    private static object EkDto(Attachment x, string? yukleyenAdi = null) => new
     {
         x.Id,
         x.EntityType,
@@ -469,6 +548,7 @@ public sealed class CollaborationController(
         x.SizeBytes,
         x.CreatedAtUtc,
         x.UploadedByUserId,
+        UploadedByName = yukleyenAdi ?? "(bilinmeyen kullanıcı)",
 
         /*
          * TARAYICIDA AÇILABİLİR Mİ.

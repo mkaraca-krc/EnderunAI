@@ -118,9 +118,11 @@ public sealed class WorkTasksController(
         var sayfa = devamVar ? items.Take(alinacak).ToList() : items;
         var son = sayfa.LastOrDefault();
 
+        var adlar = await AdlariGetirAsync(sayfa, cancellationToken);
+
         return Ok(new
         {
-            items = sayfa.Select(ToDto),
+            items = sayfa.Select(x => ToDto(x, adlar)),
             hasMore = devamVar,
             nextCursor = devamVar && son is not null
                 ? new { createdAtUtc = son.CreatedAtUtc, id = son.Id }
@@ -137,9 +139,12 @@ public sealed class WorkTasksController(
             .ApplyScope(await GetScopeAsync(cancellationToken))
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
-        return item is null
-            ? NotFound(new { message = "Görev bulunamadı." })
-            : Ok(ToDto(item));
+        if (item is null)
+            return NotFound(new { message = "Görev bulunamadı." });
+
+        var adlar = await AdlariGetirAsync([item], cancellationToken);
+
+        return Ok(ToDto(item, adlar));
     }
 
     [HttpGet("dashboard")]
@@ -345,7 +350,7 @@ public sealed class WorkTasksController(
                 cancellationToken);
         }
 
-        return Ok(ToDto(item));
+        return Ok(ToDto(item, await AdlariGetirAsync([item], cancellationToken)));
     }
 
     [HttpPut("{id:guid}")]
@@ -374,7 +379,7 @@ public sealed class WorkTasksController(
         item.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(ToDto(item));
+        return Ok(ToDto(item, await AdlariGetirAsync([item], cancellationToken)));
     }
 
     [HttpPost("{id:guid}/start")]
@@ -392,7 +397,7 @@ public sealed class WorkTasksController(
         item.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(ToDto(item));
+        return Ok(ToDto(item, await AdlariGetirAsync([item], cancellationToken)));
     }
 
     [HttpPost("{id:guid}/complete")]
@@ -459,7 +464,7 @@ public sealed class WorkTasksController(
                 cancellationToken);
         }
 
-        return Ok(ToDto(item));
+        return Ok(ToDto(item, await AdlariGetirAsync([item], cancellationToken)));
     }
 
     /// <summary>
@@ -494,7 +499,7 @@ public sealed class WorkTasksController(
         item.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(ToDto(item));
+        return Ok(ToDto(item, await AdlariGetirAsync([item], cancellationToken)));
     }
 
     /// <summary>
@@ -585,7 +590,7 @@ public sealed class WorkTasksController(
                 cancellationToken);
         }
 
-        return Ok(ToDto(item));
+        return Ok(ToDto(item, await AdlariGetirAsync([item], cancellationToken)));
     }
 
     /// <summary>
@@ -673,7 +678,7 @@ public sealed class WorkTasksController(
             Models.Notifications.NotificationSeverity.Info,
             cancellationToken);
 
-        return Ok(ToDto(item));
+        return Ok(ToDto(item, await AdlariGetirAsync([item], cancellationToken)));
     }
 
     /// <summary>
@@ -769,13 +774,21 @@ public sealed class WorkTasksController(
         item.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(ToDto(item));
+        return Ok(ToDto(item, await AdlariGetirAsync([item], cancellationToken)));
     }
 
     private static DateTime? ToUtcDate(DateTime? value) =>
         value.HasValue ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc) : null;
 
-    private static object ToDto(WorkTask x) => new
+    /*
+     * ADLAR DTO'YA SÖZLÜKLE GİRİYOR, İÇERİDE ÇÖZÜLMÜYOR.
+     *
+     * DTO'nun kendisi veritabanına gitseydi liste sayfası satır
+     * başına üç sorgu atardı. Adlar çağıran tarafta TEK sorguda
+     * toplanıyor. Sözlük verilmezse alanlar null döner — eski
+     * davranış korunur.
+     */
+    private static object ToDto(WorkTask x, IReadOnlyDictionary<Guid, string>? adlar = null) => new
     {
         x.Id,
         x.CompanyId,
@@ -830,8 +843,58 @@ public sealed class WorkTasksController(
                     x.Status != WorkTaskStatus.Completed &&
                     x.Status != WorkTaskStatus.Approved &&
                     x.Status != WorkTaskStatus.Cancelled,
-        x.CreatedAtUtc
+        x.CreatedAtUtc,
+
+        /*
+         * KİM YAPACAK, KİM İSTEDİ, KİM ONAYLADI — İSİMLE.
+         *
+         * Ekranda GUID gösteren bir görev künyesi okunamaz. Ad
+         * çözülemezse (kullanıcı silinmişse) sessizce boş geçmiyor:
+         * açık bir metin dönüyor, yoksa alan hiç yokmuş gibi görünür.
+         */
+        AssignedToName = AdBul(adlar, x.AssignedToUserId),
+        AssignedByName = AdBul(adlar, x.AssignedByUserId),
+        ApprovedByName = AdBul(adlar, x.ApprovedByUserId),
+        DelegatedFromName = AdBul(adlar, x.DelegatedFromUserId)
     };
+
+    private static string? AdBul(
+        IReadOnlyDictionary<Guid, string>? adlar, Guid? kimlik)
+    {
+        if (adlar is null || kimlik is null)
+            return null;
+
+        return adlar.TryGetValue(kimlik.Value, out var ad)
+            ? ad
+            : "(bilinmeyen kullanıcı)";
+    }
+
+    /// <summary>
+    /// Görev satırlarındaki tüm kullanıcı adlarını TEK sorguda
+    /// toplar — satır başına arama N+1 olurdu.
+    /// </summary>
+    private async Task<Dictionary<Guid, string>> AdlariGetirAsync(
+        IEnumerable<WorkTask> gorevler, CancellationToken cancellationToken)
+    {
+        var liste = gorevler
+            .SelectMany(x => new[]
+            {
+                x.AssignedToUserId, x.AssignedByUserId,
+                x.ApprovedByUserId, x.DelegatedFromUserId
+            })
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+
+        if (liste.Count == 0)
+            return [];
+
+        return await db.Users
+            .AsNoTracking()
+            .Where(x => liste.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
+    }
 }
 
 public sealed record CreateWorkTaskRequest(
