@@ -15,6 +15,20 @@ UPLOADS_DIR="/var/www/enderun-ai/uploads"
 PROJECT_FILES_DIR="/var/www/enderun-data/project-files"
 RETENTION_DAYS=30
 
+# YEDEK ŞİFRELEME ANAHTARI — SIR, BU DOSYADA DEĞİL.
+#
+# Yedekler bugüne kadar DÜZ duruyordu: db_*.dump içinde çek, maaş ve
+# personel verisi açık metin. Dizin ayrıca `drwxr-xr-x` idi, yani
+# makinedeki her kullanıcı okuyabiliyordu (o düzeltildi).
+#
+# Anahtar BU BETİKTE ÜRETİLMEZ ve yazılmaz; root'a ait bir dosyadan
+# okunur. Dosyayı Mehmet Karacabey oluşturur.
+#
+# ANAHTAR YEDEĞİN YANINDA DURMAMALI: aynı diskteki bir anahtar,
+# diski ele geçirene her ikisini birden verir. Anahtarın kopyası
+# sunucu DIŞINDA saklanmalı — kaybedilirse şifreli yedek kurtarılamaz.
+BACKUP_KEY_FILE="/etc/enderunai/backup-key"
+
 DB_HOST="127.0.0.1"
 DB_PORT="5432"
 DB_NAME="enderun_ai"
@@ -45,12 +59,42 @@ if [ -z "$DB_PASSWORD" ]; then
     fail "DB_CONNECTION içinden şifre okunamadı."
 fi
 
+# Bir dosyayı yerinde şifreler; başarılıysa düz kopyayı siler.
+#
+# ANAHTAR YOKSA YEDEK YİNE ALINIR — yalnız şifresiz kalır ve ERROR
+# olarak kayda düşer. Sebebi tarihsel: 2026-08 başında tablo sahipliği
+# yüzünden sistem SAATLERCE yedeksiz kaldı ve bunu kimse fark etmedi.
+# Şifreleme uğruna yedeğin KENDİSİNİ kaybetmek, düzeltmeye
+# çalıştığımız riskten büyük bir risk olurdu.
+sifrele() {
+    local dosya="$1"
+
+    if [ ! -s "$BACKUP_KEY_FILE" ]; then
+        log "ERROR" "ŞİFRELEME ANAHTARI YOK ($BACKUP_KEY_FILE) — yedek DÜZ bırakıldı: $(basename "$dosya")"
+        return 0
+    fi
+
+    if gpg --batch --yes --quiet \
+           --passphrase-file "$BACKUP_KEY_FILE" \
+           --symmetric --cipher-algo AES256 \
+           --output "${dosya}.gpg" "$dosya"; then
+        rm -f "$dosya"
+        chmod 600 "${dosya}.gpg"
+        log "INFO" "Şifrelendi: $(basename "${dosya}.gpg")"
+    else
+        # Şifreleme patlarsa düz dosya DURUR; yedeksiz kalmaktansa
+        # şifresiz kalmak yeğdir, ama sessiz kalmaz.
+        log "ERROR" "ŞİFRELEME BAŞARISIZ, yedek düz bırakıldı: $(basename "$dosya")"
+    fi
+}
+
 log "INFO" "Yedekleme başladı."
 
 export PGPASSWORD="$DB_PASSWORD"
 if pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -F c -f "$DB_BACKUP_FILE"; then
     DB_SIZE="$(du -h "$DB_BACKUP_FILE" | cut -f1)"
     log "INFO" "Veritabanı yedeği alındı: $DB_BACKUP_FILE ($DB_SIZE)"
+    sifrele "$DB_BACKUP_FILE"
 else
     unset PGPASSWORD
     rm -f "$DB_BACKUP_FILE"
@@ -62,6 +106,7 @@ if [ -d "$UPLOADS_DIR" ]; then
     if tar -czf "$UPLOADS_BACKUP_FILE" -C "$(dirname "$UPLOADS_DIR")" "$(basename "$UPLOADS_DIR")"; then
         UPLOADS_SIZE="$(du -h "$UPLOADS_BACKUP_FILE" | cut -f1)"
         log "INFO" "Uploads yedeği alındı: $UPLOADS_BACKUP_FILE ($UPLOADS_SIZE)"
+        sifrele "$UPLOADS_BACKUP_FILE"
     else
         rm -f "$UPLOADS_BACKUP_FILE"
         fail "uploads klasörü yedeklenemedi."
@@ -74,6 +119,7 @@ if [ -d "$PROJECT_FILES_DIR" ]; then
     if tar -czf "$PROJECT_FILES_BACKUP_FILE" -C "$(dirname "$PROJECT_FILES_DIR")" "$(basename "$PROJECT_FILES_DIR")"; then
         PROJECT_FILES_SIZE="$(du -h "$PROJECT_FILES_BACKUP_FILE" | cut -f1)"
         log "INFO" "Proje dosyaları yedeği alındı: $PROJECT_FILES_BACKUP_FILE ($PROJECT_FILES_SIZE)"
+        sifrele "$PROJECT_FILES_BACKUP_FILE"
     else
         rm -f "$PROJECT_FILES_BACKUP_FILE"
         fail "project-files klasörü yedeklenemedi."
@@ -82,7 +128,7 @@ else
     log "WARN" "Proje dosyaları klasörü bulunamadı, atlandı: $PROJECT_FILES_DIR"
 fi
 
-DELETED_COUNT="$(find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'db_*.dump' -o -name 'uploads_*.tar.gz' -o -name 'project-files_*.tar.gz' \) -mtime "+${RETENTION_DAYS}" -print -delete | wc -l)"
+DELETED_COUNT="$(find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'db_*.dump' -o -name 'db_*.dump.gpg' -o -name 'uploads_*.tar.gz' -o -name 'uploads_*.tar.gz.gpg' -o -name 'project-files_*.tar.gz' -o -name 'project-files_*.tar.gz.gpg' \) -mtime "+${RETENTION_DAYS}" -print -delete | wc -l)"
 log "INFO" "${RETENTION_DAYS} günden eski ${DELETED_COUNT} yedek dosyası silindi."
 
 log "INFO" "Yedekleme tamamlandı."
