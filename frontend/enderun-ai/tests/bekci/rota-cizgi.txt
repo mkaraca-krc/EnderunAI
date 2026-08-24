@@ -1,0 +1,16 @@
+# ÇÖZÜLMEYEN BAĞLANTI HEDEFLERİ — ÇİZGİ
+#
+# Biçim: dosya|hedef|gerekçe
+#
+# Bu dosya bir BORÇ SAYACI. Yeni bir çözülmeyen hedef eklenemez;
+# buradaki bir satır düzeltilirse SATIR SİLİNİR ve dosya küçülür.
+# Çift yönlü: sayı artamaz VE artık var olmayan satır kalamaz.
+#
+# Bu satırların hepsi Mehmet Karacabey'in kararını bekliyor:
+# temizlik mi (hedefleri kaldır) yoksa çizgi mi (böyle kalsın).
+# Karar "temizlik" olursa yapılacak tek şey ilgili satırı silmek.
+
+app/muhasebe/page.tsx|/muhasebe/mizan|status:"Planlandı" veri satırı — ekran active?<Link>:<button disabled> ile kapılıyor, TIKLANAMIYOR (app/muhasebe/page.tsx:112)
+app/muhasebe/page.tsx|/muhasebe/mali-tablolar|status:"Planlandı" veri satırı — aynı kapı, tıklanamıyor
+app/muhendislik/page.tsx|/muhendislik/markalar|status:"Hazırlanıyor" veri satırı — isReady kapısı ile tıklanamıyor
+app/projeler/[id]/page.tsx|/projeler/${project.id}/${module.href}|İKİ değişkenli şablon; module.href 14 değer alıyor ve HEPSİ çözülüyor (7 göreli + 7 mutlak, tek tek doğrulandı). Bekçi iki değişkenli şablonu açamıyor.

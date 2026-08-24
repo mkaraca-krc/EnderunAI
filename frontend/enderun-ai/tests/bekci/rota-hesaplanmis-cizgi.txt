@@ -1,0 +1,39 @@
+# HESAPLANMIŞ (DOĞRULANAMAYAN) BAĞLANTI HEDEFLERİ — ÇİZGİ
+#
+# Biçim: dosya:adet
+#
+# Hedef bir DEĞİŞKENDEN geliyor (href={item.href}, router.push(yol)).
+# Bekçi bunu statik olarak çözemez — değer çalışma zamanında belli
+# olur. Bu yüzden doğrulanmıyor, SAYILIYOR.
+#
+# KURAL: yeni hesaplanmış hedef EKLENEMEZ. Yeni bir bağlantı yazan
+# kişi ya değişmez ya şablon hedef kullanır; ikisi de doğrulanabilir.
+# Bir hedef doğrulanabilir hale getirilirse satır SİLİNİR/azalır.
+#
+# Çift yönlü: toplam artamaz VE artık var olmayan dosya kalamaz.
+
+app/depo-stok/page.tsx:2
+app/insan-kaynaklari/bordro-on-kontrol/page.tsx:1
+app/insan-kaynaklari/page.tsx:2
+app/insan-kaynaklari/personeller/page.tsx:1
+app/insan-kaynaklari/zimmetler/page.tsx:1
+app/muhasebe/page.tsx:1
+app/muhendislik/page.tsx:1
+app/raporlar/page.tsx:1
+app/satin-alma/karar-destek/page.tsx:1
+app/satin-alma/raporlar/page.tsx:1
+app/sekreterya/page.tsx:1
+app/yapilacaklar/page.tsx:1
+app/yonetim/page.tsx:1
+components/assets/tool-asset-alert-widget.tsx:1
+components/collaboration/attachment-panel.tsx:1
+components/dashboard/dashboard-stat.tsx:1
+components/dashboard/hizir-briefing-widget.tsx:1
+components/dashboard/notification-center-widget.tsx:1
+components/dashboard/operations-summary-widget.tsx:1
+components/dashboard/quick-actions-widget.tsx:1
+components/dashboard/quick-card.tsx:1
+components/dashboard/recent-activities-widget.tsx:1
+components/erp/command-palette.tsx:1
+components/erp/erp-shell.tsx:3
+components/notifications/notification-bell.tsx:1
