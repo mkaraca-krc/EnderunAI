@@ -549,22 +549,86 @@ gerçekten okunmadığını bir kez daha tara" talimatı bunu yakaladı.
 
 **Gerçek durum: `IsConfigured` TRUE.** Özellik ölü doğmuyor.
 
-#### GÜNLÜK E-POSTA ÖZETİ — DÖRT KADEMELİ BAYRAK
+#### GÜNLÜK E-POSTA ÖZETİ — ÜÇ KADEMELİ BAYRAK (2026-08-24)
 
-`DAILY_SUMMARY_MODE` (tek değişken, dört durum):
+`DAILY_SUMMARY_MODE` (tek değişken, üç durum; ortam değişkeninden
+okunur, kaynak koda gömülü DEĞİL):
 
 | Mod | Davranış |
 |---|---|
-| `off` | Tarama HİÇ koşmaz. **VARSAYILAN** — deploy bu durumda çıktı. Değişken tanımsızsa da bu geçerli. |
-| `dryrun` | Koşar, e-posta GÖNDERMEZ; kime ne gideceğini sunucu günlüğüne yazar. |
-| `test` | Yalnız `DAILY_SUMMARY_TEST_RECIPIENTS` listesine gönderir. |
-| `on` | Herkese gönderir. |
+| `kapali` | Özet üretilmez, e-posta gitmez. **VARSAYILAN** — değişken tanımsız veya tanınmayan bir değerse de bu geçerli. |
+| `dryrun` | Özet ÜRETİLİR, **SMTP HİÇ ÇAĞRILMAZ**. Yalnızca toplam istatistik günlüğe yazılır. **BUGÜNKÜ CANLI MOD.** |
+| `acik` | Herkese gerçekten gönderir. |
 
-**KURU KOŞU KAYDI** sunucu günlüğüne yazılıyor (kalıcı tabloya değil —
-bir kez okunup atılacak bilgi): kullanıcı adı, açık görev, termini
-geçen, onay bekleyen, okunmamış bildirim, gönderilecek miydi.
-**E-POSTA ADRESİ KAYDA YAZILMIYOR** — günlük, adres listesi tutulacak
-yer değil.
+**`test` KADEMESİ KALDIRILDI.** Dört durumluyken bir kademe daha
+vardı: "yalnız `DAILY_SUMMARY_TEST_RECIPIENTS` listesine gönder".
+Kaldırıldı çünkü `dryrun` ile arasındaki tek fark GERÇEK GÖNDERİM
+yapmasıydı — yani "güvenli" görünen ama SMTP yolunu tam açan bir
+kademeydi ve yanlış yazılmış bir adres listesi onu `acik`'tan
+ayırt edilemez hale getirirdi. Eski `on` değeri geriye uyum için
+hâlâ `acik` olarak okunuyor.
+
+**MOD YALNIZ E-POSTAYI KESER, TARAMAYI DEĞİL.** `kapali` modda bile
+`TaskDueNotificationScanner` (termin uyarıları) ve
+`ScopeDeferralWatchdog` (G3 erteleme nöbetçisi) koşar. Bayrak
+gönderim kapısıdır, servisin tamamının şalteri değil.
+
+> **BU KURAL BİR SÜRE YALNIZCA YORUMDA DURDU VE YORUM YANLIŞTI.**
+> `DailySummaryMode.Kapali` üzerindeki XML yorumu "Tarama HİÇ
+> KOŞMAZ" diyordu; kod ise taramayı moddan bağımsız koşturuyordu.
+> `git log` ile bakıldı: ikisi de **aynı commit'te** (`9212d291`,
+> M1/4) doğmuş — yani bu bir kayma değil, doğuştan tutarsızlık, ve
+> hiçbir test onu tutmuyordu. Bayrak önce "ana şalter" olarak
+> tasarlanmış, sonra "gönderim kapısı"na daraltılmış, yorum
+> güncellenmemiş.
+>
+> **Kod doğru, yorum yanlıştı** (2026-08-24 kararı): davranışa
+> dokunulmadı, yorum düzeltildi. Kapatma seçeneği REDDEDİLDİ —
+> `kapali` yazan biri e-postayı susturduğunu sanırken G3 erteleme
+> **güvenlik uyarısını** da susturmuş olurdu; `RetailSalesController`
+> kazasıyla aynı sınıftan gizli bir bağlantı. Maliyet de gerekçe
+> değil: kapalı modda tur **3 sorgu / 10 ms / günde 1 kez**
+> (04:00 UTC turu journald'dan ölçüldü).
+>
+> **ARTIK İDDİA YORUMDA DEĞİL TESTTE:**
+> `DailySummaryModeGatingTests.Kapali_TaramaVeBekciyiYineDeKosturur`
+> — çağrı sayacıyla (kural 23), dört değer için (`kapali`, `off`,
+> tanınmayan bir değer, tanımsız). Ters yönü de
+> `KapaliDegilse_GonderimYoluAranir` tutuyor; o olmasaydı bayrak
+> tamamen işlevsizleşse bile ilk test yeşil kalırdı.
+>
+> Sonda: tarama çağrısı erken `return`'ün ALTINA taşındı → dört
+> `kapali` durumu da kırmızıya döndü (`Failed: 4`). Geri alındı.
+>
+> Test bunun için `ITaskDueNotificationScanner` ve
+> `IScopeDeferralWatchdog` arayüzlerine dayanıyor
+> (`Services/Notifications/IDailyScanSteps.cs`). Somut sınıflar
+> `sealed` KALDI — sırf test için mühür açmak yerine dar arayüz
+> eklendi; DI'da arayüz **aynı scoped örneğe** bağlanıyor.
+
+**KURU KOŞU KAYDI — YALNIZCA TOPLAM, KİŞİSEL VERİ YOK.**
+Günlüğe yazılan alanların TAMAMI:
+
+```
+tarih, aliciSayisi,
+satirEnAz / satirOrtalama / satirEnCok,
+acikGorev, terminGecen, onayBekleyen, okunmamisBildirim,
+uretimSuresiMs
+```
+
+**YAZILMAYAN:** görev başlığı, kişi adı, kullanıcı adı, e-posta
+adresi, açıklama metni. Sunucu günlüğü journald'da tutuluyor ve
+`journalctl` okuyabilen herkese açık — orası kişi listesi tutulacak
+yer değil. Bunu koruyan test: `DryRun_KaydaKisiselVeriYazmaz`,
+yasaklı alan listesiyle.
+
+**ÖZET ÜRETİMİ KAPSAM SÜZGECİNDEN GEÇER.** Sayılar
+`db.WorkTasks.ApplyScope(kapsam)` üzerinden hesaplanıyor; kapsam her
+alıcı için `IUserAuthorizationService` ile ayrı ayrı kuruluyor
+(`ICurrentDataScopeService` oturuma bağlı olduğu için arka plan
+servisinde kullanılamaz). Yetkisi çözülemeyen kullanıcı BOŞ kapsam
+alır — hiçbir şey görmez. Sessizce "hepsini gör"e düşmek, özeti
+şirketler arası sızıntı borusuna çevirirdi.
 
 **SAAT: 04:00 UTC = 07:00 Türkiye.** Sunucu `Etc/UTC` (ölçüldü),
 Türkiye sabit UTC+3, yaz saati YOK. Kodda "07:00" yazıp sunucunun UTC
@@ -582,15 +646,19 @@ sonra gerçekten önemli bir e-posta da aynı filtreye düşerdi.
 **KİŞİ BAZINDA HATA SINIRI:** bir kişinin gönderimi patlarsa tur
 diğerlerine devam eder ve hata `DailySummaryEmailFailed` olarak kayda
 düşer. Tek kişinin bozuk adresi yüzünden kimsenin özet almaması,
-sessizce yutmaktan farksız bir arıza olurdu.
+sessizce yutmaktan farksız bir arıza olurdu. **Bu yutma mekanizması
+bir test açığı doğurdu — bkz. §5 kural 23.**
+
+**BEŞ İŞ GÜNÜ SONUNDA BAKILACAK KAYIT (tek satır):**
+```bash
+sudo journalctl -u enderunai-backend --since '5 days ago' --no-pager | grep 'GÜNLÜK ÖZET (kuru koşu)'
+```
 
 **MOD DEĞİŞTİRME (Mehmet Karacabey yapacak):**
 ```bash
 sudo nano /etc/enderunai/backend.env      # DAILY_SUMMARY_MODE=dryrun
 sudo systemctl restart enderunai-backend  # ŞART: EnvironmentFile systemd'den okunuyor
 ```
-`test` modu için ayrıca:
-`DAILY_SUMMARY_TEST_RECIPIENTS=adres1@ornek.com,adres2@ornek.com`
 
 **BREVO'YA GEÇİŞ:** yalnız `BREVO_API_KEY` yazmak YETMEZ —
 `EMAIL_PROVIDER=brevo` da gerekir. Karar: Brevo'da kalınacak ama geçiş
@@ -2740,6 +2808,30 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
 
       d) Aynı düzeltme TEST veritabanında da yapılır; yoksa aynı hata
          orada uykuda bekler.
+
+23. **"HİÇ ÇAĞRILMADI" İDDİASI SAYAÇLA KANITLANIR, FIRLATAN SAHTEYLE
+    DEĞİL.** 2026-08-24, günlük özet kuru koşusu. "dryrun'da SMTP
+    istemcisi hiç çağrılmasın" iddiasını sınamak için `SendAsync`
+    çağrılınca hata fırlatan bir sahte istemci yazdım. Sonda —
+    dryrun'daki `return`'ü kaldırıp gönderim yolunu bilerek açmak —
+    testi **kırmadı**:
+
+    - `RunAsync` her alıcıyı kendi `try/catch`'inde çalıştırıyor
+      (kural: "bildirim yazma işin kendisini çökertmesin"),
+    - fırlatılan hata orada yutuldu,
+    - gönderim başarısız sayıldığı için `gonderilen` sayacı artmadı,
+    - test `Assert.Equal(0, gonderilen)` diyordu ve YEŞİL kaldı.
+
+    Yani sahtenin fırlattığı hata, sınamak istediğim davranışın
+    kanıtı değil, sistemin dayanıklılık mekanizmasının yemi oldu.
+    Sonda olmasaydı bu testin bir şey ölçmediğini hiç göremezdim.
+
+    **KURAL:** Hata yutan (`try/catch`, `Polly`, `ContinueWith`)
+    bir yolda "şu bağımlılık çağrılmadı" iddiası, yalnızca
+    **çağrı sayacı** ile sınanır — sayaç yutulamaz. Fırlatan sahte,
+    ancak hatanın yukarı çıktığı kanıtlanmış yollarda geçerlidir.
+    Genel biçim: bir iddiayı sınayan sahte, iddianın ihlalini
+    başarısızlık yoluyla değil, GÖZLEM yoluyla göstermelidir.
 
 ---
 

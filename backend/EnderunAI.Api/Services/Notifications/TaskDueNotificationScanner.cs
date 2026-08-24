@@ -25,7 +25,7 @@ namespace EnderunAI.Api.Services.Notifications;
 /// </summary>
 public sealed class TaskDueNotificationScanner(
     AppDbContext db,
-    ITaskNotificationWriter writer)
+    ITaskNotificationWriter writer) : ITaskDueNotificationScanner
 {
     /*
      * KAPANMIŞ GÖREVLER UYARI ÜRETMEZ.

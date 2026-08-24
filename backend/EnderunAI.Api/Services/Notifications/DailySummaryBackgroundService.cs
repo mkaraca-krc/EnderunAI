@@ -46,8 +46,14 @@ public sealed class DailySummaryBackgroundService(
         }
     }
 
-    private async Task BirTurAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// TEK TUR — testlerin doğrudan çağırdığı giriş noktası.
+    /// Hangi adımın hangi modda koştuğu buradan çağrı sayacıyla
+    /// doğrulanıyor (DURUM.md §5 kural 23).
+    /// </summary>
+    public async Task BirTurAsync(CancellationToken cancellationToken)
     {
+        var ham = configuration["DAILY_SUMMARY_MODE"]?.Trim();
         var mod = ModuOku();
 
         using var scope = services.CreateScope();
@@ -55,7 +61,7 @@ public sealed class DailySummaryBackgroundService(
         // TERMİN UYARILARI MODDAN BAĞIMSIZ: bunlar uygulama içi
         // bildirim, e-posta değil. `off` yalnız E-POSTAYI kapatıyor.
         var terminTarayici = scope.ServiceProvider
-            .GetRequiredService<TaskDueNotificationScanner>();
+            .GetRequiredService<ITaskDueNotificationScanner>();
 
         var uyari = await terminTarayici.ScanAsync(cancellationToken);
 
@@ -68,21 +74,29 @@ public sealed class DailySummaryBackgroundService(
          * gerekiyor ve bunun e-posta bayrağına bağlanması yanlış
          * olurdu.
          */
-        var bekci = scope.ServiceProvider.GetRequiredService<ScopeDeferralWatchdog>();
+        var bekci = scope.ServiceProvider.GetRequiredService<IScopeDeferralWatchdog>();
         await bekci.CheckAsync(cancellationToken);
 
-        if (mod == DailySummaryMode.Off)
+        if (mod == DailySummaryMode.Kapali)
         {
+            /*
+             * HAM DEĞER DE YAZILIYOR.
+             *
+             * Önce yorumlanmış değer sabit metin olarak yazılıyordu
+             * ("=kapali"). Ortam değişkeninde `off` yazarken kayıtta
+             * `kapali` görmek, teşhis sırasında yanlış dosyaya
+             * baktırır. Ham değer sır değil; kapı adı.
+             */
             logger.LogInformation(
-                "Günlük özet KAPALI (DAILY_SUMMARY_MODE=off). " +
-                "Termin uyarısı taraması koştu: {Sayi}.", uyari);
+                "Günlük özet KAPALI (DAILY_SUMMARY_MODE={Ham} → {Mod}). " +
+                "Termin uyarısı taraması koştu: {Sayi}.",
+                ham ?? "(tanımsız)", mod, uyari);
             return;
         }
 
         var ozet = scope.ServiceProvider.GetRequiredService<DailySummaryService>();
 
-        var gonderilen = await ozet.RunAsync(
-            mod, TestAlicilariOku(), cancellationToken);
+        var gonderilen = await ozet.RunAsync(mod, cancellationToken);
 
         logger.LogInformation(
             "Günlük özet turu bitti. Mod={Mod} gonderilen={Gonderilen} " +
@@ -98,26 +112,25 @@ public sealed class DailySummaryBackgroundService(
     {
         var ham = configuration["DAILY_SUMMARY_MODE"]?.Trim();
 
+        /*
+         * DEĞER ORTAM DEĞİŞKENİNDEN — KAYNAK KODA GÖMÜLÜ DEĞİL.
+         *
+         * Tanınmayan bir değer de `Kapali` sayılıyor: yazım hatası
+         * yüzünden e-posta gönderilmeye başlanması, tanımsız
+         * değişkenden daha kötü olurdu.
+         *
+         * Eski İngilizce değerler (`off`/`on`) da kabul ediliyor:
+         * deploy sırasında ortam değişkeni eski değerde kalmışsa
+         * davranış SESSİZCE değişmesin.
+         */
         return ham?.ToLowerInvariant() switch
         {
             "dryrun" => DailySummaryMode.DryRun,
-            "test" => DailySummaryMode.Test,
-            "on" => DailySummaryMode.On,
-            _ => DailySummaryMode.Off
+            "acik" or "on" => DailySummaryMode.Acik,
+            _ => DailySummaryMode.Kapali
         };
     }
 
-    private IReadOnlyCollection<string> TestAlicilariOku()
-    {
-        var ham = configuration["DAILY_SUMMARY_TEST_RECIPIENTS"];
-
-        if (string.IsNullOrWhiteSpace(ham))
-            return [];
-
-        return ham
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
-    }
 
     /// <summary>Bir sonraki 04:00 UTC'ye kalan süre.</summary>
     private static TimeSpan SonrakiTuraKalan()

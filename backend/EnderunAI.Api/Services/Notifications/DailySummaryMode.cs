@@ -1,40 +1,60 @@
 namespace EnderunAI.Api.Services.Notifications;
 
 /// <summary>
-/// GÜNLÜK ÖZET KADEMESİ — TEK DEĞİŞKEN, DÖRT DURUM.
+/// GÜNLÜK ÖZET KADEMESİ — TEK DEĞİŞKEN, ÜÇ DURUM.
 ///
-/// `DAILY_SUMMARY_MODE` ortam değişkeninden okunuyor.
+/// `DAILY_SUMMARY_MODE` ortam değişkeninden okunuyor; değer KAYNAK
+/// KODA GÖMÜLMÜYOR. Tanımsızsa <see cref="Kapali"/>: sessizce
+/// e-posta göndermeye başlamak, tanımsız bir değişkenin kabul
+/// edilebilir sonucu değildir.
 ///
-/// NEDEN KADEMELİ: bu özellik canlıya çıktığı gün gerçek insanlara
-/// e-posta göndermeye başlıyor. "Deploy et ve gör" burada kabul
-/// edilemez — yanlış içerik ya da yanlış alıcı, geri alınamaz.
-/// Kademeler, her adımı ayrı ayrı doğrulamayı mümkün kılıyor.
+/// NEDEN KADEMELİ: bu özellik açıldığı gün gerçek insanlara e-posta
+/// göndermeye başlıyor. "Aç ve gör" burada kabul edilemez — yanlış
+/// içerik ya da yanlış alıcı geri alınamaz.
+///
+/// ÖNCEKİ SÜRÜMDE DÖRT KADEME VARDI (off/dryrun/test/on). `test`
+/// kademesi kaldırıldı: yalnız belirli adreslere gönderim, gönderim
+/// yolunu AÇIK tutmayı gerektiriyordu ve "kapalıyken hiç çağrılmaz"
+/// güvencesini zayıflatıyordu. Artık iki net durum var — gönderim
+/// yolu ya tamamen kapalı ya tamamen açık — ve arada gözlem için
+/// <see cref="DryRun"/>.
 /// </summary>
 public enum DailySummaryMode
 {
     /// <summary>
-    /// Tarama HİÇ KOŞMAZ. VARSAYILAN — deploy bu durumda çıkıyor.
-    /// Değişken tanımsızsa da bu geçerli: sessizce e-posta göndermeye
-    /// başlamak, tanımsız bir değişkenin kabul edilebilir sonucu
-    /// değil.
+    /// ÖZET ÜRETİLMEZ, E-POSTA GİTMEZ. VARSAYILAN.
+    /// Ortam değişkeni tanımsız ya da tanınmayan bir değerse de bu.
+    ///
+    /// DİKKAT — BU BİR ANA ŞALTER DEĞİL, GÖNDERİM KAPISIDIR.
+    /// `Kapali` modda da şunlar KOŞMAYA DEVAM EDER:
+    ///   - <c>TaskDueNotificationScanner</c> (termin uyarıları) —
+    ///     bunlar uygulama içi bildirim, e-posta değil;
+    ///   - <c>ScopeDeferralWatchdog</c> (G3 erteleme nöbetçisi) —
+    ///     bu bir bildirim değil, GÜVENLİK UYARISI.
+    ///
+    /// Bir güvenlik uyarısını e-posta tercihine bağlamak, "e-postalar
+    /// rahatsız ediyor, kapat" diyen kişinin farkında olmadan
+    /// nöbetçiyi de susturması demek olurdu. Bu yüzden bayrak yalnız
+    /// GÖNDERİMİ kesiyor.
+    ///
+    /// Bu yorum bir kez yanlıştı: "Tarama HİÇ KOŞMAZ" yazıyordu ve
+    /// koddaki davranışla çelişiyordu (bayrak önce ana şalter olarak
+    /// tasarlanmış, sonra gönderim kapısına daraltılmış, yorum
+    /// güncellenmemişti). Artık iddia yorumda değil TESTTE duruyor:
+    /// <c>Kapali_TaramaVeBekciyiYineDeKosturur</c>, çağrı sayacıyla.
     /// </summary>
-    Off = 0,
+    Kapali = 0,
 
     /// <summary>
-    /// Tarama koşar, E-POSTA GÖNDERMEZ. Kime ne gideceğini sunucu
-    /// günlüğüne yazar: kaç kişi, her birine kaç görev ve kaç
-    /// bildirim.
+    /// Özet ÜRETİLİR, e-posta GÖNDERİLMEZ.
     ///
-    /// E-POSTA ADRESİ KAYDA YAZILMAZ — kullanıcı adı yeterli.
+    /// SMTP istemcisi HİÇ ÇAĞRILMAZ — sahte bir istemciyle
+    /// değiştirilmez, çağrı yoluna hiç girilmez. Fark önemli: sahte
+    /// istemci "gönderim kodu çalıştı ama bir şey olmadı" demektir;
+    /// burada gönderim kodu HİÇ ÇALIŞMIYOR.
     /// </summary>
     DryRun = 1,
 
-    /// <summary>
-    /// Yalnız `DAILY_SUMMARY_TEST_RECIPIENTS` listesindeki adreslere
-    /// gönderir. Gerçek e-postanın biçimini görmek için.
-    /// </summary>
-    Test = 2,
-
     /// <summary>Herkese gönderir.</summary>
-    On = 3
+    Acik = 2
 }

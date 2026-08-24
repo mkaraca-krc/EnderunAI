@@ -522,10 +522,20 @@ builder.Services.AddScoped<
     EnderunAI.Api.Services.Notifications.TaskNotificationWriter>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Notifications.TaskDueNotificationScanner>();
+// Arayüz AYNI scoped örneğe bağlanıyor; iki ayrı kayıt olsaydı tur
+// içinde iki farklı tarayıcı örneği oluşurdu.
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.ITaskDueNotificationScanner>(
+    sp => sp.GetRequiredService<
+        EnderunAI.Api.Services.Notifications.TaskDueNotificationScanner>());
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Notifications.DailySummaryService>();
 builder.Services.AddScoped<
     EnderunAI.Api.Services.Notifications.ScopeDeferralWatchdog>();
+builder.Services.AddScoped<
+    EnderunAI.Api.Services.Notifications.IScopeDeferralWatchdog>(
+    sp => sp.GetRequiredService<
+        EnderunAI.Api.Services.Notifications.ScopeDeferralWatchdog>());
 builder.Services.AddHostedService<
     EnderunAI.Api.Services.Notifications.DailySummaryBackgroundService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IInventoryCodeService, EnderunAI.Api.Services.Inventory.InventoryCodeService>();

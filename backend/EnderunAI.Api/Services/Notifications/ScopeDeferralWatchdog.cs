@@ -27,7 +27,7 @@ namespace EnderunAI.Api.Services.Notifications;
 /// </summary>
 public sealed class ScopeDeferralWatchdog(
     AppDbContext db,
-    ILogger<ScopeDeferralWatchdog> logger)
+    ILogger<ScopeDeferralWatchdog> logger) : IScopeDeferralWatchdog
 {
     public const string ActionScopedUser = "ScopeDeferralTriggered.ScopedUser";
     public const string ActionSecondCompany = "ScopeDeferralTriggered.SecondCompany";

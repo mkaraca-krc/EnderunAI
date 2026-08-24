@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Security;
 using EnderunAI.Api.Models.Notifications;
 using EnderunAI.Api.Services.Email;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +49,7 @@ public sealed record DailySummaryRow(
 public sealed class DailySummaryService(
     AppDbContext db,
     IEmailService email,
+    IUserAuthorizationService authorization,
     ILogger<DailySummaryService> logger)
 {
     /// <summary>Türkiye saatiyle 07:00 — sunucu UTC olduğu için 04:00.</summary>
@@ -62,26 +64,45 @@ public sealed class DailySummaryService(
 
     public async Task<int> RunAsync(
         DailySummaryMode mode,
-        IReadOnlyCollection<string> testRecipients,
         CancellationToken cancellationToken)
     {
-        if (mode == DailySummaryMode.Off)
+        if (mode == DailySummaryMode.Kapali)
             return 0;
 
+        var kronometre = System.Diagnostics.Stopwatch.StartNew();
+
+        var satirlar = await HesaplaAsync(cancellationToken);
+
+        kronometre.Stop();
+
         /*
-         * E-POSTA YAPILANDIRILMAMIŞSA HİÇ KOŞMA.
+         * DRYRUN — GÖNDERİM YOLUNA HİÇ GİRİLMİYOR.
          *
-         * `dryrun` bunun istisnası: amacı zaten göndermek değil, kime
-         * ne gideceğini görmek. Yapılandırma beklemesi gereksiz.
+         * Buradan sonrası e-posta kodudur ve `DryRun` o koda ULAŞMADAN
+         * dönüyor. Sahte bir istemciyle değiştirmek yetmezdi: sahte
+         * istemci "gönderim kodu çalıştı ama bir şey olmadı" demektir;
+         * burada gönderim kodu HİÇ ÇALIŞMIYOR.
+         *
+         * Fark, bir gün gönderim yolunda yan etki doğduğunda ortaya
+         * çıkar (kota tüketimi, harici kayıt, sıraya yazma).
          */
-        if (mode != DailySummaryMode.DryRun && !email.IsConfigured)
+        if (mode == DailySummaryMode.DryRun)
+        {
+            KuruKosuKaydiYaz(satirlar, kronometre.ElapsedMilliseconds);
+            return 0;
+        }
+
+        /*
+         * E-POSTA YAPILANDIRILMAMIŞSA GÖNDERİM YOK.
+         * `DryRun` bu kontrolün üstünde: amacı zaten göndermek değil.
+         */
+        if (!email.IsConfigured)
         {
             logger.LogWarning(
                 "Günlük özet atlandı: e-posta yapılandırılmamış (IsConfigured=false).");
             return 0;
         }
 
-        var satirlar = await HesaplaAsync(cancellationToken);
         var gonderilen = 0;
 
         foreach (var satir in satirlar)
@@ -94,23 +115,10 @@ public sealed class DailySummaryService(
              */
             try
             {
-                if (mode == DailySummaryMode.DryRun)
-                {
-                    KuruKayitYaz(satir, gonderilecek: true);
-                    continue;
-                }
-
                 if (string.IsNullOrWhiteSpace(satir.Email))
                 {
                     logger.LogWarning(
-                        "Günlük özet atlandı: {Username} için e-posta adresi yok.",
-                        satir.Username);
-                    continue;
-                }
-
-                if (mode == DailySummaryMode.Test &&
-                    !testRecipients.Contains(satir.Email, StringComparer.OrdinalIgnoreCase))
-                {
+                        "Günlük özet atlandı: bir alıcının e-posta adresi yok.");
                     continue;
                 }
 
@@ -125,11 +133,6 @@ public sealed class DailySummaryService(
             }
             catch (Exception exception)
             {
-                /*
-                 * BİLDİRİM YAZIMINDAKİ DESENİN AYNISI: hata yutulmuyor
-                 * ama tur durmuyor. Kayda düşüyor ve sonraki kişiye
-                 * geçiliyor.
-                 */
                 logger.LogError(
                     exception,
                     "Günlük özet gönderilemedi. Username={Username}",
@@ -143,26 +146,53 @@ public sealed class DailySummaryService(
     }
 
     /// <summary>
-    /// KURU KOŞU KAYDI — sunucu günlüğüne, kalıcı tabloya değil.
+    /// KURU KOŞU KAYDI — TOPLU İSTATİSTİK, KİŞİSEL VERİ YOK.
     ///
-    /// Bir kez okunup atılacak bir bilgi; tabloya yazmak onu kalıcı
-    /// bir borç haline getirirdi.
+    /// Yazılanlar: tarih, alıcı sayısı, alıcı başına satır sayısı
+    /// (en az / ortalama / en çok), tetikleyici bazında dağılım,
+    /// üretim süresi.
     ///
-    /// E-POSTA ADRESİ YAZILMIYOR: kullanıcı adı kimi kastettiğimizi
-    /// söylemeye yetiyor ve günlük, adres listesi tutulacak yer değil.
+    /// YAZILMAYANLAR — BİLEREK: görev başlığı, kişi adı, kullanıcı
+    /// adı, e-posta adresi, açıklama metni. Kuru koşu kaydının amacı
+    /// "kaç kişiye ne kadar iş gidecek" sorusunu cevaplamak; kimin
+    /// hangi işi var sorusunu değil. Günlük dosyası, kişisel veri ya
+    /// da adres listesi tutulacak yer değildir ve bir kez okunup
+    /// atılacak bir bilgi için o riski almaya gerek yok.
+    ///
+    /// Kalıcı tabloya da yazılmıyor: bu bilgi bir kez okunup
+    /// atılacak, tabloya yazmak onu kalıcı bir borç haline getirirdi.
     /// </summary>
-    private void KuruKayitYaz(DailySummaryRow satir, bool gonderilecek)
+    private void KuruKosuKaydiYaz(
+        IReadOnlyList<DailySummaryRow> satirlar,
+        long sureMs)
     {
+        var aliciSayisi = satirlar.Count;
+
+        var satirSayilari = satirlar
+            .Select(x =>
+                x.OpenTaskCount + x.OverdueCount +
+                x.AwaitingApprovalCount + x.UnreadNotificationCount)
+            .ToList();
+
+        var enAz = satirSayilari.Count == 0 ? 0 : satirSayilari.Min();
+        var enCok = satirSayilari.Count == 0 ? 0 : satirSayilari.Max();
+        var ortalama = satirSayilari.Count == 0 ? 0 : satirSayilari.Average();
+
         logger.LogInformation(
-            "GÜNLÜK ÖZET (kuru koşu) kullanici={Username} acikGorev={Acik} " +
-            "terminGecen={Gecen} onayBekleyen={Onay} okunmamisBildirim={Bildirim} " +
-            "gonderilecekMi={Gonderilecek}",
-            satir.Username,
-            satir.OpenTaskCount,
-            satir.OverdueCount,
-            satir.AwaitingApprovalCount,
-            satir.UnreadNotificationCount,
-            gonderilecek);
+            "GÜNLÜK ÖZET (kuru koşu) tarih={Tarih} aliciSayisi={Alici} " +
+            "satirEnAz={EnAz} satirOrtalama={Ortalama:F1} satirEnCok={EnCok} " +
+            "acikGorev={Acik} terminGecen={Gecen} onayBekleyen={Onay} " +
+            "okunmamisBildirim={Bildirim} uretimSuresiMs={Sure}",
+            DateTime.UtcNow.ToString("yyyy-MM-dd"),
+            aliciSayisi,
+            enAz,
+            ortalama,
+            enCok,
+            satirlar.Sum(x => x.OpenTaskCount),
+            satirlar.Sum(x => x.OverdueCount),
+            satirlar.Sum(x => x.AwaitingApprovalCount),
+            satirlar.Sum(x => x.UnreadNotificationCount),
+            sureMs);
     }
 
     /// <summary>
@@ -198,15 +228,33 @@ public sealed class DailySummaryService(
             if (kapali.Contains(kullanici.Id))
                 continue;
 
-            var acik = await db.WorkTasks
+            /*
+             * KAPSAM SÜZGECİ — HER ALICI KENDİ KAPSAMINI GÖRÜR.
+             *
+             * "Bana atanmış" süzgeci tek başına yetmez: kapsam
+             * değişikliğinden ÖNCE atanmış bir görev, kullanıcı artık
+             * o projeyi göremese bile üzerinde kalır. Özet, kullanıcının
+             * göremeyeceği bir kaydın varlığını sayı olarak bile
+             * sızdırmamalı.
+             *
+             * Kapsam ARKA PLANDA çözülüyor: `ICurrentDataScopeService`
+             * çağıran kullanıcıya bağlı ve burada çağıran yok — her
+             * alıcının kapsamı `IUserAuthorizationService` üzerinden
+             * ayrı ayrı kuruluyor.
+             */
+            var kapsam = await KullaniciKapsamiAsync(kullanici.Id, cancellationToken);
+
+            var kapsamliGorevler = db.WorkTasks
                 .AsNoTracking()
+                .ApplyScope(kapsam);
+
+            var acik = await kapsamliGorevler
                 .CountAsync(
                     x => x.AssignedToUserId == kullanici.Id &&
                          AcikDurumlar.Contains(x.Status),
                     cancellationToken);
 
-            var gecen = await db.WorkTasks
-                .AsNoTracking()
+            var gecen = await kapsamliGorevler
                 .CountAsync(
                     x => x.AssignedToUserId == kullanici.Id &&
                          AcikDurumlar.Contains(x.Status) &&
@@ -214,8 +262,7 @@ public sealed class DailySummaryService(
                     cancellationToken);
 
             // ONAYIMI BEKLEYENLER: gönderdiğim ve tamamlanmış görevler.
-            var onay = await db.WorkTasks
-                .AsNoTracking()
+            var onay = await kapsamliGorevler
                 .CountAsync(
                     x => x.AssignedByUserId == kullanici.Id &&
                          x.Status == WorkTaskStatus.Completed,
@@ -238,6 +285,53 @@ public sealed class DailySummaryService(
         }
 
         return sonuc;
+    }
+
+    /// <summary>
+    /// Bir kullanıcının veri kapsamı — arka planda, çağıran olmadan.
+    ///
+    /// `ICurrentDataScopeService` oturumdaki kullanıcıya bağlı; bu
+    /// servis arka planda çalışıyor ve HER ALICI için ayrı kapsam
+    /// kurmak zorunda.
+    ///
+    /// Rol adı "Admin" olan ya da `All` kapsamı bulunan kullanıcı
+    /// global erişimli sayılıyor — `CurrentDataScopeService` ile aynı
+    /// kural; iki yerde farklı davranırsa kullanıcı ekranda gördüğü
+    /// işi özette göremezdi.
+    /// </summary>
+    private async Task<CurrentDataScopeSnapshot> KullaniciKapsamiAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var yetki = await authorization.GetAsync(userId, cancellationToken);
+
+        if (yetki is null)
+        {
+            // Yetki çözülemedi: HİÇBİR ŞEY GÖRMESİN. Boş kapsam,
+            // global kapsamdan güvenli tarafta kalır.
+            return new CurrentDataScopeSnapshot(
+                false, new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(),
+                new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>());
+        }
+
+        var globalErisim =
+            yetki.RoleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase) ||
+            yetki.DataScopes.Any(x => x.ScopeType == 0);
+
+        return new CurrentDataScopeSnapshot(
+            globalErisim,
+            yetki.DataScopes.Where(x => x.ScopeType == 1 && x.CompanyId.HasValue)
+                .Select(x => x.CompanyId!.Value).ToHashSet(),
+            yetki.DataScopes.Where(x => x.ScopeType == 2 && x.BranchId.HasValue)
+                .Select(x => x.BranchId!.Value).ToHashSet(),
+            yetki.DataScopes.Where(x => x.ScopeType == 3 && x.ProjectId.HasValue)
+                .Select(x => x.ProjectId!.Value).ToHashSet(),
+            yetki.DataScopes.Where(x => x.CompanyId.HasValue)
+                .Select(x => x.CompanyId!.Value).ToHashSet(),
+            yetki.DataScopes.Where(x => x.BranchId.HasValue)
+                .Select(x => x.BranchId!.Value).ToHashSet(),
+            yetki.DataScopes.Where(x => x.ProjectSiteId.HasValue)
+                .Select(x => x.ProjectSiteId!.Value).ToHashSet());
     }
 
     private static string GovdeUret(DailySummaryRow satir)
