@@ -1189,6 +1189,68 @@ Kural 25'in ("iki bariyer aynı sonucu üretirse test hangisinin
 tarayıcısı, taradığını ayrıca kanıtlamalıdır.** Sıfır bulgu "her şey
 yolunda" ile "hiçbir şey taranmadı" arasında ayrım yapmaz.
 
+### DAL DÜZENİ — `main` GÖVDE OLDU (2026-08-24)
+
+**ÖNCEKİ DURUM BİR RİSKTİ.** Canlı, `feature/hr-frontend-sync-20260726`
+dalından besleniyordu; `main` 2026-07-18'den beri ayrıydı ve
+**90 commit'lik paralel bir iş** taşıyordu (hepsi 2026-07-26, tek
+yazar). `origin/HEAD` **tanımsızdı**: yeni bir klon varsayılan olarak
+canlıda OLMAYAN koda düşüyordu.
+
+**YAPILAN (Seçenek 1):**
+1. `archive/procurement-20260726` dalı açıldı ve uzağa itildi —
+   `e3f68062`, eski `main` ile birebir aynı. **Önce arşiv, sonra
+   taşıma:** bu sıra sayesinde force push hiçbir şey kaybedemezdi.
+2. `origin/main` canlı commit'e (`47d1c40d`) getirildi.
+   `--force-with-lease=main:e3f68062` kullanıldı: uzaktaki `main`
+   beklenen SHA'da değilse push REDDEDİLİR, yani araya giren bir
+   iş sessizce ezilmez.
+3. `origin/HEAD` → `main` tanımlandı.
+4. Çalışma ağacı `main`'e alındı (iki dal aynı commit'te olduğu için
+   içerik değişmedi).
+
+**ARŞİVDE NE VAR:** 90 commit, 67 dosya. 40 `feat(procurement)`,
+9 `fix(hizir)`, 7 `feat(budget)`, 6 `feat(rfq)`, 5 `ci`,
+4 `feat(inventory)`, 4 `feat(documents)`.
+
+Canlıda **karşılığı olmayan** 8 denetleyici ve 8 migration:
+`HizirActionsController`, `ProcurementDocumentsController`,
+`ProcurementNotificationsController`, `ProcurementTechnicalController`,
+`ProjectBudgetsController`, `PurchaseOrderPdfController`,
+`RfqInvitationsController`, `SupplierPerformanceController`.
+Tabloların hiçbiri canlıda yok (`rfq_invitations`, `project_budgets`,
+`supplier_performances`, `procurement_documents`,
+`procurement_notifications`, `procurement_technical_evaluations`).
+
+Karşılığı **olan** 5 denetleyici gövdede farklı adla duruyor
+(`RfqsController`→`RfqController`,
+`ProcurementApprovalsController`→`ProcurementApprovalController`,
+`HizirController`, `ProcurementDashboardController`,
+`PurchaseOrders/PurchaseRequests/GoodsReceipts`) — aynı iş iki kez,
+paralel yazılmış.
+
+**GERİ ALMAK GEREKİRSE:** istenen modül arşiv dalından tek tek
+taşınır. Düz birleştirme ÖNERİLMEZ: çakışma yüzeyi 11 dosya
+(en ağırı `AppDbContext.cs`) ama asıl risk 8 migration'ın gövdenin
+5 haftalık zincirine sokulması ve `__EFMigrationsHistory` ile canlı
+şemanın uyuşmaması.
+
+**BUGÜN İKİ TARAFIN DA SATIN ALMASI KULLANILMIYOR:** `rfqs`,
+`rfq_suppliers`, `purchase_orders` hepsi **0 satır**. Yani çift
+yazımın bugün pratik bir kaybı yok.
+
+#### YAYIN DALI ARTIK SABİT
+
+`safe-deploy.sh` önce `git rev-parse --abbrev-ref HEAD` ile HANGİ
+DALDAYSA onu yayınlıyordu — dal sabitlemesi YOKTU. Yanlış bir
+`git checkout` ya da yarım kalmış bir deneme dalı, hiçbir engel
+olmadan canlıya çıkardı.
+
+Artık `DEPLOY_BRANCH` (varsayılan `main`) ile sabit ve
+`require_expected_branch` uyuşmazlıkta durduruyor. Bilinçli bir
+istisna hâlâ mümkün: `DEPLOY_BRANCH=<dal> safe-deploy.sh` — ama
+geçmek AÇIK bir hareket olmak zorunda.
+
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 
 **Neden R3 ikiye ayrıldı:** merdivende R3 "UserDataScope arayüzü" diye

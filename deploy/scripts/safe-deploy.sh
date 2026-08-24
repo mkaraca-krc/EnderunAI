@@ -34,6 +34,17 @@ BACKEND_ROLLBACK_DIR="${REPO_ROOT}/publish-rollback"
 FRONTEND_NEXT_DIR="${FRONTEND_DIR}/.next"
 FRONTEND_NEXT_ROLLBACK_DIR="${REPO_ROOT}/frontend-next-rollback"
 
+# YAYIN DALI SABİT.
+#
+# Bu betik önce `git rev-parse --abbrev-ref HEAD` ile HANGİ DALDAYSA
+# onu yayınlıyordu; dal sabitlemesi yoktu. Yanlış bir `git checkout`
+# ya da yarım kalmış bir deneme dalı, hiçbir engel olmadan canlıya
+# çıkardı.
+#
+# Ortam değişkeniyle geçilebilir (`DEPLOY_BRANCH=... safe-deploy.sh`)
+# ama geçmek BİLİNÇLİ bir hareket olsun diye varsayılan sabit.
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+
 ENV_FILE="/etc/enderunai/backend.env"
 LOG_FILE="/var/log/enderun-deploy.log"
 
@@ -354,10 +365,25 @@ rollback() {
     fi
 }
 
+# Yayın yalnız beklenen daldan yapılır.
+require_expected_branch() {
+    local current
+    current="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
+
+    if [ "$current" != "$DEPLOY_BRANCH" ]; then
+        fail "Yayın dalı '${DEPLOY_BRANCH}' ama çalışma ağacı '${current}' dalında. \
+Yanlış dalı canlıya çıkarmamak için durduruldu. Bilerek başka bir dal \
+yayınlanacaksa: DEPLOY_BRANCH=${current} $0"
+    fi
+
+    log "INFO" "Yayın dalı doğrulandı: ${current}"
+}
+
 main() {
     log "INFO" "===== safe-deploy başladı ====="
 
     require_clean_git_tree
+    require_expected_branch
 
     log "INFO" "git pull çalıştırılıyor (dal: $(git rev-parse --abbrev-ref HEAD))..."
     if ! git pull 2>&1 | tee -a "$LOG_FILE"; then
