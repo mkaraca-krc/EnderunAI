@@ -33,6 +33,47 @@ server {
         proxy_send_timeout 300s;
     }
 
+    # ---------------------------------------------------------------
+    # SIGNALR HUB — WEBSOCKET YÜKSELTMESİ
+    #
+    # NEDEN AYRI BLOK: aşağıdaki `location /api/` bloğu backend'e
+    # gidiyor ama Upgrade/Connection başlıklarını GEÇİRMİYOR. Hub o
+    # bloktan geçseydi WebSocket'e çıkamaz, SignalR long-polling'e
+    # düşerdi — çalışır ama gecikmeli ve bağlantı başına çok daha
+    # pahalı.
+    #
+    # ZAMAN AŞIMI YALNIZ BURADA UZUN: WebSocket bağlantısı boşta
+    # dururken canlıdır ve `/api/` genelindeki 300s onu her 5
+    # dakikada düşürürdü. Ama 3600s'i tüm `/api/` trafiğine vermek
+    # yanlış olurdu — takılan bir REST isteği bir saat kaynak tutar.
+    # Bu yüzden uzatma bu location'a KAPALI DEVRE.
+    #
+    # KİMLİK: token URL'e ya da sorgu dizesine YAZILMAZ. Tarayıcı
+    # WebSocket el sıkışmasında çerezleri kendiliğinden gönderir;
+    # backend `enderun_token` çerezini YALNIZ bu yol için okur.
+    # Sorgu dizesi kayda düşmesin diye erişim kaydı da kapalı.
+    location ^~ /api/hubs/ {
+        proxy_pass http://127.0.0.1:5155;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+
+        # Sorgu dizesi hiçbir koşulda kayda girmesin.
+        access_log off;
+
+        # Ara bellekleme kapalı: mesaj anında gitmeli.
+        proxy_buffering off;
+    }
+
     location /api/ {
         proxy_pass http://127.0.0.1:5155;
         proxy_http_version 1.1;
