@@ -1048,3 +1048,78 @@ hata sekiz gün canlıda durmuştu.
 `[Route]`/`[Http*]` niteliklerinden türetilen uç listesiyle
 karşılaştırmak. Şablon yollar (`tasks/${id}/approve`) sayfa
 bekçisindeki aynı normalleştirmeyle çözülebilir.
+
+---
+
+# YAPILMAMIŞ ÖZELLİKLER — KOD KALDIRILDI, NİYET KAYBOLMADI
+
+Aşağıdaki özelliklerin ön yüzü yazılmış ama backend ucu hiç
+yazılmamıştı. Kod kaldırıldı; **ne yapacakları burada duruyor** ki
+biri bir gün "bu neden yok" diye sorduğunda cevabı olsun.
+
+## AI Şantiye Analizi — proje detayında blok kaldırıldı
+
+- **Ekran:** `app/projeler/[id]/page.tsx`, "AI Şantiye Analizi" paneli
+- **Ne yapacaktı:** günlük saha raporlarına bakıp yapay zekâ
+  değerlendirmesi üretecek; her kalem `title`, `message`, `module`
+  taşıyordu (uyarı/öneri listesi)
+- **Eksik uç:** `GET projects/{id}/site-analysis` — backend'de hiç yok
+- **Bugün ne oluyordu:** panel her açılışta "AI analizi bulunamadı."
+  gösteriyordu. Hata görünmüyordu (`Promise.allSettled` yutuyordu),
+  yani kullanıcı boş bir kutuya bakıp sistemin bozuk olduğunu
+  düşünüyordu
+- **Kaldırıldığı commit:** bu paket (bkz. git log, "düzeltme/1,5-8")
+- **Geri getirmek için:** blok + `services/project-site-analysis.service.ts`
+  git geçmişinden alınır; uç yazıldığında çalışır
+
+## Proje AI Analizi — servis silindi (ekranda hiç yoktu)
+
+- **Ekran:** YOK — `services/project-ai-analysis.service.ts` hiçbir
+  yerden çağrılmıyordu
+- **Ne yapacaktı:** proje bazlı AI risk/öneri analizi
+- **Eksik uç:** `GET projects/{id}/ai-analysis`
+- **Not:** panodaki AI bloğu bu servisi KULLANMIYOR; o
+  `ai-analysis.service.ts` üzerinden `ai/dashboard` çağırıyor ve
+  ÇALIŞIYOR. İkisi karıştırılmamalı
+
+## Fiyat Farkı Hesaplama — iki servis işlevi silindi
+
+- **Ekran:** YOK — `calculate` ve `getCalculationByProgressPayment`
+  hiçbir yerden çağrılmıyordu
+- **Ne yapacaktı:** hakedişe endeks bazlı fiyat farkı hesaplayıp
+  sonucu hakedişe bağlayacaktı. Endeks ve profil tarafı
+  (`price-difference-indexes`, profiller) ÇALIŞIYOR ve ekranı var
+  (`app/fiyat-farki`); eksik olan yalnız HESAPLAMA
+- **Eksik uçlar:** `POST price-difference-calculations/calculate`,
+  `GET price-difference-calculations/progress-payment/{id}`
+- **Not:** `app/hakedis/[id]/page.tsx` içinde bu eksikliği açıklayan
+  bir yorum vardı; işlevler gidince yetim kalacağı için o da silindi
+
+## Hesap Planı Aktarımı — düğmeler DEVRE DIŞI (kaldırılmadı)
+
+- **Ekran:** `app/muhasebe/hesap-plani/aktar`
+- **Ne yapacak:** Excel/CSV'den hesap planı aktarımı. Ekran
+  `companyId`, `preview`, eşleme ve `file` gönderiyor; uçtan
+  `totalRowCount/validRowCount/createdCount/updatedCount/
+  unchangedCount/skippedCount/errorCount/errors[]` bekliyor —
+  yani önizleme modunda HİÇBİR ŞEY YAZMADAN doğrulama
+- **Eksik uç:** `POST accounting-accounts/import`
+- **Durum:** özellik TERK EDİLMEDİ, uç yazılacak. Düğmeler devre
+  dışı bırakıldı ve "Hazırlanıyor" etiketi kondu; önce 404
+  veriyorlardı
+- **Yazılırken karar gerekecek:** mevcut hesap kodu gelirse
+  güncellensin mi, üst hesap yoksa oluşturulsun mu, hangi izin
+  korusun
+
+## Depodan Zimmet — YAZILACAK (ayrı paket)
+
+- **Ekran:** `app/insan-kaynaklari/zimmetler`, "+ Depodan Zimmet"
+- **Eksik uçlar:** `POST hr/assets/from-inventory`,
+  `POST hr/assets/{id}/return-to-warehouse`
+- **Durum:** karar verildi, yazılacak. Denetim tamamlandı: model
+  (`HrAssetAssignment`) `InventoryItemId`, `WarehouseId`,
+  `IssueStockMovementId`, `ReturnStockMovementId` alanlarını ZATEN
+  taşıyor — yeni tablo gerekmiyor
+- **Ayrıca düzeltilecek:** "+ Depodan Zimmet" düğmesinin izin kapısı
+  YOK (`zimmetler/page.tsx:718-724`), yanındaki düğmede var
+

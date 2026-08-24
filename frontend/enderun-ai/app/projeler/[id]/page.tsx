@@ -40,11 +40,6 @@ import {
 } from "@/services/employer-portal.service";
 
 import {
-  projectSiteAnalysisService,
-  type ProjectSiteAnalysisResponse,
-} from "@/services/project-site-analysis.service";
-
-import {
   projectSiteService,
   type ProjectSiteListItem,
 } from "@/services/project-site.service";
@@ -228,9 +223,6 @@ export default function ProjectCenterPage() {
   const [emailLog, setEmailLog] = useState<EmployerPortalEmailLogItem[]>([]);
 
 
-  const [siteAnalysis, setSiteAnalysis] =
-    useState<ProjectSiteAnalysisResponse | null>(null);
-
   const [sites, setSites] = useState<ProjectSiteListItem[]>([]);
   const [breakdown, setBreakdown] = useState<ProjectCostBreakdown | null>(null);
 
@@ -323,7 +315,6 @@ export default function ProjectCenterPage() {
       const [
         profitabilityResult,
         dailyReportResult,
-        siteAnalysisResult,
         sitesResult,
         breakdownResult,
         laborBreakdownResult,
@@ -332,7 +323,6 @@ export default function ProjectCenterPage() {
       ] = await Promise.allSettled([
         projectProfitabilityService.getById(params.id),
         projectDailyReportsRollupService.getRecent(params.id),
-        projectSiteAnalysisService.getById(params.id),
         projectSiteService.getAll(params.id),
         projectCostService.getBreakdown(params.id),
         projectLaborCostService.getBreakdown(params.id),
@@ -357,16 +347,6 @@ export default function ProjectCenterPage() {
         console.warn(
           "Proje günlükleri yüklenemedi:",
           dailyReportResult.reason
-        );
-      }
-
-      if (siteAnalysisResult.status === "fulfilled") {
-        setSiteAnalysis(siteAnalysisResult.value);
-      } else {
-        setSiteAnalysis(null);
-        console.warn(
-          "AI şantiye analizi yüklenemedi:",
-          siteAnalysisResult.reason
         );
       }
 
@@ -1730,56 +1710,6 @@ export default function ProjectCenterPage() {
 
 
 
-          <section className="erp-panel erp-mt">
-
-            <div className="erp-panel-header">
-              <div>
-                <h2>AI Şantiye Analizi</h2>
-                <p>Günlük saha verilerine göre yapay zeka değerlendirmesi</p>
-              </div>
-            </div>
-
-
-            {!siteAnalysis ? (
-
-              <div className="erp-empty-state">
-                AI analizi bulunamadı.
-              </div>
-
-            ) : (
-
-              <div className="erp-project-list">
-
-                {siteAnalysis.items.map((item,index)=>(
-
-                  <div
-                    className="erp-project-list-item"
-                    key={index}
-                  >
-
-                    <div>
-                      <strong>
-                        {item.title}
-                      </strong>
-
-                      <span>
-                        {item.message}
-                      </span>
-                    </div>
-
-                    <span>
-                      {item.module}
-                    </span>
-
-                  </div>
-
-                ))}
-
-              </div>
-
-            )}
-
-          </section>
 
 
           <div className="enderun-project-module-grid">

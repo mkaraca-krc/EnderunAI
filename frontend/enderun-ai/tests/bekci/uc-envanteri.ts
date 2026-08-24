@@ -55,6 +55,34 @@ function segmentleriNormalize(yol: string): string {
     .join("/");
 }
 
+/**
+ * Ham yolu karşılaştırılabilir biçime getirir.
+ *
+ * Yer tutucu iki farklı şey olabilir: `/${id}/` bir SEGMENT'tir
+ * (`X` olur), `tasks${q}` ise bir SORGU EKİ'dir (atılır). Ayrım,
+ * yer tutucudan önceki karakterin `/` olup olmamasıdır.
+ */
+export function yoluNormalize(ham: string): string | null {
+  const { metin } = ifadeleriBol(ham);
+
+  let temiz = "";
+
+  for (let i = 0; i < metin.length; i++) {
+    const ch = metin[i];
+
+    if (ch !== "\u0000") {
+      temiz += ch;
+      continue;
+    }
+
+    if (i === 0 || metin[i - 1] === "/") temiz += "X";
+  }
+
+  temiz = temiz.split("?")[0].split("#")[0];
+
+  return temiz.length === 0 ? null : temiz;
+}
+
 export function backendDosyaSayisi(): number {
   return dosyalar(join(BACKEND_KOK, "Controllers"), /Controller\.cs$/).length;
 }
@@ -182,9 +210,31 @@ export function onyuzDosyaSayisi(): number {
 export function cagrilar(): Cagri[] {
   const bulunan: Cagri[] = [];
 
+  const acilmislar: { ham: string; yol: string }[] = [];
+
   for (const d of ["app", "components", "services", "lib"]) {
     for (const yol of dosyalar(join(ONYUZ_KOK, d), /\.(ts|tsx)$/)) {
       const kod = readFileSync(yol, "utf8");
+
+      /*
+       * DEĞİŞMEZ BİRLEŞİM TİPLİ PARAMETRELER AÇILIR.
+       *
+       * `function scheduleApi(path: "meetings" | "appointments")`
+       * içindeki `secretariat/${path}` statik olarak ÇÖZÜLEBİLİR:
+       * `path` yalnız iki değer alabiliyor ve ikisinin de ucu var.
+       * Açmasaydık üç çağrı "doğrulanamaz" diye istisna listesine
+       * girerdi — oysa doğrulanabilirler. Bekçinin kör noktası,
+       * gerçekten kör olduğu yerle sınırlı kalmalı.
+       */
+      const birlesimler = new Map<string, string[]>();
+      const birlesimKalip =
+        /\(\s*(\w+)\s*:\s*((?:"[^"]+"\s*\|\s*)+"[^"]+")\s*\)/g;
+
+      let b: RegExpExecArray | null;
+      while ((b = birlesimKalip.exec(kod)) !== null) {
+        const degerler = [...b[2].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+        if (degerler.length > 1) birlesimler.set(b[1], degerler);
+      }
 
       for (const kalip of KALIPLAR) {
         kalip.lastIndex = 0;
@@ -192,6 +242,15 @@ export function cagrilar(): Cagri[] {
         let m: RegExpExecArray | null;
         while ((m = kalip.exec(kod)) !== null) {
           let ham = m[1];
+
+          // Birleşim tipli değişkeni açıp HER değeri ayrı çağrı say.
+          const birlesimEslesme = /\$\{(\w+)\}/.exec(ham);
+          if (birlesimEslesme && birlesimler.has(birlesimEslesme[1])) {
+            for (const deger of birlesimler.get(birlesimEslesme[1])!) {
+              acilmislar.push({ ham: ham.split("${" + birlesimEslesme[1] + "}").join(deger), yol });
+            }
+            continue;
+          }
 
           // Doğrudan fetch: proxy önekini at.
           ham = ham.replace(/^\/api\/backend\//, "");
@@ -239,6 +298,19 @@ export function cagrilar(): Cagri[] {
         }
       }
     }
+  }
+
+  // Açılmış birleşimler normal çağrı gibi işlenir.
+  for (const { ham, yol } of acilmislar) {
+    const temiz = yoluNormalize(ham);
+    if (temiz === null) continue;
+
+    bulunan.push({
+      ham,
+      normal: `api/${segmentleriNormalize(temiz)}`,
+      dosya: relative(ONYUZ_KOK, yol),
+      hesaplanmis: false,
+    });
   }
 
   return bulunan;

@@ -320,25 +320,28 @@ export default function AccountingAccountImportPage() {
             </div>
           )}
 
+          {/*
+            DÜĞMELER DEVRE DIŞI — UÇ HENÜZ YOK.
+
+            `accounting-accounts/import` backend'de YAZILMAMIŞ. Düğmeler
+            açıkken kullanıcı dosyayı seçiyor, "Aktar" diyor ve 404
+            alıyordu — hiçbir şey yapmayan bir düğme, hata veren bir
+            düğmeden yalnız görünüşte iyidir.
+
+            KALDIRILMADI, DEVRE DIŞI BIRAKILDI: özellik terk edilmiş
+            değil, uç yazılacak (TEMIZLIK-TARAMASI.md). Düğme silinseydi
+            ekranın ne işe yaradığı da kaybolurdu.
+          */}
+          <p className="erp-status">
+            Hazırlanıyor — hesap planı aktarımı henüz açılmadı.
+          </p>
+
           <div className="erp-actions">
-            <button
-              type="button"
-              disabled={!canImport}
-              onClick={() => void runImport(true)}
-            >
-              {processing
-                ? "İşleniyor..."
-                : "Ön İzleme"}
+            <button type="button" disabled>
+              Ön İzleme
             </button>
 
-            <button
-              type="button"
-              disabled={
-                !canImport ||
-                !previewSuccessful
-              }
-              onClick={() => setConfirmingImport(true)}
-            >
+            <button type="button" disabled>
               Gerçek Aktarımı Başlat
             </button>
           </div>

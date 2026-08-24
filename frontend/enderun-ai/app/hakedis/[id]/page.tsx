@@ -45,12 +45,6 @@ export default function ProgressPaymentDetailPage() {
    * "Kesinleştir ve Fişleştir" ONAYLAMAYLA AYNI yetkide: uç ikisini de
    * hakedis.approve ile koruyor. Fişleştirme muhasebe kaydı üretse de
    * izin hakediş modülünde kalıyor.
-   *
-   * FİYAT FARKI HESAPLA DÜĞMESİ BİLİNÇLİ OLARAK KAPILANMADI: çağırdığı
-   * uç (`price-difference-calculations/calculate`) backend'de YOK, o
-   * yüzden türetilecek bir RequirePermission da yok. Uydurma bir kapı
-   * koymak, uç yazıldığında yanlış yetkiye çakılırdı.
-   * Bkz. TEMIZLIK-TARAMASI.md.
    */
   const actions = useModuleActions("hakedis");
 

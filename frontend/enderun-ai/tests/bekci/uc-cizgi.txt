@@ -2,21 +2,17 @@
 #
 # Biçim: dosya|normalize-yol|gerekçe
 #
-# Yeni çözülmeyen yol EKLENEMEZ. Buradaki bir satır düzeltilirse
-# SATIR SİLİNİR ve dosya küçülür. Çift yönlü.
+# BU SINIFTA BORÇ TUTULMAZ. Buradaki her satır, UCU YAZILACAK bir
+# özelliğe aittir ve uç yazılınca satır SİLİNİR. "Bir gün bakarız"
+# diye satır eklenmez: kırık bir çağrı, kullanıcının bastığı ölü bir
+# düğmedir.
 #
-# İLK SEKİZİ GERÇEK KIRIK ÇAĞRIDIR — kullanıcı o ekranda 404 alır.
-# Mehmet Karacabey'in kararını bekliyor: uçları yazmak mı, çağrıları
-# kaldırmak mı, yoksa çizgi olarak tutmak mı.
+# Kaldırılan özelliklerin niyeti TEMIZLIK-TARAMASI.md'de
+# "YAPILMAMIŞ ÖZELLİKLER" bölümünde duruyor.
+#
+# Çift yönlü: yeni satır eklenemez, düzelen satır kalamaz.
 
-app/muhasebe/hesap-plani/aktar/page.tsx|api/accounting-accounts/import|UÇ YOK — backend'in hiçbir yerinde "accounting-accounts/import" geçmiyor
-services/hr-asset.service.ts|api/hr/assets/from-inventory|UÇ YOK — "from-inventory" backend'de yok
-services/hr-asset.service.ts|api/hr/assets/X/return-to-warehouse|UÇ YOK — "return-to-warehouse" backend'de yok
-services/payroll-payment-account.service.ts|api/bank-accounts|YANLIŞ YOL — gerçek uç api/company-settings/bank-accounts (CompanySettingsController.cs:129)
-services/price-difference.service.ts|api/price-difference-calculations/calculate|UÇ YOK — "price-difference-calculations" backend'de yok
-services/price-difference.service.ts|api/price-difference-calculations/progress-payment/X|UÇ YOK — aynı denetleyici hiç yazılmamış
-services/project-ai-analysis.service.ts|api/projects/X/ai-analysis|UÇ YOK — "ai-analysis" backend'de yok
-services/project-site-analysis.service.ts|api/projects/X/site-analysis|UÇ YOK — "site-analysis" backend'de yok
-services/secretariat-planner.service.ts|api/secretariat/X|AYRIŞTIRICI SINIRI — ${path} ORTA segmentte ve kaynak adını taşıyor; statik olarak açılamıyor
-services/secretariat-planner.service.ts|api/secretariat/X/X/status|AYRIŞTIRICI SINIRI — aynı ${path}
-services/secretariat-planner.service.ts|api/secretariat/X/X|AYRIŞTIRICI SINIRI — aynı ${path}
+app/muhasebe/hesap-plani/aktar/page.tsx|api/accounting-accounts/import|UÇ YAZILACAK (karar verildi). Düğmeler DEVRE DIŞI + "Hazırlanıyor" etiketi, artık 404 vermiyor.
+services/hr-asset.service.ts|api/hr/assets/from-inventory|UÇ YAZILACAK — "Depodan Zimmet" paketi (denetim tamam, model hazır)
+services/hr-asset.service.ts|api/hr/assets/X/return-to-warehouse|UÇ YAZILACAK — aynı paketin iade tarafı
+services/payroll-payment-account.service.ts|api/bank-accounts|BLOKLU — "yol yanlış" öncülü ÖLÇÜMLE YANLIŞLANDI: banka hesapları için hiçbir yolda GET ucu YOK. Karar bekliyor.

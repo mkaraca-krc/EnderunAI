@@ -269,23 +269,4 @@ export const priceDifferenceService = {
     );
   },
 
-  calculate(
-    request: CalculatePriceDifferenceRequest
-  ) {
-    return apiClient<PriceDifferenceCalculation>(
-      "price-difference-calculations/calculate",
-      {
-        method: "POST",
-        body: request,
-      }
-    );
-  },
-
-  getCalculationByProgressPayment(
-    progressPaymentId: string
-  ) {
-    return apiClient<PriceDifferenceCalculation>(
-      `price-difference-calculations/progress-payment/${progressPaymentId}`
-    );
-  },
 };
