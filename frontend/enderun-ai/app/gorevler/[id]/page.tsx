@@ -108,6 +108,7 @@ export default function WorkTaskDetailPage() {
   const yapan = item?.assignedToUserId === benim;
   const gonderen = item?.assignedByUserId === benim;
   const yonetebilir = taskActions.can("manage");
+  const gorebilir = taskActions.can("view");
 
   return (
     <ErpShell
@@ -273,15 +274,24 @@ export default function WorkTaskDetailPage() {
           </section>
 
           <div className="mt-5 flex flex-col gap-5">
+            {/*
+              KARAR AÇIKÇA VERİLİYOR — varsayılana bırakılmıyor.
+              `tasks.view` yalnız 2 rolde; ekranın rota kapısı da aynı
+              izne bağlı, yani bu kullanıcı zaten buraya gelemezdi.
+              Yine de karar burada yazılı: rota kuralı bir gün
+              gevşetilirse bölüm kendiliğinden kapansın.
+            */}
             <AttachmentPanel
               entityType="WorkTask"
               entityId={item.id}
+              canRead={gorebilir}
               canUpload={yonetebilir}
             />
 
             <CommentThread
               entityType="WorkTask"
               entityId={item.id}
+              canRead={gorebilir}
               currentUserId={benim}
             />
           </div>

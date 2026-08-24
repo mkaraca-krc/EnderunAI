@@ -30,6 +30,22 @@ type Props = {
   entityType: CollaborationEntityType;
   entityId: string;
 
+  /**
+   * OKUMA İZNİ — ZORUNLU, VARSAYILANI YOK.
+   *
+   * `false` ise bileşen HİÇ RENDER EDİLMEZ ve hiçbir istek atmaz.
+   * Yorum kapısı üç tipte ekran kapısından DAR: ekranı açabilen ama
+   * yorum izni olmayan kullanıcı, 403 ya da boş bir hata kutusu
+   * GÖRMEMELİ — olmayan bir bölümün hata vermesi, kullanıcıya
+   * bozulmuş bir ekran gösterir.
+   *
+   * ZORUNLU olmasının sebebi: varsayılanı `true` olsaydı yeni bir
+   * ekran bileşeni takarken kararı ATLAMAK mümkün olurdu ve atlandığı
+   * kimseye görünmezdi. TypeScript şimdi her takma yerinde açık bir
+   * karar istiyor.
+   */
+  canRead: boolean;
+
   /** Oturum sahibinin kimliği — "bu yorum benim mi" kararı için. */
   currentUserId?: string | null;
 
@@ -38,13 +54,30 @@ type Props = {
    * ekranındır: bileşen izin bilmez.
    */
   canWrite?: boolean;
+
+  /**
+   * GÖRÜNÜRLÜK UYARISI — yazan kişi kimin okuyacağını bilsin.
+   *
+   * Yorum, kaydı görebilen HERKESE açık; bu, yazarken bilinmezse
+   * kişi kapalı sandığı bir yere açık bir şey yazar. Uyarı ipucu
+   * balonu değil, kutunun ÜSTÜNDE düz metin: balon, yazmadan önce
+   * okunmayan tek yerdir.
+   *
+   * Varsayılan genel; görünürlüğü başka bir modülden MİRASLA gelen
+   * tipler kendi metnini geçer. Örnek: çek yorumları `finance.view`
+   * ile korunuyor, yani "çekleri görebilen herkes" — "bu kaydı
+   * görebilen herkes" cümlesi orada eksik kalırdı.
+   */
+  gorunurlukNotu?: string;
 };
 
 export function CommentThread({
   entityType,
   entityId,
   currentUserId,
+  canRead,
   canWrite = true,
+  gorunurlukNotu = "Bu yorumu, kaydı görebilen herkes görür.",
 }: Props) {
   const [items, setItems] = useState<CommentItem[]>([]);
   const [cursor, setCursor] = useState<{ createdAtUtc: string; id: string } | null>(null);
@@ -77,6 +110,9 @@ export function CommentThread({
   }, []);
 
   const iptalRef = useRef(0);
+
+  // İZİN YOKSA HİÇBİR ŞEY YOK — istek de yok, kutu da yok.
+  const okuyabilir = canRead;
 
   const yukle = useCallback(
     async (devam = false) => {
@@ -116,9 +152,9 @@ export function CommentThread({
     setItems([]);
     setCursor(null);
     setHasMore(false);
-    void yukle(false);
+    if (okuyabilir) void yukle(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityType, entityId]);
+  }, [entityType, entityId, okuyabilir]);
 
   async function gonder() {
     const metin = taslak.trim();
@@ -177,6 +213,8 @@ export function CommentThread({
     return simdi - new Date(item.createdAtUtc).getTime() < DUZENLEME_PENCERESI_MS;
   }
 
+  if (!okuyabilir) return null;
+
   return (
     <section className="erp-panel" aria-label="Yorumlar">
       <header className="erp-panel-header">
@@ -185,6 +223,7 @@ export function CommentThread({
 
       {canWrite && (
         <div className="erp-comment-compose">
+          <p className="erp-comment-visibility">{gorunurlukNotu}</p>
           <textarea
             value={taslak}
             onChange={(e) => setTaslak(e.target.value)}

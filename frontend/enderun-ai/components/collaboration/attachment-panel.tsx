@@ -27,11 +27,32 @@ type Props = {
   entityType: CollaborationEntityType;
   entityId: string;
 
+  /**
+   * OKUMA İZNİ — ZORUNLU, VARSAYILANI YOK.
+   *
+   * `false` ise bileşen HİÇ RENDER EDİLMEZ ve hiçbir istek atmaz.
+   * Yorum kapısı üç tipte ekran kapısından DAR: ekranı açabilen ama
+   * yorum izni olmayan kullanıcı, 403 ya da boş bir hata kutusu
+   * GÖRMEMELİ — olmayan bir bölümün hata vermesi, kullanıcıya
+   * bozulmuş bir ekran gösterir.
+   *
+   * ZORUNLU olmasının sebebi: varsayılanı `true` olsaydı yeni bir
+   * ekran bileşeni takarken kararı ATLAMAK mümkün olurdu ve atlandığı
+   * kimseye görünmezdi. TypeScript şimdi her takma yerinde açık bir
+   * karar istiyor.
+   */
+  canRead: boolean;
+
   /** Yükleme kapalıysa blok salt okunur. İzin kararı ekranındır. */
   canUpload?: boolean;
 };
 
-export function AttachmentPanel({ entityType, entityId, canUpload = true }: Props) {
+export function AttachmentPanel({
+  entityType,
+  entityId,
+  canRead,
+  canUpload = true,
+}: Props) {
   const [items, setItems] = useState<AttachmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,8 +75,9 @@ export function AttachmentPanel({ entityType, entityId, canUpload = true }: Prop
   }, [entityType, entityId]);
 
   useEffect(() => {
-    void yukle();
-  }, [yukle]);
+    // İZİN YOKSA İSTEK DE YOK.
+    if (canRead) void yukle();
+  }, [yukle, canRead]);
 
   async function gonder(dosya: File | undefined | null) {
     if (!dosya || yukleniyor) return;
@@ -82,6 +104,8 @@ export function AttachmentPanel({ entityType, entityId, canUpload = true }: Prop
       if (kameraRef.current) kameraRef.current.value = "";
     }
   }
+
+  if (!canRead) return null;
 
   return (
     <section className="erp-panel" aria-label="Ek dosyalar">

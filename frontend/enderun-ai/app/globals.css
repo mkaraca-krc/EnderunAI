@@ -4424,6 +4424,16 @@ body {
   margin-bottom: 18px;
 }
 
+/*
+   GÖRÜNÜRLÜK UYARISI — kutunun üstünde, düz metin.
+   İpucu balonu olsaydı yazmadan önce okunmazdı.
+*/
+.erp-comment-visibility {
+  margin: 0;
+  font-size: 12px;
+  color: var(--erp-muted);
+}
+
 .erp-comment-compose textarea {
   width: 100%;
   padding: 10px 12px;

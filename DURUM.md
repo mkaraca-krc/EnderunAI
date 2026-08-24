@@ -921,6 +921,171 @@ bugün 166 hatayla düşüyor. Lint deploy kapısı DEĞİL — safe-deploy
 `npm run test` + `npm run build` koşuyor. Doğru çözüm bir veri çekme
 katmanı; M1/6'nın kapsamı değil, **ayrı paket olarak konuşulmalı**.
 
+### M1/7-0 — YORUM KAPISI: TİP BAŞINA YETKİ (2026-08-24)
+
+**KAPATILAN AÇIK:** `CollaborationController` yalnızca `[Authorize]`
+taşıyordu ve kapısı (`ErisimKontroluAsync`) yalnızca VERİ KAPSAMI
+bakıyordu — dosyada hiç `RequirePermission` yoktu. Sonuç: hakediş,
+çek ya da teklif görme izni OLMAYAN bir kullanıcı, şirket kapsamı
+yettiği sürece o kayıtların yorumunu okuyabiliyor ve ek dosyasını
+indirebiliyordu; ekranı hiç açmadan, doğrudan uca giderek.
+
+Açık canlıda ölçüldü: aktif 4 kullanıcının HEPSİ global veri
+kapsamlı ama izinleri farklı (Admin / Araç Sorumlusu / Teknik Ofis /
+çoklu rol). "Hepsi Admin olduğu için güvendeyiz" varsayımı YANLIŞTI.
+Sızan veri olmadı çünkü o gün `task_comments` ve `attachments`
+**0 satırdı** — kapı açıktı ama oda boştu. M1/7 tam da odayı
+dolduran paket.
+
+#### YETKİ TABLOSU — YEDİ TİP
+
+| Tip | Ekranın bugünkü kapısı | Yorum kapısı | Rol sayısı |
+|---|---|---|---|
+| `WorkTask` | `tasks.view` | `tasks.view` | — |
+| `Project` | `projects.view` | `projects.view` | 12/15 |
+| `ProgressPayment` | `hakedis.view` | `hakedis.view` | 5/15 |
+| `PurchaseRequest` | `purchasing.view` | **`purchasing-requests.view`** | 5/15 |
+| `GoodsReceipt` | `inventory.view` | **`purchasing-receipts.view`** | 5/15 |
+| `Offer` | `projects.view` | **`offer_tracking.view`** | 5/15 |
+| `Cheque` | `finance.view` | `finance.view` | 5/15 |
+
+**ÜÇ YERDE EKRAN KAPISINDAN BİLEREK AYRILDI** (kalın olanlar):
+
+- **Teklif:** ekran `projects.view` ile açılıyor ve bu izin 15 rolün
+  12'sinde var. Teklif yorumunu buna bağlamak, fiyat pazarlığı
+  tartışmasını neredeyse herkese açmak olurdu.
+- **Mal kabul:** ekran genel `/depo` kuralına düşüp `inventory.view`
+  ile açılıyor. Mal kabul tartışması bir depo listesi değil,
+  tedarikçi ve eksik teslim konusu.
+- **Satın alma talebi:** `purchasing.view` MODÜL kapısı,
+  `purchasing-requests.view` KAYIT kapısı. Yorum kayda ait.
+
+**İLKE:** ekranı açabilmek, TEK BİR KAYDIN tartışmasını okuyabilmek
+demek DEĞİLDİR. Ekran kapısı gevşekse onu kopyalamak hatayı çoğaltır.
+
+#### AÇIK BORÇ — ÇEK YORUMLARI
+
+Çek yorumları `finance.view` ile korunuyor; Teknik Ofis ve Teknik
+Koordinatör de okuyabiliyor. **Tetikleyici:** `cheque.view` anahtarı
+açıldığında çek yorumları Finans + Admin + GM'e daraltılacak.
+
+Sebep: `cheque.view` diye bir izin YOK (yalnız `cheque.edit` ve
+`cheque.void-closed` var) ve M1/7 içinde yeni anahtar açılmayacak
+(karar). Anahtar uydurmak yerine mevcut en yakın sınır seçildi.
+
+#### AÇIK BORÇ — `tasks.view` YALNIZ 2 ROLDE
+
+`tasks.view` **15 rolün 2'sinde** var: Admin ve Genel Müdür.
+Aktif 4 kullanıcının 3'ünde YOK (vtepe/Araç Sorumlusu,
+smemis/Teknik Ofis, uakkaya/çoklu rol).
+
+**BU BİLİNÇLİ BİR KARAR DEĞİL, YAN ETKİ.** `RoleCatalog`, tüm izin
+anahtarlarını yansımayla toplayıp Admin ve Genel Müdür'e veriyor
+(`K`). Yani koda eklenen HER yeni anahtar yalnız o iki role düşüyor;
+başka bir rol onu kendi listesinde tek tek saymadıkça almıyor. M1
+paketlerinde `tasks.view` eklendi ama rol dağıtımı yapılmadı.
+
+**SONUÇ:** M1 iş akışı çekirdeği bugün 13 role görünmüyor —
+`/gorevler` rota kapısı da `tasks.view`, `WorkTasksController`'ın
+4 ucu da. Görev sistemi "herkes iş alsın" diye kurulduğuna göre bu
+bir dağıtım eksiği.
+
+**YORUM KAPISI BUNU KÖTÜLEŞTİRMİYOR:** yorum da `tasks.view`
+istiyor, yani ekranı açabilen herkes yorumu da okuyabiliyor. Kapı
+yeni bir kısıt getirmiyor, mevcut kısıtla aynı hizada.
+
+**Tetikleyici:** `tasks.view` rollere dağıtıldığında yorum
+görünürlüğü de kendiliğinden genişler; ayrıca bir iş gerekmiyor.
+Dağıtım AYRI BİR KARAR ve bu pakete girmedi.
+
+**Bugün canlıda `task_comments` 0 satır** — okunabilecek yorum yok.
+
+#### AÇIK BORÇ — `Project` YORUMLARI GENİŞ (`projects.view`, 12/15)
+
+Teklif için 12/15'i geniş bulup reddettim ama `Project` için aynı
+anahtarı kabul ettim. Fark bilinçli:
+
+- **Teklifte daha dar, AMACA UYGUN bir anahtar VARDI**
+  (`offer_tracking.view`, 5/15). Kullanmamak tembellik olurdu.
+- **Projede yok.** Mevcut anahtarlar: `projects.view` (12),
+  `projects.manage` (4), `projects.create/edit/delete`.
+  `projects.manage` bir YAZMA anahtarı; onu okuma kapısı yapmak,
+  `cheque.view`'i uydurmakla aynı kategoride bir hata olurdu —
+  anahtarın anlamını çağrı yerinde yeniden tanımlamak.
+
+Proje yorumu sözleşme, gecikme ve taşeron tartışması taşıyabilir;
+Sekreterya, İK Sorumlusu, İSG Sorumlusu ve Araç Sorumlusu bunu
+okuyabilecek. **Bugün pratik etki YOK:** hiçbir ekran `Project`
+yorumunu takmıyor ve M1/7'nin beş hedefinde de yok.
+
+**Tetikleyici:** `Project` yorumu bir ekrana takılmadan ÖNCE karar
+verilecek — ya `project_discussion.view` gibi amaca uygun yeni bir
+anahtar açılacak, ya da geniş kalacağı açıkça onaylanacak.
+Takıldığında yorum kutusuna görünürlük notu geçilecek:
+"Bu yorumu, projeyi görebilen herkes görür."
+
+#### GÖRÜNÜRLÜK KARARI GERİYE DÖNÜK UYGULANIR
+
+Yetki OKUMA ANINDA değerlendirilir, yoruma yazılmaz. Görünürlük
+ileride daraltılırsa mevcut yorumlar da kapanır.
+
+Gerekçe: görünürlüğü yoruma damgalarsak kural iki yerde yaşar ve
+ayrışır — `route-permissions` kopyası tam olarak böyle ayrışmıştı.
+Daha önemlisi, birinin çek erişimini kaybetmesinin sebebi genellikle
+artık çek bilgisi görmemesi gerektiğidir; geçmiş tartışmayı görmeye
+devam etmesi, daraltmanın engellemek istediği şeyi sızdırır.
+**Bundan çıkan kural: görünürlük kararı yorum satırına asla
+önbelleklenmez/denormalize edilmez.**
+
+#### KAPALI TARAFA DÜŞER — VE BU BİR TEST AÇIĞI DOĞURDU
+
+Tabloda karşılığı olmayan tip REDDEDİLİR. Varsayılan "izin ver"
+olsaydı, yeni tip ekleyip tabloyu unutan kişi o tipi herkese açardı.
+
+**SONDA BİR AÇIK GÖSTERDİ:** kapalı-taraf varsayılanı önce yalnız
+UÇTAN sınanıyordu ve "varsayılanı serbest yap" sabotajı testleri
+KIRMADI. Sebep: bilinmeyen tipi `EntityContextResolver` de
+reddediyor ve uç yine 404 dönüyordu — iki bariyer aynı sonucu
+verince hangisinin çalıştığı ölçülemiyordu. Asıl tehlike ise
+`SupportedTypes`'a tip eklenip tablonun unutulmasıydı; o durumda
+çözümleyici tipi TANIR ve serbest varsayılan kapıyı ardına kadar
+açardı.
+
+Düzeltme: karar saf bir fonksiyona çıkarıldı
+(`CollaborationPermissions.ErisebilirMi(tip, izinVarMi)`) ve test
+`izinVarMi: _ => true` ile — yani TÜM İZİNLERE SAHİP bir kullanıcı
+taklit edilerek — koşuyor. Reddin sebebi yetersiz izin olamaz; tek
+sebep tipin tabloda olmamasıdır. Sabotaj tekrarlandı, artık 4 test
+kırmızıya dönüyor.
+
+**GENEL KURAL (§5 kural 23'ün akrabası):** iki bağımsız bariyer aynı
+gözlemlenebilir sonucu üretiyorsa, o sonucu ölçen test hangi
+bariyerin çalıştığını KANITLAMAZ. Sınanacak bariyer, diğerini
+devre dışı bırakan bir yolla ayrı ayrı ölçülmelidir.
+
+#### EKRAN BOZULMASIN — `canRead` ZORUNLU PROP
+
+Yorum kapısı üç tipte ekran kapısından DAR. Ekranı açabilen ama
+yorum izni olmayan kullanıcı 403 ya da boş bir hata kutusu
+GÖRMEMELİ: olmayan bir bölümün hata vermesi, kullanıcıya bozulmuş
+bir ekran gösterir ve "sistem çalışmıyor" izlenimi bırakır.
+
+`CommentThread` ve `AttachmentPanel` artık `canRead` alıyor;
+`false` ise **hiç render edilmiyor ve hiçbir istek atmıyor**.
+Prop ZORUNLU — varsayılanı `true` olsaydı yeni bir ekran takarken
+kararı atlamak mümkün olurdu ve atlandığı kimseye görünmezdi.
+TypeScript şimdi her takma yerinde açık karar istiyor.
+
+`tests/collaboration-mount-contract.test.ts` bir adım ötesini
+tutuyor: kararın SABİT `true` ile geçilmediğini. Sabit `true`,
+zorunlu prop'u sağlar ama kararı vermez — kapıyı açık bırakmanın en
+kolay yolu tam olarak budur. Sonda ile doğrulandı.
+
+#### YETKİSİZE 403 DEĞİL 404
+
+403 "bu kayıt VAR ama sana kapalı" der ve kayıt kimliği deneyerek
+varlık taraması yapmayı mümkün kılar.
+
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 
 **Neden R3 ikiye ayrıldı:** merdivende R3 "UserDataScope arayüzü" diye
@@ -3023,6 +3188,29 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
       d) Sabotajın "indiğinin" kanıtı `diff -q` ile ESKİ YEDEĞE
          karşı alınır ve yedeğin TEMİZ olduğu ayrıca bilinmelidir —
          kirli bir yedeğe karşı alınan diff hiçbir şey söylemez.
+
+25. **İKİ BAĞIMSIZ BARİYER AYNI SONUCU ÜRETİYORSA, O SONUCU ÖLÇEN
+    TEST HANGİ BARİYERİN ÇALIŞTIĞINI KANITLAMAZ.** 2026-08-24,
+    M1/7-0. Yorum kapısının "bilinmeyen tip → REDDET" varsayılanını
+    uçtan sınıyordum. Sabotaj — varsayılanı serbest yapmak — testi
+    KIRMADI, çünkü bilinmeyen tipi `EntityContextResolver` de
+    reddediyor ve uç yine 404 dönüyordu. İki bariyer aynı gözlemi
+    ürettiği için test, sınadığını sandığı şeyi hiç ölçmüyordu.
+
+    Asıl tehlike gözden kaçıyordu: biri
+    `EntityContextResolver.SupportedTypes`'a tip ekleyip izin
+    tablosunu unutursa, çözümleyici tipi TANIR — ikinci bariyer
+    devreye girmez — ve serbest varsayılan kapıyı ardına kadar açar.
+
+    **KURAL:** sınanacak bariyer, diğerini NÖTRLEYEN bir yolla ayrı
+    ölçülür. Karar saf bir fonksiyona çıkarılır ve test, diğer
+    bariyeri etkisiz kılan bir girdiyle koşar — burada
+    `ErisebilirMi(tip, izinVarMi: _ => true)`, yani TÜM İZİNLERE
+    SAHİP taklit kullanıcı: reddin sebebi yetersiz izin OLAMAZ, tek
+    sebep tipin tabloda olmamasıdır.
+
+    Kural 23'ün akrabası: orada hata YUTULUYORDU, burada sonuç
+    GÖLGELENİYOR. İkisinde de "test yeşil" bilgi taşımıyor.
 
 ---
 

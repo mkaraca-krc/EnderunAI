@@ -75,18 +75,59 @@ public sealed class CollaborationController(
         throw new UnauthorizedAccessException("Kullanıcı veri kapsamı bulunamadı.");
 
     /// <summary>
-    /// Kayda erişim kontrolü — TEK NOKTA.
+    /// YORUM KAPISI — TEK NOKTA.
     ///
-    /// Yorum listesi, yorum yazma, ek yükleme ve EK İNDİRME aynı
-    /// kapıdan geçiyor. İndirme atlanırsa sızıntı ekrandan dosyaya
-    /// taşınır; G3/1b'de dışa aktarım uçlarında tam olarak bu
-    /// yaşandı.
+    /// Yorum listesi, yorum yazma, düzenleme, gizleme, ek listeleme,
+    /// ek yükleme ve EK İNDİRME aynı kapıdan geçer. İndirme atlanırsa
+    /// sızıntı ekrandan dosyaya taşınır; G3/1b'de dışa aktarım
+    /// uçlarında tam olarak bu yaşandı.
+    ///
+    /// ÜÇ ŞART BİRLİKTE ARANIR:
+    ///
+    ///   1. KAYIT VAR MI — `EntityContextResolver` tipi çözebiliyor
+    ///      ve kayıt bulunuyor mu.
+    ///   2. KAPSAM — kaydın şirketi/projesi kullanıcının veri
+    ///      kapsamında mı.
+    ///   3. İZİN — kullanıcı bu TİPİN yorumunu görmeye yetkili mi
+    ///      (<see cref="CollaborationPermissions"/>).
+    ///
+    /// ÜÇÜNCÜSÜ SONRADAN EKLENDİ VE EKSİKLİĞİ BİR AÇIKTI. Kapı
+    /// yalnızca KAPSAM bakıyordu; denetleyicide hiç
+    /// `RequirePermission` yok. Sonuç: hakediş, çek ya da teklif
+    /// görme izni OLMAYAN bir kullanıcı, şirket kapsamı yettiği
+    /// sürece o kayıtların yorumunu okuyabiliyor ve ek dosyasını
+    /// indirebiliyordu — ekranı hiç açmadan, doğrudan uca giderek.
+    ///
+    /// Açık canlıda ölçüldü: aktif 4 kullanıcının HEPSİ global veri
+    /// kapsamlı ama izinleri farklı (Admin, Araç Sorumlusu, Teknik
+    /// Ofis, çoklu rol). Yani "hepsi Admin" olduğu için güvendeydik
+    /// varsayımı YANLIŞTI. Sızan veri olmadı çünkü o gün
+    /// `task_comments` ve `attachments` 0 satırdı — kapı açıktı ama
+    /// oda boştu.
+    ///
+    /// KİMLİK SIZDIRMAZ: yetkisiz erişimde 403 değil `null` dönüyor
+    /// ve çağıran 404 basıyor. 403, "bu kayıt VAR ama sana kapalı"
+    /// demektir; kayıt kimliğini deneyerek varlık taraması yapmayı
+    /// mümkün kılar.
     /// </summary>
-    private async Task<EntityContext?> ErisimKontroluAsync(
+    private async Task<EntityContext?> CanCommentAsync(
         string entityType,
         Guid entityId,
         CancellationToken cancellationToken)
     {
+        /*
+         * İZİN ÖNCE — veritabanına gitmeden.
+         *
+         * Yetkisiz kullanıcı için sorgu atmak gereksiz iş; ayrıca
+         * kapı sırasının başında olması, bir gün kapsam kontrolü
+         * yanlışlıkla gevşetilirse iznin hâlâ tutmasını sağlar.
+         *
+         * Tanımsız tip `null` izin döndürür ve burada REDDEDİLİR —
+         * tablo kapalı tarafa düşüyor.
+         */
+        if (!CollaborationPermissions.ErisebilirMi(entityType, currentUser.HasPermission))
+            return null;
+
         var scope = await GetScopeAsync(cancellationToken);
 
         var baglam = await entityResolver.ResolveAsync(
@@ -165,7 +206,7 @@ public sealed class CollaborationController(
         CancellationToken cancellationToken)
     {
         // KAPSAM KONTROLÜ BİR KEZ — satır başına değil.
-        var baglam = await ErisimKontroluAsync(entityType, entityId, cancellationToken);
+        var baglam = await CanCommentAsync(entityType, entityId, cancellationToken);
 
         if (baglam is null)
             return NotFound(new { message = "Kayıt bulunamadı." });
@@ -229,7 +270,7 @@ public sealed class CollaborationController(
         if (string.IsNullOrWhiteSpace(metin))
             return BadRequest(new { message = "Yorum metni zorunludur." });
 
-        var baglam = await ErisimKontroluAsync(
+        var baglam = await CanCommentAsync(
             request.EntityType, request.EntityId, cancellationToken);
 
         if (baglam is null)
@@ -313,7 +354,7 @@ public sealed class CollaborationController(
         if (yorum is null)
             return NotFound(new { message = "Yorum bulunamadı." });
 
-        if (await ErisimKontroluAsync(
+        if (await CanCommentAsync(
                 yorum.EntityType, yorum.EntityId, cancellationToken) is null)
             return NotFound(new { message = "Kayıt bulunamadı." });
 
@@ -366,7 +407,7 @@ public sealed class CollaborationController(
         if (yorum is null)
             return NotFound(new { message = "Yorum bulunamadı." });
 
-        if (await ErisimKontroluAsync(
+        if (await CanCommentAsync(
                 yorum.EntityType, yorum.EntityId, cancellationToken) is null)
             return NotFound(new { message = "Kayıt bulunamadı." });
 
@@ -395,7 +436,7 @@ public sealed class CollaborationController(
         CancellationToken cancellationToken)
     {
         // KAPSAM KONTROLÜ BİR KEZ — dosya başına değil.
-        if (await ErisimKontroluAsync(entityType, entityId, cancellationToken) is null)
+        if (await CanCommentAsync(entityType, entityId, cancellationToken) is null)
             return NotFound(new { message = "Kayıt bulunamadı." });
 
         // İkinci savunma hattı — bkz. yorum listesi.
@@ -420,7 +461,7 @@ public sealed class CollaborationController(
         IFormFile file,
         CancellationToken cancellationToken)
     {
-        var baglam = await ErisimKontroluAsync(entityType, entityId, cancellationToken);
+        var baglam = await CanCommentAsync(entityType, entityId, cancellationToken);
 
         if (baglam is null)
             return NotFound(new { message = "Kayıt bulunamadı." });
@@ -479,7 +520,7 @@ public sealed class CollaborationController(
         if (ek is null)
             return NotFound(new { message = "Ek bulunamadı." });
 
-        if (await ErisimKontroluAsync(
+        if (await CanCommentAsync(
                 ek.EntityType, ek.EntityId, cancellationToken) is null)
             return NotFound(new { message = "Ek bulunamadı." });
 
