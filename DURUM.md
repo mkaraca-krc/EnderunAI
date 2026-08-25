@@ -1284,6 +1284,65 @@ Artık `DEPLOY_BRANCH` (varsayılan `main`) ile sabit ve
 istisna hâlâ mümkün: `DEPLOY_BRANCH=<dal> safe-deploy.sh` — ama
 geçmek AÇIK bir hareket olmak zorunda.
 
+## YEDEK VE DB ERİŞİMİ (2026-08-25)
+
+#### YEDEK ŞİFRELEMESİ — MEKANİZMA KANITLANDI
+
+`enderun-backup.sh` üç yedeği de `gpg --symmetric --cipher-algo
+AES256` ile şifreliyor. Anahtar `/etc/enderunai/backup-key`
+dosyasından okunuyor; **betik anahtar ÜRETMEZ ve YAZMAZ.**
+
+**ANAHTAR YOKSA YEDEK YİNE ALINIR** — şifresiz kalır ve ERROR olarak
+kayda düşer. 2026-08 başında tablo sahipliği yüzünden sistem
+saatlerce yedeksiz kaldı ve kimse fark etmedi; şifreleme uğruna
+yedeğin KENDİSİNİ kaybetmek daha büyük bir risk olurdu.
+
+**GERİ YÜKLEME PROVASI YAPILDI (kabul ölçütü):**
+
+| Adım | Sonuç |
+|---|---|
+| Gerçek dump geçici anahtarla şifrelendi | AES-256, PGP simetrik |
+| Çözüldü | `sha256sum` orijinalle **birebir aynı** |
+| Ayrı veritabanına `pg_restore` | **0 hata** |
+| Satır sayıları (7 tablo) | 6'sı birebir aynı |
+| `security_audit_events` 1795 / 1793 | Dump'tan **54 sn sonra** yazılan 2 olay — fark açıklandı, eksiklik yok |
+
+Prova **geçici bir anahtarla ve ayrı bir veritabanına** yapıldı;
+canlı anahtara ve canlı veritabanına dokunulmadı. Prova sonunda
+geçici anahtar, çözülmüş dump ve prova veritabanı silindi.
+
+**Canlı anahtarla asıl prova, anahtar oluşturulduktan sonra
+tekrarlanmalı.** Bugün yedekler hâlâ ŞİFRESİZ alınıyor (anahtar yok).
+
+#### YEDEK DİZİNİ İZNİ
+
+`/var/backups/enderun` `drwxr-xr-x` idi — makinedeki her kullanıcı
+22 GB'lık dump'ları okuyabiliyordu. `0700`/`0600` yapıldı; `postgres`
+kullanıcısıyla denendi, dizin artık açılmıyor.
+
+#### DB BAĞLANTI KAYDI — AÇILDI
+
+`log_connections` ve `log_disconnections` **on** (ALTER SYSTEM +
+`pg_reload_conf`, **yeniden başlatma gerekmedi**).
+
+**Kayıt journald'a DEĞİL dosyaya düşüyor:** `logging_collector=off`
+ve `log_destination=stderr` olmasına rağmen Debian paketlemesi
+stderr'i `/var/log/postgresql/postgresql-16-main.log` dosyasına
+yönlendiriyor. Doğrulandı: bağlantı, kimlik doğrulama ve kopma
+satırları düşüyor.
+
+Dosya `postgres:adm`, `-rw-r-----` — dünyaya kapalı. Rotasyon
+haftalık, 10 kopya (~10 hafta).
+
+**HAFTALIK ÖZET (tek satır):**
+```bash
+sudo grep 'connection authorized' /var/log/postgresql/postgresql-16-main.log | grep -oE 'user=[a-z_]+ database=[a-z_]+' | sort | uniq -c | sort -rn
+```
+
+`log_min_duration_statement` **-1** (kapalı) bırakıldı: sorgu
+metinleri kayda düşerse IBAN ve maaş değerleri parametre olarak
+oraya sızabilirdi.
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`
