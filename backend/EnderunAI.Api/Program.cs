@@ -472,7 +472,58 @@ builder.Services
 
                 ClockSkew = TimeSpan.FromMinutes(1),
             };
+
+        /*
+         * HUB KİMLİĞİ ÇEREZDEN OKUNUR — YALNIZ HUB YOLUNDA.
+         *
+         * Tarayıcı WebSocket el sıkışmasında ÖZEL BAŞLIK GÖNDEREMEZ
+         * ama çerezleri kendiliğinden gönderir. Oturum zaten
+         * `enderun_token` adlı httpOnly çerezte duruyor.
+         *
+         * `access_token` SORGU PARAMETRESİ KULLANILMADI — SignalR'ın
+         * yaygın yolu odur ama token URL'e girerse erişim kaydına,
+         * tarayıcı geçmişine ve proxy kayıtlarına düşer. Portal
+         * token'ında yaşadığımız sızıntının aynısı olurdu.
+         *
+         * YALNIZ `/api/hubs` YOLUNDA: çerez okumayı tüm API'ye açmak
+         * CSRF yüzeyini genişletirdi (çerez `sameSite=lax`, tam
+         * koruma değil). REST uçları başlık istemeye devam ediyor.
+         */
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                if (context.Request.Path.StartsWithSegments("/api/hubs"))
+                {
+                    var cerez = context.Request.Cookies["enderun_token"];
+
+                    if (!string.IsNullOrWhiteSpace(cerez))
+                        context.Token = cerez;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
+
+/*
+ * SIGNALR — TEK SUNUCU, BELLEK İÇİ.
+ *
+ * Backend ve frontend AYNI makinede (ölçüldü: iki systemd birimi,
+ * tek sunucu). Bellek içi bağlantı takibi yeterli; Redis backplane
+ * KURULMADI — kurmak, tek sunucuda hiçbir sorunu çözmeyen bir
+ * bağımlılık eklemek olurdu.
+ *
+ * İKİNCİ SUNUCU TETİKLEYİCİSİ: ikinci bir uygulama sunucusu
+ * eklendiği gün bağlantılar iki makineye dağılır ve bir makinedeki
+ * yayın diğerindeki kullanıcıya ULAŞMAZ. Belirti sessizdir —
+ * "bazen mesaj gelmiyor". O gün Redis backplane şart olur.
+ */
+builder.Services.AddSignalR(options =>
+{
+    // Hata ayrıntısı istemciye gitmez: sunucu içi bilgi sızdırır.
+    options.EnableDetailedErrors = false;
+});
 
 /*
  * VARSAYILAN: KİMLİK DOĞRULAMA ZORUNLU.
@@ -607,6 +658,33 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+    /*
+     * MESAJ GÖNDERME — KULLANICI BAŞINA DAKİKADA 30.
+     *
+     * Kuyruğa alma YOK (`QueueLimit = 0`): sınırı aşan istek bekletilmez,
+     * 429 döner. Bekletmek, yazan kişiye "gitti" hissi verip mesajı
+     * dakikalar sonra göndermek demekti.
+     *
+     * Bölümleme KULLANICI kimliğine göre; IP'ye göre olsaydı aynı
+     * ofisten bağlanan herkes tek kotayı paylaşırdı.
+     */
+    options.AddPolicy("mesaj", context =>
+    {
+        var kullanici =
+            context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? context.Connection.RemoteIpAddress?.ToString()
+            ?? "bilinmeyen";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            kullanici,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 30,
+                QueueLimit = 0
+            });
+    });
+
     options.AddPolicy("portal", context =>
     {
         var token = context.Request.RouteValues["token"]?.ToString() ?? "unknown";
@@ -663,6 +741,14 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapControllers();
+
+/*
+ * HUB YOLU `/api/hubs/...` — nginx bu yolu AYRI bir location ile
+ * doğrudan backend'e veriyor (upgrade başlıkları, uzun zaman aşımı,
+ * access_log kapalı). `/api/backend/` altına konamazdı: orası bir
+ * Next.js Route Handler ve WebSocket yükseltmesi yapamaz.
+ */
+app.MapHub<EnderunAI.Api.Hubs.MesajHub>("/api/hubs/mesaj");
 
 /*
  * SAĞLIK KONTROLÜ ANONİM KALMAK ZORUNDA: safe-deploy servisleri

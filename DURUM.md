@@ -1284,6 +1284,62 @@ Artık `DEPLOY_BRANCH` (varsayılan `main`) ile sabit ve
 istisna hâlâ mümkün: `DEPLOY_BRANCH=<dal> safe-deploy.sh` — ama
 geçmek AÇIK bir hareket olmak zorunda.
 
+## M3/0 — GERÇEK ZAMANLI İSKELET (2026-08-25)
+
+Hub bu turda yalnız **BAĞLANIYOR**. Mesaj, kanal, okundu bilgisi
+M3/1 ve sonrasında. İskeletin ayrı deploy edilmesinin sebebi:
+altyapının canlıda çalıştığını, üstüne veri modeli koymadan ÖNCE
+görmek.
+
+#### KİMLİK ÇEREZDEN — SORGU DİZESİ YOK
+
+`access_token` sorgu parametresi (SignalR'ın yaygın yolu) **bilerek
+kullanılmadı**: token URL'e girerse erişim kaydına, tarayıcı
+geçmişine ve proxy kayıtlarına düşer — portal token'ında yaşadığımız
+sızıntının aynısı. nginx'te `/api/hubs/` için `access_log off` da bu
+yüzden var.
+
+Tarayıcı WebSocket el sıkışmasında **özel başlık gönderemez** ama
+çerezleri kendiliğinden gönderir. `JwtBearerEvents.OnMessageReceived`
+`enderun_token` çerezini okuyor.
+
+**YALNIZ `/api/hubs` YOLUNDA.** Çerez okumayı tüm API'ye açmak CSRF
+yüzeyini genişletirdi (çerez `sameSite=lax`, tam koruma değil). REST
+uçları başlık istemeye devam ediyor ve
+`Cerez_RestUcundaKabulEdilmez` bu sınırı tutuyor — sonda ile
+doğrulandı.
+
+**Hub `/api/backend/` altına konamazdı:** orası bir Next.js Route
+Handler ve `fetch()` kullanıyor; Route Handler WebSocket yükseltmesi
+YAPAMAZ. Bunu M3 Faz 0 denetiminde önerirken doğrulamamıştım,
+ölçünce çalışmadığı ortaya çıktı.
+
+#### TEK SUNUCU — REDIS KURULMADI
+
+Backend ve frontend aynı makinede (iki systemd birimi, tek sunucu).
+Bellek içi bağlantı takibi yeterli.
+
+**İKİNCİ SUNUCU TETİKLEYİCİSİ:** ikinci bir uygulama sunucusu
+eklendiği gün bağlantılar iki makineye dağılır ve bir makinedeki
+yayın diğerindeki kullanıcıya ULAŞMAZ. Belirti sessizdir — "bazen
+mesaj gelmiyor". O gün Redis backplane şart olur.
+
+#### HIZ SINIRI
+
+`mesaj` politikası: **kullanıcı başına dakikada 30**, kuyruk yok
+(`QueueLimit = 0`) — sınırı aşan istek bekletilmez, 429 döner.
+Bekletmek, yazan kişiye "gitti" hissi verip mesajı dakikalar sonra
+göndermek demekti. Bölümleme kullanıcı kimliğine göre; IP'ye göre
+olsaydı aynı ofisten bağlanan herkes tek kotayı paylaşırdı.
+
+#### KULLANICI BAŞINA GRUP
+
+Bağlanan her kullanıcı `kullanici:{id}` grubuna giriyor. Aynı kişinin
+iki cihazı iki bağlantı demek; kişiye yayın yapmak isteyen kod
+bağlantıları tek tek aramak zorunda kalmasın. Grup adı KİMLİKTEN
+türüyor, addan değil — ad kullanılsaydı iki aynı adlı kişi tek gruba
+düşer ve birinin mesajı diğerine giderdi.
+
 ## YEDEK VE DB ERİŞİMİ (2026-08-25)
 
 #### YEDEK ŞİFRELEMESİ — MEKANİZMA KANITLANDI
