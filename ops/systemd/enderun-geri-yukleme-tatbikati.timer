@@ -1,0 +1,11 @@
+[Unit]
+Description=EnderunAI geri yukleme tatbikatini uc ayda bir calistirir
+
+[Timer]
+# Ocak, Nisan, Temmuz, Ekim - ayin 1i, 04:30 (gece yedeginden sonra)
+OnCalendar=*-01,04,07,10-01 04:30:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

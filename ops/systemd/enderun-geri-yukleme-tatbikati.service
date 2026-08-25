@@ -1,0 +1,8 @@
+[Unit]
+Description=EnderunAI geri yukleme tatbikati (uc ayda bir)
+Documentation=file:///var/www/enderun-ai/DURUM.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/enderun-geri-yukleme-tatbikati.sh
+User=root

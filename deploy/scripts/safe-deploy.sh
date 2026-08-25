@@ -296,12 +296,49 @@ build_frontend() {
     fi
 }
 
+# YEDEK ALINAMAZSA YAYIN DURUR.
+#
+# Bu adım eskiden çıkış kodunu HİÇ okumuyordu: yedek betiği düşse de
+# yayın devam ediyordu. Yedeğin amacı "yayın bozarsa geri dön"; yedek
+# yoksa o güvence de yok.
+#
+# 2026-08-25'te yedek betiği, şifreleme anahtarı yoksa DURACAK şekilde
+# değişti (şifresiz dump diske düşmesin diye). O değişiklik bu kontrol
+# olmadan sessiz bir yedeksiz-yayın kapısı açardı.
+# YEDEK BETİĞİNİN TEK KAYNAĞI REPO.
+#
+# /usr/local/bin altındaki çalışan kopya her yayında repodan yeniden
+# kuruluyor. Sürüklenme böyle TESTLE DEĞİL, İNŞA YOLUYLA imkânsız:
+# canlıda elle yapılmış bir değişiklik bir sonraki yayında geri alınır
+# ve repo dışında yaşayamaz.
+install_backup_script() {
+    local kaynak="${REPO_ROOT}/scripts/enderun-backup.sh"
+
+    if [ ! -f "$kaynak" ]; then
+        fail "Yedek betiği repoda bulunamadı: $kaynak"
+    fi
+
+    if ! bash -n "$kaynak"; then
+        fail "Yedek betiğinde sözdizimi hatası — kurulmadı: $kaynak"
+    fi
+
+    if ! cmp -s "$kaynak" /usr/local/bin/enderun-backup.sh; then
+        log "INFO" "Yedek betiği repodan güncelleniyor (canlı kopya farklıydı)."
+    fi
+
+    install -m 700 -o root -g root "$kaynak" /usr/local/bin/enderun-backup.sh \
+        || fail "Yedek betiği kurulamadı: /usr/local/bin/enderun-backup.sh"
+}
+
 backup_database() {
+    install_backup_script
     log "INFO" "Veritabanı yedeği alınıyor (enderun-backup.sh)..."
     if [ -x /usr/local/bin/enderun-backup.sh ]; then
-        /usr/local/bin/enderun-backup.sh
+        if ! /usr/local/bin/enderun-backup.sh; then
+            fail "Yedekleme BAŞARISIZ — yayın durduruldu. Yedeksiz yayın yapılmaz."
+        fi
     else
-        log "WARN" "/usr/local/bin/enderun-backup.sh bulunamadı, veritabanı yedeği ATLANDI."
+        fail "/usr/local/bin/enderun-backup.sh bulunamadı — yayın durduruldu. Yedeksiz yayın yapılmaz."
     fi
 }
 
