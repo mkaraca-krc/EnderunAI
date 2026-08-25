@@ -3517,6 +3517,49 @@ testi bu yüzden eklendi.
 
 ---
 
+## 7b. KARARSIZLIĞIN BİR PARÇASI ÇÖZÜLDÜ — TARİH ÇAKIŞMASI (2026-08-25)
+
+**Bugün deploy iki kez üst üste durdu**, hep aynı iki testte:
+`ForeignCurrencyInvoiceTests.Import_ForeignInvoiceWithoutDeclaredRate_UsesArchivedTcmbRate`
+ve `...ManualInvoice_ForeignCurrencyWithoutRate_UsesArchiveAndPostsInLira`.
+Hata: `Expected 47.4881, Actual 44.000000`.
+
+**İLK TEŞHİSİM YANLIŞTI.** "Bilinen kararsızlık" dedim ve yeniden
+deploy ettim; ikinci koşu AYNI iki testte düşünce yanlış olduğu
+anlaşıldı. Kararsızlık rastgeledir; bu yeniden üretilebilirdi.
+
+**KÖK NEDEN — TARİHE BAĞLI ÇAKIŞMA:**
+
+`CommodityPriceTests:319` kendi günlerini GÖRELİ seçiyor:
+`DateTime.UtcNow.Date.AddDays(-20)`. 25 Ağustos'ta bu **2026-08-05**
+ediyor — `ForeignCurrencyInvoiceTests`'in SABİT tarihi. Birincisi
+kuru **44** olarak ÜZERİNE YAZIYOR (`SetRateAsync` upsert),
+ikincisi ise "varsa dokunma" dediği için kendi kurunu (47,4881) hiç
+tohumlayamıyor.
+
+Dün aynı hesap 08-04 veriyordu; gece yarısından ÖNCE koşan tam tur
+2629/2629 geçti, sonrakiler düştü. Kusur takvime bağlı ve ayda
+birkaç gün kendini gösteriyor (bir sonraki çakışma: `-25` gün
+hesabıyla 2026-08-30).
+
+**DÜZELTME:** `ForeignCurrencyInvoiceTests.EnsureRateAsync` yetkili
+hale getirildi — "varsa dokunma" yerine kendi kurunu her koşuda
+yazıyor. Sabit tarih DEĞİŞTİRİLMEDİ: `UsdRate` o günün gerçek TCMB
+bültenine ait, değiştirmek testin anlamını bozardı.
+
+**SONDA:** eski "varsa dokunma" davranışı geri kondu → tam olarak o
+iki test kırmızıya döndü. Teşhis kesin.
+
+**DERS:** paylaşılan test veritabanında bir test kendi verisini
+"varsa dokunma" ile tohumlarsa, o veriyi ÜZERİNE YAZAN başka bir
+teste karşı savunmasızdır. Tohumlama YETKİLİ olmalı: test kendi
+önkoşulunu garanti eder, varlığını varsaymaz. §7'deki "fixture
+yalıtımsızlığı" adayının somut bir örneği bu.
+
+**§7'DEKİ KARARSIZLIĞIN TAMAMI BU DEĞİL.** Oradaki ölçüm (personel
+testlerinde ~dörtte bir oranında düşme) ayrı bir belirti ve hâlâ
+açık.
+
 ## 7. Test suite KARARSIZ (flaky) — ölçüldü (2026-08-17)
 
 R3a yığın 1 doğrulanırken ortaya çıktı ve **kaydedilmesi şart**, çünkü

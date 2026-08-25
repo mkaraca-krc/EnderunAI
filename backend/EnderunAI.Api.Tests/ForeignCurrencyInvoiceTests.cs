@@ -69,24 +69,52 @@ public sealed class ForeignCurrencyInvoiceTests(DatabaseFixture fixture)
         return (project.CompanyId, project.Id, expenseAccount.Id);
     }
 
+    /// <summary>
+    /// KURU YETKİLİ OLARAK YAZAR — "varsa dokunma" DEĞİL.
+    ///
+    /// Önce `AnyAsync` ile bakıp varsa atlıyordu ve bu, 2026-08-25'te
+    /// deploy'u iki kez durdurdu:
+    ///
+    ///   `CommodityPriceTests:319` kendi günlerini GÖRELİ seçiyor
+    ///   (`UtcNow.Date.AddDays(-20)`) ve o gün 2026-08-05'e denk
+    ///   geldi — bu sınıfın SABİT tarihi. O test kuru 44 olarak
+    ///   ÜZERİNE YAZIYOR; buradaki "varsa dokunma" ise 47,4881'i hiç
+    ///   tohumlayamıyor. Sonuç: beklenen 47,4881, gelen 44.
+    ///
+    /// Dün aynı hesap 08-04 veriyordu ve çakışma yoktu; gece
+    /// yarısından önceki koşum bu yüzden yeşildi. Yani kusur
+    /// TARİHE BAĞLI ve ~ayda birkaç gün kendini gösteriyor.
+    ///
+    /// Sabit tarih değiştirilmedi: `UsdRate` o günün GERÇEK TCMB
+    /// bültenine ait. Değiştirmek testin anlamını bozardı. Bunun
+    /// yerine tohumlama yetkili hale getirildi — bu sınıf kendi
+    /// kurunu her koşuda garanti eder.
+    /// </summary>
     private static async Task EnsureRateAsync(
         AppDbContext db, DateTime date, string currency, decimal buying)
     {
-        var exists = await db.ExchangeRates
-            .AnyAsync(x => x.RateDate == date && x.CurrencyCode == currency);
+        var mevcut = await db.ExchangeRates
+            .SingleOrDefaultAsync(x => x.RateDate == date && x.CurrencyCode == currency);
 
-        if (exists)
-            return;
-
-        db.ExchangeRates.Add(new ExchangeRate
+        if (mevcut is not null)
         {
-            RateDate = date,
-            CurrencyCode = currency,
-            Unit = 1,
-            ForexBuying = buying,
-            ForexSelling = buying + 0.0855m,
-            Source = "TCMB"
-        });
+            mevcut.Unit = 1;
+            mevcut.ForexBuying = buying;
+            mevcut.ForexSelling = buying + 0.0855m;
+            mevcut.Source = "TCMB";
+        }
+        else
+        {
+            db.ExchangeRates.Add(new ExchangeRate
+            {
+                RateDate = date,
+                CurrencyCode = currency,
+                Unit = 1,
+                ForexBuying = buying,
+                ForexSelling = buying + 0.0855m,
+                Source = "TCMB"
+            });
+        }
 
         await db.SaveChangesAsync();
     }
