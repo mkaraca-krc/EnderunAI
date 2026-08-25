@@ -249,6 +249,17 @@ public sealed class AppDbContext(
     public DbSet<ProjectCostTransaction> ProjectCostTransactions => Set<ProjectCostTransaction>();
     public DbSet<HrProjectLaborCost> HrProjectLaborCosts => Set<HrProjectLaborCost>();
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
+
+    // M3 — KURUMSAL MESAJLAŞMA (Hızır asistanının konuşmalarıyla
+    // KARIŞTIRILMAMALI: onlar HizirConversations, ayrı bir kavram.)
+    public DbSet<EnderunAI.Api.Models.Messaging.Conversation> Conversations =>
+        Set<EnderunAI.Api.Models.Messaging.Conversation>();
+    public DbSet<EnderunAI.Api.Models.Messaging.ConversationMember> ConversationMembers =>
+        Set<EnderunAI.Api.Models.Messaging.ConversationMember>();
+    public DbSet<EnderunAI.Api.Models.Messaging.Message> Messages =>
+        Set<EnderunAI.Api.Models.Messaging.Message>();
+    public DbSet<EnderunAI.Api.Models.Messaging.PersonnelDepartmentHistory> PersonnelDepartmentHistories =>
+        Set<EnderunAI.Api.Models.Messaging.PersonnelDepartmentHistory>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
     public DbSet<Models.Notifications.NotificationRecipient> NotificationRecipients =>
@@ -844,6 +855,84 @@ public sealed class AppDbContext(
 
     private static void ConfigureSecurity(ModelBuilder modelBuilder)
     {
+        // ---------------------------------------------------------
+        // M3 — KURUMSAL MESAJLAŞMA
+        // ---------------------------------------------------------
+
+        modelBuilder.Entity<EnderunAI.Api.Models.Messaging.Conversation>(entity =>
+        {
+            entity.ToTable("conversations");
+            entity.HasQueryFilter(x => !x.IsDeleted);
+            entity.Property(x => x.Title).HasMaxLength(200);
+
+            entity.HasOne(x => x.Company).WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Liste "şirket + arşivlenmemiş + son mesaja göre" açılıyor.
+            entity.HasIndex(x => new { x.CompanyId, x.IsArchived, x.LastMessageAtUtc });
+        });
+
+        modelBuilder.Entity<EnderunAI.Api.Models.Messaging.ConversationMember>(entity =>
+        {
+            entity.ToTable("conversation_members");
+            entity.HasQueryFilter(x => !x.IsDeleted);
+
+            entity.HasOne(x => x.Conversation).WithMany(x => x.Members)
+                .HasForeignKey(x => x.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            /*
+             * ERİŞİM SORGUSUNUN İNDEKSİ. Her mesaj okumasında "bu
+             * kullanıcı bu konuşmanın üyesi mi" soruluyor; indekssiz
+             * her okuma tam tarama olurdu.
+             */
+            entity.HasIndex(x => new { x.UserId, x.LeftAtUtc });
+            entity.HasIndex(x => new { x.ConversationId, x.UserId }).IsUnique();
+        });
+
+        modelBuilder.Entity<EnderunAI.Api.Models.Messaging.Message>(entity =>
+        {
+            entity.ToTable("messages");
+            entity.HasQueryFilter(x => !x.IsDeleted);
+            entity.Property(x => x.Body).IsRequired();
+
+            entity.HasOne(x => x.Conversation).WithMany()
+                .HasForeignKey(x => x.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            /*
+             * ARAMA KOLONU VERİTABANI TARAFINDA ÜRETİLİYOR.
+             * Uygulama tarafında doldurulsaydı toplu içe aktarma ya
+             * da doğrudan SQL ile yazılan satırda BOŞ kalır ve o
+             * mesaj aramada hiç çıkmazdı. `enderun_fold`, arayüzdeki
+             * fold.ts ile birebir aynı kural.
+             */
+            entity.Property(x => x.SearchFold)
+                .HasComputedColumnSql("enderun_fold(\"Body\")", stored: true);
+
+            /*
+             * KEYSET SAYFALAMA İNDEKSİ. İmleç (CreatedAtUtc, Id);
+             * COUNT(*) atılmıyor — mesaj bu sistemin en hızlı büyüyen
+             * tablosu olacak ve her sayfa için tam sayım,
+             * sayfalamanın kendisinden pahalı olurdu.
+             */
+            entity.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc, x.Id });
+        });
+
+        modelBuilder.Entity<EnderunAI.Api.Models.Messaging.PersonnelDepartmentHistory>(entity =>
+        {
+            entity.ToTable("personnel_department_history");
+            entity.HasQueryFilter(x => !x.IsDeleted);
+            entity.Property(x => x.Reason).HasMaxLength(500);
+
+            entity.HasOne(x => x.Personnel).WithMany()
+                .HasForeignKey(x => x.PersonnelId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.PersonnelId, x.ChangedAtUtc });
+        });
+
         modelBuilder.Entity<AppUser>(entity =>
         {
             entity.ToTable("users");

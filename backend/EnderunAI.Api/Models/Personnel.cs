@@ -35,6 +35,25 @@ public sealed class Personnel : BaseEntity
     public Company Company { get; set; } = null!;
 
     public Guid? BranchId { get; set; }
+
+    /// <summary>
+    /// GÖREV YERİ DEĞİL, ORGANİZASYON BİRİMİ.
+    ///
+    /// Mesajlaşma kanallarının üyeliği buradan türeyecek. Rolden
+    /// TÜRETİLMEDİ: rol bir yetki kavramı, departman bir organizasyon
+    /// kavramı ve bugün de ayrışıyorlar — beş rolü olan bir kullanıcı
+    /// var, tek departmanı olacak. Rolden türetseydik o kişi beş
+    /// kanala birden düşer ve kimse sebebini anlamazdı.
+    ///
+    /// DEPARTMANI BOŞ PERSONEL HATA DEĞİL: kanal üyeliği almaz,
+    /// o kadar. Bugün 81 personelin hiçbirinde dolu değil.
+    ///
+    /// DEĞİŞİKLİK TARİHÇESİ AYRI TABLODA
+    /// (`personnel_department_history`): bu alan yalnız BUGÜNÜ
+    /// söyler, "ayrıldığı tarihe kadarki geçmişi görür" kuralı ise
+    /// dünkü cevabı gerektirir.
+    /// </summary>
+    public Guid? DepartmentId { get; set; }
     public Branch? Branch { get; set; }
 
     public string EmployeeNumber { get; set; } = string.Empty;

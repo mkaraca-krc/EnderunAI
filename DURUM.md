@@ -1284,6 +1284,112 @@ Artık `DEPLOY_BRANCH` (varsayılan `main`) ile sabit ve
 istisna hâlâ mümkün: `DEPLOY_BRANCH=<dal> safe-deploy.sh` — ama
 geçmek AÇIK bir hareket olmak zorunda.
 
+## M3/1 — MESAJLAŞMA VERİ MODELİ (2026-08-25)
+
+Dört tablo: `conversations`, `conversation_members`, `messages`,
+`personnel_department_history`. Artı `personnel.DepartmentId`.
+
+#### ERİŞİM: ÜYELİK, KAPSAM DEĞİL — VE GLOBAL ERİŞİM GEÇMEZ
+
+Sistemdeki diğer her süzgeç `HasGlobalAccess` kısayolu taşıyor:
+global erişimli kullanıcıda sorgu olduğu gibi geçiyor. Mesajlaşmada
+bu kısayol **YOK ve OLMAMALI** — kimse başkasının konuşmasını
+okuyamaz, Genel Müdür dahil.
+
+**İKİ AYRI KAPI, İKİSİ DE GEREKLİ:** kapsam yanlış şirketin verisini
+engeller, üyelik doğru şirketteki BAŞKASININ konuşmasını engeller.
+Biri diğerinin yerine geçmez.
+
+Kuralı **kaynak taraması** koruyor
+(`ErisimKapisi_GlobalKapsamKisayoluTasimaz`): kısayolun bir gün
+"tutarlılık olsun" diye eklenmesini yakalıyor. Çalışma zamanı testi
+bunu yakalayamazdı — kısayol eklendiğinde yalnız global erişimli
+kullanıcı için kırmızıya dönerdi ve öyle bir test kurulmamıştı.
+
+#### AYRILAN ÜYE HİÇBİR ŞEY GÖRMEZ — DAR OLAN SEÇİLDİ
+
+`LeftAtUtc` dolu olan üye, ayrıldığı tarihe kadarki mesajları da
+göremiyor. "Ayrıldığı tarihe kadarki geçmişi görür" kuralı departman
+KANALLARI bağlamında konuşulmuştu; kanallar M3/3'te gelecek ve orada
+yeniden ele alınacak.
+
+Üyelik satırı **silinmiyor, tarihleniyor**: "o tarihte kim
+görüyordu" sorusunun tek cevabı o satır.
+
+#### OKUNDU BİLGİSİ AYRI TABLODA DEĞİL
+
+`ConversationMember.LastReadAtUtc`. Mesaj başına okundu satırı
+tutmak, mesaj × üye kadar satır üretirdi — mesajlaşmada bu, sistemin
+en hızlı büyüyen tablosu olurdu. "Hangi mesajı tam olarak okudu"
+bilgisi kayboluyor; o bilgiye ihtiyaç duyan bir gereksinim yok.
+
+#### TÜRKÇE ARAMA — MEVCUT ALTYAPI KULLANILDI
+
+`enderun_fold` fonksiyonu ve `TurkishSearch.cs` C# ikizi **zaten
+vardı** (G2 turundan), eşitlikleri testle sabit. Yeniden yazılmadı:
+iki katlama ayrışırsa aynı arama bir yerde bulur, diğerinde bulamaz.
+
+`messages.SearchFold` üretilmiş kolon = `enderun_fold("Body")`,
+üstünde **GIN trigram** indeksi (migration'da elle — EF üretilmiş
+kolon üzerinde GIN tanımlayamıyor).
+
+**NEDEN TRIGRAM, tsvector DEĞİL — ÖLÇÜLDÜ (200.000 satır, PG 16.15):**
+
+`tsvector` de önek eşlemesi yapabiliyor (`to_tsquery('simple','insa:*')`)
+ve indeksi kullanıyor. "tsvector yarım kelimeyi bulmaz" doğru değil —
+**kelime BAŞINDAN** başlayan yarım kelimeyi bulur.
+
+Ayıran şey hız değil, **kelime ortası**:
+
+| Sorgu | tsvector `:*` | trigram `LIKE` |
+|---|---|---|
+| `insa` → `inşaat` (kelime başı) | 18 ms, indeksli | 17 ms, indeksli |
+| `4783` → `TLP-64783` (kelime ortası) | **0 satır — BULAMIYOR** | 49 satır, 0,2 ms |
+| `san` (3 harf) | 18 ms, indeksli | 20 ms, indeksli |
+| `be` (2 harf) | 18 ms, **indeksli** | 86 ms, **sıra taraması** |
+| iki kelime birlikte | 38 ms | 14 ms |
+
+Mesajlaşmada aranan şeyin büyük kısmı ürün/sipariş kodu parçası ve
+kod her zaman kelime başında olmuyor. tsvector bunu **hiç**
+bulamıyor — yavaş bulmuyor, bulamıyor. Trigram'ın tek zayıf noktası
+2 harflik sorgu; bu bir arama kutusu kuralıyla kapanıyor.
+
+**ARAMA KUTUSU EN AZ 3 HARF İSTEYECEK** (M3/2). 2 harfte trigram
+indeksi devre dışı kalıyor; 200 bin satırda 86 ms, iki milyon satırda
+saniyenin altında kalmaz. İkinci indeks açmaktansa sorguyu
+engellemek doğru: 2 harflik arama zaten kullanışlı sonuç vermiyor.
+
+**Canlı kanıt (test veritabanı):** `İNŞAAT ŞANTİYESİ ÖLÇÜMÜ` →
+`insaat santiyesi olcumu`. `İNŞAAT`, `insaat`, `SANTIYE`, `olcum`
+hepsi buluyor; alakasız kelime bulmuyor.
+
+#### KEYSET VE İNDEKSLER
+
+| İndeks | Ne için |
+|---|---|
+| `IX_messages_konusma_zaman` (ConversationId, CreatedAtUtc, Id) | Keyset imleci — mesaj en hızlı büyüyen tablo, COUNT(*) yok |
+| `IX_conversations_sirket_sonmesaj` | Konuşma listesi "en son konuşulan üstte" |
+| `IX_conversation_members_aktif_benzersiz` | Aynı kişi bir konuşmaya iki kez AKTİF üye olamaz — **kısmi** (LeftAtUtc IS NULL), koşulsuz olsaydı ayrılıp yeniden eklenmek imkânsız olurdu |
+| `IX_conversation_members_kullanici` | Kullanıcının konuşma listesi |
+| `IX_messages_arama_trgm` (GIN) | Türkçe arama |
+
+#### MIGRATION İKİ YÖNDE DE SINANDI
+
+Test veritabanında uygulandı → dört tablo, GIN indeksi ve
+`DepartmentId` doğrulandı → geri alındı → **hepsi tümüyle kalktı** →
+yeniden uygulandı. Veri değiştirmediği için satır sayısı
+doğrulaması (§5 kural 21) gerekmiyor.
+
+#### ARŞİV BİÇİMİ: AYNI VERİTABANINDA SOĞUK TABLO
+
+12 ay çevrimiçi, sonrası soğuk tabloya. Dosyaya çıkarmak yedek ve
+geri yükleme yüzeyini ikiye bölerdi — bugün tek `pg_dump` her şeyi
+alıyor ve geri yükleme provası da onun üzerinden yapıldı. Arşivdeki
+mesaj **aranabilir değil**, okunabilir.
+
+**TAŞIMA MEKANİZMASI KURULMADI:** ortada veri yok ve bu bir saklama
+mekanizması, silme kuralına komşu.
+
 ## M3/0 — GERÇEK ZAMANLI İSKELET (2026-08-25)
 
 Hub bu turda yalnız **BAĞLANIYOR**. Mesaj, kanal, okundu bilgisi
@@ -1488,6 +1594,10 @@ isimlendirme) buraya yazılmaz.
 - `2026-08-24 | Ödeme eylemi görünürlüğü | bank_account.view olmayan rolde "Gerçek Ödeme" düğmesi HİÇ render edilmiyor (403 yerine yokluk). | Bozuk ekran göstermek, eylemi gizlemekten kötü. | EVET`
 - `2026-08-24 | Kapsam alanı eksik satır | hr-dashboard ve zimmet kutusunda "alan yoksa satırı al" deseni "alan yoksa ELE" olarak değişti. | Şirket izolasyonunda varsayılan kapalı olmalı; bugün tek şirket olduğu için görünür etki yok. | EVET`
 - `2026-08-24 | Yarım özellikler | ai-analysis/site-analysis servisleri ve fiyat farkı hesaplama işlevleri SİLİNDİ (ekranda karşılığı yoktu); hesap planı aktarımı KALDIRILMADI, devre dışı + "Hazırlanıyor". | Ekranda görünen yarım özellik kaldırılmaz, görünmeyen ölü kod silinir. | EVET — git geçmişi`
+- `2026-08-25 | Mesaj erişimi | Üyelik kapısı; global veri kapsamı BU KAPIYI AÇMAZ, GM dahil kimse başkasının konuşmasını okuyamaz. | Erişim politikası kararı açıktı; tutarlılık uğruna kısayol eklemek politikayı kâğıt üstünde bırakırdı. | HAYIR — kısayol eklenirse geçmiş okumalar geri alınamaz`
+- `2026-08-25 | Ayrılan üye | Hiçbir şey göremez; ayrıldığı tarihe kadarki mesajları da göremez. | "Ayrıldığı tarihe kadar görür" kuralı departman kanalları için konuşulmuştu; kanallar M3/3'te. Dar olan seçildi. | EVET`
+- `2026-08-25 | Okundu bilgisi | Mesaj başına satır değil, üye satırında LastReadAtUtc. | "Hangi mesajı tam okudu" bilgisine ihtiyaç duyan gereksinim yok; ayrı tablo mesaj×üye kadar satır üretirdi. | EVET — ayrı tablo sonradan eklenebilir`
+- `2026-08-25 | Arşiv biçimi | Aynı veritabanında soğuk tablo; aranabilir değil, okunabilir. Taşıma mekanizması KURULMADI. | Dosyaya çıkarmak yedek/geri yükleme yüzeyini ikiye böler. | EVET`
 
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 
@@ -3678,6 +3788,37 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     bir yanlış yol) — hepsi canlıda duruyordu.
 
 ---
+
+28. **HER FAZIN BAŞINDA AĞACIN TEMİZ OLDUĞUNU DOĞRULA.**
+    `git status --short` boş değilse: **üzerine yazma.** Ne olduğunu
+    raporla, karar birlikte verilsin.
+
+    Bu kural bir günde ÜÇ KEZ tekrarlanan bir hatadan çıktı: ağaçta
+    daha önce yazılmış, commit edilmemiş kod vardı; ben onu
+    hatırlamadan aynı işi sıfırdan yazdım. M3/1'de sonuç iki farklı
+    tasarımın çakışmasıydı (`ConversationMember` /
+    `ConversationParticipant`) ve derleme kırıldı. Teşhis pahalıydı:
+    hata mesajı "isim bulunamadı" diyor, "iki tasarım çarpıştı"
+    demiyor.
+
+    Yarım kalmış kod, üzerine yazılınca **kaybolmaz — gizlenir.**
+    Ağaç temiz değilse tek doğru hamle durup bakmaktır.
+
+29. **DERLEME/TEST BAŞLATMADAN ÖNCE YETİM `dotnet` SÜRECİ VAR MI BAK.**
+    ```
+    pgrep -af "dotnet (build|test)|VBCSCompiler|csc.dll" || echo "temiz"
+    ```
+    Varsa ve bu turun işi değilse temizle. **Canlı uygulamanın
+    sürecine dokunma** — `enderunai-backend` servisi ayrıdır; temizlik
+    sonrası `curl -s -o /dev/null -w "%{http_code}" localhost:5000/health`
+    ile canlıyı doğrula.
+
+    Arka plan görevi öldürüldüğünde `dotnet build` ve Roslyn süreçleri
+    ayakta kalıyor. Üç derleme birbiriyle yarıştığında makine
+    boğuluyor: ölçüldü — 7,9 GB belleğin 7,77'si dolu, yük ortalaması
+    209. Belirti yanıltıcı: derleme *asılı* kalır, hata vermez.
+    33 dakika süren ve çıktı vermeyen bir derlemenin sebebini aramak,
+    tek satırlık kontrolü yapmaktan çok daha pahalı.
 
 ## 6. Ölçüm araçlarına dair uyarı
 
