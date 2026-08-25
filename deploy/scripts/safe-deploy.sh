@@ -75,6 +75,9 @@ HEALTH_CHECK_INTERVAL_SECONDS=2
 
 START_TIME="$(date +%s)"
 DEPLOY_OUTCOME="UNKNOWN"
+YARIM_KOSU_DOSYASI="${DEPLOY_STATE_DIR}/yarim-kosu"
+YARIM_KOSU_ONAYLANDI="${YARIM_KOSU_ONAYLANDI:-}"
+ASAMA="baslangic"
 
 log() {
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [$1] $2" | tee -a "$LOG_FILE"
@@ -82,6 +85,7 @@ log() {
 
 fail() {
     log "ERROR" "$1"
+    yarim_kosu_kendi_izini_sil
     print_summary
     exit 1
 }
@@ -96,6 +100,113 @@ print_summary() {
     echo "Git commit  : $(cd "$REPO_ROOT" && git rev-parse --short HEAD 2>/dev/null || echo '-')"
     echo "Log dosyası : ${LOG_FILE}"
     echo "======================================================"
+}
+
+# ─────────────────────────────────────────────────────────────────
+# YARIM KOŞU TESPİTİ
+#
+# safe-deploy bu oturumda ÜÇ KEZ dışarıdan öldürüldü ve hiçbiri iz
+# bırakmadı. İz bırakmamak asıl sorun değil; asıl sorun şu:
+#
+#   backup_current_release, publish/ dizinini publish-rollback/
+#   üzerine kopyalıyor. Bir koşu YAYINLAMA sırasında ölürse publish/
+#   YARIM kalır. Bir sonraki koşu ilk iş olarak o yarım dizini
+#   SAĞLAM geri-alma kopyasının üzerine yazar.
+#
+#   Sonuç: geri dönülecek yer kalmaz. Üstelik sessizce olur — yayın
+#   başarılı görünür, eksiklik ancak geri alma gerektiğinde çıkar.
+#
+# Bu yüzden işaret dosyası TEST aşamasında zararsız, YAYINLAMA
+# aşamasından sonra durdurucu.
+# ─────────────────────────────────────────────────────────────────
+
+# Bu aşamada ölmüş bir koşu, bir sonraki koşunun geri-alma kopyasını
+# bozar mı?
+# GÜVENLİ AŞAMALAR SAYILIR, TEHLİKELİLER DEĞİL.
+#
+# İlk yazılışı tersiydi: tehlikeli aşamalar sayılıyor, gerisi güvenli
+# kabul ediliyordu. Test bunu yakaladı — tanınmayan bir aşama adı
+# ("bilinmiyor", boş dize, ileride eklenen yeni bir aşama) AÇIK
+# tarafa düşüyordu.
+#
+# Aşama adı bilinmiyorsa koşunun nerede öldüğü de bilinmiyordur;
+# orada devam etmek tam da korunmak istenen durumu serbest bırakır.
+# Yeni bir aşama eklendiğinde varsayılan artık "dur" — listeye
+# yazılmadığı sürece geçmez.
+yarim_kosu_tehlikeli_mi() {
+    case "$1" in
+        baslangic|backend-testleri|on-yuz-testleri|surum-yedegi)
+            return 1 ;;
+        *)
+            return 0 ;;
+    esac
+}
+
+# SAF KARAR — dosya sistemine, PID'e, ortama bakmaz.
+#
+# Ayrı tutulmasının sebebi: karar dosya varlığıyla iç içe olsaydı,
+# testin onu sürebilmesi için sahte bir işaret dosyası kurması
+# gerekirdi; o zaman test kararı değil dosya kurulumunu sınardı.
+yarim_kosu_karari() {
+    local asama_adi="$1"
+    local onay="${2:-}"
+
+    if ! yarim_kosu_tehlikeli_mi "$asama_adi"; then
+        echo "devam"
+    elif [ "$onay" = "evet" ]; then
+        echo "devam-onayli"
+    else
+        echo "dur"
+    fi
+}
+
+asama() {
+    ASAMA="$1"
+    mkdir -p "$DEPLOY_STATE_DIR" 2>/dev/null || true
+    printf '%s\n%s\n%s\n' \
+        "$$" "$ASAMA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        > "$YARIM_KOSU_DOSYASI" 2>/dev/null || true
+}
+
+# YALNIZ KENDİ izini siler. Başka bir koşunun işaretini silmek,
+# gerçekten paralel çalışan bir yayını görünmez yapardı.
+yarim_kosu_kendi_izini_sil() {
+    [ -f "$YARIM_KOSU_DOSYASI" ] || return 0
+    [ "$(sed -n 1p "$YARIM_KOSU_DOSYASI" 2>/dev/null)" = "$$" ] || return 0
+    rm -f "$YARIM_KOSU_DOSYASI"
+}
+
+yarim_kosu_denetle() {
+    [ -f "$YARIM_KOSU_DOSYASI" ] || return 0
+
+    local onceki_pid onceki_asama onceki_zaman
+    onceki_pid="$(sed -n 1p "$YARIM_KOSU_DOSYASI" 2>/dev/null)"
+    onceki_asama="$(sed -n 2p "$YARIM_KOSU_DOSYASI" 2>/dev/null)"
+    onceki_zaman="$(sed -n 3p "$YARIM_KOSU_DOSYASI" 2>/dev/null)"
+
+    if [ -n "$onceki_pid" ] && [ "$onceki_pid" != "$$" ] \
+       && kill -0 "$onceki_pid" 2>/dev/null; then
+        fail "Başka bir safe-deploy ŞU AN ÇALIŞIYOR (PID ${onceki_pid}, aşama: ${onceki_asama:-bilinmiyor}). İki yayın aynı anda çalışamaz."
+    fi
+
+    log "WARN" "ÖNCEKİ KOŞU YARIM KALDI — aşama: ${onceki_asama:-bilinmiyor}, zaman: ${onceki_zaman:-bilinmiyor}"
+
+    case "$(yarim_kosu_karari "${onceki_asama:-bilinmiyor}" "$YARIM_KOSU_ONAYLANDI")" in
+        devam)
+            log "INFO" "O aşama zararsız (yayınlama başlamamıştı) — devam ediliyor."
+            rm -f "$YARIM_KOSU_DOSYASI"
+            ;;
+        devam-onayli)
+            log "WARN" "YARIM_KOSU_ONAYLANDI=evet verildi — durdurulmadı. Geri-alma kopyasının sağlamlığı ARTIK DOĞRULANMIŞ SAYILMIYOR."
+            rm -f "$YARIM_KOSU_DOSYASI"
+            ;;
+        *)
+            log "ERROR" "publish-rollback/ şu an güvenilmez olabilir; bu koşu onu YARIM bir publish/ ile üzerine yazardı."
+            log "ERROR" "Elle bakın: ls -la ${BACKEND_PUBLISH_DIR} ${BACKEND_ROLLBACK_DIR}"
+            log "ERROR" "Sağlam olduğuna karar verirseniz: YARIM_KOSU_ONAYLANDI=evet ile tekrar çalıştırın."
+            fail "Önceki yayın '${onceki_asama}' aşamasında yarım kaldı — bu koşu durduruldu."
+            ;;
+    esac
 }
 
 require_clean_git_tree() {
@@ -419,6 +530,8 @@ yayınlanacaksa: DEPLOY_BRANCH=${current} $0"
 main() {
     log "INFO" "===== safe-deploy başladı ====="
 
+    yarim_kosu_denetle
+
     require_clean_git_tree
     require_expected_branch
 
@@ -431,14 +544,22 @@ main() {
     resolve_test_scope
     log "INFO" "Test kapsamı: ${TEST_SCOPE} (${TEST_SCOPE_REASON})"
 
+    asama "backend-testleri"
     run_backend_tests
+    asama "on-yuz-testleri"
     run_frontend_tests
+    asama "surum-yedegi"
     backup_current_release
+    asama "yayinlama"
     publish_backend
+    asama "on-yuz-derleme"
     build_frontend
+    asama "veritabani-yedegi"
     backup_database
+    asama "servis-baslatma"
     restart_services
 
+    asama "saglik-kontrolu"
     if wait_for_health; then
         DEPLOY_OUTCOME="SUCCESS"
         log "INFO" "Yayın BAŞARILI."
@@ -449,9 +570,11 @@ main() {
         # backend testleri hiç koşmadan yayınlanabilirdi.
         record_successful_deploy
     else
+        asama "geri-alma"
         rollback
     fi
 
+    yarim_kosu_kendi_izini_sil
     print_summary
 
     if [ "$DEPLOY_OUTCOME" = "SUCCESS" ]; then

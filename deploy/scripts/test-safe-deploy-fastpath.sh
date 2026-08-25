@@ -102,6 +102,68 @@ expect "benzer adlı yedek dizini" "full" \
 expect "frontend kökü ama uygulama dışı" "full" \
 'frontend/enderun-ai.previous-20260731-105600/app/page.tsx'
 
+
+# ─────────────────────────────────────────────────────────────────
+# YARIM KOŞU KARARI
+#
+# Sınanan şey saf karar fonksiyonu: "önceki koşu bu aşamada öldüyse
+# devam edilebilir mi". İşaret dosyası kurulmuyor — kurulsaydı test,
+# kararı değil dosya okumayı sınardı.
+#
+# Kritik ayrım: YAYINLAMA aşaması. O noktadan sonra publish/ yarım
+# kalmış olabilir ve bir sonraki koşu onu sağlam geri-alma kopyasının
+# üzerine yazar. Test aşamasında ölmüş bir koşu ise hiçbir şey bozmaz.
+# ─────────────────────────────────────────────────────────────────
+
+karar() {
+    local name="$1" expected="$2" asama_adi="$3" onay="${4:-}"
+    local actual
+    actual="$(yarim_kosu_karari "$asama_adi" "$onay")"
+
+    if [ "$actual" = "$expected" ]; then
+        PASS=$((PASS + 1)); printf '  ✓ %s\n' "$name"
+    else
+        FAIL=$((FAIL + 1))
+        printf '  ✗ %s\n      beklenen: %s\n      çıkan   : %s\n' "$name" "$expected" "$actual"
+    fi
+}
+
+echo ""
+echo "yarım koşu kararı testleri"
+echo ""
+
+# Yayınlama BAŞLAMAMIŞ — geri-alma kopyası sağlam, devam edilir.
+karar "başlangıçta öldü"          "devam" "baslangic"
+karar "backend testinde öldü"     "devam" "backend-testleri"
+karar "ön yüz testinde öldü"      "devam" "on-yuz-testleri"
+karar "sürüm yedeği alınırken öldü" "devam" "surum-yedegi"
+
+# Yayınlama BAŞLAMIŞ — publish/ yarım olabilir, DURDUR.
+karar "yayınlama sırasında öldü"  "dur" "yayinlama"
+karar "ön yüz derlenirken öldü"   "dur" "on-yuz-derleme"
+karar "veritabanı yedeğinde öldü" "dur" "veritabani-yedegi"
+karar "servis başlatılırken öldü" "dur" "servis-baslatma"
+karar "sağlık kontrolünde öldü"   "dur" "saglik-kontrolu"
+karar "geri alınırken öldü"       "dur" "geri-alma"
+
+# Tanınmayan aşama adı GÜVENLİ TARAFA düşmez — düşmemeli de.
+#
+# Aşama adı bilinmiyorsa koşunun nerede öldüğü de bilinmiyordur.
+# "Bilmiyorum" durumunda devam etmek, tam da korunmak istenen
+# senaryoyu serbest bırakırdı. Bu satır o varsayımı sabitliyor.
+karar "aşama adı bilinmiyor"      "dur" "bilinmiyor"
+karar "aşama adı boş"             "dur" ""
+karar "uydurma aşama adı"         "dur" "filanca-asama"
+
+# Açık onay verildiğinde geçilebilir — ama yalnız TAM eşleşmeyle.
+karar "onay verildi"                    "devam-onayli" "yayinlama" "evet"
+karar "onay 'e' yazılmış"               "dur"          "yayinlama" "e"
+karar "onay 'EVET' (büyük harf)"        "dur"          "yayinlama" "EVET"
+karar "onay 'yes'"                      "dur"          "yayinlama" "yes"
+
+# Zararsız aşamada onay ARANMAZ.
+karar "zararsız aşama, onaysız"   "devam" "backend-testleri" ""
+
 echo ""
 echo "Geçen: ${PASS}, Kalan: ${FAIL}"
 
