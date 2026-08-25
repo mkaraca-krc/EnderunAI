@@ -1365,13 +1365,46 @@ hepsi buluyor; alakasız kelime bulmuyor.
 
 #### KEYSET VE İNDEKSLER
 
-| İndeks | Ne için |
+| İndeks (canlıdaki gerçek ad) | Ne için |
 |---|---|
-| `IX_messages_konusma_zaman` (ConversationId, CreatedAtUtc, Id) | Keyset imleci — mesaj en hızlı büyüyen tablo, COUNT(*) yok |
-| `IX_conversations_sirket_sonmesaj` | Konuşma listesi "en son konuşulan üstte" |
-| `IX_conversation_members_aktif_benzersiz` | Aynı kişi bir konuşmaya iki kez AKTİF üye olamaz — **kısmi** (LeftAtUtc IS NULL), koşulsuz olsaydı ayrılıp yeniden eklenmek imkânsız olurdu |
-| `IX_conversation_members_kullanici` | Kullanıcının konuşma listesi |
+| `IX_messages_ConversationId_CreatedAtUtc_Id` | Keyset imleci — mesaj en hızlı büyüyen tablo, COUNT(*) yok |
+| `IX_conversations_CompanyId_IsArchived_LastMessageAtUtc` | Konuşma listesi "en son konuşulan üstte" |
+| `IX_conversation_members_aktif_benzersiz` | Aynı kişi bir konuşmaya iki kez AKTİF üye olamaz — **kısmi**: `WHERE "LeftAtUtc" IS NULL AND NOT "IsDeleted"` |
+| `IX_conversation_members_UserId_LeftAtUtc` | Erişim sorgusu: "bu kullanıcı bu konuşmanın üyesi mi" |
 | `IX_messages_arama_trgm` (GIN) | Türkçe arama |
+
+#### CANLIYA ÇIKAN KUSUR VE DÜZELTMESİ (aynı gün)
+
+M3/1 canlıya çıktıktan sonra indeksler tek tek ölçüldü ve
+benzersizlik indeksi **koşulsuz** bulundu:
+`UNIQUE ("ConversationId","UserId")`, filtre yok. Kaynağı da öyleydi —
+`AppDbContext`'te `.HasFilter(...)` hiç yazılmamıştı.
+
+**Sonucu:** konuşmadan ayrılan kişi o konuşmaya BİR DAHA
+EKLENEMEZDİ. Üyelik satırı silinmiyor, tarihleniyor; ikinci satırı
+koşulsuz benzersizlik reddediyor. `IsDeleted` süzgeci burada yetmez —
+benzersizlik veritabanı düzeyinde uygulanıyor, EF sorgu süzgeci oraya
+işlemiyor.
+
+Düzeltme: `20260825133424_M3UyelikBenzersizligiKismi`. İki test
+indeksi iki taraftan sıkıştırıyor — filtre kaldırılırsa
+`AyrilanUye_AyniKonusmayaYenidenEklenebilir`, fazla genişletilirse
+`AyniKisi_IkiKezAktifUyeOlamaz` kırmızıya döner.
+
+**BU KUSURU BELGE YAKALADI, TEST DEĞİL.** DURUM.md'ye kısmi indeks
+yazılmıştı, canlıda koşulsuzdu; ikisini karşılaştırmak fark ettirdi.
+Kural 30 buradan çıktı.
+
+**SONDA DERSİ — VERİTABANI ÜZERİNDEN SABOTAJ İŞE YARAMAZ.** İndeksi
+elle koşulsuza çevirip testi koşturmak testi kırmızıya döndürmedi ve
+bir an "test açığı" sanıldı. Sebep: fixture her koşuda veritabanını
+düşürüp **migration'lardan** yeniden kuruyor; sonda testler
+başlamadan siliniyordu. Şemanın kaynağı model değil, migration
+dosyası — sonda oraya kurulmalı.
+
+Ayrıca `psql`, SQL hatasında bile 0 çıkış kodu döndürüyor:
+`ON_ERROR_STOP=1` olmadan `set -e` sabotajın kurulamadığını
+yakalamıyor. Sabotajın KURULDUĞU ayrıca doğrulanmalı.
 
 #### MIGRATION İKİ YÖNDE DE SINANDI
 
@@ -3819,6 +3852,26 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     209. Belirti yanıltıcı: derleme *asılı* kalır, hata vermez.
     33 dakika süren ve çıktı vermeyen bir derlemenin sebebini aramak,
     tek satırlık kontrolü yapmaktan çok daha pahalı.
+
+30. **MIGRATION CANLIYA UYGULANDIKTAN SONRA ŞEMAYI TEK TEK ÖLÇ —
+    TABLO VARLIĞI YETMEZ.**
+    ```
+    select indexname, indexdef from pg_indexes where tablename in (...);
+    ```
+    Dört tablonun da var olması "migration doğru" demek değil.
+    M3/1'de tablolar geldi, `IX_..._aktif_benzersiz` diye
+    belgelediğim KISMİ indeks ise koşulsuz çıktı — EF'e filtre hiç
+    yazılmamıştı ve ad da uydurulmuştu. Kusur canlıya çıktı.
+
+    **Yakalayan şey belgeydi:** DURUM.md kısmi diyordu, veritabanı
+    koşulsuz diyordu. Belge ile ölçümü karşılaştırmadan "deploy
+    başarılı" denmeyecek. Ad, filtre ve kolon sırası tek tek
+    okunacak.
+
+    `safe-deploy` migration'ları OTOMATİK UYGULAMAZ (betiğin
+    başında yazılı). "Yayın BAŞARILI" satırı şemanın güncel olduğunu
+    söylemez; `dotnet ef database update` elle çalıştırılacak ve
+    sonucu ölçülecek.
 
 ## 6. Ölçüm araçlarına dair uyarı
 

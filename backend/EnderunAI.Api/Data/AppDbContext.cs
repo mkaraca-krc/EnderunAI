@@ -888,7 +888,25 @@ public sealed class AppDbContext(
              * her okuma tam tarama olurdu.
              */
             entity.HasIndex(x => new { x.UserId, x.LeftAtUtc });
-            entity.HasIndex(x => new { x.ConversationId, x.UserId }).IsUnique();
+
+            /*
+             * BENZERSİZLİK KISMİDİR — KOŞULSUZ OLAMAZ.
+             *
+             * Aynı kişi bir konuşmaya iki kez AKTİF üye olamaz. Ama
+             * ayrılıp yeniden eklenebilmelidir: ayrılan üyenin satırı
+             * silinmiyor, LeftAtUtc ile tarihleniyor ("o tarihte kim
+             * görüyordu" sorusunun tek cevabı o satır). Koşulsuz bir
+             * UNIQUE(ConversationId, UserId) ikinci satırı reddeder ve
+             * kişi o konuşmaya BİR DAHA EKLENEMEZ.
+             *
+             * IsDeleted süzgeci burada yetmez: benzersizlik veritabanı
+             * düzeyinde uygulanır, EF sorgu süzgeci oraya işlemez.
+             * Bu yüzden filtre indeksin kendisinde.
+             */
+            entity.HasIndex(x => new { x.ConversationId, x.UserId })
+                .HasDatabaseName("IX_conversation_members_aktif_benzersiz")
+                .IsUnique()
+                .HasFilter("\"LeftAtUtc\" IS NULL AND NOT \"IsDeleted\"");
         });
 
         modelBuilder.Entity<EnderunAI.Api.Models.Messaging.Message>(entity =>

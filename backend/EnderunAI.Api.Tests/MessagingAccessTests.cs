@@ -200,4 +200,82 @@ public sealed class MessagingAccessTests(DatabaseFixture fixture)
             kodSatirlari,
             satir => satir.Contains("HasGlobalAccess", StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// AYRILAN ÜYE YENİDEN EKLENEBİLMELİ.
+    ///
+    /// Üyelik satırı silinmiyor, LeftAtUtc ile tarihleniyor: "o
+    /// tarihte kim görüyordu" sorusunun tek cevabı o satır. Bu
+    /// tasarımın bedeli, benzersizlik indeksinin KISMİ olma
+    /// zorunluluğudur.
+    ///
+    /// KOŞULSUZ bir UNIQUE(ConversationId, UserId) ikinci satırı
+    /// reddeder ve kişi o konuşmaya BİR DAHA EKLENEMEZ. Bu hata
+    /// canlıya çıktı ve ölçümle yakalandı: EF, filtre yazılmadığı
+    /// için indeksi koşulsuz üretmişti.
+    ///
+    /// IsDeleted süzgeci burada YETMEZ — benzersizlik veritabanı
+    /// düzeyinde uygulanıyor, EF sorgu süzgeci oraya işlemiyor.
+    /// Bu yüzden test veritabanına gerçekten YAZIYOR; süzgeci
+    /// gözlemleyen bir test bu kusuru göremezdi.
+    /// </summary>
+    [Fact]
+    public async Task AyrilanUye_AyniKonusmayaYenidenEklenebilir()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var (konusmaId, uye, _) = await KonusmaAsync(db, suffix, uyeAyrilma: DateTime.UtcNow.AddDays(-1));
+
+        db.ConversationMembers.Add(new ConversationMember
+        {
+            ConversationId = konusmaId,
+            UserId = uye,
+            LeftAtUtc = null
+        });
+
+        await db.SaveChangesAsync();
+
+        var aktif = await db.ConversationMembers
+            .AsNoTracking()
+            .CountAsync(x => x.ConversationId == konusmaId && x.UserId == uye && x.LeftAtUtc == null);
+
+        var toplam = await db.ConversationMembers
+            .AsNoTracking()
+            .CountAsync(x => x.ConversationId == konusmaId && x.UserId == uye);
+
+        Assert.Equal(1, aktif);
+        Assert.Equal(2, toplam);
+    }
+
+    /// <summary>
+    /// AYNI ANDA İKİ AKTİF ÜYELİK OLAMAZ.
+    ///
+    /// Yukarıdaki testin ters yönü. Kısmi indeks yalnız "yeniden
+    /// eklenebilsin" demiyor; aktif üyeliğin TEK olduğunu da garanti
+    /// ediyor. Filtre tümüyle kaldırılırsa üstteki test kırmızıya
+    /// döner, filtre fazla genişletilirse bu test kırmızıya döner —
+    /// ikisi birlikte indeksi iki taraftan sıkıştırıyor.
+    /// </summary>
+    [Fact]
+    public async Task AyniKisi_IkiKezAktifUyeOlamaz()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var (konusmaId, uye, _) = await KonusmaAsync(db, suffix);
+
+        db.ConversationMembers.Add(new ConversationMember
+        {
+            ConversationId = konusmaId,
+            UserId = uye,
+            LeftAtUtc = null
+        });
+
+        await Assert.ThrowsAnyAsync<DbUpdateException>(() => db.SaveChangesAsync());
+    }
 }
