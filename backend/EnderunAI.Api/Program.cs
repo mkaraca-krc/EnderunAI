@@ -599,6 +599,8 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IGoodsReceiptAccount
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockSaleIssuer, EnderunAI.Api.Services.Inventory.StockSaleIssuer>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockOutflowLineBuilder, EnderunAI.Api.Services.Inventory.StockOutflowLineBuilder>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockConsumptionPoster, EnderunAI.Api.Services.Inventory.StockConsumptionPoster>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IDepodanZimmetService, EnderunAI.Api.Services.Inventory.DepodanZimmetService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Accounting.IHesapPlaniAktarimService, EnderunAI.Api.Services.Accounting.HesapPlaniAktarimService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountLockService, EnderunAI.Api.Services.Inventory.StockCountLockService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.StockLevelAlertService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.InventoryItemPhotoService>();

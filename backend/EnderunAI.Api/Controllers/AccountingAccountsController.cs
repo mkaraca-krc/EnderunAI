@@ -11,7 +11,8 @@ namespace EnderunAI.Api.Controllers;
 [Authorize]
 [Route("api/accounting-accounts")]
 public sealed class AccountingAccountsController(
-    IAccountingAccountService service)
+    IAccountingAccountService service,
+    IHesapPlaniAktarimService aktarim)
     : ControllerBase
 {
     [HttpGet]
@@ -101,6 +102,43 @@ public sealed class AccountingAccountsController(
             return Conflict(new { message = exception.Message });
         }
     }
+
+    /// <summary>
+    /// HESAP PLANI AKTARIMI — EKLER YA DA ATLAR, ASLA DEĞİŞTİRMEZ.
+    ///
+    /// Ayrı `chart.import` anahtarı istiyor: tek hesap açmak
+    /// (`accounting.create`) ile dosyadan toplu hesap üretmek aynı iş
+    /// değil. Sonuç raporu üç listeyle dönüyor — eklenen sayısı,
+    /// atlanan mevcut kodlar, hata veren satırlar — böylece "sessizce
+    /// bir şey oldu" hâli kalmıyor.
+    /// </summary>
+    [HttpPost("import")]
+    [RequirePermission(PermissionCatalog.Keys.ChartImport)]
+    public async Task<IActionResult> Import(
+        [FromForm] Guid companyId,
+        [FromForm] bool preview,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "Dosya seçilmedi." });
+
+        try
+        {
+            await using var akis = file.OpenReadStream();
+            var sonuc = await aktarim.AktarAsync(companyId, akis, preview, cancellationToken);
+            return Ok(sonuc);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (InvalidOperationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
 
     [HttpPut("{id:guid}")]
     [RequirePermission(PermissionCatalog.Keys.AccountingEdit)]

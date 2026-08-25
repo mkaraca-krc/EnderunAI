@@ -64,7 +64,6 @@ export default function AccountingAccountImportPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [updateExisting, setUpdateExisting] = useState(false);
 
   const [result, setResult] = useState<ImportResult | null>(null);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
@@ -166,10 +165,6 @@ export default function AccountingAccountImportPage() {
 
     formData.append("companyId", companyId);
     formData.append("preview", String(preview));
-    formData.append(
-      "updateExisting",
-      String(updateExisting)
-    );
     formData.append("file", file);
 
     setProcessing(true);
@@ -286,22 +281,24 @@ export default function AccountingAccountImportPage() {
               />
             </label>
 
-            <label className="span-2 erp-check">
-              <input
-                type="checkbox"
-                checked={updateExisting}
-                disabled={processing}
-                onChange={(event) => {
-                  setUpdateExisting(
-                    event.target.checked
-                  );
-                  setResult(null);
-                }}
-              />
+            {/*
+              "MEVCUTLARI GÜNCELLE" KUTUSU KALDIRILDI.
 
-              Mevcut hesapların adını, üst hesabını ve
-              özelliklerini güncelle
-            </label>
+              Aktarım mevcut hesabı GÜNCELLEMİYOR (karar: Mehmet
+              Karacabey, 2026-08-25). Muhasebe hesabını bir dosyayla
+              değiştirmek elle yapılacak bir iştir; dosyada yanlış
+              yazılmış tek bir ad, hesabın anlamını sessizce
+              değiştirir ve fark edilmez.
+
+              Kutu duruyor olsaydı işaretlenebilir ama hiçbir şey
+              yapmazdı — kullanıcıya var olmayan bir yetenek vaat
+              eden bir düğme, olmayan düğmeden kötüdür.
+            */}
+            <p className="span-2 erp-status">
+              Mevcut hesap kodları GÜNCELLENMEZ, atlanır ve raporda
+              listelenir. Üst hesabı bulunmayan satırlar da atlanır;
+              eksik üst hesap otomatik oluşturulmaz.
+            </p>
           </div>
 
           {file && (
@@ -320,31 +317,25 @@ export default function AccountingAccountImportPage() {
             </div>
           )}
 
-          {/*
-            DÜĞMELER DEVRE DIŞI — UÇ HENÜZ YOK.
-
-            `accounting-accounts/import` backend'de YAZILMAMIŞ. Düğmeler
-            açıkken kullanıcı dosyayı seçiyor, "Aktar" diyor ve 404
-            alıyordu — hiçbir şey yapmayan bir düğme, hata veren bir
-            düğmeden yalnız görünüşte iyidir.
-
-            KALDIRILMADI, DEVRE DIŞI BIRAKILDI: özellik terk edilmiş
-            değil, uç yazılacak (TEMIZLIK-TARAMASI.md). Düğme silinseydi
-            ekranın ne işe yaradığı da kaybolurdu.
-          */}
-          <p className="erp-status">
-            Hazırlanıyor — hesap planı aktarımı henüz açılmadı.
-          </p>
-
           <div className="erp-actions">
-            <button type="button" disabled>
-              Ön İzleme
+            <button
+              type="button"
+              disabled={processing || !file || !companyId}
+              onClick={() => void runImport(true)}
+            >
+              {processing ? "İşleniyor…" : "Ön İzleme"}
             </button>
 
-            <button type="button" disabled>
+            <button
+              type="button"
+              className="erp-primary"
+              disabled={processing || !file || !companyId}
+              onClick={() => setConfirmingImport(true)}
+            >
               Gerçek Aktarımı Başlat
             </button>
           </div>
+
         </section>
 
         {result && (

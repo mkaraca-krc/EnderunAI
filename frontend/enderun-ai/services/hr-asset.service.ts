@@ -93,6 +93,9 @@ export type CreateAssetFromInventoryRequest = {
   projectId?: string | null;
   warehouseId: string;
   inventoryItemId: string;
+  // Sunucuda isteğe bağlı, varsayılanı 1. Sarf malzemede birden çok
+  // adet zimmetlenebiliyor (10 çift eldiven gibi).
+  miktar?: number;
   serialNumber?: string | null;
   assignmentDate: string;
   plannedReturnDate?: string | null;
@@ -297,6 +300,8 @@ export const hrAssetService = {
       conditionAtReturn?: string | null;
       documentPath?: string | null;
       notes?: string | null;
+      // Durum değiştiren uç: kaydın sürümü zorunlu.
+      rowVersion: string;
     }
   ) {
     return apiClient<AssetInventoryActionResponse>(

@@ -135,7 +135,16 @@ public sealed class StockSaleIssuer(
 
             db.StockMovements.Add(new StockMovement
             {
-                // WarehouseStock şirketi depodan miras alır; ayrı alanı yok.
+                // ŞİRKET YAZILIYOR — alan vardı ama boş bırakılıyordu.
+                //
+                // `WarehouseStock`ta şirket alanı yok ve depodan miras
+                // alınıyor; `StockMovement`ta İSE VAR. Boş kalması,
+                // hareketleri şirket ekseninde süzmeyi imkânsız
+                // kılıyordu: `CompanyId == Guid.Empty` hiçbir kapsamla
+                // eşleşmez, dolayısıyla süzgeç her zaman boş döner.
+                // Canlıda `stock_movements` 0 satır olduğu için geçmiş
+                // veri etkilenmiyor.
+                CompanyId = companyId,
                 WarehouseId = warehouseId,
                 InventoryItemId = line.InventoryItemId,
                 Type = StockMovementType.Issue,
@@ -226,6 +235,7 @@ public sealed class StockSaleIssuer(
                 // WarehouseStock şirketi depodan miras alır; ayrı alanı yok.
                 WarehouseId = warehouseId,
                 InventoryItemId = line.InventoryItemId,
+                CompanyId = companyId,
                 Type = StockMovementType.Receipt,
                 Quantity = line.Quantity,
                 UnitCost = unitCost,

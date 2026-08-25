@@ -93,6 +93,10 @@ public static class RoleCatalog
             PermissionCatalog.Keys.CurrentAccountsApprove,
             PermissionCatalog.Keys.AccountingView, PermissionCatalog.Keys.AccountingCreate, PermissionCatalog.Keys.AccountingEdit,
             PermissionCatalog.Keys.AccountingDelete, PermissionCatalog.Keys.AccountingApprove, PermissionCatalog.Keys.AccountingManage,
+            // Hesap planı aktarımı: Admin ve GM yansımayla alıyor,
+            // Finans Sorumlusu AÇIKÇA. Ön Muhasebe DIŞARIDA — fiş
+            // girer, hesap planını toplu değiştiremez.
+            PermissionCatalog.Keys.ChartImport,
             PermissionCatalog.Keys.HakedisView,
             // Taşeron ödemesi, avansı ve tevkifatı finansın işi.
             PermissionCatalog.Keys.SubcontractorView, PermissionCatalog.Keys.SubcontractorManage,

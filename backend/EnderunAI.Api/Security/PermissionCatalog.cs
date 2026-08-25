@@ -183,6 +183,13 @@ public static class PermissionCatalog
          * karar.
          */
         public const string BankAccountView = "bank_account.view";
+
+        // HESAP PLANI AKTARIMI — muhasebe yönetimi düzeyi.
+        //
+        // accounting.create'ten AYRI: tek hesap açmak ile bir dosyadan
+        // toplu hesap üretmek aynı iş değil. Aktarım yanlış giderse
+        // hata tek satırda kalmaz, hesap planının tamamına yayılır.
+        public const string ChartImport = "chart.import";
         public const string FinanceManage = "finance.manage";
         public const string FinanceApprove = "finance.approve";
         public const string FinanceCreate = "finance.create";
@@ -428,6 +435,7 @@ public static class PermissionCatalog
 
         new(Keys.FinanceView, "Finans", "Finansı görüntüleme", "Finans merkezi ve ödeme verilerini görüntüler."),
         new(Keys.BankAccountView, "Banka Hesapları", "Banka hesaplarını görüntüleme", "Şirket banka hesaplarını ve maskeli IBAN'ı görüntüler."),
+        new(Keys.ChartImport, "Hesap Planı Aktarımı", "Hesap planını dosyadan aktarma", "Dosyadan toplu hesap ekler. Mevcut hesapları GÜNCELLEMEZ, eksik üst hesap OLUŞTURMAZ."),
         new(Keys.FinanceManage, "Finans", "Finans yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
         new(Keys.FinanceApprove, "Finans", "Finans onayı", "Ödeme ve finans işlemlerini onaylar."),
         new(Keys.FinanceCreate, "Finans", "Finans kaydı oluşturma", "Tahsilat, ödeme ve finans kaydı oluşturur."),

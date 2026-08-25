@@ -59,6 +59,15 @@ public sealed class PagedEndpointContractTests
             "eşleşme sayısı değil en yakın N kayıt anlamlı. Ayrıca " +
             "iki aşamalı (kelime tutmazsa benzerliğe düşüyor), tek bir " +
             "toplam sayı iki aşamayı da temsil edemezdi.",
+
+        ["DepodanZimmetController.Listele"] =
+            "KEYSET SAYFALAMA. Zimmet kayıtları personel × kalem " +
+            "çeşidi kadar büyüyor; her sayfada COUNT(*) almak tablonun " +
+            "en hızlı büyüyen tarafında tam tarama demek. Bu ucun " +
+            "sorduğu soru 'kaç tane var' değil 'bir sonraki sayfa var " +
+            "mı' — cevabı `sonrakiVar` alanıyla AÇIKÇA dönüyor, yani " +
+            "arayüz kırpıldığını biliyor. Bu testin asıl derdi " +
+            "(arayüzün gelen kaydı toplam sanması) burada oluşmuyor.",
     };
 
     [Fact]
