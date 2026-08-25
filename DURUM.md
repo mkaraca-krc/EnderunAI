@@ -1284,6 +1284,115 @@ Artık `DEPLOY_BRANCH` (varsayılan `main`) ile sabit ve
 istisna hâlâ mümkün: `DEPLOY_BRANCH=<dal> safe-deploy.sh` — ama
 geçmek AÇIK bir hareket olmak zorunda.
 
+## DEPODAN ZİMMET (2026-08-25)
+
+Malzeme depo stoğundan düşer, **şirket varlığından çıkmaz**.
+
+#### "ZİMMET KONUMU" AÇILMADI — ÖLÇÜM GEREKÇEYİ ÇÜRÜTTÜ
+
+Karar "zimmet konumuna taşınsın, üç seviyeli konum yapısı buna
+uygun" idi. **Uygun değil:** bölge/raf/kat MİKTAR TUTMUYOR. Miktar
+yalnız `warehouse_stocks` üzerinde (depo, kalem) çiftinde duruyor;
+üç seviye stok kartının YERLEŞİM bilgisi. Oraya miktar taşınamaz.
+
+Ayrı bir "Zimmet" deposu açmak da düşünüldü ve bırakıldı — o tam
+olarak "yeni mekanizma kurma" olurdu.
+
+**Açık zimmet kaydının kendisi konumdur:**
+
+| | |
+|---|---|
+| depo mevcudu | `warehouse_stocks.Quantity` — düştü |
+| zimmette | açık zimmetlerin çıkış hareketleri — arttı |
+| şirket varlığı | ikisinin toplamı — **DEĞİŞMEDİ** |
+
+Miktar için yeni alan AÇILMADI: miktar zaten çıkış hareketinde ve
+kayıt ona `IssueStockMovementId` ile bağlı. İkinci kopya zamanla
+sapabilecek ikinci bir doğruluk kaynağı olurdu. **Migration yok.**
+
+#### GİDER KURALI `InventoryAccountingKind`E EKLENMEDİ — GENİŞ OLAN OYDU
+
+İlk tasarım o enum'a `Durable` eklemekti. Ölçüm çürüttü: enum'u
+**İKİLİ varsayan 15 çağrı yeri** var (`kind == TradeGood ? a : b`).
+Üçüncü değer eklendiğinde dayanıklı kalemler o 15 yerin HEPSİNDE
+sessizce sarf tarafına düşerdi — mal kabul, stok sayımı ve
+stok-muhasebe mutabakatı dahil, yani zimmetle ilgisi olmayan
+akışların muhasebesi kayardı.
+
+Zimmet sorusu ayrı bir eksen: "bu kalem bir kişiye verilince TÜKENİR
+Mİ". Karşılığı stok kartında zaten var (`InventoryItem.Type`) ve o
+alana bugün hiçbir muhasebe kararı bağlı değil — tek kullanımı
+reçete aktarımında varsayılan atamak. **Blast yarıçapı sıfır.**
+
+Karar tek yerde: `ZimmetGiderKurali.GiderYazilir`. Ekipman dışındaki
+her tür tükenir sayılıyor; **tanınmayan tür gider YAZMAZ** (iki
+yanlıştan geri alınabilir olanı).
+
+#### EŞZAMANLILIK: SATIR KİLİDİ — VE AÇIKTA KALAN
+
+`warehouse_stocks` üzerinde eşzamanlılık jetonu **YOK** (yalnız
+(depo, kalem) benzersiz indeksi var) ve çıkış oku-değiştir-yaz
+yapıyor. İki işlem aynı anda "1 adet var" okuyup ikisi de düşerse
+stok **-1** olur.
+
+Zimmet akışında `SELECT ... FOR UPDATE` ile kapatıldı.
+
+**KURAL 27 GEREĞİ AÇIKTA KALAN:** aynı açık perakende satışında ve
+stoklu satış faturasında HÂLÂ DURUYOR. Somut hata: aynı kalem aynı
+anda hem satılır hem zimmetlenirse stok eksiye düşebilir. Ayrı paket
+olarak açıldı.
+
+#### İADE VE İPTAL TEK YARDIMCIDA
+
+İkisi de malzemeyi depoya geri koyuyor ve çıkışta gider yazıldıysa
+ters kaydı atıyor. Ayrı yazılsalardı biri ters kaydı atarken diğeri
+unutabilirdi; fark stok-muhasebe mutabakatında çıkar ve hangi
+akıştan geldiği belli olmazdı.
+
+**İPTALDE GEREKÇE ZORUNLU.** İptal bu akıştaki en çok suistimal
+edilebilecek eylem: malzeme kişide kalırken kayıt kapatılmış
+görünebilir. Zimmet, iade ve iptal `SecurityAuditEvents`e yazılıyor,
+`ActorUserId` ile.
+
+İade maliyeti çıkıştakiyle AYNI dönüyor — bugünün ortalamasıyla geri
+almak, aradaki fiyat değişimini iadenin üzerine yıkardı.
+
+#### YOL ADLARI ÖN YÜZDEN ALINDI
+
+`hr-asset.service.ts` bu uçları zaten çağırıyordu ve uç yazılmadığı
+için **kırık servis çağrısı çizgisinde** duruyorlardı. Sunucuya ayrı
+bir yol koymak aynı iş için iki sözleşme yaşatırdı:
+
+- `POST api/hr/assets/from-inventory`
+- `POST api/hr/assets/{id}/return-to-warehouse`
+- `POST api/hr/assets/{id}/cancel-assignment` (yeni, ön yüzde henüz çağrılmıyor)
+
+`Miktar` ön yüzde yoktu (tek kalem varsayılıyordu); zorunlu yapmak
+mevcut çağrıyı kırardı — isteğe bağlı, varsayılanı 1.
+
+**Yeni izin anahtarı açılmadı:** uçlar `inventory.edit` kullanıyor,
+kitle değişmiyor.
+
+#### HESAP PLANI AKTARIMI — EKLER YA DA ATLAR, ASLA DEĞİŞTİRMEZ
+
+`POST api/accounting-accounts/import`, ayrı `chart.import` anahtarı.
+
+- Mevcut hesap kodu gelirse GÜNCELLENMEZ — atlanır, "zaten var" listelenir
+- Üst hesap yoksa OLUŞTURULMAZ — hata verilir, satır atlanır
+- Hiyerarşi kodun kendisinden türetiliyor (`150.01.02` → `150.01`);
+  ayrı üst-hesap alanı kodla çelişebilecek ikinci kaynak olurdu
+- Satırlar koda göre sıralı işleniyor: aynı dosyadaki üst hesap önce
+
+**İZİN YAYILMASI TUZAĞI:** `RoleCatalog`'daki `K` dizisi anahtarları
+**yansımayla** topluyor — yeni anahtar, `K` kullanan her role
+otomatik gider. Ölçüldü: `K`/`KWithSensitive` yalnız Admin ve Genel
+Müdür'de. Finans Sorumlusu'na AÇIKÇA eklendi; **Ön Muhasebe
+dışarıda** — fiş girer, hesap planını toplu değiştiremez.
+
+#### KIRIK SERVİS ÇAĞRILARI: 3 → 0
+
+Bu paket çizgideki üç satırı da kapattı. Sınıf yeniden **sıfırda**.
+
 ## M3/1 — MESAJLAŞMA VERİ MODELİ (2026-08-25)
 
 Dört tablo: `conversations`, `conversation_members`, `messages`,
@@ -1682,10 +1791,24 @@ Açık kalan 4 madde:
 
 3. **Uzak yedek hedefi** | Betik yazıldı ama `UZAK_YEDEK_ETKIN`
    KAPALI; yurt dışı aktarımı hukukçu cevabına kadar kapalı kalacak |
-   **Bana düşen: hedef listesi + maliyet tahmini**, AB/Türkiye veri
-   merkezi olanlar ayrı işaretli.
+   **TÜRKİYE HEDEFİ ONAYLANDI** (Mehmet, 2026-08-25): fiyat karar
+   ekseni değil, yargı yetkisi. Sağlayıcılara iletilecek soru listesi
+   hazır: `ops/belgeler/uzak-yedek-saglayici-sorulari.md` — beş eleme
+   şartı, birincisi silme yetkisi olmayan anahtar / nesne kilidi.
+   Teklifler Mehmet'te.
 
-4. **§7 personel testi kararsızlığı** | Personel testlerindeki
+4. **Malzeme ve yedek parça zimmette gider yazsın mı** |
+   VARSAYIMLA ilerlendi: `Material` ve `SparePart` tükenir sayıldı,
+   yalnız `Equipment` dayanıklı | Mehmet'in teyidi. Ters ise
+   `ZimmetGiderKurali` içinde tek satır değişir; geçmiş kayıtlar
+   etkilenmez çünkü henüz zimmet verilmedi.
+
+5. **Stok düşüren diğer kapılarda eşzamanlılık** | Zimmet tarafı
+   `FOR UPDATE` ile kapatıldı; perakende satış ve stoklu satış
+   faturası hâlâ oku-değiştir-yaz | **AYRI PAKET AÇILDI** (Mehmet,
+   2026-08-25). Planı zimmet raporundan sonra.
+
+6. **§7 personel testi kararsızlığı** | Personel testlerindeki
    ~dörtte bir düşme hâlâ açık; §7b tarih çakışması bunun PARÇASI
    DEĞİLDİ | Ayrı teşhis turu — **M3/2'den sonra**.
 
@@ -1734,6 +1857,10 @@ isimlendirme) buraya yazılmaz.
 - `2026-08-25 | Depodan Zimmet: stok | Stoktan DÜŞER ama şirket varlığından ÇIKMAZ: "zimmet" konumuna taşınır. İade edilince geri döner. | Üç seviyeli konum yapısı buna uygun; depo stoğu doğru görünür, malzeme kaybolmaz. | EVET — konum taşıma geri alınabilir`
 - `2026-08-25 | Depodan Zimmet: muhasebe | Fiş TÜRE GÖRE. Sarf kategorisi → çıkışta gider yazılır (150/740 deseni). Dayanıklı taşınır → gider YAZILMAZ, demirbaş/zimmet kaydı olarak durur; amortisman varsa oradan yürür. | Mevcut muhasebe kuralının aynısı; kategori zaten stok kartında var, yeni alan açılmıyor. | HAYIR — gider yazılan fiş muhasebe kaydıdır`
 - `2026-08-25 | Mesaj arşivi | Süresiz arşiv; silme mekanizması KURULMADI. | Ticari kayıt saklama süreleri ile KVKK "gereğinden uzun tutma" ilkesi çakışabiliyor; hukukçu cevabı bekleniyor. | EVET — silme sonradan eklenebilir, silinen veri geri gelmez`
+- `2026-08-25 | Zimmet gider ekseni | Karar InventoryItem.Type üzerinden veriliyor (Ekipman hariç her tür tükenir), InventoryCategory.AccountingKind'e ÜÇÜNCÜ DEĞER EKLENMEDİ. | O enum'u ikili varsayan 15 çağrı yeri var; üçüncü değer mal kabul, sayım ve mutabakat muhasebesini de sessizce kaydırırdı. Type alanına bugün hiçbir muhasebe kararı bağlı değil. | EVET`
+- `2026-08-25 | Malzeme/yedek parça sınıflandırması | Material ve SparePart TÜKENİR sayıldı (gider yazılır); yalnız Equipment dayanıklı. | Malzeme işin içine giriyor, yedek parça takıldığında bitiyor. VARSAYIM — Mehmet'in onayı alınmadı, ters ise tek satır değişir. | EVET`
+- `2026-08-25 | Zimmet iptali | Gerekçe ZORUNLU; iptal ayrı uçta, denetim kaydında iadeden ayrı eylem adıyla. | İptal en çok suistimal edilebilecek eylem: malzeme kişide kalırken kayıt kapatılmış görünebilir. | EVET`
+- `2026-08-25 | Zimmet uçlarının izni | Yeni anahtar açılmadı, inventory.edit kullanılıyor. | Yeni anahtar kitle kararıdır; mevcut anahtar kitleyi değiştirmiyor. | EVET`
 
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 
@@ -3990,6 +4117,32 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     Ayrıca: kabuk betiğinde **satır devamlarını (`\`) birleştirmeden**
     satır satır bakmak yanıltır — `pg_dump ... \` satırında boru
     görünmez, boru alt satırdadır.
+
+32. **SABOTAJIN UYGULANDIĞINI DOĞRULA, SONRA TESTİ KOŞ.**
+
+    Sonda testlerinde sabotajı yaptıktan sonra, testi koşmadan ÖNCE
+    değişikliğin gerçekten dosyaya yazıldığını doğrula (diff ya da
+    grep ile satırı göster). Komut sessizce hata verip satırı
+    değiştirmezse test yeşil kalır ve bu yeşil bir kanıt değil,
+    **yanılgıdır.**
+
+    Bu oturumda ÜÇ kez farklı biçimde yaşandı:
+
+    - kural doğru ama hiçbir yerden çağrılmıyor (maskeleme)
+    - sabotaj yanlış yere uygulanmış (`tr-TR` yerine `toLowerCase`)
+    - sabotaj hiç uygulanmamış (`sed` ayracı `||` ile çakıştı)
+
+    Üçü de aynı hata sınıfı: **testin yeşil olması, korumanın var
+    olduğunu göstermez.**
+
+    **DÖRDÜNCÜ BİÇİM — AYNI DOSYAYA İKİ SONDA:** aynı dosyaya arka
+    arkaya iki sabotaj uygulanırken ikinci yedek, orijinali değil
+    BİRİNCİ SABOTAJLI hâli kaydetti. Geri alma o bozuk hâli yazdı ve
+    sabotaj ağaçta kaldı. Bir dosya için yedek YALNIZ BİR KEZ alınır
+    ve her sondadan sonra ağaç doğrulanır:
+    ```
+    grep -c "<sabotaj izi>" <dosya>   # 0 olmalı
+    ```
 
 ## 6. Ölçüm araçlarına dair uyarı
 
