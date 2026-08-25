@@ -144,9 +144,20 @@ export const hrDashboardService = {
     return normalizeList<
       HrDashboardPersonnel
     >(response).filter(
-      (item) =>
-        !item.companyId ||
-        item.companyId === companyId
+      /*
+       * KAPSAM ALANI EKSİKSE SATIR ELENİR.
+       *
+       * Önce `!item.companyId || ...` yazıyordu: şirket alanı
+       * gelmeyen satır listeye GİRİYORDU. Şirket izolasyonunda
+       * varsayılan KAPALI olmalı — "kapı bilinmeyen tipte kapalı
+       * düşer" kuralının aynısı.
+       *
+       * Bugün zararsız çünkü canlıda tek şirket var. İkinci şirket
+       * geldiği gün ya da kapsamı sınırlı bir kullanıcı tanımlandığı
+       * gün sızdırırdı — G3 erteleme nöbetçisinin beklediği iki
+       * tetikleyici tam olarak bunlar.
+       */
+      (item) => item.companyId === companyId
     );
   },
 

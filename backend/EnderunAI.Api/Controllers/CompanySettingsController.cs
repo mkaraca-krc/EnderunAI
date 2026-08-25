@@ -3,6 +3,7 @@ using EnderunAI.Api.Contracts.Accounting;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Accounting;
 using EnderunAI.Api.Services.Email;
 using EnderunAI.Api.Services.Upload;
@@ -26,7 +27,9 @@ public sealed class CompanySettingsController(
     AppDbContext db,
     IUploadService uploadService,
     IEmailService emailService,
-    IAccountingIntegrationService accountingIntegration) : ControllerBase
+    IAccountingIntegrationService accountingIntegration,
+    ICurrentUserService currentUser,
+    ICurrentDataScopeService dataScope) : ControllerBase
 {
     private const string LogoCategory = "company-logo";
 
@@ -124,6 +127,134 @@ public sealed class CompanySettingsController(
         var stream = new FileStream(file.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         Response.Headers.CacheControl = "public, max-age=3600";
         return File(stream, file.ContentType, enableRangeProcessing: true);
+    }
+
+    /// <summary>
+    /// ŞİRKETİN BANKA HESAPLARI — IBAN MASKELİ.
+    ///
+    /// BU UÇ ÖNCE YOKTU ve eksikliği canlıda bir arıza üretiyordu:
+    /// bordro ekranı `bank-accounts` çağırıyor, 404 alıyor ve
+    /// "Gerçek Ödeme" hiç işaretlenemiyordu.
+    ///
+    /// `company-settings.view` KULLANILMIYOR: o anahtar tüm ayar
+    /// paketini açıyor ve yalnız Admin/GM'de. Bordro ödemesini
+    /// işaretleyen İK Sorumlusu ile hesabın sahibi Finans Sorumlusu
+    /// da bu veriye ihtiyaç duyuyor — `bank_account.view` tam bu
+    /// dilim için açıldı.
+    ///
+    /// IBAN MASKELİ DÖNER. Tam IBAN ayrı bir uçtan, tek hesap için
+    /// ve DENETİM KAYDIYLA alınır: varsayılan olarak açıkta bırakmak
+    /// yerine, isteyene kayda geçerek verilir.
+    /// </summary>
+    [HttpGet("bank-accounts")]
+    [RequirePermission(PermissionCatalog.Keys.BankAccountView)]
+    public async Task<IActionResult> GetBankAccounts(
+        [FromQuery] Guid companyId,
+        CancellationToken cancellationToken)
+    {
+        var scope = await dataScope.GetAsync(cancellationToken)
+            ?? throw new UnauthorizedAccessException("Kullanıcı veri kapsamı bulunamadı.");
+
+        /*
+         * MASKELEME BELLEKTE YAPILIYOR, SORGUDA DEĞİL.
+         *
+         * `IbanMaskele` özel bir C# metodu; `IQueryable.Select`
+         * içinde çağrılırsa EF Core onu SQL'e çevirmeye çalışır ve
+         * "could not be translated" ile ÇALIŞMA ANINDA patlar.
+         * Derleme sessiz kalır, hata ancak uç çağrıldığında çıkar.
+         *
+         * Satır sayısı küçük (şirket başına birkaç hesap), o yüzden
+         * önce çekip sonra biçimlendirmenin maliyeti yok.
+         */
+        var kayitlar = await db.CompanyBankAccounts
+            .AsNoTracking()
+            .ApplyScope(scope)
+            .Where(x => x.CompanyId == companyId)
+            .OrderBy(x => x.BankName)
+            .ToListAsync(cancellationToken);
+
+        var hesaplar = kayitlar.Select(x => new
+        {
+            x.Id,
+            x.CompanyId,
+            x.BankName,
+            x.AccountHolder,
+            x.CurrencyCode,
+
+            // MASKELİ: banka adı + hesap sahibi + son dört hane
+            // seçmeye yeter. Tam IBAN ayrı uçtan.
+            IbanMasked = IbanMaskele(x.Iban)
+        });
+
+        return Ok(hesaplar);
+    }
+
+    /// <summary>
+    /// TAM IBAN — TEK HESAP, KAYDA GEÇER.
+    ///
+    /// "Göster/Kopyala" eyleminin ucu. Liste ucundan ayrı olmasının
+    /// sebebi: tam IBAN'ı listeyle birlikte döndürmek, onu her ekran
+    /// açılışında açığa çıkarmak demekti. Burada tek hesap isteniyor
+    /// ve HER İSTEK kayda düşüyor.
+    ///
+    /// KAYDA IBAN YAZILMAZ — kim, hangi hesap, ne zaman. IBAN'ın
+    /// kendisini denetim kaydına yazmak, korumaya çalıştığımız veriyi
+    /// ikinci bir yere kopyalamak olurdu.
+    /// </summary>
+    [HttpGet("bank-accounts/{id:guid}/iban")]
+    [RequirePermission(PermissionCatalog.Keys.BankAccountView)]
+    public async Task<IActionResult> GetBankAccountIban(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var scope = await dataScope.GetAsync(cancellationToken)
+            ?? throw new UnauthorizedAccessException("Kullanıcı veri kapsamı bulunamadı.");
+
+        var hesap = await db.CompanyBankAccounts
+            .AsNoTracking()
+            .ApplyScope(scope)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (hesap is null)
+            return NotFound(new { message = "Banka hesabı bulunamadı." });
+
+        db.SecurityAuditEvents.Add(new SecurityAuditEvent
+        {
+            ActorUserId = currentUser.UserId,
+            ActorUsername = currentUser.Username,
+            Action = "BankAccountIbanRevealed",
+            EntityType = "CompanyBankAccount",
+            EntityId = hesap.Id,
+
+            // IBAN YOK — yalnız hangi hesabın açıldığı.
+            DetailsJson = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                summary = "Tam IBAN görüntülendi.",
+                bankName = hesap.BankName
+            }),
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            OccurredAtUtc = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { iban = hesap.Iban });
+    }
+
+    /// <summary>
+    /// Son dört hane dışında maskeler. Dört haneden kısa değer
+    /// tümüyle maskelenir — kısa bir değeri kısmen göstermek,
+    /// maskelemeyi anlamsız kılardı.
+    /// </summary>
+    private static string IbanMaskele(string? iban)
+    {
+        if (string.IsNullOrWhiteSpace(iban)) return string.Empty;
+
+        var temiz = iban.Replace(" ", string.Empty);
+
+        return temiz.Length <= 4
+            ? new string('*', temiz.Length)
+            : "****" + temiz[^4..];
     }
 
     [HttpPost("bank-accounts")]

@@ -18,6 +18,19 @@ namespace EnderunAI.Api.Security;
 /// </summary>
 public static class FinanceScopeExtensions
 {
+    /// <summary>
+    /// Şirket banka hesapları — YALNIZ ŞİRKET EKSENİ.
+    ///
+    /// Proje ve şube eksenleri BİLEREK yok: banka hesabı şirkete ait,
+    /// projeye değil. Proje kapsamı olan bir kullanıcıya şirketin
+    /// banka hesaplarını açmak, kapsamı genişletmek olurdu.
+    /// </summary>
+    public static IQueryable<CompanyBankAccount> ApplyScope(
+        this IQueryable<CompanyBankAccount> query, CurrentDataScopeSnapshot scope) =>
+        scope.HasGlobalAccess
+            ? query
+            : query.Where(x => scope.CompanyIds.Contains(x.CompanyId));
+
     public static IQueryable<Project> ApplyScope(
         this IQueryable<Project> query, CurrentDataScopeSnapshot scope) =>
         scope.HasGlobalAccess

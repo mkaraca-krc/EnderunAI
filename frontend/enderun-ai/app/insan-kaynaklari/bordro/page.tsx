@@ -174,6 +174,18 @@ export default function PayrollManagementPage() {
    */
   const actions = useModuleActions("attendance-payroll");
 
+  /*
+   * ÖDEME EYLEMİ AYRI KAPIDA — EKRAN KAPISINDAN DAR.
+   *
+   * Ödeme işaretlemek banka hesabı listesi gerektiriyor ve o liste
+   * `bank_account.view` ile korunuyor. Ekranı `payroll.view` ile
+   * açan ama bu anahtarı olmayan rol (bugün: Teknik Koordinatör)
+   * ödeme düğmesini HİÇ GÖRMEZ — 403 alıp bozuk ekran görmez.
+   * M1/7'deki `canRead` deseninin aynısı.
+   */
+  const bankActions = useModuleActions("bank_account");
+  const odemeYapabilir = bankActions.can("view") && !bankActions.loading;
+
   const [companies, setCompanies] = useState<
     CompanyListItem[]
   >([]);
@@ -658,11 +670,18 @@ export default function PayrollManagementPage() {
       const currency =
         record.currencyCode || "TRY";
 
+      /*
+       * PARA BİRİMİ EKSİKSE HESAP ELENİR.
+       *
+       * `currencyCode` artık isteğe bağlı (modelde de `string?`).
+       * Boşsa hesabı listeye ALMIYORUZ: hangi para biriminde olduğu
+       * bilinmeyen bir hesaba ödeme işaretlemek, yanlış kurdan
+       * ödeme kaydı üretebilir. Dar taraf.
+       */
       const compatibleBanks =
         bankRows.filter(
           (item) =>
-            item.currencyCode
-              .toUpperCase() ===
+            (item.currencyCode ?? "").toUpperCase() ===
             currency.toUpperCase()
         );
 
@@ -1984,7 +2003,7 @@ export default function PayrollManagementPage() {
                         )}
 
                         {record.status ===
-                          PayrollStatus.Approved && actions.can("edit") && (
+                          PayrollStatus.Approved && actions.can("edit") && odemeYapabilir && (
                           <button
                             type="button"
                             disabled={
@@ -2545,7 +2564,7 @@ export default function PayrollManagementPage() {
                 )}
 
                 {selectedRecord.status ===
-                  PayrollStatus.Approved && (
+                  PayrollStatus.Approved && odemeYapabilir && (
                   <button
                     type="button"
                     onClick={() =>
@@ -2864,13 +2883,13 @@ export default function PayrollManagementPage() {
                         >
                           {account.bankName}
                           {" · "}
-                          {account.accountName}
+                          {account.accountHolder ?? "—"}
                           {" · "}
                           {
                             account.currencyCode
                           }
-                          {account.iban
-                            ? ` · ${account.iban}`
+                          {account.ibanMasked
+                            ? ` · ${account.ibanMasked}`
                             : ""}
                         </option>
                       )

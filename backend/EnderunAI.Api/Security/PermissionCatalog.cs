@@ -166,6 +166,23 @@ public static class PermissionCatalog
 
         // Finans
         public const string FinanceView = "finance.view";
+
+        /*
+         * BANKA HESABI OKUMA — DAR VE AYRI.
+         *
+         * Banka hesapları bugün yalnız `company-settings.view` ile
+         * okunabiliyordu ve o anahtar TÜM şirket ayarları paketini
+         * açıyor (logo, mesai pencereleri, hepsi). Bu anahtar yalnız
+         * banka hesaplarını açar — aynı kitleye daha az veri.
+         *
+         * KİTLE GENİŞLETİLMEDİ: yalnız Admin ve Genel Müdür'e
+         * veriliyor, yani IBAN görebilen rol sayısı bugünküyle AYNI.
+         * Finans Sorumlusu ve İK Sorumlusu'na verilmesi DURUM.md
+         * "BEKLEYEN KARARLAR" listesinde: bordro ödemesini İK yapıyor
+         * ve bugün yapamıyor, ama IBAN kitlesini genişletmek ayrı bir
+         * karar.
+         */
+        public const string BankAccountView = "bank_account.view";
         public const string FinanceManage = "finance.manage";
         public const string FinanceApprove = "finance.approve";
         public const string FinanceCreate = "finance.create";
@@ -410,6 +427,7 @@ public static class PermissionCatalog
         new(Keys.HakedisDelete, "Hakediş", "Hakediş silme", "Hakediş, metraj veya fiyat farkı kaydını siler."),
 
         new(Keys.FinanceView, "Finans", "Finansı görüntüleme", "Finans merkezi ve ödeme verilerini görüntüler."),
+        new(Keys.BankAccountView, "Banka Hesapları", "Banka hesaplarını görüntüleme", "Şirket banka hesaplarını ve maskeli IBAN'ı görüntüler."),
         new(Keys.FinanceManage, "Finans", "Finans yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
         new(Keys.FinanceApprove, "Finans", "Finans onayı", "Ödeme ve finans işlemlerini onaylar."),
         new(Keys.FinanceCreate, "Finans", "Finans kaydı oluşturma", "Tahsilat, ödeme ve finans kaydı oluşturur."),

@@ -1,14 +1,28 @@
 import { apiClient } from "@/lib/api/api-client";
 
+/*
+ * TEK SÖZLEŞME — UCUN DÖNDÜRDÜĞÜ ADLAR.
+ *
+ * Önce burada `accountName`, `accountingAccountId` ve `isActive`
+ * vardı; üçü de sunucuda YOKTU. Sonuç: `.filter` her satırı eliyordu
+ * ve liste SESSİZCE boş kalıyordu — 404'ten beter, çünkü hata bile
+ * görünmüyordu.
+ *
+ * Eşleme katmanı yazılmadı. Modeldeki doğru ad `AccountHolder`
+ * (hesap sahibi) olduğu için uç `accountHolder` döndürüyor ve tip
+ * ona uyduruldu. `accountingAccountId` yalnız KASA hesabında var,
+ * bankada yok. `isActive` modelde hiç yok; uç zaten silinmemişleri
+ * döndürüyor.
+ *
+ * IBAN MASKELİ: son dört hane. Tam IBAN ayrı uçtan, denetim kaydıyla.
+ */
 export type PayrollBankAccount = {
   id: string;
   companyId: string;
   bankName: string;
-  accountName: string;
-  iban?: string | null;
-  currencyCode: string;
-  accountingAccountId?: string | null;
-  isActive?: boolean;
+  accountHolder?: string | null;
+  ibanMasked: string;
+  currencyCode?: string | null;
 };
 
 export type PayrollCashAccount = {
@@ -56,20 +70,21 @@ function normalizeList<T>(
 }
 
 export const payrollPaymentAccountService = {
-  async getBankAccounts(
-    companyId: string
-  ) {
-    const response =
-      await apiClient<unknown>(
-        "bank-accounts"
-      );
+  /*
+   * SÜZME SUNUCUDA. Şirket parametresi uca gidiyor; ön yüz artık
+   * çekip elemiyor. Elemek, alan adı bir gün değişirse listeyi
+   * sessizce boşaltan desendi.
+   */
+  async getBankAccounts(companyId: string) {
+    return apiClient<PayrollBankAccount[]>(
+      `company-settings/bank-accounts?companyId=${encodeURIComponent(companyId)}`
+    );
+  },
 
-    return normalizeList<
-      PayrollBankAccount
-    >(response).filter(
-      (item) =>
-        item.companyId === companyId &&
-        item.isActive !== false
+  /** Tam IBAN — "Göster/Kopyala". Her çağrı kayda düşer. */
+  async revealIban(id: string) {
+    return apiClient<{ iban: string }>(
+      `company-settings/bank-accounts/${id}/iban`
     );
   },
 

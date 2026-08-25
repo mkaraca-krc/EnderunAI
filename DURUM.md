@@ -1251,6 +1251,67 @@ Artık `DEPLOY_BRANCH` (varsayılan `main`) ile sabit ve
 istisna hâlâ mümkün: `DEPLOY_BRANCH=<dal> safe-deploy.sh` — ama
 geçmek AÇIK bir hareket olmak zorunda.
 
+## BEKLEYEN KARARLAR
+
+Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`
+
+1. **`bank_account.view` Finans Sorumlusu + İK Sorumlusu'na verilsin mi** |
+   Çalışma yetkisi kuralı (c): IBAN görebilen kitleyi genişletiyor
+   (2 rol → 4 rol). Anahtar bu iki role RoleCatalog'a yazılmıştı,
+   kural gereği GERİ ALINDI |
+   Mehmet'in onayı. Onaylanmazsa bordroda "Gerçek Ödeme" İK
+   Sorumlusu'nda çalışmamaya devam eder (bugün de çalışmıyor).
+
+2. **Tam IBAN için ayrı `bank_account.reveal` anahtarı** |
+   Aynı kural: yeni anahtar açmak kitle kararı. Bugün tam IBAN ucu
+   liste ucuyla AYNI anahtarı kullanıyor, ama ayrı yüzey ve her
+   çağrıda denetim kaydı var |
+   Mehmet'in kararı: izin düzeyinde de darlık isteniyor mu.
+
+3. **Hesap planı aktarım ucu (`accounting-accounts/import`)** |
+   Uç yazılacak (karar verildi) ama iş kuralları belirsiz: mevcut
+   hesap kodu gelirse güncellensin mi, üst hesap yoksa oluşturulsun
+   mu, hangi izin korusun. Kural (a): muhasebe kaydını etkileyen
+   yeni kural kurulmuyor |
+   Bu üç sorunun cevabı. Düğmeler devre dışı + "Hazırlanıyor".
+
+4. **Depodan Zimmet: stok ve muhasebe davranışı** |
+   Kural (a): zimmet gider yazacaksa bu yeni bir muhasebe kuralı.
+   Denetim tamam, model hazır (`HrAssetAssignment` alanları mevcut) |
+   İki karar: (1) stoktan düşsün mü yoksa "zimmet" konumuna mı
+   taşınsın, (2) fiş kesilsin mi — türe göre mi (sarf gider yazar,
+   dayanıklı taşınır).
+
+5. **Mesaj saklama: arşivden silme** | Kural (b) ve (f): silme
+   mekanizması kurulmuyor | 12 ay çevrimiçi + arşiv onaylı; arşivden
+   sonrası için karar yok, silme kurulmadı.
+
+6. **KVKK aydınlatma metni** | Kural (e): hukuk metni yazılmıyor |
+   Mehmet hazırlatacak; ekranda yeri açılacak.
+
+7. **Disk şifrelemesi** | Mevcut sunucuda yeniden kurulum gerektirir |
+   Karar ve bakım penceresi. Yedek şifrelemesi ve dizin izni
+   yapıldı; disk hâlâ düz `ext4`.
+
+8. **DB bağlantı kaydı** (`log_connections`, `logging_collector`) |
+   Sıradaki pakete bırakıldı | Kim ne zaman bağlandı bugün hiç iz
+   bırakmıyor.
+
+---
+
+## KARAR KAYDI
+
+Kendi verdiğim iş kuralı kararları. Teknik kararlar (test, indeks,
+isimlendirme) buraya yazılmaz.
+
+`tarih | konu | karar | dayandığım varsayım | geri alması kolay mı`
+
+- `2026-08-24 | Banka hesabı izni | Yeni dar anahtar bank_account.view açıldı, YALNIZ Admin+GM'e (yansımayla). Finans/İK'ya verilmedi. | IBAN kitlesini genişletmemek, bordro engelini kaldırmaktan öncelikli (kural c). | EVET — RoleCatalog'a iki satır`
+- `2026-08-24 | IBAN maskeleme | Liste ucunda son dört hane; tam IBAN ayrı uçtan, tek hesap, her çağrı denetim kaydına. Kayda IBAN yazılmıyor. | Banka adı + hesap sahibi + son dört hane, ödeme ekranında hesabı ayırt etmeye yeter. | EVET`
+- `2026-08-24 | Ödeme eylemi görünürlüğü | bank_account.view olmayan rolde "Gerçek Ödeme" düğmesi HİÇ render edilmiyor (403 yerine yokluk). | Bozuk ekran göstermek, eylemi gizlemekten kötü. | EVET`
+- `2026-08-24 | Kapsam alanı eksik satır | hr-dashboard ve zimmet kutusunda "alan yoksa satırı al" deseni "alan yoksa ELE" olarak değişti. | Şirket izolasyonunda varsayılan kapalı olmalı; bugün tek şirket olduğu için görünür etki yok. | EVET`
+- `2026-08-24 | Yarım özellikler | ai-analysis/site-analysis servisleri ve fiyat farkı hesaplama işlevleri SİLİNDİ (ekranda karşılığı yoktu); hesap planı aktarımı KALDIRILMADI, devre dışı + "Hazırlanıyor". | Ekranda görünen yarım özellik kaldırılmaz, görünmeyen ölü kod silinir. | EVET — git geçmişi`
+
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 
 **Neden R3 ikiye ayrıldı:** merdivende R3 "UserDataScope arayüzü" diye

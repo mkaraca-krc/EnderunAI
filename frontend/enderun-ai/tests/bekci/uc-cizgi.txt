@@ -15,4 +15,3 @@
 app/muhasebe/hesap-plani/aktar/page.tsx|api/accounting-accounts/import|UÇ YAZILACAK (karar verildi). Düğmeler DEVRE DIŞI + "Hazırlanıyor" etiketi, artık 404 vermiyor.
 services/hr-asset.service.ts|api/hr/assets/from-inventory|UÇ YAZILACAK — "Depodan Zimmet" paketi (denetim tamam, model hazır)
 services/hr-asset.service.ts|api/hr/assets/X/return-to-warehouse|UÇ YAZILACAK — aynı paketin iade tarafı
-services/payroll-payment-account.service.ts|api/bank-accounts|BLOKLU — "yol yanlış" öncülü ÖLÇÜMLE YANLIŞLANDI: banka hesapları için hiçbir yolda GET ucu YOK. Karar bekliyor.

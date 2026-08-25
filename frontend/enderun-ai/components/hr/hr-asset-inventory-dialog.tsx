@@ -117,8 +117,16 @@ export default function HrAssetInventoryDialog({
     [companyId, projects]
   );
 
+  /*
+   * KAPSAM ALANI EKSİKSE DEPO ELENİR.
+   *
+   * Önce `!x.companyId || ...` yazıyordu ve şirket alanı gelmeyen
+   * depo listeye giriyordu. Zimmet, depodan mal çıkaran bir işlem;
+   * yanlış şirketin deposu listede görünürse kullanıcı onu seçebilir.
+   * Varsayılan kapalı.
+   */
   const filteredWarehouses = useMemo(
-    () => warehouses.filter((x) => !x.companyId || x.companyId === companyId),
+    () => warehouses.filter((x) => x.companyId === companyId),
     [companyId, warehouses]
   );
 
