@@ -1239,6 +1239,39 @@ taşınır. Düz birleştirme ÖNERİLMEZ: çakışma yüzeyi 11 dosya
 `rfq_suppliers`, `purchase_orders` hepsi **0 satır**. Yani çift
 yazımın bugün pratik bir kaybı yok.
 
+#### DAL DÜZENİ — KURAL (2026-08-25)
+
+1. **Yayın dalı `main`'dir. Canlı her zaman `main`'in ucudur.**
+2. **İş kısa ömürlü dallarda yapılır**; birleşince dal `archive/`
+   önekine alınır.
+3. **Bir dal 2 haftadır dokunulmamışsa `archive/` önekine alınır.**
+4. **Dal adı yaptığı işi anlatır.**
+5. **Dal SİLİNMEZ** — adlandırmayla emekliye ayrılır. Silmek bilgi
+   kaybıdır; `archive/` öneki aynı bilgiyi koruyup "bu aktif değil"
+   der.
+
+**2026-08-25'te uygulandı:** 19 dal `archive/` önekine alındı, her
+biri için önce arşiv kopyası oluşturulup **SHA eşitliği 19/19
+doğrulandıktan sonra** eski ad kaldırıldı. Uzakta artık tek aktif
+dal var: `main`. Arşivde 20 dal duruyor.
+
+#### 28 TEMMUZ ÖNCESİ DALLAR BİRLEŞTİRİLMEYECEK — KURAL
+
+`archive/feature/accounting-finance-sprint-1-20260728` (113 commit)
+ve `archive/feature/project-hierarchy-20260728` (91 commit) —
+**ikisi aynı soydan**, hiyerarşi dalı muhasebe dalının atası
+(ölçüldü: `merge-base --is-ancestor` doğruladı, commit başlıkları
+birebir aynı küme).
+
+**Bu dallar bugün yürürlükte olan kuralların HİÇBİRİNİ taşımıyor:**
+kapsam süzgeci, keyset sayfalama, RowVersion + UpdatedAtUtc, kırık
+servis çağrısı çizgisi, rota bekçisi, uç bekçisi — hepsi 28
+Temmuz'dan sonra kondu. Birleştirme, 450'de tutulan kapsam borcunu
+geri getirir ve dört bekçinin çizgisini birden yükseltir.
+
+**Oradan KOD değil NİYET kurtarılır:** istenen özellik bugünkü
+kurallarla YENİDEN YAZILIR. Envanter aşağıda.
+
 #### YAYIN DALI ARTIK SABİT
 
 `safe-deploy.sh` önce `git rev-parse --abbrev-ref HEAD` ile HANGİ
@@ -1296,6 +1329,35 @@ Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyo
 8. **DB bağlantı kaydı** (`log_connections`, `logging_collector`) |
    Sıradaki pakete bırakıldı | Kim ne zaman bağlandı bugün hiç iz
    bırakmıyor.
+
+9. **28 Temmuz dallarındaki özellikler — hangisi yeniden yazılsın** |
+   Birleştirme kural gereği yapılmayacak; hangi özelliğin istendiği
+   iş kararı | Aşağıdaki listeden seçim.
+
+   **UCUZ ENVANTER** (commit başlıklarından; dosya analizi ve
+   çakışma ölçümü YAPILMADI):
+
+   | Özellik | Canlıda |
+   |---|---|
+   | **Proje bütçesi** — bütçe modeli, hesaplama servisi, uçlar, migration, ve sipariş onayında bütçe kontrolü | **YOK** (`project_budgets` tablosu yok) |
+   | **Sipariş PDF'i** — PdfSharpCore, sipariş PDF servisi ve uçları | **YOK** (`PdfSharpCore` paketi yok) |
+   | **Hızır eylem motoru** — eylem sözleşmeleri, servis arayüzü, eylem uçları | **KISMEN** (`HizirController` var, "eylem motoru" ayrı) |
+   | **Stok/mal kabul/sipariş modelleri** | **VAR** (üç tablo da mevcut, 0 satır) |
+   | **Hiyerarşi kapsamlı muhasebe panoları** | **BİLİNMİYOR** |
+   | **CI iş akışları** (backend restore/build, doğrulama) | **BİLİNMİYOR** — `.github/workflows/ci.yml` var, kapsamı ölçülmedi |
+
+   En belirgin boşluk **proje bütçesi**: 7 commit'lik bir küme ve
+   sipariş onayına bütçe kontrolü ekliyordu. Canlıda karşılığı yok.
+
+10. **Yarıda kesilen deploy için yordam** | Bugün deploy iki kez
+    dışarıdan öldürüldü; ikisi de TEST aşamasındaydı ve iz
+    bırakmadı | safe-deploy'a "yarım koşu tespiti" adımı gerekli mi,
+    yoksa mevcut sıralama (test → yedek → yayın → restart) yeterli
+    mi.
+
+11. **§7'deki personel testi kararsızlığı** | Bugün çözülen tarih
+    çakışması (§7b) o kararsızlığın PARÇASI DEĞİL; personel
+    testlerindeki ~dörtte bir düşme hâlâ açık | Ayrı bir teşhis turu.
 
 ---
 
