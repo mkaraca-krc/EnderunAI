@@ -1335,6 +1335,22 @@ kolon üzerinde GIN tanımlayamıyor).
 
 **NEDEN TRIGRAM, tsvector DEĞİL — ÖLÇÜLDÜ (200.000 satır, PG 16.15):**
 
+**KARAR (2026-08-25, Mehmet):** trigram kalıyor, tsvector eklenmiyor.
+Gerekçe: kelime ortası eşleşmesi, öngörülebilir süre, %25 yazma
+maliyetinden kaçınma.
+
+**ÖLÇÜM TARİHİ: 2026-08-25.** İki bağımsız koşu — 200.000 ve 500.000
+satır, PostgreSQL 16.15.
+
+**YENİDEN ÖLÇÜM EŞİĞİ: `messages` 500.000 satırı geçtiğinde.**
+Trigram'ın seçicilik tahmini bugün isabetli (56'ya karşı gerçek 30) ve
+kararın dayandığı şey bu isabet. Tahmin, satır sayısı ve kelime
+dağılımı değiştikçe kayabilir; kaydığında ölçülen tek şey süre olmaz,
+planlayıcının SEÇTİĞİ YOL olur. Kontrol sorgusu:
+```sql
+SELECT count(*) FROM messages;   -- 500.000'i geçtiyse ölçümü tekrarla
+```
+
 `tsvector` de önek eşlemesi yapabiliyor (`to_tsquery('simple','insa:*')`)
 ve indeksi kullanıyor. "tsvector yarım kelimeyi bulmaz" doğru değil —
 **kelime BAŞINDAN** başlayan yarım kelimeyi bulur.
@@ -1353,6 +1369,34 @@ Mesajlaşmada aranan şeyin büyük kısmı ürün/sipariş kodu parçası ve
 kod her zaman kelime başında olmuyor. tsvector bunu **hiç**
 bulamıyor — yavaş bulmuyor, bulamıyor. Trigram'ın tek zayıf noktası
 2 harflik sorgu; bu bir arama kutusu kuralıyla kapanıyor.
+
+**İKİNCİ ÖLÇÜM (500.000 satır, bağımsız koşu) BUNU DOĞRULADI VE
+BİR TUZAK EKLEDİ:** yukarıdaki tablo `ORDER BY ... LIMIT` olmadan
+ölçülmüş. Gerçek sorgu her zaman sıralı ve sayfalı olacak. O desende
+`tsvector` öneki **4,5 saniye** sürdü.
+
+Sebep indeks değil, **planlayıcının seçimi**: önek `:*` sorgusunun
+seçicilik tahmini 2800 satır, gerçek 30 — 93 kat şişik. Bu şişik
+tahminle planlayıcı "id'ye göre geriye yürürsem 50 sonucu hemen
+bulurum" diyor ve tabloyu neredeyse baştan sona tarıyor. GIN'e
+zorlandığında (`enable_indexscan=off`) aynı sorgu **0,30 ms**.
+
+Trigram'ın tahmini isabetli (56'ya karşı gerçek 30) ve aynı sorguda
+**0,52 ms**, indeksi kullanarak.
+
+| Nadir kelime + `ORDER BY id DESC LIMIT 50` | Süre | Seçilen yol |
+|---|---|---|
+| tsvector `veda:*` | **4487 ms** | id indeksinde geriye tarama |
+| tsvector `veda:*`, GIN'e zorlanmış | 0,30 ms | GIN |
+| trigram `%veda%` | **0,52 ms** | GIN |
+
+Yani tsvector'ün asıl bedeli yavaşlık değil **öngörülemezlik**: aynı
+sorgu, aranan kelimenin ne kadar seyrek olduğuna göre 0,3 ms veya
+4,5 saniye sürüyor. Trigram'da böyle bir uçurum yok.
+
+Yazma maliyeti de ölçüldü (20.000 mesaj ekleme): indekssiz 249 ms,
+yalnız trigram 627 ms, trigram+tsvector 781 ms. İkinci indeks yazmayı
+**%25** ağırlaştırıyor — mesaj tablosu sistemin en çok yazılan tablosu.
 
 **ARAMA KUTUSU EN AZ 3 HARF İSTEYECEK** (M3/2). 2 harfte trigram
 indeksi devre dışı kalıyor; 200 bin satırda 86 ms, iki milyon satırda
@@ -1481,33 +1525,115 @@ düşer ve birinin mesajı diğerine giderdi.
 
 ## YEDEK VE DB ERİŞİMİ (2026-08-25)
 
-#### YEDEK ŞİFRELEMESİ — MEKANİZMA KANITLANDI
+#### YEDEK ŞİFRELEMESİ — AKIŞTA, DÜZ KOPYA HİÇ DİSKE DÜŞMÜYOR
 
-`enderun-backup.sh` üç yedeği de `gpg --symmetric --cipher-algo
-AES256` ile şifreliyor. Anahtar `/etc/enderunai/backup-key`
-dosyasından okunuyor; **betik anahtar ÜRETMEZ ve YAZMAZ.**
+**BULGU (2026-08-25):** yedek dizininde 2 Ağustos'tan beri birikmiş
+**532 düz veritabanı yedeği** vardı — toplam 1573 şifresiz dosya,
+23 GB. İçlerinde aynı gün tablodan, kayıttan ve günlükten temizlenen
+token açık metin duruyordu. Diskteki düz kopya, o temizliğin tamamını
+anlamsız kılıyor.
 
-**ANAHTAR YOKSA YEDEK YİNE ALINIR** — şifresiz kalır ve ERROR olarak
-kayda düşer. 2026-08 başında tablo sahipliği yüzünden sistem
-saatlerce yedeksiz kaldı ve kimse fark etmedi; şifreleme uğruna
-yedeğin KENDİSİNİ kaybetmek daha büyük bir risk olurdu.
+`enderun-backup.sh` yeniden yazıldı. `pg_dump` çıktısı **doğrudan
+`gpg`'ye akıyor**, düz hali diske hiç düşmüyor:
 
-**GERİ YÜKLEME PROVASI YAPILDI (kabul ölçütü):**
+```
+pg_dump ... -F c | gpg --symmetric --cipher-algo AES256 --output x.gpg
+```
+
+Önce yazıp sonra şifrelemek arada bir pencere bırakıyordu; süreç o
+pencerede ölürse düz dump orada KALIYORDU. Ölçüldü: koşu boyunca
+dizin 0,25 sn aralıklarla izlendi, **tek bir düz dosya düşmedi.**
+
+#### ANAHTAR YOKSA YEDEK ALINMAZ — ÖNCEKİ KARARIN TERSİ
+
+Betik önce "anahtar yoksa yedeği yine al, düz bırak, ERROR yaz"
+diyordu; gerekçe 2026-08 başında sistemin saatlerce yedeksiz
+kalmasıydı. **Karar değişti (Mehmet Karacabey, 2026-08-25):**
+şifresiz dump diske hiç düşmeyecek.
+
+Yedeksiz kalma riski nasıl karşılanıyor: betik artık **sessiz
+başarısız olmuyor** — `exit 1` ile duruyor, systemd birimi "failed"
+durumuna düşüyor, ve **safe-deploy yayını kesiyor.**
+
+`safe-deploy` yedek adımı çıkış kodunu **hiç okumuyordu**: yedek
+düşse de yayın devam ediyordu. Yedeğin amacı "yayın bozarsa geri
+dön"; yedek yoksa o güvence de yok. Düzeltildi.
+
+#### DOĞRULAMA — YAZILMIŞ OLMAK OKUNABİLİR OLMAK DEĞİL
+
+Her yedek, yazıldıktan sonra **açıldığı doğrulanarak** kabul ediliyor;
+açılamıyorsa dosya siliniyor ve betik duruyor. Dizinde
+`BOZUK-YARIM_db_20260814` adlı bir dosya duruyor: doğrulanmamış
+yedeğin ne demek olduğunun kanıtı.
+
+**`pg_restore --list` KULLANILAMIYOR:** özel biçimli arşivi borudan
+okuyamıyor (ölçüldü: borudan çıkış 2, dosyadan çıkış 0). Dosyadan
+okutmak düz dump'ı diske yazmayı gerektirirdi. `/dev/shm` de çözüm
+değil — bu makinede **takas açık** (4 GB, 1,6 GB kullanımda), tmpfs
+sayfası takas dosyası üzerinden diske düşebilir.
+
+Yerine iki aşama: (1) tam çözme — gpg'nin kendi bütünlük denetimi
+(MDC) kırpılmış/bozuk/yanlış anahtarlı dosyayı yakalıyor, (2) ilk
+5 bayt `PGDMP` mi.
+
+#### GERİ YÜKLEME PROVASI — CANLI ANAHTARLA YAPILDI
 
 | Adım | Sonuç |
 |---|---|
-| Gerçek dump geçici anahtarla şifrelendi | AES-256, PGP simetrik |
-| Çözüldü | `sha256sum` orijinalle **birebir aynı** |
-| Ayrı veritabanına `pg_restore` | **0 hata** |
-| Satır sayıları (7 tablo) | 6'sı birebir aynı |
-| `security_audit_events` 1795 / 1793 | Dump'tan **54 sn sonra** yazılan 2 olay — fark açıklandı, eksiklik yok |
+| Şifreli yedek **borudan** `pg_restore`'a | `gpg=0 pg_restore=0`, **0 uyarı** |
+| Tablo sayısı | canlı 236 / prova 236 |
+| `personnel` | 81 / 81 |
+| `users` | 13 / 13 |
+| `companies`, `projects`, `cheques` | hepsi eşit |
+| Kısmi indeks (`aktif_benzersiz`) | provada da filtresiyle mevcut |
 
-Prova **geçici bir anahtarla ve ayrı bir veritabanına** yapıldı;
-canlı anahtara ve canlı veritabanına dokunulmadı. Prova sonunda
-geçici anahtar, çözülmüş dump ve prova veritabanı silindi.
+**YAN BULGU:** `pg_restore --dbname` boruyu okuyor (`--list` okumuyor).
+Yani geri yükleme de düz ara dosya gerektirmiyor — felaket anında
+şifreli yedek doğrudan açılıyor.
 
-**Canlı anahtarla asıl prova, anahtar oluşturulduktan sonra
-tekrarlanmalı.** Bugün yedekler hâlâ ŞİFRESİZ alınıyor (anahtar yok).
+Prova **ayrı bir veritabanına** yapıldı (`enderun_geri_yukleme_provasi`),
+canlıya dokunulmadı, sonunda düşürüldü.
+
+#### ANAHTAR
+
+`/etc/enderunai/backup-key`, **0400 root:root**, 48 baytlık rastgele
+değer. `postgres` ve `www-data` kullanıcılarıyla denendi: **ikisi de
+okuyamıyor.** Betik anahtarı ÜRETMEZ ve YAZMAZ.
+
+**ANAHTAR BUGÜN YEDEKLERLE AYNI DİSKTE — AÇIK KARAR (BEKLEYEN
+KARARLAR 12).** Diski ele geçiren ikisini birden alır. Bugünkü
+şifreleme, "diski çalan okuyamasın" korumasını **vermiyor**; yalnız
+yanlışlıkla kopyalanan tek bir yedek dosyasını koruyor.
+
+#### GEÇMİŞTEKİ DÜZ YEDEKLER
+
+1573 düz dosya tek tek şifrelendi, **açıldığı doğrulandı**, sonra düz
+kopya `shred -u -n 1 -z` ile silindi. Şifreleme veya doğrulama
+başarısız olan dosyada düz kopya DURUYOR ve kayda düşüyor — veri
+kaybetmemek şifrelemekten önce gelir.
+
+Betiğe **düz dosya nöbeti** eklendi: dizinde şifresiz yedek kalırsa
+her koşuda ERROR yazıyor.
+
+#### İKİ ZAMANLAYICI VARDI, BİRİ ÖLÜYDÜ
+
+`/etc/cron.d/enderun-ai-backup` var olmayan bir betiği
+(`scripts/backup.sh`) her gece çağırıyor ve `/bin/sh: not found` ile
+düşüyordu. Kaldırıldı (kopyası
+`/root/enderun-ai-backup.devre-disi-20260825`). Çalışan tek
+zamanlayıcı `enderun-backup.timer`, her gece 03:00.
+
+#### BETİĞİN TEK KAYNAĞI REPO
+
+`scripts/enderun-backup.sh`. `safe-deploy` her yayında bu dosyayı
+`/usr/local/bin/enderun-backup.sh` olarak **yeniden kuruyor**
+(`install -m 700`, öncesinde `bash -n`). Sürüklenme testle değil
+**inşa yoluyla** imkânsız: canlıda elle yapılan bir değişiklik bir
+sonraki yayında geri alınır.
+
+İçerik nöbetçisi `BackupScriptGuardTests` (5 test): pg_dump boruya
+akıyor mu, tar boruya akıyor mu, anahtar yoksa duruyor mu, her yedek
+doğrulanıyor mu, borunun iki ucu da kontrol ediliyor mu.
 
 #### YEDEK DİZİNİ İZNİ
 
@@ -1542,78 +1668,49 @@ oraya sızabilirdi.
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`
 
-1. **`bank_account.view` Finans Sorumlusu + İK Sorumlusu'na verilsin mi** |
-   Çalışma yetkisi kuralı (c): IBAN görebilen kitleyi genişletiyor
-   (2 rol → 4 rol). Anahtar bu iki role RoleCatalog'a yazılmıştı,
-   kural gereği GERİ ALINDI |
-   Mehmet'in onayı. Onaylanmazsa bordroda "Gerçek Ödeme" İK
-   Sorumlusu'nda çalışmamaya devam eder (bugün de çalışmıyor).
+**2026-08-25'te 13 maddenin 9'u karara bağlandı** (aşağıda "KAPANANLAR").
+Açık kalan 4 madde:
 
-2. **Tam IBAN için ayrı `bank_account.reveal` anahtarı** |
-   Aynı kural: yeni anahtar açmak kitle kararı. Bugün tam IBAN ucu
-   liste ucuyla AYNI anahtarı kullanıyor, ama ayrı yüzey ve her
-   çağrıda denetim kaydı var |
-   Mehmet'in kararı: izin düzeyinde de darlık isteniyor mu.
+1. **KVKK aydınlatma metni** | Kural (e): hukuk metni yazılmıyor |
+   Metin Mehmet'te. **Bana düşen: ekranda yerini açmak** —
+   "metin bekleniyor" yer tutucusuyla. M3/2'de yapılacak.
 
-3. **Hesap planı aktarım ucu (`accounting-accounts/import`)** |
-   Uç yazılacak (karar verildi) ama iş kuralları belirsiz: mevcut
-   hesap kodu gelirse güncellensin mi, üst hesap yoksa oluşturulsun
-   mu, hangi izin korusun. Kural (a): muhasebe kaydını etkileyen
-   yeni kural kurulmuyor |
-   Bu üç sorunun cevabı. Düğmeler devre dışı + "Hazırlanıyor".
+2. **Mesaj saklama süresi** | 12 ay çevrimiçi + **süresiz arşiv**
+   kalıyor, silme mekanizması KURULMADI | Mehmet hukukçuya soracak:
+   ticari kayıt saklama süreleri ile KVKK'nın "gereğinden uzun tutma"
+   ilkesi çakışabiliyor. Karar gelince eklenir.
 
-4. **Depodan Zimmet: stok ve muhasebe davranışı** |
-   Kural (a): zimmet gider yazacaksa bu yeni bir muhasebe kuralı.
-   Denetim tamam, model hazır (`HrAssetAssignment` alanları mevcut) |
-   İki karar: (1) stoktan düşsün mü yoksa "zimmet" konumuna mı
-   taşınsın, (2) fiş kesilsin mi — türe göre mi (sarf gider yazar,
-   dayanıklı taşınır).
+3. **Uzak yedek hedefi** | Betik yazıldı ama `UZAK_YEDEK_ETKIN`
+   KAPALI; yurt dışı aktarımı hukukçu cevabına kadar kapalı kalacak |
+   **Bana düşen: hedef listesi + maliyet tahmini**, AB/Türkiye veri
+   merkezi olanlar ayrı işaretli.
 
-5. **Mesaj saklama: arşivden silme** | Kural (b) ve (f): silme
-   mekanizması kurulmuyor | 12 ay çevrimiçi + arşiv onaylı; arşivden
-   sonrası için karar yok, silme kurulmadı.
+4. **§7 personel testi kararsızlığı** | Personel testlerindeki
+   ~dörtte bir düşme hâlâ açık; §7b tarih çakışması bunun PARÇASI
+   DEĞİLDİ | Ayrı teşhis turu — **M3/2'den sonra**.
 
-6. **KVKK aydınlatma metni** | Kural (e): hukuk metni yazılmıyor |
-   Mehmet hazırlatacak; ekranda yeri açılacak.
+### ERTELENENLER (kapanmadı, sıraya girmedi)
 
-7. **Disk şifrelemesi** | Mevcut sunucuda yeniden kurulum gerektirir |
-   Karar ve bakım penceresi. Yedek şifrelemesi ve dizin izni
-   yapıldı; disk hâlâ düz `ext4`.
+- **Disk şifrelemesi** | Yeniden kurulum ve bakım penceresi
+  gerektiriyor. Yedek şifrelemesi + sunucu dışına kopyalama aynı
+  riskin daha büyük kısmını daha ucuza kapatıyor | Madde açık kalıyor,
+  bugün sırada değil.
+- **Sipariş PDF'i** (28 Temmuz dallarından) | Küçük ve faydalı; ayrı
+  madde olarak bekliyor.
 
-8. **DB bağlantı kaydı** (`log_connections`, `logging_collector`) |
-   Sıradaki pakete bırakıldı | Kim ne zaman bağlandı bugün hiç iz
-   bırakmıyor.
+### KAPANANLAR (2026-08-25)
 
-9. **28 Temmuz dallarındaki özellikler — hangisi yeniden yazılsın** |
-   Birleştirme kural gereği yapılmayacak; hangi özelliğin istendiği
-   iş kararı | Aşağıdaki listeden seçim.
-
-   **UCUZ ENVANTER** (commit başlıklarından; dosya analizi ve
-   çakışma ölçümü YAPILMADI):
-
-   | Özellik | Canlıda |
-   |---|---|
-   | **Proje bütçesi** — bütçe modeli, hesaplama servisi, uçlar, migration, ve sipariş onayında bütçe kontrolü | **YOK** (`project_budgets` tablosu yok) |
-   | **Sipariş PDF'i** — PdfSharpCore, sipariş PDF servisi ve uçları | **YOK** (`PdfSharpCore` paketi yok) |
-   | **Hızır eylem motoru** — eylem sözleşmeleri, servis arayüzü, eylem uçları | **KISMEN** (`HizirController` var, "eylem motoru" ayrı) |
-   | **Stok/mal kabul/sipariş modelleri** | **VAR** (üç tablo da mevcut, 0 satır) |
-   | **Hiyerarşi kapsamlı muhasebe panoları** | **BİLİNMİYOR** |
-   | **CI iş akışları** (backend restore/build, doğrulama) | **BİLİNMİYOR** — `.github/workflows/ci.yml` var, kapsamı ölçülmedi |
-
-   En belirgin boşluk **proje bütçesi**: 7 commit'lik bir küme ve
-   sipariş onayına bütçe kontrolü ekliyordu. Canlıda karşılığı yok.
-
-10. **Yarıda kesilen deploy için yordam** | Bugün deploy iki kez
-    dışarıdan öldürüldü; ikisi de TEST aşamasındaydı ve iz
-    bırakmadı | safe-deploy'a "yarım koşu tespiti" adımı gerekli mi,
-    yoksa mevcut sıralama (test → yedek → yayın → restart) yeterli
-    mi.
-
-11. **§7'deki personel testi kararsızlığı** | Bugün çözülen tarih
-    çakışması (§7b) o kararsızlığın PARÇASI DEĞİL; personel
-    testlerindeki ~dörtte bir düşme hâlâ açık | Ayrı bir teşhis turu.
-
----
+| Madde | Karar |
+|---|---|
+| `bank_account.view` kimde | **Yalnız Finans.** İK bordroyu hazırlar, ödemeyi Finans yapar |
+| Tam IBAN anahtarı | **Ayrı `bank_account.reveal`** — maskeli görmek ile açmak farklı yetki |
+| Hesap planı aktarımı | Mevcut kod GÜNCELLENMEZ, üst hesap OLUŞTURULMAZ, ayrı `chart.import` anahtarı |
+| Depodan Zimmet | Stoktan düşer, şirket varlığından çıkmaz ("zimmet" konumu); fiş TÜRE GÖRE |
+| DB bağlantı kaydı | `d54a9467` ile kapandı — listeden düşürüldü |
+| 28 Temmuz dalları | **Yeniden yazılmayacak.** Proje bütçesi = boşluk analizi 1 numara (taahhüt bütçe kontrolü), ayrı paket. Hızır eylem motoru kapsam dışı |
+| Yarım koşu tespiti | safe-deploy'a **eklenecek** |
+| Anahtar kopyası | Sunucu + parola yöneticisi + kasada basılı — onaylandı |
+| Mesaj arşivinden silme | Şimdilik silme kurulmuyor (yukarıda madde 2 olarak açık) |
 
 ## KARAR KAYDI
 
@@ -1631,6 +1728,12 @@ isimlendirme) buraya yazılmaz.
 - `2026-08-25 | Ayrılan üye | Hiçbir şey göremez; ayrıldığı tarihe kadarki mesajları da göremez. | "Ayrıldığı tarihe kadar görür" kuralı departman kanalları için konuşulmuştu; kanallar M3/3'te. Dar olan seçildi. | EVET`
 - `2026-08-25 | Okundu bilgisi | Mesaj başına satır değil, üye satırında LastReadAtUtc. | "Hangi mesajı tam okudu" bilgisine ihtiyaç duyan gereksinim yok; ayrı tablo mesaj×üye kadar satır üretirdi. | EVET — ayrı tablo sonradan eklenebilir`
 - `2026-08-25 | Arşiv biçimi | Aynı veritabanında soğuk tablo; aranabilir değil, okunabilir. Taşıma mekanizması KURULMADI. | Dosyaya çıkarmak yedek/geri yükleme yüzeyini ikiye böler. | EVET`
+- `2026-08-25 | bank_account.view kitlesi | YALNIZ Finans Sorumlusu. İK Sorumlusu IBAN görmez; bordroda "Gerçek Ödeme" onda çalışmaz — bu eksik değil, doğru ayrım. | İK bordroyu hazırlar, ödemeyi Finans yapar; IBAN İK'nın işini yapmak için gerekli değil. | EVET`
+- `2026-08-25 | Tam IBAN yetkisi | Ayrı bank_account.reveal anahtarı; maskeli görmek ile tam IBAN'ı açmak farklı yetkilerdir. Denetim kaydı her açılışta yazılmaya devam eder. | Kural (c): en dar seçenek. | EVET`
+- `2026-08-25 | Hesap planı aktarımı | Mevcut hesap kodu gelirse GÜNCELLENMEZ — satır atlanır, raporda "zaten var" listelenir. Üst hesap yoksa OLUŞTURULMAZ — hata verilir, satır atlanır. İzin: ayrı chart.import, muhasebe yönetimi düzeyinde. | Muhasebe hesabını aktarımla değiştirmek ciddi iş, elle yapılmalı; sessizce hiyerarşi üretmek hesap planını bozar ve fark edilmez. | EVET — aktarım satır atlar, veri değiştirmez`
+- `2026-08-25 | Depodan Zimmet: stok | Stoktan DÜŞER ama şirket varlığından ÇIKMAZ: "zimmet" konumuna taşınır. İade edilince geri döner. | Üç seviyeli konum yapısı buna uygun; depo stoğu doğru görünür, malzeme kaybolmaz. | EVET — konum taşıma geri alınabilir`
+- `2026-08-25 | Depodan Zimmet: muhasebe | Fiş TÜRE GÖRE. Sarf kategorisi → çıkışta gider yazılır (150/740 deseni). Dayanıklı taşınır → gider YAZILMAZ, demirbaş/zimmet kaydı olarak durur; amortisman varsa oradan yürür. | Mevcut muhasebe kuralının aynısı; kategori zaten stok kartında var, yeni alan açılmıyor. | HAYIR — gider yazılan fiş muhasebe kaydıdır`
+- `2026-08-25 | Mesaj arşivi | Süresiz arşiv; silme mekanizması KURULMADI. | Ticari kayıt saklama süreleri ile KVKK "gereğinden uzun tutma" ilkesi çakışabiliyor; hukukçu cevabı bekleniyor. | EVET — silme sonradan eklenebilir, silinen veri geri gelmez`
 
 ### Şu an üzerinde çalışılan: R3a — veri kapsamı zorlaması
 
@@ -3872,6 +3975,21 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     başında yazılı). "Yayın BAŞARILI" satırı şemanın güncel olduğunu
     söylemez; `dotnet ef database update` elle çalıştırılacak ve
     sonucu ölçülecek.
+
+31. **KAYNAK TARAYAN BİR NÖBETÇİ KELİMEYİ DEĞİL KOMUTU GÖZLEMELİ.**
+    Yorumlar kelimeyi hayatta tutar. `betik.Contains("PIPESTATUS")`
+    diyen test SONDAYI GEÇTİ: atamalar `DURUM=(0 0)` ile
+    etkisizleştirildiği hâlde kelime yorumlarda yaşadığı için test
+    yeşil kaldı — üstelik yorumu oraya AÇIKLAMA olsun diye ben
+    yazmıştım.
+
+    Aranan şey **atamanın veya çağrının kendisi** olmalı; yorum ve
+    boş satırlar önce ELENMELİ. Kural 23'ün kaynak tarama biçimi:
+    "kelime var" ile "denetim çalışıyor" ayrı şeyler.
+
+    Ayrıca: kabuk betiğinde **satır devamlarını (`\`) birleştirmeden**
+    satır satır bakmak yanıltır — `pg_dump ... \` satırında boru
+    görünmez, boru alt satırdadır.
 
 ## 6. Ölçüm araçlarına dair uyarı
 
