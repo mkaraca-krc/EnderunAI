@@ -241,6 +241,29 @@ public sealed class CoverageBaselineTests
 
                     if (pencere.Contains("ApplyScope")) continue;
 
+                    /*
+                     * MESAJLAŞMADA KAPI ÜYELİKTİR, KAPSAM DEĞİL.
+                     *
+                     * `ApplyScope` global erişimli kullanıcı için
+                     * sorguyu OLDUĞU GİBİ geçiriyor. Mesajlaşmada
+                     * aynısını yapsaydık Admin ve Genel Müdür herkesin
+                     * özel konuşmasını okurdu — M3/1'de açıkça
+                     * reddedilen şey.
+                     *
+                     * `ApplyMembership` DAHA DAR: kullanıcının üyesi
+                     * olduğu konuşmalarla sınırlıyor ve o konuşmalar
+                     * zaten kapsam içindeki şirketlerde açılıyor.
+                     * Yani kapsam süzgecinin kapattığı her şeyi
+                     * kapatıyor, üstüne bir de aynı şirketteki
+                     * yabancıyı kapatıyor.
+                     *
+                     * DOSYA MUAFİYETİ AÇMADIM: muafiyet o dosyadaki
+                     * KAPISIZ bir okumayı da geçirirdi. Burada yalnız
+                     * kapının kendisi tanınıyor; kapısız mesajlaşma
+                     * okuması hâlâ düşer.
+                     */
+                    if (pencere.Contains("ApplyMembership")) continue;
+
                     // SATIR NUMARASI YAZILMIYOR — bkz. sınıf başındaki
                     // "ÇİZGİ NEDEN SATIR NUMARASIZ" notu.
                     sonuc.Add($"{goreli}:{ad}");

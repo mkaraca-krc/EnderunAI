@@ -68,6 +68,27 @@ public sealed class PagedEndpointContractTests
             "mı' — cevabı `sonrakiVar` alanıyla AÇIKÇA dönüyor, yani " +
             "arayüz kırpıldığını biliyor. Bu testin asıl derdi " +
             "(arayüzün gelen kaydı toplam sanması) burada oluşmuyor.",
+
+        ["MesajlarController.Konusmalar"] =
+            "KEYSET SAYFALAMA. Konuşma listesi 'en son konuşulan üstte' " +
+            "sıralı ve imleç (SonMesajZamani, Id) ikilisi. Kullanıcının " +
+            "sorduğu soru 'kaç konuşmam var' değil; liste sonsuz " +
+            "kaydırma ile açılıyor ve `sonrakiVar` alanı kırpıldığını " +
+            "AÇIKÇA söylüyor.",
+
+        ["MesajlarController.Mesajlar"] =
+            "KEYSET SAYFALAMA. `messages` sistemin en hızlı büyüyen " +
+            "tablosu (M3/1 ölçümü); her sayfada COUNT(*) almak sohbet " +
+            "açılışında tam tarama demek. Sohbet ekranı geriye doğru " +
+            "kaydırıyor, toplam mesaj sayısını hiçbir yerde " +
+            "göstermiyor. `sonrakiVar` kırpıldığını söylüyor.",
+
+        ["MesajlarController.Ara"] =
+            "SIRALI ARAMA + KEYSET. Trigram `LIKE` ile eşleşen mesajlar " +
+            "zamana göre sıralı dönüyor; anlamlı olan 'kaç eşleşme var' " +
+            "değil en yeni N eşleşme. COUNT(*) burada aramanın kendisi " +
+            "kadar pahalı olurdu — aynı GIN taramasını ikinci kez " +
+            "yaptırırdı. `sonrakiVar` kırpıldığını söylüyor.",
     };
 
     [Fact]

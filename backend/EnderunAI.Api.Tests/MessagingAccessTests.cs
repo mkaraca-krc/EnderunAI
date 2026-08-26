@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models.Messaging;
 using EnderunAI.Api.Security;
@@ -196,9 +197,54 @@ public sealed class MessagingAccessTests(DatabaseFixture fixture)
                         && !x.TrimStart().StartsWith("//") && !x.TrimStart().StartsWith("/*"))
             .ToList();
 
+        /*
+         * BÜYÜK/KÜÇÜK HARFE DUYARSIZ — SONDADA YAKALANDI.
+         *
+         * Kural önce `StringComparison.Ordinal` ile yalnız
+         * `HasGlobalAccess` dizgesini arıyordu. M3/2 sondasında
+         * kapıya `bool hasGlobalAccess = false` parametresi eklendi
+         * ve kural GÖRMEDİ: küçük harfli parametre adı eşleşmiyor.
+         * Kural, korumak istediği şeyi değil bir yazım biçimini
+         * izliyormuş.
+         */
         Assert.DoesNotContain(
             kodSatirlari,
-            satir => satir.Contains("HasGlobalAccess", StringComparison.Ordinal));
+            satir => satir.Contains("globalaccess", StringComparison.OrdinalIgnoreCase));
+
+        /*
+         * ASIL KORUMA: İMZA KİLİDİ.
+         *
+         * Dizge aramak, kısayolun ADINI izlemek demek; ad değişince
+         * kural boşalır (Kural 31: SÖZCÜĞÜ değil KOMUTU izle).
+         * Korunması gereken gözlem şu: üyelik süzgecinin BYPASS
+         * KANALI OLMAMALI. Kanal ancak bir parametreyle açılabilir,
+         * o yüzden imza sabitleniyor — `(this IQueryable<T> query,
+         * Guid userId)` dışında parametre alan bir `ApplyMembership`
+         * kural dışıdır, adı ne olursa olsun.
+         */
+        var imzalar = Regex.Matches(
+            kod,
+            @"ApplyMembership\(\s*(?<parametreler>[^)]*)\)",
+            RegexOptions.Singleline);
+
+        Assert.True(imzalar.Count >= 2,
+            $"Beklenenden az ApplyMembership bildirimi bulundu ({imzalar.Count}). "
+            + "Kural boşalmış olabilir.");
+
+        foreach (Match imza in imzalar)
+        {
+            var parametreler = imza.Groups["parametreler"].Value
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            Assert.True(
+                parametreler.Length == 2,
+                "Üyelik süzgecine fazladan parametre eklenmiş: "
+                + string.Join(" | ", parametreler)
+                + ". Her ek parametre, üyeliği atlamanın bir kanalıdır; "
+                + "kapı YALNIZ (sorgu, kullanıcı) alır.");
+
+            Assert.Contains("Guid userId", parametreler[1], StringComparison.Ordinal);
+        }
     }
 
     /// <summary>

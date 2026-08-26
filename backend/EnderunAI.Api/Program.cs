@@ -606,6 +606,7 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountLockServi
 // aynı DbContext'in işlemine bağlı. Singleton olsaydı iki istek
 // birbirinin kilit kaydını görürdü.
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStokSatirKilidi, EnderunAI.Api.Services.Inventory.StokSatirKilidiService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Messaging.IMesajlasmaService, EnderunAI.Api.Services.Messaging.MesajlasmaService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.StockLevelAlertService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.InventoryItemPhotoService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountVoucherPoster, EnderunAI.Api.Services.Inventory.StockCountVoucherPoster>();
