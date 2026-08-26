@@ -1328,19 +1328,110 @@ Karar tek yerde: `ZimmetGiderKurali.GiderYazilir`. Ekipman dışındaki
 her tür tükenir sayılıyor; **tanınmayan tür gider YAZMAZ** (iki
 yanlıştan geri alınabilir olanı).
 
-#### EŞZAMANLILIK: SATIR KİLİDİ — VE AÇIKTA KALAN
+#### EŞZAMANLILIK: SATIR KİLİDİ — KAPANDI (2026-08-25)
 
 `warehouse_stocks` üzerinde eşzamanlılık jetonu **YOK** (yalnız
 (depo, kalem) benzersiz indeksi var) ve çıkış oku-değiştir-yaz
 yapıyor. İki işlem aynı anda "1 adet var" okuyup ikisi de düşerse
 stok **-1** olur.
 
-Zimmet akışında `SELECT ... FOR UPDATE` ile kapatıldı.
+Zimmet paketinde bu akışa özel `SELECT ... FOR UPDATE` ile
+kapatılmıştı; Kural 27 gereği açıkta kalan yazılmıştı. Eşzamanlılık
+paketi bu açığı kapattı — **kilit tek yere taşındı**:
+`IStokSatirKilidi` (`StokSatirKilidiService.cs`).
 
-**KURAL 27 GEREĞİ AÇIKTA KALAN:** aynı açık perakende satışında ve
-stoklu satış faturasında HÂLÂ DURUYOR. Somut hata: aynı kalem aynı
-anda hem satılır hem zimmetlenirse stok eksiye düşebilir. Ayrı paket
-olarak açıldı.
+**ÖLÇÜM — "StockSaleIssuer tek kapı mı?" HAYIR.** Depo stoğunu
+değiştiren canlı nokta **sekiz** (`backups/**` csproj'da derlemeden
+çıkarılmış, sayılmadı):
+
+| Nokta | Ne yapıyor | Tehlike |
+|---|---|---|
+| `StockSaleIssuer:129` | düşürür | negatif stok |
+| `SupplierInvoiceStockPoster:236` | düşürür (fatura iadesi/iptali) | negatif stok |
+| `InventoryController.Issue` | düşürür (depodan çıkış) | negatif stok |
+| `StockCountService:280` | **mutlak yazar** | kayıp güncelleme |
+| `InventoryController.Adjustment` | **mutlak yazar** (tekil düzeltme) | kayıp güncelleme |
+| `StockSaleIssuer:230` | artırır (satış iadesi) | kayıp giriş |
+| `SupplierInvoiceStockPoster:119` | artırır | kayıp giriş |
+| `GoodsReceiptService:663` | artırır (mal kabul) | kayıp giriş |
+| `RetailSaleService:722` | artırır (fiş iadesi) | kayıp giriş |
+
+**SON İKİSİNİ İLK ÖLÇÜMDE KAÇIRDIM.** Kapıları `grep` ile ararken
+`request.` içeren satırları elemiştim (gürültü sanmıştım); iki
+denetleyici ucu tam o yüzden görünmedi. Kaçırılanları **kendi
+yazdığım nöbetçi kural** yakaladı — nöbetçinin ölçümden bağımsız
+olması bu yüzden değerli: ölçüm insan hatasına açık, tarama değil.
+
+Bu iki uçta kilit **karardan sonra** değil, karardan önce iş görüyor:
+`Issue`'da yeterlilik kontrolü işlem açılmadan önce yapılıyordu,
+kilitten sonra **tekrarlanıyor**; `Adjustment`'ta fark (`delta`)
+kilitten sonra **yeniden hesaplanıyor**. Kilidi koyup kararı bayat
+veriyle bırakmak, kilidi hiç koymamakla aynı sonucu verirdi.
+
+Perakende satış ve stoklu satış faturası çıkışı `IssueAsync`'ten
+geçiyor, ayrı nokta değil. Artıran yollar stoğu eksiye düşüremez ama
+kilitsiz iki eşzamanlı giriş birbirinin artışını siler: mal depoya
+girmemiş sayılır. Bu yüzden kilit **altı noktanın hepsine** kondu;
+yalnız düşüren ikisi kapatılsaydı nöbetçi kural istisna taşımak
+zorunda kalırdı ve istisnalar zamanla büyür.
+
+**ÜÇ TUZAK — ÜÇÜ DE KODDA YAZILI:**
+
+1. **İşlem yoksa kilit yok.** `FOR UPDATE` işlem dışında yalnız o
+   ifade boyunca tutar. Sessiz geçilseydi "kilidi çağırdım" diye
+   korunduğunu sanan ama korunmayan akış üretilirdi. Ölçüldü: bugün
+   altı yolun hepsi çağıran tarafta `BeginTransactionAsync` açıyor.
+   Açmayan bir yol yazılırsa **hata fırlatılır**.
+2. **EF kimlik haritası.** Satır bu bağlamda daha önce okunmuşsa
+   kilitten sonraki sorgu veritabanına gitmez, bayat miktar döner.
+   Kilit alındıktan sonra izlenen kayıt **tazeleniyor**.
+   `SupplierInvoiceStockPoster` stokları döngüden ÖNCE topluca
+   okuduğu için bu tuzak orada gerçek.
+3. **Kendi işlemini bozma.** Tazeleme koşulsuz yapılsaydı aynı kalemi
+   iki satırda içeren belge kendini bozardı: ikinci satır birincinin
+   bekleyen düşüşünü geri alır, 5 stoktan 2+2 çıkınca 3 yerine 1
+   kalırdı. Anahtar (işlem, depo, kalem) ve yalnız `Unchanged` kayıt
+   tazeleniyor. İşlem kimliği anahtarın parçası çünkü kilit işlem
+   bitince serbest kalır.
+
+**NÖBETÇİ:** `StockMovementContractTests` iki kural ekledi —
+stok miktarını değiştiren her nokta öncesinde kilit alır (**metot
+gövdesi bazında**, dosya bazında değil: aynı dosyadaki komşu metodun
+kilidi kuralı yeşil tutuyordu) ve `FOR UPDATE` yalnız tek dosyada
+geçer.
+
+#### İKİ SONDA YEŞİL GEÇTİ — VE BU BİR BULGUDUR
+
+Tazeleme kararını iki ayrı bariyer koruyordu: (1) aynı işlemde aynı
+satırın ikinci kez işlenmemesi, (2) yalnız `Unchanged` kaydın
+tazelenmesi. **İkisi de tek tek sondalanamadı:**
+
+| Sonda | Kaldırılan | Sonuç |
+|---|---|---|
+| C | tekrar-engelleyici küme | **YEŞİL** — `Unchanged` koşulu sonucu aynı tuttu |
+| F | `Unchanged` koşulu | **YEŞİL** — küme ikinci çağrıyı zaten erken döndürdü |
+
+Birini kaldırınca diğeri sonucu aynı tutuyor; yani yeşil hiçbir şey
+söylemiyor. **Kural 25'in tam tarifi.** Karar
+`StokSatirKilidiKarari.TazelenmeliMi(ilkKilit, izlenenDurum)` saf
+fonksiyonuna çıkarıldı ve dört hâl doğrudan sınandı
+(`StokSatirKilidiKarariTests`, 8 test). Artık her koşulun sabotajı
+kaçmıyor.
+
+İki koşul birbirinin yedeği DEĞİL: küme "aynı belgede aynı kalem iki
+satır" hâlini kapatıyor, `Unchanged` koşulu ise "kayıt kilitten önce
+değiştirilmiş" hâlini. Örtüşüyorlar ama kapsamları farklı.
+
+#### SONDA DÜZENEĞİNDE İKİ HATA — KURAL 32'YE EK
+
+1. **`git diff` bu ağaçta ölçüm aracı değildi.** Paket commit
+   edilmemişti; dosyalar HEAD'e göre zaten farklıydı. "Sabotaj
+   uygulandı mı" ve "geri alındı mı" ölçümlerinin İKİSİ de her zaman
+   yanlış cevap veriyordu — sabotaj hiç uygulanmasa bile "uygulandı"
+   diyordu. Ölçüm **yedeğin kendisiyle** (`cmp`) yapılacak.
+2. **Sonda D sabotajı hiç uygulanamadı** (çapa metni tutmadı).
+   Düzenek bunu "GEÇERSİZ" diye bildirdi ve geri aldı; yeşil sayıp
+   geçmedi. Kural 32 tam da bunun için var.
 
 #### İADE VE İPTAL TEK YARDIMCIDA
 
@@ -1778,7 +1869,8 @@ oraya sızabilirdi.
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`
 
 **2026-08-25'te 13 maddenin 9'u karara bağlandı** (aşağıda "KAPANANLAR").
-Açık kalan 4 madde:
+Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
+**5 madde**:
 
 1. **KVKK aydınlatma metni** | Kural (e): hukuk metni yazılmıyor |
    Metin Mehmet'te. **Bana düşen: ekranda yerini açmak** —
@@ -1803,12 +1895,7 @@ Açık kalan 4 madde:
    `ZimmetGiderKurali` içinde tek satır değişir; geçmiş kayıtlar
    etkilenmez çünkü henüz zimmet verilmedi.
 
-5. **Stok düşüren diğer kapılarda eşzamanlılık** | Zimmet tarafı
-   `FOR UPDATE` ile kapatıldı; perakende satış ve stoklu satış
-   faturası hâlâ oku-değiştir-yaz | **AYRI PAKET AÇILDI** (Mehmet,
-   2026-08-25). Planı zimmet raporundan sonra.
-
-6. **§7 personel testi kararsızlığı** | Personel testlerindeki
+5. **§7 personel testi kararsızlığı** | Personel testlerindeki
    ~dörtte bir düşme hâlâ açık; §7b tarih çakışması bunun PARÇASI
    DEĞİLDİ | Ayrı teşhis turu — **M3/2'den sonra**.
 
@@ -1834,6 +1921,7 @@ Açık kalan 4 madde:
 | Yarım koşu tespiti | safe-deploy'a **eklenecek** |
 | Anahtar kopyası | Sunucu + parola yöneticisi + kasada basılı — onaylandı |
 | Mesaj arşivinden silme | Şimdilik silme kurulmuyor (yukarıda madde 2 olarak açık) |
+| Stok kapılarında eşzamanlılık | **Kapandı.** Kilit `IStokSatirKilidi`'ne taşındı, altı mutasyon noktasının hepsi kullanıyor, nöbetçi metot bazında tarıyor |
 
 ## KARAR KAYDI
 
