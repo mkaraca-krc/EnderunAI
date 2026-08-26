@@ -202,7 +202,16 @@ public sealed record ChequeListItemResponse(
     DateTime IssueDate,
     DateTime DueDate,
     int DaysToDue,
-    bool IsOverdue);
+    bool IsOverdue,
+    /// <summary>
+    /// BU SATIR TUTAR TOPLAMINA GİRER Mİ — kararı SUNUCU verir.
+    ///
+    /// Ekran eskiden kendi kuralını yazıyordu (`status !== Voided`) ve
+    /// liste ucundaki süzgeçten AYRI karar veriyordu; ÇEK/1'deki hata
+    /// tam olarak bu ayrışmaydı. Bayrak buraya konuldu ki ekranda
+    /// ikinci bir karar yeri kalmasın.
+    /// </summary>
+    bool CountsTowardTotals);
 
 public sealed record ChequeDetailResponse(
     Guid Id,

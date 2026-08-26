@@ -32,12 +32,21 @@ public sealed class ChequesController(
         [FromQuery] string? search,
         /// <summary>İptal edilen çekler varsayılan olarak gelmez.</summary>
         [FromQuery] bool includeVoided,
+        /// <summary>
+        /// KAPANMIŞ ÇEKLER VARSAYILAN OLARAK GELMEZ (ÇEK/1).
+        ///
+        /// Ödenen çek listede kalmaya devam ediyordu ve ekrandaki ay
+        /// toplamına giriyordu. Silinmiyor, gizlenmiyor — durum
+        /// süzgeciyle ya da bu bayrakla her zaman görülebiliyor.
+        /// </summary>
+        [FromQuery] bool includeClosed,
         CancellationToken cancellationToken)
     {
         return Ok(await service.GetAllAsync(
             companyId, direction, status, currentAccountId, projectId,
             costCenterCode, search,
             includeVoided,
+            includeClosed,
             cancellationToken));
     }
 

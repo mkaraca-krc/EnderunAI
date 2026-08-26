@@ -26,6 +26,12 @@ public interface IChequeService
         string? search,
         /// <summary>İptal edilen çekler varsayılan olarak listelenmez.</summary>
         bool includeVoided,
+        /// <summary>
+        /// Kapanmış çekler (ödenen, tahsil edilen, karşılıksız, iade,
+        /// ertelenen) de gelsin mi. Varsayılan HAYIR — liste açık
+        /// çekleri gösterir.
+        /// </summary>
+        bool includeClosed,
         CancellationToken cancellationToken);
 
     Task<ChequeDetailResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken);
@@ -471,33 +477,40 @@ public sealed class ChequeService(
         string? costCenterCode,
         string? search,
         bool includeVoided,
+        bool includeClosed,
         CancellationToken cancellationToken)
     {
         var query = db.Cheques.AsNoTracking().AsQueryable();
 
         /*
-         * İPTAL EDİLEN ÇEKLER VARSAYILAN OLARAK GİZLİ.
+         * DURUM SÜZGECİ TEK KAPIDAN GEÇER.
          *
-         * Denetim izi için defterde duruyorlar ama günlük listede
-         * gürültü yapıyorlardı: kullanıcı iptal ettiği çeki her açılışta
-         * yeniden görüyor ve "silinmemiş mi" diye tereddüt ediyordu.
-         * Açıkça istenirse geliyorlar ve ekranda üstü çizili/soluk
-         * gösteriliyorlar — gizlemek yok saymak değil.
+         * Burada İKİ bağımsız süzgeç vardı ve sorguda VE ile
+         * birleşiyorlardı: biri "açık olmayanı ele", diğeri "iptal
+         * olanı ele". VE ile birleşen iki süzgeçte HER ZAMAN DAR OLAN
+         * SESSİZCE KAZANIR — kullanıcı "iptalleri göster" dese bile
+         * açık süzgeci iptali eliyordu ve ekran boş geliyordu.
          *
-         * DURUM SÜZGECİ AÇIKÇA İPTAL SEÇİLDİYSE bu kural devreye
-         * girmiyor: kullanıcı zaten iptalleri istemiştir.
+         * Küme artık tek yerde çözülüyor
+         * (`ChequeStatusRules.CozumleDurumKumesi`) ve sorgu tek satır.
+         * Çarpışacak ikinci süzgeç yok; üçüncü bir seçenek eklendiğinde
+         * de aynı fonksiyona girecek.
+         *
+         * ÖNCELİK: açık kullanıcı isteği varsayılan süzgeci EZER.
+         * Tersi asla olmaz.
          */
-        var voidedRequested = status == (int)ChequeStatus.Voided;
+        var durumKumesi = ChequeStatusRules.CozumleDurumKumesi(
+            new ChequeStatusRules.ListeDurumIstegi(
+                SecilenDurum: status is null ? null : (ChequeStatus)status.Value,
+                KapanmislarDahil: includeClosed,
+                IptallerDahil: includeVoided));
 
-        if (!includeVoided && !voidedRequested)
-            query = query.Where(x => x.Status != ChequeStatus.Voided);
+        query = query.Where(x => durumKumesi.Contains(x.Status));
 
         if (companyId is not null)
             query = query.Where(x => x.CompanyId == companyId.Value);
         if (direction is not null)
             query = query.Where(x => (int)x.Direction == direction.Value);
-        if (status is not null)
-            query = query.Where(x => (int)x.Status == status.Value);
         if (currentAccountId is not null)
             query = query.Where(x => x.CurrentAccountId == currentAccountId.Value);
         if (projectId is not null)
@@ -550,8 +563,11 @@ public sealed class ChequeService(
         return rows.Select(x =>
         {
             var daysToDue = (int)(x.DueDate.Date - today).TotalDays;
-            var isOpen = x.Status is ChequeStatus.Portfolio or ChequeStatus.AtBank
-                or ChequeStatus.AtFactoring or ChequeStatus.Issued;
+            // AÇIK KÜMENİN ÜÇÜNCÜ KOPYASIYDI. Aynı dört durum burada
+            // satır içi yazılıydı; liste süzgeci ve ekran toplamıyla
+            // birlikte kural üç ayrı yerde yaşıyordu. Tek kaynağa
+            // bağlandı.
+            var isOpen = ChequeStatusRules.AcikMi(x.Status);
 
             return new ChequeListItemResponse(
                 x.Id,
@@ -576,7 +592,8 @@ public sealed class ChequeService(
                 x.IssueDate,
                 x.DueDate,
                 daysToDue,
-                isOpen && daysToDue < 0);
+                isOpen && daysToDue < 0,
+                ChequeStatusRules.ToplamaGirer(x.Status));
         }).ToList();
     }
 
@@ -780,7 +797,8 @@ public sealed class ChequeService(
         // ama filtre AÇIKÇA yazılıyor ki ileride buraya "toplam çek"
         // gibi bir alan eklendiğinde iptalliler sessizce geri
         // sızmasın.
-        query = query.Where(x => x.Status != ChequeStatus.Voided);
+        query = query.Where(x =>
+                !ChequeStatusRules.ToplamaGirmeyenDurumlar.Contains(x.Status));
 
         var groups = await query
             .GroupBy(x => x.Status)

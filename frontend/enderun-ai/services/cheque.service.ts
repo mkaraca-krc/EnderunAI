@@ -123,6 +123,15 @@ export type ChequeListItem = {
   dueDate: string;
   daysToDue: number;
   isOverdue: boolean;
+  /**
+   * TOPLAMA GİRER Mİ — kararı SUNUCU veriyor.
+   *
+   * Ekran eskiden kendi kuralını yazıyordu (`status !== Voided`) ve
+   * liste ucundaki süzgeçten AYRI karar veriyordu. ÇEK/1'deki hata
+   * tam olarak bu ayrışmaydı: ödenen çek sunucudan geliyordu, ekran
+   * da onu topluyordu. Artık ekranda karar yok.
+   */
+  countsTowardTotals: boolean;
 };
 
 export type ChequeDetail = ChequeListItem & {
@@ -318,6 +327,15 @@ export const chequeService = {
        * kullanıcı açıkça isterse geliyor.
        */
       includeVoided?: boolean;
+      /**
+       * KAPANMIŞ ÇEKLER VARSAYILAN OLARAK GİZLİ (ÇEK/1).
+       *
+       * Ödenen/tahsil edilen/karşılıksız çek listede kalmaya devam
+       * ediyor ve o ayın toplamına giriyordu. Silinmiyor, gizlenmiyor
+       * — varsayılandan çıkıyor; durum süzgeciyle ya da bu bayrakla
+       * her zaman görülebiliyor.
+       */
+      includeClosed?: boolean;
     } = {}
   ) {
     const query = new URLSearchParams();
@@ -330,6 +348,7 @@ export const chequeService = {
       query.set("costCenterCode", params.costCenterCode);
     if (params.search) query.set("search", params.search);
     if (params.includeVoided) query.set("includeVoided", "true");
+    if (params.includeClosed) query.set("includeClosed", "true");
 
     const suffix = query.toString();
     return apiClient<ChequeListItem[]>(`cheques${suffix ? `?${suffix}` : ""}`);

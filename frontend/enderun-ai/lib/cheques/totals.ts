@@ -1,4 +1,4 @@
-import { ChequeStatus, type ChequeListItem } from "@/services/cheque.service";
+import { type ChequeListItem } from "@/services/cheque.service";
 
 /**
  * Çek defteri ekranındaki toplamlar.
@@ -26,9 +26,20 @@ const MONTH_NAMES = [
   "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
 ];
 
-/** İptal edilen çek hiçbir toplama girmez. */
+/**
+ * TOPLAMA GİRER Mİ — KARAR SUNUCUDA.
+ *
+ * Burada `item.status !== Voided` yazıyordu ve sunucudaki
+ * liste süzgecinden AYRI bir karardı. ÇEK/1 bu ayrışmanın faturasıydı:
+ * sunucu ödenen çeki listeye koyuyordu (durum süzgeci yoktu), ekran da
+ * "iptal değil" diye topluyordu. Ödenen çek hem listede hem toplamda
+ * kalıyordu.
+ *
+ * Kural artık `ChequeStatusRules` içinde tek yerde; sunucu her satırda
+ * sonucu bayrak olarak yolluyor. Ekranın işi toplamak.
+ */
 export function countsTowardTotals(item: ChequeListItem) {
-  return item.status !== ChequeStatus.Voided;
+  return item.countsTowardTotals;
 }
 
 /** Toplanabilir değer: keşide kurundaki TL karşılığı. */
@@ -110,4 +121,30 @@ export function summarizeCheques(items: ChequeListItem[]): ChequeTotals {
     listTotal: list.reduce((sum, group) => sum + group.total, 0),
     groups: list,
   };
+}
+
+/**
+ * TOPLAM BAŞLIĞI SÜZGECİ TAKİP EDER.
+ *
+ * NEDEN ÖNEMLİ: "Bu Ayın Çek Yükü" yazıp altında ödenmişlerin
+ * toplamını göstermek, sayı doğru olsa bile CÜMLEYİ yalan yapar.
+ * Kullanıcı rakamı okumaz, başlığı okur.
+ *
+ * Başlık burada üretiliyor çünkü toplamın kuralıyla aynı yerde
+ * durmalı: biri değişip diğeri kalırsa ekran yine yanlış şey söyler.
+ */
+export function chequeTotalLabel(
+  statusFilter: string,
+  showClosed: boolean,
+  statusLabels: Record<number, string>
+): string {
+  if (statusFilter !== "") {
+    const ad = statusLabels[Number(statusFilter)];
+
+    return ad ? `${ad} çekler toplamı` : "Listelenen toplam";
+  }
+
+  // Kapanmışlar açıkken liste artık "açık çekler" değil; başlık da
+  // öyle demiyor.
+  return showClosed ? "Listelenen toplam" : "Açık çekler toplamı";
 }

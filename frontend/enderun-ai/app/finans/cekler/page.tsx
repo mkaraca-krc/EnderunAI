@@ -14,7 +14,11 @@ import {
 } from "@/services/cost-center.service";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { amount as formatAmount, money, number as formatNumber } from "@/lib/format/turkish";
-import { chequeMonthKey, summarizeCheques } from "@/lib/cheques/totals";
+import {
+  chequeMonthKey,
+  chequeTotalLabel,
+  summarizeCheques,
+} from "@/lib/cheques/totals";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   Button,
@@ -201,6 +205,15 @@ export default function ChequeRegisterPage() {
   /** İptaller varsayılan gizli; kullanıcı açıkça isterse listeye girer. */
   const [showVoided, setShowVoided] = useState(false);
 
+  /**
+   * KAPANMIŞ ÇEKLER VARSAYILAN GİZLİ (ÇEK/1).
+   *
+   * Ödenen çek listede kalmaya ve o ayın toplamına girmeye devam
+   * ediyordu. Silinmiyor, gizlenmiyor — varsayılandan çıkıyor;
+   * bu kutu ya da durum süzgeci ile her zaman görülebiliyor.
+   */
+  const [showClosed, setShowClosed] = useState(false);
+
   /** Detayda "Değişiklik geçmişi" sekmesi ve muhasebe süzgeci. */
   const [showChangeLog, setShowChangeLog] = useState(false);
   const [onlyAccountingChanges, setOnlyAccountingChanges] = useState(false);
@@ -265,6 +278,7 @@ export default function ChequeRegisterPage() {
           costCenterCode: costCenterFilter || undefined,
           search: search.trim() || undefined,
           includeVoided: showVoided,
+          includeClosed: showClosed,
         }),
         chequeService.getSummary(companyId),
       ]);
@@ -285,6 +299,7 @@ export default function ChequeRegisterPage() {
     costCenterFilter,
     search,
     showVoided,
+    showClosed,
   ]);
 
   const loadLookups = useCallback(async () => {
@@ -1107,7 +1122,8 @@ export default function ChequeRegisterPage() {
         <div>
           <strong>{items.length} çek</strong>
           <small style={{ display: "block", marginTop: "4px" }}>
-            Listelenen toplam: {money(listTotal)}
+            {chequeTotalLabel(statusFilter, showClosed, CHEQUE_STATUS_LABELS)}:{" "}
+            {money(listTotal)}
           </small>
         </div>
 
@@ -1657,6 +1673,19 @@ export default function ChequeRegisterPage() {
               />
               İptalleri göster
             </label>
+
+            {/* KAPANMIŞ ÇEKLER: ödenen, tahsil edilen, karşılıksız,
+                iade ve ertelenen. Varsayılan listede yoklar çünkü
+                "bu ayki çek yükü" sorusuna girmiyorlar; geçmiş
+                erişilebilir kalsın diye tek tıkla geri geliyorlar. */}
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={showClosed}
+                onChange={(e) => setShowClosed(e.target.checked)}
+              />
+              Kapanmışları göster
+            </label>
           </div>
         </div>
 
@@ -1673,7 +1702,7 @@ export default function ChequeRegisterPage() {
             columns={chequeColumns}
             rowKey={(row) => row.id}
             title="Çek Listesi"
-            resetKey={`${direction}|${statusFilter}|${projectFilter}|${costCenterFilter}|${search}|${showVoided}`}
+            resetKey={`${direction}|${statusFilter}|${projectFilter}|${costCenterFilter}|${search}|${showVoided}|${showClosed}`}
             rowProps={(row) => ({
               onClick: () => void openDetail(row.id),
               style: {

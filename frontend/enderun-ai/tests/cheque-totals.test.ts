@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { summarizeCheques } from "@/lib/cheques/totals";
+import {
+  chequeMonthKey,
+  chequeTotalLabel,
+  summarizeCheques,
+} from "@/lib/cheques/totals";
 import { ChequeStatus, type ChequeListItem } from "@/services/cheque.service";
 
 /**
@@ -22,11 +26,21 @@ function cheque(
 ): ChequeListItem {
   counter += 1;
 
+  const status = overrides.status ?? ChequeStatus.Issued;
+
   return {
     id: `cheque-${counter}`,
     chequeNumber: `CEK-${counter}`,
     direction: 1,
-    status: ChequeStatus.Issued,
+    status,
+    // SUNUCUNUN YOLLADIĞI BAYRAK TAKLİT EDİLİYOR.
+    //
+    // Kural artık ekranda değil sunucuda (`ChequeStatusRules`); test
+    // verisi de sunucunun ürettiği hâli taşımalı, yoksa test var
+    // olmayan bir sözleşmeyi sınar. Sunucudaki kural "iptal dışında
+    // her şey toplanır".
+    countsTowardTotals: overrides.countsTowardTotals
+      ?? status !== ChequeStatus.Voided,
     // amountTry ve dueDate zaten overrides'ta zorunlu; aşağıdaki
     // yayılma onları getirir. amount ise yalnız varsayılan olarak
     // TRY tutarına eşitlenir, istenirse override edilebilir.
@@ -125,5 +139,108 @@ describe("çek toplamları", () => {
 
     expect(listTotal).toBe(0);
     expect(groups).toHaveLength(0);
+  });
+
+  /**
+   * TOPLAM KARARI SUNUCUNUN — EKRAN KENDİ KURALINI YAZMIYOR.
+   *
+   * ÇEK/1'in kök nedeni iki ayrı karar yeriydi: sunucu listeye neyi
+   * koyacağına, ekran neyi toplayacağına ayrı karar veriyordu ve
+   * ikisi ayrışmıştı. Bu test ekranın artık kendi kuralı OLMADIĞINI
+   * kanıtlıyor: durumu "Ödendi" olan bir satır, sunucu saydırdığı
+   * için toplanıyor; iptal durumundaki bir satır sunucu saymadığı
+   * için toplanmıyor. Karar tek yerde.
+   */
+  it("toplam, durumu değil sunucunun bayrağını izler", () => {
+    const items = [
+      // Ödenmiş çek: kullanıcı "Ödendi" süzgecini seçtiğinde sunucu
+      // bunu listeye koyar VE saydırır — dolu liste + sıfır toplam
+      // anlamsız bir ekran olurdu.
+      cheque({
+        dueDate: "2026-03-10",
+        amountTry: 30_000,
+        status: ChequeStatus.Paid,
+        countsTowardTotals: true,
+      }),
+      // Sunucu saymadığını söylediyse ekran saymaz — durumu ne olursa
+      // olsun.
+      cheque({
+        dueDate: "2026-03-12",
+        amountTry: 99_000,
+        status: ChequeStatus.Issued,
+        countsTowardTotals: false,
+      }),
+    ];
+
+    const { listTotal, groups } = summarizeCheques(items);
+
+    expect(listTotal).toBe(30_000);
+    // Sayılmayan satır LİSTEDE kalır: gizlemek yok saymak değil.
+    expect(groups[0].rows).toHaveLength(2);
+    expect(groups[0].count).toBe(1);
+  });
+});
+
+describe("toplam başlığı", () => {
+  const etiketler = { 10: "Verilen", 11: "Ödendi", 90: "İptal" };
+
+  /**
+   * BAŞLIK SÜZGECİ TAKİP ETMELİ.
+   *
+   * "Bu Ayın Çek Yükü" yazıp altında ödenmişlerin toplamını
+   * göstermek, sayı doğru olsa bile cümleyi yalan yapar. Kullanıcı
+   * rakamı değil başlığı okur.
+   */
+  it("varsayılanda açık çekleri söyler", () => {
+    expect(chequeTotalLabel("", false, etiketler)).toBe("Açık çekler toplamı");
+  });
+
+  it("durum seçiliyse o durumu söyler", () => {
+    expect(chequeTotalLabel("11", false, etiketler)).toBe("Ödendi çekler toplamı");
+  });
+
+  /**
+   * Kapanmışlar açıkken liste artık "açık çekler" değil; başlık da
+   * öyle dememeli. Yanlış başlık, düzeltmeye çalıştığımız hatanın
+   * ekran tarafındaki hâli olurdu.
+   */
+  it("kapanmışlar açıkken açık çek demez", () => {
+    expect(chequeTotalLabel("", true, etiketler)).toBe("Listelenen toplam");
+  });
+});
+
+describe("ay gruplaması", () => {
+  /**
+   * AY VADE TARİHİNE GÖRE — KEŞİDE TARİHİNE GÖRE DEĞİL.
+   *
+   * "Bu ayın çek yükü" sorusu "bu ay hangi çekleri ödeyeceğiz"
+   * demektir; çekin ne zaman yazıldığı değil ne zaman ödeneceği
+   * önemli. Keşide tarihine göre gruplansaydı Ağustos'ta yazılıp
+   * Kasım'da ödenecek çek Ağustos yüküne girer ve iki ay birden
+   * yanlış olurdu.
+   *
+   * ÇEK/1'de bu alan ölçüldü ve DOĞRU çıktı; test onu kilitliyor.
+   */
+  it("ay anahtarı vade tarihinden gelir", () => {
+    const item = cheque({
+      dueDate: "2026-11-15",
+      amountTry: 1_000,
+      issueDate: "2026-08-01",
+    });
+
+    expect(chequeMonthKey(item)).toBe("2026-11");
+  });
+
+  it("toplamlar vade ayına düşer, keşide ayına değil", () => {
+    const { groups } = summarizeCheques([
+      cheque({ dueDate: "2026-11-15", amountTry: 1_000, issueDate: "2026-08-01" }),
+      cheque({ dueDate: "2026-08-20", amountTry: 2_000, issueDate: "2026-08-02" }),
+    ]);
+
+    const kasim = groups.find((g) => g.key === "2026-11");
+    const agustos = groups.find((g) => g.key === "2026-08");
+
+    expect(kasim?.total).toBe(1_000);
+    expect(agustos?.total).toBe(2_000);
   });
 });
