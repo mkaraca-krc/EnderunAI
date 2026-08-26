@@ -826,6 +826,30 @@ hepsini security tarafına yazıyor; dağılım ağırlıklı yetki/kullanıcı
 **İş tarafı neredeyse hiç kayıtlı değil** — M2a'nın işi kesiciye tip
 eklemekten çok, hangi varlığın "iş olayı" sayıldığına karar vermek.
 
+**M2a KAPSAMINA AÇIKÇA GİREN BORÇ — ÇEK İZİ AYRI TABLODA
+(ÇEK/1'de ölçüldü, 2026-08-26):**
+
+`audit_logs` **çek hareketlerini İÇERMİYOR**; çek izi
+`cheque_movements` tablosunda tutuluyor. Ölçüm: çek 805088'in iki
+kaydı için `audit_logs`ta **0 satır**, buna karşılık
+`cheque_movements`ta dört satır (alındı → iptal, düzenlendi →
+ödendi), her biri `CreatedByUserId`, `MovementDate`, `FromStatus`,
+`ToStatus` ve fiş bağıyla birlikte.
+
+**M2a BUNU BİRLEŞTİRMELİ.** Aksi hâlde M2b'nin günlük faaliyet
+raporu çek hareketlerinin **hiçbirini görmez**: "bugün ne oldu"
+sorusunun cevabında çek düzenleme, ciro, tahsil, ödeme, karşılıksız
+ve iptal **eksik kalır** — ve eksikliği kimse fark etmez, çünkü
+rapor boş değil, yalnızca çek satırları yok.
+
+Birleştirme biçimi M2a'nın kararı; iki seçenek var ve ikisi de
+`cheque_movements`ı SİLMEZ (fiş bağı ve durum geçiş matrisi oraya
+dayanıyor):
+- kesiciye çek tipini ekleyip `audit_logs`a da yazmak (çift yazım,
+  ama tek okuma noktası), ya da
+- faaliyet raporunun okuma katmanında iki kaynağı birleştirmek
+  (tek yazım, birleştirme mantığı raporda).
+
 ### M1/6 — ORTAK YORUM BİLEŞENİ + GÖREV DETAY EKRANI (2026-08-24)
 
 **ÖNCE BİR CANLI HATA KAPANDI: `/gorevler/{id}` ROTASI YOKTU.**
