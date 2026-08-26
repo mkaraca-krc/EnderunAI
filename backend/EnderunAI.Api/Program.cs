@@ -602,6 +602,10 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockConsumptionPos
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IDepodanZimmetService, EnderunAI.Api.Services.Inventory.DepodanZimmetService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Accounting.IHesapPlaniAktarimService, EnderunAI.Api.Services.Accounting.HesapPlaniAktarimService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountLockService, EnderunAI.Api.Services.Inventory.StockCountLockService>();
+// KİLİT SCOPED OLMALI: alınan satırları istek boyunca hatırlıyor ve
+// aynı DbContext'in işlemine bağlı. Singleton olsaydı iki istek
+// birbirinin kilit kaydını görürdü.
+builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStokSatirKilidi, EnderunAI.Api.Services.Inventory.StokSatirKilidiService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.StockLevelAlertService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.InventoryItemPhotoService>();
 builder.Services.AddScoped<EnderunAI.Api.Services.Inventory.IStockCountVoucherPoster, EnderunAI.Api.Services.Inventory.StockCountVoucherPoster>();

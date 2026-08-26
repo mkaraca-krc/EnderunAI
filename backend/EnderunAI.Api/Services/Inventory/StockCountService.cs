@@ -46,7 +46,8 @@ public sealed class StockCountService(
     AppDbContext db,
     IDocumentNumberService documentNumbers,
     ICurrentUserService currentUser,
-    IStockCountVoucherPoster voucherPoster) : IStockCountService
+    IStockCountVoucherPoster voucherPoster,
+    IStokSatirKilidi stokKilidi) : IStockCountService
 {
     private static readonly StockCountStatus[] ActiveStatuses =
         [StockCountStatus.Counting, StockCountStatus.PendingApproval];
@@ -262,6 +263,16 @@ public sealed class StockCountService(
         foreach (var line in adjusted)
         {
             var difference = line.Difference!.Value;
+
+            // SATIR KİLİDİ — SAYIM MUTLAK YAZAR, EN TEHLİKELİ BİÇİM.
+            //
+            // Burada tehlike negatif stok değil, KAYIP GÜNCELLEME:
+            // sayım "40 yaz" der, araya giren çıkış 5 düşer, sayım 40
+            // yazar ve çıkış yok olur. Sayım kilidi açık oturum varken
+            // hareketi engelliyor ama oturum AÇILMADAN ÖNCE başlamış
+            // bir işlemi engelleyemez; kalan pencereyi bu kilit kapar.
+            await stokKilidi.KilitleAsync(
+                session.WarehouseId, line.InventoryItemId, cancellationToken);
 
             var stock = await db.WarehouseStocks.SingleOrDefaultAsync(
                 x => x.WarehouseId == session.WarehouseId

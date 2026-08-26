@@ -65,7 +65,8 @@ public interface IStockSaleIssuer
 
 public sealed class StockSaleIssuer(
     AppDbContext db,
-    IStockCountLockService countLock) : IStockSaleIssuer
+    IStockCountLockService countLock,
+    IStokSatirKilidi stokKilidi) : IStockSaleIssuer
 {
     public async Task<IReadOnlyList<StockSaleCost>> IssueAsync(
         Guid companyId,
@@ -87,6 +88,14 @@ public sealed class StockSaleIssuer(
 
             // SAYIM KİLİDİ: sayılan bölgeye hareket girmez.
             await countLock.EnsureNotLockedAsync(
+                warehouseId, line.InventoryItemId, cancellationToken);
+
+            // SATIR KİLİDİ — OKUMADAN ÖNCE.
+            //
+            // Sıra önemli: kilit okumadan sonra alınsaydı iki istek de
+            // eski miktarı okur, sonra sırayla kilitlenir ve ikisi de
+            // "yeterli" kararını bayat veriyle vermiş olurdu.
+            await stokKilidi.KilitleAsync(
                 warehouseId, line.InventoryItemId, cancellationToken);
 
             var stock = await db.WarehouseStocks
@@ -177,6 +186,16 @@ public sealed class StockSaleIssuer(
             if (line.Quantity <= 0m) continue;
 
             await countLock.EnsureNotLockedAsync(
+                warehouseId, line.InventoryItemId, cancellationToken);
+
+            // İADE DE OKU-DEĞİŞTİR-YAZ: kilitsiz iki eşzamanlı iade
+            // aynı miktarı okur ve biri diğerinin artışını siler —
+            // stok eksiye düşmez ama mal kaybolur.
+            //
+            // Stok kaydı hiç yoksa kilit 0 satır tutar; o durumda iki
+            // eşzamanlı iade aynı kaydı eklemeye çalışır ve biri
+            // benzersizlik kısıtından temiz hata alır (bozulma değil).
+            await stokKilidi.KilitleAsync(
                 warehouseId, line.InventoryItemId, cancellationToken);
 
             var stock = await db.WarehouseStocks

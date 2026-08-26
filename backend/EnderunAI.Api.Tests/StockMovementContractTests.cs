@@ -221,4 +221,113 @@ public sealed class StockMovementContractTests
             @"IsNullOrWhiteSpace\(request\.Description\)",
             adjustment[..Math.Min(2500, adjustment.Length)]);
     }
+
+    /// <summary>
+    /// STOK MİKTARINI DEĞİŞTİREN HER YOL SATIR KİLİDİ ALIR.
+    ///
+    /// Stok değişimi oku-değiştir-yaz: iki istek aynı kalemi aynı anda
+    /// okursa ikisi de "1 adet var" görür. PostgreSQL varsayılanı Read
+    /// Committed olduğundan iki işlem çakışmadan tamamlanır: veritabanı
+    /// hata VERMEZ, stok 0 görünür ama tek maldan iki çıkış yapılmıştır.
+    ///
+    /// KURAL METOT GÖVDESİ BAZINDA — dosya bazında DEĞİL. İlk yazdığım
+    /// biçim "dosyada bir yerde kilit çağrısı geçsin" diyordu ve sondada
+    /// KAÇIRDI: `SupplierInvoiceStockPoster` içinde iki mutasyon
+    /// noktası var; iade tarafındaki kilit silindiğinde giriş
+    /// tarafındaki çağrı kuralı yeşil tutuyordu.
+    ///
+    /// Kilit ayrıca DEĞİŞİKLİKTEN ÖNCE aranıyor: sonra alınan kilit,
+    /// bayat veriyle verilmiş kararı düzeltmez.
+    /// </summary>
+    [Fact]
+    public void StokMiktariniDegistirenHerYol_SatirKilidiAlir()
+    {
+        var offenders = new List<string>();
+        var checkedSites = 0;
+
+        foreach (var (name, code) in SourceFiles())
+        {
+            if (!TouchesStock(code)) continue;
+
+            foreach (var (uye, govde) in Uyeler(code))
+            {
+                foreach (Match site in Regex.Matches(
+                    govde,
+                    @"\bstock\.Quantity\s*(\+=|-=|=(?!=))"))
+                {
+                    checkedSites++;
+
+                    var oncesi = govde[..site.Index];
+
+                    if (!oncesi.Contains("stokKilidi.KilitleAsync"))
+                        offenders.Add($"{name}:{uye}");
+                }
+            }
+        }
+
+        // Kural boşalırsa (desen tutmaz olursa) sessizce geçmesin.
+        Assert.True(checkedSites >= 8,
+            $"Beklenenden az stok yazma noktası bulundu ({checkedSites}). "
+            + "Kural boşalmış olabilir — değişken adı hâlâ 'stock' mu?");
+
+        Assert.True(
+            offenders.Count == 0,
+            "Bu noktalar depo stoğunu DEĞİŞTİRİYOR ama öncesinde satır "
+            + "kilidi almıyor: " + string.Join(", ", offenders)
+            + ". Kilitsiz oku-değiştir-yaz, eşzamanlı iki istekte tek "
+            + "maldan iki çıkış üretir ve veritabanı hata vermez.");
+    }
+
+    /// <summary>
+    /// SATIR KİLİDİ TEK YERDEN ALINIR.
+    ///
+    /// Zimmet paketinde kilit o akışa özel bir `FOR UPDATE` cümlesiyle
+    /// alınmıştı; kilidi bir taraf alıp diğerleri almadığında yarış
+    /// aynen sürüyordu. Aynı kararın ikinci bir kopyası çıkarsa
+    /// kopyalar zamanla ayrışır (Kural 25).
+    /// </summary>
+    [Fact]
+    public void SatirKilidi_TekYerdenAlinir()
+    {
+        var offenders = SourceFiles()
+            .Where(x => x.Code.Contains("FOR UPDATE"))
+            .Select(x => x.Name)
+            .Where(x => x != "StokSatirKilidiService.cs")
+            .ToList();
+
+        Assert.True(
+            offenders.Count == 0,
+            "Bu dosyalar kendi FOR UPDATE cümlesini yazıyor: "
+            + string.Join(", ", offenders)
+            + ". Satır kilidi yalnız IStokSatirKilidi üzerinden alınır.");
+    }
+
+    /// <summary>
+    /// Kaynağı üye (metot/özellik) gövdelerine böler.
+    ///
+    /// Kaba ama yeterli: girinti 4 olan `public`/`private`/`internal`
+    /// bildirimleri sınır kabul edilir. Amaç tam bir ayrıştırıcı değil,
+    /// bir metottaki kilidin komşu metodu örtmesini engellemek.
+    /// </summary>
+    private static IEnumerable<(string Name, string Body)> Uyeler(string code)
+    {
+        var sinirlar = Regex.Matches(
+            code, @"\n    (?:public|private|internal|protected)[^\n(]*")
+            .ToList();
+
+        if (sinirlar.Count == 0)
+        {
+            yield return ("<dosya>", code);
+            yield break;
+        }
+
+        for (var i = 0; i < sinirlar.Count; i++)
+        {
+            var basi = sinirlar[i].Index;
+            var sonu = i + 1 < sinirlar.Count ? sinirlar[i + 1].Index : code.Length;
+
+            var ad = sinirlar[i].Value.Trim().Split(' ').LastOrDefault() ?? "?";
+            yield return (ad, code[basi..sonu]);
+        }
+    }
 }

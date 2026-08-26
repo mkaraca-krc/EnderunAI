@@ -76,7 +76,8 @@ public sealed class RetailSaleService(
     IUserAuthorizationService authorization,
     Services.Inventory.IStockSaleIssuer stockIssuer,
     IRetailSaleVoucherPoster retailVouchers,
-    Services.Inventory.IStockCountLockService countLock) : IRetailSaleService
+    Services.Inventory.IStockCountLockService countLock,
+    Services.Inventory.IStokSatirKilidi stokKilidi) : IRetailSaleService
 {
     /// <summary>
     /// SANAL REZERV: fiili stoktan, henüz sonuçlanmamış fişlerdeki
@@ -705,6 +706,10 @@ public sealed class RetailSaleService(
         {
             if (!quantities.TryGetValue(item.Id, out var amount) || amount <= 0m)
                 continue;
+
+            // SATIR KİLİDİ — OKUMADAN ÖNCE: iade de oku-değiştir-yaz.
+            await stokKilidi.KilitleAsync(
+                sale.WarehouseId, item.InventoryItemId, cancellationToken);
 
             var stock = await db.WarehouseStocks
                 .Include(x => x.InventoryItem)

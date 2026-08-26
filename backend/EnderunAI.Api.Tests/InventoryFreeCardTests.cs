@@ -387,6 +387,13 @@ public sealed class InventoryFreeCardTests(DatabaseFixture fixture)
 
         var issuer = scope.ServiceProvider.GetRequiredService<IStockSaleIssuer>();
 
+        // İŞLEM AÇILIYOR — çıkış kapısı satır kilidi alıyor ve
+        // `FOR UPDATE` işlem dışında hiçbir şey korumaz. Kilit servisi
+        // bu durumda sessizce geçmek yerine hata veriyor; test de
+        // gerçek çağıranın yaptığını yapmalı (perakende satış, satış
+        // faturası ve zimmet hepsi işlem içinde çağırıyor).
+        await using var transaction = await db.Database.BeginTransactionAsync();
+
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             issuer.IssueAsync(
                 scene.CompanyId,
@@ -422,6 +429,9 @@ public sealed class InventoryFreeCardTests(DatabaseFixture fixture)
 
         var issuer = scope.ServiceProvider.GetRequiredService<IStockSaleIssuer>();
 
+        // İŞLEM AÇILIYOR — gerekçe için bkz. Satis_ProjeyeBagliKartSatilamaz.
+        await using var transaction = await db.Database.BeginTransactionAsync();
+
         var costs = await issuer.IssueAsync(
             scene.CompanyId,
             scene.WarehouseId,
@@ -431,6 +441,7 @@ public sealed class InventoryFreeCardTests(DatabaseFixture fixture)
             CancellationToken.None);
 
         await db.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         Assert.Single(costs);
         Assert.Equal(2000m, costs[0].TotalCost);

@@ -20,6 +20,7 @@ public sealed class InventoryController(
     Services.Inventory.IStockAccountingConsistencyService consistency,
     Services.Inventory.IStockConsumptionPoster consumptionPoster,
     Services.Inventory.IStockCountLockService countLock,
+    Services.Inventory.IStokSatirKilidi stokKilidi,
     Services.Inventory.InventoryItemPhotoService photos) : ControllerBase
 {
     /// <summary>
@@ -1010,6 +1011,17 @@ public sealed class InventoryController(
         await countLock.EnsureNotLockedAsync(
             stock.WarehouseId, stock.InventoryItemId, cancellationToken);
 
+        // SATIR KİLİDİ. Kayıt yukarıda okundu ama yeterlilik kontrolü
+        // işlem AÇILMADAN ÖNCE yapıldı; arada başka bir çıkış malı
+        // almış olabilir. Kilit izlenen kaydı tazeliyor, bu yüzden
+        // kontrol taze miktarla TEKRARLANIYOR — kilidin tek başına
+        // faydası yok, karar da kilitten sonra verilmeli.
+        await stokKilidi.KilitleAsync(
+            stock.WarehouseId, stock.InventoryItemId, cancellationToken);
+
+        if (stock.Quantity < request.Quantity)
+            return Conflict(new { message = "Stok yetersiz." });
+
         stock.Quantity -= request.Quantity;
         stock.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -1250,6 +1262,20 @@ public sealed class InventoryController(
         // geçersiz kılardı.
         await countLock.EnsureNotLockedAsync(
             stock.WarehouseId, stock.InventoryItemId, cancellationToken);
+
+        // SATIR KİLİDİ. Düzeltme MUTLAK yazıyor: araya giren bir çıkış
+        // sessizce yok olur. Kilit kaydı tazeliyor; fark da taze
+        // miktardan YENİDEN hesaplanıyor, yoksa fişe yazılan miktar
+        // stoktaki gerçek değişimi anlatmazdı.
+        await stokKilidi.KilitleAsync(
+            stock.WarehouseId, stock.InventoryItemId, cancellationToken);
+
+        delta = request.CountedQuantity - stock.Quantity;
+        if (delta == 0)
+            return BadRequest(new
+            {
+                message = "Sayılan miktar mevcut stokla aynı, düzeltme gerekmiyor."
+            });
 
         stock.Quantity = request.CountedQuantity;
         stock.UpdatedAtUtc = DateTime.UtcNow;

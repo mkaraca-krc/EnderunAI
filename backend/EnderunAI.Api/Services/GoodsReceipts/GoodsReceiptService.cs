@@ -21,7 +21,8 @@ public sealed class GoodsReceiptService(
     ICurrentDataScopeService dataScope,
     ICurrentUserService currentUser,
     Services.Inventory.IGoodsReceiptAccountingPoster accountingPoster,
-    Services.Inventory.IStockCountLockService countLock)
+    Services.Inventory.IStockCountLockService countLock,
+    Services.Inventory.IStokSatirKilidi stokKilidi)
     : IGoodsReceiptService
 {
     public async Task<PagedResult<GoodsReceiptListItemResponse>> GetAllAsync(
@@ -658,6 +659,11 @@ public sealed class GoodsReceiptService(
 
             // SAYIM KİLİDİ: sayılan bölgeye hareket girmez.
             await countLock.EnsureNotLockedAsync(
+                receipt.WarehouseId, inventoryItemId, cancellationToken);
+
+            // SATIR KİLİDİ: iki eşzamanlı mal kabul aynı miktarı okur
+            // ve biri diğerinin girişini siler — mal kaybolur.
+            await stokKilidi.KilitleAsync(
                 receipt.WarehouseId, inventoryItemId, cancellationToken);
 
             stock.Quantity += item.AcceptedQuantity;

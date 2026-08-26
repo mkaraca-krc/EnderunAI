@@ -43,7 +43,8 @@ public interface ISupplierInvoiceStockPoster
 public sealed class SupplierInvoiceStockPoster(
     AppDbContext db,
     ICurrentUserService currentUser,
-    IStockCountLockService countLock) : ISupplierInvoiceStockPoster
+    IStockCountLockService countLock,
+    IStokSatirKilidi stokKilidi) : ISupplierInvoiceStockPoster
 {
     public async Task<int> PostAsync(
         SupplierInvoice invoice, CancellationToken cancellationToken)
@@ -95,6 +96,12 @@ public sealed class SupplierInvoiceStockPoster(
             var warehouseId = item.WarehouseId ?? invoice.WarehouseId
                 ?? throw new InvalidOperationException(
                     $"Kalem {item.LineNumber}: stok girişi için depo belirlenemedi.");
+
+            // SATIR KİLİDİ: giriş de oku-değiştir-yaz. Kilitsiz iki
+            // eşzamanlı giriş aynı miktarı okur, biri diğerinin
+            // artışını siler ve mal depoya girmemiş sayılır.
+            await stokKilidi.KilitleAsync(
+                warehouseId, inventoryItemId, cancellationToken);
 
             var stock = warehouseStocks.SingleOrDefault(x =>
                 x.WarehouseId == warehouseId && x.InventoryItemId == inventoryItemId);
@@ -211,6 +218,15 @@ public sealed class SupplierInvoiceStockPoster(
             var warehouseId = item.WarehouseId ?? invoice.WarehouseId
                 ?? throw new InvalidOperationException(
                     $"Kalem {item.LineNumber}: iade için depo belirlenemedi.");
+
+            // SATIR KİLİDİ — YETERLİLİK KONTROLÜNDEN ÖNCE.
+            //
+            // Stoklar döngüden önce topluca okunuyor; kilit alınmadan
+            // yapılan kontrol bayat veriye dayanır. Kilit, izlenen
+            // kaydı tazeler, böylece aşağıdaki kontrol taze miktarı
+            // görür ve iki eşzamanlı iade stoğu eksiye düşüremez.
+            await stokKilidi.KilitleAsync(
+                warehouseId, inventoryItemId, cancellationToken);
 
             var stock = warehouseStocks.SingleOrDefault(x =>
                 x.WarehouseId == warehouseId && x.InventoryItemId == inventoryItemId);

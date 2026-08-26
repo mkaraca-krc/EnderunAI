@@ -150,27 +150,14 @@ public sealed class DepodanZimmetService(
 
         await using var islem = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        // ────────────────────────────────────────────────────────
-        // SATIR KİLİDİ — EŞZAMANLI ZİMMET STOĞU EKSİYE DÜŞÜRMESİN
+        // SATIR KİLİDİ ARTIK BURADA DEĞİL — `StockSaleIssuer` alıyor.
         //
-        // `StockSaleIssuer` oku-değiştir-yaz yapıyor: miktarı okuyor,
-        // yetiyor mu diye bakıyor, düşüyor. `warehouse_stocks`
-        // üzerinde eşzamanlılık jetonu YOK (ölçüldü: yalnız
-        // (depo, kalem) benzersiz indeksi var). İki işlem aynı anda
-        // "1 adet var" okuyup ikisi de düşerse stok -1 olur.
-        //
-        // Kilit YALNIZ bu akış için alınıyor. Aynı açık perakende
-        // satışında ve stoklu satış faturasında HÂLÂ DURUYOR — orada
-        // kapatmak o akışların davranışını değiştirirdi ve bu paketin
-        // kapsamı değil. Açıkta kalan somut hata: aynı kalem aynı anda
-        // hem satılır hem zimmetlenirse stok eksiye düşebilir.
-        // ────────────────────────────────────────────────────────
-        await db.Database.ExecuteSqlRawAsync(
-            "SELECT 1 FROM warehouse_stocks "
-            + "WHERE \"WarehouseId\" = {0} AND \"InventoryItemId\" = {1} "
-            + "FOR UPDATE",
-            [istek.WarehouseId, istek.InventoryItemId],
-            cancellationToken);
+        // Bu akışa özel `FOR UPDATE` cümlesi vardı; kilidi bir taraf
+        // alıp perakende satış ile stoklu satış faturası almadığı
+        // sürece koruma yarım kalıyordu. Kilit stok değiştiren her
+        // yolun ortak geçtiği yere (`IStokSatirKilidi`) taşındı;
+        // burada tekrarlansaydı aynı kararın iki ayrı yerde
+        // yaşayan iki kopyası olurdu (Kural 25).
 
         var satirlar = new List<StockSaleLine>
         {
