@@ -19,6 +19,7 @@ import {
   chequeTotalLabel,
   summarizeCheques,
 } from "@/lib/cheques/totals";
+import { kasaHesapEtiketi } from "@/lib/finans/kasa-hesap-etiketi";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   Button,
@@ -1960,7 +1961,7 @@ export default function ChequeRegisterPage() {
                       <option value="">—</option>
                       {cashAccounts.map((account) => (
                         <option key={account.id} value={account.id}>
-                          {account.code} — {account.name}
+                          {kasaHesapEtiketi(account)}
                         </option>
                       ))}
                     </select>
@@ -2126,7 +2127,7 @@ export default function ChequeRegisterPage() {
                       <option value="">Seçin...</option>
                       {cashAccounts.map((account) => (
                         <option key={account.id} value={account.id}>
-                          {account.code} — {account.name}
+                          {kasaHesapEtiketi(account)}
                         </option>
                       ))}
                     </select>

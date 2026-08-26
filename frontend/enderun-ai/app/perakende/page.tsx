@@ -7,6 +7,7 @@ import { Button, ConfirmDialog, EmptyState, Input, Modal, Select } from "@/compo
 import { money, quantity as formatQuantity, unitPrice } from "@/lib/format/turkish";
 import { parseScannedItem } from "@/lib/inventory/qr";
 import { usePermissions } from "@/lib/use-permissions";
+import { kasaHesapEtiketi } from "@/lib/finans/kasa-hesap-etiketi";
 import {
   RETAIL_PAYMENT,
   RETAIL_STATUS,
@@ -25,7 +26,14 @@ type Line = {
 
 type Resources = {
   warehouses: { id: string; code: string; name: string; companyId: string }[];
-  cashAccounts: { id: string; code: string; name: string; type: number; companyId: string }[];
+  cashAccounts: {
+    id: string;
+    code: string;
+    name: string;
+    bankName?: string | null;
+    type: number;
+    companyId: string;
+  }[];
   customers: { id: string; code: string; title: string }[];
 };
 
@@ -561,7 +569,10 @@ export default function RetailSalesPage() {
                   placeholder="Seçin"
                   options={(resources?.cashAccounts ?? []).map((item) => ({
                     value: item.id,
-                    label: item.name,
+                    // ETİKET TEK KAYNAKTAN. Burada yalnız `item.name`
+                    // yazıyordu ve altı banka hesabı BİREBİR AYNI
+                    // görünüyordu — üç ekran arasında en kötüsü.
+                    label: kasaHesapEtiketi(item),
                   }))}
                 />
               </label>

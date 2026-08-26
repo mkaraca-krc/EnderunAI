@@ -212,7 +212,10 @@ public sealed class RetailSalesController(
             .ApplyScope(scope)
             .Where(x => x.IsActive)
             .OrderBy(x => x.Name)
-            .Select(x => new { x.Id, x.Code, x.Name, Type = (int)x.Type, x.CompanyId })
+            // BANKA ADI DA GİDİYOR: altı banka hesabının `Name` alanı
+            // birebir aynı ("Ankara Merkez TL Hesabı"); ayırt edici
+            // bilgi banka adı. Bkz. lib/finans/kasa-hesap-etiketi.ts
+            .Select(x => new { x.Id, x.Code, x.Name, x.BankName, Type = (int)x.Type, x.CompanyId })
             .ToListAsync(cancellationToken);
 
         var customers = await db.CurrentAccounts
