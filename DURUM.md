@@ -4564,6 +4564,54 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     şeylerdir. Ölçüm `git log <son-yayin>..HEAD` ile yapılır;
     push durumu yayın kapsamını göstermez.
 
+39. **ZORUNLU OLMAYAN + DOĞRULANMAYAN + MUHASEBE FİŞİ ÜRETEN
+    ALAN, EN TEHLİKELİ BİLEŞİMDİR.**
+
+    Üçü tek başına zararsızdır. Birlikte olduklarında alan, kimsenin
+    doldurmak zorunda olmadığı, yanlış doldurulduğunda hiçbir şeyin
+    itiraz etmediği, ama yanlışlığın **yevmiye kaydına geçtiği** bir
+    kanal hâline gelir. Hata ekranda değil, defterde birikir; ve
+    defterde biriken hata, fark edildiğinde artık düzeltilebilir bir
+    kayıt değil, düzeltme fişi gerektiren bir olaydır.
+
+    Çekin ödeme hesabı tam olarak bu alandı: seçilmesi zorunlu değil,
+    seçilen hesabın çekin bankasıyla tutup tutmadığı denetlenmiyor,
+    ama seçildiği anda o hesabın muhasebe kodunu alacaklandıran fiş
+    kesiliyor.
+
+    **KURAL:** bu üçlüyü taşıyan her alan için üçünden **en az biri**
+    kırılacak — ya zorunlu olacak, ya doğrulanacak, ya da fiş
+    üretmeyecek. Yeni alan eklenirken üçü birden sağlanıyorsa, bu
+    tasarım hatasıdır ve kapatılmadan geçilmez.
+
+## 5a. CANLIDA YANLIŞ ÜÇ ÇEK KAYDI — VERİ BOZUK DEĞİL, GİRİŞ YANLIŞ
+
+Bu kaydı ileride veritabanına bakan biri "veri bozulmuş" sanmasın
+diye bırakıyorum. **Veri tutarlıdır; girilen bilgi yanlıştır.**
+
+| Çek | Yaprağın bankası | Seçilen ödeme hesabı | Sorun |
+|---|---|---|---|
+| 805088 | Garanti | Fibabanka hesabı | Yanlış BANKA |
+| VCK-2026-000020 | Garanti | Kasa hesabı | Banka yerine KASA |
+| VCK-2026-000022 | Garanti | Kasa hesabı | Banka yerine KASA |
+
+Son ikisi iptal edilmiş kayıtlardır. Karışıklığın yalnız bankalar
+arasında değil, **kasa ile banka arasında da** yaşandığını
+gösterdikleri için buraya yazıldılar — acil yamanın etiketine türün
+(`Banka · …` / `Kasa · …`) girmesinin sebebi budur.
+
+**SEBEP KULLANICI DİKKATSİZLİĞİ DEĞİL:** şirketin altı banka
+hesabının `Name` alanı birebir aynıydı ("Ankara Merkez TL Hesabı").
+Açılır listede altı özdeş satır görünüyordu; seçen kişinin ayırt
+etmesini sağlayacak hiçbir işaret yoktu.
+
+**GEÇMİŞE DOKUNULMAYACAK.** Bu üç kayıt kodla düzeltilmez, migration
+ile düzeltilmez, elle UPDATE edilmez. Yanlış fiş kesilmişse karşılığı
+**düzeltme fişidir** ve bu bir muhasebe işlemidir — Mehmet'in kararı
+(2026-08-26). Yazılım tarafının borcu ileriye dönüktür: seçimi ayırt
+edilebilir yapmak (acil yama, `1ab5293b`) ve verilen çekte kasa
+hesaplarını listeden çıkarmak (ÇEK/2).
+
 ## 6. Ölçüm araçlarına dair uyarı
 
 Bu oturumda ölçüm aracım **üç kez** eksik sonuç verdi:
