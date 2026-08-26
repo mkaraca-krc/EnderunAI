@@ -1484,6 +1484,122 @@ dışarıda** — fiş girer, hesap planını toplu değiştiremez.
 
 Bu paket çizgideki üç satırı da kapattı. Sınıf yeniden **sıfırda**.
 
+## M3/2a — MESAJLAŞMA UÇLARI (2026-08-26)
+
+Sekiz uç (`/api/mesajlar`): konuşma listesi, birebir konuşma aç,
+mesaj listesi, mesaj gönder, okundu, toplam okunmamış, arama, kişi
+arama. Hepsi keyset; `COUNT(*)` yok.
+
+#### YETKİ ANAHTARI AÇILMADI — BİLİNÇLİ
+
+Mesajlaşma "yetkisi olan görür" işi değil: giriş yapmış herkes KENDİ
+konuşmasını görür, kimse başkasınınkini göremez. Kapı `[Authorize]`
+artı ÜYELİK.
+
+Yeni bir `messaging.use` anahtarı açsaydım `RoleCatalog` yansıması
+(`K`/`KWithSensitive`) onu yalnız Admin ve Genel Müdür'e verirdi;
+kalan her role elle eklemek gerekirdi ve biri unutulsaydı o rol
+**sessizce** mesajlaşamazdı. Sessiz yetki kaybı, gürültülü hatadan
+kötüdür.
+
+#### KİME YAZABİLİRİM: KAPSAM. KİMİ OKUYABİLİRİM: ÜYELİK.
+
+İki kapı iki AYRI soruyu cevaplıyor ve ikisi de gerekli:
+
+- **Kişi listesi** kapsamla sınırlı — yalnız kapsamdaki şirketlerde
+  personel kaydı olan aktif kullanıcılar. Açık olsaydı bir şirketin
+  kullanıcısı diğerinin çalışan listesini arama kutusundan dökerdi;
+  mesaj göndermeden, yalnız isimleri görerek.
+- **Okuma** üyelikle sınırlı — aynı şirketteki bir yabancı, kapsam
+  süzgecini geçse bile başkasının konuşmasını göremiyor.
+
+Üye olmayan için cevap "yetkiniz yok" DEĞİL "bulunamadı": yetki
+hatası, konuşmanın VAR OLDUĞUNU söylerdi.
+
+Personel kaydı olmayan (yalnız sistem) kullanıcılar kişi listesinde
+çıkmıyor — dar olan seçildi.
+
+#### ÜÇ HARF KURALI SUNUCUDA (M3/1 ölçümünün karşılığı)
+
+`MesajAramaKurali` saf sınıf: `Gecerli`, `Normalize`, `Uyari`.
+Ekran kuralı yalnız kolaylık — ekran atlanabilir, uç doğrudan
+çağrılabilir; **sunucu atlanamaz**.
+
+Karar saf fonksiyonda çünkü aynı kural iki yerde geçerli. İki yere
+gömülseydi eşzamanlılık paketinde yaşadığımızın aynısı olurdu: iki
+bariyer birbirini örter, hiçbiri tek başına sondalanamaz ve yeşil
+hiçbir şey söylemez (Kural 25).
+
+#### GERÇEK ZAMANLI YAYIN YALNIZ ÜYELERE
+
+Hub'da (M3/0) konuşma başına grup YOK, kullanıcı başına grup var.
+Mesaj, o anki AKTİF üyelerin kişisel gruplarına tek tek gönderiliyor.
+Konuşma grubuna yayın yapsaydık ayrılan üyenin bağlantısı grupta
+kaldığı sürece mesaj almaya devam ederdi — erişim kapısı REST'te
+kapalı, yayında açık kalırdı.
+
+#### MEVCUT NÖBETÇİ KURAL GERÇEKTE KORUMUYORDU — SONDA BULDU
+
+`ErisimKapisi_GlobalKapsamKisayoluTasimaz` (M3/1'de yazılmış), erişim
+kapısına `bool hasGlobalAccess = false` parametresi eklendiğinde
+**yeşil kaldı**. Sebep: kural yalnız `HasGlobalAccess` dizgesini
+büyük/küçük harfe DUYARLI arıyordu; küçük harfli parametre adı
+eşleşmiyordu. Kural, korumak istediği şeyi değil bir yazım biçimini
+izliyormuş.
+
+İki katman eklendi:
+
+1. Dizge araması büyük/küçük harfe **duyarsız**.
+2. **İMZA KİLİDİ** — asıl koruma. Dizge aramak kısayolun ADINI izlemek
+   demek; ad değişince kural boşalır (Kural 31: sözcüğü değil komutu
+   izle). Korunan gözlem: üyelik süzgecinin BYPASS KANALI olmamalı.
+   Kanal ancak bir parametreyle açılabilir, o yüzden imza sabitlendi:
+   `ApplyMembership` yalnız `(sorgu, Guid userId)` alır.
+
+Sonda B3 bunu kanıtladı: kısayol `denetimModu` diye bambaşka bir adla
+eklendiğinde dizge araması kaçırıyor, imza kilidi yakalıyor.
+
+#### SONDA TABLOSU
+
+| Sonda | Sabotaj | Sonuç |
+|---|---|---|
+| A | Üyelik kapısı kaldırıldı | kırmızı (14'te 2) |
+| B | Kapıya küçük harfli global kısayol | **yeşil → kural zayıf, düzeltildi** |
+| B2 | Aynı sabotaj, güçlendirilmiş kurala karşı | kırmızı |
+| B3 | Kısayol bambaşka adla (`denetimModu`) | kırmızı — imza kilidi |
+| C | En az harf 3 → 2 | kırmızı (28'de 4) |
+| D | Arama üyelik süzgecini atlıyor | kırmızı |
+| E | Okunmamış sayısı kendi mesajımı sayıyor | kırmızı |
+
+#### KAPSAM TARAYICISININ KÖR NOKTASI — ÖLÇÜLDÜ
+
+`CoverageBaselineTests` okumadan sonraki **400 karakterlik pencerede**
+kapı arıyor ve yorumları **uzunluğu koruyarak** boşluğa çeviriyor
+(`Bosalt` her karakteri boşlukla değiştiriyor). Zincirin İÇİNE yazılan
+uzun bir yorum, kapı yerinde dururken tarayıcıyı kör ediyor.
+
+Bu paketteki `sonMesajlar` sorgusunda tam olarak bu oldu: yedi
+satırlık gerekçe `.ApplyMembership(userId)` çağrısını pencerenin
+dışına itti ve tarayıcı "kapsamsız okuma" dedi. Kapı hep oradaydı.
+
+**Bugünkü çözüm dar:** yorum zincirin ÜSTÜNE taşındı. Tarayıcıyı
+düzeltmedim çünkü `Bosalt`u uzunluk korumayan biçime çevirmek 450
+kalemlik çizgiyi baştan hesaplatır ve o kendi paketi olmalı.
+
+**Açıkta kalan somut hata (Kural 27):** stok ya da başka bir şirketli
+varlığı okurken zincirin içine 400 karakteri aşan yorum yazan biri,
+kapıyı koymuş olsa bile testi kırmızıya düşürür; kapıyı KOYMAMIŞ
+olan biri ise aynı yorumla testi YEŞİL geçiremez (pencere kapıyı
+bulamayınca kural düşer). Yani yön güvenli tarafta — yanlış alarm
+üretir, sessiz geçiş üretmez.
+
+#### BOŞ SORGUDA ÇERÇEVENİN MESAJI GÖRÜNÜYORDU
+
+`[FromQuery] string q` zorunluyken boş sorgu ASP.NET model
+doğrulamasına takılıyor ve kullanıcı `"The q field is required."`
+görüyordu: İngilizce, kuralı anlatmayan, bizim yazmadığımız bir
+mesaj. `q` nullable yapıldı; kuralın mesajını kural veriyor.
+
 ## M3/1 — MESAJLAŞMA VERİ MODELİ (2026-08-25)
 
 Dört tablo: `conversations`, `conversation_members`, `messages`,
