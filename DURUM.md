@@ -4533,6 +4533,37 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     kontrolü. `git diff` commit edilmemiş ağaçta ölçüm aracı
     DEĞİLDİR (bkz. Kural 32 eki).
 
+37. **DURUM ETİKETLERİ SIFAT OLARAK KULLANILMAZ.**
+
+    Durum etiketleri isimden önce sıfat olarak kullanılmaz;
+    **parantez içinde ya da iki nokta sonrasında** durur.
+
+    ÇEK/1'de yaşandı: `${etiket} çekler toplamı` biçimi "Ödendi
+    çekler toplamı" üretti — sayı doğru, cümle bozuk. Etiketler durum
+    ADI ("Verildi", "Tahsil edildi", "İade alındı") ve Türkçede
+    isimden önce çekim gerektiriyorlar.
+
+    **SIFAT KARŞILIĞI LİSTESİ AÇILMAZ.** İkinci bir alan, yeni bir
+    durum eklendiğinde karşılığını yazmayı unutan biri yüzünden aynı
+    bozukluğu geri getirir — ve unutulduğu fark edilmez, çünkü ekran
+    boş kalmaz, yalnız cümle bozulur. `Toplam (Ödendi)` biçimi
+    hiçbir durumda çekim gerektirmez.
+
+38. **YAYIN PAKET DEĞİL, BİRİKİMDİR.**
+
+    Bir paketi deploy etmek, son yayından beri biriken **TÜM**
+    commit'leri canlıya taşır. Her yayın öncesi, taşınacak paketlerin
+    listesi **ÖNDEN bildirilir ve onay alınır.**
+
+    Bu yayın (`1bb59ef4`) ÇEK/1'in yanında **Depodan Zimmet**,
+    **hesap planı aktarımı** ve **M3/2a mesajlaşma uçlarını** da
+    taşıdı; bunlar için ayrıca onay alınmamıştı.
+
+    İki ayrı sayı karıştırılmasın: `origin/main`e göre "kaç commit
+    ileride" ile son BAŞARILI yayına göre "ne taşınacak" farklı
+    şeylerdir. Ölçüm `git log <son-yayin>..HEAD` ile yapılır;
+    push durumu yayın kapsamını göstermez.
+
 ## 6. Ölçüm araçlarına dair uyarı
 
 Bu oturumda ölçüm aracım **üç kez** eksik sonuç verdi:

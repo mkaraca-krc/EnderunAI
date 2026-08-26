@@ -141,7 +141,19 @@ export function chequeTotalLabel(
   if (statusFilter !== "") {
     const ad = statusLabels[Number(statusFilter)];
 
-    return ad ? `${ad} çekler toplamı` : "Listelenen toplam";
+    /*
+     * DURUM ETİKETİ PARANTEZ İÇİNDE — SIFAT OLARAK DEĞİL.
+     *
+     * Önce `${ad} çekler toplamı` yazıyordu ve "Ödendi çekler
+     * toplamı" çıkıyordu: sayı doğru, cümle bozuk. Etiketler durum
+     * adı ("Verildi", "Tahsil edildi", "İade alındı") ve isimden
+     * önce sıfat çekimi gerektiriyorlar.
+     *
+     * Sıfat karşılığı listesi AÇILMADI: yeni bir durum eklendiğinde
+     * karşılığını yazmayı unutan biri aynı bozukluğu geri getirir.
+     * Parantezli biçim hiçbir durumda çekim gerektirmez.
+     */
+    return ad ? `Toplam (${ad})` : "Listelenen toplam";
   }
 
   // Kapanmışlar açıkken liste artık "açık çekler" değil; başlık da

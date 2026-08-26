@@ -195,8 +195,18 @@ describe("toplam başlığı", () => {
     expect(chequeTotalLabel("", false, etiketler)).toBe("Açık çekler toplamı");
   });
 
-  it("durum seçiliyse o durumu söyler", () => {
-    expect(chequeTotalLabel("11", false, etiketler)).toBe("Ödendi çekler toplamı");
+  /**
+   * DURUM ETİKETİ PARANTEZ İÇİNDE — SIFAT OLARAK DEĞİL.
+   *
+   * "Ödendi çekler toplamı" sayı doğru ama cümle bozuktu. Etiketler
+   * durum adı ve isimden önce sıfat çekimi gerektiriyor. Sıfat
+   * karşılığı listesi açılmadı: yeni durum eklendiğinde karşılığını
+   * yazmayı unutan biri aynı bozukluğu geri getirirdi.
+   */
+  it("durum seçiliyse etiketi parantez içinde verir", () => {
+    expect(chequeTotalLabel("11", false, etiketler)).toBe("Toplam (Ödendi)");
+    expect(chequeTotalLabel("10", false, etiketler)).toBe("Toplam (Verilen)");
+    expect(chequeTotalLabel("90", false, etiketler)).toBe("Toplam (İptal)");
   });
 
   /**
