@@ -4386,21 +4386,43 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     Yarım kalmış kod, üzerine yazılınca **kaybolmaz — gizlenir.**
     Ağaç temiz değilse tek doğru hamle durup bakmaktır.
 
-29. **DERLEME/TEST BAŞLATMADAN ÖNCE YETİM `dotnet` SÜRECİ VAR MI BAK.**
-    ```
-    pgrep -af "dotnet (build|test)|VBCSCompiler|csc.dll" || echo "temiz"
-    ```
-    Varsa ve bu turun işi değilse temizle. **Canlı uygulamanın
-    sürecine dokunma** — `enderunai-backend` servisi ayrıdır; temizlik
-    sonrası `curl -s -o /dev/null -w "%{http_code}" localhost:5000/health`
-    ile canlıyı doğrula.
+29. **DERLEME VE TEST `scripts/derleme-kos.sh` ÜZERİNDEN KOŞAR —
+    DOĞRUDAN `dotnet build/test` ÇAĞRILMAZ.**
 
-    Arka plan görevi öldürüldüğünde `dotnet build` ve Roslyn süreçleri
-    ayakta kalıyor. Üç derleme birbiriyle yarıştığında makine
-    boğuluyor: ölçüldü — 7,9 GB belleğin 7,77'si dolu, yük ortalaması
-    209. Belirti yanıltıcı: derleme *asılı* kalır, hata vermez.
-    33 dakika süren ve çıktı vermeyen bir derlemenin sebebini aramak,
-    tek satırlık kontrolü yapmaktan çok daha pahalı.
+    **GÖREV DURDURMAK SARMALAYICIYI ÖLDÜRÜR, ALT SÜREÇLERİ ÖLDÜRMEZ.**
+    Kesilen her `dotnet build`/`test` arkada ~4,5 GB'lık yetim süreç
+    bırakır; ikincisi aynı `obj/` kilidinde buluşur ve 8 GB'lık makine
+    OOM'a girer. **Bu oturumda ÜÇ KEZ oldu** (2026-08-26 21:39, 22:17,
+    22:37 — çekirdek günlüğünde `Out of memory: Killed process …
+    (dotnet)`). Durdurma, süreç **AĞACINI** sonlandırmalıdır.
+
+    **YETİMİN KİM OLDUĞU ÖLÇÜLDÜ** ve "msbuild" değil:
+    - `csc.dll` (Roslyn derleyicisi), **PPID=1**, 3,9 GB — ebeveyni
+      öldü, kendisi yaşamaya devam etti.
+    - `VBCSCompiler` (Roslyn'in **KALICI** derleyici sunucusu), 2,9 GB
+      — tasarımı gereği derleme bittikten sonra da ayakta kalır.
+
+    Koşucu üç kapı koyuyor, üçü de sondayla kanıtlandı:
+
+    | Kapı | Mekanizma | Sonda |
+    |---|---|---|
+    | Tek örnek | sabit adlı systemd scope | ikinci koşu çıkış **75**, başlamadı |
+    | Süreç ağacı | her şey scope'un cgroup'unda | 4 süreç → `systemctl stop` → **4/4 öldü**, cgroup silindi |
+    | Bellek tavanı | `MemoryMax` | `constraint=CONSTRAINT_MEMCG`, çıkış **137** |
+
+    Ayrıca `MSBUILDDISABLENODEREUSE=1` ve `UseSharedCompilation=false`:
+    kalıcı derleyici sunucusu hiç doğmaz. Derleme yavaşlar; bu makinede
+    hız değil **sınır** önceliklidir.
+
+    Kilit dosyası KULLANILMIYOR: kilidi tutan süreç OOM ile ölürse
+    dosya yalan söyler. systemd birimi ölünce ad da serbest kalır.
+
+29a. **CANLI UYGULAMA İLE TEST KOŞUSU AYNI MAKİNEDE.**
+
+    3a (takas), 3b (`OOMScoreAdjust=-500`) ve 3c (bellek tavanı) bunu
+    **hafifletir, ORTADAN KALDIRMAZ.** Üç OOM'da da kurban test süreci
+    oldu ve canlı API ayakta kaldı — ama bu şansa bırakılamaz.
+    **Kalıcı çözüm ayrı makinedir.**
 
 30. **MIGRATION CANLIYA UYGULANDIKTAN SONRA ŞEMAYI TEK TEK ÖLÇ —
     TABLO VARLIĞI YETMEZ.**

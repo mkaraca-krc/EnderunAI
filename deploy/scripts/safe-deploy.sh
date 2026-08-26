@@ -357,7 +357,12 @@ run_backend_tests() {
     log "INFO" "Backend testleri çalıştırılıyor..."
     resolve_test_db_connection
 
-    if dotnet test "$BACKEND_TEST_PROJECT" --configuration Release 2>&1 | tee -a "$LOG_FILE"; then
+    # TEST KOŞUCU ÜZERİNDEN (2026-08-26): tek örnek, kendi cgroup'u,
+    # bellek tavanı. Doğrudan çağrı, durdurulduğunda ardında 4,5 GB'lık
+    # yetim Roslyn süreci bırakıyordu ve ikinci koşu makineyi OOM'a
+    # sokuyordu — bir oturumda üç kez. Bkz. scripts/derleme-kos.sh.
+    if "${REPO_ROOT}/scripts/derleme-kos.sh" \
+            dotnet test "$BACKEND_TEST_PROJECT" --configuration Release 2>&1 | tee -a "$LOG_FILE"; then
         log "INFO" "Backend testleri geçti."
     else
         fail "Backend testleri BAŞARISIZ. Yayın DURDURULDU, hiçbir servise dokunulmadı."
