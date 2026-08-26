@@ -1484,6 +1484,97 @@ dışarıda** — fiş girer, hesap planını toplu değiştiremez.
 
 Bu paket çizgideki üç satırı da kapattı. Sınıf yeniden **sıfırda**.
 
+## ÇEK/1 — ÖDENEN ÇEK LİSTEDE VE TOPLAMDA KALIYORDU (2026-08-26)
+
+ŞİKAYET (GM): çek "Ödendi" göründüğü hâlde o ayın toplam çek
+tutarından düşmüyor ve listede duruyor. Çek bankaya fiilen işlenmiş.
+
+#### KÖK NEDEN: DURUM DOĞRU YAZILIYORDU, HATA OKUMADAYDI
+
+Şüphe "durum belki sadece arayüzde değişiyor" yönündeydi; canlı
+veritabanından teyit edildi ve **öyle değildi**. Çek 805088
+(`VCK-2026-000025`, 1.000.000 TRY):
+
+| Katman | Durum |
+|---|---|
+| `cheques.Status` | 11 (Paid) ✓ |
+| `cheque_movements` | 10 → 11, tarih 2026-08-26 ✓ |
+| Muhasebe fişi `TDI-2026-000051` | 103.01 borç / 102.10 alacak, dengeli ✓ |
+
+Hata **okuma tarafında** ve **iki ayrı yerdeydi**:
+
+1. `ChequeService.GetAllAsync` — durum süzgeci YALNIZ çağıran
+   gönderirse uygulanıyordu; ekran açılışta hiçbir durum
+   göndermiyordu. Elenen tek şey İptal'di.
+2. `lib/cheques/totals.ts` — ekran kendi kuralını yazıyordu
+   (`status !== Voided`) ve sunucudaki süzgeçten AYRI karar
+   veriyordu.
+
+Üstelik açık küme `GetAllAsync` içinde `isOpen` diye ÜÇÜNCÜ kez
+satır içi yazılıydı (gecikme hesabı için).
+
+#### TARİH ALANI KARIŞIKLIĞI YOKTU
+
+Ay gruplaması `chequeMonthKey` = `dueDate.slice(0, 7)` — zaten **vade
+tarihine** göre. K3 kapsamında düzeltilecek bir şey çıkmadı.
+
+Aylık toplamı üreten bir SUNUCU UCU DA YOK: `cheques/summary` tarih
+süzgeci taşımıyor, durum kırılımı veriyor. Ay toplamı ekranda,
+listeden türüyor — bu yüzden listeye ne gelirse toplama giriyordu.
+
+#### KURAL TEK YERE ALINDI: `ChequeStatusRules`
+
+İki soru ayrı, ikisi de tek dosyada:
+
+- **Hangi çekler listelenir** → `AcikDurumlar` =
+  {Portföy, Bankada, Faktoringde, Verilen}.
+- **Hangi satır toplanır** → `ToplamaGirmeyenDurumlar` = {İptal}.
+
+Kural önce yalnız metottu; EF Core metot çağrısını SQL'e çeviremediği
+için sorgu yerlerinde patladı. Dizi hem `IN (...)` olarak çevriliyor
+hem metodu besliyor — kural yine tek yerde.
+
+**EKRANIN KURALI TAMAMEN KALKTI.** Sunucu her satırda
+`countsTowardTotals` bayrağı dönüyor; `totals.ts` yalnız topluyor.
+Ayrışacak ikinci karar yeri kalmadı (K2).
+
+#### KARARLAR
+
+- `Bounced` (karşılıksız) **kapanmış** sayıldı: alacak cariye döndü
+  ve orada izleniyor. Açık bırakılsaydı aynı alacak hem cari hesapta
+  hem çek yükünde iki kez görünürdü.
+- `AtFactoring` (kırdırılmış) **açık** kaldı: parası alınmış olsa da
+  çek tedavülde ve rücu riski taşıyor. `CashFlowService` onu beklenen
+  tahsilattan çıkarıyor — çelişki değil, farklı soru: nakit akışı
+  "ne kadar para gelecek", çek defteri "hangi çekler hâlâ canlı".
+
+#### YENİ SÜZGEÇ ESKİ BİR KAPIYI EZDİ — MEVCUT TESTLER YAKALADI
+
+İptal de kapanmış bir durum. Açık süzgeci onu da eleyince
+`includeVoided` kapısı işlevsiz kaldı: kullanıcı "iptalleri göster"
+dese bile hiçbir şey gelmiyordu. İki kapı çarpıştığında **dar olan
+sessizce kazandı**.
+
+`IptalEdilenCek_VarsayilanListedeYok_IstenirseGelir` ve
+`VoidedCheque_StaysVisibleAndFilterable` kırmızıya döndü.
+`VarsayilanListeDurumlari` iptali GEÇİRİYOR; iptali eleme kararı
+kendi kapısında kalıyor.
+
+#### SONDA
+
+| Sonda | Önce | Sabotajlı | Geri alındıktan sonra |
+|---|---|---|---|
+| A — sunucudaki varsayılan süzgeç kaldırıldı | 6/6 yeşil | **3 kırmızı** | 6/6 yeşil |
+| B — ekran kendi kuralını geri yazdı | 7/7 yeşil | **1 kırmızı** | 7/7 yeşil |
+
+Her iki sonda da yedekle `cmp` ile doğrulandı; artakalan yedek yok.
+
+#### ETKİLENEN KAYIT SAYISI
+
+Canlıda Paid durumunda **tek** çek vardı (1.000.000 TRY).
+`Collected` hiç yoktu — alınan çek tarafında aynı hata henüz görünür
+olmamıştı ama kural aynıydı.
+
 ## M3/2a — MESAJLAŞMA UÇLARI (2026-08-26)
 
 Sekiz uç (`/api/mesajlar`): konuşma listesi, birebir konuşma aç,
@@ -4347,6 +4438,76 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     ```
     grep -c "<sabotaj izi>" <dosya>   # 0 olmalı
     ```
+
+33. **CIRCIR KIRMIZISI BİÇİM DÜZENLEMESİYLE KAPATILAMAZ.**
+
+    Kapsam cırcırı (`CoverageBaselineTests`) statik METİN taramasıdır:
+    okumadan sonraki 400 karakterlik pencerede kapı arar ve yorumları
+    uzunluğu koruyarak boşluğa çevirir. Bu, pencere sınırının
+    **kozmetik değişikliklerle oynayabileceği** anlamına gelir —
+    zincirin içine uzun bir yorum yazmak kapıyı pencerenin dışına
+    iter ve cırcır kapı yerindeyken kırmızıya döner.
+
+    **Kırmızı, yorumu kısaltarak ya da satırları kaydırarak
+    KAPATILMAZ.** Yalnız iki meşru kapanış vardır:
+    1. Sorguyu gerçekten kapsamlandırmak (`ApplyScope` /
+       `ApplyMembership`),
+    2. İstisna listesine GEREKÇESİYLE eklemek.
+
+    Yorumu taşımak yalnızca kapının ZATEN yerinde olduğu ölçülüp
+    kanıtlandığında meşrudur ve o zaman bile ölçüm rapora yazılır.
+    Aksi hâlde "testi susturdum" ile "hatayı düzelttim" birbirine
+    karışır.
+
+34. **AÇIK KULLANICI İSTEĞİ VARSAYILAN SÜZGECİ EZER. TERSİ ASLA
+    OLMAZ.**
+
+    Varsayılan süzgeç bir kolaylıktır; kullanıcı bir şeyi açıkça
+    istediğinde kolaylık susar.
+
+    Bunun uygulama biçimi de bağlayıcı: **iki bağımsız süzgeci VE ile
+    birleştirme.** VE ile birleşen iki süzgeçte her zaman DAR OLAN
+    SESSİZCE KAZANIR. Gösterilecek küme tek bir fonksiyonda çözülür,
+    sorgu tek satır olur (`WHERE X IN (...)`).
+
+    ÇEK/1'de yaşandı: "açık olmayanı ele" ile "iptal olanı ele" VE
+    ile birleşince, kullanıcı "iptalleri göster" dese bile ekran boş
+    geliyordu. Yama ("iptali de geçir") çalışıyordu ama çarpışmayı
+    ortadan kaldırmıyordu — üçüncü bir süzgeçte aynı hata yeniden
+    doğardı.
+
+35. **FAKTORİNGDEKİ ÇEKİN İKİ FARKLI SAYIDA GÖRÜNMESİ KASITLIDIR.**
+
+    Çek defterinde **AÇIK** sayılır: çek tedavülde ve rücu riski
+    sürüyor. Nakit akışında **beklenen tahsilat DEĞİLDİR**: para
+    faktoringden zaten geldi.
+
+    İki sayının farkı hata değil; iki ayrı soruya verilen iki ayrı
+    doğru cevaptır — "hangi çekler hâlâ canlı" ile "ne kadar para
+    gelecek". Yazılmasaydı altı ay sonra tutarsızlık sanılıp
+    "düzeltilir" ve biri bozulurdu.
+
+36. **SONDA GEÇERLİLİK KURALI.**
+
+    Her sonda, sabotajın gerçekten UYGULANDIĞINI kanıtlamak
+    zorundadır: hedef blok eşleşti mi, dosya yedeğinden farklı mı.
+
+    **Sabotaj uygulanamadıysa sonuç YEŞİL DEĞİL, GEÇERSİZDİR.**
+    Uygulanamayan sabotaj kanıt üretmez; kanıt ürettiğini sanmak
+    daha tehlikelidir — koruma olmadığı hâlde "sondadan geçti"
+    denmiş olur.
+
+    **KOD DEĞİŞİNCE SONDA BETİKLERİ DE ESKİR.** Metin hedefli
+    sabotaj, hedeflediği blok yeniden yazıldığında sessizce
+    ıskalar. ÇEK/1'de yaşandı: tek kapı düzeltmesi Sonda A'nın
+    hedeflediği iki süzgeç bloğunu ortadan kaldırdı ve sabotaj
+    tutmadı. Düzenek "GEÇERSİZ" dedi, sonda yeni koda göre
+    (A2) yeniden yazıldı ve ilk turun rakamı raporda GERİ ÇEKİLDİ.
+
+    Pratikte: `cmp` ile yedek karşılaştırması, `assert count == 1`
+    ile hedef tekilliği, ve sabotaj sonrası "dosya değişti mi"
+    kontrolü. `git diff` commit edilmemiş ağaçta ölçüm aracı
+    DEĞİLDİR (bkz. Kural 32 eki).
 
 ## 6. Ölçüm araçlarına dair uyarı
 
