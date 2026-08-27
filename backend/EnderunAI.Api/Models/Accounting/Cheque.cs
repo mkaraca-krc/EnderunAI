@@ -92,10 +92,38 @@ public enum ChequeVoidReason
 /// hangi tarih, hangi taraf. "Düzenlenemez" tek başına kullanıcıyı
 /// ne yapacağını bilmeden bırakır.
 /// </summary>
-public sealed record ChequeEditability(bool CanEdit, string? Reason)
+/// <remarks>
+/// İKİ AYRI SORU, İKİ AYRI CEVAP (ÇEK/2 · K1/K2):
+///
+/// <c>CanEdit</c> — MALİ VE KİMLİK alanları açık mı (tutar, vade, çek
+/// no, cari, banka, masraf merkezi). Kapanmış ya da işlem görmüş
+/// çekte KAPALI; bu, bugünkü davranıştır ve değişmedi.
+///
+/// <c>CanEditDescriptive</c> — TANIMLAYICI alanlar açık mı (keşideci,
+/// şube, açıklama). Bunlar deftere de bakiyeye de dokunmaz, o yüzden
+/// kapanmış çekte de açıktır: bir yazım hatasını düzeltmek için mali
+/// kaydı iptal edip yeniden üretmek, hatanın kendisinden zararlıdır.
+///
+/// Tek bir bayrak yetmiyordu; eskiden yetiyor sanılıyordu ve bedeli
+/// "iptal edip yeniden girin"di.
+/// </remarks>
+public sealed record ChequeEditability(
+    bool CanEdit, string? Reason, bool CanEditDescriptive)
 {
-    public static ChequeEditability Allowed() => new(true, null);
-    public static ChequeEditability Blocked(string reason) => new(false, reason);
+    public static ChequeEditability Allowed() => new(true, null, true);
+
+    /// <summary>
+    /// HER ŞEY KAPALI. Yalnız kaydın kendisine güvenilemediği hâlde
+    /// kullanılır (hareket geçmişi yok); mali kapanış için değil.
+    /// </summary>
+    public static ChequeEditability Blocked(string reason) => new(false, reason, false);
+
+    /// <summary>
+    /// MALİ ALANLAR KAPALI, TANIMLAYICI ALANLAR AÇIK. Kapanmış ya da
+    /// işlem görmüş çeğin normal hâli.
+    /// </summary>
+    public static ChequeEditability DescriptiveOnly(string reason) =>
+        new(false, reason, true);
 }
 
 /// <summary>

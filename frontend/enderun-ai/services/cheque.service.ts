@@ -166,6 +166,13 @@ export type ChequeDetail = ChequeListItem & {
    */
   editBlockedReason?: string | null;
 
+  /**
+   * TANIMLAYICI ALANLAR AÇIK MI (ÇEK/2) — keşideci, şube, açıklama.
+   * `canEdit` kapalıyken bile açık olabilir: kapanmış çekte yazım
+   * hatası düzeltmek mali kaydı iptal etmeyi gerektirmiyor.
+   */
+  canEditDescriptive: boolean;
+
   /** Kapanmış bir durumdan mı iptal edildi (rozet). */
   voidedFromClosedState: boolean;
 

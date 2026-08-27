@@ -162,11 +162,17 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
     }
 
     /// <summary>
-    /// İŞLEM GÖRMÜŞ ÇEKTE DÜZENLEME KAPALI — hem API reddediyor hem
+    /// İŞLEM GÖRMÜŞ ÇEKTE MALİ ALANLAR KAPALI — hem API reddediyor hem
     /// detay yanıtı `canEdit=false` diyor ve NEDENİ somut.
     ///
     /// UI düğmeyi bu bilgiye göre pasifleştiriyor; ikisi aynı metottan
     /// beslendiği için ayrışamıyorlar.
+    ///
+    /// KAPSAM DEĞİŞTİ (ÇEK/2 · K1/K2): bu test eskiden "kaydın TAMAMI
+    /// kilitli" ve gerekçede "İptal edip yeniden girin" yazıyor diye
+    /// doğruluyordu. Artık tanımlayıcı alanlar açık; test kapsamını o
+    /// karara göre daralttı — MALİ alanın reddi burada, tanımlayıcı
+    /// alanın kabulü `ChequeAlanSinifiDavranisTests` içinde.
     /// </summary>
     [Fact]
     public async Task IslemGormusCek_DuzenlenemezVeNedeniSomut()
@@ -194,16 +200,27 @@ public sealed class ChequeEditAndVoidTests(DatabaseFixture fixture)
 
         Assert.False(detail.GetProperty("canEdit").GetBoolean());
 
-        var reason = detail.GetProperty("editBlockedReason").GetString() ?? "";
-        Assert.Contains("düzenlenemez", reason);
-        Assert.Contains("İptal edip yeniden girin", reason);
+        // Tanımlayıcı alanlar buna rağmen AÇIK.
+        Assert.True(detail.GetProperty("canEditDescriptive").GetBoolean());
 
-        // API de reddetmeli — düğmeyi gizlemek yetmez.
+        var reason = detail.GetProperty("editBlockedReason").GetString() ?? "";
+        Assert.Contains("kilitli", reason);
+        Assert.Contains("Keşideci, şube ve açıklama düzeltilebilir", reason);
+
+        // "İPTAL EDİP YENİDEN GİRİN" CÜMLESİ KALKTI: kullanıcıyı bir
+        // yazım hatası için mali kaydı iptale çağırmak yanlıştı.
+        Assert.DoesNotContain("İptal edip yeniden girin", reason);
+
+        // API MALİ ALANI REDDETMELİ — düğmeyi gizlemek yetmez.
         var response = await client.PutAsJsonAsync(
             $"/api/cheques/{id}",
-            EditPayload(scene, $"CK{suffix}", detail.GetProperty("rowVersion").GetDateTime()));
+            EditPayload(scene, $"CK{suffix}", detail.GetProperty("rowVersion").GetDateTime(),
+                amount: 99_999m));
 
         Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var govde = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Tutar", govde);
     }
 
     /// <summary>

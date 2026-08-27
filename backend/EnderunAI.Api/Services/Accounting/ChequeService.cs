@@ -251,9 +251,14 @@ public sealed class ChequeService(
                 ? $"{cause.MovementDate:dd.MM.yyyy} tarihinde "
                 : string.Empty;
 
-            return ChequeEditability.Blocked(
+            // MALİ ALANLAR KAPANDI, KAYIT KAPANMADI (ÇEK/2 · K2).
+            // "İptal edip yeniden girin" cümlesi kalktı: artık
+            // keşideci/şube/açıklama düzeltilebiliyor, o yüzden
+            // kullanıcıyı mali kaydı iptale çağırmak yanlış olurdu.
+            return ChequeEditability.DescriptiveOnly(
                 $"Bu çek {when}\"{StatusName(cheque.Status)}\" durumuna geçtiği için " +
-                "düzenlenemez. İptal edip yeniden girin.");
+                "tutar, vade, çek no, cari, banka ve masraf merkezi kilitli. " +
+                "Keşideci, şube ve açıklama düzeltilebilir.");
         }
 
         /*
@@ -288,10 +293,11 @@ public sealed class ChequeService(
 
         if (processed is not null)
         {
-            return ChequeEditability.Blocked(
+            return ChequeEditability.DescriptiveOnly(
                 $"Bu çek {processed.MovementDate:dd.MM.yyyy} tarihinde " +
-                $"\"{StatusName(processed.ToStatus)}\" işlemi gördüğü için düzenlenemez. " +
-                "İptal edip yeniden girin.");
+                $"\"{StatusName(processed.ToStatus)}\" işlemi gördüğü için " +
+                "tutar, vade, çek no, cari, banka ve masraf merkezi kilitli. " +
+                "Keşideci, şube ve açıklama düzeltilebilir.");
         }
 
         return ChequeEditability.Allowed();
@@ -738,6 +744,7 @@ public sealed class ChequeService(
 
             editability.CanEdit,
             editability.Reason,
+            editability.CanEditDescriptive,
             cheque.VoidedFromClosedState,
             cheque.VoidReasonKind is ChequeVoidReason vk ? (int)vk : null,
             cheque.VoidReasonKind is ChequeVoidReason vk2 ? VoidReasonName(vk2) : null,
@@ -1037,7 +1044,9 @@ public sealed class ChequeService(
          */
         var editability = await GetEditabilityAsync(cheque, cancellationToken);
 
-        if (!editability.CanEdit)
+        // HİÇBİR ŞEY AÇIK DEĞİLSE burada duruyoruz. Bu artık yalnız
+        // kaydın kendisine güvenilemediği hâl (hareket geçmişi yok).
+        if (!editability.CanEdit && !editability.CanEditDescriptive)
             throw new InvalidOperationException(editability.Reason!);
 
         /*
@@ -1052,6 +1061,53 @@ public sealed class ChequeService(
          * bırakılsaydı koruma fiilen olmazdı — atlatmak için alanı
          * hiç göndermemek yeterdi. Tek istemci kendi ön yüzümüz.
          */
+        /*
+         * KİLİTLİ ALAN KAPISI (ÇEK/2 · K1/K4).
+         *
+         * Mali alanlar kapalıysa, isteğin BUNLARDAN HİÇBİRİNİ
+         * değiştirmediği kanıtlanmadan devam edilmiyor. Karar
+         * `ChequeAlanSiniflari`'ndan geliyor — burada ikinci bir liste
+         * YOK. İkinci liste olsaydı yeni alan birine eklenip diğerine
+         * eklenmez, alan kilitli görünüp fiilen serbest kalırdı.
+         *
+         * Reddedilen alanlar ADLARIYLA söyleniyor: "düzenlenemez"
+         * cümlesi kullanıcıyı hangi alanı geri alacağını bilmeden
+         * bırakıyordu.
+         */
+        if (!editability.CanEdit)
+        {
+            var kilitliDegisenler =
+                ChequeAlanSiniflari.DegisenKilitliAlanlar(cheque, request);
+
+            if (kilitliDegisenler.Count > 0)
+            {
+                var adlar = string.Join(", ", kilitliDegisenler
+                    .Select(x => ChequeAlanSiniflari.Etiket(x)));
+
+                throw new InvalidOperationException(
+                    $"{editability.Reason} Değiştirilmek istenen kilitli alanlar: {adlar}.");
+            }
+        }
+
+        /*
+         * SIRA ÖNEMLİ: KİLİT ÖNCE, DAMGA SONRA.
+         *
+         * Damga kontrolü önce olsaydı, kapanmış bir çekte tutarı
+         * değiştirmeye çalışan istek "değişiklik damgası eksik" (400)
+         * cevabını alırdı — oysa söylenmesi gereken "tutar kilitli".
+         * Kullanıcı damgayı düzeltip aynı duvara yeniden çarpardı.
+         *
+         * MEVCUT DAVRANIŞ DA BUNU İSTİYOR: `PaidCheque_Amount
+         * CannotBeChanged` ödenmiş çekte tutar değişikliğine 409
+         * bekliyor ve damga hiç göndermiyor. Sırayı ters kurduğumda
+         * o test 400 alıp kırmızıya döndü — yani bu sıra bir tercih
+         * değil, korunması gereken bir sözleşme.
+         *
+         * K5 ZEDELENMİYOR: tanımlayıcı düzenlemede kilitli alan
+         * değişmediği için kapı sessiz geçilir ve damga kontrolü
+         * aynen çalışır (bkz. `TanimlayiciDuzenlemede_BayatDamga
+         * Reddedilir`).
+         */
         EnsureRowVersionMatches(cheque, request.RowVersion);
 
         /*
@@ -1061,7 +1117,10 @@ public sealed class ChequeService(
          */
         var changes = new List<ChequeChangeLog>();
 
-        void Track(string field, string label, string? before, string? after,
+        // ETİKET ÇAĞRI YERİNDEN GELMİYOR (ÇEK/2 · K4): alan sınıfıyla
+        // aynı sözlükten çözülüyor. Etiketi burada elle yazmak, sınıfı
+        // sözlüğe eklerken etiketi unutmayı mümkün kılardı.
+        void Track(string field, string? before, string? after,
             bool affectsAccounting = false)
         {
             if (string.Equals(before, after, StringComparison.Ordinal))
@@ -1071,7 +1130,7 @@ public sealed class ChequeService(
             {
                 ChequeId = cheque.Id,
                 FieldName = field,
-                FieldLabel = label,
+                FieldLabel = ChequeAlanSiniflari.Etiket(field),
                 OldValue = before,
                 NewValue = after,
                 AffectsAccounting = affectsAccounting,
@@ -1079,19 +1138,19 @@ public sealed class ChequeService(
             });
         }
 
-        Track("ChequeNumber", "Çek numarası",
+        Track("ChequeNumber",
             cheque.ChequeNumber, request.ChequeNumber.Trim());
-        Track("BankName", "Banka", cheque.BankName,
+        Track("BankName", cheque.BankName,
             string.IsNullOrWhiteSpace(request.BankName) ? cheque.BankName : request.BankName.Trim());
-        Track("BankBranch", "Şube", cheque.BankBranch, Normalize(request.BankBranch));
-        Track("Drawer", "Keşideci", cheque.Drawer, Normalize(request.Drawer));
-        Track("Description", "Açıklama", cheque.Description, Normalize(request.Description));
+        Track("BankBranch", cheque.BankBranch, Normalize(request.BankBranch));
+        Track("Drawer", cheque.Drawer, Normalize(request.Drawer));
+        Track("Description", cheque.Description, Normalize(request.Description));
         // MASRAF MERKEZİ DE MUHASEBEYİ ETKİLER (kullanıcı kararı):
         // fişin masraf merkezi kırılımı bu iki alandan çözülüyor.
-        Track("ProjectId", "Proje",
+        Track("ProjectId",
             cheque.ProjectId?.ToString(), request.ProjectId?.ToString(),
             affectsAccounting: true);
-        Track("CostCenterCode", "Masraf merkezi",
+        Track("CostCenterCode",
             cheque.CostCenterCode, Normalize(request.CostCenterCode),
             affectsAccounting: true);
 
@@ -1103,13 +1162,13 @@ public sealed class ChequeService(
         // taşımıyor (ölçüldü), vade takibi çekin kendi alanından
         // besleniyor. Yine de mali sonucu olan bir düzeltme olduğu için
         // denetim süzgecinde görünüyor.
-        Track("Amount", "Tutar",
+        Track("Amount",
             cheque.Amount.ToString("0.00"), decimal.Round(request.Amount, 2).ToString("0.00"),
             affectsAccounting: true);
-        Track("DueDate", "Vade",
+        Track("DueDate",
             cheque.DueDate.ToString("yyyy-MM-dd"), AsUtc(request.DueDate).ToString("yyyy-MM-dd"),
             affectsAccounting: true);
-        Track("CurrentAccountId", "Cari",
+        Track("CurrentAccountId",
             cheque.CurrentAccountId?.ToString(), request.CurrentAccountId?.ToString(),
             affectsAccounting: true);
 
@@ -1186,12 +1245,47 @@ public sealed class ChequeService(
          * çalışıyordu. Kaydın kendisi hariç tutuluyor, yoksa çek kendi
          * numarasıyla çakışır ve hiçbir düzenleme kaydedilemezdi.
          */
-        await EnsureChequeNumberAvailableAsync(
-            cheque.CompanyId, cheque.Direction,
-            string.IsNullOrWhiteSpace(request.BankName) ? cheque.BankName : request.BankName,
-            request.BankBranch,
-            Cheque.NormalizeChequeNumber(request.ChequeNumber),
-            excludeChequeId: cheque.Id, cancellationToken);
+        /*
+         * MÜKERRER KONTROLÜ YALNIZ ANAHTAR DEĞİŞTİYSE (ÇEK/2).
+         *
+         * Tekillik anahtarı: şirket + yön + BANKA + ŞUBE + normalize
+         * numara. Üçü de aynıysa sorulacak bir şey yok — kayıt zaten
+         * o anahtarla duruyor.
+         *
+         * KOŞULSUZ ÇALIŞTIRMAK İPTAL EDİLMİŞ ÇEKTE PATLIYORDU: iptal
+         * numarayı yeniden kullanıma açıyor, sorgu iptalleri eliyor,
+         * dolayısıyla iptal edilmiş bir çeğin AÇIKLAMASINI düzeltmek
+         * "bu numara başka çekte kullanılıyor" hatası veriyordu.
+         * Kapanmış çekte tanımlayıcı düzeltme açılınca bu yol ilk kez
+         * yürünebilir hâle geldi.
+         *
+         * Aynı anda başkası o anahtarı almışsa yarışı veritabanı
+         * indeksi yakalıyor (aşağıdaki DbUpdateException kolu).
+         */
+        var istenenBanka =
+            string.IsNullOrWhiteSpace(request.BankName) ? cheque.BankName : request.BankName;
+
+        var kimlikAnahtariDegisti =
+            !string.Equals(
+                Cheque.NormalizeChequeNumber(request.ChequeNumber),
+                cheque.NormalizedChequeNumber, StringComparison.Ordinal)
+            || !string.Equals(
+                istenenBanka.Trim(), cheque.BankName.Trim(),
+                StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(
+                (request.BankBranch ?? string.Empty).Trim(),
+                (cheque.BankBranch ?? string.Empty).Trim(),
+                StringComparison.OrdinalIgnoreCase);
+
+        if (kimlikAnahtariDegisti)
+        {
+            await EnsureChequeNumberAvailableAsync(
+                cheque.CompanyId, cheque.Direction,
+                istenenBanka,
+                request.BankBranch,
+                Cheque.NormalizeChequeNumber(request.ChequeNumber),
+                excludeChequeId: cheque.Id, cancellationToken);
+        }
 
         cheque.ChequeNumber = request.ChequeNumber.Trim();
         cheque.NormalizedChequeNumber = Cheque.NormalizeChequeNumber(request.ChequeNumber);
@@ -1887,6 +1981,20 @@ public sealed class ChequeService(
 
         if (RequiresCashAccount(fromStatus, toStatus) && cashAccount is null)
             throw new ArgumentException("Bu geçiş için kasa/banka hesabı seçilmelidir.");
+
+        /*
+         * VERİLEN ÇEK KASADAN ÖDENMEZ (ÇEK/2).
+         *
+         * Sunucu tarafı YETKİLİ olan yer burası. Ekrandaki süzgeç
+         * yalnız kolaylıktır; onu atlayan (eski sekme, doğrudan istek)
+         * burada reddedilir. Ekrana güvenmek, bu kuralı ekranı
+         * yenilemeyen herkes için kapatmak olurdu.
+         */
+        if (!CekOdemeHesabiKurali.Uygun(
+                cheque.Direction, fromStatus, toStatus, cashAccount?.Type))
+        {
+            throw new ArgumentException(CekOdemeHesabiKurali.RetMesaji);
+        }
 
         var movementDate = AsUtc(request.MovementDate);
 

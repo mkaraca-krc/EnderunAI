@@ -1508,6 +1508,87 @@ dışarıda** — fiş girer, hesap planını toplu değiştiremez.
 
 Bu paket çizgideki üç satırı da kapattı. Sınıf yeniden **sıfırda**.
 
+## ÇEK/2 — DÜZENLENEBİLİRLİK ALAN SINIFINA GÖRE (2026-08-27)
+
+### SORUN
+
+`EvaluateEditability` alan ayrımı yapmıyordu: kapanmış çekte kaydın
+TAMAMI kilitliydi ve kullanıcıya sunulan tek çare "İptal edip yeniden
+girin" cümlesiydi.
+
+**Bir yazım hatasını düzeltmek için mali kaydı iptal edip yeniden
+üretmek, hatanın kendisinden zararlıdır:** iptal gerçekleşmiş bir para
+hareketini storno ile geri alır, numarayı yeniden kullanıma açar ve
+deftere iki fiş daha yazar — hepsi keşideci adındaki bir harf için.
+
+### ÇÖZÜM — ÜÇ SINIF, TEK TANIM
+
+`ChequeAlanSiniflari` (`Services/Accounting/ChequeAlanKurallari.cs`):
+
+| Sınıf | Alanlar | Kapanmış çekte |
+|---|---|---|
+| **Kilitli** | çek no, banka, cari, proje, masraf merkezi, tutar, keşide, vade, hakediş, fatura, para birimi, kur | KAPALI |
+| **Tanımlayıcı** | keşideci, şube, açıklama | **AÇIK** |
+| **Taşıyıcı** | `RowVersion`, `EditReason` | veri değil, zarf |
+
+**BANKA ADI NEDEN TANIMLAYICI DEĞİL:** şube ve keşideci çekin
+üzerindeki yazılardır; banka, çekin hangi yaprak olduğunu söyler ve
+ödeme hesabıyla eşleştirilen alandır — canlıdaki 805088 uyuşmazlığı
+tam olarak bu eşleşmeydi. K2 listesinde de yok. Kimlik sayıldı.
+
+**SINIF VE ETİKET AYNI SÖZLÜKTE.** Etiketler eskiden `UpdateAsync`
+içindeki `Track` çağrılarına elle yazılıydı; ayrı tutulsalardı yeni
+alan eklerken birine yazıp diğerine yazmamak mümkün olurdu (K4).
+
+### ÇIRÇIR — SINIFSIZ ALAN GEÇEMEZ
+
+`ChequeAlanSinifiTests` yansımayla çalışıyor:
+- `UpdateChequeRequest`'in her özelliği sözlükte olmak zorunda,
+- sözlükte istekte karşılığı olmayan alan kalamaz,
+- **her kilitli alan TEK TEK değiştirilip yakalandığı doğrulanıyor.**
+
+Sonuncusu asıl olan: sözlükte "Kilitli" yazan ama karşılaştırılmayan
+bir alan, ekranda kilitli görünür, denetimde kilitli sayılır ve fiilen
+serbesttir. Yansıma testi bunu listeye değil DAVRANIŞA bakarak
+kapatıyor ve yeni eklenen alanı kendiliğinden kapsıyor.
+
+### VERİLEN ÇEK KASADAN ÖDENMEZ
+
+`CekOdemeHesabiKurali` — yalnız `Verildi → Ödendi` geçişini
+kısıtlıyor. Alınan çeğin elden tahsili gerçek bir akıştır ve kasaya
+girebilir; kural oraya taşmıyor (testle sabitlendi: kapsanan geçiş
+kümesi tam olarak `Issued:Issued->Paid`).
+
+Bu tek süzgeç, canlıdaki üç yanlış kayıttan **ikisini** (bkz. §5a)
+baştan imkânsız kılardı. Kural 39'un kırıldığı yer de burası: alan
+artık DOĞRULANIYOR.
+
+### İKİ SIRA KARARI — İKİSİ DE TESTLE SABİTLENDİ
+
+1. **Kilitli alan kapısı, damga kontrolünden ÖNCE.** Sonra olsaydı
+   kapanmış çekte tutar değiştiren istek 409 "tutar kilitli" yerine
+   400 "damga eksik" alırdı. Mevcut bir test yakaladı (Kural 43).
+
+2. **Mükerrer kontrolü yalnız kimlik anahtarı değişince.** Koşulsuz
+   çalıştırmak iptal edilmiş çekte patlıyordu: iptal numarayı yeniden
+   kullanıma açıyor, sorgu iptalleri eliyor, dolayısıyla iptal kaydın
+   AÇIKLAMASINI düzeltmek "bu numara başkasında" hatası veriyordu. Bu
+   yol ÇEK/2'den önce hiç yürünemediği için görünmemişti.
+
+### SONDALAR (Kural 36 ve 45)
+
+| Sonda | Sabotaj altında | Geri alınca |
+|---|---|---|
+| **A** — K1 kapısı | **GEÇERSİZ**: yalnız eski test düştü | — |
+| **A2** — K1 (tek kapıya indirildikten sonra) | 4/24 kırmızı | 24/24 yeşil |
+| **B** — K2 (`DescriptiveOnly` → `Blocked`) | 6/23 kırmızı | işaret 0, `cmp` aynı |
+| **C** — kasa süzgeci | 1/17 — tam isabet | işaret 0, `cmp` aynı |
+
+**A'NIN GEÇERSİZ SAYILMASI BU PAKETİN ASIL KAZANCI.** Kapıyı devre
+dışı bıraktığımda yeni testlerimin hiçbiri kırmızıya dönmedi, çünkü
+kilidi farkında olmadan İKİ yerde kurmuştum. Ayrıntı ve çıkan kural:
+Kural 45.
+
 ## ÇEK/1 — ÖDENEN ÇEK LİSTEDE VE TOPLAMDA KALIYORDU (2026-08-26)
 
 ŞİKAYET (GM): çek "Ödendi" göründüğü hâlde o ayın toplam çek
@@ -2101,7 +2182,7 @@ Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyo
 
 **2026-08-25'te 13 maddenin 9'u karara bağlandı** (aşağıda "KAPANANLAR").
 Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
-**5 madde**:
+**6 madde** (6. madde 2026-08-26'da eklendi):
 
 1. **KVKK aydınlatma metni** | Kural (e): hukuk metni yazılmıyor |
    Metin Mehmet'te. **Bana düşen: ekranda yerini açmak** —
@@ -2129,6 +2210,38 @@ Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
 5. **§7 personel testi kararsızlığı** | Personel testlerindeki
    ~dörtte bir düşme hâlâ açık; §7b tarih çakışması bunun PARÇASI
    DEĞİLDİ | Ayrı teşhis turu — **M3/2'den sonra**.
+
+6. **EF MIGRATION ARŞİVİNİN BİRLEŞTİRİLMESİ (squash)** |
+   Kural (b): geri döndürülemez migration işlemi, kendi başıma
+   yapılmıyor | **Mehmet'in kararı bekleniyor.**
+
+   **ÖLÇÜM (2026-08-26):** derlenen kaynağın **%92'si migration.**
+
+   | | |
+   |---|---|
+   | Toplam derlenen kaynak | 88,4 MB |
+   | Migration `.Designer.cs` | **81,5 MB (195 dosya)** |
+   | Gerçek uygulama kodu | 5,0 MB |
+
+   Her `.Designer.cs` modelin TAM anlık görüntüsünü taşıyor ve model
+   büyüdükçe her yeni migration onu bir kez daha kopyalıyor:
+   `InitialCreate` **4 KB**, ortadaki **447 KB**, sonuncusu
+   **744 KB**. Roslyn'e verilen şey 195 kez kopyalanmış aynı şema.
+
+   **SONUCU SOMUT:** tek `csc.dll` süreci derlemede **4,9 GB**
+   tutuyor. 7,7 GB'lık makinede bu, canlı uygulamayla aynı yerde
+   koşan test turunu sürekli sınırın dibinde tutuyor (bkz. Kural 29,
+   29a). Eğri de düz değil — her yeni migration ~744 KB ekliyor.
+
+   **RAM EKLEMEK ÇÖZÜM DEĞİL:** semptomu satın alır, eğriyi
+   durdurmaz. Ölçüm "8 GB yetersiz" demiyor, "bu derleme anormal"
+   diyor.
+
+   **RİSK:** dosya tarafını birleştirmek canlı
+   `__EFMigrationsHistory` tablosuyla uyumsuzluk üretirse yeni bir
+   makinede kurulum "migration bulunamadı" ile düşer. Kendi yedeği
+   ve geri yükleme tatbikatıyla, AYRI bir paket olarak ele
+   alınmalı — başka bir işin içine sıkıştırılmamalı.
 
 ### ERTELENENLER (kapanmadı, sıraya girmedi)
 
@@ -4605,6 +4718,123 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
     kırılacak — ya zorunlu olacak, ya doğrulanacak, ya da fiş
     üretmeyecek. Yeni alan eklenirken üçü birden sağlanıyorsa, bu
     tasarım hatasıdır ve kapatılmadan geçilmez.
+
+40. **`VBCSCompiler` KALICI BİR DERLEYİCİ SUNUCUSUDUR; SÜREÇ
+    AĞACINI ÖLDÜRMEK ONU TEMİZLEMEZ.**
+
+    Derleme bitince ÖLMEZ — sonraki derlemeleri hızlandırmak için
+    bekler ve PPID=1'e bağlanır. "Derlemeyi durdurdum, temizdir"
+    varsayımı bu yüzden yanlıştır.
+
+    **OOM'UN GERÇEK KAYNAĞI ÖLÇÜLDÜ ve sanılan değildi:**
+
+    | Süreç | RSS |
+    |---|---|
+    | `csc.dll` (Roslyn derleyici, PPID=1) | **3,9 GB** |
+    | `VBCSCompiler` (kalıcı sunucu) | **2,9 GB** |
+    | `dotnet build` — suçlu sanılan | **10 MB** |
+
+    **YAYIN/CI KOŞULARINDA PAYLAŞIMLI DERLEME KAPALI OLACAK**
+    (`/p:UseSharedCompilation=false`), ya da her koşu sonunda
+    `dotnet build-server shutdown` çağrılacak. `scripts/derleme-kos.sh`
+    ikisini birden yapıyor: kuşak da takıyor, askı da (bkz. Kural 29).
+
+41. **cgroup `MemoryMax` .NET'TE BASİT BİR TAVAN DEĞİLDİR.**
+
+    Sınırı gören çalışma zamanı **GC yığınını sınırın %75'ine çeker**
+    ve cgroup'a ÇARPMADAN `OutOfMemoryException` atar. Yani koyduğunuz
+    tavanın dörtte biri sessizce kaybolur.
+
+    **ÖLÇÜLDÜ — ikisi de aynı hatayla düştü:**
+
+    | Tavan | Fiilî yığın | Zirve | Sonuç |
+    |---|---|---|---|
+    | 4G | ~3,0 GB | 3,46 GB | OutOfMemoryException |
+    | 6G | ~4,6 GB | 4,80 GB | OutOfMemoryException |
+    | 6G + `GCHeapHardLimitPercent=0x5A` | ~5,4 GB | **5,48 GB** | **geçti** |
+
+    .NET iş yüküne konan tavan, gerçek zirve kullanımın **belirgin
+    üstünde** olmalıdır — yoksa "makine yetmiyor" sanılır. Ben tam
+    olarak bunu sanacaktım ve RAM yükseltmesi önerecektim.
+
+42. **BİR KORUMA DEVREYE ALINMADAN ÖNCE GERÇEK İŞ YÜKÜ ÜZERİNDE
+    ÖLÇÜLÜR. ÖLÇÜLMEDEN KONAN KORUMA, KORUDUĞU ŞEYİ KIRAR.**
+
+    İki kez yaşandı:
+
+    - **3G tavanı** `safe-deploy`'un **HER** yayınını test aşamasında
+      düşürecekti. Sayıyı tahminle koymuştum; gerçek ihtiyaç 5,48 GB
+      çıktı.
+    - **Kapsam cırcırının 400 karakterlik penceresi** yorum uzunluğu
+      değişince yanlış kırmızı verdi — nöbetçi, koruduğu koda
+      dokunulmadığı hâlde alarm üretti.
+
+    Ölçülmeden konan nöbetçi, güven kaybettirir: birkaç yanlış
+    alarmdan sonra insanlar onu susturur ve gerçek alarmı da
+    kaçırırlar.
+
+43. **KALICI RET, GEÇİCİ RETTEN ÖNCE GELİR.**
+
+    Bir istek hiçbir koşulda kabul edilmeyecekse (kilitli alan,
+    yetkisiz işlem, kapanmış belge), bu ret; yeniden denenirse
+    geçebilecek retlerden (damga uyuşmazlığı, eşzamanlılık, geçici
+    kilit) **ÖNCE** döndürülür.
+
+    Aksi halde kullanıcı asla başarılı olmayacak bir denemeye
+    yönlendirilir: damgayı tazeler, sayfayı yeniler, yeniden dener ve
+    aynı duvara çarpar — üstelik her seferinde duvarın ne olduğunu
+    öğrenmeden.
+
+    **Kontrol sırası bir tercih değil, korunması gereken bir
+    davranıştır ve testle kilitlenir.**
+
+    Kaynak: `ChequeReversalTests.PaidCheque_AmountCannotBeChanged`.
+    ÇEK/2'de kilitli alan kapısını damga kontrolünün ARKASINA
+    koymuştum; ödenmiş çekte tutar değiştirmeye çalışan istek
+    409 "tutar kilitli" yerine 400 "damga eksik" alıyordu. Testi
+    ben yazmadım — mevcut test yakaladı.
+
+44. **BASH BETİKLERİ ARTIMLI OKUNUR: KOŞAN BİR BETİĞİ DÜZENLEMEK O
+    TURU SESSİZCE BOZAR.**
+
+    Yorumlayıcı dosyayı baştan sona bir kerede almaz; çalıştıkça
+    okur. Koşarken düzenlenen betikte, henüz okunmamış kısmın
+    kayması yorumlayıcıyı satırın ortasından devam ettirir. Sonuç
+    hata mesajı bile olmayabilir — betik yanlış şeyi yapıp
+    sıfırla çıkar.
+
+    **BETİK DÜZENLEMESİ TUR BİTENE KADAR BEKLER.** Kaynak dosyaları
+    (`.cs`, `.ts`) için bu geçerli değil: onlar derlenmiş hâlde
+    koşar, düzenleme koşan turu etkilemez — yalnız o turun sonucu
+    artık kaynağı temsil etmez, o da ayrı bir tuzaktır.
+
+45. **SONDA YALNIZ MUHAFIZI DEĞİL, TESTİ DE ÖLÇER: SABOTAJ ALTINDA
+    KIRMIZIYA DÖNMEYEN TEST O MUHAFIZI KANITLAMIYORDUR.**
+
+    Kural 32 "sabotajın uygulandığını kanıtla" der, Kural 36 "uygulanmamış
+    sabotaj GEÇERSİZDİR" der. Bu kural üçüncüsünü ekliyor: **HANGİ
+    testlerin kırmızıya döndüğüne bak.** Yanlış testin kırmızı olması,
+    yeşil kalanların sağlam olduğu anlamına gelmez — tam tersini
+    gösterir.
+
+    **ÇEK/2'DE YAŞANDI.** K1 kapısını devre dışı bıraktım; **yalnız
+    ESKİ bir test** (`PaidCheque_AmountCannotBeChanged`) düştü, o kapı
+    için yazdığım YENİ testlerin hepsi yeşil kaldı. Sebep: kilidi
+    farkında olmadan İKİ yerde kurmuştum ve ikinci bariyer aynı isteği
+    yine reddediyordu (Kural 25). Testlerim muhafızı değil, "istek
+    reddediliyor mu" sorusunu ölçüyordu.
+
+    Tek kapıya indirince aynı sabotaj **1 yerine 4** testi kırdı ve
+    ikisi benim yeni testlerimdi.
+
+    **İKİNCİ BARİYERİN NEREDEN GELDİĞİ ÖĞRETİCİ:** çek numarasını
+    kapıda NORMALİZE ederek, atamada HAM hâliyle işliyordum. İkinci
+    bariyer, birincinin kendi tutarsızlığını yamıyordu. **Çözüm sapmayı
+    yakalamak değil, İMKÂNSIZ KILMAK oldu** — kapı artık atamayla
+    birebir aynı değere bakıyor.
+
+    "Derinlemesine savunma" niyetiyle eklenen ikinci kontrol, çoğu
+    zaman birincinin ölçülmesini engelleyen bir perdedir.
 
 ## 5a. CANLIDA YANLIŞ ÜÇ ÇEK KAYDI — VERİ BOZUK DEĞİL, GİRİŞ YANLIŞ
 

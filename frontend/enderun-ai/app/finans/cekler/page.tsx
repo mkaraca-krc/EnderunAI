@@ -20,6 +20,7 @@ import {
   summarizeCheques,
 } from "@/lib/cheques/totals";
 import { kasaHesapEtiketi } from "@/lib/finans/kasa-hesap-etiketi";
+import { secilebilirOdemeHesaplari } from "@/lib/cheques/odeme-hesabi";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import {
   Button,
@@ -1104,6 +1105,32 @@ export default function ChequeRegisterPage() {
     detail.direction === ChequeDirection.Received &&
     detail.status === ChequeStatus.Portfolio;
 
+  /*
+    MALİ ALANLAR KİLİTLİ Mİ (ÇEK/2 · K1).
+
+    Karar SUNUCUDAN geliyor; ekran "hareketi varsa kapalı" gibi kendi
+    kuralını yazsaydı uçla zamanla ayrışırdı. Alanlar gizlenmiyor,
+    PASİF gösteriliyor: gizlenseydi kullanıcı çekin tutarını göremeden
+    açıklamasını düzeltirdi.
+  */
+  const maliAlanlarKilitli = detail !== null && !detail.canEdit;
+
+  /*
+    VERİLEN ÇEK KASADAN ÖDENMEZ (ÇEK/2).
+
+    Seçilemeyecek hesap hiç GÖSTERİLMİYOR. Yetkili yer sunucu; burası
+    yalnız kullanıcıyı reddedilecek bir seçime sokmamak için.
+  */
+  const statusCashAccounts =
+    detail === null || statusForm.toStatus === ""
+      ? cashAccounts
+      : secilebilirOdemeHesaplari(
+          detail.direction,
+          detail.status,
+          Number(statusForm.toStatus),
+          cashAccounts
+        );
+
   const statusNeedsCashAccount =
     detail !== null &&
     statusForm.toStatus !== "" &&
@@ -1925,9 +1952,22 @@ export default function ChequeRegisterPage() {
                     <select
                       required
                       value={statusForm.toStatus}
-                      onChange={(e) =>
-                        setStatusForm({ ...statusForm, toStatus: e.target.value })
-                      }
+                      onChange={(e) => {
+                        /*
+                          DURUM DEĞİŞİNCE SEÇİLİ HESAP SIFIRLANIR.
+
+                          Bırakılsaydı, önce kasa seçip sonra "Ödendi"ye
+                          geçen kullanıcıda liste hesabı gizler ama
+                          değer state'te KALIRDI: ekran boş görünür,
+                          istek kasa hesabıyla gider ve sunucudan
+                          anlaşılmaz bir red döner.
+                        */
+                        setStatusForm({
+                          ...statusForm,
+                          toStatus: e.target.value,
+                          cashAccountId: "",
+                        });
+                      }}
                     >
                       {detail.allowedNextStatuses.map((status) => (
                         <option key={status} value={String(status)}>
@@ -1959,7 +1999,7 @@ export default function ChequeRegisterPage() {
                       }
                     >
                       <option value="">—</option>
-                      {cashAccounts.map((account) => (
+                      {statusCashAccounts.map((account) => (
                         <option key={account.id} value={account.id}>
                           {kasaHesapEtiketi(account)}
                         </option>
@@ -2024,11 +2064,17 @@ export default function ChequeRegisterPage() {
                     <button
                       type="button"
                       className="erp-secondary-button"
-                      disabled={saving || !detail.canEdit}
-                      title={detail.canEdit ? undefined : detail.editBlockedReason ?? undefined}
+                      disabled={
+                        saving || (!detail.canEdit && !detail.canEditDescriptive)
+                      }
+                      title={
+                        detail.canEdit
+                          ? undefined
+                          : detail.editBlockedReason ?? undefined
+                      }
                       onClick={openEditModal}
                     >
-                      Çeki Düzenle
+                      {detail.canEdit ? "Çeki Düzenle" : "Keşideci / Şube / Açıklama Düzelt"}
                     </button>
                   )}
 
@@ -2473,13 +2519,21 @@ export default function ChequeRegisterPage() {
         onConfirm={(input) => void runVoid(input)}
       />
 
-      {/* DÜZELTME: işlem görmüş çekte uç reddediyor — önce durumu geri
-          almak gerekiyor. Ekran bunu engellemek yerine sunucunun
-          gerekçesini gösteriyor. */}
+      {/* DÜZELTME İKİ KİPLİ (ÇEK/2): açık çekte her alan, kapanmış
+          çekte yalnız keşideci/şube/açıklama. Mali alanlar gizlenmiyor
+          PASİF gösteriliyor — gizlenseydi kullanıcı çekin tutarını
+          göremeden açıklamasını düzeltirdi. Gerekçe cümlesi
+          sunucudan geliyor; ekran kendi metnini uydursaydı ikisi
+          zamanla ayrışırdı. */}
       <Modal
         open={showEditModal}
-        title="Çeki düzenle"
-        description="Tutar ya da cari değişirse giriş fişi ters kayıtla kapanır ve yeni tutarla yenisi kesilir."
+        title={maliAlanlarKilitli ? "Çeki düzelt" : "Çeki düzenle"}
+        description={
+          maliAlanlarKilitli
+            ? detail?.editBlockedReason ??
+              "Tutar, vade, çek no, cari, banka ve masraf merkezi kilitli."
+            : "Tutar ya da cari değişirse giriş fişi ters kayıtla kapanır ve yeni tutarla yenisi kesilir."
+        }
         onClose={() => setShowEditModal(false)}
         busy={saving}
         footer={
@@ -2510,6 +2564,7 @@ export default function ChequeRegisterPage() {
         <div className="grid gap-3 md:grid-cols-2">
           <Input
             label="Çek numarası"
+            disabled={maliAlanlarKilitli}
             value={editForm.chequeNumber}
             onChange={(e) =>
               setEditForm({ ...editForm, chequeNumber: e.target.value })
@@ -2518,6 +2573,7 @@ export default function ChequeRegisterPage() {
 
           <Input
             label="Banka"
+            disabled={maliAlanlarKilitli}
             value={editForm.bankName}
             onChange={(e) =>
               setEditForm({ ...editForm, bankName: e.target.value })
@@ -2542,6 +2598,7 @@ export default function ChequeRegisterPage() {
 
           <SearchableSelect
             label="Cari"
+            disabled={maliAlanlarKilitli}
             value={editForm.currentAccountId}
             onChange={(next) =>
               setEditForm({ ...editForm, currentAccountId: next })
@@ -2551,6 +2608,7 @@ export default function ChequeRegisterPage() {
 
           <TutarInput
             label="Tutar"
+            disabled={maliAlanlarKilitli}
             value={editForm.amount === "" ? null : Number(editForm.amount)}
             onChange={(next) =>
               setEditForm({
@@ -2570,6 +2628,7 @@ export default function ChequeRegisterPage() {
                 companyId={companyId}
                 value={editCostCenterKey}
                 includeProjectId={detail?.projectId ?? null}
+                disabled={maliAlanlarKilitli}
                 required
                 onChange={(option) => {
                   const resolved = resolveCostCenter(option);
@@ -2588,6 +2647,7 @@ export default function ChequeRegisterPage() {
           <Input
             label="Keşide tarihi"
             type="date"
+            disabled={maliAlanlarKilitli}
             value={editForm.issueDate}
             onChange={(e) =>
               setEditForm({ ...editForm, issueDate: e.target.value })
@@ -2597,6 +2657,7 @@ export default function ChequeRegisterPage() {
           <Input
             label="Vade"
             type="date"
+            disabled={maliAlanlarKilitli}
             value={editForm.dueDate}
             onChange={(e) =>
               setEditForm({ ...editForm, dueDate: e.target.value })

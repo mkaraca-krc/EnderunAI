@@ -277,6 +277,15 @@ public sealed record ChequeDetailResponse(
     /// </summary>
     string? EditBlockedReason,
 
+    /// <summary>
+    /// TANIMLAYICI ALANLAR AÇIK MI (ÇEK/2 · K2) — keşideci, şube,
+    /// açıklama. <c>CanEdit</c> kapalıyken bile açık olabilir:
+    /// kapanmış çekte yazım hatası düzeltmek mali kaydı iptal etmeyi
+    /// gerektirmiyor. Ekran düzenleme formunda mali alanları bu
+    /// bilgiye göre pasifleştiriyor.
+    /// </summary>
+    bool CanEditDescriptive,
+
     /// <summary>Çek kapanmış bir durumdan mı iptal edildi (rozet için).</summary>
     bool VoidedFromClosedState,
 
