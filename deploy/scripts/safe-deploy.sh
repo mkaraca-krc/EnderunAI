@@ -19,8 +19,17 @@
 # yeni kod bile publish edilmez, canlı sürüm olduğu gibi çalışmaya devam
 # eder. NOT: Bu script yeni EF Core migration'larını canlı veritabanına
 # OTOMATİK uygulamaz — migration içeren bir değişiklik yayınlanıyorsa,
-# yedek aldıktan sonra "dotnet ef database update" hâlâ elle çalıştırılmalı
-# (mevcut oturum boyunca izlenen yöntem budur, kasıtlı bir tercihtir).
+# yedek aldıktan sonra göçler hâlâ ELLE uygulanmalı (kasıtlı tercih).
+#
+# İKİ BAĞLAM VAR, --context ZORUNLU. Bayrak olmadan komut
+# "More than one DbContext was found" ile durur:
+#     dotnet ef database update --project backend/EnderunAI.Api \
+#         --context AppDbContext
+#     dotnet ef database update --project backend/EnderunAI.Api \
+#         --context HrDbContext
+#
+# Betik UYGULAMAZ ama artık DOĞRULAR: `gocleri_dogrula` kapısı, iki
+# bağlamın da güncel olduğunu görmeden yayına devam etmez.
 
 set -uo pipefail
 
@@ -398,6 +407,83 @@ backup_current_release() {
     log "INFO" "Rollback yedeği hazır: ${BACKEND_ROLLBACK_DIR}, ${FRONTEND_NEXT_ROLLBACK_DIR}"
 }
 
+#
+# GÖÇ KAPISI — İKİ BAĞLAM DA GÜNCEL Mİ (KURULUM/1 · 1b).
+#
+# BU BETİK GÖÇ UYGULAMAZ, kasıtlı bir tercih (bkz. başlıktaki not).
+# Ama uygulanmadığını DOĞRULAMIYORDU da: kaynağa yeni bir göç girip
+# canlıya uygulanmadan yayın yapılabilirdi ve "Yayın BAŞARILI" satırı
+# görünürdü. Kod yeni sütunu bekler, veritabanında yoktur, hata
+# kullanıcıya çıkar.
+#
+# ÖLÇÜLDÜ (2026-08-27): kaynakta 202 göç, canlı geçmişinde 202 kayıt,
+# iki yönde de fark 0. Yani bugüne kadar elle uygulama disiplini
+# tutmuş. Kapı, o disiplinin unutulduğu ilk günü yakalamak için.
+#
+# İKİ BAĞLAM: AppDbContext (Migrations/) ve HrDbContext
+# (Migrations/HumanResources/). İkisi aynı __EFMigrationsHistory
+# tablosunu paylaşıyor, o yüzden tek sorgu ikisini de kapsıyor.
+# `dotnet ef` ÇAĞRILMIYOR: derleme gerektirir, yavaştır ve iki bağlam
+# yüzünden --context olmadan zaten hata verir.
+#
+gocleri_dogrula() {
+    log "INFO" "Göç kapısı: iki bağlamın da güncel olduğu doğrulanıyor..."
+
+    local canli_baglanti
+    canli_baglanti="$(grep -E '^DB_CONNECTION=' "$ENV_FILE" | sed -E "s/^DB_CONNECTION=//" | tr -d \'\")"
+    [ -z "$canli_baglanti" ] && fail "Göç kapısı: DB_CONNECTION okunamadı."
+
+    local h u d
+    h=$(sed -n 's/.*Host=\([^;]*\).*/\1/p' <<<"$canli_baglanti"); [ -z "$h" ] && h=localhost
+    u=$(sed -n 's/.*Username=\([^;]*\).*/\1/p' <<<"$canli_baglanti")
+    d=$(sed -n 's/.*Database=\([^;]*\).*/\1/p' <<<"$canli_baglanti")
+    PGPASSWORD=$(sed -n 's/.*Password=\([^;]*\).*/\1/p' <<<"$canli_baglanti")
+    export PGPASSWORD
+
+    local kaynak gecmis
+    kaynak="$(mktemp)"; gecmis="$(mktemp)"
+
+    # Kaynaktaki TÜM göçler — her iki bağlam.
+    { ls "${REPO_ROOT}"/backend/EnderunAI.Api/Migrations/*.cs 2>/dev/null
+      ls "${REPO_ROOT}"/backend/EnderunAI.Api/Migrations/HumanResources/*.cs 2>/dev/null; } \
+      | grep -v Designer | grep -v Snapshot \
+      | sed 's|.*/||; s|\.cs$||' | sort > "$kaynak"
+
+    if ! psql -h "$h" -U "$u" -d "$d" -tAc \
+            'select "MigrationId" from "__EFMigrationsHistory"' 2>/dev/null | sort > "$gecmis"; then
+        unset PGPASSWORD
+        rm -f "$kaynak" "$gecmis"
+        fail "Göç kapısı: canlı veritabanına bağlanılamadı."
+    fi
+    unset PGPASSWORD
+
+    # BOŞ SONUÇ YOKLUĞUN KANITI DEĞİLDİR (Kural 48): geçmiş tablosu boş
+    # dönüyorsa sorgu çalışmamış demektir, "hiç göç yok" demek değil.
+    if [ ! -s "$gecmis" ]; then
+        rm -f "$kaynak" "$gecmis"
+        fail "Göç kapısı: geçmiş tablosu BOŞ okundu; sorgu çalışmamış olabilir."
+    fi
+
+    local bekleyen fazladan
+    bekleyen="$(comm -23 "$kaynak" "$gecmis")"
+    fazladan="$(comm -13 "$kaynak" "$gecmis")"
+    rm -f "$kaynak" "$gecmis"
+
+    if [ -n "$bekleyen" ]; then
+        log "ERROR" "Canlıya UYGULANMAMIŞ göç(ler) var:"
+        echo "$bekleyen" | while read -r m; do log "ERROR" "    $m"; done
+        fail "Göç kapısı: önce yedek alıp 'dotnet ef database update --context <bağlam>' çalıştırın."
+    fi
+
+    if [ -n "$fazladan" ]; then
+        log "ERROR" "Canlıda kaynağın TANIMADIĞI göç kimliği var:"
+        echo "$fazladan" | while read -r m; do log "ERROR" "    $m"; done
+        fail "Göç kapısı: canlı şema kaynağın ilerisinde; incelenmeden yayın yapılmaz."
+    fi
+
+    log "INFO" "Göç kapısı: iki bağlam da güncel."
+}
+
 publish_backend() {
     log "INFO" "Backend publish ediliyor: ${BACKEND_PUBLISH_DIR}"
 
@@ -560,6 +646,11 @@ main() {
     # Kapsam pull'DAN SONRA belirleniyor: HEAD ancak o noktada kesin.
     resolve_test_scope
     log "INFO" "Test kapsamı: ${TEST_SCOPE} (${TEST_SCOPE_REASON})"
+
+    # GÖÇ KAPISI TESTLERDEN ÖNCE: 20 dakikalık test turunu koşup sonra
+    # "göç eksik" demek, hem zaman hem de operatörün sabrı israfıdır.
+    asama "goc-kapisi"
+    gocleri_dogrula
 
     asama "backend-testleri"
     run_backend_tests

@@ -150,7 +150,26 @@ public sealed class HrDbContext(DbContextOptions<HrDbContext> options)
         {
             entity.ToTable("hr_departments");
             ConfigureBase(entity);
-            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+
+            /*
+             * BENZERSİZLİK SÜZGEÇLİ (KURULUM/1 · Kural 49).
+             *
+             * Süzgeçsiz benzersizlik, YUMUŞAK SİLİNMİŞ bir departmanın
+             * kodunu rehin tutuyordu: kullanıcı departmanı siliyor,
+             * aynı kodla yenisini açamıyordu. Yumuşak silmenin anlamı
+             * kaydın kullanıcı için YOK OLMASIDIR.
+             *
+             * Bu, oturumun başındaki çek hatasının aynı sınıfı: "iptal
+             * et ve aynı numarayla yeniden gir" yolu kapalıydı.
+             *
+             * Canlıda AYRICA elle yazılmış süzgeçli bir ikiz vardı
+             * (IX_hr_departments_Company_Code). Süzgeçsiz olan daha
+             * KATI olduğu için ikizin amacını sessizce eziyordu; bu
+             * göçte kaldırılıyor, kısıt tek ve modelin sahipliğinde.
+             */
+            entity.HasIndex(x => new { x.CompanyId, x.Code })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.HasIndex(x => x.ParentDepartmentId);
             entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
@@ -160,8 +179,17 @@ public sealed class HrDbContext(DbContextOptions<HrDbContext> options)
         {
             entity.ToTable("hr_positions");
             ConfigureBase(entity);
-            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
-            entity.HasIndex(x => new { x.DepartmentId, x.Code }).IsUnique();
+
+            // BENZERSİZLİK SÜZGEÇLİ — gerekçe hr_departments ile aynı
+            // (Kural 49). Pozisyonun kodu da silindikten sonra yeniden
+            // kullanılabilmeli.
+            entity.HasIndex(x => new { x.CompanyId, x.Code })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.HasIndex(x => new { x.DepartmentId, x.Code })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.HasIndex(x => x.DepartmentId);
             entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Title)

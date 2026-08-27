@@ -2182,7 +2182,7 @@ Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyo
 
 **2026-08-25'te 13 maddenin 9'u karara bağlandı** (aşağıda "KAPANANLAR").
 Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
-**6 madde** (6. madde 2026-08-26'da eklendi):
+**8 madde** (6–8. maddeler 2026-08-26/27'de eklendi):
 
 1. **KVKK aydınlatma metni** | Kural (e): hukuk metni yazılmıyor |
    Metin Mehmet'te. **Bana düşen: ekranda yerini açmak** —
@@ -2242,6 +2242,75 @@ Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
    makinede kurulum "migration bulunamadı" ile düşer. Kendi yedeği
    ve geri yükleme tatbikatıyla, AYRI bir paket olarak ele
    alınmalı — başka bir işin içine sıkıştırılmamalı.
+
+7. **INDEKS/1 — MODELİN VAR SANDIĞI 14 EKSİK İNDEKS** |
+   Ayrı paket, KURULUM/1'e karıştırılmadı | **Ölçüldü
+   (2026-08-27), yapılmadı.**
+
+   Model bu indekslerin var olduğunu sanıyor; **canlıda hiçbiri
+   yok**:
+
+   ```
+   IX_cargo_shipments_ProjectId
+   IX_document_attachments_CompanyId
+   IX_document_workflows_CompanyId
+   IX_hr_job_applications_CandidateId
+   IX_incoming_documents_CategoryId
+   IX_incoming_documents_ProjectId
+   IX_outgoing_documents_CategoryId
+   IX_outgoing_documents_ProjectId
+   IX_phone_notes_ProjectId
+   IX_progress_payments_CompanyId_Status_ProgressPaymentDate
+   IX_purchase_orders_SupplierCurrentAccountId
+   IX_secretariat_schedule_entries_CompanyId_Type_Status_StartAtUtc
+   IX_secretariat_schedule_entries_ProjectId
+   IX_visitor_records_ProjectId
+   ```
+
+   **ANLIK GÖRÜNTÜ BU İNDEKSLERİ "VAR" SAYDIĞI İÇİN D1 SONSUZA
+   KADAR YEŞİL VERİR.** D1 modeli anlık görüntüyle karşılaştırır,
+   veritabanıyla değil (bkz. Kural 46).
+
+   Bugün tablolar küçük olduğundan görünmüyor; **veri büyüdükçe
+   sessiz tam tablo taramaları olarak ortaya çıkacak.** Çoğu
+   `ProjectId` gibi yabancı anahtar indeksi.
+
+   Ayrışmanın diğer 4 kalemi (elle başka adla var olanlar) HR
+   bölgesinde ve **KURULUM/1'de kapandı**.
+
+8. **KURULUM/1'DEN ARTAN BENZERSİZLİK KALEMLERİ** |
+   Yeni eksen (Kural 49) listeyi yeniden eledi; bunlar karara
+   bağlanmadı | **Ölçüldü, yapılmadı.**
+
+   **(i) PAKETTEN ÇIKAN İKİ KALEM — yeni eksenle yeniden
+   değerlendirilecek:**
+   - `tool_service_requests (CompanyId, RequestNumber)` — bugün
+     SÜZGEÇLİ, belge numarası olduğu için süzgeçsiz olmalı gibi
+     görünüyordu; **0 satır**.
+   - `vehicles (CompanyId, PlateNumber)` — bugün SÜZGEÇLİ, plaka
+     dış kimlik olduğu için süzgeçsiz olmalı gibi görünüyordu;
+     **0 satır**.
+
+   İkisi de boş olduğu için **bugün hiçbir pratik etkileri yok**.
+   Sıkılaştırma yönünde oldukları için çakışma riski de yok
+   (ölçüldü: tekrar eden anahtar yok).
+
+   **(ii) 16 `LineNumber` KALEMİ** — belge içi satır sırası.
+   `LineNumber` bir kimlik değil **SIRA**dır; belge satırı
+   silinince numaranın yeniden kullanılması normal olabilir.
+   Ayrı ölçüm ister: satır numarası dışarıya (rapor, PDF, karşı
+   taraf) taşınıyor mu?
+
+   **(iii) 14 KARIŞIK KALEM** — dönem/numara bileşimleri
+   (`progress_payments`, `project_measurements`,
+   `AccountingPeriods`, `hr_performance_reviews`,
+   `subcontractor_contracts` …). Aralarında **tutarsızlık** var:
+   aynı kavram iki farklı şekilde kurulmuş — sözleşme numarası
+   `subcontractor_contracts`'ta süzgeçsiz, `isg_osgb_contracts`'ta
+   süzgeçli.
+
+   **DÖRT ÖKSÜZ TABLO ölçümü YAPILDI** — bkz. §5c (üçü boş, biri
+   tek satır, yolu kaynakta bulunamadı).
 
 ### ERTELENENLER (kapanmadı, sıraya girmedi)
 
@@ -4835,6 +4904,239 @@ yazıyordu. Tavan doğruydu, tavanın SÖYLENMEMESİ hataydı.
 
     "Derinlemesine savunma" niyetiyle eklenen ikinci kontrol, çoğu
     zaman birincinin ölçülmesini engelleyen bir perdedir.
+
+46. **BİR KARŞILAŞTIRMA, İKİ TARAFIN DA AYNI KUSURU TAŞIMASI
+    İHTİMALİNE KARŞI ÜÇÜNCÜ BİR REFERANS İÇERMELİDİR.**
+
+    **İKİ ÖZDEŞ YANLIŞ "ÖZDEŞ" ÇIKAR.** Karşılaştırma yeşil verir,
+    kabul şartı sağlanır, sonuç yanlıştır.
+
+    SQUASH/1'de yakalandı. Z1 "A (mevcut göçler) = B (temel göç)"
+    diye kurulmuştu. İkisi de AYNI YORDAMLA kurulacaktı; yordam
+    eksikse (ör. iki `DbContext`ten yalnız birinin göçlerini
+    uygulamak) eksiklik HER İKİ tarafta da oluşur ve karşılaştırma
+    bunu **göremez**.
+
+    Düzeltilmiş şart: karşılaştırma **ÜÇ TARAFLI** — A / B / **CANLI**.
+    Canlı ile göçler arasındaki her fark bir bulgudur.
+
+    Genel kural: bir referansı kendisinden türeyen bir şeyle
+    karşılaştırmak, ortak atadan gelen hatayı asla göstermez.
+    Üçüncü taraf, zincirin dışından gelmelidir.
+
+47. **DENETİM ARACININ YANLIŞ ALARMI, BULGUNUN KENDİSİ KADAR ACİL
+    DÜZELTİLİR.**
+
+    Yanlış alarm üreten bir araç, çıktısını ciddiye almamayı
+    öğretir; birkaç boş alarmdan sonra gerçek bulgu da "yine odur"
+    diye geçilir. Araç o noktada koruma değil, **gürültü
+    kaynağıdır** — ve sustuğu gün kimse fark etmez.
+
+    Bu oturumda üç kez oldu: kapsam cırcırı 400 karakterlik
+    penceresiyle yanlış kırmızı verdi; koşucu nöbetçisi bir HATA
+    MESAJI metnini ihlal saydı; Z1 aracı `md5(prosrc)` ile GİRİNTİ
+    farkını şema farkı sandı ve `enderun_fold` için yanlış bir
+    "bulgu" raporlamama yol açtı.
+
+    **METİN KARŞILAŞTIRMASI İLK ELEME, HÜKÜM DAVRANIŞTAN.**
+    Boşluk normalleştirmesi yetmez — boşluk, dize sabitlerinin
+    İÇİNDE anlamlıdır ve normalleştirme oradaki gerçek farkı da
+    siler. Fonksiyonlar için doğru kurgu: sabit bir girdi kümesini
+    iki tarafta da çalıştır, çıktıları karşılaştır. **Aynı girdilere
+    aynı cevabı veren iki fonksiyon aynıdır.**
+
+48. **SIFIR SONUÇ, YOKLUĞUN KANITI DEĞİLDİR.**
+
+    Boş dönen bir arama ya da sorgu iki şeyi birden gösterebilir:
+    aranan şey yoktur, **ya da sorgu yanlıştır.** İkisi ekranda
+    birbirinin aynısıdır.
+
+    Bu yüzden her boş ölçüm, **VAR OLDUĞU KESİN BİLİNEN** bir örnek
+    üzerinde tekrarlanır (olumlu denetim). O da boş dönüyorsa ortada
+    bulgu değil **arıza** vardır.
+
+    **KAYNAK — bu oturumda en pahalı hatam:**
+    `git log --all -- '*Migrations/$f*'` deseni
+    `Migrations/HumanResources/` **alt dizinini kapsamadı** ve altı
+    dosyanın her biri için `0` döndürdü. Bunu "hiç commit
+    edilmemiş" diye okudum ve canlıya kayıt dışı göç uygulandığı
+    gibi ağır bir bulgu raporladım. Doğru yolla sorunca **üç
+    commit** çıktı; göçler baştan beri depodaydı.
+
+    Olumlu denetimi yapsaydım — var olduğunu bildiğim herhangi bir
+    dosyayı aynı desenle aratsaydım — desenin bozuk olduğunu ilk
+    adımda görürdüm.
+
+    **KURAL 36'NIN ÖLÇÜM TARAFINDAKİ İKİZİDİR:** hiç uygulanmamış
+    sabotaj kanıt üretmez; hiç eşleşmemiş sorgu bulgu üretmez.
+
+49. **YUMUŞAK SİLİNEBİLEN TABLODA BENZERSİZLİĞİN SÜZGEÇLİ Mİ
+    SÜZGEÇSİZ Mİ OLACAĞI, ANAHTARIN TÜRÜNE BAĞLIDIR.**
+
+    **(a) KULLANICININ SEÇTİĞİ KOD** — proje, departman, cari, depo,
+    pozisyon kodu: **SÜZGEÇLİ** (`WHERE "IsDeleted" = false`).
+    Kullanıcı bir kaydı sildikten sonra aynı kodu yeniden
+    kullanabilmelidir. Süzgeçsiz benzersizlik, silinmiş kaydın kodunu
+    **rehin tutar**.
+
+    **(b) SİSTEMİN ÜRETTİĞİ BELGE NUMARASI** — çek `InternalNumber`,
+    fatura no, sipariş no, fiş no: **SÜZGEÇSİZ**. Belge numarası bir
+    kez verildiyse, kayıt silinse bile **ASLA** yeniden verilmez;
+    muhasebe ve denetim tekilliği kalıcıdır.
+
+    **(c) DIŞ KİMLİK** — TC kimlik no, vergi no: ayrı karar
+    gerektirir, **varsayılan SÜZGEÇSİZ**. Aynı kişi için ikinci bir
+    kayıt açmak yerine silinmiş kaydı geri getirmek doğrudur.
+
+    **AYNI TABLODA İKİ ANAHTAR FARKLI SINIFA GİREBİLİR:**
+    `cheques.ChequeNumber` (a) → süzgeçli;
+    `cheques.InternalNumber` (b) → süzgeçsiz.
+
+    Sınıfı belirlerken **alanı kimin doldurduğuna** bakılır:
+    `DocumentNumberService` üretiyorsa (b), kullanıcı formda
+    yazıyorsa (a).
+
+    **AYNI SÜTUNLARDA HEM SÜZGEÇLİ HEM SÜZGEÇSİZ BENZERSİZLİK**
+    bulunması, katı olanın gevşek olanı **sessizce ezmesi** demektir:
+    süzgeçli indeks orada durur ama hiçbir işe yaramaz.
+
+50. **BELGEDE, YORUMDA VEYA README'DE YAZAN BİR KOMUT, O KOMUTUN
+    ÇALIŞTIĞININ KANITI DEĞİLDİR.**
+
+    Bir davranışın var olduğu **metinle değil, çalıştırılan kodla**
+    kanıtlanır. Bu oturumda **dört kez** yorum metni çağrı sanıldı.
+
+    Kaynak: `safe-deploy.sh:22` — `"dotnet ef database update"` bir
+    çağrı değil, göçlerin **ELLE** uygulanması gerektiğini söyleyen
+    bir nottu. Ben onu bir çağrı sanıp "iki bağlamla hata veriyor"
+    diye rapor ettim; çağrı yoktu ki hata versin.
+
+    Aynı hatanın diğer üç yüzü: nöbetçi testi bir hata mesajı
+    metnini ihlal saydı; kapsam cırcırı yorum uzunluğu değişince
+    yanlış kırmızı verdi; `pgrep` ölçüm kabuğunun kendi komut
+    satırını saydı. Hepsi tek cümlede toplanır: **metin, davranış
+    değildir** (bkz. Kural 31, 47).
+
+## 5b. DÜŞEN BULGULAR — HR-ŞEMA/1 FAZ 0 (2026-08-27)
+
+**Bu bölüm, kayıtta kalmış olsaydı ileride birinin üzerine iş
+yapacağı ÜÇ YANLIŞ BULGUYU ve hangi ölçüm hatasından geldiklerini
+yazıya geçirir.** Yanlış bir bulgu, kuralsızlıktan kötüdür.
+
+| Rapor ettiğim | Gerçek | Ölçüm hatası |
+|---|---|---|
+| "Altı HR göçü hiç commit edilmemiş" | Göçler **git'te var**, üç commit'te eklenmişler | `git log --all -- '*Migrations/$f*'` deseni `Migrations/HumanResources/` **alt dizinini kapsamadı**, 0 döndü (Kural 48) |
+| "`HrDbContext`'in kaynakta 0 göçü var" | **6 göç + anlık görüntü** var, `Migrations/HumanResources/` altında | Aynı hata: yalnız `Migrations/*.Designer.cs` düzlemine baktım |
+| "Temiz kurulum sessizce kırık" | Kurulum **çalışıyor** | A veritabanına yalnız `AppDbContext` göçlerini uygulamıştım; iki bağlamla kurulan veritabanı canlıyla **6652 satırda 0 fark** verdi |
+
+Bir bulgu daha düştü: **`enderun_fold` gövdeleri farklı** dediğim
+şey yalnız GİRİNTİ farkıydı; Z1 aracım `md5(prosrc)` ile
+karşılaştırıyordu (Kural 47).
+
+**AYAKTA KALAN GERÇEK BULGULAR:** kurulum yordamının `--context`
+söylememesi, ve süzgeçsiz benzersizlik kapsamı (bkz. Kural 49).
+
+### B2 OKUNURLUK BORCU — İKİ BAĞLAM TEK GEÇMİŞ TABLOSU
+
+`AppDbContext` ve `HrDbContext` aynı `__EFMigrationsHistory`
+tablosunu paylaşıyor (202 kayıt). Bir kimliğin hangi bağlama ait
+olduğu tablodan okunamıyor; **beni yanıltan yapı buydu** — HR
+kayıtları `AppDbContext` göçleriyle karşılaştırılınca "kaynakta
+karşılığı yok" gibi göründü.
+
+**AYRILMADI, KASITLI.** Canlı bir veritabanının göç defterini
+kozmetik sebeple taşımak, kazandırdığından fazlasını riske atar:
+taşıma sırasında bir kaydın düşmesi, EF'in o göçü yeniden
+uygulamaya kalkması demektir. Kusur değil, **okunurluk borcu**
+olarak kaydedildi.
+
+Ayrımı bugün gereksiz kılan şey: `safe-deploy`'un göç kapısı iki
+bağlamın göç dosyalarını birlikte okuyup tek geçmiş tablosuyla
+karşılaştırıyor, yani bağlam ayrımına ihtiyaç duymuyor.
+
+52. **ÇÖKEN ARAÇ ZARARSIZDIR; TEHLİKELİ OLAN, HATA VERMEDEN
+    MAKUL GÖRÜNEN YANLIŞ ÇIKTI ÜRETEN ARAÇTIR.**
+
+    Çöken araç durur ve görünür. Yanlış çıktı üreten araç,
+    sonucunuza sessizce karışır ve kararınızın parçası olur.
+
+    **ÖLÇÜM ÇIKTISININ BİÇİMİ DE SONUCUN PARÇASIDIR:** satır
+    sayısı, sütun sayısı ve hizalama doğrulanmadan tablo okunmaz.
+
+    Kaynak: sınıflandırma tablosunu üreten betikte `grep -c` sıfır
+    dönünce (çıkış kodu 1) `|| echo 0` **ikinci bir satır** bastı;
+    tablo kaydı, sütunlar birbirine karıştı. 16 kalemlik
+    sınıflandırma o tabloya göre yapılacaktı — biçim bozukluğunu
+    fark etmeseydim yanlış tablodan karar çıkacaktı.
+
+    Aynı sınıf: `pgrep`in kendi ölçüm kabuğumu sayması, 400
+    karakterlik pencerenin `SELECT`i kesmesi, `git log` deseninin
+    alt dizini kapsamaması. Hepsi **çökmedi**; hepsi makul
+    görünen yanlış sayı üretti (bkz. Kural 48).
+
+## 5c. DÖRT ÖKSÜZ TABLO — ÖLÜ AĞIRLIK (2026-08-27)
+
+Göçlerde var, canlıda var, **hiçbir `DbContext` yönetmiyor**.
+Kaynakta yalnız göç dosyalarında geçiyorlar.
+
+| Tablo | Satır |
+|---|---|
+| `approval_workflow_definitions` | **1** |
+| `hr_certificate_definitions` | 0 |
+| `hr_competency_definitions` | 0 |
+| `hr_training_definitions` | 0 |
+
+Üçü boş: **yarım kalmış özellik kalıntısı.** SQUASH/1'de temel
+göçte korunacaklar; silme kararı ayrıca verilecek.
+
+**DOLU OLAN TEK SATIRIN YOLU BULUNAMADI** ve bu kayda değer:
+`PURCHASE_REQUEST_APPROVAL`, 25.07.2026 12:04:59,
+`CreatedByUserId` **NULL**.
+
+- Kodda **hiç geçmiyor** (`git log --all -S` deponun tamamında
+  bulamadı; olumlu denetim aracın çalıştığını doğruladı).
+- Tabloları yaratan göç saat **10:24:37**, satır **12:04:59** —
+  göç de ekmemiş.
+
+Geriye en olası ihtimal **elle çalıştırılmış bir `INSERT`**
+kalıyor. **BUGÜN AÇIK BİR KAPI YOK:** o tabloya dokunan hiçbir
+kod yok, dolayısıyla yazmaya devam eden bir mekanizma da yok.
+
+51. **"ÖNCE GÖÇ, SONRA KOD" SIRASI YALNIZCA GÖÇ GERİYE
+    UYUMLUYSA GÜVENLİDİR.**
+
+    Eski kodun yeni şemayla çalıştığı bir pencere **her göçte**
+    vardır — göç uygulanır, yayın henüz yapılmamıştır.
+
+    **İndeks tanımı değiştiren göçlerde bu pencere zararsızdır:**
+    eski kod indeksin şeklini umursamaz, aynı sorguları çalıştırır.
+
+    **Sütun veya tablo ekleyen/kaldıran göçlerde tehlikelidir** ve
+    her seferinde **AYRICA** değerlendirilir; varsayılmaz.
+
+    KURULUM/1 yalnız indeks değiştirdiği için güvenliydi. **ÖP/1a
+    tablo ve sütun ekleyecek** — orada aynı sıra otomatik olarak
+    geçerli sayılmayacak.
+
+## 5d. KURULUM/1 — DEPLOY SONRASI DOĞRULAMA (GM listesi)
+
+Bu paketten sonra canlıda **gözle** doğrulanacak:
+
+1. **Bir departmanı sil, aynı kodla yenisini aç → GEÇMELİ.**
+   (Paketten önce bu mümkün değildi: silinmiş kaydın kodu rehin
+   kalıyordu.)
+2. **İki aktif departman aynı kodu alamamalı → TEMİZ HATA.**
+   (Kısıtın gevşemediğinin kanıtı. Bu adım atlanırsa "süzgeç
+   ekledik" diye benzersizliği tümden kaldırmış olmak mümkün.)
+
+Aynı ikisi pozisyon, vardiya tanımı, doküman kategorisi, stok
+kategorisi/özniteliği ve depo hiyerarşisi (bölge/raf/seviye) için
+de geçerli.
+
+**DEĞİŞMEMESİ GEREKENLER** — bunlar hâlâ reddetmeli: muhasebe
+hesabı, proje, stok kalemi, depo, şirket, kasa, şube, cari,
+mühendislik pozisyonu kodları silinse bile yeniden
+kullanılamamalı.
 
 ## 5a. CANLIDA YANLIŞ ÜÇ ÇEK KAYDI — VERİ BOZUK DEĞİL, GİRİŞ YANLIŞ
 

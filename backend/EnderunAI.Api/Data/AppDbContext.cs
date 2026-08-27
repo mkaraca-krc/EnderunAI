@@ -3368,7 +3368,8 @@ public sealed class AppDbContext(
         {
             entity.ToTable("warehouse_zones");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique();
+            entity.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
             entity.HasOne(x => x.Warehouse)
@@ -3382,7 +3383,8 @@ public sealed class AppDbContext(
         {
             entity.ToTable("warehouse_shelves");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.WarehouseZoneId, x.Code }).IsUnique();
+            entity.HasIndex(x => new { x.WarehouseZoneId, x.Code }).IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
             entity.HasOne(x => x.WarehouseZone)
                 .WithMany(x => x.Shelves)
@@ -3395,7 +3397,8 @@ public sealed class AppDbContext(
         {
             entity.ToTable("warehouse_shelf_levels");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.WarehouseShelfId, x.Code }).IsUnique();
+            entity.HasIndex(x => new { x.WarehouseShelfId, x.Code }).IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
             entity.HasOne(x => x.WarehouseShelf)
                 .WithMany(x => x.Levels)
@@ -3438,7 +3441,8 @@ public sealed class AppDbContext(
             entity.ToTable("inventory_categories");
             entity.HasKey(x => x.Id);
             // Kod SİSTEM GENELİNDE tekil: kategori şirkete bağlı değil.
-            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.Code).IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.Property(x => x.Code).HasMaxLength(60).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
             entity.HasQueryFilter(x => !x.IsDeleted);
@@ -3461,7 +3465,8 @@ public sealed class AppDbContext(
         {
             entity.ToTable("inventory_attributes");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.InventoryCategoryId, x.Code }).IsUnique();
+            entity.HasIndex(x => new { x.InventoryCategoryId, x.Code }).IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.Property(x => x.Code).HasMaxLength(60).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
             entity.HasOne(x => x.InventoryCategory)
@@ -4117,7 +4122,8 @@ public sealed class AppDbContext(
         {
             entity.ToTable("document_categories");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(500);
@@ -5495,7 +5501,8 @@ public sealed class AppDbContext(
         {
             entity.ToTable("hr_shift_definitions");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
             entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.Property(x => x.BreakHours).HasPrecision(8, 2);
