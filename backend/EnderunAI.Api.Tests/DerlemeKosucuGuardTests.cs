@@ -159,13 +159,48 @@ public sealed class DerlemeKosucuGuardTests
 
         var komutlar = KomutMetni(File.ReadAllText(yol));
 
+        /*
+         * TEK KELİME DEĞİL, KOMUT AİLESİ ARANIYOR (Kural 31).
+         *
+         * İlk yazımda yalnız `dotnet test` arıyordu ve bu yüzden
+         * `dotnet publish`in koşucuyu atladığını KAÇIRDI: yayının EN
+         * AĞIR derlemesi tavansız, tek-örnek kapısız koşuyordu.
+         * Nöbetçi, koruduğu şeyin bir örneğini değil TAMAMINI
+         * kapsamalı.
+         *
+         * `build-server shutdown` bir derleme değil, temizlik
+         * çağrısıdır — koşucudan geçmesi anlamsız olurdu.
+         */
+        var derlemeKomutlari = new[]
+        {
+            "dotnet test", "dotnet build", "dotnet publish",
+            "dotnet pack", "dotnet msbuild"
+        };
+
+        /*
+         * METİN İÇİNDEKİ KOMUT, KOMUT DEĞİLDİR (Kural 31, ikinci kez).
+         *
+         * İlk hâli `fail "dotnet publish başarısız oldu."` satırını
+         * ihlal saydı — o bir HATA MESAJI, bir çağrı değil. Nöbetçi
+         * yanlış alarm verdiğinde susturulur, sonra gerçek alarmı da
+         * kaçırırsınız (Kural 42).
+         *
+         * Çift tırnaklı metinler ATILARAK aranıyor. Muafiyet kontrolü
+         * ise HAM satırda yapılıyor: koşucunun yolu
+         * `"${REPO_ROOT}/scripts/derleme-kos.sh"` tırnak içindedir ve
+         * temizlenmiş satırda kaybolurdu — muafiyeti temizlenmiş
+         * satırda arasaydım gerçek çağrıyı ihlal sayardım.
+         */
+        static string TirnakliMetinleriAt(string satir) =>
+            System.Text.RegularExpressions.Regex.Replace(satir, "\"[^\"]*\"", "\"\"");
+
         var dogrudanCagrilar = komutlar.Split('\n')
-            .Where(x => x.Contains("dotnet test"))
+            .Where(x => derlemeKomutlari.Any(k => TirnakliMetinleriAt(x).Contains(k)))
             .Where(x => !x.Contains("derleme-kos.sh"))
             .ToArray();
 
         Assert.True(dogrudanCagrilar.Length == 0,
-            "Koşucuyu atlayan `dotnet test` çağrısı: " +
+            "Koşucuyu atlayan derleme çağrısı: " +
             string.Join(" | ", dogrudanCagrilar));
     }
 

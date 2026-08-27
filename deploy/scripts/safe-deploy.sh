@@ -400,7 +400,19 @@ backup_current_release() {
 
 publish_backend() {
     log "INFO" "Backend publish ediliyor: ${BACKEND_PUBLISH_DIR}"
-    if ! dotnet publish "$BACKEND_DIR" -c Release -o "$BACKEND_PUBLISH_DIR" 2>&1 | tee -a "$LOG_FILE"; then
+
+    # KOŞUCU ÜZERİNDEN — publish YAYININ EN AĞIR DERLEMESİDİR.
+    #
+    # 2026-08-27'de fark edildi: test çağrısı koşucuya bağlanmıştı ama
+    # publish DOĞRUDAN çağrılıyordu. Yani yayının Release derlemesi
+    # tavansız, tek-örnek kapısız ve kalıcı derleyici sunucusu açık
+    # koşuyordu — korumanın en çok gerektiği adım korumasızdı.
+    #
+    # Nöbetçi test de yalnız `dotnet test` arıyordu; artık `dotnet`
+    # ile başlayan HER derleme çağrısını arıyor (Kural 31: komuta bak,
+    # tek bir kelimeye değil).
+    if ! "${REPO_ROOT}/scripts/derleme-kos.sh" \
+            dotnet publish "$BACKEND_DIR" -c Release -o "$BACKEND_PUBLISH_DIR" 2>&1 | tee -a "$LOG_FILE"; then
         fail "dotnet publish başarısız oldu."
     fi
 }
