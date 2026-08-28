@@ -237,6 +237,22 @@ public static class PermissionCatalog
         // tıklamak yetiyor, kötü niyet gerekmiyor.
         public const string ChequeVoidClosed = "cheque.void-closed";
 
+        // ── HAFTALIK ÖDEME PLANI (ÖP/1a) ──────────────────────────
+
+        // PLANI HAZIRLAMA: satırları kurar, tutar önerir, onaya sunar.
+        // Onaylayamaz — hazırlayan ile onaylayan aynı kişi olamaz (K4).
+        public const string PaymentPlanPrepare = "payment.plan.prepare";
+
+        // PLANI ONAYLAMA: YALNIZ GENEL MÜDÜR. Admin AÇIKÇA HARİÇ.
+        //
+        // Bu, sistemdeki en dar anahtar. Gerekçe: onay, paranın kime
+        // ve ne kadar çıkacağına dair karardır; "tam sistem yetkisi"
+        // teknik bir roldür, ödeme kararı vermez.
+        //
+        // RoleCatalog'da hassas sayılıyor, yani otomatik dağıtıma
+        // GİRMİYOR ve yalnız Genel Müdür'e AÇIKÇA yazılıyor.
+        public const string PaymentPlanApprove = "payment.plan.approve";
+
         // Cari
         public const string CurrentAccountsView = "current-accounts.view";
         public const string CurrentAccountsCreate = "current-accounts.create";
@@ -455,6 +471,11 @@ public static class PermissionCatalog
             "Portföydeki/yeni verilen çekin alanlarını düzeltir; tutar, para birimi ya da cari değişirse muhasebe fişi ters kayıtla kapatılıp yenisi kesilir."),
         new(Keys.ChequeVoidClosed, "Finans", "Çek — kapanmış iptal",
             "Tahsil edilmiş, ödenmiş, bankada/faktoringde, karşılıksız ya da iade alınmış çeki iptal eder. Gerçekleşmiş para hareketini storno ile geri alır ve çek numarasını yeniden kullanıma açar."),
+
+        new(Keys.PaymentPlanPrepare, "Finans", "Ödeme planı — hazırlama",
+            "Haftalık ödeme planının satırlarını kurar, tutar önerir ve planı onaya sunar. ONAYLAYAMAZ: hazırlayan ile onaylayan aynı kişi olamaz."),
+        new(Keys.PaymentPlanApprove, "Finans", "Ödeme planı — onaylama",
+            "Haftalık ödeme planını SATIR SATIR onaylar; kimin parasının ne kadar ve hangi yöntemle çıkacağına karar verir. YALNIZ GENEL MÜDÜR — Admin dahil hiçbir role otomatik verilmez."),
 
         new(Keys.CurrentAccountsView, "Cari", "Cari kartları görüntüleme", "Cari hesap kartlarını ve hareketlerini görüntüler."),
         new(Keys.CurrentAccountsCreate, "Cari", "Cari kart oluşturma", "Yeni cari hesap kartı oluşturur."),

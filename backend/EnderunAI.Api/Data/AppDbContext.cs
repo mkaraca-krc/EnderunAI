@@ -80,6 +80,16 @@ public sealed class AppDbContext(
         Set<Models.HumanResources.PersonnelDocument>();
     public DbSet<PayrollTaxBracket> PayrollTaxBrackets => Set<PayrollTaxBracket>();
     public DbSet<Cheque> Cheques => Set<Cheque>();
+
+    // ── HAFTALIK ÖDEME PLANI (ÖP/1a) ──────────────────────────────
+    public DbSet<Models.Finance.OdemePlani> OdemePlanlari
+        => Set<Models.Finance.OdemePlani>();
+    public DbSet<Models.Finance.OdemePlaniSatiri> OdemePlaniSatirlari
+        => Set<Models.Finance.OdemePlaniSatiri>();
+    public DbSet<Models.Finance.OdemePlaniHesapBakiyesi> OdemePlaniHesapBakiyeleri
+        => Set<Models.Finance.OdemePlaniHesapBakiyesi>();
+    public DbSet<Models.Finance.PlanDisiOdeme> PlanDisiOdemeler
+        => Set<Models.Finance.PlanDisiOdeme>();
     public DbSet<ChequeMovement> ChequeMovements => Set<ChequeMovement>();
     public DbSet<ChequeAllocation> ChequeAllocations => Set<ChequeAllocation>();
     public DbSet<TaxPayment> TaxPayments => Set<TaxPayment>();
@@ -3364,6 +3374,95 @@ public sealed class AppDbContext(
 
     private static void ConfigureInventoryItems(ModelBuilder modelBuilder)
     {
+        // ═══════════════════════════════════════════════════════
+        // HAFTALIK ÖDEME PLANI (ÖP/1a)
+        // ═══════════════════════════════════════════════════════
+
+        modelBuilder.Entity<Models.Finance.OdemePlani>(entity =>
+        {
+            entity.ToTable("odeme_planlari");
+
+            /*
+             * HAFTA BAŞINA TEK PLAN — SÜZGEÇLİ (Kural 49).
+             *
+             * Süzgeçsiz olsaydı silinmiş bir planın haftası REHİN
+             * kalırdı: yanlış kurulan bir plan silinip aynı hafta
+             * için yenisi açılamazdı. Hafta, kullanıcının seçtiği
+             * bir anahtar ve eşleştirme anahtarı DEĞİL — hiçbir
+             * rapor plana haftasıyla bağlanmıyor, hepsi Id üzerinden.
+             */
+            entity.HasIndex(x => new { x.CompanyId, x.HaftaBaslangici })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.HaftaBaslangici).HasColumnType("date");
+            entity.Property(x => x.OdemeGunu).HasColumnType("date");
+            entity.Property(x => x.Durum).HasConversion<int>();
+
+            entity.HasMany(x => x.Satirlar)
+                .WithOne(x => x.OdemePlani)
+                .HasForeignKey(x => x.OdemePlaniId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.HesapBakiyeleri)
+                .WithOne(x => x.OdemePlani)
+                .HasForeignKey(x => x.OdemePlaniId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Models.Finance.OdemePlaniSatiri>(entity =>
+        {
+            entity.ToTable("odeme_plani_satirlari");
+
+            entity.HasIndex(x => new { x.OdemePlaniId, x.Oncelik });
+            entity.HasIndex(x => x.CurrentAccountId);
+
+            entity.Property(x => x.OnerilenTutar).HasPrecision(18, 2);
+            entity.Property(x => x.OnaylananTutar).HasPrecision(18, 2);
+            entity.Property(x => x.OnayliTutar).HasPrecision(18, 2);
+            entity.Property(x => x.OdenenTutar).HasPrecision(18, 2);
+
+            entity.Property(x => x.CekVadesi).HasColumnType("date");
+            entity.Property(x => x.OnayliCekVadesi).HasColumnType("date");
+
+            entity.Property(x => x.Yontem).HasConversion<int>();
+            entity.Property(x => x.OnayliYontem).HasConversion<int>();
+            entity.Property(x => x.Karar).HasConversion<int>();
+            entity.Property(x => x.OdemeDurumu).HasConversion<int>();
+            entity.Property(x => x.KapanisSebebi).HasConversion<int>();
+
+            entity.Property(x => x.Aciklama).HasMaxLength(1000);
+            entity.Property(x => x.KapanisAciklamasi).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<Models.Finance.OdemePlaniHesapBakiyesi>(entity =>
+        {
+            entity.ToTable("odeme_plani_hesap_bakiyeleri");
+
+            // Plan başına hesap başına TEK bakiye satırı; yenileme
+            // aynı satırı günceller, ikincisini eklemez.
+            entity.HasIndex(x => new { x.OdemePlaniId, x.CashAccountId })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
+
+            entity.Property(x => x.GosterilenBakiye).HasPrecision(18, 2);
+            entity.Property(x => x.Kaynak).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<Models.Finance.PlanDisiOdeme>(entity =>
+        {
+            entity.ToTable("plan_disi_odemeler");
+
+            entity.HasIndex(x => new { x.CompanyId, x.OdemeTarihi });
+
+            entity.Property(x => x.Tutar).HasPrecision(18, 2);
+            entity.Property(x => x.OdemeTarihi).HasColumnType("date");
+            entity.Property(x => x.ListelendigiHafta).HasColumnType("date");
+
+            // SEBEP ZORUNLU: gerekçesiz acil ödeme denetlenemez (K5).
+            entity.Property(x => x.Sebep).HasMaxLength(1000).IsRequired();
+        });
+
         modelBuilder.Entity<WarehouseZone>(entity =>
         {
             entity.ToTable("warehouse_zones");

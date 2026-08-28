@@ -50,6 +50,12 @@ builder.Services.AddDbContext<HrDbContext>(options =>
     options.UseNpgsql(connectionString);
 });
 
+builder.Services.AddScoped<EnderunAI.Api.Services.Finance.IOdemeSatirKilidi,
+    EnderunAI.Api.Services.Finance.OdemeSatirKilidiService>();
+builder.Services.AddScoped<EnderunAI.Api.Services.Finance.OdemePlaniService>();
+builder.Services.AddHostedService<
+    EnderunAI.Api.Services.Finance.HaftalikOdemePlaniBackgroundService>();
+
 builder.Services.AddSingleton<IUploadService, UploadService>();
 // Aktif e-posta kanalı. Sunucu sağlayıcısı 465'i açtığı için varsayılan
 // SMTP; Brevo kodu yerinde duruyor ve EMAIL_PROVIDER=brevo ile tek satır

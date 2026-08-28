@@ -34,11 +34,23 @@ public static class RoleCatalog
     /// Buradaki anahtarlar `K`'ye girmez; isteyen rol onları kendi
     /// listesinde tek tek sayar.
     /// </summary>
+    /// <summary>
+    /// KASITLI VERİLEN ANAHTARLAR — otomatik dağıtıma girmezler.
+    ///
+    /// TEK KAVRAM: bu küme "bu anahtar hiçbir role kendiliğinden
+    /// geçmez" demektir. Hangi rolün hangisini alacağı AŞAĞIDA,
+    /// rolün kendi listesinde AÇIKÇA yazılır. İkinci bir muafiyet
+    /// listesi açılmaz.
+    /// </summary>
     private static readonly HashSet<string> SensitiveKeys =
         new(StringComparer.OrdinalIgnoreCase)
         {
             PermissionCatalog.Keys.ChequeEdit,
-            PermissionCatalog.Keys.ChequeVoidClosed
+            PermissionCatalog.Keys.ChequeVoidClosed,
+
+            // ÖDEME PLANI ONAYI — Admin'e de GİTMEZ (ÖP/1a · İ2).
+            // Aşağıda yalnız Genel Müdür'ün listesinde açıkça var.
+            PermissionCatalog.Keys.PaymentPlanApprove
         };
 
     private static readonly string[] K = typeof(PermissionCatalog.Keys)
@@ -48,20 +60,42 @@ public static class RoleCatalog
         .ToArray();
 
     /// <summary>
-    /// Hassas anahtarları da içeren tam küme — yalnız Admin ve Genel
-    /// Müdür için, ve AÇIKÇA yazılarak.
+    /// ADMIN'İN KÜMESİ — hassas anahtarlar TEK TEK yazılır.
+    ///
+    /// Eskiden `[.. K, .. SensitiveKeys]` idi: hassas kümeye eklenen
+    /// HER anahtar Admin'e de sessizce geçiyordu. `payment.plan.approve`
+    /// bunu kabul edilemez kıldı — ödeme onayı teknik bir rolün işi
+    /// değil (İ2).
+    ///
+    /// Artık her rol, aldığı hassas anahtarı KENDİ listesinde
+    /// gösteriyor. Yeni hassas anahtar eklendiğinde hiçbir role
+    /// kendiliğinden gitmez; unutulursa kimse alamaz — sessiz
+    /// genişlemenin tersi, ve doğru taraf budur.
     /// </summary>
-    private static readonly string[] KWithSensitive =
-        [.. K, .. SensitiveKeys];
+    private static readonly string[] AdminKeys =
+    [
+        .. K,
+        PermissionCatalog.Keys.ChequeEdit,
+        PermissionCatalog.Keys.ChequeVoidClosed
+    ];
+
+    /// <summary>Genel Müdür — Admin'in kümesi ARTI ödeme planı onayı.</summary>
+    private static readonly string[] GenelMudurKeys =
+    [
+        .. AdminKeys,
+        PermissionCatalog.Keys.PaymentPlanApprove
+    ];
 
     public static readonly IReadOnlyList<RoleSeedDefinition> Roles =
     [
-        new("Admin", "Tam sistem yetkisi.", KWithSensitive),
+        new("Admin", "Tam sistem yetkisi.", AdminKeys),
 
-        new("Genel Müdür", "Tüm iş modülleri, kullanıcı yönetimi ve ek ödeme dahil tam yetki.", KWithSensitive),
+        new("Genel Müdür", "Tüm iş modülleri, kullanıcı yönetimi, ek ödeme ve ÖDEME PLANI ONAYI dahil tam yetki.", GenelMudurKeys),
 
         new("Finans Sorumlusu", "Finans, kasa, çek, cari ve muhasebe tam yetki; raporlar.",
         [
+            // ÖDEME PLANI HAZIRLAMA (ÖP/1a · İ1) — onaylama YOK.
+            PermissionCatalog.Keys.PaymentPlanPrepare,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.FinanceView, PermissionCatalog.Keys.FinanceCreate, PermissionCatalog.Keys.FinanceEdit,
@@ -161,6 +195,8 @@ public static class RoleCatalog
 
         new("Ön Muhasebe", "Fatura/cari tam yetki, muhasebe fiş girişi, satın alma görüntüleme.",
         [
+            // ÖDEME PLANI HAZIRLAMA (ÖP/1a · İ1) — onaylama YOK.
+            PermissionCatalog.Keys.PaymentPlanPrepare,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView, PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.ReportsView,
             PermissionCatalog.Keys.CurrentAccountsView, PermissionCatalog.Keys.CurrentAccountsCreate,

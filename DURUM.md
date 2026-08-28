@@ -1508,6 +1508,151 @@ dışarıda** — fiş girer, hesap planını toplu değiştiremez.
 
 Bu paket çizgideki üç satırı da kapattı. Sınıf yeniden **sıfırda**.
 
+## ÖP/1a — HAFTALIK ÖDEME PLANI (2026-08-27)
+
+### NEDEN CARİ BAZLI
+
+On bir kontrolün hiçbiri fatura ayrıntısına bağlı değil. Satırda
+`SupplierInvoiceId` alanı AÇIK ama ZORUNLU DEĞİL (Y3): ileride fatura
+bazlı takip gelirse satır faturaya bağlanır, **kurallar değişmez**.
+
+**SİSTEM PLANI KENDİ ÖNERMEZ.** Listeyi muhasebeci kurar. Tek istisna
+gelecek hafta vadesi dolan çekler — çekte vade verisi sağlam.
+
+### K2 — PAKETİN OMURGASI
+
+Onaylandığında satırın **onaylanan değerleri ayrıca saklanıyor**:
+cari, tutar, yöntem, çek vadesi, **öncelik**, çıkış hesabı. Ödeme
+anında güncel değerler bunlarla karşılaştırılıyor; fark varsa ödeme
+**yapılmıyor** ve satır yeniden onaya dönüyor.
+
+**Onaydan sonra tutarı değiştirilebilen bir sistemde onay hiçbir şey
+ifade etmez.**
+
+ÖNCELİK NEDEN DAHİL (K7): para kısıtlıyken sırayı değiştirmek, kimin
+parasını alacağını değiştirmektir — biçim değil, **ödeme kararıdır**.
+
+ÇEK VADESİ **GÜN BAZINDA** karşılaştırılıyor: aynı günün farklı saati
+karar değişikliği değildir. Saat farkı yüzünden onay düşürmek kuralı
+gürültüye boğar ve susturulmasına yol açardı (Kural 42).
+
+### B1/B2 — PLAN GÖSTERDİĞİ BAKİYEYİ SAKLAR
+
+**ÖLÇÜLDÜ: banka bakiyesi bu sistemde SAKLANMIYOR**, hareketlerden
+anlık türetiliyor (`OpeningBalance + girişler − çıkışlar`,
+`CashAccountsController.cs:95`). Dolayısıyla "onay anındaki bakiye"
+diye bir kayıt yoktu.
+
+Onay bir sayıya bakılarak verilen karardır; yeniden kurulamayan bir
+onay **denetlenebilir değildir**. Plan artık gösterdiği bakiyeyi
+hesap bazında saklıyor. Bu, K9'un iki hâlini tek mekanizmada
+birleştiriyor: bakiye ister hesaplansın ister elle girilsin, plan
+GÖSTERİLENİ saklar.
+
+Yeniden hesaplama **açık istekle** oluyor (B2) — ekran her açılışta
+bütün hareketleri taramıyor.
+
+### İ2 — ONAY ANAHTARI ADMIN'E DE GİTMİYOR
+
+`RoleCatalog` izinleri **yansımayla** dağıtıyor; kataloğa eklenen her
+anahtar rollere sessizce geçiyordu. Hassas kümeye almak da yetmiyordu:
+eski `KWithSensitive = [.. K, .. SensitiveKeys]` hassas anahtarları
+**Admin'e DE** veriyordu.
+
+Mekanizma değişti — **tek kavram korunarak**: toptan küme kaldırıldı,
+her rol aldığı hassas anahtarı KENDİ listesinde gösteriyor.
+
+```
+AdminKeys      = [.. K, ChequeEdit, ChequeVoidClosed]
+GenelMudurKeys = [.. AdminKeys, PaymentPlanApprove]
+```
+
+Yeni hassas anahtar artık hiçbir role kendiliğinden gitmiyor;
+unutulursa kimse alamaz — sessiz genişlemenin tersi.
+
+**K4 KAPIDA DEĞİL KODDA:** "hazırlayan kendi satırını onaylayamaz"
+izinle çözülemez, çünkü GM hem hazırlayabilir hem onaylayabilir.
+Engellenen şey AYNI SATIRDA ikisini birden yapmak. **Satırı son
+değiştiren de hazırlayan sayılıyor** — yoksa kural "hazırla,
+başkasına onaylat, sonra değiştir" ile atlatılırdı.
+
+### D1 — HAFTALIK TETİKLEYİCİ ELLE DEĞİL
+
+**ÖLÇÜLDÜ:** `DailySummaryBackgroundService` deseni zaten vardı
+(her gün 04:00 UTC), yalnız haftalık varyantı yazılmamıştı. Pazartesi
+05:00 UTC'de çalışıyor.
+
+`SonrakiTuraKalan` **saf ve `public`**: zamanı içeriden okuyan bir
+hesap ancak pazartesi sabahı sınanabilirdi — yani hiç sınanmazdı.
+
+**OTOMATİK TASLAKTA `HazirlayanUserId` BOŞ.** Bir "sistem kullanıcısı"
+uydurmak, K4'ün hazırlayan tarafını bir hayalete bağlamak ve kuralı
+fiilen boşaltmak olurdu (o hayalet kimse olmadığı için herkes
+onaylayabilirdi). Muhasebeci ilk dokunuşta sahipleniyor.
+
+### ÖDEME KAPILARININ SIRASI (Kural 43)
+
+`SatirOdemeKaydetAsync` üç kapıyı şu sırayla geçiriyor:
+**K8 (yaşlanma) → K2 (değişim) → K3 (sınır)**.
+
+İlk ikisi **kalıcı ret** — satır yeniden onaya döner. K3 **geçici** —
+daha az tutar girilip yeniden denenebilir. Kalıcı ret önce gelmezse
+kullanıcı tutarı düşüre düşüre aynı duvara çarpar.
+
+K8 ve K2 yalnız reddetmiyor, **satırı da geri düşürüyor**: sadece
+hata fırlatmak satırı "onaylı" gösterirdi.
+
+### SONDALAR — BEŞİ DE ÖNGÖRÜYLE BİREBİR
+
+Her sondanın beklentisi **koşturulmadan önce** yazıldı.
+
+| Sonda | Öngörü | Sonuç | Taşma |
+|---|---|---|---|
+| S1 K2 karşılaştırması | 9–10, hepsi K2 | **9** | yok |
+| S2 K3 sınırı | 3 | **3** | yok |
+| S3 K4 kontrolü | 3, adlarıyla | **3** birebir | yok |
+| S4 K8 yaşlanması | 3 | **3** | yok |
+| S5 İ2 Admin'e açık | 2, adlarıyla | **2** birebir | yok |
+
+**Her sabotaj yalnız kendi kuralını kırdı.** Bu, altı kararı ayrı saf
+fonksiyonlara bölmenin ölçülebilir karşılığı — ÇEK/2'de kilit iki
+yerde kurulduğu için sonda GEÇERSİZ sayılmıştı (Kural 45).
+
+### GM ⊇ ADMIN — YAPISAL BORÇ
+
+`GenelMudurKeys = [.. AdminKeys, PaymentPlanApprove]` yazıldı, yani
+**GM'nin yetkileri Admin'in üst kümesi.** Bugün doğru: GM her şeyi
+yapabilir, artı ödeme onayı.
+
+**BORÇ ŞU:** ileride Admin'e verilip GM'ye verilmemesi gereken bir
+teknik anahtar çıkarsa (sunucu bakımı, günlük temizliği gibi), bu
+kalıp onu da GM'ye taşır. O gün iki liste **birbirinden bağımsız**
+yazılmalı; bugün yapılmadı çünkü ortada öyle bir anahtar yok ve
+olmayan bir ihtiyaç için ayrım açmak, ayrımın neden var olduğunu
+unutturur.
+
+### HAFTALIK PLAN TEKLİĞİ — İŞ KURALI, TEKNİK KISIT DEĞİL
+
+`(CompanyId, HaftaBaslangici)` kısmi benzersiz indeksi "bir haftaya
+bir plan" diyor. Bu **teknik bir zorunluluk değil, iş kuralı**:
+veritabanı iki plan taşıyabilirdi.
+
+Kural şu düşünceden geliyor: aynı hafta için iki plan varsa "bu
+haftanın bütçesi ne" sorusunun iki cevabı olur ve K6'nın iki sayısı
+anlamını yitirir.
+
+**İKİNCİ BİR KOŞU GEREKİYORSA YOLU K5'TİR** — plan dışı ödeme.
+Görünür, sebebi zorunlu, bir sonraki haftanın planının başında
+listeleniyor. Yani ihtiyaç karşılanıyor; karşılanma biçimi
+denetlenebilir olanı.
+
+### İ3 — BİLİNÇLİ EKSİK
+
+**Vekâlet/yedek onaycı YOK.** GM yoksa plan bekler. İlk turda
+bilinçli olarak yapılmadı; ikinci bir onaycı tanımlamak, "yalnız GM
+onaylar" kuralının tek istisnasını açmak demektir ve o istisnanın
+kimin elinde olacağı ayrı bir karardır.
+
 ## ÇEK/2 — DÜZENLENEBİLİRLİK ALAN SINIFINA GÖRE (2026-08-27)
 
 ### SORUN
@@ -2182,7 +2327,7 @@ Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyo
 
 **2026-08-25'te 13 maddenin 9'u karara bağlandı** (aşağıda "KAPANANLAR").
 Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
-**8 madde** (6–8. maddeler 2026-08-26/27'de eklendi):
+**10 madde** (6–10. maddeler 2026-08-26/27'de eklendi):
 
 1. **KVKK aydınlatma metni** | Kural (e): hukuk metni yazılmıyor |
    Metin Mehmet'te. **Bana düşen: ekranda yerini açmak** —
@@ -2311,6 +2456,59 @@ Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
 
    **DÖRT ÖKSÜZ TABLO ölçümü YAPILDI** — bkz. §5c (üçü boş, biri
    tek satır, yolu kaynakta bulunamadı).
+
+9. **SQUASH/1 — ERTELENDİ (İPTAL DEĞİL)** |
+   Gerekçesi ortadan kalktı, bedeli fazla | **Ölçüldü
+   (2026-08-27), yapılmadı.**
+
+   Squash'ın gerekçesi derleme belleğiydi; o sorun makine
+   sertleştirmesiyle çözüldü (takas, `OOMScoreAdjust`, bellek
+   tavanı, `UseSharedCompilation=false`, tek-örnek kapısı) ve son
+   temiz derleme sorunsuz geçti. Squash artık **onarım değil
+   iyileştirme**, ve bedeli 116 ham SQL nesnesini elle taşımak.
+
+   **ÖLÇÜMÜN ÜRETTİĞİ ASIL BULGU — EF MODELİ, ŞEMANIN BÜYÜK BİR
+   KISMININ KAYNAĞI DEĞİLDİR.**
+
+   | | |
+   |---|---|
+   | Modelden üretilen şema betiğinin indeksi | **491** |
+   | Canlıdaki indeks (PK hariç) | **594** |
+   | **Canlıda var, modelde YOK** | **116** |
+
+   Bu 116 nesne yalnızca göçlerin **ham SQL bloklarında** yaşıyor;
+   model ve anlık görüntü onlardan habersiz. Aralarında:
+   `IX_cheques_aktif_benzersizlik` (çek mükerrerlik koruması),
+   KURULUM/1'de kurulan üç süzgeçli benzersizlik,
+   `IX_hr_salary_definitions_Personnel_Start`,
+   `IX_sales_invoices_..._OfficialInvoiceNumber`.
+
+   Modelden üretilecek bir temel göç bu 116 korumayı **sessizce
+   düşürür**. Z1 kabul şartı bunu yakalar — süreç doğru kuruldu.
+
+   **SIRA:** önce ham SQL yüzeyini küçült (**SEMA-KAYNAK/1**),
+   sonra kalan için temel göçü **CANLI ŞEMADAN** üret.
+   **Modelden üretip 116 nesneyi elle eklemek YAPILMAYACAK** —
+   elle aktarım tam da sessiz eksik üreten yöntemdir.
+
+10. **SEMA-KAYNAK/1 — HAM SQL YÜZEYİNİ KÜÇÜLT** | Öncelik düşük |
+   **Ölçüldü, yapılmadı.**
+
+   116 nesnenin türe göre dağılımı ölçüldü:
+
+   | Tür | Adet | Modele taşınabilir mi |
+   |---|---|---|
+   | Düz indeks | **100** | **Evet** — `HasIndex` |
+   | Kısmi (`WHERE`) | **11** | **Evet** — `HasFilter` |
+   | İfade/fonksiyon tabanlı | 2 | Hayır |
+   | `gin`/`gist` (trigram) | 3 | Hayır |
+
+   **116'nın 111'i taşınabilir.** Kalan 5 (artı `enderun_fold`
+   fonksiyonu, `pg_trgm` uzantısı ve üretilmiş sütunlar) ham SQL
+   kalır ve bu **bilinçli bir istisnadır** — DURUM.md'de
+   listelenecek.
+
+   Bu paket bittiğinde squash ucuzlar.
 
 ### ERTELENENLER (kapanmadı, sıraya girmedi)
 
@@ -5137,6 +5335,79 @@ de geçerli.
 hesabı, proje, stok kalemi, depo, şirket, kasa, şube, cari,
 mühendislik pozisyonu kodları silinse bile yeniden
 kullanılamamalı.
+
+## 5e. ÖDEME PLANI, NAKİT AKIŞI PROJEKSİYONUNA BAĞLANMADI (2026-08-27)
+
+**ÖLÇÜLDÜ, YENİDEN KULLANILMADI — ve bu bilinçli.**
+
+`CashFlowProjectionService`'i ödeme planına bağlamak cazipti.
+Tanımları karşılaştırıldı, **örtüşmüyorlar**:
+
+| | Nakit akışı projeksiyonu | Ödeme planı |
+|---|---|---|
+| Eksen | **tarih** (gün gün bakiye) | **cari** (kime ne kadar) |
+| Kapsam | çek + vergi + hakediş + bordro + düzenli gider | tedarikçi borçları |
+| Kesinlik | kesin ↔ tahmini karışık | tahminle plan yapılmaz |
+| **Elden ödeme** | **DAHİL, maskesiz tam tutar** | dahil değil |
+| Cevapladığı soru | "hangi gün açığa düşeriz" | "bu hafta kime ödeyeceğiz" |
+
+**EN KESKİN AYRIM BİR YETKİ MESELESİ.** Projeksiyon elden
+ödemeleri `LoadEffectiveExtraPaymentsAsync` ile **maskesiz**
+topluyor; kendi yorumu gerekçeyi yazıyor: *"Yetki KAPIDA
+çözülüyor (`cashflow.view`), tablo içeride tek ve eksiksiz."*
+
+Ödeme planı **farklı bir kapıdan** ve **daha geniş bir kitleye**
+açılıyor. Servisi bağlamak, elden ödeme tutarlarını o kitleye
+sızdırırdı — maaş verisinin izleyici kitlesini genişletmek,
+karar gerektiren bir iştir, yan etki olarak yapılmaz.
+
+**TEK SERVİSİN İKİ ANLAM TAŞIMASI, İKİ AYRI SERVİSTEN KÖTÜDÜR.**
+Aynı ilkenin daha önceki uygulaması: faktoringdeki çek, çek
+defterinde AÇIK ama nakit akışında beklenen tahsilat DEĞİL —
+iki sayı farklı soruya cevap veriyor ve fark kasıtlıdır
+(Kural 35).
+
+53. **K8 SINIRI: 21 GÜN DOLDUĞUNDA ONAY DÜŞER.**
+
+    Kural "üç haftayı aşan onay düşer" diyordu; sınır **21 gün DAHİL
+    düşer** olarak uygulandı (`< 3*7`). Yani 20 gün geçerli, 21 gün
+    geçersiz.
+
+    Alternatif okuma ("21 hâlâ geçerli, 22 düşer") mümkündü;
+    belirsizlik testte açıkça sabitlendi
+    (`K8_UcHaftayiAsanOnayDuser`, `[InlineData(21, false)]`), böylece
+    karar değiştirilmek istenirse tek satır olur.
+
+54. **SAF KARAR SONDALARI KURALLARI KANITLAR, KURALLARIN BİRLİKTE
+    UYGULANIŞINI KANITLAMAZ.**
+
+    **YARIŞLAR TUTKALDA YAŞAR:** okuma ile yazma arasındaki aralıkta,
+    işlem sınırlarında, kilitsiz güncellemelerde. Bir pakette saf
+    kural sondaları yeşilse, ayrıca **BİRLEŞTİRME SONDASI** gerekir.
+
+    ÖP/1a'da K2 ve K3'ün **beş sondası da geçti** (S1–S5, beşi de
+    öngörüyle birebir). Delik `SatirOdemeKaydetAsync` içinde,
+    **kuralların arasındaydı**: okuma ile yazma arasında kilit yoktu,
+    K3 **bayat** `OdenenTutar` üzerinden hesaplıyordu. İki eşzamanlı
+    istek K2'yi "onaylandığı gibi", K3'ü "kendi payına" geçiyor ve
+    toplamda onaylanandan fazla ödeme yazılıyordu.
+
+    **BİRLEŞTİRME SONDASINI KURMAK ÜÇ DENEME ALDI** — ve bu, kuralın
+    asıl ağırlığı:
+
+    | Deneme | Sabotaj altında |
+    |---|---|
+    | İki `Task` sal, "toplam aşmadı" de | **YEŞİL** — yarış penceresi mikrosaniye, iki istek fiilen sırayla koştu |
+    | Dışarıdan kilitle, "bloke oluyor mu" de | **YEŞİL** — PostgreSQL `FOR UPDATE`li satıra `UPDATE`i zaten bloke ediyor; test açık kilidi örtük olandan ayıramadı |
+    | **Bayat okuma**: kilit sahibi tutarı sınıra çekip commit eder | **KIRMIZI** ✓ |
+
+    Ayırt edici soru şuydu: **servis kilidi aldıktan SONRA mı
+    okuyor?** İlk iki test bunu sormuyordu; var olmayan bir korumayı
+    doğruluyor gibi görünüyorlardı.
+
+    Kurallar yalıtılabilir; **aralarındaki aralık yalıtılamaz** ve
+    orada "ölçtüğünü sandığın şey" ile "gerçekte ölçtüğün şey"
+    kolayca ayrışır.
 
 ## 5a. CANLIDA YANLIŞ ÜÇ ÇEK KAYDI — VERİ BOZUK DEĞİL, GİRİŞ YANLIŞ
 

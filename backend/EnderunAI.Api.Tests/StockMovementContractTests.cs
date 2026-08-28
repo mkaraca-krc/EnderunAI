@@ -279,27 +279,90 @@ public sealed class StockMovementContractTests
     }
 
     /// <summary>
-    /// SATIR KİLİDİ TEK YERDEN ALINIR.
+    /// SATIR KİLİDİ YALNIZ ADANMIŞ KİLİT SERVİSLERİNDE ALINIR.
     ///
     /// Zimmet paketinde kilit o akışa özel bir `FOR UPDATE` cümlesiyle
     /// alınmıştı; kilidi bir taraf alıp diğerleri almadığında yarış
     /// aynen sürüyordu. Aynı kararın ikinci bir kopyası çıkarsa
     /// kopyalar zamanla ayrışır (Kural 25).
+    ///
+    /// KURAL GENİŞLETİLDİ (2026-08-27), GEVŞETİLMEDİ. Önceki hâli TEK
+    /// bir dosya adını sabitliyordu: `StokSatirKilidiService.cs`.
+    /// ÖP/1a ödeme satırı için ikinci bir kilit servisi getirdi
+    /// (`OdemeSatirKilidiService`) — FARKLI bir tabloyu kilitliyor ve
+    /// `IStokSatirKilidi` onu kilitleyemez, çünkü o depo+kart
+    /// anahtarıyla çalışıyor.
+    ///
+    /// Yeni kural, eskisinin NİYETİNİ koruyor ve dişlerini artırıyor:
+    ///   (1) `FOR UPDATE` yalnız `*KilidiService.cs` dosyalarında —
+    ///       bir iş akışının içinde elle kilit alınamaz,
+    ///   (2) her kilit servisinde EN FAZLA BİR `FOR UPDATE` — kilit
+    ///       servisi bir torbaya dönüşemez.
+    ///
+    /// İkinci şart öncekinde YOKTU: tek dosya kuralı, o dosyanın
+    /// içinde beş ayrı kilit birikmesini engellemiyordu.
     /// </summary>
     [Fact]
-    public void SatirKilidi_TekYerdenAlinir()
+    public void SatirKilidi_YalnizAdanmisKilitServislerinde()
     {
-        var offenders = SourceFiles()
-            .Where(x => x.Code.Contains("FOR UPDATE"))
+        /*
+         * YORUMLAR AYIKLANIYOR (Kural 31: komuta bak, kelimeye değil).
+         *
+         * İlk yazımda ham metinde sayıyordum ve İKİ kilit servisi de
+         * "birden çok FOR UPDATE" diye kırmızı verdi — çünkü ikisi de
+         * çözümü YORUMDA anlatıyor. Kuralı yazarken kuralın kendi
+         * tuzağına düştüm.
+         */
+        static string KomutMetni(string kod) =>
+            string.Join("\n", kod.Split('\n')
+                .Where(x =>
+                {
+                    var t = x.TrimStart();
+                    return !t.StartsWith("//", StringComparison.Ordinal)
+                        && !t.StartsWith("*", StringComparison.Ordinal)
+                        && !t.StartsWith("/*", StringComparison.Ordinal);
+                }));
+
+        var kilitYazanlar = SourceFiles()
+            .Select(x => (x.Name, Kod: KomutMetni(x.Code)))
+            .Where(x => x.Kod.Contains("FOR UPDATE"))
+            .ToList();
+
+        var akisIcinde = kilitYazanlar
+            .Where(x => !x.Name.EndsWith("KilidiService.cs", StringComparison.Ordinal))
             .Select(x => x.Name)
-            .Where(x => x != "StokSatirKilidiService.cs")
             .ToList();
 
         Assert.True(
-            offenders.Count == 0,
+            akisIcinde.Count == 0,
             "Bu dosyalar kendi FOR UPDATE cümlesini yazıyor: "
-            + string.Join(", ", offenders)
-            + ". Satır kilidi yalnız IStokSatirKilidi üzerinden alınır.");
+            + string.Join(", ", akisIcinde)
+            + ". Satır kilidi yalnız adanmış bir *KilidiService üzerinden alınır.");
+
+        /*
+         * KOMUT SAYILIYOR, KELİME DEĞİL (Kural 31, ikinci kez).
+         *
+         * "FOR UPDATE" geçişlerini saymak yanlıştı: her iki kilit
+         * servisi de HATA MESAJINDA o ifadeyi anıyor
+         * ("...alınamaz: FOR UPDATE yalnız ifade boyunca tutar").
+         * Mesaj metni bir kilit cümlesi DEĞİLDİR.
+         *
+         * Sayılan şey artık kilidi fiilen alan ÇAĞRI:
+         * `ExecuteSqlRawAsync`. Bir kilit servisi tek bir bütünü
+         * kilitler; ikinci bir kilit cümlesi ayrı servise çıkar.
+         */
+        var torbalasanlar = kilitYazanlar
+            .Where(x => System.Text.RegularExpressions.Regex
+                .Matches(x.Kod, @"ExecuteSqlRaw\w*\(").Count > 1)
+            .Select(x => x.Name)
+            .ToList();
+
+        Assert.True(
+            torbalasanlar.Count == 0,
+            "Bu kilit servisleri birden çok FOR UPDATE taşıyor: "
+            + string.Join(", ", torbalasanlar)
+            + ". Her kilit servisi TEK bir bütünü kilitler; ikincisi "
+            + "ayrı bir servise çıkarılır.");
     }
 
     /// <summary>
