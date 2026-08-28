@@ -670,6 +670,233 @@ public sealed class OdemePlaniService(AppDbContext db, IOdemeSatirKilidi kilit)
         return new ButceOzeti(nakit, yukumluluk);
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // OKUMA — EKRANLARIN YÜZEYİ (ÖP/1b)
+    // ═══════════════════════════════════════════════════════════════
+
+    public sealed record PlanOzeti(
+        Guid Id, DateTime HaftaBaslangici, DateTime OdemeGunu,
+        OdemePlaniDurumu Durum, int SatirSayisi, int BekleyenSatir,
+        Guid? HazirlayanUserId, Guid? OnaylayanUserId, DateTime? KapanmaAnUtc);
+
+    public async Task<IReadOnlyList<PlanOzeti>> PlanlariListeleAsync(
+        Guid companyId, CancellationToken cancellationToken)
+        => await db.OdemePlanlari
+            .Where(x => x.CompanyId == companyId)
+            .OrderByDescending(x => x.HaftaBaslangici)
+            .Select(x => new PlanOzeti(
+                x.Id, x.HaftaBaslangici, x.OdemeGunu, x.Durum,
+                x.Satirlar.Count,
+                x.Satirlar.Count(s => s.Karar == OdemeSatirKarari.Bekliyor),
+                x.HazirlayanUserId, x.OnaylayanUserId, x.KapanmaAnUtc))
+            .ToListAsync(cancellationToken);
+
+    public sealed record SatirOzeti(
+        Guid Id, Guid CurrentAccountId, string? CariUnvan,
+        decimal OnerilenTutar, OdemeYontemi Yontem, DateTime? CekVadesi,
+        int Oncelik, Guid? CashAccountId, string? Aciklama,
+        OdemeSatirKarari Karar, decimal? OnaylananTutar,
+        OdemeSatirOdemeDurumu OdemeDurumu, decimal OdenenTutar,
+        int DevirHaftaSayisi, bool OnaydanSonraDegisti,
+        IReadOnlyList<string> DegisenAlanlar,
+        OdemeKapanisSebebi? KapanisSebebi, string? KapanisAciklamasi);
+
+    public sealed record PlanDisiOzeti(
+        Guid Id, Guid CurrentAccountId, string? CariUnvan,
+        decimal Tutar, DateTime OdemeTarihi, string Sebep);
+
+    public sealed record PlanDetayi(
+        Guid Id, DateTime HaftaBaslangici, DateTime OdemeGunu,
+        OdemePlaniDurumu Durum, Guid? HazirlayanUserId, Guid? OnaylayanUserId,
+        IReadOnlyList<SatirOzeti> Satirlar,
+        IReadOnlyList<PlanDisiOzeti> GecenHaftaninPlanDisi,
+        ButceOzeti Butce);
+
+    /// <summary>
+    /// Plan detayı — ekranların tek okuma kaynağı (E2/E3).
+    ///
+    /// K2 DURUMU SUNUCUDAN GELİYOR: `OnaydanSonraDegisti` ve
+    /// `DegisenAlanlar`, ekranın kendi karşılaştırmasını yazmasını
+    /// gereksiz kılıyor. Ekran kendi kuralını yazsaydı sunucuyla
+    /// zamanla ayrışırdı — çek ekranında `canEdit` için aynı ilke
+    /// uygulanmıştı.
+    ///
+    /// K5 GEÇEN HAFTANIN PLAN DIŞI ÖDEMELERİ planın BAŞINDA
+    /// listeleniyor: acil ödeme yasak değil, görünmez olması yasak.
+    /// </summary>
+    public async Task<PlanDetayi> PlanDetayiAsync(
+        Guid planId, CancellationToken cancellationToken)
+    {
+        var plan = await db.OdemePlanlari
+            .Include(x => x.Satirlar)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == planId, cancellationToken)
+            ?? throw new KeyNotFoundException("Ödeme planı bulunamadı.");
+
+        var cariIdler = plan.Satirlar.Select(x => x.CurrentAccountId).Distinct().ToList();
+
+        var cariler = await db.CurrentAccounts
+            .Where(x => cariIdler.Contains(x.Id))
+            .Select(x => new { x.Id, x.Title })
+            .ToDictionaryAsync(x => x.Id, x => x.Title, cancellationToken);
+
+        var satirlar = plan.Satirlar
+            .OrderBy(x => x.Oncelik).ThenBy(x => x.CreatedAtUtc)
+            .Select(x =>
+            {
+                var degisenler = x.Karar is OdemeSatirKarari.Onaylandi or OdemeSatirKarari.Kismi
+                    ? OdemePlaniKurallari.DegisenOnayAlanlari(x)
+                    : [];
+
+                return new SatirOzeti(
+                    x.Id, x.CurrentAccountId,
+                    cariler.GetValueOrDefault(x.CurrentAccountId),
+                    x.OnerilenTutar, x.Yontem, x.CekVadesi, x.Oncelik,
+                    x.CashAccountId, x.Aciklama, x.Karar, x.OnaylananTutar,
+                    x.OdemeDurumu, x.OdenenTutar, x.DevirHaftaSayisi,
+                    degisenler.Count > 0, degisenler,
+                    x.KapanisSebebi, x.KapanisAciklamasi);
+            })
+            .ToList();
+
+        var oncekiHafta = plan.HaftaBaslangici.AddDays(-7);
+
+        var planDisi = await db.PlanDisiOdemeler
+            .Where(x => x.CompanyId == plan.CompanyId
+                && x.OdemeTarihi >= oncekiHafta
+                && x.OdemeTarihi < plan.HaftaBaslangici)
+            .Select(x => new { x.Id, x.CurrentAccountId, x.Tutar, x.OdemeTarihi, x.Sebep })
+            .ToListAsync(cancellationToken);
+
+        var planDisiCari = await db.CurrentAccounts
+            .Where(x => planDisi.Select(p => p.CurrentAccountId).Contains(x.Id))
+            .Select(x => new { x.Id, x.Title })
+            .ToDictionaryAsync(x => x.Id, x => x.Title, cancellationToken);
+
+        return new PlanDetayi(
+            plan.Id, plan.HaftaBaslangici, plan.OdemeGunu, plan.Durum,
+            plan.HazirlayanUserId, plan.OnaylayanUserId,
+            satirlar,
+            [.. planDisi.Select(x => new PlanDisiOzeti(
+                x.Id, x.CurrentAccountId,
+                planDisiCari.GetValueOrDefault(x.CurrentAccountId),
+                x.Tutar, x.OdemeTarihi, x.Sebep))],
+            await ButceOzetiAsync(planId, cancellationToken));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SATIR DÜZENLEME — HAZIRLAMA (E2)
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// SATIR EKLEME/SİLME TASLAK DIŞINDA KAPALI (D2).
+    ///
+    /// Yeni satır K2'nin GÖREMEDİĞİ yerden girer: karşılaştırılacak
+    /// bir onay anlık görüntüsü yoktur. Onaylanan satırlar yerinde
+    /// durur ama yanlarına yenisi eklenirse bütçe onaylanandan büyür.
+    ///
+    /// DÜZENLEMEYE UYGULANMAZ (D1): mevcut satırın alanları onaya
+    /// sunulduktan sonra da değiştirilebilir. Değişen satırın onayı
+    /// K2 gereği düşer ve yeniden onaya gelir; DİĞER satırların onayı
+    /// etkilenmez.
+    ///
+    /// Düzenlemeyi de kapatmak, K2'nin "değişiklik onayı düşürür"
+    /// yarısını HİÇ TETİKLENEMEZ kılardı — paketin en kritik kuralı
+    /// ölü koda dönerdi.
+    ///
+    /// UNUTULAN ÖDEMENİN YOLU K5'TİR: plan dışı ödeme, sebebi
+    /// zorunlu, ertesi haftanın planının başında görünür. K5 zaten
+    /// bunun için var.
+    /// </summary>
+    private static void EklemeSilmeIcinTaslakOlmali(OdemePlani plan)
+    {
+        if (plan.Durum != OdemePlaniDurumu.Taslak)
+            throw new InvalidOperationException(
+                $"Plan \"{plan.Durum}\" durumunda; satırlar yalnız taslakta "
+                + "değiştirilebilir. Değişiklik gerekiyorsa plan onaydan geri "
+                + "çekilmelidir.");
+    }
+
+    public async Task<Guid> SatirEkleAsync(
+        Guid planId, Guid currentAccountId, decimal tutar, OdemeYontemi yontem,
+        DateTime? cekVadesi, int oncelik, Guid? cashAccountId, string? aciklama,
+        Guid? kullaniciId, CancellationToken cancellationToken)
+    {
+        var plan = await PlanGetirAsync(planId, cancellationToken);
+        EklemeSilmeIcinTaslakOlmali(plan);
+
+        var satir = new OdemePlaniSatiri
+        {
+            OdemePlaniId = planId,
+            CurrentAccountId = currentAccountId,
+            OnerilenTutar = tutar,
+            Yontem = yontem,
+            CekVadesi = cekVadesi,
+            Oncelik = oncelik,
+            CashAccountId = cashAccountId,
+            Aciklama = aciklama,
+            CreatedByUserId = kullaniciId
+        };
+
+        db.OdemePlaniSatirlari.Add(satir);
+        await db.SaveChangesAsync(cancellationToken);
+        return satir.Id;
+    }
+
+    public async Task SatirGuncelleAsync(
+        Guid satirId, decimal tutar, OdemeYontemi yontem, DateTime? cekVadesi,
+        int oncelik, Guid? cashAccountId, string? aciklama,
+        Guid? kullaniciId, CancellationToken cancellationToken)
+    {
+        var satir = await db.OdemePlaniSatirlari
+            .Include(x => x.OdemePlani)
+            .FirstOrDefaultAsync(x => x.Id == satirId, cancellationToken)
+            ?? throw new KeyNotFoundException("Plan satırı bulunamadı.");
+
+        /*
+         * TASLAK ŞARTI YOK (D1) — bilinçli.
+         *
+         * Muhasebecinin hatasını düzeltmesinin tek makul yolu bu.
+         * Risk zaten K2'nin kapsamında: değişen satırın onayı ödeme
+         * anında düşer ve satır yeniden onaya gelir. Ekran bunu
+         * `OnaydanSonraDegisti` ile gösteriyor.
+         *
+         * KAPANMIŞ PLAN İSTİSNA: kapanan plan değiştirilemez (D5).
+         */
+        if (satir.OdemePlani.Durum == OdemePlaniDurumu.Kapandi)
+            throw new InvalidOperationException(
+                "Kapanmış planın satırı değiştirilemez.");
+
+        satir.OnerilenTutar = tutar;
+        satir.Yontem = yontem;
+        satir.CekVadesi = cekVadesi;
+        satir.Oncelik = oncelik;
+        satir.CashAccountId = cashAccountId;
+        satir.Aciklama = aciklama;
+        satir.UpdatedAtUtc = DateTime.UtcNow;
+        satir.UpdatedByUserId = kullaniciId;
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SatirSilAsync(
+        Guid satirId, Guid? kullaniciId, CancellationToken cancellationToken)
+    {
+        var satir = await db.OdemePlaniSatirlari
+            .Include(x => x.OdemePlani)
+            .FirstOrDefaultAsync(x => x.Id == satirId, cancellationToken)
+            ?? throw new KeyNotFoundException("Plan satırı bulunamadı.");
+
+        EklemeSilmeIcinTaslakOlmali(satir.OdemePlani);
+
+        // YUMUŞAK SİLME: satır geçmişte kalır, listeden düşer.
+        satir.IsDeleted = true;
+        satir.DeletedAtUtc = DateTime.UtcNow;
+        satir.DeletedByUserId = kullaniciId;
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task<OdemePlani> PlanGetirAsync(
         Guid planId, CancellationToken cancellationToken)
         => await db.OdemePlanlari

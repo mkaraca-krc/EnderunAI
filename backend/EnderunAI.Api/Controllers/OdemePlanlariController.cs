@@ -36,6 +36,83 @@ public sealed class OdemePlanlariController(
     public sealed record BakiyeIstegi(
         Guid CashAccountId, decimal? ElleGirilenTutar);
 
+    public sealed record SatirIstegi(
+        Guid CurrentAccountId, decimal Tutar, int Yontem, DateTime? CekVadesi,
+        int Oncelik, Guid? CashAccountId, string? Aciklama);
+
+    /// <summary>E1 — plan listesi.</summary>
+    [HttpGet]
+    [RequirePermission(PermissionCatalog.Keys.PaymentPlanPrepare)]
+    public async Task<IActionResult> Listele(
+        [FromQuery] Guid companyId, CancellationToken cancellationToken)
+        => Ok(await service.PlanlariListeleAsync(companyId, cancellationToken));
+
+    /// <summary>
+    /// E2/E3 — plan detayı: satırlar, bütçe, geçen haftanın plan dışı
+    /// ödemeleri ve K2 durumu.
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PaymentPlanPrepare)]
+    public async Task<IActionResult> Detay(Guid id, CancellationToken cancellationToken)
+    {
+        try { return Ok(await service.PlanDetayiAsync(id, cancellationToken)); }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+    }
+
+    /// <summary>E2 — satır ekle.</summary>
+    [HttpPost("{id:guid}/satirlar")]
+    [RequirePermission(PermissionCatalog.Keys.PaymentPlanPrepare)]
+    public async Task<IActionResult> SatirEkle(
+        Guid id, [FromBody] SatirIstegi istek, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var satirId = await service.SatirEkleAsync(
+                id, istek.CurrentAccountId, istek.Tutar,
+                (OdemeYontemi)istek.Yontem, istek.CekVadesi, istek.Oncelik,
+                istek.CashAccountId, istek.Aciklama,
+                currentUser.UserId, cancellationToken);
+
+            return Ok(new { id = satirId });
+        }
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+    }
+
+    /// <summary>E2 — satır güncelle.</summary>
+    [HttpPut("satirlar/{satirId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PaymentPlanPrepare)]
+    public async Task<IActionResult> SatirGuncelle(
+        Guid satirId, [FromBody] SatirIstegi istek, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await service.SatirGuncelleAsync(
+                satirId, istek.Tutar, (OdemeYontemi)istek.Yontem, istek.CekVadesi,
+                istek.Oncelik, istek.CashAccountId, istek.Aciklama,
+                currentUser.UserId, cancellationToken);
+
+            return NoContent();
+        }
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+    }
+
+    /// <summary>E2 — satır sil (yumuşak).</summary>
+    [HttpDelete("satirlar/{satirId:guid}")]
+    [RequirePermission(PermissionCatalog.Keys.PaymentPlanPrepare)]
+    public async Task<IActionResult> SatirSil(
+        Guid satirId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await service.SatirSilAsync(satirId, currentUser.UserId, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+    }
+
     /// <summary>D1 — haftanın taslağı.</summary>
     [HttpPost("taslak")]
     [RequirePermission(PermissionCatalog.Keys.PaymentPlanPrepare)]

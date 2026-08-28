@@ -106,6 +106,24 @@ const RULES: Rule[] = [
     match: "/finans/gider-merkezi",
     permission: "expense.view",
   },
+  /*
+   * ÖDEME PLANI — HAZIRLAYAN VEYA ONAYLAYAN.
+   *
+   * Genel "/finans" kuralından ÖNCE olmak ZORUNDA: sonra kalsaydı ekran
+   * finance.view olan herkese açılırdı ve haftanın kime ne ödeneceği
+   * finans modülünü görebilen herkesin önüne düşerdi.
+   *
+   * İKİ ANAHTARIN BİRİ YETER: onaylayanın hazırlama izni olmak zorunda
+   * değil. Tek anahtara bağlansaydı planı onaylayacak kişi kendi onay
+   * ekranını açamazdı.
+   *
+   * Ekranın AÇILMASI ile İŞLEM YAPILMASI ayrı: onay düğmeleri
+   * payment.plan.approve ile görünür, uçta da aynı izin aranır.
+   */
+  {
+    match: "/finans/odeme-planlari",
+    permission: ["payment.plan.prepare", "payment.plan.approve"],
+  },
   { match: "/finans", permission: "finance.view" },
 
   // --- Hakediş ---

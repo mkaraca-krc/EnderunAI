@@ -166,6 +166,11 @@ export const MENU_GROUPS: MenuGroup[] = [
         icon: "▩",
       },
       {
+        label: "Ödeme Planı",
+        href: "/finans/odeme-planlari",
+        icon: "◱",
+      },
+      {
         label: "Nakit Akışı",
         href: "/finans/nakit-akis",
         icon: "≈",

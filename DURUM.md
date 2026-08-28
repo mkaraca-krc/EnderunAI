@@ -1508,6 +1508,146 @@ dışarıda** — fiş girer, hesap planını toplu değiştiremez.
 
 Bu paket çizgideki üç satırı da kapattı. Sınıf yeniden **sıfırda**.
 
+## ÖP/1b — ÖDEME PLANI EKRANLARI (2026-08-28)
+
+### TEK EKRAN, ÜÇ KİP
+
+E2 (hazırlama), E3 (onay) ve E4 (uygulama) **ayrı yollara
+bölünmedi**. Plan tek bir nesne ve haftanın içinde durumdan duruma
+geçiyor; ayrı adresler olsaydı kullanıcının "bu hafta hangi adreste"
+diye bilmesi gerekirdi. Daha somut engel: D1 gereği onaydaki bir
+planda satır düzeltilebiliyor — ayrı ekranlarda bu, hazırlama
+ekranına geri dönmeyi gerektirirdi.
+
+Kip **durumdan ve izinden birlikte** çıkar:
+
+| Kip | Koşul |
+|---|---|
+| Ekleme/silme (D2) | `payment.plan.prepare` **ve** Durum = Taslak |
+| Düzenleme (D1) | `payment.plan.prepare` **ve** Durum ≠ Kapandı |
+| Karar (E3) | `payment.plan.approve` **ve** Durum = Onayda |
+| Ödeme kaydı (E4) | `payment.plan.prepare` **ve** Durum ∈ {Onaylandı, Uygulandı} |
+
+### İKİ KAPI AYRI AYRI SINANDI
+
+Bunlar **bilerek iki ayrı testte**:
+
+- **Ekran görünürlüğü** — `tests/odeme-plani-ekran.test.tsx`, yol izni
+  üzerinden. `/finans/odeme-planlari` iki anahtardan biriyle açılır
+  (`payment.plan.prepare` VEYA `payment.plan.approve`). Tek anahtara
+  bağlansaydı planı onaylayacak kişi kendi onay ekranını açamazdı.
+  Kural genel `/finans` kuralından **ÖNCE** duruyor; sonra kalsaydı
+  ekran `finance.view` olan herkese açılırdı.
+- **Uçtaki 403** — `OdemePlaniUcIzinTests.cs`. Ön Muhasebe ve Finans
+  Sorumlusu karar ucundan 403 alır; GM almaz.
+- **Katalog düzeyi** — `OdemePlaniIzinTests.cs` (ÖP/1a'dan). "Hangi
+  rol hangi anahtarı taşıyor" sorusunu `RoleCatalog` üzerinden
+  sorar. Bu üçüncü dosya bilerek ayrı: katalog doğru olup uçtaki
+  attribute unutulsaydı oradaki testler yeşil kalırdı (bkz.
+  Kural 55 — bu dosya ÖP/1b sırasında bir kez üstüne yazılıp geri
+  alındı).
+
+Tek testte birleştirilseydi, arayüz kapısı bir gün kaldırıldığında
+sunucu kapısının hâlâ durup durmadığı görülmezdi — yeşil yanlış
+yerden gelirdi.
+
+**Olumlu kontrol var:** "Ön Muhasebe planı OKUYABİLİR" ve "GM karar
+ucunda 403 ALMAZ" testleri, 403'lerin "izin yok"tan geldiğini, "rol
+hiç yaratılmamış"tan gelmediğini kanıtlıyor.
+
+### DÖRT SONDA — HEPSİ KAPANDI
+
+| Sonda | Kırmızıya dönen | Kapsam |
+|---|---|---|
+| D2 kapısı kaldırıldı (backend) | `D2_OnaydakiPlana_SatirEklenemez`, `D2_OnaydakiPlandan_SatirSilinemez` | 64 testten 2'si |
+| Onay ekranı Ön Muhasebe'ye açıldı | `yalnız hazırlama izniyle karar düğmeleri görünmez` | 11 testten 1'i |
+| K9 uyarısı kaldırıldı | `fark eksiyse uyarı görünür ve onay düğmesi kalır` | 11 testten 1'i |
+| K6'nın iki sayısı toplandı | `iki sayının TOPLAMI hiçbir yerde görünmez` | 11 testten 1'i |
+| Karar ucu Prepare iznine düşürüldü | `OnMuhasebe_KararUcuna_403_Alir`, `FinansSorumlusu_KararUcuna_403_Alir` | `OdemePlaniUcIzinTests` 4 testten 2'si |
+
+**D2 sondasının asıl kazancı D1 testlerinin YEŞİL KALMASIYDI.** Tek
+kapıya bağlı olsalardı sabotaj beşini birden kırardı — bu da
+düzenlemenin de kapandığı, yani K2'nin "değişiklik onayı düşürür"
+yarısının ölü koda döndüğü anlamına gelirdi.
+
+### K6 EKRANDA — TOPLAM YOK
+
+İki tablo ayrı: "Bu Cuma Çıkacak Nakit" (hesap bazında) ve "Bu Hafta
+Yaratılan Gelecek Yükümlülük" (vade ayına göre). **Hiçbir yerde
+"haftanın toplamı" satırı yok** ve test bunu doğrudan ölçüyor: nakit
+40.000, çek 25.000 seçilmiş; ekranda `65.000,00` aranıyor ve
+bulunmaması bekleniyor. Değerler eşit seçilseydi toplayan bir hata
+"iki sayıdan biri" gibi görünüp testten kaçardı.
+
+### K9 — UYARIR, ENGELLEMEZ (D4)
+
+Fark eksiyse ekran açıkça söylüyor ama onay düğmesi yerinde kalıyor;
+test ikisini birden iddia ediyor. **Bütçe her karardan sonra
+sunucudan YENİDEN isteniyor**, istemcide toplanmıyor — istemcide
+toplansaydı K3'ün geçici retleri, eşzamanlı başka bir karar ya da
+K2'nin düşürdüğü onay ekrana yansımaz, GM bayat bir farka bakarak
+onay verirdi.
+
+### CARİ SATIRDA SABİT — SONUCU AÇIKÇA YAZILDI
+
+`SatirGuncelleAsync` cariyi parametre olarak **almıyor**; cari satır
+açılışında sabitleniyor. D2 ile birleşince şu çıkıyor: plan onaya
+sunulduktan sonra bir satırın carisi **hiç** değiştirilemez — satır
+silinemediği için yeniden de açılamaz. Ekran bunu gizlemiyor:
+taslakta silinip yeniden açılır, onaydaysa satır reddedilir ve ödeme
+plan dışı (K5) olarak kaydedilir.
+
+### ÜÇ CIRCIR DÜŞTÜ — CIRCIRLAR DEĞİL, KOD DÜZELTİLDİ
+
+Ekranların ilk sürümü frontend suite'inde **üç cırcırı** birden
+düşürdü. Üçünde de çizgi yükseltilmedi (Kural 33):
+
+| Cırcır | İhlal | Ne yapıldı |
+|---|---|---|
+| `lint cırcırı` (`set-state-in-effect`) | 2 (her sayfada 1) | Sayfalar `lib/data/use-refreshable` kancasına taşındı |
+| `liste bileşeni cırcırı` | E1 ham `<table>` yazıyordu | E1 `components/ui/data-table.tsx`e taşındı |
+| `servis çağrısı bekçisi` | `${KOK}/...` hesaplanmış önek | Yol sabit yazıldı, değişken yalnız segment |
+
+**`useRefreshable` ilk kez kullanıldı.** Kanca "arayüzün TEK tazeleme
+mekanizması" olarak yazılmıştı ama **sıfır çağrı yeri** vardı; lint
+çizgisinin 110 dosya taşımasının sebebi de bu. Bu iki ekran çizgiyi
+yükseltmiyor.
+
+Kancanın bir sınırı ölçüldü: **parametre değişince yeniden çekmiyor**
+(fetcher ref'te sabitleniyor, `run` yalnız `enabled`'a bağlı). E1'de
+şirket seçimi bu yüzden durumda değil **ref'te**; tazeleme olay
+işleyicisinden `refresh()` ile tetikleniyor. Seçim durumda tutulup bir
+efektle tazelenseydi kaçınılan ihlal geri gelirdi.
+
+### YAN BULGU — KABUK ÇÖKMESİ (ÖP/1b DIŞI, AYRI PAKETE DEVREDİLDİ)
+
+`components/erp/erp-shell.tsx:503` içinde `currentUser?.roles[0]`
+duruyor: isteğe bağlı zincir `currentUser`'da kesiliyor, `roles`
+korumasız. `roles` alanı olmayan bir kullanıcı gelirse **tek bir
+sayfa değil, uygulamanın tamamı** beyaz ekrana düşer — kabuk her
+ekranı sarıyor.
+
+BULUNMA BİÇİMİ VE SINIRI — ABARTILMASIN. ÖP/1b ekran testinin
+`apiClient` taklidi bilinmeyen her yola `[]` dönüyordu; kabuk
+oturumu `auth/me` ile çektiği için `currentUser` bir DİZİ oldu,
+`[].roles` undefined kaldı ve `undefined[0]` patladı. Yani çökmeyi
+üreten **taklidin şekliydi**, canlı sözleşme değil. Taklit
+düzeltildi (`auth/me` gerçek şekli dönüyor) ve testler kaynak
+düzeltmesi OLMADAN yeşil.
+
+Kırılganlık yine de gerçek: tip `roles`u "her zaman var" sayıyor,
+bozuk ya da beklenmedik bir yanıt şekli tüm kabuğu düşürür. Ama bu,
+"canlıda olacak" değil "kabuğun tek bir alan yüzünden komple
+çökebilmesi" sorunudur — çözümü tek bir `?.` değil, HATA SINIRIDIR.
+
+**Kaynak düzeltmesi bu pakete DAHİL DEĞİL.**
+
+Düzeltme KABUK DAYANIKLILIĞI paketine devredildi: tek karakterlik bir
+koruma, uygulamanın tamamını saran bileşene dokunuyor ve ödeme planı
+paketiyle birlikte çıkması hangi değişikliğin ne kırdığını
+belirsizleştirirdi. O paket ayrıca hata sınırı, hata kaydı ve yarım
+isteğe bağlı zincirlerin süpürülmesini taşıyor.
+
 ## ÖP/1a — HAFTALIK ÖDEME PLANI (2026-08-27)
 
 ### NEDEN CARİ BAZLI
@@ -2327,7 +2467,7 @@ Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyo
 
 **2026-08-25'te 13 maddenin 9'u karara bağlandı** (aşağıda "KAPANANLAR").
 Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
-**10 madde** (6–10. maddeler 2026-08-26/27'de eklendi):
+**11 madde** (6–11. maddeler 2026-08-26/28'de eklendi):
 
 1. **KVKK aydınlatma metni** | Kural (e): hukuk metni yazılmıyor |
    Metin Mehmet'te. **Bana düşen: ekranda yerini açmak** —
@@ -2509,6 +2649,24 @@ Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
    listelenecek.
 
    Bu paket bittiğinde squash ucuzlar.
+
+11. **ÖDEME PLANINDA "ONAYDAN GERİ ÇEKME" YOLU** | Şimdi
+   açılmadı, ihtiyaç ölçülmedi | **Karar bekliyor.**
+
+   Plan onaya sunulduktan sonra **satır EKLEME/SİLME kapalı** (D2):
+   yeni satır K2'nin göremediği yerden girer, çünkü
+   karşılaştırılacak bir onay anlık görüntüsü yoktur.
+
+   **Satır DÜZENLEME ise açık** (D1) — değişen satırın onayı K2
+   gereği düşer, diğerleri etkilenmez.
+
+   Unutulan bir ödemenin yolu bugün **K5** (plan dışı ödeme):
+   sebebi zorunlu, ertesi haftanın planının başında listeleniyor.
+
+   **K5 VARKEN GERİ ÇEKME YOLUNUN GEREKLİ OLUP OLMADIĞI
+   ÖLÇÜLMEDİ.** Birkaç hafta gerçek kullanımdan sonra belli olur;
+   şimdiden yazmak, kullanılmayabilecek bir kapıyı bakım yüküne
+   çevirir.
 
 ### ERTELENENLER (kapanmadı, sıraya girmedi)
 
@@ -5408,6 +5566,34 @@ iki sayı farklı soruya cevap veriyor ve fark kasıtlıdır
     Kurallar yalıtılabilir; **aralarındaki aralık yalıtılamaz** ve
     orada "ölçtüğünü sandığın şey" ile "gerçekte ölçtüğün şey"
     kolayca ayrışır.
+
+55. **YENİ DOSYA YAZMADAN ÖNCE O ADIN BOŞ OLDUĞU ÖLÇÜLÜR.**
+
+    `cat > dosya` var olanı sessizce siler; ne uyarı verir, ne de
+    silinenin ne olduğunu söyler. Testler yeşil kaldığı için hata
+    **yeşilin arkasına saklanır**: silinen bekçiler koşmadıkları için
+    kırmızı da veremezler.
+
+    ÖP/1b'de `OdemePlaniUcIzinTests` yazılırken `OdemePlaniIzinTests.cs`
+    adı seçildi ve ÖP/1a'nın **altı test niteliği** üstüne yazıldı —
+    "onay anahtarı Admin'de YOK", "yalnızca GM'de", "hazırlayan roller
+    onay iznini almaz" dahil, yani paketin asıl güvenlik bekçileri.
+    Tam suite **2865/2865 yeşil** verdi; sayı doğruydu, **kapsam
+    eksikti**.
+
+    YAKALATAN: `git status` çıktısında dosyanın `??` değil **`M`**
+    görünmesi. Yeni sandığın dosya "değişmiş" görünüyorsa yeni değildir.
+
+    İKİ SONUÇ:
+    - Yazmadan önce `ls` ya da `git status`; ad çakışıyorsa **ayrı
+      dosya**, üstüne yazma yok.
+    - Kapsamı değişmiş bir suite'in eski sayısı **sonuç olarak
+      sunulmaz**; geri alma sonrası suite YENİDEN koşar.
+
+    Ad çakışması burada bir işaretti: katalog düzeyi ("hangi rol hangi
+    anahtarı taşıyor") ile uç düzeyi ("anahtar uçta gerçekten aranıyor
+    mu") zaten iki ayrı sorudur. Katalog doğru olup uçtaki attribute
+    unutulsaydı, birinci dosya yeşil kalırdı.
 
 ## 5a. CANLIDA YANLIŞ ÜÇ ÇEK KAYDI — VERİ BOZUK DEĞİL, GİRİŞ YANLIŞ
 
