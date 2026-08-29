@@ -1,0 +1,16 @@
+# ÖN YÜZ TEST SAYISI ÇİZGİSİ — KURAL 55'İN MEKANİK KARŞILIĞI
+#
+# Bu sayı BİLDİRİM sayısıdır, çözülmüş test sayısı değil:
+#   statik  = it( / test( çağrıları
+#   dinamik = it.each( / test.each( blokları
+#
+# `it.each` tek satırdır ama dizisi kadar durum üretir; ayrı eksende
+# duruyor ki silinmesi gürültüde kaybolmasın.
+#
+# Kurallar arka uç çizgisiyle aynı — oradaki açıklamaya bakınız:
+# çizgi YUKARI serbest, AŞAĞI ayrı commit'te ve gerekçeli.
+# Birleştirme meşrudur ve çizgiyi düşürmek savunma gerektirmez.
+#
+# KAYNAK: 2026-08-29, kabuk paketi yayınlandıktan sonra ölçüldü.
+statik: 367
+dinamik: 11

@@ -1,0 +1,31 @@
+# ARKA UÇ TEST SAYISI ÇİZGİSİ — KURAL 55'İN MEKANİK KARŞILIĞI
+#
+# Bu sayı BİLDİRİM sayısıdır, çözülmüş test sayısı değil:
+#   statik  = [Fact] + [InlineData] satırları
+#   dinamik = [MemberData] / [ClassData] bildirimleri
+#
+# Dinamik olanlar çalışma anında çözülüyor ve statik sayılamıyor.
+# Ayrı eksende duruyorlar: tek sayıda toplansaydı yüz durum üreten
+# bir teorinin silinmesi "1 düşüş" gibi görünür, gürültüde kaybolurdu.
+#
+# ─────────────────────────────────────────────────────────────
+# ÇİZGİ YUKARI SERBEST, AŞAĞI AYRI COMMIT'TE VE GEREKÇELİ.
+# ─────────────────────────────────────────────────────────────
+#
+# Bu cırcır, çizginin sessizce DÜŞÜRÜLMESİNİ yakalayamaz — ölçüldü,
+# sonda koşuldu, doğrulandı. Düşürülmüş bir çizgi ile meşru
+# birleştirme sonrası çizgi mekanik olarak ayırt edilemez.
+#
+# Koruma bu yüzden usule ait: düşüş AYRI BİR COMMIT'te, gerekçesi
+# commit mesajında yazılı olarak yapılır. Değerli olan sayının
+# kendisi değil, düşüşün bir KONUŞMAYA dönüşmesidir.
+#
+# BİRLEŞTİRME MEŞRUDUR. 23 ayrı testi tek parametreli teste çevirmek
+# İYİ bir değişikliktir ve bu sayıyı düşürür. Çizgiyi düşürmek ucuz,
+# normal ve kayıtlı bir işlemdir — savunulması gereken bir şey değil.
+# Bu cırcır testin SİLİNMESİNİ fark ettirmek için var;
+# İYİLEŞTİRİLMESİNİ engellemek için değil.
+#
+# KAYNAK: 2026-08-29, kabuk paketi yayınlandıktan sonra ölçüldü.
+statik: 2756
+dinamik: 22

@@ -1508,6 +1508,93 @@ dışarıda** — fiş girer, hesap planını toplu değiştiremez.
 
 Bu paket çizgideki üç satırı da kapattı. Sınıf yeniden **sıfırda**.
 
+## TEST SAYISI CIRCIRI — KURAL 55'İN MEKANİK KARŞILIĞI (2026-08-29)
+
+**Kural 55'in mekanik karşılığı test sayısı cırcırıdır. Kural akılda
+değil, çizgide durur.**
+
+ÖP/1b'de bir test dosyasının üstüne yazıldı ve ÖP/1a'nın altı test
+niteliği silindi; tam takım 2865/2865 YEŞİL verdi. O gün yakalatan
+şey `git status` çıktısındaki `M` harfiydi — **şans, düzenek değil**.
+
+### BİLDİRİM SAYILIYOR, ÇÖZÜLMÜŞ TEST DEĞİL
+
+Çözülmüş sayı yalnız takım koşarken bilinir; bir test dosyasından
+okunamaz. Sayaç bildirimleri sayıyor ve bu, aranan şeyi tam
+karşılıyor: bir durum silinirse sayı düşer.
+
+| Eksen | Arka uç | Ön yüz |
+|---|---|---|
+| statik | `[Fact]` + `[InlineData]` = **2756** | `it(` / `test(` = **367** |
+| dinamik | `[MemberData]`/`[ClassData]` = **22** | `it.each(` = **11** |
+
+**İKİ EKSEN ŞART**: `[MemberData]` taşıyan bir teori tek satırdır ama
+çalışma anında 148 durum üretiyor (2756 statik ≠ 2874 gerçek). Tek
+sayıda toplansaydı o teorinin silinmesi "1 düşüş" gibi görünür,
+gürültüde kaybolurdu.
+
+### NEDEN ÖN YÜZ TAKIMINDA
+
+Tek sayaç, iki taraf. İki ayrı sayaç yazılsaydı zamanla ayrışırlardı:
+biri `[Theory]` sayımını düzeltir, diğeri eski hâlinde kalırdı.
+`endpoint-guard.test.ts` zaten backend kaynağını okuyor; desen yeni
+değil.
+
+Bedeli: arka uçtan test silen kişi kırmızıyı BAŞKA BİR TAKIMDAN alır.
+Hata mesajı bu yüzden dört soruyu birden cevaplıyor — hangi taraf,
+kaçtan kaça hangi eksende, cırcır neden burada, düşüş meşruysa ne
+yapılacağı. Yoksa yarım saat yanlış yerde aranır.
+
+### İKİ SONDA — BİRİ KUSURU, DİĞERİ SINIRI GÖSTERDİ
+
+| Sonda | Beklenen | Sonuç |
+|---|---|---|
+| Arka uçtan test dosyası silindi | KIRMIZI | **KIRMIZI** — "arka uç · statik 2756 → 2751" |
+| Geri alındı | YEŞİL | 3/3 yeşil |
+| Çizgi elle 2756 → 2600 düşürüldü | **YEŞİL kalmalı** | **3/3 yeşil** |
+| Sayaç backend yolunu bulamıyor | KIRMIZI | **KIRMIZI** — pozitif kontrol + sayı testi |
+
+Üçüncü sonda kanıtsız bir iddiayı kapatmak için koşuldu: "sayaç
+bozulursa pozitif kontrol yakalar" denmişti ama ÖLÇÜLMEMİŞTİ. Yol
+bozulduğunda `dosyalar()` boş dizi döndürüyor ve iki test birden
+kırmızı veriyor — sayaç sessizce boşa düşemiyor (Kural 48).
+
+### YAKALAYAMADIĞI ŞEY — ÖLÇÜLDÜ, GİZLENMİYOR
+
+**Çizginin sessizce DÜŞÜRÜLMESİNİ yakalayamaz.** Sonda koşuldu:
+çizgi 2756'dan 2600'e çekildi, pozitif kontrol (>2000) sorunsuz
+geçti, cırcır sustu.
+
+Bu bir eksik değil, yapısal bir sınır: **düşürülmüş bir çizgi ile
+meşru birleştirme sonrası çizgi mekanik olarak AYIRT EDİLEMEZ.**
+
+Pozitif kontrolün eşiğini gerçek sayıya yaklaştırmak da çözüm değil —
+o zaman her meşru birleştirme eşiği de güncellemeyi gerektirir ve
+eşik İKİNCİ BİR ÇİZGİYE dönüşür; aynı delik ikinci kez açılmış olur.
+
+Koruma bu yüzden usule ait:
+
+> **ÇİZGİ YUKARI SERBESTÇE GÜNCELLENİR. AŞAĞI HAREKET AYRI BİR
+> COMMIT'TE, GEREKÇESİ COMMIT MESAJINDA YAZILI OLARAK YAPILIR.**
+
+Korumanın değeri sayının kendisi değil, **düşüşün bir KONUŞMAYA
+dönüşmesidir**. Kapsam cırcırının "yalnız küçülebilir" kuralının
+tersi: bu yalnız büyüyebilir.
+
+### BİRLEŞTİRME MEŞRUDUR — CIRCIR İYİLEŞTİRMEYİ ENGELLEMEZ
+
+KURULUM/1'de 23 ayrı test yerine tek parametreli test yazılması
+istendi ve doğrusu buydu. Bu cırcır altında o iyi değişiklik sayıyı
+23'ten 1'e düşürür ve kırmızı verir.
+
+Bu yüzden hem belgeye hem hata mesajına açıkça yazıldı: **çizgiyi
+düşürmek ucuz, normal ve kayıtlı bir işlemdir — savunulması gereken
+bir şey değildir.** Bu cırcır testin SİLİNMESİNİ fark ettirmek için
+vardır; testin İYİLEŞTİRİLMESİNİ engellemek için değil.
+
+Kural 42'nin doğrudan sonucu: insanı doğru işi yapmaktan caydıran bir
+kural, ya susturulur ya da kötü kodu teşvik eder.
+
 ## KABUK DAYANIKLILIĞI (2026-08-28)
 
 ### BAŞLANGIÇ DURUMU — ÖLÇÜLDÜ
@@ -5751,6 +5838,12 @@ iki sayı farklı soruya cevap veriyor ve fark kasıtlıdır
     anahtarı taşıyor") ile uç düzeyi ("anahtar uçta gerçekten aranıyor
     mu") zaten iki ayrı sorudur. Katalog doğru olup uçtaki attribute
     unutulsaydı, birinci dosya yeşil kalırdı.
+
+    **MEKANİK KARŞILIĞI: TEST SAYISI CIRCIRI** (bkz. o başlık).
+    `git status`taki `M` harfi bu sefer yakaladı ama o şanstı. Cırcır
+    arka uç ve ön yüz için ayrı çizgi tutuyor ve sayı düşerse kırmızı
+    veriyor. Yakalayamadığı şey de kayıtlı: çizginin sessizce
+    düşürülmesi — koruma orada usule ait, mekanizmada değil.
 
 ## 5a. CANLIDA YANLIŞ ÜÇ ÇEK KAYDI — VERİ BOZUK DEĞİL, GİRİŞ YANLIŞ
 
