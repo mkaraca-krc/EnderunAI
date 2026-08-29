@@ -1508,6 +1508,163 @@ dışarıda** — fiş girer, hesap planını toplu değiştiremez.
 
 Bu paket çizgideki üç satırı da kapattı. Sınıf yeniden **sıfırda**.
 
+## KABUK DAYANIKLILIĞI (2026-08-28)
+
+### BAŞLANGIÇ DURUMU — ÖLÇÜLDÜ
+
+Uygulamada **hiçbir hata sınırı yoktu**: ne `app/error.tsx`, ne
+`componentDidCatch`, ne de bir istemci hata kaydı ucu. React render
+sırasında hata alan ağacı KÖKÜNDEN söküyor; yakalayan olmayınca
+geriye boş bir `<div>` kalıyor. Yani bugüne kadar **herhangi bir
+bileşendeki herhangi bir hata = beyaz ekran**, ve kimsenin haberi
+olmuyordu.
+
+### İKİ KATMANLI SINIR — NEDEN İKİ
+
+İlk tasarımım tek katmandı ve YANLIŞTI: sınır yalnız `{children}`ı
+sarsaydı kabuğun KENDİ kodundaki bir hata yakalanmazdı. Kabuk her
+ekranı sardığı için orada bir çöküş, açık kalan tek bir sayfa bile
+bırakmıyor.
+
+| Katman | Neyi sarar | Çöküşte ne olur |
+|---|---|---|
+| Dış | `ErpShellIc`in tamamı | Tam sayfa hata ekranı |
+| İç | yalnız `{children}` | Yan menü/arama/kimlik AYAKTA, içerik yerine hata ekranı |
+
+Tek katman olsaydı bir raporun hatası bütün gezinmeyi de götürürdü.
+İç sınır önce yakalar; dıştaki yalnız kabuğun kendi çöküşünde
+devreye girer.
+
+**Sınıf bileşeni zorunlu**: `getDerivedStateFromError` ve
+`componentDidCatch` kancalarla yazılamıyor. React'in kendi sınırı,
+tercih değil.
+
+**NE YAKALAMAZ** (sonradan "neden çalışmadı" denmesin): olay
+işleyicileri, `setTimeout`, sunucu tarafı render, ve sınırın KENDİ
+render'ı. Olay işleyicileri zaten `try/catch` ile ekranda hata
+gösteriyor.
+
+### KAYIT — KİŞİSEL VERİ KURALINA UYGUN
+
+`POST /api/istemci-hatalari`, `[Authorize]`, ayrı izin anahtarı YOK
+(her giriş yapmış kullanıcı kendi ekranında hata alabilir ve
+bildirebilmelidir; anonime açık bir günlük yazma ucu ise günlüğü
+şişirmenin en kolay yolu olurdu).
+
+Kabul edilen alanlar **beyaz liste** — serbest nesne alınsaydı
+istemci günlüğe tutar, IBAN, cari unvanı yazdırabilirdi:
+
+| Alan | Sınır |
+|---|---|
+| `nerede` | 40 karakter ("kabuk" / "içerik") |
+| `hataAdi` | 80 karakter |
+| `mesaj` | 200 karakter — **iki tarafta da** kısaltılıyor |
+| `yol` | 300 karakter, sunucuda `SensitivePathMasker` ile maskeleniyor |
+
+- **Kullanıcı kimliği oturumdan, istekten DEĞİL.** İstemcinin
+  gönderdiğine güvenilseydi biri başkasının adına kayıt ürettirebilirdi.
+- **Bileşen yığını gönderilmiyor** — yalnız tarayıcı konsoluna.
+- **Mesaj iki tarafta da kısaltılıyor**: istemci kısaltması
+  atlatılabilir, sunucu ona güvenmiyor.
+- **Yol maskeleme tek kaynaktan**: `GlobalExceptionHandler` ile aynı
+  `SensitivePathMasker`. İkinci bir maskeleme yazılsaydı biri
+  güncellenip diğeri kalırdı.
+- Bir test bunu doğrudan ölçüyor: taklit oturumdaki kullanıcı adının
+  bildirimin hiçbir alanında geçmediğini iddia ediyor.
+
+**VERİTABANI TABLOSU YOK — BİLEREK.** Tablo göç demektir ve bu bir
+sertleştirme yaması. Ayrıca istemciden TETİKLENEN bir kaydın tabloya
+yazılması, bozuk ya da kötü niyetli bir istemcinin veritabanını
+şişirmesine yol açardı.
+
+### BİLDİRİM SESSİZ BAŞARISIZ OLUR
+
+Kullanıcı zaten hata ekranına bakıyor. Bildirim de patlarsa (ağ yok,
+oturum düşmüş) ikinci bir hata fırlatmak sınırın kendisini döngüye
+sokar: `componentDidCatch` içinden atılan hata YAKALANMAZ, ağacı
+tekrar söker. `void` ile ayrılıyor — beklenseydi hata ekranı bir ağ
+turu kadar geç görünürdü.
+
+### SÜPÜRME — SAYILDI, DONDURULDU, DÜZELTİLMEDİ
+
+`a?.b.c` / `a?.b[0]` deseni: dış nesne korunmuş, **iç alan
+korumasız**. Yazan "a henüz yüklenmemiş olabilir" diye düşünmüş,
+"a geldi ama b gelmemiş olabilir" diye düşünmemiş.
+
+**TypeScript bunu yakalamaz ve yakalamaması doğru**: tip `b`yi
+zorunlu ilan ediyorsa derleyicinin şüphelenmesi için sebep yok. Kusur
+TİPİN KENDİSİNDE — sunucu sözleşmesi ile tip tanımı ayrıştığında tip
+yalan söyler.
+
+**28 dosyada 64 yer.** `tests/bekci/yarim-zincir-cizgi.txt` içinde
+donduruldu; `tests/yarim-zincir-ratchet.test.ts` dört testle koruyor:
+tarama boşa düşmüyor (pozitif kontrol), sayı çizgiyi aşmıyor,
+düzeltilen dosya çizgiden silinir, ve kabuk ayrıca ayrı sınanıyor
+(orada bir geri adım diğerlerinden ağır).
+
+Düzeltme bu turda YOK — hepsi aynı ölçüde riskli değil, bir kısmı
+`Promise.all` çıktısı gibi yapı gereği güvenli. Tek turda hepsini
+değiştirmek, gerçek riskli olanları gürültünün içinde kaybederdi.
+
+ÖP/1b'nin kendi yeni sayfası da bu desenden bir tane taşıyor
+(`data?.detay.butce`) ve çizgiye yazıldı — kendine muafiyet yok.
+
+**HATA SINIRI BU CIRCIRIN YERİNE GEÇMEZ.** Sınır çöküşü EKRANA
+çeviriyor, çöküşü ortadan kaldırmıyor. İki ayrı katman.
+
+### İKİ SONDA
+
+| Sonda | Kırmızıya dönen |
+|---|---|
+| Dış katman kaldırıldı | `kabuğun kendi çöküşü hata ekranına düşer, ekran BOŞ KALMAZ` + `çöküş kayda bildirilir` |
+| `roles?.[0]` geri alındı | süpürme cırcırının İKİSİ birden (toplam + kabuk özel testi) |
+
+**Sonda A'nın asıl kazancı**: yalıtılmış hata sınırı testleri YEŞİL
+kaldı. Yani "sınır çalışıyor" ile "sınır kabuğa doğru bağlanmış" iki
+ayrı şey; bağlantı koparsa sınır hâlâ çalışıyor görünür. Bu yüzden
+`tests/kabuk-dayanikliligi.test.tsx` GERÇEK `ErpShell`i render ediyor
+ve çöküşü `{children}`ın DIŞINDAN (`NotificationBell`) veriyor —
+yalnız dış katmanın yakalayabileceği yerden.
+
+### GEÇMİŞTEKİ İDDİAMIN DÜZELTMESİ
+
+ÖP/1b sırasında "`roles` alanı olmayan bir kullanıcı gelirse tüm
+uygulama beyaz ekrana düşer" dedim. **Gördüğüm kanıttan daha güçlü
+bir iddiaydı**: çökmeyi üreten, test taklidimin bilinmeyen yollara
+`[]` dönmesiydi — kabuk oturumu `auth/me` ile çektiği için
+`currentUser` bir DİZİ oldu. Canlı sözleşmenin böyle davrandığına
+dair ölçümüm yoktu ve hâlâ yok.
+
+Kırılganlık yine de gerçek, ama gerekçesi "canlıda patlıyor" değil
+**"tip yalan söyleyebilir ve kabuk tek bir alan yüzünden komple
+çökebiliyor"**. Doğru çözüm de bu yüzden tek bir `?.` değil, hata
+sınırıdır.
+
+### ÜÇÜNCÜ SONDA — SÖZLEŞMENİN KENDİSİ YAKALADI
+
+Kabuk iki parçaya bölününce (`ErpShell` sarmalayıcı + gövde) ön yüz
+takımı `redwood-contract`'ı düşürdü: sözleşme kabuk açılışlarını
+`<ErpShell` ÖNEKİNE bakarak sayıyor ve gövdenin ilk adı `ErpShellIc`
+o önekle eşleşiyordu. Kabuk, kendi içinde bayraksız bir ekran
+açıyormuş gibi göründü.
+
+**Sözleşme gevşetilmedi — ad düzeltildi** (`KabukGovdesi`). Zaten
+doğrusu da buydu: bu bileşen bir kabuk değil, kabuğun gövdesi.
+
+Arkasından ikinci bir tuzak: düzeltmeyi anlatan YORUMUN İÇİNE
+`<ErpShell` yazmıştım ve sayaç yorum ile kodu ayırmıyor. Bu oturumda
+aynı sınıftan üçüncü hata (önce `FOR UPDATE` yorumda, sonra hata
+mesajı metninde). Yorum, öneki yazmayacak şekilde düzeltildi.
+
+### SAYILAR
+
+| Ölçüm | Sonuç |
+|---|---|
+| Backend takımı | 2874/2874 |
+| Ön yüz takımı | **485/485** (474 → +11) |
+| TypeScript | 0 hata |
+| Yarım zincir | 28 dosya / 64 yer, donduruldu |
+
 ## ÖP/1b — ÖDEME PLANI EKRANLARI (2026-08-28)
 
 ### TEK EKRAN, ÜÇ KİP

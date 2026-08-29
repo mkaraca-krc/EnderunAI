@@ -1,0 +1,42 @@
+# YARIM İSTEĞE BAĞLI ZİNCİR ÇİZGİSİ — dosya:adet
+#
+# DESEN: a?.b.c  ya da  a?.b[0]  — dış nesne korunmuş, İÇ ALAN
+# korumasız. TypeScript bunu yakalamaz çünkü tip "b her zaman
+# var" diyor; sunucu o alanı göndermezse çalışma anında patlar.
+#
+# Bu sayı yalnızca AŞAĞI iner. Bir dosya düzeltildiğinde satırı
+# SİLİNİR (testlerden biri bunu zorunlu kılıyor).
+#
+# KAYNAK: KABUK DAYANIKLILIĞI paketi, 2026-08-28. Kabuktaki
+# currentUser?.roles[0] tam bu desendi ve tüm uygulamayı
+# düşürebiliyordu; düzeltildi ve bu yüzden listede YOK.
+#
+# DÜZELTME BU TURDA DEĞİL: paket sayıyor, listeliyor, donduruyor.
+app/dashboard/page.tsx:4
+app/depo-stok/mal-kabul/[id]/page.tsx:2
+app/depo-stok/raf/[warehouseId]/[shelfId]/page.tsx:1
+app/finans/odeme-planlari/[id]/page.tsx:1
+app/finans/piyasa/page.tsx:1
+app/insan-kaynaklari/gorevlendirmeler/page.tsx:1
+app/insan-kaynaklari/ise-alim/page.tsx:2
+app/insan-kaynaklari/personel-360/page.tsx:2
+app/insan-kaynaklari/personeller/page.tsx:2
+app/insan-kaynaklari/puantaj-cetveli/page.tsx:2
+app/muhasebe/buyuk-defter/page.tsx:2
+app/muhasebe/kesinti-hesaplari/page.tsx:1
+app/muhasebe/kur-degerlemesi/page.tsx:2
+app/muhasebe/yevmiye/page.tsx:1
+app/muhendislik/receteler/ice-aktar/page.tsx:1
+app/perakende/page.tsx:1
+app/portal/[token]/page.tsx:1
+app/projeler/[id]/is-programi/page.tsx:5
+app/projeler/[id]/malzeme-ihtiyaci/page.tsx:2
+app/satin-alma/butce-onay/page.tsx:2
+app/satin-alma/karar-destek/page.tsx:8
+app/satin-alma/raporlar/page.tsx:11
+app/satin-alma/rfq/[id]/karsilastirma/page.tsx:2
+app/satin-alma/rfq/[id]/page.tsx:2
+app/satin-alma/siparis/[id]/page.tsx:2
+app/sistem-yonetimi/sirket-ayarlari/page.tsx:1
+app/teklifler/yeni/page.tsx:1
+components/erp/hata-siniri.tsx:1

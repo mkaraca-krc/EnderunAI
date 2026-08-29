@@ -57,7 +57,45 @@ type CurrentSession = {
 
 
 
-export default function ErpShell({
+import { HataSiniri } from "./hata-siniri";
+import { istemciHatasiBildir } from "@/services/istemci-hatasi.service";
+
+/**
+ * KABUK — İKİ KATMANLI HATA SINIRI.
+ *
+ * DIŞ KATMAN kabuğun KENDİ kodunu sarıyor. Kabuğun bir satırı
+ * patladığında React ağacı kökünden söküyor ve geriye boş bir
+ * `<div>` kalıyordu; kullanıcı beyaz ekran görüyordu. Kabuk her
+ * ekranı sardığı için çöktüğünde açık kalan tek bir sayfa bile
+ * olmuyordu.
+ *
+ * İÇ KATMAN yalnız sayfa içeriğini sarıyor. Bir ekran çökse bile yan
+ * menü, arama ve kimlik AYAKTA kalır; kullanıcı başka bir ekrana
+ * geçebilir. Tek katman olsaydı bir raporun hatası bütün gezinmeyi
+ * de götürürdü.
+ *
+ * SIRA ÖNEMLİ: iç sınır önce yakalar. Dıştaki yalnız kabuğun kendi
+ * çöküşünde devreye girer.
+ *
+ * GÖVDE "ErpShell" ÖNEKİYLE ADLANDIRILMADI. Redwood sözleşmesi
+ * kabuk açılışlarını etiketin ÖNEKİNE bakarak sayıyor; "ErpShell"
+ * ile başlayan her etiket bir ekran açılışı sayılıyor. Gövde o
+ * önekle adlandırılınca kabuk, kendi içinde bayraksız bir ekran
+ * açıyormuş gibi göründü ve sözleşme düştü.
+ *
+ * Sözleşme GEVŞETİLMEDİ — ad düzeltildi. Zaten doğrusu da bu:
+ * bu bileşen bir kabuk değil, kabuğun gövdesi. (Bu yorumun
+ * kendisi de o öneki yazmıyor; sayaç yorum ile kodu ayırmıyor.)
+ */
+export default function ErpShell(props: ErpShellProps) {
+  return (
+    <HataSiniri nerede="kabuk" bicim="tam" onHata={istemciHatasiBildir}>
+      <KabukGovdesi {...props} />
+    </HataSiniri>
+  );
+}
+
+function KabukGovdesi({
   title,
   description,
   children,
@@ -500,7 +538,7 @@ export default function ErpShell({
           {!collapsed && (
             <div className="erp-user-info">
               <strong>{currentUser?.fullName || currentUser?.username || "Kullanıcı"}</strong>
-              <span>{currentUser?.roles[0] || "Kullanıcı"}</span>
+              <span>{currentUser?.roles?.[0] || "Kullanıcı"}</span>
             </div>
           )}
           <LogoutButton variant="erp" />
@@ -603,7 +641,15 @@ export default function ErpShell({
           </div>
         </div>
 
-        <div className="erp-content">{children}</div>
+        <div className="erp-content">
+          <HataSiniri
+            nerede="içerik"
+            bicim="govde"
+            onHata={istemciHatasiBildir}
+          >
+            {children}
+          </HataSiniri>
+        </div>
       </main>
 
       <CommandPalette
