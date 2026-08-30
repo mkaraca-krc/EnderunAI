@@ -568,13 +568,32 @@ public sealed class FinancialInstrumentTests(DatabaseFixture fixture)
         var stationery = await CategoryIdAsync(
             context.CompanyId, ExpenseCategoryCatalog.Stationery);
 
-        // Aynı ekstre dönemine üç harcama.
-        var spend = Today.AddDays(2);
+        /*
+         * TARİHLER TAKVİMDEN BAĞIMSIZ SEÇİLİYOR.
+         *
+         * Önce `Today.AddDays(2)` ve `+3` kullanılıyordu ve test
+         * ÇOĞU GÜN geçiyordu. Ayın 30'unda kırmızıya döndü: harcamalar
+         * ayın 1'i ve 2'sine düştü, kesim günü de 1 olduğu için ilki
+         * o ayın ekstresine, ikincisi BİR SONRAKİ ekstreye girdi —
+         * iddia "tek ekstre" diyordu, iki ekstre çıktı.
+         *
+         * Üretim kodu doğruydu (`CutDateFor` kesim gününde yapılan
+         * harcamayı o ekstreye koyuyor). Yanlış olan testin varsayımı:
+         * "Today+2 ile Today+3 aynı dönemdedir" takvime bağlı bir
+         * varsayım ve ayda bir gün yanlış.
+         *
+         * Kesim günü 1 olduğunda dönem ayın 2'sinden sonraki ayın
+         * 1'ine kadar sürüyor. Gelecek ayın 5 ve 6'sı, hangi gün
+         * koşulursa koşulsun aynı dönemin ORTASINDA kalıyor.
+         */
+        var donemOrtasi = new DateTime(Today.Year, Today.Month, 1, 0, 0, 0, DateTimeKind.Utc)
+            .AddMonths(1)
+            .AddDays(4);
 
-        await AddCardExpenseAsync(client, context, cardId, supplies, 5_000m, spend, "A");
-        await AddCardExpenseAsync(client, context, cardId, stationery, 3_000m, spend, "B");
+        await AddCardExpenseAsync(client, context, cardId, supplies, 5_000m, donemOrtasi, "A");
+        await AddCardExpenseAsync(client, context, cardId, stationery, 3_000m, donemOrtasi, "B");
         await AddCardExpenseAsync(client, context, cardId, supplies, 2_000m,
-            spend.AddDays(1), "C");
+            donemOrtasi.AddDays(1), "C");
 
         var projection = await ProjectionAsync(client, context);
 
