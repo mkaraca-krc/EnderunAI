@@ -4044,6 +4044,32 @@ body {
   vertical-align: middle;
 }
 
+/*
+ * İKİNCİ SATIR AYRACI — TEK KAYNAK.
+ *
+ * Sütunlar ikinci bir bilgiyi <small> ile yazıyor: çek no altında
+ * belge no, banka adı altında keşideci. `.erp-table` bunu blok
+ * yapıyordu ama DataTable'ın kullandığı `.erp-data-table-grid`
+ * için karşılığı YOKTU — <small> satır içi kalıyor ve iki ayrı
+ * bilgi tek kelimeymiş gibi okunuyordu:
+ *
+ *     "HALKBANKFIRAT LIFE"        (banka + keşideci)
+ *     "C1 1796766ACK-2026-000005" (çek no + belge no)
+ *
+ * 20 ekran bu desende. Düzeltme tek kaynaktan: her ekrana ayrı ayrı
+ * yazmak, 20 kopyanın zamanla ayrışması demekti.
+ *
+ * YALNIZ <small>: `.erp-table` ayrıca span ve strong'u da bloklıyor,
+ * ama burada span'ı bloklamak `erp-status` rozetlerini bozar —
+ * `.erp-data-table-grid tbody td span` özgüllüğü (0,3,3) `.erp-status`
+ * (0,1,0) kuralını ezer ve her rozet tam satır kaplardı.
+ */
+.erp-data-table-grid tbody td small {
+  display: block;
+  margin-top: 4px;
+  color: var(--erp-muted);
+}
+
 .erp-data-table-grid tbody tr:last-child td {
   border-bottom: 0;
 }

@@ -1638,6 +1638,68 @@ döndüğü gözlendi: 21 testin 2'si kırmızı, `Admin` **4394 bayt**,
 diğer 14 rol yeşil. Sonda ile taklit edilen kusur, gerçeğinin yerini
 tutmaz (Kural 59).
 
+## EKRAN/1 — LİSTE HÜCRESİNDE İKİNCİ SATIR (2026-08-30)
+
+### AYRAÇSIZ BİRLEŞME — 20 EKRANDA, TEK SEBEPTEN
+
+Canlıda görülen (Mehmet, tarayıcı):
+
+    "HALKBANKFIRAT LIFE"                 (banka adı + keşideci)
+    "HALKBANKFIRAT LIFE YATIRIM İNŞAAT…"
+    "C1 1796766ACK-2026-000005"          (çek no + belge no)
+
+İki ayrı bilgi tek kelimeymiş gibi okunuyordu.
+
+**KÖK NEDEN:** sütunlar ikinci bilgiyi `<small>` ile yazıyor.
+`.erp-table td small { display: block }` VARDI; DataTable'ın
+kullandığı `.erp-data-table-grid` için **YOKTU**. `<small>` satır
+içi kalıyordu.
+
+İşaretleme doğruydu, eksik olan stildi — bu yüzden hiçbir render
+testi yakalayamazdı.
+
+**KAPSAM: 20 ekran** (DataTable + `render` içinde `<small>`).
+En yoğunları: satış faturaları 5, faturalar 5, İSG belgeler 5,
+yevmiye 4, kur değerlemesi 4.
+
+### DÜZELTME TEK KAYNAKTAN
+
+`app/globals.css` içine tek kural. 20 ekrana ayrı ayrı yazmak, 20
+kopyanın zamanla ayrışması demekti.
+
+**YALNIZ `<small>` ALINDI.** `.erp-table` ayrıca `span` ve `strong`u
+da bloklıyor, ama `.erp-data-table-grid tbody td span` özgüllüğü
+(0,3,3) `.erp-status` (0,1,0) kuralını EZER ve DataTable içindeki her
+durum rozeti tam satır kaplardı — düzeltilenden büyük bir hata.
+
+### SONDA
+
+`display: block` kaldırıldı → `.erp-data-table-grid` testi kırmızı,
+`.erp-table` testi **YEŞİL KALDI**. İkisi birden kırmızı olsaydı test
+sınıfları ayırt etmiyor demekti (Kural 61).
+
+### CSS SÖZLEŞMESİ, RENDER TESTİ DEĞİL
+
+Kural harici bir stil dosyasında ve jsdom onu uygulamıyor; render
+testi kuralın varlığını ölçemez, yalnız işaretlemeyi ölçer.
+İşaretleme zaten doğruydu.
+
+### CHECKBOX ADI — ÖLÇÜLDÜ, KUSUR YOK
+
+"İptalleri göster" / "Kapanmışları göster" kutularının erişilebilir
+adının `"on"` göründüğü bildirildi. Ölçüldü: `<label>` sarmalı
+checkbox'ın erişilebilir adı **doğru üretiliyor** (erişilebilir ad
+hesabıyla doğrulandı, `aria-label` niteliği null — beklenen bu).
+
+`"on"`, checkbox'ın `value` niteliği yokken varsayılan DEĞERİ; aracın
+adı değil değeri göstermesi. Süzgeç bulgusunun geri çekilmesiyle aynı
+sınıf.
+
+**KOD DEĞİŞTİRİLMEDİ.** Ölçülmemiş bir soruna karşı "her ihtimale
+karşı" `aria-label` eklemek, bu programın disiplininin tersi olurdu —
+ve var olmayan bir kusura muhafız koymak, muhafızın neyi koruduğunu
+belirsizleştirir.
+
 ## TARİH BAĞIMLI TEST — AYIN 30'UNDA KIRILIYORDU (2026-08-30)
 
 `FinancialInstrumentTests.Statement_ProducesOneCashOutflowForThePeriod`
