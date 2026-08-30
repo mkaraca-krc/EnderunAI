@@ -145,6 +145,157 @@ public sealed class TokenCookieSizeTests
             currentUser.Permissions.Count);
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // GERÇEK ROLLER — VEKİL DEĞİL
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// PAYLI EŞİK. 4096 tarayıcının sınırı; uçurumun kenarında değil,
+    /// YAKLAŞIRKEN uyarı almak istiyoruz. Aradaki 596 bayt, bir sonraki
+    /// izin paketinin sınırı sessizce aşmasını engelleyen pay.
+    /// </summary>
+    private const int PayliEsik = 3500;
+
+    public static TheoryData<string> KatalogRolleri()
+    {
+        var veri = new TheoryData<string>();
+
+        foreach (var rol in RoleCatalog.Roles)
+            veri.Add(rol.Name);
+
+        return veri;
+    }
+
+    /// <summary>
+    /// KATALOGDAKİ HER ROLÜN JETONU EŞİĞİN ALTINDA OLMALI.
+    ///
+    /// NEDEN BU TEST GEREKTİ — ÜSTTEKİ TESTLER VARDI VE ATEŞLEMEDİLER.
+    ///
+    /// Yukarıdaki testler her zaman `AllPermissionKeys()` geçiyor, yani
+    /// kataloğun TAMAMINI. O küme her zaman "hepsine sahip" bayrağını
+    /// tetikliyor ve jeton küçük çıkıyor; test yeşil kalıyor. Yani
+    /// testler Admin'in GERÇEK anahtar kümesini değil, onun YERİNE
+    /// GEÇEN bir vekili sınıyordu.
+    ///
+    /// Vekil, "Admin = kataloğun tamamı" doğru olduğu sürece gerçeği
+    /// temsil ediyordu. ÖP/1a'da `payment.plan.approve` Admin'den
+    /// çıkarıldı (ödeme onayı teknik bir rolün işi değil — İ2) ve
+    /// Admin 141'den 140'a düştü. Vekil o anda gerçeği temsil etmeyi
+    /// BIRAKTI, ama testler aynı vekili sınamaya devam ettiği için
+    /// yeşil kaldılar.
+    ///
+    /// Canlıda olan: 140 izin jetona tek tek yazıldı, jeton 4096 baytı
+    /// aştı, tarayıcı çerezi SESSİZCE attı, giriş döngüye girdi.
+    ///
+    /// Bu test artık `RoleCatalog.Roles` üzerinden koşuyor — vekil
+    /// yok, rollerin kendisi. Yeni bir rol eklendiğinde ya da bir
+    /// rolden izin çıkarıldığında kendiliğinden kapsıyor.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(KatalogRolleri))]
+    public void HerRolunJetonu_EsigiAsmiyor(string rolAdi)
+    {
+        var rol = RoleCatalog.Roles.Single(x => x.Name == rolAdi);
+
+        var token = CreateService().Create(
+            CreateUser(), [rol.Name], rol.PermissionKeys);
+
+        var cerezBaytlari = CookieName.Length + token.Length;
+
+        Assert.True(
+            cerezBaytlari < PayliEsik,
+            $"\"{rolAdi}\" rolünün jetonu {cerezBaytlari} bayt — paylı eşik "
+            + $"{PayliEsik}, tarayıcı sınırı {CookieByteLimit}. "
+            + $"Rolde {rol.PermissionKeys.Count} izin var.\n\n"
+            + "SEBEP MUHTEMELEN İZİN ÇIKARMAK: tam yetkili bir rolden TEK "
+            + "bir izin çıkarmak \"hepsine sahip\" bayrağını devre dışı "
+            + "bırakır ve bütün liste jetona yazılır. Jeton maliyeti izin "
+            + "sayısıyla düzgün artmaz — bayrak bir uçurum yaratır.\n\n"
+            + "Bu sınırı aşan jeton tarayıcı tarafından SESSİZCE atılır: "
+            + "giriş 200 döner, oturum hiç açılmaz, kullanıcı login "
+            + "ekranına geri düşer.");
+    }
+
+    /// <summary>
+    /// EN BÜYÜK ROLÜN PAYI RAPORLANIYOR.
+    ///
+    /// Yalnız "eşiğin altında" demek yetmiyor: eşiğe ne kadar
+    /// yaklaşıldığı görünmezse, bir paket sınırı bir hamlede aşar ve
+    /// kimse yaklaştığını fark etmez.
+    /// </summary>
+    [Fact]
+    public void EnBuyukRolunPayi_Raporlanir()
+    {
+        var enBuyuk = RoleCatalog.Roles
+            .Select(rol => new
+            {
+                rol.Name,
+                Bayt = CookieName.Length + CreateService()
+                    .Create(CreateUser(), [rol.Name], rol.PermissionKeys).Length
+            })
+            .OrderByDescending(x => x.Bayt)
+            .First();
+
+        Assert.True(
+            enBuyuk.Bayt < PayliEsik,
+            $"En büyük jeton \"{enBuyuk.Name}\" rolünde: {enBuyuk.Bayt} bayt. "
+            + $"Paylı eşiğe kalan: {PayliEsik - enBuyuk.Bayt} bayt.");
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // REDDETME MUHAFIZI (Ş3)
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// SINIRI AŞAN JETON ÜRETİLMEZ — SESSİZ KALMAZ.
+    ///
+    /// Tarayıcı 4096 baytı aşan çerezi sessizce atıyor: giriş 200
+    /// dönüyor, Set-Cookie gidiyor, çerez yok sayılıyor, kullanıcı
+    /// login ekranına geri düşüyor ve HİÇBİR KATMAN ne olduğunu
+    /// söylemiyor. Canlıda bu teşhis saatler aldı (2026-08-29).
+    ///
+    /// Bu test o sessizliği kilitliyor: eşiği aşan jeton üretilmiyor,
+    /// açık hata çıkıyor. Kullanıcı yine giremez ama NEDEN giremediği
+    /// bellidir.
+    ///
+    /// KATALOG YETMEZ, ÇÜNKÜ TAM KATALOG BAYRAĞA DÜŞER. Eşiği aşmak
+    /// için kataloğun DIŞINDA uydurma anahtarlar veriliyor: bunlar ne
+    /// bayrağı tetikler ne de tümleyene sığar, liste olarak yazılırlar.
+    /// </summary>
+    [Fact]
+    public void EsigiAsanJeton_UretilmezVeAcikHataVerir()
+    {
+        // Katalog dışı anahtarlar: bayrak tetiklenmez, tümleyen
+        // kısalmaz, liste kaçınılmaz olarak büyür.
+        var sisirilmis = Enumerable
+            .Range(0, 400)
+            .Select(i => $"uydurma.izin.cok.uzun.anahtar.{i:D4}")
+            .ToArray();
+
+        var hata = Assert.Throws<InvalidOperationException>(
+            () => CreateService().Create(CreateUser(), ["Admin"], sisirilmis));
+
+        Assert.Contains("çerez eşiğini aşıyor", hata.Message);
+        Assert.Contains("SESSİZCE", hata.Message);
+        Assert.Contains("JETON/2", hata.Message);
+    }
+
+    /// <summary>
+    /// SINIRIN ALTINDAKİ JETON ÜRETİLİYOR — muhafız fazla geniş olmasın.
+    ///
+    /// Bu iddia olmasaydı, her jetonu reddeden bir muhafız da üstteki
+    /// testi geçerdi ve kimse giriş yapamazdı.
+    /// </summary>
+    [Fact]
+    public void SinirAltindakiJeton_Uretilir()
+    {
+        var token = CreateService().Create(
+            CreateUser(), ["Finans Sorumlusu"], AllPermissionKeys().Take(20));
+
+        Assert.False(string.IsNullOrWhiteSpace(token));
+        Assert.True(CookieName.Length + token.Length < PayliEsik);
+    }
+
     private static string DecodePayload(string token)
     {
         var payload = token.Split('.')[1]

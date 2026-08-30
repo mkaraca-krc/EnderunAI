@@ -1508,6 +1508,188 @@ dışarıda** — fiş girer, hesap planını toplu değiştiremez.
 
 Bu paket çizgideki üç satırı da kapattı. Sınıf yeniden **sıfırda**.
 
+## JETON/1 — TÜMLEYEN KODLAMA VE REDDETME MUHAFIZI (2026-08-29)
+
+### ARIZA: GİRİŞ DÖNGÜSÜ, SEBEBİ BİR İZİN ÇIKARMAK
+
+ÖP/1a'da `payment.plan.approve` Admin'den çıkarıldı — yetkilendirme
+açısından doğruydu (İ2: ödeme onayı teknik bir rolün işi değil).
+Öngörülmeyen sonucu:
+
+| Halka | Ne oldu |
+|---|---|
+| `RoleCatalog` | Admin 141 → **140** izin |
+| `HasEveryPermission` | artık **false** |
+| `TokenService` | 140 izni **tek tek** jetona yazdı |
+| Jeton | **4394 bayt** (ölçüldü; tarayıcı sınırı 4096) |
+| Tarayıcı | çerezi **SESSİZCE** attı |
+| `middleware` | `enderun_token` göremedi → `/login` |
+| Kullanıcı | giriş 200 dönüyor, oturum hiç açılmıyor |
+
+**Yayın günü hiçbir belirti yoktu.** Mehmet'in elindeki jeton 12 saat
+geçerliydi; arıza jeton dolduğunda ortaya çıktı (Kural 56).
+
+`mehmet` kullanıcısının rolü **Admin**'di (Genel Müdür değil). Acil
+düzeltme olarak Genel Müdür rolü **eklendi** (Admin kaldırılmadı —
+arıza anında rol takası gereksiz risk): birleşik izin 141/141 = tam
+katalog = bayrak = küçük jeton.
+
+### BEKÇİ VARDI VE ATEŞLEMEDİ — VEKİL SINIYORDU
+
+`TokenCookieSizeTests` dört testle tam bu arızayı koruyordu. Üçü
+`AllPermissionKeys()` geçiyordu — **kataloğun tamamı**, ki o küme her
+zaman bayrağı tetikler ve jetonu küçültür. Dördüncüsü `Take(44)` ile
+elle yazılmış bir sayı kullanıyordu.
+
+Yani testler Admin'in gerçek anahtar kümesini değil, **onun yerine
+geçen bir vekili** sınıyordu. Vekil, "Admin = kataloğun tamamı" doğru
+olduğu sürece geçerliydi; ÖP/1a o eşitliği bozdu, vekil geçersizleşti,
+testler yeşil kalmaya devam etti. **Kural 58** bu olaydan doğdu.
+
+Yeni testler `RoleCatalog.Roles` üzerinden koşuyor.
+
+### ÜÇÜNCÜ KODLAMA: TÜMLEYEN
+
+Sorun izin listesi değil, **bayrağın yarattığı uçurum** (Kural 57).
+Üçüncü bir hâl eklendi:
+
+| Kodlama | Ne zaman |
+|---|---|
+| `all_permissions` | kataloğun tamamı |
+| `all_permissions` + `not_permissions` | tamamı eksi listelenenler |
+| `permissions` | yalnız listelenenler |
+
+**Seçim boyuta göre ve DETERMİNİSTİK**: `|izinler| <= |tümleyen|` ise
+liste, değilse tümleyen. Eşitlik kuralın içinde — `<` olsaydı katalog
+bir izin büyüyünce sınıra yakın bir rol kodlama değiştirir, aynı
+kullanıcı bir girişte çalışıp ötekinde çalışmazdı.
+
+Admin'in jetonu artık tek anahtar taşıyor.
+
+### TEK YORUMLAYICI (Ş1)
+
+Üç alan adı yalnız iki dosyada geçer:
+`Security/JetonIzinKodlamasi.cs` ve `lib/auth/jeton-izinleri.ts`.
+İki çalışma ortamı olduğu için iki dosya; **her tarafta tek yer**.
+
+`tests/jeton-kodlamasi-tek-yer.test.ts` **her iki tarafı** tarıyor.
+Yalnız ön yüz taransaydı arka uçtaki ikinci bir okuma görülmezdi.
+
+En tehlikeli hata bu muhafızın önlediği şey: `all_permissions`
+bayrağını **tek başına** okuyan bir tüketici, yanındaki
+`not_permissions` listesini görmez ve kullanıcıya **olmayan bir
+yetkiyi verir**. Eski okuma biçimi tam böyleydi ve ikili dünyada
+doğruydu; tümleyen eklendiği an sessizce yanlışa dönerdi.
+
+Muhafız **yorumları eliyor** — bir yorum karar veremez. `permissions`
+kelimesi ayrı ele alınıyor: her yerde geçen bir iş terimi (tablo adı,
+`user.permissions`), yalnız *jeton alanı olarak okunması* yasak.
+
+`middleware` artık `routeErisimi(yol, izinVar)` çağırıyor;
+`canAccessRoute` imzası **bozulmadı** (20+ test ona bağlı) ve kabuk
+ile menü `/auth/me`'den gelen açılmış listeyle çalışmaya devam ediyor.
+
+### REDDETME MUHAFIZI (Ş3)
+
+`TokenService` jetonu üretip **ölçüyor**; paylı eşiği (3500) aşarsa
+`InvalidOperationException` fırlatıyor. Gerekçe: bugünkü teşhis
+saatler aldı çünkü **hiçbir katman "bu çerez atıldı" demedi.**
+
+Açık hata, sessiz arızadan her zaman iyidir: kullanıcı yine giremez
+ama **neden** giremediği bellidir.
+
+### SINIR VE JETON/2'NİN TETİĞİ (Ş4)
+
+**Tümleyen kodlaması bugünkü uçurumu kaldırır, ÖLÇEKLENMEYİ ÇÖZMEZ.**
+Kataloğun yaklaşık yarısına sahip bir rol hâlâ şişer: 141 anahtarda
+~70 anahtar ≈2400 bayt (güvenli), 300 anahtarda ~150 anahtar ≈4000
+bayt (değil).
+
+> **JETON/2** (izin listesini jetondan tümüyle çıkarma + middleware'in
+> yeniden kurulması) **ŞU OLAYLA açılır: herhangi bir rolün jetonu
+> 3500 bayt uyarı çizgisini aşarsa.** O ana kadar açılmaz; o an
+> geldiğinde tartışılmaz, başlar.
+
+Bir sonraki paketin ne zaman gerektiğini bugün yazmazsak, gelecek
+sefer bunu bir arıza sırasında keşfederiz — bugün olduğu gibi.
+
+### SONDA MUHAFIZIN KENDİSİNDE DELİK BULDU
+
+Sonda D (kodlamayı middleware'de ikinci kez oku) ilk denemede
+**GEÇMEDİ** — muhafız 3/3 yeşil kaldı.
+
+Sebep ölçüldü: muhafız alan adını **yalnız tırnaklı** arıyordu
+(`"all_permissions"`). Sabotaj özellik erişimi yazmıştı
+(`.all_permissions`) — yani muhafız, koruduğunu söylediğim şeyi **en
+doğal yazım biçiminde görmüyordu**.
+
+Muhafız üç biçimi de görecek şekilde düzeltildi (`"alan"`, `.alan`,
+`['alan']`) ve sonda ikinci denemede kırmızı verdi, ihlal satırını
+adıyla gösterdi. Sağlam kodda yanlış alarm yok.
+
+**Sonda olmasaydı bu delik commit'e girer ve "Ş1 korunuyor" yazardı.**
+Kural 42'nin bir başka yüzü: ölçülmemiş bir koruma konmuş sayılmaz —
+ve bir muhafızın varlığı, çalıştığının kanıtı değildir.
+
+### KIRMIZI ÖNCE GÖZLENDİ
+
+Test düzeltmeden **önce** yazıldı ve gerçek kusura karşı kırmızıya
+döndüğü gözlendi: 21 testin 2'si kırmızı, `Admin` **4394 bayt**,
+diğer 14 rol yeşil. Sonda ile taklit edilen kusur, gerçeğinin yerini
+tutmaz (Kural 59).
+
+## TARİH BAĞIMLI TEST — AYIN 30'UNDA KIRILIYORDU (2026-08-30)
+
+`FinancialInstrumentTests.Statement_ProducesOneCashOutflowForThePeriod`
+JETON/1'in tam takım koşusunda kırmızı verdi. **JETON/1 ile ilgisi
+yoktu** — yalıtılmış koşuda da kırmızıydı, yani kirlenme de değildi.
+
+**KARARSIZ DEĞİL, TARİH BAĞIMLI.** Aradaki fark önemli: kararsız test
+rastgele kırılır, bu ayın 30'unda **kesin** kırılır.
+
+| Gün | Harcama tarihleri | Ekstre sayısı |
+|---|---|---|
+| 29 Ağustos | 31 Ağu, 1 Eyl | ikisi de Eylül ekstresinde → **1** ✓ |
+| 30 Ağustos | 1 Eyl, 2 Eyl | 1 Eyl → Eylül, 2 Eyl → **Ekim** → **2** ✗ |
+
+**ÜRETİM KODU DOĞRUYDU.** `CreditCardService.CutDateFor` "kesim
+gününde yapılan harcama o ekstreye girer" diyor ve bunu doğru
+uyguluyor. Yanlış olan testin varsayımıydı: *"Today+2 ile Today+3 aynı
+dönemdedir"* — takvime bağlı bir varsayım ve **ayda bir gün yanlış**.
+
+Tarihler gelecek ayın 5-6'sına sabitlendi. Kesim günü 1 olduğunda
+dönem ayın 2'sinden sonraki ayın 1'ine sürüyor; 5 ve 6 hangi gün
+koşulursa koşulsun dönemin ortasında kalıyor.
+
+**AYNI DOSYADA 10 `Today.AddDays` DAHA VAR** (kredi taksitleri, gider
+girişleri). Ay sınırına duyarlı olup olmadıkları **ÖLÇÜLMEDİ** — ayrı
+kalem olarak bekliyor. Bu tür bir kırılganlık yalnız belirli
+takvim günlerinde görünür, yani yayın kapısı onu çoğu gün geçirir.
+
+## SÜZGEÇ BULGUSU GERİ ÇEKİLDİ (2026-08-29)
+
+`/finans/cekler` süzgeç kontrollerinin etkileşimli öğe olmadığı
+bulgusu **YANLIŞTI.** Erişilebilirlik ağacı varsayılan derinlikle
+okundu, kontroller o derinliğin altında kaldı, **eksik sonuç yokluk
+sayıldı** — Kural 48'in ihlali, olumlu denetim yapılmadı.
+
+Kontroller yerel `<select>`, `<input type=checkbox>` ve textbox
+olarak mevcut; süzgeç çubuğu koşulsuz render ediliyor ve önünde erken
+çıkış yok (kaynakta ölçüldü).
+
+20 ekranlık tarama **yazılmadı**.
+
+## ÇEK/1 CANLIDA DOĞRULANDI (2026-08-29, gözlem)
+
+| Görünüm | Ölçüm |
+|---|---|
+| Varsayılan (Verilen çekler) | 16 çek · "Açık çekler toplamı: 21.392.358,18 ₺" |
+| | Ağustos 2026 grubu **yok**, 805088 listede **değil** ✓ |
+| Süzgeç = Ödendi | 3 çek · "Toplam (Ödendi): 3.327.488,00 ₺" |
+| | 805088 **görünüyor** ✓ |
+
+Etiket parantezli biçimde çalışıyor (Kural 37).
+
 ## TEST SAYISI CIRCIRI — KURAL 55'İN MEKANİK KARŞILIĞI (2026-08-29)
 
 **Kural 55'in mekanik karşılığı test sayısı cırcırıdır. Kural akılda
@@ -5844,6 +6026,127 @@ iki sayı farklı soruya cevap veriyor ve fark kasıtlıdır
     arka uç ve ön yüz için ayrı çizgi tutuyor ve sayı düşerse kırmızı
     veriyor. Yakalayamadığı şey de kayıtlı: çizginin sessizce
     düşürülmesi — koruma orada usule ait, mekanizmada değil.
+
+56. **YETKİLENDİRME DEĞİŞİKLİKLERİ ANINDA GÖRÜNMEZ.**
+
+    Mevcut oturumlar eski jetonla çalışmaya devam eder; yeni davranış
+    ancak jetonlar dolduğunda (burada 12 saat sonra) ortaya çıkar. Bu
+    yüzden rol/izin değişikliği içeren bir yayının doğrulaması,
+    uygulamanın "hâlâ çalışıyor" olmasıyla **YAPILAMAZ** — **TEMİZ BİR
+    OTURUMLA YENİDEN GİRİŞ** gerektirir.
+
+    **KAYNAK:** ÖP/1a — `payment.plan.approve` Admin'den çıkarıldı,
+    Admin 141'den 140 izne düştü, "hepsine sahip" bayrağı devre dışı
+    kaldı, 140 izin tek tek jetona yazıldı, jeton 4096 baytı aştı,
+    tarayıcı çerezi **SESSİZCE** attı, giriş döngüye girdi. **Yayın
+    günü hiçbir belirti yoktu**; arıza, eldeki jetonun süresi dolduğu
+    gün ortaya çıktı.
+
+57. **BİR ROLÜN JETON MALİYETİ İZİN SAYISIYLA DÜZGÜN ARTMAZ.**
+
+    "Hepsine sahip" kısayolu bir **uçurum** yaratır. Tam yetkili bir
+    rolden **TEK** bir izin çıkarmak, jetonu on kat büyütebilir:
+    bayrak devre dışı kalır ve bütün liste jetona yazılır.
+
+    **İZİN ÇIKARMAK, İZİN EKLEMEKTEN DAHA TEHLİKELİDİR.** Ekleme
+    doğrusal büyütür; çıkarma bir eşiği aşağıdan yukarı geçirebilir.
+
+58. **BİR MUHAFIZ, GİRDİSİNİ KENDİ ELİYLE KURUYORSA, KAPSAMI YAZILDIĞI
+    ANDA DONAR.**
+
+    Elle kurulmuş bir küme (`AllPermissionKeys()`, `Take(44)`, sabit
+    liste) gerçeğin **VEKİLİDİR**; yalnızca vekil ile gerçek örtüştüğü
+    sürece geçerlidir. Örtüşme bozulduğunda muhafız susmaz — **YEŞİL
+    KALMAYA DEVAM EDER**, çünkü hâlâ vekili sınamaktadır.
+
+    Muhafızlar **gerçek kayıttan** sürülmelidir (`RoleCatalog.Roles`,
+    `DbSet` listesi, dosya taraması); böylece sistem değiştiğinde
+    kapsam kendiliğinden genişler.
+
+    **KAYNAK:** `TokenCookieSizeTests` dört testle jeton boyutunu
+    koruyordu; üçü `AllPermissionKeys()` geçiyordu — o küme her zaman
+    "hepsine sahip" bayrağını tetikler ve jetonu küçültür. Dördüncüsü
+    `Take(44)` ile elle yazılmış bir sayı kullanıyordu. ÖP/1a'da Admin
+    katalogdan ayrılınca vekil geçersizleşti, testler yeşil kaldı,
+    canlıda giriş kırıldı.
+
+    Kural 48'in ("sıfır sonuç yokluğun kanıtı değil") kardeşi: orada
+    boş küme her iddiayı doğruluyordu, burada sabit küme her
+    değişikliği görmezden geliyor. İkisi de **ölçtüğünü sandığın şey
+    ile gerçekte ölçtüğün şeyin** ayrışmasıdır.
+
+59. **YENİ BİR MUHAFIZIN İLK GÖZLEMİ GERÇEK KUSURA KARŞI OLMALIDIR.**
+
+    Düzeltmeyle birlikte doğan bir test, kusuru yakaladığını
+    KANITLAMAZ — yalnız düzeltme sonrası yeşili gösterir. Sonda ile
+    taklit edilen kusur, gerçeğinin yerini tam tutmaz: sabotaj senin
+    kurduğun bir şeydir, gerçek kusur değildir.
+
+    **KIRMIZI GÖZLENİR, sonra düzeltilir, sonra TEK SEFERDE commit
+    edilir.** Kırmızı commit edilmez ama gözlemsiz de geçilmez.
+
+    KAYNAK: JETON/1. Jeton boyutu testi düzeltmeden önce yazıldı ve
+    gerçek kusura karşı kırmızıya döndüğü gözlendi — `Admin` rolü
+    **4394 bayt**, paylı eşik 3500, tarayıcı sınırı 4096. Diğer 14 rol
+    yeşil kaldı; hepsi kırmızı olsaydı test rolleri değil başka bir
+    şeyi ölçüyor olurdu.
+
+60. **BİR KODLAMA GENİŞLETİLDİĞİNDE, ONU ANLAMAYAN OKUYUCUNUN HANGİ
+    TARAFA DÜŞTÜĞÜ TASARIMIN PARÇASIDIR.**
+
+    **Kapalı** tarafa düşen eksik yetki GÖRÜNÜR ve düzeltilir; **açık**
+    tarafa düşen fazla yetki GÖRÜNMEZ. Yeni alanlar, eski okuyucuyu
+    KAPALI tarafa düşürecek şekilde şekillendirilir.
+
+    KAYNAK: JETON/1. Tümleyen kodlaması önce `all_permissions: true` +
+    `not_permissions` biçiminde tasarlanmıştı. `not_permissions`ı
+    bilmeyen bir okuyucu bayrağı görüp HER ŞEYİ verirdi — Admin'e ödeme
+    onayı dahil, yani İ2'nin tam tersi.
+
+    **Bu teorik değil:** safe-deploy sağlık kontrolü düşerse ön yüzü
+    GERİ ALIYOR, ama kullanıcıların çerezindeki yeni biçimli jeton
+    **12 saat** yaşıyor. O pencerede eski middleware yol korumasını
+    tamamen açardı.
+
+    Kodlama değiştirildi: tümleyen kullanıldığında bayrak
+    GÖNDERİLMİYOR. Anlamayan okuyucu ne bayrak ne liste görür, izin
+    kümesi boş kalır, kullanıcı ekrana giremez.
+
+    OKUMA SIRASI DA TASARIMIN PARÇASI: tümleyen ÖNCE bakılır. Sıra
+    tersine olsaydı ve bir gün ikisi birden gelirse, bayrağı önce
+    okuyan kod tümleyeni yok sayıp fazla yetki verirdi. Sıra o hatayı
+    yapısal olarak imkânsız kılıyor.
+
+    İLGİLİ: gidiş-dönüş iddiaları **küme eşitliği** olmalı, kapsama
+    değil. "çözülmüş ⊇ gerçek" fazla yetkiyi yakalamaz.
+
+61. **SONDA RAPORU KIRMIZILARLA BİRLİKTE YEŞİLLERİ DE TAŞIR.**
+
+    Kırmızıya dönen testler sabotajın **UYGULANDIĞINI** kanıtlar;
+    yeşil kalanlar sabotajın **SINIRLI KALDIĞINI** kanıtlar.
+
+    Bir sondada her şey kırmızıya dönüyorsa ölçülen şey hedef değil,
+    **koşum düzeneğidir** — derleme kırılmış, ortak fikstür bozulmuş
+    ya da testler aynı bağımlılığa takılmış olabilir.
+
+    Her sonda için **beklenen kırmızı VE beklenen yeşil önden yazılır**,
+    ikisi de doğrulanır.
+
+    KAYNAK: JETON/1. Sonda A'da gidiş-dönüş testinin yeşil kalması,
+    testlerin gerçekten rolleri ölçtüğünü gösterdi. Sonda C'de
+    `SinirAltindakiJeton_Uretilir`in yeşil kalması, muhafızın HER
+    jetonu değil yalnız eşiği aşanı reddettiğini gösterdi — o test
+    olmasaydı, her jetonu reddeden bozuk bir muhafız da sondayı
+    geçerdi ve kimse giriş yapamazdı.
+
+    **EK — DAR SORU TUZAĞI:** bir ölçüm doğru olabilir ama sorulan
+    soru dar olabilir. Çıktıyı okurken *"bu ne diyor"* kadar *"bunun
+    tersini soran biri ne görürdü"* de sorulur.
+
+    Bunun bedeli aynı pakette ödendi: `Tumleyen_YoksayilirsaFazlaYetki
+    Dogar` testi yeşilken "tümleyeni okumak şart" diye okundu. Aynı
+    çıktı "tümleyeni okumayan HER ŞEYİ görür" de diyordu — yani
+    kodlamanın açık tarafa düştüğünü. Ölçüm doğruydu, soru dardı.
 
 ## 5a. CANLIDA YANLIŞ ÜÇ ÇEK KAYDI — VERİ BOZUK DEĞİL, GİRİŞ YANLIŞ
 

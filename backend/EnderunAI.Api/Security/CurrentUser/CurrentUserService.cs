@@ -46,33 +46,20 @@ public sealed class CurrentUserService(
         ?? [];
 
     /// <summary>
-    /// Token'daki izinler.
+    /// TOKEN'DAKİ İZİNLER — KODLAMAYI ÇÖZEN TEK YER BURASI DEĞİL.
     ///
-    /// TAM YETKİ BAYRAĞI: kataloğun tamamına sahip kullanıcıda
-    /// <see cref="TokenService"/> izinleri tek tek yazmıyor, tek bir
-    /// <c>all_permissions</c> claim'i koyuyor — 129 anahtar token'ı
-    /// 4096 baytlık çerez sınırının üstüne çıkarıyor ve tarayıcı
-    /// çerezi sessizce atıyordu. Bayrak burada da açılmazsa tam
-    /// yetkili kullanıcı izinsiz görünür: elden tutar maskesi gibi
-    /// <c>HasPermission</c>'a dayanan her yer sessizce kapanırdı.
+    /// Çözme <see cref="JetonIzinKodlamasi"/> içinde. Burada alan adı
+    /// geçmiyor ve GEÇMEMELİ: üç kodlama (hepsi / tümleyen / liste)
+    /// iki ayrı yerde yorumlansaydı biri güncellenip diğeri kalırdı.
+    ///
+    /// Somut tehlike: `all_permissions` bayrağını TEK BAŞINA okuyan
+    /// bir tüketici, yanındaki `not_permissions` listesini görmez ve
+    /// kullanıcıya OLMAYAN bir yetkiyi verirdi. Okuma da bu yüzden
+    /// tek kapıdan geçiyor.
     /// </summary>
     public IReadOnlyCollection<string> Permissions =>
-        HasAllPermissions
-            ? PermissionCatalog.Permissions
-                .Select(definition => definition.Key)
-                .ToArray()
-            : Principal?
-                .FindAll("permissions")
-                .Select(claim => claim.Value)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray()
-              ?? [];
-
-    private bool HasAllPermissions =>
-        string.Equals(
-            Principal?.FindFirstValue("all_permissions"),
-            "true",
-            StringComparison.OrdinalIgnoreCase);
+        JetonIzinKodlamasi.Oku(alan =>
+            Principal?.FindAll(alan).Select(claim => claim.Value) ?? []);
 
     public bool IsInRole(string role) =>
         !string.IsNullOrWhiteSpace(role) &&

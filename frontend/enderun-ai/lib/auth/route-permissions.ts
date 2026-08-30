@@ -255,6 +255,31 @@ export function routePermission(pathname: string): RoutePermission {
  * ya da başka bir role tüm izinler verilirse ad kontrolü yanlış cevap
  * verirdi.
  */
+/**
+ * YOL KURALININ TEK KARAR YERİ — İZİN KAYNAĞINDAN BAĞIMSIZ.
+ *
+ * Çağıran "bu izin var mı" sorusunu kendi kaynağından cevaplar:
+ * middleware jetondan (üç kodlamayı çözerek), kabuk ve menü ise
+ * `/auth/me`'den gelen açılmış listeden. Yol kuralı — hangi yol
+ * hangi izni ister, dizi ise HERHANGİ BİRİ yeter — burada, tek
+ * yerde kalır.
+ *
+ * Ayrılmasaydı: middleware jeton kodlamasını çözmek için ya kendi
+ * yol haritasını tutardı ya da izinleri düz bir kümeye açardı;
+ * ikincisi ön yüze ikinci bir izin kataloğu taşımak demekti ve
+ * o katalog sessizce ayrışırdı (Kural 58).
+ */
+export function routeErisimi(
+  pathname: string,
+  izinVar: (permission: string) => boolean,
+): boolean {
+  const required = routePermission(pathname);
+
+  if (!required) return true;
+
+  return Array.isArray(required) ? required.some(izinVar) : izinVar(required);
+}
+
 export function canAccessRoute(
   pathname: string,
   permissions: Iterable<string>,
@@ -262,13 +287,7 @@ export function canAccessRoute(
 ): boolean {
   if (hasAllPermissions) return true;
 
-  const required = routePermission(pathname);
-
-  if (!required) return true;
-
   const granted = permissions instanceof Set ? permissions : new Set(permissions);
 
-  return Array.isArray(required)
-    ? required.some((permission) => granted.has(permission))
-    : granted.has(required);
+  return routeErisimi(pathname, (permission) => granted.has(permission));
 }

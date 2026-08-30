@@ -8,6 +8,9 @@ namespace EnderunAI.Api.Security;
 
 public sealed class TokenService(IConfiguration configuration)
 {
+    /// <summary>`enderun_token=` — çerez boyutuna adı da dahil.</summary>
+    private const int CerezAdiUzunlugu = 14;
+
     public string Create(
         AppUser user,
         IEnumerable<string> roles,
@@ -35,38 +38,12 @@ public sealed class TokenService(IConfiguration configuration)
             claims.Add(new Claim("roles", roleName));
         }
 
-        // ÇEREZ SINIRI (4096 BAYT) — bu token çereze yazılıyor ve
-        // tarayıcılar ad+değer toplamı 4096 baytı aşan çerezi
-        // SESSİZCE atıyor. Hiçbir hata çıkmıyor: giriş 200 dönüyor,
-        // Set-Cookie gidiyor, tarayıcı çerezi yok sayıyor, sonraki
-        // istekte oturum görünmediği için kullanıcı login ekranına
-        // geri düşüyor.
+        // KODLAMA TEK YERDE: JetonIzinKodlamasi.
         //
-        // Kataloğun TAMAMINA sahip kullanıcıda (Admin, Genel Müdür)
-        // 129 izin anahtarı tek tek yazılınca token 5391 bayta
-        // çıkıyordu; canlıda tam olarak bu yaşandı. Tam yetkide
-        // listeyi yazmak zaten gereksiz: tüketici tarafta "hepsi
-        // var" demekle aynı anlama geliyor.
-        //
-        // Kısmi yetkideki kullanıcılarda liste aynen yazılıyor —
-        // en geniş özel rol 44 izinde ve sınırın çok altında.
-        var permissionList = permissions
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var hasEveryPermission = PermissionCatalog.HasEveryPermission(permissionList);
-
-        if (hasEveryPermission)
-        {
-            claims.Add(new Claim("all_permissions", "true"));
-        }
-        else
-        {
-            foreach (var permission in permissionList)
-            {
-                claims.Add(new Claim("permissions", permission));
-            }
-        }
+        // Üç kodlama (hepsi / tümleyen / liste) ve hangisinin
+        // seçileceği kararı orada. Burada tekrar edilseydi biri
+        // güncellenip diğeri kalırdı — bu programın en sık hatası.
+        claims.AddRange(JetonIzinKodlamasi.Yaz(permissions));
 
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
@@ -79,6 +56,39 @@ public sealed class TokenService(IConfiguration configuration)
             expires: DateTime.UtcNow.AddHours(12),
             signingCredentials: credentials);
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        var yazilan = new JwtSecurityTokenHandler().WriteToken(token);
+
+        // ═══════════════════════════════════════════════════════════
+        // REDDETME MUHAFIZI (JETON/1 · Ş3)
+        // ═══════════════════════════════════════════════════════════
+        //
+        // SINIRI AŞAN JETON ÜRETİLMEZ. Tarayıcı, ad+değer toplamı 4096
+        // baytı aşan çerezi SESSİZCE atıyor: giriş 200 dönüyor,
+        // Set-Cookie gidiyor, çerez yok sayılıyor, kullanıcı login
+        // ekranına geri düşüyor ve HİÇBİR KATMAN "bu çerez atıldı"
+        // demiyor.
+        //
+        // Canlıda bu teşhis saatler aldı (2026-08-29). Bir daha sessiz
+        // kalmayacak: sunucu jetonu göndermektense üretmeyi reddediyor
+        // ve ne olduğunu açıkça söylüyor. Açık hata, sessiz arızadan
+        // her zaman iyidir — kullanıcı yine giremez ama NEDEN
+        // giremediği bellidir.
+        //
+        // EŞİK 4096 DEĞİL, PAYLI 3500: uçurumun kenarında değil,
+        // yaklaşırken durmak istiyoruz.
+        var cerezBaytlari = CerezAdiUzunlugu + yazilan.Length;
+
+        if (cerezBaytlari > JetonIzinKodlamasi.PayliEsik)
+        {
+            throw new InvalidOperationException(
+                $"Jeton çerez eşiğini aşıyor: {cerezBaytlari} bayt "
+                + $"(eşik {JetonIzinKodlamasi.PayliEsik}, tarayıcı sınırı "
+                + $"{JetonIzinKodlamasi.CerezSiniri}). Bu jeton gönderilseydi "
+                + "tarayıcı çerezi SESSİZCE atar ve kullanıcı giriş "
+                + "yapamazdı. İzinler jetona sığmıyor — izin listesinin "
+                + "jetondan çıkarılması gerekiyor (DURUM.md · JETON/2).");
+        }
+
+        return yazilan;
     }
 }
