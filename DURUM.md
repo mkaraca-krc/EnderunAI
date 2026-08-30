@@ -1638,6 +1638,106 @@ döndüğü gözlendi: 21 testin 2'si kırmızı, `Admin` **4394 bayt**,
 diğer 14 rol yeşil. Sonda ile taklit edilen kusur, gerçeğinin yerini
 tutmaz (Kural 59).
 
+## GÜN KAPANIŞI — 2026-08-28/30
+
+### CANLIYA ÇIKAN ALTI COMMIT, BEŞ YAYIN
+
+| Commit | Paket | Yayın |
+|---|---|---|
+| `718b220f` | ÖP/1b — ödeme planı ekranları, iki ayrı izin kapısı | 28 Ağu 13:43 |
+| `47b984d9` | KABUK — hata sınırı, istemci hata kaydı, yarım zincir cırcırı | 29 Ağu 21:32 |
+| `d075eebf` | Test sayısı cırcırı — Kural 55'in mekanik karşılığı | 29 Ağu 22:11 |
+| `10ed01b9` | Tarih bağımlı ekstre testi düzeltmesi | 30 Ağu 01:25 |
+| `99cae2d8` | JETON/1 — tümleyen kodlama, tek yorumlayıcı, reddetme muhafızı | 30 Ağu 01:25 |
+| `2ff2c447` | EKRAN/1 — liste hücresinde ikinci satır ayracı | 30 Ağu 02:06 |
+
+Son iki commit tek yayında çıktı. Beş yayının beşinde de göç kapısı
+yeşil verdi, hiçbirinde geri alma çalışmadı.
+
+**SON DURUM:** backend 2915 test, ön yüz 494 test, tsc 0 hata.
+
+### CANLIYI KIRAN İKİ OLAY
+
+#### 1. GİRİŞ DÖNGÜSÜ (30 Ağustos)
+
+**Sebep bizdik.** ÖP/1a'da `payment.plan.approve` Admin'den çıkarıldı
+— karar DOĞRUYDU (İ2) ve hâlâ doğru. Görülmeyen, o kararın jeton
+boyutuna ne yapacağıydı: "hepsine sahip" kısayolu düştü, 140 izin tek
+tek jetona yazıldı, jeton 4394 bayta çıktı, tarayıcı 4096'yı aşan
+çerezi SESSİZCE attı.
+
+**Yayın günü hiçbir belirti yoktu.** Arıza, eldeki jetonun 12 saati
+dolduğunda ortaya çıktı — GM sisteme giremedi.
+
+Acil çözüm veri düzeyinde oldu (`mehmet`'e Genel Müdür rolü EKLENDİ,
+Admin kaldırılmadı): birleşik izin 141/141 = bayrak = küçük jeton.
+Kalıcı çözüm JETON/1.
+
+**DÖRT ŞEY BUNU YAKALAYAMADI ve dördü de aynı sınıftan:**
+
+| Nerede | Ne oldu |
+|---|---|
+| `TokenCookieSizeTests` | gerçek rolleri değil `AllPermissionKeys()` VEKİLİNİ sınıyordu (Kural 58) |
+| Tam takım 2865/2865 | yeşildi ama KAPSAMI EKSİKTİ — üstüne yazılan bekçiler koşmuyordu (Kural 55) |
+| `Tumleyen_Yoksayilirsa…` | doğru ölçüyordu, SONUCU DAR OKUNDU (Kural 61) |
+| Tek-yer muhafızı | `"alan"` arıyordu, `.alan` yazımını görmüyordu — SONDA yakaladı |
+
+Hepsi tek bir cümlenin farklı yüzleri: **ölçtüğünü sandığın şey ile
+gerçekte ölçtüğün şeyin ayrışması.**
+
+#### 2. DERLEME BELLEK TÜKENMESİ (28 Ağustos, önceki tur)
+
+Makine sertleştirmesi paketinden önce üç kez bellek tükenmesi yaşandı
+ve yetim süreçler kaldı. Çözüm: systemd scope ile tek-örnek kapısı,
+cgroup ile süreç ağacının tamamının öldürülmesi, `MemoryMax=6500M` ve
+`DOTNET_GCHeapHardLimitPercent`.
+
+**Sınırın kendisi de bir ders verdi:** 3G tahminle konmuştu ve her
+yayını kıracaktı; gerçek ihtiyaç ÖLÇÜLDÜ (5,72 GB) ve sınır ona göre
+konuldu (Kural 42).
+
+### DOĞRULANMAMIŞ KALEMLER — KODDAN ÇIKMAZ
+
+Bunlar Mehmet'te; hiçbiri testle kapatılamaz.
+
+| Kalem | Neyi kanıtlar |
+|---|---|
+| **`uakkaya` ile temiz giriş** | JETON/1'in TÜMLEYEN yolu. `mehmet` artık bayrak yolunda, kendi girişi bu paketi KANITLAMAZ |
+| **805088'in ekstresi** | muhasebe düzeltme fişi (§5a) |
+| **Muhasebecinin bugünkü ödeme listesi yöntemi** | ÖP/1b'nin gerçek işe oturup oturmadığı |
+| ÇEK/2 | kapanmış çekte düzeltme; verilen çekte kasa hesapları listede yok |
+| Acil yama | `Banka · Garanti Bankası — BANKA-004` |
+| KURULUM/1 | departman sil → aynı kodla aç → geçmeli; iki aktif departman aynı kodu alamamalı |
+| ÖP/1b | Ön Muhasebe'ye karar düğmesi görünmemeli; bakiye yetmezken uyarı + onay düğmesi yerinde; onaydaki planda "Satır Ekle" yok, "Düzelt" var |
+| KABUK | bir ekran çökerse yan menü ayakta kalmalı |
+| EKRAN/1 | çek listesinde banka/keşideci ve çek no/belge no İKİ SATIRDA |
+
+**`uakkaya` doğrulaması üç maddeyi birlikte gerektiriyor:** giriş
+yapılabiliyor mu (boyut), ödeme ONAY ekranına erişemiyor mu (İ2 —
+tümleyen doğru okunuyor), hazırlama ekranına erişebiliyor mu (fazla
+kapanmadı). Üçü olmadan paket doğrulanmış sayılmaz.
+
+### AÇIK KALEMLER
+
+- **`mehmet`'te Admin rolü** kalacak mı — karar Mehmet'te, dokunulmadı
+- **`FinancialInstrumentTests`'te 10 `Today.AddDays` daha** var; ay
+  sınırına duyarlılıkları ÖLÇÜLMEDİ. Bu sınıf kırılganlık yalnız
+  belirli takvim günlerinde görünür, yani yayın kapısı çoğu gün geçirir
+- **JETON/2'nin tetiği yazılı**: herhangi bir rolün jetonu 3500 baytı
+  aşarsa açılır — o an geldiğinde tartışılmaz, başlar
+- **Yarım zincir çizgisi**: 28 dosyada 64 yer donduruldu, düzeltme
+  bekliyor
+- **Sıradaki paketler**: HP/1 (hesap planı + banka/şube referans
+  listesi — Faz 0 ölçümü yapılmıştı, yeniden okunacak), SEMA-KAYNAK/1
+  → SQUASH/1, INDEKS/1
+
+### BU TURDA EKLENEN KURALLAR
+
+55 (yeni dosya adı boş mu), 56 (yetkilendirme anında görünmez),
+57 (izin çıkarmak eklemekten tehlikeli), 58 (elle kurulmuş girdi
+kapsamı dondurur), 59 (ilk gözlem gerçek kusura karşı), 60 (anlamayan
+okuyucu kapalı tarafa düşer), 61 (sonda raporu yeşilleri de taşır).
+
 ## EKRAN/1 — LİSTE HÜCRESİNDE İKİNCİ SATIR (2026-08-30)
 
 ### AYRAÇSIZ BİRLEŞME — 20 EKRANDA, TEK SEBEPTEN
