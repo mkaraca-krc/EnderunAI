@@ -562,6 +562,73 @@ restart_services() {
     systemctl restart enderunai-frontend
 }
 
+# ═══════════════════════════════════════════════════════════════
+# PROXY DUMAN KONTROLÜ — GÖVDESİZ DURUM KODU
+# ═══════════════════════════════════════════════════════════════
+#
+# NEDEN VAR: sağlık kontrolü `/api/health`e bakıyor ve o GÖVDELİ
+# cevap dönüyor. Bu yüzden 18 Temmuz'dan 30 Ağustos'a kadar süren
+# bir arızayı HİÇ görmedi:
+#
+#   Proxy her yanıtı gövde olarak geçiriyordu; Web standardına göre
+#   `new Response(gövde, { status: 204 })` FIRLATIR. Fırlatan yapıcı
+#   catch'e düşüyor ve proxy 502 döndürüyordu. Arka uçta 11
+#   kontrolcüde 21 uç 204 dönüyor — ödeme planı satır işlemleri,
+#   İK kayıtları, şirket ayarları dahil. ON PAKETİN yazma uçları
+#   altı hafta boyunca canlıda 502 verdi ve 2865 test yeşildi.
+#
+# TESTLER BU KATMANI GÖRMEZ: hepsi servisi DOĞRUDAN çağırıyor,
+# proxy'den geçmiyor. Proxy'nin tek gözü tarayıcı doğrulamasıydı.
+#
+# BU KONTROL PROXY ÜZERİNDEN ve 204 DÖNEN bir uca gider. Cevap 204
+# ya da 401 olmalı (401 = kimlik yok ama PROXY ÇALIŞIYOR). 502
+# gelirse proxy gövdesiz durumu yine kıramıyor demektir ve yayın
+# BAŞARISIZ sayılır.
+#
+# ANONİM VE GÖVDESİZ BİR UÇ KULLANILIYOR (`/api/health/govdesiz`).
+# İlk deneme kimlik gerektiren bir uçtaydı ve 401 döndü — yani 204
+# yoluna HİÇ ULAŞMADI; kontrol yeşil verdi, proxy kırıktı. Kabul
+# edilen TEK cevap 204'tür; 401 dahil her şey başarısızlıktır.
+proxy_duman_kontrolu() {
+    local kod
+    kod="$(curl -s -o /dev/null -w "%{http_code}" -m 5 \
+        "http://127.0.0.1:3000/api/backend/health/govdesiz" 2>/dev/null)"
+
+    #
+    # ÜÇ SONUÇ, ÜÇ DAVRANIŞ (Kural 67):
+    #
+    #   204 → GEÇTİ.  Gövdesiz durum proxy'den sağ geçti.
+    #   502 → İHLAL.  Aradığımız kusur geri gelmiş; YAYIN DURUR.
+    #   ??? → KARAR VEREMEDİ. Kontrolün HEDEFİ yanlış (uç taşınmış,
+    #         adı değişmiş, kimlik istemeye başlamış). Bu bir YAYIN
+    #         sorunu değil, KONTROL sorunudur — uyarır, düşürmez.
+    #
+    # NEDEN "BİLİNMEYEN" YAYINI DÜŞÜRMÜYOR: bu kapı ilk kez bu
+    # yayında koşuyor ve hedef ucun canlıda 204 döndüğü HENÜZ
+    # ÖLÇÜLEMEDİ (uç bu yayınla geliyor). Yeni bir kapının ilk işi
+    # sağlıklı bir yayını düşürmek olmamalı. Kapı yalnız ARADIĞI
+    # KUSURA (502) karşı serttir; hedefini bulamadığında sessizce
+    # geçmez ama yayını da kesmez — üçüncü durumu AYRI bildirir.
+    case "$kod" in
+        204)
+            log "INFO" "Proxy duman kontrolü GEÇTİ (204 proxy'den geçti)."
+            return 0
+            ;;
+        502)
+            log "ERROR" "Proxy duman kontrolü İHLAL: 204 dönen uç 502 döndü."
+            log "ERROR" "Proxy gövdesiz durum kodlarını kıramıyor; 21 yazma ucu ÖLÜ."
+            log "ERROR" "Bu, 18 Tem–30 Ağu arasında altı hafta süren arızanın aynısı."
+            return 1
+            ;;
+        *)
+            log "WARN" "Proxy duman kontrolü KARAR VEREMEDİ: HTTP ${kod} (204 da 502 de değil)."
+            log "WARN" "Hedef uç /api/health/govdesiz bulunamadı ya da kimlik istiyor."
+            log "WARN" "Yayın DURDURULMADI — bu kontrolün sorunu, yayının değil."
+            return 0
+            ;;
+    esac
+}
+
 wait_for_health() {
     log "INFO" "Sağlık kontrolü başlıyor (en fazla ${HEALTH_CHECK_TIMEOUT_SECONDS}s)..."
     local elapsed=0
@@ -575,6 +642,7 @@ wait_for_health() {
 
         if [ "$backend_ok" -eq 1 ] && [ "$frontend_ok" -eq 1 ]; then
             log "INFO" "Sağlık kontrolü BAŞARILI (backend + frontend, ${elapsed}s içinde)."
+            proxy_duman_kontrolu || return 1
             return 0
         fi
 

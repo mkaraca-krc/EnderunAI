@@ -1638,6 +1638,54 @@ döndüğü gözlendi: 21 testin 2'si kırmızı, `Admin` **4394 bayt**,
 diğer 14 rol yeşil. Sonda ile taklit edilen kusur, gerçeğinin yerini
 tutmaz (Kural 59).
 
+## 204/502 — ALTI HAFTALIK SESSİZ ARIZA (2026-08-30)
+
+Ön yüz proxy'si (`app/api/backend/[...path]/route.ts`) her yanıtı
+`arrayBuffer()` ile okuyup gövde olarak geçiriyordu. Web standardına
+göre `new Response(gövde, { status: 204 })` **FIRLATIR** — boş tampon
+bile geçersiz. Fırlatan yapıcı `catch`e düşüyor ve proxy **502**
+döndürüyordu.
+
+**18 Temmuz'dan 30 Ağustos'a — altı hafta.** (`83f567d9`, monorepo
+birleştirmesi.)
+
+### ON PAKET, YAZMA UÇLARI ÖLÜYKEN "TAMAMLANDI" SAYILDI
+
+| Controller | 204 uç | Paket |
+|---|---|---|
+| `OdemePlanlari` | **6** | ÖP/1b (28 Ağu) |
+| `HrRecruitment` | 4 | M1/1 (23 Ağu) |
+| `HrMasterData` | 3 | Personel ek ödeme (6 Ağu) |
+| `CompanySettings` | 1 | Banka hesabı ucu (25 Ağu) |
+| `ProgressPayments` | 1 | G3/1b (22 Ağu) |
+| `Tax` | 1 | ROL-UI R2/4c (17 Ağu) |
+| `ProjectMeasurements` | 1 | Yetki daraltma (16 Ağu) |
+| `ProjectBoq` | 1 | NATURA B2 (12 Ağu) |
+| `ProjectSiteDailyReports` | 1 | P5-P6 (5 Ağu) |
+| `ProjectSites` | 1 | Yetki Faz 2 (2 Ağu) |
+| `IstemciHatalari` | 1 | KABUK (29 Ağu) |
+
+**2865 test yeşildi.** Testler servisi doğrudan çağırıyor, proxy'den
+geçmiyor (Kural 68).
+
+### NEDEN KİMSE BİLMİYORDU
+
+İlk kurban `istemci-hatalari` ucuydu — **hata bildirim kanalının
+kendisi.** Ekranlar çöküyor, bildirmeye çalışıyor, bildirim de 502
+alıyordu (Kural 66).
+
+Kaybedilen bildirim **sıfır**: kanal 14 saatliktı ve o sürede tek
+istek geldi (ölçüldü, arşiv günlükler dahil).
+
+### DÜZELTME
+
+- Proxy: 204/205/304'te gövde yerine `null` — **tek yerde, 21 uç**
+- `GET /api/health/govdesiz` — anonim, gövdesiz, yan etkisiz
+- safe-deploy: proxy üzerinden **üç sonuçlu** duman kontrolü
+
+**KALICI OLAN ÜÇÜNCÜSÜ:** tek satırlık bir kontrol, altı haftalık
+arızayı ilk yayında yakalardı.
+
 ## BEKLEYEN PAKET — GÖÇ/PROVA: GÖÇ CANLININ KOPYASINDA DENENSİN
 
 **Boşluk:** göç kapısı *"uygulandı mı"* sorusunu cevaplıyor.
@@ -6519,6 +6567,66 @@ biçimlerde ve ayrı günlerde bulundu — ama aynı hata.
     `ad,` sözdizimini kaçırdı; yetim bekçisi `Ad(` arayıp metot grubu
     kullanımını kaçırdı. Hepsinde arama, aradığı şeyin alabileceği
     biçimlerden dardı.
+
+66. **İZLEME KANALI, İZLEDİĞİ ŞEYLE AYNI ARIZAYI PAYLAŞMAMALIDIR.**
+
+    Paylaşıyorsa **sessizliği sağlıkla ayırt edilemez** hâle gelir:
+    *"hata bildirimi gelmiyor"* hem **"hata yok"** hem **"kanal ölü"**
+    demektir ve ikisi aynı görünür.
+
+    Bir hata/izleme kanalı, izlediği sistemin kırıldığı yerden
+    **BAĞIMSIZ** doğrulanır — düzenli bir canlılık sinyaliyle ya da
+    kanalı doğrudan sınayan bir testle.
+
+    **"Rapor gelmiyor" ASLA sağlık kanıtı sayılmaz.**
+
+    KAYNAK: 2026-08-30. `istemci-hatalari` ucu başarıda **204**
+    dönüyordu ve 204/502 proxy hatasının kurbanlarından biriydi.
+    **21 kırık ucu bize bildirecek kanal, o 21'den biriydi.**
+    Ekranlar çöküyor, bildirmeye çalışıyor, bildirim de 502 alıyordu.
+
+    Kural 48'in bir başka yüzü: orada sıfır sonuç yokluğun kanıtı
+    değildi; burada sıfır rapor sağlığın kanıtı değil.
+
+    **EK — YENİ KANALIN İLK SINAVI:** `istemci-hatalari` kanalı
+    **doğduğu andan itibaren** kırıktı ve 14 saat fark edilmedi;
+    çünkü yeni bir kanalın ilk sınavı "çalışıyor mu" değil, **sessiz
+    olması**ydı. Sessizlik başarı sanıldı.
+
+    Yeni kurulan her bildirim kanalının **İLK testi, bilerek bir hata
+    üretip kanalın taşıdığını görmek** olmalıdır.
+
+67. **MUHAFIZIN ÜÇ SONUCU VARDIR: GEÇTİ / İHLAL / KARAR VEREMEDİ.**
+
+    Bir muhafız işini bitiremezse — zaman aşımı, erişilemeyen kaynak,
+    eksik girdi — sonucu **İHLAL DEĞİLDİR** ve **GEÇTİ de değildir.**
+
+    Üçüncü durumu ayrı bildirmeyen bir muhafız iki yoldan biriyle
+    zarar verir: ya **yanlış alarm** üretir ve okunmamayı öğretir
+    (Kural 47), ya **sessizce geçirir** ve yanlış güven verir
+    (Kural 48).
+
+    **Kırmızının SEBEBİ, kırmızının kendisi kadar rapor edilir.**
+
+    KAYNAK: jeton tek-yer muhafızı tam takımda 5 sn sınırını aştı
+    (~800 kaynak dosya tarıyor) ve **gerçek ihlalle aynı göründü** —
+    ayırt eden tek şey hata metnindeki `Test timed out` satırıydı.
+
+    UYGULAMA: proxy duman kontrolü üç sonuçlu kuruldu — 204 GEÇTİ,
+    502 İHLAL (yayın durur), başka her şey KARAR VEREMEDİ (uyarır,
+    yayını durdurmaz). Gerekçe: kontrolün hedefini bulamaması bir
+    YAYIN sorunu değil, KONTROL sorunudur.
+
+68. **TESTLER SERVİSİ DOĞRUDAN ÇAĞIRIR, PROXY'DEN GEÇMEZ.**
+
+    Proxy, **kapsamı sıfır olan bir katmandır** ve tek gözü tarayıcı
+    doğrulamasıdır. Yayın sonrası duman kontrolü proxy üzerinden ve
+    **en az bir 204 dönen uçtan** geçmelidir.
+
+    KAYNAK: 204/502. 18 Temmuz'dan 30 Ağustos'a — **altı hafta** —
+    on paketin yazma uçları canlıda 502 veriyordu ve **2865 test
+    yeşildi.** Sağlık kontrolü `/api/health`e bakıyordu ve o gövdeli
+    cevap döndüğü için kusuru hiç görmedi.
 
 ## 5a. CANLIDA YANLIŞ ÜÇ ÇEK KAYDI — VERİ BOZUK DEĞİL, GİRİŞ YANLIŞ
 

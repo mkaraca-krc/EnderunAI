@@ -779,6 +779,30 @@ app.MapGet("/api/health", () =>
     });
 }).AllowAnonymous();
 
+/*
+ * GÖVDESİZ SAĞLIK UCU — PROXY DUMAN KONTROLÜ İÇİN (2026-08-30).
+ *
+ * NEDEN AYRI BİR UÇ GEREKTİ: `/api/health` GÖVDELİ cevap dönüyor ve
+ * bu yüzden 18 Temmuz'dan 30 Ağustos'a kadar süren bir arızayı hiç
+ * görmedi. Ön yüz proxy'si her yanıtı gövde olarak geçiriyordu; Web
+ * standardına göre `new Response(gövde, { status: 204 })` FIRLATIR.
+ * Sonuç: arka uçta 204 dönen 21 uç (ödeme planı satır işlemleri, İK
+ * kayıtları, şirket ayarları) tarayıcıya 502 olarak ulaşıyordu.
+ * ON PAKETİN yazma uçları altı hafta boyunca ölüydü ve 2865 test
+ * yeşildi — testler proxy'den GEÇMİYOR.
+ *
+ * DUMAN KONTROLÜ NEDEN BUNA MUHTAÇ: kimlik gerektiren bir uçla
+ * denendi ve 401 döndü — yani 204 yoluna HİÇ ULAŞMADI. Kontrol
+ * yeşil verdi, proxy kırıktı. Ölçtüğünü sandığın şey ile gerçekte
+ * ölçtüğün şeyin ayrışması (Kural 65).
+ *
+ * YÜZEYİ EN DAR HÂLİ: gövde almaz, gövde döndürmez, yan etkisi
+ * yoktur, hiçbir veriye dokunmaz. `/api/health` ile aynı anonim
+ * seviyede; taşıdığı tek bilgi "bu süreç ayakta".
+ */
+app.MapGet("/api/health/govdesiz", () => Results.NoContent())
+   .AllowAnonymous();
+
 app.Run();
 
 public partial class Program;

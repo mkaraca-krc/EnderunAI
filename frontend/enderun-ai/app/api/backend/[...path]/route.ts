@@ -79,10 +79,35 @@ async function proxy(
       );
     }
 
-    return new NextResponse(responseBody, {
-      status: response.status,
-      headers: responseHeaders,
-    });
+    /*
+     * GÖVDESİZ DURUM KODLARI (204, 205, 304) GÖVDE KABUL ETMEZ.
+     *
+     * `new Response(gövde, { status: 204 })` Web standardına göre
+     * FIRLATIR. Bu proxy her yanıtı `arrayBuffer()` ile okuyup
+     * gövde olarak geçiriyordu; boş bir tampon bile 204'te geçersiz.
+     *
+     * SONUÇ: fırlatan yapıcı `catch`e düşüyor ve proxy 502
+     * döndürüyordu. Yani arka uç DOĞRU çalışıp 204 dönerken,
+     * tarayıcı "Backend servisine bağlantı kurulamadı" görüyordu.
+     *
+     * CANLIDA OLAN (2026-08-30): `istemci-hatalari` ucu 204 dönüyor
+     * ve 502'ye çevriliyordu — yani HATA BİLDİRİM KANALININ KENDİSİ
+     * çökmüştü. Ekranlar çöküyor, bildirmeye çalışıyor, bildirim de
+     * düşüyordu. Kimsenin haberi olmamasının sebebi buydu.
+     *
+     * KAPSAM: arka uçta 11 kontrolcüde 21 uç 204 dönüyor — ödeme
+     * planı satır işlemleri dahil. Hepsi aynı şekilde 502 veriyordu.
+     * Düzeltme TEK YERDE çünkü hata proxy'de, uçlarda değil.
+     */
+    const govdesizDurumlar = new Set([204, 205, 304]);
+
+    return new NextResponse(
+      govdesizDurumlar.has(response.status) ? null : responseBody,
+      {
+        status: response.status,
+        headers: responseHeaders,
+      },
+    );
   } catch (error) {
     console.error("Backend proxy error:", error);
 

@@ -194,7 +194,20 @@ describe("jeton kodlaması tek yerde", () => {
     }
   });
 
-  it("kodlama alanları yorumlayıcı dışında okunmuyor", () => {
+  /*
+   * SÜRE SINIRI YÜKSELTİLDİ — İDDİA DEĞİŞMEDİ.
+   *
+   * Bu test arka uçta ~500, ön yüzde ~300 kaynak dosyayı okuyup
+   * tarıyor. Tek başına ~1 sn, ama tam takımda CPU rekabetiyle 8 sn
+   * sürdü ve vitest'in varsayılan 5 sn sınırına takıldı.
+   *
+   * ZAMAN AŞIMI GERÇEK İHLALLE AYNI GÖRÜNÜR: ikisi de kırmızı verir
+   * ve "muhafız bir şey buldu" sanılır. Ölçüldü — tek başına koşuda
+   * yeşil, yani ihlal yok, iş ağır.
+   *
+   * İddia aynen duruyor; yalnız işin gerçek süresine yer açıldı.
+   */
+  it("kodlama alanları yorumlayıcı dışında okunmuyor", { timeout: 30_000 }, () => {
     const bulunan = ihlaller();
 
     expect(
