@@ -6155,6 +6155,38 @@ iki sayı farklı soruya cevap veriyor ve fark kasıtlıdır
     orada "ölçtüğünü sandığın şey" ile "gerçekte ölçtüğün şey"
     kolayca ayrışır.
 
+### ÖLÇÜM DE BİR İDDİADIR VE DOĞRULANMALIDIR
+
+Aşağıdaki kurallar **tek bir şeyin farklı yüzleridir**: ölçtüğünü
+sandığın şey ile gerçekte ölçtüğün şeyin ayrışması. Biri tanıdık
+geliyorsa diğer dördünü de oku.
+
+| # | Yüzü |
+|---|---|
+| **55** | üstüne yazılan dosya: yeni sandığın ad boş olmayabilir — takım yeşil kalır, kapsam eksilir |
+| **58** | vekil küme: muhafız girdisini kendi eliyle kurarsa kapsamı yazıldığı anda donar |
+| **59** | gözlemsiz muhafız: düzeltmeyle doğan test, kusuru yakaladığını kanıtlamaz |
+| **60** | anlamayan okuyucu: bir kodlama genişlerken eski okuyucunun düştüğü taraf tasarımın parçasıdır |
+| **61** | eksik sonda raporu: yalnız kırmızıları saymak, sabotajın sınırlı kaldığını göstermez |
+
+**BİTİŞİK DEĞİLLER.** Aradaki 56 ve 57 bu gruba ait değil — onlar
+yetkilendirme alanının kuralları. Grup numaralarıyla tanımlanıyor,
+sırasıyla değil.
+
+**ORTAK SORU İKİ YÖNLÜ:**
+
+> *"Bu ölçümü geçiren şey benim kodum mu, yoksa başka bir şey mi?"*
+>
+> ve tersi:
+>
+> *"Bu ölçüm boş/yeşil dönerse, bunun iki açıklaması var mı?"*
+
+**BU TURDAKİ DÖRT BEKÇİ DE BU SINIFTAN KAÇIRDI:** vekil küme, eksik
+kapsam, dar okuma, eksik yazım biçimi. Dördü ayrı yerlerde, ayrı
+biçimlerde ve ayrı günlerde bulundu — ama aynı hata.
+
+---
+
 55. **YENİ DOSYA YAZMADAN ÖNCE O ADIN BOŞ OLDUĞU ÖLÇÜLÜR.**
 
     `cat > dosya` var olanı sessizce siler; ne uyarı verir, ne de
