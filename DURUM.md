@@ -1903,6 +1903,65 @@ istek geldi (ölçüldü, arşiv günlükler dahil).
 **KALICI OLAN ÜÇÜNCÜSÜ:** tek satırlık bir kontrol, altı haftalık
 arızayı ilk yayında yakalardı.
 
+## BEKLEYEN PAKET — KAPI/1: NİTELİK YOKSA REDDET
+
+**Sırası: GM'nin İŞEMRİ/1 doğrulamasından sonra. M3/2b'den ÖNCE ya da
+onunla BİRLİKTE — sonra değil.**
+
+### HÜKÜM (Mehmet, 2026-08-30)
+
+Yol türetimi bir güvenlik ağı **DEĞİL**. İki sebeple:
+
+1. **Bugün sıfır uç yakalıyor** — 34 niteliksiz ucun hiçbiri yol
+   kuralına uymuyor, yani var olduğu altı ay boyunca hiçbir şey yapmadı.
+2. Yakalasaydı bile **daha KABA bir izne düşürerek** yakalardı. Nitelik
+   silinen uç 403 vermiyor, sessizce daha gevşek çalışıyor. **Sessiz
+   gevşeme, gürültülü kapanmadan kötüdür — kimse fark etmez.**
+
+**Doğru tasarım tersidir: nitelik yoksa REDDET.** Ve tercihen çalışma
+anında değil, **açılışta**: muaf listede olmayan ve niteliği olmayan bir
+uç varsa uygulama hiç başlamasın. Böylece 183'lük kuyruk riski tümden
+biter — çünkü **nitelik silen kişi deploy'da öğrenir, saldırgan değil.**
+
+### ÖLÇÜM (İŞEMRİ/1 sonda F, 2026-08-30)
+
+Sonda F "POST'tan `[RequirePermission]` niteliğini sil" idi ve **yeşil
+kaldı**. Sebebi testin körlüğü değildi; `PermissionAuthorizationMiddleware`
+niteliği görünce yol sezgisine **hiç bakmıyor** — nitelik varsa orada
+karar verip dönüyor, yol sezgisi yalnızca nitelik YOKKEN çalışıyor.
+F2'de iki katman birden kapatıldı ve `S2b` kırmızıya döndü.
+
+| Ölçüm | Sayı |
+|---|---|
+| Toplam uç | 790 |
+| Nitelikli | 756 |
+| **Niteliksiz** | **34** |
+| Niteliksiz ucun yol kuralına uyanı | **0** — ağ bugün hiçbir şey yakalamıyor |
+| Nitelik silinse ağ yakalar | 553 |
+| **Nitelik silinse HİÇBİR KORUMA KALMAZ** | **183** |
+| Nitelik ≠ yoldan türeyen (nitelik daha ince) | 400 / 736 |
+
+O 183'ün içinde **`/api/cheques` ailesinin tamamı (13 uç)**,
+`/api/company-settings`, `/api/kurumlar-vergisi-oranlari`,
+`/api/e-invoice/import/commit`, `/api/access-requests/{id}/approve` var.
+
+### M3/2b BAĞLANTISI — SIRALAMANIN SEBEBİ
+
+34 niteliksiz ucun **8'i `/api/mesajlar/*`**. Mesajlaşma ekranı (M3/2b)
+sıradaki paketlerden biri ve bugün o uçların izin kapısı **yok** —
+yalnız `[Authorize]` var, yani **oturum açan herkes**. Daha önceki sonda
+D *"arama üyelik süzgecini atlayınca yabancı başkasının mesajını buldu"*
+demişti. İkisi aynı yüzeye bakıyor.
+
+Bu yüzden sıra: **KAPI/1, M3/2b'den önce ya da onunla birlikte gelir.**
+
+Kalan niteliksiz uçlar: `/api/bildirimler/*` (5), `/api/collaboration/*`
+(7), `/api/portal/*` (4), `/api/auth/*` (4), `/api/user-preferences` (2),
+`/api/yonetim/kpi`, `/api/istemci-hatalari`, `/api/isg/benim`,
+`/api/company-settings/logo`.
+
+---
+
 ## BEKLEYEN PAKET — GÖÇ/PROVA: GÖÇ CANLININ KOPYASINDA DENENSİN
 
 **Boşluk:** göç kapısı *"uygulandı mı"* sorusunu cevaplıyor.
