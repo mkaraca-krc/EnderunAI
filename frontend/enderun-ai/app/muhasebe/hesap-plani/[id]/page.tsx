@@ -150,6 +150,22 @@ export default function AccountingAccountDetailPage() {
   async function save(event: FormEvent) {
     event.preventDefault();
 
+    /*
+     * SÜRÜM YOKSA KAYDETMEYE HİÇ BAŞLANMAZ.
+     *
+     * `item` sunucudan gelen son yanıt; sürüm ondan alınıyor. Henüz
+     * yüklenmediyse gönderilecek bir sürüm de yoktur ve sunucu
+     * zaten reddederdi — kullanıcıyı ağ turu bekletmeden aynı şeyi
+     * burada söylüyoruz. Sunucudaki kapı KALDIRILMADI; bu yalnız
+     * daha erken bir uyarı.
+     */
+    if (!item) {
+      setError(
+        "Sayfanın eski bir sürümü açık. Sayfayı yenileyip tekrar deneyin."
+      );
+      return;
+    }
+
     setSaving(true);
     setMessage("");
     setError("");
@@ -157,8 +173,16 @@ export default function AccountingAccountDetailPage() {
     const payload: UpdateAccountingAccountRequest = {
       parentAccountId:
         form.parentAccountId || null,
-      code: form.code.trim(),
       name: form.name.trim(),
+
+      /*
+       * SÜRÜM SUNUCUDAN GELEN DEĞERLE GÖNDERİLİYOR — formdan DEĞİL.
+       *
+       * Formdan alınsaydı kullanıcı sayfada dururken sürüm eskimez,
+       * hep "güncel" görünürdü ve kayıp güncelleme yakalanmazdı.
+       * `item` son sunucu yanıtı; sürüm oradan geliyor.
+       */
+      surum: item.surum,
       description:
         form.description.trim() || null,
       nature: form.nature,
@@ -172,7 +196,6 @@ export default function AccountingAccountDetailPage() {
         form.currencyCode
           .trim()
           .toUpperCase() || null,
-      isActive: form.isActive,
     };
 
     try {
@@ -233,6 +256,51 @@ export default function AccountingAccountDetailPage() {
         err instanceof Error
           ? err.message
           : "Hesap pasife alınamadı."
+      );
+    } finally {
+      setDeactivating(false);
+    }
+  }
+
+  /*
+   * GERİ AÇMA (HP/1 · K3).
+   *
+   * Servisteki `activate` ucunun ekrandaki karşılığı. Düğmesi
+   * olmasaydı yetenek kullanıcı için YOK demekti (Kural 62'nin ters
+   * yönü) — ve "Durum" seçicisi de kaldırıldığı için pasife alınan
+   * bir hesabı geri açmanın HİÇBİR yolu kalmazdı.
+   */
+  async function activate() {
+    if (!item) return;
+
+    setDeactivating(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const result =
+        await accountingAccountService.activate(item.id);
+
+      setMessage(result.message);
+
+      setForm((current) => ({
+        ...current,
+        isActive: true,
+      }));
+
+      setItem((current) =>
+        current
+          ? {
+              ...current,
+              isActive: true,
+            }
+          : current
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Hesap geri açılamadı."
       );
     } finally {
       setDeactivating(false);
@@ -315,6 +383,17 @@ export default function AccountingAccountDetailPage() {
                 : "Pasife Al"}
             </button>
           )}
+
+          {!item.isActive && actions.can("delete") && (
+            <button
+              type="button"
+              className="erp-secondary-button"
+              disabled={deactivating}
+              onClick={() => void activate()}
+            >
+              {deactivating ? "İşleniyor..." : "Geri Aç"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -364,41 +443,38 @@ export default function AccountingAccountDetailPage() {
             </select>
           </label>
 
+          {/*
+            DURUM SEÇİCİSİ KALDIRILDI (HP/1 · K3).
+            Aktiflik artık formdan değil, kendi düğmelerinden
+            değişiyor: "Pasife Al" / "Geri Aç". Seçici bırakılsaydı
+            hiçbir şey yapmayan bir kutu olurdu — kullanıcı "Pasif"
+            seçer, "güncellendi" mesajı alır, hesap aktif kalırdı.
+            Sessiz yalan, görünür hatadan kötüdür.
+          */}
           <label>
             <span>Durum</span>
-
-            <select
-              value={String(form.isActive)}
-              disabled={saving}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  isActive:
-                    event.target.value === "true",
-                }))
-              }
-            >
-              <option value="true">Aktif</option>
-              <option value="false">Pasif</option>
-            </select>
+            <strong>{item.isActive ? "Aktif" : "Pasif"}</strong>
           </label>
 
+          {/*
+            HESAP KODU SALT OKUNUR (HP/1 · K1).
+            Kod oluşturulduktan sonra değişmez; düzenlenebilir
+            bırakılsaydı kullanıcı yazar, kaydeder, "güncellendi"
+            görür ve kod değişmezdi. Yanlış kod için yol:
+            hesabı pasife al, doğrusunu yeni hesap olarak aç.
+          */}
           <label>
-            <span>Hesap Kodu *</span>
+            <span>Hesap Kodu</span>
 
             <input
-              required
-              maxLength={50}
               value={form.code}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  code: event.target.value
-                    .toUpperCase()
-                    .replace(/\s+/g, ""),
-                }))
-              }
+              readOnly
+              disabled
             />
+            <small>
+              Hesap kodu değiştirilemez. Yanlışsa hesabı pasife alıp
+              doğru kodla yeni hesap açın.
+            </small>
           </label>
 
           <label>

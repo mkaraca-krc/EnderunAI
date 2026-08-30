@@ -168,6 +168,33 @@ public sealed class AccountingAccountsController(
         }
     }
 
+    /// <summary>
+    /// K3 — pasife almanın geri alınması. `AccountingDelete` ile
+    /// aynı izinde: pasife alabilen geri de açabilmeli, aksi hâlde
+    /// yanlışlıkla kapatılan bir hesap için başka birinin beklenmesi
+    /// gerekirdi.
+    /// </summary>
+    [HttpPost("{id:guid}/activate")]
+    [RequirePermission(PermissionCatalog.Keys.AccountingDelete)]
+    public async Task<IActionResult> Activate(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await service.ActivateAsync(id, cancellationToken);
+            return Ok(new { message = "Muhasebe hesabı geri açıldı." });
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(new { message = exception.Message });
+        }
+    }
+
     [HttpPost("{id:guid}/deactivate")]
     [RequirePermission(PermissionCatalog.Keys.AccountingDelete)]
     public async Task<IActionResult> Deactivate(

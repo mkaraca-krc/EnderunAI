@@ -34,6 +34,21 @@ export type AccountingAccountDetail = {
   isActive: boolean;
   createdAtUtc: string;
   updatedAtUtc?: string | null;
+
+  /**
+   * KAYIT SÜRÜMÜ — güncelleme isteğinde AYNEN geri verilir.
+   *
+   * Sunucudaki `UpdatedAtUtc` damgasının tel üzerindeki hâli (ISO
+   * dize); ikinci bir belirteç değil. Taşınmasaydı yalnız istek içi
+   * pencere korunurdu — kullanıcının 10 dakika önce açtığı formdaki
+   * kayıp güncelleme yakalanamazdı.
+   *
+   * DEĞER ÜZERİNDE İŞLEM YAPILMAZ: olduğu gibi alınır, olduğu gibi
+   * geri verilir. Tarihe çevirip yeniden biçimlendirmek milisaniye
+   * kaybına yol açar ve sunucu her isteği "başkası değiştirdi" diye
+   * reddederdi.
+   */
+  surum: string;
 };
 
 export type CreateAccountingAccountRequest = {
@@ -49,17 +64,29 @@ export type CreateAccountingAccountRequest = {
   currencyCode?: string | null;
 };
 
+/**
+ * HESAP GÜNCELLEME — KOD VE AKTİFLİK BURADA YOK (HP/1 · K1, K3).
+ *
+ * KOD YOK: hesap kodu oluşturulduktan sonra değişmez. Yanlışsa
+ * hesap pasife alınır, doğrusu yeni hesap olarak açılır.
+ *
+ * AKTİFLİK YOK: pasife alma ve geri açma kendi uçlarında
+ * (`deactivate` / `activate`). Burada da bulunsaydı iki kapı olur
+ * ve biri diğerini sessizce ezerdi.
+ *
+ * SÜRÜM ZORUNLU: sunucunun okuma yanıtında gelen `surum` aynen geri
+ * verilir. Gönderilmezse istek reddedilir — atlanmaz.
+ */
 export type UpdateAccountingAccountRequest = {
   parentAccountId?: string | null;
-  code: string;
   name: string;
+  surum: string;
   description?: string | null;
   nature: AccountingAccountNature;
   isPostingAllowed: boolean;
   requiresProject: boolean;
   requiresCostCenter: boolean;
   currencyCode?: string | null;
-  isActive: boolean;
 };
 
 function buildQuery(filters?: {
@@ -160,6 +187,16 @@ export const accountingAccountService = {
       {
         method: "PUT",
         body: request,
+      }
+    );
+  },
+
+  /** K3 — pasife almanın geri alınması. */
+  activate(id: string) {
+    return apiClient<{ message: string }>(
+      `accounting-accounts/${id}/activate`,
+      {
+        method: "POST",
       }
     );
   },

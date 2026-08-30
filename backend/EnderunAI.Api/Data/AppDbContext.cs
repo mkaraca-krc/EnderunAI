@@ -2500,6 +2500,19 @@ public sealed class AppDbContext(
             entity.ToTable("accounting_accounts");
             entity.HasKey(x => x.Id);
 
+            /*
+             * EŞZAMANLILIK: `UpdatedAtUtc` DAMGASI (HP/1 · K8).
+             *
+             * Belirteç veritabanı tarafında DEĞİL, `KayitSurumu`
+             * içinde karşılaştırılıyor. Burada bir yapılandırma YOK
+             * ve olmamalı.
+             *
+             * NEDEN xmin DEĞİL: denendi (iki farklı Npgsql API'siyle)
+             * ve ikisi de `AddColumn<uint>("xmin", type: "xid")`
+             * üreten bir göç çıkardı — canlıda sistem sütunu
+             * çakışmasıyla düşerdi. Ayrıntı `KayitSurumu` içinde.
+             */
+
             entity.HasIndex(x => new { x.CompanyId, x.Code })
                 .IsUnique();
 

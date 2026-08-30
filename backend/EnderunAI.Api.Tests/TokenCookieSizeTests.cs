@@ -296,6 +296,51 @@ public sealed class TokenCookieSizeTests
         Assert.True(CookieName.Length + token.Length < PayliEsik);
     }
 
+    /// <summary>
+    /// HER ROLÜN KODLAMASI VE BAYT SAYISI — RAPOR.
+    ///
+    /// Yeni bir izin anahtarı eklendiğinde katalog büyür ve roller
+    /// kodlama değiştirebilir. Bu test her rolün hangi kodlamayı
+    /// kullandığını ve kaç bayt ettiğini ÇIKTIYA yazıyor; sayıyı
+    /// varsaymak yerine okumak için.
+    /// </summary>
+    [Fact]
+    public void HerRolun_KodlamasiVeBoyutu_Raporlanir()
+    {
+        var satirlar = RoleCatalog.Roles
+            .Select(rol =>
+            {
+                var claims = JetonIzinKodlamasi.Yaz(rol.PermissionKeys);
+
+                var kodlama =
+                    claims.Any(c => c.Type == JetonIzinKodlamasi.TumleyenAlani) ? "TUMLEYEN"
+                    : claims.Any(c => c.Type == JetonIzinKodlamasi.HepsiAlani) ? "BAYRAK"
+                    : "LISTE";
+
+                var bayt = CookieName.Length + CreateService()
+                    .Create(CreateUser(), [rol.Name], rol.PermissionKeys).Length;
+
+                return $"{rol.Name,-24} {rol.PermissionKeys.Count,4} izin  "
+                     + $"{kodlama,-9} {bayt,5} bayt";
+            })
+            .ToArray();
+
+        var rapor = $"KATALOG: {PermissionCatalog.Permissions.Count} izin"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, satirlar);
+
+        /*
+         * RAPOR ÇIKTIYA YAZILIYOR.
+         *
+         * İlk hâli yalnız BAŞARISIZLIK mesajında taşıyordu; test
+         * geçince sayılar hiç görünmüyordu — yani "raporla" denen
+         * şeyi yapmıyordu. Ölçüm, ancak okunabildiği yerde ölçümdür.
+         */
+        Console.WriteLine(rapor);
+
+        Assert.True(satirlar.Length > 10, rapor);
+    }
+
     private static string DecodePayload(string token)
     {
         var payload = token.Split('.')[1]

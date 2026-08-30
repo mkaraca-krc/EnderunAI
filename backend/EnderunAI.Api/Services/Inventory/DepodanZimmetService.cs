@@ -2,6 +2,7 @@ namespace EnderunAI.Api.Services.Inventory;
 
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
+using EnderunAI.Api.Services.Common;
 using EnderunAI.Api.Security;
 using EnderunAI.Api.Security.CurrentUser;
 using Microsoft.EntityFrameworkCore;
@@ -400,27 +401,14 @@ public sealed class DepodanZimmetService(
         ?? throw new UnauthorizedAccessException("Kullanıcı veri kapsamı bulunamadı.");
 
     /// <summary>
-    /// Milisaniye hassasiyetinde karşılaştırılıyor: PostgreSQL
-    /// mikrosaniye tutuyor, JSON'a giden değer milisaniyede kesiliyor.
-    /// Tam eşitlik aranırsa her istek çakışma verirdi.
+    /// SÜRÜM DOĞRULAMASI ORTAK KAYNAKTAN (`KayitSurumu`).
+    ///
+    /// Bu mantık burada yazılmıştı; HP/1'de hesap planı da aynı şeye
+    /// ihtiyaç duyunca kopyalanmak yerine ORTAK YERE ÇIKARILDI.
+    /// İki kopya zamanla ayrışırdı — bu programın en sık hatası.
     /// </summary>
-    private static void SurumuDogrula(HrAssetAssignment zimmet, DateTime? surum)
-    {
-        if (surum is null)
-            throw new InvalidOperationException("Kayıt sürümü (RowVersion) zorunludur.");
-
-        var guncel = zimmet.UpdatedAtUtc ?? zimmet.CreatedAtUtc;
-
-        var a = new DateTime(guncel.Ticks - (guncel.Ticks % TimeSpan.TicksPerMillisecond), DateTimeKind.Utc);
-        var b = surum.Value.ToUniversalTime();
-        b = new DateTime(b.Ticks - (b.Ticks % TimeSpan.TicksPerMillisecond), DateTimeKind.Utc);
-
-        if (a != b)
-        {
-            throw new DbUpdateConcurrencyException(
-                "Kayıt başka bir kullanıcı tarafından değiştirilmiş. Sayfayı yenileyip tekrar deneyin.");
-        }
-    }
+    private static void SurumuDogrula(HrAssetAssignment zimmet, DateTime? surum) =>
+        KayitSurumu.Dogrula(zimmet, surum);
 
     private void DenetimYaz(string eylem, Guid zimmetId, object ayrinti) =>
         db.SecurityAuditEvents.Add(new SecurityAuditEvent

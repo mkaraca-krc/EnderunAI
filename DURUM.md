@@ -1638,6 +1638,89 @@ döndüğü gözlendi: 21 testin 2'si kırmızı, `Admin` **4394 bayt**,
 diğer 14 rol yeşil. Sonda ile taklit edilen kusur, gerçeğinin yerini
 tutmaz (Kural 59).
 
+## BEKLEYEN PAKET — GÖÇ/PROVA: GÖÇ CANLININ KOPYASINDA DENENSİN
+
+**Boşluk:** göç kapısı *"uygulandı mı"* sorusunu cevaplıyor.
+*"Doğru mu"* sorusunu **hiçbir şey cevaplamıyor.**
+
+2026-08-30'da üretilen bir göç canlıda patlayacaktı
+(`AddColumn "xmin"` → sistem sütunu çakışması) ve bunu yakalayan tek
+şey **insanın `Up()`'ı okuması** oldu. Kapı onu durdurmazdı: kapı
+göçün uygulanıp uygulanmadığına bakar, içeriğine değil.
+
+**TASARIM** — SQUASH/1'de Z3 olarak kurulan desen standartlaşıyor:
+
+    bekleyen göç var mı?
+      → canlının TAZE bir kopyasını al
+      → göçü o kopyaya uygula
+      → başarısızsa YAYIN DURUR, canlıya DOKUNULMAZ
+      → başarılıysa kopya silinir, yayın devam eder
+
+**Maliyet:** bir kopya + bir uygulama, dakikalar.
+**Kazanç:** canlıda patlayan göç sınıfının tamamı.
+
+**NEDEN CANLININ KOPYASI, BOŞ VERİTABANI DEĞİL:** boş şemada geçen
+bir göç, canlıdaki veriye takılabilir (benzersizlik ihlali, NOT NULL
+varsayılanı, tip dönüşümü). Prova ancak gerçek veriyle prova.
+
+## ÖLÜ ÖN YÜZ KOPYALARI TAŞINDI (2026-08-30)
+
+`frontend/` altındaki **yedi kullanılmayan ön yüz kopyası** (2.1 GB,
+30-31 Temmuz tarihli, git'te izlenmiyor) `/opt/enderun-olu-kopyalar-
+20260830/` dizinine taşındı. Orada bir `README.md` var: tam eski
+yollar, taşınma gerekçesi, taşımadan önce yapılan referans kanıtı.
+
+**NEDEN:** depo kökünden yazılan taramaları şişiriyorlardı. Yarım
+zincir ölçümü canlı kopyada 64, depo genelinde **218**; FORM/1'in
+payload ölçümü 6'ya karşı **48**.
+
+**BUGÜNE KADAR HİÇBİR SAYI YANLIŞ OLMADI** — mevcut cırcırların
+tamamı `join(__dirname, "..")` ile canlı kopyaya kapsamlıydı; sekizi
+tek tek ölçüldü. Tehlike gelecek taramalardaydı ve sessiz olurdu.
+
+**TAŞIMADAN ÖNCE KANITLANDI:** nginx dosya yolu göstermiyor (hepsi
+`proxy_pass`), `next-server` cwd'si `frontend/enderun-ai`, systemd
+`WorkingDirectory` aynı, symlink/cron/timer referansı yok. Tek
+referans `test-safe-deploy-fastpath.sh` içinde ve **dize olarak** —
+saf sınıflandırma fonksiyonuna veriliyor, dosya sistemine
+dokunmuyor.
+
+**TAŞIMA SONRASI:** `/api/health` 200, ön yüz 200, `next-server` aynı
+dizinden, depo kökünden tarama 218 → **71** (64 üretim + 7 test).
+
+**SİLME 30.09.2026'DAN SONRA** — karar ayrıca verilecek. Git'te
+karşılıkları yok; silinirse geri getirilemezler.
+
+## BEKLEYEN PAKET — FORM/1: DÜZENLENEBİLİR ALAN TİPİNİ DTO'DAN TÜRET
+
+**Sorun (Kural 62):** bir alan istek sözleşmesinden çıkarıldığında,
+ekrandaki kontrolü sessizce yalan söyleyen bir kutuya dönüşüyor.
+Derleyici görmüyor çünkü form durumu ile istek gövdesi ayrı tipler.
+
+**Öneri:** form durumunu ikiye ayır —
+
+| Bölüm | İçerik | Tipi |
+|---|---|---|
+| GÖSTERİLEN | kod, durum, oluşturma tarihi | serbest |
+| DÜZENLENEBİLİR | isteğe giden alanlar | **istek DTO'sundan TÜRETİLİR** |
+
+Böylece DTO'dan bir alan çıktığında o alana bağlı düzenlenebilir
+kontrol **DERLENMEZ**. HP/1'deki iki sessiz yalan derleme hatası
+olurdu.
+
+**KAPSAM ÖLÇÜLDÜ (2026-08-30):**
+
+| Ölçüm | Sayı |
+|---|---|
+| DTO tipli payload kuran ekran | **6** |
+| Form durumunu ayrı tip olarak tutan ekran | **37** |
+
+Dar uygulama 6 ekran, geniş uygulama 37. HP/1'e sığmıyor.
+
+**BU SINIF TEK SEFERLİK DEĞİL:** her sözleşme daraltmasında yeniden
+doğar. Bugün hesap planında oldu; yarın başka bir DTO daraltıldığında
+aynı yerden çıkar.
+
 ## GÜN KAPANIŞI — 2026-08-28/30
 
 ### CANLIYA ÇIKAN ALTI COMMIT, BEŞ YAYIN
@@ -6341,6 +6424,101 @@ biçimlerde ve ayrı günlerde bulundu — ama aynı hata.
     Dogar` testi yeşilken "tümleyeni okumak şart" diye okundu. Aynı
     çıktı "tümleyeni okumayan HER ŞEYİ görür" de diyordu — yani
     kodlamanın açık tarafa düştüğünü. Ölçüm doğruydu, soru dardı.
+
+62. **DÜZENLENEBİLİR BİR KONTROL BİR SÖZDÜR.**
+
+    Bir alan sözleşmeden (DTO) çıkarıldığında, o alanın ekrandaki
+    kontrolü de KALKMALI ya da SALT OKUNUR olmalıdır.
+
+    Kontrol ekranda kalıp isteğe konmazsa: kullanıcı değeri
+    değiştirir, sistem **"güncellendi"** der ve **hiçbir şey olmaz.**
+    Bu, hatadan KÖTÜDÜR — hata görülür, yalan görülmez.
+
+    **NE DERLEME NE TYPESCRIPT BUNU YAKALAR:** form durumu alanı hâlâ
+    taşır, yalnız istek gövdesine koymaz. İki taraf da geçerli kod.
+
+    TERS YÖNDE DE GEÇERLİ: serviste var olan bir yetenek ekranda
+    düğmesi yoksa, kullanıcı için YOKTUR.
+
+    KAYNAK: HP/1. K1 (kod değişmez) ve K3 (aktiflik tek kapıdan) arka
+    uçta uygulandı; ekranda "Durum" seçicisi ve "Hesap Kodu" girişi
+    **düzenlenebilir kaldı ama gönderilmiyordu.** Kullanıcı "Pasif"
+    seçip kaydetseydi "güncellendi" mesajı alır, hesap aktif kalırdı.
+    Testlerin hepsi yeşildi.
+
+63. **OLUMSUZ İDDİA DA ÖLÇÜM İSTER.**
+
+    *"Gerekmez", "boştur", "yoktur", "dokunmuyor"* — bunlar kanıt
+    gerektirmiyormuş gibi hissettirir, çünkü gösterilecek bir şey
+    yoktur. Oysa **yanılması en kolay iddialar bunlardır.**
+
+    Ve yanılmanın bedeli **İKİ KATIDIR**: olumsuz iddia üzerine
+    genellikle bir KONTROL KALDIRILIR — yani hem yanılırsın hem
+    korumasız kalırsın.
+
+    KAYNAK: HP/1 · K8. Önce *"xmin göç gerektirmez"* denildi ve Kural
+    51 değerlendirmesi bu bilgiyle DÜŞÜRÜLDÜ. `BekleyenModelDegisikligi
+    Tests` yakaladı: göç gerekiyordu. Sonra *"göç var ama Up'ı boş"*
+    denildi; `Up()` okununca **sistem sütunu oluşturmaya çalışıyordu**
+    (`AddColumn<uint>("xmin", type: "xid")`). Canlıda
+    `column name "xmin" conflicts with a system column name` ile
+    düşerdi.
+
+    İki olumsuz iddia arka arkaya, ikisi de ölçümsüz, ikincisi
+    birincinin düzeltmesi olarak söylendi.
+
+    Kural 48'in kardeşi: **orada sıfırı ölçüm döndürüyordu, burada
+    sıfırı biz varsayıyoruz.**
+
+64. **MUHAFIZ TESTLERİ SONUCUNU DA YAZAR.**
+
+    Bir testin **adı** neyi kontrol ettiğini söyler; **kırılırsa NE
+    OLACAĞINI** söylemez. Bir muhafızı kıran kişi genellikle onu yazan
+    kişi değildir ve kırdığı şeyin bedelini bilmez.
+
+    Sıradan davranış testleri için gerekmez. Ama sonucu iddiadan
+    okunamayan muhafızlarda — **TOLERANS, SIRA, SÜZGEÇ, İZİN SINIRI,
+    EŞZAMANLILIK** — teste tek cümlelik bir *"bu kırmızıya dönerse şu
+    olur"* notu girer.
+
+    KAYNAK: `KayitSurumu` tolerans testleri.
+
+    | Tolerans | Sonuç |
+    |---|---|
+    | Çok dar (tam eşitlik) | **her istek çakışır**, kimse kaydı düzenleyemez — görünür ama felç |
+    | Çok geniş (saniye) | **gerçek çakışma kaçar**, kayıp güncelleme sessizce olur — görünmez ve zararlı |
+
+    İkisi birlikte yazılmadan toleransın bir **ARALIK** olduğu
+    anlaşılmıyor; tek kenar yazılırsa diğeri "gereksiz karmaşıklık"
+    gibi görünür ve kaldırılır.
+
+65. **KARŞILAŞTIRMA, ARADIĞIN DEĞİŞİKLİĞİN ÇÖZÜNÜRLÜĞÜNDE YAPILIR.**
+
+    Aradığın şeyden **bir kademe kaba** bir karşılaştırma sessizce
+    geçer:
+
+    | Kaba | İnce |
+    |---|---|
+    | durum | içerik |
+    | sayı | kimlik |
+    | ad | gövde |
+
+    *"Değişmiş dosya listesi aynı"* ile *"dosyaların içeriği aynı"*
+    FARKLI iddialardır; birincisi ikincisini KANITLAMAZ.
+
+    Bir doğrulama kurarken sor: **yakalamaya çalıştığım fark, bu
+    karşılaştırmanın gördüğü seviyede mi?**
+
+    KAYNAK: 2026-08-30, sonda kalıntı kontrolü. `git status` sabotajlı
+    ve sağlam hâlde AYNI `M` satırını veriyordu — dosya zaten
+    değişmişti, sabotaj onu bir kez daha değiştirdi ve durum satırı
+    kımıldamadı. Ayırt eden `md5` oldu.
+
+    Aynı hata bu oturumda başka kılıklarda da çıktı: muhafız `"alan"`
+    arayıp `.alan` yazımını kaçırdı; dedektör `ad:` arayıp kısayol
+    `ad,` sözdizimini kaçırdı; yetim bekçisi `Ad(` arayıp metot grubu
+    kullanımını kaçırdı. Hepsinde arama, aradığı şeyin alabileceği
+    biçimlerden dardı.
 
 ## 5a. CANLIDA YANLIŞ ÜÇ ÇEK KAYDI — VERİ BOZUK DEĞİL, GİRİŞ YANLIŞ
 

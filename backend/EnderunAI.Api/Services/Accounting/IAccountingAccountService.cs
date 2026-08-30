@@ -36,4 +36,9 @@ public interface IAccountingAccountService
     Task DeactivateAsync(
         Guid id,
         CancellationToken cancellationToken);
+
+    /// <summary>K3 — pasife almanın geri alınması.</summary>
+    Task ActivateAsync(
+        Guid id,
+        CancellationToken cancellationToken);
 }
