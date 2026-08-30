@@ -154,9 +154,33 @@ function buildQuery(filters?: WorkTaskFilters) {
   return query ? `?${query}` : "";
 }
 
+/**
+ * GÖREV LİSTESİ ZARFI — sunucunun döndürdüğü şekil.
+ *
+ * `nextCursor` imleç tabanlı sayfalama için; bugün ekran onu
+ * kullanmıyor ama sözleşmede duruyor çünkü sunucu gönderiyor ve
+ * tipin gerçeği yansıtması gerekiyor.
+ */
+export type WorkTaskSayfasi = {
+  items: WorkTask[];
+  hasMore: boolean;
+  nextCursor: { createdAtUtc: string; id: string } | null;
+};
+
 export const workTaskService = {
+  /**
+   * GÖREV LİSTESİ — ZARF DÖNER, DÜZ DİZİ DEĞİL.
+   *
+   * Uç `{ items, hasMore, nextCursor }` döndürüyor. Burada
+   * `WorkTask[]` bekleniyordu ve ekran ilk `.slice` çağrısında
+   * `TypeError: M.slice is not a function` ile ÇÖKÜYORDU —
+   * `/gorevler` hiç açılmıyordu.
+   *
+   * "WorkTasks 1 kayıt" tablosunun sebebi buydu: bulunabilirlik
+   * değil, ekranın açılmaması.
+   */
   getAll(filters?: WorkTaskFilters) {
-    return apiClient<WorkTask[]>(
+    return apiClient<WorkTaskSayfasi>(
       `tasks${buildQuery(filters)}`
     );
   },

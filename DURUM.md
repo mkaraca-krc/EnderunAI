@@ -1638,6 +1638,48 @@ döndüğü gözlendi: 21 testin 2'si kırmızı, `Admin` **4394 bayt**,
 diğer 14 rol yeşil. Sonda ile taklit edilen kusur, gerçeğinin yerini
 tutmaz (Kural 59).
 
+## ZARF/1 — /gorevler ZARF UYUMSUZLUĞU (2026-08-30)
+
+`/gorevler` F4 turundan beri **hiç açılmıyordu.** Uç
+`{ items, hasMore, nextCursor }` zarfına çevrilmiş, ekran düz dizi
+beklemeye devam etmişti: `TypeError: M.slice is not a function`.
+
+**"WorkTasks 1 kayıt" tablosunun sebebi buydu** — bulunabilirlik ya
+da kullanıcı ilgisizliği değil, ekranın açılmaması.
+
+**NEDEN GÖRÜLMEDİ:** istemci hata bildirim kanalı da ayrı bir
+arızayla (204/502) çöküktü. Ekran çöküyor, bildirmeye çalışıyor,
+bildirim de düşüyordu (Kural 66).
+
+### MUHAFIZ ÖNCE YAZILDI, KIRIK HÂLDE KOŞTU
+
+`tests/zarf-tuketimi.test.ts` **düzeltmeden ÖNCE** koşuldu ve
+`/gorevler`i yakaladı:
+
+    services/work-task.service.ts: apiClient<WorkTask[]>("tasks")
+    — WorkTasksController.cs zarf dönüyor
+
+Düzeltmeden sonra yeşil. Bu, muhafızın yerleşik olumlu denetimi
+(Kural 59: ilk gözlem gerçek kusura karşı).
+
+### TARAMA SONUCU: YALNIZ /gorevler
+
+Zarf dönen **5 kök uç** var (WorkTasks, AccountingAccounts,
+GoodsReceipts, EngineeringPositions/Recipes, Collaboration).
+**Başka hiçbirinde** düz dizi tüketimi yok.
+
+Elle grep 5 yanlış aday üretmişti; muhafız onları eledi çünkü zarf
+**kök uçta**, dizi bekleyen çağrılar **alt uçlara** gidiyor
+(`/arama`, `/{id}/inventory-options`). Controller seviyesinde
+eşleştirmek beşini de yanlış bildirirdi (Kural 47).
+
+### MUHAFIZIN BİLİNEN SINIRI
+
+`apiClient<X[]>` kalıbını arıyor. Zarfı `any` ile ya da tipsiz
+tüketen bir yer varsa **görmez**. Kapsam genişletmesi bilinçli
+olarak yapılmadı: `any` taraması gürültülüdür ve yanlış alarm üreten
+muhafız okunmamayı öğretir.
+
 ## 204/502 — ALTI HAFTALIK SESSİZ ARIZA (2026-08-30)
 
 Ön yüz proxy'si (`app/api/backend/[...path]/route.ts`) her yanıtı

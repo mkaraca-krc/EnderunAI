@@ -202,7 +202,7 @@ export default function WorkTasksPage() {
 
       setCompanies(companyRows);
       setProjects(projectRows);
-      setItems(taskRows);
+      setItems(taskRows.items);
       setDashboard(dashboardData);
 
       if (
