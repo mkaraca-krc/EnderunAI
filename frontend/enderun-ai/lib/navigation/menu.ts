@@ -43,9 +43,25 @@ export const MENU_GROUPS: MenuGroup[] = [
        * yapmayalım.
        */
       {
-        label: "Yapılacaklar",
+        label: "Bekleyen İşler",
         href: "/yapilacaklar",
         icon: "☑",
+      },
+      /*
+       * İŞ EMİRLERİ, BEKLEYEN İŞLER'İN HEMEN ALTINDA.
+       *
+       * Önce YÖNETİM grubunun dibindeydi ve adı "Görevler"di.
+       * "Görevler" ile "Yapılacaklar" Türkçede EŞ ANLAMLI: Genel Müdür
+       * üstte olana bastı, orada oluşturma formu olmadığı için
+       * "yazacak yer yok" dedi. Form hep buradaydı, /gorevler'de.
+       *
+       * İkisi artık yan yana ve adları NE İÇİN gidildiğini söylüyor:
+       * BEKLEYEN İŞLER okunacak yer, İŞ EMİRLERİ yazılacak yer.
+       */
+      {
+        label: "İş Emirleri",
+        href: "/gorevler",
+        icon: "✎",
       },
       {
         label: "Göstergeler",
@@ -671,20 +687,23 @@ export const MENU_GROUPS: MenuGroup[] = [
       },
     ],
   },
+  /*
+   * BU GRUP ÖNCE "YÖNETİM" ADINI TAŞIYORDU — İKİNCİ KEZ.
+   *
+   * `key: "management"` menüde İKİ KERE geçiyordu ve kabuk grupları
+   * `key={group.key}` ile işliyor (erp-shell.tsx:493): React aynı
+   * anahtarı iki kardeş düğümde görüyordu. Kullanıcı tarafında ise yan
+   * menüde birbirinden uzakta iki "YÖNETİM" başlığı vardı.
+   *
+   * ONAY MERKEZİ GİRİŞİ KALDIRILDI: /onay-merkezi zaten /yapilacaklar'a
+   * yönlendiriyor (onay-merkezi/page.tsx:21) — aynı ekran menüde iki
+   * adla duruyordu. ROTA VE YÖNLENDİRME DURUYOR: yer imleri ve
+   * paylaşılmış bağlantılar kırılmasın.
+   */
   {
-    key: "management",
-    label: "YÖNETİM",
+    key: "documents-reports",
+    label: "BELGELER VE RAPORLAR",
     items: [
-      {
-        label: "Onay Merkezi",
-        href: "/onay-merkezi",
-        icon: "✓",
-      },
-      {
-        label: "Görevler",
-        href: "/gorevler",
-        icon: "☑",
-      },
       {
         label: "Dokümanlar",
         href: "/dokumanlar",

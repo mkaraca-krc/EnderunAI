@@ -11,6 +11,6 @@
 # çizgi YUKARI serbest, AŞAĞI ayrı commit'te ve gerekçeli.
 # Birleştirme meşrudur ve çizgiyi düşürmek savunma gerektirmez.
 #
-# KAYNAK: 2026-08-29, kabuk paketi yayınlandıktan sonra ölçüldü.
-statik: 367
-dinamik: 11
+# KAYNAK: 2026-08-30, İŞEMRİ/1 paketinde ölçüldü (çizgi YUKARI taşındı).
+statik: 389
+dinamik: 15

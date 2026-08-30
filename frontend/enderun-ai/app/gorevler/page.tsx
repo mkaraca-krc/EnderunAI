@@ -218,7 +218,7 @@ export default function WorkTasksPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Görevler yüklenemedi."
+          : "İş emirleri yüklenemedi."
       );
     } finally {
       setLoading(false);
@@ -294,7 +294,7 @@ export default function WorkTasksPage() {
       });
 
       setSuccess(
-        "Görev başarıyla oluşturuldu."
+        "İş emri başarıyla oluşturuldu."
       );
 
       setForm({
@@ -308,7 +308,7 @@ export default function WorkTasksPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Görev oluşturulamadı."
+          : "İş emri oluşturulamadı."
       );
     } finally {
       setSaving(false);
@@ -322,13 +322,13 @@ export default function WorkTasksPage() {
 
     try {
       await workTaskService.start(id);
-      setSuccess("Görev başlatıldı.");
+      setSuccess("İş emri başlatıldı.");
       await load();
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Görev başlatılamadı."
+          : "İş emri başlatılamadı."
       );
     } finally {
       setProcessingId("");
@@ -354,13 +354,13 @@ export default function WorkTasksPage() {
         note.trim() || null
       );
 
-      setSuccess("Görev tamamlandı.");
+      setSuccess("İş emri tamamlandı.");
       await load();
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Görev tamamlanamadı."
+          : "İş emri tamamlanamadı."
       );
     } finally {
       setProcessingId("");
@@ -379,13 +379,13 @@ export default function WorkTasksPage() {
         reason.trim()
       );
 
-      setSuccess("Görev iptal edildi.");
+      setSuccess("İş emri iptal edildi.");
       await load();
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Görev iptal edilemedi."
+          : "İş emri iptal edilemedi."
       );
     } finally {
       setProcessingId("");
@@ -398,7 +398,7 @@ export default function WorkTasksPage() {
   const columns: DataTableColumn<WorkTask>[] = [
     {
       key: "gorev",
-      header: "Görev",
+      header: "İş Emri",
       value: (item) =>
         `${item.taskNumber} — ${item.title}${item.isOverdue ? " (Gecikti)" : ""}`,
       render: (item) => (
@@ -516,8 +516,8 @@ export default function WorkTasksPage() {
   return (
     <ErpShell
       design="redwood"
-      title="Görev Yönetimi"
-      description="Şirket, proje ve ERP süreçlerine bağlı görevleri yönetin"
+      title="İş Emirleri"
+      description="Şirket, proje ve ERP süreçlerine bağlı iş emirlerini açın ve yönetin"
     >
       {error && (
         <div className="erp-alert error">
@@ -582,7 +582,7 @@ export default function WorkTasksPage() {
           >
             {showForm
               ? "Formu Kapat"
-              : "+ Yeni Görev"}
+              : "+ Yeni İş Emri"}
           </button>
         )}
       </div>
@@ -593,7 +593,7 @@ export default function WorkTasksPage() {
           onSubmit={createTask}
         >
           <div className="erp-form-header">
-            <h2>Yeni Görev</h2>
+            <h2>Yeni İş Emri</h2>
             <p>
               Manuel görev oluşturun ve projeye
               bağlayın.
@@ -781,7 +781,7 @@ export default function WorkTasksPage() {
               >
                 {saving
                   ? "Kaydediliyor..."
-                  : "Görevi Kaydet"}
+                  : "İş Emrini Kaydet"}
               </button>
             )}
           </div>
@@ -929,8 +929,8 @@ export default function WorkTasksPage() {
             columns={columns}
             rowKey={(item) => item.id}
             loading={loading}
-            title="Görevler"
-            emptyText="Görev bulunamadı. Yeni bir görev oluşturun veya filtreleri değiştirin."
+            title="İş Emirleri"
+            emptyText="İş emri bulunamadı. Yeni bir iş emri açın veya filtreleri değiştirin."
             resetKey={`${projectFilter}|${statusFilter}|${priorityFilter}`}
           />
       </div>
@@ -939,15 +939,15 @@ export default function WorkTasksPage() {
           key={`${pending.kind}-${pending.id}`}
           open
           title={
-            pending.kind === "complete" ? "Görevi Tamamla" : "Görevi İptal Et"
+            pending.kind === "complete" ? "İş Emrini Tamamla" : "İş Emrini İptal Et"
           }
           description={
             pending.kind === "complete"
-              ? "Görev tamamlandı olarak işaretlenecek. Tamamlama notu isteğe bağlı ama kayda geçer."
-              : "Görev iptal edilecek. İptal nedeni zorunlu; görevi açan kişi bunu görecek."
+              ? "İş emri tamamlandı olarak işaretlenecek. Tamamlama notu isteğe bağlı ama kayda geçer."
+              : "İş emri iptal edilecek. İptal nedeni zorunlu; iş emrini açan kişi bunu görecek."
           }
           confirmLabel={
-            pending.kind === "complete" ? "Görevi Tamamla" : "Görevi İptal Et"
+            pending.kind === "complete" ? "İş Emrini Tamamla" : "İş Emrini İptal Et"
           }
           requireReason={pending.kind === "cancel"}
           showReason

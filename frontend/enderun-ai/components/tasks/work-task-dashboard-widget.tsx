@@ -5,9 +5,9 @@ export default function WorkTaskDashboardWidget() {
     <section className="rounded-2xl border bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold">Görev Yönetimi</h2>
+          <h2 className="text-lg font-semibold">İş Emirleri</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Görevlerinizi görüntüleyin ve yönetin.
+            İş emirlerini görüntüleyin, yeni iş emri açın.
           </p>
         </div>
 
@@ -15,7 +15,7 @@ export default function WorkTaskDashboardWidget() {
           href="/gorevler"
           className="rounded-lg border px-4 py-2 text-sm font-medium"
         >
-          Görevlere Git
+          İş Emirlerine Git
         </Link>
       </div>
     </section>

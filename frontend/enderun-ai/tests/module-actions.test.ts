@@ -446,8 +446,8 @@ describe("eleman seviyesi yetki (R2/1)", () => {
    */
   const BUTTON_GATES: Array<[string, string, string]> = [
     // [ekran, düğme etiketi, beklenen eylem]
-    ["app/gorevler/page.tsx", "+ Yeni Görev", "manage"],
-    ["app/gorevler/page.tsx", "Görevi Kaydet", "manage"],
+    ["app/gorevler/page.tsx", "+ Yeni İş Emri", "manage"],
+    ["app/gorevler/page.tsx", "İş Emrini Kaydet", "manage"],
     ["app/gorevler/page.tsx", "Başlat", "manage"],
     ["app/gorevler/page.tsx", "Tamamla", "manage"],
     ["app/finans/kasa-banka/page.tsx", "+ Yeni Hesap", "create"],

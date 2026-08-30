@@ -1638,9 +1638,170 @@ döndüğü gözlendi: 21 testin 2'si kırmızı, `Admin` **4394 bayt**,
 diğer 14 rol yeşil. Sonda ile taklit edilen kusur, gerçeğinin yerini
 tutmaz (Kural 59).
 
+## İŞEMRİ/1 — "YAZACAK YER YOK" (2026-08-30)
+
+Genel Müdür `/yapilacaklar`ı açtı: *"burda görev veya emir yazılacak bir
+yer yok."* Haklıydı — ama **oluşturma formu 26 Temmuz'dan beri
+`/gorevler`de duruyordu** (`app/gorevler/page.tsx:591`).
+
+### FAZ 0 PAKETİ GEÇERSİZ KILDI
+
+Paket "form yaz" diye açıldı. Ölçüm formun zaten var olduğunu gösterdi
+ve paket **adlandırma + bulunabilirlik** paketine döndü. Kod yazılmadan
+önce ölçüldüğü için yanlış iş hiç yapılmadı (KAPI 1).
+
+### KÖK SEBEP: EŞ ANLAMLI İKİ AD
+
+| | `/yapilacaklar` | `/gorevler` |
+|---|---|---|
+| Eski ad | "Yapılacaklar" | "Görevler" |
+| Menüdeki yeri | GİRİŞ grubunda, üstte | YÖNETİM grubunda, aşağıda |
+| Ne yapar | kişisel + rol kuyruğu | iş emri kütüğü, **form burada** |
+
+"Yapılacaklar" ile "Görevler" Türkçede eş anlamlı. Kullanıcının
+hangisinin gelen kutusu, hangisinin kütük olduğunu anlamasını sağlayan
+hiçbir işaret yoktu; **üstte olana bastı.** Üstelik doğru ekran
+23 Ağustos'tan beri zarf uyumsuzluğundan açılmıyordu (ZARF/1).
+
+Aynı ekran menüde **iki adla** da duruyordu: "Onay Merkezi"
+(`/onay-merkezi`) birincisi ikincisine yönlendiriyor.
+
+### YAPILANLAR
+
+- `/gorevler` → **"İş Emirleri"**, `/yapilacaklar` → **"Bekleyen İşler"**.
+  Rotalar DEĞİŞMEDİ (yer imleri).
+- İş Emirleri, Bekleyen İşler'in **hemen altına** taşındı.
+- "Onay Merkezi" menü girişi kaldırıldı; **rota ve yönlendirme duruyor**.
+- `/yapilacaklar` boş ekranı artık İş Emirleri'ne **bağlantı** veriyor.
+  **Form değil** — ikinci form ikinci doğrulama, ikinci izin kapısı ve
+  ikinci hata yüzeyi demek olurdu. Tek kapı `/gorevler`.
+- Şema DEĞİŞMEDİ: migration yok, yeni alan yok.
+
+### "Bekleyen İşlerim" DEĞİL, "Bekleyen İşler"
+
+Ekranın yedi bölümünden **üçü** kişisel (`assignedToUserId`,
+`assignedByUserId`), **dördü** rol kuyruğu: `purchase-orders?status=1`,
+`purchase-requests?status=1`, `site-reports/pending-approval` ve
+ilerleme. Aynı izne sahip iki kişi aynı satırları görür. "İşlerim"
+ekranın yarısı için yalan olurdu.
+
+### MUHAFIZ İLK KOŞUSUNDA İKİ TANE DAHA BULDU
+
+`tests/menu-es-anlamli-ad.test.ts` yazıldığında `/raporlar` (Rapor
+Merkezi + Raporlar) ve `/depo-stok/mal-kabul` (Mal Kabul + Mal Kabul)
+tekrarlarını bildirdi. **Silmedim**: ikisi de aynı ekranı İKİ
+DEPARTMANIN menüsünde gösteriyor ve kasıtlı olabilir — mal kabul hem
+satın almanın hem deponun işi. Satın alma ve depo kullanıcılarının
+gezinme yolunu bu paketin kapsamı dışında tek taraflı değiştirmedim.
+Muhafızda **açık gerekçeli istisna listesi** olarak duruyorlar; karar
+Mehmet'te.
+
+### ÖLÇÜM: İŞ EMRİNİ ON ÜÇ ROL GÖREMİYOR
+
+`tasks.view` ve `tasks.manage` yalnızca **Admin** ve **Genel Müdür**
+rollerinde. Şantiye Şefi, Formen, Teknik Ofis, İK Sorumlusu dahil on üç
+rolde ikisi de yok. Yani bu paket ekranı öne çıkarıyor ama iki rol
+dışında kimse menüde göremeyecek. **İzin genişletmek bu paketin işi
+değil** (yetki genişletmesi ayrı karar); ölçüm kayda geçti.
+
+---
+
+### SONDALAR — ALTI SABOTAJ, BİRİ BEKLENMEDİK
+
+| # | Sabotaj | Beklenen | Gerçekleşen |
+|---|---|---|---|
+| A | `/yapilacaklar`a `<form>` ekle | kırmızı | kırmızı ✓ |
+| B | oluşturma düğmesini izin kapısının dışına al | kırmızı | kırmızı ✓ |
+| C | menüye eş anlamlı "İşler" girişi | kırmızı | kırmızı ✓ |
+| D | aynı ekranı ikinci kez menüye koy | kırmızı | kırmızı ✓ |
+| E | grup anahtarını çakıştır | kırmızı | kırmızı ✓ |
+| F | POST'tan `[RequirePermission]` niteliğini sil | kırmızı | **YEŞİL** |
+
+### F NEDEN YEŞİL KALDI — İKİ KİLİT DEĞİL, BİR YEDEK ZİNCİR
+
+**Önce "iki bağımsız kilit" dedim. YANLIŞTI.** Kodu satır satır
+okuyunca çıkan şey bir zincir: `PermissionAuthorizationMiddleware`
+önce niteliğe bakar, **nitelik varsa yol sezgisine HİÇ BAKMAZ** ve
+oracıkta karar verip döner. Yol sezgisi yalnızca nitelik YOKKEN
+çalışır:
+
+    if (ContainsAny(path, "task", "gorev", "görev"))
+        return isRead ? TasksView : TasksManage;
+
+Yani `/api/tasks` POST'u nitelik tamamen silinse bile `tasks.manage`
+istiyor. Sabotajım iki kilitten yalnızca birini açmıştı.
+
+**F2 — ikisi birden kapatıldı** (nitelik silindi + ara katmanın yol
+eşleşmesi bozuldu): `S2b_TasksManageOlmayanKullaniciIsEmriAcamaz`
+**kırmızıya döndü.** Bekçi gerçek; sonda geçerli hâle gelince kanıtladı.
+
+**Bunun iki yüzü var.** İyi yüzü: niteliği unutulan bir uç yine de
+korunur. Dikkat gerektiren yüzü: yolunda tesadüfen `task` geçen bir uç,
+kimse istemeden görev izinlerine bağlanır. Bu bir arıza değil, kayda
+geçmiş bir davranış.
+
+### S1 — TÜRKÇE TUZAĞI
+
+`S1` ilk koşuda kırmızı verdi ama **uç doğru davranmıştı**:
+`{"message":"Görev başlığı zorunludur."}`. İddiam `Contains("başlık")`
+arıyordu; Türkçede son ünsüz yumuşar (**başlık → başlığı**) ve o dizi
+cümlede geçmez. Arıza kodda değil, aramadaydı — kök arayan bir iddia
+Türkçede sessizce yanlış yere düşer. İddia tam cümleye çevrildi.
+
+### ÖLÇÜM ARACININ KENDİSİ ÖLÇÜME KARIŞTI
+
+Test sayısı çizgisini yukarı taşırken cırcırın kendi sayacını kullandım:
+dosyaya geçici bir `it("GÜNCEL SAYIM")` ekleyip sayıyı okuttum, sonra
+geçici testi sildim. Okuduğum sayı **390**'dı ama gerçek sayı **389** —
+**ölçüm aracı kendini saymıştı.**
+
+Cırcır yeni çizgiyi hemen reddetti ("390 → 389, 1 düştü"). Sessizce
+1 fazla bir çizgi kalsaydı, bir sonraki paket sebepsiz kırmızı alırdı
+ve kimse sebebini anlamazdı.
+
+Ölçüm aracı ölçtüğü şeyin içinde yaşıyorsa, ölçümü değiştirir
+(Kural 58'in bir alt hâli).
+
+### Kural 70 — KAYNAKTA GREP ÖLÇÜM DEĞİL, İPUCUDUR
+
+**Kullanıcıya görünen bir metnin "yok" olduğunu kaynak taramasıyla
+söyleme. Ölçüm, render edilmiş çıktıda yapılır.**
+
+Bugün beş kez "aramam dardı" dedim. Bu bir dikkat sorunu değil,
+tasarımın sonucu: kullanıcıya görünen metin JSX içine dağılmış — kimi
+`"tırnaklı"`, kimi `{degisken}` içinde, kimi düpedüz tırnaksız gövde
+metni. Tek bir kalıp hepsini yakalayamaz.
+
+Son örnek: `grep -c '"Başlat"'` **0** verdi ve "etiket yok" dedim.
+Etiket 486. satırda, JSX gövdesinde, tırnaksız duruyordu. Cırcır onu
+buluyordu; benim aramam bulmuyordu.
+
+**Uygulama:** bir metnin varlığı/yokluğu iddiası, testin gördüğü render
+çıktısına dayanmalı. Kaynak taraması yalnızca "nereye bakayım" sorusunu
+cevaplar.
+
+**Kalıcı çözüm bu değil.** Metinlerin tek dosyada toplandığı bir metin
+katmanı bu arıza sınıfını tümden bitirir — not olarak duruyor, paket
+değil.
+
+### Kural 69 — İKİ EKRAN EŞ ANLAMLI ADA SAHİP OLAMAZ
+
+**İki ekran eş anlamlı ada sahip olamaz ve bir ekran menüde birden fazla
+girişle görünemez. Menü etiketi ekranın NE OLDUĞUNU değil, kullanıcının
+oraya NİYE GİTTİĞİNİ söyler.**
+
+Arızanın şekli: kullanıcı doğru işi yapmak için yanlış ekrana gider,
+orada aradığını bulamaz ve **özelliğin var olmadığı sonucuna varır.**
+Kod kusursuz çalışırken özellik yok sayılır.
+
+Mekanik karşılığı `tests/menu-es-anlamli-ad.test.ts`: eş anlamlı çiftler,
+tekrarlı yol, tekrarlı grup anahtarı/etiketi. **Dürüst sınırı**: eş
+anlamlılık bir kelime listesinden okunur; listede olmayan yeni bir çift
+testten geçer. Liste arıza tekrar ettikçe büyür.
+
 ## ZARF/1 — /gorevler ZARF UYUMSUZLUĞU (2026-08-30)
 
-`/gorevler` F4 turundan beri **hiç açılmıyordu.** Uç
+`/gorevler` **23 Ağustos'tan beri hiç açılmıyordu.** Uç
 `{ items, hasMore, nextCursor }` zarfına çevrilmiş, ekran düz dizi
 beklemeye devam etmişti: `TypeError: M.slice is not a function`.
 
@@ -1650,6 +1811,20 @@ da kullanıcı ilgisizliği değil, ekranın açılmaması.
 **NEDEN GÖRÜLMEDİ:** istemci hata bildirim kanalı da ayrı bir
 arızayla (204/502) çöküktü. Ekran çöküyor, bildirmeye çalışıyor,
 bildirim de düşüyordu (Kural 66).
+
+
+> **DÜZELTME (İŞEMRİ/1 Faz 0'da ölçüldü).** Yukarıda önce "F4 turundan
+> beri" yazıyordu. YANLIŞTI ve ölçülmeden yazılmıştı. Gerçek:
+>
+> - Ön yüz **26 Temmuz**'dan beri (`a71c11c8`) düz dizi okuyor.
+> - Arka uç zarfa **23 Ağustos**'ta geçti (`d57a4c50`, M1/2).
+> - F4 commit'leri 21–22 Ağustos'tandır; kırılmanın sebebi F4 değil.
+>
+> Süre **7 gün**, "haftalarca" değil. Kanıt: `GRV-2026-00001` 1 Ağustos'ta
+> `/gorevler` formundan açılmış — o gün iki taraf da düz dizi
+> konuşuyordu ve ekran çalışıyordu.
+>
+> Bu, ölçülmeden tekrarlanan bir tarihin kayda geçmesiydi (Kural 58).
 
 ### MUHAFIZ ÖNCE YAZILDI, KIRIK HÂLDE KOŞTU
 

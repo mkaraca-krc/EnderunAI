@@ -267,8 +267,8 @@ export default function YapilacaklarSayfasi() {
   return (
     <div className="rw">
       <div className="erp-page-header">
-        <h1>Yapılacaklar</h1>
-        <p>Onayınızı bekleyen işler, size atanan ve gönderdiğiniz görevler.</p>
+        <h1>Bekleyen İşler</h1>
+        <p>Onayınızı bekleyen işler, size atanan ve gönderdiğiniz iş emirleri.</p>
       </div>
 
       {yukleniyor && <div className="erp-alert">Yükleniyor…</div>}
@@ -278,6 +278,23 @@ export default function YapilacaklarSayfasi() {
           <p>
             <strong>Bekleyen işiniz yok.</strong> Onayınızı bekleyen, size atanmış
             ya da takip ettiğiniz açık bir iş bulunmuyor.
+          </p>
+          {/*
+            * BOŞ EKRAN NE YAPILACAĞINI SÖYLER.
+            *
+            * Genel Müdür bu ekranı boşken açtı ve "burda görev veya emir
+            * yazılacak bir yer yok" dedi — haklıydı: ekran bekleyeni
+            * listeler, iş emri AÇMAZ. Açma yeri /gorevler ve orada form
+            * zaten var; kullanıcının bilmediği şey oraya gidileceğiydi.
+            *
+            * BU BİR BAĞLANTIDIR, FORM DEĞİL. İkinci bir oluşturma yolu
+            * ikinci bir doğrulama, ikinci bir izin kapısı ve ikinci bir
+            * hata yüzeyi demek olurdu. Tek kapı /gorevler.
+            */}
+          <p className="mt-3">
+            <Link href="/gorevler" className="erp-secondary-button">
+              Yeni iş emri açmak için → İş Emirleri
+            </Link>
           </p>
         </div>
       )}

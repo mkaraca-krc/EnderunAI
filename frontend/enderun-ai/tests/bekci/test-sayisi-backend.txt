@@ -26,6 +26,6 @@
 # Bu cırcır testin SİLİNMESİNİ fark ettirmek için var;
 # İYİLEŞTİRİLMESİNİ engellemek için değil.
 #
-# KAYNAK: 2026-08-29, kabuk paketi yayınlandıktan sonra ölçüldü.
-statik: 2756
-dinamik: 22
+# KAYNAK: 2026-08-30, İŞEMRİ/1 paketinde ölçüldü (çizgi YUKARI taşındı).
+statik: 2798
+dinamik: 24

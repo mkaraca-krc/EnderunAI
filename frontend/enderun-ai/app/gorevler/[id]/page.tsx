@@ -73,7 +73,7 @@ export default function WorkTaskDetailPage() {
     try {
       setItem(await workTaskService.getById(id));
     } catch (hata) {
-      setError(hata instanceof Error ? hata.message : "Görev yüklenemedi.");
+      setError(hata instanceof Error ? hata.message : "İş emri yüklenemedi.");
     } finally {
       setLoading(false);
     }
@@ -133,26 +133,26 @@ export default function WorkTaskDetailPage() {
   return (
     <ErpShell
       design="redwood"
-      title={item?.taskNumber ?? "Görev"}
-      description={item?.title ?? "Görev detayı"}
+      title={item?.taskNumber ?? "İş Emri"}
+      description={item?.title ?? "İş emri detayı"}
     >
       <div className="mb-5 flex items-center gap-2 text-sm text-slate-500">
         <Link href="/yapilacaklar" className="hover:text-slate-900">
-          Yapılacaklar
+          Bekleyen İşler
         </Link>
         <span>›</span>
         <Link href="/gorevler" className="hover:text-slate-900">
-          Görev Yönetimi
+          İş Emirleri
         </Link>
         <span>›</span>
         <strong className="text-slate-800">{item?.taskNumber ?? "…"}</strong>
       </div>
 
-      {loading && <p>Görev yükleniyor…</p>}
+      {loading && <p>İş emri yükleniyor…</p>}
 
       {error && !loading && (
         <EmptyState
-          title="Görev açılamadı"
+          title="İş emri açılamadı"
           description={error}
           action={
             <Button variant="secondary" onClick={() => void yukle()}>
@@ -318,8 +318,8 @@ export default function WorkTaskDetailPage() {
 
           <ConfirmDialog
             open={tamamlaAcik}
-            title="Görevi tamamla"
-            description="Görev kapanmaz: isteyen kişiye onaya gider. Ne yaptığınızı yazmanız, onaylayanın işi görmeden karar vermesini önler."
+            title="İş emrini tamamla"
+            description="İş emri kapanmaz: isteyen kişiye onaya gider. Ne yaptığınızı yazmanız, onaylayanın işi görmeden karar vermesini önler."
             confirmLabel="Tamamladım"
             showReason
             reasonLabel="Tamamlama notu"
@@ -332,8 +332,8 @@ export default function WorkTaskDetailPage() {
 
           <ConfirmDialog
             open={iadeAcik}
-            title="Görevi iade et"
-            description="Görev yeniden açılır ve yapan kişiye döner. Termin korunur."
+            title="İş emrini iade et"
+            description="İş emri yeniden açılır ve yapan kişiye döner. Termin korunur."
             confirmLabel="İade Et"
             requireReason
             reasonLabel="İade gerekçesi"
