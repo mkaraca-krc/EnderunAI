@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using EnderunAI.Api.Services.Common;
 namespace EnderunAI.Api.Controllers;
 
 [ApiController]
@@ -249,53 +250,16 @@ public sealed class WorkTasksController(
          * kendisinden türetilebiliyor — hakediş projeye, mal kabul
          * depoya bağlı — o yüzden orada zorunlu değil.
          */
-        var kaydaBagli = !string.IsNullOrWhiteSpace(request.SourceModule);
+        var merkezHatasi = await MerkezDogrulaAsync(
+            request.ProjectId,
+            request.BranchId,
+            request.ProjectSiteId,
+            request.CenterType,
+            request.SourceModule,
+            cancellationToken);
 
-        if (!kaydaBagli)
-        {
-            var merkezVar =
-                request.ProjectId.HasValue ||
-                request.BranchId.HasValue ||
-                request.ProjectSiteId.HasValue;
-
-            if (!merkezVar)
-            {
-                return BadRequest(new
-                {
-                    message =
-                        "Kayda bağlı olmayan görevde masraf merkezi zorunludur: " +
-                        "proje, şube ya da şantiye seçin."
-                });
-            }
-        }
-
-        /*
-         * ATANAN KİŞİ KAYDI GÖREBİLMELİ.
-         *
-         * Göremeyeceği bir göreve atanan kullanıcı, gelen kutusunda
-         * açamadığı bir satır görür. Daha kötüsü: görev, kapsam
-         * disiplinine açılmış gizli bir kapı olurdu.
-         */
-        if (request.AssignedToUserId is Guid atanan)
-        {
-            var taslak = new WorkTask
-            {
-                CompanyId = request.CompanyId,
-                ProjectId = request.ProjectId,
-                BranchId = request.BranchId,
-                ProjectSiteId = request.ProjectSiteId
-            };
-
-            if (!await GorevAtanabilirMiAsync(taslak, atanan, cancellationToken))
-            {
-                return BadRequest(new
-                {
-                    message =
-                        "Seçilen kullanıcı bu görevin kaydını göremiyor, " +
-                        "dolayısıyla göreve atanamaz. Önce yetki verin."
-                });
-            }
-        }
+        if (merkezHatasi is not null)
+            return BadRequest(new { message = merkezHatasi });
 
         var taskNumber = await documentNumbers.GenerateAsync(
             request.CompanyId, "WORK_TASK", "GRV", cancellationToken);
@@ -305,7 +269,10 @@ public sealed class WorkTasksController(
             CompanyId = request.CompanyId,
             ProjectId = request.ProjectId,
             TaskNumber = taskNumber,
-            CenterType = request.CenterType,
+            // TÜR SEÇİMDEN TÜRER: istekten gelen değer yalnızca
+            // çelişki kontrolünde okundu, saklanmıyor.
+            CenterType = MasrafMerkeziKurali.TuruTuret(
+                request.ProjectId, request.BranchId, request.ProjectSiteId),
             BranchId = request.BranchId,
             ProjectSiteId = request.ProjectSiteId,
             Title = request.Title.Trim(),
@@ -368,6 +335,31 @@ public sealed class WorkTasksController(
 
         if (string.IsNullOrWhiteSpace(request.Title))
             return BadRequest(new { message = "Görev başlığı zorunludur." });
+
+        /*
+         * PUT DE MERKEZ YAZAR — VE AYNI KAPIDAN GEÇER.
+         *
+         * Önce `UpdateWorkTaskRequest` merkez alanlarını hiç taşımıyordu:
+         * merkez yalnız oluşturmada konabiliyor, yanlış konmuşsa BİR DAHA
+         * DÜZELTİLEMİYORDU. Alanlar eklendi ve doğrulama POST ile aynı
+         * metoda bağlandı — ikinci bir kapı doğmasın.
+         */
+        var merkezHatasi = await MerkezDogrulaAsync(
+            request.ProjectId,
+            request.BranchId,
+            request.ProjectSiteId,
+            request.CenterType,
+            item.SourceModule,
+            cancellationToken);
+
+        if (merkezHatasi is not null)
+            return BadRequest(new { message = merkezHatasi });
+
+        item.ProjectId = request.ProjectId;
+        item.BranchId = request.BranchId;
+        item.ProjectSiteId = request.ProjectSiteId;
+        item.CenterType = MasrafMerkeziKurali.TuruTuret(
+            request.ProjectId, request.BranchId, request.ProjectSiteId);
 
         item.Title = request.Title.Trim();
         item.Description = request.Description?.Trim();
@@ -852,6 +844,9 @@ public sealed class WorkTasksController(
          * çözülemezse (kullanıcı silinmişse) sessizce boş geçmiyor:
          * açık bir metin dönüyor, yoksa alan hiç yokmuş gibi görünür.
          */
+        ProjectName = AdBul(adlar, x.ProjectId),
+        BranchName = AdBul(adlar, x.BranchId),
+        ProjectSiteName = AdBul(adlar, x.ProjectSiteId),
         AssignedToName = AdBul(adlar, x.AssignedToUserId),
         AssignedByName = AdBul(adlar, x.AssignedByUserId),
         ApprovedByName = AdBul(adlar, x.ApprovedByUserId),
@@ -873,6 +868,38 @@ public sealed class WorkTasksController(
     /// Görev satırlarındaki tüm kullanıcı adlarını TEK sorguda
     /// toplar — satır başına arama N+1 olurdu.
     /// </summary>
+    /// <summary>
+    /// Merkez doğrulamasının TEK giriş noktası. POST ve PUT bunu çağırır.
+    ///
+    /// Kural saf bir metotta (<see cref="MasrafMerkeziKurali"/>) yaşıyor;
+    /// buradaki tek iş, şantiyenin projesini veritabanından okuyup ona
+    /// vermek. Böylece kuralın kendisi test edilebilir kalıyor ve iki
+    /// çağıran arasında kopya çıkmıyor.
+    /// </summary>
+    private async Task<string?> MerkezDogrulaAsync(
+        Guid? projectId,
+        Guid? branchId,
+        Guid? projectSiteId,
+        ExpenseCenterType? centerType,
+        string? sourceModule,
+        CancellationToken cancellationToken)
+    {
+        Guid? santiyeninProjesi = null;
+
+        if (projectSiteId.HasValue)
+        {
+            santiyeninProjesi = await db.ProjectSites
+                .AsNoTracking()
+                .Where(x => x.Id == projectSiteId.Value)
+                .Select(x => (Guid?)x.ProjectId)
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+
+        return MasrafMerkeziKurali.Dogrula(
+            projectId, branchId, projectSiteId,
+            centerType, sourceModule, santiyeninProjesi);
+    }
+
     private async Task<Dictionary<Guid, string>> AdlariGetirAsync(
         IEnumerable<WorkTask> gorevler, CancellationToken cancellationToken)
     {
@@ -887,13 +914,104 @@ public sealed class WorkTasksController(
             .Distinct()
             .ToList();
 
-        if (liste.Count == 0)
+        // ERKEN ÇIKIŞ KALDIRILDI: kullanıcı kimliği olmayan ama
+        // merkezi olan bir görevde merkez adı da çözülmeliydi.
+        var merkezVarMi = gorevler.Any(x =>
+            x.ProjectId.HasValue || x.BranchId.HasValue || x.ProjectSiteId.HasValue);
+
+        if (liste.Count == 0 && !merkezVarMi)
             return [];
 
-        return await db.Users
+        var sonuc = await db.Users
             .AsNoTracking()
             .Where(x => liste.Contains(x.Id))
             .ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
+
+        /*
+         * MERKEZ ADLARI DA AYNI SÖZLÜKTE.
+         *
+         * Ekranda GUID gösteren bir merkez sütunu okunamaz. Liste
+         * ekranı adları kendi çektiği listelerden çözebiliyordu ama
+         * DETAY ekranı hiçbir liste çekmiyor — aynı bilgi iki ayrı
+         * yoldan üretilseydi ikisi bir gün ayrışırdı.
+         *
+         * Kimlikler GUID ve tablolar arası çakışmadığı için tek
+         * sözlük yetiyor; `ToDto` hepsini `AdBul` ile okuyor.
+         */
+        /*
+         * MERKEZ ADLARI DA KAPSAM SÜZGECİNDEN GEÇER.
+         *
+         * İlk yazımım `db.Projects` ve `db.Branches`'i süzgeçsiz
+         * okuyordu ve `CoverageBaselineTests` bunu yakaladı. "Kimliği
+         * zaten kapsamlı bir görevden geldi, dolayısıyla güvenli"
+         * diye düşünmüştüm — ama o bir ÇIKARIM; süzgeç bir ÖLÇÜM.
+         * Kapsamı dar bir kullanıcı, göreceği bir görevin bağlı olduğu
+         * ama KENDİ kapsamı dışındaki bir projenin kodunu ve adını
+         * görebilirdi. Ad çözülemezse ekran "Proje" yazar — bilgi
+         * sızmaz, ekran da kırılmaz.
+         */
+        var kapsam = await GetScopeAsync(cancellationToken);
+
+        var projeler = gorevler.Select(x => x.ProjectId).Where(x => x.HasValue)
+            .Select(x => x!.Value).Distinct().ToList();
+        var subeler = gorevler.Select(x => x.BranchId).Where(x => x.HasValue)
+            .Select(x => x!.Value).Distinct().ToList();
+        var santiyeler = gorevler.Select(x => x.ProjectSiteId).Where(x => x.HasValue)
+            .Select(x => x!.Value).Distinct().ToList();
+
+        if (projeler.Count > 0)
+        {
+            foreach (var satir in await db.Projects.AsNoTracking().ApplyScope(kapsam)
+                .Where(x => projeler.Contains(x.Id))
+                .Select(x => new { x.Id, Ad = x.Code + " — " + x.Name })
+                .ToListAsync(cancellationToken))
+            {
+                sonuc[satir.Id] = satir.Ad;
+            }
+        }
+
+        if (subeler.Count > 0)
+        {
+            foreach (var satir in await db.Branches.AsNoTracking().ApplyScope(kapsam)
+                .Where(x => subeler.Contains(x.Id))
+                .Select(x => new { x.Id, Ad = x.Code + " — " + x.Name })
+                .ToListAsync(cancellationToken))
+            {
+                sonuc[satir.Id] = satir.Ad;
+            }
+        }
+
+        if (santiyeler.Count > 0)
+        {
+            /*
+             * ŞANTİYE KAPSAMI GEÇİŞLİ KAPATILIYOR.
+             *
+             * `ProjectSite` `CompanyId` taşımadığı için
+             * `CoverageBaselineTests`'in kapsamı dışında — cırcır bunu
+             * BİLDİRMEDİ. Ama sızıntı sınıfı proje/şubeyle aynı ve
+             * `ProjectSite` için bir `Apply` aşırı yüklemesi yok.
+             *
+             * Şantiye kendi projesinin altında yaşıyor: projesi
+             * kullanıcının kapsamındaysa şantiyesi de öyle. Süzgeci
+             * proje üzerinden kuruyoruz.
+             *
+             * Cırcırın görmediği bir sızıntıyı kapatmak, cırcırın
+             * kapsamının ölçüm sınırı olduğunu unutmamak demek.
+             */
+            var kapsamliProjeler = db.Projects.AsNoTracking().ApplyScope(kapsam)
+                .Select(x => x.Id);
+
+            foreach (var satir in await db.ProjectSites.AsNoTracking()
+                .Where(x => santiyeler.Contains(x.Id)
+                    && kapsamliProjeler.Contains(x.ProjectId))
+                .Select(x => new { x.Id, Ad = x.Code + " — " + x.Name })
+                .ToListAsync(cancellationToken))
+            {
+                sonuc[satir.Id] = satir.Ad;
+            }
+        }
+
+        return sonuc;
     }
 }
 
@@ -927,7 +1045,16 @@ public sealed record UpdateWorkTaskRequest(
     Guid? AssignedToUserId,
     DateTime? StartDate,
     DateTime? DueDate,
-    string? Tags);
+    string? Tags,
+
+    /// <summary>
+    /// MERKEZ ALANLARI PUT'A EKLENDİ. Önce yoktu ve yanlış konmuş bir
+    /// masraf merkezi düzeltilemiyordu. Doğrulama POST ile aynı metotta.
+    /// </summary>
+    Guid? ProjectId = null,
+    Guid? BranchId = null,
+    Guid? ProjectSiteId = null,
+    ExpenseCenterType? CenterType = null);
 
 public sealed record CompleteWorkTaskRequest(string? CompletionNote);
 

@@ -192,6 +192,26 @@ export default function WorkTaskDetailPage() {
               iyidir.
             */}
             <div className="erp-detail-grid">
+              {/*
+                MASRAF MERKEZİ DETAYDA DA GÖRÜNÜR.
+
+                Önce hiçbir yerde yoktu: veri uçtan geliyordu, ekran
+                okumuyordu bile. Ad SUNUCUDAN geliyor — bu ekran
+                proje/şube/şantiye listesi çekmiyor ve çekmemeli;
+                aynı bilgiyi iki ayrı yoldan üretmek bir gün ayrışır.
+              */}
+              <div>
+                <span>Masraf Merkezi</span>
+                <strong>
+                  {item.projectSiteId
+                    ? item.projectSiteName ?? "Şantiye"
+                    : item.branchId
+                      ? item.branchName ?? "Şube"
+                      : item.projectId
+                        ? item.projectName ?? "Proje"
+                        : "—"}
+                </strong>
+              </div>
               <div>
                 <span>Yapacak</span>
                 <strong>{item.assignedToName ?? "—"}</strong>

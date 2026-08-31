@@ -16,6 +16,25 @@ export enum WorkTaskStatus {
   Cancelled = 5,
 }
 
+
+/*
+ * MASRAF MERKEZİ — ÜÇ ALAN, TEK SEÇİM.
+ *
+ * Arka uç bu üçünü DTO'da hep gönderiyordu; ön yüz tipi onları
+ * tanımıyordu bile. Genel Müdür'ün "iş emrinde merkez çıkmıyor"
+ * demesinin sebebi buydu: veri geliyordu, ekran okumuyordu.
+ *
+ * `centerType` YAZILMAZ, OKUNUR. Sunucu onu seçimden türetiyor;
+ * gönderilen değer yalnız çelişki kontrolünde kullanılıyor.
+ */
+export const MERKEZ_TURU = {
+  Sube: 0,
+  Proje: 1,
+  Santiye: 2,
+} as const;
+
+export type MerkezTuru = (typeof MERKEZ_TURU)[keyof typeof MERKEZ_TURU];
+
 export type WorkTask = {
   id: string;
   companyId: string;
@@ -40,6 +59,22 @@ export type WorkTask = {
   tags?: string | null;
   isOverdue: boolean;
   createdAtUtc: string;
+
+  /** Masraf merkezi — üçünden yalnız biri dolu (şantiyede projesi de gelir). */
+  branchId?: string | null;
+  projectSiteId?: string | null;
+  centerType?: MerkezTuru | null;
+
+  /*
+   * MERKEZ ADLARI SUNUCUDAN GELİR.
+   *
+   * Liste ekranı adları kendi çektiği listelerden çözebiliyordu ama
+   * DETAY ekranı hiçbir liste çekmiyor. Aynı bilgi iki ayrı yoldan
+   * üretilseydi ikisi bir gün ayrışırdı — tek kaynak sunucu.
+   */
+  projectName?: string | null;
+  branchName?: string | null;
+  projectSiteName?: string | null;
 
   /*
    * ÇİFT ADIMLI KAPANIŞ İZİ.
@@ -95,6 +130,11 @@ export type CreateWorkTaskRequest = {
   sourceEntityId?: string | null;
   sourceEventCode?: string | null;
   tags?: string | null;
+
+  /** Masraf merkezi. `centerType` sunucuda seçimden türetilir. */
+  branchId?: string | null;
+  projectSiteId?: string | null;
+  centerType?: MerkezTuru | null;
 };
 
 export type UpdateWorkTaskRequest = {
@@ -105,6 +145,17 @@ export type UpdateWorkTaskRequest = {
   startDate?: string | null;
   dueDate?: string | null;
   tags?: string | null;
+
+  /*
+   * MERKEZ PUT'TA DA VAR.
+   *
+   * Önce yoktu: merkez yalnız oluşturmada konabiliyor, yanlış konmuşsa
+   * bir daha düzeltilemiyordu. Doğrulama POST ile aynı metotta.
+   */
+  projectId?: string | null;
+  branchId?: string | null;
+  projectSiteId?: string | null;
+  centerType?: MerkezTuru | null;
 };
 
 export type WorkTaskFilters = {

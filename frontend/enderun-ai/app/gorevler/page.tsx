@@ -28,6 +28,16 @@ import {
 } from "@/services/project.service";
 
 import {
+  branchService,
+  type BranchListItem,
+} from "@/services/branch.service";
+
+import {
+  projectSiteService,
+  type ProjectSiteListItem,
+} from "@/services/project-site.service";
+
+import {
   workTaskService,
   WorkTaskPriority,
   WorkTaskStatus,
@@ -69,6 +79,16 @@ const statusClasses: Record<number, string> = {
 
 const initialForm = {
   companyId: "",
+  /*
+   * MASRAF MERKEZİ — ÖNCE TÜR, SONRA LİSTE.
+   *
+   * `merkezTuru` ekranın kendi durumu; sunucuya gönderilmiyor.
+   * Sunucu türü seçimden TÜRETİYOR (tek kaynak). Buradaki alan
+   * yalnızca "hangi listeyi göstereyim" sorusunu cevaplıyor.
+   */
+  merkezTuru: "proje" as "proje" | "sube" | "santiye",
+  branchId: "",
+  projectSiteId: "",
   projectId: "",
   title: "",
   description: "",
@@ -111,6 +131,17 @@ export default function WorkTasksPage() {
   const [projects, setProjects] = useState<
     ProjectListItem[]
   >([]);
+
+  const [branches, setBranches] = useState<BranchListItem[]>([]);
+
+  /*
+   * ŞANTİYE LİSTESİ PROJEYE BAĞLI.
+   *
+   * Uç `/api/projects/{projectId}/sites` — yani şantiye görebilmek için
+   * önce proje seçilmiş olmalı. Kademe bu yüzden doğal: tür "şantiye"
+   * ise önce proje, sonra o projenin şantiyeleri.
+   */
+  const [sites, setSites] = useState<ProjectSiteListItem[]>([]);
 
   const [items, setItems] = useState<WorkTask[]>([]);
 
@@ -169,6 +200,74 @@ export default function WorkTasksPage() {
     [projects, companyFilter]
   );
 
+  /*
+   * ŞANTİYE LİSTESİ OLAY ANINDA ÇEKİLİR — EFEKTLE DEĞİL.
+   *
+   * İlk yazımım `useEffect` + `setSites` desenindeydi ve lint cırcırını
+   * 154'ten 155'e çıkardı. Cırcır bir TAVAN ("toplam çizgiyi aşamaz")
+   * ve yükseltilemez; test sayısı cırcırıyla karıştırmak üzereydim —
+   * o yukarı serbest, bu değil.
+   *
+   * Doğru yer zaten olay işleyicisi: liste ancak kullanıcı tür ya da
+   * proje değiştirdiğinde anlam kazanıyor. Efekt gereksizdi.
+   *
+   * PROJE DEĞİŞİNCE ŞANTİYE SIFIRLANIR: bir projenin şantiyesi başka
+   * projeyle gönderilebilseydi iki kaynak çelişirdi. Sunucu bu bileşimi
+   * ayrıca REDDEDİYOR (MasrafMerkeziKurali) — buradaki sıfırlama
+   * kullanıcıyı reddedilecek bir seçimden koruyor, kapının kendisi orada.
+   */
+  /*
+   * MERKEZ METNİ — TEK ÇÖZÜCÜ.
+   *
+   * Liste ve (varsa) diğer yerler aynı metni üretsin diye tek yerde.
+   * Sıra önemli: şantiye en dar merkez, ondan sonra şube, en son proje.
+   * Kayıtta şantiye varsa projesi de dolu olur; o durumda şantiyeyi
+   * göstermek daha bilgilendirici.
+   */
+  function merkezMetni(item: WorkTask): string {
+    /*
+     * ADLAR SUNUCUDAN. İlk yazımım adları ekranın kendi listelerinden
+     * çözüyordu; detay ekranı o listeleri çekmediği için aynı bilgi
+     * iki ayrı yoldan üretilecekti. Tek kaynak sunucu (`ToDto`).
+     *
+     * Sıra önemli: şantiye en dar merkez, sonra şube, en son proje.
+     * Şantiyede projesi de dolu olur; şantiyeyi göstermek daha
+     * bilgilendirici, projeyi parantezde veriyoruz.
+     */
+    if (item.projectSiteId) {
+      const ad = item.projectSiteName ?? "Şantiye";
+      return item.projectName ? `${ad} (${item.projectName})` : ad;
+    }
+
+    if (item.branchId) return item.branchName ?? "Şube";
+    if (item.projectId) return item.projectName ?? "Proje";
+
+    return "—";
+  }
+
+
+  async function santiyeleriYukle(projectId: string) {
+    /*
+     * ÇIPLAK `return;` YOK — SESSİZ YÜKLENİYOR CIRCIRI İÇİN.
+     *
+     * İlk yazımım erken çıkışlıydı ve cırcır onu bildirdi. Cırcır
+     * KONUMA bakıyor: `useState(true)` ile ilk `setLoading(false)`
+     * arasındaki çıplak `return;`leri sayıyor. Bu fonksiyonun yükleme
+     * durumuyla ilgisi yok, yani teknik olarak yanlış pozitif — ama
+     * cırcırı gevşetmek yerine deseni değiştirdim: erken çıkış zaten
+     * gerekli değildi ve if/else daha okunur.
+     */
+    if (!projectId) {
+      setSites([]);
+    } else {
+      try {
+        setSites(await projectSiteService.getAll(projectId));
+      } catch {
+        setSites([]);
+      }
+    }
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -177,11 +276,21 @@ export default function WorkTasksPage() {
       const [
         companyRows,
         projectRows,
+        branchRows,
         taskRows,
         dashboardData,
       ] = await Promise.all([
         companyService.getAll(),
         projectService.getAll(),
+        /*
+         * ŞUBELER ANA YÜKLEMEDE, ŞANTİYELER DEĞİL.
+         *
+         * Şube listesi şirkete bağlı ve küçük; peşin çekiliyor.
+         * Şantiye listesi PROJEYE bağlı (uç `/projects/{id}/sites`),
+         * yani hangi projenin seçileceği bilinmeden çekilemez —
+         * proje seçilince ayrı efektte geliyor.
+         */
+        branchService.getAll(),
         workTaskService.getAll({
           companyId:
             companyFilter || undefined,
@@ -202,6 +311,7 @@ export default function WorkTasksPage() {
 
       setCompanies(companyRows);
       setProjects(projectRows);
+      setBranches(branchRows);
       setItems(taskRows.items);
       setDashboard(dashboardData);
 
@@ -277,7 +387,16 @@ export default function WorkTasksPage() {
     try {
       await workTaskService.create({
         companyId: form.companyId,
+        /*
+         * MERKEZ GÖNDERİLİYOR — `centerType` GÖNDERİLMİYOR.
+         *
+         * Tür sunucuda seçimden türetiliyor (tek kaynak). Buradan
+         * ayrıca göndermek ikinci bir kaynak yaratır; ikisi çelişirse
+         * hangisinin doğru olduğu bilinemez.
+         */
         projectId: form.projectId || null,
+        branchId: form.branchId || null,
+        projectSiteId: form.projectSiteId || null,
         title: form.title.trim(),
         description:
           form.description.trim() || null,
@@ -410,22 +529,34 @@ export default function WorkTasksPage() {
       ),
     },
     {
-      key: "proje",
-      header: "Proje",
-      value: (item) => {
-        const project = projects.find((row) => row.id === item.projectId);
-        return project ? `${project.code} — ${project.name}` : "—";
-      },
+      /*
+       * MERKEZ SÜTUNU — "PROJE" SÜTUNUNUN YERİNE.
+       *
+       * Önce yalnız proje gösteriliyordu; şube ya da şantiyeye bağlı bir
+       * iş emri listede "—" görünüyordu. Genel Müdür "iş emrinde merkez
+       * çıkmıyor" derken bunu söylüyordu: veri uçtan geliyordu, ekran
+       * okumuyordu bile.
+       */
+      key: "merkez",
+      header: "Merkez",
+      value: (item) => merkezMetni(item),
       render: (item) => {
-        const project = projects.find((row) => row.id === item.projectId);
+        const metin = merkezMetni(item);
 
-        return project ? (
+        if (metin === "—") return "—";
+
+        // "KOD — Ad" biçimini iki satıra ayırıyoruz; ayıramıyorsak
+        // metni olduğu gibi basıyoruz (uydurmak yok).
+        const [kod, ...kalan] = metin.split(" — ");
+        const ad = kalan.join(" — ");
+
+        return ad ? (
           <>
-            <strong>{project.code}</strong>
-            <small>{project.name}</small>
+            <strong>{kod}</strong>
+            <small>{ad}</small>
           </>
         ) : (
-          "—"
+          <strong>{metin}</strong>
         );
       },
     },
@@ -631,17 +762,98 @@ export default function WorkTasksPage() {
               </select>
             </label>
 
+            {/*
+              MASRAF MERKEZİ — ÖNCE TÜR, SONRA LİSTE.
+
+              Genel Müdür "iş emrinde merkez çıkmıyor" dedi. Ölçüldü:
+              formda yalnız "Proje" vardı; şube ve şantiye seçicisi HİÇ
+              yoktu ve gövde onları hiç göndermiyordu.
+
+              Tür ayrı bir alan olarak SUNUCUYA GÖNDERİLMİYOR — sunucu
+              onu seçimden türetiyor (tek kaynak). Buradaki seçim
+              yalnızca hangi listenin gösterileceğini belirliyor.
+            */}
             <label>
-              <span>Proje</span>
+              <span>Masraf Merkezi Türü *</span>
               <select
-                value={form.projectId}
-                onChange={(event) =>
+                value={form.merkezTuru}
+                onChange={(event) => {
+                  const tur = event.target
+                    .value as typeof form.merkezTuru;
+
+                  // Tür değişince eski seçim taşınmaz: proje türünde
+                  // şube kalırsa sunucu "tek merkez seçilebilir" der.
                   setForm({
                     ...form,
-                    projectId:
-                      event.target.value,
-                  })
-                }
+                    merkezTuru: tur,
+                    projectId: "",
+                    branchId: "",
+                    projectSiteId: "",
+                  });
+                  setSites([]);
+                }}
+              >
+                <option value="proje">Proje</option>
+                <option value="sube">Şube</option>
+                <option value="santiye">Şantiye</option>
+              </select>
+            </label>
+
+            {form.merkezTuru === "sube" && (
+              <label>
+                <span>Şube *</span>
+                <select
+                  value={form.branchId}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      branchId: event.target.value,
+                    })
+                  }
+                >
+                  <option value="">Şube seçilmedi</option>
+
+                  {branches
+                    .filter(
+                      (row) =>
+                        !form.companyId ||
+                        row.companyId === form.companyId
+                    )
+                    .map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {row.code} — {row.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
+
+            <label>
+              <span>
+                {form.merkezTuru === "santiye"
+                  ? "Şantiyenin Projesi *"
+                  : form.merkezTuru === "proje"
+                    ? "Proje *"
+                    : "Proje"}
+              </span>
+              <select
+                disabled={form.merkezTuru === "sube"}
+                value={form.projectId}
+                onChange={(event) => {
+                  const projectId = event.target.value;
+
+                  // ŞANTİYE SIFIRLANIR: eski şantiye yeni projeye ait
+                  // olmayabilir; sunucu o bileşimi reddediyor.
+                  setForm({
+                    ...form,
+                    projectId,
+                    projectSiteId: "",
+                  });
+
+                  if (form.merkezTuru === "santiye") {
+                    void santiyeleriYukle(projectId);
+                  }
+                }}
               >
                 <option value="">
                   Proje seçilmedi
@@ -660,6 +872,34 @@ export default function WorkTasksPage() {
                 )}
               </select>
             </label>
+
+            {form.merkezTuru === "santiye" && (
+              <label>
+                <span>Şantiye *</span>
+                <select
+                  disabled={!form.projectId}
+                  value={form.projectSiteId}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      projectSiteId: event.target.value,
+                    })
+                  }
+                >
+                  <option value="">
+                    {form.projectId
+                      ? "Şantiye seçilmedi"
+                      : "Önce proje seçin"}
+                  </option>
+
+                  {sites.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.code} — {row.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <label className="span-2">
               <span>Başlık *</span>

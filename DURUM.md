@@ -1762,6 +1762,113 @@ ve kimse sebebini anlamazdı.
 Ölçüm aracı ölçtüğü şeyin içinde yaşıyorsa, ölçümü değiştirir
 (Kural 58'in bir alt hâli).
 
+## MERKEZ/1 — MASRAF MERKEZİ GÖRÜNÜRLÜĞÜ (2026-08-31)
+
+Genel Müdür: *"İş emrinde merkez çıkmıyor."* Ölçüm üç ayrı eksik buldu.
+
+### 1. FORMDA ŞUBE VE ŞANTİYE SEÇİCİSİ HİÇ YOKTU
+
+Yalnız "Proje" vardı; gövde `branchId` ve `projectSiteId` alanlarını
+hiç göndermiyordu. **Kendi tarifim yanlıştı**: arka uçtaki kuralı okuyup
+formu ona göre anlatmıştım, oysa kural formda hiç işlemiyordu.
+
+### 2. MERKEZ HİÇBİR YERDE GÖRÜNMÜYORDU
+
+Arka uç `CenterType`, `BranchId`, `ProjectSiteId` üçünü de DTO'da
+gönderiyordu; **ön yüz tipi onları tanımıyordu bile.** Veri geliyordu,
+ekran okumuyordu.
+
+### 3. `CenterType` DOĞRULANMIYORDU
+
+İstekten olduğu gibi alınıyor, hangi alanın dolu olduğuyla
+karşılaştırılmıyordu: `Project` yazıp `BranchId` doldurmak mümkündü.
+
+### KURAL TEK YERE TAŞINDI — VE PUT'UN KAPISIZ DUVARI KAPANDI
+
+`Services/Common/MasrafMerkeziKurali.cs` — saf, veritabanısız, üç iddia:
+merkez zorunlu · tür seçimle çelişemez · şantiye kendi projesiyle gelir.
+
+**PUT'a merkez alanları eklendi.** Mehmet "doğrulama POST ve PUT'u da
+kapsasın" demişti; ölçüm talimatın dayandığı varsayımı düzeltti: PUT
+merkez alanlarına **hiç dokunmuyordu**, yani ikinci kapı değil
+**kapısız duvardı** — merkez oluşturmada konuyor ve **bir daha
+düzeltilemiyordu.** Alanlar eklendi, aynı metoda bağlandı.
+
+`CenterType` artık **saklanmıyor, türetiliyor**; istekten gelen değer
+yalnız çelişki kontrolünde okunuyor.
+
+Merkez adları `AdlariGetirAsync`'e katıldı: liste ve detay **tek
+kaynaktan** besleniyor. Detay ekranı hiçbir liste çekmiyor ve çekmemeli.
+
+### AÇIK KALAN KAPI — BİR TESTLE SABİTLENDİ
+
+`SourceModule` dolu istekler kuralın dışında kalmaya devam ediyor. Ön
+yüz artık her zaman merkez gönderdiği için kaçış **fiilen kullanılmıyor**
+ama **kapı kapanmadı.**
+
+`KaydaBagliGorev_MerkezsizGecer_ACIK_KAPI` testi bunu sabitliyor ve
+yorumunda yazıyor: *"BU TEST BİR KUSURU SABİTLİYOR, BİR DAVRANIŞI
+DEĞİL… KURAL-KATMAN/1 geldiğinde DEĞİŞTİRİLECEK — silinmeyecek, tersine
+çevrilecek."* Böylece "kapandı" sanılması imkânsız: kapıyı kapatan paket
+bu testi kırmızıya düşürmek zorunda kalacak.
+
+### ÜÇ CIRCIR YAKALADI, ÜÇÜ DE GEVŞETİLMEDİ
+
+| Cırcır | Ne dedi | Ne yapıldı |
+|---|---|---|
+| `set-state-in-effect` | 154 → **155** | efekt kaldırıldı, şantiye listesi olay işleyicisine taşındı; çizgi 154 |
+| Sessiz yükleniyor | `gorevler/page.tsx: 0 → 1` | çıplak `return;` → if/else |
+| Redwood sözleşmesi | alıcı deseni şaştı | yazım düzeltildi |
+
+**LINT CIRCIRI TAVAN, TEST SAYISI CIRCIRI TABAN.** Çizgiyi yükseltmeye
+hazırlanıyordum — *"yukarı serbest"* diye. Dosya `toplam ÇİZGİYİ AŞAMAZ`
+diyor. İkisini karıştırmak, bir borcu sessizce büyütmek olurdu.
+
+### DÖRDÜNCÜ CIRCIR: KAPSAM TABANI — VE ÇIKARIMIN ÖLÇÜM YERİNE GEÇMESİ
+
+Merkez adlarını çözerken `db.Projects` ve `db.Branches` **süzgeçsiz**
+okunuyordu. `CoverageBaselineTests` yakaladı.
+
+İçimden geçen gerekçe: *"kimlikler zaten kapsamlı bir görev listesinden
+geliyor, dolayısıyla güvenli."* **Bu bir ÇIKARIM; süzgeç bir ÖLÇÜM.**
+Kapsamı dar bir kullanıcı, göreceği bir görevin bağlı olduğu ama kendi
+kapsamı dışındaki bir projenin **kodunu ve adını** görebilirdi.
+
+İstisna listesine yazılmadı: `ApplyScope` her iki tip için de mevcuttu,
+yani düzeltilebilir bir şeyi "düzeltilmeyecek" diye kaydetmek yanlış
+olurdu.
+
+**CIRCIRIN GÖRMEDİĞİ DE KAPATILDI.** `ProjectSite` `CompanyId`
+taşımadığı için cırcırın kapsamı dışında — **bildirmedi**. Ama sızıntı
+sınıfı aynı ve `ProjectSite` için `Apply` aşırı yüklemesi yok; süzgeç
+**projesi üzerinden geçişli** kuruldu. *Cırcırın kapsamı bir ölçüm
+sınırıdır, güvence değil* (X4'ün tekrarı).
+
+### AYNI İŞİN İKİ ADI — BU KEZ KOD İÇİNDE
+
+İlk düzeltmem `kapsam.Apply(db.Projects...)` yazdı ve cırcır **yine
+kırmızı** verdi: dedektör kapsam süzgecini `ApplyScope` **dizgesini**
+arayarak tanıyor. Süzgeç vardı, cırcır göremedi.
+
+Dizgeye bakmak cırcırın zayıflığı — ama çözüm cırcırı gevşetmek değildi:
+`Branch` için bir `ApplyScope` uzantısı eklendi ve mevcut
+`CurrentDataScopeSnapshot.Apply`'a **delege ediyor**. Yeni kural yok,
+tek ad var.
+
+Bu, günün ikinci "aynı iş iki adla yaşıyor" bulgusu. Birincisi menüde eş
+anlamlı ekran adlarıydı (Kural 69); bu, kod içinde eş anlamlı metot
+adları. İkisi de bir okuyucuyu yanlış cevaba götürüyordu — biri insanı,
+diğeri cırcırı.
+
+### SONDA — 7 KIRMIZI, 4 YEŞİL, İLAN EDİLDİĞİ GİBİ
+
+Kural tamamen devre dışı bırakıldı. Beklenen kırmızılar ve yeşiller
+KOŞUDAN ÖNCE yazıldı; sonuç birebir uydu. Yeşil kalan dördü `null`
+bekleyenlerdi — sabotajın şekli onları ayırt edemez hâle getiriyor ve
+bu, pozitif kontrolün neden gerektiğini gösteriyor.
+
+---
+
 ## X4 — MUHAFIZIN İKİ KÖRLÜĞÜ (2026-08-31)
 
 `/dashboard` canlıda hâlâ React #418 üretiyordu ve o ekran 26'lık
