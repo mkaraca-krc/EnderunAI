@@ -22,6 +22,7 @@ import ExecutiveAiSummaryWidget from "@/components/dashboard/executive-ai-summar
 import HizirBriefingWidget from "@/components/dashboard/hizir-briefing-widget";
 import { progressTrackingService } from "@/services/progress-tracking.service";
 import { greetingFor } from "@/lib/greeting";
+import { useIstemciTarihi } from "@/lib/use-istemci-zamani";
 import { useCurrentUser } from "@/lib/use-current-user";
 import WorkTaskDashboardWidget from "@/components/tasks/work-task-dashboard-widget";
 
@@ -126,7 +127,16 @@ export default function DashboardPage() {
   // Karşılama, oturumdaki gerçek kullanıcıdan üretilir; hiçbir ad
   // sabit yazılmaz.
   const { user: currentUser } = useCurrentUser();
-  const greeting = greetingFor(currentUser);
+  /*
+   * SELAMLAMA BAĞLANMA SONRASI DOLAR.
+   *
+   * Çizimde `new Date()` okunursa sunucu (derleme anı) ve istemci
+   * (açılış anı) farklı selamlama yazar — hidrasyon uyuşmazlığı.
+   * `useIstemciTarihi` sunucuda `null` döndüğü için iki geçiş de
+   * aynı metni çizer.
+   */
+  const simdi = useIstemciTarihi();
+  const greeting = greetingFor(currentUser, simdi);
 
   const [projects, setProjects] = useState<
     ProjectListItem[]

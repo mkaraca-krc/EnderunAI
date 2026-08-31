@@ -54,12 +54,61 @@ import { describe, expect, it } from "vitest";
  */
 
 const KOK = join(__dirname, "..");
-const DIZINLER = ["app", "components"];
+/*
+ * KAPSAM GENİŞLETİLDİ (X4).
+ *
+ * Önce yalnız `app` ve `components` taranıyordu. O dışlama CANLIDA BİR
+ * KUSURU SAKLADI: `lib/greeting.ts:18`'in `timeGreeting(now = new Date())`
+ * varsayılanı panoyu her öğleden sonra hidrasyon uyuşmazlığına
+ * düşürüyordu (React #418) ve muhafız göremedi.
+ *
+ * Dışlamayı ben seçmiştim ve gerekçesi ("belirsizlik tek gözden
+ * geçirilmiş yerde yaşasın") kulağa iyi geliyordu. Ölçüm gerekçeyi
+ * çürüttü: dışlanan yer gözden geçirilmiş değildi, sadece görünmezdi.
+ */
+const DIZINLER = ["app", "components", "lib", "services"];
 
 /** Sunucu ve istemcide farklı sonuç veren çağrılar. */
 const BELIRSIZ = /\b(?:new\s+Date\s*\(\s*\)|Date\.now\s*\(\s*\)|Math\.random\s*\(\s*\)|crypto\.randomUUID\s*\(\s*\))/;
 
 type Bulgu = { dosya: string; satir: number; metin: string };
+
+/*
+ * PAYLAŞILAN MODÜLLERDE GEREKÇELİ İSTİSNALAR — her satır ÖLÇÜLDÜ.
+ *
+ * Liste kısa kalmalı. Uzarsa muhafız yine körleşir; o yüzden her
+ * girdi neden güvenli olduğunu yazıyor.
+ */
+const GEREKCELI_ISTISNA = new Map<string, string>([
+  [
+    "lib/use-istemci-zamani.ts:42",
+    "Belirsizliğin BİLEREK yaşadığı tek yer. useSyncExternalStore ile " +
+      "sunucu anlık görüntüsü ayrı veriliyor; uyuşmazlık imkânsız.",
+  ],
+  [
+    "lib/auth.ts:26",
+    "Oturum jetonunun bitiş zamanı. Çizimde değil, jeton üretiminde " +
+      "koşuyor; DOM'a hiç yazılmıyor.",
+  ],
+  [
+    "lib/auth.ts:93",
+    "Jeton süresi doğrulaması. Çizimde değil; DOM'a yazılmıyor.",
+  ],
+  [
+    "lib/data/use-refreshable.ts:116",
+    "Veri getirme geri çağrısının içinde (async fetch sonrası " +
+      "setLastUpdatedAt). Çizimde değil.",
+  ],
+  [
+    "services/finance-dashboard.service.ts:122",
+    "Async veri getirme fonksiyonunun gövdesinde; getirme anında " +
+      "koşuyor, çizimde değil.",
+  ],
+  [
+    "services/todo.service.ts:108",
+    "Gecikme hesabı; veri dönüştürme yolunda, yükleyiciden çağrılıyor.",
+  ],
+]);
 
 function dosyalar(dizin: string, biriktir: string[] = []): string[] {
   for (const ad of readdirSync(dizin)) {
@@ -67,7 +116,9 @@ function dosyalar(dizin: string, biriktir: string[] = []): string[] {
     if (statSync(tam).isDirectory()) {
       if (ad === "node_modules" || ad === ".next") continue;
       dosyalar(tam, biriktir);
-    } else if (ad.endsWith(".tsx")) {
+    } else if (ad.endsWith(".tsx") || ad.endsWith(".ts")) {
+      // `.ts` DE TARANIYOR: `lib/greeting.ts` bir `.tsx` değildi ve
+      // yalnız bu yüzden görünmez kalmıştı.
       biriktir.push(tam);
     }
   }
@@ -131,8 +182,24 @@ function tara(): {
       const icerik = readFileSync(yol, "utf8");
       dosyaSayisi += 1;
 
-      // Sunucu bileşeni: "use client" yoksa çizim sunucuda, hidrasyon yok.
-      if (!/^\s*["']use client["']/m.test(icerik)) {
+      /*
+       * "use client" ATLAMASI YALNIZ EKRAN DOSYALARI İÇİN.
+       *
+       * Önce her dosyaya uygulanıyordu ve muhafız `lib/greeting.ts`'i
+       * İKİNCİ KEZ kaçırdı: kapsamı `lib/`'e genişlettim, dosya yine
+       * atlandı çünkü `"use client"` satırı yoktu. Ama `lib/` modülleri
+       * direktif taşımaz — istemci bileşenleri onları İÇE AKTARIR ve
+       * kod istemcide de çizimde de koşar.
+       *
+       * Direktif yokluğu `app/` ve `components/` altında "sunucu
+       * bileşeni" demektir; `lib/` ve `services/` altında HİÇBİR ŞEY
+       * demez.
+       */
+      const ekranDosyasi =
+        relative(KOK, yol).startsWith("app/") ||
+        relative(KOK, yol).startsWith("components/");
+
+      if (ekranDosyasi && !/^\s*["']use client["']/m.test(icerik)) {
         sunucuBileseni += 1;
         continue;
       }
@@ -149,10 +216,31 @@ function tara(): {
           metin: satirlar[i].trim().slice(0, 100),
         };
 
+        /*
+         * PAYLAŞILAN MODÜLLERDE SEZGİ UYGULANMAZ.
+         *
+         * `lib/` ve `services/` altında JSX yok; risk bir VARSAYILAN
+         * PARAMETREDE ya da modül düzeyinde saklanıyor —
+         * `timeGreeting(now: Date = new Date())` gibi. Varsayılan
+         * ÇAĞRI ANINDA değerlenir ve çağıran çizim gövdesindeyse
+         * uyuşmazlık doğar. Çağrı yerini metinle bilemeyiz.
+         *
+         * Bu yüzden orada HER NOKTA İHLALDİR; muafiyet ancak açık ve
+         * gerekçeli listeyle verilir. Yanlış alarma katlanıyoruz:
+         * yanlış alarm veren muhafız, hiç konuşmayan muhafızdan iyidir.
+         */
+        const paylasilan = !ekranDosyasi;
+
         // MUAF TUTULAN DA SAYILIYOR: fazla muaf tutan muhafız sessizce
         // kördür. Sayı görünmezse körlüğü fark edemeyiz (Kural 70).
-        if (cizimdeMi(satirlar, i)) bulgular.push(kayit);
-        else muaf.push(kayit);
+        if (paylasilan) {
+          if (GEREKCELI_ISTISNA.has(`${kayit.dosya}:${kayit.satir}`)) muaf.push(kayit);
+          else bulgular.push(kayit);
+        } else if (cizimdeMi(satirlar, i)) {
+          bulgular.push(kayit);
+        } else {
+          muaf.push(kayit);
+        }
       }
     }
   }
@@ -173,6 +261,22 @@ describe("çizimde belirsiz değer", () => {
      * bunu kimse fark etmez. Sayı her koşuda görünsün ki oran
      * kayarsa gözle yakalanabilsin.
      */
+    /*
+     * KAPSAM DA BASILIYOR — SAYI KADAR ÖNEMLİ.
+     *
+     * Muhafız yalnız `app/` ve `components/` tarıyor. Bu dışlama
+     * CANLIDA BİR KUSURU SAKLADI: `lib/greeting.ts:18`'in
+     * `timeGreeting(now = new Date())` varsayılanı panoyu her öğleden
+     * sonra hidrasyon uyuşmazlığına düşürüyordu ve muhafız göremedi,
+     * çünkü dosya kapsam dışındaydı.
+     *
+     * Dışlamayı ben seçmiştim ("belirsizlik tek gözden geçirilmiş
+     * yerde yaşasın", `lib/use-istemci-zamani.ts`). Gerekçe hâlâ
+     * geçerli ama BEDELİ VAR ve o bedel görünür olmalı.
+     */
+    console.log(
+      `[çizimde belirsiz değer] KAPSAM: ${DIZINLER.join(" + ")} · .tsx ve .ts`,
+    );
     console.log(
       `[çizimde belirsiz değer] taranan .tsx: ${sonuc.dosyaSayisi} · ` +
         `sunucu bileşeni (atlanan): ${sonuc.sunucuBileseni} · ` +

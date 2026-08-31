@@ -14,8 +14,23 @@ export type GreetingUser = {
   honorific?: string | null;
 };
 
-/** Saat dilimine göre selamlama. */
-export function timeGreeting(now: Date = new Date()): string {
+/*
+ * SAAT DIŞARIDAN GELİR — VARSAYILAN ÜRETİLMEZ.
+ *
+ * Önce imzası `timeGreeting(now: Date = new Date())` idi. Varsayılan
+ * ÇAĞRI ANINDA değerleniyor; pano onu çizim gövdesinde çağırıyordu
+ * (`app/dashboard/page.tsx`). Sunucu geçişi derleme anında koştuğu
+ * için HTML'e "Günaydın" donuyor, öğleden sonra açan istemci
+ * "İyi günler" çiziyor ve her yüklemede hidrasyon uyuşmazlığı
+ * doğuyordu (React #418) — canlıda ölçüldü.
+ *
+ * `null` geçilirse selamlama BOŞ döner: sunucu ve hidrasyon geçişi
+ * aynı şeyi çizer, uyuşmazlık imkânsız hâle gelir. Gerçek selamlama
+ * bağlanma sonrası gelir.
+ */
+export function timeGreeting(now: Date | null): string {
+  if (!now) return "";
+
   const hour = now.getHours();
 
   if (hour >= 5 && hour < 12) return "Günaydın";
@@ -60,10 +75,15 @@ export function addressFor(user: GreetingUser | null | undefined): string {
  */
 export function greetingFor(
   user: GreetingUser | null | undefined,
-  now: Date = new Date()
+  // Saat çağırandan gelir; `null` ise selamlama boş kalır (yukarıdaki
+  // gerekçe). Varsayılan üretmek uyuşmazlığı geri getirirdi.
+  now: Date | null
 ): string {
   const address = addressFor(user);
   const greeting = timeGreeting(now);
+
+  // Saat yoksa (sunucu geçişi) yalnız hitap döner; iki geçiş de aynı.
+  if (!greeting) return address;
 
   return address ? `${greeting} ${address}` : greeting;
 }

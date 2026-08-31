@@ -1762,6 +1762,64 @@ ve kimse sebebini anlamazdı.
 Ölçüm aracı ölçtüğü şeyin içinde yaşıyorsa, ölçümü değiştirir
 (Kural 58'in bir alt hâli).
 
+## X4 — MUHAFIZIN İKİ KÖRLÜĞÜ (2026-08-31)
+
+`/dashboard` canlıda hâlâ React #418 üretiyordu ve o ekran 26'lık
+listede **yoktu**. Kaynak: **"Günaydın"**.
+
+`lib/greeting.ts:18` → `timeGreeting(now: Date = new Date())`.
+Varsayılan **çağrı anında** değerleniyor; pano onu çizim gövdesinde
+çağırıyordu (`app/dashboard/page.tsx:129`). Derleme sabah yapıldığı için
+HTML'e "Günaydın" dondu; öğleden sonra açan istemci "İyi günler" çizdi.
+
+### MUHAFIZ NEDEN İKİ KEZ KAÇIRDI
+
+**Birinci körlük — KAPSAM.** `tests/cizimde-belirsiz-deger.test.ts`
+yalnız `app/` ve `components/` altını, yalnız `.tsx` uzantısını
+tarıyordu. `lib/greeting.ts` iki sebepten birden görünmezdi.
+
+Dışlamayı **ben seçmiştim**: `lib/use-istemci-zamani.ts`'i oraya
+koyarken *"belirsizlik tek gözden geçirilmiş yerde yaşasın"* dedim.
+Gerekçe kulağa iyi geliyordu; ölçüm çürüttü. **Dışlanan yer gözden
+geçirilmiş değildi, sadece görünmezdi.**
+
+**İkinci körlük — DİREKTİF SEZGİSİ.** Kapsamı genişlettim, dosya
+**yine atlandı**: `"use client"` satırı yoktu ve sezgi onu "sunucu
+bileşeni, hidrasyon yok" saydı. Ama `lib/` modülleri direktif taşımaz —
+istemci bileşenleri onları içe aktarır ve kod çizimde koşar.
+
+Direktif yokluğu `app/` ve `components/` altında bir şey söyler;
+`lib/` ve `services/` altında **hiçbir şey söylemez**.
+
+### YENİ KURAL DEĞİL, YENİ ÖLÇÜT: MUAFİYET ORANI
+
+Mehmet'in yakaladığı satır: *"belirsiz çağrı: 141 · ihlal: 0 ·
+MUAF: 141"*. **Muafiyet oranı %100 olan bir muhafızın yeşili hiçbir şey
+söylemez.**
+
+Paylaşılan modüllerde (`lib/`, `services/`) sezgi artık **hiç
+uygulanmıyor**: her nokta ihlaldir, muafiyet yalnız **gerekçeli listeyle**
+verilir (bugün 6 satır, her biri ölçülmüş). Yanlış alarma katlanıyoruz —
+*yanlış alarm veren muhafız, hiç konuşmayan muhafızdan iyidir.*
+
+### İKİ SONDA — DEĞİŞMİŞ SEZGİYLE
+
+| Sonda | Sonuç |
+|---|---|
+| `lib/greeting.ts` düzeltmeden önce | **yakalandı** (`:18` ve `:63`) |
+| Çizim gövdesine kasıtlı `new Date()` | **yakalandı** (`gorevler/page.tsx:565`), geri alınca yeşil |
+
+İlk sabotaj denemem **uygulanmadı** (hedef dizge eşleşmedi) ve yeşil
+verdi; o yeşil kanıt sayılmadı, dizge ölçülüp tekrarlandı (Kural 36).
+
+### KALAN SINIR
+
+`app/` + `components/` altındaki 141 muafiyet hâlâ **sezgiye** dayanıyor
+ve o sezginin `useState` başlatıcılarını kaçırdığı ölçülmüş durumda.
+Daraltmak ölçülmemiş büyüklükte bir kuyruk açar; ayrı iş olarak bekliyor.
+
+---
+
 ## METİN-BAĞ/1 — PANODA İKİ KIRIK BAĞLANTI (2026-08-31)
 
 Genel Müdür tarayıcı konsolunda iki 404 gördü. nginx günlüğü kaynağı
@@ -1909,6 +1967,38 @@ göremediğini söylemez.
 **Ama ikisi de kuralın yerine geçmez.** İkisi de bu arızadan SONRA
 yazıldı ve ikisi de metin tabanlı. Kural insana ait: ekranı aç, bir şeye
 bas.
+
+#### Kural 71 — NOT (a): ÖLÜMCÜLLÜK EKRANA GÖRE DEĞİŞİR
+
+**Hidrasyon uyuşmazlığının ekranı öldürüp öldürmediği, uyuşmazlığın
+ağacın neresinde olduğuna bağlıdır. Bir ekranda ölümcül olması genel
+yasa değildir.**
+
+`/gorevler`de uyuşmazlık etkileşimi tamamen kesiyordu: dört tıkta form
+açılmadı, "Yenile" ağ isteği üretmedi. `/dashboard`da aynı hata sınıfı
+(#418) üretiliyor ama ekran **etkileşimli** — bağlantı tıklaması
+çalışıyor.
+
+İŞEMRİ/1-A raporunda "(i) doğrulandı" derken bunu bir ekran için
+söylemiştim; genel yasa diye okunmamalı.
+
+#### Kural 71 — NOT (b): KONSOL BİRİKİMLİDİR
+
+**Tarayıcı konsolu birikimlidir: duran bir hata satırı, süren bir
+arızanın kanıtı değildir. Konsol ipucudur; ölçüm, sunucu günlüğü ya da
+temiz yüklemedir.**
+
+**BU NOT MEHMET'İN HATASINDAN DOĞDU** ve öyle kalsın — kuralların kimin
+hatasından doğduğu, onları hatırlanır kılan şey.
+
+METİN-BAĞ/1 yayınlandıktan sonra konsolda iki 404 duruyordu ve arıza
+sürüyor sanıldı. nginx erişim günlüğü tersini söyledi: GM'nin IP'sinden
+bugün **767 istek**, üç 404'ün **üçü de deploy'dan ÖNCE** (07:17:54,
+07:17:54, 08:11:25 — yayın 08:56:32'de bitti). Deploy sonrası pano
+yüklemeleri 200/304 ve taze `_rsc` belirteçleriyle.
+
+Konsoldaki satırlar sekmede duruyordu, yeni istek üretmiyorlardı.
+
 
 ### Kural 70 — KAYNAKTA GREP ÖLÇÜM DEĞİL, İPUCUDUR
 
