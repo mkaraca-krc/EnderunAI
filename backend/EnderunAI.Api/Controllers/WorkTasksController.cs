@@ -405,6 +405,42 @@ public sealed class WorkTasksController(
         item.Title = request.Title.Trim();
         item.Description = request.Description?.Trim();
         item.Priority = request.Priority;
+        /*
+         * PUT DE ATAMAYI DOĞRULAR — ACIL/2.
+         *
+         * ACIL/1 POST'taki kapıyı kapattı; AYNI AÇIK PUT'TA DURUYORDU.
+         * Kayıt yetkili bir kişiyle açılır, sonra PUT ile görevi
+         * göremeyen birine devredilirdi — POST'un reddettiği şey bir
+         * güncelleme üzerinden geçerdi.
+         *
+         * DERS: bir kapı eksiği bulunduğunda aynı kaynağın BÜTÜN yazma
+         * fiilleri aynı turda sınanır. ACIL/1'de yalnız POST bakıldı,
+         * PUT bir gün sonra çıktı.
+         *
+         * Doğrulama GÜNCELLENMİŞ merkez alanlarıyla yapılıyor: atanan
+         * kişinin görmesi gereken şey, kaydın YENİ hâli.
+         */
+        if (request.AssignedToUserId is Guid yeniAtanan)
+        {
+            var taslak = new WorkTask
+            {
+                CompanyId = item.CompanyId,
+                ProjectId = request.ProjectId,
+                BranchId = request.BranchId,
+                ProjectSiteId = request.ProjectSiteId
+            };
+
+            if (!await GorevAtanabilirMiAsync(taslak, yeniAtanan, cancellationToken))
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "Seçilen kullanıcı bu görevin kaydını göremiyor, " +
+                        "dolayısıyla göreve atanamaz. Önce yetki verin."
+                });
+            }
+        }
+
         item.AssignedToUserId = request.AssignedToUserId;
         item.StartDate = ToUtcDate(request.StartDate);
         item.DueDate = ToUtcDate(request.DueDate);

@@ -1762,6 +1762,65 @@ ve kimse sebebini anlamazdı.
 Ölçüm aracı ölçtüğü şeyin içinde yaşıyorsa, ölçümü değiştirir
 (Kural 58'in bir alt hâli).
 
+## ACIL/2 — AYNI AÇIĞIN PUT'TAKİ KARDEŞİ (2026-08-31)
+
+ACIL/1 `POST /api/tasks`'ın atama kapısını kapattı. **Aynı açık PUT'ta
+duruyordu:** `item.AssignedToUserId = request.AssignedToUserId` yazılıyor,
+doğrulanmıyordu. Kayıt yetkili biriyle açılır, sonra PUT ile görevi
+göremeyen birine devredilirdi — POST'un reddettiği şey bir güncelleme
+üzerinden geçerdi.
+
+Bulunuşu KURAL-KATMAN/1 Faz 0'da, yazma yollarının doğrulama durumu
+tablolanırken oldu.
+
+### DERS — KURAL DEĞİL, HENÜZ
+
+**Bir kapı eksiği bulunduğunda, aynı kaynağın BÜTÜN yazma fiilleri aynı
+turda sınanır** (POST/PUT/PATCH/DELETE ve eylem uçları).
+
+ACIL/1'de yalnız POST'a bakıldı. *"Yapısal düzeltme zaten kapsayacak"* ve
+*"delegate zaten doğruluyor"* — ikisi de **okumaydı, ölçüm değil.**
+Bu turda delegate ÖLÇÜLDÜ ve okuma doğrulandı; PUT ölçüldü ve **açık
+çıktı.** Tekrar ederse kurallaşır.
+
+Mehmet'in gerekçesi kayda değer: *"Yapısal düzeltme zaten kapsayacak"
+cümlesi, canlı bir deliğin beklemesinin en sık gerekçesidir.*
+
+### KOŞULAR
+
+| Aşama | Sonuç |
+|---|---|
+| Düzeltmeden önce | **1 kırmızı / 5 yeşil** — `Expected: BadRequest` |
+| Düzeltmeden sonra | **22/22 yeşil** |
+| Sabotaj (`if (false && ...)`) | **1 kırmızı / 13 yeşil** |
+
+Sabotajda POST testleri ve delegate **yeşil kaldı** — kesimin yalnız
+PUT'u vurduğunun kanıtı.
+
+### SİLİNEN-SAVUNMA KONTROLÜNÜN SINIRI CANLIDA ÖLÇÜLDÜ
+
+Sabotaj bilerek `if (false && ...)` biçiminde yapıldı: hiçbir satır
+silinmedi. Kontrol koşuldu ve **görmedi** — *"savunma şekilli satır
+silinmemiş."*
+
+Dosyasında yazılı sınır artık bir iddia değil, **ölçüm**:
+*bu kontrol silmeye karşı korur, etkisizleştirmeye karşı değil.*
+
+### BUGÜNKÜ MUHAFIZLARIN ORTAK SINIRI
+
+| Muhafız | Ölçtüğü | Göremediği |
+|---|---|---|
+| Yetim muhafız | çağrı VAR MI | çağrı ÇALIŞIYOR MU |
+| Silinen savunma | satır SİLİNDİ Mİ | satır ETKİSİZ Mİ |
+| Çizimde belirsiz değer | metin kalıbı | dolaylı çağrı |
+| Arka uç rotaları | dizge sabiti | birleştirilmiş yol |
+
+Dördü de metin tabanlı ve dördü de aynı yerde duruyor: **kodun şeklini
+ölçüyorlar, davranışını değil.** Davranışı ölçen tek şey test — ve bugün
+iki kez, testsiz bir savunmanın sessizce yok olabildiği görüldü.
+
+---
+
 ## ACIL/1 — SESSİZ SİLİNEN ATAMA DOĞRULAMASI (2026-08-31)
 
 MERKEZ/1'in kendi commit'i (`2d90c946`) bir güvenlik kontrolünü sildi ve

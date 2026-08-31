@@ -87,6 +87,126 @@ public sealed class AtamaKapisiTests(DatabaseFixture fixture)
             await yanit.Content.ReadAsStringAsync());
     }
 
+    // ═══════════════════════════════════════════════════════════
+    //  AYNI KAYNAĞIN BÜTÜN YAZMA FİİLLERİ — ACIL/2
+    //
+    //  DERS: ACIL/1'de POST'taki eksik kapı kapatıldı ama aynı
+    //  kaynağın DİĞER fiilleri o anda sınanmadı. PUT bir gün sonra
+    //  çıktı. Bir kapı eksiği bulunduğunda aynı kaynağın bütün yazma
+    //  fiilleri (POST/PUT/PATCH/DELETE ve eylem uçları) AYNI TURDA
+    //  sınanır.
+    // ═══════════════════════════════════════════════════════════
+
+    /// <summary>Görevi oluşturup kimliğini döndürür.</summary>
+    private async Task<Guid> GorevAcAsync(HttpClient client, Project proje)
+    {
+        var yanit = await client.PostAsJsonAsync(
+            "/api/tasks", Govde(proje.CompanyId, proje.Id, null));
+
+        Assert.Equal(HttpStatusCode.OK, yanit.StatusCode);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        return (await db.WorkTasks.AsNoTracking()
+            .SingleAsync(x => x.ProjectId == proje.Id)).Id;
+    }
+
+    private async Task<Guid> YetkisizKullaniciAsync(string suffix)
+    {
+        await TestUserFactory.CreateClientWithRolesAsync(
+            fixture, suffix, [GorevGoremeyenRol]);
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        return (await db.Users.AsNoTracking()
+            .SingleAsync(x => x.Username.Contains(suffix))).Id;
+    }
+
+    [Fact]
+    public async Task PUT_GorevuGoremeyenKullaniciyaAtama_Reddedilir()
+    {
+        /*
+         * ACIL/2'NİN ASIL İDDİASI.
+         *
+         * PUT `item.AssignedToUserId = request.AssignedToUserId` yazıyor
+         * ama doğrulamıyordu. POST'taki kapı ACIL/1'de kapatıldı; aynı
+         * açık PUT'ta duruyordu — kayıt yetkili bir kişiyle açılır,
+         * sonra PUT ile yetkisiz birine devredilirdi.
+         */
+        var proje = await ProjeAsync(fixture, "ATM-PUT");
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var id = await GorevAcAsync(client, proje);
+        var yetkisizId = await YetkisizKullaniciAsync("atama-put-goremez");
+
+        var yanit = await client.PutAsJsonAsync(
+            $"/api/tasks/{id}",
+            new
+            {
+                title = "Yetkisize devredilmiş iş emri",
+                priority = (int)WorkTaskPriority.Normal,
+                assignedToUserId = yetkisizId,
+                projectId = (Guid?)proje.Id,
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, yanit.StatusCode);
+        Assert.Contains(
+            "göreve atanamaz",
+            await yanit.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task PUT_YetkiliKullaniciyaAtama_Kabul_POZITIF_KONTROL()
+    {
+        var proje = await ProjeAsync(fixture, "ATM-PUT-OK");
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var id = await GorevAcAsync(client, proje);
+
+        Guid adminId;
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            adminId = (await db.Users.AsNoTracking()
+                .SingleAsync(x => x.Username == AuthHelper.AdminUsername)).Id;
+        }
+
+        var yanit = await client.PutAsJsonAsync(
+            $"/api/tasks/{id}",
+            new
+            {
+                title = "Yetkiliye atanmış iş emri",
+                priority = (int)WorkTaskPriority.Normal,
+                assignedToUserId = adminId,
+                projectId = (Guid?)proje.Id,
+            });
+
+        Assert.Equal(HttpStatusCode.OK, yanit.StatusCode);
+    }
+
+    [Fact]
+    public async Task DELEGATE_GorevuGoremeyenKullaniciya_Reddedilir()
+    {
+        /*
+         * DELEGATE ZATEN DOĞRULUYORDU (ölçüldü) — ama bu turda o da
+         * SINANIYOR. "Zaten var" demek ölçüm değildir; ACIL/1'in
+         * dersi tam olarak buydu.
+         */
+        var proje = await ProjeAsync(fixture, "ATM-DLG");
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var id = await GorevAcAsync(client, proje);
+        var yetkisizId = await YetkisizKullaniciAsync("atama-dlg-goremez");
+
+        var yanit = await client.PostAsJsonAsync(
+            $"/api/tasks/{id}/delegate",
+            new { toUserId = yetkisizId, reason = "Sonda devri" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, yanit.StatusCode);
+    }
+
     [Fact]
     public async Task AtamasizOlusturma_Kabul_POZITIF_KONTROL()
     {
