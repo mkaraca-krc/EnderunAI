@@ -1762,6 +1762,111 @@ ve kimse sebebini anlamazdı.
 Ölçüm aracı ölçtüğü şeyin içinde yaşıyorsa, ölçümü değiştirir
 (Kural 58'in bir alt hâli).
 
+## İŞEMRİ/1-A — HİDRASYON UYUŞMAZLIĞI (2026-08-30)
+
+`components/ui/data-table.tsx:565` çıktı üst bilgisine **çizim
+sırasında** `new Date().toLocaleString("tr-TR")` yazıyordu. Sunucu
+geçişi derleme anında, istemci geçişi kullanıcının açtığı anda koşuyor:
+her yüklemede React #418.
+
+**11 gün açık kaldı** (`7c5b25bc`, 19 Ağustos → 30 Ağustos).
+**144 statik önçizilen rotanın 26'sı** derleme saatini HTML'ine
+dondurmuştu; `/finans/odeme-planlari` de bu 26'nın içindeydi.
+
+### ÇERÇEVE DÜZELTMESİ — GECİKMİŞ DOĞRULAMA KULLANICININ İHMALİ DEĞİL
+
+Altı haftadır "GM ödeme planında tek yazma yapmadı" diye not tutuluyordu.
+O ekran donmuş damga taşıyan 26 ekrandan biri: **tık yapılmamış olabilir
+çünkü YAPILAMIYORDU.**
+
+**Bekleyen bir doğrulamanın gecikmesini kullanıcının ihmaline yazmak,
+ekranın çalıştığını varsaymaktır — ve bugün o varsayım üç kez çöktü**
+(204/502, zarf uyumsuzluğu, hidrasyon).
+
+### DÜZELTME — VE İKİ CIRCIRIN İKİ KEZ HAKLI ÇIKMASI
+
+İlk düzeltmem `useEffect` + `setState` desenindeydi. **Lint cırcırı
+154'ten 159'a çıktı ve haklıydı**: o desen veri çekme için tartışmalı,
+bu iş için ise doğrudan yanlış araç. `lib/use-istemci-zamani.ts`
+yazıldı — `useSyncExternalStore` ile sunucu ve istemci anlık
+görüntüleri ayrı veriliyor, geçişi React yönetiyor, efekt yok. Çizgi
+**154'e döndü**; yükseltilmedi.
+
+İkincisi: `setCiktiDamgasi(new Date().toLocaleString("tr-TR"))` yazımı
+redwood sözleşmesini kırdı — kuralın alıcı deseni açılış parantezini
+yutup alıcıyı `setCiktiDamgasiD` sanıyordu. **Kural gevşetilmedi**,
+yazım düzeltildi.
+
+Toplam 7 gerçek bulgu kapatıldı: `data-table` (her yükleme),
+`demirbas` ×2 (garanti bitişi), `mal-kabul/yeni` (derlemeden sonraki her
+gün), `ice-aktar` ve `kar-analizi` ×2 (yılbaşı).
+
+### MUAFİYET SAYACI MUHAFIZI KENDİ KÖRLÜĞÜNÜ İTİRAF ETTİRDİ
+
+`tests/cizimde-belirsiz-deger.test.ts` ilk hâlinde yalnız bulgu sayısını
+basıyordu. Muafiyet sayısı eklenince çıkan tablo: **146 muaf / 0 ihlal.**
+
+Sebep ölçüldü: sezgi bir satırdan yukarı doğru `return (` arıyor, ama
+`useState` başlatıcıları `return`'ün üstünde durur; arama işaret
+bulamayınca **açık tarafa** düşüyor. Yani muhafız JSX içindekileri
+yakalıyor, durum başlatıcılarını kaçırıyor.
+
+**Sayı görünmeseydi bu körlük fark edilmezdi.** Kapsam genişletmesi ayrı
+iş olarak bekliyor; sınır muhafızın kendi dosyasında yazılı.
+
+### YAN ÖLÇÜM — YUMUŞAK SİLME DAMGASI (sistemik değil)
+
+21 tabloda 35 yumuşak silinmiş satır, **13'ü damgasız**. Hepsinin
+`CreatedAtUtc` tarihi **2026-08-01**; 11 Ağustos'taki silmeler damgalı.
+`AuditSaveChangesInterceptor:85,97` her silmede damgayı yazıyor.
+Tarihsel kalıntı, bozuk yol değil. Düzeltilmedi.
+
+---
+
+### Kural 71 — YAYIN, TARAYICIDA BİR ETKİLEŞİM GÖRÜLMEDEN TAMAM DEĞİLDİR
+
+**Bir ekran, tarayıcıda üzerinde en az bir gerçek etkileşim gözlenmeden
+yayınlanmış sayılmaz. Test takımları hidrasyon çalıştırmaz; yeşil takım
+ekranın açıldığını değil, kodun derlendiğini söyler.**
+
+**DOĞURAN OLAY (İŞEMRİ/1, 2026-08-30).** Ön yüz 524/524, arka uç
+2946/2946, muhafızlar yeşil, duman kontrolü 204 — ve ekran tarayıcıda
+**tamamen etkileşimsizdi**. Genel Müdür "+ Yeni İş Emri"ye dört kez
+bastı, form hiç açılmadı; "Yenile" hiç ağ isteği üretmedi.
+
+**Kök sebep, 11 gün eskiydi ve bu paketle ilgisizdi.**
+`components/ui/data-table.tsx:565` çıktı üst bilgisine çizim sırasında
+`new Date().toLocaleString("tr-TR")` yazıyordu. Sunucu geçişi **derleme
+anında** koşuyor, istemci geçişi kullanıcının açtığı anda: her yüklemede
+hidrasyon uyuşmazlığı (React #418).
+
+**ÖLÇÜLEN MALİYET: 144 statik önçizilen rotanın 26'sı** derleme saatini
+HTML'ine dondurmuştu — `/gorevler`, `/finans/odeme-planlari`, `/hakedis`,
+`/cariler`, `/muhasebe/fisler`, `/metrajlar`, `/sirketler` dahil.
+Damgayı ekleyen paketin adı **"F5: çıktı dürüstlüğü"**ydü (`7c5b25bc`,
+19 Ağustos): çıktının dürüstlüğü için konan damga 26 ekranı bozdu.
+
+**İKİNCİ ÖĞRETİCİ KISIM — MUHAFIZ NEDEN KAÇIRDI.** Aynı pakette B4
+("Onay Merkezi menü girişi kaldırılır") **yarım uygulandı**: menü
+tanımından kalktı, ama `components/erp/erp-shell.tsx:446`'da
+`MENU_GROUPS`'tan bağımsız, **sabit kodlanmış** ikinci bir
+`<Link href="/onay-merkezi">` duruyordu. Muhafız `MENU_GROUPS`'u okuyor,
+kabuğun gövdesine yazılmış bağlantıyı değil — **yeşil verdi, ekran
+ihlalliydi.** İhlali kod taraması değil, tarayıcı gördü.
+
+Kural 65 ve 70'in yanına, ölçüm-aracı ailesine girer: ölçüm aracı neyi
+göremediğini söylemez.
+
+**Mekanik karşılıkları:**
+- `tests/hidrasyon.test.tsx` — `renderToString` + `hydrateRoot`, saat
+  ilerletilerek. Pozitif kontrolü kasıtlı uyuşmazlığı yakalıyor.
+- `tests/cizimde-belirsiz-deger.test.ts` — çizim gövdesinde
+  `new Date()/Date.now()/Math.random()/crypto.randomUUID()`.
+
+**Ama ikisi de kuralın yerine geçmez.** İkisi de bu arızadan SONRA
+yazıldı ve ikisi de metin tabanlı. Kural insana ait: ekranı aç, bir şeye
+bas.
+
 ### Kural 70 — KAYNAKTA GREP ÖLÇÜM DEĞİL, İPUCUDUR
 
 **Kullanıcıya görünen bir metnin "yok" olduğunu kaynak taramasıyla

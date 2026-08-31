@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
+import { useIstemciTarihi } from "@/lib/use-istemci-zamani";
+
 import ErpShell from "@/components/erp/erp-shell";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { useModuleActions } from "@/lib/auth/module-actions";
@@ -69,6 +71,17 @@ export default function ToolAssetsPage() {
    * "Kaydet" AYNI DÜĞME İKİ AYRI UÇ: düzenlemede PUT, yenide POST.
    */
   const actions = useModuleActions("personnel");
+
+  /*
+   * "BUGÜN" ÇİZİMDE OKUNMAZ.
+   *
+   * `new Date()` çizim sırasında sunucuda (derleme anı) ve istemcide
+   * (açılış anı) farklı sonuç verir; garanti bitişi ikisinin arasında
+   * kalırsa aynı satır sunucuda "sürüyor", istemcide "doldu" yazar —
+   * hidrasyon uyuşmazlığı. Bağlanma sonrası dolduruluyor: ilk çizimde
+   * iki taraf da AYNI tabanı kullanır.
+   */
+  const bugun = useIstemciTarihi();
 
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
   const [assets, setAssets] = useState<ToolAsset[]>([]);
@@ -245,7 +258,7 @@ export default function ToolAssetsPage() {
       value: (row) => {
         if (!row.warrantyEndDate) return "—";
 
-        const active = new Date(row.warrantyEndDate) >= new Date();
+        const active = bugun !== null && new Date(row.warrantyEndDate) >= bugun;
 
         return `${dateFormat.format(new Date(row.warrantyEndDate))} · ${
           active ? "sürüyor" : "doldu"
@@ -254,7 +267,7 @@ export default function ToolAssetsPage() {
       render: (row) => {
         if (!row.warrantyEndDate) return "—";
 
-        const active = new Date(row.warrantyEndDate) >= new Date();
+        const active = bugun !== null && new Date(row.warrantyEndDate) >= bugun;
 
         return (
           <>

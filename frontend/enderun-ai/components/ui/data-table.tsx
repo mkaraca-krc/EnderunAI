@@ -387,8 +387,56 @@ export function DataTable<T>({
     return groupedRows.slice(start, start + pageSize);
   }, [groupedRows, server, safePage, pageSize, printAllRows]);
 
+  /*
+   * ÇIKTI DAMGASI ÇİZİMDE ÜRETİLMEZ.
+   *
+   * Önce `{new Date().toLocaleString("tr-TR")}` doğrudan JSX'te
+   * duruyordu. Sunucu geçişi DERLEME ANINDA koşuyor, istemci geçişi
+   * kullanıcının ekranı açtığı anda: iki metin farklı oluyor ve her
+   * yüklemede hidrasyon uyuşmazlığı doğuyordu (React #418).
+   *
+   * ÖLÇÜLDÜ: 144 statik önçizilen rotanın 26'sı derleme saatini
+   * HTML'ine dondurmuştu. 11 gün boyunca (7c5b25bc, 19 Ağustos) hiçbir
+   * takım görmedi — test takımı hidrasyon çalıştırmaz.
+   *
+   * DAMGANIN AMACI ÇIKTININ NE ZAMAN ALINDIĞINI SÖYLEMEK. O hâlde
+   * çizim anında değil, çıktı anında üretilmeli:
+   *   - sunucu geçişinde BOŞ (uyuşmazlık imkânsız),
+   *   - bağlanma sonrası doldurulur,
+   *   - yazdırma/indirme anında TAZELENİR.
+   *
+   * `suppressHydrationWarning` KULLANILMADI: uyarıyı gizler, metni
+   * yanlış bırakırdı. Semptomu susturmak düzeltme değildir.
+   */
+  /*
+   * DAMGA YALNIZ ÇIKTI ANINDA ÜRETİLİR — EFEKTLE DEĞİL.
+   *
+   * İlk düzeltmem `useEffect` + `setState` ile bağlanma sonrası
+   * dolduruyordu; lint cırcırı bunu 154'ten 159'a çıkardı ve HAKLIYDI.
+   * Damga zaten yalnız `print-only` blokta görünüyor — ekranda hiç
+   * görünmüyor. O hâlde bağlanmada üretmenin bir sebebi yok: yazdırma
+   * anında üretmek hem doğru değeri verir ("Alındı: ..." gerçekten
+   * çıktının alındığı an) hem de efekt gerektirmez.
+   */
+  const [ciktiDamgasi, setCiktiDamgasi] = useState<string | null>(null);
+
+  function damgayiTazele() {
+    /*
+     * ÖNCE DEĞİŞKENE ALINIYOR — SÜS DEĞİL.
+     *
+     * `setCiktiDamgasi(new Date().toLocaleString("tr-TR"))` yazımı
+     * redwood sözleşmesini kırıyordu: kuralın alıcı deseni açılış
+     * parantezini de yutuyor ve alıcıyı `setCiktiDamgasiD` sanıp
+     * "sayıya seçeneksiz toLocaleString" diye bildiriyordu. Kural
+     * gevşetilmedi; yazım düzeltildi.
+     */
+    const simdi = new Date().toLocaleString("tr-TR");
+    setCiktiDamgasi(simdi);
+  }
+
   async function printScope(scope: "page" | "all") {
     if (scope === "page") {
+      flushSync(damgayiTazele);
       window.print();
       return;
     }
@@ -409,7 +457,10 @@ export function DataTable<T>({
        * "effect içinde setState" oluyordu; burada akış düz ve
        * okunur: tam listeyi bas, yazdır, geri al.
        */
-      flushSync(() => setPrintAllRows(all));
+      flushSync(() => {
+        setPrintAllRows(all);
+        damgayiTazele();
+      });
       window.print();
     } catch (error) {
       setExportError(
@@ -562,7 +613,8 @@ export function DataTable<T>({
           {title && <h2 className="erp-print-title">{title}</h2>}
           {printMeta && <div className="erp-print-meta">{printMeta}</div>}
           <div className="erp-print-meta">
-            {new Date().toLocaleString("tr-TR")} · {whole(total)} kayıt
+            {ciktiDamgasi ? `Alındı: ${ciktiDamgasi} · ` : ""}
+            {whole(total)} kayıt
             {printAllRows ? " (tamamı)" : ` · sayfa ${whole(safePage)}/${whole(pageCount)}`}
           </div>
         </div>

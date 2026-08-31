@@ -1,5 +1,6 @@
 "use client";
 
+import { useIstemciGunu } from "@/lib/use-istemci-zamani";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -63,9 +64,19 @@ function NewGoodsReceiptContent() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  /*
+   * MAL KABUL TARİHİ ÇİZİMDE ÜRETİLMEZ.
+   *
+   * Sunucu geçişi derleme günü, istemci geçişi kullanıcının açtığı gün;
+   * derlemeden sonraki her gün ikisi farklı tarih yazardı. Varsayılan
+   * artık istemci gününden geliyor; kullanıcı değiştirirse `form`
+   * kazanır.
+   */
+  const istemciGunu = useIstemciGunu();
+
   const [form, setForm] = useState({
     warehouseId: "",
-    receiptDate: new Date().toISOString().slice(0, 10),
+    receiptDate: "",
     receivedByName: "",
     dispatchNoteNumber: "",
     dispatchNoteDate: "",
@@ -137,7 +148,7 @@ function NewGoodsReceiptContent() {
 
     const payload: CreateGoodsReceiptRequest = {
       warehouseId: form.warehouseId,
-      receiptDate: dateToUtc(form.receiptDate)!,
+      receiptDate: dateToUtc(form.receiptDate || istemciGunu || "")!,
       receivedByName: form.receivedByName.trim(),
       dispatchNoteNumber: form.dispatchNoteNumber.trim() || null,
       dispatchNoteDate: dateToUtc(form.dispatchNoteDate),
@@ -248,7 +259,7 @@ function NewGoodsReceiptContent() {
                 label="Mal Kabul Tarihi"
                 type="date"
                 required
-                value={form.receiptDate}
+                value={form.receiptDate || istemciGunu || ""}
                 onChange={(value) => setForm({ ...form, receiptDate: value })}
               />
               <TextInput

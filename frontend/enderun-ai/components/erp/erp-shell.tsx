@@ -443,16 +443,19 @@ function KabukGovdesi({
             {!collapsed && <span>Dashboard</span>}
           </Link>
 
-          <Link
-            className={`erp-nav-link ${
-              pathname === "/onay-merkezi" ? "active" : ""
-            }`}
-            href="/onay-merkezi"
-            title="Onay Merkezi"
-          >
-            <span className="erp-nav-icon">✓</span>
-            {!collapsed && <span>Onay Merkezi</span>}
-          </Link>
+          {/*
+            ONAY MERKEZİ BAĞLANTISI KALDIRILDI (İŞEMRİ/1-A).
+            
+            Burada `MENU_GROUPS`'tan bağımsız, SABİT KODLANMIŞ bir
+            `<Link href="/onay-merkezi">` duruyordu. İŞEMRİ/1'de menü
+            tanımından aynı girişi kaldırdım ve "uygulandı" dedim;
+            muhafız da yeşil verdi — çünkü muhafız `MENU_GROUPS`'u
+            okuyor, kabuğun gövdesine yazılmış bir bağlantıyı değil.
+            İhlali tarayıcı gördü, kod taraması değil (Kural 70/71).
+            
+            /onay-merkezi ROTASI DURUYOR: /yapilacaklar'a yönlendiriyor,
+            yer imleri kırılmıyor. Giden yalnızca ikinci menü girişi.
+          */}
 
           {/*
             KISAYOLLAR EN ÜSTTE: favori, "her gün açtığım sayfa" demek;

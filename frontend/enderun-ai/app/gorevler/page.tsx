@@ -567,7 +567,7 @@ export default function WorkTasksPage() {
 
         <div>
           <strong>
-            {loading ? "…" : items.length} görev
+            {loading ? "…" : items.length} iş emri
           </strong>
           <span> listelendi</span>
         </div>
@@ -913,7 +913,7 @@ export default function WorkTasksPage() {
               }
             >
               <option value="">
-                Tüm görevler
+                Tüm iş emirleri
               </option>
               <option value="true">
                 Yalnızca gecikenler

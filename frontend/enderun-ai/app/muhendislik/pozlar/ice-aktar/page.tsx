@@ -1,5 +1,6 @@
 "use client";
 
+import { useIstemciYili } from "@/lib/use-istemci-zamani";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -81,7 +82,14 @@ export default function PositionImportPage() {
   const [inspection, setInspection] = useState<SpreadsheetInspection | null>(null);
   const [preview, setPreview] = useState<PositionImportPreview | null>(null);
 
-  const [year, setYear] = useState(new Date().getFullYear());
+  // Yıl çizimde okunmaz: derleme yılı ile açılış yılı yılbaşında
+  // farklı olur. Bağlanma sonrası dolduruluyor.
+  // Taban 0: iki geçiş de aynı değeri çizer, uyuşmazlık doğmaz.
+  // Gerçek yıl bağlanma sonrası geliyor (aşağıdaki effect).
+  const istemciYili = useIstemciYili();
+  const [secilenYil, setSecilenYil] = useState<number | null>(null);
+  const year = secilenYil ?? istemciYili ?? 0;
+  const setYear = setSecilenYil;
   const [institution, setInstitution] = useState<number>(
     PositionPriceInstitution.Csb
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useIstemciYili } from "@/lib/use-istemci-zamani";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -97,9 +98,19 @@ export default function ProjectProfitPage() {
 
   const [breakdown, setBreakdown] = useState<ProjectProfitBreakdown | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
-  const [referenceYear, setReferenceYear] = useState<number | undefined>(
-    new Date().getFullYear()
-  );
+  /*
+   * YIL ÇİZİMDE OKUNMAZ.
+   *
+   * Sunucu geçişi derleme anında, istemci geçişi açılışta koşuyor;
+   * yılbaşını geçen bir yayında ikisi farklı yıl yazar ve hidrasyon
+   * uyuşmazlığı doğar. Bağlanma sonrası dolduruluyor.
+   */
+  const istemciYili = useIstemciYili();
+  const [secilenYil, setSecilenYil] = useState<number | undefined>(undefined);
+
+  const currentYear = istemciYili ?? 0;
+  const referenceYear = secilenYil ?? istemciYili ?? undefined;
+  const setReferenceYear = setSecilenYil;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -131,8 +142,9 @@ export default function ProjectProfitPage() {
     };
   }, [fetchBreakdown, reloadToken]);
 
-  const currentYear = new Date().getFullYear();
-  const years = [currentYear, currentYear - 1, currentYear - 2];
+  const years = currentYear
+    ? [currentYear, currentYear - 1, currentYear - 2]
+    : [];
 
   return (
     <ErpShell
