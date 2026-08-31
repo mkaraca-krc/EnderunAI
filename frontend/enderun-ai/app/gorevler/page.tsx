@@ -595,7 +595,7 @@ export default function WorkTasksPage() {
           <div className="erp-form-header">
             <h2>Yeni İş Emri</h2>
             <p>
-              Manuel görev oluşturun ve projeye
+              Elle iş emri açın ve projeye
               bağlayın.
             </p>
           </div>

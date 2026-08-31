@@ -1762,6 +1762,49 @@ ve kimse sebebini anlamazdı.
 Ölçüm aracı ölçtüğü şeyin içinde yaşıyorsa, ölçümü değiştirir
 (Kural 58'in bir alt hâli).
 
+## METİN-BAĞ/1 — PANODA İKİ KIRIK BAĞLANTI (2026-08-31)
+
+Genel Müdür tarayıcı konsolunda iki 404 gördü. nginx günlüğü kaynağı
+verdi: `_rsc=` önyüklemesi, yönlendiren `/dashboard`.
+
+**Bağlantıları ARKA UÇ üretiyor.** `HizirBriefingSources.cs` pano
+brifing kalemlerine ön yüz rotalarını **sabit kodluyor** ve ikisinin
+karşılığı yoktu:
+
+| Rota | Gerçek |
+|---|---|
+| `/muhasebe/tedarikci-faturalari` | `/muhasebe/faturalar` — menü etiketi "Tedarikçi Faturaları" olduğu için yol da öyle sanılmış |
+| `/santiye/gunluk-raporlar` | **hiç yok** — `app/santiye/` dizini bile yok. Günlük raporlar `/projeler/{id}/santiyeler/{siteId}` altında; düz adres yok, `/projeler`e bağlandı |
+
+GM bu uyarılara tıkladığında **boş sayfa** görüyordu.
+
+### NEDEN MEVCUT BEKÇİ GÖRMEDİ
+
+`tests/route-guard.test.ts` tam bu sınıf için yazılmıştı — *"bir bağlantı
+hedefinin varlığı, önekinin varlığıyla kanıtlanmaz"* — ama **yalnız ön
+yüzü tarıyor.** Arka uçtan gelen bağlantılar kapsamının dışındaydı.
+Bekçi yeşil, bağlantı kırık.
+
+`tests/arka-uc-rotalari.test.ts` bu boşluğu kapatıyor: 30 dosya, 19 rota,
+0 kırık. Düzeltmeden önce koşuldu ve ikisini de adıyla bildirdi.
+
+### MUHAFIZ KENDİ AÇIKLAMAMA TAKILDI — ÜÇÜNCÜ KEZ
+
+Düzeltmeyi yapıp koştuğumda muhafız **yine kırmızı** verdi: eski rotayı
+açıklayan yorumum o dizgeyi taşıyordu ve tarama onu bağlantı sandı.
+Yorum bağlantı üretmez; muhafız artık yorum satırlarını atlıyor.
+
+Aynı hatayı KABUK paketinde de yapmıştım (açıklama yorumum redwood
+sözleşmesini tetiklemişti). **Metin tarayan bir muhafız, kendisini
+anlatan metni de tarar.**
+
+Ayrıca 42. metin kapatıldı: form alt başlığı *"Manuel görev oluşturun ve
+projeye bağlayın."* → *"Elle iş emri açın ve projeye bağlayın."*
+Üç satıra bölünmüş, tırnaksız JSX gövdesindeydi; kaynak taramam altı kez
+üst üste bu biçimi kaçırdı (Kural 70).
+
+---
+
 ## İŞEMRİ/1-A — HİDRASYON UYUŞMAZLIĞI (2026-08-30)
 
 `components/ui/data-table.tsx:565` çıktı üst bilgisine **çizim

@@ -45,7 +45,15 @@ public sealed class PendingApprovalsBriefingSource(AppDbContext db)
             {
                 items.Add(new BriefingItem(
                     $"{count} tedarikçi faturası onay bekliyor",
-                    null, BriefingSeverity.Warning, "/muhasebe/tedarikci-faturalari"));
+                    null, BriefingSeverity.Warning, "/muhasebe/faturalar"));
+                /*
+                 * ROTA DÜZELTİLDİ: "/muhasebe/tedarikci-faturalari"
+                 * diye bir ekran hiç olmadı. Ekranın gerçek adresi
+                 * "/muhasebe/faturalar"; menüdeki etiketi
+                 * "Tedarikçi Faturaları" olduğu için yol da öyle
+                 * sanılmış. GM panoda bu uyarıya tıkladığında boş
+                 * sayfa görüyordu (tarayıcı konsolu + nginx 404).
+                 */
             }
         }
 
@@ -177,7 +185,18 @@ public sealed class MissingSiteReportBriefingSource(AppDbContext db)
             new BriefingItem(
                 $"{missing} şantiyenin dünkü günlük raporu girilmemiş",
                 $"{yesterday:dd.MM.yyyy} tarihi için rapor bekleniyor",
-                BriefingSeverity.Warning, "/santiye/gunluk-raporlar")
+                /*
+                 * ROTA DÜZELTİLDİ: "/santiye/gunluk-raporlar" diye bir
+                 * ekran yok — `app/santiye/` dizini bile yok. Günlük
+                 * raporlar projeye ve şantiyeye bağlı bir alt yolda
+                 * yaşıyor (/projeler/{id}/santiyeler/{siteId}), yani
+                 * tek bir düz adres yok.
+                 *
+                 * PROJE LİSTESİNE BAĞLANIYOR: kullanıcı oradan
+                 * şantiyeye iner. Uydurma bir düz adres yazmak yerine
+                 * var olan en yakın gerçek durağa götürüyoruz.
+                 */
+                BriefingSeverity.Warning, "/projeler")
         ];
     }
 }
