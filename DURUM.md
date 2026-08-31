@@ -1762,6 +1762,75 @@ ve kimse sebebini anlamazdı.
 Ölçüm aracı ölçtüğü şeyin içinde yaşıyorsa, ölçümü değiştirir
 (Kural 58'in bir alt hâli).
 
+## ACIL/1 — SESSİZ SİLİNEN ATAMA DOĞRULAMASI (2026-08-31)
+
+MERKEZ/1'in kendi commit'i (`2d90c946`) bir güvenlik kontrolünü sildi ve
+canlıya çıkardı. Ayrıntı ve kural: **Kural 72**.
+
+### NASIL BULUNDU — TESADÜFE YAKIN
+
+KURAL-KATMAN/1 Faz 0'da WorkTask yazma yollarını sayarken `new WorkTask`
+sayısının **3'ten 2'ye** düştüğü görüldü. Bir sayının beklenmedik
+düşüşü; başka hiçbir işaret yoktu.
+
+**Bunu sayacak ikinci bir tesadüf yoktu.** Mehmet A0'ı üç kez sordu ve
+haklıydı: A1 tek bir bulguyu düzeltir, A0 aynı kesimin başka ne
+götürdüğünü söyler.
+
+### A0 — TAM TARAMA SONUCU
+
+`2d90c946` o dosyada **50 satır** sildi:
+
+| Satır | Sınıf |
+|---|---|
+| 1–20 | **(a)** merkez kuralı → ortak metoda taşındı |
+| **21–46** | **(b) KAZARA** — atama doğrulaması |
+| 47–50 | **(a)** `CenterType` türetme · erken çıkış genişletme · sözlük değişkeni · DTO alanları |
+
+**Bugünkü sekiz commit'in tamamı tarandı.** Aralıkla kesme YALNIZ bir
+yerde kullanıldı; diğer yedi commit'te `assert`'li tam-metin çapası
+vardı. Tek kazara silme bu.
+
+### A2 — TEST ÖNCE, SIRA TERS KURULMADI
+
+| Aşama | Sonuç |
+|---|---|
+| Düzeltmeden ÖNCE | **1 kırmızı / 2 yeşil** — `Expected: BadRequest, Actual: OK` |
+| Düzeltmeden SONRA | **19/19 yeşil** |
+
+Kırmızının mesajı regresyonun kendi kanıtı oldu.
+
+### A3 — SABOTAJ, EN SİNSİ BİÇİMİYLE
+
+Blok **silinmedi**, `if (false && ...)` yapıldı: çağrı kodda durdu,
+hiç çalışmadı. **1 kırmızı / 12 yeşil.**
+
+`YetimMuhafizTests` **yeşil kaldı** — hem sabotajın doğru yeri kestiğini
+hem o muhafızın bu sınıfı göremediğini kanıtlıyor.
+
+### A4 — SAYIM TABANI REDDEDİLDİ, DİFF UYARISI YAZILDI
+
+İlk öneri savunma satırlarının sayısı için taban çizgisiydi. **Mehmet
+reddetti ve gerekçesi ölçümden daha keskindi:** sayım tabanı yanlış
+katmanda ölçüyor — bugün olan şey bir sayının düşmesi değil, bir
+DEĞİŞİKLİĞİN amaçladığından fazlasını götürmesiydi. Doğru yer diff.
+
+Ayrıca toplamı sabit tutan bir silme (başka yerde +2, burada −2) sayım
+tabanından sessizce geçerdi; **en tehlikeli silme tam olarak odur.**
+
+`deploy/scripts/silinen-savunma-kontrolu.sh` — 50 commit'e geriye dönük
+koşuldu: **2 alarm (%4), 0 yanlış alarm**, `2d90c946` yakalanıyor.
+safe-deploy'a bağlandı, **kapı değil uyarı** (çıkış her zaman 0).
+
+### BU PAKETİN KANITI TEST
+
+**Kural 71 burada uygulanmıyor** çünkü atama kapısını tarayıcıdan
+sınamak ikinci bir kullanıcıya atama denemesi gerektirir ve canlıda
+`tasks.view`'e sahip ikinci kullanıcı yok (ölçüldü: yalnız Admin ve
+Genel Müdür rollerinde). **Kural esnetilmedi; kapsamı dışında.**
+
+---
+
 ## MERKEZ/1 — MASRAF MERKEZİ GÖRÜNÜRLÜĞÜ (2026-08-31)
 
 Genel Müdür: *"İş emrinde merkez çıkmıyor."* Ölçüm üç ayrı eksik buldu.
@@ -2030,6 +2099,50 @@ iş olarak bekliyor; sınır muhafızın kendi dosyasında yazılı.
 Tarihsel kalıntı, bozuk yol değil. Düzeltilmedi.
 
 ---
+
+### Kural 72 — KOD BLOĞU METİN ARALIĞIYLA SİLİNMEZ
+
+**Kod bloğu metin aralığıyla silinmez. Aralıkla kesmek zorunda kalırsan,
+kesilen aralığı silmeden önce bas ve oku; aralığın içinde amaçladığından
+fazlası varsa kesim yanlıştır. Yerine: kesilecek bloğun tam metnini çapa
+olarak kullan ve eşleştiğini doğrula — bugün sekiz commit'in yedisinde
+yaptığın buydu, hata sekizincisinde, çapasız kesimde oldu.**
+
+**DOĞURAN OLAY (`2d90c946`, MERKEZ/1).** Merkez kuralı ortak metoda
+taşınırken POST gövdesi `s.index(bas)` … `s.index(son)` aralığıyla
+kesildi. Aralıkta duran **atama doğrulaması** da gitti:
+
+    if (request.AssignedToUserId is Guid atanan)
+    {
+        var taslak = new WorkTask { ... };
+        if (!await GorevAtanabilirMiAsync(taslak, atanan, ...))
+            return BadRequest("Seçilen kullanıcı bu görevin kaydını
+                               göremiyor, dolayısıyla göreve atanamaz.");
+    }
+
+**26 satır sessizce silindi ve canlıya çıktı.** `POST /api/tasks` bir
+gün boyunca `AssignedToUserId`'yi doğrulamadı: `tasks.manage` taşıyan
+biri, iş emrini kendi veri kapsamı dışındaki bir kullanıcıya
+atayabilirdi. Pratik risk düşüktü (`tasks.manage` yalnız Admin ve Genel
+Müdür'de, ikisi de küresel kapsamlı) ama kapı açıktı.
+
+**HİÇBİR ŞEY YAKALAMADI. 2965 test, dört cırcır, kapsam tabanı — hiçbiri.**
+Sebep: silinen kod **testsizdi**. `YetimMuhafizTests` de görmedi çünkü
+`GorevAtanabilirMiAsync` başka iki çağrı yerinde yaşamaya devam
+ediyordu — yetim değildi, yalnız **en önemli çağıranını kaybetmişti.**
+
+Bulunması tesadüfe yakındı: KURAL-KATMAN/1 Faz 0'da yazma yollarını
+sayarken `new WorkTask` sayısının 3'ten 2'ye düştüğü görüldü.
+
+**KURAL 55'İN KARDEŞİ.** 55 dosya düzeyinde (`cat >` ile var olan test
+dosyasını ezmek), 72 blok düzeyinde. İkisi de aynı aile: **yazma işlemi
+amaçladığından fazlasını götürdü.**
+
+**MEKANİK KARŞILIĞI:** `deploy/scripts/silinen-savunma-kontrolu.sh` —
+commit'in SİLDİĞİ satırlara bakar, savunma şekilli olanları olduğu gibi
+ekrana basar ve beyan ister. Taban çizgisi tutmaz, sayı saymaz.
+Geriye dönük ölçüldü: son 50 commit'te **2 alarm (%4), 0 yanlış alarm**,
+`2d90c946` yakalanıyor.
 
 ### Kural 71 — YAYIN, TARAYICIDA BİR ETKİLEŞİM GÖRÜLMEDEN TAMAM DEĞİLDİR
 

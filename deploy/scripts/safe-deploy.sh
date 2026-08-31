@@ -711,6 +711,30 @@ main() {
         fail "git pull başarısız oldu."
     fi
 
+    # SİLİNEN SAVUNMA KONTROLÜ — YAYIN ÖNCESİ İKİNCİ AĞ.
+    #
+    # Kapı DEĞİL: çıkışı her zaman 0 ve yayını durdurmaz. Amacı,
+    # yayınlanacak commit'in sildiği savunma satırlarını günlüğe basmak.
+    # `2d90c946` bu kontrol olsaydı yakalanırdı — 26 satırlık bir atama
+    # doğrulaması sessizce silinmiş ve canlıya çıkmıştı (Kural 72).
+    #
+    # KAPI KİPİ: alarm verirse commit mesajında `SAVUNMA-BEYAN:` arar.
+    # Beyan varsa geçer, yoksa YAYIN DURUR.
+    #
+    # İlk yazımım yalnız günlüğe basıp geçiyordu. Mehmet düzeltti ve
+    # gerekçe kendi cümlemdi: "ölçüm, ancak okunabildiği yerde
+    # ölçümdür." Otomatik bir yayın turunda günlüğe basılan uyarı
+    # OKUNMAZ — o hâliyle kontrol burada süs olurdu.
+    #
+    # KAPI "SİLME YASAK" DEMİYOR, "SİLDİĞİNİ SÖYLE" DİYOR. Meşru
+    # taşımalar engellenmiyor; maliyeti commit mesajına bir cümle.
+    # (`42486f70` gibi meşru bir refaktör de alarm verirdi ve mesajı
+    # zaten anlatıyordu — eksik olan tek şey biçimli bir satırdı.)
+    if ! "${REPO_ROOT}/deploy/scripts/silinen-savunma-kontrolu.sh" HEAD --kapi 2>&1 \
+            | tee -a "$LOG_FILE"; then
+        fail "Silinen savunma satırları beyan edilmemiş (Kural 72)."
+    fi
+
     # Kapsam pull'DAN SONRA belirleniyor: HEAD ancak o noktada kesin.
     resolve_test_scope
     log "INFO" "Test kapsamı: ${TEST_SCOPE} (${TEST_SCOPE_REASON})"

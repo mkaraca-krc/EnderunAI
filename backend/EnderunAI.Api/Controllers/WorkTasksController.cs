@@ -261,6 +261,47 @@ public sealed class WorkTasksController(
         if (merkezHatasi is not null)
             return BadRequest(new { message = merkezHatasi });
 
+        /*
+         * ATANAN KİŞİ KAYDI GÖREBİLMELİ.
+         *
+         * Göremeyeceği bir göreve atanan kullanıcı, gelen kutusunda
+         * açamadığı bir satır görür. Daha kötüsü: görev, kapsam
+         * disiplinine açılmış gizli bir kapı olurdu.
+         *
+         * ── BU BLOK BİR KEZ SESSİZCE SİLİNDİ ──
+         *
+         * `2d90c946` (MERKEZ/1) merkez kuralını ortak metoda taşırken
+         * POST gövdesini METİN ARALIĞIYLA kesti; aralıkta duran bu blok
+         * da gitti ve 26 satır kayıtsız şekilde canlıya çıktı. 2965
+         * testin hiçbiri görmedi çünkü blok TESTSİZDİ; yetim muhafızı da
+         * görmedi çünkü `GorevAtanabilirMiAsync` başka iki yerde
+         * yaşamaya devam ediyordu — yetim değildi, yalnız en önemli
+         * çağıranını kaybetmişti.
+         *
+         * Artık `AtamaKapisiTests` bu bloğu sınıyor. Silinirse test
+         * kırmızı verir.
+         */
+        if (request.AssignedToUserId is Guid atanan)
+        {
+            var taslak = new WorkTask
+            {
+                CompanyId = request.CompanyId,
+                ProjectId = request.ProjectId,
+                BranchId = request.BranchId,
+                ProjectSiteId = request.ProjectSiteId
+            };
+
+            if (!await GorevAtanabilirMiAsync(taslak, atanan, cancellationToken))
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "Seçilen kullanıcı bu görevin kaydını göremiyor, " +
+                        "dolayısıyla göreve atanamaz. Önce yetki verin."
+                });
+            }
+        }
+
         var taskNumber = await documentNumbers.GenerateAsync(
             request.CompanyId, "WORK_TASK", "GRV", cancellationToken);
 
