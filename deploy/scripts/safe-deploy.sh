@@ -742,6 +742,24 @@ main() {
     # GÖÇ KAPISI TESTLERDEN ÖNCE: 20 dakikalık test turunu koşup sonra
     # "göç eksik" demek, hem zaman hem de operatörün sabrı israfıdır.
     asama "goc-kapisi"
+    # GÖÇ PROVASI — GÖÇ KAPISINDAN ÖNCE.
+    #
+    # ASIL YERİ BURASI DEĞİL, ELLE ÇAĞRIDIR. `gocleri_dogrula` bekleyen
+    # göç bulunca yayını zaten DURDURUYOR ("önce yedek alıp dotnet ef
+    # database update çalıştırın"), yani deploy anında bekleyen göç
+    # OLMAZ ve prova burada neredeyse her zaman boş geçer.
+    #
+    # Provanın işe yaradığı an, göçü ELLE uygulamadan öncedir:
+    #     deploy/scripts/goc-provasi.sh
+    # Canlının taze kopyasında oynatır; patlarsa canlıya dokunulmaz.
+    #
+    # Buradaki çağrı bir AĞ: akış değişirse ya da bir göç araya
+    # sızarsa yakalar. Maliyeti sıfıra yakın — bekleyen göç yoksa
+    # kopya bile almadan çıkar.
+    if ! "${REPO_ROOT}/deploy/scripts/goc-provasi.sh" 2>&1 | tee -a "$LOG_FILE"; then
+        fail "Göç provası geçmedi — ayrıntı yukarıda."
+    fi
+
     gocleri_dogrula
 
     asama "backend-testleri"

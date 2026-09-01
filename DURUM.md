@@ -2587,30 +2587,70 @@ Kalan niteliksiz uçlar: `/api/bildirimler/*` (5), `/api/collaboration/*`
 
 ---
 
-## BEKLEYEN PAKET — GÖÇ/PROVA: GÖÇ CANLININ KOPYASINDA DENENSİN
+## GÖÇ/PROVA — KURULDU (2026-09-01)
 
-**Boşluk:** göç kapısı *"uygulandı mı"* sorusunu cevaplıyor.
-*"Doğru mu"* sorusunu **hiçbir şey cevaplamıyor.**
+`deploy/scripts/goc-provasi.sh`. Canlının **taze kopyasını** alır, göçü
+oraya uygular, patlarsa yayın durur ve **canlıya dokunulmaz**.
 
-2026-08-30'da üretilen bir göç canlıda patlayacaktı
-(`AddColumn "xmin"` → sistem sütunu çakışması) ve bunu yakalayan tek
-şey **insanın `Up()`'ı okuması** oldu. Kapı onu durdurmazdı: kapı
-göçün uygulanıp uygulanmadığına bakar, içeriğine değil.
+### İKİ KONTROL
 
-**TASARIM** — SQUASH/1'de Z3 olarak kurulan desen standartlaşıyor:
+| Kontrol | Sonuç |
+|---|---|
+| **Pozitif** — geçerli göç | `SAHİPLİK ✓ · TAZELİK 205=205 ✓ · GEÇTİ · UYGULAMA KANITI: 1 göç geçmişte` · çıkış 0 |
+| **Negatif** — bozuk göç | `PROVA DÜŞTÜ · GEREKÇE: Applying migration · SQLSTATE · göç adı` · `42P07 relation "WorkTasks" already exists` · çıkış 1 |
 
-    bekleyen göç var mı?
-      → canlının TAZE bir kopyasını al
-      → göçü o kopyaya uygula
-      → başarısızsa YAYIN DURUR, canlıya DOKUNULMAZ
-      → başarılıysa kopya silinir, yayın devam eder
+**Aynı göç dosyası**, tek fark bir SQL satırı. Düzenek göçün İÇERİĞİNE
+bakıyor. Sonda göçü silindi; canlıda hiçbir iz kalmadı (ölçüldü).
 
-**Maliyet:** bir kopya + bir uygulama, dakikalar.
-**Kazanç:** canlıda patlayan göç sınıfının tamamı.
+### DÜZENEK ALTI KEZ YANILDI, HER YANILGI BİR KANIT SATIRI DOĞURDU
 
-**NEDEN CANLININ KOPYASI, BOŞ VERİTABANI DEĞİL:** boş şemada geçen
-bir göç, canlıdaki veriye takılabilir (benzersizlik ihlali, NOT NULL
-varsayılanı, tip dönüşümü). Prova ancak gerçek veriyle prova.
+| # | Yanılgı | Doğurduğu |
+|---|---|---|
+| 1 | `dotnet-ef` PATH'te sanıldı | araç kontrolü + KARAR VEREMEDİ |
+| 2 | tek bağlam sanıldı, `JWT_SECRET` unutuldu | iki bağlam ayrı ayrı |
+| 3 | bağlantı `ConnectionStrings__` sanıldı | `DB_CONNECTION` (fabrika okunarak) |
+| 4 | koşan betik zulaya alındı | `/tmp` kopyasından koşma |
+| 5 | `[Migration]` niteliksiz sabotaj → **yanlış YEŞİL** | **UYGULAMA KANITI** |
+| 6 | kopya `postgres` adına açıldı → `42501` | **SAHİPLİK KANITI** |
+
+**BEŞİNCİSİ EN TEHLİKELİSİYDİ.** Düzenek *"bekleyen göç uygulandı"* dedi
+ve **hiçbir şey uygulanmamıştı**: betik dosya adına bakıyordu, EF
+`[Migration]` niteliğine. Yanlış kırmızı kapıyı öldürür; **yanlış yeşil
+kapıyı gereksiz kılar ve kimse fark etmez.**
+
+Ve **pozitif kontrol ilk hâlinde BOŞTU** (`Applying migration: 0`). Bir
+göçün uygulanabildiğini hiç kanıtlamamıştı; bunu ancak negatif kontrol
+ortaya çıkardı.
+
+### SINIFLANDIRMA ASİMETRİK — MEHMET'İN KARARI
+
+İlk sürüm bir YASAK LİSTESİ tutuyordu. Mehmet reddetti: *"o liste
+gözlemle büyüyor ve her büyüme bir yanlış kırmızıyla satın alınıyor."*
+Üç koşuda üç kez oldu.
+
+Yeni kural: **"göç patlardı" hükmü POZİTİF OLARAK KANITLANMADIKÇA
+verilmez.** Üç kanıttan biri aranır — uygulama aşamasına girildi mi,
+PostgreSQL hatası (SQLSTATE) var mı, göç adı çıktıda geçiyor mu. Hiçbiri
+yoksa **KARAR VEREMEDİ**.
+
+*"Yanlış kırmızı kapının kendisini öldürür; yanlış 'karar veremedi'
+yalnızca bir insanın bakmasını ister. Maliyet farkı asimetrik olduğu için
+sınıflandırma da öyle."*
+
+Karar sınavını verdi: yasak listesi olsaydı `42501` (izin) ile `42P07`
+(gerçek göç hatası) **aynı kovaya** düşerdi.
+
+### ASIL YERİ ELLE ÇAĞRI
+
+`gocleri_dogrula` bekleyen göç bulunca yayını **zaten durduruyor** —
+yani göçler deploy'dan ÖNCE elle uygulanıyor ve prova safe-deploy içinde
+neredeyse her zaman boş geçer.
+
+**Provanın işe yaradığı an, göçü elle uygulamadan öncedir.**
+safe-deploy'daki çağrı bir ağ: akış değişirse yakalar, maliyeti sıfıra
+yakın.
+
+---
 
 ## ÖLÜ ÖN YÜZ KOPYALARI TAŞINDI (2026-08-30)
 
