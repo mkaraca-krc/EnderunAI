@@ -417,8 +417,26 @@ public sealed class WorkTasksController(
          * fiilleri aynı turda sınanır. ACIL/1'de yalnız POST bakıldı,
          * PUT bir gün sonra çıktı.
          *
-         * Doğrulama GÜNCELLENMİŞ merkez alanlarıyla yapılıyor: atanan
-         * kişinin görmesi gereken şey, kaydın YENİ hâli.
+         * DOĞRULAMA GÜNCELLENMİŞ MERKEZ ALANLARIYLA YAPILIR: atanan
+         * kişinin görmesi gereken şey, kaydın YENİ hâli. Eski merkeze
+         * göre doğrulamak, kişiyi göremeyeceği bir kaydın içine
+         * yerleştirirdi.
+         *
+         * ── SAĞLAMLIĞIN KAYNAĞI: `request.*` OKUNUYOR ──
+         *
+         * Bu blok satır sırasına GÜVENMİYOR. Yukarıda `item.ProjectId`
+         * zaten `request.ProjectId`'ye yazılmış durumda; o yüzden
+         * `item.*` okunsa bile bugün aynı sonuç çıkardı. Ama o doğruluk
+         * SIRAYA bağlı olurdu ve bir sonraki düzenleyen bu bloğu merkez
+         * yazımının üstüne alsaydı sessizce bozulurdu.
+         *
+         * ÖLÇÜLDÜ: sabotaj tek başına "yukarı taşı" ya da tek başına
+         * "eski alanları oku" biçiminde yapıldığında test YEŞİL kalıyor
+         * — ikisi birlikte yapıldığında kırmızıya dönüyor. Yani
+         * `request.*` okumak, sıra değişse bile iddiayı ayakta tutuyor.
+         *
+         * `PUT_AtamaYeniMerkezeGoreDogrulanir` bunu koruyor. Adı
+         * davranışı anlatıyor, satır sırasını değil.
          */
         if (request.AssignedToUserId is Guid yeniAtanan)
         {

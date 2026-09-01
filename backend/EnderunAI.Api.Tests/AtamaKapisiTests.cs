@@ -187,6 +187,124 @@ public sealed class AtamaKapisiTests(DatabaseFixture fixture)
     }
 
     [Fact]
+    public async Task PUT_AtamaYeniMerkezeGoreDogrulanir()
+    {
+        /*
+         * BU PAKETİN EN İNCE KARARI — VE TEK BAŞINA ATAMA SONDASI ONU
+         * ÖLÇMEZ.
+         *
+         * PUT hem merkezi hem atananı aynı anda değiştirebiliyor.
+         * Doğrulama HANGİ merkeze göre yapılmalı: kaydın yüklenmiş
+         * (ESKİ) hâline mi, istekteki (YENİ) hâline mi?
+         *
+         * YENİ olmalı. Atanan kişinin görmesi gereken şey, kaydın
+         * kaydedildikten SONRAKİ hâli; eski merkeze göre doğrulamak,
+         * kişiyi göremeyeceği bir kaydın içine yerleştirir.
+         *
+         * SENARYO: kullanıcının kapsamı YALNIZ A projesi.
+         *   - Görev A projesindeyken ona atanabilir (eski merkez).
+         *   - Aynı PUT'ta merkez B'ye taşınıp kişi atanırsa REDDEDİLİR.
+         *
+         * ADI DAVRANIŞI ANLATIYOR, SIRAYI DEĞİL: satır numaraları
+         * değişince test adı yalan söylemesin. Sıra (merkez → atama →
+         * yazma) bir sözleşme ve bu test onu davranış üzerinden korur;
+         * bir sonraki düzenleyen merkez doğrulamasını atamanın altına
+         * alırsa bu test düşer.
+         */
+        Project projeA;
+        Guid projeBId;
+        Guid kullaniciId;
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            projeA = await TestDataFactory.CreateProjectAsync(db, "ATM-YENI-A");
+
+            // İKİNCİ PROJE AYNI ŞİRKETTE: şirketler arası tuhaf bir
+            // kurulum, ölçmek istediğimiz şeyi bulandırırdı.
+            var projeB = new Project
+            {
+                CompanyId = projeA.CompanyId,
+                BranchId = projeA.BranchId,
+                EmployerCurrentAccountId = projeA.EmployerCurrentAccountId,
+                Code = "PRJ-ATM-YENI-B",
+                Name = "Test Proje ATM-YENI-B",
+                CurrencyCode = "TRY",
+                Status = ProjectStatus.Active
+            };
+            db.Projects.Add(projeB);
+            await db.SaveChangesAsync();
+            projeBId = projeB.Id;
+        }
+
+        // Kullanıcı: görev iznini taşıyan bir rol, ama kapsamı DAR.
+        await TestUserFactory.CreateClientWithRolesAsync(
+            fixture, "atama-proje-kapsamli", ["Genel Müdür"]);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var kullanici = await db.Users
+                .SingleAsync(x => x.Username.Contains("atama-proje-kapsamli"));
+            kullaniciId = kullanici.Id;
+
+            /*
+             * KAPSAM ELLE DARALTILIYOR: `TestUserFactory` yalnız ŞİRKET
+             * kapsamı kurabiliyor ve şirket kapsamı bu senaryoyu
+             * ÖLÇEMEZ — şirket kapsamlı bir kullanıcı o şirketin BÜTÜN
+             * projelerini görür, yani A'yı da B'yi de. Ayrımın
+             * görünmesi için kapsam PROJE düzeyinde olmalı.
+             */
+            var eskiler = await db.UserDataScopes
+                .Where(x => x.UserId == kullaniciId).ToListAsync();
+            db.UserDataScopes.RemoveRange(eskiler);
+
+            db.UserDataScopes.Add(new UserDataScope
+            {
+                UserId = kullaniciId,
+                ScopeType = DataScopeType.Project,
+                ProjectId = projeA.Id
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+        var id = await GorevAcAsync(client, projeA);
+
+        // ÖNCE POZİTİF: eski merkezde (A) atama GEÇMELİ.
+        var kabul = await client.PutAsJsonAsync(
+            $"/api/tasks/{id}",
+            new
+            {
+                title = "A projesinde atanmış",
+                priority = (int)WorkTaskPriority.Normal,
+                assignedToUserId = kullaniciId,
+                projectId = (Guid?)projeA.Id,
+            });
+
+        Assert.Equal(HttpStatusCode.OK, kabul.StatusCode);
+
+        // ASIL İDDİA: aynı PUT'ta merkez B'ye taşınıp kişi atanırsa red.
+        var yanit = await client.PutAsJsonAsync(
+            $"/api/tasks/{id}",
+            new
+            {
+                title = "B projesine taşınıp atanmış",
+                priority = (int)WorkTaskPriority.Normal,
+                assignedToUserId = kullaniciId,
+                projectId = (Guid?)projeBId,
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, yanit.StatusCode);
+        Assert.Contains(
+            "göreve atanamaz",
+            await yanit.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task DELEGATE_GorevuGoremeyenKullaniciya_Reddedilir()
     {
         /*
