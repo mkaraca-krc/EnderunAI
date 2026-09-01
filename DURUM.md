@@ -1797,6 +1797,35 @@ cümlesi, canlı bir deliğin beklemesinin en sık gerekçesidir.*
 Sabotajda POST testleri ve delegate **yeşil kaldı** — kesimin yalnız
 PUT'u vurduğunun kanıtı.
 
+### İDDİA GÜÇLENDİ, SEBEBİ DEĞİŞTİ
+
+Mehmet'in itirazı: *"Doğrulama güncellenmiş merkez alanlarıyla yapılıyor"
+— bu bir OKUMA, ölçüm değil.* Haklıydı; sonda listesinde tek başına
+atama vardı, birleşik durum yoktu.
+
+`PUT_AtamaYeniMerkezeGoreDogrulanir` yazıldı ve **üç sabotaj varyantının
+ikisi yeşil kaldı**:
+
+| Sabotaj | Sonuç |
+|---|---|
+| yalnız "eski alanları oku" | **yeşil** — işlemsiz |
+| yalnız "doğrulamayı yukarı taşı" | **yeşil** |
+| ikisi birden | **kırmızı** |
+
+Deploy durduruldu ve sebep kod okunarak ölçüldü: doğrulama çalıştığında
+`item.ProjectId` **zaten** `request.ProjectId`'ye yazılmıştı (satır 36),
+iki kaynak aynı değerdi.
+
+**SONUÇ İDDİAYI HEM DÜZELTTİ HEM GÜÇLENDİRDİ.** Doğrulama yeni merkeze
+bakıyor **çünkü `request.*` okunuyor** — `item` mutasyona uğradığı için
+değil. Mehmet'in *"sıra bir sözleşmedir"* endişesi **kısmen yersizdi**:
+sıra bozulsa bile iddia ayakta kalır; bozulması için **iki bağımsız
+hata** gerekiyor.
+
+Bulgu koda yazıldı: bir sonraki düzenleyen bu bloğu merkez yazımının
+üstüne alırsa neden hâlâ doğru çalışacağını ve neyin onu bozacağını
+okuyabilsin.
+
 ### SİLİNEN-SAVUNMA KONTROLÜNÜN SINIRI CANLIDA ÖLÇÜLDÜ
 
 Sabotaj bilerek `if (false && ...)` biçiminde yapıldı: hiçbir satır
@@ -2419,6 +2448,27 @@ istek geldi (ölçüldü, arşiv günlükler dahil).
 
 **KALICI OLAN ÜÇÜNCÜSÜ:** tek satırlık bir kontrol, altı haftalık
 arızayı ilk yayında yakalardı.
+
+## BEKLEYEN PAKET — TEST DÜZENEĞİ: PROJE KAPSAMLI KULLANICI
+
+`TestUserFactory.CreateClientWithRolesAsync` yalnız **şirket** kapsamı
+kurabiliyor (`scopedCompanyId`). **Şirket kapsamı bazı ayrımları
+GÖREMEZ:** şirket kapsamlı bir kullanıcı o şirketin bütün projelerini
+görür, yani "A projesini görüyor ama B'yi görmüyor" senaryosu
+kurulamaz.
+
+ACIL/2'de `PUT_AtamaYeniMerkezeGoreDogrulanir` tam bu ayrıma
+dayanıyordu ve **kapsamı elle kurmak zorunda kaldı** (`UserDataScopes`
+satırlarını silip `DataScopeType.Project` eklemek). Yazılmasaydı test
+yeşil verir ve **hiçbir şey ölçmezdi.**
+
+Yarın aynı ayrımı sınamak isteyen bir sonda aynı tuzağa düşecek —
+ve o sonda muhtemelen tuzağı fark etmeyecek, çünkü test yeşil olacak.
+
+**İş:** `TestUserFactory`'ye proje (ve gerekirse şube/şantiye) kapsamı
+eklemek. Küçük ama ACIL/2'nin işi değildi.
+
+---
 
 ## BEKLEYEN PAKET — KAPI/1: NİTELİK YOKSA REDDET
 
