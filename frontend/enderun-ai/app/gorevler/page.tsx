@@ -13,6 +13,7 @@ import {
   type DataTableColumn,
 } from "@/components/ui/data-table";
 
+import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { Button, ConfirmDialog } from "@/components/ui";
@@ -522,7 +523,32 @@ export default function WorkTasksPage() {
         `${item.taskNumber} — ${item.title}${item.isOverdue ? " (Gecikti)" : ""}`,
       render: (item) => (
         <>
-          <strong>{item.taskNumber}</strong>
+          {/*
+            NUMARA BİR BAĞLANTI — DETAYA TEK GİRİŞ BURASI.
+
+            Önce `<strong>` idi: `/gorevler/[id]` ekranı VARDI ama
+            listeden oraya GİDİLEMİYORDU. Genel Müdür numaraya
+            tıkladı, hiçbir şey olmadı.
+
+            Yan etkisi: MERKEZ/1'in "detayda masraf merkezi görünüyor"
+            iddiası DOĞRULANAMIYORDU — doğrulanacak ekrana
+            ulaşılamıyordu.
+
+            ÖLÇÜLDÜ: rota erişilebilirdi ama yalnız ARKA UÇTAN —
+            `TaskDueNotificationScanner.cs:88` termin bildiriminde
+            `/gorevler/{id}` üretiyor. Yani "bağlantı yok" değil,
+            "kullanıcının bulunduğu yerden yok"du. Ön yüzü tarayan bir
+            ölçüm bunu "bağlantı yok" diye okur ve yanılır
+            (METİN-BAĞ/1'in dersi).
+
+            Desen mevcut: `erp-row-link` üç ekranda kullanılıyor.
+          */}
+          <Link
+            href={`/gorevler/${item.id}`}
+            className="erp-row-link"
+          >
+            <strong>{item.taskNumber}</strong>
+          </Link>
           <small>{item.title}</small>
           {item.isOverdue && <span className="erp-status red">Gecikti</span>}
         </>

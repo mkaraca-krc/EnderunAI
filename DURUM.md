@@ -2470,6 +2470,64 @@ eklemek. Küçük ama ACIL/2'nin işi değildi.
 
 ---
 
+## BAĞ/1 — LİSTEDEN DETAYA GİDİŞ (2026-09-01)
+
+Genel Müdür iş emri numarasına tıkladı, hiçbir şey olmadı. Numara
+`<strong>` idi; `/gorevler/[id]` ekranı **vardı** ama listeden oraya
+**gidilemiyordu**.
+
+**Yan etkisi:** MERKEZ/1'in *"detayda masraf merkezi görünüyor"* iddiası
+**doğrulanamıyordu** — doğrulanacak ekrana ulaşılamıyordu. Açık duran bir
+iddia, bir bağlantı eksikliği yüzünden açık kaldı.
+
+### ÖLÇÜM: BU SINIF TARANABİLİR DEĞİL
+
+46 dinamik detay rotası tarandı; **hiçbir yerden bağlantı almayan 2**:
+`/portal/[token]` (beklenen — dış paydaşa e-postayla giden jeton
+bağlantısı) ve `/depo-stok/raf/[warehouseId]/[shelfId]`.
+
+**`/gorevler/[id]` bu listede ÇIKMADI** ve tarama **teknik olarak
+haklıydı**: rotaya bağlantı **var** — `TaskDueNotificationScanner.cs:88`,
+termin bildirimi `/gorevler/{id}` üretiyor.
+
+Yani sınıf *"hedef ulaşılamaz"* değil, ***"kullanıcının bulunduğu yerden
+ulaşılamaz"***. **Bu taranabilir bir şey değil:** hangi ekrandan hangi
+ekrana gidilmesi gerektiği bir TASARIM KARARI, kod özelliği değil.
+Muhafız yazılsaydı yanlış şeyi ölçerdi — bu yüzden yazılmadı.
+
+Bir sonraki sefer aynı soruyu soran kişi taramaya güvenmesin.
+
+### DERS: BAĞLANTILAR ARKA UÇTA DA YAŞIYOR
+
+Ön yüzü tarayan bir ölçüm `/gorevler/[id]` için *"bağlantı yok"* der ve
+yanılır. METİN-BAĞ/1'de aynı ders tersinden çıkmıştı: arka uç ön yüz
+rotalarına bağlantı üretiyor ve `route-guard` onları göremiyordu.
+
+---
+
+## ÖLÇÜM DÜZELTMESİ — `MANUAL` KAÇIŞI ARTIK KULLANILIYOR (2026-09-01)
+
+KURAL-KATMAN/1 Faz 0'da ölçmüştüm: *"`SourceModule` hiçbir kayıtta dolu
+değil — `MANUAL` kaçışı canlıda hiç kullanılmamış."*
+
+**O ölçüm eskidi.** 1 Eylül 15:00'te Genel Müdür ilk gerçek iş emrini
+açtı: `GRV-2026-000001`, **`SourceModule = MANUAL`**, merkezi dolu
+(şantiye, `CenterType = 2`).
+
+**ASIL DERS BU:** kaçış yolu üretimde kullanılmıyordu; **ekran onu
+kullanmaya başladığı anda kullanılır oldu.** Bir kaçışın bugün
+kullanılmıyor olması, kapatılmasını erteleme gerekçesi değildir.
+
+Burada zararsızdı — merkez doluydu. Ama kural onu **atladı**: merkezi
+boş bırakan bir istek de aynı yoldan geçerdi.
+
+**KURAL-KATMAN'ın gerekçesi artık ölçülmüş bir gerçek**, öngörü değil.
+
+**Göç planı bu tek kaydı hesaba katacak:** `MANUAL` kaynaklı, merkezi
+dolu, atanmamış; tür alanı geldiğinde **İşEmri** olacak.
+
+---
+
 ## BEKLEYEN PAKET — KAPI/1: NİTELİK YOKSA REDDET
 
 **Sırası: GM'nin İŞEMRİ/1 doğrulamasından sonra. M3/2b'den ÖNCE ya da
