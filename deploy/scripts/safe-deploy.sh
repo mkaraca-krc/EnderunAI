@@ -472,7 +472,21 @@ gocleri_dogrula() {
     if [ -n "$bekleyen" ]; then
         log "ERROR" "Canlıya UYGULANMAMIŞ göç(ler) var:"
         echo "$bekleyen" | while read -r m; do log "ERROR" "    $m"; done
-        fail "Göç kapısı: önce yedek alıp 'dotnet ef database update --context <bağlam>' çalıştırın."
+        # HAM KOMUT DEĞİL, ONAYLI YOL SÖYLENİYOR.
+        #
+        # Burada önce "yedek alıp `dotnet ef database update` çalıştırın"
+        # yazıyordu. O cümle, göç provasını operatörün HATIRLAMASINA
+        # bırakıyordu — ve prova safe-deploy'da çağrılsa bile burada
+        # hiçbir zaman iş yapmıyor, çünkü bu kapı bekleyen göç bulunca
+        # yayını zaten durduruyor. Yani provanın iş yaptığı tek an
+        # (elle uygulama öncesi) korumasızdı.
+        #
+        # `goc-uygula.sh` bağı MEKANİK yapar: provayı kendisi koşar,
+        # geçmezse canlıya tek bir DDL göndermez.
+        log "ERROR" "Göç kapısı: göçü ELLE 'dotnet ef database update' ile uygulamayın."
+        log "ERROR" "Onaylı tek yol — provayı kendisi koşar, geçmezse reddeder:"
+        log "ERROR" "    sudo deploy/scripts/goc-uygula.sh"
+        fail "Göç kapısı: uygulanmamış göç var; 'deploy/scripts/goc-uygula.sh' çalıştırın."
     fi
 
     if [ -n "$fazladan" ]; then

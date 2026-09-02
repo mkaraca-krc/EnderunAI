@@ -66,14 +66,30 @@ set -uo pipefail
 HEDEF="${1:-}"
 KIP="${2:-uyari}"
 
-DESEN='return[[:space:]]+(BadRequest|Forbid|Unauthorized|NotFound)[[:space:]]*\(|throw[[:space:]]+new[[:space:]]+[A-Za-z]|if[[:space:]]*\([[:space:]]*![[:space:]]*await[[:space:]]|\[RequirePermission'
+# DESEN İKİ DİLİ TANIR — 9d4ffd0b BUNU GÖSTERDİ.
+#
+# Kapsamı `*.sh`'e açmak YETMEDİ: desen tamamen C#/TS şekilliydi, o
+# commit'te silinen 8 satırlık kabuk muhafızını yine görmedi. Bir
+# kontrolün kapsamı ile ölçütü AYRI İKİ ŞEYDİR; kapsamı genişletip
+# ölçütü olduğu yerde bırakmak, kontrolü genişletmiş gibi yapar.
+#
+# Kabuk savunmasının şekli: `hata`/`fail` çağrısı, sıfırdan farklı
+# `exit`, ve `|| exit` / `|| fail` kısayolları.
+DESEN='return[[:space:]]+(BadRequest|Forbid|Unauthorized|NotFound)[[:space:]]*\(|throw[[:space:]]+new[[:space:]]+[A-Za-z]|if[[:space:]]*\([[:space:]]*![[:space:]]*await[[:space:]]|\[RequirePermission|^[[:space:]]*(hata|fail)[[:space:]]+"|^[[:space:]]*exit[[:space:]]+[1-9]|\|\|[[:space:]]*\{?[[:space:]]*(hata|fail|exit)[[:space:]]|&&[[:space:]]*\{[[:space:]]*(hata|fail)[[:space:]]'
 
 if [ -n "$HEDEF" ]; then
-    KAYNAK="$(git show "$HEDEF" --unified=0 -- '*.cs' '*.ts' '*.tsx' 2>/dev/null)"
+    KAYNAK="$(git show "$HEDEF" --unified=0 -- '*.cs' '*.ts' '*.tsx' '*.sh' 2>/dev/null)"
     BASLIK="commit $HEDEF"
 else
-    KAYNAK="$(git diff --unified=0 -- '*.cs' '*.ts' '*.tsx' 2>/dev/null; \
-              git diff --cached --unified=0 -- '*.cs' '*.ts' '*.tsx' 2>/dev/null)"
+    # KABUK BETİKLERİ DE KAPSAMDA — 9d4ffd0b BUNU GÖSTERDİ.
+    #
+    # O commit'te `goc-provasi.sh`'ten 8 satırlık bir muhafız bloğu
+    # kaldırıldı ve bu kontrol "savunma şekilli satır silinmemiş" dedi.
+    # Sebep: yalnız *.cs, *.ts, *.tsx bakılıyordu. Yayın hattını koruyan
+    # muhafızların KENDİSİ kabuk betiği; koruma kapsamının dışında
+    # kalmaları, muhafız fikrinin kendisini çürütür.
+    KAYNAK="$(git diff --unified=0 -- '*.cs' '*.ts' '*.tsx' '*.sh' 2>/dev/null; \
+              git diff --cached --unified=0 -- '*.cs' '*.ts' '*.tsx' '*.sh' 2>/dev/null)"
     BASLIK="çalışma ağacı"
 fi
 
@@ -81,7 +97,7 @@ fi
 # Yorum satırları elenir: yorumda geçen bir `throw` savunma değildir.
 BULGU="$(printf '%s\n' "$KAYNAK" \
     | grep '^-' | grep -v '^---' | sed 's/^-//' \
-    | grep -vE '^[[:space:]]*(//|\*|/\*)' \
+    | grep -vE '^[[:space:]]*(//|\*|/\*|#)' \
     | grep -E "$DESEN" || true)"
 
 if [ -z "$BULGU" ]; then
