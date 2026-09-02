@@ -7,13 +7,125 @@ export enum WorkTaskPriority {
   Critical = 3,
 }
 
+/*
+ * DURUM ENUM'U ARKA UÇLA BİREBİR.
+ *
+ * Önce burada `Draft = 0` ve `Waiting = 3` vardı — arka uçta İKİSİ DE
+ * YOK. `Approved = 6` ve `Returned = 7` ise arka uçta VAR, burada
+ * yoktu. Yani "tek kaynak" sanılan bu enum'un kendisi de yanlıştı:
+ * liste ekranı onaylanmış bir görevi hiç tanımıyordu.
+ *
+ * `Waiting` yalnız etikette değil, DAVRANIŞTA da kullanılıyordu
+ * (`gorevler/page.tsx` "Başlat" düğmesi koşulu) — hiçbir zaman
+ * eşleşmeyen ölü bir dal.
+ *
+ * Kaynak: backend/EnderunAI.Api/Models/WorkTask.cs. `tests/
+ * gorev-durum-etiketi.test.ts` bu hizayı C# dosyasını okuyarak ölçer.
+ */
 export enum WorkTaskStatus {
-  Draft = 0,
   Open = 1,
   InProgress = 2,
-  Waiting = 3,
+  /** Yapan bitirdi; GÖNDERENİN onayı bekleniyor. */
   Completed = 4,
   Cancelled = 5,
+  /** Gönderen onayladı — görev kapandı. */
+  Approved = 6,
+  /** Gönderen gerekçesiyle iade etti; görev yapana geri döner. */
+  Returned = 7,
+}
+
+/*
+ * ETİKET VE RENK — TEK KAYNAK.
+ *
+ * NEDEN BURADA: liste ve detay ekranları bu eşlemeyi AYRI AYRI
+ * yazmıştı. Detay ekranı yoğun 0-tabanlı numaralandırma varsaymış
+ * (DURUM_OPEN = 0) ve altı gerçek değerden üçünü yanlış göstermişti.
+ * Genel Müdür listede "Açık" gördüğü görevin detayında "Devam Ediyor"
+ * gördü; kayıt değişmemişti, iki ekran aynı sayıyı farklı okuyordu.
+ *
+ * `Record<WorkTaskStatus, ...>` derleme zamanında EKSİKSİZLİK dayatır:
+ * enum'a değer eklenip buraya eklenmezse derleme düşer. Çalışma
+ * zamanı ölçümü ayrıca `tests/gorev-durum-etiketi.test.ts` içinde.
+ */
+export const DURUM_ETIKETLERI: Record<WorkTaskStatus, string> = {
+  [WorkTaskStatus.Open]: "Açık",
+  [WorkTaskStatus.InProgress]: "Devam Ediyor",
+  [WorkTaskStatus.Completed]: "Tamamlandı, onay bekliyor",
+  [WorkTaskStatus.Cancelled]: "İptal",
+  [WorkTaskStatus.Approved]: "Onaylandı",
+  [WorkTaskStatus.Returned]: "İade Edildi",
+};
+
+export const DURUM_RENKLERI: Record<WorkTaskStatus, string> = {
+  [WorkTaskStatus.Open]: "blue",
+  [WorkTaskStatus.InProgress]: "yellow",
+  [WorkTaskStatus.Completed]: "yellow",
+  [WorkTaskStatus.Cancelled]: "red",
+  [WorkTaskStatus.Approved]: "green",
+  [WorkTaskStatus.Returned]: "red",
+};
+
+/*
+ * İKİ RENK SÖZLÜĞÜ, TEK KAYNAK.
+ *
+ * Liste `erp-status` CSS sınıfı kullanıyor (blue/green/red...), detay
+ * ise `Badge` bileşeninin türlerini (success/warning/danger...). İkisi
+ * ayrı sözlük — bu yüzden tek bir renk haritası ikisine de yetmez.
+ * Ama eşlemenin KENDİSİ tek yerde durmalı; yoksa yine ayrışırlar.
+ */
+export const DURUM_ROZET_TURU: Record<
+  WorkTaskStatus,
+  "default" | "success" | "warning" | "danger" | "info"
+> = {
+  [WorkTaskStatus.Open]: "info",
+  [WorkTaskStatus.InProgress]: "warning",
+  [WorkTaskStatus.Completed]: "warning",
+  [WorkTaskStatus.Cancelled]: "danger",
+  [WorkTaskStatus.Approved]: "success",
+  [WorkTaskStatus.Returned]: "danger",
+};
+
+export const ONCELIK_ETIKETLERI: Record<WorkTaskPriority, string> = {
+  [WorkTaskPriority.Low]: "Düşük",
+  [WorkTaskPriority.Normal]: "Normal",
+  [WorkTaskPriority.High]: "Yüksek",
+  [WorkTaskPriority.Critical]: "Kritik",
+};
+
+/**
+ * Durumun Türkçe adı. Tanınmayan değer için sunucunun gönderdiği
+ * `statusName` kullanılır — sunucu İngilizce enum adı gönderir, bu
+ * yüzden yedek bir ÇÖZÜM DEĞİL, görünür bir işarettir.
+ */
+export function durumEtiketi(status: number, yedek?: string): string {
+  return DURUM_ETIKETLERI[status as WorkTaskStatus] ?? yedek ?? String(status);
+}
+
+export function durumRengi(status: number): string {
+  return DURUM_RENKLERI[status as WorkTaskStatus] ?? "gray";
+}
+
+export function durumRozetTuru(
+  status: number,
+): "default" | "success" | "warning" | "danger" | "info" {
+  return DURUM_ROZET_TURU[status as WorkTaskStatus] ?? "default";
+}
+
+export const ONCELIK_RENKLERI: Record<WorkTaskPriority, string> = {
+  [WorkTaskPriority.Low]: "gray",
+  [WorkTaskPriority.Normal]: "blue",
+  [WorkTaskPriority.High]: "yellow",
+  [WorkTaskPriority.Critical]: "red",
+};
+
+export function oncelikRengi(priority: number): string {
+  return ONCELIK_RENKLERI[priority as WorkTaskPriority] ?? "gray";
+}
+
+export function oncelikEtiketi(priority: number, yedek?: string): string {
+  return (
+    ONCELIK_ETIKETLERI[priority as WorkTaskPriority] ?? yedek ?? String(priority)
+  );
 }
 
 

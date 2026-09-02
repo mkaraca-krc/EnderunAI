@@ -2612,6 +2612,31 @@ Kalan niteliksiz uçlar: `/api/bildirimler/*` (5), `/api/collaboration/*`
 
 ---
 
+## MUHAFIZ DESENİ — KAPSAM İLE ÖLÇÜT AYRI İKİ ŞEYDİR (2026-09-02)
+
+`silinen-savunma-kontrolu.sh`, `9d4ffd0b` commit'inde `goc-provasi.sh`'ten
+silinen 8 satırlık muhafız bloğunu görmedi. İlk teşhis kapsamdı: kontrol
+yalnız `*.cs`, `*.ts`, `*.tsx` dosyalarına bakıyordu.
+
+**Muhafızı `*.sh`'e açmak YETMEDİ; muhafızın KENDİSİ kabuk savunmasını
+tanımıyordu.** Deseni tamamen C#/TS şekilliydi (`return BadRequest`,
+`throw new`, `[RequirePermission`) ve yorum eleyicisi `#` bilmiyordu.
+Kapsam genişletildikten sonra aynı commit yeniden denetlendi ve yine
+"savunma şekilli satır silinmemiş" dedi.
+
+**Kapsamı genişletmek ile görmeyi öğretmek ayrı işlerdir — ve bunu
+pozitif kontrol ortaya çıkardı, kapsam değişikliği değil.** Kapsam
+değiştirildikten sonra "artık kapsıyor" denip geçilseydi, kontrol
+genişletilmiş gibi yapacak ve aynı körlüğü sürdürecekti. Bir kontrolü
+değiştirdikten sonra, onu KAÇIRDIĞI BİLİNEN VAKA ile yeniden koşmak
+zorunludur; yoksa değişikliğin işe yarayıp yaramadığı ölçülmemiş olur.
+
+Desene kabuk savunması eklendi (`hata`/`fail` çağrısı, sıfırdan farklı
+`exit`, `|| exit` kısayolları) ve iki yönde sınandı: `9d4ffd0b` artık
+6 satırı buluyor, `f9b61709` (yalnız ön yüz bağlantısı) temiz kalıyor.
+
+---
+
 ## GÖÇ/PROVA — SEKİZ SONDA VE ÖLÇÜMÜN KENDİSİ (2026-09-02)
 
 Sekiz sonda koşuldu; **hepsinin beklentisi koşudan önce ilan edildi**,

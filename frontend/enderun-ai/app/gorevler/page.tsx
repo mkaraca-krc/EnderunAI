@@ -42,41 +42,27 @@ import {
   workTaskService,
   WorkTaskPriority,
   WorkTaskStatus,
+  DURUM_ETIKETLERI,
+  ONCELIK_ETIKETLERI,
+  durumEtiketi,
+  durumRengi,
+  oncelikEtiketi,
+  oncelikRengi,
   type WorkTask,
   type WorkTaskDashboard,
 } from "@/services/work-task.service";
 
-const priorityLabels: Record<number, string> = {
-  [WorkTaskPriority.Low]: "Düşük",
-  [WorkTaskPriority.Normal]: "Normal",
-  [WorkTaskPriority.High]: "Yüksek",
-  [WorkTaskPriority.Critical]: "Kritik",
-};
-
-const statusLabels: Record<number, string> = {
-  [WorkTaskStatus.Draft]: "Taslak",
-  [WorkTaskStatus.Open]: "Açık",
-  [WorkTaskStatus.InProgress]: "Devam Ediyor",
-  [WorkTaskStatus.Waiting]: "Bekliyor",
-  [WorkTaskStatus.Completed]: "Tamamlandı",
-  [WorkTaskStatus.Cancelled]: "İptal",
-};
-
-const priorityClasses: Record<number, string> = {
-  [WorkTaskPriority.Low]: "gray",
-  [WorkTaskPriority.Normal]: "blue",
-  [WorkTaskPriority.High]: "yellow",
-  [WorkTaskPriority.Critical]: "red",
-};
-
-const statusClasses: Record<number, string> = {
-  [WorkTaskStatus.Draft]: "gray",
-  [WorkTaskStatus.Open]: "blue",
-  [WorkTaskStatus.InProgress]: "yellow",
-  [WorkTaskStatus.Waiting]: "yellow",
-  [WorkTaskStatus.Completed]: "green",
-  [WorkTaskStatus.Cancelled]: "red",
-};
+/*
+ * ETİKET VE RENK HARİTALARI BURADAN KALDIRILDI.
+ *
+ * Burada `statusLabels`, `statusClasses` ve `priorityLabels` vardı;
+ * detay ekranında da AYRI kopyaları vardı ve ikisi ayrıştı. Üstelik
+ * buradaki kopya da eksikti: `Draft=0` ve `Waiting=3` arka uçta hiç
+ * yok, `Approved=6` ve `Returned=7` ise burada yoktu — onaylanmış bir
+ * görev listede İngilizce "Approved" olarak görünüyordu.
+ *
+ * Tek kaynak: `services/work-task.service.ts`.
+ */
 
 const initialForm = {
   companyId: "",
@@ -589,20 +575,20 @@ export default function WorkTasksPage() {
     {
       key: "oncelik",
       header: "Öncelik",
-      value: (item) => priorityLabels[item.priority] ?? item.priorityName,
+      value: (item) => oncelikEtiketi(item.priority, item.priorityName),
       render: (item) => (
-        <span className={`erp-status ${priorityClasses[item.priority] ?? "gray"}`}>
-          {priorityLabels[item.priority] ?? item.priorityName}
+        <span className={`erp-status ${oncelikRengi(item.priority)}`}>
+          {oncelikEtiketi(item.priority, item.priorityName)}
         </span>
       ),
     },
     {
       key: "durum",
       header: "Durum",
-      value: (item) => statusLabels[item.status] ?? item.statusName,
+      value: (item) => durumEtiketi(item.status, item.statusName),
       render: (item) => (
-        <span className={`erp-status ${statusClasses[item.status] ?? "gray"}`}>
-          {statusLabels[item.status] ?? item.statusName}
+        <span className={`erp-status ${durumRengi(item.status)}`}>
+          {durumEtiketi(item.status, item.statusName)}
         </span>
       ),
     },
@@ -632,8 +618,12 @@ export default function WorkTasksPage() {
 
         return (
           <div className="flex flex-wrap gap-2">
+              {/* İkinci koşul önce `WorkTaskStatus.Waiting` idi ve o değer
+                  arka uçta HİÇ YOKTU — hiçbir zaman eşleşmeyen ölü bir dal.
+                  Yerine `Returned`: iade edilen görev yapana geri döner ve
+                  yeniden başlatılabilmelidir. */}
             {(item.status === WorkTaskStatus.Open ||
-              item.status === WorkTaskStatus.Waiting) &&
+              item.status === WorkTaskStatus.Returned) &&
               actions.can("manage") && (
                 <button
                   type="button"
@@ -970,7 +960,7 @@ export default function WorkTasksPage() {
                 }
               >
                 {Object.entries(
-                  priorityLabels
+                  ONCELIK_ETIKETLERI
                 ).map(([value, label]) => (
                   <option
                     key={value}
@@ -1125,7 +1115,7 @@ export default function WorkTasksPage() {
                 Tüm durumlar
               </option>
 
-              {Object.entries(statusLabels).map(
+              {Object.entries(DURUM_ETIKETLERI).map(
                 ([value, label]) => (
                   <option
                     key={value}
@@ -1153,7 +1143,7 @@ export default function WorkTasksPage() {
               </option>
 
               {Object.entries(
-                priorityLabels
+                ONCELIK_ETIKETLERI
               ).map(([value, label]) => (
                 <option
                   key={value}

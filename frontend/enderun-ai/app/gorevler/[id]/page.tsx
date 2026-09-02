@@ -10,7 +10,14 @@ import { Badge, Button, ConfirmDialog, EmptyState } from "@/components/ui";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { date, dateTime } from "@/lib/format/turkish";
-import { type WorkTask, workTaskService } from "@/services/work-task.service";
+import {
+  type WorkTask,
+  WorkTaskStatus,
+  durumEtiketi,
+  durumRozetTuru,
+  oncelikEtiketi,
+  workTaskService,
+} from "@/services/work-task.service";
 
 /**
  * GÖREV DETAYI.
@@ -25,28 +32,20 @@ import { type WorkTask, workTaskService } from "@/services/work-task.service";
  * DOĞRU YERİNE götürsün" kararının karşılığı burasıdır.
  */
 
-/** Sunucudaki `WorkTaskStatus` ile aynı sıra. */
-const DURUM_OPEN = 0;
-const DURUM_IN_PROGRESS = 1;
-const DURUM_COMPLETED = 2;
-const DURUM_APPROVED = 3;
-const DURUM_CANCELLED = 5;
-
-function durumRengi(status: number) {
-  if (status === DURUM_APPROVED) return "success" as const;
-  if (status === DURUM_COMPLETED) return "warning" as const;
-  if (status === DURUM_CANCELLED) return "danger" as const;
-  return "default" as const;
-}
-
-const DURUM_ADLARI: Record<number, string> = {
-  [DURUM_OPEN]: "Açık",
-  [DURUM_IN_PROGRESS]: "Devam Ediyor",
-  [DURUM_COMPLETED]: "Tamamlandı, onay bekliyor",
-  [DURUM_APPROVED]: "Onaylandı",
-  4: "İade Edildi",
-  [DURUM_CANCELLED]: "İptal",
-};
+/*
+ * DURUM ETİKETİ ARTIK BURADA TANIMLANMIYOR.
+ *
+ * Burada beş sabit ve iki harita vardı; yorumu "Sunucudaki
+ * WorkTaskStatus ile aynı sıra" diyordu ve BU YANLIŞTI. Sunucuda
+ * Open=1, InProgress=2, Completed=4, Approved=6 — burada 0,1,2,3
+ * yazıyordu. Genel Müdür listede "Açık" gördüğü görevin detayında
+ * "Devam Ediyor" gördü; kayıt hiç değişmemişti (Status=1,
+ * UpdatedAtUtc boş — ölçüldü). İki ekran aynı sayıyı farklı okuyordu.
+ *
+ * Eşleme tek kaynağa taşındı: `services/work-task.service.ts`.
+ * İkinci bir doğru kopya yazmak çözüm değil — bugün ayrışan da iki
+ * "doğru" kopyaydı.
+ */
 
 export default function WorkTaskDetailPage() {
   const params = useParams<{ id: string }>();
@@ -170,13 +169,13 @@ export default function WorkTaskDetailPage() {
             </header>
 
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <Badge variant={durumRengi(item.status)}>
-                {DURUM_ADLARI[item.status] ?? item.statusName}
+              <Badge variant={durumRozetTuru(item.status)}>
+                {durumEtiketi(item.status, item.statusName)}
               </Badge>
 
               {item.isOverdue && <Badge variant="danger">Termin geçti</Badge>}
 
-              <Badge>{item.priorityName}</Badge>
+              <Badge>{oncelikEtiketi(item.priority, item.priorityName)}</Badge>
 
               {item.returnCount > 0 && (
                 <Badge variant="warning">{item.returnCount} kez iade edildi</Badge>
@@ -268,7 +267,7 @@ export default function WorkTaskDetailPage() {
 
             {yonetebilir && !taskActions.loading && (
               <div className="erp-comment-actions">
-                {yapan && item.status === DURUM_OPEN && (
+                {yapan && item.status === WorkTaskStatus.Open && (
                   <Button
                     variant="secondary"
                     disabled={islem}
@@ -279,7 +278,8 @@ export default function WorkTaskDetailPage() {
                 )}
 
                 {yapan &&
-                  (item.status === DURUM_OPEN || item.status === DURUM_IN_PROGRESS) && (
+                  (item.status === WorkTaskStatus.Open ||
+                      item.status === WorkTaskStatus.InProgress) && (
                     <Button
                       variant="primary"
                       disabled={islem}
@@ -289,7 +289,7 @@ export default function WorkTaskDetailPage() {
                     </Button>
                   )}
 
-                {gonderen && item.status === DURUM_COMPLETED && (
+                {gonderen && item.status === WorkTaskStatus.Completed && (
                   <>
                     <Button
                       variant="primary"
