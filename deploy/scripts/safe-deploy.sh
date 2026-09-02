@@ -756,9 +756,36 @@ main() {
     # Buradaki çağrı bir AĞ: akış değişirse ya da bir göç araya
     # sızarsa yakalar. Maliyeti sıfıra yakın — bekleyen göç yoksa
     # kopya bile almadan çıkar.
-    if ! "${REPO_ROOT}/deploy/scripts/goc-provasi.sh" 2>&1 | tee -a "$LOG_FILE"; then
-        fail "Göç provası geçmedi — ayrıntı yukarıda."
-    fi
+    # ÇIKIŞ KODU AYRIŞTIRILIYOR — "KARAR VEREMEDİM" İLE "SORUN YOK"
+    # AYNI ŞEY DEĞİLDİR.
+    #
+    # Önce `if ! ... | tee` idi ve iki kusuru vardı:
+    #   1. Boru hattında betiğin çıkış kodu `tee`'ninkiyle karışır.
+    #      Burada `set -uo pipefail` (satır 34) onu kurtarıyordu —
+    #      yani muhafız, İKİ SATIR UZAKTAKİ BİR AYARA bağlıydı. O ayar
+    #      bir gün kalkarsa prova sessizce etkisizleşirdi ve kimse
+    #      fark etmezdi. Artık `PIPESTATUS` ile DOĞRUDAN okunuyor.
+    #   2. Çıkış 1 (prova düştü) ile çıkış 2 (KARAR VEREMEDİ) aynı
+    #      mesajı veriyordu. İkisi de yayını durdurur — ama operatöre
+    #      ne yapacağını söyleyen şey mesajdır.
+    "${REPO_ROOT}/deploy/scripts/goc-provasi.sh" 2>&1 | tee -a "$LOG_FILE"
+    prova_kodu="${PIPESTATUS[0]}"
+    case "$prova_kodu" in
+        0)
+            ;;
+        2)
+            log "ERROR" "════════════════════════════════════════════════"
+            log "ERROR" "GÖÇ PROVASI KARAR VEREMEDİ (çıkış 2)."
+            log "ERROR" "Prova, göç hakkında hüküm VEREMEDİ — düzenek,"
+            log "ERROR" "bağlantı ya da ölçüm güvenilir değil."
+            log "ERROR" "'Karar veremedim' ile 'sorun yok' AYNI ŞEY DEĞİLDİR."
+            log "ERROR" "Yayın durdu. İNSAN BAKMALI; ayrıntı yukarıda."
+            fail "Göç provası karar veremedi (çıkış 2) — insan incelemesi gerekiyor."
+            ;;
+        *)
+            fail "Göç provası DÜŞTÜ (çıkış ${prova_kodu}) — ayrıntı yukarıda."
+            ;;
+    esac
 
     gocleri_dogrula
 

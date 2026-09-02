@@ -2449,6 +2449,31 @@ istek geldi (ölçüldü, arşiv günlükler dahil).
 **KALICI OLAN ÜÇÜNCÜSÜ:** tek satırlık bir kontrol, altı haftalık
 arızayı ilk yayında yakalardı.
 
+## BEKLEYEN PAKET — GÖÇ/ETKİ: SESSİZCE VERİ BOZAN GÖÇ
+
+GÖÇ/PROVA'nın **kanıtlanmış sınırı**: prova, göçün canlının bir
+kopyasında **patlamadığını** ölçer. Verinin **doğru kaldığını**
+ölçmez.
+
+Sonda A bunu somut gösterdi. `DropColumn(name:"Title",
+table:"WorkTasks")` kopyada sorunsuz uygulandı — `Applying migration`
+basıldı, çıkış kodu 0, `PROVA GEÇTİ`. Kolon ve içindeki bütün görev
+başlıkları yok oldu ve **prova bundan hiç söz etmedi.** Yıkıcı beyan
+kapısı bu göçü ancak beyan EDİLMEDİĞİ için durdurdu; beyan doğru
+yazılınca prova yeşil verdi. Yani bugünkü savunma **beyana**
+dayanıyor, ölçüme değil.
+
+Beyanın durduramadığı asıl tehlike yıkıcı olmayan göçtür:
+`AlterColumn` ile tip daraltmak, `UpdateData` ile yanlış dönüşüm
+yazmak, varsayılan değerle var olan satırları ezmek. Bunların hiçbiri
+`yikici_kalemler()` desenine girmez, hiçbiri hata vermez, hepsi veriyi
+sessizce bozar.
+
+**İş:** provaya bir **etki ölçümü** aşaması eklemek — göçten önce ve
+sonra kopyada seçili tabloların satır sayısı ve anahtar sütunlarının
+boş-olmayan sayımı alınıp farkın raporlanması; fark beyan edilmemişse
+prova düşer. "Patlamadı" ile "doğru" arasındaki boşluk bu.
+
 ## BEKLEYEN PAKET — TEST DÜZENEĞİ: PROJE KAPSAMLI KULLANICI
 
 `TestUserFactory.CreateClientWithRolesAsync` yalnız **şirket** kapsamı
@@ -2584,6 +2609,40 @@ Kalan niteliksiz uçlar: `/api/bildirimler/*` (5), `/api/collaboration/*`
 (7), `/api/portal/*` (4), `/api/auth/*` (4), `/api/user-preferences` (2),
 `/api/yonetim/kpi`, `/api/istemci-hatalari`, `/api/isg/benim`,
 `/api/company-settings/logo`.
+
+---
+
+## GÖÇ/PROVA — SEKİZ SONDA VE ÖLÇÜMÜN KENDİSİ (2026-09-02)
+
+Sekiz sonda koşuldu; **hepsinin beklentisi koşudan önce ilan edildi**,
+hepsi tuttu: A1 beyan yok · A2 doğru beyan · D2 `[Migration]` yok ·
+D3 bayat kopya (sayılar eşit) · E sahte araçla fark boş · C1 olmayan
+veritabanı · C2 yanlış parola · temizlik koşusu.
+
+**En somut katkı: tazelik kanıtının kendisi bozuktu.** Yalnız
+`count(*)` karşılaştırıyordu; 205 = 205 iki FARKLI küme için de
+doğrudur. Bayat bir kopya kuruldu (sonda göçü eklendi, başka bir göç
+silindi, sayı yine 205) ve **commit'li eski betik onu tazelik
+kanıtından geçirdi**. Sonra göç patladı ve düzenek masum bir göç için
+"bu göç canlıda da patlardı" dedi — bayat kopya, yanlış kırmızıya
+dönüştü. **Sayıyla doğrulama, kümeyle doğrulamanın yerini tutmaz.**
+
+**İki sessiz kusur sondaların değil, ÖLÇMENİN ürünü oldu:**
+1. `dotnet ef migrations list` veritabanına BAĞLANAMADIĞI hâlde çıkış
+   0 döndü ve her şeyi "uygulanmamış" gösterdi. Kapatma: EF'in saydığı
+   uygulanmış toplam, kopyanın `__EFMigrationsHistory` satır sayısıyla
+   tutmak zorunda — iki bağımsız okuyucu.
+2. JSON ayrıştırıcısı sessizce düşüyordu: `dotnet ef`, JSON'dan önce
+   `info: …Command[20101]` basıyor ve ilk `[` yanlış yeri gösteriyor.
+
+**Geri çekilen iddia — kayda böyle geçsin.** "Eski kod bayat kopyada
+YEŞİL verirdi" dedim; kurduğum ispat yeşil vermedi, kırmızı verdi
+(silinmiş göçü yeniden uygulamaya çalışıp 42P07 aldı). Gösterilen şey
+"eski kod bayat kopyayı tazelik kanıtından geçirdi ve sonra masum göçü
+suçladı"dır. Fark ölçümünün durum ölçümünden üstünlüğü **kod
+okumasına** dayanıyor, gösterilmiş bir yeşile değil. İleride biri "bu
+düzenek şunu yakalıyor" derken **neyin gösterildiğini, neyin
+okunduğunu** ayırt edebilsin.
 
 ---
 
