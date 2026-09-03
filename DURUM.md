@@ -4593,6 +4593,62 @@ testsiz bir yüzey.
 
 ---
 
+---
+
+## SAVUNMANIN ÜÇ KAYBOLMA BİÇİMİ (Mehmet, 2026-09-03)
+
+> 1. **SİLİNİR** → kapı yakalar (Kural 72: *"sildiğini söyle"*)
+> 2. **ETKİSİZLEŞİR** → yalnız savunmayı sınayan test yakalar
+>    (`if (false && …)` kapıdan geçer)
+> 3. **HİÇ YAZILMAZ** → ikisi de yakalamaz. Yalnız kapsamın **DIŞLAMA**
+>    ile tanımlanması yakalar: her yüzey varsayılan olarak korunur,
+>    istisnalar açıkça yazılır.
+>
+> **Boş bir yüzey, boş bir küme gibidir: her iddiayı doğrular, hiçbir
+> şeyi kanıtlamaz.**
+
+### ÜÇÜ DE AYNI GÜN ÖLÇÜLDÜ — SIRAYLA
+
+**1. SİLİNİR — kapı çalıştı, beni yakaladı.**
+GÖÇ/YOL commit'i `goc-uygula.sh`'deki `[ ! -x "$EF_ARACI" ]` varlık
+kontrolünü siliyordu. Silme kasıtlıydı ve gerekçesi elimdeydi
+(kontrol `goc_onkosul_dogrula`'ya taşındı ve genişledi) ama commit
+mesajında **beyan etmemiştim**. Kapı yayını durdurdu; beyan yazıldı,
+yayın devam etti.
+
+Kapının kendi ifadesi doğru kurulmuş: *"Bu kapı 'silme yasak'
+demiyor, 'sildiğini söyle' diyor."*
+
+**2. ETKİSİZLEŞİR — kapı göremez, test gördü.**
+Aynı gün sonda N'de `PersonelDepartmanKurali.DegisiklikMi` kapısını
+`if (false)` ile etkisizleştirdim. Hiçbir satır silinmedi; Kural 72
+kapısı böyle bir değişiklikten **sessizce geçer** — kendi belgesinde
+de bunu yazıyor. Yakalayan şey `AyniDepartmanTekrar_TarihceyeYAZILMAZ`
+testi oldu.
+
+**3. HİÇ YAZILMAZ — ikisi de göremedi, yıllarca görmedi.**
+`SecretInSourceGuardTests` yalnız `EnderunAI.Api` ve
+`EnderunAI.Api.Tests` altındaki `.cs` dosyalarını tarıyor.
+`deploy/scripts/*.sh` ve `.github/workflows/*.yml` kapsamın DIŞINDA
+ve **hep dışındaydı**. Orada bir sır silinmedi (silinecek bir şey
+yoktu), etkisizleşmedi (etkisi yoktu) — **hiç yazılmamıştı**.
+
+Bu yüzden bekçi yıllarca yeşil kaldı ve o yeşil hiçbir şey
+söylemiyordu: bakılmayan bir yüzeyde bakılacak bir şey yoktur.
+
+### SONUCU: KAPSAM LİSTE İLE TANIMLANMAZ
+
+Kapsamı **liste** ile tanımlanan bir bekçi ("şunları tara"), listede
+olmayan her yüzeyde her iddiayı doğrular. Ve yarın eklenecek her yeni
+dosya türü **varsayılan olarak korumasız doğar**.
+
+Kapsam **dışlama** ile tanımlanır: her şey taranır, istisnalar açıkça
+ve gerekçesiyle yazılır. Bu, `KAPI/1`'in *"bilinmeyen tipte kapalı
+düş"* kuralının bekçinin kendi kapsamına uygulanmış hâlidir — yeni
+yüzey **korumalı doğar**.
+
+---
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`
