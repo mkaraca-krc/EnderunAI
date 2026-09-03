@@ -4453,6 +4453,146 @@ eksik. Departman kullanımı başlamadan önce kapatılmalı.
 
 ---
 
+---
+
+## PROVA, UYGULAMANIN KENDİSİYLE AYNI YOLU KULLANMALIDIR (Mehmet onayı, 2026-09-03)
+
+> **PROVA İLE UYGULAMA AYNI KOD YOLUNU VE AYNI ORTAMI KULLANMALIDIR —
+> AYNI DOSYA OLMASI GEREKMEZ. AYRIŞAN HER NOKTA (ORTAM DEĞİŞKENİ,
+> BAYRAK, İKİLİ, DERLEME) PROVANIN SINAMADIĞI BİR NOKTADIR. PROVANIN
+> YEŞİLİ, UYGULAMANIN YEŞİLİ DEĞİLDİR.**
+
+*(Kuralın ilk yazımı "aynı betiği" diyordu. Mehmet düzeltti: ölçüm
+gösterdi ki iki betik birbirinin kopyası değil — `goc-provasi.sh`
+prova MOTORU, `goc-uygula.sh` onu ÇAĞIRAN düzenleyici. Aranan şey tek
+dosya değil, **tek kod yolu**.)*
+
+### DOĞURAN OLAY — PROVA GEÇTİ, UYGULAMA DÜŞTÜ
+
+DEPARTMAN/1'in SAHA göçünde `goc-provasi.sh` **GEÇTİ** (iki bağlam da
+canlının kopyasında sorunsuz), hemen ardından `goc-uygula.sh` aynı göçü
+canlıya uygularken **DÜŞTÜ**.
+
+Sebep göç değildi. Prova betiği `dotnet ef`e `JWT_SECRET` veriyordu,
+uygulama betiği vermiyordu. `AppDbContext`'in tasarım-zamanı fabrikası
+olduğu için o adım her iki betikte de çalışıyordu; `HrDbContext`'in
+fabrikası yoktu ve uygulamanın Host'una muhtaçtı.
+
+**Provanın yeşili, tam da provanın uygulamadan FARKLI olduğu yerde
+anlamsızdı.** Prova o farkı sınayamaz, çünkü fark provanın kendisinde.
+
+### SONUCU ÖZELLİKLE SİNSİYDİ
+
+Göç canlıya **uygulandı** (`Applying migration… Done.`), betik yine de
+**çıkış 1** verdi. Yani araç, işin yapılmadığını değil, **yapıldığı
+hâlde yapılmadığını** söyledi.
+
+Kaydına güvenilemeyen bir dağıtım aracı, olmayan bir aracın iki katı
+zararlıdır: olmayan araç sizi ölçmeye zorlar, yanlış konuşan araç
+ölçtüğünüzü sanmanıza yol açar.
+
+### ÖLÇÜM — "YARIM GÖÇ" SANILDI, DEĞİLDİ
+
+Betiğin hatası "yarım kalmış göç" endişesi doğurdu. Ölçüm üç
+bağımsız kanıtla aksini gösterdi:
+
+| Ölçüm | Sonuç |
+|---|---|
+| HrDbContext göç dosyası / uygulanmış | 7 / **7** — bekleyen 0 |
+| AppDbContext göç dosyası / uygulanmış | 200 / **200** — bekleyen 0 |
+| Geçmişte olup dosyası olmayan (hayalet) | yok |
+| `dotnet ef database update -c HrDbContext` | *"No migrations were applied. The database is already up to date."* |
+| Servisler / sağlık / son 30 dk hata | active · 200 · **0 hata** |
+
+Betik göçü UYGULARKEN değil, ikinci bağlamı **AÇARKEN** düştü — ve o
+bağlamda uygulanacak hiçbir göç yoktu. Şema yarım kalmadı.
+
+### İKİ DERS, İKİSİ DE BU DEPODA TEKRAR EDİYOR
+
+1. **İki kopya zamanla ayrışır.** Prova betiği `JWT_SECRET`'in
+   gerekliliğini biliyordu ve gerekçesini yorumuna yazmıştı; uygulama
+   betiği aynı bilgiyi taşımıyordu. `GorevAtamaKurali`'nin doğuşu da,
+   merkez kuralının PUT'ta ikinci bir kopya taşıması da aynı hataydı.
+
+2. **Yamayı kök çözümle karıştırma.** İlk refleksim uygulama betiğine
+   `JWT_SECRET` eklemekti. Bu YAMAYDI: asıl kusur, bir GÖÇÜN hiç
+   kullanmadığı bir UYGULAMA SIRRININ varlığına bağlı olmasıydı. Göç
+   şemayı taşır, kimlik doğrulamaz. Kök çözüm
+   `HrDbContextFactory` — göç yolu artık yalnız `DB_CONNECTION`
+   istiyor ve `JWT_SECRET` göç betiklerinden tamamen kalktı.
+
+### UYGULANAN ÇÖZÜM — ÜÇ PARÇA
+
+**1. Kök çözüm:** `HrDbContextFactory` (AppDbContextFactory ile aynı
+desen, bilerek). Kanıt: `JWT_SECRET` ortamdan KALDIRILMIŞ hâlde
+`dotnet ef database update -c HrDbContext` → çıkış 0.
+
+**2. Ortak kod yolu:** `deploy/scripts/goc-ortak.sh` — tek `ef_kos()`,
+tek ortam, tek bayrak kümesi, tek bağlam listesi (`GOC_BAGLAMLAR`).
+Prova ve uygulama artık ikisi de onu çağırıyor; hiçbiri `dotnet-ef`i
+doğrudan çağırmıyor.
+
+**İKİNCİ AYRIŞMA DA BURADA KAPANDI:** prova `--no-build` ile diskteki
+MEVCUT ikiliyi doğruluyor, uygulama ise YENİDEN DERLEYİP başka bir
+ikiliden göç uyguluyordu. Kaynak arada değişmişse doğrulanan ile
+uygulanan aynı değildi. Artık derleme BİR KEZ başta (`goc_derle`) ve
+her iki taraf da aynı ikiliyi okuyor.
+
+**3. Ön koşul denetimi:** `goc_onkosul_dogrula` — göçe BAŞLAMADAN önce
+gerekli değişkenler ve HER İKİ bağlamın açılabildiği doğrulanıyor.
+
+SAHA göçünde şema yarım kalmadı ama bu ŞANSTI: HrDbContext'in bekleyen
+göçü yoktu. Sıra tersine olsaydı ya da o bağlamda bekleyen göç
+olsaydı, gerçekten yarım kalırdı. **Yarıda düşen göç, hiç başlamayan
+göçten pahalıdır.**
+
+**SONDA P:** `HrDbContextFactory` çalışma anında hata fırlatacak hâle
+getirildi (derleme geçiyor). Gözlem — ilan edildiği gibi:
+`AppDbContext: açılabiliyor ✓`, `HATA: HrDbContext AÇILAMIYOR`,
+`Göçe BAŞLANMADI`. Geri alındı, ikisi de açıldı, dosya bayt bayt aynı.
+
+**MEKANİK KARŞILIĞI:** `GocBetikleriTutarliligiTests` (7 test) —
+ortak `ef_kos` kullanımı, doğrudan çağrı yasağı, `JWT_SECRET`
+istenmemesi, ön koşulun uygulamadan ÖNCE gelmesi (sıra testi), tek
+derleme, tek bağlam listesi.
+
+### SIR DENETİMİ — DÖNDÜRME GEREKMEDİ, KANITLANDI
+
+Betikte bir `JWT_SECRET` değeri bulunması sır sızıntısı şüphesi
+doğurdu. Ölçüm — değerler karşılaştırıldı, gerçek sır HİÇBİR YERE
+basılmadan:
+
+| Yer | Uzunluk | sha256(12) | Sonuç |
+|---|---|---|---|
+| Canlı `JWT_SECRET` | **128** | `2a4c657b0788` | — |
+| `goc-uygula.sh` (commit'lenmemiş) | 43 | `86e35cecc5b2` | farklı |
+| `goc-provasi.sh` | 44 | `0d9ff19da633` | farklı |
+| `safe-deploy.sh` | 40 | `c99ab0465aaf` | farklı |
+| `ci.yml` JWT | 54 | `92fd1145d2fb` | farklı |
+| `ci.yml` DB parolası | 16 | `8d99a206267e` | farklı (gerçek 10 kr) |
+| `README-KURULUM.txt` | 18 | `06bec4cf27e4` | yer tutucu |
+| `TestWebApplicationFactory` | 56 | `344c74140bc5` | farklı |
+
+**Gerçek sır ne çalışma ağacında ne git geçmişinde bulundu.** Yedi
+adayın hepsi sahte → **döndürme gerekmedi.**
+
+### SIR BEKÇİSİ NEDEN ÖTMEDİ — DESEN DEĞİL, YÜZEY
+
+`SecretInSourceGuardTests` yalnız `EnderunAI.Api` ve
+`EnderunAI.Api.Tests` altındaki **`.cs`** dosyalarını tarıyor.
+`deploy/scripts/*.sh`, `scripts/*.sh` ve `.github/workflows/*.yml`
+kapsam DIŞINDA.
+
+Desen kusurlu değil: `goc-provasi.sh`'deki 44 karakterlik değer
+bekçinin aradığı biçime UYUYOR — bir `.cs` dosyasında olsaydı
+yakalanırdı. Eksik olan **kapsanan yüzey**. Kabuk betikleri, tıpkı
+`enderun-backup.sh`'ın şifreleme muhafızından önceki hâli gibi,
+testsiz bir yüzey.
+
+**AÇIK İŞ:** bekçiye `.sh` / `.yml` yüzeyini eklemek.
+
+---
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`

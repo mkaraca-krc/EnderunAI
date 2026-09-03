@@ -31,6 +31,11 @@ YEDEK_BETIGI="/usr/local/bin/enderun-backup.sh"
 log()  { echo "[goc-uygula] $*"; }
 hata() { echo "[goc-uygula] HATA: $*" >&2; }
 
+# ORTAK KATMAN: `dotnet ef` çağrısı, derleme ve ön koşul denetimi
+# prova ile PAYLAŞILIYOR. Ayrı yazıldıkları için ayrışmışlardı.
+# shellcheck source=goc-ortak.sh
+. "${REPO_ROOT}/deploy/scripts/goc-ortak.sh"
+
 canli="$(sudo grep -E '^DB_CONNECTION=' "$ENV_FILE" 2>/dev/null | sed -E 's/^DB_CONNECTION=//' | tr -d "'\"")"
 [ -z "$canli" ] && { hata "DB_CONNECTION okunamadı."; exit 2; }
 CANLI_DB="$(sed -n 's/.*Database=\([^;]*\).*/\1/p' <<<"$canli")"
@@ -66,6 +71,21 @@ if [ ! -s "$onces" ]; then
 fi
 log "Uygulanacak göç(ler):"
 sed 's/^/           /' "$onces"
+
+# ── 0) ÖN KOŞUL DENETİMİ ── HİÇBİR ŞEYE DOKUNMADAN ÖNCE.
+#
+# Derleme burada BİR KEZ yapılıyor; bundan sonraki bütün ef çağrıları
+# (prova dahil) `--no-build` ile AYNI ikiliyi okuyor.
+log "════ ÖN KOŞUL DENETİMİ ════"
+if ! goc_derle; then
+    hata "KARAR VEREMEDİ: derleme başarısız. Göçe BAŞLANMADI."
+    rm -f "$onces"; exit 2
+fi
+if ! goc_onkosul_dogrula "$canli"; then
+    hata "ÖN KOŞUL DÜŞTÜ — göçe BAŞLANMADI, canlıya DOKUNULMADI."
+    rm -f "$onces"; exit 2
+fi
+log "Ön koşullar tamam: iki bağlam da açılabiliyor."
 
 # ── 1) PROVA ── canlıya dokunmadan ÖNCE, canlının taze kopyasında.
 log "════ GÖÇ PROVASI ════"
@@ -113,17 +133,14 @@ if ! sudo "$YEDEK_BETIGI"; then
 fi
 
 # ── 4) UYGULAMA ──
-EF_ARACI="${DOTNET_EF:-/root/.dotnet/tools/dotnet-ef}"
-[ ! -x "$EF_ARACI" ] && { hata "KARAR VEREMEDİ: dotnet-ef bulunamadı."; rm -f "$onces" "$sonras"; exit 2; }
+# EF_ARACI ve varlık kontrolü ORTAK KATMANDA (goc_onkosul_dogrula).
 
 log "════ CANLIYA UYGULANIYOR ════"
 for baglam in AppDbContext HrDbContext; do
     log "bağlam: $baglam"
-    if ! DB_CONNECTION="$canli" \
-            ConnectionStrings__DefaultConnection="$canli" \
-            "$EF_ARACI" database update \
-            --project "${REPO_ROOT}/backend/EnderunAI.Api" \
-            --context "$baglam"; then
+    # ORTAK YOL: prova da aynı `ef_kos`u çağırıyor. Ortam, bayraklar
+    # ve ikili tek yerde tanımlı — ayrışacak nokta kalmadı.
+    if ! ef_kos "$canli" "$baglam" database update; then
         hata "GÖÇ UYGULANIRKEN DÜŞTÜ ($baglam)."
         hata "Yedek yukarıda alındı; gerekirse ondan dönülür."
         rm -f "$onces" "$sonras"; exit 1

@@ -64,6 +64,14 @@ KIP="${1:-normal}"
 log() { echo "[goc-provasi] $*"; }
 hata() { echo "[goc-provasi] HATA: $*" >&2; }
 
+# ORTAK KATMAN: `dotnet ef` çağrısı uygulama betiğiyle PAYLAŞILIYOR.
+# Ayrı yazıldıkları için ayrışmışlardı (2026-09-03, SAHA göçü):
+# prova JWT_SECRET veriyordu, uygulama vermiyordu; prova --no-build
+# kullanıyordu, uygulama yeniden derliyordu. İkisi de provanın
+# sınayamadığı noktalardı.
+# shellcheck source=goc-ortak.sh
+. "${REPO_ROOT}/deploy/scripts/goc-ortak.sh"
+
 canli="$(sudo grep -E '^DB_CONNECTION=' "$ENV_FILE" 2>/dev/null | sed -E 's/^DB_CONNECTION=//' | tr -d "'\"")"
 [ -z "$canli" ] && { hata "DB_CONNECTION okunamadı."; exit 1; }
 
@@ -387,12 +395,8 @@ rm -f "$derleme"
 ef_liste() {
     local baglam="$1" hedef="$2" ham
     ham="$(mktemp)"
-    if ! DB_CONNECTION="$prova_baglanti" \
-            ConnectionStrings__DefaultConnection="$prova_baglanti" \
-            JWT_SECRET="goc-provasi-gecici-anlamsiz-deger-0123456789" \
-            "$EF_ARACI" migrations list --no-build --json \
-            --project "${REPO_ROOT}/backend/EnderunAI.Api" \
-            --context "$baglam" >"$ham" 2>&1; then
+    if ! ef_kos "$prova_baglanti" "$baglam" migrations list --json \
+            >"$ham" 2>&1; then
         hata "  ($baglam) migrations list düştü; çıktının sonu:"
         tail -8 "$ham" | sed 's/^/           /' >&2
         rm -f "$ham"; return 1
@@ -443,11 +447,24 @@ PYEOF
 # DEĞİLDİR. İlk koşumda düzenek tam da bunu "bu göç canlıda da patlardı"
 # diye raporladı; ikinci yanlış kırmızıydı.
 #
-# JWT_SECRET DE GEREKİYOR: `dotnet ef` uygulamanın Host'unu ayağa
-# kaldırıyor ve doğrulama oradan geçiyor. Gerçek sır GEREKMİYOR —
-# göç uygulanırken kimse jeton üretmiyor; yalnız değişkenin VARLIĞI
-# aranıyor. Bu yüzden burada tek kullanımlık, anlamsız bir değer
-# veriliyor ve HİÇBİR YERE YAZILMIYOR.
+# JWT_SECRET ARTIK GEREKMİYOR — KÖK ÇÖZÜM YAZILDI (2026-09-03).
+#
+# Eskiden gerekiyordu: `dotnet ef`, tasarım-zamanı fabrikası olmayan
+# bir bağlam için uygulamanın Host'unu ayağa kaldırmak zorundaydı ve
+# Host bu değişkeni istiyordu. `AppDbContext`'in fabrikası vardı,
+# `HrDbContext`'in YOKTU — ve tek fark buydu.
+#
+# `HrDbContextFactory` yazıldıktan sonra göç yolu yalnız
+# `DB_CONNECTION` istiyor. Değişken her iki göç betiğinden de
+# TAMAMEN KALDIRILDI; ne okunuyor, ne yazılıyor.
+#
+# BURADA DURAN ESKİ DEĞER SAHTEYDİ, ÖLÇÜLDÜ: canlı sır 128 karakter,
+# buradaki 44'tü ve sha256'ları farklıydı. Gerçek sır ne çalışma
+# ağacında ne git geçmişinde bulundu — döndürme gerekmedi.
+#
+# DERS: bir göçün, hiç kullanmadığı bir UYGULAMA SIRRININ varlığına
+# bağlı olması yapısal bir kusurdur. Göç şemayı taşır, kimlik
+# doğrulamaz.
 BAGLAMLAR=(AppDbContext HrDbContext)
 sonuc=0
 ef_bekleyen_toplam=0
@@ -530,12 +547,8 @@ for baglam in "${BAGLAMLAR[@]}"; do
     # DEĞER PROVA KOPYASINI GÖSTERİYOR, CANLIYI DEĞİL. Bu satır
     # yanlış olursa prova canlıya uygulanır; yukarıda ayrıca
     # kontrol ediliyor (bağlantı dizesi değişmediyse durulur).
-    if DB_CONNECTION="$prova_baglanti" \
-            ConnectionStrings__DefaultConnection="$prova_baglanti" \
-            JWT_SECRET="goc-provasi-gecici-anlamsiz-deger-0123456789" \
-            "$EF_ARACI" database update --no-build \
-            --project "${REPO_ROOT}/backend/EnderunAI.Api" \
-            --context "$baglam" >"$cikti" 2>&1; then
+    if ef_kos "$prova_baglanti" "$baglam" database update \
+            >"$cikti" 2>&1; then
         # BAŞARI YOLUNDA DA UYGULANAN GÖÇLER BASILIYOR.
         #
         # İlk sürümde EF çıktısı geçici dosyaya gidiyor ve siliniyordu;
