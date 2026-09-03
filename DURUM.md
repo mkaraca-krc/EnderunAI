@@ -3031,6 +3031,44 @@ olarak mevcut; süzgeç çubuğu koşulsuz render ediliyor ve önünde erken
 
 Etiket parantezli biçimde çalışıyor (Kural 37).
 
+## BOŞ ALAN GÖRÜLDÜĞÜNDE ÖNCE YAZMA YOLU ARANIR (Mehmet onayı, 2026-09-03)
+
+> **BİR ALANIN MODELDE OLMASI, ONU DOLDURAN BİR YOLUN OLDUĞU ANLAMINA
+> GELMEZ. BOŞ ALAN GÖRÜLDÜĞÜNDE ÖNCE YAZMA YOLU ARANIR.**
+
+DOĞURAN OLAY (İŞEMRİ/2 Faz 2 KAPI 1, ölçüldü): `Personnel.DepartmentId`
+canlıda **79 aktif personelin 0'ında** dolu. İlk okuma — benim de,
+Mehmet'in de ilk okuması — *"veri girilmemiş"* oldu. Ölçüm başka bir
+şey gösterdi:
+
+**Kod tabanında `Personnel.DepartmentId`'ye yazan hiçbir yol yok.**
+`DepartmentId = …` biçimindeki tüm eşleşmeler `HrPosition.DepartmentId`
+(pozisyon→departman). Personelin departmanını yazan bir uç, bir servis,
+bir ekran hiç yazılmamış.
+
+Yani 0/79 bir **veri girme ihmali değil**, bir **eksik yazma yolu**.
+Alanı doldurmak için "birinin oturup girmesi" yetmez; önce alanı
+yazabilen bir mekanizma gerekir.
+
+NEDEN ÖNEMLİ: iki teşhis birbirine hiç benzemeyen iki iş üretir.
+"Veri girilmemiş" teşhisi bir HATIRLATMA üretir (birine söyle,
+doldursun) ve o hatırlatma sonsuza kadar karşılıksız kalır. "Yazma yolu
+yok" teşhisi bir PAKET üretir. Yanlış teşhisle geçen her gün, hiç
+gelmeyecek bir veriyi beklemekle geçer.
+
+BUNUN AYNISI DAHA ÖNCE YAŞANDI, TERSİNDEN: `MANUAL` kaçışı için
+*"bugün kullanılmıyor"* denmişti; ekran onu kullanmaya başladığı anda
+kullanılır oldu. Orada yokluğu kalıcı sandık, burada varlığı. İkisinin
+ortak dersi: **alanın durumu hakkında çıkarım yapma, yazma yolunu
+ÖLÇ.**
+
+MEKANİK KARŞILIĞI YOK — bu bir teşhis alışkanlığı, bir bekçi değil.
+Uygulanışı şu: boş bir alan raporlanmadan önce
+`grep -rn "AlanAdi\s*=" --include=*.cs` koşulur ve sonucu rapora
+yazılır.
+
+---
+
 ## TEST SAYISI CIRCIRI — KURAL 55'İN MEKANİK KARŞILIĞI (2026-08-29)
 
 **Kural 55'in mekanik karşılığı test sayısı cırcırıdır. Kural akılda
@@ -4228,6 +4266,193 @@ sudo grep 'connection authorized' /var/log/postgresql/postgresql-16-main.log | g
 metinleri kayda düşerse IBAN ve maaş değerleri parametre olarak
 oraya sızabilirdi.
 
+---
+
+## İŞEMRİ/2 FAZ 2 — KAPI 1 ÖLÇÜMÜ VE KARARLARI (2026-09-03)
+
+### ÖLÇÜM TESPİTİ DÜZELTTİ
+
+Faz 1 kapanışında *"kaskadın departman yarısı canlıda boş"* diye
+yazmıştım. Ölçüm bunu üç yerde düzeltti:
+
+| İddia | Ölçüm |
+|---|---|
+| "departman verisi yok" | `hr_departments` = **5 kayıt** (FİNANS, İNSAN KAYNAKLARI, MUHASEBE, TEKNİK OFİS, Yönetim) — liste dolu, **bağ** boş |
+| "veri girilmemiş" | `Personnel.DepartmentId`'ye **yazan hiçbir yol yok** (bkz. o başlık) |
+| "rolden tohumlanabilir" | **imkânsız** — personel↔kullanıcı bağı **0/13**; roller `users` üzerinde, personelin rolü yok |
+
+`hr_positions` = 0, `personnel_department_history` = 0.
+
+### ASIL ÇELİŞKİ: TAKSONOMİ İŞ GÜCÜNÜ KAPSAMIYORDU
+
+Beş departmanın beşi de **ofis** birimi. İş gücünün çoğunluğu saha:
+`Profession = SAHA GÖREVLİSİ` **31 kişi**, ayrıca ünvan tarafında
+USTA ×12, KALFA ×9, YARDIMCI ×8, ŞOFÖR, FORMEN, Elektrik Ustası.
+Bunların gideceği bir departman **yoktu** — kusursuz bir atama ekranı
+bile 31+ kişiyi atayamazdı, çünkü sorun veri değil **seçenek
+yokluğuydu**.
+
+### TOHUMLAMA ÖLÇÜLDÜ VE KAPATILDI
+
+`Profession` → mevcut departman eşleşmesi, 79 aktif personel:
+
+| Durum | Kişi |
+|---|---|
+| BOŞ — tohumlanamaz | 38 |
+| HEDEF DEPARTMAN YOK (saha) | 31 |
+| hedef yok / belirsiz | 4 |
+| BELİRSİZ — iki departmana birden (`MUHASEBE-FİNANS`) | 2 |
+| **KESİN → Yönetim** | 2 |
+| **KESİN → TEKNİK OFİS** | 2 |
+
+**Kesin tohumlanabilir: 79'un 4'ü (%5).**
+
+MEHMET'İN KARARI VE GEREKÇESİ: *"Tohumlama YAPMA. %5 isabetli bir
+tohumlama, elle atamadan daha kötüdür: yanlış atananı kimse fark
+etmez."* Liste boş başlar, elle doldurulur.
+
+Ayrıca ölçümde bir veri kalitesi işareti çıktı: `MUHASEBE-FİNANS` ve
+`MUHASEBE- FİNANS` — aynı meslek, boşlukla ayrışmış iki yazım. Serbest
+metin alandan tohumlamanın maliyeti bu.
+
+### KARARLAR (KAPI 1, Mehmet)
+
+1. **Tek bir SAHA departmanı açılır** (5 + 1 = 6). Saha görevlisi,
+   usta, kalfa, yardımcı, şoför, formen — hepsi SAHA'ya girer.
+   GEREKÇE: saha personelinin asıl çalışma birimi **proje**; M3'te
+   proje kanalı o işi görür, SAHA departman kanalı saha geneli
+   duyurular için kalır. Daha ince bölünmeyecek; ihtiyaç çıkarsa sonra
+   bölünür.
+2. **Yazma yolu ayrı ve ÖNCE gelen küçük paket** (DEPARTMAN/1):
+   uç + servis + ekran, toplu atama görünümü, `personnel_department_history`
+   yazımı, kapsam süzgeci / RowVersion / keyset normal kuralları.
+3. **Tohumlama yok.**
+4. Faz 2 kaskadı boş bağla **dürüst** davranır (aşağıda).
+
+### KASKADIN DÜRÜST BOŞLUĞU — MESAJIN YERİ DÜZELTİLDİ
+
+İlk tasarımda dürüst mesaj "departman seçici boşsa" durumuna
+konacaktı. Ölçüm gösterdi ki seçici **boş değil** (5-6 seçenek);
+boş olan, seçimden **sonraki** personel listesi. Mesaj oraya konur:
+
+> "Bu departmana atanmış personel yok — personel departman ataması
+> yapılmamış" + toplu atama ekranına bağlantı
+
+Sessiz boş liste yok. "Tümü" her zaman açık; proje kolu bağımsız
+çalışır.
+
+### M3 BAĞLANTISI — NOT
+
+**M3 departman kanalları `Personnel.DepartmentId`'ye dayanıyor**
+(`Conversation.DepartmentId` modelde var, üyelik türetimi henüz
+yazılmadı). Alan boş kaldığı sürece **departman kanalları boş
+doğar** — hata vermez, sessizce kimseyi içermez.
+
+**M3/3'ten ÖNCE veri doldurulmuş olmalı.** DEPARTMAN/1 bu yüzden
+Faz 2'den de önce geliyor.
+
+---
+
+---
+
+## DEPARTMAN/1 — `Personnel.DepartmentId`'NİN İLK YAZMA YOLU (2026-09-03)
+
+KAPI 1'de ölçülmüştü: alan modelde vardı, göçü uygulanmıştı, canlıda
+**79 aktif personelin 0'ında** doluydu ve sebebi veri girme ihmali
+değil, **yazan hiçbir yolun olmamasıydı**. Bu paket o boşluğu
+kapatıyor.
+
+### YOL BOYUNDA ÇIKAN BULGU — EKRAN "DEPARTMAN" YAZIP MESLEK GÖSTERİYORDU
+
+Personel listesindeki kolon başlığı **"Departman / Pozisyon"**du; hücre
+ise `profession` (meslek) ve `jobTitle` (ünvan) gösteriyordu.
+Personelin gerçek departmanı ekranda **hiç görünmüyordu.**
+
+**Boşluğun neden fark edilmediğinin bir parçası bu:** ekranda
+"Departman" yazan dolu bir kolon vardı. Bakan kişi departmanın girili
+olduğunu sanırdı — sütun doluydu, yalnız başka bir şeyle.
+
+Başlık `Meslek / Pozisyon` olarak düzeltildi, yanına gerçek
+`Departman` kolonu kondu ve başlığın geri gelmesini engelleyen bir test
+yazıldı (`personel-departman-ekran-sozlesmesi`). Testin ilk hâli fazla
+genişti ve KENDİ AÇIKLAMA YORUMUMU yakaladı: dosyada hatayı anlatan
+yorum da o dizeyi içeriyordu. Test başlığın kendisini (`<TableHead>…`)
+arayacak şekilde daraltıldı — yoksa hatayı KAYDETMEK, hatayı geri
+getirmek sayılırdı.
+
+### TASARIM KARARLARI VE GEREKÇELERİ
+
+| Karar | Gerekçe |
+|---|---|
+| `veri-tamamla`'ya EKLENMEDİ, ayrı uç | O uç alan DOLDURMAK için: gönderilmeyen alanı değiştirmiyor ve boşaltma yolu yok. Departman boşaltması meşru (yanlış atananın düzeltilmesi). Ayrıca tarihçe ve sürüm kontrolü orada yok. |
+| `null` = departmandan çıkar | `CompletePersonnelDataRequest`'in kuralının TERSİ ve bilinçli. Reddedilseydi yanlış atama düzeltilemezdi. |
+| RowVersion = `KayitSurumu` | Bu deponun mevcut deseni; `xmin` daha önce denenip gerekçesiyle reddedilmiş. Yeni göç gerekmedi. |
+| Yeni ekran yok, mevcut listeye kolon | 79 satırın tamamına giriş yapılacak; her satır için panel açtırmak 79 × (aç, seç, kaydet, kapat) demekti. |
+| Keyset yok | Yeni liste ucu açılmadı. Mevcut ucun sayfalamasızlığı önceden var olan bir durum (79 satır) — bu paket onu ne düzeltiyor ne kötüleştiriyor. |
+| Tarihçe ucun İÇİNDE | Ayrı çağrıya bırakılsaydı, çağırmayı unutan ilk yazma yolu M3'ün "ayrıldığı tarihe kadarki geçmiş" kuralını sessizce delerdi. |
+| Aynı departman tekrar → 200, tarihçeye yazılmaz | Toplu girişte aynı değeri yeniden seçmek olağan; 400 dönmek var olmayan bir sorun gösterirdi. Ama tarihçeye yazılsaydı, hiç olmamış geçişlerle dolardı. |
+
+### İKİ BAĞLAM, SIFIR YABANCI ANAHTAR
+
+`Personnel` **AppDbContext**'te, `HrDepartment` **HrDbContext**'te —
+aynı fiziksel veritabanı, ayrı bağlamlar. EF ikisi arasında yabancı
+anahtar kuramıyor: **veritabanı bu bağı doğrulamıyor.** "Departman var
+mı, aktif mi, aynı şirkette mi" kontrolünün tamamı uygulama katmanında,
+`PersonelDepartmanKurali` içinde ve testli. Aynı sebeple departman adı
+liste ucunda LINQ ile birleştirilemiyor; kimlikler projeksiyondan sonra
+tek sorguda ada çevriliyor.
+
+### SAHA DEPARTMANI — VERİ GÖÇÜ
+
+`20260903150000_SahaDepartmani`: şirket başına bir `SAHA-001`.
+Kimlik gömülmedi, satır `companies` üzerinden türetiliyor — sabit GUID
+gömülseydi test veritabanında yanlış şirkete yazardı. `NOT EXISTS` ile
+tekrar koşmaya dayanıklı (göç provası canlının kopyasında koşuyor).
+
+`Down` **koşullu**: SAHA'ya atanmış personel ya da tarihçe kaydı varsa
+satır silinmiyor. Koşulsuz silseydik, iki bağlam arasında yabancı
+anahtar OLMADIĞI için veritabanı itiraz etmez, bağ sessizce kırılırdı.
+
+**DÜRÜST SINIR:** göçün etkisi test veritabanında ölçülemiyor — insert
+mevcut şirketlere bağlı, test veritabanında göç anında hiç şirket yok.
+Güvence göç provasından (`goc-provasi`, canlının kopyası) ve göç
+sonrası canlı ölçümden geliyor.
+
+### BEŞ SONDA — HEPSİ İLAN EDİLDİĞİ GİBİ
+
+| Sonda | Sabotaj | Düşen |
+|---|---|---|
+| J | kural çağrısı silindi | `OlmayanDepartman`, `PasifDepartman`, `BaskaSirketinDepartmani` ✓ |
+| K | tarihçe yazımı silindi | `Atama_Kabul_VE_TarihceyeYazilir`, `TarihcedeOncekiDepartman`, `AyniDepartmanTekrar` ✓ |
+| L | sürüm kontrolü silindi | `SurumGonderilmezse`, `EskiSurum_Cakisma` ✓ |
+| M | kapsamlı okuma ham `db.Personnel` yapıldı | `DarKapsam_GorunmeyenPersonelinDepartmani_Yazilamaz` ✓ (pozitif kontrol yeşil kaldı) |
+| N | `DegisiklikMi` kapısı kaldırıldı | `AyniDepartmanTekrar` ✓ |
+
+Kontrolcü her sondadan sonra **bayt bayt** geri geldi.
+
+### KAPSAM SÜZGECİ — BORÇ BİRİKMEDİ
+
+`personnel.edit` bugün yalnız geniş kapsamlı rollerde (İK Sorumlusu,
+Teknik Koordinatör), yani süzgeç canlıda hiçbir isteği reddetmiyor.
+İŞEMRİ/2 Faz 1'de aynı durum bir DÜRÜST SINIR olarak yazılmış ve
+Mehmet'in şartıyla kapatılmıştı; bu pakette baştan kapatıldı —
+`PersonelDepartmanKapsamTests`, rolü değil KAPSAMI daraltıyor.
+
+Burada ayrıca daha ağır: departman yazmak bir personelin M3 kanal
+üyeliğini belirleyecek. Kapsam dışı birinin departmanını
+değiştirebilmek, onu görmediğiniz bir kanala sokabilmek demek.
+
+### KALAN RİSK — KAYIT, PAKET DEĞİL
+
+Departman **silme** muhafızı (`HrMasterDataController`) alt birim ve
+pozisyon kontrol ediyor, **personel kontrol etmiyor**. Alan dolmaya
+başladığı gün bir departmanın silinmesi personelleri yetim bırakır.
+Liste ucu bunu sessizce boş göstermiyor — çözülemeyen kimlik
+`(bilinmeyen departman)` olarak görünüyor — ama muhafızın kendisi
+eksik. Departman kullanımı başlamadan önce kapatılmalı.
+
+---
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`
@@ -4235,6 +4460,48 @@ Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyo
 **2026-08-25'te 13 maddenin 9'u karara bağlandı** (aşağıda "KAPANANLAR").
 Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
 **11 madde** (6–11. maddeler 2026-08-26/28'de eklendi):
+
+0. **KULLANICI HESAPLARI — M3'ÜN ÖN KOŞULU** (2026-09-03, KAPI 1'de
+   karara bağlandı; ölçüm bu maddede) | Karar verildi, **paket
+   yazılmadı** | M3/3'ten ÖNCE bitmeli.
+
+   **KARAR (Mehmet):** önce **ofis + şef/formen** (~15-20 kişi). Saha
+   ekiplerine şefleri üzerinden ulaşılır; herkese hesap ileride ayrı
+   konu. Gerekçe: *"M3 mesajlaşma bugün 4 kullanıcı arasında kurulur;
+   kitle olmadan mobil öncelikli tasarımın karşılığı yok."*
+
+   **ÖLÇÜM TAHMİNİ DÜZELTTİ — İŞ SANILDIĞINDAN KÜÇÜK:**
+
+   | Ölçüm | Sonuç |
+   |---|---|
+   | Kullanıcı hesabı | **13 var** (4 aktif: `mehmet`, `smemis`, `uakkaya`, `vtepe`) |
+   | Pasif hesap | **9** — ve **rolleri zaten atanmış** |
+   | Personel↔kullanıcı bağı | **0 / 13** |
+   | Ofis + şef/formen kohortu | **10 kişi** (P0001–P0007, P0009, P0058, EMP-001) |
+
+   Yani iş büyük ölçüde **hesap açma değil, ETKİNLEŞTİRME**. Pasif 9
+   hesabın rolleri hazır: Sekreterya, Teknik Ofis ×3, Formen, Finans
+   Sorumlusu + İK Sorumlusu, Teknik Koordinatör ×2, Araç Sorumlusu.
+
+   **BAĞ KURULABİLİR (ölçüldü):** kullanıcı adı deseni "ad baş harfi +
+   soyad". Bu kuralla **13 kullanıcının 10'u** bir personel kaydıyla
+   eşleşiyor (P0001–P0009 ve P0045). Eşleşmeyen 3: `mehmet` (yönetici
+   hesabı), `ioktem`, `uakkaya` — bu ikisinin soyadıyla **hiç personel
+   kaydı yok**.
+
+   **DİKKAT ÇEKEN:** `uakkaya` **aktif** ve **beş rol** taşıyor (Finans,
+   Satın Alma, Ön Muhasebe, İK, İSG) ama personel kaydı yok. Yanlış
+   olmayabilir (dışarıdan muhasebeci olabilir) — ama bilinerek mi böyle,
+   kayıtta yazmıyor.
+
+   **BANA DÜŞEN, KARAR SENDE:** eşleşen 10 bağ **otomatik yazılmasın**
+   önerisi — yanlış bir bağ maaş görünürlüğü ve veri kapsamı demek.
+   Ekranda "önerilen eşleşme" olarak gösterilip tek tek onaylanması
+   daha ucuz ve geri alınabilir. Tohumlama için verdiğin gerekçenin
+   aynısı: yanlış olanı kimse fark etmez.
+
+   **HESABI OLMAYAN KOHORT ÜYESİ: 2** — P0058 (ŞOFÖR / MERKEZ OFİS) ve
+   EMP-001 (Elektrik Ustası). Kalan 8 kohort üyesinin hesabı var.
 
 1. **KVKK aydınlatma metni** | Kural (e): hukuk metni yazılmıyor |
    Metin Mehmet'te. **Bana düşen: ekranda yerini açmak** —

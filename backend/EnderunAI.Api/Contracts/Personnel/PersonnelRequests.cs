@@ -82,3 +82,26 @@ public sealed record CompletePersonnelDataRequest(
     DateTime? BirthDate,
     DateTime? EmploymentStartDate,
     Guid? BranchId);
+
+/// <summary>
+/// Personelin departman ataması.
+///
+/// ── `DepartmentId` NEDEN NULLABLE VE NEDEN "GÖNDERİLMEDİ" DEĞİL ──
+///
+/// Burada `null` "değiştirme" demek DEĞİL, "departmandan çıkar"
+/// demektir. `CompletePersonnelDataRequest`'in kuralının tersi ve
+/// bilinçli: o uç alan DOLDURMAK için var, bu uç bir alanı YÖNETMEK
+/// için. Departmandan çıkarmanın başka bir yolu olmasaydı, yanlış
+/// atanan bir personel düzeltilemezdi.
+///
+/// ── `RecordVersion` ZORUNLU ──
+///
+/// Toplu atama ekranı 79 satırı aynı anda gösteriyor; iki kişinin aynı
+/// listeyi açıp aynı satırı değiştirmesi olağan. Sürüm damgası
+/// `KayitSurumu` ile karşılaştırılıyor (bu depoda RowVersion'ın
+/// karşılığı; `xmin` denenip gerekçesiyle reddedildi).
+/// </summary>
+public sealed record SetPersonnelDepartmentRequest(
+    Guid? DepartmentId,
+    DateTime? RecordVersion,
+    string? Reason);

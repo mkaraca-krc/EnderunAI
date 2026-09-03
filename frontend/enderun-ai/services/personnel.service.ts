@@ -39,6 +39,23 @@ export type PersonnelListItem = {
   email?: string | null;
   jobTitle?: string | null;
   profession?: string | null;
+  /**
+   * Personelin organizasyon birimi. GÖREV YERİ DEĞİL — görev yeri
+   * `workLocationType`/şantiye ataması; departman organizasyon
+   * kavramı ve M3 mesaj kanallarının üyeliği buradan türeyecek.
+   *
+   * Boş olması hata değil: departmanı olmayan personel kanal üyeliği
+   * almaz, o kadar.
+   */
+  departmentId?: string | null;
+  /** Sunucuda çözülür; departman başka bir DbContext'te yaşıyor. */
+  departmentName?: string | null;
+  /**
+   * Kaydın sürüm damgası. Departman atamasında geri gönderilir;
+   * sunucu araya giren başka bir değişikliği bununla yakalıyor.
+   * (Bu depoda RowVersion'ın karşılığı — `xmin` denenip reddedildi.)
+   */
+  recordVersion?: string | null;
   employmentStartDate?: string | null;
   /** Fazla mesai muvafakatinin geçerli olduğu yıl. Boşsa alınmamış. */
   /**
@@ -293,6 +310,35 @@ export const personnelService = {
         body: payload,
       }
     );
+  },
+
+  /**
+   * Personelin departmanını yazar — bu alanın İLK yazma yolu.
+   *
+   * `departmentId: null` "değiştirme" değil, "departmandan çıkar"
+   * demektir (`completeData`'nın kuralının tersi ve bilinçli).
+   *
+   * `recordVersion` ZORUNLU: toplu atama ekranı 79 satırı aynı anda
+   * gösteriyor; iki kişinin aynı satırı değiştirmesi olağan.
+   */
+  setDepartment(
+    id: string,
+    payload: {
+      departmentId: string | null;
+      recordVersion: string;
+      reason?: string | null;
+    }
+  ) {
+    return apiClient<{
+      message: string;
+      departmentId: string | null;
+      departmentName: string | null;
+      recordVersion: string;
+      changed: boolean;
+    }>(`hr/personnel/${id}/departman`, {
+      method: "PUT",
+      body: payload,
+    });
   },
 
   closeAssignment(assignmentId: string, endDate?: string) {

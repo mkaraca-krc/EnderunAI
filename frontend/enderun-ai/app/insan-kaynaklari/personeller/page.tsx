@@ -50,6 +50,10 @@ import {
   type ProjectSiteListItem,
 } from "@/services/project-site.service";
 import { hrSalaryService } from "@/services/hr-salary.service";
+import {
+  hrOrganizationService,
+  type HrDepartment,
+} from "@/services/hr-organization.service";
 import { extraPaymentService } from "@/services/termination.service";
 import {
   personnelOvertimeService,
@@ -216,6 +220,23 @@ export default function HrPersonnelPage() {
   const [projectId, setProjectId] = useState("");
   const [formOpen, setFormOpen] = useState(false);
 
+  /*
+   * DEPARTMAN ATAMASI SATIR İÇİNDE.
+   *
+   * NEDEN AYRI EKRAN DEĞİL: 79 personelin tamamına departman
+   * girilecek. Her satır için bir panel açtırmak 79 × (aç, seç,
+   * kaydet, kapat) demekti. Kolon + satır içi seçici, listenin
+   * kendisini toplu atama görünümüne çeviriyor — yeni ekran ve yeni
+   * uç açmadan.
+   *
+   * `departmentSaving` satır kimliğini tutuyor: aynı anda birden çok
+   * satır kaydedilebilir, tek bir "kaydediliyor" bayrağı hepsini
+   * birden kilitlerdi.
+   */
+  const [departments, setDepartments] = useState<HrDepartment[]>([]);
+  const [departmentSaving, setDepartmentSaving] = useState<string | null>(null);
+  const [departmentError, setDepartmentError] = useState("");
+
   // Görev yeri paneli: atama mevcut bir personel üzerinde yapılan bir
   // işlem, oluşturma formunun alanı değil — bu yüzden ayrı panel.
   const [locationTarget, setLocationTarget] =
@@ -286,6 +307,22 @@ export default function HrPersonnelPage() {
 
       setItems(personnelResult);
 
+      /*
+       * DEPARTMANLAR AYRI UÇTAN VE HATASI YUTULUYOR: alınamazsa liste
+       * yine çalışır, yalnızca seçici doldurulamaz. Departman listesi
+       * bu ekranın ASIL işi değil; onu düşürmesi orantısız olurdu.
+       * (Eksik veri rozetlerinde de aynı desen kullanılıyor.)
+       */
+      try {
+        setDepartments(
+          (await hrOrganizationService.getDepartments()).filter(
+            (department) => department.isActive !== false
+          )
+        );
+      } catch {
+        setDepartments([]);
+      }
+
       // Eksik veri özeti ayrı uçtan; alınamazsa liste yine çalışır,
       // yalnızca rozetler çıkmaz.
       try {
@@ -309,6 +346,60 @@ export default function HrPersonnelPage() {
       setError(err instanceof Error ? err.message : "Personel ekranı yüklenemedi.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  /**
+   * Satır içi departman ataması.
+   *
+   * SÜRÜM DAMGASI GERİ GÖNDERİLİYOR: liste 79 satırı aynı anda
+   * gösteriyor ve iki kişinin aynı satırı değiştirmesi olağan.
+   * Sunucu çakışmayı 409 ile bildiriyor; o durumda satır sessizce
+   * eski değerinde kalmıyor, kullanıcıya söyleniyor ve liste
+   * tazeleniyor.
+   */
+  async function assignDepartment(
+    item: PersonnelListItem,
+    departmentId: string
+  ) {
+    const yeni = departmentId ? departmentId : null;
+
+    if ((item.departmentId ?? null) === yeni) return;
+
+    setDepartmentSaving(item.id);
+    setDepartmentError("");
+
+    try {
+      const sonuc = await personnelService.setDepartment(item.id, {
+        departmentId: yeni,
+        recordVersion: item.recordVersion ?? "",
+      });
+
+      // Yalnız değişen satır güncelleniyor: tüm listeyi yeniden
+      // çekmek, kullanıcı sırayla 79 satır girerken her seferinde
+      // ekranı zıplatırdı.
+      setItems((mevcut) =>
+        mevcut.map((satir) =>
+          satir.id === item.id
+            ? {
+                ...satir,
+                departmentId: sonuc.departmentId,
+                departmentName: sonuc.departmentName,
+                recordVersion: sonuc.recordVersion,
+              }
+            : satir
+        )
+      );
+    } catch (err) {
+      setDepartmentError(
+        err instanceof Error ? err.message : "Departman ataması kaydedilemedi."
+      );
+
+      // Çakışmada elimizdeki sürüm eskimiştir; tazelenmezse sonraki
+      // deneme de aynı hatayı alır.
+      await reloadPersonnel().catch(() => undefined);
+    } finally {
+      setDepartmentSaving(null);
     }
   }
 
@@ -853,6 +944,15 @@ export default function HrPersonnelPage() {
         </div>
       )}
 
+      {departmentError && (
+        <div className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {/* SESSİZ BAŞARISIZLIK YOK: satır içi seçici, kaydetme
+              başarısız olduğunda eski değerine dönüyor. Şerit olmasa
+              kullanıcı atamanın yapıldığını sanırdı. */}
+          {departmentError}
+        </div>
+      )}
+
       {success && (
         <div className="mb-5 flex items-start justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           <span>{success}</span>
@@ -1077,7 +1177,20 @@ export default function HrPersonnelPage() {
                 <TableRow>
                   <TableHead>Personel</TableHead>
                   <TableHead>Şirket / Şube</TableHead>
-                  <TableHead>Departman / Pozisyon</TableHead>
+                  {/*
+                      BAŞLIK DÜZELTİLDİ — YANILTIYORDU.
+
+                      Bu kolon "Departman / Pozisyon" yazıyordu ama
+                      gösterdiği alanlar `profession` ve `jobTitle`,
+                      yani MESLEK ve ünvan. Personelin departmanı
+                      (`departmentId`) hiç gösterilmiyordu — ve canlıda
+                      79 personelin hiçbirinde dolu değildi. Ekran
+                      "Departman" yazan bir kolonda başka bir şey
+                      gösterdiği için, alanın boş olduğu da fark
+                      edilmiyordu.
+                  */}
+                  <TableHead>Meslek / Pozisyon</TableHead>
+                  <TableHead>Departman</TableHead>
                   <TableHead>Şantiye</TableHead>
                   <TableHead>İşe Giriş</TableHead>
                   <TableHead>Durum</TableHead>
@@ -1131,6 +1244,53 @@ export default function HrPersonnelPage() {
                       <TableCell>
                         <span className="block whitespace-nowrap text-slate-800">{item.profession || "—"}</span>
                         <span className="mt-1 block whitespace-nowrap text-xs text-slate-500">{item.jobTitle || "Pozisyon belirtilmedi"}</span>
+                      </TableCell>
+                      <TableCell>
+                        {actions.can("edit") ? (
+                          <select
+                            className="w-44 rounded-lg border border-slate-300 px-2 py-1 text-sm disabled:opacity-50"
+                            value={item.departmentId ?? ""}
+                            disabled={
+                              departmentSaving === item.id ||
+                              departments.length === 0
+                            }
+                            onChange={(event) =>
+                              void assignDepartment(item, event.target.value)
+                            }
+                            aria-label={`${item.fullName} departmanı`}
+                          >
+                            {/* BOŞ SEÇENEK BİR KARAR: departmandan
+                                çıkarmanın yolu bu. Kaldırılırsa yanlış
+                                atanan personel düzeltilemez. */}
+                            <option value="">— Departman yok —</option>
+                            {departments.map((department) => (
+                              <option key={department.id} value={department.id}>
+                                {department.name}
+                              </option>
+                            ))}
+                            {/* SİLİNMİŞ/LİSTEDE OLMAYAN DEPARTMAN SESSİZCE
+                                KAYBOLMAZ: seçili kimlik listede yoksa
+                                seçici boşa düşer ve kullanıcı departmanı
+                                silinmiş sanırdı. */}
+                            {item.departmentId &&
+                              !departments.some(
+                                (department) => department.id === item.departmentId
+                              ) && (
+                                <option value={item.departmentId}>
+                                  {item.departmentName ?? "(bilinmeyen departman)"}
+                                </option>
+                              )}
+                          </select>
+                        ) : (
+                          <span className="block whitespace-nowrap text-slate-800">
+                            {item.departmentName ?? "—"}
+                          </span>
+                        )}
+                        {departments.length === 0 && actions.can("edit") && (
+                          <span className="mt-1 block text-xs text-amber-700">
+                            Departman listesi alınamadı.
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {item.activeSiteAssignment ? (

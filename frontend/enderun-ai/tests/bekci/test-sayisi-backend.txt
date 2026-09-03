@@ -58,5 +58,14 @@
 #   çıra · arka uç: çizgi N · gerçek M · gevşeklik M-N
 # Bu satır 2849'a çıkarken de kullanıldı — sayı elle sayılmadı, çıra
 # gevşekliği 3 diye bastı ve çizgi ona taşındı.
-statik: 2849
+# DEPARTMAN/1 (2026-09-03): 2849 → 2869, katkı +20. Gevşeklik çıranın
+# kendi baskısından okundu (Kural 55/D): "çizgi 2849 · gerçek 2869 ·
+# gevşeklik 20". Döküm:
+#   PersonelDepartmanKuraliTests   9  (8 [Fact] + 1 [Theory] × 2 [InlineData]
+#                                      — sıra tespiti dahil)
+#   PersonelDepartmanUcuTests      9  ([Fact]; tarihçe ve sürüm kontrolü
+#                                      dahil, iddialar VERİTABANINDAN)
+#   PersonelDepartmanKapsamTests   2  ([Fact]; daraltılmış kapsam +
+#                                      pozitif kontrol)
+statik: 2869
 dinamik: 24

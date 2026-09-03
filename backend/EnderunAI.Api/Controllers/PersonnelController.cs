@@ -2,6 +2,7 @@ using EnderunAI.Api.Contracts.Personnel;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Common;
 using EnderunAI.Api.Services.HumanResources;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -224,6 +225,7 @@ public sealed class PersonnelController(
         [FromQuery] Guid? projectId,
         [FromQuery] string? search,
         [FromServices] IScopedData scoped,
+        [FromServices] Data.HumanResources.HrDbContext hrDb,
         CancellationToken cancellationToken)
     {
         /*
@@ -285,6 +287,14 @@ public sealed class PersonnelController(
                 x.Email,
                 x.JobTitle,
                 x.Profession,
+                // DEPARTMAN ADI BURADA ÇÖZÜLMÜYOR: departmanlar
+                // HrDbContext'te; iki bağlam LINQ'te birleştirilemez.
+                // Kimlikler projeksiyondan sonra tek sorguda ada
+                // çevriliyor (veri-eksikleri ucundaki desenin aynısı).
+                x.DepartmentId,
+                // Toplu departman atama ekranı satır başına sürüm
+                // damgası gönderiyor; `KayitSurumu.Oku`nun aynısı.
+                RecordVersion = x.UpdatedAtUtc ?? x.CreatedAtUtc,
                 x.EmploymentStartDate,
                 x.EmploymentEndDate,
                 // Ücret gizliliği: yetkisiz kullanıcıya tutar hiç dönmez.
@@ -328,7 +338,64 @@ public sealed class PersonnelController(
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(items);
+        /*
+         * DEPARTMAN ADLARI TEK SORGUDA.
+         *
+         * Satır başına sorgu atmak 79 personelde 79 sorgu demekti.
+         * Yalnız listede GEÇEN kimlikler soruluyor; hiç departmanı olan
+         * yoksa sorgu hiç atılmıyor.
+         */
+        var departmanIdleri = items
+            .Where(x => x.DepartmentId.HasValue)
+            .Select(x => x.DepartmentId!.Value)
+            .Distinct()
+            .ToList();
+
+        var departmanAdlari = departmanIdleri.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await hrDb.Departments.AsNoTracking()
+                .Where(x => departmanIdleri.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+
+        var sonuc = items.Select(x => new
+        {
+            x.Id,
+            x.CompanyId,
+            x.CompanyName,
+            x.BranchId,
+            x.BranchName,
+            x.EmployeeNumber,
+            x.FirstName,
+            x.LastName,
+            x.FullName,
+            x.IdentityNumber,
+            x.Phone,
+            x.Email,
+            x.JobTitle,
+            x.Profession,
+            x.DepartmentId,
+            // SİLİNMİŞ/BULUNAMAYAN DEPARTMAN SESSİZCE BOŞ GÖSTERİLMEZ:
+            // kimlik dolu ama ad çözülemiyorsa ekranda görünür bir iz
+            // kalır. Departman silme muhafızı bugün personeli kontrol
+            // ETMİYOR — bu durum gerçekleşebilir.
+            DepartmentName = x.DepartmentId.HasValue
+                ? (departmanAdlari.TryGetValue(x.DepartmentId.Value, out var ad)
+                    ? ad
+                    : "(bilinmeyen departman)")
+                : null,
+            x.RecordVersion,
+            x.EmploymentStartDate,
+            x.EmploymentEndDate,
+            x.MonthlySalary,
+            x.Status,
+            x.IsActive,
+            x.WorkLocationType,
+            x.IsAwaitingWorkLocation,
+            x.ActiveAssignments,
+            x.ActiveSiteAssignment
+        });
+
+        return Ok(sonuc);
     }
 
     [HttpGet("{id:guid}")]
@@ -904,6 +971,148 @@ public sealed class PersonnelController(
 
         return Ok(new { message = "Proje görevlendirmesi kapatıldı." });
     }
+    /// <summary>
+    /// PERSONELİN DEPARTMANINI YAZAR — BU ALANIN İLK YAZMA YOLU.
+    ///
+    /// ── NEDEN AYRI BİR UÇ, NEDEN `veri-tamamla` DEĞİL ──
+    ///
+    /// `veri-tamamla` alan DOLDURMAK için var: gönderilmeyen alanı
+    /// değiştirmiyor ve bir alanı BOŞALTMANIN yolu yok. Departman
+    /// yönetiminde boşaltma meşru bir işlem (yanlış atananın
+    /// düzeltilmesi). Ayrıca departman iki şey daha istiyor ve o uçta
+    /// ikisi de yok: **tarihçe kaydı** ve **sürüm kontrolü**.
+    ///
+    /// ── TARİHÇE ZORUNLU, SÜS DEĞİL ──
+    ///
+    /// `Personnel.DepartmentId` yalnız BUGÜNÜ söyler. M3'ün
+    /// "personel ayrıldığı tarihe kadarki mesaj geçmişini görür"
+    /// kuralı DÜNKÜ cevabı gerektiriyor; onu yalnız
+    /// `personnel_department_history` verebilir. Bu yüzden tarihçe
+    /// yazımı bu ucun içinde — ayrı bir çağrıya bırakılsaydı,
+    /// çağırmayı unutan ilk yazma yolu geçmişi sessizce delerdi.
+    ///
+    /// ── KAPSAM SÜZGECİ BUGÜN ISIRMIYOR, YİNE DE VAR VE TESTLİ ──
+    ///
+    /// `personnel.edit` bugün yalnız geniş kapsamlı rollerde. Süzgeç
+    /// yine de uygulanıyor ve daraltılmış kapsamla ayrıca test
+    /// ediliyor (`PersonelDepartmanKapsamTests`) — "bugün devreye
+    /// girmiyor" ile "doğru çalışıyor" aynı şey değil.
+    /// </summary>
+    [HttpPut("{id:guid}/departman")]
+    [RequirePermission(PermissionCatalog.Keys.PersonnelEdit)]
+    public async Task<IActionResult> SetDepartment(
+        Guid id,
+        SetPersonnelDepartmentRequest request,
+        [FromServices] Data.HumanResources.HrDbContext hrDb,
+        [FromServices] IScopedData scoped,
+        CancellationToken cancellationToken)
+    {
+        /*
+         * KAPSAM ÖNCE, İZLEME SONRA.
+         *
+         * `scoped.PersonnelAsync` AsNoTracking döndürüyor; güncelleme
+         * izlenen bir varlık istiyor. Bu yüzden önce kapsamlı sorguyla
+         * kaydın GÖRÜLEBİLİR olduğu doğrulanıyor, sonra aynı kimlikle
+         * izlenen kayıt yükleniyor. Sıra tersine dönerse kapsam
+         * atlanmış olur.
+         */
+        var gorunur = await (await scoped.PersonnelAsync(cancellationToken))
+            .AnyAsync(x => x.Id == id, cancellationToken);
+
+        if (!gorunur)
+            return NotFound(new { message = "Personel bulunamadı." });
+
+        var personnel = await db.Personnel
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (personnel is null)
+            return NotFound(new { message = "Personel bulunamadı." });
+
+        try
+        {
+            KayitSurumu.Dogrula(personnel, request.RecordVersion);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+
+        // Departman başka bağlamda (HrDbContext); EF yabancı anahtar
+        // kuramıyor, doğrulama tamamen burada.
+        var departman = request.DepartmentId is Guid depId
+            ? await hrDb.Departments.AsNoTracking()
+                .Where(x => x.Id == depId)
+                .Select(x => new { x.Id, x.CompanyId, x.IsActive, x.IsDeleted, x.Name })
+                .SingleOrDefaultAsync(cancellationToken)
+            : null;
+
+        var hata = PersonelDepartmanKurali.Dogrula(
+            request.DepartmentId,
+            departmanVarMi: departman is not null,
+            departmanAktifMi: departman is not null &&
+                              departman.IsActive && !departman.IsDeleted,
+            departmanSirketId: departman?.CompanyId,
+            personelSirketId: personnel.CompanyId);
+
+        if (hata is not null)
+            return BadRequest(new { message = hata });
+
+        var onceki = personnel.DepartmentId;
+
+        if (!PersonelDepartmanKurali.DegisiklikMi(onceki, request.DepartmentId))
+        {
+            /*
+             * DEĞİŞİKLİK YOKSA TARİHÇEYE YAZILMAZ — ama istek de HATA
+             * DEĞİL. Toplu atama ekranında aynı değeri yeniden seçmek
+             * olağan; 400 dönmek kullanıcıya var olmayan bir sorun
+             * gösterirdi.
+             */
+            return Ok(new
+            {
+                message = "Departman zaten aynı; değişiklik yapılmadı.",
+                departmentId = personnel.DepartmentId,
+                departmentName = departman?.Name,
+                recordVersion = KayitSurumu.Oku(personnel),
+                changed = false
+            });
+        }
+
+        var simdi = DateTime.UtcNow;
+
+        personnel.DepartmentId = request.DepartmentId;
+        personnel.UpdatedAtUtc = simdi;
+
+        db.PersonnelDepartmentHistories.Add(
+            new EnderunAI.Api.Models.Messaging.PersonnelDepartmentHistory
+            {
+                PersonnelId = personnel.Id,
+                CompanyId = personnel.CompanyId,
+                DepartmentId = request.DepartmentId,
+                PreviousDepartmentId = onceki,
+                ChangedAtUtc = simdi,
+                Reason = string.IsNullOrWhiteSpace(request.Reason)
+                    ? null
+                    : request.Reason.Trim()
+            });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = request.DepartmentId is null
+                ? "Personel departmandan çıkarıldı."
+                : "Departman ataması kaydedildi.",
+            departmentId = personnel.DepartmentId,
+            departmentName = departman?.Name,
+            recordVersion = KayitSurumu.Oku(personnel),
+            changed = true
+        });
+    }
+
     private static DateTime UtcDate(DateTime value)
     {
         return DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);

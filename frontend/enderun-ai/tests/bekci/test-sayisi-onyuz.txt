@@ -23,5 +23,10 @@
 # gerçek sayısı da 405'ti, yani +5'in tamamı bu pakete ait
 # (gorev-turu-tek-kaynak.test.ts). Arka uç tarafında durum farklı —
 # oradaki nota bakınız.
-statik: 410
+# DEPARTMAN/1 (2026-09-03): 410 → 415, katkı +5 —
+# personel-departman-ekran-sozlesmesi.test.ts. Ekranın kaybolduğunda
+# SESSİZ kalacak üç kararını sabitliyor: yanıltıcı "Departman /
+# Pozisyon" başlığının geri gelmemesi, seçicideki boş seçenek
+# (departmandan çıkarmanın tek yolu) ve sürüm damgasının gönderilmesi.
+statik: 415
 dinamik: 15
