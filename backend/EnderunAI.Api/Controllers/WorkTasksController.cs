@@ -18,6 +18,7 @@ public sealed class WorkTasksController(
     ICurrentUserService currentUser,
     EnderunAI.Api.Services.DocumentNumbers.IDocumentNumberService documentNumbers,
     ICurrentDataScopeService dataScope,
+    IScopedData scoped,
     IUserAuthorizationService authorization,
     EnderunAI.Api.Services.Notifications.ITaskNotificationWriter notifications)
     : ControllerBase
@@ -262,6 +263,31 @@ public sealed class WorkTasksController(
             return BadRequest(new { message = merkezHatasi });
 
         /*
+         * TÜR VE ATAMA KAPISI — ÜÇ YAZMA YOLUNUN ORTAK KURALI.
+         *
+         * Kural denetleyicinin gövdesinde değil, `GorevAtamaKurali`
+         * içinde. Sebebi bu dosyanın kendi tarihinde yazılı: merkez
+         * kuralı burada yaşarken Hızır onu hiç görmedi, PUT ise ikinci
+         * bir kopya taşıdı.
+         */
+        var turHatasi = GorevAtamaKurali.Dogrula(
+            request.Kind,
+            request.AssignedToUserId,
+            request.AssignedToPersonnelId);
+
+        if (turHatasi is not null)
+            return BadRequest(new { message = turHatasi });
+
+        if (request.AssignedToPersonnelId is Guid atananPersonel)
+        {
+            var personelHatasi = await PersonelAtanabilirMiAsync(
+                request.CompanyId, atananPersonel, cancellationToken);
+
+            if (personelHatasi is not null)
+                return BadRequest(new { message = personelHatasi });
+        }
+
+        /*
          * ATANAN KİŞİ KAYDI GÖREBİLMELİ.
          *
          * Göremeyeceği bir göreve atanan kullanıcı, gelen kutusunda
@@ -320,7 +346,9 @@ public sealed class WorkTasksController(
             Description = request.Description?.Trim(),
             Priority = request.Priority,
             Status = WorkTaskStatus.Open,
+            Kind = request.Kind,
             AssignedToUserId = request.AssignedToUserId,
+            AssignedToPersonnelId = request.AssignedToPersonnelId,
             AssignedByUserId = currentUser.UserId,
             StartDate = ToUtcDate(request.StartDate),
             DueDate = ToUtcDate(request.DueDate),
@@ -402,6 +430,33 @@ public sealed class WorkTasksController(
         item.CenterType = MasrafMerkeziKurali.TuruTuret(
             request.ProjectId, request.BranchId, request.ProjectSiteId);
 
+        /*
+         * PUT DE AYNI KAPIDAN GEÇER.
+         *
+         * ACIL/2'nin dersi: bir kapı eksiği bulunduğunda aynı kaynağın
+         * BÜTÜN yazma fiilleri aynı turda sınanır. Tür ve atama kapısı
+         * yalnız POST'a konsaydı, tür güncelleme ile `Belirsiz`e
+         * çevrilebilir ve iki atama alanı PUT üzerinden birlikte
+         * doldurulabilirdi.
+         */
+        var turHatasi = GorevAtamaKurali.Dogrula(
+            request.Kind,
+            request.AssignedToUserId,
+            request.AssignedToPersonnelId);
+
+        if (turHatasi is not null)
+            return BadRequest(new { message = turHatasi });
+
+        if (request.AssignedToPersonnelId is Guid guncelPersonel)
+        {
+            var personelHatasi = await PersonelAtanabilirMiAsync(
+                item.CompanyId, guncelPersonel, cancellationToken);
+
+            if (personelHatasi is not null)
+                return BadRequest(new { message = personelHatasi });
+        }
+
+        item.Kind = request.Kind;
         item.Title = request.Title.Trim();
         item.Description = request.Description?.Trim();
         item.Priority = request.Priority;
@@ -460,6 +515,7 @@ public sealed class WorkTasksController(
         }
 
         item.AssignedToUserId = request.AssignedToUserId;
+        item.AssignedToPersonnelId = request.AssignedToPersonnelId;
         item.StartDate = ToUtcDate(request.StartDate);
         item.DueDate = ToUtcDate(request.DueDate);
         item.Tags = request.Tags?.Trim();
@@ -721,10 +777,38 @@ public sealed class WorkTasksController(
 
         var oncekiSorumlu = item.AssignedToUserId;
 
+        /*
+         * DEVRETME DÖRDÜNCÜ YAZMA YOLU — ÖLÇÜMLE BULUNDU.
+         *
+         * Paketin kapsamı "üç yazma yolu" olarak konmuştu: POST, PUT,
+         * Hızır. Ölçüm dördüncüsünü gösterdi: `delegate` de
+         * `AssignedToUserId` YAZIYOR ve `GorevAtamaKurali`'ndan
+         * GEÇMİYOR.
+         *
+         * SESSİZ SONUCU: personele atanmış bir görev bir kullanıcıya
+         * devredilirse İKİ ALAN DA dolu kalırdı. Kural isteğin içindeki
+         * çelişkiyi reddediyor ama bu yol kaydın içinde çelişki
+         * ÜRETİYORDU — ve `AssignedToDisplayName` sessizce kullanıcıyı
+         * seçip personeli gizlerdi. Tam olarak kaçınmak için kurulan
+         * desen, kapının atlandığı yerden geri girerdi.
+         *
+         * NEDEN TEMİZLEME, NEDEN RET DEĞİL: devretme işin sahibini
+         * değiştirmektir; personele verilmiş bir işi bir kullanıcıya
+         * devretmek meşru bir istektir. Reddetseydik, sahadaki işi
+         * ofise devretmenin tek yolu görevi silip yeniden açmak olurdu.
+         *
+         * İZ KAYBOLMUYOR: `DelegatedFromUserId` bir KULLANICI alanı,
+         * personel kimliğini taşıyamaz. O yüzden önceki personel
+         * aşağıdaki denetim kaydına yazılıyor — modelin kendi notu da
+         * zaten "tam zincir denetim kaydında" diyor.
+         */
+        var oncekiPersonel = item.AssignedToPersonnelId;
+
         item.DelegatedFromUserId = oncekiSorumlu;
         item.DelegatedAtUtc = DateTime.UtcNow;
         item.DelegationCount += 1;
         item.AssignedToUserId = request.ToUserId;
+        item.AssignedToPersonnelId = null;
         item.UpdatedAtUtc = DateTime.UtcNow;
 
         // DENETİM: kim, kimden kime, ne zaman, neden.
@@ -739,6 +823,10 @@ public sealed class WorkTasksController(
             {
                 summary = $"{item.TaskNumber} devredildi.",
                 oncekiSorumlu,
+                // PERSONELDEN DEVRALMANIN TEK İZİ BURASI: kayıt
+                // üzerindeki `DelegatedFromUserId` yalnız kullanıcı
+                // taşıyabiliyor.
+                oncekiPersonel,
                 yeniSorumlu = request.ToUserId,
                 gerekce
             }),
@@ -887,7 +975,10 @@ public sealed class WorkTasksController(
         PriorityName = x.Priority.ToString(),
         Status = (int)x.Status,
         StatusName = x.Status.ToString(),
+        Kind = (int)x.Kind,
+        KindName = x.Kind.ToString(),
         x.AssignedToUserId,
+        x.AssignedToPersonnelId,
         x.AssignedByUserId,
         x.StartDate,
         x.DueDate,
@@ -943,20 +1034,41 @@ public sealed class WorkTasksController(
         BranchName = AdBul(adlar, x.BranchId),
         ProjectSiteName = AdBul(adlar, x.ProjectSiteId),
         AssignedToName = AdBul(adlar, x.AssignedToUserId),
+        AssignedToPersonnelName = AdBul(
+            adlar, x.AssignedToPersonnelId, "(bilinmeyen personel)"),
+
+        /*
+         * "YAPACAK" SLOTUNUN TEK KAYNAĞI.
+         *
+         * Ekran bu alanı okur; iki alanı yan yana koyup kendi önceliğini
+         * kurmaz. Bugün dördüncü kez aynı deseni düzelttik (ETİKET/1):
+         * aynı soruyu iki yerden cevaplayan kod bir gün ayrışıyor.
+         *
+         * BURADA ÖNCELİK KURALI YOK, OLAMAZ DA: `GorevAtamaKurali`
+         * ikisinin birden dolmasını REDDEDİYOR, dolayısıyla en fazla
+         * biri doludur. Öncelik kuralı yazsaydık, kapı bir gün
+         * gevşediğinde hangisinin doğru olduğunu sessizce seçerdik.
+         */
+        AssignedToDisplayName =
+            AdBul(adlar, x.AssignedToUserId) ??
+            AdBul(adlar, x.AssignedToPersonnelId, "(bilinmeyen personel)"),
+
         AssignedByName = AdBul(adlar, x.AssignedByUserId),
         ApprovedByName = AdBul(adlar, x.ApprovedByUserId),
         DelegatedFromName = AdBul(adlar, x.DelegatedFromUserId)
     };
 
     private static string? AdBul(
-        IReadOnlyDictionary<Guid, string>? adlar, Guid? kimlik)
+        IReadOnlyDictionary<Guid, string>? adlar,
+        Guid? kimlik,
+        string bulunamadi = "(bilinmeyen kullanıcı)")
     {
         if (adlar is null || kimlik is null)
             return null;
 
         return adlar.TryGetValue(kimlik.Value, out var ad)
             ? ad
-            : "(bilinmeyen kullanıcı)";
+            : bulunamadi;
     }
 
     /// <summary>
@@ -995,6 +1107,49 @@ public sealed class WorkTasksController(
             centerType, sourceModule, santiyeninProjesi);
     }
 
+    /// <summary>
+    /// ATANAN PERSONEL GERÇEK, ÇALIŞIYOR VE KAPSAM İÇİNDE Mİ.
+    ///
+    /// ÜÇ AYRI SORU, ÜÇ AYRI HATA MESAJI DEĞİL — bilerek. Kapsam
+    /// dışındaki bir personelin "var ama göremiyorsun" diye ayrı bir
+    /// cevap alması, kapsamın kendisini bir arama aracına çevirirdi:
+    /// kimliği deneyerek kimin var olduğu öğrenilebilirdi. Kapsam dışı
+    /// personel, olmayan personelle AYNI cevabı alır.
+    ///
+    /// AYRILAN TEK DURUM İŞTEN AYRILMIŞ PERSONEL: onu kullanıcı zaten
+    /// görebiliyor (kapsam içinde), dolayısıyla ayrı mesaj bilgi
+    /// sızdırmıyor ve "listede vardı ama atayamadım" şaşkınlığını
+    /// önlüyor.
+    /// </summary>
+    private async Task<string?> PersonelAtanabilirMiAsync(
+        Guid companyId,
+        Guid personnelId,
+        CancellationToken cancellationToken)
+    {
+        /*
+         * HAM `db.Personnel` KULLANILMIYOR: kontrolcülerde kapsamsız
+         * personel okuması bekçi test tarafından yasak (ScopedData.cs).
+         * Atama kapısı bir OKUMA yapıyor ve o okuma da kapsamlı.
+         */
+        var personel = await (await scoped.PersonnelAsync(cancellationToken))
+            .AsNoTracking()
+            .Where(x => x.Id == personnelId && x.CompanyId == companyId)
+            .Select(x => new { x.Status })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (personel is null)
+            return "Seçilen personel bulunamadı.";
+
+        if (personel.Status != PersonnelStatus.Active)
+        {
+            return
+                "Seçilen personel aktif çalışan değil; " +
+                "göreve atanamaz.";
+        }
+
+        return null;
+    }
+
     private async Task<Dictionary<Guid, string>> AdlariGetirAsync(
         IEnumerable<WorkTask> gorevler, CancellationToken cancellationToken)
     {
@@ -1014,7 +1169,23 @@ public sealed class WorkTasksController(
         var merkezVarMi = gorevler.Any(x =>
             x.ProjectId.HasValue || x.BranchId.HasValue || x.ProjectSiteId.HasValue);
 
-        if (liste.Count == 0 && !merkezVarMi)
+        /*
+         * PERSONEL DE ERKEN ÇIKIŞA GİRER.
+         *
+         * Erken çıkış listesi bir kez zaten eksik kalmıştı (merkezi olan
+         * ama kullanıcısı olmayan görev). Aynı hatanın personel biçimi:
+         * yalnız personele atanmış bir görevde `liste` boş, merkez de
+         * boşsa erken çıkılır ve ad ÇÖZÜLMEZDİ — ekran "Yapacak" yerine
+         * hiçbir şey gösterirdi.
+         */
+        var personeller = gorevler
+            .Select(x => x.AssignedToPersonnelId)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+
+        if (liste.Count == 0 && personeller.Count == 0 && !merkezVarMi)
             return [];
 
         var sonuc = await db.Users
@@ -1046,6 +1217,26 @@ public sealed class WorkTasksController(
          * sızmaz, ekran da kırılmaz.
          */
         var kapsam = await GetScopeAsync(cancellationToken);
+
+        if (personeller.Count > 0)
+        {
+            /*
+             * PERSONEL ADI DA KAPSAM SÜZGECİNDEN GEÇER.
+             *
+             * Ham `db.Personnel` kontrolcüde yasak; `scoped.PersonnelAsync`
+             * kullanıcının görebileceği personeli veriyor. Kapsam dışı bir
+             * personelin adı çözülmez ve ekran "(bilinmeyen personel)"
+             * yazar — bilgi sızmaz, ekran kırılmaz.
+             */
+            foreach (var satir in await (await scoped.PersonnelAsync(cancellationToken))
+                .AsNoTracking()
+                .Where(x => personeller.Contains(x.Id))
+                .Select(x => new { x.Id, Ad = x.FirstName + " " + x.LastName })
+                .ToListAsync(cancellationToken))
+            {
+                sonuc[satir.Id] = satir.Ad.Trim();
+            }
+        }
 
         var projeler = gorevler.Select(x => x.ProjectId).Where(x => x.HasValue)
             .Select(x => x!.Value).Distinct().ToList();
@@ -1131,7 +1322,21 @@ public sealed record CreateWorkTaskRequest(
     /// </summary>
     ExpenseCenterType? CenterType = null,
     Guid? BranchId = null,
-    Guid? ProjectSiteId = null);
+    Guid? ProjectSiteId = null,
+
+    /// <summary>
+    /// GÖREV TÜRÜ — ZORUNLU. Varsayılanı <c>Belirsiz</c> olması bir
+    /// kolaylık değil, bir KAPI: gönderilmezse istek reddedilir.
+    /// Sözdizimi gereği son parametrelerin varsayılanı olmak zorunda;
+    /// o varsayılan, geçerli bir tür değil REDDEDİLEN değer seçildi.
+    /// </summary>
+    WorkTaskKind Kind = WorkTaskKind.Belirsiz,
+
+    /// <summary>
+    /// Sistem hesabı olmayan personele atama. <c>AssignedToUserId</c>
+    /// ile birlikte gönderilemez — bkz. <c>GorevAtamaKurali</c>.
+    /// </summary>
+    Guid? AssignedToPersonnelId = null);
 
 public sealed record UpdateWorkTaskRequest(
     string Title,
@@ -1149,7 +1354,21 @@ public sealed record UpdateWorkTaskRequest(
     Guid? ProjectId = null,
     Guid? BranchId = null,
     Guid? ProjectSiteId = null,
-    ExpenseCenterType? CenterType = null);
+    ExpenseCenterType? CenterType = null,
+
+    /// <summary>
+    /// GÖREV TÜRÜ — ZORUNLU. Varsayılanı <c>Belirsiz</c> olması bir
+    /// kolaylık değil, bir KAPI: gönderilmezse istek reddedilir.
+    /// Sözdizimi gereği son parametrelerin varsayılanı olmak zorunda;
+    /// o varsayılan, geçerli bir tür değil REDDEDİLEN değer seçildi.
+    /// </summary>
+    WorkTaskKind Kind = WorkTaskKind.Belirsiz,
+
+    /// <summary>
+    /// Sistem hesabı olmayan personele atama. <c>AssignedToUserId</c>
+    /// ile birlikte gönderilemez — bkz. <c>GorevAtamaKurali</c>.
+    /// </summary>
+    Guid? AssignedToPersonnelId = null);
 
 public sealed record CompleteWorkTaskRequest(string? CompletionNote);
 

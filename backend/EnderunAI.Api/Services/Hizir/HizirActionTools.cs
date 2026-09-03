@@ -186,6 +186,18 @@ public sealed class HizirActionTools(
             Description = Text(args, "aciklama"),
             Priority = WorkTaskPriority.Normal,
             Status = WorkTaskStatus.Open,
+            /*
+             * TÜR AÇIKÇA YAZILIYOR — ÜÇÜNCÜ YAZMA YOLU.
+             *
+             * Bu yol denetleyiciyi HİÇ görmüyor; `db.WorkTasks.Add(...)`
+             * doğrudan burada. Tür varsayılana bırakılsaydı `Belirsiz`
+             * kalırdı ve Hızır sessizce türsüz görev üretirdi — merkez
+             * kuralının bir zamanlar bu yoldan kaçmasının aynısı.
+             *
+             * `Hatirlatma` ÇÜNKÜ: bu araç kişinin kendine koyduğu not;
+             * başkasına iş yüklemiyor (atama zaten çağırana sabit).
+             */
+            Kind = WorkTaskKind.Hatirlatma,
             // Hatırlatma yalnızca çağıran kullanıcıya atanır; Hızır
             // üzerinden başkasına görev yüklenemez.
             AssignedToUserId = context.UserId,

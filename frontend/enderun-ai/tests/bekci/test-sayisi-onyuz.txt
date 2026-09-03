@@ -11,7 +11,17 @@
 # çizgi YUKARI serbest, AŞAĞI ayrı commit'te ve gerekçeli.
 # Birleştirme meşrudur ve çizgiyi düşürmek savunma gerektirmez.
 #
-# KAYNAK: 2026-09-02, ETİKET/1 paketinde ölçüldü (çizgi YUKARI taşındı:
-# 389 → 405; durum etiketi tek kaynak sondaları eklendi).
-statik: 405
+# KAYNAK: 2026-09-02, İŞEMRİ/2 Faz 1'de ölçüldü (çizgi YUKARI taşındı:
+# 405 → 410; görev türü tek kaynak sondaları eklendi).
+#
+# SAYI CIRCIRIN KENDİ SAYACINDAN OKUNDU, ELLE SAYILMADI: çizgi geçici
+# olarak 99999 yapıldı ve cırcırın hata metnindeki gerçek değer alındı.
+# Kendi saydığım sayıyı yazmak, ölçtüğüm şeyi kendi tahminimle
+# değiştirmek olurdu.
+#
+# BU TARAFTA ÇİZGİ İLE GERÇEK SAYI ÖRTÜŞÜYORDU: HEAD'in (b9d125e0)
+# gerçek sayısı da 405'ti, yani +5'in tamamı bu pakete ait
+# (gorev-turu-tek-kaynak.test.ts). Arka uç tarafında durum farklı —
+# oradaki nota bakınız.
+statik: 410
 dinamik: 15

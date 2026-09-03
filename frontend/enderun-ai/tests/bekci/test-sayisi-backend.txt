@@ -26,6 +26,37 @@
 # Bu cırcır testin SİLİNMESİNİ fark ettirmek için var;
 # İYİLEŞTİRİLMESİNİ engellemek için değil.
 #
-# KAYNAK: 2026-08-30, İŞEMRİ/1 paketinde ölçüldü (çizgi YUKARI taşındı).
-statik: 2798
+# KAYNAK: 2026-09-02, İŞEMRİ/2 Faz 1'de ölçüldü. Çizgi 2798'den 2843'e
+# taşındı ama BU FARKIN TAMAMI BU PAKETE AİT DEĞİL — ölçüldü:
+#
+#   2798  önceki çizgi (2026-08-30, İŞEMRİ/1)
+#   2824  HEAD'in (b9d125e0) GERÇEK sayısı — yani çizgi 26 geride
+#         duruyordu. Çizgi YUKARI serbest olduğu için aradaki paketler
+#         onu güncellemek zorunda değildi; bu meşru bir boşluk.
+#   2849  bu paketten sonra  →  BU PAKETİN KATKISI: +25
+#
+# +25'in dökümü:
+#   GorevAtamaKuraliTests        8  (6 [Fact] + 1 [Theory] × 2 [InlineData])
+#   IsEmriTuruKapisiTests       12  ([Fact]; S3e sonda G'den sonra eklendi)
+#   DevretmeAtamaTekilligiTests  2  ([Fact]; dördüncü yazma yolu)
+#   PersonelKapsamSuzgeciTests   3  ([Fact]; KAPI 2 şartı — kapsam
+#                                    süzgeci daraltılmış kapsamla
+#                                    doğrudan ölçüldü, rol değişikliği
+#                                    beklenmedi)
+#
+# NEDEN BÖYLE YAZILDI: "2798 → 2843" tek başına, 45 testin bu pakette
+# eklendiğini ima ederdi. Çizgi bir taban; iki çizgi arasındaki fark
+# bir katkı ölçüsü DEĞİLDİR. Katkıyı ölçmek için çıranın kendi sayım
+# kuralı HEAD'in ayrı bir kopyasına uygulandı.
+#
+# SAYILAR CIRCIRIN KENDİ SAYACINDAN OKUNDU, ELLE SAYILMADI: 2843
+# çizgiyi geçici olarak 999999 yapıp cırcırın hata metninden alındı ve
+# paket büyüdükçe aynı sayaçla 2846'ya güncellendi;
+# 2824 ise aynı sayım kuralının HEAD kopyasına uygulanmasıyla bulundu
+# ve kural, çalışma ağacında 2843'ü birebir ürettiği için doğrulandı.
+# GEVŞEKLİK ARTIK HER KOŞUDA BASILIYOR (Kural 55/D, 2026-09-03):
+#   çıra · arka uç: çizgi N · gerçek M · gevşeklik M-N
+# Bu satır 2849'a çıkarken de kullanıldı — sayı elle sayılmadı, çıra
+# gevşekliği 3 diye bastı ve çizgi ona taşındı.
+statik: 2849
 dinamik: 24

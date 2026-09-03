@@ -60,6 +60,7 @@ public sealed class MerkezKapisiTests(DatabaseFixture fixture)
             centerType = centerType.HasValue ? (int?)centerType.Value : null,
             title = baslik,
             priority = (int)WorkTaskPriority.Normal,
+            kind = (int)WorkTaskKind.IsEmri,
         };
 
     // ───────── S1: üçü de boş ─────────
@@ -196,6 +197,7 @@ public sealed class MerkezKapisiTests(DatabaseFixture fixture)
             {
                 title = "Merkezi silinmiş iş emri",
                 priority = (int)WorkTaskPriority.Normal,
+                kind = (int)WorkTaskKind.IsEmri,
                 projectId = (Guid?)null,
                 branchId = (Guid?)null,
                 projectSiteId = (Guid?)null,
@@ -234,6 +236,7 @@ public sealed class MerkezKapisiTests(DatabaseFixture fixture)
             {
                 title = "Merkezi düzeltilmiş iş emri",
                 priority = (int)WorkTaskPriority.Normal,
+                kind = (int)WorkTaskKind.IsEmri,
                 projectId = (Guid?)proje.Id,
                 projectSiteId = (Guid?)santiye.Id,
             });

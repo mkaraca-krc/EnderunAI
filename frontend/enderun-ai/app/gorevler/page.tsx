@@ -42,8 +42,11 @@ import {
   workTaskService,
   WorkTaskPriority,
   WorkTaskStatus,
+  WorkTaskKind,
   DURUM_ETIKETLERI,
   ONCELIK_ETIKETLERI,
+  TUR_ETIKETLERI,
+  SECILEBILIR_TURLER,
   durumEtiketi,
   durumRengi,
   oncelikEtiketi,
@@ -79,6 +82,15 @@ const initialForm = {
   projectId: "",
   title: "",
   description: "",
+  /*
+   * TÜR BOŞ BAŞLAR — VARSAYILAN YOK, BİLEREK.
+   *
+   * "İş emri"yi varsayılan yapmak kolaydı ama alanı ANLAMSIZ kılardı:
+   * kimse seçmezse hepsi iş emri olurdu ve tür hiçbir şeyi ölçmezdi.
+   * Sunucu da aynı gerekçeyle `Belirsiz`i reddediyor; burada boş
+   * bırakmak o kararın ekran tarafındaki karşılığı.
+   */
+  kind: "",
   priority: String(WorkTaskPriority.Normal),
   startDate: "",
   dueDate: "",
@@ -390,6 +402,7 @@ export default function WorkTasksPage() {
         priority: Number(
           form.priority
         ) as WorkTaskPriority,
+        kind: Number(form.kind) as WorkTaskKind,
         assignedToUserId: null,
         startDate: form.startDate || null,
         dueDate: form.dueDate || null,
@@ -945,6 +958,38 @@ export default function WorkTasksPage() {
                   })
                 }
               />
+            </label>
+
+            <label>
+              <span>Tür *</span>
+              <select
+                required
+                value={form.kind}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    kind: event.target.value,
+                  })
+                }
+              >
+                {/*
+                  BOŞ SEÇENEK KALDIRILMIYOR: `required` ile birlikte
+                  tarayıcı gönderimi engelliyor. Doğrudan "İş Emri"yle
+                  başlasaydı kullanıcı seçim YAPMADAN gönderirdi ve
+                  alan bir tercihi değil, varsayılanı kaydederdi.
+
+                  LİSTE `SECILEBILIR_TURLER`DEN: `TUR_ETIKETLERI`
+                  üzerinden dolaşsaydı "Türü belirtilmemiş" de
+                  görünürdü ve sunucu onu reddederdi — kullanıcı
+                  seçebildiği bir şeyin reddedilmesiyle karşılaşırdı.
+                */}
+                <option value="">Seçiniz…</option>
+                {SECILEBILIR_TURLER.map((tur) => (
+                  <option key={tur} value={tur}>
+                    {TUR_ETIKETLERI[tur]}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label>

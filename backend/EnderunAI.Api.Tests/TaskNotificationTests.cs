@@ -94,6 +94,7 @@ public sealed class TaskNotificationTests(DatabaseFixture fixture)
             projectId = proje.Id,
             title = "Atama bildirimi testi",
             priority = 1,
+            kind = (int)WorkTaskKind.IsEmri,
             assignedToUserId = atanan
         });
 

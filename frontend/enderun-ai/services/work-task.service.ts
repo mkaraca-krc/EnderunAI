@@ -8,6 +8,45 @@ export enum WorkTaskPriority {
 }
 
 /*
+ * GÖREV TÜRÜ — ARKA UÇLA BİREBİR.
+ *
+ * Kaynak: backend/EnderunAI.Api/Models/WorkTask.cs (`WorkTaskKind`).
+ *
+ * `Belirsiz = 0` BİR SEÇENEK DEĞİL: arka uçtaki üç yazma yolu da onu
+ * reddediyor. Burada duruyor çünkü göç öncesi kayıtlarda görülebilir
+ * ve okunurken bir etikete ihtiyacı var — ama seçim listesine
+ * KONMUYOR (bkz. `SECILEBILIR_TURLER`).
+ */
+export enum WorkTaskKind {
+  Belirsiz = 0,
+  IsEmri = 1,
+  Hatirlatma = 2,
+}
+
+export const TUR_ETIKETLERI: Record<WorkTaskKind, string> = {
+  [WorkTaskKind.Belirsiz]: "Türü belirtilmemiş",
+  [WorkTaskKind.IsEmri]: "İş Emri",
+  [WorkTaskKind.Hatirlatma]: "Hatırlatma",
+};
+
+/**
+ * KULLANICIYA SUNULAN TÜRLER — `Belirsiz` BİLEREK YOK.
+ *
+ * Seçim listesini `TUR_ETIKETLERI` üzerinden dolaşan bir ekran
+ * "Türü belirtilmemiş" seçeneğini de gösterirdi ve sunucu onu
+ * reddederdi: kullanıcı seçebildiği bir şeyin reddedilmesiyle
+ * karşılaşırdı. Ayrı liste, o ihtimali kaynakta kapatıyor.
+ */
+export const SECILEBILIR_TURLER: ReadonlyArray<WorkTaskKind> = [
+  WorkTaskKind.IsEmri,
+  WorkTaskKind.Hatirlatma,
+];
+
+export function turEtiketi(kind: number, yedek?: string): string {
+  return TUR_ETIKETLERI[kind as WorkTaskKind] ?? yedek ?? "—";
+}
+
+/*
  * DURUM ENUM'U ARKA UÇLA BİREBİR.
  *
  * Önce burada `Draft = 0` ve `Waiting = 3` vardı — arka uçta İKİSİ DE
@@ -158,7 +197,10 @@ export type WorkTask = {
   priorityName: string;
   status: WorkTaskStatus;
   statusName: string;
+  kind: WorkTaskKind;
+  kindName: string;
   assignedToUserId?: string | null;
+  assignedToPersonnelId?: string | null;
   assignedByUserId?: string | null;
   startDate?: string | null;
   dueDate?: string | null;
@@ -215,6 +257,18 @@ export type WorkTask = {
    * değil: yazarsız görünen bir kayıt, arızayı gizler.
    */
   assignedToName?: string | null;
+  assignedToPersonnelName?: string | null;
+
+  /*
+   * "YAPACAK" SLOTUNUN TEK KAYNAĞI — EKRAN BUNU OKUR.
+   *
+   * `assignedToName` ve `assignedToPersonnelName` yan yana durup ekran
+   * kendi önceliğini kursaydı, aynı soruyu iki yerden cevaplayan bir
+   * kod daha doğardı. Sunucu ikisinin birden dolmasını REDDEDİYOR ve
+   * bu alanı tek yerde hesaplıyor.
+   */
+  assignedToDisplayName?: string | null;
+
   assignedByName?: string | null;
   approvedByName?: string | null;
   delegatedFromName?: string | null;
@@ -235,7 +289,23 @@ export type CreateWorkTaskRequest = {
   title: string;
   description?: string | null;
   priority: WorkTaskPriority;
+
+  /**
+   * ZORUNLU — İSTEĞE BAĞLI DEĞİL.
+   *
+   * `kind?:` yazsaydık, türü göndermeyen bir çağrı derlenir ve
+   * sunucudan 400 alırdı; hata ÇALIŞMA zamanında, kullanıcının
+   * karşısında çıkardı. Zorunlu alan, aynı hatayı DERLEME zamanına
+   * çekiyor — ETİKET/1'deki `Record<Enum, T>` ile aynı disiplin.
+   */
+  kind: WorkTaskKind;
+
   assignedToUserId?: string | null;
+
+  /** Sistem hesabı olmayan personele atama. `assignedToUserId` ile
+   *  birlikte gönderilemez — sunucu reddeder. */
+  assignedToPersonnelId?: string | null;
+
   startDate?: string | null;
   dueDate?: string | null;
   sourceModule?: string | null;
@@ -253,7 +323,13 @@ export type UpdateWorkTaskRequest = {
   title: string;
   description?: string | null;
   priority: WorkTaskPriority;
+
+  /** ZORUNLU — POST ile aynı gerekçe. PUT de aynı kapıdan geçiyor;
+   *  tür gönderilmezse görev `Belirsiz`e çevrilmiş olurdu. */
+  kind: WorkTaskKind;
+
   assignedToUserId?: string | null;
+  assignedToPersonnelId?: string | null;
   startDate?: string | null;
   dueDate?: string | null;
   tags?: string | null;

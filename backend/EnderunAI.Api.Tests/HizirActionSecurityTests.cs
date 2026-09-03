@@ -306,6 +306,21 @@ public sealed class HizirActionSecurityTests(DatabaseFixture fixture)
 
         // Hatırlatma yalnızca çağırana atanır; başkasına görev yüklenemez.
         Assert.Equal(context.UserId, task.AssignedToUserId);
+
+        /*
+         * ÜÇÜNCÜ YAZMA YOLUNUN TÜRÜ — BURADA ÖLÇÜLÜYOR.
+         *
+         * Bu araç denetleyiciyi HİÇ görmüyor; `db.WorkTasks.Add(...)`
+         * doğrudan `HizirActionTools` içinde. POST ve PUT'a konan tür
+         * kapısı bu yolu KAPSAMAZ — merkez kuralının bir zamanlar tam
+         * bu yoldan kaçmasının aynısı (bkz. MasrafMerkeziKurali).
+         *
+         * Tür varsayılana bırakılsaydı `Belirsiz` kalır ve Hızır
+         * sessizce türsüz görev üretirdi. Bu satır o ihtimali kapatıyor
+         * ve ayrıca türün DOĞRU olanı seçtiğini söylüyor: hatırlatma
+         * kişinin kendine koyduğu nottur, iş emri değil.
+         */
+        Assert.Equal(WorkTaskKind.Hatirlatma, task.Kind);
     }
 
     /// <summary>

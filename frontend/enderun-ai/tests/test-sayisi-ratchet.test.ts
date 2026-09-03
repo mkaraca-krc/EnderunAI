@@ -241,9 +241,53 @@ function mesaj(taraf: string, cizgiDosyasi: string, olculen: Sayim, temel: Sayim
   ].join("\n");
 }
 
+/**
+ * GEVŞEKLİK HER KOŞUDA BASILIR — KURAL 55/D.
+ *
+ * ÇİZGİ BİR TABANDIR: gerçek sayı çizginin ÜSTÜNDEYSE cırcır susar.
+ * Aradaki fark GEVŞEKLİKTİR ve cırcır, gevşeklik tükenene kadar
+ * SESSİZDİR — o kadar test silinebilir, hiçbir şey ötmez.
+ *
+ * ÖLÇÜLDÜ (2026-09-02, İŞEMRİ/2 Faz 1): çizgi 2798'de dururken gerçek
+ * sayı 2824'tü. 26 testlik gevşeklik BEŞ COMMIT boyunca birikmişti,
+ * çünkü çizgi YUKARI serbest ve aradaki paketler onu güncellemek
+ * zorunda değildi. Yani cırcır o gün bir cırcır değil, bir süstü.
+ *
+ * NEDEN HATIRLAMAYA BIRAKILMIYOR: gevşekliği o gün ancak çıranın
+ * hareketini KALEMLEMEYE çalışırken fark ettim. Kuralı hatırlamaya
+ * bırakırsan unutulur; sayıyı ekrana basarsan unutulamaz. Gevşeklik
+ * sıfır değilse her koşuda görünür ve biri sorar.
+ *
+ * NEDEN KIRMIZI DEĞİL, BASKI: gevşekliği kırmızıya çevirmek çizgiyi
+ * bir TAVANA dönüştürürdü ve "yukarı serbest" kuralını iptal ederdi.
+ * Aranan şey engel değil GÖRÜNÜRLÜK — düşüşün bir konuşmaya dönüşmesi
+ * gibi, gevşekliğin de bir konuşmaya dönüşmesi.
+ */
+function gevseklikSatiri(taraf: string, olculen: Sayim, temel: Sayim): string {
+  const statikBosluk = olculen.statik - temel.statik;
+  const dinamikBosluk = olculen.dinamik - temel.dinamik;
+
+  return (
+    `çıra · ${taraf}: ` +
+    `çizgi ${temel.statik} · gerçek ${olculen.statik} · gevşeklik ${statikBosluk}` +
+    `   ‖ dinamik: ` +
+    `çizgi ${temel.dinamik} · gerçek ${olculen.dinamik} · gevşeklik ${dinamikBosluk}`
+  );
+}
+
 describe("test sayısı cırcırı", () => {
   const arkaUc = arkaUcSayimi();
   const onYuz = onYuzSayimi();
+
+  /*
+   * BASKI `describe` GÖVDESİNDE, BİR TESTİN İÇİNDE DEĞİL.
+   *
+   * Test içinde olsaydı, o test atlandığında ya da ondan önce başka
+   * bir test patladığında gevşeklik BASILMAZDI — tam da bir şeylerin
+   * ters gittiği koşuda. Gövde her toplamada çalışır.
+   */
+  console.log(gevseklikSatiri("arka uç", arkaUc.sayim, cizgi("test-sayisi-backend.txt")));
+  console.log(gevseklikSatiri("ön yüz ", onYuz.sayim, cizgi("test-sayisi-onyuz.txt")));
 
   /**
    * TARAMA BOŞA DÜŞMÜYOR.

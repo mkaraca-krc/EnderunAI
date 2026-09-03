@@ -16,6 +16,7 @@ import {
   durumEtiketi,
   durumRozetTuru,
   oncelikEtiketi,
+  turEtiketi,
   workTaskService,
 } from "@/services/work-task.service";
 
@@ -199,6 +200,19 @@ export default function WorkTaskDetailPage() {
                 proje/şube/şantiye listesi çekmiyor ve çekmemeli;
                 aynı bilgiyi iki ayrı yoldan üretmek bir gün ayrışır.
               */}
+              {/*
+                TÜR EKRANDA GÖRÜNÜR — GÖRÜNMEYEN ALAN ÖLÇÜLMEZ.
+
+                Tür yalnız veritabanında dursaydı, yanlış seçilmiş bir
+                türü kimse fark edemezdi. `kindName` yerine yerel
+                etiket kullanılıyor: sunucu İngilizce enum adı
+                gönderiyor ("IsEmri"), ekranda Türkçe karşılığı
+                duruyor ve o eşleme tek kaynakta.
+              */}
+              <div>
+                <span>Tür</span>
+                <strong>{turEtiketi(item.kind, item.kindName)}</strong>
+              </div>
               <div>
                 <span>Masraf Merkezi</span>
                 <strong>
@@ -211,9 +225,26 @@ export default function WorkTaskDetailPage() {
                         : "—"}
                 </strong>
               </div>
+              {/*
+                "YAPACAK" TEK ALANDAN OKUNUYOR.
+
+                Önce `assignedToName` okunuyordu — yalnız sistem
+                KULLANICISINI gösteren alan. Canlıda ölçüldü
+                (2026-09-02): 79 aktif personel, 13 kullanıcı hesabı,
+                aralarında sıfır bağ. Yani personelin ezici çoğunluğu
+                bu slotta HİÇBİR ZAMAN görünemezdi.
+
+                İki alanı yan yana koyup burada bir öncelik kuralı
+                kurmak akla geliyor ama ETİKET/1'in dersi tam tersi:
+                aynı soruyu iki yerden cevaplayan kod ayrışıyor.
+                Sunucu ikisinin birden dolmasını reddediyor ve tek
+                alanı kendisi hesaplıyor.
+              */}
               <div>
                 <span>Yapacak</span>
-                <strong>{item.assignedToName ?? "—"}</strong>
+                <strong>
+                  {item.assignedToDisplayName ?? "—"}
+                </strong>
               </div>
               <div>
                 <span>İsteyen</span>

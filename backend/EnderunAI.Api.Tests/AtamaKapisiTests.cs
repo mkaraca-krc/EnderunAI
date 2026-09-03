@@ -48,6 +48,7 @@ public sealed class AtamaKapisiTests(DatabaseFixture fixture)
         projectId,
         title = "Atama sonda iş emri",
         priority = (int)WorkTaskPriority.Normal,
+        kind = (int)WorkTaskKind.IsEmri,
         assignedToUserId = atanan,
     };
 
@@ -147,6 +148,7 @@ public sealed class AtamaKapisiTests(DatabaseFixture fixture)
             {
                 title = "Yetkisize devredilmiş iş emri",
                 priority = (int)WorkTaskPriority.Normal,
+                kind = (int)WorkTaskKind.IsEmri,
                 assignedToUserId = yetkisizId,
                 projectId = (Guid?)proje.Id,
             });
@@ -179,6 +181,7 @@ public sealed class AtamaKapisiTests(DatabaseFixture fixture)
             {
                 title = "Yetkiliye atanmış iş emri",
                 priority = (int)WorkTaskPriority.Normal,
+                kind = (int)WorkTaskKind.IsEmri,
                 assignedToUserId = adminId,
                 projectId = (Guid?)proje.Id,
             });
@@ -281,6 +284,7 @@ public sealed class AtamaKapisiTests(DatabaseFixture fixture)
             {
                 title = "A projesinde atanmış",
                 priority = (int)WorkTaskPriority.Normal,
+                kind = (int)WorkTaskKind.IsEmri,
                 assignedToUserId = kullaniciId,
                 projectId = (Guid?)projeA.Id,
             });
@@ -294,6 +298,7 @@ public sealed class AtamaKapisiTests(DatabaseFixture fixture)
             {
                 title = "B projesine taşınıp atanmış",
                 priority = (int)WorkTaskPriority.Normal,
+                kind = (int)WorkTaskKind.IsEmri,
                 assignedToUserId = kullaniciId,
                 projectId = (Guid?)projeBId,
             });

@@ -2,6 +2,31 @@ using EnderunAI.Api.Models.Expenses;
 
 namespace EnderunAI.Api.Models;
 
+/// <summary>
+/// GÖREV TÜRÜ.
+///
+/// İKİ TÜR, BİR DE REDDEDİLEN SIFIR:
+///   `İşEmri`     — birine verilen, hesabı sorulan iş.
+///   `Hatırlatma` — kişinin kendine koyduğu not; kimseye iş yüklemez.
+///
+/// NEDEN VARSAYILAN YOK: `Belirsiz = 0` bir tür DEĞİL, tür seçilmediğinin
+/// kaydı. Varsayılan koysaydık — hangisini koyarsak koyalım — tür
+/// seçmeyen her yazma yolu sessizce o türü üretirdi ve alan hiçbir şey
+/// ölçmezdi. Bu yüzden `Belirsiz` HER YAZMA YOLUNDA REDDEDİLİR; sıfır
+/// yalnız göç öncesi satırlarda görülebilecek bir geçmiş izidir.
+///
+/// SAYI SIFIRDAN BAŞLIYOR ÇÜNKÜ REDDEDİLEN DEĞER SIFIR OLMALI:
+/// veritabanı `integer` sütununun doğal boşluğu 0'dır. Reddedilen değeri
+/// oraya koymak, "yazılmamış" ile "geçersiz"i aynı yere düşürür ve
+/// ikisini de aynı kapı yakalar.
+/// </summary>
+public enum WorkTaskKind
+{
+    Belirsiz = 0,
+    IsEmri = 1,
+    Hatirlatma = 2
+}
+
 public enum WorkTaskPriority
 {
     Low = 0,
@@ -71,8 +96,33 @@ public sealed class WorkTask : BaseEntity
     public WorkTaskPriority Priority { get; set; } = WorkTaskPriority.Normal;
     public WorkTaskStatus Status { get; set; } = WorkTaskStatus.Open;
 
+    /// <summary>
+    /// Görevin türü. VARSAYILAN ATANMIYOR — bilerek. C# `0` verir, o da
+    /// <see cref="WorkTaskKind.Belirsiz"/>'dir ve her yazma yolunda
+    /// reddedilir. Buraya bir varsayılan yazmak, kapıyı açık bırakmak
+    /// olurdu: tür göndermeyen çağıran sessizce geçerdi.
+    /// </summary>
+    public WorkTaskKind Kind { get; set; }
+
     public Guid? AssignedToUserId { get; set; }
     public Guid? AssignedByUserId { get; set; }
+
+    /// <summary>
+    /// İŞİ YAPACAK PERSONEL — sistem hesabı olmayanlar için.
+    ///
+    /// ÖLÇÜLDÜ (2026-09-02, canlı): 79 aktif personel, 13 kullanıcı
+    /// hesabı ve ikisi arasında SIFIR bağ — `AppUser.PersonnelId`
+    /// alanı var ama hiçbir satırda dolu değil. Yani personelin ezici
+    /// çoğunluğuna `AssignedToUserId` ile iş verilemiyordu.
+    ///
+    /// NEDEN İKİSİ BİRDEN DOLU OLAMAZ: "bu işi kim yapacak" sorusunun
+    /// tek cevabı olur. İki alan birden dolduğunda ekranda hangisini
+    /// göstereceğimizi bir öncelik kuralıyla çözmek, iki kaynağı
+    /// GÖRÜNTÜ katmanında uzlaştırmak demektir; kaynaklar ayrıştığında
+    /// kural sessizce yanlış cevabı seçer. O yüzden çelişki kaynakta
+    /// reddediliyor — bkz. <c>GorevAtamaKurali</c>.
+    /// </summary>
+    public Guid? AssignedToPersonnelId { get; set; }
 
     public DateTime? StartDate { get; set; }
     public DateTime? DueDate { get; set; }

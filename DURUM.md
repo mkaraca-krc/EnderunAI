@@ -1969,6 +1969,29 @@ DEĞİL… KURAL-KATMAN/1 geldiğinde DEĞİŞTİRİLECEK — silinmeyecek, ters
 çevrilecek."* Böylece "kapandı" sanılması imkânsız: kapıyı kapatan paket
 bu testi kırmızıya düşürmek zorunda kalacak.
 
+### KURAL-KATMAN/1'İN KABUL KRİTERİ — İKİNCİ SATIR (2026-09-03)
+
+`sourceModule` kaçışına dayanan **ikinci** bir test daha var ve o bir
+kusuru sabitlemiyor, kaçışı **iskele olarak kullanıyor**:
+
+> **`IsEmriTuruKapisiTests.S3d_MerkezsizGorevde_De_PersonelAdiCozulur`
+> GÜNCELLENECEK.**
+
+S3d, merkezi olmayan bir görevde de personel adının çözüldüğünü
+ölçüyor; merkezsiz görevi yaratabilmek için `sourceModule` kaçışından
+geçiyor. Kaçış kapandığı gün o istek 400 dönecek ve test **kapsam
+kaybından değil, iskele kaybından** kırmızıya düşecek.
+
+NEDEN BUGÜN YAZILIYOR: o gün kırmızıyı gören kişi önce "adı çözme
+mantığını mı bozdum" diye arayacak — yanlış yerde. Kaydedilmezse bu
+yarım saat kayıptır. Kaydedilirse tek satırlık iş: görev merkezli
+kurulur, iddia aynı kalır.
+
+AYRIM: `KaydaBagliGorev_MerkezsizGecer_ACIK_KAPI` **tersine
+çevrilecek** (kusuru sabitliyor); S3d **korunacak, kurulumu
+değişecek** (davranışı sabitliyor). İkisini karıştırmak, çalışan bir
+iddiayı silmek olurdu.
+
 ### ÜÇ CIRCIR YAKALADI, ÜÇÜ DE GEVŞETİLMEDİ
 
 | Cırcır | Ne dedi | Ne yapıldı |
@@ -7377,6 +7400,45 @@ biçimlerde ve ayrı günlerde bulundu — ama aynı hata.
     veriyor. Yakalayamadığı şey de kayıtlı: çizginin sessizce
     düşürülmesi — koruma orada usule ait, mekanizmada değil.
 
+    **D FIKRASI — GEVŞEKLİK SIFIRDA TUTULUR** (Mehmet onayı,
+    2026-09-03):
+
+    > **TEST EKLEYEN HER PAKET, ÇIRA ÇİZGİSİNİ KENDİ ÖLÇTÜĞÜ GERÇEK
+    > SAYIYA TAŞIR; ÇİZGİ GERÇEK SAYININ GERİSİNDE BIRAKILMAZ. ÇIRA
+    > HER KOŞUDA KENDİ GEVŞEKLİĞİNİ BASAR.**
+
+    Çizgi bir TABANDIR: gerçek sayı üstündeyse cırcır susar. Aradaki
+    fark GEVŞEKLİKTİR ve cırcır, **gevşeklik tükenene kadar sessizdir**
+    — o kadar test silinebilir, hiçbir şey ötmez.
+
+    DOĞURAN OLAY (ölçüldü, İŞEMRİ/2 Faz 1): çizgi 2798'de dururken
+    HEAD'in gerçek sayısı **2824**'tü. 26 testlik gevşeklik **beş
+    commit** boyunca birikmişti; her biri kuralı çiğnememişti, çünkü
+    çizgi yukarı serbestti ve güncellemek zorunlu değildi. Sonuç: o gün
+    26 test silinebilir ve cırcır susardı. Cırcır bir cırcır değil, bir
+    süstü.
+
+    NEDEN BASKI, NEDEN KIRMIZI DEĞİL: gevşekliği kırmızıya çevirmek
+    çizgiyi bir TAVANA dönüştürür ve "yukarı serbest" kuralını iptal
+    ederdi. Aranan şey engel değil **görünürlük** — düşüşün bir
+    konuşmaya dönüşmesi gibi, gevşekliğin de bir konuşmaya dönüşmesi.
+
+    NEDEN HATIRLAMAYA BIRAKILMIYOR (Mehmet'in gerekçesi): *"kuralı
+    hatırlamaya bırakırsan unutulur; sayıyı ekrana basarsan
+    unutulamaz."* 26'lık gevşeklik ancak çıranın hareketi
+    KALEMLENMEYE çalışılırken fark edildi; basılıyor olsaydı ertesi
+    gün görülürdü.
+
+    BİÇİM (`tests/test-sayisi-ratchet.test.ts`, `describe` gövdesinde —
+    bir testin içinde değil, ki başka bir test patladığında da bassın):
+
+        çıra · arka uç: çizgi 2849 · gerçek 2849 · gevşeklik 0
+        çıra · ön yüz : çizgi  410 · gerçek  410 · gevşeklik 0
+
+    İLK İŞİNİ HEMEN GÖRDÜ: eklendiği koşuda `gevşeklik 3` bastı (bu
+    paketin `PersonelKapsamSuzgeciTests`'i), çizgi ona taşındı. Sayı
+    elle sayılmadı — çıranın kendi çıktısından okundu.
+
 56. **YETKİLENDİRME DEĞİŞİKLİKLERİ ANINDA GÖRÜNMEZ.**
 
     Mevcut oturumlar eski jetonla çalışmaya devam eder; yeni davranış
@@ -7890,3 +7952,288 @@ geçti. Yani o düşmeler **kararsızlıktı**, mantık hatası değil — diki�
 izi 15 isteğin hepsinde `global=True` ve `ham == kapsamli` gösterdi
 (bkz. §7). Kararsızlığın MEKANİZMASI hâlâ bilinmiyor ve ölçülmeden
 fixture'a dokunulmamalı.
+
+---
+
+## İŞEMRİ/2 FAZ 1 — ÖLÇÜM KAYDI (2026-09-02)
+
+### KAPI 1: ölçüm tasarımın gerekçesini düzeltti
+
+Tasarım notu şöyleydi: *"Detayda 'Yapacak — ' boş… İŞEMRİ/2'nin
+dolduracağı alan tam olarak orası."* Ölçüm slotun **neden** boş
+olduğunu değiştirdi:
+
+`app/gorevler/page.tsx:393` — görev formu `assignedToUserId: null`
+gönderiyor, **sabit**. Formda atama alanı hiç yok. Yani slot personel
+alanı eksik olduğu için değil, **hiçbir yolun atama yazmaması** yüzünden
+boştu. Canlı doğruluyor: iki görev kaydının ikisinde de
+`AssignedToUserId` NULL.
+
+Bu paketi geçersiz kılmıyor — gerekçesini düzeltiyor. Paketin
+içeriği (tür + personel alanı, tek göç, yazma yolları) bağımsız olarak
+isteniyordu.
+
+### İKİ KİMLİK UZAYI, ARALARINDA SIFIR BAĞ
+
+Canlıda ölçüldü:
+
+| Ölçüm | Değer |
+|---|---|
+| Aktif personel (`Status=1`) | 79 |
+| İşten ayrılmış (`Status=4`) | 2 |
+| Kullanıcı hesabı | 13 |
+| `AppUser.PersonnelId` dolu olan kullanıcı | **0** |
+| `DepartmentId` dolu olan aktif personel | **0** (5 departman tanımlı) |
+| Aktif şantiye ataması olan personel | 25 |
+
+`AppUser.PersonnelId` alanı **var ama hiçbir satırda dolu değil**.
+Yani "bu kullanıcı şu kişidir" sorusunun bugün cevabı yok. Personelin
+ezici çoğunluğuna `AssignedToUserId` ile iş verilemiyordu.
+
+**Kaskadın departman yarısı canlıda boş.** Beş departman tanımlı, hiçbir
+aktif personel bir departmana bağlı değil. Proje/şantiye yarısı dolu
+(25 personel). Faz 2'nin seçicisi buna göre kurulacak; departman
+süzgeci yazılacak ama bugün hiçbir şeyi süzmeyecek.
+
+### "YAPACAK" SLOTUNUN İKİ KAYNAĞA DÜŞME TEHLİKESİ — KAYNAKTA KAPATILDI
+
+İki atama alanı tek slotu besleseydi, bugün dördüncü kez düzeltilen
+desen (ETİKET/1) veri katmanında yeniden doğardı. Alınan karar:
+**görüntü katmanında öncelik kuralı yok; çelişki yazma yollarında
+reddediliyor.** Öncelik kuralı yazılsaydı, kapı bir gün gevşediğinde
+hangisinin doğru olduğunu sessizce seçerdi.
+
+### "ÜÇ YAZMA YOLU" BİR SAYIMDI VE EKSİKTİ
+
+Kapsam POST, PUT ve Hızır olarak konmuştu. Ölçüm **dördüncüsünü**
+gösterdi: `POST /api/tasks/{id}/delegate` de `AssignedToUserId`
+yazıyor ve kuraldan geçmiyordu. Personele atanmış bir görev bir
+kullanıcıya devredilince **iki alan da dolu kalırdı** — kural isteğin
+içindeki çelişkiyi reddederken, bu yol çelişkiyi **kaydın içinde**
+üretiyordu.
+
+Bu, ACIL/2'nin dersinin genişletilmiş hâli: bir alanın kapısı
+kurulurken o alanı YAZAN bütün fiiller aranır, yalnız POST ve PUT
+değil. `grep -n "AssignedToUserId" ` ile doğrulanabilir bir sayım
+olsaydı dördüncüsü baştan görünürdü.
+
+### YANLIŞ KIRMIZI — İLAN EDİLEN KIRMIZI BU DEĞİLDİ
+
+Kural 61 gereği "mevcut POST testleri tür göndermediği için 400 alacak"
+diye ilan edildi. İlk koşuda 29 testin **hepsi** düştü — ama sebep kapı
+değildi: `TEST_DB_CONNECTION` tanımsızdı ve `TestWebApplicationFactory`
+daha kurulurken patlıyordu. Kapıya hiç ulaşılmadı.
+
+"Kırmızı verdi" ile "kapı çalıştı" aynı şey değildir. Ortam kurulunca
+gerçek ölçüm çıktı: **6 düştü / 6 geçti**, düşenlerin hepsi kayıt
+oluşturabilen testler.
+
+### ÖLÇÜLMEDİĞİ SÖYLENEN ŞEY: PERSONEL KAPSAM SÜZGECİ — **KAPANDI**
+
+**İLK KAYIT (KAPI 2 raporunda dürüst sınır olarak yazılmıştı):**
+`PersonelAtanabilirMiAsync` kapsamlı okuma yapıyor
+(`scoped.PersonnelAsync`), ama bu iddia **bugün sınanamıyor**:
+`tasks.manage` izni canlıda yalnız **Admin** ve **Genel Müdür**
+rollerinde, ikisi de geniş kapsamlı. Dar kapsamlı bir kullanıcı görev
+zaten oluşturamıyor. Süzgeç yerinde duruyor ama dar kapsamda ne yaptığı
+ÖLÇÜLMEMİŞ. *"Yetki genişlediği gün ayrı bir sonda gerekir."*
+
+**MEHMET'İN DÜZELTMESİ (KAPI 2 onayının 2. şartı, 2026-09-03):**
+
+> *"Rol değişikliğini bekleme, süzgeci daraltılmış kapsamla doğrudan
+> çağır. Testsiz savunma bırakma."*
+
+Doğru olan buydu ve gerekçesi benim kendi kaydımda duruyordu: bu kod
+tabanının tekrar eden yarası testsiz savunma (`2d90c946`). "Bugün
+devreye girmiyor" ile "doğru çalışıyor" aynı şey değil — üstelik aynı
+dersi bu dosyanın başka bir yerinde **`MANUAL` kaçışı** için zaten
+yazmıştım: *"bir kaçışın bugün kullanılmıyor olması, kapatılmasını
+erteleme gerekçesi değildir."* Aynı hatayı tersinden yapıyordum.
+
+**YÖNTEM: ROLÜ DEĞİL, KAPSAMI DARALT.** Yeni bir rol uydurmak yerine
+`ICurrentDataScopeService` test konağında değiştirilip daraltılmış bir
+anlık görüntü döndürüldü. İzin katmanına hiç dokunulmadı: aynı Admin,
+aynı uç, aynı istek — tek değişen kullanıcının **veri kapsamı**.
+
+İZOLASYON ÖLÇÜLDÜ, VARSAYILMADI: POST gövdesinde kapsam kullanan TEK
+yer `PersonelAtanabilirMiAsync` (`WorkTasksController:1134`). Masraf
+merkezi doğrulaması ham `db.ProjectSites` okuyor. Yani bu testlerde
+gelen 400'ün sebebi başka bir kapı olamaz.
+
+`PersonelKapsamSuzgeciTests` — 3 test:
+
+| Test | İddia |
+|---|---|
+| `DarKapsam_GorunmeyenPersonele_Atama_Reddedilir` | Personel VAR, AKTİF, aynı şirkette — tek eksiği kapsamda olmaması. 400. |
+| `DarKapsam_GorunenPersonele_Atama_Kabul_POZITIF_KONTROL` | Aynı kapsam, şantiyeye ATANMIŞ personel. 200. Bu olmadan yukarıdaki test boştur. |
+| `Kapsam_Cozulemezse_HicbirPersonel_Atanamaz_FAIL_CLOSED` | Kapsam hiç çözülemediğinde kapı AÇILMIYOR. `ScopedData`'nın docstring'i bunu vaat ediyordu; vaat artık test edilir. |
+
+**SONDA I** — `scoped.PersonnelAsync` yerine ham `db.Personnel`
+yazıldı. İlan: iki kırmızı (ret + fail-closed), bir yeşil (pozitif
+kontrol). Gözlem: **tam olarak o iki test düştü**, pozitif kontrol
+ayakta kaldı, kontrolcü geri alındıktan sonra bayt bayt aynı.
+
+**KALAN SINIR (gizlenmiyor):** bu testler süzgecin *dar kapsamda doğru
+süzdüğünü* gösteriyor; canlıda `tasks.manage`'in dar kapsamlı bir role
+verilmesinin **başka** sonuçları olur (görev listesi, devretme, gelen
+kutusu). Onlar bu paketin kapsamında değil ve o gün ayrıca ölçülecek.
+
+### DÜRÜST SINIR: ÖN YÜZ TEK KAYNAK TESTİ
+
+`tests/gorev-turu-tek-kaynak.test.ts` arka ucun C# enum'unu **metin
+olarak** okuyor. Arka uç bir değeri hesaplayarak üretirse
+(`IsEmri = 1 << 0`) ayrıştırma çöker — sessizce yeşile düşmez, açık
+hata verir.
+
+---
+
+## ÜÇ KAYIT — ÖLÇÜM USULÜ (2026-09-02, İŞEMRİ/2 Faz 1 sırasında)
+
+### 1. Mehmet'in ölçüm hatası — kendi kaydıyla birlikte
+
+Mehmet, ETİKET/1'in "sessizce kaybolduğunu" sordu. Kaybolmamıştı:
+`b9d125e0` commit edilmiş, itilmiş ve **canlıya çıkmıştı** —
+`/var/lib/enderun-ai/last-deployed-commit` tam olarak o commit'i
+gösteriyordu.
+
+Kendi sözleriyle: *"bir işin yapılmadığını, yapıldığını gösteren kaydı
+aramadan iddia ettim."*
+
+NEDEN BURAYA YAZILIYOR: bu, aynı gün dört kez tekrarlanan desenin
+kendisidir — **yokluk iddiası bir ölçüm gerektirir**. Kural 48'in
+("boş sonuç yokluğun kanıtı değildir") insan tarafındaki karşılığı.
+Kaydı arayan tek bir komut vardı ve çalıştırılmamıştı.
+
+İKİNCİ DERS, BENİM TARAFIMDA: rapor yapılmış işi görünür kılmadıysa,
+soruyu doğuran şey raporun kendisidir. ETİKET/1 bir önceki turda
+bitmişti ve o turun raporu bu turda görünmüyordu; "bitti" demek
+yetmiyor, **nerede durduğunu gösteren kayıt** raporda olmalı.
+
+### 2. SONDALAR TEST DEĞİLDİR
+
+**Sonda bir test değildir; testin ısırdığını kanıtlayan bir deneydir.**
+
+Test kod tabanında yaşar ve her koşuda çalışır. Sonda bir kez yapılır,
+sonucu kaydedilir ve geri alınır — kod tabanında iz bırakmaz. Bir
+paketin "kaç test ekledi" sorusuna sondalar **sayılmaz**.
+
+NEDEN ÖNEMLİ: ikisi karıştırılırsa iki ayrı yanılgı doğar. Sondayı
+test sanmak, çırayı sonda sayısıyla şişirir — silinmesi hiçbir şeyi
+bozmayan sayılar. Testi sonda sanmak daha kötüsü: bir kez kırmızı
+verdiği görülen bir testin *kalıcı* olarak koruduğu varsayılır, oysa
+hiç eklenmemiş olabilir.
+
+İŞEMRİ/2 Faz 1'in sayıları bu ayrımla: **24 test eklendi**
+(19 arka uç + 5 ön yüz), **10 sonda koşuldu** (A–G arka uçta,
+F1–F3 ön yüzde). Sondaların hiçbiri kod tabanında durmuyor.
+
+### 3. İKİ ÇİZGİ ARASINDAKİ FARK BİR KATKI ÖLÇÜSÜ DEĞİLDİR
+
+Çıra bir **taban**tır, bir sayaç değil. "Çizgi 2798'di, şimdi 2843"
+cümlesi 45 testin eklendiğini söylemez — yalnız tabanın nereye
+taşındığını söyler.
+
+ÖLÇÜLDÜ (çıranın kendi sayım kuralı, HEAD'in ayrı kopyasına
+uygulanarak; kural çalışma ağacında 2843'ü birebir ürettiği için
+doğrulandı):
+
+| commit | sayı | paket |
+|---|---|---|
+| `d202eab3` | **2798** | İŞEMRİ/1 — çizgi burada yazıldı, **gerçek sayıya eşitti** |
+| `2d90c946` | 2809 | MERKEZ/1 (+11) |
+| `9b3c0a3c` | 2817 | MERKEZ/1 sondaları (+8) |
+| `2e981381` | 2820 | ACIL/1 (+3) |
+| `6ed68a43` | 2823 | ACIL/2 (+3) |
+| `761f7eb2` | **2824** | ACIL/2 (+1) |
+| `f9b61709` | 2824 | BAĞ/1 (ön yüz — arka uçta +0) |
+| `b9d125e0` | 2824 | ETİKET/1 (ön yüz — arka uçta +0) |
+
+**BOŞLUĞUN KAYNAĞI:** çizgi `d202eab3`'te doğruydu. Sonraki **beş**
+commit toplam **26 test ekledi ve çizgiyi güncellemedi**. Bu kural
+ihlali DEĞİL: çıra "aşağı inmesin" diyor, "gerçek sayıya eşit olsun"
+demiyor — yukarı taşımak serbest, zorunlu değil.
+
+**AMA BEDELİ ÖLÇÜLEBİLİR VE CİDDİ:** o beş commit boyunca arka uç
+çırasının **26 testlik boşluğu** vardı. Yani o dönemde **26 test
+silinebilir ve çıra hiçbir şey söylemezdi.** Gevşekliği olan bir
+taban, gevşeklik tükenene kadar ısırmayan bir tabandır.
+
+Bu boşluğun tam olarak hangi paketlerde biriktiği ayrıca dikkat
+çekici: MERKEZ/1, ACIL/1 ve ACIL/2 — yani **sessizce silinen
+savunmanın bulunduğu ve kapatıldığı paketlerin tam kendisi**
+(`2d90c946` 26 satırlık atama kapısını metin aralığıyla kesmişti).
+O paketler çırayı güncelleseydi, boşluk o günlerde sıfır olurdu.
+
+Ön yüzde bu boşluk yok: `b9d125e0`'de çizgi 405, gerçek sayı 405.
+Fark ETİKET/1'in çizgiyi ölçerek taşımasından geliyor.
+
+**BOŞLUK TEK SEFERDE DEĞİL, BEŞ COMMIT BOYUNCA BİRİKTİ.** Her adım tek
+başına küçüktü — 11, 8, 3, 3, 1 — ve hiçbiri kendi başına dikkat
+çekecek boyutta değildi. Kimse toplamı görmedi çünkü toplam hiçbir
+yerde YAZMIYORDU. Boşluk ancak bir sonraki paket çırayı kalemlemeye
+çalışınca, yani üç gün sonra fark edildi.
+
+Bu, ölçümün nerede durduğuyla ilgili bir ders: gevşeklik **hesaplanan**
+bir sayı değil, **basılmayan** bir sayıydı. İki çizgiyi de gören tek
+şey çıranın kendisiydi ve ikisinin farkını hiç söylemiyordu.
+
+---
+
+## SONDA G — İLAN EDİLEN KIRMIZI GELMEDİ (2026-09-02)
+
+**Bu bölüm bir başarıyı değil, bir yanılgının ölçümle düzeltilmesini
+kaydediyor.**
+
+### İlan ve sonuç
+
+Kural 61 gereği ilan edilmişti: *"Ad çözücünün erken çıkışından
+`personeller.Count == 0` koşulu silinirse `S3d` kırmızı verir."*
+
+**SONDA YEŞİL GELDİ** — 11/11. Sabotaj uygulandı, hiçbir test düşmedi.
+
+### Sebep — ölçüldü, tahmin edilmedi
+
+Erken çıkışın baktığı `liste`, dört alandan besleniyor:
+`AssignedToUserId`, `AssignedByUserId`, `ApprovedByUserId`,
+`DelegatedFromUserId`. Bunlardan **`AssignedByUserId` her iki yazma
+yolunda da HER ZAMAN yazılıyor** —
+`WorkTasksController:352` (`= currentUser.UserId`) ve
+`HizirActionTools:204` (`= context.UserId`).
+
+Yani API'den doğan hiçbir görevde `liste` boş olamaz. `liste.Count == 0`
+hiç sağlanmıyor, erken çıkış hiç tetiklenmiyor ve eklediğim koşul
+**ulaşılamaz koddu**. `S3d` onu sınamıyordu; başka bir şeyi sınıyordu
+(merkezsiz görevde adın NORMAL yoldan çözülmesi — değerli ama farklı
+bir iddia).
+
+### Neden kaldırılmadı
+
+Koşul DOĞRU, yalnızca bugün ulaşılamaz. İki seçenek vardı:
+
+  (a) Ulaşılamaz olduğu için sil.
+  (b) Ulaşılabilir bir şekil bul ve SINA.
+
+(b) seçildi. `S3e` kaydı doğrudan veritabanına yazıyor — hiçbir
+kullanıcı kimliği taşımayan, yalnız personele atanmış bir görev. Bu
+şekil bugün üretilmiyor ama mümkün: bir içe aktarma ya da arka plan
+işi, isteyeni olmayan bir görevi personele atayabilir.
+
+(a) daha temiz görünüyordu ama bu kod tabanının yarası tam olarak
+**testsiz savunma**: `2d90c946` 26 satırlık atama kapısını sessizce
+sildi ve 2965 testin hiçbiri görmedi, çünkü o kod TESTSİZDİ. Doğru bir
+savunmayı silmek yerine test edilebilir kılmak, aynı yaranın tekrarını
+önlüyor.
+
+### Asıl ders
+
+**"Sonda kırmızı vermedi" iki farklı şey demek olabilir: savunma
+sağlam, ya da SONDA YANLIŞ YERE VURUYOR.** İkisini ayıran şey, sondanın
+kırmızı verdiğini görmüş olmaktır — G'de görülmedi.
+
+Bu, `goc-provasi.sh`'deki KARAR VEREMEDİ ayrımının test tarafındaki
+karşılığı: yeşil bir sonda, savunmanın çalıştığının kanıtı değildir.
+Kanıt, sabotajın kırmızı ürettiğini GÖRMEKTİR.
+
+`S3d`'nin yorumu düzeltildi: artık erken çıkışı koruduğunu iddia
+etmiyor. Yanlış bir yorum, olmayan bir yorumdan daha zararlıdır —
+sonraki okuyucu o iddiaya güvenip sınamayı atlar.

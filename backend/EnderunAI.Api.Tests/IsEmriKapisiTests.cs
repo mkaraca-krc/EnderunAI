@@ -53,6 +53,7 @@ public sealed class IsEmriKapisiTests(DatabaseFixture fixture)
             projectId = proje.Id,
             title = "   ",
             priority = (int)WorkTaskPriority.Normal,
+            kind = (int)WorkTaskKind.IsEmri,
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, yanit.StatusCode);
@@ -89,6 +90,7 @@ public sealed class IsEmriKapisiTests(DatabaseFixture fixture)
             projectId = proje.Id,
             title = "Sonda iş emri",
             priority = (int)WorkTaskPriority.Normal,
+            kind = (int)WorkTaskKind.IsEmri,
         });
 
         Assert.Equal(HttpStatusCode.OK, yanit.StatusCode);
@@ -108,6 +110,7 @@ public sealed class IsEmriKapisiTests(DatabaseFixture fixture)
             projectId = proje.Id,
             title = "Yetkisiz iş emri",
             priority = (int)WorkTaskPriority.Normal,
+            kind = (int)WorkTaskKind.IsEmri,
         });
 
         Assert.Equal(HttpStatusCode.Forbidden, yanit.StatusCode);
