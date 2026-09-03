@@ -4649,6 +4649,141 @@ yüzey **korumalı doğar**.
 
 ---
 
+---
+
+## SEBEBİ ÖLÇÜLMEMİŞ BİR YEŞİL, KANIT DEĞİLDİR (Mehmet, 2026-09-03)
+
+> **İLAN EDİLEN KIRMIZI GELMEDİĞİNDE ÜÇ İHTİMAL VARDIR: SAVUNMA
+> SAĞLAMDIR, SAVUNMA ULAŞILAMAZDIR, YA DA SONDA HEDEFİ ISKALAMIŞTIR.
+> ÜÇÜ DE 'YEŞİL' GÖRÜNÜR. AYIRAN TEK ŞEY SEBEBİN ÖLÇÜLMESİDİR.
+> SEBEBİ ÖLÇÜLMEMİŞ BİR YEŞİL, KANIT DEĞİLDİR.**
+
+Üçünün de örneği aynı gün çıktı:
+
+| | Sonda | Yeşilin sebebi |
+|---|---|---|
+| Savunma **sağlam** | A–F, H–P | Sabotaj gerçekten ısırıldı; yeşil olan pozitif kontrollerdi |
+| Savunma **ulaşılamaz** | **G¹** | Eklediğim erken çıkış koşulu ULAŞILMAZ koddu; sabotaj bir şeyi bozamadı çünkü o kod hiç koşmuyordu |
+| Sonda **ıskaladı** | **Q¹** | Sabotaj dizgisi 42 karakterdi, bekçinin eşiği 43. Bekçi doğru çalıştı; sonda hedefin bir karakter yanına düştü |
+
+G¹ ve Q¹ kayıtta aynı görünürdü: *"ilan kırmızıydı, yeşil geldi."*
+Sebep ölçülmeseydi ikisi de "savunma sağlam" diye yorumlanabilirdi —
+ve ikisi de yanlış olurdu.
+
+### AYNI KURAL ÖLÇÜME DE UZANIYOR
+
+Aynı gün eşik maliyetini iki kez ölçmeye çalıştım; ikisinde de
+`sed`/`grep` ifadem tutmadı ve **ölçüm hiç yapılmadı**. Çıktı yine de
+düzgün, temiz ve ikna edici görünüyordu: *"43 → 0, 40 → 0, 32 → 0."*
+
+Yakalatan tek şey, betiğe **dosyadaki gerçek eşiği bastırmış** olmamdı
+— üç satırda da `regex: {43,}` yazıyordu, yani hep aynı eşik
+ölçülmüştü.
+
+> **Koştuğu doğrulanmamış bir ölçüm de sonuç değildir.** Sonuç, ölçümün
+> gerçekten istenen şeye uygulandığını gösteren bir iz taşımalıdır.
+
+Üçüncü denemede yöntem değişti: bekçinin süzgeç zinciri ayrı bir
+betikte ÇOĞALTILDI ve çoğaltma, eşik 43'te gerçek bekçiyle **aynı
+sonucu (0 bulgu)** vererek doğrulandı. Ancak ondan sonra diğer eşikler
+anlamlı oldu.
+
+---
+
+## SIR BEKÇİSİ — İKİ KATMAN, İKİ AYRI MANTIK (2026-09-03)
+
+### KAPSAM ARTIK DIŞLAMA İLE TANIMLI
+
+Bekçi eskiden kapsamını LİSTE ile tanımlıyordu ("EnderunAI.Api ve
+EnderunAI.Api.Tests altındaki .cs dosyaları"). `deploy/scripts/*.sh`
+ve `.github/workflows/*.yml` yıllarca taranmadı ve bekçi o yüzeyde her
+zaman yeşil kaldı.
+
+Artık evren **git'in izlediği her dosya** — yani commit edilebilen her
+şey. İstisnalar açıkça ve gerekçesiyle yazılı, ve her istisnanın
+gerekçeli olduğunu sınayan ayrı bir test var.
+
+**SONDA Q²:** dışlama listesine dokunulmadan `.ps1` ve `.env.example`
+eklendi (depoda hiç olmayan iki dosya türü) — ikisi de yakalandı.
+Yeni yüzey **korumalı doğuyor**.
+
+### KATMAN 1 — DESEN: EŞİKLİ, ÇÜNKÜ SEZGİSEL
+
+Uzunluk/alfabe sezgisi yanlış alarm üretir; eşik onun içindir.
+Eşik ölçülerek **43'ten 40'a** indirildi:
+
+| Eşik | Bulgu | | Eşik | Bulgu |
+|---|---|---|---|---|
+| 43 | 0 | | 36 | 11 |
+| **40** | **0** | | 32 | 11 |
+| | | | 24 | 16 |
+
+40'a inmek BEDAVA — tek yanlış alarm eklemiyor — ve tam da kaçan
+sınıfı kapatıyor: `safe-deploy.sh`'deki değer 40 karakterdi ve hiç
+yakalanmamıştı.
+
+**BU EŞİK BİR SINIRDIR VE GİZLENMİYOR:** 40 karakterin altındaki bir
+sır bu katmandan geçer.
+
+### KATMAN 2 — GERÇEK SIR: EŞİKTEN TAMAMEN BAĞIMSIZ
+
+Mehmet'in düzeltmesi: *"Gerçek sırlar ortam değişkeninden okunur,
+dosyalarda birebir dizgi olarak aranır. Uzunluk/entropi/biçim filtresi
+UYGULANMAZ."*
+
+Gerekçe ölçülmüştür: **gerçek DB parolası 10 karakter.** Hiçbir makul
+desen eşiği onu geçirmez; ama bu katmanın onu yakalaması zorunludur.
+**Uzunluk, sırrın değerini belirlemez.**
+
+Kurallar:
+- Hiçbir dışlaması yok — `package-lock.json` ve göç dosyaları dahil.
+- Sır hiçbir çıktıya yazılmaz: yalnız `GERÇEK ÜRETİM SIRRI: <ad>` ve
+  dosya/satır. Değer ne hata mesajına, ne günlüğe düşer — yoksa bekçi,
+  koruduğu şeyi ifşa eden araca dönüşürdü.
+- **Sessiz atlama yok:** beklenen bir sır ortamda yoksa "KONTROL
+  EDİLEMEDİ" diye KIRMIZI verir. Henüz var olmayan sırlar
+  (`PORTAL_TOKEN_ANAHTARI`, `VAPID_PRIVATE_KEY`) ayrı bir listede
+  gerekçesiyle duruyor ve **ortaya çıktıkları gün test kırmızı verip
+  taşınmaya zorluyor** — M3'ün VAPID anahtarı sessizce korumasız
+  kalamayacak.
+
+**DÜRÜST SINIR:** bu katman ortam dosyasını okuyor; CI'da o dosya yok
+ve test ATLANIYOR (geçmiyor — atlandığı açıkça yazılıyor). Yayını
+durduran kapı sunucudaki koşu ve orada dosya her zaman var.
+
+**ÖZET TABANLI İLK TASARIM TERK EDİLDİ:** sırların SHA-256 özetlerini
+depoda tutmayı denedim. Yüksek entropili sır için güvenli ama 10
+karakterlik bir parolanın özeti kaba kuvvetle çözülebilir — depoya
+koymak onu korumak değil, ona bir doğrulama oracle'ı vermek olurdu.
+Ortamdan okuma bu ikilemi tamamen ortadan kaldırdı; özet dosyası ve
+üreteci silindi (kullanılmayan bir yapılandırma, koruma sanılan ölü
+ağırlıktır).
+
+### SONDA S — VE BEKÇİNİN KENDİ BULDUĞU ŞEY
+
+Gerçek DB parolası (10 karakter) geçici bir dosyaya konuldu.
+Beklendiği gibi: gerçek sır katmanı KIRMIZI, desen katmanı YEŞİL
+(kaçırması beklenen davranış). Ağaç sonrasında temiz, izlenen dosyada
+kalıntı yok, `git diff`te iz yok.
+
+**Ama bulgu üç satır döndü:**
+
+    GERÇEK ÜRETİM SIRRI: DB_PAROLASI
+    GERÇEK ÜRETİM SIRRI: SEED_ADMIN_PASSWORD
+    GERÇEK ÜRETİM SIRRI: SMTP_PASS
+
+Dosyada tek bir değer vardı. Hash karşılaştırmasıyla doğrulandı:
+**üç sır da AYNI 10 karakterlik değer.**
+
+Yani tek bir sızıntı **veritabanını, yönetici hesabını ve posta
+hesabını birden** açar. Bu bir sızıntı değil — hiçbir yere sızmamış —
+ama bir tasarım zayıflığı ve bekçinin kendisi buldu.
+
+(Değerin özeti buraya YAZILMIYOR: 10 karakterlik bir parolanın özeti
+kaba kuvvet için ipucudur.)
+
+---
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`
@@ -4656,6 +4791,41 @@ Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyo
 **2026-08-25'te 13 maddenin 9'u karara bağlandı** (aşağıda "KAPANANLAR").
 Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
 **11 madde** (6–11. maddeler 2026-08-26/28'de eklendi):
+
+0a. **ÜÇ ÜRETİM SIRRI AYNI VE 10 KARAKTER — DÖNDÜRME KARARI SENDE**
+   (2026-09-03, sır bekçisi paketi sırasında bulundu) | Karar
+   bekliyor, hiçbir şey değiştirilmedi | Sen tetikleyeceksin.
+
+   **ÖLÇÜM:** `DB parolası`, `SEED_ADMIN_PASSWORD` ve `SMTP_PASS`
+   **birebir aynı değer** ve **10 karakter**. Hash karşılaştırmasıyla
+   doğrulandı; değer ve özeti hiçbir yere yazılmadı.
+
+   **NEDEN ÖNEMLİ:** tek bir sızıntı üç sistemi birden açar —
+   veritabanı, yönetici hesabı, posta hesabı. Ayrıca 10 karakter, bir
+   sır bekçisinin özet tabanlı korumasına giremeyecek kadar kısa
+   (kaba kuvvetle çözülebilir).
+
+   **SIZINTI YOK:** üçü de ne çalışma ağacında ne git geçmişinde
+   bulundu — ölçüldü.
+
+   **DÖNDÜRME YORDAMI (senin onayınla, sırayla):**
+   1. Üçü için AYRI ve uzun (32+ karakter) değerler üret.
+   2. `DB parolası`: PostgreSQL'de `ALTER ROLE enderun_user PASSWORD …`,
+      ardından `/etc/enderunai/backend.env` içindeki `DB_CONNECTION`
+      güncellenir. **Sıra önemli:** parola değişip env güncellenmeden
+      servis yeniden başlarsa bağlanamaz.
+   3. `SMTP_PASS`: posta sağlayıcısında değiştirilip env'e yazılır.
+      Doğrulaması SENDE — ilk gönderim testini ben yapmıyorum.
+   4. `SEED_ADMIN_PASSWORD`: yalnız ilk kurulumda kullanılıyor;
+      değiştirilmesi mevcut oturumları etkilemez. Yine de üçünün ayrı
+      olması esas.
+   5. `systemctl restart enderunai-backend` — **mevcut oturumlar
+      etkilenmez** (jeton `JWT_SECRET`'e bağlı, o değişmiyor).
+   6. Değişiklikten sonra sır bekçisi yeniden koşar: yeni değerleri
+      ortamdan okur, hiçbir yapılandırma güncellemesi gerekmez.
+
+   **BENİM YAPMADIKLARIM:** sır üretmiyorum, ortam dosyasına
+   yazmıyorum, posta göndermiyorum — bugünkü sır disiplini gereği.
 
 0. **KULLANICI HESAPLARI — M3'ÜN ÖN KOŞULU** (2026-09-03, KAPI 1'de
    karara bağlandı; ölçüm bu maddede) | Karar verildi, **paket

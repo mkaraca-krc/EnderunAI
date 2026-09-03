@@ -241,7 +241,11 @@ resolve_test_db_connection() {
 
     export TEST_DB_CONNECTION="${live_connection//Database=enderun_ai;/Database=enderun_ai_test;}"
     export DB_CONNECTION="$TEST_DB_CONNECTION"
-    export JWT_SECRET="deploy-script-test-jwt-secret-0123456789"
+    # SAHTE DEĞER, AÇIK ÖNEKLE İŞARETLİ (sır bekçisi kuralı).
+    # Bu değişken TESTLERİN koştuğu süreç için gerekiyor —
+    # `dotnet test` uygulamanın Host'unu ayağa kaldırıyor. Göç
+    # yolundan ise TAMAMEN kaldırıldı (HrDbContextFactory).
+    export JWT_SECRET="TEST-deploy-script-jwt-secret-0123456789"
 }
 
 #

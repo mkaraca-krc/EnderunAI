@@ -131,7 +131,29 @@ function arkaUcSayimi(): { sayim: Sayim; dosyaSayisi: number } {
     for (const satir of satirlar) {
       const s = satir.trim();
 
+      /*
+       * `[SkippableFact]` DA SAYILIYOR — 2026-09-03'te BULUNDU.
+       *
+       * Sayaç yalnız `[Fact` ile başlayan satırları sayıyordu;
+       * `[SkippableFact]` o desene UYMUYOR. Depoda 4 tane vardı
+       * (3'ü `BookImportProfileTests`, biri sır bekçisi) ve DÖRDÜ DE
+       * GÖRÜNMÜYORDU: silinseler çıra ötmezdi.
+       *
+       * Tam da bu cırcırın var oluş sebebi olan hata, cırcırın kendi
+       * kör noktasındaydı. Bulunuşu tesadüfe yakın: sır bekçisi
+       * paketinde 11 test eklendi ama gevşeklik 10 çıktı; aradaki 1
+       * kovalanınca ortaya çıktı.
+       *
+       * DERS: bir sayaç, saymadığı şeyi de bildirmelidir. Burada
+       * bildiremezdi — o yüzden desen genişletildi.
+       */
       if (s.startsWith("[Fact")) bu += 1;
+      else if (s.startsWith("[SkippableFact")) bu += 1;
+      else if (s.startsWith("[SkippableTheory")) {
+        // `[SkippableTheory]` kendi başına sıfır durumdur; altındaki
+        // `[InlineData]` satırları zaten aşağıda sayılıyor. Burada
+        // sayılmaması BİLİNÇLİ — `[Theory]` ile aynı davranış.
+      }
       else if (s.startsWith("[InlineData")) bu += 1;
       else if (s.startsWith("[MemberData") || s.startsWith("[ClassData")) {
         dinamik += 1;

@@ -67,5 +67,20 @@
 #                                      dahil, iddialar VERİTABANINDAN)
 #   PersonelDepartmanKapsamTests   2  ([Fact]; daraltılmış kapsam +
 #                                      pozitif kontrol)
-statik: 2869
+# GÖÇ/YOL + SIR-BEKÇİ (2026-09-03): 2869 → 2883, gevşeklik 14.
+# Çıranın kendi baskısından okundu (Kural 55/D). Döküm:
+#   GocBetikleriTutarliligiTests   7  (GÖÇ/YOL — prova ile uygulamanın
+#                                      aynı kod yolunu kullanması)
+#   SecretInSourceGuardTests      +4  (1 → 5: kapsam dışlamayla, gerçek
+#                                      sır katmanı, istisna gerekçeleri)
+#   [SkippableFact] GÖRÜNÜR OLDU  +3  (BookImportProfileTests — ÖNCEDEN
+#                                      VARDI ama sayaç görmüyordu)
+#
+# SAYIM KURALI DEĞİŞTİ: `[SkippableFact]` artık sayılıyor. Sayaç yalnız
+# `[Fact` ile başlayan satırlara bakıyordu; depodaki 4 SkippableFact
+# testi GÖRÜNMÜYORDU — silinseler çıra ötmezdi. Cırcırın var oluş
+# sebebi olan hata, cırcırın kendi kör noktasındaydı. Bulunuşu
+# tesadüfe yakın: 11 test eklendi, gevşeklik 10 çıktı; aradaki 1
+# kovalanınca ortaya çıktı.
+statik: 2883
 dinamik: 24

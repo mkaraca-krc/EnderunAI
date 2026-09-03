@@ -31,7 +31,12 @@ jobs:
     env:
       TEST_DB_CONNECTION: "Host=127.0.0.1;Port=5432;Database=enderun_ai_test;Username=enderun_user;Password=ci_test_password"
       DB_CONNECTION: "Host=127.0.0.1;Port=5432;Database=enderun_ai_test;Username=enderun_user;Password=ci_test_password"
-      JWT_SECRET: "ci-only-jwt-secret-never-used-in-production-0123456789"
+      # SAHTE DEĞER, AÇIK ÖNEKLE İŞARETLİ (sır bekçisi kuralı).
+      # "TEST-" öneki rastlantıya bırakılmıyor, elle konuyor:
+      # gerçek bir sırrın bu karakterlerle başlaması pratikte
+      # imkânsız. Bekçi bu öneki gördüğünde geçiyor — böylece bir
+      # sonraki denetimde bu değeri yeniden hash'lemek gerekmiyor.
+      JWT_SECRET: "TEST-ci-only-jwt-secret-never-used-in-production-0123456789"
 
     steps:
       - name: Checkout
