@@ -5285,6 +5285,61 @@ taranacak commit yok.
 
 ---
 
+---
+
+## DEPARTMAN SİLME MUHAFIZI — PERSONEL KONTROLÜ EKLENDİ (2026-09-04)
+
+### GİZİL RİSK, DEPARTMAN/1 İLE AKTİF OLDU
+
+Muhafız alt birim ve pozisyon kontrol ediyordu, **PERSONEL kontrol
+etmiyordu**. Bulunduğunda alan zaten boştu (79 aktif personelin 0'ında
+departman doluydu) — yani risk gizildi ve hiçbir belirti vermiyordu.
+
+DEPARTMAN/1 o alanın yazma yolunu açtı. **Risk o gün aktif hâle
+geldi** ve Mehmet, atama yapmadan önce muhafızın çıkmasını şart koştu.
+
+### NEDEN SESSİZ BİR BOZULMA OLURDU
+
+`Personnel` AppDbContext'te, `HrDepartment` HrDbContext'te. İki bağlam
+arasında **yabancı anahtar yok**; veritabanı bu bağı doğrulamıyor.
+Silme, personeldeki `DepartmentId`'yi olduğu gibi bırakır ve kimlik
+artık hiçbir kayda çözülmez.
+
+Liste ucu bunu sessizce boş göstermiyor — `(bilinmeyen departman)`
+yazıyor — ama **bir ekranın dürüstlüğü, veriyi bozmanın mazereti
+değildir.**
+
+### İKİ TASARIM KARARI
+
+**1. Sebepler ayrı raporlanıyor.** "Alt birim/pozisyon var" ile
+"personel var" farklı işler gerektiriyor: biri organizasyon yapısını,
+diğeri insan kayıtlarını değiştirmeyi. Tek mesajda birleştirmek
+kullanıcıyı yanlış yere bakmaya gönderirdi. Mesaj ayrıca KAÇ personel
+olduğunu söylüyor.
+
+**2. Yumuşak silinmiş personel engellemiyor.** Aksi hâlde bir
+departman, yıllar önce silinmiş tek bir kayıt yüzünden sonsuza kadar
+silinemez hâle gelirdi — muhafız korumadan ENGELE dönüşürdü (Kural
+42).
+
+### SONDA AB
+
+Personel kontrolü bloğu `if (false)` ile etkisizleştirildi. İlan: tek
+kırmızı. Gözlem: **yalnız `PersoneliOlanDepartman_SILINEMEZ` düştü**,
+diğer ikisi yeşil kaldı, dosya bayt bayt geri geldi.
+
+### YOL BOYUNDA — TESTİN KENDİ ÖLÇÜMÜ YANLIŞTI
+
+Pozitif kontrol "Sequence contains no elements" ile kırmızı verdi.
+Silme ÇALIŞMIŞTI; `HrDbContext` yumuşak silinmiş kayıtları genel sorgu
+süzgeciyle elediği için doğrulama sorgum satırı göremiyordu.
+`IgnoreQueryFilters` ile okundu.
+
+Kırmızının sebebi kod değil, **testin kendi ölçümüydü** — bugün bunun
+dördüncü örneği.
+
+---
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`

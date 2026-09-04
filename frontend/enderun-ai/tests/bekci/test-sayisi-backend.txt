@@ -98,5 +98,9 @@
 # SIR-ARALIK (2026-09-04): 2908 → 2911, gevşeklik 3.
 #   SirAdlariTekListeTests  3  (iki tarayıcı tek liste; tarayıcılarda
 #                               gömülü sır adı yasağı)
-statik: 2911
+# DEPARTMAN-MUHAFIZ (2026-09-04): 2911 → 2914, gevşeklik 3.
+#   DepartmanSilmeMuhafiziTests  3  (personeli olan departman silinemez;
+#                                    pozitif kontrol; yumuşak silinmiş
+#                                    personel engellemiyor)
+statik: 2914
 dinamik: 24

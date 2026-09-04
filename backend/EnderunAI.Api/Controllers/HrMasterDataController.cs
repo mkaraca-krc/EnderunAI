@@ -617,6 +617,47 @@ public sealed class HrDepartmentsController(
             x => x.ParentDepartmentId == id, cancellationToken);
         var hasPositions = await hrDb.Positions.AnyAsync(
             x => x.DepartmentId == id, cancellationToken);
+
+        /*
+         * ═══ PERSONEL KONTROLÜ — EKSİKTİ, ÖLÇÜMLE BULUNDU ═══
+         *
+         * Muhafız alt birim ve pozisyon kontrol ediyordu, PERSONEL
+         * kontrol ETMİYORDU. Bulunduğunda alan zaten boştu (79 aktif
+         * personelin 0'ında departman doluydu) — yani risk gizildi.
+         *
+         * DEPARTMAN/1 o alanın yazma yolunu açtı; risk o gün AKTİF
+         * hâle geldi. Mehmet ataması yapmadan önce bu muhafızın
+         * çıkmasını şart koştu: departmanı silinen personeller sessizce
+         * yetim kalırdı.
+         *
+         * NEDEN SESSİZ: `Personnel` AppDbContext'te, `HrDepartment`
+         * HrDbContext'te. İki bağlam arasında YABANCI ANAHTAR YOK;
+         * veritabanı bu bağı doğrulamıyor. Silme, personeldeki
+         * `DepartmentId`'yi olduğu gibi bırakır ve kimlik artık
+         * hiçbir kayda çözülmez.
+         *
+         * Liste ucu bunu sessizce boş göstermiyor —
+         * "(bilinmeyen departman)" yazıyor — ama bir ekranın dürüstlüğü,
+         * veriyi bozmanın mazereti değil.
+         *
+         * SEBEPLER AYRI RAPORLANIYOR: "alt birim/pozisyon var" ile
+         * "personel var" farklı işler gerektirir. Tek mesajda
+         * birleştirmek, kullanıcıyı yanlış yere bakmaya gönderirdi.
+         */
+        var personelSayisi = await appDb.Personnel
+            .CountAsync(x => x.DepartmentId == id && !x.IsDeleted, cancellationToken);
+
+        if (personelSayisi > 0)
+        {
+            return Conflict(new
+            {
+                message =
+                    $"Bu departmana bağlı {personelSayisi} personel var; " +
+                    "departman silinemez. Önce personeli başka bir departmana " +
+                    "taşıyın ya da departmandan çıkarın."
+            });
+        }
+
         if (hasChildren || hasPositions)
         {
             return Conflict(new
