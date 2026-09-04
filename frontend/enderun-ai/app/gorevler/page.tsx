@@ -16,6 +16,14 @@ import {
 import Link from "next/link";
 import ErpShell from "@/components/erp/erp-shell";
 import { useModuleActions } from "@/lib/auth/module-actions";
+import {
+  personnelService,
+  type PersonnelListItem,
+} from "@/services/personnel.service";
+import {
+  hrOrganizationService,
+  type HrDepartment,
+} from "@/services/hr-organization.service";
 import { Button, ConfirmDialog } from "@/components/ui";
 
 import {
@@ -80,6 +88,22 @@ const initialForm = {
   branchId: "",
   projectSiteId: "",
   projectId: "",
+  /*
+   * ATAMA KASKADI — `merkezTuru` ile AYNI DESEN.
+   *
+   * `atamaKaynagi` ekranın kendi durumu; sunucuya GÖNDERİLMİYOR.
+   * Yalnızca "personel listesini neye göre daraltayım" sorusunu
+   * cevaplıyor. Sunucuya giden tek şey `assignedToPersonnelId`.
+   *
+   * "TÜMÜ" HER ZAMAN AÇIK: kaskadın bir kolu boş olsa bile ekran
+   * kullanılabilir kalmalı. Ölçüldü (2026-09-04): departman bağı
+   * canlıda 0/79 idi; kaskadı zorunlu kılsaydık kimse görev
+   * atayamazdı.
+   */
+  atamaKaynagi: "tumu" as "tumu" | "departman" | "proje",
+  atamaDepartmanId: "",
+  atamaProjeId: "",
+  assignedToPersonnelId: "",
   title: "",
   description: "",
   /*
@@ -144,10 +168,92 @@ export default function WorkTasksPage() {
 
   const [items, setItems] = useState<WorkTask[]>([]);
 
+  /*
+   * ATAMA KASKADI İÇİN VERİ.
+   *
+   * Personel ve departmanlar bir kez yükleniyor; kaskad istemcide
+   * daraltıyor. Her seçimde sunucuya gitmek, üç tıklamada üç istek
+   * demekti — ve liste zaten 79 satır.
+   *
+   * PERSONEL KAPSAMLI GELİYOR: uç `IScopedData` üzerinden süzüyor,
+   * yani kullanıcı görmediği personeli burada da göremez.
+   */
+  const [personnel, setPersonnel] = useState<PersonnelListItem[]>([]);
+  const [taskDepartments, setTaskDepartments] = useState<HrDepartment[]>([]);
+
   const [dashboard, setDashboard] =
     useState<WorkTaskDashboard | null>(null);
 
   const [form, setForm] = useState(initialForm);
+
+  /*
+   * ATAMA VERİSİ AYRI YÜKLENİYOR VE HATASI YUTULUYOR.
+   *
+   * Alınamazsa görev ekranı yine çalışır; yalnız atama seçicisi boş
+   * kalır ve bunu SÖYLER. Görev açmayı, personel listesinin
+   * alınamamasına bağlamak orantısız olurdu.
+   */
+  useEffect(() => {
+    let iptal = false;
+
+    (async () => {
+      try {
+        const [kisiler, departmanlar] = await Promise.all([
+          personnelService.getAll(),
+          hrOrganizationService.getDepartments(),
+        ]);
+
+        if (iptal) return;
+
+        setPersonnel(
+          kisiler.filter((x) => x.isActive && x.status === 1)
+        );
+        setTaskDepartments(
+          departmanlar.filter((x) => x.isActive !== false)
+        );
+      } catch {
+        if (!iptal) {
+          setPersonnel([]);
+          setTaskDepartments([]);
+        }
+      }
+    })();
+
+    return () => {
+      iptal = true;
+    };
+  }, []);
+
+  /**
+   * Kaskadın o anki personel listesi.
+   *
+   * "TÜMÜ" HER ZAMAN AÇIK — kaskadın bir kolu boş olsa bile ekran
+   * kullanılabilir kalır.
+   */
+  const atanabilirPersonel = useMemo(() => {
+    if (form.atamaKaynagi === "departman") {
+      if (!form.atamaDepartmanId) return [];
+      return personnel.filter(
+        (x) => x.departmentId === form.atamaDepartmanId
+      );
+    }
+
+    if (form.atamaKaynagi === "proje") {
+      if (!form.atamaProjeId) return [];
+      return personnel.filter((x) =>
+        x.activeAssignments?.some(
+          (a) => a.projectId === form.atamaProjeId
+        )
+      );
+    }
+
+    return personnel;
+  }, [
+    personnel,
+    form.atamaKaynagi,
+    form.atamaDepartmanId,
+    form.atamaProjeId,
+  ]);
   const [showForm, setShowForm] = useState(false);
 
   const [companyFilter, setCompanyFilter] =
@@ -404,6 +510,19 @@ export default function WorkTasksPage() {
         ) as WorkTaskPriority,
         kind: Number(form.kind) as WorkTaskKind,
         assignedToUserId: null,
+        /*
+         * ATAMA İSTEĞE BAĞLI: Faz 1'in kuralı atamasız görevi kabul
+         * ediyor. Boş dize `null`a çevriliyor — sunucu `Guid?`
+         * bekliyor ve boş dize onun için geçersiz olurdu.
+         *
+         * KULLANICI ATAMASI FORMDA YOK, BİLEREK: ölçüldü ki 79
+         * personelin 13 kullanıcıyla SIFIR bağı var; GM'nin "kime
+         * verdim" sorusunun cevabı personel. Kullanıcıya devretme
+         * zaten ayrı bir akışta (`delegate`) duruyor ve Faz 1'in
+         * kuralı ikisinin aynı anda dolmasını reddediyor.
+         */
+        assignedToPersonnelId:
+          form.assignedToPersonnelId || null,
         startDate: form.startDate || null,
         dueDate: form.dueDate || null,
         sourceModule: "MANUAL",
@@ -584,6 +703,32 @@ export default function WorkTasksPage() {
           <strong>{metin}</strong>
         );
       },
+    },
+    {
+      /*
+       * ═══ "YAPACAK" SÜTUNU — FAZ 2 ═══
+       *
+       * Genel Müdür'ün asıl sorusu buydu: "kime verdim?"
+       *
+       * DEĞER SUNUCUDA HESAPLANIYOR (`assignedToDisplayName`). Ekran
+       * kullanıcı adı ile personel adı arasında SEÇİM YAPMIYOR —
+       * çünkü Faz 1'de çelişki kaynakta reddedildi: iki atama alanı
+       * asla birlikte dolamaz, dolayısıyla bir öncelik kuralı da yok.
+       *
+       * Burada bir "ya öbürü doluysa" mantığı yazsaydık, kaynakta
+       * olmayan bir belirsizliği ekranda uydurmuş olurduk.
+       */
+      key: "yapacak",
+      header: "Yapacak",
+      value: (item) => item.assignedToDisplayName ?? "—",
+      render: (item) =>
+        item.assignedToDisplayName ? (
+          <span>{item.assignedToDisplayName}</span>
+        ) : (
+          // ATANMAMIŞ GÖREV HATA DEĞİL: Faz 1'in kuralı atamasız
+          // görevi kabul ediyor. Uyarı rengi kullanılmıyor.
+          <span className="erp-muted">—</span>
+        ),
     },
     {
       key: "oncelik",
@@ -990,6 +1135,145 @@ export default function WorkTasksPage() {
                   </option>
                 ))}
               </select>
+            </label>
+
+            {/* ═══════ ATAMA KASKADI ═══════ */}
+            <label>
+              <span>Kime verilecek</span>
+              <select
+                value={form.atamaKaynagi}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    atamaKaynagi: event.target
+                      .value as typeof form.atamaKaynagi,
+                    atamaDepartmanId: "",
+                    atamaProjeId: "",
+                    // KAYNAK DEĞİŞİNCE SEÇİM TEMİZLENİYOR: aksi hâlde
+                    // artık listede olmayan bir kişi seçili kalırdı ve
+                    // kullanıcı bunu göremezdi.
+                    assignedToPersonnelId: "",
+                  })
+                }
+              >
+                <option value="tumu">Tüm personel</option>
+                <option value="departman">Departmana göre</option>
+                <option value="proje">Projeye göre</option>
+              </select>
+            </label>
+
+            {form.atamaKaynagi === "departman" && (
+              <label>
+                <span>Departman</span>
+                <select
+                  value={form.atamaDepartmanId}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      atamaDepartmanId: event.target.value,
+                      assignedToPersonnelId: "",
+                    })
+                  }
+                >
+                  <option value="">Seçiniz…</option>
+                  {taskDepartments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {form.atamaKaynagi === "proje" && (
+              <label>
+                <span>Proje</span>
+                <select
+                  value={form.atamaProjeId}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      atamaProjeId: event.target.value,
+                      assignedToPersonnelId: "",
+                    })
+                  }
+                >
+                  <option value="">Seçiniz…</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code} · {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <label>
+              <span>Personel</span>
+              <select
+                value={form.assignedToPersonnelId}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    assignedToPersonnelId: event.target.value,
+                  })
+                }
+              >
+                {/* ATAMA İSTEĞE BAĞLI: Faz 1'in kuralı atamasız
+                    görevi kabul ediyor. */}
+                <option value="">Atanmadı</option>
+                {atanabilirPersonel.map((kisi) => (
+                  <option key={kisi.id} value={kisi.id}>
+                    {kisi.fullName}
+                    {kisi.departmentName
+                      ? ` · ${kisi.departmentName}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+
+              {/*
+                  ═══ SESSİZ BOŞ LİSTE YOK ═══
+
+                  Mesajın YERİ ölçümle düzeltildi: ilk tasarımda
+                  "departman seçici boşsa" durumuna konacaktı. Ölçüm
+                  gösterdi ki seçici BOŞ DEĞİL (canlıda 6 departman);
+                  boş olan, seçimden SONRAKİ personel listesi.
+
+                  Boş bir liste, sebebini söylemezse kullanıcı kendi
+                  hatasını arar — oysa sorun verinin girilmemiş
+                  olmasıdır.
+              */}
+              {form.atamaKaynagi === "departman" &&
+                form.atamaDepartmanId &&
+                atanabilirPersonel.length === 0 && (
+                  <span className="gorev-bos-uyari">
+                    Bu departmana atanmış personel yok — personel
+                    departman ataması yapılmamış olabilir.{" "}
+                    <Link href="/insan-kaynaklari/personeller">
+                      Personel ekranından atayın
+                    </Link>
+                    , ya da <strong>Tüm personel</strong> seçeneğini
+                    kullanın.
+                  </span>
+                )}
+
+              {form.atamaKaynagi === "proje" &&
+                form.atamaProjeId &&
+                atanabilirPersonel.length === 0 && (
+                  <span className="gorev-bos-uyari">
+                    Bu projede görevli personel yok. Şantiye ataması
+                    yapılmamış olabilir; <strong>Tüm personel</strong>
+                    {" "}seçeneğini kullanabilirsiniz.
+                  </span>
+                )}
+
+              {form.atamaKaynagi === "tumu" &&
+                personnel.length === 0 && (
+                  <span className="gorev-bos-uyari">
+                    Personel listesi alınamadı; atama yapılamıyor.
+                  </span>
+                )}
             </label>
 
             <label>

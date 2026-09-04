@@ -5410,6 +5410,80 @@ yapılmıyor; güvence sunucudaki koşuda geçerli ve bu, çıranın kendi
 
 ---
 
+---
+
+## İŞEMRİ/2 FAZ 2 — ATAMA KASKADI VE "YAPACAK" SÜTUNU (2026-09-04)
+
+### FAZ 1 NE BIRAKMIŞTI — ÖLÇÜLDÜ
+
+Faz 1 arka uçta personel atamasını açtı: `AssignedToPersonnelId`, saf
+kural, dört yazma yolu, `AssignedToDisplayName`. Ama ölçüm gösterdi ki
+**ekran onu hiç kullanmıyordu**: görev formu `assignedToUserId: null`
+gönderiyor ve atama için **hiçbir alan taşımıyordu**.
+
+Yani yetenek vardı, kapısı yoktu. Faz 2 o kapıyı açıyor.
+
+### KASKAD — `merkezTuru` İLE AYNI DESEN
+
+`atamaKaynagi` ekranın kendi durumu; sunucuya **gönderilmiyor**.
+Yalnızca "personel listesini neye göre daraltayım" sorusunu
+cevaplıyor. Sunucuya giden tek şey `assignedToPersonnelId`.
+
+Bu, masraf merkezindeki desenin aynısı ve bilerek: sunucu türü
+seçimden türetiyor, ekran yalnız listeyi daraltıyor.
+
+### "TÜMÜ" HER ZAMAN AÇIK — VE VARSAYILAN
+
+Ölçüldü (2026-09-04): departman bağı canlıda **0/79**. Kaskadı zorunlu
+kılsaydık **hiç kimse görev atayamazdı**. "Tüm personel" hem her zaman
+açık hem de varsayılan.
+
+### BOŞ LİSTENİN MESAJI — YERİ ÖLÇÜMLE DÜZELTİLDİ
+
+İlk tasarımda dürüst mesaj *"departman seçici boşsa"* durumuna
+konacaktı. Ölçüm gösterdi ki **seçici boş değil** (canlıda 6
+departman); boş olan, seçimden **sonraki** personel listesi.
+
+Mesaj oraya kondu ve ne yapılacağını da söylüyor: personel ekranına
+bağlantı ve "Tüm personel" seçeneği.
+
+> Boş bir liste, sebebini söylemezse kullanıcı KENDİ hatasını arar —
+> oysa sorun verinin girilmemiş olmasıdır.
+
+### KAYNAK DEĞİŞİNCE SEÇİM TEMİZLENİYOR
+
+Aksi hâlde artık listede olmayan bir kişi seçili kalırdı ve kullanıcı
+bunu göremezdi — **form, göstermediği bir değeri gönderirdi.**
+
+### "YAPACAK" SÜTUNU — EKRAN SEÇİM YAPMIYOR
+
+Değer sunucuda hesaplanıyor (`assignedToDisplayName`). Ekran kullanıcı
+adı ile personel adı arasında **seçim yapmıyor**, çünkü Faz 1'de
+çelişki **kaynakta** reddedildi: iki atama alanı asla birlikte
+dolamaz, dolayısıyla bir öncelik kuralı da yok.
+
+Ekranda bir "ya öbürü doluysa" mantığı yazmak, **kaynakta olmayan bir
+belirsizliği uydurmak** olurdu.
+
+### KULLANICI ATAMASI FORMDA YOK — BİLEREK
+
+Ölçüldü: 79 personelin 13 kullanıcıyla **sıfır bağı** var. GM'nin
+"kime verdim" sorusunun cevabı personel. Kullanıcıya devretme zaten
+ayrı bir akışta (`delegate`) duruyor ve Faz 1'in kuralı ikisinin aynı
+anda dolmasını reddediyor.
+
+### SONDALAR — ÜÇÜ DE İLAN EDİLDİĞİ GİBİ
+
+| Sonda | Sabotaj | Düşen |
+|---|---|---|
+| AH | "Tüm personel" seçeneği kaldırıldı | `TÜM PERSONEL seçeneği her zaman açık` |
+| AI | boş liste mesajı silindi | `boş liste SESSİZ geçmiyor` |
+| AJ | kaynak değişince seçim temizlenmedi | `kaynak değişince SEÇİM temizleniyor` |
+
+Her sondada tek test düştü, dosya bayt bayt geri geldi.
+
+---
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`

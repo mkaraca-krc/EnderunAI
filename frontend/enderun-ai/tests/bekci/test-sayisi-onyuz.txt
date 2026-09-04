@@ -42,5 +42,11 @@
 #   sayısını KOŞUCUNUN keşfettiğiyle karşılaştıran test. Bir sayaç
 #   yalnız tanıdığını sayar; kapsamı bağımsız ikinci bir sayımla
 #   doğrulanır.
-statik: 422
+# ISEMRI/2 FAZ 2 (2026-09-04): 422 → 429, katkı +7.
+#   gorev-atama-kaskadi.test.ts 7: Tüm personel her zaman açık, boş
+#   listenin sebebini söylemesi, kaynak değişince seçimin
+#   temizlenmesi, atamanın isteğe bağlı olması, kaskad durumunun
+#   sunucuya gitmemesi, Yapacak sütununun sunucunun hesabını
+#   göstermesi.
+statik: 429
 dinamik: 15
