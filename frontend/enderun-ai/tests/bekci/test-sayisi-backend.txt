@@ -95,5 +95,8 @@
 #   UcuzKapilarTekTanimTests  5  (tek tanım, iki çağıran; kapı listesinin
 #                                 ikinci kopyası; sıranın main() içinde
 #                                 pahalı turlardan önce olması)
-statik: 2908
+# SIR-ARALIK (2026-09-04): 2908 → 2911, gevşeklik 3.
+#   SirAdlariTekListeTests  3  (iki tarayıcı tek liste; tarayıcılarda
+#                               gömülü sır adı yasağı)
+statik: 2911
 dinamik: 24

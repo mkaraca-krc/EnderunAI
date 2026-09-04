@@ -5186,6 +5186,105 @@ yoksa koşuyor sayılır.
 
 ---
 
+---
+
+## BİR İŞİN BİTTİĞİ YALNIZ POZİTİF BİTİŞ İŞARETİYLE BİLİNİR (Mehmet, 2026-09-04)
+
+> **BİR İŞİN BİTTİĞİ YALNIZ POZİTİF BİTİŞ İŞARETİYLE BİLİNİR.
+> İŞARETİN YOKLUĞU 'BİTTİ' DEMEK DEĞİLDİR. BELİRSİZLİK, KURALI SIKAN
+> YÖNE OKUNUR.**
+
+### DOĞURAN OLAY
+
+safe-deploy koşarken çalışma ağacına dokunmama kuralı mutlaktır. Bu
+turda çiğnedim — sebebi kuralı hafife almam değil, **yanlış ölçümdü**.
+
+Deploy'un bittiğini iki DOLAYLI sinyalden çıkardım: `pgrep -af
+safe-deploy` boş döndü ve günlükte özet yoktu. İkisi de yanılttı —
+`pgrep` desenim `sudo setsid bash -c` sarmalayıcısını yakalamıyordu,
+günlük ise henüz özet satırını yazmamıştı.
+
+Elimde AKSİNİ söyleyen bir sinyal vardı: **bitiş satırı YOKTU.** Onu
+"kesilmiş" diye okudum — yani belirsizliği, kuralı GEVŞETEN yöne
+çevirdim.
+
+Sonuç: 08:15:50'de `safe-deploy.sh`'i, o betik KOŞARKEN düzenledim.
+Bash betiği artımlı okur; ortasına satır eklemek sonraki bayt
+konumlarını kaydırır ve süreç bozuk bir parça çalıştırabilir.
+Bozulmadı — **ama bu şans, tasarım değil.**
+
+### MEKANİK KARŞILIĞI
+
+`safe-deploy` artık koşunun BAŞINDA `son-kosu` işaretini siliyor,
+SONUNDA yazıyor (sonuç, commit, zaman, süre). `deploy-kosuyor-mu.sh`
+yalnız bu işarete bakıyor:
+
+- işaret yok → **KOŞUYOR** (kapalı taraf)
+- işaret var ama yarım-koşu izi de var → **KOŞUYOR**
+- işaret var, iz yok → **BİTTİ** + sonuç
+
+`pgrep`, özet metni, süre tahmini gibi DOLAYLI sinyaller kullanılmıyor:
+desen tutmazsa "yok" der ve bu "bitti" ile aynı görünür.
+
+---
+
+## SIR TARAYICI PUSH ÖNCESİNDE — ASİMETRİ (2026-09-04)
+
+### NEDEN BU KAPI DİĞERLERİNDEN FARKLI
+
+> **Sır bekçisinin kaçırdığı şey GERİ ALINAMAZ — geçmişe yazılır ve
+> silinemez. Diğer kapıların kaçırdığı bir sonraki turda yakalanır.**
+
+Bu asimetri, push öncesinde bir sır kontrolünü zorunlu kılıyor. Ama
+tam tarama (`dotnet test`, 278 sn) kancada SSH bağlantısını düşürdü.
+
+### ARALIK TARAYICI — UÇ NOKTA FARKI YETMEZ
+
+İlk tasarım `git diff <uzak>..<yerel>` düşünüyordu. Mehmet düzeltti ve
+sabotajla kanıtlandı:
+
+    commit 1: dosyaya sır eklendi
+    commit 2: dosya silindi
+
+Uç noktalar arasında dosya YOK — fark boş. Ama sır **geçmişe
+yazıldı**. Sır geçmişe COMMIT ANINDA girer, uç noktada değil.
+
+`sir-tara.py` her commit'i tek tek geziyor:
+`git rev-list` → `git diff-tree` → her dosyanın **o commit'teki** hâli
+(`git show <sha>:<yol>`).
+
+**SABOTAJ SONUCU:** uç nokta farkı **boş** (eski tasarım yeşil
+geçerdi), aralık tarayıcı **KIRMIZI** —
+`391937ac · sonda-sir-gecici.ts:1 → GERÇEK ÜRETİM SIRRI: JWT_SECRET`.
+Değer basılmadı. Geçici dal silindi, nesneler toplandı, gerçek sır
+geçmişte yok — doğrulandı.
+
+### ÜST SINIR — ÖLÇÜLDÜ, TAHMİN EDİLMEDİ
+
+Aralık **50 commit**'i aşarsa tarayıcı KIRMIZI verip tam tarama
+istiyor. Sessizce kısaltmıyor: kısaltmak, taranmadığı hâlde "tarandı"
+demek olurdu.
+
+Sınır ölçümle kondu: son 14 günde günlük commit 2-14; deponun
+tarihindeki en yoğun gün **94** (toplu bir gün). 50 sınırını tüm
+geçmişte yalnız o bir gün aşardı — ve o gün zaten tam tarama hak eden
+bir gün.
+
+### İKİ TARAYICI, TEK LİSTE
+
+Kapsamlar farklı olmak zorunda, listeler değil.
+`deploy/bekci/uretim-sir-adlari.txt` tek kaynak; hem C# bekçisi hem
+Python tarayıcı oradan okuyor. `SirAdlariTekListeTests` tarayıcıların
+İÇİNDE gömülü sır adı bulunmasını yasaklıyor.
+
+### İLK PUSH VE SİLİNEN DAL
+
+Uzak sha `0000...` ise aralık yok: push edilen tüm commit'ler geziliyor
+(`rev-list <yerel> --not --all`). Yerel sha sıfırsa (dal silme)
+taranacak commit yok.
+
+---
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`

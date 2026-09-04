@@ -85,6 +85,19 @@ HEALTH_CHECK_INTERVAL_SECONDS=2
 START_TIME="$(date +%s)"
 DEPLOY_OUTCOME="UNKNOWN"
 YARIM_KOSU_DOSYASI="${DEPLOY_STATE_DIR}/yarim-kosu"
+
+# POZİTİF BİTİŞ İŞARETİ.
+#
+# Bir işin bittiği YALNIZ pozitif bir bitiş işaretiyle bilinir. Bu
+# dosya koşunun BAŞINDA siliniyor, SONUNDA yazılıyor. Yokluğu "bitti"
+# demek değil, "henüz bitmedi" demek.
+#
+# DOĞURAN OLAY (2026-09-04): deploy'un bittiğini `pgrep` çıktısının
+# boş olmasından ve günlükte özet görünmemesinden çıkardım. İkisi de
+# DOLAYLI sinyaldi ve ikisi de yanılttı; deploy koşmaya devam ediyordu
+# ve ben o sırada `safe-deploy.sh`i düzenledim — koşan bir bash
+# betiğini değiştirmek onu bozabilir.
+SON_KOSU_DOSYASI="${DEPLOY_STATE_DIR}/son-kosu"
 YARIM_KOSU_ONAYLANDI="${YARIM_KOSU_ONAYLANDI:-}"
 ASAMA="baslangic"
 
@@ -109,6 +122,17 @@ print_summary() {
     echo "Git commit  : $(cd "$REPO_ROOT" && git rev-parse --short HEAD 2>/dev/null || echo '-')"
     echo "Log dosyası : ${LOG_FILE}"
     echo "======================================================"
+
+    # POZİTİF BİTİŞ İŞARETİ — sonuç ne olursa olsun yazılır.
+    # "Başarısız" da bir bitiştir; okuyanın ayırt etmesi için sonuç
+    # da yazılıyor.
+    mkdir -p "$DEPLOY_STATE_DIR" 2>/dev/null || true
+    {
+        echo "SONUC=${DEPLOY_OUTCOME}"
+        echo "COMMIT=$(cd "$REPO_ROOT" && git rev-parse --short HEAD 2>/dev/null || echo '-')"
+        echo "ZAMAN=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "SURE=${elapsed}s"
+    } > "$SON_KOSU_DOSYASI" 2>/dev/null || true
 }
 
 # ─────────────────────────────────────────────────────────────────
@@ -720,6 +744,10 @@ main() {
     log "INFO" "===== safe-deploy başladı ====="
 
     yarim_kosu_denetle
+
+    # ÖNCEKİ KOŞUNUN BİTİŞ İŞARETİ SİLİNİYOR: bu koşu bitene kadar
+    # "bitti" cevabı verilemesin.
+    rm -f "$SON_KOSU_DOSYASI" 2>/dev/null || true
 
     require_clean_git_tree
     require_expected_branch

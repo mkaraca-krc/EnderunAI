@@ -43,6 +43,20 @@ BE="${REPO_ROOT}/backend"
 log()  { echo "[ucuz-kapi] $*"; }
 hata() { echo "[ucuz-kapi] HATA: $*" >&2; }
 
+# ARALIK VERİLMEMİŞSE: uzakta olmayan commit'ler taranır.
+# Kanca aralığı git'in stdin'inden alıp ortam değişkeniyle veriyor;
+# elle çalıştırıldığında bu varsayılan devreye giriyor.
+if [ -z "${SIR_ARALIK_UZAK:-}" ] || [ -z "${SIR_ARALIK_YEREL:-}" ]; then
+    if uzak_ucu="$(cd "$REPO_ROOT" && git rev-parse --verify -q '@{u}' 2>/dev/null)"; then
+        export SIR_ARALIK_UZAK="$uzak_ucu"
+        export SIR_ARALIK_YEREL="$(cd "$REPO_ROOT" && git rev-parse HEAD)"
+    else
+        # Üst dal yoksa: yalnız HEAD taranır (aralık kurulamıyor).
+        export SIR_ARALIK_UZAK="$(cd "$REPO_ROOT" && git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+        export SIR_ARALIK_YEREL="$(cd "$REPO_ROOT" && git rev-parse HEAD)"
+    fi
+fi
+
 # ── KAPI LİSTESİ — TEK KAYNAK ──
 #
 # Biçim: "sınıf|ad|çalışma dizini|komut"
@@ -72,6 +86,17 @@ hata() { echo "[ucuz-kapi] HATA: $*" >&2; }
 # HIZLI KÜME ARTIK ~10 SANİYE: bu olayı doğuran kapı (kurumsal kimlik,
 # 1 sn) ve ona en yakın koruma (tip kontrolü, 8 sn).
 #
+# ═══ SIR TARAYICI HIZLI KÜMEDE — ASİMETRİ YÜZÜNDEN ═══
+#
+# Sır bekçisinin tam sürümü `agir` (278 sn) ama push öncesinde bir
+# sır kontrolü OLMAK ZORUNDA: sır bekçisinin kaçırdığı şey GERİ
+# ALINAMAZ — geçmişe yazılır ve silinemez. Diğer kapıların kaçırdığı
+# bir sonraki turda yakalanır.
+#
+# `sir-tara.py` bu asimetriyi kapatıyor: tüm depoyu değil, push
+# edilecek COMMIT ARALIĞINI tarıyor — saniyeler. Kapsamlar farklı,
+# LİSTE AYNI (`deploy/bekci/uretim-sir-adlari.txt`).
+#
 # ═══ DÜRÜST SINIR ═══
 #
 # Kanca artık `agir` kapıları koşmuyor. Yani SIR BEKÇİSİ VE ÖN YÜZ
@@ -89,7 +114,8 @@ KAPILAR=(
   "hizli|kurumsal kimlik|${FE}|node scripts/kimlik-taramasi.mjs"
   "hizli|tip kontrolü|${FE}|npx tsc --noEmit -p tsconfig.json"
   "agir|ön yüz derlemesi|${FE}|npm run build"
-  "agir|sır bekçisi|${BE}|dotnet test EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj -v q --nologo --filter FullyQualifiedName~SecretInSourceGuardTests"
+  "hizli|sır tarayıcı (aralık)|${REPO_ROOT}|deploy/scripts/sir-tara.py ${SIR_ARALIK_UZAK:-} ${SIR_ARALIK_YEREL:-}"
+  "agir|sır bekçisi (tüm depo)|${BE}|dotnet test EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj -v q --nologo --filter FullyQualifiedName~SecretInSourceGuardTests"
 )
 
 YALNIZ_HIZLI=0

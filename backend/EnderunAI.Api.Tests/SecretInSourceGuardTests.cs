@@ -296,40 +296,48 @@ public sealed class SecretInSourceGuardTests
     }
 
     /// <summary>
-    /// ÜRETİM SIRLARININ ADLARI — ORTAMDAN OKUNACAK OLANLAR.
+    /// ÜRETİM SIRLARININ ADLARI — TEK LİSTEDEN OKUNUYOR.
     ///
-    /// `DB_PAROLASI` bir ortam değişkeni değil; `DB_CONNECTION` içinden
-    /// çıkarılıyor. Ayrı ad taşıması bilinçli: bulgu raporunda
-    /// "bağlantı dizesi" değil "parola" yazması gerekiyor.
+    /// ── NEDEN DOSYADAN (2026-09-04) ──
+    ///
+    /// Aynı liste iki tarayıcıda gerekiyor: bu bekçi (tüm depo, yayın
+    /// turunda) ve `deploy/scripts/sir-tara.py` (push edilecek commit
+    /// aralığı, saniyeler). KAPSAMLARI farklı olmak zorunda,
+    /// LİSTELERİ değil.
+    ///
+    /// Liste C#'ta gömülü kalsaydı Python tarayıcı ikinci bir kopya
+    /// tutardı ve ayrışırlardı — bu kod tabanının en sık hatası.
+    /// Şimdi ikisi de `deploy/bekci/uretim-sir-adlari.txt` okuyor ve
+    /// `SirAdlariTekListeTests` bunu zorluyor.
     /// </summary>
-    private static readonly string[] ZorunluSirlar =
-    [
-        "JWT_SECRET",
-        "DB_PAROLASI",
-        "SMTP_PASS",
-        "SMTP_USER",
-        "SEED_ADMIN_PASSWORD",
-        "ANTHROPIC_API_KEY",
-    ];
+    private static string AdlarDosyasi(string kok) =>
+        Path.Combine(kok, "deploy", "bekci", "uretim-sir-adlari.txt");
 
-    /// <summary>
-    /// HENÜZ VAR OLMAYAN SIRLAR — ortaya çıktıklarında
-    /// <see cref="ZorunluSirlar"/>'a TAŞINACAKLAR.
-    ///
-    /// Burada durmaları bir muafiyet değil, bir KAYIT: "bu sır
-    /// kontrol edilmiyor ve bunu biliyoruz". Liste olmasaydı, M3
-    /// geldiğinde VAPID özel anahtarı sessizce korumasız kalırdı —
-    /// tam olarak bu bekçinin yeniden yazılma sebebi.
-    /// </summary>
-    private static readonly Dictionary<string, string> HenuzYokSirlar = new()
+    private static (List<string> Zorunlu, Dictionary<string, string> HenuzYok)
+        SirAdlari(string kok)
     {
-        ["PORTAL_TOKEN_ANAHTARI"] =
-            "Portal tokenları kayıt başına üretiliyor, ortamda tek bir " +
-            "anahtar yok. Merkezî bir anahtara geçilirse buraya taşınır.",
-        ["VAPID_PRIVATE_KEY"] =
-            "M3 (mobil bildirim) ile gelecek. Geldiği gün ZorunluSirlar'a " +
-            "taşınmalı.",
-    };
+        var zorunlu = new List<string>();
+        var henuzYok = new Dictionary<string, string>();
+
+        var yol = AdlarDosyasi(kok);
+        if (!File.Exists(yol)) return (zorunlu, henuzYok);
+
+        foreach (var satir in File.ReadAllLines(yol))
+        {
+            var s = satir.Trim();
+            if (s.Length == 0 || s.StartsWith('#')) continue;
+
+            var parcalar = s.Split(
+                (char[]?)null, 3, StringSplitOptions.RemoveEmptyEntries);
+
+            if (parcalar.Length >= 2 && parcalar[0] == "zorunlu")
+                zorunlu.Add(parcalar[1]);
+            else if (parcalar.Length >= 3 && parcalar[0] == "henuz-yok")
+                henuzYok[parcalar[1]] = parcalar[2];
+        }
+
+        return (zorunlu, henuzYok);
+    }
 
     private const string OrtamDosyasi = "/etc/enderunai/backend.env";
 
@@ -337,7 +345,8 @@ public sealed class SecretInSourceGuardTests
     /// Üretim sırlarını ortam dosyasından okur. DEĞERLER HİÇBİR YERE
     /// BASILMAZ — yalnız bu sözlükte tutulur ve arama için kullanılır.
     /// </summary>
-    private static Dictionary<string, string> UretimSirlari()
+    private static Dictionary<string, string> UretimSirlari(
+        IReadOnlyList<string> zorunluAdlar)
     {
         var sonuc = new Dictionary<string, string>();
         if (!File.Exists(OrtamDosyasi)) return sonuc;
@@ -361,7 +370,7 @@ public sealed class SecretInSourceGuardTests
             if (deger.Length > 0) ham[ad] = deger;
         }
 
-        foreach (var ad in ZorunluSirlar)
+        foreach (var ad in zorunluAdlar)
         {
             if (ad == "DB_PAROLASI")
             {
@@ -407,7 +416,16 @@ public sealed class SecretInSourceGuardTests
          * test çıktısına düşer — yoksa bekçi, koruduğu şeyi ifşa eden
          * araca dönüşürdü.
          */
-        var sirlar = UretimSirlari();
+        var kok0 = DepoKok();
+        var (zorunluAdlar, _) = SirAdlari(kok0);
+
+        Assert.True(
+            zorunluAdlar.Count > 0,
+            $"Sır adları listesi okunamadı ya da boş: {AdlarDosyasi(kok0)}. " +
+            "Bu dosya olmadan gerçek sır kontrolü hiçbir şey sınamaz " +
+            "(Kural 48).");
+
+        var sirlar = UretimSirlari(zorunluAdlar);
 
         Skip.If(
             !File.Exists(OrtamDosyasi),
@@ -429,7 +447,7 @@ public sealed class SecretInSourceGuardTests
          * edilemedi" diye KIRMIZI verir. Sessizce atlamak, boş küme
          * sorununun küçük hâlidir.
          */
-        var eksik = ZorunluSirlar.Where(a => !sirlar.ContainsKey(a)).ToList();
+        var eksik = zorunluAdlar.Where(a => !sirlar.ContainsKey(a)).ToList();
 
         Assert.True(
             eksik.Count == 0,
@@ -437,10 +455,10 @@ public sealed class SecretInSourceGuardTests
             string.Join("\n  ", eksik) +
             $"\n\nBu sırlar taranmadı, yani onlar için bu bekçi HİÇBİR " +
             "ŞEY söylemiyor. Ortamda gerçekten yoksa `ZorunluSirlar` " +
-            "listesinden çıkarılıp `HenuzYokSirlar`'a gerekçesiyle " +
+            "listesinden çıkarılıp `henuz-yok` satırına gerekçesiyle " +
             "taşınmalı — sessizce atlanmamalı.");
 
-        var kok = DepoKok();
+        var kok = kok0;
         var bulgular = new List<string>();
 
         foreach (var dosya in IzlenenDosyalar(kok))
@@ -495,7 +513,13 @@ public sealed class SecretInSourceGuardTests
          *    M3 geldiğinde VAPID anahtarı burada takılacak ve
          *    ZorunluSirlar'a taşınmaya zorlayacak.
          */
-        foreach (var (ad, gerekce) in HenuzYokSirlar)
+        var (_, henuzYok) = SirAdlari(DepoKok());
+
+        Assert.True(
+            henuzYok.Count > 0,
+            "'henuz-yok' listesi boş okundu; dosya biçimi bozulmuş olabilir.");
+
+        foreach (var (ad, gerekce) in henuzYok)
             Assert.False(string.IsNullOrWhiteSpace(gerekce), $"Gerekçesiz: {ad}");
 
         if (!File.Exists(OrtamDosyasi)) return;
@@ -506,13 +530,13 @@ public sealed class SecretInSourceGuardTests
             .Select(x => x.Split('=', 2)[0].Trim())
             .ToHashSet();
 
-        var artikVar = HenuzYokSirlar.Keys.Where(ham.Contains).ToList();
+        var artikVar = henuzYok.Keys.Where(ham.Contains).ToList();
 
         Assert.True(
             artikVar.Count == 0,
             "ARTIK VAR OLAN SIRLAR HÂLÂ 'HENÜZ YOK' LİSTESİNDE:\n  " +
             string.Join("\n  ", artikVar) +
-            "\n\nBunlar `ZorunluSirlar`'a taşınmalı; aksi hâlde gerçek " +
+            "\n\nBunlar listede `zorunlu`ya taşınmalı; aksi hâlde gerçek " +
             "sır katmanı onları TARAMIYOR ve kimse fark etmiyor.");
     }
 

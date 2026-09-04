@@ -1,0 +1,38 @@
+# ÜRETİM SIRLARININ ADLARI — TEK LİSTE, İKİ TARAYICI.
+#
+# Bu dosya SIRLARI DEĞİL, ADLARINI tutar. Değerler
+# /etc/enderunai/backend.env içinde durur ve hiçbir yere kopyalanmaz.
+#
+# ═══ NEDEN AYRI DOSYA ═══
+#
+# İki tarayıcı var ve kapsamları farklı:
+#
+#   1. SecretInSourceGuardTests  — TÜM depo, yayın turunda (yavaş)
+#   2. sir-tara.py               — push edilecek COMMIT ARALIĞI (hızlı)
+#
+# Kapsamları farklı olmak zorunda; LİSTELERİ değil. Liste iki yerde
+# yazılsaydı zamanla ayrışırdı ve ayrışan her nokta, birinin
+# sınamadığı bir noktadır. `SirAdlariTekListeTests` ikisinin de bu
+# dosyayı okuduğunu zorluyor.
+#
+# ═══ BİÇİM ═══
+#
+#   zorunlu    <AD>              → ortamda BULUNMALI; yoksa bekçi
+#                                  "KONTROL EDİLEMEDİ" diye kırmızı verir
+#   henuz-yok  <AD>  <gerekçe>   → bu sır henüz üretilmiyor; ortaya
+#                                  çıktığı gün `zorunlu`ya taşınmalı
+#                                  ve bekçi bunu zorlar
+#
+# `DB_PAROLASI` bir ortam değişkeni değil: `DB_CONNECTION` içinden
+# çıkarılıyor. Ayrı ad taşıması bilinçli — bulgu raporunda "bağlantı
+# dizesi" değil "parola" yazması gerekiyor.
+
+zorunlu  JWT_SECRET
+zorunlu  DB_PAROLASI
+zorunlu  SMTP_PASS
+zorunlu  SMTP_USER
+zorunlu  SEED_ADMIN_PASSWORD
+zorunlu  ANTHROPIC_API_KEY
+
+henuz-yok  PORTAL_TOKEN_ANAHTARI  Portal tokenları kayıt başına üretiliyor, ortamda tek bir anahtar yok. Merkezî bir anahtara geçilirse buraya taşınır.
+henuz-yok  VAPID_PRIVATE_KEY  M3 (mobil bildirim) ile gelecek. Geldiği gün zorunlu'ya taşınmalı.

@@ -51,6 +51,26 @@ fi
 #
 # LİSTE YİNE TEK: ayrım listenin kendi alanında (`hizli`/`agir`),
 # burada ikinci bir liste yok.
+# ═══ PUSH ARALIĞI GIT'İN STDIN'İNDEN OKUNUYOR ═══
+#
+# git, pre-push kancasına her ref için bir satır verir:
+#   <yerel ref> <yerel sha> <uzak ref> <uzak sha>
+#
+# Sır tarayıcı bu aralığı COMMIT COMMIT geziyor. Uç nokta farkı
+# YETMEZ: aradaki bir commit'te doğup sonraki commit'te silinen bir
+# sır, uç noktalarda görünmez ama GEÇMİŞE YAZILIR.
+#
+# İLK PUSH: uzak sha 0000... olur; tarayıcı o durumda push edilen tüm
+# commit'leri gezer.
+while read -r _yerel_ref yerel_sha _uzak_ref uzak_sha; do
+    [ -z "${yerel_sha:-}" ] && continue
+    # Silinen dal (yerel sha sıfır): taranacak commit yok.
+    case "$yerel_sha" in *[!0]*) ;; *) continue ;; esac
+    export SIR_ARALIK_UZAK="$uzak_sha"
+    export SIR_ARALIK_YEREL="$yerel_sha"
+    break
+done
+
 echo "[pre-push] Ucuz kapılar koşuluyor (hızlı küme; atlamak için --no-verify)..."
 
 if ! REPO_ROOT="$KOK" "$BETIK" --hizli; then
