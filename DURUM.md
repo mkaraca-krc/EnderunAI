@@ -5340,6 +5340,76 @@ dördüncü örneği.
 
 ---
 
+---
+
+## BİR SAYAÇ YALNIZ TANIDIĞINI SAYAR (Mehmet, 2026-09-04)
+
+> **BİR SAYAÇ YALNIZ TANIDIĞINI SAYAR. KAPSAMI, KENDİ BİLGİSİYLE
+> DEĞİL, BAĞIMSIZ İKİNCİ BİR SAYIMLA DOĞRULANIR.**
+
+### DOĞURAN OLAY
+
+Çıra `[Fact]` ve `[InlineData]` satırlarını sayıyordu.
+`[SkippableFact]` o desene UYMUYORDU: depoda 4 tane vardı ve **dördü
+de görünmüyordu** — silinseler çıra ötmezdi.
+
+**Cırcırın var oluş sebebi olan hata, cırcırın kendi kör
+noktasındaydı.** Bulunuşu tesadüfe yakındı: bir pakette 11 test
+eklendi, gevşeklik 10 çıktı; aradaki 1 kovalanınca ortaya çıktı.
+
+### NEDEN "DESENE EKLEMEK" YETMEZ
+
+`[SkippableFact]`i tanımak o günkü boşluğu kapatır ama yarın başka bir
+öznitelik gelir ve aynı sessizlik tekrarlanır. Sayacın kendi bilgisi,
+kendi kapsamının kanıtı olamaz.
+
+### ÇÖZÜM: İKİ BAĞIMSIZ SAYIM
+
+| Sayım | Kaynak |
+|---|---|
+| ÇIRA | kaynak dosyalardan öznitelik sayarak (statik) |
+| KOŞUCU | `dotnet test --list-tests` ile keşfederek (dinamik) |
+
+Uyuşmazlık, çıranın bir şeyi **tanımadığını** söyler — ne olduğunu
+bilmesine gerek yok.
+
+### NEDEN METOT EKSENİ
+
+Koşucu **3059 DURUM** buluyor (teori satırları ayrı ayrı), çıra
+**2914 BİLDİRİM** sayıyor. Farklı eksenler, karşılaştırılamaz.
+
+Karşılaştırılabilir tek eksen **METOT**: bir `[Theory]` kaç durum
+üretirse üretsin tek metottur. Ölçüldü: kaynakta **2533**
+(`[Fact]` 2364 + `[SkippableFact]` 4 + `[Theory]` 165), koşucuda
+**2533**. Birebir.
+
+### HER KOŞUDA BASILIYOR
+
+    çıra · metot: kaynak 2533 · koşucu 2533 · fark 0
+
+Karşılaştırmanın YAPILMADIĞI durum da basılıyor
+(`KOŞUCU SAYIMI YOK — karşılaştırma YAPILMADI`). Sessizce atlanmış bir
+karşılaştırma, yapılmış gibi görünürdü.
+
+### SONDA AG
+
+`arkaUcSayimi` içindeki öznitelik listesinden `[SkippableFact`
+çıkarıldı. Gözlem — ilan edildiği gibi:
+
+    çıra · metot: kaynak 2529 · koşucu 2533 · fark -4
+
+ve test kırmızı, mesajda iki sayı da adıyla. Geri alındı, bayt bayt
+aynı.
+
+### DÜRÜST SINIR
+
+Koşucu sayımı depo DIŞINDA (`/var/lib/enderun-ai`) — yayın çalışma
+ağacını kirletmesin diye. CI'da o dosya yok ve karşılaştırma
+yapılmıyor; güvence sunucudaki koşuda geçerli ve bu, çıranın kendi
+çıktısında yazılı.
+
+---
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`

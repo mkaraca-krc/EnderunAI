@@ -37,5 +37,10 @@
 #   personel-departman-ekran-sozlesmesi.test.ts +2:
 #     süzgeçlerde (boş) seçeneği (38 kişi hiçbir süzgeçten
 #     görünmüyordu) ve departmanı boş sayacının süzgeci yok sayması.
-statik: 421
+# CIRA-KOR-NOKTA (2026-09-04): 421 → 422, katkı +1.
+#   test-sayisi-ratchet.test.ts +1: çıranın kendi saydığı metot
+#   sayısını KOŞUCUNUN keşfettiğiyle karşılaştıran test. Bir sayaç
+#   yalnız tanıdığını sayar; kapsamı bağımsız ikinci bir sayımla
+#   doğrulanır.
+statik: 422
 dinamik: 15

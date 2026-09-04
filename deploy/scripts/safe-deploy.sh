@@ -854,6 +854,21 @@ main() {
 
     asama "backend-testleri"
     run_backend_tests
+
+    # KOŞUCUNUN TEST SAYIMI — ÇIRANIN İKİNCİ, BAĞIMSIZ KAYNAĞI.
+    #
+    # Arka uç turundan HEMEN SONRA: derleme sıcak, `--no-build` ile
+    # saniyeler sürüyor. Ön yüz turu bu sayımı okuyup kendi statik
+    # sayımıyla karşılaştırıyor; uyuşmazlık, çıranın bir test
+    # özniteliğini TANIMADIĞINI söyler.
+    #
+    # Başarısızlığı yayını DURDURMUYOR: bu bir ölçüm kaynağı, bir kapı
+    # değil. Üretilemezse çıra karşılaştırmayı "YAPILMADI" diye
+    # BASIYOR — sessizce atlamıyor.
+    if ! "${REPO_ROOT}/deploy/scripts/kosucu-test-sayimi.sh" --no-build 2>&1 \
+            | tee -a "$LOG_FILE"; then
+        log "WARN" "Koşucu test sayımı üretilemedi; çıra karşılaştırması bu turda YAPILMAYACAK."
+    fi
     asama "on-yuz-testleri"
     run_frontend_tests
     asama "surum-yedegi"

@@ -119,10 +119,27 @@ function dosyalar(dizin: string, uzantilar: string[]): string[] {
  * `[ClassData]` çalışma anında çözülür ve statik sayılamaz; DİNAMİK
  * eksende bildirim başına 1 sayılır.
  */
-function arkaUcSayimi(): { sayim: Sayim; dosyaSayisi: number } {
+function arkaUcSayimi(): {
+  sayim: Sayim;
+  dosyaSayisi: number;
+  metot: number;
+} {
   let statik = 0;
   let dinamik = 0;
   let dosyaSayisi = 0;
+
+  /*
+   * METOT EKSENİ — KOŞUCUYLA KARŞILAŞTIRMA İÇİN.
+   *
+   * `statik` BİLDİRİM sayıyor (bir teori kaç satır taşırsa o kadar).
+   * Koşucu ise DURUM keşfediyor. İkisi farklı eksen ve
+   * karşılaştırılamaz.
+   *
+   * Karşılaştırılabilir tek eksen METOT: bir `[Theory]` kaç durum
+   * üretirse üretsin TEK metottur. Koşucunun bulduğu farklı metot
+   * adıyla birebir tutmalı.
+   */
+  let metot = 0;
 
   for (const yol of dosyalar(BACKEND_TEST, [".cs"])) {
     const satirlar = readFileSync(yol, "utf8").split("\n");
@@ -147,6 +164,16 @@ function arkaUcSayimi(): { sayim: Sayim; dosyaSayisi: number } {
        * DERS: bir sayaç, saymadığı şeyi de bildirmelidir. Burada
        * bildiremezdi — o yüzden desen genişletildi.
        */
+      // METOT SAYIMI: her test özniteliği bir metoda karşılık gelir.
+      if (
+        s.startsWith("[Fact") ||
+        s.startsWith("[SkippableFact") ||
+        s.startsWith("[Theory") ||
+        s.startsWith("[SkippableTheory")
+      ) {
+        metot += 1;
+      }
+
       if (s.startsWith("[Fact")) bu += 1;
       else if (s.startsWith("[SkippableFact")) bu += 1;
       else if (s.startsWith("[SkippableTheory")) {
@@ -166,7 +193,37 @@ function arkaUcSayimi(): { sayim: Sayim; dosyaSayisi: number } {
     }
   }
 
-  return { sayim: { statik, dinamik }, dosyaSayisi };
+  return { sayim: { statik, dinamik }, dosyaSayisi, metot };
+}
+
+/**
+ * KOŞUCUNUN BİLDİRDİĞİ FARKLI TEST METODU SAYISI.
+ *
+ * `deploy/scripts/kosucu-test-sayimi.sh` üretiyor ve depo DIŞINA
+ * yazıyor (yayın çalışma ağacını kirletmesin diye).
+ *
+ * Dosya yoksa `null` dönüyor — ve karşılaştırma SESSİZCE ATLANMIYOR,
+ * çıranın kendi çıktısında görünür biçimde yazılıyor.
+ */
+function kosucuSayisi(): { metot: number; commit: string } | null {
+  const yol = "/var/lib/enderun-ai/kosucu-test-sayisi.txt";
+
+  try {
+    const metin = readFileSync(yol, "utf8");
+    const oku = (anahtar: string) =>
+      metin
+        .split("\n")
+        .map((x) => x.trim())
+        .find((x) => x.startsWith(`${anahtar}=`))
+        ?.slice(anahtar.length + 1) ?? "";
+
+    const metot = Number(oku("METOT"));
+    if (!Number.isFinite(metot) || metot <= 0) return null;
+
+    return { metot, commit: oku("COMMIT") };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -311,6 +368,23 @@ describe("test sayısı cırcırı", () => {
   console.log(gevseklikSatiri("arka uç", arkaUc.sayim, cizgi("test-sayisi-backend.txt")));
   console.log(gevseklikSatiri("ön yüz ", onYuz.sayim, cizgi("test-sayisi-onyuz.txt")));
 
+  /*
+   * İKİ BAĞIMSIZ SAYIM HER KOŞUDA BASILIYOR.
+   *
+   * Karşılaştırmanın YAPILMADIĞI durum da görünür olmalı: dosya
+   * yoksa bunu yazıyoruz. Sessizce atlanmış bir karşılaştırma,
+   * yapılmış bir karşılaştırma gibi görünürdü.
+   */
+  const kosucu = kosucuSayisi();
+
+  console.log(
+    kosucu
+      ? `çıra · metot: kaynak ${arkaUc.metot} · koşucu ${kosucu.metot} · ` +
+        `fark ${arkaUc.metot - kosucu.metot}`
+      : "çıra · metot: KOŞUCU SAYIMI YOK — karşılaştırma YAPILMADI " +
+        "(deploy/scripts/kosucu-test-sayimi.sh ile üretilir)",
+  );
+
   /**
    * TARAMA BOŞA DÜŞMÜYOR.
    *
@@ -331,6 +405,66 @@ describe("test sayısı cırcırı", () => {
     expect(arkaUc.sayim.statik).toBeGreaterThan(2000);
     expect(onYuz.dosyaSayisi).toBeGreaterThan(30);
     expect(onYuz.sayim.statik).toBeGreaterThan(250);
+  });
+
+  it("çıranın saydığı metot, koşucunun bulduğuyla TUTUYOR", () => {
+    /*
+     * ═══ BİR SAYAÇ YALNIZ TANIDIĞINI SAYAR ═══
+     *
+     * Çıra `[Fact]` ve `[InlineData]` satırlarını sayıyordu.
+     * `[SkippableFact]` o desene UYMUYORDU: depoda 4 tane vardı ve
+     * DÖRDÜ DE GÖRÜNMÜYORDU — silinseler çıra ötmezdi. Cırcırın var
+     * oluş sebebi olan hata, cırcırın KENDİ KÖR NOKTASINDAYDI.
+     *
+     * `[SkippableFact]`i desene eklemek yetmez: yarın başka bir
+     * öznitelik gelir ve aynı sessizlik tekrarlanır.
+     *
+     * ÇÖZÜM İKİ BAĞIMSIZ SAYIM: biri kaynaktan öznitelik sayıyor,
+     * diğeri koşucudan keşif alıyor. Uyuşmazlık, çıranın bir şeyi
+     * TANIMADIĞINI söyler — ne olduğunu bilmesine gerek yok.
+     *
+     * NEDEN METOT EKSENİ: koşucu 3059 DURUM buluyor (teori satırları
+     * ayrı), çıra 2914 BİLDİRİM sayıyor. Farklı eksenler.
+     * Karşılaştırılabilir tek eksen METOT: bir teori kaç durum
+     * üretirse üretsin tek metottur. Ölçüldü: kaynakta 2533, koşucuda
+     * 2533.
+     *
+     * DOSYA YOKSA ATLANIYOR — ama SESSİZCE DEĞİL: yukarıdaki baskı
+     * "KARŞILAŞTIRMA YAPILMADI" yazıyor. CI'da bu dosya yok; güvence
+     * sunucudaki koşuda geçerli.
+     */
+    const kosucu = kosucuSayisi();
+
+    if (!kosucu) {
+      expect(arkaUc.metot).toBeGreaterThan(100);
+      return;
+    }
+
+    expect(
+      arkaUc.metot,
+      [
+        "",
+        "ÇIRANIN SAYDIĞI METOT, KOŞUCUNUN BULDUĞUYLA TUTMUYOR.",
+        "",
+        `  kaynak (çıra)   : ${arkaUc.metot}`,
+        `  koşucu (keşif)  : ${kosucu.metot}`,
+        "",
+        "NE DEMEK: çıra, koşucunun gördüğü bir testi TANIMIYOR",
+        "olabilir — ya da tersi. En olası sebep, tanınmayan yeni bir",
+        "test özniteliği (`[SkippableFact]` bir kez tam olarak bunu",
+        "yaptı ve 4 test görünmez kaldı).",
+        "",
+        "NE YAPILIR: `arkaUcSayimi` içindeki öznitelik listesini",
+        "güncelleyin. Sayının kendisini değil, TANIMAYI düzeltin —",
+        "çizgiyi kaydırmak sorunu gizler.",
+        "",
+        "KOŞUCU SAYIMI ESKİ OLABİLİR: dosyadaki commit",
+        `  ${kosucu.commit.slice(0, 8)}`,
+        "Bu koşudan farklıysa önce `deploy/scripts/kosucu-test-sayimi.sh`",
+        "ile tazeleyin.",
+        "",
+      ].join("\n"),
+    ).toBe(kosucu.metot);
   });
 
   it("arka uç test sayısı düşmüyor", () => {
