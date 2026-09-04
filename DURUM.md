@@ -5484,6 +5484,88 @@ Her sondada tek test düştü, dosya bayt bayt geri geldi.
 
 ---
 
+---
+
+## KURAL-KATMAN/1 — `sourceModule` KAÇIŞI KAPANDI (2026-09-04)
+
+### AD KARIŞIKLIĞI — DÜZELTİLDİ
+
+Mehmet bu işi "KAPI/1" diye istedi. İkisi ayrı paket:
+
+| Paket | Konusu |
+|---|---|
+| **KURAL-KATMAN/1** | `sourceModule` kaçışı, S3d testi ← **bu paket** |
+| **KAPI/1** | Uçlarda `[RequirePermission]` niteliği — **hâlâ bekliyor** |
+
+Tarif edilen iş açıkça birincisiydi; kodun kendi yorumu da *"kaydın
+türüne bağlanması KURAL-KATMAN/1'in işi"* diyordu. KAPI/1 bekleyen
+listede duruyor ve ölçülmüş riski büyük: 34 niteliksiz uç, nitelik
+silinirse 183 uçta hiçbir koruma kalmıyor, ve **8 mesajlaşma ucunun
+izin kapısı bugün hiç yok** — M3/2b ile bağı bu.
+
+### KAPATMAYI GÜVENLİ KILAN ÖLÇÜM
+
+Kaçış şuydu:
+
+    if (!string.IsNullOrWhiteSpace(sourceModule))
+        return null;
+
+Yani **dolu herhangi bir dizge** merkez kuralının tamamını atlıyordu.
+Kuralın kendi yorumu da bunu söylüyordu: *"dizgeye bakan kural kural
+değildir"*.
+
+Muafiyetin gerekçesi "hakediş ya da mal kabul üzerinden doğan görevin
+merkezi kaynak kaydından türetilebilir"di. **ÖLÇÜLDÜ: o vaka canlıda
+hiç gerçekleşmemiş.** Üç görevin dağılımı `MANUAL × 2`, `(boş) × 1`.
+
+Yani kaçış, kurulduğu sebep için **bir kez bile kullanılmadı**;
+kullanan tek şey ön yüzün kendi işareti olan `MANUAL` oldu — ki o, tam
+olarak **muaf olmaması gereken** durum. Kaçış, korumayı kaldırdığı
+yerde koruma gerekiyordu.
+
+Görev açan iki yer var ve ikisi de etkilenmiyor:
+`WorkTasksController` (ön yüz her zaman merkez gönderiyor) ve
+`HizirActionTools` (denetleyiciyi hiç görmüyor). Hiçbir arka uç servisi
+gerçek bir modül adıyla görev açmıyor — muhasebe fişlerindeki
+`SourceModule` alanları **başka bir varlığa** ait.
+
+### PARAMETRE DE KALDIRILDI
+
+`Dogrula` artık `sourceModule` almıyor. Dursaydı biri günün birinde
+yeniden bir dizge kontrolü yazardı. **Kaldırılan bir kaçış,
+kullanılmayan bir kaçıştan güvenlidir.**
+
+### İKİ TEST, İKİ FARKLI AKIBET — AYRIM ÖNCEDEN KAYITLIYDI
+
+- `KaydaBagliGorev_MerkezsizGecer_ACIK_KAPI` bir **kusuru**
+  sabitliyordu → **tersine çevrildi**
+  (`KaydaBagliGorev_De_MERKEZSIZ_GECEMEZ`).
+- `S3d` bir **davranışı** sabitliyor → **korundu**, kurulumu değişti:
+  merkezsiz görev API'den artık açılamadığı için doğrudan veritabanına
+  yazılıyor.
+
+S3d'nin notunda açıkça yazıldı: **merkezsiz görev API'den artık
+açılamaz ama canlıda VAR OLABİLİR** — kaçış kapanmadan önce açılmış
+kayıtlar duruyor ve ekranın onları doğru göstermesi gerekiyor.
+
+### SONDA AK — İLAN EKSİKTİ VE EKSİKLİK KANITIN KENDİSİ
+
+İlan: 1 kırmızı. Gözlem: **4** — `KaydaBagliGorev_De_MERKEZSIZ_GECEMEZ`,
+`S1_MerkezsizPost_Reddedilir`, `S4_PutMerkezsizGuncelleme_Reddedilir`,
+`UcuDeBossa_Reddedilir`.
+
+Sebep: **sabotaj orijinal kaçışı taklit edemedi.** Orijinal kaçış dolu
+bir `sourceModule` dizgesine bakıyordu; o parametre artık YOK,
+dolayısıyla birebir geri konamadı. Yerine daha geniş bir kaçış yazıldı
+("merkez hiç seçilmemişse geç") ve o, merkezsizliği sınayan üç testi
+birden düşürdü.
+
+Fazladan gelen kırmızılar doğru davranış; ilan eksikti. Ve bu eksiklik
+kapanışın kanıtı: **kaçış devre dışı bırakılmadı, dayanağıyla birlikte
+kaldırıldı.**
+
+---
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`
@@ -5491,6 +5573,49 @@ Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyo
 **2026-08-25'te 13 maddenin 9'u karara bağlandı** (aşağıda "KAPANANLAR").
 Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
 **11 madde** (6–11. maddeler 2026-08-26/28'de eklendi):
+
+0A. **M3'ÜN İKİ ÖN KOŞULU — HESAP PAKETİ BİTMEDEN M3'E GEÇİLMEZ**
+   (Mehmet, 2026-09-04) | Karar verildi, paket yazılmadı |
+   M3/2b ve sonraki M3 paketlerinden ÖNCE.
+
+   **ÖN KOŞUL 1 — DEPARTMAN VERİSİ:** bugün kapanıyor. Yazma yolu
+   (DEPARTMAN/1), toplu atama ekranı, silme muhafızı ve doğrulama
+   sorgusu canlıda; atama Mehmet'te.
+
+   **ÖN KOŞUL 2 — KULLANICI HESAPLARI: HİÇ BAŞLAMADI.**
+
+   Gerekçe (Mehmet): *"M3 mesajlaşma bugün 4 kullanıcı arasında
+   kurulur; kitle olmadan mobil öncelikli tasarımın karşılığı yok."*
+
+   **ÖLÇÜM TAHMİNİ KÜÇÜLTTÜ** — "~15-20 hesap" beklentisi ölçümde şuna
+   dönüşüyor:
+
+   | Ölçüm | Sonuç |
+   |---|---|
+   | Kullanıcı hesabı | 13 var (4 aktif) |
+   | Pasif ama **rolleri atanmış** | 9 |
+   | Personel↔kullanıcı bağı | **0 / 13** |
+   | Ofis + şef/formen kohortu | ~10 kişi |
+   | Hesabı olmayan kohort üyesi | 2 (P0058, EMP-001) |
+
+   Yani iş **hesap açma değil**: 9 etkinleştirme + 2 yeni hesap + 10
+   bağ.
+
+   **BAĞ KURULABİLİR AMA OTOMATİK YAZILMAMALI:** kullanıcı adı deseni
+   "ad baş harfi + soyad" ve bu kuralla 13 kullanıcının 10'u bir
+   personel kaydıyla eşleşiyor (P0001–P0009, P0045). Eşleşmeyen üç:
+   `mehmet` (yönetici hesabı), `ioktem`, `uakkaya` — bu ikisinin
+   soyadıyla hiç personel kaydı yok.
+
+   Yanlış bir bağ **maaş görünürlüğü ve veri kapsamı** demek. Ekranda
+   "önerilen eşleşme" olarak gösterilip tek tek onaylanması daha ucuz
+   ve geri alınabilir — tohumlama için verilen gerekçenin aynısı:
+   *yanlış olanı kimse fark etmez*.
+
+   **ETKİNLEŞTİRME TUZAĞI:** `ralici` ve `ccihan` tohum parolasını
+   taşıyor. Etkinleştirme parolayı değiştirmiyor, hesabı açıyor —
+   yani o an eski paylaşılan parolayla giriş yapılabilir hâle
+   gelirler. TEMIZLIK-TARAMASI.md'ye yazıldı.
 
 0a. **ÜÇ ÜRETİM SIRRI AYNI VE 10 KARAKTER — DÖNDÜRME KARARI SENDE**
    (2026-09-03, sır bekçisi paketi sırasında bulundu) | Karar

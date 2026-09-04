@@ -256,7 +256,6 @@ public sealed class WorkTasksController(
             request.BranchId,
             request.ProjectSiteId,
             request.CenterType,
-            request.SourceModule,
             cancellationToken);
 
         if (merkezHatasi is not null)
@@ -418,7 +417,6 @@ public sealed class WorkTasksController(
             request.BranchId,
             request.ProjectSiteId,
             request.CenterType,
-            item.SourceModule,
             cancellationToken);
 
         if (merkezHatasi is not null)
@@ -1083,12 +1081,19 @@ public sealed class WorkTasksController(
     /// vermek. Böylece kuralın kendisi test edilebilir kalıyor ve iki
     /// çağıran arasında kopya çıkmıyor.
     /// </summary>
+    /// <summary>
+    /// Masraf merkezini doğrular.
+    ///
+    /// `sourceModule` PARAMETRESİ KALDIRILDI (KURAL-KATMAN/1,
+    /// 2026-09-04): kural artık kaynak modül adına BAKMIYOR. Dolu bir
+    /// dizge tüm kuralı atlıyordu ve ölçüldü ki o kaçış, kurulduğu
+    /// sebep için bir kez bile kullanılmamıştı.
+    /// </summary>
     private async Task<string?> MerkezDogrulaAsync(
         Guid? projectId,
         Guid? branchId,
         Guid? projectSiteId,
         ExpenseCenterType? centerType,
-        string? sourceModule,
         CancellationToken cancellationToken)
     {
         Guid? santiyeninProjesi = null;
@@ -1104,7 +1109,7 @@ public sealed class WorkTasksController(
 
         return MasrafMerkeziKurali.Dogrula(
             projectId, branchId, projectSiteId,
-            centerType, sourceModule, santiyeninProjesi);
+            centerType, santiyeninProjesi);
     }
 
     /// <summary>

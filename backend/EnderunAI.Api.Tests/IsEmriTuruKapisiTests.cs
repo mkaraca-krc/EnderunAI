@@ -4,6 +4,7 @@ using System.Text.Json;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Tests.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -238,42 +239,72 @@ public sealed class IsEmriTuruKapisiTests(DatabaseFixture fixture)
     public async Task S3d_MerkezsizGorevde_De_PersonelAdiCozulur()
     {
         /*
-         * DİKKAT — BU TEST ERKEN ÇIKIŞI SINAMIYOR. ÖLÇÜLDÜ.
+         * ═══ KURULUM DEĞİŞTİ — KURAL-KATMAN/1 (2026-09-04) ═══
          *
-         * İlk yazdığımda bu testin `AdlariGetirAsync` içindeki erken
-         * çıkış koşulunu koruduğunu SANDIM ve sondayı öyle ilan ettim:
-         * "koşuldan `personeller.Count == 0` çıkarılırsa S3d kırmızı
-         * verir." SONDA YEŞİL GELDİ.
+         * Bu test merkezsiz bir görevi `sourceModule` KAÇIŞINDAN
+         * geçerek açıyordu. Kaçış kapatıldı (merkez artık koşulsuz
+         * zorunlu), dolayısıyla o kurulum artık 400 döner.
          *
-         * Sebebi ölçüldü: erken çıkışın baktığı `liste`,
-         * `AssignedByUserId`'yi de içeriyor ve HER İKİ yazma yolu da onu
-         * her zaman yazıyor (`WorkTasksController:352`,
-         * `HizirActionTools:204`). Yani API'den doğan hiçbir görevde
-         * `liste` boş olamaz; erken çıkış hiç tetiklenmiyor.
+         * Karar önceden kayıtlıydı: "S3d KORUNACAK, kurulumu
+         * değişecek" — çünkü bu test bir KUSURU değil bir DAVRANIŞI
+         * sabitliyor. (Kusuru sabitleyen `ACIK_KAPI` testi ise
+         * tersine çevrildi.)
          *
-         * BU TESTİN GERÇEKTEN SINADIĞI ŞEY: merkezi olmayan bir görevde
-         * personel adının NORMAL yoldan çözüldüğü. Değerli ama başka bir
-         * iddia. Erken çıkışın kendisi `S3e`'de sınanıyor.
+         * YENİ KURULUM: görev doğrudan veritabanına yazılıyor.
+         * Merkezsiz bir görev API'den artık AÇILAMAZ, ama CANLIDA
+         * VAR OLABİLİR — kaçış kapanmadan önce açılmış kayıtlar
+         * duruyor. Ekranın onları doğru göstermesi gerekiyor.
          *
-         * MERKEZSİZ GÖREV NASIL AÇILIYOR: `SourceModule` dolu olan istek
-         * masraf merkezi kuralından muaf (kayda bağlı görev). Bu,
-         * `MasrafMerkeziKurali` içinde AÇIKÇA yazılmış ve
-         * KURAL-KATMAN/1'e bırakılmış bilinen bir kapı; burada onu
-         * düzeltmiyoruz, yalnız test düzeneği olarak kullanıyoruz.
+         * ── BU TEST ERKEN ÇIKIŞI SINAMIYOR ──
+         *
+         * `AssignedByUserId` BİLEREK DOLU: erken çıkış koşulu
+         * sağlanmasın diye. Erken çıkışın kendisi `S3e`'de sınanıyor
+         * ve orada tüm kullanıcı alanları boş.
+         *
+         * Bu ayrım ölçümle öğrenildi: sonda G ilan edilen kırmızıyı
+         * vermedi, çünkü S3d'nin sandığım şeyi sınamadığı ortaya
+         * çıktı.
          */
-        var proje = await ProjeAsync(fixture, "TUR-S3D");
-        var personel = await PersonelAsync(fixture, proje.CompanyId, "TUR-S3D");
-        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+        Project proje;
+        Personnel personel;
+        Guid gorevId;
 
-        var yanit = await client.PostAsJsonAsync("/api/tasks", new
+        using (var scope = fixture.Factory.Services.CreateScope())
         {
-            companyId = proje.CompanyId,
-            title = "Merkezsiz, yalnız personele atanmış",
-            priority = (int)WorkTaskPriority.Normal,
-            kind = (int)WorkTaskKind.IsEmri,
-            assignedToPersonnelId = personel.Id,
-            sourceModule = "TEST",
-        });
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            proje = await TestDataFactory.CreateProjectAsync(db, "TUR-S3D");
+            personel = await TestDataFactory.CreatePersonnelAsync(
+                db, proje.CompanyId, "TUR-S3D");
+
+            var yonetici = await db.Users.SingleAsync(
+                x => x.Username == AuthHelper.AdminUsername);
+
+            var gorev = new WorkTask
+            {
+                CompanyId = proje.CompanyId,
+                TaskNumber = "GRV-SONDA-S3D",
+                Title = "Merkezsiz, yalnız personele atanmış",
+                Kind = WorkTaskKind.IsEmri,
+                Status = WorkTaskStatus.Open,
+                AssignedToPersonnelId = personel.Id,
+
+                // MERKEZ YOK — testin konusu bu.
+                ProjectId = null,
+                BranchId = null,
+                ProjectSiteId = null,
+
+                // KULLANICI ALANI DOLU: erken çıkış tetiklenmesin
+                // (o, S3e'nin konusu).
+                AssignedByUserId = yonetici.Id,
+            };
+
+            db.WorkTasks.Add(gorev);
+            await db.SaveChangesAsync();
+            gorevId = gorev.Id;
+        }
+
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+        var yanit = await client.GetAsync($"/api/tasks/{gorevId}");
 
         Assert.Equal(HttpStatusCode.OK, yanit.StatusCode);
 

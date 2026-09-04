@@ -40,20 +40,51 @@ public static class MasrafMerkeziKurali
         Guid? branchId,
         Guid? projectSiteId,
         ExpenseCenterType? centerType,
-        string? sourceModule,
         Guid? santiyeninProjesi)
     {
         /*
-         * KAYDA BAĞLI GÖREV MUAF — ŞİMDİLİK.
+         * ═══ KAÇIŞ KAPATILDI — KURAL-KATMAN/1 (2026-09-04) ═══
          *
-         * Hakediş ya da mal kabul üzerinden doğan bir görevin merkezi
-         * kaynak kaydından türetilebiliyor. Ama bu muafiyet bir DİZGEYE
-         * bakıyor ve dizgeye bakan kural kural değildir: yarın eklenen
-         * her modül adı aynı kaçışı yeniden açar. Kaydın türüne bağlanması
-         * KURAL-KATMAN/1'in işi.
+         * Burada şu vardı:
+         *
+         *     if (!string.IsNullOrWhiteSpace(sourceModule))
+         *         return null;
+         *
+         * Yani DOLU herhangi bir dizge, merkez kuralının tamamını
+         * atlıyordu. Kuralın kendi yorumu bunu zaten söylüyordu:
+         * "dizgeye bakan kural kural değildir".
+         *
+         * ── NEDEN ŞİMDİ VE NEDEN GÜVENLE ──
+         *
+         * Muafiyetin gerekçesi "hakediş ya da mal kabul üzerinden
+         * doğan görevin merkezi kaynak kaydından türetilebilir"di.
+         * ÖLÇÜLDÜ (2026-09-04, canlı): o vaka HİÇ GERÇEKLEŞMEMİŞ.
+         * Üç görevin `SourceModule` dağılımı `MANUAL × 2`, `(boş) × 1`.
+         *
+         * Yani kaçış, kurulduğu sebep için bir kez bile kullanılmadı;
+         * kullanan tek şey ön yüzün kendi işareti olan `MANUAL` oldu —
+         * ki o, tam olarak MUAF OLMAMASI gereken durum. Kaçış,
+         * korumayı kaldırdığı yerde koruma gerekiyordu.
+         *
+         * ── GÖREV AÇAN İKİ YER VAR, İKİSİ DE ETKİLENMİYOR ──
+         *
+         * `WorkTasksController` (ön yüz her zaman merkez gönderiyor)
+         * ve `HizirActionTools` (denetleyiciyi hiç görmüyor, bu kural
+         * ona zaten uygulanmıyor). Hiçbir arka uç servisi gerçek bir
+         * modül adıyla görev açmıyor — muhasebe fişlerindeki
+         * `SourceModule` alanları BAŞKA bir varlığa ait.
+         *
+         * ── GELECEKTE BİR MODÜL GÖREV AÇARSA ──
+         *
+         * Merkezi KENDİSİ verecek. Kaynak kaydını okuyan taraf, o
+         * kaydın projesini/şubesini de biliyor; bilmiyorsa merkez
+         * gerçekten belirsiz demektir ve o zaman muafiyet değil, bir
+         * karar gerekir.
+         *
+         * `sourceModule` parametresi de KALDIRILDI: dursaydı biri
+         * günün birinde yeniden bir dizge kontrolü yazardı. Kaldırılan
+         * bir kaçış, kullanılmayan bir kaçıştan güvenlidir.
          */
-        if (!string.IsNullOrWhiteSpace(sourceModule))
-            return null;
 
         var secilenler = new[] { projectId, branchId, projectSiteId }
             .Count(x => x.HasValue);

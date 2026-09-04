@@ -29,7 +29,7 @@ public sealed class MasrafMerkeziKuraliTests
     public void UcuDeBossa_Reddedilir()
     {
         var hata = MasrafMerkeziKurali.Dogrula(
-            null, null, null, null, null, null);
+            null, null, null, null, null);
 
         Assert.NotNull(hata);
         Assert.Contains("Masraf merkezi zorunludur", hata);
@@ -43,13 +43,13 @@ public sealed class MasrafMerkeziKuraliTests
          * yeşil kalırdı. Bu test o ihtimali kapatıyor.
          */
         Assert.Null(MasrafMerkeziKurali.Dogrula(
-            Proje, null, null, null, null, null));
+            Proje, null, null, null, null));
 
         Assert.Null(MasrafMerkeziKurali.Dogrula(
-            null, Sube, null, null, null, null));
+            null, Sube, null, null, null));
 
         Assert.Null(MasrafMerkeziKurali.Dogrula(
-            Proje, null, Santiye, null, null, Proje));
+            Proje, null, Santiye, null, Proje));
     }
 
     // ───────── S2: CenterType çelişkisi ─────────
@@ -60,7 +60,7 @@ public sealed class MasrafMerkeziKuraliTests
     public void ProjeSecilipBaskaTurYazilirsa_Reddedilir(ExpenseCenterType yanlisTur)
     {
         var hata = MasrafMerkeziKurali.Dogrula(
-            Proje, null, null, yanlisTur, null, null);
+            Proje, null, null, yanlisTur, null);
 
         Assert.NotNull(hata);
         Assert.Contains("türü seçilen merkezle uyuşmuyor", hata);
@@ -70,10 +70,10 @@ public sealed class MasrafMerkeziKuraliTests
     public void DogruTurYazilirsa_Kabul()
     {
         Assert.Null(MasrafMerkeziKurali.Dogrula(
-            Proje, null, null, ExpenseCenterType.Project, null, null));
+            Proje, null, null, ExpenseCenterType.Project, null));
 
         Assert.Null(MasrafMerkeziKurali.Dogrula(
-            null, Sube, null, ExpenseCenterType.Branch, null, null));
+            null, Sube, null, ExpenseCenterType.Branch, null));
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public sealed class MasrafMerkeziKuraliTests
          * çelişirse hangisinin doğru olduğu bilinemez — reddedilir.
          */
         var hata = MasrafMerkeziKurali.Dogrula(
-            BaskaProje, null, Santiye, null, null, Proje);
+            BaskaProje, null, Santiye, null, Proje);
 
         Assert.NotNull(hata);
         Assert.Contains("seçilen projeye ait değil", hata);
@@ -112,7 +112,7 @@ public sealed class MasrafMerkeziKuraliTests
     public void SantiyeVarProjeYok_Reddedilir()
     {
         var hata = MasrafMerkeziKurali.Dogrula(
-            null, null, Santiye, null, null, Proje);
+            null, null, Santiye, null, Proje);
 
         Assert.NotNull(hata);
         Assert.Contains("projesi de gönderilmelidir", hata);
@@ -122,7 +122,7 @@ public sealed class MasrafMerkeziKuraliTests
     public void SantiyeBulunamazsa_Reddedilir()
     {
         var hata = MasrafMerkeziKurali.Dogrula(
-            Proje, null, Santiye, null, null, null);
+            Proje, null, Santiye, null, null);
 
         Assert.NotNull(hata);
         Assert.Contains("şantiye bulunamadı", hata);
@@ -134,7 +134,7 @@ public sealed class MasrafMerkeziKuraliTests
     public void ProjeVeSubeBirlikte_Reddedilir()
     {
         var hata = MasrafMerkeziKurali.Dogrula(
-            Proje, Sube, null, null, null, null);
+            Proje, Sube, null, null, null);
 
         Assert.NotNull(hata);
         Assert.Contains("Tek bir masraf merkezi", hata);
@@ -143,21 +143,29 @@ public sealed class MasrafMerkeziKuraliTests
     // ───────── Açık kalan kapı: BİLEREK ─────────
 
     [Fact]
-    public void KaydaBagliGorev_MerkezsizGecer_ACIK_KAPI()
+    public void KaydaBagliGorev_De_MERKEZSIZ_GECEMEZ()
     {
         /*
-         * BU TEST BİR KUSURU SABİTLİYOR, BİR DAVRANIŞI DEĞİL.
+         * ═══ BU TEST TERSİNE ÇEVRİLDİ — KURAL-KATMAN/1 ═══
          *
-         * `SourceModule` dolu olan istek kuralın dışında kalıyor ve
-         * merkezsiz geçebiliyor. Ön yüz artık her zaman merkez
-         * gönderdiği için bu kaçış FİİLEN kullanılmıyor — ama KAPI
-         * AÇIK ve öyle olduğu burada yazılı.
+         * Eski hâli `KaydaBagliGorev_MerkezsizGecer_ACIK_KAPI` idi ve
+         * BİR KUSURU sabitliyordu: `SourceModule` dolu olan istek
+         * kuralın dışında kalıyor, merkezsiz geçebiliyordu. Yorumunda
+         * da yazıyordu: *"KURAL-KATMAN/1 geldiğinde DEĞİŞTİRİLECEK —
+         * silinmeyecek, tersine çevrilecek."*
          *
-         * Kapanması, kuralın dizgeye değil kaydın TÜRÜNE bakmasıyla
-         * olacak: KURAL-KATMAN/1. O paket geldiğinde bu test
-         * DEĞİŞTİRİLECEK — silinmeyecek, tersine çevrilecek.
+         * Kapatıldı ve test tersine çevrildi. Artık kaynak modül adı
+         * diye bir kavram kuralda YOK — parametre bile kaldırıldı, ki
+         * biri günün birinde yeniden bir dizge kontrolü yazmasın.
+         *
+         * ÖLÇÜM KAPATMAYI GÜVENLİ KILDI: kaçışın gerekçesi olan
+         * "hakediş/mal kabul üzerinden doğan görev" canlıda HİÇ
+         * gerçekleşmemişti (`MANUAL × 2`, `(boş) × 1`). Kaçışı
+         * kullanan tek şey ön yüzün kendi işaretiydi — tam olarak muaf
+         * OLMAMASI gereken durum.
          */
-        Assert.Null(MasrafMerkeziKurali.Dogrula(
-            null, null, null, null, "HAKEDIS", null));
+        Assert.Equal(
+            "Masraf merkezi zorunludur: proje, şube ya da şantiye seçin.",
+            MasrafMerkeziKurali.Dogrula(null, null, null, null, null));
     }
 }
