@@ -237,6 +237,27 @@ export default function HrPersonnelPage() {
   const [departmentSaving, setDepartmentSaving] = useState<string | null>(null);
   const [departmentError, setDepartmentError] = useState("");
 
+  /*
+   * TOPLU DEPARTMAN ATAMA.
+   *
+   * NEDEN: 79 aktif personelin tamamına departman girilecek ve
+   * ölçüldü ki ~40'ı aynı departmana (SAHA) gidiyor. Satır satır
+   * seçmek 79 ayrı işlem demekti.
+   *
+   * ARKA UÇTA DEĞİŞİKLİK YOK: satır başına uç zaten var ve tek yazma
+   * noktasından (`ParolaYazici` deseninin departman karşılığı,
+   * `PUT .../departman`) geçiyor. Toplu uç açmak ikinci bir yazma
+   * yolu doğururdu — bu kod tabanının en sık hatası.
+   *
+   * KISMİ BAŞARISIZLIK SESSİZ GEÇMİYOR: satırlar tek tek uygulanıyor
+   * ve biri düşerse (ör. sürüm çakışması) "tamamlandı" denmiyor —
+   * başarısızlar SEÇİLİ KALIYOR ve sayısı yazılıyor.
+   */
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDepartmentId, setBulkDepartmentId] = useState("");
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkResult, setBulkResult] = useState("");
+
   // Görev yeri paneli: atama mevcut bir personel üzerinde yapılan bir
   // işlem, oluşturma formunun alanı değil — bu yüzden ayrı panel.
   const [locationTarget, setLocationTarget] =
@@ -400,6 +421,97 @@ export default function HrPersonnelPage() {
       await reloadPersonnel().catch(() => undefined);
     } finally {
       setDepartmentSaving(null);
+    }
+  }
+
+  /**
+   * Seçili satırlara aynı departmanı uygular.
+   *
+   * TEK TEK UYGULANIYOR, TOPLU UÇ AÇILMADI: satır başına uç zaten var
+   * ve her satırın KENDİ sürüm damgası var. Toplu bir uç, ya sürüm
+   * kontrolünü atlamak ya da onu ikinci kez yazmak zorunda kalırdı.
+   *
+   * SIRAYLA, PARALEL DEĞİL: 40 eşzamanlı istek sunucuyu gereksiz
+   * yükler ve hata sırasını okunmaz hâle getirir. 40 satır sırayla
+   * saniyeler sürüyor.
+   */
+  async function applyBulkDepartment() {
+    if (selectedIds.size === 0) return;
+
+    const hedef = bulkDepartmentId ? bulkDepartmentId : null;
+
+    setBulkRunning(true);
+    setBulkResult("");
+    setDepartmentError("");
+
+    let basarili = 0;
+    const basarisiz: string[] = [];
+
+    for (const id of Array.from(selectedIds)) {
+      const satir = items.find((x) => x.id === id);
+      if (!satir) continue;
+
+      if ((satir.departmentId ?? null) === hedef) {
+        // Zaten aynı: sunucuya gitmeye gerek yok.
+        basarili += 1;
+        continue;
+      }
+
+      try {
+        const sonuc = await personnelService.setDepartment(id, {
+          departmentId: hedef,
+          recordVersion: satir.recordVersion ?? "",
+        });
+
+        setItems((mevcut) =>
+          mevcut.map((x) =>
+            x.id === id
+              ? {
+                  ...x,
+                  departmentId: sonuc.departmentId,
+                  departmentName: sonuc.departmentName,
+                  recordVersion: sonuc.recordVersion,
+                }
+              : x
+          )
+        );
+
+        basarili += 1;
+      } catch (err) {
+        basarisiz.push(
+          `${satir.fullName}: ${
+            err instanceof Error ? err.message : "bilinmeyen hata"
+          }`
+        );
+      }
+    }
+
+    /*
+     * BAŞARISIZLAR SEÇİLİ KALIYOR.
+     *
+     * Hepsini temizlemek "tamamlandı" izlenimi verirdi; kullanıcı
+     * hangi satırın atlandığını aramak zorunda kalırdı. Seçim,
+     * yeniden denemenin de hazır hâli.
+     */
+    setSelectedIds(
+      new Set(
+        Array.from(selectedIds).filter((id) => {
+          const satir = items.find((x) => x.id === id);
+          return satir ? basarisiz.some((b) => b.startsWith(satir.fullName)) : false;
+        })
+      )
+    );
+
+    setBulkRunning(false);
+
+    if (basarisiz.length === 0) {
+      setBulkResult(`${basarili} personelin departmanı güncellendi.`);
+    } else {
+      setBulkResult(
+        `${basarili} başarılı, ${basarisiz.length} BAŞARISIZ. ` +
+          "Başarısız satırlar seçili bırakıldı."
+      );
+      setDepartmentError(basarisiz.join(" · "));
     }
   }
 
@@ -1042,7 +1154,7 @@ export default function HrPersonnelPage() {
           <Select
             value={profession}
             onChange={(event) => setProfession(event.target.value)}
-            placeholder="Tüm departman / meslekler"
+            placeholder="Tüm meslekler"
             options={professionOptions}
           />
           <Select
@@ -1171,10 +1283,93 @@ export default function HrPersonnelPage() {
             </div>
             <Badge variant="info">{filteredItems.length} kayıt</Badge>
           </CardHeader>
+
+          {/*
+              TOPLU ATAMA ŞERİDİ — YALNIZ SEÇİM VARKEN.
+              Boşken göstermek, her açılışta kullanılmayan bir kontrol
+              göstermek olurdu.
+          */}
+          {actions.can("edit") && selectedIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-3 border-y border-slate-200 bg-slate-50 px-4 py-3">
+              <strong className="text-sm text-slate-800">
+                {selectedIds.size} personel seçili
+              </strong>
+
+              <select
+                className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                value={bulkDepartmentId}
+                disabled={bulkRunning}
+                onChange={(event) => setBulkDepartmentId(event.target.value)}
+                aria-label="Toplu atanacak departman"
+              >
+                {/* BOŞ SEÇENEK: toplu DEPARTMANDAN ÇIKARMA da mümkün. */}
+                <option value="">— Departman yok —</option>
+                {departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                disabled={bulkRunning}
+                onClick={() => void applyBulkDepartment()}
+                className="rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+              >
+                {bulkRunning ? "Uygulanıyor…" : "Seçililere uygula"}
+              </button>
+
+              <button
+                type="button"
+                disabled={bulkRunning}
+                onClick={() => {
+                  setSelectedIds(new Set());
+                  setBulkResult("");
+                }}
+                className="text-sm text-slate-600 underline disabled:opacity-50"
+              >
+                Seçimi temizle
+              </button>
+
+              {bulkResult && (
+                <span className="text-sm text-slate-700">{bulkResult}</span>
+              )}
+            </div>
+          )}
+
           <CardContent className="overflow-x-auto p-0">
             <Table>
               <TableHeader>
                 <TableRow>
+                  {actions.can("edit") && (
+                    <TableHead className="w-10">
+                      {/*
+                          SÜZÜLENLERİN HEPSİNİ SEÇ — tüm listeyi değil.
+                          Kullanıcı önce süzer (ör. meslek = SAHA
+                          GÖREVLİSİ), sonra hepsini seçer. Süzgeci
+                          yok sayan bir "hepsini seç", görmediği
+                          satırları da değiştirirdi.
+                      */}
+                      <input
+                        type="checkbox"
+                        aria-label="Süzülen personelin hepsini seç"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={
+                          filteredItems.length > 0 &&
+                          filteredItems.every((x) => selectedIds.has(x.id))
+                        }
+                        onChange={(event) => {
+                          setBulkResult("");
+                          setSelectedIds(
+                            event.target.checked
+                              ? new Set(filteredItems.map((x) => x.id))
+                              : new Set()
+                          );
+                        }}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead>Personel</TableHead>
                   <TableHead>Şirket / Şube</TableHead>
                   {/*
@@ -1202,6 +1397,25 @@ export default function HrPersonnelPage() {
                 {filteredItems.map((item) => {
                   return (
                     <TableRow key={item.id}>
+                      {actions.can("edit") && (
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            aria-label={`${item.fullName} seç`}
+                            className="h-4 w-4 rounded border-slate-300"
+                            checked={selectedIds.has(item.id)}
+                            onChange={(event) => {
+                              setBulkResult("");
+                              setSelectedIds((mevcut) => {
+                                const yeni = new Set(mevcut);
+                                if (event.target.checked) yeni.add(item.id);
+                                else yeni.delete(item.id);
+                                return yeni;
+                              });
+                            }}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-700">

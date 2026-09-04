@@ -28,5 +28,10 @@
 # SESSİZ kalacak üç kararını sabitliyor: yanıltıcı "Departman /
 # Pozisyon" başlığının geri gelmemesi, seçicideki boş seçenek
 # (departmandan çıkarmanın tek yolu) ve sürüm damgasının gönderilmesi.
-statik: 415
+# TOPLU-ATAMA (2026-09-04): 415 → 419, katkı +4.
+#   personel-departman-ekran-sozlesmesi.test.ts +4:
+#     süzülenleri seçme (tüm listeyi değil), kısmi başarısızlığın
+#     sessiz geçmemesi, toplu uç açılmaması, yanıltıcı süzgeç
+#     yer tutucusunun geri gelmemesi.
+statik: 419
 dinamik: 15

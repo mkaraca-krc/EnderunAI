@@ -73,6 +73,51 @@ describe("personel ekranı departman sözleşmesi", () => {
     expect(ekran).toContain("recordVersion: item.recordVersion");
   });
 
+  it("toplu atama SÜZÜLENLERİ seçiyor, tüm listeyi değil", () => {
+    /*
+     * Kullanıcı önce süzer (ör. meslek = SAHA GÖREVLİSİ), sonra
+     * "hepsini seç" der. Süzgeci yok sayan bir "hepsini seç",
+     * GÖRMEDİĞİ satırları da değiştirirdi — ve bu, 79 kişilik bir
+     * listede fark edilmesi en zor hata türü.
+     */
+    expect(ekran).toContain("filteredItems.map((x) => x.id)");
+    expect(ekran).not.toContain("items.map((x) => x.id)");
+  });
+
+  it("toplu atamada KISMİ BAŞARISIZLIK sessiz geçmiyor", () => {
+    /*
+     * 40 satır tek tek uygulanırken biri düşerse (ör. sürüm
+     * çakışması) "tamamlandı" demek yanlış olur. Başarısızlar seçili
+     * kalıyor ve sayısı yazılıyor — yeniden denemenin hazır hâli.
+     */
+    expect(ekran).toContain("BAŞARISIZ");
+    expect(ekran).toContain("Başarısız satırlar seçili bırakıldı");
+  });
+
+  it("toplu atama TEK SATIR UCUNU kullanıyor, toplu uç yok", () => {
+    /*
+     * Toplu bir uç açmak İKİNCİ BİR YAZMA YOLU doğururdu ve her
+     * satırın kendi sürüm damgası olduğu için ya sürüm kontrolünü
+     * atlamak ya da onu ikinci kez yazmak zorunda kalırdı.
+     *
+     * Bu kod tabanının en sık hatası ikinci yazma yolu — bir günde
+     * altı kez görüldü.
+     */
+    expect(ekran).toContain("personnelService.setDepartment");
+    expect(servis).not.toContain("setDepartmentBulk");
+    expect(servis).not.toContain("departman/toplu");
+  });
+
+  it("meslek süzgecinin yanıltıcı yer tutucusu geri gelmiyor", () => {
+    /*
+     * Süzgeç "Tüm departman / meslekler" yazıyordu ama YALNIZ meslek
+     * süzüyordu — kolon başlığındaki aynı yanılgının süzgeçte kalmış
+     * hâli. Departman ayrı bir alan.
+     */
+    expect(ekran).not.toContain('placeholder="Tüm departman / meslekler"');
+    expect(ekran).toContain('placeholder="Tüm meslekler"');
+  });
+
   it("kaydetme başarısız olduğunda ekranda hata gösteriliyor", () => {
     /*
      * Satır içi seçici, kaydetme başarısız olduğunda eski değerine
