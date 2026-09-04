@@ -807,6 +807,23 @@ main() {
 
     gocleri_dogrula
 
+    # ── UCUZ KAPILAR — PAHALI TURLARDAN ÖNCE ──
+    #
+    # SIRA MALİYETE GÖRE: saniyelerle ölçülen kapılar önce, dakikalarla
+    # ölçülen turlar sonra. Kapıların doğruluğu değişmiyor, yalnız yeri.
+    #
+    # DOĞURAN OLAY (2026-09-04): kurumsal kimlik taraması bir buton
+    # rengini yakaladı ama iki tam turdan (~27 dk) ve arka uç
+    # publish'inden SONRA. Aynı bulgu 24 saniyede gelebilirdi.
+    #
+    # LİSTE BURADA DEĞİL, `ucuz-kapilar.sh` içinde — aynı betik push
+    # öncesi kancada da koşuyor. İki yerde iki liste, ayrışan bir
+    # nokta demekti.
+    log "INFO" "Ucuz kapılar çalıştırılıyor (pahalı turlardan önce)..."
+    if ! "${REPO_ROOT}/deploy/scripts/ucuz-kapilar.sh" 2>&1 | tee -a "$LOG_FILE"; then
+        fail "Ucuz kapılardan biri düştü; pahalı turlara girilmedi."
+    fi
+
     asama "backend-testleri"
     run_backend_tests
     asama "on-yuz-testleri"

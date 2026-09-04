@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#
+# PRE-PUSH — UCUZ KAPILAR YERELDE DE KOŞAR.
+#
+# ═══ NEDEN VAR ═══
+#
+# PAROLA/1'de kurumsal kimlik taraması yayında düştü ve ben o kontrolü
+# YERELDE KOŞMAYI UNUTMUŞTUM. 24 saniyelik bir kontrol, 27 dakikalık
+# iki tam turdan sonra kırmızı verdi.
+#
+# İki ayrı kusur vardı: kapının YERİ (safe-deploy içinde geç) ve
+# ALIŞKANLIK (yerelde koşmayı unutmak). Sıra betikte düzeltildi;
+# alışkanlık ise hatırlamaya bırakılamaz — bu kanca onu mekanik
+# kılıyor.
+#
+# ═══ AYNI BETİK ═══
+#
+# Kapı listesi burada TEKRAR EDİLMİYOR: `ucuz-kapilar.sh` çağrılıyor,
+# safe-deploy'un çağırdığı betiğin ta kendisi. İki yerde iki liste,
+# ayrışan bir nokta demekti.
+#
+# ═══ ATLAMA ═══
+#
+# Acil bir durumda `git push --no-verify` ile atlanabilir. Bu bilerek
+# açık: kapı, insanı doğru işi yapmaktan caydırmamalı (Kural 42).
+# Ama atlamak GÖRÜNÜR bir seçim olur, unutmak gibi sessiz değil.
+
+set -uo pipefail
+
+KOK="$(git rev-parse --show-toplevel)"
+BETIK="${KOK}/deploy/scripts/ucuz-kapilar.sh"
+
+if [ ! -x "$BETIK" ]; then
+    echo "[pre-push] UYARI: ucuz-kapilar.sh bulunamadı ($BETIK)." >&2
+    echo "[pre-push] Kapılar KOŞULMADI. Push'a izin veriliyor ama" >&2
+    echo "[pre-push] bu bir eksiklik — betiği geri getirin." >&2
+    exit 0
+fi
+
+echo "[pre-push] Ucuz kapılar koşuluyor (atlamak için --no-verify)..."
+
+if ! REPO_ROOT="$KOK" "$BETIK"; then
+    echo "[pre-push] Push DURDURULDU: ucuz kapılardan biri düştü." >&2
+    exit 1
+fi
+
+exit 0
