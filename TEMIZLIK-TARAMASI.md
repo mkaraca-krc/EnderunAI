@@ -1123,3 +1123,22 @@ biri bir gün "bu neden yok" diye sorduğunda cevabı olsun.
 - **Ayrıca düzeltilecek:** "+ Depodan Zimmet" düğmesinin izin kapısı
   YOK (`zimmetler/page.tsx:718-724`), yanındaki düğmede var
 
+---
+
+## PASİF HESAPLAR ETKİNLEŞTİRİLİRKEN — YENİ PAROLA ZORUNLU (2026-09-03)
+
+`ralici` ve `ccihan` **tohum parolasını taşıyor** (ölçüldü:
+PBKDF2 karşılaştırmasıyla). O parola aynı zamanda veritabanı ve posta
+parolasıydı.
+
+Şu an giriş yapamıyorlar çünkü **pasif**. Ama etkinleştirme, parolayı
+değiştirmiyor — hesabı açıyor. Yani etkinleştirildikleri an, eski
+paylaşılan parolayla giriş yapılabilir hâle gelirler.
+
+> **ETKİNLEŞTİRME ANINDA HER İKİSİNE DE YENİ VE AYRI PAROLA
+> VERİLECEK** (`Sistem Yönetimi → Kullanıcılar → parola sıfırla`).
+
+NEDEN BURAYA YAZILDI: etkinleştirme, hesap açma paketinin içinde
+sıradan bir adım gibi görünüyor. Bu not olmasa, o gün "hesabı aktif
+et" tıklanır ve parola konusu hiç akla gelmez — çünkü ekranda
+etkinleştirme ile parola iki ayrı işlem.

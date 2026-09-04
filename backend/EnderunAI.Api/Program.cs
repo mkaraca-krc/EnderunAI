@@ -508,6 +508,88 @@ builder.Services
                 }
 
                 return Task.CompletedTask;
+            },
+
+            /*
+             * PAROLA DEĞİŞİNCE ESKİ JETONLAR REDDEDİLİR.
+             *
+             * Jetonlar durumsuz: imzası geçerli ve süresi dolmamış bir
+             * jeton, parola değişse de 12 saat daha çalışırdı. Parola
+             * değiştirmenin sebebi genelde "bu parolayı başkası
+             * biliyor" olduğuna göre bu, değişikliği amacından ederdi.
+             *
+             * KONTROL BURADA, ÇÜNKÜ TEK GEÇİŞ NOKTASI: her kimlik
+             * doğrulanmış istek buradan geçiyor. Denetimi uçlara
+             * dağıtmak, unutulan ilk uçta sızıntı demekti.
+             *
+             * MALİYET: `IOturumGecerliligi` bir ÖNBELLEK; veritabanına
+             * yalnız ıska durumunda gidiyor (süreç ömrü boyunca
+             * kullanıcı başına bir kez).
+             */
+            OnTokenValidated = async context =>
+            {
+                var kimlik =
+                    context.Principal?.FindFirst(
+                        System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                    ?? context.Principal?.FindFirst(
+                        System.IdentityModel.Tokens.Jwt
+                            .JwtRegisteredClaimNames.Sub)?.Value;
+
+                if (!Guid.TryParse(kimlik, out var kullaniciId))
+                    return;
+
+                DateTime? uretim = null;
+                var iat = context.Principal?.FindFirst(
+                    System.IdentityModel.Tokens.Jwt
+                        .JwtRegisteredClaimNames.Iat)?.Value;
+
+                if (long.TryParse(iat, out var saniye))
+                {
+                    uretim = DateTimeOffset
+                        .FromUnixTimeSeconds(saniye).UtcDateTime;
+                }
+
+                var gecerlilik = context.HttpContext.RequestServices
+                    .GetRequiredService<EnderunAI.Api.Security.IOturumGecerliligi>();
+                var db = context.HttpContext.RequestServices
+                    .GetRequiredService<EnderunAI.Api.Data.AppDbContext>();
+
+                if (!await gecerlilik.GecerliAsync(
+                        kullaniciId, uretim, db,
+                        context.HttpContext.RequestAborted))
+                {
+                    /*
+                     * REDDİN KAYDI — TEŞHİS EDİLEBİLİR, SIRRI ELE
+                     * VERMEZ.
+                     *
+                     * Bu sürüm yayınlandığında canlıdaki TÜM jetonlar
+                     * `iat` taşımadığı için reddedilecek ve dört
+                     * kullanıcı aynı anda düşecek. O an "ne oluyor"
+                     * sorusunun cevabı bir yerde olmalı.
+                     *
+                     * JETON İÇERİĞİ YAZILMIYOR: yalnız kullanıcı
+                     * kimliği ve sebebin hangi dal olduğu. Kayıt,
+                     * koruduğu şeyi ele veren bir yer olamaz —
+                     * portal jetonunda ödenmiş ders.
+                     *
+                     * VERİTABANINA DEĞİL GÜNLÜĞE: reddedilen her
+                     * istek için satır yazmak, geçersiz jetonla
+                     * yapılan bir istek seline karşı kendi kendine
+                     * açılmış bir kapı olurdu.
+                     */
+                    var gunluk = context.HttpContext.RequestServices
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("OturumGecerliligi");
+
+                    gunluk.LogWarning(
+                        "Jeton reddedildi: parola değişimi sonrası eski oturum. " +
+                        "KullanıcıId={KullaniciId} JetonUretimZamaniVarMi={VarMi}",
+                        kullaniciId,
+                        uretim.HasValue);
+
+                    context.Fail(
+                        "Parola değiştiği için bu oturum sonlandırıldı.");
+                }
             }
         };
     });
@@ -525,6 +607,23 @@ builder.Services
  * yayın diğerindeki kullanıcıya ULAŞMAZ. Belirti sessizdir —
  * "bazen mesaj gelmiyor". O gün Redis backplane şart olur.
  */
+/*
+ * OTURUM GEÇERLİLİĞİ — TEKİL (singleton).
+ *
+ * Önbellek süreç ömrü boyunca yaşamalı; scoped olsaydı her istekte
+ * sıfırlanır ve önbellek hiçbir işe yaramazdı (her istek veritabanına
+ * giderdi). Tekil olması "tek süreç" varsayımının da kaynağı — o
+ * varsayım OturumGecerliligi belgesinde yazılı.
+ */
+builder.Services.AddSingleton<
+    EnderunAI.Api.Security.IOturumGecerliligi,
+    EnderunAI.Api.Security.OturumGecerliligi>();
+
+// PAROLA YAZMANIN TEK NOKTASI — karma, damga ve önbellek birlikte.
+builder.Services.AddScoped<
+    EnderunAI.Api.Security.IParolaYazici,
+    EnderunAI.Api.Security.ParolaYazici>();
+
 builder.Services.AddSignalR(options =>
 {
     // Hata ayrıntısı istemciye gitmez: sunucu içi bilgi sızdırır.

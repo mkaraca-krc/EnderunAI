@@ -17,7 +17,7 @@ namespace EnderunAI.Api.Controllers;
 [Route("api/user-management")]
 public sealed class UserManagementController(
     AppDbContext db,
-    PasswordService passwordService,
+    IParolaYazici parolaYazici,
     IUserAuthorizationService userAuthorizationService) : ControllerBase
 {
     private static readonly Regex UsernamePattern =
@@ -187,22 +187,42 @@ public sealed class UserManagementController(
             ? GenerateTemporaryPassword()
             : request.Password!;
 
-        if (temporaryPassword.Length < 10)
-            return BadRequest(new { message = "Şifre en az 10 karakter olmalıdır." });
+        /*
+         * POLİTİKA TEK YERDE — `ParolaPolitikasi`.
+         *
+         * Burada `< 10` sabiti vardı ve kendi parolasını değiştirme
+         * ucu yazılırken ikinci bir kopya doğacaktı. İki kopya zamanla
+         * ayrışır: biri 12'ye çıkarılır, diğeri 10'da kalır ve zayıf
+         * parola YÖNETİCİ ELİYLE girilebilir hâle gelirdi.
+         *
+         * ÖLÇÜLDÜ: canlıdaki paylaşılan parola TAM 10 karakterdi —
+         * yani eski asgariyi birebir karşılıyordu. Bir asgari, ihlal
+         * edilmediği sürece hiçbir şey söylemez.
+         */
+        if (ParolaPolitikasi.Dogrula(temporaryPassword) is string politikaHatasi)
+            return BadRequest(new { message = politikaHatasi });
 
-        var password = passwordService.Hash(temporaryPassword);
         var user = new AppUser
         {
             Username = username,
             FullName = request.FullName.Trim(),
             Honorific = NormalizeHonorific(request.Honorific),
             Email = NormalizeOptional(request.Email),
-            PasswordHash = password.Hash,
-            PasswordSalt = password.Salt,
             IsActive = request.IsActive,
             WorkHoursExempt = request.WorkHoursExempt,
             PersonnelId = request.PersonnelId
         };
+
+        /*
+         * OLUŞTURMA DA TEK NOKTADAN — İSTİSNASIZ.
+         *
+         * Yeni kullanıcının düşürülecek oturumu yok; damga burada
+         * pratikte bir şey değiştirmiyor. Yine de aynı yoldan
+         * geçiyor, çünkü bekçi testin İSTİSNASI olmamalı: bir
+         * istisna, zamanla deliğe dönüşür ve bu kod tabanı bunu
+         * defalarca gösterdi.
+         */
+        parolaYazici.Uygula(user, temporaryPassword, DateTime.UtcNow);
 
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
@@ -337,12 +357,25 @@ public sealed class UserManagementController(
             ? GenerateTemporaryPassword()
             : request.NewPassword!;
 
-        if (temporaryPassword.Length < 10)
-            return BadRequest(new { message = "Şifre en az 10 karakter olmalıdır." });
+        // POLİTİKA TEK YERDE (bkz. kullanıcı oluşturma yolundaki not).
+        // Bu, kuralın İKİNCİ kopyasıydı: biri oluşturmada, biri
+        // sıfırlamada. Tam da tek kaynağa çekilirken bulundu.
+        if (ParolaPolitikasi.Dogrula(temporaryPassword) is string sifirlamaHatasi)
+            return BadRequest(new { message = sifirlamaHatasi });
 
-        var password = passwordService.Hash(temporaryPassword);
-        user.PasswordHash = password.Hash;
-        user.PasswordSalt = password.Salt;
+        /*
+         * SIFIRLAMA DA OTURUMLARI DÜŞÜRÜR — ÖLÇÜMLE BULUNDU.
+         *
+         * Bu yol karmayı yazıyor ama damgayı YAZMIYORDU ve oturum
+         * önbelleğini güncellemiyordu. Sonuç: yöneticinin parolasını
+         * sıfırladığı kullanıcının açık oturumları yaşamaya devam
+         * ediyordu.
+         *
+         * Oysa sıfırlamanın kullanıldığı senaryo tam olarak "parola
+         * başkasının elinde" senaryosudur. Oturum düşmezse sıfırlama
+         * işini yapmamış olur.
+         */
+        parolaYazici.Uygula(user, temporaryPassword, DateTime.UtcNow);
 
         await db.SaveChangesAsync(cancellationToken);
 

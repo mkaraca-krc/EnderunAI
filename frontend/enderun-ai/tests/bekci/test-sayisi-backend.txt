@@ -82,5 +82,14 @@
 # sebebi olan hata, cırcırın kendi kör noktasındaydı. Bulunuşu
 # tesadüfe yakın: 11 test eklendi, gevşeklik 10 çıktı; aradaki 1
 # kovalanınca ortaya çıktı.
-statik: 2883
+# PAROLA/1 (2026-09-04): 2883 → 2903, gevşeklik 20. Döküm:
+#   ParolaDegistirmeTests        14  (eski parola, politika, tekrar,
+#                                     eski jeton reddi, iat'siz jeton +
+#                                     pozitif kontrolü, aynı saniye
+#                                     sınırı, önbellek boşken koruma,
+#                                     yönetici sıfırlaması oturum düşürür,
+#                                     denetim kaydı)
+#   ParolaPolitikasiTekYerTests   3  (asgari uzunluk ikinci kez doğmasın)
+#   ParolaYaziciTekYerTests       3  (karma+damga+önbellek tek noktada)
+statik: 2903
 dinamik: 24

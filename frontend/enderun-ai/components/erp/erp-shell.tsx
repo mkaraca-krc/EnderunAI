@@ -544,6 +544,22 @@ function KabukGovdesi({
               <span>{currentUser?.roles?.[0] || "Kullanıcı"}</span>
             </div>
           )}
+          {/*
+              PAROLA DEĞİŞTİRME — KULLANICI BİLGİSİNİN YANINDA.
+
+              Yazılmış ama bulunamayan bir ekran, yazılmamış ekrandan
+              farksızdır. Buraya konuyor çünkü kullanıcının kendine
+              ait tek yer burası; ayrı bir menü başlığı açmak, tek
+              maddelik bir menü üretirdi.
+          */}
+          <Link
+            href="/parola"
+            className="erp-user-action"
+            title="Parola Değiştir"
+            aria-label="Parola Değiştir"
+          >
+            🔑
+          </Link>
           <LogoutButton variant="erp" />
           <button
             type="button"

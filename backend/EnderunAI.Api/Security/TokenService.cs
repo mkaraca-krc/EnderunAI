@@ -11,10 +11,19 @@ public sealed class TokenService(IConfiguration configuration)
     /// <summary>`enderun_token=` — çerez boyutuna adı da dahil.</summary>
     private const int CerezAdiUzunlugu = 14;
 
+    /// <param name="uretimZamani">
+    /// Jetonun `iat` iddiası. Boşsa şimdiki zaman.
+    ///
+    /// NEDEN AÇIKÇA VERİLEBİLİYOR: parola değişiminde oturum sınırı
+    /// bir SONRAKİ saniyeye konuyor ve kullanıcının kendi yeni jetonu
+    /// o sınırla üretilmek zorunda. Aksi hâlde parolasını değiştiren
+    /// kişi, kendi cevabındaki jetonla bile içeri giremezdi.
+    /// </param>
     public string Create(
         AppUser user,
         IEnumerable<string> roles,
-        IEnumerable<string> permissions)
+        IEnumerable<string> permissions,
+        DateTime? uretimZamani = null)
     {
         var secret = configuration["Jwt:Secret"]
             ?? Environment.GetEnvironmentVariable("JWT_SECRET")
@@ -29,7 +38,26 @@ public sealed class TokenService(IConfiguration configuration)
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(JwtRegisteredClaimNames.UniqueName, user.Username),
-            new("full_name", user.FullName)
+            new("full_name", user.FullName),
+
+            /*
+             * ÜRETİM ZAMANI (`iat`) — OTURUM DÜŞÜRME BUNA BAĞLI.
+             *
+             * Parola değişince o kullanıcının ÖNCEDEN üretilmiş
+             * jetonları geçersiz sayılıyor; karşılaştırma bu iddiaya
+             * bakıyor. `JwtSecurityToken` yapıcısı `iat` eklemiyor,
+             * bu yüzden açıkça yazılıyor.
+             *
+             * BOYUT: ~20 bayt. Çerez sınırı muhafızı (aşağıda) zaten
+             * 4096 baytı aşan jetonu üretmeyi reddediyor — yani bu
+             * ekleme sessizce bir sınırı aşamaz.
+             */
+            new(JwtRegisteredClaimNames.Iat,
+                new DateTimeOffset(
+                        uretimZamani ?? DateTime.UtcNow,
+                        TimeSpan.Zero)
+                    .ToUnixTimeSeconds().ToString(),
+                ClaimValueTypes.Integer64)
         };
 
         foreach (var roleName in roleNames)

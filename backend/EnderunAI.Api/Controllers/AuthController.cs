@@ -18,8 +18,162 @@ public sealed class AuthController(
     TokenService tokenService,
     ILoginAttemptService loginAttemptService,
     IUserAuthorizationService userAuthorizationService,
-    IWorkHourAccessService workHourAccessService) : ControllerBase
+    IWorkHourAccessService workHourAccessService,
+    IParolaYazici parolaYazici) : ControllerBase
 {
+    /// <summary>
+    /// KENDİ PAROLASINI DEĞİŞTİRME — SİSTEMDE İLK KEZ.
+    ///
+    /// ── ÖNCEDEN YOKTU ──
+    ///
+    /// Ölçüldü (2026-09-03): parola değiştirmenin TEK yolu yönetici
+    /// sıfırlamasıydı (`user-management.edit`). Yani bir kullanıcı
+    /// kendi parolasını değiştiremiyordu — parolasının başkası
+    /// tarafından bilindiğini fark etse bile yöneticiye gitmek
+    /// zorundaydı.
+    ///
+    /// ── DOĞRULAMA SIRASI DAVRANIŞIN PARÇASI ──
+    ///
+    /// ESKİ PAROLA ÖNCE kontrol ediliyor. Uzunluk hatası önce
+    /// dönseydi, eski parolayı BİLMEYEN biri de politikayı öğrenirdi:
+    /// uç, kendisine yetkisi olmayan birine bilgi veren bir yüzeye
+    /// dönüşürdü.
+    ///
+    /// ── HATA MESAJLARI AYIRT ETTİRMEZ ──
+    ///
+    /// "Kullanıcı yok" ile "parola yanlış" AYNI mesajı döndürüyor.
+    /// Ayırt edilebilir olsalardı, uç bir kullanıcı adı doğrulama
+    /// aracına dönüşürdü. (Burada kimlik zaten doğrulanmış olduğu için
+    /// "kullanıcı yok" beklenmiyor — ama beklenmedik durumun da ayırt
+    /// edilebilir olmaması gerekiyor.)
+    ///
+    /// ── DİĞER OTURUMLAR DÜŞER ──
+    ///
+    /// Karar: "dar olan kazanır". Değişimden önce üretilmiş her jeton
+    /// geçersiz. Gerekçe `OturumGecerliligi` içinde.
+    ///
+    /// SIRA: damga ÖNCE yazılır, yeni jeton ONDAN SONRA üretilir.
+    /// Tersi olsaydı, kullanıcının kendi yeni jetonu da değişimden
+    /// önce üretilmiş sayılıp reddedilebilirdi.
+    ///
+    /// YENİ JETON CEVAPTA DÖNÜYOR: kendi oturumu da düştüğü için,
+    /// dönmeseydi kullanıcı parolasını değiştirir değiştirmez dışarı
+    /// atılır ve bunu bir hata sanardı.
+    /// </summary>
+    [Authorize]
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword(
+        ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        const string ortakHata =
+            "Mevcut parola doğrulanamadı.";
+
+        var kimlik =
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+
+        if (!Guid.TryParse(kimlik, out var kullaniciId))
+            return Unauthorized(new { message = ortakHata });
+
+        var user = await db.Users
+            .SingleOrDefaultAsync(x => x.Id == kullaniciId, cancellationToken);
+
+        // AYIRT ETTİRMEYEN CEVAP: kullanıcı yok da, parola yanlış da
+        // aynı mesajı alıyor.
+        if (user is null ||
+            !passwordService.Verify(
+                request.CurrentPassword ?? string.Empty,
+                user.PasswordHash,
+                user.PasswordSalt))
+        {
+            return BadRequest(new { message = ortakHata });
+        }
+
+        // ESKİ PAROLA DOĞRULANDIKTAN SONRA politika söyleniyor.
+        if (ParolaPolitikasi.Dogrula(request.NewPassword) is string politikaHatasi)
+            return BadRequest(new { message = politikaHatasi });
+
+        if (!string.Equals(
+                request.NewPassword, request.NewPasswordConfirm, StringComparison.Ordinal))
+        {
+            return BadRequest(new { message = "Yeni parolalar birbiriyle eşleşmiyor." });
+        }
+
+        if (passwordService.Verify(
+                request.NewPassword!, user.PasswordHash, user.PasswordSalt))
+        {
+            return BadRequest(new
+            {
+                message = "Yeni parola mevcut parolayla aynı olamaz."
+            });
+        }
+
+        var simdi = DateTime.UtcNow;
+
+        /*
+         * TEK NOKTA: karma, damga ve oturum önbelleği BİRLİKTE.
+         * Üçünü ayrı ayrı yazmak, birini unutan yeni bir yolun
+         * korumayı sessizce kapatması demekti — yönetici sıfırlama
+         * yolu tam olarak böyleydi (ölçüldü).
+         */
+        var jetonSaniyesi = parolaYazici.Uygula(user, request.NewPassword!, simdi);
+
+        /*
+         * DENETİM KAYDI AYIRT EDİLEBİLİR.
+         *
+         * `AppUser` zaten denetleniyor ama olay "Updated" diye
+         * yazılıyor — ad değişikliğinden ayırt edilemez. Parola
+         * değişikliği ayrı bir eylem adıyla kaydediliyor.
+         *
+         * PAROLA VE KARMASI KAYDA YAZILMIYOR. Denetim kaydı, koruduğu
+         * sırrı ele veren bir yer olamaz — bu ders portal jetonunda
+         * ödendi.
+         */
+        db.Set<SecurityAuditEvent>().Add(new SecurityAuditEvent
+        {
+            ActorUserId = user.Id,
+            ActorUsername = user.Username,
+            Action = "PasswordChanged",
+            EntityType = nameof(AppUser),
+            EntityId = user.Id,
+            DetailsJson = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                summary = "Kullanıcı kendi parolasını değiştirdi",
+                otherSessionsRevoked = true
+            }),
+            IpAddress = ResolveClientIp(),
+            UserAgent = Request.Headers.UserAgent.ToString(),
+            OccurredAtUtc = simdi
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        /*
+         * YENİ JETON, OTURUM SINIRIYLA ÜRETİLİYOR — sınırı
+         * `ParolaYazici` döndürüyor. Sınır bir SONRAKİ saniye:
+         * değişim saniyesindeki tüm eski jetonlar reddedilsin diye.
+         * Kendi yeni jetonumuz o saniyede üretilmezse aynı kapıya
+         * takılırdı.
+         */
+
+        var roller = await db.UserRoles
+            .Where(x => x.UserId == user.Id)
+            .Select(x => x.Role.Name)
+            .ToArrayAsync(cancellationToken);
+
+        var yetki = await userAuthorizationService.GetAsync(user.Id, cancellationToken);
+        var izinler = (yetki?.Permissions ?? []).OrderBy(x => x).ToArray();
+
+        return Ok(new
+        {
+            message =
+                "Parola değiştirildi. Diğer oturumlarınız sonlandırıldı.",
+            token = tokenService.Create(user, roller, izinler, jetonSaniyesi),
+            expiresInSeconds = 43200
+        });
+    }
+
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login(

@@ -15,6 +15,21 @@ public sealed class AppUser
     public string? Email { get; set; }
     public string PasswordHash { get; set; } = string.Empty;
     public string PasswordSalt { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Parolanın son değiştirilme zamanı (UTC). Boş = hiç
+    /// değiştirilmemiş (kurulumdan beri aynı).
+    ///
+    /// NEDEN VAR: parola değişince o kullanıcının DİĞER OTURUMLARI
+    /// düşer. Jetonlar durumsuz olduğu için "bu jeton değişimden önce
+    /// mi üretildi" sorusunun cevabı bir yerde durmak zorunda.
+    ///
+    /// Kimlik doğrulamada bu alan VERİTABANINDAN OKUNMUYOR; açılışta
+    /// belleğe alınıp orada güncelleniyor (bkz. OturumGecerliligi).
+    /// Sütun, sürecin yeniden başlamasından sonra da doğru cevabı
+    /// verebilmek için var.
+    /// </summary>
+    public DateTime? PasswordChangedAtUtc { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAtUtc { get; set; }

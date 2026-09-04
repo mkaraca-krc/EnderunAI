@@ -4784,6 +4784,306 @@ kaba kuvvet için ipucudur.)
 
 ---
 
+---
+
+## ORTAM SIRLARI İLE TÜREMİŞ KAYITLAR İKİ AYRI LİSTEDİR (Mehmet, 2026-09-03)
+
+> **BİR ORTAM DEĞİŞKENİNİ DEĞİŞTİRMEK, O DEĞİŞKENDEN TÜREMİŞ MEVCUT
+> KAYITLARI DEĞİŞTİRMEZ. TOHUMLAMA (SEED) DEĞERLERİ YALNIZ İLK
+> KURULUMU ETKİLER; KURULMUŞ HESAPLAR AYRI BİR İŞLE GÜNCELLENİR. SIR
+> DÖNDÜRMEDE 'ORTAM SIRLARI' İLE 'TÜREMİŞ KAYITLAR' İKİ AYRI
+> LİSTEDİR.**
+
+DOĞURAN OLAY: `SEED_ADMIN_PASSWORD`'ü döndürme yordamının bir adımı
+sanmıştım. Ölçüm gösterdi ki `DatabaseSeeder` o parolayı **yalnızca
+kullanıcı YOKSA** kuruyor (`if (user is null)`). Yani ortam
+değişkenini değiştirmek, o parolayı taşıyan **dört mevcut hesabın**
+hiçbirini etkilemiyor — onlar kurulumdan beri aynı parolayı taşıyor.
+
+İki liste karışırsa sonuç sinsi: yordam "döndürdüm" der, kayıt
+"döndürüldü" yazar, **hesaplar eski parolayla açılmaya devam eder.**
+Yani döndürmenin kendisi bir yanılsamaya dönüşür.
+
+### ÖLÇÜM — TOHUM PAROLASINI HÂLÂ TAŞIYAN HESAPLAR
+
+Yöntem: `SEED_ADMIN_PASSWORD`, her hesabın kendi tuzuyla
+PBKDF2-SHA256 (210.000 tur, 32 bayt) ile hesaplanıp saklanan karmayla
+karşılaştırıldı. Değer hiçbir yere yazılmadı.
+
+| Hesap | Durum | Roller |
+|---|---|---|
+| `mehmet` | **AKTİF** | **Admin, Genel Müdür** |
+| `uakkaya` | **AKTİF** | Finans, Satın Alma, Ön Muhasebe, İK, İSG |
+| `ralici` | pasif | Teknik Koordinatör |
+| `ccihan` | pasif | Formen |
+
+Kalan 9 hesap taşımıyor.
+
+**VE AYNI DEĞER `DB_CONNECTION` PAROLASI VE `SMTP_PASS` İLE BİREBİR
+AYNI** (hash karşılaştırmasıyla doğrulandı). Yani tek 10 karakterlik
+dizgi dört şeyi birden koruyor: veritabanı, posta hesabı, Admin/GM
+hesabı, beş rollü finans/İK hesabı.
+
+**GİRİŞ BİLGİSİ VERİLMİŞ HERKES FİİLEN VERİTABANI PAROLASINI
+BİLİYOR.** Sızıntı yok (ne ağaçta ne geçmişte) ama açık canlıda
+duruyor.
+
+### ÖLÇÜM HATAM — ETİKET, SAYI DEĞİL
+
+İlk turda `IsActive` boolean'ını `t`/`f` sanıp okudum; PostgreSQL `||`
+ile metne çevirirken `true`/`false` üretiyor. Dört hesabı da "pasif"
+diye sınıflandırmıştım — yani **aktif bir Admin hesabını pasif**
+göstermiştim. İki ölçüm çelişince ham değeri bastırıp düzelttim.
+
+Yanlış olan sayı değildi, **etiketti**. Ve etiket burada "aktif admin
+mi" demek — yani hatanın maliyeti aciliyetin yanlış okunmasıydı.
+
+---
+
+## SIR DÖNDÜRME PAKETİ — HAZIR, TETİK MEHMET'TE (2026-09-03)
+
+### ADIM 0 — ŞİMDİ, KESİNTİSİZ, KOD GEREKMİYOR
+
+Mehmet'in ilk çerçevesi *"Adım 0 parola değiştirme paketi olmadan
+uygulanamaz"* idi. **Ölçüm aksini gösterdi:** yönetici sıfırlama akışı
+uçtan uca MEVCUT.
+
+| Katman | Durum |
+|---|---|
+| Uç | `POST /api/user-management/users/{id}/reset-password` (`user-management.edit`) |
+| Servis | `userManagementService.resetPassword(id, newPassword?)` |
+| Ekran | `app/sistem-yonetimi/kullanicilar` |
+| İzin | `mehmet` → Admin **ve** Genel Müdür, ikisinde de var |
+
+Yordam (~2 dakika, kesinti yok):
+1. `Sistem Yönetimi → Kullanıcılar`
+2. `uakkaya` → 32+ karakterlik yeni parola
+3. `mehmet` → **kendine ait, farklı** 32+ karakterlik parola
+
+**OTURUM DÜŞMEZ:** jeton `JWT_SECRET` ile imzalı ve o değişmiyor.
+Kendini kilitleme riski yok — bu adımı ertelemenin en yaygın sebebi
+budur ve burada geçerli değil.
+
+**İKİ SINIR:** (a) bu bir yönetici SIFIRLAMASI, eski parola sorulmaz;
+(b) arka uçtaki asgari uzunluk **10** ve ekranda kontrol yok.
+
+### AŞAMA 2 — ORTAM SIRLARI (kesinti saatinde)
+
+| # | Adım | Kesinti | Gerekçe |
+|---|---|---|---|
+| 1 | `enderun-backup.sh` | yok | geri dönüşü olmayan işten önce |
+| 2 | `ALTER ROLE enderun_user PASSWORD …` | **yok** | mevcut bağlantılar kopmaz, yalnız yeni bağlantılar etkilenir |
+| 3 | `backend.env`: `DB_CONNECTION`, `SMTP_PASS`, `SEED_ADMIN_PASSWORD` | yok | — |
+| 4 | `systemctl restart enderunai-backend` | **~10 sn** | ölçüldü: son iki deploy'da sağlık 10 sn'de döndü |
+
+**2 İLE 3 YER DEĞİŞTİRİLEMEZ:** env yeni değeri gösterirken
+veritabanı eskisini beklerse, o aralıkta yeniden başlayan servis
+bağlanamaz.
+
+**Üç değer AYRI ve FARKLI, en az 32 karakter.** Tek dizgi üç sisteme
+bağlanmayacak.
+
+**GERİ DÖNÜŞ:** 2. adım `ALTER ROLE` ile eski değere döner, env
+yedekten döner, servis yeniden başlar. Bu yüzden eski değerler
+döndürme tamamlanana kadar Mehmet'in elinde kalmalı.
+
+### MEHMET'İN YAPACAKLARI (ben yapmıyorum)
+
+- Üç ortam sırrı + iki hesap parolası için **ayrı ayrı** değer üretmek
+- SMTP parolasını sağlayıcı panelinden değiştirmek
+- Kesinti saati seçmek
+- Adım 0'ı ekrandan uygulamak
+
+**BENİM YAPMADIKLARIM (sır disiplini):** sır üretmiyorum, ortam
+dosyasına yazmıyorum, posta göndermiyorum, tarayıcı adımlarını
+koşmuyorum.
+
+### DOĞRULAMA — ÖNCE VE SONRA (Mehmet onayladı)
+
+Bekçi her zaman O ANKİ ortamı okuyor; "yeni sırlar depoda yok" ile
+"eski sırlar da depoda yok" iddialarını tek koşuda yapamaz.
+
+- **Döndürmeden ÖNCE** bekçi koşulur → o an ortamdaki **eski**
+  değerlerin depoda olmadığı kanıtlanır.
+- **Döndürmeden SONRA** bekçi koşulur → **yeni** değerlerin depoda
+  olmadığı kanıtlanır.
+
+İkisi birlikte çift doğrulama verir ve **eski değeri hiçbir yere
+yazmayı gerektirmez**.
+
+### PAROLA DEĞİŞTİRME DÜZENEĞİNİN ÖLÇÜMÜ — ÜÇ CEVAP
+
+**1. Ekran eski parolayı soruyor mu?** Soramaz — **kendi parolasını
+değiştirme akışı sistemde HİÇ YOK.** Tek yol yönetici sıfırlaması.
+
+**2. Parola politikası?** Tek kural: **asgari 10 karakter**.
+Karmaşıklık, tekrar ve geçmiş kontrolü yok. Mevcut parola tam 10 —
+asgariyi birebir karşılıyor.
+
+**3. Denetim kaydı?** **Kısmen.** `AppUser` denetlenen varlıklar
+arasında, sıfırlama `Updated` olayı yazıyor (aktör, kullanıcı adı, IP,
+tarayıcı). **SINIR:** kayıt "kullanıcı kaydı güncellendi" diyor,
+"parola değişti" demiyor — ad değişikliğinden ayırt edilemez.
+
+**İYİ OLAN:** `PasswordHash`/`PasswordSalt` denetim kaydına
+YAZILMIYOR (özet yalnız kullanıcı adı). Bu ders portal jetonunda
+öğrenilmişti ve burada da tutuyor: **denetim kaydı, koruduğu sırrı ele
+veren bir yer olamaz.**
+
+---
+
+---
+
+## PAROLA/1 — KENDİ PAROLASINI DEĞİŞTİRME VE OTURUM DÜŞÜRME (2026-09-04)
+
+### ⚠️ DEPLOY İLANI — HERKES DÜŞECEK
+
+Bu sürüm yayınlandığı anda **canlıdaki TÜM oturumlar sonlanır.**
+
+Sebep: oturum geçerliliği jetonun `iat` (üretim zamanı) iddiasına
+bakıyor ve bu sürümden önceki jetonların hiçbirinde `iat` YOK.
+`GecerliAsync` bu durumda **fail-closed** davranıyor — okuyamadığı bir
+üretim zamanını "geçerli" saymıyor.
+
+Dört aktif kullanıcı (`mehmet`, `smemis`, `uakkaya`, `vtepe`) yeniden
+giriş yapacak. **Bu bilinçli ve ilan edilmiştir**; alternatifi, eski
+jetonların 12 saat boyunca oturum düşürme kuralının dışında kalmasıydı.
+
+Red, günlüğe teşhis edilebilir biçimde yazılıyor: kullanıcı kimliği ve
+"jeton üretim zamanı var mıydı" bilgisi. **Jeton içeriği yazılmıyor**
+ve kayıt veritabanına değil GÜNLÜĞE gidiyor — geçersiz jetonla yapılan
+bir istek seli, kendi kendine açılmış bir kapı olurdu.
+
+### ÖNCEDEN NE YOKTU
+
+Ölçüldü: parola değiştirmenin **tek yolu yönetici sıfırlamasıydı**.
+Bir kullanıcı kendi parolasını değiştiremiyordu — parolasının başkası
+tarafından bilindiğini fark etse bile.
+
+### KARAR: DAR OLAN KAZANIR
+
+Parola değişince o kullanıcının **diğer oturumları düşer**. Gerekçe:
+değiştirmenin sebebi çoğu zaman "bu parolayı başkası biliyor"dur;
+eski oturum yaşarsa değişiklik amacına ulaşmaz.
+
+Jetonlar durumsuz olduğu için bu bir mekanizma gerektirdi:
+`PasswordChangedAtUtc` damgası + `iat` karşılaştırması. Kimlik
+doğrulamada veritabanına HİÇ bakılmıyordu; bu tercih korundu —
+`OturumGecerliligi` bir ÖNBELLEK, veritabanına yalnız ıskada gidiyor.
+
+### SONDA TASARIMI DÜZELTTİ — SANİYE SINIRI
+
+`iat` saniye çözünürlüğünde ve bu iki yönlü bir tuzak:
+
+- **Aşağı yuvarlarsan:** değişimle AYNI SANİYEDE üretilmiş ESKİ
+  jetonlar hayatta kalır. Kendi jetonunu kurtarmak için açılan pay,
+  saldırganın jetonunu da kurtarır.
+- **Ham karşılaştırırsan:** kullanıcının KENDİ yeni jetonu reddedilir.
+
+İlk sürüm aşağı yuvarlıyordu. Sonda turunda
+`Degisiklikten_Sonra_ESKI_JETON_Reddedilir` **üç sabotajda düştü,
+birinde düşmedi** — sabotajlarla açıklanamayan bir desen. Sebep
+zamanlamaydı: testte her şey aynı saniyeye düşüyordu.
+
+**Canlıda ARA SIRA görünecek, testte hiç görünmeyecek bir hataydı.**
+
+Çözüm: sınır bir SONRAKİ saniye; kullanıcının yeni jetonu da o
+saniyeyle üretiliyor (`TokenService` artık üretim zamanını
+alabiliyor). Boşluk pay vermeden kapandı ve
+`AYNI_SANIYEDEKI_ESKI_Jeton_Da_Reddedilir` testi onu çiviliyor.
+
+### YÖNETİCİ SIFIRLAMASI DA OTURUM DÜŞÜRÜYOR — ÖLÇÜMLE BULUNDU
+
+Sıfırlama yolu karmayı yazıyor, **damgayı yazmıyor ve önbelleği
+güncellemiyordu**. Yani yöneticinin parolasını sıfırladığı kullanıcının
+açık oturumu 12 saat daha çalışıyordu.
+
+Oysa sıfırlamanın kullanıldığı senaryo tam olarak *"parola başkasının
+elinde"* senaryosudur. **Oturum düşmezse sıfırlama işini yapmamış
+olur.**
+
+### TEK YAZMA NOKTASI + NEGATİF ÖNBELLEĞİN ÖMRÜ
+
+Parola değiştirmek ÜÇ şeyi birlikte yapmak: karma, damga, önbellek.
+Üçü ayrılabildiği sürece, birini unutan her yeni yol korumayı sessizce
+kapatır — ve bu varsayım değil, ölçüm (sıfırlama yolu tam olarak
+böyleydi).
+
+**KARAR — (c) + (b) birlikte:**
+
+- **(c) Tek yazma noktası:** `ParolaYazici`. Üç yazma yolunun üçü de
+  (kendi değiştirme, yönetici sıfırlama, kullanıcı oluşturma) oradan
+  geçiyor. Bekçi test `ParolaYazici` dışında parola alanına yazmayı
+  yasaklıyor; **iki muafiyet var ve ikisi de gerekçeli** (kuralın evi,
+  tohumlayıcı).
+- **(b) Negatif değerin ömrü 60 saniye:** (c) bir gün delinirse sessiz
+  bozulma en fazla bu kadar sürer.
+
+Pozitif değere ömür KONMADI: bir damga yazıldıysa geri alınmaz,
+eskimez; onu süreli yapmak hiçbir şey kazandırmadan her dakika
+veritabanına gitmek olurdu.
+
+**Oluşturma yolu da tek noktaya bağlandı** — yeni kullanıcının
+düşürülecek oturumu yok, yani damga orada pratikte bir şey
+değiştirmiyor. Yine de bağlandı, çünkü bekçinin İSTİSNASI olmamalı:
+istisna zamanla deliğe dönüşür.
+
+### PAROLA POLİTİKASI — ASGARİ 12, TEK KAYNAK
+
+Eskiden 10'du ve **canlıdaki paylaşılan parola tam 10 karakterdi** —
+asgariyi birebir karşılıyordu. *Bir asgari, ihlal edilmediği sürece
+hiçbir şey söylemez.*
+
+Kural `UserManagementController` içinde **İKİ AYRI YERDE** elle yazılmış
+sabitle duruyordu (oluşturma ve sıfırlama). İlk kopyayı değiştirip
+"bağlandı" dedim; **ikinci kopyayı ancak ölçünce buldum** — hata, tam
+da onu ortadan kaldırırken karşıma çıktı. `ParolaPolitikasiTekYerTests`
+ikinci kopyanın doğmasını engelliyor.
+
+Karmaşıklık kuralı EKLENMEDİ: karmaşıklık zorunluluğu insanları
+tahmin edilebilir kalıplara iter; uzunluk daha ucuz ve daha etkili.
+
+### `WorkHoursExempt` — ANAHTAR KURAL KADAR KORUNUYOR MU
+
+Testte kullandım (testin sonucu koşulduğu SAATE bağlı olmasın diye) ve
+Mehmet haklı olarak sordu: bir iş kuralını delen anahtar, kuralın
+kendisi kadar korunmalı.
+
+| Ölçüm | Sonuç |
+|---|---|
+| Varsayılan | `false` — canlıda **13 kullanıcının 13'ünde de kapalı** |
+| Kim değiştirebiliyor | Ekrandan onay kutusu; `user-management.create` / `.edit` |
+| Denetim kaydı | `Updated` olayı var, **ama ad değişikliğinden ayırt edilemiyor** |
+
+**DEĞERLENDİRME:** anahtar, kuralın kendisiyle aynı izin seviyesinde
+(ikisi de yönetici işi) — burada sorun yok. Sorun GÖRÜNÜRLÜKTE:
+güvenlikle ilgili bir denetimi kapatmak, bir adı düzeltmekle aynı izi
+bırakıyor.
+
+**KARAR:** alan ekranda kalsın (gece vardiyası gibi meşru ihtiyacı
+var, bugün kimse kullanmıyor); ama değişikliği **ayırt edilebilir**
+olsun — parola değişikliğinde yaptığımızın aynısı. Ayrı ve küçük iş.
+
+### SÜREÇ HATASI — SONDA KOŞARKEN İKİNCİ KOŞU
+
+Sonda koşarken ikinci bir tam koşu başlattım. İki `dotnet test` aynı
+test veritabanını ve aynı kaynak dosyalarını paylaştı; 12 test 1 ms'de
+düştü — yani **iddia sınanmadı, düzenek çöktü**.
+
+Sonra sondayı öldürünce **`ParolaPolitikasi.cs` sabotajlı kaldı**:
+uzunluk kontrolü silinmiş hâlde. `finally` ile geri alma, ancak süreç
+yaşarsa çalışır.
+
+> **BİR SONDA SÜRECİ ÖLDÜRÜLÜRSE SABOTAJ KALICILAŞABİLİR. GERİ ALMA
+> SÜREÇTEN BAĞIMSIZ OLMALI (DİSK YEDEĞİ + AYRI ONARIM KOMUTU).
+> AYRICA: AYNI ANDA İKİNCİ BİR TAM KOŞU BAŞLATILMAZ — KOŞULAR
+> SERİLEŞTİRİLİR.**
+
+İkisi de uygulandı: yedekler artık diskte, her sondadan sonra bütünlük
+doğrulaması var, koşular tek tek.
+
+---
+
 ## BEKLEYEN KARARLAR
 
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`
