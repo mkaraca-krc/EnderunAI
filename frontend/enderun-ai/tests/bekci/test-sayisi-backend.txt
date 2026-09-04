@@ -102,5 +102,13 @@
 #   DepartmanSilmeMuhafiziTests  3  (personeli olan departman silinemez;
 #                                    pozitif kontrol; yumuşak silinmiş
 #                                    personel engellemiyor)
-statik: 2914
+# KAPI/1 (2026-09-04): 2914 → 2925, gevşeklik 11.
+#   UcKapisiTests  10  (ambalaj: liste yayın çıktısında + her satır
+#                       kategorili/gerekçeli; ısırma: beyansız uç
+#                       bulunur, nitelikli/anonim/muaf bulunmaz;
+#                       yüzey dışı denetlenmez; ölü muafiyet bulunur;
+#                       belirsiz muafiyet bulunur + tekil pozitif kontrol)
+#   UcKapisiCanliYuzeyTests  1  (canlı yönlendirme tablosu boş değil —
+#                                taban 800; boş yüzey her iddiayı doğrular)
+statik: 2925
 dinamik: 24

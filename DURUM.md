@@ -2255,6 +2255,58 @@ ekrana basar ve beyan ister. Taban çizgisi tutmaz, sayı saymaz.
 Geriye dönük ölçüldü: son 50 commit'te **2 alarm (%4), 0 yanlış alarm**,
 `2d90c946` yakalanıyor.
 
+**E FIKRASI — GEREKÇE YORUM SATIRINDAYSA GEREKÇE YOKTUR** (Mehmet
+onayı, 2026-09-04):
+
+> **Bir savunmanın gerekçesi yorum satırındaysa, o gerekçe yoktur.**
+> Makine okuyamayan gerekçe bir sonraki ucu korumaz; yalnız bu ucun
+> neden korunduğunu anlatır. Muafiyet dağınık yorumlarda değil, tek
+> ve sayılabilir bir listede durur — çünkü **sayılamayan muafiyet,
+> muafiyet değil unutmadır.**
+
+**DOĞURAN OLAY (KAPI/1 ölçümü, 2026-09-04).** `[RequirePermission]`
+taşımayan 35 uç sayıldı ve paket "35 korumasız uç, kapat" varsayımıyla
+açıldı. Otuz beşinin tamamı tek tek açıldığında varsayım çürüdü:
+
+| adet | kapı | uygulandı | testi |
+|---|---|---|---|
+| 7 | `[AllowAnonymous]` (giriş, erişim talebi, logo, portal ×4) | evet | — |
+| 6 | kendi kimliği — kimlik oturumdan, istekten değil | evet | evet |
+| 8 | üyelik kapısı — `ApplyMembership`, serviste 5 yerde | evet | `Yabanci_BaskasininKonusmasiniGoremez` +6 |
+| 5 | alıcı kapısı — satır başına `RequiredPermission` + `UserId` | evet | 15 dosya |
+| 8 | dinamik izin — izin isteğin İÇERİĞİNE bağlı | evet | `YetkisizKullanici_KpiyiHicGormez` |
+| 1 | yalnız kimlik (istemci hata bildirimi) | evet | — |
+
+**Çıplak delik: sıfır.** Otuz beş gerekçenin hepsi vardı ve hepsi
+uygulanmıştı. Ama hepsi **yorum satırında** yaşıyordu; makine
+hiçbirini bilmiyordu. Yani paketin değeri delik kapatmak değil,
+**gerileme önlemekti**: yarın eklenen 36'ncı ucun gerekçesi olmayacak
+ve hiçbir şey fark etmeyecekti.
+
+**MEKANİK KARŞILIĞI:** `Security/UcKapisi/` — `api/` altındaki her uç
+ya `[RequirePermission]` taşır, ya `[AllowAnonymous]` taşır, ya da
+`MuafUclar.txt` içinde **kategorisi ve gerekçesiyle** yer alır. Üçü de
+yoksa **uygulama açılmaz**. Liste **gömülü kaynaktır**, yanına konan
+bir dosya değil; ayrı bir test onun yayın çıktısında bulunduğunu
+ölçer. Gerekçesi 25 karakterden kısa satır kabul edilmez; karşılığı
+kalmamış (ölü) muafiyet de hata sayılır.
+
+**`[AllowAnonymous]` NEDEN MUAFİYET SAYILMIYOR:** o **gürültülü bir
+beyandır**, sessiz yokluk değil. Muafiyet listesi yalnız "kimliği var,
+yetki niteliği yok, ÇÜNKÜ..." diyen uçları taşır.
+
+**DÜRÜST SINIR — BU MUHAFIZ NEYİ YAKALAMAZ** (Mehmet, aynen):
+*Bu muhafız savunmanın SİLİNMESİNİ değil, BEYANSIZLIĞINI yakalar.
+`ApplyMembership` servisten çıkarılırsa muafiyet satırı yerinde durur
+ve muhafız yeşil kalır. İkinci kaybolma biçimini yakalayan şey
+tablonun son sütunu — o sütunun dolu kalması muhafızın parçasıdır,
+süsü değil.*
+
+**KARDEŞİ, KOPYASI DEĞİL:** `AuthorizeGuardTests` sınıf düzeyinde
+KİMLİĞİ denetler (`[Authorize]` var mı), bu kapı uç düzeyinde YETKİ
+BEYANINI. Ayrı eksenler: kimliği olan ama beyanı olmayan bir uç,
+giriş yapmış herkese açıktır.
+
 ### Kural 71 — YAYIN, TARAYICIDA BİR ETKİLEŞİM GÖRÜLMEDEN TAMAM DEĞİLDİR
 
 **Bir ekran, tarayıcıda üzerinde en az bir gerçek etkileşim gözlenmeden
@@ -2472,6 +2524,31 @@ istek geldi (ölçüldü, arşiv günlükler dahil).
 **KALICI OLAN ÜÇÜNCÜSÜ:** tek satırlık bir kontrol, altı haftalık
 arızayı ilk yayında yakalardı.
 
+## BEKLEYEN PAKET — TEST SIRASI: RASTGELE SIRA + TOHUM
+
+**Küçük iş. KAPI/1'e girmedi (Mehmet: "bu pakete girmesin").**
+
+**NE:** xUnit'e özel bir sıralayıcı (`ITestCollectionOrderer` +
+`ITestCaseOrderer`) takılır; tam tur her koşuda rastgele sırayla
+koşar. Tohum çıktının ilk satırına ve koşu kaydına basılır; ortam
+değişkeniyle sabitlenebilir ki kırmızı birebir tekrar üretilsin.
+
+**NEDEN (karar ve gerekçe): bkz. KARAR KAYDI, 2026-09-04.**
+
+**SABOTAJ (Mehmet'in şartı):** bilerek sıraya bağlı bir test yaz —
+ön koşulunu başka bir testin yan etkisinden alan bir test — seçilen
+düzenek onu yakalamalı. İlan: en az bir tohumda KIRMIZI.
+
+**BAŞLAMADAN ÖNCE ÖLÇÜLECEK — DÜRÜST BEKLENTİ:** bugün kaç test sıraya
+bağlı bilinmiyor. `IkinciSirket_UyariUretir` tesadüfen bulundu ve
+tek olmayabilir. Rastgele sıra ilk açıldığında BİRDEN ÇOK kırmızı
+gelmesi olasıdır. O hâlde çözüm rastgeleliği kapatmak DEĞİL, bilinen
+bağımlıların cırcır usulü bir listesini tutmaktır: liste yalnız
+KÜÇÜLÜR, listede olmayan yeni bağımlılık kırmızı verir. Aksi hâlde
+ilk gürültülü koşuda düzenek kapatılır ve kural kâğıt üstünde kalır.
+
+---
+
 ## BEKLEYEN PAKET — GÖÇ/ETKİ: SESSİZCE VERİ BOZAN GÖÇ
 
 GÖÇ/PROVA'nın **kanıtlanmış sınırı**: prova, göçün canlının bir
@@ -2576,7 +2653,23 @@ dolu, atanmamış; tür alanı geldiğinde **İşEmri** olacak.
 
 ---
 
-## BEKLEYEN PAKET — KAPI/1: NİTELİK YOKSA REDDET
+## BEKLEYEN PAKET — KAPI/1: NİTELİK YOKSA REDDET — **YAPILDI (2026-09-04)**
+
+> **UYGULANDI, AMA ÖLÇÜM HÜKMÜ DEĞİŞTİRDİ.** Aşağıdaki hüküm "niteliksiz
+> uç = korumasız uç" varsayımıyla yazılmıştı. KAPI/1 ölçümü bu varsayımı
+> çürüttü: 35 ucun tamamında bir kapı vardı, hepsi uygulanmıştı ve çoğunun
+> testi de vardı — **çıplak delik sıfır**. Eksik olan koruma değil, korumanın
+> MAKİNEYE GÖRÜNÜR beyanıydı. Paket bu yüzden delik kapatma değil gerileme
+> önleme paketi olarak yazıldı. Ayrıntı ve tablo: **Kural 72 / E fıkrası**.
+>
+> Bugün canlıda: `api/` altındaki her uç ya `[RequirePermission]` taşır, ya
+> `[AllowAnonymous]` taşır, ya da `Security/UcKapisi/MuafUclar.txt` içinde
+> kategorisi ve gerekçesiyle yer alır (30 satır). Üçü de yoksa **uygulama
+> açılmaz**. Liste gömülü kaynaktır; ölü ve belirsiz muafiyet de hatadır.
+>
+> **YOL SEZGİSİ KALDIRILMADI** — aşağıdaki hükmün 1. maddesi hâlâ geçerli
+> ve hâlâ sıfır uç yakalıyor. Kaldırılması ayrı bir karar; KAPI/1 çalışma
+> anındaki davranışı DEĞİŞTİRMEDİ, yalnız beyansızlığı imkânsız kıldı.
 
 **Sırası: GM'nin İŞEMRİ/1 doğrulamasından sonra. M3/2b'den ÖNCE ya da
 onunla BİRLİKTE — sonra değil.**
@@ -5574,6 +5667,31 @@ Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyo
 Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
 **11 madde** (6–11. maddeler 2026-08-26/28'de eklendi):
 
+0B. **KPI KAPSAM SÜZGECİ — TETİKLEYİCİ: İKİNCİ ŞİRKET** (ölçüldü 2026-09-04,
+  KAPI/1 sırasında). `ManagementKpiService`'teki yedi göstergeden yalnız
+  **satın alma** veri kapsamını alt servise geçiriyor. Diğer altısı —
+  nakit kapanış, kâr marjı, gider toplamı, bordro maliyeti, açık çek,
+  finansal araç yükü — `companyId`'yi **sorgu dizesinden** alıyor ve alt
+  servislerde de kapsam kontrolü yok (`CashFlowProjectionService`'te tek
+  kapsam referansı bile yok).
+
+  **BUGÜN SÖMÜRÜLEBİLİR DEĞİL:** canlıda tek şirket var (ölçüldü:
+  `companies` = 1). İkinci şirkette `CashFlowView` izni olan ama kapsamı o
+  şirketi içermeyen bir kullanıcı, şirket kimliğini elle yazarak o
+  şirketin nakit kapanışını okuyabilir.
+
+  **NOT DEĞİL, TETİKLEYİCİYE BAĞLI:** `ScopeDeferralWatchdog` içindeki
+  `AdiKonmusBorclar` listesine yazıldı. Koşul gerçekleştiği gün uyarı
+  denetim kaydına düşüyor ve borcun adı uyarının **içinde** yazıyor;
+  kimsenin hatırlaması gerekmiyor.
+
+  **KAPSAM BORCU ÇİZGİSİ AYRICA GEREKMEDİ (ölçüldü):** altı yolun alt
+  servisleri `kapsam-temel-cizgi.txt` içinde zaten sayılıyor —
+  CashFlowProjection 13, Expense 29, Payroll 14, Cheque 8,
+  FinancialInstrument 5, Profitability 1 = **70 okuma**. Çoğalamazlar.
+  `ManagementKpiService`'in çizgide 0 satırı olması doğru: doğrudan DbSet
+  okuması yok, hepsini alt servislerden alıyor.
+
 0A. **M3'ÜN İKİ ÖN KOŞULU — HESAP PAKETİ BİTMEDEN M3'E GEÇİLMEZ**
    (Mehmet, 2026-09-04) | Karar verildi, paket yazılmadı |
    M3/2b ve sonraki M3 paketlerinden ÖNCE.
@@ -5923,6 +6041,13 @@ Kendi verdiğim iş kuralı kararları. Teknik kararlar (test, indeks,
 isimlendirme) buraya yazılmaz.
 
 `tarih | konu | karar | dayandığım varsayım | geri alması kolay mı`
+
+> **BİR İSTİSNA (2026-09-04, Mehmet talimatı):** aşağıdaki test sırası
+> maddesi TEKNİK bir karardır ve bu bölümün kendi tanımına göre buraya
+> yazılmazdı. Mehmet açıkça *"gerekçesini KARAR KAYDI'na yaz"* dediği
+> için buraya yazıldı; gerilim gizlenmesin diye not düşülüyor.
+
+- `2026-09-04 | Test sırası bağımlılığı — mekanik karşılık | (a) TAM TURDA RASTGELE SIRA seçildi; tohum çıktıya ve koşu kaydına yazılır, kırmızıda aynı tohumla birebir tekrar koşulur. (b) periyodik "her test tek başına" turu REDDEDİLDİ. | (a) her deploy'da koşar, (b) haftada bir; sıra bağımlılığı eklendiği gün yakalanmalı, yedi gün sonra değil. (a) ek duvar saati istemez, (b) 2544 metodu ayrı süreçlerde koşturmak demek — bütünleşme testleri her seferinde veritabanı kurduğu için saatler sürerdi ve baskı altında ilk atlanacak tur olurdu. Tohum olmadan rastgelelik İŞE YARAMAZ: tekrar üretilemeyen kırmızı, düzeltilemeyen kırmızıdır. | EVET — tohum sabitlenerek eski davranışa dönülür`
 
 - `2026-08-24 | Banka hesabı izni | Yeni dar anahtar bank_account.view açıldı, YALNIZ Admin+GM'e (yansımayla). Finans/İK'ya verilmedi. | IBAN kitlesini genişletmemek, bordro engelini kaldırmaktan öncelikli (kural c). | EVET — RoleCatalog'a iki satır`
 - `2026-08-24 | IBAN maskeleme | Liste ucunda son dört hane; tam IBAN ayrı uçtan, tek hesap, her çağrı denetim kaydına. Kayda IBAN yazılmıyor. | Banka adı + hesap sahibi + son dört hane, ödeme ekranında hesabı ayırt etmeye yeter. | EVET`
@@ -8897,6 +9022,37 @@ biçimlerde ve ayrı günlerde bulundu — ama aynı hata.
     paketin `PersonelKapsamSuzgeciTests`'i), çizgi ona taşındı. Sayı
     elle sayılmadı — çıranın kendi çıktısından okundu.
 
+    **SONDA TUZAĞI** (Mehmet onayı, 2026-09-04):
+
+    > **Sonda, geri alma tuzağıyla yazılır.** Sabotajı uygulayan betik
+    > `trap ... EXIT INT TERM` ile sağlam kopyayı geri koymalıdır.
+
+    **DOĞURAN OLAY (KAPI/1, 2026-09-04).** Sonda B (`EmbeddedResource`
+    girdisini yayın çıktısından çıkar) üç kez bellek izleyicisi
+    tarafından öldürüldü. Tuzaksız koşan ilk ikisinde `.csproj`
+    **sabotajlı kaldı** ve elle geri alındı; tuzaklı üçüncüde betik
+    öldürüldüğü anda `[trap] csproj geri alındı` basıp sağlam hâline
+    döndü.
+
+    Bu, "bir sonda süreci öldürülürse sabotaj kalıcılaşabilir"
+    kaydının MEKANİK karşılığıdır: o kayıt tehlikeyi anlatıyordu,
+    tuzak onu ortadan kaldırıyor.
+
+    **24. MADDENİN VARSAYDIĞI TEMEL KURAL BUDUR.** "Sonda tuzağında
+    yollar mutlak olur" maddesi tuzağın VAR olduğunu varsayıyordu;
+    burada yazılan, tuzağın zorunlu olduğudur. İkisi birlikte okunur:
+    tuzak konur (bu madde), içindeki yollar mutlak olur ve geri almanın
+    çıkış kodu kontrol edilir (24/a-b).
+
+    **KENDİ BETİĞİM 24/b'Yİ ÇİĞNEDİ (dürüstlük kaydı):** bugünkü
+    `sondaB.sh`, `cp`'nin çıkış kodunu kontrol etmeden koşulsuz
+    `[trap] csproj geri alındı` bastı. Yollar mutlaktı (24/a) ve
+    bütünlük ayrıca `diff` ile doğrulandı, bu yüzden zarar doğmadı —
+    ama basılan cümle kendi başına kanıt değildi. Tuzak SIGKILL'de
+    hiç çalışmaz; bu yüzden sondadan sonra bütünlük HER HÂLÜKÂRDA
+    ayrıca doğrulanır (md5 ya da `diff`). Tuzak o kontrolün yerine
+    geçmez, onu gereksizleştirmez.
+
 56. **YETKİLENDİRME DEĞİŞİKLİKLERİ ANINDA GÖRÜNMEZ.**
 
     Mevcut oturumlar eski jetonla çalışmaya devam eder; yeni davranış
@@ -9112,6 +9268,30 @@ biçimlerde ve ayrı günlerde bulundu — ama aynı hata.
     `ad,` sözdizimini kaçırdı; yetim bekçisi `Ad(` arayıp metot grubu
     kullanımını kaçırdı. Hepsinde arama, aradığı şeyin alabileceği
     biçimlerden dardı.
+
+    **SIRA BAĞIMLI TEST** (Mehmet onayı, 2026-09-04):
+
+    > **Yeşilliği başka testlerin sırasına bağlı olan test, hiçbir şeyi
+    > ölçmez.** Ön koşulunu kendi kurmayan test, tam takımda yeşil
+    > görünüp tek başına kırmızı verir; süzgeçle koşan kişi onu "bozuk"
+    > sanar ve gerçek bir kırmızıdan ayırt edemez.
+
+    **DOĞURAN OLAY (KAPI/1, 2026-09-04).** `IkinciSirket_UyariUretir`
+    tam takımda yeşildi (deploy `bf707858`, 3059/3059) ama süzgeçle tek
+    başına koşturulduğunda `"Test kurulumu birden çok şirket
+    üretmeliydi"` diye düştü. Testin KENDİ yorumu bağımlılığı itiraf
+    ediyordu: *"Test veritabanında zaten birden çok şirket var (her test
+    kendi şirketini açıyor)."* Yani ön koşulu, ilgisiz testlerin yan
+    etkisiydi.
+
+    NEDEN 65'İN ALTINDA: burada da ölçtüğünü sandığın şey ile gerçekte
+    ölçtüğün şey ayrışıyor. "Bu test yeşil" sanılıyordu; ölçülen şey
+    "bu test, kendisinden önce koşan testlerle birlikte yeşil"di.
+
+    **BULUNUŞU TESADÜFTÜ** — KAPI/1 sırasında bir süzgeçli koşuda
+    çıktı. Mekanik karşılığı ayrı bir pakete bırakıldı (bkz. BEKLEYEN
+    PAKET — TEST SIRASI); bir sonraki sıra bağımlılığı tesadüfe
+    bırakılmayacak.
 
 66. **İZLEME KANALI, İZLEDİĞİ ŞEYLE AYNI ARIZAYI PAYLAŞMAMALIDIR.**
 

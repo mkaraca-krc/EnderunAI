@@ -30,6 +30,22 @@
 
   <ItemGroup>
     <!--
+      MUAF UÇ LİSTESİ GÖMÜLÜ KAYNAKTIR — yanına kopyalanan bir dosya
+      DEĞİL. Bu ayrım bu depoda bedeli ödenerek öğrenildi: aşağıdaki
+      hesap planı seed dosyası çalışma dizininden okunuyordu ve canlıda
+      FileNotFoundException verdi.
+
+      Burada bedel daha ağır olurdu: uç kapısı listeyi okuyamazsa
+      UYGULAMA AÇILMAZ (kapalı tarafa düşer). Yani bu satırın
+      unutulması, bir güvenlik kapısını doğrudan dağıtım arızasına
+      çevirir. UcKapisiTests.MuafiyetListesi_YayinCiktisindadir bu
+      satırın etkisini ölçüyor.
+    -->
+    <EmbeddedResource Include="Security\UcKapisi\MuafUclar.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
       Hesap planı seed dosyası publish çıktısına kopyalanmalı;
       AccountingAccountSeedService dosyayı çalışma dizininden okuyor.
       Bu kural olmadan seed ucu canlıda FileNotFoundException veriyordu.

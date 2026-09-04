@@ -1125,7 +1125,7 @@ biri bir gün "bu neden yok" diye sorduğunda cevabı olsun.
 
 ---
 
-## PASİF HESAPLAR ETKİNLEŞTİRİLİRKEN — YENİ PAROLA ZORUNLU (2026-09-03)
+## PASİF HESAPLAR ETKİNLEŞTİRİLİRKEN — YENİ PAROLA ZORUNLU (2026-09-03) — **KAPANDI (2026-09-04)**
 
 `ralici` ve `ccihan` **tohum parolasını taşıyor** (ölçüldü:
 PBKDF2 karşılaştırmasıyla). O parola aynı zamanda veritabanı ve posta
@@ -1142,3 +1142,28 @@ NEDEN BURAYA YAZILDI: etkinleştirme, hesap açma paketinin içinde
 sıradan bir adım gibi görünüyor. Bu not olmasa, o gün "hesabı aktif
 et" tıklanır ve parola konusu hiç akla gelmez — çünkü ekranda
 etkinleştirme ile parola iki ayrı işlem.
+
+### KAPANDI — 2026-09-04
+
+**Not, tuzağı kaldırmadan yalnız tarif ediyordu.** Mehmet'in kararı:
+*"Belgelenmiş bir tuzak, kaldırılmış bir tuzaktan her zaman daha
+kötüdür."* Hesaplar pasif olduğu için kimse etkilenmeden kapatılabilirdi
+ve beklemek için bir sebep yoktu.
+
+**YAPILAN:** her iki hesabın parolası yönetici sıfırlamasıyla ayrı ayrı
+üretilmiş rastgele değerlere çevrildi. **Değerler hiçbir yere
+yazılmadı** — hesaplar pasif, kimsenin o parolalara ihtiyacı yok.
+Etkinleştirme günü yine sıfırlanacaklar.
+
+**DOĞRULAMA (canlı, 2026-09-04 15:2x):**
+
+    Username | IsActive | PasswordChangedAtUtc
+    ccihan   | f        | 2026-09-04 14:53
+    ralici   | f        | 2026-09-04 14:53
+
+İkisi de hâlâ pasif; ikisi de artık tohum parolasını taşımıyor.
+
+**ÜSTTEKİ KUTU YİNE DE GEÇERLİ:** etkinleştirme anında yeni ve ayrı
+parola verilmesi kuralı kalkmadı. Bugün kapanan şey *paylaşılan tohum
+parolasının* bu iki hesapta yaşamaya devam etmesiydi, etkinleştirme
+disiplini değil.

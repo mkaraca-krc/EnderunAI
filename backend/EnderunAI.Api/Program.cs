@@ -902,6 +902,27 @@ app.MapGet("/api/health", () =>
 app.MapGet("/api/health/govdesiz", () => Results.NoContent())
    .AllowAnonymous();
 
+/*
+ * UÇ KAPISI — AÇILIŞ DENETİMİ (KAPI/1, 2026-09-04).
+ *
+ * BÜTÜN `Map...` ÇAĞRILARINDAN SONRA: daha yukarıda çağrılsaydı
+ * yönlendirme tablosu eksik olur, denetim göremediği ucu "yok" sayardı.
+ *
+ * NE YAPAR: `api/` altındaki her ucun bir BEYANI olduğunu doğrular —
+ * ya [RequirePermission], ya [AllowAnonymous], ya da gerekçeli bir
+ * muafiyet. Üçü de yoksa uygulama BAŞLAMAZ.
+ *
+ * NEDEN AÇILIŞTA, NEDEN İSTEK ANINDA DEĞİL: niteliği silen kişi bunu
+ * deploy'da öğrenmelidir, saldırgan değil. İstek anında reddetseydik
+ * hata canlıda ve kullanıcının önünde çıkardı.
+ *
+ * BU KAPI OLMADAN NE OLUYORDU: PermissionAuthorizationMiddleware,
+ * niteliği olmayan bir uçta yol sezgisine düşüyor; sezgi de bir şey
+ * bulamazsa isteği GEÇİRİYOR. Yani beyanın yokluğu sessizce "herkese
+ * açık" anlamına geliyordu.
+ */
+EnderunAI.Api.Security.UcKapisi.UcKapisiAcilisDenetimi.Dogrula(app);
+
 app.Run();
 
 public partial class Program;

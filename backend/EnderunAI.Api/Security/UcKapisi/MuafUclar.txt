@@ -1,0 +1,64 @@
+# MUAF UÇLAR — YETKİ NİTELİĞİ TAŞIMAYAN UÇLAR VE GEREKÇELERİ
+#
+# BİÇİM:  kategori | Denetleyici.Metot | gerekçe
+#
+# KURAL: `api/` altındaki her uç ya [RequirePermission] taşır, ya
+# [AllowAnonymous] taşır, ya da bu listede yer alır. Üçü de yoksa
+# UYGULAMA AÇILMAZ.
+#
+# [AllowAnonymous] TAŞIYAN UÇLAR BU LİSTEDE DEĞİLDİR — anonimlik zaten
+# gürültülü bir beyandır, sessiz yokluk değil. Bu liste yalnız "kimliği
+# var, yetki niteliği yok, ÇÜNKÜ..." diyen uçları taşır.
+#
+# KATEGORİLER:
+#   kendi-kimligi  Kimlik OTURUMDAN gelir, istekten değil; çağıran yalnız
+#                  kendi kaydına ulaşabilir.
+#   uyelik-kapisi  Erişimi üyelik belirler; süzgeç serviste her uçta geçilir.
+#   alici-kapisi   Satır başına alıcı/izin süzgeci okuma anında uygulanır.
+#   dinamik-izin   İzin isteğin İÇERİĞİNE bağlıdır; statik nitelikle ifade
+#                  EDİLEMEZ.
+#   yalniz-kimlik  Bilerek yalnız kimlik; ayrı bir anahtar açmak yanlış olurdu.
+#
+# DÜRÜST SINIR: bu listedeki her gerekçe bir savunmayı ANLATIR ama
+# DOĞRULAMAZ. Savunmanın etkisizleşmesini yakalayan şey son sütundaki
+# testtir; o testlerin dolu kalması muhafızın parçasıdır, süsü değil.
+
+# --- kendi kimliği --------------------------------------------------
+kendi-kimligi | Auth.Me | Kimlik jetondan okunur; kullanıcı yalnız kendi profilini döndürür. Ayrı bir anahtar, kişinin kendini görmesini yönetici kararına bağlardı.
+kendi-kimligi | Auth.ChangePassword | Kişi kendi parolasını değiştirir; eski parola önce doğrulanır. Yetki anahtarı konsaydı parola değiştirme yönetici iznine bağlanırdı.
+kendi-kimligi | Auth.WorkHoursStatus | Çağıranın kendi mesai durumu; kimlik jetondan gelir, istekten kullanıcı kimliği alınmaz.
+kendi-kimligi | UserPreferences.Get | Kullanıcı arayüz tercihleri; sorgu `UserId == oturum` ile kilitli, başka satır okunamaz.
+kendi-kimligi | UserPreferences.Save | Yazma da aynı kilitle; kullanıcı yalnız kendi tercih satırını yazar.
+kendi-kimligi | IsgPersonnelRecords.GetOwnCard | Kişinin kendi İSG kartı; personel kimliği oturumdan alınır. Ayrı izin, kişinin kendi belgesine erişimini yönetici kararına bağlardı.
+
+# --- üyelik kapısı --------------------------------------------------
+uyelik-kapisi | Mesajlar.Konusmalar | Mesajlaşma yetkiyle değil ÜYELİKLE görünür; MesajlasmaService her uçta ApplyMembership(userId) uygular. Ayrı anahtar açılsaydı rol yansıması onu yalnız Admin ve GM'ye verir, sessiz yetki kaybı doğardı.
+uyelik-kapisi | Mesajlar.BirebirAc | Birebir konuşma açan kişi zaten üyelerden biridir; üyelik serviste kurulur ve doğrulanır.
+uyelik-kapisi | Mesajlar.Mesajlar | Konuşma mesajları yalnız aktif üyeye açılır; ApplyMembership süzgeci sorgunun içinde.
+uyelik-kapisi | Mesajlar.Gonder | Gönderen aktif üye değilse servis reddeder; üyelik kapısı yazma yolunda da geçilir.
+uyelik-kapisi | Mesajlar.Okundu | Okundu işareti yalnız üyenin kendi satırına yazılır; üyelik kapısı serviste.
+uyelik-kapisi | Mesajlar.Okunmamis | Sayaç çağıranın kendi üyeliklerinden hesaplanır; başka konuşma sayıma girmez.
+uyelik-kapisi | Mesajlar.Ara | Arama üyelik süzgecinden geçer; süzgeç atlandığında yabancının mesajı bulunuyordu, testi var.
+uyelik-kapisi | Mesajlar.Kisiler | Konuşulabilecek kişiler listesi; içerik taşımaz, yalnız ad ve kimlik döndürür.
+uyelik-kapisi | api/hubs/mesaj | SignalR hub'ı; sınıfında [Authorize] var ve grup üyeliği bağlantı anında doğrulanıyor. Nitelik hub uçlarına uygulanamaz.
+uyelik-kapisi | api/hubs/mesaj/negotiate | Hub'ın anlaşma ucu; çerçeve üretir, hub ile aynı kimlik ve üyelik kapısına tabidir.
+
+# --- alıcı kapısı ---------------------------------------------------
+alici-kapisi | Notifications.List | Her bildirim kendi RequiredPermission alanını taşır ve okuma anında süzülür; merkeze tek anahtar konsaydı izni olan kullanıcı kendi modülünün bildirimini göremezdi.
+alici-kapisi | Notifications.MarkRead | Okundu yazımı çağıranın kendi alıcı satırına kilitli.
+alici-kapisi | Notifications.Dismiss | Kapatma da aynı alıcı kilidiyle; başkasının satırı kapatılamaz.
+alici-kapisi | Notifications.Snooze | Erteleme çağıranın kendi alıcı satırında; başka kullanıcının bildirimi ertelenemez.
+alici-kapisi | Notifications.MarkPersonalRead | Kişisel satır sorgusu `Id == recipientId && UserId == oturum` ile kilitli.
+
+# --- dinamik izin ---------------------------------------------------
+dinamik-izin | Collaboration.GetComments | İzin, istekteki varlık TİPİNE bağlı (CollaborationPermissions.ErisebilirMi); statik nitelik tek bir anahtar dayatır ve yanlış olurdu. Tanımsız tip reddedilir.
+dinamik-izin | Collaboration.AddComment | Aynı dinamik kapı; CanCommentAsync hem izni hem veri kapsamını tek yerde uygular.
+dinamik-izin | Collaboration.EditComment | Dinamik izin artı sahiplik ve 15 dakikalık düzenleme penceresi.
+dinamik-izin | Collaboration.HideComment | Dinamik izin artı sahiplik kontrolü; başkasının yorumu gizlenemez.
+dinamik-izin | Collaboration.GetAttachments | Ek dosya listesi de kaydın tipine bağlı izinden geçer.
+dinamik-izin | Collaboration.UploadAttachment | Yükleme aynı dinamik kapıdan; bağsız ek dosya yazılamaz.
+dinamik-izin | Collaboration.DownloadAttachment | İndirme ucu kapsamlanmazsa sızıntı ekrandan değil bağlantıdan olur; aynı dinamik kapı burada da geçilir.
+dinamik-izin | ManagementKpi.Get | Kapı KPI BAŞINA, sayfa başına değil: yedi göstergenin her biri kendi anahtarına bağlı ve yetkisi olmayan gösterge yanıta hiç girmiyor. Uca tek üst anahtar konsaydı nakit görmeyen yönetici hiçbir gösterge göremezdi.
+
+# --- yalnız kimlik --------------------------------------------------
+yalniz-kimlik | IstemciHatalari.Bildir | Her giriş yapmış kullanıcı kendi ekranında hata alabilir ve bildirebilmelidir. Veritabanı tablosu yok, sunucu günlüğüne yazılır; kullanıcı kimliği oturumdan alınır ve yol maskelenir.

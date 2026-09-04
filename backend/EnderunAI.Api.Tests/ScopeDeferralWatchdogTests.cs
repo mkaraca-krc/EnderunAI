@@ -83,6 +83,15 @@ public sealed class ScopeDeferralWatchdogTests(DatabaseFixture fixture)
             .SingleAsync();
 
         Assert.Contains("ertelemesi sona erdi", uyari.DetailsJson!);
+
+        /*
+         * ADI KONMUŞ BORÇ UYARININ İÇİNDE OLMALI.
+         *
+         * Uyarı düştüğü gün, onu okuyan kişinin NEYE bakacağını da
+         * okuması gerekir. Borcun adı ayrı bir belgede dursaydı, uyarı
+         * "bir şey oldu" der ve o belgeyi kimse açmazdı.
+         */
+        Assert.Contains("KPI KAPSAM SÜZGECİ", uyari.DetailsJson!, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -150,12 +159,24 @@ public sealed class ScopeDeferralWatchdogTests(DatabaseFixture fixture)
             .Where(x => x.Action == ScopeDeferralWatchdog.ActionSecondCompany)
             .ExecuteDeleteAsync();
 
-        // Test veritabanında zaten birden çok şirket var (her test
-        // kendi şirketini açıyor), bu yüzden koşul sağlanmış olmalı.
-        await TestDataFactory.CreateProjectAsync(db, $"SRK{suffix}");
+        /*
+         * ÖN KOŞULUNU KENDİ KURAR — BAŞKA TESTLERİN YAN ETKİSİNE DAYANMAZ.
+         *
+         * Eskiden tek şirket açıp "test veritabanında zaten birden çok
+         * şirket var, her test kendi şirketini açıyor" varsayıyordu.
+         * Tam takımda doğruydu; TEK BAŞINA koşturulduğunda kırmızı
+         * veriyordu (ölçüldü, KAPI/1 sırasında). Yeşilliği başka
+         * testlerin sırasına bağlı bir test, ölçtüğünü sandığın şeyi
+         * ölçmez — bugün süzgeçle koşan biri onu "bozuk" sanır ve
+         * gerçek bir kırmızıyla ayırt edemez.
+         */
+        await TestDataFactory.CreateProjectAsync(db, $"SRKA{suffix}");
+        await TestDataFactory.CreateProjectAsync(db, $"SRKB{suffix}");
 
         var aktifSirket = await db.Companies.CountAsync(x => x.IsActive);
-        Assert.True(aktifSirket > 1, "Test kurulumu birden çok şirket üretmeliydi.");
+        Assert.True(
+            aktifSirket > 1,
+            $"Test kurulumu birden çok şirket üretmeliydi; sayılan: {aktifSirket}.");
 
         await bekci.CheckAsync(CancellationToken.None);
 

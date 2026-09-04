@@ -32,6 +32,37 @@ public sealed class ScopeDeferralWatchdog(
     public const string ActionScopedUser = "ScopeDeferralTriggered.ScopedUser";
     public const string ActionSecondCompany = "ScopeDeferralTriggered.SecondCompany";
 
+    /// <summary>
+    /// TETİKLENDİĞİNDE FİİLÎ SIZINTIYA DÖNÜŞEN, ADI KONMUŞ BORÇLAR.
+    ///
+    /// NEDEN BURADA, NEDEN BİR NOTTA DEĞİL: bu borçların ortak özelliği
+    /// BUGÜN sömürülemez olmalarıdır — tetikleyici koşul gerçekleşene
+    /// kadar zararsız dururlar. "Şu paketten önce bakarız" demek, birinin
+    /// o günü hatırlamasına güvenmektir; hatırlamaz. Tetikleyici zaten
+    /// burada ölçülüyor; borcun adı da burada dursun ki uyarı düştüğü gün
+    /// NEYE bakılacağı uyarının İÇİNDE yazsın.
+    ///
+    /// KAPSAM BORCU ÇİZGİSİ AYRI VE YETERLİ: aşağıdaki altı KPI yolunun
+    /// alt servisleri `kapsam-temel-cizgi.txt` içinde zaten sayılıyor
+    /// (CashFlowProjection 13, Expense 29, Payroll 14, Cheque 8,
+    /// FinancialInstrument 5, Profitability 1 = 70 okuma), yani
+    /// ÇOĞALAMAZLAR. Buraya yazılan şey borcun kendisi değil, borcun
+    /// TETİKLENDİĞİNDE NE ANLAMA GELDİĞİ.
+    /// </summary>
+    public static readonly IReadOnlyList<string> AdiKonmusBorclar =
+    [
+        "KPI KAPSAM SÜZGECİ (ManagementKpiController + ManagementKpiService): " +
+        "yedi göstergeden yalnız SATIN ALMA veri kapsamını alt servise " +
+        "geçiriyor. Diğer altısı — nakit kapanış, kâr marjı, gider toplamı, " +
+        "bordro maliyeti, açık çek, finansal araç yükü — `companyId`'yi " +
+        "sorgu dizesinden alıyor ve alt servislerde de kapsam kontrolü yok " +
+        "(CashFlowProjectionService'te tek kapsam referansı bile yok). " +
+        "TEK ŞİRKETLE SÖMÜRÜLEMEZ. İkinci şirkette: `CashFlowView` izni olan " +
+        "ama kapsamı o şirketi içermeyen bir kullanıcı, şirket kimliğini elle " +
+        "yazarak o şirketin nakit kapanışını okuyabilir. " +
+        "Ölçüm: KAPI/1, 2026-09-04.",
+    ];
+
     public async Task CheckAsync(CancellationToken cancellationToken)
     {
         await KapsamliKullaniciKontrolAsync(cancellationToken);
@@ -124,6 +155,7 @@ public sealed class ScopeDeferralWatchdog(
             {
                 summary = ozet,
                 ayrinti,
+                adiKonmusBorclar = AdiKonmusBorclar,
                 kaynak =
                     "DURUM.md — G3/2-3-4 erteleme gerekçesi ve tetikleyici koşullar."
             }),
