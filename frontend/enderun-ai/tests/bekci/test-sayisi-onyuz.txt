@@ -33,5 +33,9 @@
 #     süzülenleri seçme (tüm listeyi değil), kısmi başarısızlığın
 #     sessiz geçmemesi, toplu uç açılmaması, yanıltıcı süzgeç
 #     yer tutucusunun geri gelmemesi.
-statik: 419
+# BOS-SUZGEC (2026-09-04): 419 → 421, katkı +2.
+#   personel-departman-ekran-sozlesmesi.test.ts +2:
+#     süzgeçlerde (boş) seçeneği (38 kişi hiçbir süzgeçten
+#     görünmüyordu) ve departmanı boş sayacının süzgeci yok sayması.
+statik: 421
 dinamik: 15

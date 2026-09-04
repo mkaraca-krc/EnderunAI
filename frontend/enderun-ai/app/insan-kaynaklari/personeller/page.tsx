@@ -147,10 +147,38 @@ function initials(item: Pick<PersonnelListItem, "firstName" | "lastName">) {
   return `${item.firstName?.[0] ?? ""}${item.lastName?.[0] ?? ""}`.toLocaleUpperCase("tr-TR");
 }
 
+/**
+ * SÜZGEÇ SEÇENEĞİ OLARAK "(boş)" — ÖLÇÜMLE GEREKLİ OLDU.
+ *
+ * Bu işlev boş değerleri ELİYORDU (`.filter(Boolean)`). Sonuç: alanı
+ * boş olan personele hiçbir süzgeçle ulaşılamıyordu.
+ *
+ * ÖLÇÜLDÜ (2026-09-04, canlı): 79 aktif personelin 38'inde Meslek
+ * boş, 39'unda ünvan boş — ve İKİSİ DE boş olanlar tam 38 kişi. Yani
+ * meslek süzgecinden kaçan grup, ünvan süzgecinden de kaçıyordu.
+ * Departman atanacak en büyük tek küme onlardı ve ekranda hiçbir
+ * yoldan toplanamıyorlardı.
+ *
+ * SENTINEL DEĞER: gerçek bir meslek adıyla çakışmasın diye
+ * `BOS_SECENEK` kullanılıyor; parantezli etiket kullanıcıya görünen
+ * kısım.
+ */
+const BOS_SECENEK = "__BOS__";
+
 function uniqueOptions(values: Array<string | null | undefined>) {
-  return [...new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])]
+  const dolular = [
+    ...new Set(values.map((value) => value?.trim()).filter(Boolean) as string[]),
+  ]
     .sort((a, b) => a.localeCompare(b, "tr"))
     .map((value) => ({ value, label: value }));
+
+  const bosSayisi = values.filter((value) => !value?.trim()).length;
+
+  // BOŞ SEÇENEĞİ YALNIZ BOŞ KAYIT VARSA: yoksa kullanılmayan bir
+  // seçenek göstermek olurdu.
+  return bosSayisi > 0
+    ? [{ value: BOS_SECENEK, label: `(boş) · ${bosSayisi}` }, ...dolular]
+    : dolular;
 }
 
 function PersonnelShortcuts({ personnelId }: { personnelId: string }) {
@@ -592,8 +620,18 @@ export default function HrPersonnelPage() {
       if (activity === "passive" && item.isActive) return false;
       if (companyId && item.companyId !== companyId) return false;
       if (branchId && item.branchId !== branchId) return false;
-      if (profession && item.profession !== profession) return false;
-      if (jobTitle && item.jobTitle !== jobTitle) return false;
+      // BOŞ SEÇENEĞİ: alanın gerçekten boş olduğu kayıtlar.
+      if (profession) {
+        const bos = !item.profession?.trim();
+        if (profession === BOS_SECENEK ? !bos : item.profession !== profession)
+          return false;
+      }
+
+      if (jobTitle) {
+        const bos = !item.jobTitle?.trim();
+        if (jobTitle === BOS_SECENEK ? !bos : item.jobTitle !== jobTitle)
+          return false;
+      }
       if (
         projectId &&
         !item.activeAssignments?.some((assignment) => assignment.projectId === projectId)
@@ -1176,6 +1214,38 @@ export default function HrPersonnelPage() {
           <div className="flex items-center justify-between gap-3 md:col-span-2 xl:col-span-4">
             <span className="text-sm text-slate-500">
               {filteredItems.length} / {items.length} personel gösteriliyor
+              {(() => {
+                /*
+                 * DEPARTMANI BOŞ SAYACI — SÜZGECİ YOK SAYAR.
+                 *
+                 * Bu sayaç "işin tamamı bitti mi" sorusunu cevaplıyor;
+                 * tablo başlığındaki "hepsini seç" ise "şu an ne
+                 * değiştiriyorum" sorusunu. İkisi zıt görünüyor ama
+                 * sebepleri farklı.
+                 *
+                 * Süzgeçli bir sayaç burada YANILTIRDI: süzgeç
+                 * daraldıkça sıfıra iner ve "bitti" izlenimi verir.
+                 * Atamanın bittiği, TÜM aktif personelde sayacın
+                 * sıfırlanmasıyla bilinir.
+                 */
+                const bosDepartman = items.filter(
+                  (x) => x.isActive && x.status === 1 && !x.departmentId
+                ).length;
+
+                if (bosDepartman === 0) {
+                  return (
+                    <strong className="ml-2 text-emerald-700">
+                      · departmanı boş personel yok
+                    </strong>
+                  );
+                }
+
+                return (
+                  <strong className="ml-2 text-amber-700">
+                    · departmanı boş: {bosDepartman}
+                  </strong>
+                );
+              })()}
             </span>
             <Button variant="ghost" size="sm" onClick={resetFilters}>
               Filtreleri Temizle

@@ -108,6 +108,53 @@ describe("personel ekranı departman sözleşmesi", () => {
     expect(servis).not.toContain("departman/toplu");
   });
 
+  it("süzgeçlerde (boş) seçeneği var — kimse kaybolmuyor", () => {
+    /*
+     * ═══ ÖLÇÜMLE GEREKLİ OLDU ═══
+     *
+     * `uniqueOptions` boş değerleri ELİYORDU. Sonuç: alanı boş olan
+     * personele hiçbir süzgeçle ulaşılamıyordu.
+     *
+     * Canlı ölçüm (2026-09-04): 79 aktif personelin 38'inde Meslek
+     * boş, 39'unda ünvan boş — ve İKİSİ DE boş olanlar tam 38 kişi.
+     * Yani meslek süzgecinden kaçan grup ünvan süzgecinden de
+     * kaçıyordu; departman atanacak EN BÜYÜK tek küme ekranda hiçbir
+     * yoldan toplanamıyordu.
+     *
+     * Seçenek kaldırılırsa o 38 kişi yeniden görünmez olur ve bunun
+     * hiçbir belirtisi olmaz — liste dolu görünmeye devam eder.
+     */
+    expect(ekran).toContain("BOS_SECENEK");
+    expect(ekran).toContain("(boş)");
+
+    // BOŞ KAYIT YOKSA SEÇENEK DE YOK: kullanılmayan seçenek
+    // gösterilmiyor.
+    expect(ekran).toContain("bosSayisi > 0");
+  });
+
+  it("departmanı boş sayacı SÜZGECİ YOK SAYIYOR", () => {
+    /*
+     * İKİ SORU, İKİ FARKLI KAPSAM — BİLEREK ZIT:
+     *
+     *   "Şu an ne değiştiriyorum?" → süzgece UYAR (hepsini seç),
+     *      yoksa görülmeyen satırlar değişir.
+     *   "İş bitti mi?"            → süzgeci YOK SAYAR (bu sayaç),
+     *      yoksa süzgeç daraldıkça sıfıra iner ve bitmediği hâlde
+     *      "bitti" izlenimi verir.
+     *
+     * Sayaç `items` üzerinden hesaplanmalı, `filteredItems` üzerinden
+     * DEĞİL.
+     */
+    const sayacBlogu = ekran.slice(
+      ekran.indexOf("DEPARTMANI BOŞ SAYACI"),
+      ekran.indexOf("departmanı boş:"),
+    );
+
+    expect(sayacBlogu.length).toBeGreaterThan(100);
+    expect(sayacBlogu).toContain("items.filter");
+    expect(sayacBlogu).not.toContain("filteredItems.filter");
+  });
+
   it("meslek süzgecinin yanıltıcı yer tutucusu geri gelmiyor", () => {
     /*
      * Süzgeç "Tüm departman / meslekler" yazıyordu ama YALNIZ meslek
