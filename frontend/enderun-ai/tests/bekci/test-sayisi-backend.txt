@@ -92,8 +92,8 @@
 #   ParolaPolitikasiTekYerTests   3  (asgari uzunluk ikinci kez doğmasın)
 #   ParolaYaziciTekYerTests       3  (karma+damga+önbellek tek noktada)
 # KAPI-SIRASI (2026-09-04): 2903 → 2907, gevşeklik 4.
-#   UcuzKapilarTekTanimTests  4  (tek tanım, iki çağıran; kapı listesinin
+#   UcuzKapilarTekTanimTests  5  (tek tanım, iki çağıran; kapı listesinin
 #                                 ikinci kopyası; sıranın main() içinde
 #                                 pahalı turlardan önce olması)
-statik: 2907
+statik: 2908
 dinamik: 24

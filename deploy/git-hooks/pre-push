@@ -37,9 +37,23 @@ if [ ! -x "$BETIK" ]; then
     exit 0
 fi
 
-echo "[pre-push] Ucuz kapılar koşuluyor (atlamak için --no-verify)..."
+# ═══ YALNIZ `hizli` KAPILAR — ÖLÇÜMLE BULUNDU ═══
+#
+# İlk hâl dört kapıyı da koşuyordu ve PUSH DÜŞTÜ:
+# "Connection to github.com closed by remote host."
+#
+# Git, SSH bağlantısını kancadan ÖNCE açıyor; kanca 362 saniye sürünce
+# uzak uç boşta kalan bağlantıyı kapattı. Süreyi tek bir kapı
+# götürüyordu: sır bekçisi (278 sn — arka ucu yeniden derliyor).
+#
+# DÜRÜST SINIR: sır bekçisi push öncesinde ÇALIŞMIYOR, yalnız yayın
+# turunda çalışıyor. Kancanın verdiği güvence, listenin `hizli` kısmı.
+#
+# LİSTE YİNE TEK: ayrım listenin kendi alanında (`hizli`/`agir`),
+# burada ikinci bir liste yok.
+echo "[pre-push] Ucuz kapılar koşuluyor (hızlı küme; atlamak için --no-verify)..."
 
-if ! REPO_ROOT="$KOK" "$BETIK"; then
+if ! REPO_ROOT="$KOK" "$BETIK" --hizli; then
     echo "[pre-push] Push DURDURULDU: ucuz kapılardan biri düştü." >&2
     exit 1
 fi

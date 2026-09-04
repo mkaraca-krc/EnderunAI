@@ -44,18 +44,66 @@ log()  { echo "[ucuz-kapi] $*"; }
 hata() { echo "[ucuz-kapi] HATA: $*" >&2; }
 
 # ── KAPI LİSTESİ — TEK KAYNAK ──
-# Biçim: "ad|çalışma dizini|komut"
+#
+# Biçim: "sınıf|ad|çalışma dizini|komut"
+#
+# SINIF: `hizli` ya da `agir`. Bu bir İKİNCİ LİSTE DEĞİL, listenin
+# kendi üzerindeki bir ÖZELLİK — ayrım burada, tek yerde yazılı.
+#
+# ═══ NEDEN SINIF GEREKTİ (2026-09-04, ölçüldü) ═══
+#
+# Kanca ilk hâlinde dört kapıyı da koştu ve push DÜŞTÜ:
+# "Connection to github.com closed by remote host."
+#
+# Sebep: git, SSH bağlantısını kancadan ÖNCE açıyor. Kanca 362 saniye
+# sürünce uzak uç boşta kalan bağlantıyı kapattı.
+#
+# Süre dağılımı sorunu tek bir kapıya indirdi:
+#   kurumsal kimlik    0-1 sn
+#   tip kontrolü       5-8 sn
+#   ön yüz derlemesi  79-92 sn
+#   sır bekçisi      278 sn   ← arka ucu yeniden derliyor
+#
+# İlk düzeltmede yalnız sır bekçisi `agir` yapıldı ve hızlı küme 101
+# saniyeye indi. Yine de riskliydi: düşen koşu 362 saniyedeydi ve SSH'ın
+# boşta kalma toleransı belirsiz. Süreyi götüren ikinci kapı ön yüz
+# derlemesiydi (92 sn), o da `agir` oldu.
+#
+# HIZLI KÜME ARTIK ~10 SANİYE: bu olayı doğuran kapı (kurumsal kimlik,
+# 1 sn) ve ona en yakın koruma (tip kontrolü, 8 sn).
+#
+# ═══ DÜRÜST SINIR ═══
+#
+# Kanca artık `agir` kapıları koşmuyor. Yani SIR BEKÇİSİ VE ÖN YÜZ
+# DERLEMESİ push öncesinde ÇALIŞMIYOR — yalnız yayın turunda
+# çalışıyorlar. Bu bir eksiklik ve gizlenmiyor: kancanın verdiği
+# güvence, listenin `hizli` kısmıdır.
+#
+# Tip kontrolü, derlemenin yakaladığı hataların çoğunu zaten
+# yakalıyor; derlemenin ek olarak gördüğü şey Next'e özgü sorunlar.
+#
+# Buna rağmen liste TEK: iki çağıran aynı dosyayı okuyor, ayrım
+# listenin kendi alanında duruyor. İki ayrı liste olsaydı biri
+# güncellenip diğeri kalırdı.
 KAPILAR=(
-  "kurumsal kimlik|${FE}|node scripts/kimlik-taramasi.mjs"
-  "tip kontrolü|${FE}|npx tsc --noEmit -p tsconfig.json"
-  "ön yüz derlemesi|${FE}|npm run build"
-  "sır bekçisi|${BE}|dotnet test EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj -v q --nologo --filter FullyQualifiedName~SecretInSourceGuardTests"
+  "hizli|kurumsal kimlik|${FE}|node scripts/kimlik-taramasi.mjs"
+  "hizli|tip kontrolü|${FE}|npx tsc --noEmit -p tsconfig.json"
+  "agir|ön yüz derlemesi|${FE}|npm run build"
+  "agir|sır bekçisi|${BE}|dotnet test EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj -v q --nologo --filter FullyQualifiedName~SecretInSourceGuardTests"
 )
 
-if [ "${1:-}" = "--liste" ]; then
-    for kapi in "${KAPILAR[@]}"; do echo "${kapi%%|*}"; done
-    exit 0
-fi
+YALNIZ_HIZLI=0
+
+case "${1:-}" in
+    --liste)
+        for kapi in "${KAPILAR[@]}"; do
+            kalan="${kapi#*|}"
+            echo "${kapi%%|*}  ${kalan%%|*}"
+        done
+        exit 0 ;;
+    --hizli)
+        YALNIZ_HIZLI=1 ;;
+esac
 
 # SIR BEKÇİSİ VERİTABANI İSTEMİYOR ama test projesi ortam değişkeni
 # olmadan yüklenemiyor. Varsa canlıdan türetiliyor, yoksa o kapı
@@ -73,13 +121,20 @@ basladi=$(date +%s)
 sira=0
 
 for kapi in "${KAPILAR[@]}"; do
-    sira=$((sira + 1))
-    ad="${kapi%%|*}"
+    sinif="${kapi%%|*}"
     kalan="${kapi#*|}"
+    ad="${kalan%%|*}"
+    kalan="${kalan#*|}"
     dizin="${kalan%%|*}"
     komut="${kalan#*|}"
 
-    log "[$sira/${#KAPILAR[@]}] $ad"
+    if [ "$YALNIZ_HIZLI" = "1" ] && [ "$sinif" != "hizli" ]; then
+        log "    — $ad ATLANDI (ağır kapı; yayın turunda koşacak)"
+        continue
+    fi
+
+    sira=$((sira + 1))
+    log "[$sira] $ad"
     kapi_basladi=$(date +%s)
 
     if ! (cd "$dizin" && eval "$komut") ; then

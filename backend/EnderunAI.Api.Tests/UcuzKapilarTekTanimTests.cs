@@ -112,6 +112,40 @@ public sealed class UcuzKapilarTekTanimTests
     }
 
     [Fact]
+    public void Kanca_HIZLI_Kumeyi_Kosuyor_Yayin_HEPSINI()
+    {
+        /*
+         * ═══ AYRIM LİSTENİN KENDİ ALANINDA, İKİNCİ LİSTEDE DEĞİL ═══
+         *
+         * Kanca ilk hâlinde dört kapıyı da koşuyordu ve PUSH DÜŞTÜ:
+         * "Connection to github.com closed by remote host." Git, SSH
+         * bağlantısını kancadan ÖNCE açıyor; 362 saniyelik kanca
+         * bağlantıyı boşta bıraktı.
+         *
+         * Çözüm ikinci bir liste DEĞİL: her kapı `hizli`/`agir` diye
+         * etiketlendi ve kanca `--hizli` çağırıyor. Liste hâlâ tek
+         * dosyada.
+         *
+         * DÜRÜST SINIR: kanca ağır kapıları koşmuyor. Bu test o
+         * ayrımın YERİNİ sabitliyor — sınıf listede, çağıranda değil.
+         */
+        var kanca = Kod("deploy", "git-hooks", "pre-push");
+        var yayin = Kod("deploy", "scripts", "safe-deploy.sh");
+        var liste = Kod("deploy", "scripts", "ucuz-kapilar.sh");
+
+        Assert.Contains("--hizli", kanca);
+        Assert.DoesNotContain("--hizli", yayin);
+
+        // SINIFLAR LİSTEDE TANIMLI.
+        Assert.Contains("hizli|", liste);
+        Assert.Contains("agir|", liste);
+
+        // ÇAĞIRANLAR SINIF ADI TAŞIMIYOR: ayrım listede yaşıyor.
+        Assert.DoesNotContain("agir|", kanca);
+        Assert.DoesNotContain("agir|", yayin);
+    }
+
+    [Fact]
     public void Ucuz_Kapilar_PAHALI_TURLARDAN_ONCE_Cagriliyor()
     {
         /*
