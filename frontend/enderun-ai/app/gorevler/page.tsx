@@ -268,6 +268,17 @@ export default function WorkTasksPage() {
   const [priorityFilter, setPriorityFilter] =
     useState("");
 
+  /*
+   * TÜR SÜZGECİ — BOŞ DEĞER "İŞ EMRİ" DEMEK, "HEPSİ" DEĞİL.
+   *
+   * Diğer süzgeçlerde boş dize "süzme" anlamına geliyor; burada
+   * gelmiyor ve bu bilerek. Kütüğün varsayılanı dar: alan hiç
+   * gönderilmiyor, sunucu yalnız iş emri döndürüyor. "Tümü" ayrı
+   * ve AÇIK bir seçim (`0`).
+   */
+  const [kindFilter, setKindFilter] =
+    useState("");
+
   const [overdueOnly, setOverdueOnly] =
     useState(false);
 
@@ -409,6 +420,10 @@ export default function WorkTasksPage() {
             priorityFilter === ""
               ? undefined
               : Number(priorityFilter),
+          kind:
+            kindFilter === ""
+              ? undefined
+              : Number(kindFilter),
           overdueOnly,
         }),
         workTaskService.getDashboard(),
@@ -443,6 +458,7 @@ export default function WorkTasksPage() {
     projectFilter,
     statusFilter,
     priorityFilter,
+    kindFilter,
     overdueOnly,
     form.companyId,
   ]);
@@ -1458,6 +1474,34 @@ export default function WorkTasksPage() {
           </label>
 
           <label>
+            <span>Tür</span>
+            <select
+              value={kindFilter}
+              onChange={(event) =>
+                setKindFilter(
+                  event.target.value
+                )
+              }
+            >
+              <option value="">
+                İş emirleri
+              </option>
+
+              <option
+                value={String(
+                  WorkTaskKind.Hatirlatma
+                )}
+              >
+                Hatırlatmalar
+              </option>
+
+              <option value="0">
+                Tümü
+              </option>
+            </select>
+          </label>
+
+          <label>
             <span>Öncelik</span>
             <select
               value={priorityFilter}
@@ -1516,7 +1560,7 @@ export default function WorkTasksPage() {
             loading={loading}
             title="İş Emirleri"
             emptyText="İş emri bulunamadı. Yeni bir iş emri açın veya filtreleri değiştirin."
-            resetKey={`${projectFilter}|${statusFilter}|${priorityFilter}`}
+            resetKey={`${projectFilter}|${statusFilter}|${priorityFilter}|${kindFilter}`}
           />
       </div>
       {pending && (

@@ -121,6 +121,17 @@ export default function YapilacaklarSayfasi() {
     const talepVar = requestActions.can("approve") || requestActions.can("view");
     const raporVar = reportActions.can("approve") || reportActions.can("view");
 
+    /*
+     * `kind=0` = TÜM TÜRLER — BU EKRANIN DAVRANIŞI DEĞİŞMEDİ.
+     *
+     * `/gorevler` kütüğü artık varsayılan olarak yalnız iş emri
+     * gösteriyor (KURAL-KATMAN, TUR 1.3). Bu ekran ise kişinin
+     * kendi kuyruğu: Hızır hatırlatmaları da buraya AİT ve iki
+     * bölüm de aynen kalmalı. Süzgeci burada AÇIKÇA yazmak,
+     * sunucu varsayılanının bu ekranı sessizce daraltmasını
+     * önlüyor — varsayılana yaslanan ekran, varsayılan değişince
+     * habersiz değişir.
+     */
     const istekler: {
       kind: TodoKind;
       izin: boolean;
@@ -131,7 +142,7 @@ export default function YapilacaklarSayfasi() {
         izin: gorevVar,
         cagri: async () => {
           const yanit = await apiClient<{ items: RawTask[] }>(
-            "tasks?status=4&pageSize=50",
+            "tasks?status=4&kind=0&pageSize=50",
           );
 
           return (yanit.items ?? [])
@@ -209,7 +220,7 @@ export default function YapilacaklarSayfasi() {
     if (gorevVar) {
       try {
         const yanit = await apiClient<{ items: RawTask[] }>(
-          `tasks?assignedToUserId=${encodeURIComponent(kullaniciId)}&pageSize=50`,
+          `tasks?assignedToUserId=${encodeURIComponent(kullaniciId)}&kind=0&pageSize=50`,
         );
 
         setBana(
@@ -223,7 +234,7 @@ export default function YapilacaklarSayfasi() {
       }
 
       try {
-        const yanit = await apiClient<{ items: RawTask[] }>("tasks?pageSize=50");
+        const yanit = await apiClient<{ items: RawTask[] }>("tasks?kind=0&pageSize=50");
 
         setBenden(
           (yanit.items ?? [])

@@ -124,6 +124,7 @@ public sealed class DailySummaryTests(DatabaseFixture fixture)
             ProjectId = proje.Id,
             TaskNumber = $"TEST-OZT-{Guid.NewGuid():N}"[..20],
             Title = "Özet testi görevi",
+            Kind = WorkTaskKind.IsEmri,
             Status = WorkTaskStatus.Open,
             AssignedToUserId = atanan,
             DueDate = termin
@@ -427,6 +428,7 @@ public sealed class DailySummaryDryRunTests(DatabaseFixture fixture)
             ProjectId = proje.Id,
             TaskNumber = $"TEST-KRU-{Guid.NewGuid():N}"[..20],
             Title = baslik,
+            Kind = WorkTaskKind.IsEmri,
             Status = WorkTaskStatus.Open,
             AssignedToUserId = atanan
         });

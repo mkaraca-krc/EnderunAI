@@ -2753,6 +2753,118 @@ Desene kabuk savunması eklendi (`hata`/`fail` çağrısı, sıfırdan farklı
 
 ---
 
+## AÇIK KARARLAR — ÖZERK TURLARDA BİRİKENLER (2026-09-04)
+
+### AK-1 — HIZIR MERKEZİ NEREDEN TÜRETSİN (TUR 1.2, TIKANDI)
+
+**İSTENEN:** "Hızır'ın açtığı kayıtta merkez, çağıran kullanıcının
+şubesinden türer; şube yoksa Hızır hatırlatma açamaz ve bunu açıkça
+söyler."
+
+**ÖLÇÜM BUNUNLA ÇELİŞİYOR (canlı, 2026-09-04):**
+
+| Ölçüm | Değer |
+|---|---|
+| Aktif şube | 1 |
+| Aktif kapsam satırı (`user_data_scopes`) | 13 |
+| `BranchId` DOLU kapsam satırı | **0** |
+| Şube kapsamı olan kullanıcı | **0 / 13** |
+
+Kural bugün yazılırsa Hızır hatırlatma özelliği 13 kullanıcının
+13'ünde de ölür. Bu, TUR 4.1'de konmuş ilkenin aynısı: *"81
+personelin 0'ında departman dolu; kademeyi zorunlu yaparsak ekran
+ilk günden ölür."*
+
+**ÖNERİ (karar bekliyor):** merkez önce kullanıcının şube
+kapsamından türesin; kapsam yoksa ve kullanıcının şirketinde TEK
+şube varsa o kullanılsın; aday sayısı 0 ya da 1'den fazlaysa Hızır
+açıkça reddetsin. Hiçbir durumda adaylar arasından SEÇİM yapmaz —
+belirsizlik ret sebebidir. Bugünkü veride bu, özelliği yaşatır ve
+tek şube olduğu için tahmin de içermez.
+
+**GENİŞ TARAF SEÇİLMEDİ:** "merkezsiz de geçsin" seçeneği
+değerlendirilmedi; o, 1.1 ve 1.2'nin tamamını anlamsız kılardı.
+
+### AK-2 — NÖBET/1 UYARISI NEREYE GİDECEK
+Seçenekler: e-posta / WhatsApp / Telegram / sunucuda dosya. Karar
+gelene kadar dosyaya yazılacak ve dosya günlüklenecek.
+
+### AK-3 — SUNUCU DIŞI YEDEK (KVKK)
+`UZAK_YEDEK_ETKIN=hayir`. **Bugün tek disk arızası tüm veriyi geri
+dönüşsüz kaybettirir** — yedekler, şifreleme anahtarı ve canlı
+veritabanı aynı `/dev/vda1` üzerinde.
+
+---
+
+## TUR 1 — ŞEMA VE KURAL BÜTÜNLÜĞÜ (2026-09-04)
+
+### 1.1 — GÖREV TÜRÜ: KORUMAK YERİNE İMKÂNSIZ KILMAK
+
+`Belirsiz = 0` zaten reddediliyordu, ama reddi YALNIZ uygulama kodu
+yapıyordu. Göç `20260904202822_GorevTuruBelirsizYasak` sütun
+varsayılanını düşürüp `CK_WorkTasks_Kind_Belirsiz_Degil` kısıtını
+koyuyor: sıfır artık veritabanına YAZILAMAZ.
+
+**YAZMA YOLLARININ TAMAMI SAYILDI — 8 DEĞİL, ÖNCE 15.** Depoda 15
+`new WorkTask` var. İkisi (`WorkTasksController` 311 ve 496) `Kind`
+yazmıyor ama `Add` DA EDİLMİYOR: kapsam denetimi için üretilip
+atılıyorlar. Kalıcı üç yol — POST, PUT, Hızır — üçü de türü açıkça
+yazıyor. Üretimde `WorkTasks`'a ham SQL yok; tek ham SQL eski
+göçlerde ve hepsi bu göçten ÖNCE koşuyor.
+
+**BOŞ VERİTABANINDA DA GÜVENLİ.** Test ve tatbikat veritabanları
+göçlerden sıfırdan kuruluyor. İŞEMRİ/2 göçü (`20260902220339`)
+`update "WorkTasks" set "Kind" = 1 where "Kind" = 0` yapıyor ve
+sıralamada önce geliyor; kısıt eklenirken 0'lı satır kalmıyor.
+
+**SONDA HEDEFİ IŞKALADI, DÜZELTİLDİ — KAYDA GEÇİYOR.** İlk sonda
+kısıtı TEST VERİTABANINDAN düşürdü ve ilan edilen kırmızı GELMEDİ.
+Sebep savunmanın sağlamlığı değildi: `DatabaseFixture.InitializeAsync`
+her koşuda `DropTestDatabaseAsync()` çağırıp veritabanını göçlerden
+yeniden kuruyor — sabotaj, testler koşmadan önce siliniyordu.
+
+> **VERİTABANI ÜSTÜNDE YAPILAN SABOTAJ, VERİTABANINI HER KOŞUDA
+> YENİDEN KURAN BİR DÜZENEKTE SONDA DEĞİLDİR.** Doğru sabotaj noktası
+> göç dosyasıdır — üstelik daha güçlü iddia: kısıtı yaratan şeyin
+> göç olduğunu da kanıtlar.
+
+| Sonda | Sabotaj | Ölçülen |
+|---|---|---|
+| A2 | göçün `Up`'ından `add constraint` çıkarıldı | `SifirTur_HamSqlIleDeYazilamaz` KIRMIZI, diğeri yeşil |
+| B2 | göçün `Up`'ından `drop default` çıkarıldı | `TurSutununVarsayilaniYok` KIRMIZI, diğeri yeşil |
+| C | 8 test eklemesinden biri geri alındı | `23514 ... CK_WorkTasks_Kind_Belirsiz_Degil` — eklemeler süs değil |
+
+### 1.2 — KURAL-KATMAN KALANI: ÜÇTE İKİSİ ZATEN KAPALI
+
+Ölçüldü: kuralın ortak sınıfa taşınması, MANUAL kaçışının kapanması
+(`sourceModule` parametresi tümden kaldırılmış) ve `ACIK_KAPI`
+testinin silinmeden `KaydaBagliGorev_De_MERKEZSIZ_GECEMEZ` diye
+tersine çevrilmesi — üçü de `bf707858`'de yapılmış ve canlıda.
+
+**AÇIK KALAN TEK PARÇA HIZIR YOLU — VE O KAPI 1'E TAKILDI.**
+Bkz. AÇIK KARARLAR: "Hızır merkezi nereden türetsin".
+
+### 1.3 — HIZIR HATIRLATMALARI KÜTÜKTEN ÇIKTI
+
+`/api/tasks` VARSAYILAN olarak yalnız iş emri döndürüyor. Bu bir
+gizleme değil daraltma ve fark ÖLÇÜLEBİLİR: `kind=2` yalnız
+hatırlatma, `kind=0` hepsi.
+
+`kind = 0` NEDEN "HEPSİ" DEMEK: 1.1'deki kısıt sıfırı kalıcı olarak
+yazılamaz kıldı; sıfır hiçbir satırla eşleşemeyeceği için gerçek bir
+süzgeç değeri olma ihtimali kapandı ve "süzgeç yok" anlamını
+taşıyabiliyor. **Bu anlamın dayanağı o kısıttır**; kısıt kalkarsa
+yorum da geçersizleşir.
+
+`/yapilacaklar` DEĞİŞMEDİ ve bu tesadüf değil: o ekranın üç çağrısı
+artık `kind=0`'ı AÇIKÇA gönderiyor. Varsayılana yaslanan ekran,
+varsayılan değişince habersiz değişir.
+
+Sonda: varsayılan daraltma satırı silindi → `Varsayilan_YalnizIsEmri`
+KIRMIZI, diğer ikisi yeşil.
+
+---
+
 ## YEDEK/1 — "YEDEK ALINDI" SATIRI NEYİ KAPSIYOR (2026-09-04)
 
 **SORU:** veritabanı şu an silinse onu ne geri getirir? Sekiz kez

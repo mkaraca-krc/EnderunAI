@@ -38,6 +38,7 @@ public sealed class TaskNotificationTests(DatabaseFixture fixture)
             ProjectId = proje.Id,
             TaskNumber = $"TEST-BLD-{suffix}",
             Title = "Bildirim testi görevi",
+            Kind = WorkTaskKind.IsEmri,
             Status = durum,
             AssignedToUserId = atanan,
             AssignedByUserId = gonderen,
@@ -442,6 +443,7 @@ public sealed class BildirimHatasiDayaniklilikTests(DatabaseFixture fixture)
             ProjectId = proje.Id,
             TaskNumber = $"TEST-DAY-{suffix}",
             Title = "Dayanıklılık testi",
+            Kind = WorkTaskKind.IsEmri,
             Status = WorkTaskStatus.Open,
             AssignedToUserId = Guid.NewGuid()
         };

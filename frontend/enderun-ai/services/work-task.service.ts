@@ -352,6 +352,19 @@ export type WorkTaskFilters = {
   assignedToUserId?: string;
   status?: number;
   priority?: number;
+  /**
+   * TÜR SÜZGECİ — GÖNDERİLMEZSE SUNUCU "YALNIZ İŞ EMRİ" UYGULAR.
+   *
+   * `undefined` ile `0` BURADA AYNI ŞEY DEĞİL:
+   *   undefined -> alan hiç gönderilmez -> sunucu varsayılanı (İş Emri)
+   *   0         -> "tüm türler" (sunucu tarafında sentinel; gerekçesi
+   *                `WorkTasksController.GetAll` yorumunda)
+   *   1 / 2     -> yalnız o tür
+   *
+   * `/yapilacaklar` bu yüzden açıkça `kind: 0` gönderiyor: o ekranın
+   * iki bölümü hatırlatmaları da göstermeye DEVAM etmeli.
+   */
+  kind?: number;
   overdueOnly?: boolean;
 };
 
@@ -379,6 +392,12 @@ function buildQuery(filters?: WorkTaskFilters) {
 
   if (filters?.priority !== undefined) {
     params.set("priority", String(filters.priority));
+  }
+
+  // `0` ANLAMLI BİR DEĞER: `!filters.kind` yazılsaydı "tüm türler"
+  // sessizce düşer ve liste varsayılana (yalnız iş emri) dönerdi.
+  if (filters?.kind !== undefined) {
+    params.set("kind", String(filters.kind));
   }
 
   if (filters?.overdueOnly !== undefined) {

@@ -32,6 +32,7 @@ public sealed class CollaborationAuthorNameTests(DatabaseFixture fixture)
             ProjectId = proje.Id,
             TaskNumber = $"TEST-YRM-{suffix}",
             Title = "Yorum adı testi görevi",
+            Kind = WorkTaskKind.IsEmri,
             Status = WorkTaskStatus.Open
         };
 

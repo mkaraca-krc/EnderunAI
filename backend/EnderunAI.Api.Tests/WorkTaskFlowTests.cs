@@ -40,6 +40,7 @@ public sealed class WorkTaskFlowTests(DatabaseFixture fixture)
             ProjectId = proje.Id,
             TaskNumber = $"TEST-GRV-{suffix}",
             Title = "Akış testi görevi",
+            Kind = WorkTaskKind.IsEmri,
             Status = WorkTaskStatus.Completed,
             AssignedToUserId = atanan,
             AssignedByUserId = gonderen,
@@ -311,6 +312,7 @@ public sealed class WorkTaskFlowTests(DatabaseFixture fixture)
                 ProjectId = proje.Id,
                 TaskNumber = $"TEST-SYF-{suffix}-{i}",
                 Title = $"Sayfa testi {i}",
+                Kind = WorkTaskKind.IsEmri,
                 Status = WorkTaskStatus.Open,
                 CreatedAtUtc = DateTime.UtcNow.AddMinutes(-i)
             });

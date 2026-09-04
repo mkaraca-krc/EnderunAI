@@ -81,6 +81,7 @@ public sealed class CollaborationAuthorizationTests(DatabaseFixture fixture)
                     ProjectId = proje.Id,
                     TaskNumber = $"TEST-YTK-{suffix}",
                     Title = "Yetki testi görevi",
+                    Kind = WorkTaskKind.IsEmri,
                     Status = WorkTaskStatus.Open
                 };
                 db.WorkTasks.Add(x);

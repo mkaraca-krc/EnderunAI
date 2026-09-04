@@ -110,5 +110,14 @@
 #                       belirsiz muafiyet bulunur + tekil pozitif kontrol)
 #   UcKapisiCanliYuzeyTests  1  (canlı yönlendirme tablosu boş değil —
 #                                taban 800; boş yüzey her iddiayı doğrular)
-statik: 2925
+# CHECK + TUR-1.3 (2026-09-04): 2925 → 2930, gevşeklik 5.
+#   GorevTuruDepoKapisiTests     2  (depolama katmanı: sıfır tür ham SQL
+#                                    ile de yazılamaz — pozitif kontrol
+#                                    aynı testin içinde; Kind sütununun
+#                                    varsayılanı yok)
+#   GorevKutuguTurSuzgeciTests   3  (kütük varsayılanı yalnız iş emri;
+#                                    kind=2 yalnız hatırlatma; kind=0
+#                                    ikisi de — POZİTİF KONTROL, kayıtlar
+#                                    süzüldü, kaybolmadı)
+statik: 2930
 dinamik: 24

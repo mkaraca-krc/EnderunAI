@@ -39,6 +39,7 @@ public sealed class WorkTasksController(
         [FromQuery] Guid? assignedToUserId,
         [FromQuery] int? status,
         [FromQuery] int? priority,
+        [FromQuery] int? kind,
         [FromQuery] bool? overdueOnly,
         [FromQuery] int? pageSize,
         [FromQuery] DateTime? cursorCreatedAtUtc,
@@ -67,6 +68,33 @@ public sealed class WorkTasksController(
             query = query.Where(x => (int)x.Status == status.Value);
         if (priority.HasValue)
             query = query.Where(x => (int)x.Priority == priority.Value);
+
+        /*
+         * TÜR SÜZGECİ — VARSAYILAN "HEPSİ" DEĞİL, "İŞ EMRİ".
+         *
+         * Görev kütüğü bir İŞ kaydıdır. Hızır hatırlatmaları kişinin
+         * kendine koyduğu notlardır ve başkasına iş yüklemezler;
+         * ikisi aynı listede durunca kütük, iş takibi için
+         * okunamaz hâle geliyordu.
+         *
+         * VARSAYILAN DARDIR, BİLEREK: süzgeç GÖNDERİLMEDİĞİNDE liste
+         * yalnız iş emri gösterir. Gizleme değil daraltma — hatırlatmalar
+         * `kind=2` ile, hepsi `kind=0` ile görülebiliyor ve
+         * `/yapilacaklar` iki bölümünü aynen koruyor (o ekran `kind=0`
+         * gönderiyor).
+         *
+         * `kind = 0` NEDEN "HEPSİ" DEMEK: `Belirsiz = 0` artık
+         * veritabanına YAZILAMAZ (`CK_WorkTasks_Kind_Belirsiz_Degil`,
+         * göç 20260904202822). Yani sıfır hiçbir satırla eşleşemez;
+         * gerçek bir süzgeç değeri olma ihtimali kalıcı olarak
+         * kapandığı için "süzgeç yok" anlamını taşıyabiliyor. Bu
+         * anlam, o kısıt kalktığı gün geçersizleşir — kısıt bu
+         * yorumun DAYANAĞIDIR, süsü değil.
+         */
+        if (kind is null)
+            query = query.Where(x => x.Kind == WorkTaskKind.IsEmri);
+        else if (kind.Value != 0)
+            query = query.Where(x => (int)x.Kind == kind.Value);
 
         var now = DateTime.UtcNow;
         if (overdueOnly == true)
