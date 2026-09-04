@@ -2753,6 +2753,46 @@ Desene kabuk savunması eklendi (`hata`/`fail` çağrısı, sıfırdan farklı
 
 ---
 
+## GÖÇ/PROVA — GÖÇ ÖNDE, KOD ARKADA: PENCERE (2026-09-04)
+
+**Göç uygulandıktan sonra dağıtım tamamlanmazsa, eski kodun yeni şemaya
+yazdığı bir pencere açılır. Bu pencerede yazılan kayıtlar ÖLÇÜLMELİ.**
+
+**PENCERE BİR KAZA DEĞİL, DÜZENEĞİN ZORUNLU SONUCU.** `safe-deploy.sh`'ın
+göç kapısı (satır 458–526) uygulanmamış göç varken yayını REDDEDİYOR ve
+`goc-uygula.sh`'ı ayrı çalıştırmayı şart koşuyor. Yani şema değişikliği
+olan her pakette göç, koddan ÖNCE canlıya gider — sıra bir tercih değil,
+kapının dayattığı şey. Pencerenin genişliği `goc-uygula.sh`'ın bitişi ile
+servis yeniden başlatması arasındaki süredir: **2026-09-04 koşusunda
+2594s (~43 dakika)**. "Kısa pencere" varsayımı ölçülmeden kullanılamaz.
+
+**ÖLÇMENİN TUZAĞI — GERİ DOLDURMA KANITI SİLER.** Göç yeni sütunu
+varsayılanla açıp mevcut satırları geri dolduruyorsa
+(`update ... set "Kind" = 1 where "Kind" = 0`), pencerede yazılmış bir
+satır da o geri doldurmaya YAKALANIR. Sonradan `count(*) where Kind = 0`
+sorgusu SIFIR döner ve pencere boş görünür — oysa satır vardı, adı
+değişti. **Sayı sorgusu bu soruyu cevaplayamaz.**
+
+Çalışan ölçüm — işlem kimliği karşılaştırması:
+
+    select "MigrationId", xmin::text::bigint from "__EFMigrationsHistory";
+    select "TaskNumber", "Kind", xmin::text::bigint from "WorkTasks";
+
+Göç satırının `xmin`'i, göçün işlemidir. Bir veri satırının `xmin`'i
+göçünkine EŞİTSE o satıra geri doldurma dokunmuştur (yani göçten önce
+vardı ya da penceredeydi); BÜYÜKSE satır göçten sonra kodun yazdığı
+satırdır. `track_commit_timestamp` bu sunucuda `off`, o yüzden zaman
+değil SIRA okunuyor — soruyu cevaplamaya yetiyor.
+
+**İŞEMRİ/2 ÖLÇÜMÜ (2026-09-04):** göç `xmin` 6469781; iki eski satır
+tam o `xmin`'i taşıyor (geri doldurma onlara dokundu, göçün kendi
+belgesiyle uyumlu), üçüncü satır `xmin` 6501410 > 6469781 ve
+`UpdatedAtUtc` boş — yani göçten SONRA kodun açıkça yazdığı satır.
+**Pencerede yazılmış kayıt yok.** Bu, sayı sorgusuyla değil, bu
+karşılaştırmayla gösterildi.
+
+---
+
 ## GÖÇ/PROVA — SEKİZ SONDA VE ÖLÇÜMÜN KENDİSİ (2026-09-02)
 
 Sekiz sonda koşuldu; **hepsinin beklentisi koşudan önce ilan edildi**,
