@@ -1,3 +1,4 @@
+using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.Expenses;
 
 namespace EnderunAI.Api.Services.Common;
@@ -27,7 +28,8 @@ public static class MasrafMerkeziKurali
     /// Merkez seçiminin kendi içinde tutarlı olduğunu doğrular.
     ///
     /// ÜÇ İDDİA:
-    ///   1. Kayda bağlı olmayan iş emri bir merkez taşımalı.
+    ///   1. İŞ EMRİ bir merkez taşımalı. Hatırlatma taşımak zorunda
+    ///      değil — bkz. <paramref name="kind"/>.
     ///   2. <c>CenterType</c> hangi alanın dolu olduğuyla ÇELİŞMEMELİ —
     ///      tür seçimden türer, ayrıca elle girilmez.
     ///   3. Şantiye seçildiyse projesi de gelmeli ve şantiye o projeye
@@ -35,7 +37,28 @@ public static class MasrafMerkeziKurali
     ///      <paramref name="santiyeninProjesi"/> ile dışarıdan verilir.)
     /// </summary>
     /// <returns>Hata mesajı; kural sağlanıyorsa <c>null</c>.</returns>
+    /// <param name="kind">
+    /// KAYDIN TÜRÜ — MERKEZ ZORUNLULUĞUNU BU BELİRLER.
+    ///
+    /// Masraf merkezi, muhasebenin masrafı YAZACAĞI yeri söyler.
+    /// Kişisel bir hatırlatmanın masrafı yoktur; ondan merkez
+    /// istemek, var olmayan bir soruya cevap zorlamaktır.
+    ///
+    /// ── BU KURAL BİR KEZ YANLIŞ KONDU, ÖLÇÜM DÜZELTTİ ──
+    ///
+    /// Önce "merkez çağıranın şubesinden türesin, şubesi yoksa Hızır
+    /// hatırlatma açamasın" denmişti. ÖLÇÜLDÜ (2026-09-04, canlı):
+    /// aktif şube 1, `user_data_scopes` içinde `BranchId` dolu satır
+    /// SIFIR, yani şube kapsamı olan kullanıcı 0/13. O kural
+    /// özelliği 13 kullanıcının 13'ünde de öldürürdü.
+    ///
+    /// Karar değişti (Mehmet Karacabey, 2026-09-04): zorunluluk
+    /// VERİ DURUMUNA değil kaydın TÜRÜNE bağlanır. Veri durumuna
+    /// bağlanan bir kural, veri değiştiği gün sessizce başka bir
+    /// kural olur.
+    /// </param>
     public static string? Dogrula(
+        WorkTaskKind kind,
         Guid? projectId,
         Guid? branchId,
         Guid? projectSiteId,
@@ -91,6 +114,20 @@ public static class MasrafMerkeziKurali
 
         if (secilenler == 0)
         {
+            /*
+             * HATIRLATMADA MERKEZ ARANMAZ — VE BU, KURALIN GERİ
+             * KALANINI KAPSAM DIŞI BIRAKMAZ.
+             *
+             * Yalnız ZORUNLULUK türe bağlı. Hatırlatma bir merkez
+             * GÖNDERİRSE aşağıdaki çelişki ve aidiyet denetimleri
+             * ona da uygulanır: "zorunlu değil" ile "denetlenmez"
+             * aynı şey olsaydı, tür alanı kuralın tamamını atlatan
+             * yeni bir kaçış olurdu — kapattığımız `sourceModule`
+             * kaçışının aynısı.
+             */
+            if (kind == WorkTaskKind.Hatirlatma)
+                return null;
+
             return "Masraf merkezi zorunludur: proje, şube ya da şantiye seçin.";
         }
 

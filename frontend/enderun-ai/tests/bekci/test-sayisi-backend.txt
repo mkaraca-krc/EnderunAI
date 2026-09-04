@@ -119,5 +119,18 @@
 #                                    kind=2 yalnız hatırlatma; kind=0
 #                                    ikisi de — POZİTİF KONTROL, kayıtlar
 #                                    süzüldü, kaybolmadı)
-statik: 2930
+# AK-1 / KURAL-KATMAN (2026-09-04): 2930 → 2937, gevşeklik 7.
+#   MasrafMerkeziKuraliTests    +3  (merkezsiz iş emri reddedilir;
+#                                    merkezsiz hatırlatma kabul edilir;
+#                                    hatırlatma merkez GÖNDERİRSE çelişki
+#                                    yine reddedilir — "zorunlu değil"
+#                                    ile "denetlenmez" ayrı şey)
+#   IsEmriTuruKapisiTests       +2  (aynı iki iddia UÇTAN UCA: kural
+#                                    doğru mu ayrı, çağrılıyor mu ayrı)
+#   HizirMerkezKuraliTests       2  (üçüncü yazma yolu ortak kuralı
+#                                    çağırıyor + kaynak okunuyor pozitif
+#                                    kontrolü; çağrı bugün davranışsal
+#                                    olarak etkisiz olduğu için kaynak
+#                                    testi — gerekçesi dosyada yazılı)
+statik: 2937
 dinamik: 24

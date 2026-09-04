@@ -2753,9 +2753,149 @@ Desene kabuk savunması eklendi (`hata`/`fail` çağrısı, sıfırdan farklı
 
 ---
 
+## KUTU/1 — CC'NİN BAĞLANTIDAN BAĞIMSIZ HÂLE GELMESİ (2026-09-04)
+
+### PARÇA 1 — HAYATTA KALMA
+
+**ÖLÇÜLDÜ, VARSAYILMADI.** CC, VS Code'un entegre terminalinde
+koşuyordu:
+
+```
+claude(814505) -> bash -> ptyHost -> code-server --enable-remote-auto-shutdown
+```
+
+Bağlantı kesilince code-server kapanır, pty ölür, CC SIGHUP alır.
+"Zaten devam eder" YANLIŞTI.
+
+**KURULAN:** `cc-oturum.service` → tmux oturumu `cc`.
+
+| Süreç | PPID | cgroup |
+|---|---|---|
+| tmux server | **1** | `/system.slice/cc-oturum.service` |
+| CC (VS Code'daki) | 814280 | `/user.slice/user-0.slice/session-1689.scope` |
+| code-server | 1 | `/user.slice/user-0.slice/session-1689.scope` |
+
+**NEDEN DÜZ `tmux` YETMEDİ:** düz tmux da PID 1'in çocuğu oluyor ama
+DOĞDUĞU cgroup'ta kalıyor — bugün VS Code'un oturumu.
+`KillUserProcesses=no` olduğu için bugün hayatta kalırdı; yani
+hayatta kalma bir AYARIN bugünkü değerine bağlı olurdu. Kendi birimi
+olunca **dayanak ayar değil yapı** oluyor.
+
+**DEVİR:** `cc-devir.timer` dakikada bir bakar; eski CC sürecinin
+öldüğü ÖLÇÜLDÜĞÜNDE tmux'ta `claude --resume` ile konuşmayı sürdürür.
+Fail-closed: süreç yaşıyorsa, oturum yoksa, panel doluysa ya da
+konuşma dosyası yoksa HİÇBİR ŞEY YAPMAZ.
+
+| Sonda | Ölçülen |
+|---|---|
+| D2 — olmayan konuşma kimliği | çıkış 1, günlükte hata, panel `bash` kaldı |
+| D1 — ölü PID + gerçek konuşma | panel `bash` → `claude`, günlükte devir, tetik dosyası kaldırıldı |
+
+**D1 GERÇEK BİR KUSUR BULDU:** `claude --resume` büyük konuşmalarda
+tuş bekleyen bir soru soruyor (*"Resume from summary / Resume full
+session"*). Devir orada TAKILI KALIRDI. Düzeltildi: ekran okunuyor,
+soru görünüyorsa onaylanıyor, görünmüyorsa hiçbir tuş
+gönderilmiyor. **Dürüst kayıt:** ikinci koşuda soru çıkmadığı için
+o dal canlıda denenmedi; koruduğu arıza ise bir önceki koşuda
+gözle görüldü.
+
+### PARÇA 2 — RAPOR ADRESİ
+
+nginx'te **dizin değil TEK DOSYA tam eşleşmesi** (`location =`).
+Dizin konumu hiç yok, dolayısıyla dizin listelemesi sorusu doğmuyor.
+Gerçek genel IP üzerinden HTTP 200 ölçüldü; yanlış yol raporu
+vermiyor. `enderun-rapor.timer` 2 dakikada bir tazeliyor.
+
+Rapor iki kaynaktan birleşiyor: **ölçülen canlı olgular** (git,
+dağıtım, servisler, sağlık, CC'nin nerede koştuğu) ve CC'nin yazdığı
+anlatı. Gerekçe: elle yazılan bir "sistem sağlıklı" satırı sistem
+çökse bile orada durur; ölçülen satır duramaz.
+
+**YOL BU DOSYAYA YAZILMAZ.** Tahmin edilemez yol bir yetki
+belgesidir; depoya girerse yetki olmaktan çıkar.
+
+### PARÇA 3 — EMİR KANALI: KURULMADI, ERTELENDİ
+
+**ÖLÇÜLEN GÜVENLİK GERÇEĞİ — PAKETİN TASARIMINI BU BELİRLEDİ:**
+
+> `tmux send-keys`, panelde **bash** varsa gönderilen metni **root
+> kabuk komutu olarak ÇALIŞTIRIR.** Ölçüldü: panele yazılan bir satır
+> gerçekten dosya oluşturdu.
+
+Yani "metin veridir, komut değildir" güvencesi tmux'tan gelmiyor;
+**panelde CC'nin TUI'sinin koşuyor olmasından** geliyor. CC çıkarsa
+aynı düzenek bir kök kabuğa dönüşür. Ayrıca kanalın yönlendirdiği
+şey komut çalıştırabilen bir ajandır: güvence "hiçbir şey olamaz"
+değil, "kabuk değil"dir.
+
+**KARAR (Mehmet Karacabey, 2026-09-04):** güvenlik açısından hassas
+bir kanal, üç saatlik baskı altında gece yarısında kurulmaz.
+GM döndüğünde kurulacak. **TASARIM NOTU — kurulurken şunlarla:**
+
+1. Adres **özel depo** üzerinden (sunucunun mevcut SSH anahtarı
+   yeterli; yeni sır girmiyor, adres tahmin edilemez).
+2. Panelde koşan sürecin CC'nin arayüzü olduğu **her gönderimden
+   önce** doğrulanır.
+3. Arayüz yoksa **gönderilmez** ve uyarı üretilir (kapalı tarafa düş).
+4. İzleyici **root olmayan** bir kullanıcıyla koşar.
+5. İşaretli emir (`ENDERUN-EMIR-V1`), sıra numarası, ayrı günlük,
+   "okuyamadım" ile "yeni emir yok"un ayrı tutulması.
+6. Metin `send-keys` ile değil `load-buffer` + `paste-buffer -p` ile
+   gönderilir: kabuk alıntılaması hiç devreye girmez ve çok satırlı
+   metin erken gönderilmez.
+
+### FAZ 0 ÖLÇÜMÜ (adres seçimi için)
+
+| Ölçüm | Sonuç |
+|---|---|
+| `claude.ai` (curl, tarayıcı kimliğiyle de) | **HTTP 403** — bu yöntemle okunamaz |
+| `anthropic.com` | 200 |
+| `raw.githubusercontent.com` | 200 |
+| Proxy | yok |
+| Giden trafik | `ufw` yalnız gelen için; `OUTPUT policy ACCEPT` |
+| Sunucudan GitHub SSH | çalışıyor (`git ls-remote`, çıkış 0) |
+
+---
+
 ## AÇIK KARARLAR — ÖZERK TURLARDA BİRİKENLER (2026-09-04)
 
-### AK-1 — HIZIR MERKEZİ NEREDEN TÜRETSİN (TUR 1.2, TIKANDI)
+### AK-1 — ÇÖZÜLDÜ (2026-09-04): MERKEZ ZORUNLULUĞU TÜRE BAĞLI
+
+**KARAR DEĞİŞTİ, GEREKÇESİYLE.** İlk kural "merkez çağıranın
+şubesinden türesin, şubesi yoksa Hızır hatırlatma açamasın"dı.
+Ölçüm onu çürüttü (aşağıdaki tablo). Mehmet Karacabey, 2026-09-04:
+*"Ölçmeden karar vermiştim."*
+
+> **MASRAF MERKEZİ ZORUNLULUĞU YALNIZ `Kind = İşEmri` İÇİN GEÇERLİDİR.
+> `Kind = Hatirlatma` kayıtlarında merkez aranmaz.**
+
+Gerekçe: merkez, muhasebenin masrafı YAZACAĞI yeri söyler; kişisel
+bir hatırlatmanın masrafı yoktur. Kural **veri durumuna değil kaydın
+TÜRÜNE** bağlandı — veri durumuna bağlanan bir kural, veri değiştiği
+gün sessizce başka bir kural olur.
+
+**"ZORUNLU DEĞİL" İLE "DENETLENMEZ" AYRI ŞEY.** Hatırlatma bir merkez
+GÖNDERİRSE çelişki ve aidiyet denetimleri ona da uygulanır. Aksi
+hâlde tür alanı, kuralın tamamını atlatan yeni bir kaçış olurdu —
+kapatılan `sourceModule` kaçışının birebir aynısı. Ayrı test
+koruyor.
+
+**ÜÇÜNCÜ YAZMA YOLU BAĞLANDI.** `HizirActionTools` artık
+`MasrafMerkeziKurali.Dogrula`'yı çağırıyor. Çağrı bugün DAVRANIŞSAL
+OLARAK ETKİSİZ (hatırlatmada kural zaten geçiyor) ve bu yüzden onu
+davranışla sınayan bir test YAZILAMAZ; yazdığımı iddia etseydim
+başka bir şeyi ölçen bir test yazmış olurdum. Yerine kaynak okuyan
+yetim-muhafız testi kondu, gerekçesi dosyasında yazılı.
+**"Bugün etkisiz" ile "gereksiz" aynı şey değildir.**
+
+| Sonda | Ölçülen |
+|---|---|
+| E — kuraldan tür muafiyeti çıkarıldı | tam olarak 2 hatırlatma testi KIRMIZI (biri birim, biri uçtan uca), 26 test yeşil |
+| F — Hızır'daki ÇAĞRI silindi | `HatirlatmaYolu_MerkezKuraliniCagirir` KIRMIZI |
+
+**ÖLÇÜMÜN KENDİSİ (kayda kalıyor, kararı bu çürüttü):**
+
+### AK-1 — ESKİ ÖLÇÜM (kararın dayanağı)
 
 **İSTENEN:** "Hızır'ın açtığı kayıtta merkez, çağıran kullanıcının
 şubesinden türer; şube yoksa Hızır hatırlatma açamaz ve bunu açıkça

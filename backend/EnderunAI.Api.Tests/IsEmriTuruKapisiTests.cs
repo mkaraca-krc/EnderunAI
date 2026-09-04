@@ -487,4 +487,67 @@ public sealed class IsEmriTuruKapisiTests(DatabaseFixture fixture)
             $"{personel.FirstName} {personel.LastName}",
             sonuc.RootElement.GetProperty("assignedToDisplayName").GetString());
     }
+
+    // ───────── MERKEZ ZORUNLULUĞU TÜRE BAĞLI (AK-1) ─────────
+
+    /// <summary>
+    /// Merkezsiz gövde: şirket ve başlık var, proje/şube/şantiye YOK.
+    /// </summary>
+    private static Dictionary<string, object?> MerkezsizGovde(
+        Guid sirket, string baslik, int tur) =>
+        new()
+        {
+            ["companyId"] = sirket,
+            ["title"] = baslik,
+            ["priority"] = (int)WorkTaskPriority.Normal,
+            ["kind"] = tur
+        };
+
+    /// <summary>
+    /// İDDİA: merkezsiz İŞ EMRİ uçtan reddedilir.
+    ///
+    /// `MasrafMerkeziKuraliTests` kuralın doğru olduğunu gösteriyor;
+    /// bu test kuralın gerçekten ÇAĞRILDIĞINI. İkisi ayrı iddia.
+    /// </summary>
+    [Fact]
+    public async Task MerkezsizIsEmri_UctanREDDEDILIR()
+    {
+        var proje = await ProjeAsync(fixture, "MRK-IE");
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var yanit = await client.PostAsJsonAsync(
+            "/api/tasks",
+            MerkezsizGovde(proje.CompanyId, "Merkezsiz iş emri",
+                           (int)WorkTaskKind.IsEmri));
+
+        Assert.Equal(HttpStatusCode.BadRequest, yanit.StatusCode);
+
+        var govde = await yanit.Content.ReadAsStringAsync();
+        Assert.Contains("Masraf merkezi zorunludur", govde);
+    }
+
+    /// <summary>
+    /// İDDİA: merkezsiz HATIRLATMA uçtan KABUL edilir.
+    ///
+    /// BU TEST OLMADAN ÜSTTEKİ YALAN SÖYLEYEBİLİRDİ: merkez her tür
+    /// için zorunlu olsaydı da o test yeşil kalırdı. İkisi birlikte
+    /// "tür okunuyor mu" sorusunu cevaplıyor.
+    ///
+    /// Ayrıca bu, AK-1'in düzeltilmiş kararının canlıdaki karşılığı:
+    /// şube kapsamı olan kullanıcı 0/13 olduğu için merkez
+    /// zorunluluğu hatırlatmaya uygulansaydı özellik herkeste ölürdü.
+    /// </summary>
+    [Fact]
+    public async Task MerkezsizHatirlatma_UctanKABUL_EDILIR()
+    {
+        var proje = await ProjeAsync(fixture, "MRK-HT");
+        var client = await AuthHelper.CreateAuthorizedClientAsync(fixture.Factory);
+
+        var yanit = await client.PostAsJsonAsync(
+            "/api/tasks",
+            MerkezsizGovde(proje.CompanyId, "Merkezsiz hatırlatma",
+                           (int)WorkTaskKind.Hatirlatma));
+
+        Assert.Equal(HttpStatusCode.OK, yanit.StatusCode);
+    }
 }

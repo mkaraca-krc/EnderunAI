@@ -275,11 +275,16 @@ public sealed class WorkTasksController(
          * KARŞILIĞI OLMAYAN İŞ demektir: ay sonunda "bu emek nereye
          * gitti" sorusunun cevabı olmaz.
          *
-         * Kayda bağlı görevde (SourceModule dolu) merkez kaydın
-         * kendisinden türetilebiliyor — hakediş projeye, mal kabul
-         * depoya bağlı — o yüzden orada zorunlu değil.
+         * ZORUNLULUK TÜRE BAĞLI (2026-09-04): merkez yalnız İŞ EMRİ
+         * için zorunlu. Hatırlatmanın masrafı yoktur.
+         *
+         * Buradaki eski yorum "kayda bağlı görevde (SourceModule dolu)
+         * merkez zorunlu değil" diyordu; O KAÇIŞ KAPANDI
+         * (KURAL-KATMAN/1) ve yorum artık yanlıştı. Yanlış yorum,
+         * yorumsuz koddan kötüdür: okuyan onu kural sanır.
          */
         var merkezHatasi = await MerkezDogrulaAsync(
+            request.Kind,
             request.ProjectId,
             request.BranchId,
             request.ProjectSiteId,
@@ -441,6 +446,7 @@ public sealed class WorkTasksController(
          * metoda bağlandı — ikinci bir kapı doğmasın.
          */
         var merkezHatasi = await MerkezDogrulaAsync(
+            request.Kind,
             request.ProjectId,
             request.BranchId,
             request.ProjectSiteId,
@@ -1118,6 +1124,7 @@ public sealed class WorkTasksController(
     /// sebep için bir kez bile kullanılmamıştı.
     /// </summary>
     private async Task<string?> MerkezDogrulaAsync(
+        WorkTaskKind kind,
         Guid? projectId,
         Guid? branchId,
         Guid? projectSiteId,
@@ -1136,7 +1143,7 @@ public sealed class WorkTasksController(
         }
 
         return MasrafMerkeziKurali.Dogrula(
-            projectId, branchId, projectSiteId,
+            kind, projectId, branchId, projectSiteId,
             centerType, santiyeninProjesi);
     }
 

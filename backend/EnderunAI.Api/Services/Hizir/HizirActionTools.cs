@@ -4,6 +4,7 @@ using System.Text.Json;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
 using EnderunAI.Api.Security;
+using EnderunAI.Api.Services.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace EnderunAI.Api.Services.Hizir;
@@ -175,6 +176,33 @@ public sealed class HizirActionTools(
          * gerekmiyor. MHS, VCK, TKL sıralarının hepsi aynı yerden
          * geçiyor.
          */
+        /*
+         * ÜÇÜNCÜ YAZMA YOLU ORTAK KURALA BAĞLANDI (KURAL-KATMAN, 2026-09-04).
+         *
+         * Bu yol denetleyiciyi HİÇ görmüyor. Merkez kuralı uzun süre
+         * yalnız POST gövdesinde yaşadı ve Hızır onu bir kez bile
+         * çağırmadı — ortada iki kapı değil, bir kapı ve bir açık
+         * duvar vardı.
+         *
+         * BUGÜN BU ÇAĞRI GEÇİYOR VE GEÇMESİ DOĞRU: hatırlatmada
+         * merkez aranmıyor. Ama çağrının VARLIĞI, kuralın yarın
+         * değişmesi hâlinde bu yolun da o değişikliği görmesini
+         * sağlıyor. `HizirMerkezKuraliTests` çağrıyı koruyor:
+         * silinirse test kırmızı verir.
+         *
+         * "Bugün etkisiz" ile "gereksiz" aynı şey değildir.
+         */
+        var merkezHatasi = MasrafMerkeziKurali.Dogrula(
+            WorkTaskKind.Hatirlatma,
+            projectId: null,
+            branchId: null,
+            projectSiteId: null,
+            centerType: null,
+            santiyeninProjesi: null);
+
+        if (merkezHatasi is not null)
+            return new HizirToolOutcome($"KAYIT YOK: {merkezHatasi}", IsError: true);
+
         var taskNumber = await documentNumbers.GenerateAsync(
             companyId, "WORK_TASK", "GRV", cancellationToken);
 

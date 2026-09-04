@@ -1,3 +1,4 @@
+using EnderunAI.Api.Models;
 using EnderunAI.Api.Models.Expenses;
 using EnderunAI.Api.Services.Common;
 using Xunit;
@@ -28,7 +29,7 @@ public sealed class MasrafMerkeziKuraliTests
     [Fact]
     public void UcuDeBossa_Reddedilir()
     {
-        var hata = MasrafMerkeziKurali.Dogrula(
+        var hata = MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             null, null, null, null, null);
 
         Assert.NotNull(hata);
@@ -42,13 +43,13 @@ public sealed class MasrafMerkeziKuraliTests
          * POZİTİF KONTROL: yukarıdaki test, kural HER İSTEĞİ reddetse de
          * yeşil kalırdı. Bu test o ihtimali kapatıyor.
          */
-        Assert.Null(MasrafMerkeziKurali.Dogrula(
+        Assert.Null(MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             Proje, null, null, null, null));
 
-        Assert.Null(MasrafMerkeziKurali.Dogrula(
+        Assert.Null(MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             null, Sube, null, null, null));
 
-        Assert.Null(MasrafMerkeziKurali.Dogrula(
+        Assert.Null(MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             Proje, null, Santiye, null, Proje));
     }
 
@@ -59,7 +60,7 @@ public sealed class MasrafMerkeziKuraliTests
     [InlineData(ExpenseCenterType.ProjectSite)]
     public void ProjeSecilipBaskaTurYazilirsa_Reddedilir(ExpenseCenterType yanlisTur)
     {
-        var hata = MasrafMerkeziKurali.Dogrula(
+        var hata = MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             Proje, null, null, yanlisTur, null);
 
         Assert.NotNull(hata);
@@ -69,10 +70,10 @@ public sealed class MasrafMerkeziKuraliTests
     [Fact]
     public void DogruTurYazilirsa_Kabul()
     {
-        Assert.Null(MasrafMerkeziKurali.Dogrula(
+        Assert.Null(MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             Proje, null, null, ExpenseCenterType.Project, null));
 
-        Assert.Null(MasrafMerkeziKurali.Dogrula(
+        Assert.Null(MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             null, Sube, null, ExpenseCenterType.Branch, null));
     }
 
@@ -101,7 +102,7 @@ public sealed class MasrafMerkeziKuraliTests
          * A projesinin şantiyesi B projesiyle gönderiliyor. İki kaynak
          * çelişirse hangisinin doğru olduğu bilinemez — reddedilir.
          */
-        var hata = MasrafMerkeziKurali.Dogrula(
+        var hata = MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             BaskaProje, null, Santiye, null, Proje);
 
         Assert.NotNull(hata);
@@ -111,7 +112,7 @@ public sealed class MasrafMerkeziKuraliTests
     [Fact]
     public void SantiyeVarProjeYok_Reddedilir()
     {
-        var hata = MasrafMerkeziKurali.Dogrula(
+        var hata = MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             null, null, Santiye, null, Proje);
 
         Assert.NotNull(hata);
@@ -121,7 +122,7 @@ public sealed class MasrafMerkeziKuraliTests
     [Fact]
     public void SantiyeBulunamazsa_Reddedilir()
     {
-        var hata = MasrafMerkeziKurali.Dogrula(
+        var hata = MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             Proje, null, Santiye, null, null);
 
         Assert.NotNull(hata);
@@ -133,7 +134,7 @@ public sealed class MasrafMerkeziKuraliTests
     [Fact]
     public void ProjeVeSubeBirlikte_Reddedilir()
     {
-        var hata = MasrafMerkeziKurali.Dogrula(
+        var hata = MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, 
             Proje, Sube, null, null, null);
 
         Assert.NotNull(hata);
@@ -166,6 +167,66 @@ public sealed class MasrafMerkeziKuraliTests
          */
         Assert.Equal(
             "Masraf merkezi zorunludur: proje, şube ya da şantiye seçin.",
-            MasrafMerkeziKurali.Dogrula(null, null, null, null, null));
+            MasrafMerkeziKurali.Dogrula(WorkTaskKind.IsEmri, null, null, null, null, null));
+    }
+
+    // ───────── ZORUNLULUK TÜRE BAĞLI (AK-1, 2026-09-04) ─────────
+
+    /// <summary>
+    /// İDDİA: merkezsiz İŞ EMRİ reddedilir.
+    ///
+    /// Bu, kuralın ilk günden beri taşıdığı iddia. Aşağıdaki
+    /// hatırlatma testiyle BİRLİKTE okunmalı: ikisi olmadan
+    /// "tür bakılıyor mu" sorusu cevapsız kalır. Tek başına bu test,
+    /// türün hiç okunmadığı bir kodda da yeşil olurdu.
+    /// </summary>
+    [Fact]
+    public void MerkezsizIsEmri_REDDEDILIR()
+    {
+        Assert.Equal(
+            "Masraf merkezi zorunludur: proje, şube ya da şantiye seçin.",
+            MasrafMerkeziKurali.Dogrula(
+                WorkTaskKind.IsEmri, null, null, null, null, null));
+    }
+
+    /// <summary>
+    /// İDDİA: merkezsiz HATIRLATMA kabul edilir.
+    ///
+    /// GEREKÇE KAYITTA: masraf merkezi, muhasebenin masrafı yazacağı
+    /// yeri söyler. Kişisel bir hatırlatmanın masrafı yoktur.
+    ///
+    /// BU KURAL BİR KEZ YANLIŞ KONDU. Önce "çağıranın şubesinden
+    /// türesin, şubesi yoksa açılamasın" denmişti; ölçüm gösterdi ki
+    /// şube kapsamı olan kullanıcı 0/13 ve o kural özelliği herkeste
+    /// öldürürdü. Zorunluluk veri durumuna değil TÜRE bağlandı.
+    /// </summary>
+    [Fact]
+    public void MerkezsizHatirlatma_KABUL_EDILIR()
+    {
+        Assert.Null(MasrafMerkeziKurali.Dogrula(
+            WorkTaskKind.Hatirlatma, null, null, null, null, null));
+    }
+
+    /// <summary>
+    /// İDDİA: "zorunlu değil" ile "denetlenmez" AYNI ŞEY DEĞİL.
+    ///
+    /// Hatırlatma bir merkez gönderirse çelişki denetimi ona da
+    /// uygulanır. Bu test olmasaydı tür alanı, kuralın tamamını
+    /// atlatan yeni bir kaçış olurdu — kapatılan `sourceModule`
+    /// kaçışının birebir aynısı.
+    /// </summary>
+    [Fact]
+    public void Hatirlatma_MerkezGONDERIRSE_CELISKI_YINE_REDDEDILIR()
+    {
+        var hata = MasrafMerkeziKurali.Dogrula(
+            WorkTaskKind.Hatirlatma,
+            projectId: Guid.NewGuid(),
+            branchId: Guid.NewGuid(),
+            projectSiteId: null,
+            centerType: null,
+            santiyeninProjesi: null);
+
+        Assert.NotNull(hata);
+        Assert.Contains("Tek bir masraf merkezi", hata);
     }
 }
