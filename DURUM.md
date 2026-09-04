@@ -2753,6 +2753,114 @@ Desene kabuk savunması eklendi (`hata`/`fail` çağrısı, sıfırdan farklı
 
 ---
 
+## YEDEK/1 — "YEDEK ALINDI" SATIRI NEYİ KAPSIYOR (2026-09-04)
+
+**SORU:** veritabanı şu an silinse onu ne geri getirir? Sekiz kez
+"yedek alındı" satırı okunup onay verildi; o satırın neyi kapsadığı
+ölçülmemişti.
+
+**BİRİNCİ BULGU — AYNI SÖZCÜK İKİ AYRI ŞEY.** `deploy/scripts/backup.sh`
+15 satır ve **veritabanına hiç dokunmuyor**: altı ön yüz dosyasını
+kopyalıyor (`middleware.ts`, login yolu, `erp-shell.tsx`, …). 216K'lık
+`release-foundation-rc1-*` klasörü budur. `rollback.sh` de yalnız onu
+geri alır. Veritabanı yedeği AYRI bir betiktir:
+`/usr/local/bin/enderun-backup.sh` (repo kopyası `scripts/enderun-backup.sh`,
+ikisi birebir aynı — `BackupScriptSyncTests` koruyor). safe-deploy her
+yayından önce İKİSİNİ de çağırıyor, ama günlükte ikisi de "yedek"
+diye geçiyor. **Onay verilen satır, hangisinin çalıştığını söylemiyordu.**
+
+### (a) Döküm alınıyor mu — EVET
+
+`pg_dump -F c` çıktısı **borudan** `gpg --symmetric --cipher-algo AES256`'a
+giriyor; düz dump diske HİÇ düşmüyor. `PIPESTATUS` iki ucu da denetliyor
+(gpg yarım pg_dump'tan da geçerli bir .gpg üretir). Ardından `dogrula`:
+tam çözme (gpg MDC) + ilk 5 bayt `PGDMP`. Düşerse dosya siliniyor ve
+betik `exit 1` — safe-deploy yayını keser.
+
+Üç dosya, `/var/backups/enderun` altında:
+`db_YYYYAAGG_SSDDss.dump.gpg`, `uploads_*.tar.gz.gpg`,
+`project-files_*.tar.gz.gpg`.
+
+Bugünkü en yeni: **`db_20260904_172703.dump.gpg`, 4.987.053 bayt (4,8M)**,
+17:27'de safe-deploy'un yedek adımında alındı. Ayrıca her gece 03:00'te
+`enderun-backup.timer` (son koşu 2026-09-04 03:00:43).
+
+### (b) Kaç yedek, ne kadar geriye
+
+613 veritabanı dökümü, 613 uploads, 590 proje dosyası; toplam **26G**.
+Dosya adına göre aralık **2026-08-02 → 2026-09-04 (34 gün)**; son
+günlerde günde 5–14 döküm (her deploy bir tane daha alıyor).
+
+**`RETENTION_DAYS=30` ama süzgeç `-mtime` kullanıyor, dosya adındaki
+tarihi değil.** 2026-08-25'te geçmiş yedekler toplu şifrelendiğinde
+hepsinin mtime'ı "o gün" oldu; bu yüzden adı 30 günden eski dosyalar
+hâlâ duruyor. Bugün zararsız (fazla saklıyor, eksik değil) ama saklama
+süresi ölçülmüş bir sayı değil — mtime'a bağlı bir yan etki.
+
+### (c) Nerede duruyor — AYNI SUNUCUDA, AYNI DİSKTE
+
+`/var/backups/enderun` ve `/var/lib/postgresql` **aynı aygıtta**
+(`/dev/vda1`, aygıt no 64769; 193G, 132G boş). Şifreleme anahtarı
+`/etc/enderunai/backup-key` de aynı diskte.
+
+**SUNUCUYU KAYBEDERSEK YEDEĞİ DE KAYBEDERİZ. Bugün sunucu dışı hiçbir
+kopya yok.** Bu bir eksiklik değil, kayıtlı bir karar:
+`scripts/enderun-yedek-uzak.py` yazılmış (S3 + Object Lock, yalnız
+`PutObject`/`ListBucket`, `DeleteObject` YOK), ama
+`/etc/enderunai/backup-remote.env` içinde `UZAK_YEDEK_ETKIN=hayir` ve
+KVKK yurt dışı aktarım değerlendirmesi bekliyor. Zamanlayıcı ya da cron
+kaydı da yok — günlükteki tek izler 2026-08-25 denemeleri
+("Uzak yedek KAPALI — hiçbir şey gönderilmedi").
+
+Bugünkü şifreleme, "diski çalan okuyamasın" korumasını **vermiyor**
+(anahtar aynı diskte); yalnız yanlışlıkla kopyalanan tek dosyayı
+koruyor. Bu daha önce de kayıtlıydı (BEKLEYEN KARARLAR 12), burada
+tekrar ediliyor çünkü soru "felakette ne kurtarır" diye soruldu.
+
+### (d) Geri yükleyen betik — CANLI İÇİN YOK
+
+`enderun-geri-yukleme-tatbikati.sh` var ama işi **doğrulama**: ayrı bir
+veritabanı kurar, yükler, karşılaştırır, sonunda düşürür. Canlıyı geri
+yükleyen bir betik YOK. Mekanik biliniyor ve tek satır
+(`gpg --decrypt … | pg_restore --dbname=…`, düz ara dosya gerekmiyor),
+ama felaket anının adımları — servisleri durdur, veritabanını düşür/kur,
+yükle, göç geçmişini denetle, servisleri kaldır, sağlık kontrolü —
+**yazılı değil.** Bu bir sonraki paketin konusu.
+
+### DOĞRULAMA — İKİ KONTROL, İKİSİ DE KOŞULDU
+
+Tanım: bir yedek, ancak BOŞ BİR VERİTABANINA yüklenip satır sayıları
+canlıyla karşılaştırıldığında doğrulanmış sayılır.
+
+| Kontrol | Sonuç |
+|---|---|
+| **Pozitif** — `db_20260904_172703.dump.gpg` | **240 tablo**, `personnel` 81/81 · `users` 13/13 · `companies` 1/1 · `projects` 4/4 · `cheques` 31/31 · çıkış **0** · 19 saniye |
+| **Negatif** — aynı dosyanın ortasından 4096 bayt rastgele veriyle bozulmuş kopyası (boyut değişmedi) | **`Geri yükleme BAŞARISIZ (gpg=2, pg_restore=1)`**, çıkış **1** — "doğrulandı" DEMEDİ |
+
+Negatif kontrol, adı sözlük sırasında en sona düşen sahte bir dosyayla
+yapıldı (tatbikat en yeniyi `sort | tail -1` ile seçiyor); koşu bitince
+dosya silindi, dizinde artık yok.
+
+**EN ÖNEMLİ BULGU — TATBİKAT BUGÜNE KADAR HİÇ KOŞMAMIŞTI.**
+`enderun-geri-yukleme-tatbikati.timer` 2026-08-25'ten beri kurulu ve
+**üç ayda bir** koşacak; sıradaki koşu **2026-10-01**. systemd günlüğü
+bu birim için BOŞ — birim bir kez bile tetiklenmemiş. Bugünkü koşu
+elle yapıldı ve tatbikatın ilk gerçek koşusudur.
+
+Bu, "hiç doğrulanmamıştı" demek DEĞİL: 2026-08-25'te elle bir prova
+yapılmış ve kayda geçmiş (o gün 236 tablo; bugün 240). Ama o günden
+bugüne 34 günlük yedeklerin hiçbiri geri yüklenerek sınanmadı; aradaki
+tek güvence gece nöbetinin "açılıyor + PGDMP ile başlıyor" denetimiydi
+ve o denetim, İÇİNDEKİNİN doğru olduğunu göstermez. **Negatif kontrol
+ise bugüne kadar hiç yapılmamıştı** — tatbikatın bozuk dosyayı
+reddettiği ilk kez ölçüldü.
+
+**AÇIK KALAN İKİ ŞEY:** (1) sunucu dışı kopya yok — sunucu giderse her
+şey gider; (2) canlıya geri yükleme adımları yazılı değil. İkisi de
+karar bekliyor, ikisi de bu kayıtta duruyor.
+
+---
+
 ## GÖÇ/PROVA — GÖÇ ÖNDE, KOD ARKADA: PENCERE (2026-09-04)
 
 **Göç uygulandıktan sonra dağıtım tamamlanmazsa, eski kodun yeni şemaya
