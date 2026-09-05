@@ -2753,6 +2753,84 @@ Desene kabuk savunması eklendi (`hata`/`fail` çağrısı, sıfırdan farklı
 
 ---
 
+## TUR 2 — MESAJLAŞMA (M3/2b) (2026-09-05)
+
+### FAZ 0 — ÖLÇÜM
+
+| Ölçüm | Değer |
+|---|---|
+| `conversations` / `messages` / `conversation_members` | **0 / 0 / 0** |
+| 8 ucun izin durumu | yalnız `[Authorize]`; KAPI/1 onları muafiyet listesine `uyelik-kapisi` gerekçesiyle YAZDIRMIŞTI (beyansız bırakmamıştı) |
+| Üyelik süzgeci | **TEK KAYNAK** — `MessagingAccessExtensions.ApplyMembership`, 8 sorgu noktası + `UyeMiyimAsync` + SignalR yayını |
+| Ön yüz | **HİÇ YOK** — rota, servis, SignalR bağımlılığı: üçü de yok |
+| Bildirim | SignalR `MesajHub`, kullanıcı başına grup; yayın listesi de `ApplyMembership`'ten türüyor |
+
+Özellik hiç kullanılmamış olduğu için **regresyon riski yok** — izin
+kapısı eklemek bugün kimseyi kesmiyor.
+
+### 2.2 — İZİN KAPILARI
+
+`mesajlar.view` (okuyan 5 uç) ve `mesajlar.send` (yazan 3 uç).
+KAPI/1 muafiyet listesinden **8 satır düştü** (30 → 22); hub'ın iki
+ucu kaldı, çünkü nitelik hub uçlarına uygulanamıyor.
+
+**KODUN KENDİ YORUMU EKSİK BİLGİ VERİYORDU — ÖLÇÜLDÜ.** Dosyada
+"yeni bir anahtar `RoleCatalog` yansıması yüzünden yalnız Admin ve
+GM'ye gider, kalan roller sessizce mesajlaşamaz" yazıyordu.
+`DatabaseSeeder.SeedRolePermissionsAsync` **her açılışta** koşuyor ve
+**add-only**: `RoleCatalog`'a eklenen anahtar canlıdaki role de
+düşüyor, hiçbir grant silinmiyor.
+
+> Gerçek risk **yayılma değil, 13 elle yazılan rol listesinden birini
+> UNUTMAKTI.** Kuralla değil koşuyla kapatıldı: tek ortak küme
+> (`RoleCatalog.HerRolde`) + `RolMesajlasmaTests`. Yarın eklenecek bir
+> rol de kapsanıyor.
+
+**ANAHTAR ÜYELİK KAPISININ YERİNE GEÇMİYOR, ÜSTÜNE GELİYOR.**
+`mesajlar.view` "mesajlaşmayı kullanabilir" demek, "her mesajı okur"
+değil. İki kapı üst üste: anahtar özelliğe, üyelik konuşmaya.
+
+### 2.3 — ÜYELİK SÜZGECİ
+
+Ölçüm zaten tek kaynağı gösteriyordu; sonda onu kanıtladı.
+
+### SONDALAR
+
+| Sonda | Sabotaj | Ölçülen |
+|---|---|---|
+| G | bir uçtan `[RequirePermission]` silindi | **`UÇ KAPISI — UYGULAMA AÇILAMAZ. BEYANSIZ UÇ (1)`** — beyan ile muafiyet listesi arasındaki bağ mekanik |
+| H | üyelik süzgeci YALNIZ arama yolundan söküldü | tam olarak `Arama_TurkceKatlarVeYalnizKendiKonusmamdaArar` KIRMIZI, diğer 20 test yeşil |
+
+### 2.4 — EKRAN
+
+Konuşma listesi + mesaj görünümü + gönderme. **Kapsam kilidi:** dosya
+eki, okundu bilgisi (rozet dışında), grup yönetimi, canlı akış YOK.
+
+**SÖZLEŞME TAHMİN EDİLMEDİ, OKUNDU.** İlk taslakta `ogeler`,
+`karsiTarafAdi`, `adSoyad`, `benimMi` yazılmıştı; sunucudaki kayıtlar
+okununca **dördü de yanlış çıktı** (`kayitlar`, `baslik`, `ad`, ve
+`benimMi` diye bir alan hiç yok). Mesajın kime ait olduğu
+`gonderenUserId` ile oturumdaki kullanıcı karşılaştırılarak bulunuyor.
+
+**LİNT ÇIRASI KAYDIRILMADI, KOD DÜZELTİLDİ.** İlk yazışta ekran
+`react-hooks/set-state-in-effect` çizgisini 2 ihlal ileri itiyordu
+(`app/mesajlar/page.tsx: 0 -> 2`). Çizgiyi kaydırmak sorunu gizlerdi.
+Yerine: konuşma listesi ortak `useRefreshable` kancasına alındı,
+mesajlar da **efektle değil TIKLAMAYLA** yükleniyor. Kalan tek efekt
+setState çağırmıyor, DOM'a yazıyor — efektin asıl işi. Veri artık
+durum değiştiği için değil, **kullanıcı istediği için** geliyor.
+
+**ÇIRA KENDİ HATAMI DÜZELTTİ.** Çizgiyi 2941 yazmıştım; ölçüm
+`gevşeklik -1` dedi, yani çizgi gerçekten öndeydi. `[Theory]`
+statik değil **dinamik** eksende sayılıyor: statik 2937 → **2940**,
+dinamik 24 → **25**, ikisinde de gevşeklik 0.
+
+**KURAL 71 — DOĞRULAMA BEKLİYOR:** deploy sonrası Mehmet tarayıcıdan
+bir mesaj gönderecek. Bu madde onun onayına kadar "kapandı"
+yazılmaz.
+
+---
+
 ## KUTU/1 — CC'NİN BAĞLANTIDAN BAĞIMSIZ HÂLE GELMESİ (2026-09-04)
 
 ### PARÇA 1 — HAYATTA KALMA

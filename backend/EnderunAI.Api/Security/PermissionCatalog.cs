@@ -306,6 +306,23 @@ public static class PermissionCatalog
         public const string TasksView = "tasks.view";
         public const string TasksManage = "tasks.manage";
 
+        /*
+         * MESAJLAŞMA — İKİ ANAHTAR, YOL TÜRETİMİNE BIRAKILMADI.
+         *
+         * Sekiz mesaj ucu bugüne kadar yalnız `[Authorize]` taşıyordu.
+         * Gerekçesi kayıtlıydı ve makuldü: erişimi ÜYELİK belirliyor,
+         * "yetkisi olan görür" işi değil. Ama beyansızlık, gerekçesi
+         * ne olursa olsun okunamaz: bir ucun neye izin verdiği, o ucun
+         * üstünde YAZILI olmalı (KURAL 72/E).
+         *
+         * ÜYELİK KAPISI KALKMIYOR — bu anahtarlar onun YERİNE değil,
+         * ÜSTÜNE geliyor. `mesajlar.view` taşıyan biri hâlâ yalnız
+         * kendi konuşmasını görür; anahtar "mesajlaşma özelliğini
+         * kullanabilir" demektir, "her mesajı okur" değil.
+         */
+        public const string MesajlarView = "mesajlar.view";
+        public const string MesajlarSend = "mesajlar.send";
+
         // Raporlama
         public const string ReportsView = "reports.view";
 
@@ -512,6 +529,9 @@ public static class PermissionCatalog
 
         new(Keys.TasksView, "Görev Yönetimi", "Görevleri görüntüleme", "Kendisine açık görevleri görüntüler."),
         new(Keys.TasksManage, "Görev Yönetimi", "Görev yönetimi", "Görev oluşturur, atar ve durumunu günceller."),
+
+        new(Keys.MesajlarView, "Mesajlaşma", "Mesajları görüntüleme", "Üyesi olduğu konuşmaları ve mesajları görüntüler."),
+        new(Keys.MesajlarSend, "Mesajlaşma", "Mesaj gönderme", "Üyesi olduğu konuşmalara mesaj gönderir ve birebir konuşma açar."),
 
         new(Keys.ReportsView, "Raporlama", "Raporları görüntüleme", "Yetkili olduğu modüllerin raporlarını görüntüler."),
 

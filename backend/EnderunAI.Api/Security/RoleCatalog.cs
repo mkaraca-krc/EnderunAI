@@ -53,6 +53,32 @@ public static class RoleCatalog
             PermissionCatalog.Keys.PaymentPlanApprove
         };
 
+    /// <summary>
+    /// HER ROLÜN ALDIĞI ANAHTARLAR.
+    ///
+    /// Bugün yalnız mesajlaşma burada. Sebebi: mesajlaşma bir MODÜL
+    /// yetkisi değil, çalışanın birbirine ulaşma yolu — yetkiye göre
+    /// dağıtılan bir şey değil, herkese açık bir kanal. Ama uçlar
+    /// yine de BEYAN taşımalı (KURAL 72/E): "izin gerekmiyor" ile
+    /// "izin yazılmamış" dışarıdan aynı görünür.
+    ///
+    /// NEDEN AYRI KÜME, 13 LİSTEYE TEK TEK YAZMAK DEĞİL: Admin ve
+    /// Genel Müdür anahtarları `K` yansımasıyla alıyor, kalan 13 rol
+    /// listesini ELLE taşıyor. Elle yazılan 13 yerden biri
+    /// unutulduğunda o rol sessizce mesajlaşamaz. Tek küme + tek
+    /// yayma, unutmayı tek noktaya indiriyor; `RolMesajlasmaTests`
+    /// de o tek noktayı sınıyor — yarın eklenecek bir rol sessizce
+    /// dışarıda kalamaz.
+    ///
+    /// ANAHTAR ÜYELİK KAPISININ YERİNE GEÇMEZ. `mesajlar.view`
+    /// taşıyan biri hâlâ yalnız KENDİ konuşmasını görür.
+    /// </summary>
+    private static readonly string[] HerRolde =
+    [
+        PermissionCatalog.Keys.MesajlarView,
+        PermissionCatalog.Keys.MesajlarSend
+    ];
+
     private static readonly string[] K = typeof(PermissionCatalog.Keys)
         .GetFields()
         .Select(f => (string)f.GetValue(null)!)
@@ -94,6 +120,7 @@ public static class RoleCatalog
 
         new("Finans Sorumlusu", "Finans, kasa, çek, cari ve muhasebe tam yetki; raporlar.",
         [
+            .. HerRolde,
             // ÖDEME PLANI HAZIRLAMA (ÖP/1a · İ1) — onaylama YOK.
             PermissionCatalog.Keys.PaymentPlanPrepare,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
@@ -149,6 +176,7 @@ public static class RoleCatalog
 
         new("Satın Alma Sorumlusu", "Talep, RFQ, sipariş, mal kabul ve stok süreçleri tam yetki; cari görüntüleme.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.PurchasingRequestsView, PermissionCatalog.Keys.PurchasingRequestsCreate,
@@ -172,6 +200,7 @@ public static class RoleCatalog
 
         new("İK Sorumlusu", "Personel, puantaj ve bordro tam yetki; ücret rakamlarını görür.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ReportsView, PermissionCatalog.Keys.AiUse,
             PermissionCatalog.Keys.PersonnelView, PermissionCatalog.Keys.PersonnelCreate,
@@ -195,6 +224,7 @@ public static class RoleCatalog
 
         new("Ön Muhasebe", "Fatura/cari tam yetki, muhasebe fiş girişi, satın alma görüntüleme.",
         [
+            .. HerRolde,
             // ÖDEME PLANI HAZIRLAMA (ÖP/1a · İ1) — onaylama YOK.
             PermissionCatalog.Keys.PaymentPlanPrepare,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView, PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView,
@@ -212,6 +242,7 @@ public static class RoleCatalog
 
         new("Teknik Ofis", "Projeler; keşif/metraj/hakediş tam yetki; dosyalar tam yetki; maliyet ve kâr görünür.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ProjectsCreate,
             PermissionCatalog.Keys.ProjectsEdit,
@@ -229,6 +260,7 @@ public static class RoleCatalog
 
         new("Teknik Koordinatör", "Teknik Ofis + tüm şantiyeler + günlük rapor onaylama + saha personel yönetimi.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.ProjectsCreate,
             PermissionCatalog.Keys.ProjectsEdit,
@@ -264,6 +296,7 @@ public static class RoleCatalog
         new("İSG Sorumlusu",
             "İSG tam yetki: OSGB sözleşmesi, sağlık raporu (tıbbi detay dahil), eğitim, sertifika, kaza kayıtları ve saha belgeleri.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.CompaniesView,
             PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView, PermissionCatalog.Keys.SitesView,
             PermissionCatalog.Keys.PersonnelView,
@@ -278,6 +311,7 @@ public static class RoleCatalog
 
         new("Şantiye Şefi", "Sadece atandığı şantiyeler: günlük rapor girme, şantiye personelini görüntüleme, sarf talebi.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.SitesView,
             PermissionCatalog.Keys.SiteReportsView, PermissionCatalog.Keys.SiteReportsCreate,
             PermissionCatalog.Keys.SiteReportsEdit, PermissionCatalog.Keys.SiteReportsDelete,
@@ -299,6 +333,7 @@ public static class RoleCatalog
 
         new("Formen", "Sadece atandığı şantiyede günlük rapor girme (taslak), kendi ekibini görüntüleme.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.SitesView,
             PermissionCatalog.Keys.SiteReportsView, PermissionCatalog.Keys.SiteReportsCreate,
             PermissionCatalog.Keys.SiteReportsEdit,
@@ -314,6 +349,7 @@ public static class RoleCatalog
         new("Satış Personeli",
             "Merkez depodan perakende satış hazırlar. Stok adedini ve satış fiyatını görür, MALİYETİ GÖRMEZ; iskonto tavanını aşamaz, elden satış açamaz.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView,
             PermissionCatalog.Keys.SalesView, PermissionCatalog.Keys.SalesCreate,
             // Cari GÖRÜNTÜLEME var, oluşturma yok: vadeli satışta müşteri
@@ -328,6 +364,7 @@ public static class RoleCatalog
 
         new("Sekreterya", "Dosyalar tam yetki, cari kart oluşturma/görüntüleme, projeler görüntüleme.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.DocumentsView, PermissionCatalog.Keys.DocumentsCreate,
             PermissionCatalog.Keys.DocumentsEdit, PermissionCatalog.Keys.DocumentsDelete,
@@ -344,6 +381,7 @@ public static class RoleCatalog
         // — bu rolde o anahtar yok.
         new("Araç Sorumlusu", "Filo: araç kartları, atamalar ve araç masrafları.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.VehicleView, PermissionCatalog.Keys.VehicleManage,
             PermissionCatalog.Keys.ExpenseView, PermissionCatalog.Keys.ExpenseManage,
@@ -352,6 +390,7 @@ public static class RoleCatalog
 
         new("Depo Sorumlusu", "Stok giriş-çıkış, transfer, rezervasyon ve mal kabul.",
         [
+            .. HerRolde,
             PermissionCatalog.Keys.DashboardView, PermissionCatalog.Keys.ProjectsView, PermissionCatalog.Keys.ScheduleView,
             PermissionCatalog.Keys.InventoryView, PermissionCatalog.Keys.InventoryCreate,
             PermissionCatalog.Keys.InventoryEdit, PermissionCatalog.Keys.InventoryDelete,

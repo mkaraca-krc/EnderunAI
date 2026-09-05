@@ -1,21 +1,41 @@
 namespace EnderunAI.Api.Controllers;
 
 using EnderunAI.Api.Services.Messaging;
+using EnderunAI.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 /// <summary>
 /// MESAJLAŞMA UÇLARI.
 ///
-/// YETKİ ANAHTARI YOK — `[Authorize]` yeterli. Mesajlaşma "yetkisi
-/// olan görür" işi değil: giriş yapmış herkes KENDİ konuşmasını
-/// görür, kimse başkasınınkini göremez. Erişimi üyelik belirliyor ve
-/// üyelik kapısı serviste her uçta geçiliyor.
+/// HER UÇ BEYAN TAŞIR (2026-09-04): `mesajlar.view` okuyan uçlarda,
+/// `mesajlar.send` yazan uçlarda.
 ///
-/// Yeni bir `messaging.use` anahtarı açsaydım `RoleCatalog`
-/// yansıması onu yalnız Admin ve Genel Müdür'e verirdi; kalan her
-/// role elle eklemek gerekirdi ve biri unutulsaydı o rol sessizce
-/// mesajlaşamazdı. Sessiz yetki kaybı, gürültülü hatadan kötüdür.
+/// ── ÖNCEKİ KARAR VE NEDEN DEĞİŞTİ ──
+///
+/// Burada "yetki anahtarı yok, `[Authorize]` yeterli" yazıyordu.
+/// Gerekçesi doğruydu ve DURUYOR: erişimi ÜYELİK belirler, mesajlaşma
+/// "yetkisi olan görür" işi değil. Değişen şey gerekçe değil,
+/// BEYANIN kendisi: bir ucun neye izin verdiği o ucun üstünde yazılı
+/// olmalı, çünkü "izin gerekmiyor" ile "izin yazılmamış" dışarıdan
+/// AYNI görünür (KURAL 72/E).
+///
+/// Eski yorumun korkusu ölçüldü ve YANLIŞ ÇIKTI: "yeni anahtar
+/// yalnız Admin ve GM'ye gider, kalan roller sessizce mesajlaşamaz"
+/// deniyordu. `DatabaseSeeder.SeedRolePermissionsAsync` HER AÇILIŞTA
+/// koşuyor ve ADD-ONLY — `RoleCatalog`'a eklenen anahtar canlıdaki
+/// role de düşüyor, hiçbir grant silinmiyor. Gerçek risk yayılma
+/// değil, 13 elle yazılan listeden birini UNUTMAKTI; o da tek bir
+/// ortak küme (`RoleCatalog.HerRolde`) ve onu sınayan
+/// `RolMesajlasmaTests` ile kapatıldı.
+///
+/// ── ANAHTAR ÜYELİK KAPISININ YERİNE GEÇMEZ ──
+///
+/// `mesajlar.view` "mesajlaşmayı kullanabilir" demektir, "her mesajı
+/// okur" DEĞİL. İki kapı üst üste durur: anahtar özelliğe, üyelik
+/// konuşmaya. Anahtarı olan biri hâlâ yalnız kendi konuşmasını
+/// görür — `MessagingAccessExtensions` bunu sağlıyor ve GM için bile
+/// kısayolu yok.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -30,6 +50,7 @@ public sealed class MesajlarController(IMesajlasmaService mesajlar) : Controller
     public sealed record BirebirAcIstegi(Guid KarsiUserId);
 
     [HttpGet("konusmalar")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarView)]
     public Task<IActionResult> Konusmalar(
         [FromQuery] DateTime? imlecZaman,
         [FromQuery] Guid? imlecId,
@@ -39,12 +60,14 @@ public sealed class MesajlarController(IMesajlasmaService mesajlar) : Controller
             imlecZaman, imlecId, Limitle(limit), cancellationToken)));
 
     [HttpPost("konusmalar/birebir")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarSend)]
     public Task<IActionResult> BirebirAc(
         BirebirAcIstegi istek, CancellationToken cancellationToken) =>
         SarmalaAsync(async () => Ok(
             await mesajlar.BirebirKonusmaAcAsync(istek.KarsiUserId, cancellationToken)));
 
     [HttpGet("konusmalar/{id:guid}/mesajlar")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarView)]
     public Task<IActionResult> Mesajlar(
         Guid id,
         [FromQuery] DateTime? imlecZaman,
@@ -55,12 +78,14 @@ public sealed class MesajlarController(IMesajlasmaService mesajlar) : Controller
             id, imlecZaman, imlecId, Limitle(limit), cancellationToken)));
 
     [HttpPost("konusmalar/{id:guid}/mesajlar")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarSend)]
     public Task<IActionResult> Gonder(
         Guid id, MesajGonderIstegi istek, CancellationToken cancellationToken) =>
         SarmalaAsync(async () => Ok(
             await mesajlar.MesajGonderAsync(id, istek.Govde, cancellationToken)));
 
     [HttpPost("konusmalar/{id:guid}/okundu")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarView)]
     public Task<IActionResult> Okundu(Guid id, CancellationToken cancellationToken) =>
         SarmalaAsync(async () =>
         {
@@ -70,6 +95,7 @@ public sealed class MesajlarController(IMesajlasmaService mesajlar) : Controller
 
     /// <summary>Rozet ve sekme başlığı bunu çağırıyor.</summary>
     [HttpGet("okunmamis")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarView)]
     public Task<IActionResult> Okunmamis(CancellationToken cancellationToken) =>
         SarmalaAsync(async () => Ok(new
         {
@@ -83,6 +109,7 @@ public sealed class MesajlarController(IMesajlasmaService mesajlar) : Controller
     // İngilizce, kuralı anlatmayan, bizim yazmadığımız bir mesaj.
     // Kuralın mesajını kural versin (MesajAramaKurali.Uyari).
     [HttpGet("ara")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarView)]
     public Task<IActionResult> Ara(
         [FromQuery] string? q,
         [FromQuery] DateTime? imlecZaman,
@@ -93,6 +120,7 @@ public sealed class MesajlarController(IMesajlasmaService mesajlar) : Controller
             q ?? string.Empty, imlecZaman, imlecId, Limitle(limit), cancellationToken)));
 
     [HttpGet("kisiler")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarSend)]
     public Task<IActionResult> Kisiler(
         [FromQuery] string? q, CancellationToken cancellationToken) =>
         SarmalaAsync(async () => Ok(

@@ -32,14 +32,6 @@ kendi-kimligi | UserPreferences.Save | Yazma da aynı kilitle; kullanıcı yaln�
 kendi-kimligi | IsgPersonnelRecords.GetOwnCard | Kişinin kendi İSG kartı; personel kimliği oturumdan alınır. Ayrı izin, kişinin kendi belgesine erişimini yönetici kararına bağlardı.
 
 # --- üyelik kapısı --------------------------------------------------
-uyelik-kapisi | Mesajlar.Konusmalar | Mesajlaşma yetkiyle değil ÜYELİKLE görünür; MesajlasmaService her uçta ApplyMembership(userId) uygular. Ayrı anahtar açılsaydı rol yansıması onu yalnız Admin ve GM'ye verir, sessiz yetki kaybı doğardı.
-uyelik-kapisi | Mesajlar.BirebirAc | Birebir konuşma açan kişi zaten üyelerden biridir; üyelik serviste kurulur ve doğrulanır.
-uyelik-kapisi | Mesajlar.Mesajlar | Konuşma mesajları yalnız aktif üyeye açılır; ApplyMembership süzgeci sorgunun içinde.
-uyelik-kapisi | Mesajlar.Gonder | Gönderen aktif üye değilse servis reddeder; üyelik kapısı yazma yolunda da geçilir.
-uyelik-kapisi | Mesajlar.Okundu | Okundu işareti yalnız üyenin kendi satırına yazılır; üyelik kapısı serviste.
-uyelik-kapisi | Mesajlar.Okunmamis | Sayaç çağıranın kendi üyeliklerinden hesaplanır; başka konuşma sayıma girmez.
-uyelik-kapisi | Mesajlar.Ara | Arama üyelik süzgecinden geçer; süzgeç atlandığında yabancının mesajı bulunuyordu, testi var.
-uyelik-kapisi | Mesajlar.Kisiler | Konuşulabilecek kişiler listesi; içerik taşımaz, yalnız ad ve kimlik döndürür.
 uyelik-kapisi | api/hubs/mesaj | SignalR hub'ı; sınıfında [Authorize] var ve grup üyeliği bağlantı anında doğrulanıyor. Nitelik hub uçlarına uygulanamaz.
 uyelik-kapisi | api/hubs/mesaj/negotiate | Hub'ın anlaşma ucu; çerçeve üretir, hub ile aynı kimlik ve üyelik kapısına tabidir.
 

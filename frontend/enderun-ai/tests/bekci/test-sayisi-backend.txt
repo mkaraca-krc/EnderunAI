@@ -132,5 +132,19 @@
 #                                    kontrolü; çağrı bugün davranışsal
 #                                    olarak etkisiz olduğu için kaynak
 #                                    testi — gerekçesi dosyada yazılı)
-statik: 2937
-dinamik: 24
+# TUR 2.2 — MESAJ İZİN KAPISI (2026-09-05): 2937 → 2941, gevşeklik 4.
+#   RolMesajlasmaTests    2  (RoleCatalog'daki HER rol iki mesajlaşma
+#                             anahtarını da taşır; rol sayısı tabanı —
+#                             13 rol listesini elle taşıyor, biri
+#                             unutulsa o rol sessizce mesajlaşamazdı)
+#   MesajIzinKapisiTests  1 statik + 1 DİNAMİK
+#                            (izinli Formen → 200 POZİTİF KONTROL statik;
+#                             3 yol × izinsiz → 403 [Theory] DİNAMİK
+#                             eksende sayılıyor. İlk yazışta ikisi de
+#                             statik sanılmıştı; çıra düzeltti —
+#                             gevşeklik -1 verdi, yani çizgi gerçekten
+#                             ÖNDEYDİ. İzinsiz rol testin içinde
+#                             üretiliyor çünkü 15 rolün 15'i artık
+#                             anahtarı taşıyor.)
+statik: 2940
+dinamik: 25

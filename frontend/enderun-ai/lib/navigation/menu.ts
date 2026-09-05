@@ -63,6 +63,19 @@ export const MENU_GROUPS: MenuGroup[] = [
         href: "/gorevler",
         icon: "✎",
       },
+      /*
+       * MESAJLAR, İŞ EMİRLERİ'NİN ALTINDA.
+       *
+       * Aynı grupta çünkü ikisi de kişiler arası iş trafiği. Menüde
+       * görünmesi izne bağlı değil — `canAccessRoute` onu
+       * `mesajlar.view` üzerinden zaten süzüyor ve o anahtar her
+       * rolde var.
+       */
+      {
+        label: "Mesajlar",
+        href: "/mesajlar",
+        icon: "✉",
+      },
       {
         label: "Göstergeler",
         href: "/yonetim",

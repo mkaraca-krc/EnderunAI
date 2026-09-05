@@ -218,6 +218,7 @@ const RULES: Rule[] = [
 
   // --- Diğer ---
   { match: "/gorevler", permission: "tasks.view" },
+  { match: "/mesajlar", permission: "mesajlar.view" },
   { match: "/raporlar", permission: "reports.view" },
   { match: "/ai-asistan", permission: "ai.use" },
 
