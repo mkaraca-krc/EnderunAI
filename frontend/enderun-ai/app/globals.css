@@ -4789,3 +4789,106 @@ body {
   background: var(--erp-surface);
   color: var(--erp-text);
 }
+
+/* ── MESAJ PANELİ (M3/2c-1) ─────────────────────────────────────────
+   MODAL DEĞİL: arka planda örtü YOK. Panelin varlık sebebi "yazarken
+   diğer ekranlarda çalışabilmek"; bir örtü tam da onu engellerdi.
+   Altındaki ekran tıklanabilir kalıyor.
+
+   KIRILMA NOKTASI 900px — ölçülerek seçildi, `.mesaj-duzen` zaten
+   orada tek sütuna geçiyor. Dar ekranda panel HİÇ açılmaz (baloncuk
+   /mesajlar'a yönlendirir), bu yüzden burada yalnız güvenlik amaçlı
+   gizleniyor. */
+.mesaj-baloncuk {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 5.75rem;          /* Hızır baloncuğunun ÜSTÜNDE, çakışmasın */
+  z-index: 50;
+  width: 3.5rem;
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: var(--erp-accent, #0e7490);
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgb(0 0 0 / 25%);
+}
+
+.mesaj-baloncuk:hover { filter: brightness(1.1); }
+
+.mesaj-panel {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 10rem;
+  z-index: 49;
+  width: min(26rem, calc(100vw - 2.5rem));
+  height: min(32rem, calc(100vh - 13rem));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--erp-border, #e2e8f0);
+  border-radius: 1rem;
+  background: var(--erp-surface, #fff);
+  box-shadow: 0 20px 45px rgb(0 0 0 / 22%);
+}
+
+.mesaj-panel-govde {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.mesaj-panel-baslik {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--erp-border, #e2e8f0);
+}
+
+.mesaj-panel-baslik strong { flex: 1; font-size: 0.95rem; }
+
+.mesaj-panel-geri,
+.mesaj-panel-kapat,
+.mesaj-panel-tamsayfa {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.4rem;
+  color: var(--erp-muted, #64748b);
+  font-size: 1rem;
+  text-decoration: none;
+}
+
+.mesaj-panel-geri:hover,
+.mesaj-panel-kapat:hover,
+.mesaj-panel-tamsayfa:hover {
+  background: var(--erp-hover, #f1f5f9);
+  color: var(--erp-text, #0f172a);
+}
+
+/* PANEL KİPİ TEK SÜTUN: dar bir kutuda iki sütun okunmaz. */
+.mesaj-duzen-panel {
+  grid-template-columns: 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mesaj-duzen-panel .mesaj-liste,
+.mesaj-duzen-panel .mesaj-govde {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  /* Panel bu genişlikte zaten açılmıyor; görünürse de gizlenir. */
+  .mesaj-panel { display: none; }
+}

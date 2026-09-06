@@ -1,6 +1,7 @@
 "use client";
 
 import HizirBubble from "@/components/hizir/hizir-bubble";
+import MesajBaloncugu from "@/components/mesajlar/mesaj-baloncugu";
 import Link from "next/link";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -681,6 +682,23 @@ function KabukGovdesi({
 
       {/* Kullanıcı hangi sayfada olursa olsun Hızır'a ulaşabilsin. */}
       <HizirBubble />
+
+      {/*
+        MESAJ PANELİ KABUKTA, `children`'IN DIŞINDA — BİLEREK.
+        Sayfa bileşenine konsaydı her rota değişiminde sökülüp yeniden
+        kurulurdu: açık konuşma kapanır, yazılmış taslak gider.
+
+        KENDİ HATA SINIRINDA: `nerede="içerik"` sınırı yalnız
+        `children`'ı sarıyor; panel onun dışında olduğu için kapsamına
+        girmiyor ve sarılmasaydı bir hata TÜM ERP KABUĞUNU düşürürdü.
+      */}
+      <HataSiniri
+        nerede="mesaj-paneli"
+        bicim="govde"
+        onHata={istemciHatasiBildir}
+      >
+        <MesajBaloncugu />
+      </HataSiniri>
     </div>
   );
 }

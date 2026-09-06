@@ -9,11 +9,30 @@ namespace EnderunAI.Api.Controllers;
 
 public sealed record UserUiPreferenceResponse(
     bool SidebarCollapsed,
-    IReadOnlyList<string> FavoritePaths);
+    IReadOnlyList<string> FavoritePaths,
+    bool MessagePanelOpen,
+    Guid? LastConversationId);
 
+/// <summary>
+/// KAYDETME İSTEĞİ — YENİ ALANLAR İSTEĞE BAĞLI, VE BU BİLEREK BÖYLE.
+///
+/// Bu uç tercihin TAMAMINI yazıyor. Mesaj paneli yalnız kendi iki
+/// alanını bilir; tam gövde göndermesi gerekseydi favorileri ve menü
+/// tercihini de taşımak zorunda kalır, taşımadığı gün onları SİLERDİ.
+///
+/// `null` = "bu alana dokunma". Panelin isteği menü tercihini,
+/// menünün isteği panel durumunu ezmiyor.
+///
+/// NEDEN `LastConversationId` İÇİN "TEMİZLE" YOLU YOK: bir konuşma
+/// silinse bile burada duran kimlik zararsızdır — arayüz karşılığı
+/// olmayan kimliği sessizce eler (`FavoritePaths` ile aynı karar).
+/// Temizleme yolu eklemek, kullanılmayan bir yol daha açardı.
+/// </summary>
 public sealed record SaveUserUiPreferenceRequest(
     bool SidebarCollapsed,
-    List<string>? FavoritePaths);
+    List<string>? FavoritePaths,
+    bool? MessagePanelOpen = null,
+    Guid? LastConversationId = null);
 
 /// <summary>
 /// Kullanıcının KENDİ arayüz tercihleri.
@@ -59,7 +78,9 @@ public sealed class UserPreferencesController(
         // arayüzün hata yolunu koşması gerekirdi.
         return Ok(new UserUiPreferenceResponse(
             preference?.SidebarCollapsed ?? false,
-            preference?.FavoritePaths ?? []));
+            preference?.FavoritePaths ?? [],
+            preference?.MessagePanelOpen ?? false,
+            preference?.LastConversationId));
     }
 
     [HttpPut]
@@ -97,6 +118,15 @@ public sealed class UserPreferencesController(
 
         preference.SidebarCollapsed = request.SidebarCollapsed;
         preference.FavoritePaths = favorites;
+
+        // GÖNDERİLMEYEN ALAN DEĞİŞMEZ. Panelin isteği menü tercihini,
+        // menünün isteği panel durumunu ezmiyor.
+        if (request.MessagePanelOpen is not null)
+            preference.MessagePanelOpen = request.MessagePanelOpen.Value;
+
+        if (request.LastConversationId is not null)
+            preference.LastConversationId = request.LastConversationId;
+
         preference.UpdatedAtUtc = DateTime.UtcNow;
         preference.UpdatedByUserId = userId;
 
@@ -104,6 +134,8 @@ public sealed class UserPreferencesController(
 
         return Ok(new UserUiPreferenceResponse(
             preference.SidebarCollapsed,
-            preference.FavoritePaths));
+            preference.FavoritePaths,
+            preference.MessagePanelOpen,
+            preference.LastConversationId));
     }
 }
