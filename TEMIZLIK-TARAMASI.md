@@ -1227,3 +1227,42 @@ ve `PGDMP` başlığıyla doğrulandı —
 
 Karar: Mehmet, 2026-09-06 — *"Kalıntıysa TEMIZLIK-TARAMASI.md'ye kaydını
 düşüp DÜŞÜR — yüzey küçülsün."*
+
+## `enderun-rapor` kanalı DEVRE DIŞI — kullanılmıyordu (2026-09-06)
+
+**NE YAPIYORDU.** `enderun-rapor.timer` iki dakikada bir
+`enderun-rapor-yaz.sh`i koşuyor, canlı olguları (git, dağıtım,
+servisler, sağlık, CC'nin nerede koştuğu) ve CC'nin yazdığı anlatıyı
+tek bir metin dosyasında birleştiriyordu. Dosya nginx üzerinden
+tahmin edilemez bir adresten okunuyordu. KUTU/1 Parça 2 buydu:
+Mehmet'in bilgisayarı kapalıyken duruma bakabilmesi.
+
+**NEDEN KAPATILDI (Mehmet, 2026-09-06):** *"Mehmet raporu kullanmıyor,
+PC başında çalışıyor. Kullanılmayan bir kanalı ayakta tutmak, ölümünü
+de görünmez kılıyor."*
+
+Bunun kanıtı aynı gün ölçüldü: kanal 03:58'den 07:14'e kadar **3 saat
+15 dakika sessizce öldü** (`Type=oneshot` + `TimeoutStartSec=infinity`,
+takılan koşu zamanlayıcıyı bloklamıştı) ve kimse fark etmedi. Zaten
+okunmayan bir kanalın sessizliği, tanım gereği fark edilmez.
+
+**NE SİLİNMEDİ.** Birim dosyaları, betik ve depo kopyası duruyor:
+`/etc/systemd/system/enderun-rapor.{service,timer}`,
+`/usr/local/bin/enderun-rapor-yaz.sh`, `deploy/kutu/`. Yalnız
+`disable --now` yapıldı.
+
+**DÜZELTMELERİ ÜZERİNDE KALDI.** `TimeoutStartSec=90` ve
+`OnFailure=enderun-uyari@%N.service` dosyalarda duruyor — geri
+açılırsa düzeltilmiş hâliyle açılacak, aynı arızayı tekrar kurmayacak.
+
+**ESKİ ADRES YANLIŞ OKUNMASIN DİYE:** `son.txt`in içeriği tek bir
+kapanış bildirimiyle değiştirildi. Adres hâlâ 200 dönüyor ama ilk
+satırı *"BU KANAL KAPATILDI — 2026-09-06"*. Boş bir 404, kanalın
+kapandığını değil sunucunun bozulduğunu düşündürürdü.
+
+**NÖBET/1 BU BİRİMİ İZLEMEYECEK.** Kapalı bir birimin sessizliği arıza
+değildir; izlemek sahte alarm üretirdi. NÖBET/1 kurulduğunda izleme
+listesine `cc-oturum`, `cc-devir` ve geri yükleme tatbikatı girecek;
+`enderun-rapor` **girmeyecek** ve bu satır o kararın kaydıdır.
+
+**GERİ AÇMAK İÇİN:** `systemctl enable --now enderun-rapor.timer`
