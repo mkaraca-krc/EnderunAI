@@ -1301,3 +1301,30 @@ geçirilmesi demek. Bugünkü davranış doğru; yanlış olan yalnız adın
 
 **TAŞINACAK YER BELLİ:** işaret eklendiğinde `EmployeeNumber` deseni
 `S%` olan kayıtlar oraya taşınır ve `Status` gerçek anlamına döner.
+
+## Ön yüz ↔ uç sözleşmesi hiç sınanmıyor — AÇIK (2026-09-06)
+
+**BOŞLUK:** uç testleri C#'tan **doğru biçimli** bir gövdeyle çağırıyor;
+ön yüz testleri `fetch`i **taklit ediyor**. **İkisi de sınırı
+geçmiyor.** Aradaki alanda hiçbir şey yok.
+
+Çift `JSON.stringify` arızası tam o boşlukta yaşadı: birebir konuşma
+açma ucunun testi vardı ve yeşildi, ön yüz de kendi tarafında
+tutarlıydı, ama telden çıkan gövde ile ucun beklediği gövde
+uyuşmuyordu ve bunu kimse sınamıyordu.
+
+**BUGÜN KAPANAN KISIM:** `api-client-govde-sozlesmesi.test.ts` bu
+arızanın SINIFINI kapatıyor (çağıran kendi kendine stringify edemez).
+
+**AÇIK KALAN — GENEL BOŞLUK:** alan adı değişse, tip değişse, zorunlu
+bir alan eklense **yine hiçbir test yakalamaz.** Sunucudaki kayıt
+`KarsiUserId`den `HedefUserId`e dönse, ön yüz eski adı göndermeye
+devam eder ve iki taraf da kendi içinde yeşil kalır.
+
+**ÇÖZÜM ŞİMDİ DEĞİL.** Muhtemel yön: uçların istek/yanıt kayıtlarından
+üretilen bir sözleşme dosyası ve ön yüz tiplerinin ona bağlanması.
+Bugünün paketi değil.
+
+**TETİKLEYİCİ (Mehmet, 2026-09-06):** *"bir sözleşme uyuşmazlığı daha
+çıktığında paket açılır."* Bu satır o günün kaydıdır; ikinci uyuşmazlık
+görüldüğünde bu madde pakete dönüşecek.

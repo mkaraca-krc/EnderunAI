@@ -7371,6 +7371,28 @@ kaldırıldı.**
 
 ## BEKLEYEN KARARLAR
 
+0C. **FİKİR — "HİÇ ÇAĞRILMAMIŞ UÇLAR" HARİTASI** (Mehmet, 2026-09-06;
+  paket değil, not).
+
+  **DOĞURAN GÖZLEM:** çift `JSON.stringify` arızasında beş kırık çağrı
+  canlıda duruyordu ve kimse fark etmemişti — çünkü kimse o ekranları
+  kullanmamıştı. Ölçüldü: `stock_count_sessions` = 0 ve son 7 günde o
+  uçlara giden **hiçbir** istek yok. Mesajlaşma, Mehmet denediği için
+  ortaya çıktı.
+
+  **FİKİR:** erişim günlüklerinden *"bugüne kadar hiç çağrılmamış
+  uçlar"* listesi çıkarmak. O liste, **sınanmamış yüzeyin haritasıdır**
+  — testlerin değil, GERÇEK KULLANIMIN kapsamadığı yer.
+
+  **NEDEN DEĞERLİ:** test kapsamı "kod çalıştırıldı mı" der; bu ölçüm
+  "bu yol hiç gerçek bir kullanıcıyla karşılaştı mı" der. İkisi farklı
+  sorulardır ve ikincisinin cevabı bugüne kadar hiç sorulmadı.
+
+  **Mehmet'in eklediği:** *"onları bulan bir sonraki kişi muhtemelen
+  depo sayımı yapan biri olurdu, benim gibi ölçen biri değil."*
+
+  Ucuz bir ölçüm; paket açılmadı, fikir olarak duruyor.
+
 Yapılmayan işler ve nedenleri. Biçim: `konu | neden yapılmadı | ne gerekiyor`
 
 **2026-08-25'te 13 maddenin 9'u karara bağlandı** (aşağıda "KAPANANLAR").
