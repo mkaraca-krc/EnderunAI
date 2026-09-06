@@ -86,14 +86,14 @@ export const messagingService = {
   gonder(konusmaId: string, govde: string) {
     return apiClient<MesajOzeti>(
       `mesajlar/konusmalar/${konusmaId}/mesajlar`,
-      { method: "POST", body: JSON.stringify({ govde }) }
+      { method: "POST", body: { govde } }
     );
   },
 
   birebirAc(karsiUserId: string) {
     return apiClient<KonusmaOzeti>("mesajlar/konusmalar/birebir", {
       method: "POST",
-      body: JSON.stringify({ karsiUserId }),
+      body: { karsiUserId },
     });
   },
 

@@ -312,7 +312,7 @@ export const inventoryService = {
   ): Promise<{ message: string; accountingKind: number }> {
     return apiClient(`inventory/categories/${categoryId}/accounting-kind`, {
       method: "PUT",
-      body: JSON.stringify({ accountingKind }),
+      body: { accountingKind },
     });
   },
 

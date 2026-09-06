@@ -115,7 +115,7 @@ export const stockCountService = {
   }) {
     return apiClient<{ id: string; documentNumber: string; lineCount: number; message: string }>(
       "stock-counts",
-      { method: "POST", body: JSON.stringify(payload) }
+      { method: "POST", body: payload }
     );
   },
 
@@ -130,7 +130,7 @@ export const stockCountService = {
   ) {
     return apiClient<{ message: string }>(`stock-counts/${id}/miktarlar`, {
       method: "PUT",
-      body: JSON.stringify({ lines }),
+      body: { lines },
     });
   },
 
@@ -148,14 +148,14 @@ export const stockCountService = {
   reject(id: string, reason: string) {
     return apiClient<{ message: string }>(`stock-counts/${id}/reddet`, {
       method: "POST",
-      body: JSON.stringify({ reason }),
+      body: { reason },
     });
   },
 
   cancel(id: string, reason: string) {
     return apiClient<{ message: string }>(`stock-counts/${id}/iptal`, {
       method: "POST",
-      body: JSON.stringify({ reason }),
+      body: { reason },
     });
   },
 };

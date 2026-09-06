@@ -44,15 +44,65 @@ export async function apiClient<T>(
     : await response.text().catch(() => "");
 
   if (!response.ok) {
-    const message =
-      typeof payload === "object" &&
-      payload !== null &&
-      "message" in payload
-        ? String((payload as { message?: unknown }).message)
-        : `İşlem başarısız: ${response.status}`;
-
-    throw new ApiError(message, response.status, payload);
+    throw new ApiError(hataMesaji(payload, response.status), response.status, payload);
   }
 
   return payload as T;
+}
+
+/**
+ * SUNUCUNUN SÖYLEDİĞİNİ KULLANICIYA GÖSTER.
+ *
+ * ═══ NEDEN YAZILDI (2026-09-06) ═══
+ *
+ * Ekranda "İşlem başarısız: 400" yazıyordu ve bu cümle kullanıcıya
+ * hiçbir şey söylemiyor. Sunucu susmuyordu — ASP.NET model bağlama
+ * hatasında `ProblemDetails` döndürüyor: `title`, `errors`, `traceId`.
+ * Ama `message` alanı YOK, ve eski kod yalnız `message`a bakıyordu.
+ * Anlamlı cevap elimizdeydi, okumuyorduk.
+ *
+ * ÜÇ BİÇİM, ÜÇÜ DE OKUNUYOR — geniş yakalamak yerine SIRAYLA:
+ *   1. `message` — bu uygulamanın kendi iş kuralı hataları
+ *   2. `errors`  — ProblemDetails alan doğrulaması (en yararlısı:
+ *                  hangi alanın neden reddedildiğini söyler)
+ *   3. `title`   — ProblemDetails genel başlığı
+ *
+ * SON ÇARE HÂLÂ DURUM KODU: hiçbiri yoksa kullanıcıya bir şey demek
+ * gerek. Ama artık "hiçbiri yok" gerçekten nadir bir durum, varsayılan
+ * değil.
+ */
+function hataMesaji(payload: unknown, status: number): string {
+  if (typeof payload !== "object" || payload === null) {
+    return `İşlem başarısız: ${status}`;
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  if (typeof p.message === "string" && p.message.trim().length > 0) {
+    return p.message;
+  }
+
+  // ProblemDetails.errors: { "alan": ["sebep", ...] }
+  if (typeof p.errors === "object" && p.errors !== null) {
+    const satirlar = Object.entries(p.errors as Record<string, unknown>)
+      .map(([alan, sebepler]) => {
+        const metin = Array.isArray(sebepler)
+          ? sebepler.map(String).join(" ")
+          : String(sebepler);
+
+        // Alan adı ".body" gibi teknik olabilir; boşsa yalnız sebebi yaz.
+        return alan && alan !== "$" ? `${alan}: ${metin}` : metin;
+      })
+      .filter((x) => x.trim().length > 0);
+
+    if (satirlar.length > 0) {
+      return `İstek reddedildi — ${satirlar.join(" · ")}`;
+    }
+  }
+
+  if (typeof p.title === "string" && p.title.trim().length > 0) {
+    return `${p.title} (${status})`;
+  }
+
+  return `İşlem başarısız: ${status}`;
 }

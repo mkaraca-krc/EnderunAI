@@ -3141,6 +3141,94 @@ paketinin işi ve **AÇILMAYACAK listesinde** — Mehmet'in kararı.
 
 ---
 
+## M3 — KONUŞMA AÇILAMIYORDU: ÇİFT JSON ÇEVRİMİ (2026-09-06)
+
+**BULUŞ MEHMET'İN, TARAYICIDAN.** Kişi araması düzeldi, kişi bulunuyor,
+seçiliyor — ama `POST /api/backend/mesajlar/konusmalar/birebir`
+**400** dönüyor ve ekranda yalnız *"İşlem başarısız: 400"* yazıyor.
+
+### KÖK SEBEP — BENİM HATAM, TUR 2'DEN KALMA
+
+`apiClient` gövdeyi zaten `JSON.stringify(options.body)` ile
+çeviriyor. `messaging.service.ts` içinde **bir kez daha**
+`JSON.stringify` çağrılmış. Sonuç: telden çıkan gövde bir nesne değil,
+bir JSON **metni** — `"{\"karsiUserId\":\"...\"}"`. ASP.NET onu
+`BirebirAcIstegi` kaydına bağlayamıyor ve 400 dönüyor.
+
+### ARIZA GÖRÜNENDEN GENİŞTİ — ÜÇ SERVİS, YEDİ ÇAĞRI
+
+Mesajlaşmada göründü ama tarama başka yerler de buldu:
+
+| Dosya | Kırık çağrı | Ne yapıyordu |
+|---|---|---|
+| `stock-count.service.ts` | **4** | sayım oluştur, miktar kaydet, reddet, iptal |
+| `messaging.service.ts` | **2** | mesaj gönder, birebir konuşma aç |
+| `inventory.service.ts` | **1** | kategori muhasebe türü |
+
+**DAR TUTULDU — 25 EŞLEŞMEDEN 7'Sİ HATALIYDI.** Depoda 25 yerde
+`body: JSON.stringify` geçiyor ama çoğu **doğru**: `fetch`i doğrudan
+çağıran dosyalarda (`app/login/page.tsx`,
+`inventory-movement.service.ts`) stringify etmek gerekiyor. Yalnız
+`apiClient` kullananlar hatalı. Hepsini düzeltmek, çalışan kodu
+bozmak olurdu.
+
+**CANLI ETKİ ÖLÇÜLDÜ:** `stock_count_sessions` = 0,
+`stock_count_lines` = 0 ve son 7 günde bu uçlara giden hiçbir istek
+günlükte yok. Yani beş çağrı kırıktı ama **kimse denememişti** —
+mesajlaşmayı Mehmet denediği için oradan çıktı.
+
+### HATA MESAJI — DÜZELTME `apiClient`'TA, MESAJLAŞMAYA ÖZEL DEĞİL
+
+*"İşlem başarısız: 400"* kullanıcıya hiçbir şey söylemiyordu. Sunucu
+susmuyordu: ASP.NET model bağlama hatasında `ProblemDetails`
+döndürüyor (`title`, `errors`, `traceId`) — ama `message` alanı yok ve
+eski kod **yalnız** `message`a bakıyordu. **Anlamlı cevap
+elimizdeydi, okumuyorduk.** Bu, aynı gün üçüncü kez görülen sınıf.
+
+`apiClient` artık sırayla `message` → `errors` → `title` okuyor; ham
+durum kodu son çare. Düzeltme tek yerde, tüm uygulama yararlanıyor.
+
+### TEST BOŞLUĞU — ASIL SORU VE CEVABI
+
+**Birebir açma ucunun testi VARDI ve YEŞİLDİ:**
+`MesajlasmaUclariTests.BirebirKonusma_IkinciKezAcilmaz` ve
+`KendineKonusma_Acilmaz`.
+
+**NEDEN YAKALAMADI:** o testler ucu C#'tan **doğru biçimli bir
+gövdeyle** çağırıyor. Kırılan şey uç değildi, **ön yüz ↔ uç
+sözleşmesiydi** — ve onu sınayan hiçbir test yoktu. Mehmet'in cümlesi
+tam yerine oturuyor: *"üç adımın ikisi yeşilken üçüncüsü canlıda
+kırılıyor."*
+
+**İKİ TEST YAZILDI, BİRİ DİĞERİNİN YERİNE GEÇMİYOR:**
+
+1. `api-client-govde-sozlesmesi.test.ts` (3 test) — **yapısal sebebi**
+   tutuyor: `apiClient` çağıran hiçbir dosya gövdeyi kendisi
+   stringify edemez. Pozitif kontrolü içinde (5'ten az dosya
+   bulunursa tarama bozuktur). Üçüncü test sözleşmenin DAYANAĞINI
+   sınıyor: `apiClient` gerçekten `JSON.stringify(options.body)`
+   yapıyor mu — yapmasaydı diğer iki test yanlış olurdu.
+2. `mesajlasma-istek-bicimi.test.ts` (2 test) — **çıktıyı** tutuyor:
+   `fetch` taklit edilip telden çıkan gövde çözülüyor ve **nesne**
+   olduğu doğrulanıyor.
+
+Yapısal kural bir gün başka bir yoldan delinirse ikincisi yine
+yakalar; ikincisi yalnız mesajlaşmayı görür, birincisi tüm depoyu.
+
+**SONDA N1 ve N2, ikisi de ayrı ayrı ısırdı:** çift çevrim geri
+konduğunda yapısal nöbetçi dosyayı adıyla listeledi
+(`services/messaging.service.ts`), davranış testi
+`expected 'string' to be 'object'` dedi.
+
+### KURAL 79'UN İKİNCİ UYGULAMASI
+
+Aynı gün ikinci kez: kusur bir yerde göründü, ölçüm onu üç yerde
+buldu, düzeltme tek tek yamalama yerine **sınıfı kapatan bir kural**
+oldu. Yalnız mesajlaşmayı düzeltseydim kalan beşi canlıda kalırdı ve
+sekizincisi yarın yazılırdı.
+
+---
+
 ## M3 — KİŞİ ARAMASI: ASIL KUSUR VERİDEYDİ (2026-09-06)
 
 **BULUŞ MEHMET'İN, TARAYICIDAN.** Ekranda kişi araması hiçbir sonuç
