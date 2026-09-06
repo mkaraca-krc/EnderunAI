@@ -2211,6 +2211,36 @@ Tarihsel kalıntı, bozuk yol değil. Düzeltilmedi.
 
 ---
 
+### Kural 77 — SINIR GEÇMEYEN BAYRAK YOK SAYILIR
+
+**Bir bayrak süreç/birim sınırını geçmiyorsa yok sayılır. Bayrak
+okunamadığında davranış, en zararsız tarafa düşer — gerçek eylem
+açıkça istenmelidir.**
+
+Onaylandı: Mehmet, 2026-09-06, kıl payı kaçırılan bir olayın üstüne.
+
+**OLAY:** uyarı betiğinin gerçek e-posta göndermesini engellemek için
+sonda birimine `Environment=UYARI_KURU=1` yazdım. systemd bu değişkeni
+`OnFailure=` ile tetiklenen **AYRI birime geçirmiyor** — bilmiyordum.
+Betik gerçek gönderim denedi. Posta yalnız ilgisiz bir tırnak hatasına
+takıldığı için çıkmadı. *"İlk gönderim testi sende değil bende"*
+kuralını tasarım değil, **şans** korudu.
+
+**YANLIŞ OLAN NEYDİ:** bayrağın yokluğunu "gerçek eylem istendi" diye
+okumak. Doğrusu tersidir — bayrak okunamıyorsa niyet de bilinmiyordur
+ve bilinmeyen niyet, zararsız tarafa düşer.
+
+**UYGULAMA:** gönderim kapısı artık sürecin ortamında değil, DİSKTE:
+`/etc/enderunai/uyari-posta-acik` dosyası yoksa e-posta gönderilmiyor.
+Tetikleyen kim olursa olsun — systemd, cron, elle koşan biri — aynı
+kapı geçerli, çünkü kapı sürecin dışında.
+
+**AKRABASI:** Kural 55/D'nin "susturma kaçış yolu değildir" ilkesi ve
+"kapalı tarafa düşme" (fail-closed) disiplini. Üçü de aynı şeyi söyler:
+belirsizlik, izin anlamına gelmez.
+
+---
+
 ### Kural 76 — KENDİ YAŞINI YAYINLAMAYAN KANAL GÜVENİLMEZDİR
 
 **Bir kanalın sessizliği, iyi haber ile ölümü aynı gösterir. Kanal
@@ -2961,6 +2991,130 @@ betiğim yalnız çift tırnak soyuyordu; `curl`'e tırnaklı konak adı gitti
 buldu. Düzeltildi ve ayrıştırıcının ürettiği uzunluklar kaynaktan
 okunan değerlerle birebir eşleşiyor (17/3/27/10) — değer basılmadan
 doğrulandı.
+
+### 3.1a (İKİNCİ TUR) — TATBİKAT ARTIK CANLIYA HİÇ BAĞLANMIYOR
+
+**SORU DEĞİŞTİ, CEVAP GÜÇLENDİ.** Tatbikat, geri yüklediği kopyayı
+CANLIYLA karşılaştırıyordu ve bu yüzden karşılaştırma "yaklaşık" olmak
+zorundaydı: canlı, yedek alındıktan sonra değişir. Mehmet'in çözümü:
+*"Canlı yedekten sonra değişir; yedeğin kendi damgası değişmez."*
+
+**YEDEĞİN YANINDA SATIR DAMGASI.** `enderun-backup.sh` artık her yedekle
+birlikte `db_<damga>.satirlar.txt` yazıyor: 240 tablo, `<tablo>|<satır>`.
+Aynı saklama politikasına tabi (temizlik süzgecine deseni eklendi).
+
+**DÖKÜMDEN SONRA SAYMAK YANLIŞ OLURDU.** pg_dump kendi tutarlı
+görüntüsünü alır; döküm bittikten sonra sayılan satırlar dökümün
+GÖRDÜĞÜ satırlar değildir. Tek bir gece yazımı bile tam eşitlik
+iddiasını çürütürdü. Çözüm ölçülerek seçildi: bir oturum
+`repeatable read` işlemi açıp `pg_export_snapshot()` ile görüntüyü
+dışa aktarıyor; `pg_dump --snapshot=` ve sayım AYNI görüntüyü
+kullanıyor. Mekanizma tek başına sınandı (dışa aktarılan görüntüden
+`personnel = 81` okundu), sonra betiğe girdi.
+
+**FAIL-CLOSED İKİ YERDE:** görüntü alınamazsa yedek alınmıyor; damga
+üretilemezse alınan yedek SİLİNİYOR. Karşılaştırılamayan yedek
+tutulmuyor.
+
+**TATBİKAT ARTIK TAM EŞİTLİK İSTİYOR.** 240 tablonun tamamı damgayla
+birebir eşleşmezse kırmızı. Ölçüldü: `db_20260906_173141.dump.gpg`
+geri yüklendi, 240 tablo, **fark yok**, 8 saniye.
+
+**POZİTİF DAMGA GENİŞLEDİ:** `sonuc`, `zaman`, `sure_sn`, `yedek`,
+`boyut_bayt`, `tablo`.
+
+### ÜÇ KATMANLI MUHAFIZ — VE ÜÇÜNCÜSÜ BETİĞİN DIŞINDA
+
+Günde bir koşan bir işin canlıya değme ihtimali, üç ayda bir
+koşandan 90 kat fazla.
+
+| # | Katman | Nerede durur |
+|---|---|---|
+| 1 | **Beyaz liste** — hedef adı yalnız `enderun_geri_yukleme_tatbikati` olabilir | betikte |
+| 2 | **Doluluk** — hedef varsa ve tablo taşıyorsa DROP'a gelinmez | betikte |
+| 3 | **Veritabanı yetkisi** — `enderun_tatbikat` rolünün `enderun_ai`'de hakkı yok | **PostgreSQL'de** |
+
+**NEDEN BEYAZ LİSTE, KARA LİSTE DEĞİL (Mehmet):** *"'bilinen kötüleri
+say' yaklaşımı her zaman eksik kalır."* Canlı örneği vardı: `postgres`
+veritabanı bir kara listede olmazdı ve 0 tablosu olduğu için doluluk
+kontrolünden de geçerdi.
+
+**ÜÇÜNCÜ KATMAN NEDEN ŞART (Mehmet):** *"Betikteki iki kontrol de aynı
+dosyada; ikisi birlikte düzenlenebilir. Veritabanı yetkisi betik
+düzenlenerek aşılamaz."*
+
+**SABOTAJ S1 — ASIL SINAMA, KOŞULDU.** Betiğin bir kopyasında beyaz
+liste ve doluluk kontrolleri İKİSİ BİRDEN kaldırıldı ve hedef
+`enderun_ai` yapıldı. Betik yine durdu; duran şey betik değildi:
+
+    ERROR:  must be owner of database enderun_ai
+    FATAL:  permission denied for database "enderun_ai"
+
+Sonrasında ölçüldü: `enderun_ai` 240 tablo, `personnel` 81, sağlık 200.
+**Bugünkü tasarımda bu sabotaj canlıyı ezerdi.**
+
+**S2/S3/S4 da ilan edildiği gibi:** kontroller yerindeyken hedef canlı
+→ 1. katmanda durdu; damga kaldırıldı → *"karşılaştıracak şey olmadan
+GEÇEMEZ"*; damgada `personnel|81` → `999` yapıldı → kırmızı, farkı
+tablo adıyla ve iki sayıyla gösterdi.
+
+### PUBLIC CONNECT KAPATILDI — VE "template1 MİRASI" ÖLÇÜMDE ÇIKMADI
+
+`enderun_ai` ve `enderun_ai_test` üzerinde `REVOKE CONNECT ... FROM
+PUBLIC`. Geri almadan **önce** ölçüldü: `enderun_user` açık hakka
+(`CTc`) sahip, `postgres` süperkullanıcı — **PUBLIC'in hakkına dayanan
+tek bir kimlik yok.** Sonra doğrulandı: `enderun_user` bağlanıyor,
+`enderun_tatbikat` reddediliyor, uygulama 200.
+
+**SAHİP PUBLIC'E DAYANMIYOR — ÖLÇÜLDÜ.** Atılacak bir veritabanında:
+geri alma sonrası `NULL` ACL `{=T/enderun_user, enderun_user=CTc/...}`
+olarak **maddileşiyor**; PostgreSQL sahibe açık hak yazıyor. Bu yüzden
+"önce açık hak ver, sonra kapat" adımına gerek kalmadı.
+
+**KAPI 1 — 1b'NİN MEKANİZMASI YANLIŞTI.** *"Yeni DB, PUBLIC'in CONNECT
+hakkını template1'den miras alır"* varsayımı ölçümde çürüdü:
+
+| Ölçüm | Sonuç |
+|---|---|
+| `template1`'den PUBLIC CONNECT geri alındı | ACL `{postgres=CTc/postgres}` |
+| Ardından kurulan yeni DB'nin ACL'i | **`NULL`** |
+| Yeni DB'de PUBLIC CONNECT | **hâlâ `t`** |
+
+PostgreSQL yeni veritabanının ACL'ini şablondan **kopyalamıyor**;
+`NULL` bırakıyor ve `NULL` "yerleşik varsayılan" demek — PUBLIC'e
+CONNECT + TEMP. `ALTER DEFAULT PRIVILEGES` de veritabanı nesnesini
+kapsamıyor. **PostgreSQL'de "yeni veritabanı kapalı doğsun" diye bir
+ayar yok.** `template1` ölçüm için açıldı ve eski hâline döndürülüp
+doğrulandı.
+
+İlke doğruydu, taşıyıcısı yanlıştı. Yerine iki şey kondu:
+
+**A — KURAN KAPATIR.** Tatbikat, kurduğu veritabanını kurar kurmaz
+`REVOKE CONNECT ... FROM PUBLIC` ile kapatıyor; kapatamazsa yayın
+durur. Gelecekteki her DB oluşturma yolu bunu taşıyacak.
+
+**B — AÇIK VERİTABANI KAPISI.** `acik-veritabani-kapisi.sh`, PUBLIC'e
+açık veritabanlarını sayıyor ve beyaz listede olmayan her açık DB'de
+düşüyor. Beyaz liste `<ad> | <kategori> | <gerekçe>` biçiminde;
+**gerekçesiz satır kabul edilmiyor.** Çift yönlü: listede olup artık
+açık olmayan satır da düşürüyor (çürümüş muafiyet). Tarama sağlığı
+basılıyor ve **sıfır DB tarandıysa yeşil vermiyor** (Kural 48).
+`ucuz-kapilar.sh` içinde `hizli` sınıfta.
+
+**SONDA B1/B2/B3 üçü de ısırdı:** beyaz listede olmayan açık bir DB
+kuruldu → kaçak olarak adıyla düştü; gerekçesiz satır eklendi →
+satır numarasıyla reddedildi; kapalı bir DB listeye yazıldı →
+"çürümüş muafiyet" ile düştü.
+
+### İKİ KALINTI VERİTABANI DÜŞÜRÜLDÜ
+
+`enderun_squash_a` ve `enderun_iki_baglam`: betikte, kodda, DURUM.md'de
+**sıfır** referans, 0 açık oturum, 20'şer MB. Göç denemelerinden kalma.
+Düşürmeden önce `pg_dump -F c` dökümleri alındı ve `PGDMP` başlığıyla
+doğrulandı (`/var/backups/enderun/kalinti-20260906/`). Kayıt
+TEMIZLIK-TARAMASI.md'de.
+
+**Mehmet:** *"Kalıntıysa kaydını düşüp DÜŞÜR — yüzey küçülsün."*
 
 ### 3.1a — TATBİKAT ÜÇ AYDAN GECELİĞE İNDİ, BAŞARI DAMGASI KOYULDU
 

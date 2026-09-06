@@ -33,6 +33,7 @@ zorunlu  SMTP_PASS
 zorunlu  SMTP_USER
 zorunlu  SEED_ADMIN_PASSWORD
 zorunlu  ANTHROPIC_API_KEY
+zorunlu  TATBIKAT_DB_PAROLASI
 
 henuz-yok  PORTAL_TOKEN_ANAHTARI  Portal tokenları kayıt başına üretiliyor, ortamda tek bir anahtar yok. Merkezî bir anahtara geçilirse buraya taşınır.
 henuz-yok  VAPID_PRIVATE_KEY  M3 (mobil bildirim) ile gelecek. Geldiği gün zorunlu'ya taşınmalı.

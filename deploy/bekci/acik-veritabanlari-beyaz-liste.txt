@@ -1,0 +1,24 @@
+# PUBLIC'E AÇIK OLMASINA İZİN VERİLEN VERİTABANLARI — BEYAZ LİSTE
+#
+# ═══ NEDEN BEYAZ LİSTE, KARA LİSTE DEĞİL ═══
+#
+# "Bilinen kötüleri say" yaklaşımı her zaman eksik kalır. 2026-09-06'da
+# bunun canlı örneği görüldü: tatbikat hedefi için bir kara liste
+# tasarlanmıştı (enderun_ai, template0, template1...) ve `postgres`
+# veritabanı listede yoktu — 0 tablosu olduğu için tablo kontrolünden
+# de geçiyordu. Beyaz listede yalnız İZİN VERİLEN yazar; geri kalan
+# her şey reddedilir.
+#
+# ═══ NEDEN GEREKÇE ZORUNLU ═══
+#
+# Gerekçesiz bir muafiyet satırı, bir süre sonra kimsenin neden orada
+# olduğunu bilmediği bir satırdır ve silinemez hâle gelir. Gerekçesi
+# olmayan satır KABUL EDİLMEZ (Kural 72/E deseni).
+#
+# BİÇİM:  <veritabanı adı> | <kategori> | <gerekçe>
+#
+# ÇİFT YÖNLÜ: listede olup ARTIK AÇIK OLMAYAN bir satır da kapıyı
+# düşürür. Uygulanmayan muafiyet, çürümüş muafiyettir.
+
+postgres | postgresql-varsayilani | Bakim veritabani. CREATE DATABASE icin baglanilmasi gerekiyor (tatbikat rolu dahil) ve icinde tablo yok: olculdu, public semada 0 tablo. Kapatmak yeni veritabani kurmayi imkansiz kilardi.
+template1 | postgresql-varsayilani | Yeni veritabani sablonu. PostgreSQL'in kendi araclari buna baglanir. 2026-09-06'da olculdu: bundan PUBLIC CONNECT'i geri almak yeni veritabanlarini KORUMUYOR (yeni DB'nin ACL'i sablondan kopyalanmiyor, NULL doguyor), yani kapatmanin faydasi yok, riski var.

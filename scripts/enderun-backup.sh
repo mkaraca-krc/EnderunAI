@@ -142,10 +142,67 @@ dogrula() {
 log "INFO" "Yedekleme başladı."
 
 # ── VERİTABANI ────────────────────────────────────────────────────
+#
+# ═══ NEDEN ANLIK GÖRÜNTÜ DIŞA AKTARILIYOR ═══
+#
+# Yedeğin YANINA satır sayısı damgası yazılıyor; geri yükleme tatbikatı
+# geri yüklediği kopyayı CANLIYLA değil BU DAMGAYLA karşılaştırıyor.
+#
+# Sebep (Mehmet, 2026-09-06): *"Canlı yedekten sonra değişir; yedeğin
+# kendi damgası değişmez."* Canlıyla karşılaştırma her tatbikatta
+# "yaklaşık" olmak zorundaydı — sayılar zaten farklı olacaktı. Damgayla
+# karşılaştırma TAM EŞİTLİK isteyebilir. Ayrıca tatbikatın canlı
+# veritabanına hiç bağlanmaması gerekiyor; damga bunu mümkün kılan şey.
+#
+# AMA DÖKÜMDEN SONRA SAYMAK YANLIŞ OLURDU: pg_dump kendi tutarlı
+# görüntüsünü alır; döküm bittikten sonra sayılan satırlar dökümün
+# GÖRDÜĞÜ satırlar değildir. Tek gece yazılan birkaç satır bile tam
+# eşitlik iddiasını çürütür.
+#
+# ÇÖZÜM: bir oturum `repeatable read` işlemi açıp `pg_export_snapshot()`
+# ile görüntüyü dışa aktarıyor. pg_dump AYNI görüntüyü `--snapshot` ile
+# kullanıyor, sayım da aynı görüntüden yapılıyor. Üçü de aynı ana bakar.
+#
+# FAIL-CLOSED: görüntü alınamazsa yedek DE alınmaz. Damgasız bir yedek,
+# tatbikatın karşılaştıracak şeyi olmayan bir yedektir.
 export PGPASSWORD="$DB_PASSWORD"
+
+coproc GORUNTU { psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+                      -Aqt -v ON_ERROR_STOP=1 2>&1; }
+printf 'begin transaction isolation level repeatable read;\nselect pg_export_snapshot();\n' >&"${GORUNTU[1]}"
+
+GORUNTU_ID=""
+read -r -t 30 GORUNTU_ID <&"${GORUNTU[0]}" || true
+
+if ! printf '%s' "$GORUNTU_ID" | grep -qE '^[0-9A-Fa-f-]+$'; then
+    printf '\\q\n' >&"${GORUNTU[1]}" 2>/dev/null || true
+    unset PGPASSWORD
+    fail "Anlık görüntü dışa aktarılamadı — yedek ALINMADI. Damgasız yedek yazılmıyor."
+fi
+
 pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -F c \
+    --snapshot="$GORUNTU_ID" \
     | sifreli_yaz "$DB_BACKUP_FILE"
 DURUM=("${PIPESTATUS[@]}")
+
+# SATIR SAYISI DAMGASI — DÖKÜMLE AYNI GÖRÜNTÜDEN.
+#
+# `query_to_xml` kullanılıyor: `count(*)` her tablo için ayrı ayrı
+# çalıştırılmak zorunda ve tablo adları çalışma anında belli. Tek
+# sorguda, tek görüntüde bitiyor.
+SATIR_DAMGASI="$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -Aqt -F'|' -c "
+begin transaction isolation level repeatable read;
+set transaction snapshot '$GORUNTU_ID';
+select t.relname,
+       (xpath('/row/cnt/text()', query_to_xml(
+            format('select count(*) as cnt from %I.%I', t.schemaname, t.relname),
+            false, true, '')))[1]::text::bigint
+from pg_stat_user_tables t
+where t.schemaname = 'public'
+order by t.relname;" 2>/dev/null)"
+
+printf 'commit;\n\\q\n' >&"${GORUNTU[1]}" 2>/dev/null || true
+wait "$GORUNTU_PID" 2>/dev/null || true
 unset PGPASSWORD
 
 # İKİ ÇIKIŞ KODU DA KONTROL EDİLİYOR. pg_dump yarıda ölse bile gpg
@@ -158,6 +215,32 @@ fi
 
 dogrula "$DB_BACKUP_FILE" dump || { rm -f "$DB_BACKUP_FILE"; fail "Veritabanı yedeği AÇILAMADI, silindi: $(basename "$DB_BACKUP_FILE")"; }
 log "INFO" "Veritabanı yedeği şifreli alındı ve açıldığı doğrulandı: $(basename "$DB_BACKUP_FILE") ($(du -h "$DB_BACKUP_FILE" | cut -f1))"
+
+# ── DAMGAYI YAZ ───────────────────────────────────────────────────
+#
+# ŞİFRELENMİYOR — bilerek. İçinde kişisel veri yok (tablo adı ve satır
+# sayısı), dizin zaten yalnız root'a açık, ve asıl gerekçe şu: şifreleme
+# anahtarı bir gün kaybolursa damga hâlâ okunabilir ve yedeğin NE
+# İÇERMESİ GEREKTİĞİNİ söyler.
+#
+# SAKLAMA: aşağıdaki temizlik süzgecine `db_*.satirlar.txt` deseni
+# eklendi — damga, ait olduğu yedekle aynı saklama politikasına tabi.
+if [ -z "$SATIR_DAMGASI" ]; then
+    rm -f "$DB_BACKUP_FILE"
+    fail "Satır sayısı damgası üretilemedi — yedek SİLİNDİ. Karşılaştırılamayan yedek tutulmaz."
+fi
+
+DAMGA_DOSYASI="${BACKUP_DIR}/db_${TIMESTAMP}.satirlar.txt"
+{
+    printf '# YEDEK SATIR SAYISI DAMGASI\n'
+    printf '# yedek     : %s\n' "$(basename "$DB_BACKUP_FILE")"
+    printf '# goruntu   : dokumle AYNI anlik goruntu (pg_export_snapshot)\n'
+    printf '# uretildi  : %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '# bicim     : <tablo>|<satir>\n'
+    printf '%s\n' "$SATIR_DAMGASI"
+} > "$DAMGA_DOSYASI"
+chmod 600 "$DAMGA_DOSYASI"
+log "INFO" "Satır damgası yazıldı: $(basename "$DAMGA_DOSYASI") ($(grep -vc '^#' "$DAMGA_DOSYASI") tablo)"
 
 # ── KLASÖRLER ─────────────────────────────────────────────────────
 klasor_yedekle() {
@@ -188,7 +271,7 @@ klasor_yedekle "$PROJECT_FILES_DIR" "$PROJECT_FILES_BACKUP_FILE" "Proje dosyalar
 # süresine tabi olsun. Bugün hepsi şifrelendi, ama süzgeç daralırsa
 # eski bir düz dosya sessizce sonsuza kadar kalırdı.
 DELETED_COUNT="$(find "$BACKUP_DIR" -maxdepth 1 -type f \
-    \( -name 'db_*.dump' -o -name 'db_*.dump.gpg' \
+    \( -name 'db_*.dump' -o -name 'db_*.dump.gpg' -o -name 'db_*.satirlar.txt' \
     -o -name 'uploads_*.tar.gz' -o -name 'uploads_*.tar.gz.gpg' \
     -o -name 'project-files_*.tar.gz' -o -name 'project-files_*.tar.gz.gpg' \) \
     -mtime "+${RETENTION_DAYS}" -print -delete | wc -l)"

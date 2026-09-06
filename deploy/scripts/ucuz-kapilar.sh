@@ -116,6 +116,7 @@ KAPILAR=(
   "agir|ön yüz derlemesi|${FE}|npm run build"
   "hizli|sır tarayıcı (aralık)|${REPO_ROOT}|deploy/scripts/sir-tara.py ${SIR_ARALIK_UZAK:-} ${SIR_ARALIK_YEREL:-}"
   "hizli|kutu ayrışması|${REPO_ROOT}|deploy/kutu/ayrisma-kontrolu.sh"
+  "hizli|açık veritabanı|${REPO_ROOT}|deploy/scripts/acik-veritabani-kapisi.sh"
   "agir|sır bekçisi (tüm depo)|${BE}|dotnet test EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj -v q --nologo --filter FullyQualifiedName~SecretInSourceGuardTests"
 )
 

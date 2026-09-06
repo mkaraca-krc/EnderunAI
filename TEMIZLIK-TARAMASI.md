@@ -1202,3 +1202,28 @@ daha çağrılmıyor: `deploy/scripts/verify.sh`,
 `deploy/scripts/common.sh`. Silinmediler — Mehmet'in kararı yalnız iki
 dosya içindi. `common.sh` ayrıca `BACKUP_ROOT` gibi yol tanımlarını
 tutuyor; silinmesi ayrı ölçüm ister.
+
+## Kalıntı veritabanları DÜŞÜRÜLDÜ — `enderun_squash_a`, `enderun_iki_baglam` (2026-09-06)
+
+**NE İDİLER.** Göç sıkıştırma (SQUASH/1) ve iki bağlamlı göç denemelerinden
+kalma çalışma kopyaları. Deneme bittiğinde silinmediler.
+
+**KALINTI OLDUKLARI ÖLÇÜLDÜ, VARSAYILMADI:**
+
+| Ölçüm | Sonuç |
+|---|---|
+| Betik / kod / yapılandırma referansı | **0** |
+| DURUM.md'de geçiş | **0** |
+| Açık oturum | **0** |
+| Boyut | 20 MB + 20 MB |
+
+**NEDEN SİLİNDİLER — YÜZEY.** İkisi de PUBLIC'e CONNECT açıktı ve
+canlıya benzer şema taşıyorlardı. Kimsenin çağırmadığı bir veritabanı,
+kimsenin bakmadığı bir yüzeydir.
+
+**GERİ ALINABİLİR:** düşürmeden önce `pg_dump -F c` ile dökümleri alındı
+ve `PGDMP` başlığıyla doğrulandı —
+`/var/backups/enderun/kalinti-20260906/` (1,9 M + 1,8 M).
+
+Karar: Mehmet, 2026-09-06 — *"Kalıntıysa TEMIZLIK-TARAMASI.md'ye kaydını
+düşüp DÜŞÜR — yüzey küçülsün."*
