@@ -146,5 +146,5 @@
 #                             ÖNDEYDİ. İzinsiz rol testin içinde
 #                             üretiliyor çünkü 15 rolün 15'i artık
 #                             anahtarı taşıyor.)
-statik: 2940
+statik: 2942
 dinamik: 25

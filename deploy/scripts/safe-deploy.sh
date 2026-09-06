@@ -420,7 +420,7 @@ run_frontend_tests() {
 }
 
 backup_current_release() {
-    log "INFO" "Mevcut sürüm rollback için yedekleniyor..."
+    log "INFO" "SÜRÜM YEDEĞİ [safe-deploy.sh:backup_current_release] — derlenmiş çıktı kopyalanıyor. VERİ YEDEĞİ DEĞİLDİR."
 
     rm -rf "$BACKEND_ROLLBACK_DIR"
     if [ -d "$BACKEND_PUBLISH_DIR" ]; then
@@ -432,7 +432,7 @@ backup_current_release() {
         cp -a "$FRONTEND_NEXT_DIR" "$FRONTEND_NEXT_ROLLBACK_DIR"
     fi
 
-    log "INFO" "Rollback yedeği hazır: ${BACKEND_ROLLBACK_DIR}, ${FRONTEND_NEXT_ROLLBACK_DIR}"
+    log "INFO" "SÜRÜM YEDEĞİ hazır [safe-deploy.sh:backup_current_release] — yalnız derlenmiş çıktı: ${BACKEND_ROLLBACK_DIR}, ${FRONTEND_NEXT_ROLLBACK_DIR}"
 }
 
 #
@@ -579,7 +579,7 @@ install_backup_script() {
     fi
 
     if ! cmp -s "$kaynak" /usr/local/bin/enderun-backup.sh; then
-        log "INFO" "Yedek betiği repodan güncelleniyor (canlı kopya farklıydı)."
+        log "INFO" "VERİ YEDEĞİ betiği [enderun-backup.sh] repodan güncelleniyor (canlı kopya farklıydı)."
     fi
 
     install -m 700 -o root -g root "$kaynak" /usr/local/bin/enderun-backup.sh \
@@ -588,7 +588,7 @@ install_backup_script() {
 
 backup_database() {
     install_backup_script
-    log "INFO" "Veritabanı yedeği alınıyor (enderun-backup.sh)..."
+    log "INFO" "VERİ YEDEĞİ alınıyor [enderun-backup.sh] — veritabanı dökümü + uploads + proje dosyaları, şifreli."
     if [ -x /usr/local/bin/enderun-backup.sh ]; then
         if ! /usr/local/bin/enderun-backup.sh; then
             fail "Yedekleme BAŞARISIZ — yayın durduruldu. Yedeksiz yayın yapılmaz."
@@ -704,7 +704,7 @@ rollback() {
         cp -a "$BACKEND_ROLLBACK_DIR" "$BACKEND_PUBLISH_DIR"
         log "INFO" "Backend önceki sürüme geri alındı."
     else
-        log "WARN" "Backend rollback yedeği yok, geri alınamadı."
+        log "WARN" "SÜRÜM YEDEĞİ [safe-deploy.sh:backup_current_release] yok — backend geri alınamadı. (Veri yedeği ayrıdır, bu satır onu ilgilendirmez.)"
     fi
 
     if [ -d "$FRONTEND_NEXT_ROLLBACK_DIR" ]; then
@@ -712,7 +712,7 @@ rollback() {
         cp -a "$FRONTEND_NEXT_ROLLBACK_DIR" "$FRONTEND_NEXT_DIR"
         log "INFO" "Frontend önceki sürüme geri alındı."
     else
-        log "WARN" "Frontend rollback yedeği yok, geri alınamadı."
+        log "WARN" "SÜRÜM YEDEĞİ [safe-deploy.sh:backup_current_release] yok — frontend geri alınamadı. (Veri yedeği ayrıdır, bu satır onu ilgilendirmez.)"
     fi
 
     restart_services

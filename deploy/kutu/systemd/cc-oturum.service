@@ -1,0 +1,19 @@
+[Unit]
+Description=CC calisma oturumu (tmux: cc) - baglantidan bagimsiz
+Documentation=file:///var/www/enderun-ai/DURUM.md
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/local/bin/cc-oturum.sh
+ExecStop=/usr/bin/tmux kill-session -t cc
+RemainAfterExit=yes
+# KillMode=none: birim durdurulduğunda systemd oturumdaki İŞLERİ
+# öldürmesin. Oturumu kapatmak ExecStop'un açık işidir; yan etki
+# olarak koşan bir işin öldürülmesi kabul edilemez.
+KillMode=none
+User=root
+Environment=HOME=/root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=CC devri - VS Code oturumu olunce tmux'taki CC devralir
+Documentation=file:///var/www/enderun-ai/DURUM.md
+After=cc-oturum.service
+Requires=cc-oturum.service
+
+[Service]
+Type=oneshot
+# ZAMAN AŞIMI — 2026-09-06 ÖLÇÜMÜ SONRASI EKLENDİ.
+# Type=oneshot varsayılanı TimeoutStartSec=infinity. Takılan bir koşu
+# ZAMANLAYICIYI SONSUZA KADAR BLOKLAR; 2026-09-06 03:58-07:12 arası
+# tam olarak bu oldu ve rapor kanalı 3 saat 15 dakika sessizce öldü.
+TimeoutStartSec=180
+ExecStart=/usr/local/bin/cc-devir.sh
+User=root
+Environment=HOME=/root

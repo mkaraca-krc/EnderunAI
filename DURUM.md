@@ -2211,6 +2211,72 @@ Tarihsel kalıntı, bozuk yol değil. Düzeltilmedi.
 
 ---
 
+### Kural 75 — "ÖLÇÜM DÜZELTMESİ" SİLİNECEK SATIRI ÇOĞALTIYORSA, DÜZELTME DEĞİLDİR
+
+**Bir "ölçüm düzeltmesi", silinecek satır ya da dosya sayısını
+değiştiriyorsa ölçüm düzeltmesi değildir; hiç uygulanmamış bir
+politikanın İLK UYGULAMASIDIR ve ayrı onay ister.**
+
+Onaylandı: Mehmet, 2026-09-06. Gerekçesi olarak kendi örneğini verdi —
+saklama süresi "dosya adındaki tarihe göre işlesin" diye düzeltilince
+silinecek dosya 407'ye çıkıyor. Bu bir kusur onarımı gibi görünür ama
+sonucu, bugüne kadar hiç silme yapmamış bir politikanın ilk kez
+işlemesidir. İkisi arasındaki fark, onayın kapsamıdır: kusur onarımı
+zaten verilmiş onayın içindedir, ilk uygulama değildir.
+
+**NASIL AYIRT EDİLİR:** düzeltmeden önce ve sonra, politikanın
+DOKUNACAĞI nesne sayısını say. Sayı sıfırdan büyük bir sayıya
+çıkıyorsa ilk uygulamadır.
+
+---
+
+### Kural 74 — ZAMANLAYICININ DAMGASI, SERVİSİNİN KOŞTUĞUNUN KANITI DEĞİLDİR
+
+**Bir zamanlayıcının damgası, servisinin koştuğunun kanıtı değildir.
+Kanıt, birim adıyla günlükte bir `Starting` / `Finished` satırıdır.**
+
+Onaylandı: Mehmet, 2026-09-06.
+
+`LastTriggerUSec` ve `/var/lib/systemd/timers/stamp-*` ETKİNLEŞTİRME
+anını da kaydeder. 2026-09-05'te geri yükleme tatbikatının damgası
+"25 Ağustos 16:21"i gösteriyordu ve ben önce "koşmuş" diye okudum.
+Derin ölçüm tersini söyledi: o saati kapsayan 1113 satırlık günlükte
+birim adıyla tek bir `systemd[1]: Starting …` satırı yok —
+`enderun-backup.service`'in aynı penceredeki satırları ise duruyor.
+Damga, betiği elle `sudo` ile çalıştırdığım anı işaretlemişti.
+
+**AKRABASI (aynı gün ölçüldü):** `Starting` satırının VARLIĞI da tek
+başına yetmez. `Finished` yoksa koşu bitmemiştir — bkz. aşağıdaki
+2026-09-06 bulgusu: `cc-devir.service` 04:02:15'te `Starting` yazdı,
+`Finished` hiç yazmadı ve rapor kanalı 3 saat 15 dakika sessizce öldü.
+
+---
+
+### Kural 73 — COMMİT EDİLMEMİŞ İŞ, YENİDEN BAŞLATMADAN SAĞ ÇIKMAZ
+
+**Çalışma ağacındaki commit'lenmemiş iş, yeniden başlatmadan sağ
+çıkmaz. Taslak da olsa commit edilir ya da kaybı göze alınır.**
+
+Onaylandı: Mehmet, 2026-09-06, kaybın üstüne.
+
+**KAYIP GERÇEK, VARSAYIM DEĞİL:** 2026-09-05 gecesi iki taslak geçici
+dizine yazıldı — felaket kurtarma yordamı ve NÖBET/1 bekçi betiği.
+İkisi de "yarın depoya girecek" diye bırakıldı. Sunucu 2026-09-06
+07:12'de âniden yeniden başladı; oturuma özel geçici dizin silindi;
+iki dosya da gitti.
+
+**"GEÇİCİ" SÖZCÜĞÜ TUZAK:** dosyayı geçici dizine yazarken verilen
+karar "bu dosya önemsiz" değil, "bunu birazdan taşıyacağım"dı. Aradaki
+süre, kaybın penceresidir ve o pencere ne kadar kısa sanılırsa o kadar
+uzun olur.
+
+**UYGULAMA:** bir taslak bir sonraki commit'e kadar yaşayacaksa depoya
+girer — gerekirse `taslak/` altında ve açıkça taslak olduğu yazılarak.
+Depoya girmeyecekse, kaybı GÖZE ALINDIĞI yazılır ve yeniden üretme
+maliyeti kabul edilir. Üçüncü seçenek yok.
+
+---
+
 ### Kural 72 — KOD BLOĞU METİN ARALIĞIYLA SİLİNMEZ
 
 **Kod bloğu metin aralığıyla silinmez. Aralıkla kesmek zorunda kalırsan,
@@ -2753,6 +2819,123 @@ Desene kabuk savunması eklendi (`hata`/`fail` çağrısı, sıfırdan farklı
 
 ---
 
+## TUR 3 — YEDEK, İZLEME VE DAYANIKLILIK (2026-09-06)
+
+### U0 — 07:12 YENİDEN BAŞLATMASI: NE ÖLÇÜLDÜ, NE ÖLÇÜLEMEDİ
+
+**KAPANMA DÜZGÜN DEĞİLDİ.** Önceki önyükleme 2026-09-06 07:12:16'da
+KESİLİYOR ve günlükte **tek bir kapanma kaydı yok** — ne
+`systemd-shutdown`, ne `Reached target Shutdown`, ne `Unmounting`.
+Düzgün bir `reboot` bunları yazar. 88 saniye sonra 07:13:44'te yeni
+önyükleme başlıyor.
+
+**OOM DEĞİL.** O önyüklemede 7 OOM satırı var ama hepsi **28 Ağustos**
+tarihli (`enderun-derleme.scope`, dotnet derlemesi) — olaydan 9 gün
+önce. 6 Eylül'de tek bir OOM yok. Zaten OOM süreç öldürür, makineyi
+yeniden başlatmaz.
+
+**AMA BELLEK BASKISI VARDI.** Son 73 dakikada güvenlik duvarı
+gürültüsü dışında günlüğe düşen **yalnız dört satır** var ve dördü de
+`systemd-journald: Under memory pressure, flushing caches` (06:35,
+06:35, 06:40, 06:41). Ondan bir saat önce Kestrel `thread pool
+starvation` uyarısı vermiş.
+
+**ÇEKİRDEK YÜKSELDİ:** 6.8.0-138 → 6.8.0-139. O çekirdek
+`unattended-upgrade` ile **2026-09-04 06:50'de** kurulmuştu, yani iki
+gün bekleyen bir yeniden başlatma borcu vardı. Ama günlükte systemd'nin
+yeniden başlatmayı BAŞLATTIĞINA dair bir iz yok.
+
+**ÖLÇEMEDİĞİM ŞEY, AÇIKÇA:** sağlayıcı paneline erişimim yok. İçeriden
+bakınca "sağlayıcı/hipervizör kaynaklı sıfırlama" ile "bellek
+baskısıyla donan makinenin dışarıdan sıfırlanması" ayırt edilemiyor.
+Kanıt ikisiyle de uyumlu. **Paneldeki bakım/olay kaydına Mehmet
+bakmalı.**
+
+### U0'IN YAN BULGUSU — RAPOR KANALI 3 SAAT 15 DAKİKA SESSİZCE ÖLDÜ
+
+Ölçüm sırasında çıktı, aranmıyordu:
+
+| Birim | Son `Starting` | `Finished` |
+|---|---|---|
+| `enderun-rapor.service` | 03:58:56 | **hiç yok** |
+| `cc-devir.service` | 04:02:15 | **hiç yok** |
+
+İkisi de `Type=oneshot` ve systemd'nin bu tip için varsayılanı
+`TimeoutStartSec=infinity`. **Takılan bir koşu zamanlayıcıyı sonsuza
+kadar bloklar.** Sonuç: Mehmet'e "PC'n kapalıyken buradan oku" diye
+verilen rapor adresi 04:00'dan makinenin ölümüne kadar GÜNCELLENMEDİ
+ve bunu kimse fark etmedi. Kanal öldüğünde sessizlik, "her şey yolunda"
+ile aynı görünüyor.
+
+**DÜZELTİLDİ:** `cc-devir.service` → `TimeoutStartSec=180` (betiğin
+gerçek üst sınırı ~90 sn), `enderun-rapor.service` → `90`.
+
+**SONDA Z1 — MEKANİZMA KANITLANDI, İKİ AYAKTA DA.** Atılıp silinen bir
+birim (`ExecStart=/bin/sleep 600`):
+- `TimeoutStartSec=8` ile → 8. saniyede `start operation timed out.
+  Terminating.`, birim `failed`, sonuç `timeout`, `sleep` süreci ölü.
+- Zaman aşımı olmadan (pozitif kontrol) → 14 saniye sonra hâlâ
+  `activating`, `TimeoutStart=infinity`, süreç yaşıyor.
+
+İkinci ayak olmasa sonda hedefi bulduğunu iddia edemezdim. Birim
+silindi, iz bırakılmadı.
+
+**NÖBET/1'E BORÇ:** bu arıza NÖBET/1'in yakalaması gereken cinsten ve
+canlılık damgası tam bunun için isteniyordu. Zaman aşımı düzeltmesi
+arızayı önler; nöbetçi de olsaydı **haber verirdi**. İkisi ayrı iş.
+
+### 3.2 — "YEDEK" DİYEN SATIR ARTIK KİMİN KONUŞTUĞUNU SÖYLÜYOR
+
+**SORUN (Mehmet):** *"AYNI SÖZCÜK İKİ AYRI ŞEY… ben sekiz kez onay
+verirken hangisini okuduğumu bilmiyordum."*
+
+Günlükte iki apayrı şey aynı sözcükle geçiyordu:
+
+| Etiket | Ne yapar | Veritabanı silinirse işe yarar mı |
+|---|---|---|
+| `[safe-deploy.sh:backup_current_release]` | derlenmiş çıktının kopyası | **HAYIR** |
+| `[enderun-backup.sh]` | pg_dump + uploads + proje dosyaları, şifreli | **EVET, tek şey budur** |
+
+Altı günlük satırının tamamı artık köşeli parantez içinde konuşanın
+adını taşıyor; sürüm yedeği satırları ayrıca *"VERİ YEDEĞİ DEĞİLDİR"*
+diyor.
+
+**BENİM GREP'İM ÜÇ SATIR KAÇIRDI, TEST BULDU.** Elle taradığımda dört
+satır saymıştım. `[Yy]edek` deseni **"yedeği"** biçimini yakalamıyor
+(`yedeğ` ≠ `yedek`), ve rollback yolundaki iki `WARN` satırı ile bir
+INFO satırı gözden kaçmıştı. Nöbetçi test ilk koşusunda kırmızı yandı
+ve üçünü adıyla listeledi. **Kural 70'in canlı örneği: kaynakta grep
+ölçüm değil, ipucudur.**
+
+**NÖBETÇİ — `YedekGunlukKimligiTests` (2 test):**
+- `YedekDiyenHerGunlukSatiri_KonusaniniAdlandirir` — "yedek/yedeğ/backup"
+  geçen her `log` satırı köşeli parantezli bir ad taşımalı. **Pozitif
+  kontrol aynı testin içinde:** en az 3 satır bulunmadıysa ayıklama
+  bozulmuştur ve test hiçbir şey ölçmüyordur (Kural 48).
+- `SurumYedegiIleVeriYedegi_FarkliKonusanlarOlarakGorunur` — en az iki
+  AYRI etiket olmalı. Birinci test tek başına, dört satıra da aynı
+  etiketi koyarak susturulabilirdi.
+
+**İKİ SONDA, İLAN EDİLDİĞİ GİBİ (Kural 61):**
+- S1: bir satırın etiketi silindi → birinci test **kırmızı** (satırı
+  adıyla yazdı), ikinci **yeşil**.
+- S2: dört etiket de aynı yapıldı → birinci **yeşil**, ikinci
+  **kırmızı**.
+
+Her sonda yalnız hedeflediği testi düşürdü; ikisi de geri alındı.
+
+**ÜÇÜNCÜ BULGU — ÖKSÜZ BETİK.** `deploy/scripts/backup.sh` ve
+`rollback.sh` **hiçbir yerden çağrılmıyor**: ne safe-deploy, ne bir
+servis, ne bir zamanlayıcı. safe-deploy kendi içindeki
+`backup_current_release()` fonksiyonunu kullanıyor.
+
+**ESKİ KAYDIM YANLIŞTI, DÜZELTİLDİ.** YEDEK/1 bölümünde *"safe-deploy
+her yayından önce İKİSİNİ de çağırıyor"* yazıyordu. Ölçüm bunu
+çürüttü. İki betiğin de başına, ne olmadıklarını söyleyen açık uyarı
+yazıldı. Silinmeleri **AK-8**'de.
+
+---
+
 ## TUR 2 — MESAJLAŞMA (M3/2b) (2026-09-05)
 
 ### FAZ 0 — ÖLÇÜM
@@ -3003,14 +3186,131 @@ tek şube olduğu için tahmin de içermez.
 **GENİŞ TARAF SEÇİLMEDİ:** "merkezsiz de geçsin" seçeneği
 değerlendirilmedi; o, 1.1 ve 1.2'nin tamamını anlamsız kılardı.
 
-### AK-2 — NÖBET/1 UYARISI NEREYE GİDECEK
-Seçenekler: e-posta / WhatsApp / Telegram / sunucuda dosya. Karar
-gelene kadar dosyaya yazılacak ve dosya günlüklenecek.
+### AK-2 — NÖBET/1 UYARISI NEREYE GİDECEK — **KARARA BAĞLANDI (2026-09-06)**
 
-### AK-3 — SUNUCU DIŞI YEDEK (KVKK)
+**E-POSTA birincil, DOSYA her zaman.** Mevcut SMTP kullanılacak; yeni
+bağımlılık ve yeni sır EKLENMEYECEK. Dosya kanalı e-posta çalışsa da
+yazılmaya devam eder — tek kanala bağlanmak, kanal öldüğünde sessizliği
+"her şey yolunda" gibi gösterir.
+
+**DÜRÜST SINIR — NÖBET/1 NEYİ YAKALAMAZ:** nöbetçi izlediği sunucunun
+İÇİNDE koşuyor. Sunucu ölürse nöbetçi de ölür ve hiçbir uyarı gitmez.
+Yani NÖBET/1 **"servis bozuldu"yu yakalar, "sunucu öldü"yü yakalamaz.**
+
+Bu boşluğun kanıtı bugün elimizde: 2026-09-06 07:12'de sunucu âniden
+durdu ve hiçbir uyarı gitmedi — çünkü uyarıyı gönderecek olan da
+aynı makinedeydi. Dışarıdan bakan bir göz için AK-7 açıldı.
+
+### AK-3 — SUNUCU DIŞI YEDEK — **YAPILACAK, ŞARTLARI BELLİ (2026-09-06)**
+
 `UZAK_YEDEK_ETKIN=hayir`. **Bugün tek disk arızası tüm veriyi geri
 dönüşsüz kaybettirir** — yedekler, şifreleme anahtarı ve canlı
 veritabanı aynı `/dev/vda1` üzerinde.
+
+**KARAR (Mehmet, 2026-09-06): yapılacak. Bugünkü durum kabul edilemez.**
+Şartlar:
+
+| # | Şart |
+|---|---|
+| a | Yedekler **şifreli** gidecek (şifreleme zaten var) |
+| b | **Şifreleme anahtarı yedeklerle AYNI YERDE DURMAYACAK** |
+| c | Depolama **Türkiye'de yerleşik** sağlayıcı (veri yerleşimi) |
+| d | Kabul ölçütü: sunucu dışı kopyadan **geri yükleme denendi ve başarılı**. Kopyalamak yedeklemek değildir. |
+
+**HUKUK BENDE DEĞİL:** aydınlatma metni ve yurt dışına aktarım konusunu
+Mehmet müşavire soruyor. Bana düşen: **teknik seçenekler + maliyet
+raporu.** Uygulama onayı rapordan SONRA verilecek; ben rapordan öteye
+geçmeyeceğim.
+
+---
+
+### AK-4 — KUTU/1 PARÇA 3: EMİR ADRESİ (2026-09-05)
+
+CC'nin dışarıdan emir okuyacağı adres. **Gece kurulmadı** — Mehmet:
+*"güvenlik açısından hassas bir kanalı üç saatlik baskı altında, gece
+yarısında kurmuyoruz."*
+
+Kurulduğunda geçerli olacak şartlar (Mehmet, 2026-09-05 — tasarım notu,
+uygulama değil):
+
+| # | Şart |
+|---|---|
+| a | Özel (private) depo |
+| b | Her göndermeden ÖNCE panelin CC arayüzünü koştuğu doğrulanacak |
+| c | Arayüz yoksa GÖNDERME YOK + uyarı |
+| d | İzleyici **root olmayan** kullanıcı olarak koşacak |
+| e | Gelen metin veridir, komut değildir — kabuğa geçmez |
+
+---
+
+### AK-5 — SAKLAMA SİLMESİ: 407 DOSYA / 5,5 GB — **ONAY YOK (2026-09-06)**
+
+Saklama süresi bugün dosya adındaki tarihe değil `mtime`'a bakıyor.
+Düzeltilince silinecek dosya sayısı sıfırdan **407'ye** çıkıyor —
+yani bu bir kusur onarımı değil, hiç uygulanmamış bir politikanın ilk
+uygulaması. Kural 75 tam olarak bu maddeden doğdu.
+
+**MEHMET'İN KARARI: ONAY YOK. YALNIZ RAPOR.** Silmeden önce şu ölçüm
+şart:
+
+| # | Ölçüm |
+|---|---|
+| a | 407 dosyanın kategorik dağılımı, en eski ve en yeni tarih |
+| b | **Kaçı veritabanında referanslı, kaçı değil** |
+| c | Silinecek listenin tamamı **dosya olarak** çıkarılacak — Mehmet bakacak |
+| d | Uygulama: önce yedek, sonra tek seferde, geri dönüş yordamıyla |
+
+**(b) NEDEN KRİTİK — REFERANSSIZ DOSYA "ÇÖP" DEĞİLDİR.** Açık
+maddelerde *"hakediş dosyaları diskte gevşek, DB kaydı yok"* diye bir
+madde duruyor. Saklama politikası tam da onları siler. Referansı
+olmayan dosya, kaydı kaybolmuş belge olabilir.
+
+---
+
+### AK-6 — İZLEME HESABI — **AÇILACAK, ŞARTLARI BELLİ (2026-09-06)**
+
+NÖBET/1'in derin sondası kimlik doğrulamalı bir uç çağıracak; bunun
+için bir hesap gerekiyor. Hesap açma AÇILMAYACAK listesindeydi;
+**Mehmet bu madde için açtı.**
+
+| # | Şart |
+|---|---|
+| a | Adı açıkça izleme hesabı olacak (`izleme` / `monitor`) |
+| b | **En dar izin:** yalnız derin sondanın çağırdığı uçlar. Kişisel veri, maaş, çek, mesajlaşma — hiçbirine erişim yok |
+| c | Parolası ortam değişkeninde; koda ve betiğe YAZILMAYACAK |
+| d | **Sır döndürme listesine eklenecek** — sürekli duran bir kimlik bilgisidir |
+| e | `WorkHoursExempt = true` (7/24 koşuyor) |
+| f | Mesajlaşma kanallarına, bildirim kitlelerine, personel listesine GİRMEYECEK — insan gibi görünmeyecek |
+| g | Denetim kaydında ayırt edilebilir olacak |
+
+**(e) KARAR KAYDI — `WorkHoursExempt` ALANININ İLK MEŞRU KULLANIMI.**
+Alan bugüne kadar bir insana verilseydi "mesai kuralını kimin için
+esnetiyoruz" sorusunu doğururdu. İzleme hesabı insan değil ve 7/24
+koşması işinin tanımı. Mehmet bunun kayda böyle geçmesini istedi.
+
+---
+
+### AK-7 — SUNUCU DIŞINDAN CANLILIK KONTROLÜ (2026-09-06)
+
+AK-2'nin dürüst sınırının karşılığı: dışarıdan `/api/health` çağıran,
+bu makineden bağımsız bir göz. AK-3 ile **aynı aileden** — ikisi de
+"bu sunucu tamamen giderse ne oluyor" sorusunun parçası ve Mehmet
+ikisinin **birlikte planlanmasını** istedi.
+
+**ŞİMDİ KURULMAYACAK.** Madde açıldı, seçenek raporu AK-3 raporuyla
+birlikte gelecek.
+
+---
+
+### AK-8 — ÖKSÜZ YEDEK BETİĞİ SİLİNSİN Mİ (2026-09-06)
+
+`deploy/scripts/backup.sh` (15 satır) ve `deploy/scripts/rollback.sh`
+(12 satır) **hiçbir yerden çağrılmıyor** — ölçüldü. Kafa karışıklığının
+kaynağı bunlar: ikisi de "yedek" diyor ama veriye dokunmuyor.
+
+Bugün ikisine de başlığına açık uyarı yazıldı. **Silinip
+silinmeyecekleri açık** — silme, hâlâ elle kullanılıp kullanılmadığını
+bilmeyi gerektiriyor ve bu Mehmet'in bilgisi.
 
 ---
 
@@ -3095,9 +3395,17 @@ kopyalıyor (`middleware.ts`, login yolu, `erp-shell.tsx`, …). 216K'lık
 `release-foundation-rc1-*` klasörü budur. `rollback.sh` de yalnız onu
 geri alır. Veritabanı yedeği AYRI bir betiktir:
 `/usr/local/bin/enderun-backup.sh` (repo kopyası `scripts/enderun-backup.sh`,
-ikisi birebir aynı — `BackupScriptSyncTests` koruyor). safe-deploy her
-yayından önce İKİSİNİ de çağırıyor, ama günlükte ikisi de "yedek"
-diye geçiyor. **Onay verilen satır, hangisinin çalıştığını söylemiyordu.**
+ikisi birebir aynı — `BackupScriptSyncTests` koruyor).
+
+> **DÜZELTME (2026-09-06):** burada *"safe-deploy her yayından önce
+> İKİSİNİ de çağırıyor"* yazıyordu — **YANLIŞTI**. Ölçüldü: safe-deploy
+> `deploy/scripts/backup.sh`i HİÇ çağırmıyor; kendi içindeki
+> `backup_current_release()` fonksiyonunu kullanıyor. `backup.sh` ve
+> `rollback.sh` öksüz. Ayrıntı: TUR 3 / 3.2, silme kararı AK-8.
+
+Günlükte ikisi de "yedek" diye geçiyordu ve **onay verilen satır,
+hangisinin çalıştığını söylemiyordu** — 2026-09-06'da düzeltildi,
+`YedekGunlukKimligiTests` nöbette.
 
 ### (a) Döküm alınıyor mu — EVET
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=CC devir yoklamasi (dakikada bir)
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

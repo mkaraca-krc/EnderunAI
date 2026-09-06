@@ -1,0 +1,10 @@
+[Unit]
+Description=CC durum raporunu uretir (KUTU/1 Parca 2)
+
+[Service]
+Type=oneshot
+# ZAMAN AŞIMI — 2026-09-06 ÖLÇÜMÜ SONRASI EKLENDİ (bkz. cc-devir.service).
+TimeoutStartSec=90
+ExecStart=/usr/local/bin/enderun-rapor-yaz.sh
+User=root
+Environment=HOME=/root

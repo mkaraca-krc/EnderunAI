@@ -1,4 +1,21 @@
 #!/usr/bin/env bash
+#
+# DİKKAT — BU BİR VERİ YEDEĞİ DEĞİLDİR VE HİÇBİR YERDEN ÇAĞRILMIYOR.
+#
+# ÖLÇÜLDÜ (2026-09-06): depoda hiçbir betik, servis ya da zamanlayıcı
+# bu dosyayı çağırmıyor. `safe-deploy.sh` kendi içindeki
+# `backup_current_release()` fonksiyonunu kullanıyor; veri yedeğini ise
+# `/usr/local/bin/enderun-backup.sh` alıyor. Burası yalnız ELLE
+# çalıştırıldığında iş görür.
+#
+# NE YAPAR: altı ön yüz kaynak dosyasını kopyalar. Veritabanına,
+# yüklenen dosyalara, proje dosyalarına DOKUNMAZ. Buradan geri yükleme
+# yapmak veriyi geri getirmez.
+#
+# DURUM.md'deki eski kayıt "safe-deploy her yayından önce ikisini de
+# çağırıyor" diyordu; O KAYIT YANLIŞTI, 2026-09-06'da düzeltildi.
+#
+# Silinip silinmeyeceği AÇIK KARARLAR'da (AK-8).
 set -Eeuo pipefail
 D="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${D}/common.sh"
