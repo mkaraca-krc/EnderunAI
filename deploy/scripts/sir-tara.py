@@ -43,7 +43,22 @@ import sys
 
 KOK = os.environ.get("REPO_ROOT", "/var/www/enderun-ai")
 ADLAR_DOSYASI = os.path.join(KOK, "deploy", "bekci", "uretim-sir-adlari.txt")
-ORTAM_DOSYASI = "/etc/enderunai/backend.env"
+# ═══ SIR NEREDE DURUYOR — TEK DOSYA DEĞİL ═══
+#
+# Sırların hepsi `backend.env`de değil ve olmamalı: tatbikat
+# veritabanı rolünün parolasını uygulama süreci OKUMAMALI. Bir sırrı
+# "tarayıcı oraya bakıyor" diye uygulamanın ortamına taşımak, koruma
+# değil, yüzey genişletmesidir.
+#
+# ÖLÇÜLDÜ (2026-09-06): TATBIKAT_DB_PAROLASI listeye `zorunlu` diye
+# yazıldı ama tarayıcının baktığı yere konmadı; tarayıcı okuyamadığı
+# sırrı "sızmadı" diye raporlamayı REDDETTİ ve yayını durdurdu.
+# Kapı doğru davrandı (Kural 48: boş sonuç yokluğun kanıtı değildir);
+# eksik olan, tarayıcının sırların GERÇEKTE durduğu yerleri bilmesiydi.
+ORTAM_DOSYALARI = [
+    "/etc/enderunai/backend.env",
+    "/etc/enderunai/tatbikat.env",
+]
 
 # ═══ ÜST SINIR — SESSİZ KISALTMA YOK ═══
 #
@@ -88,21 +103,31 @@ def sir_adlari():
 def uretim_sirlari(adlar):
     """Ortam dosyasından DEĞERLERİ okur. Hiçbir yere basılmaz."""
     ham = {}
-    if not os.path.exists(ORTAM_DOSYASI):
-        return {}
-    try:
-        icerik = open(ORTAM_DOSYASI, encoding="utf-8", errors="replace").read()
-    except PermissionError:
-        return {}
+    okunan_dosya = 0
 
-    for satir in icerik.split("\n"):
-        s = satir.strip()
-        if not s or s.startswith("#") or "=" not in s:
+    for yol in ORTAM_DOSYALARI:
+        if not os.path.exists(yol):
             continue
-        ad, _, deger = s.partition("=")
-        deger = deger.strip().strip('"').strip("'")
-        if deger:
-            ham[ad.strip()] = deger
+        try:
+            icerik = open(yol, encoding="utf-8", errors="replace").read()
+        except PermissionError:
+            continue
+
+        okunan_dosya += 1
+
+        for satir in icerik.split("\n"):
+            s = satir.strip()
+            if not s or s.startswith("#") or "=" not in s:
+                continue
+            ad, _, deger = s.partition("=")
+            deger = deger.strip().strip('"').strip("'")
+            if deger:
+                ham[ad.strip()] = deger
+
+    # HİÇBİR DOSYA OKUNAMADIYSA: boş sözlük döner ve çağıran taraf
+    # "kontrol edilemedi" deyip durur. Sessiz geçiş yok.
+    if okunan_dosya == 0:
+        return {}
 
     sonuc = {}
     for ad in adlar:
@@ -153,7 +178,7 @@ def main():
     sirlar = uretim_sirlari(adlar)
     if not sirlar:
         # SESSİZ ATLAMA YOK — ama bu ortamda (ör. CI) sırlar okunamaz.
-        print("[sir-tara] ATLANDI: üretim ortam dosyası okunamadı "
+        print("[sir-tara] ATLANDI: üretim ortam dosyaları okunamadı "
               f"({ORTAM_DOSYASI}). Bu ortamda gerçek sır kontrolü YAPILAMADI.")
         return 0
 
