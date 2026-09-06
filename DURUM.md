@@ -3141,6 +3141,38 @@ paketinin işi ve **AÇILMAYACAK listesinde** — Mehmet'in kararı.
 
 ---
 
+## KARAR — MESAJLAŞMA DUYURUSU 2c-2'YE BAĞLI (2026-09-06)
+
+**Mesajlaşma, canlı bağlantı (M3/2c-2) tamamlanmadan ekibe
+DUYURULMAYACAK.**
+
+**GEREKÇE (Mehmet):** *"bugün alıcı tarafta mesaj kendiliğinden
+belirmiyor; yalnız gönderen kendi ekranında görüyor. Duyurulup
+denenirse ilk deneyimde cevapsız kalınır ve sistem bir daha açılmaz."*
+
+**SIRA:**
+
+```
+2c-1 (panel)
+  → 2c-2 (canlı bağlantı + rozet + kaçırılanları çekme)
+    → hesap paketi
+      → ANCAK O ZAMAN duyuru
+        → ÇAY/1
+```
+
+**NEDEN KAYDA DEĞER:** bu, "özellik hazır mı" ile "özellik
+duyurulabilir mi" arasındaki farkı ayıran bir karar. Kod bugün
+çalışıyor ve U1'de tarayıcıdan doğrulandı — ama **çalışan bir özellik,
+kullanılabilir bir özellik değildir.** Tek yönlü bir mesajlaşma
+teknik olarak yeşil, insani olarak kırmızıdır.
+
+**İLK DENEYİM GERİ ALINAMAZ.** Bir kullanıcı bir aracı bir kez
+denerse ve karşılık göremezse, ikinci denemesi olmaz. Bu, yayın
+geri alınabilirliğinden farklı bir şey: kodu geri alabiliriz, ilk
+izlenimi alamayız.
+
+---
+
 ## M3/2b — **KAPANDI** (2026-09-06, Kural 71 doğrulandı)
 
 **TARAYICIDAN, MEHMET'İN OTURUMUYLA, `9678e7bb` ÜZERİNDE:**
