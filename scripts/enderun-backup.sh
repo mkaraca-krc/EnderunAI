@@ -139,6 +139,26 @@ dogrula() {
     return 0
 }
 
+# ── KOŞUYOR KİLİDİ ────────────────────────────────────────────────
+#
+# Geri yükleme tatbikatı, yedek hâlâ alınırken başlarsa sessizce bir
+# önceki yedeğe düşerdi. Onun beklemesi için "şu an koşuyorum" demenin
+# bir yolu gerekiyor.
+#
+# NEDEN pgrep DEĞİL — ÖLÇÜLDÜ (2026-09-06): `pgrep -f` tam komut
+# satırında arar ve bu yolun ADINI ANAN her komutu eşleştirir. Sonda
+# sırasında tatbikat, sondayı koşturan KABUĞUN komut satırını "yedek
+# koşuyor" sanıp beklemeye girdi. Aynı tuzak `pkill -f` ile ikinci kez
+# yaşandı ve o sefer kabuğun kendisi öldü. BİR AD ARAMASI, BİR VARLIK
+# ÖLÇÜMÜ DEĞİLDİR.
+#
+# Kilit dosyası PID taşıyor; tatbikat hem dosyaya hem SÜRECİN
+# YAŞADIĞINA bakıyor. Betik çökse bile bayat kilit kimseyi bekletmez.
+YEDEK_KILIDI="/var/lib/enderun-ai/yedek-kosuyor"
+mkdir -p "$(dirname "$YEDEK_KILIDI")"
+printf '%s\n' "$$" > "$YEDEK_KILIDI"
+trap 'rm -f "$YEDEK_KILIDI"' EXIT
+
 log "INFO" "Yedekleme başladı."
 
 # ── VERİTABANI ────────────────────────────────────────────────────

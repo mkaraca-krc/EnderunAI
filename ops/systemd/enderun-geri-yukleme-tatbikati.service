@@ -8,7 +8,8 @@ OnFailure=enderun-uyari@%N.service
 
 [Service]
 Type=oneshot
-# 18 saniyelik is; 10 dakika fazlasiyla pay.
-TimeoutStartSec=600
+# 18 saniyelik is, AMA yedek koşuyorsa 30 dakikaya kadar bekleyebilir
+# (BEKLEME_TAVANI_SN=1800). 40 dakika, beklemenin tavani artı pay.
+TimeoutStartSec=2400
 ExecStart=/usr/local/bin/enderun-geri-yukleme-tatbikati.sh
 User=root

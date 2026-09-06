@@ -123,8 +123,77 @@ MUHAFIZ_GECTI=1
 # Dosya değiştirme zamanına (`%T@`) göre seçmek YANLIŞ ÇIKTI: geçmiş
 # yedekler toplu şifrelendiğinde hepsinin zamanı "şimdi" oldu ve
 # tatbikat 17 gün önceki bir yedeği "en yeni" sanıp seçti.
+# ── ÖNCE: YEDEK HÂLÂ ALINIYOR MU ────────────────────────────────
+#
+# Tatbikat 03:31'de, gece yedeği 03:00'te koşuyor. Yedek normalde 7
+# saniye sürüyor ama bir gün uzarsa tatbikat ONU BEKLEMELİ — yoksa
+# sessizce bir öncekine düşer ve "geri yükleme çalışıyor" der. O yeşil,
+# BUGÜNÜN yedeği hakkında hiçbir şey söylemez.
+#
+# Beklemek de sonsuz olamaz: tavana vurulursa açıkça "hâlâ koşuyor"
+# denip durulur. Sessizce eskiye düşmek yok, sonsuz bekleme de yok.
+# NEDEN KİLİT DOSYASI, pgrep DEĞİL — ÖLÇÜLDÜ (2026-09-06): ilk sürüm
+# `pgrep -f '/usr/local/bin/enderun-backup.sh'` kullanıyordu ve sonda
+# sırasında SONDAYI KOŞTURAN KABUĞUN komut satırını eşleştirdi — komut
+# satırında yol adı geçiyordu, o kadar. Tatbikat 30 dakika bekleyip
+# düşecekti. Bir ad araması varlık ölçümü değildir.
+BEKLEME_TAVANI_SN=1800
+BEKLENEN=0
+YEDEK_KILIDI="/var/lib/enderun-ai/yedek-kosuyor"
+
+yedek_kosuyor_mu() {
+    [ -s "$YEDEK_KILIDI" ] || return 1
+    local pid
+    pid="$(head -1 "$YEDEK_KILIDI" 2>/dev/null | tr -dc '0-9')"
+    [ -n "$pid" ] || return 1
+    # BAYAT KİLİT KİMSEYİ BEKLETMEZ: dosya duruyor ama süreç ölmüşse
+    # kilit geçersizdir.
+    kill -0 "$pid" 2>/dev/null
+}
+
+while yedek_kosuyor_mu; do
+    if [ "$BEKLENEN" -eq 0 ]; then
+        log "INFO" "Yedekleme koşuyor — bitmesi bekleniyor (tavan ${BEKLEME_TAVANI_SN}sn)."
+    fi
+    if [ "$BEKLENEN" -ge "$BEKLEME_TAVANI_SN" ]; then
+        fail "Yedekleme $((BEKLENEN / 60)) dakikadır hâlâ koşuyor — tatbikat ESKİ yedeğe düşmüyor, DURDU."
+    fi
+    sleep 10
+    BEKLENEN=$((BEKLENEN + 10))
+done
+[ "$BEKLENEN" -eq 0 ] || log "INFO" "Yedekleme bitti (${BEKLENEN}sn beklendi)."
+
 YEDEK="$(find "$BACKUP_DIR" -maxdepth 1 -name 'db_*.dump.gpg' | sort | tail -1)"
 [ -n "$YEDEK" ] || fail "Şifreli veritabanı yedeği bulunamadı."
+
+# ── YEDEK TAZE Mİ ───────────────────────────────────────────────
+#
+# TATBİKATIN SORUSU "geri yükleme çalışıyor mu" DEĞİL, "BUGÜNÜN yedeği
+# geri yüklenebiliyor mu"dur (Mehmet, 2026-09-06). Eski bir yedekle
+# alınan yeşil, yedekleme zincirinin koptuğunu GİZLER — hatta zincir
+# koptukça tatbikat aynı eski dosyayı her gece başarıyla yükleyip her
+# gece yeşil vermeye devam eder.
+#
+# ÖLÇÜT SAAT, TAKVİM GÜNÜ DEĞİL — SEBEBİ VAR: gece yedeği 03:00'te
+# alınıyor. "Bugüne ait olsun" kuralı, tatbikat gece yarısından sonra
+# elle koşturulduğunda SAHTE KIRMIZI verirdi (o an en yeni yedek dün
+# 03:00'ün yedeğidir ve hiçbir şey bozuk değildir). Saat cinsinden yaş
+# ikisini de doğru ayırır: 26 saat, günlük döngü artı payı.
+YEDEK_TAVANI_SAAT=26
+YEDEK_ADI="$(basename "$YEDEK")"
+YEDEK_TARIH="$(printf '%s' "$YEDEK_ADI" | sed -E 's/^db_([0-9]{8})_([0-9]{6})\..*/\1 \2/')"
+
+if ! printf '%s' "$YEDEK_TARIH" | grep -qE '^[0-9]{8} [0-9]{6}$'; then
+    fail "Yedek adından tarih okunamadı: $YEDEK_ADI"
+fi
+
+YEDEK_EPOK="$(date -d "$(printf '%s' "$YEDEK_TARIH" | sed -E 's/^(....)(..)(..) (..)(..)(..)$/\1-\2-\3 \4:\5:\6/')" +%s 2>/dev/null)"
+[ -n "$YEDEK_EPOK" ] || fail "Yedek tarihi çözümlenemedi: $YEDEK_ADI"
+
+YEDEK_YAS_SAAT=$(( ( $(date +%s) - YEDEK_EPOK ) / 3600 ))
+if [ "$YEDEK_YAS_SAAT" -gt "$YEDEK_TAVANI_SAAT" ]; then
+    fail "YEDEK ESKİ — en yeni yedek ${YEDEK_YAS_SAAT} saatlik ($YEDEK_ADI). Yedekleme başarısız olmuş olabilir; zincir kopuk."
+fi
 
 SATIR_DAMGASI="${YEDEK%.dump.gpg}.satirlar.txt"
 
@@ -137,7 +206,20 @@ SATIR_DAMGASI="${YEDEK%.dump.gpg}.satirlar.txt"
 [ -s "$SATIR_DAMGASI" ] \
     || fail "Satır damgası yok: $(basename "$SATIR_DAMGASI") — karşılaştıracak şey olmadan tatbikat GEÇEMEZ."
 
-log "INFO" "Sınanan yedek: $(basename "$YEDEK")  damga: $(basename "$SATIR_DAMGASI")"
+# ── DAMGA BU YEDEĞİN Mİ ─────────────────────────────────────────
+#
+# Dosya adı eşleşmesi tek başına yetmez: adlar eşleşiyor diye içerik
+# bu koşudan gelmiş olmaz. Damganın başlığında hangi yedek için
+# yazıldığı DURUYOR; onu okuyup karşılaştırıyoruz.
+#
+# Neden önemli: eski bir damgayla yeni bir yedeği karşılaştırmak SAHTE
+# YEŞİL üretir — ya da sahte kırmızı. İkisi de yanlış cevap.
+DAMGADAKI_YEDEK="$(grep -m1 '^# yedek' "$SATIR_DAMGASI" | sed -E 's/^# yedek[[:space:]]*:[[:space:]]*//')"
+if [ "$DAMGADAKI_YEDEK" != "$YEDEK_ADI" ]; then
+    fail "Damga BAŞKA bir yedeğe ait: damga '$DAMGADAKI_YEDEK', sınanan '$YEDEK_ADI'. Eşleşmeyen damgayla karşılaştırma yapılmaz."
+fi
+
+log "INFO" "Sınanan yedek: $YEDEK_ADI (${YEDEK_YAS_SAAT} saatlik)  damga: $(basename "$SATIR_DAMGASI")"
 
 # ── KUR VE HEMEN KAPAT (A: KURAN KAPATIR) ───────────────────────────
 #
