@@ -3545,7 +3545,7 @@ uygulama değil):
 
 ---
 
-### AK-5 — SAKLAMA SİLMESİ: 407 DOSYA / 5,5 GB — **ONAY YOK (2026-09-06)**
+### AK-5 — SAKLAMA SİLMESİ — **ÖLÇÜM BİTTİ, ONAY HÂLÂ YOK (2026-09-06)**
 
 Saklama süresi bugün dosya adındaki tarihe değil `mtime`'a bakıyor.
 Düzeltilince silinecek dosya sayısı sıfırdan **407'ye** çıkıyor —
@@ -3568,6 +3568,84 @@ madde duruyor. Saklama politikası tam da onları siler. Referansı
 olmayan dosya, kaydı kaybolmuş belge olabilir.
 
 ---
+
+---
+
+### AK-5 ÖLÇÜM SONUCU — (a), (b), (c) TAMAM
+
+**RAKAM DEĞİŞTİ: 407 / 5,5 GB DEĞİL, 509 DOSYA / 6,83 GB.** İlk sayım
+birkaç gün öncesindi; yedekler her yayında da alındığı için küme büyüdü.
+
+**KÖK SEBEP — SAKLAMA 12 GÜNDÜR HİÇBİR ŞEY SİLMİYOR.** `-mtime +30`
+bugün **0** dosya siliyor. Sebep: `db_20260802_113154.dump.gpg`ın
+DOĞUM zamanı **2026-08-25 15:56:46**. Tüm dizin o gün 15:56–16:32
+arasında yeniden yazılmış (1579 dosya). Ağustos başındaki bir yedek
+dosya sisteminde 12 günlük görünüyor; eşik 2026-09-24'e kadar hiçbir
+şeyi yakalamayacak. **mtime bu dizinde yaş göstergesi değil:** 1839
+dosyanın 607'sinde mtime doğum zamanından farklı.
+
+**Kimin kopyaladığı bulunamadı.** O saatlerde uzak yedek paketi
+geliştiriliyordu ama o betik dosyaları yalnız OKUYOR (`open("rb")`) —
+elendi.
+
+#### (a) DAĞILIM
+
+| Tip | Silinecek | Boyut | Kalacak |
+|---|---|---|---|
+| `db_*` | 177 | 0,09 GB | 442 |
+| `uploads_*` | 177 | **6,73 GB** | 442 |
+| `project-files_*` | 155 | 0,01 GB | 441 |
+
+En eski dosya adı tarihi 2026-08-02, en yenisi 2026-09-06.
+
+#### (b) KAYBOLACAK BENZERSİZ VERİ — ÜÇ TİP AYRI AYRI ÖLÇÜLDÜ
+
+**`uploads_` → HİÇBİR ŞEY.** 177 aday arşiv çözülüp içerikleri
+birleştirildi: 2190 benzersiz girdi, ve **bugünkü arşivde olmayan
+girdi sayısı 0**.
+
+**`project-files_` → 27 DOSYA, TOPLAM 185 BAYT.** Adaylarda bugünkü
+arşivde olmayan 69 girdi çıktı (42 klasör + 27 dosya). Uzantıları
+`.pdf` (17) ve `.dwg` (10) — yani ilk bakışta tam da korkulan şey.
+**Ama boyutları 2–11 bayt, ortalama 7 bayt.** Gerçek bir PDF en az
+~1 KB'dir. Bunlar test kırıntısı. Ait oldukları 21 proje GUID'inin
+**hiçbiri** canlıda yok ve en eski dökümde de yok — yani veritabanında
+hiç var olmamışlar.
+
+**`db_*` → İKİ TABLO, İŞ VERİSİ DEĞİL.** En eski döküm
+(`db_20260802_113154`) ayrı bir veritabanına geri yüklenip canlıyla
+tablo tablo karşılaştırıldı. Eskide canlıdan FAZLA satır taşıyan
+yalnız iki tablo var: `roles` (31 → 15) ve `user_roles` (33 → 21) —
+rol tekilleştirmesi. Hiçbir iş tablosunda (personel, proje, çek,
+fatura…) satır kaybı yok. Eski dökümde 122 tablo var, canlıda 240:
+şema büyümüş.
+
+**SENİN UYARININ KARŞILIĞI ÖLÇÜLDÜ.** *"Referanssız dosya çöp
+değildir"* — doğru soruydu ve tam olarak bu ölçümle cevaplandı. Cevap
+bu dizin için "kayıp yok" çıktı, ama **cevap ölçümden geldi,
+varsayımdan değil.**
+
+#### (c) LİSTE
+
+`/var/lib/enderun-ai/ak5-silinecek-liste.txt` (0600, 509 satır,
+`<boyut-bayt> <dosya>`). Başlığında *"BU LİSTE BİR ÖNERİDİR — HİÇBİR
+DOSYA SİLİNMEDİ"* yazıyor.
+
+#### ÖNERİ — ONAY BEKLİYOR
+
+**Saklama süresi tip başına ayrılsın:**
+
+| Tip | Öneri | Gerekçe |
+|---|---|---|
+| `uploads_` | 30 gün | Kütlenin **%98'i** burada, kayıp 0 ölçüldü |
+| `project-files_` | 30 gün | 0,01 GB; kayıp 185 bayt test kırıntısı |
+| `db_*` | **365 gün** | 177 dosya yalnız 0,09 GB. Silmenin kazancı yok, tutmanın bedeli yok; `roles` örneği eski dökümlerin tarihsel değeri olduğunu gösterdi |
+
+Ve ölçüt `-mtime` yerine **dosya adındaki tarih** olsun — betik zaten
+en yeni yedeği ad sırasına göre seçiyor, aynı ilke.
+
+**UYGULAMA HÂLÂ ONAYA BAĞLI (Kural 75).** Bu bir ölçüm düzeltmesi
+değil, hiç uygulanmamış bir politikanın ilk uygulaması.
 
 ### AK-6 — İZLEME HESABI — **AÇILACAK, ŞARTLARI BELLİ (2026-09-06)**
 
