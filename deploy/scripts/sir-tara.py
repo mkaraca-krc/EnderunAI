@@ -43,23 +43,11 @@ import sys
 
 KOK = os.environ.get("REPO_ROOT", "/var/www/enderun-ai")
 ADLAR_DOSYASI = os.path.join(KOK, "deploy", "bekci", "uretim-sir-adlari.txt")
-# ═══ SIR NEREDE DURUYOR — TEK DOSYA DEĞİL ═══
-#
-# Sırların hepsi `backend.env`de değil ve olmamalı: tatbikat
-# veritabanı rolünün parolasını uygulama süreci OKUMAMALI. Bir sırrı
-# "tarayıcı oraya bakıyor" diye uygulamanın ortamına taşımak, koruma
-# değil, yüzey genişletmesidir.
-#
-# ÖLÇÜLDÜ (2026-09-06): TATBIKAT_DB_PAROLASI listeye `zorunlu` diye
-# yazıldı ama tarayıcının baktığı yere konmadı; tarayıcı okuyamadığı
-# sırrı "sızmadı" diye raporlamayı REDDETTİ ve yayını durdurdu.
-# Kapı doğru davrandı (Kural 48: boş sonuç yokluğun kanıtı değildir);
-# eksik olan, tarayıcının sırların GERÇEKTE durduğu yerleri bilmesiydi.
-ORTAM_DOSYALARI = [
-    "/etc/enderunai/backend.env",
-    "/etc/enderunai/tatbikat.env",
-]
-
+# SIRLARIN DURDUGU DOSYALAR KODDA DEGIL, LISTEDE.
+# `uretim-sir-adlari.txt` her sirrin hangi dosyada oldugunu soyluyor;
+# burasi o listeden turetiyor. Ucuncu bir dosya gelirse bu betige
+# DOKUNULMAZ (2026-09-06 dersi: ayni ariza iki tarayicida ayri ayri
+# cikti cunku yol koddaydi).
 # ═══ ÜST SINIR — SESSİZ KISALTMA YOK ═══
 #
 # Ölçüldü (2026-09-04): son 14 günde günlük commit 2-14; deponun
@@ -85,19 +73,50 @@ def git(*args, ikili=False):
     return r.returncode, r.stdout if r.returncode == 0 else ""
 
 
-def sir_adlari():
-    """Tek listeden zorunlu sır adlarını okur."""
-    zorunlu = []
+def liste_satirlari():
+    """
+    Listeyi ayrıştırır: (durum, ad, dosya, gerekçe).
+
+    GEREKÇESİZ SATIR KABUL EDİLMEZ. Gerekçesi olmayan bir muafiyet, bir
+    süre sonra kimsenin neden orada olduğunu bilmediği bir satırdır ve
+    silinemez hâle gelir (Kural 72/E deseni, muafiyet listesiyle aynı).
+    """
     if not os.path.exists(ADLAR_DOSYASI):
         return None
-    for satir in open(ADLAR_DOSYASI, encoding="utf-8"):
+
+    satirlar = []
+    for no, satir in enumerate(open(ADLAR_DOSYASI, encoding="utf-8"), 1):
         s = satir.strip()
         if not s or s.startswith("#"):
             continue
-        parcalar = s.split(None, 2)
-        if len(parcalar) >= 2 and parcalar[0] == "zorunlu":
-            zorunlu.append(parcalar[1])
-    return zorunlu
+
+        parcalar = [p.strip() for p in s.split("|")]
+        if len(parcalar) < 4 or not all(parcalar[:4]):
+            print(f"[sir-tara] LISTE BOZUK satir {no}: "
+                  "bicim <durum> | <ad> | <dosya> | <gerekce>")
+            return None
+
+        satirlar.append(tuple(parcalar[:4]))
+
+    return satirlar
+
+
+def sir_adlari():
+    """Tek listeden zorunlu sır adlarını okur."""
+    satirlar = liste_satirlari()
+    if satirlar is None:
+        return None
+    return [ad for durum, ad, _dosya, _g in satirlar if durum == "zorunlu"]
+
+
+def ortam_dosyalari():
+    """Zorunlu sırların durduğu dosyalar — LİSTEDEN, kodda değil."""
+    satirlar = liste_satirlari() or []
+    yollar = []
+    for durum, _ad, dosya, _g in satirlar:
+        if durum == "zorunlu" and dosya != "-" and dosya not in yollar:
+            yollar.append(dosya)
+    return yollar
 
 
 def uretim_sirlari(adlar):
@@ -105,7 +124,7 @@ def uretim_sirlari(adlar):
     ham = {}
     okunan_dosya = 0
 
-    for yol in ORTAM_DOSYALARI:
+    for yol in ortam_dosyalari():
         if not os.path.exists(yol):
             continue
         try:

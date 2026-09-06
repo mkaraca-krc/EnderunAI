@@ -313,61 +313,104 @@ public sealed class SecretInSourceGuardTests
     private static string AdlarDosyasi(string kok) =>
         Path.Combine(kok, "deploy", "bekci", "uretim-sir-adlari.txt");
 
-    private static (List<string> Zorunlu, Dictionary<string, string> HenuzYok)
-        SirAdlari(string kok)
+    /// <summary>
+    /// Liste satırı: durum | ad | hangi dosyada | gerekçe.
+    /// </summary>
+    private sealed record SirSatiri(
+        string Durum, string Ad, string Dosya, string Gerekce);
+
+    /// <summary>
+    /// LİSTEYİ AYRIŞTIRIR — GEREKÇESİZ SATIR KABUL EDİLMEZ.
+    ///
+    /// Gerekçesi olmayan bir muafiyet, bir süre sonra kimsenin neden
+    /// orada olduğunu bilmediği bir satırdır ve silinemez hâle gelir.
+    /// Aynı kural muafiyet listesinde ve açık veritabanı beyaz
+    /// listesinde de var.
+    /// </summary>
+    private static List<SirSatiri> ListeSatirlari(string kok)
     {
-        var zorunlu = new List<string>();
-        var henuzYok = new Dictionary<string, string>();
+        var sonuc = new List<SirSatiri>();
 
         var yol = AdlarDosyasi(kok);
-        if (!File.Exists(yol)) return (zorunlu, henuzYok);
+        if (!File.Exists(yol)) return sonuc;
 
+        var no = 0;
         foreach (var satir in File.ReadAllLines(yol))
         {
+            no++;
             var s = satir.Trim();
             if (s.Length == 0 || s.StartsWith('#')) continue;
 
-            var parcalar = s.Split(
-                (char[]?)null, 3, StringSplitOptions.RemoveEmptyEntries);
+            var p = s.Split('|').Select(x => x.Trim()).ToArray();
 
-            if (parcalar.Length >= 2 && parcalar[0] == "zorunlu")
-                zorunlu.Add(parcalar[1]);
-            else if (parcalar.Length >= 3 && parcalar[0] == "henuz-yok")
-                henuzYok[parcalar[1]] = parcalar[2];
+            Assert.True(
+                p.Length >= 4 && p.Take(4).All(x => x.Length > 0),
+                $"Sır listesi satır {no} bozuk. Biçim: "
+                + "<durum> | <ad> | <dosya> | <gerekçe>");
+
+            sonuc.Add(new SirSatiri(p[0], p[1], p[2], p[3]));
         }
 
-        return (zorunlu, henuzYok);
+        return sonuc;
     }
 
-    private const string OrtamDosyasi = "/etc/enderunai/backend.env";
+    private static (List<string> Zorunlu, Dictionary<string, string> HenuzYok)
+        SirAdlari(string kok)
+    {
+        var satirlar = ListeSatirlari(kok);
+
+        return (
+            satirlar.Where(x => x.Durum == "zorunlu").Select(x => x.Ad).ToList(),
+            satirlar.Where(x => x.Durum == "henuz-yok")
+                    .ToDictionary(x => x.Ad, x => x.Gerekce));
+    }
+
+    /// <summary>
+    /// SIRLARIN DURDUĞU DOSYALAR KODDA DEĞİL, LİSTEDE.
+    ///
+    /// 2026-09-06'da `TATBIKAT_DB_PAROLASI` listeye eklendi ama sabit
+    /// yazılmış `backend.env` yolunda yoktu; bu bekçi kapalı tarafa
+    /// düşüp yayını durdurdu — DOĞRU davranış, eksik olan yolun kodda
+    /// olmasıydı. Aynı arıza Python tarayıcısında bir yayın önce
+    /// çıkmıştı. Artık üçüncü bir dosya gelirse hiçbir koda dokunulmaz.
+    /// </summary>
+    private static List<string> OrtamDosyalari(string kok) =>
+        ListeSatirlari(kok)
+            .Where(x => x.Durum == "zorunlu" && x.Dosya != "-")
+            .Select(x => x.Dosya)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
     /// <summary>
     /// Üretim sırlarını ortam dosyasından okur. DEĞERLER HİÇBİR YERE
     /// BASILMAZ — yalnız bu sözlükte tutulur ve arama için kullanılır.
     /// </summary>
     private static Dictionary<string, string> UretimSirlari(
-        IReadOnlyList<string> zorunluAdlar)
+        IReadOnlyList<string> zorunluAdlar, IReadOnlyList<string> dosyalar)
     {
         var sonuc = new Dictionary<string, string>();
-        if (!File.Exists(OrtamDosyasi)) return sonuc;
-
-        string[] satirlar;
-        try { satirlar = File.ReadAllLines(OrtamDosyasi); }
-        catch { return sonuc; }
-
         var ham = new Dictionary<string, string>();
 
-        foreach (var satir in satirlar)
+        foreach (var dosya in dosyalar)
         {
-            var s = satir.Trim();
-            if (s.Length == 0 || s.StartsWith('#')) continue;
+            if (!File.Exists(dosya)) continue;
 
-            var esittir = s.IndexOf('=');
-            if (esittir <= 0) continue;
+            string[] satirlar;
+            try { satirlar = File.ReadAllLines(dosya); }
+            catch { continue; }
 
-            var ad = s[..esittir].Trim();
-            var deger = s[(esittir + 1)..].Trim().Trim('"', '\'');
-            if (deger.Length > 0) ham[ad] = deger;
+            foreach (var satir in satirlar)
+            {
+                var s = satir.Trim();
+                if (s.Length == 0 || s.StartsWith('#')) continue;
+
+                var esittir = s.IndexOf('=');
+                if (esittir <= 0) continue;
+
+                var ad = s[..esittir].Trim();
+                var deger = s[(esittir + 1)..].Trim().Trim('"', '\'');
+                if (deger.Length > 0) ham[ad] = deger;
+            }
         }
 
         foreach (var ad in zorunluAdlar)
@@ -425,13 +468,14 @@ public sealed class SecretInSourceGuardTests
             "Bu dosya olmadan gerçek sır kontrolü hiçbir şey sınamaz " +
             "(Kural 48).");
 
-        var sirlar = UretimSirlari(zorunluAdlar);
+        var ortamDosyalari = OrtamDosyalari(kok0);
+        var sirlar = UretimSirlari(zorunluAdlar, ortamDosyalari);
 
         Skip.If(
-            !File.Exists(OrtamDosyasi),
-            $"ÜRETİM ORTAM DOSYASI YOK ({OrtamDosyasi}) — gerçek sır " +
-            "kontrolü KOŞULAMADI. Bu ortamda (ör. CI) sırlar okunamıyor; " +
-            "koruma sunucudaki koşuda geçerli. ATLANDI, GEÇMEDİ.");
+            ortamDosyalari.Count == 0 || ortamDosyalari.All(x => !File.Exists(x)),
+            $"ÜRETİM ORTAM DOSYALARI YOK ({string.Join(", ", ortamDosyalari)}) " +
+            "— gerçek sır kontrolü KOŞULAMADI. Bu ortamda (ör. CI) sırlar " +
+            "okunamıyor; koruma sunucudaki koşuda geçerli. ATLANDI, GEÇMEDİ.");
 
         /*
          * KURAL 48 — BOŞ KÜME SORUNU. Ortam dosyası VAR ama hiçbir sır
@@ -439,8 +483,8 @@ public sealed class SecretInSourceGuardTests
          */
         Assert.True(
             sirlar.Count > 0,
-            $"{OrtamDosyasi} okunuyor ama HİÇBİR üretim sırrı " +
-            "çıkarılamadı. Bu katman şu an hiçbir şey sınamıyor.");
+            $"{string.Join(", ", ortamDosyalari)} okunuyor ama HİÇBİR " +
+            "üretim sırrı çıkarılamadı. Bu katman şu an hiçbir şey sınamıyor.");
 
         /*
          * SESSİZ ATLAMA YOK: beklenen bir sır ortamda yoksa "kontrol
@@ -522,9 +566,15 @@ public sealed class SecretInSourceGuardTests
         foreach (var (ad, gerekce) in henuzYok)
             Assert.False(string.IsNullOrWhiteSpace(gerekce), $"Gerekçesiz: {ad}");
 
-        if (!File.Exists(OrtamDosyasi)) return;
+        // "HENÜZ YOK" İDDİASI, SIRLARIN DURDUĞU HER DOSYAYA KARŞI
+        // SINANIR — tek dosyaya bakmak, ikinci dosyada ortaya çıkan bir
+        // sırrı görmezdi.
+        var dosyalar = OrtamDosyalari(DepoKok());
+        var mevcut = dosyalar.Where(File.Exists).ToList();
+        if (mevcut.Count == 0) return;
 
-        var ham = File.ReadAllLines(OrtamDosyasi)
+        var ham = mevcut
+            .SelectMany(File.ReadAllLines)
             .Select(x => x.Trim())
             .Where(x => x.Length > 0 && !x.StartsWith('#'))
             .Select(x => x.Split('=', 2)[0].Trim())

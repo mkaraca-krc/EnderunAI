@@ -1,39 +1,46 @@
-# ÜRETİM SIRLARININ ADLARI — TEK LİSTE, İKİ TARAYICI.
+# ÜRETİM SIR ADLARI — TEK LİSTE, ÜÇ OKUYUCU
 #
-# Bu dosya SIRLARI DEĞİL, ADLARINI tutar. Değerler
-# /etc/enderunai/backend.env içinde durur ve hiçbir yere kopyalanmaz.
-#
-# ═══ NEDEN AYRI DOSYA ═══
-#
-# İki tarayıcı var ve kapsamları farklı:
-#
-#   1. SecretInSourceGuardTests  — TÜM depo, yayın turunda (yavaş)
-#   2. sir-tara.py               — push edilecek COMMIT ARALIĞI (hızlı)
-#
-# Kapsamları farklı olmak zorunda; LİSTELERİ değil. Liste iki yerde
-# yazılsaydı zamanla ayrışırdı ve ayrışan her nokta, birinin
-# sınamadığı bir noktadır. `SirAdlariTekListeTests` ikisinin de bu
-# dosyayı okuduğunu zorluyor.
+# Okuyanlar: `deploy/scripts/sir-tara.py` (push öncesi, commit aralığı),
+# `SecretInSourceGuardTests` (yayın turu, tüm depo),
+# `SirAdlariTekListeTests` (ikisinin aynı listeyi okuduğunu tutar).
 #
 # ═══ BİÇİM ═══
 #
-#   zorunlu    <AD>              → ortamda BULUNMALI; yoksa bekçi
-#                                  "KONTROL EDİLEMEDİ" diye kırmızı verir
-#   henuz-yok  <AD>  <gerekçe>   → bu sır henüz üretilmiyor; ortaya
-#                                  çıktığı gün `zorunlu`ya taşınmalı
-#                                  ve bekçi bunu zorlar
+#   <durum> | <sır adı> | <hangi dosyada> | <gerekçe>
 #
-# `DB_PAROLASI` bir ortam değişkeni değil: `DB_CONNECTION` içinden
-# çıkarılıyor. Ayrı ad taşıması bilinçli — bulgu raporunda "bağlantı
-# dizesi" değil "parola" yazması gerekiyor.
+# durum : `zorunlu`   — ortamda VAR olmalı; bulunamazsa tarayıcı
+#                       "KONTROL EDİLEMEDİ" deyip DURUR (Kural 48).
+#         `henuz-yok` — bugün yok; dosya alanı `-`.
+#
+# ═══ NEDEN DOSYA ALANI EKLENDİ (2026-09-06) ═══
+#
+# `TATBIKAT_DB_PAROLASI` bu listeye `zorunlu` yazıldı ama tarayıcıların
+# baktığı yere konmadı: sır `/etc/enderunai/tatbikat.env`de, iki
+# tarayıcı da yalnız `backend.env`e bakıyordu. İkisi de kapalı tarafa
+# düştü ve YAYINI İKİ KEZ DURDURDU — davranış doğruydu, eksik olan
+# tarayıcıların sırların GERÇEKTE nerede olduğunu bilmemesiydi.
+#
+# İlkinde Python tarayıcısına ikinci dosya elle öğretildi; ikinci
+# yayında aynı arıza C# bekçisinde çıktı. Üçüncü bir dosya gelseydi
+# üçüncü kez çıkacaktı.
+#
+# ARTIK DOSYA YOLU VERİDİR, KOD DEĞİL. Yeni bir sır eklemek bu dosyaya
+# bir satır yazmaktır; hiçbir tarayıcıya dokunulmaz. Muafiyet listesi
+# ve açık veritabanı beyaz listesiyle aynı desen.
+#
+# ═══ SIRRIN YERİ, KORUMANIN PARÇASIDIR ═══
+#
+# Bir sırrı "tarayıcı oraya bakıyor" diye uygulamanın ortam dosyasına
+# taşımak koruma değil, yüzey genişletmesidir. Tatbikat rolünün
+# parolasını uygulama süreci OKUMAMALI; bu yüzden ayrı dosyada duruyor
+# ve tarayıcı ona gidiyor.
 
-zorunlu  JWT_SECRET
-zorunlu  DB_PAROLASI
-zorunlu  SMTP_PASS
-zorunlu  SMTP_USER
-zorunlu  SEED_ADMIN_PASSWORD
-zorunlu  ANTHROPIC_API_KEY
-zorunlu  TATBIKAT_DB_PAROLASI
-
-henuz-yok  PORTAL_TOKEN_ANAHTARI  Portal tokenları kayıt başına üretiliyor, ortamda tek bir anahtar yok. Merkezî bir anahtara geçilirse buraya taşınır.
-henuz-yok  VAPID_PRIVATE_KEY  M3 (mobil bildirim) ile gelecek. Geldiği gün zorunlu'ya taşınmalı.
+zorunlu | JWT_SECRET | /etc/enderunai/backend.env | Oturum jetonlarini imzalar; sizarsa herkesin kimligine burunulur.
+zorunlu | DB_PAROLASI | /etc/enderunai/backend.env | DB_CONNECTION icindeki Password alanindan turetilir.
+zorunlu | SMTP_PASS | /etc/enderunai/backend.env | Giden e-posta kimligi.
+zorunlu | SMTP_USER | /etc/enderunai/backend.env | Giden e-posta kimligi; kullanici adi da sirdir.
+zorunlu | SEED_ADMIN_PASSWORD | /etc/enderunai/backend.env | Ilk yonetici hesabinin parolasi.
+zorunlu | ANTHROPIC_API_KEY | /etc/enderunai/backend.env | Hizir icin model erisimi; sizarsa faturalandirilir.
+zorunlu | TATBIKAT_DB_PAROLASI | /etc/enderunai/tatbikat.env | Geri yukleme tatbikatinin DB rolu. Uygulama sureci OKUMAMALI, o yuzden ayri dosyada.
+henuz-yok | PORTAL_TOKEN_ANAHTARI | - | Portal tokenlari kayit basina uretiliyor, ortamda tek bir anahtar yok. Merkezi bir anahtara gecilirse zorunlu'ya tasinir.
+henuz-yok | VAPID_PRIVATE_KEY | - | M3 (mobil bildirim) ile gelecek. Geldigi gun zorunlu'ya tasinmali.
