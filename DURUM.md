@@ -2211,6 +2211,69 @@ Tarihsel kalıntı, bozuk yol değil. Düzeltilmedi.
 
 ---
 
+### Kural 80 — DENETİM KAYDINDA AKTÖR, EYLEMİ FİİLEN YAPAN TARAFTIR
+
+**Denetim kaydında aktör, eylemi FİİLEN yapan taraftır. Onay veren kişi
+ayrı bir alanda veya açıklamada anlatılır, aktör alanına yazılmaz.
+Onayı aktör gibi göstermek, izin kendisini yanlışlar.**
+
+Onaylandı: Mehmet, 2026-09-06.
+
+**BU KURAL BİR KAZADAN DOĞMADI — HENÜZ OLMAMIŞ BİR KAZAYI KAPATIYOR.**
+Bugüne kadarki kuralların çoğu bir arızanın ardından yazıldı. Bu,
+personel bağlarını yazmayı TASARLARKEN verilen bir kararın kurala
+bağlanmasıdır: aktör alanına `mehmet` yazmak akla geldi, doğru
+olmadığı için vazgeçildi, ve karar artık bir sonraki sefere kişisel
+sağduyuya bırakılmıyor.
+
+Mehmet'in kaydettiği ayrım: *"Düzeneğin olgunlaştığı yer tam olarak
+orası — hatayı bekleyip kural yazmak yerine, kararın kendisini kurala
+bağlamak."*
+
+**NEDEN ÖNEMLİ:** denetim kaydının tek işi *"bunu kim yaptı"*
+sorusuna cevap vermektir. Onay veren kişiyi aktör göstermek, o kişinin
+klavye başında olduğu izlenimi verir; gerçek bir soruşturmada bu
+izlenim yanlış yere bakılmasına yol açar. Onay ayrı bir olgudur ve
+ayrı yazılır.
+
+**UYGULAMA:** personel↔kullanıcı bağlarında `ActorUsername` =
+uygulayan taraf; onay veren, tarihi ve kapsamı `DetailsJson` içinde.
+
+---
+
+### Kural 79 — KUSUR BİRDEN ÇOK OKUYUCUDA YAŞIYORSA, DÜZELTME KAYNAKTA YAPILIR
+
+**Bir kusur birden çok okuyucuda yaşıyorsa, düzeltme okuyucuda değil
+kaynakta yapılır. İlk okuyucuyu elle düzeltmek sorunu değil örneğini
+çözer; ikinci okuyucu aynı arızayı tekrar eder.**
+
+Onaylandı: Mehmet, 2026-09-06.
+
+**DOĞURAN OLAY:** sır listesinde dosya yolu. `TATBIKAT_DB_PAROLASI`
+listeye `zorunlu` yazıldı ama iki tarayıcı da `backend.env` yolunu
+KODDA tutuyordu.
+
+| Yayın | Düşen okuyucu | Süre | Sonuç |
+|---|---|---|---|
+| 1 | `sir-tara.py` | 115 sn | `UNKNOWN` |
+| 2 | `SecretInSourceGuardTests` | 322 sn | `UNKNOWN` |
+
+Birinci yayından sonra tarayıcıya ikinci dosyayı **elle öğrettim**.
+Bu, sorunu değil ÖRNEĞİNİ çözdü; ikinci yayın aynı arızayı ikinci
+okuyucuda tekrarladı. Yol veriye taşınınca ikisi birden kapandı ve
+sonda üçüncü bir dosyayla koda dokunulmadan çalıştığını gösterdi.
+
+**ÖLÇÜT:** bir düzeltme yaparken sor — *"bu kusur bu dosyaya mı özgü,
+yoksa aynı bilgiyi okuyan başkaları da var mı?"* İkincisi ise
+düzeltilecek yer okuyucu değil, okunan şeydir.
+
+**AKRABASI:** "aynı kuralın ikinci kopyası" bu kod tabanının en sık
+hatası — merkez kuralının PUT kopyası, `dotnet ef`in üç ortamı,
+parola uzunluğunun iki kopyası. Kural 79 aynı hatanın veri tarafındaki
+biçimini adlandırıyor.
+
+---
+
 ### Kural 78 — SÜREÇ KİMLİĞİ ADA DEĞİL, PID'E DAYANIR
 
 **Süreç ad eşleştirmesi (`pgrep -f` / `pkill -f`) kendi komut satırını
@@ -2984,6 +3047,121 @@ neyin kasıtlı olduğunu betik bilemez.
 
 **Bundan sonra dal/stash hareketi gerektiren her sonda bu betikten
 geçecek.**
+
+---
+
+## M3 — KİŞİ ARAMASI: ASIL KUSUR VERİDEYDİ (2026-09-06)
+
+**BULUŞ MEHMET'İN, TARAYICIDAN.** Ekranda kişi araması hiçbir sonuç
+vermiyordu; hata da yoktu, boş durum da. Üç ayrı kusur üst üste
+binmişti ve en alttaki, mesajlaşmayı bütünüyle kullanılamaz kılıyordu.
+
+### KÖK SEBEP — 13 KULLANICININ HİÇBİRİNDE PERSONEL BAĞI YOKTU
+
+`KisiAraAsync` şu süzgeci uyguluyor: `x.PersonnelId != null && ...`.
+Ölçüldü: **`PersonnelId` dolu olan kullanıcı sayısı 0.** Yani uç, ne
+yazılırsa yazılsın **hiçbir zaman kimseyi döndüremezdi**. Boş sonuç bir
+arama kusuru değil, verinin sonucuydu.
+
+`FullName` 13 kullanıcının hepsinde doluydu ve `enderun_fold` doğru
+çalışıyordu (`ÇELİK → celik`, `İIŞŞĞĞ → iissgg`) — süzgeç kaldırılınca
+`akk` sorgusu `Uğur AKKAYA`'yı buluyordu. Arama çalışıyordu, veri yoktu.
+
+### SÜZGEÇ KALIYOR — GEREKÇE YALNIZ KAPSAM DEĞİL
+
+`PersonnelId` şartı kaldırılmadı (Mehmet, 2026-09-06). Teknik olarak
+mümkündü — `SirketlerAsync` kapsamı `dataScope`'tan alıyor, personel
+kaydına bağlı değil. **Ama süzgecin ikinci bir işi var: personel kaydı
+olmayan sistem/izleme hesapları rehberde görünmemeli.** Süzgeç bunu
+doğal olarak sağlıyor.
+
+Bu, AK-6'daki izleme hesabı şartıyla birebir aynı çizgi: *"mesajlaşma
+kanallarına, bildirim kitlelerine, personel listesine girmeyecek —
+insan gibi görünmeyecek."*
+
+### 10 BAĞ KURULDU, 3'Ü BELİRSİZ BIRAKILDI
+
+Eşleştirme **katlanmış tam ad birebir** karşılaştırmasıyla yapıldı;
+kullanıcı adı deseni kanıt değil, doğrulama olarak kullanıldı. 10
+kullanıcı yüksek güvenle eşleşti (`smemis→P0008`, `vtepe→P0009`,
+`asakcak→P0001`, `cboran→P0002`, `ccihan→P0045`, `dyildirici→P0003`,
+`hkutlu→P0004`, `iyavuzkanat→P0005`, `oturkmen→P0006`,
+`ralici→P0007`).
+
+**ÜÇÜ İÇİN "YOK" SONUCU KESİNLEŞTİRİLDİ, TAHMİN EDİLMEDİ:**
+81 kaydın 0'ı silinmiş, 0'ı pasif (yani ilk tarama tamamdı); yedi
+yazım varyantı ad ve soyad **ters sırayla da** denendi, hepsi sıfır;
+başka alan üzerinden eşleşme **imkânsız** — `users` tablosunda
+telefon/TC alanı yok, personelde 0 e-posta dolu.
+
+### İKİ SİSTEM KAYDI AÇILDI — VE ANLAMSAL BİR BORÇ DOĞDU
+
+`mehmet` ve `uakkaya` için `S0001` / `S0002` numaralı iki personel
+kaydı açıldı; `Status = Candidate`, yalnız zorunlu altı alan dolu
+(ücret, işe giriş, SGK **boş**).
+
+**ÖNCE ÖLÇÜLDÜ — "P" ÖNEKİ VARSAYAN KOD YOK:** `EmployeeNumber`
+yalnız boş olmama kontrolü, `ToUpperInvariant()`, şirket içi
+benzersizlik, arama ve gösterim için kullanılıyor. Ayrıştırma, numara
+üretme, sayısal sıralama yok. Canlıda zaten ikinci bir önek vardı
+(`E`, 1 kayıt).
+
+**ANLAMSAL BORÇ (Mehmet'in metni, aynen):** *"Candidate durumu burada
+'işe alım adayı' anlamında değil, 'bordro dışı sistem kaydı' anlamında
+kullanıldı. Doğru çözüm ayrı bir 'bordro dışı' işareti olurdu; Active
+yapmak ise bu kişileri her ay puantaj cetveline düşürürdü. Davranış
+doğru, ad yanıltıcı. İleride bordro dışı işareti eklenirse bu iki kayıt
+oraya taşınacak."*
+
+**YAN ETKİ ÖLÇÜLDÜ:** bordro, puantaj, izin bakiyesi ve proje planlama
+`Status == Active` süzüyor — `Candidate` kayıt hiçbirine girmiyor.
+Ayrı bir SGK bildirim modülü yok. **Tek istisna İSG göstergesi:**
+`Status != Terminated` süzüyor, yani personel sayısı 79 → 81 oluyor.
+
+**İSG SÜZGECİNE DOKUNULMADI (Mehmet):** *"İkisi de gerçek çalışan; İSG
+kapsamında görünmeleri doğru, eksiklikleri yanlıştı."*
+
+### 71 PERSONELİN BAĞSIZ KALMASI NORMALDİR
+
+83 personelin 12'si bir kullanıcıya bağlı. Kalan 71 bağsız ve **bu bir
+eksiklik değil** — herkesin sistem hesabı olmayacak. İleride "bağlar
+eksik kalmış" diye okunmasın diye buraya yazılıyor.
+
+### KOD TARAFI — DÖRT DÜZELTME
+
+**(a) ASGARİ HARF TEK KAYNAKTAN.** Ekran "en az 2 harf" diyordu,
+sunucu 3 istiyordu. Sayı `lib/mesajlasma/arama-kurali.ts` içinde tek
+yerde; gerekçesi sunucuda ölçülmüş (`MesajAramaKurali.EnAzHarf` —
+iki harflik sorguda trigram indeksi devre dışı kalıyor). İkisinin aynı
+kaldığını `mesaj-arama-asgari-harf.test.ts` tutuyor, pozitif kontrolü
+içinde. **SONDA M1:** sunucudaki sabit 4 yapıldı → test kırmızı
+(`expected 3 to be 4`); geri alınınca yeşil.
+
+**(b) SUNUCUNUN MESAJI GÖSTERİLİYOR.** `catch {}` sunucunun anlamlı
+cümlesini düşürüyordu; artık ekranda görünüyor.
+
+**(c) SESSİZ BOŞ SONUÇ KALKTI.** "Arandı ama kimse bulunamadı" ile
+"henüz aranmadı" ayrıldı; birincisinde *"Eşleşen kişi bulunamadı"*
+yazıyor.
+
+**(d) KULLANICI ADIYLA DA ARANIYOR.** `FullName` **veya** `Username`.
+Mehmet `uakkaya` yazmıştı — o bir kullanıcı adı. **E-posta bilerek
+eklenmedi:** gereksiz yüzey ve e-posta adreslerini sorguyla
+doğrulanabilir hâle getirirdi.
+
+**BOŞ DURUM ARTIK SEBEBİNİ SÖYLÜYOR:** rehber boşsa ekran, kişinin
+hesabının bir personel kaydına bağlı ve etkin olması gerektiğini ve
+yöneticiye bildirilmesini yazıyor.
+
+### DENETİM KAYDI
+
+10 bağ + 2 kayıt açma denetim kaydına düştü (`PersonelBagiKuruldu`,
+`SistemPersonelKaydiAcildi`). **Aktör `CC (otomasyon)`; onay veren,
+tarihi ve kapsamı `DetailsJson` içinde** (Kural 80).
+
+**BİR SINIR KAYDA GEÇİYOR:** `users` tablosunda güncelleme damgası
+alanı **yok** (`UpdatedAtUtc` diye bir sütun bulunmuyor). Bağın ne
+zaman kurulduğunun tek kaydı denetim olayı satırıdır.
 
 ---
 

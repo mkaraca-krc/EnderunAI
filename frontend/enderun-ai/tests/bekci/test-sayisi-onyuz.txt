@@ -43,10 +43,13 @@
 #   yalnız tanıdığını sayar; kapsamı bağımsız ikinci bir sayımla
 #   doğrulanır.
 # ISEMRI/2 FAZ 2 (2026-09-04): 422 → 429, katkı +7.
+# M3 KİŞİ ARAMA (2026-09-06): 429 → 431, katkı +2. Arayüzdeki asgari
+#   harf sayısının sunucudakiyle aynı kaldığını tutan test ve onun
+#   pozitif kontrolü (mesaj-arama-asgari-harf.test.ts).
 #   gorev-atama-kaskadi.test.ts 7: Tüm personel her zaman açık, boş
 #   listenin sebebini söylemesi, kaynak değişince seçimin
 #   temizlenmesi, atamanın isteğe bağlı olması, kaskad durumunun
 #   sunucuya gitmemesi, Yapacak sütununun sunucunun hesabını
 #   göstermesi.
-statik: 429
+statik: 431
 dinamik: 15

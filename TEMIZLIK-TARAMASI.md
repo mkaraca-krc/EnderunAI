@@ -1280,3 +1280,24 @@ sokulmadı** (Mehmet: *"Aynı boşluk. TEMIZLIK'e yaz, bu pakete sokma."*).
 
 Düzeltmesi tek satır: `<HataSiniri nerede="hizir" bicim="govde">` ile
 sarmak. Bugün sömürülebilir bir açık değil, dayanıklılık borcu.
+
+## `Candidate` durumu iki anlamda kullanılıyor — AÇIK (2026-09-06)
+
+**Mehmet'in tespiti, aynen:** *"Candidate durumu burada 'işe alım
+adayı' anlamında değil, 'bordro dışı sistem kaydı' anlamında kullanıldı.
+Doğru çözüm ayrı bir 'bordro dışı' işareti olurdu; Active yapmak ise bu
+kişileri her ay puantaj cetveline düşürürdü. Davranış doğru, ad
+yanıltıcı. İleride bordro dışı işareti eklenirse bu iki kayıt oraya
+taşınacak."*
+
+**BUGÜN KAÇ KAYIT:** iki — `S0001` (Mehmet Karacabey) ve `S0002`
+(Uğur AKKAYA). İkisi de mesajlaşma rehberinde görünebilmek için açıldı;
+ücret, işe giriş ve SGK alanları boş.
+
+**NEDEN BUGÜN DÜZELTİLMEDİ:** ayrı bir "bordro dışı" işareti eklemek
+model değişikliği + göç + tüm `Status == Active` süzgeçlerinin gözden
+geçirilmesi demek. Bugünkü davranış doğru; yanlış olan yalnız adın
+çağrıştırdığı anlam.
+
+**TAŞINACAK YER BELLİ:** işaret eklendiğinde `EmployeeNumber` deseni
+`S%` olan kayıtlar oraya taşınır ve `Status` gerçek anlamına döner.

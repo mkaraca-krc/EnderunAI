@@ -5,6 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useRefreshable } from "@/lib/data/use-refreshable";
 import {
+  MESAJ_ARAMA_EN_AZ_HARF,
+  MESAJ_ARAMA_IPUCU,
+} from "@/lib/mesajlasma/arama-kurali";
+import {
   messagingService,
   type MesajOzeti,
   type KisiOzeti,
@@ -70,6 +74,17 @@ export default function MesajlarSayfasi() {
   const [kisiSorgu, setKisiSorgu] = useState("");
   const [kisiler, setKisiler] = useState<KisiOzeti[]>([]);
   const [kisiAcik, setKisiAcik] = useState(false);
+
+  /*
+   * ARAMANIN NEDEN SONUÇ VERMEDİĞİ HER ZAMAN SÖYLENİR.
+   *
+   * `kisiHatasi` sunucunun mesajını taşır; `kisiArandi` ise "arama
+   * gerçekten koştu mu" bilgisini. İkisi olmadan boş bir liste üç
+   * ayrı durumu aynı gösteriyordu: henüz yazmadın, harf yetmedi,
+   * eşleşen yok. Üçünün cevabı farklı.
+   */
+  const [kisiHatasi, setKisiHatasi] = useState<string | null>(null);
+  const [kisiArandi, setKisiArandi] = useState(false);
 
   const dip = useRef<HTMLDivElement | null>(null);
 
@@ -146,15 +161,40 @@ export default function MesajlarSayfasi() {
   async function kisiAra(q: string) {
     setKisiSorgu(q);
 
-    if (q.trim().length < 2) {
+    const sorgu = q.trim();
+
+    /*
+     * ASGARİ HARF TEK KAYNAKTAN.
+     *
+     * Burada "2" yazıyordu, sunucu 3 istiyordu. Bir harflik fark,
+     * kullanıcıya hiçbir açıklaması olmayan boş bir liste olarak
+     * görünüyordu. Sayı artık `MESAJ_ARAMA_EN_AZ_HARF`'ten geliyor ve
+     * sunucudakiyle aynı kaldığını bir test tutuyor.
+     */
+    if (sorgu.length < MESAJ_ARAMA_EN_AZ_HARF) {
       setKisiler([]);
+      setKisiArandi(false);
+      setKisiHatasi(null);
       return;
     }
 
     try {
-      setKisiler(await messagingService.kisiAra(q.trim()));
-    } catch {
+      setKisiler(await messagingService.kisiAra(sorgu));
+      setKisiHatasi(null);
+      setKisiArandi(true);
+    } catch (err) {
+      /*
+       * SUNUCUNUN MESAJI YUTULMUYOR.
+       *
+       * Uç anlamlı bir cümle dönüyor ("Arama için en az 3 harf
+       * yazın…"). Eski hâlde `catch {}` onu düşürüyor ve kullanıcı
+       * neden sonuç almadığını göremiyordu.
+       */
       setKisiler([]);
+      setKisiArandi(true);
+      setKisiHatasi(
+        err instanceof Error ? err.message : "Kişi araması başarısız oldu."
+      );
     }
   }
 
@@ -202,9 +242,24 @@ export default function MesajlarSayfasi() {
               <input
                 type="search"
                 value={kisiSorgu}
-                placeholder="Kişi ara (en az 2 harf)"
+                placeholder={MESAJ_ARAMA_IPUCU}
                 onChange={(e) => void kisiAra(e.target.value)}
               />
+
+              {kisiHatasi && (
+                <div className="erp-alert erp-alert-error">{kisiHatasi}</div>
+              )}
+
+              {/* SESSİZ BOŞ LİSTE YOK: aramanın koştuğu ama kimseyi
+                  bulamadığı durum, hiç aranmamış durumdan ayrılır. */}
+              {!kisiHatasi && kisiArandi && kisiler.length === 0 && (
+                <div className="erp-empty-state">
+                  <p>
+                    <strong>Eşleşen kişi bulunamadı.</strong> Ad, soyad ya da
+                    kullanıcı adının bir parçasını yazmayı deneyin.
+                  </p>
+                </div>
+              )}
 
               {kisiler.map((kisi) => (
                 <button
@@ -222,11 +277,25 @@ export default function MesajlarSayfasi() {
 
           {konusmaKaynagi.loading && <div className="erp-alert">Yükleniyor…</div>}
 
+          {/*
+            BOŞ DURUM SEBEBİNİ SÖYLER.
+            2026-09-06'da rehber HERKES için boştu ve ekran bunu hiç
+            söylemiyordu: sebep arama değil, veriydi — 13 kullanıcının
+            hiçbirinde personel bağı yoktu ve uç yapısı gereği kimseyi
+            döndüremiyordu. "Sessizlik" o gün üç ayrı arızayı aynı
+            gösterdi. Ekran artık ne olduğunu ve ne yapılacağını yazar.
+          */}
           {!konusmaKaynagi.loading && konusmalar.length === 0 && (
             <div className="erp-empty-state">
               <p>
                 <strong>Henüz konuşmanız yok.</strong> &ldquo;Yeni
                 konuşma&rdquo; ile bir çalışma arkadaşınızı seçin.
+              </p>
+              <p>
+                Rehberde kimseyi bulamıyorsanız, o kişinin kullanıcı
+                hesabının bir <strong>personel kaydına bağlı</strong> ve
+                hesabının <strong>etkin</strong> olması gerekir. Bağ yoksa
+                kişi rehberde görünmez; yöneticinize bildirin.
               </p>
             </div>
           )}

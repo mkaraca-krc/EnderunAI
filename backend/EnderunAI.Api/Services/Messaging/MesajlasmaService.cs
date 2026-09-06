@@ -445,8 +445,20 @@ public sealed class MesajlasmaService(
             // anında yapılıyor. Kişi listesi küçük (şirket başına
             // yüzler mertebesi) olduğundan kabul edilebilir — mesajda
             // kabul edilemezdi, orada üretilmiş kolon + GIN var.
+            // AD VE KULLANICI ADI — İKİSİ BİRDEN (2026-09-06).
+            //
+            // Önce yalnız `FullName` aranıyordu. Mehmet tarayıcıdan
+            // "uakkaya" yazdı ve boş sonuç aldı: o bir KULLANICI ADI.
+            // İnsanlar birbirini iki isimle tanır ve hangisini
+            // yazacağını arama kutusu belirlemez.
+            //
+            // E-POSTA BİLEREK YOK: gereksiz yüzey. Rehberde kimseyi
+            // e-postasıyla aramıyoruz ve aramak, e-posta adreslerini
+            // sorgu yoluyla doğrulanabilir hâle getirirdi.
             .Where(x => EF.Functions.Like(
-                AppDbContext.Fold(x.FullName), $"%{katlanmis}%"))
+                            AppDbContext.Fold(x.FullName), $"%{katlanmis}%")
+                        || EF.Functions.Like(
+                            AppDbContext.Fold(x.Username), $"%{katlanmis}%"))
             .OrderBy(x => x.FullName)
             .Take(20)
             .Select(x => new KisiOzeti(x.Id, x.FullName, x.Honorific))
