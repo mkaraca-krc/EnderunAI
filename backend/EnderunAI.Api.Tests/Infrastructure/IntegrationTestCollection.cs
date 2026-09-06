@@ -15,6 +15,10 @@ public sealed class DatabaseFixture : IAsyncLifetime
         // MigrationRecovery mantığı veritabanını oluşturup migrate edip
         // admin kullanıcıyı seed eder.
         using var scope = Factory.Services.CreateScope();
+
+        // KURAN KAPATIR (A kararı, 2026-09-06). Veritabanı yukarıdaki
+        // satırda doğdu; PUBLIC'e açık doğdu. Hemen kapatılıyor.
+        await TestWebApplicationFactory.TestVeritabaniniPubliceKapatAsync();
     }
 
     public async Task DisposeAsync()

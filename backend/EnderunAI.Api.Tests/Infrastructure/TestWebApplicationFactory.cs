@@ -47,6 +47,40 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
         await command.ExecuteNonQueryAsync();
     }
 
+    /// <summary>
+    /// KURAN KAPATIR — TEST VERİTABANI PUBLIC'E AÇIK KALMASIN.
+    ///
+    /// PostgreSQL'de yeni bir veritabanı ACL'i `NULL` olarak doğar ve
+    /// `NULL` "yerleşik varsayılan" demektir: PUBLIC'e CONNECT + TEMP.
+    /// Bunu değiştiren bir ayar YOK — ölçüldü (2026-09-06):
+    /// `template1`'den PUBLIC CONNECT'i geri almak yeni veritabanını
+    /// KORUMUYOR, çünkü şablonun ACL'i kopyalanmıyor.
+    ///
+    /// NEDEN BURADA: bu fixture her koşuda test veritabanını DÜŞÜRÜP
+    /// yeniden kurduruyor. Elle yapılan bir kapatma bir sonraki koşuda
+    /// kayboluyor — nitekim kayboldu ve `acik-veritabani-kapisi.sh`
+    /// bunu yayından hemen sonra yakaladı. Kapatmayı KURAN yola koymak,
+    /// tek kalıcı çözüm.
+    ///
+    /// SESSİZCE GEÇMEZ: kapatılamazsa istisna yükselir. Açık kalmış bir
+    /// veritabanı, "kapattım sanıyordum"dan iyidir.
+    /// </summary>
+    public static async Task TestVeritabaniniPubliceKapatAsync()
+    {
+        var builder = new NpgsqlConnectionStringBuilder(TestConnectionString)
+        {
+            Database = "postgres"
+        };
+
+        await using var connection = new NpgsqlConnection(builder.ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            $"REVOKE CONNECT ON DATABASE {TestDatabaseName} FROM PUBLIC;";
+        await command.ExecuteNonQueryAsync();
+    }
+
     private static string ResolveTestConnectionString()
     {
         var explicitValue = Environment.GetEnvironmentVariable("TEST_DB_CONNECTION");
