@@ -2912,6 +2912,81 @@ Desene kabuk savunması eklendi (`hata`/`fail` çağrısı, sıfırdan farklı
 
 ---
 
+## SIR LİSTESİ ARTIK SIRRIN YERİNİ DE SÖYLÜYOR (2026-09-06)
+
+**AYNI ARIZA İKİ AYRI OKUYUCUDA, İKİ AYRI YAYINDA ÇIKTI.**
+`TATBIKAT_DB_PAROLASI` listeye `zorunlu` yazıldı ama iki tarayıcı da
+`/etc/enderunai/backend.env` yolunu **kodda** tutuyordu:
+
+| Yayın | Düşen | Süre | Sonuç |
+|---|---|---|---|
+| 1 | `sir-tara.py` (aralık taraması) | 115 sn | `UNKNOWN`, hiçbir şey dağıtılmadı |
+| 2 | `SecretInSourceGuardTests` (tüm depo) | 322 sn | `UNKNOWN`, hiçbir şey dağıtılmadı |
+
+Birincisinde tarayıcıya ikinci dosyayı **elle öğrettim** — bu, sorunu
+değil örneğini çözdü. Mehmet'in dediği aynen gerçekleşti: *"üçüncü
+dosya gelince aynı şey olacak."*
+
+**İKİ KAPI DA DOĞRU DAVRANDI.** İkisi de "okuyamadığım sırrı sızmadı
+diye raporlamam" deyip durdu (Kural 48). İlan ettiğim yeşil iki kez
+gelmedi ve iki kez de sebep savunmanın sağlamlığıydı — eksik bendeydi.
+
+**ÇÖZÜM: DOSYA YOLU ARTIK VERİ.** Liste biçimi
+`<durum> | <ad> | <hangi dosyada> | <gerekçe>`. Her iki tarayıcı da
+ortam dosyalarını listeden türetiyor; ikisinde de sabit `/etc/enderunai`
+yolu **kalmadı**. Yeni bir sır eklemek bir satır yazmaktır.
+
+**SONDA H1 — ÜÇÜNCÜ DOSYA, KODA DOKUNULMADAN.** Hiç var olmayan bir
+`/etc/enderunai/sonda-ucuncu.env` kuruldu, içine sahte bir sır kondu,
+listeye bir satır eklendi ve değer bir kaynak dosyasına yazıldı.
+Bekçi kırmızı verdi:
+
+    frontend/enderun-ai/lib/sonda-h1.ts:1  ->  GERÇEK ÜRETİM SIRRI: SONDA_UCUNCU
+
+Değişen tek dosya listeydi.
+
+**İLK DENEMEDE SONDA HEDEFİ IŞKALADI — KAYDA GEÇİYOR.** Sonda dosyası
+**izlenmiyordu** ve bekçi `git ls-files` kullanıyor: yalnız izlenen
+dosyaları tarıyor. Test yeşil kaldı. Üç ihtimalden ("savunma sağlam /
+savunma erişilemez / sonda hedefi ıskaladı") üçüncüsüydü; dosya
+indekse eklenince sonda ısırdı.
+
+**BU BİR KAPSAM SINIRI VE GİZLENMİYOR:** `SecretInSourceGuardTests`
+izlenmeyen dosyaları görmez. Bugün bir boşluk değil — izlenmeyen bir
+dosya depoya girmez, girdiği an izlenir ve hem bu bekçi hem
+`sir-tara.py` onu görür. Ama sonda yazarken bilinmesi gerekir.
+
+**SIRRI backend.env'E TAŞIMADIM.** Tatbikat rolünün parolasını
+uygulama süreci okumamalı. Bir sırrı *"tarayıcı oraya bakıyor"* diye
+uygulamanın ortamına taşımak koruma değil, yüzey genişletmesidir.
+
+---
+
+## SONDA KOŞUCUSU — KİRLİ AĞAÇTA SONDA KOŞMAZ (2026-09-06)
+
+**KAYIP ÖNCE YAŞANDI, KURAL SONRA GELDİ.** Bir sondayı kurmak için
+`git stash -u` → yeni dal → `stash pop` → commit yaptım. Bu dizi,
+**henüz commit edilmemiş bir düzeltmeyi atılacak dalın içine gömdü**;
+dal silinince düzeltme de gitti ve aynı kapı ikinci kez düştü.
+Düzeltme reflog'dan **yalnız o dosya alınarak** kurtarıldı
+(`git checkout <sha> -- deploy/scripts/sir-tara.py`); sahte sırrı
+taşıyan diğer iki dosya alınmadı ve alınmadığı doğrulandı.
+
+Kural 73 bunu **anlatıyor** ama **uygulamıyor**.
+`deploy/scripts/sonda-kos.sh` uygulatıyor: ağaç kirliyse komutu **hiç
+çalıştırmadan** durur ve değişiklikleri listeler. Göç betiğindeki ön
+koşul denetiminin aynısı — *yarıda düşen bir sonda, hiç başlamayan
+sondadan pahalıdır.*
+
+`--kirli-kabul`, bilerek çalışma ağacını değiştirip geri alan sondalar
+için. Koşu sonrası ağaçta iz kaldıysa **söyler ama temizlemez** —
+neyin kasıtlı olduğunu betik bilemez.
+
+**Bundan sonra dal/stash hareketi gerektiren her sonda bu betikten
+geçecek.**
+
+---
+
 ## M3/2c — MESAJLAŞMA PANELİ: KARAR KAYDI (2026-09-06)
 
 ### MOBİL KIRILMA NOKTASI: 900px
@@ -2927,6 +3002,34 @@ eşiği zaten **900px** — iki sütundan tek sütuna orada geçiyor.
 Yeni bir eşik eklemek, aynı ekranın iki farklı yerde iki farklı
 noktada kırılması demekti. Mehmet onayladı: *"mevcut düzenin kendi
 eşiği; yeni eşik icat etme."*
+
+### TERCİH YAZMA SIKLIĞI — GECİKMELİ VE KAPANIŞTA
+
+**BU BİR ÖNGÖRÜ, ÖLÇÜM DEĞİL — açıkça yazıyorum.** Canlıda
+`conversations = 0`, `messages = 0`: mesajlaşma henüz hiç
+kullanılmadı, gerçek sıklık verisi yok.
+
+Ölçebildiklerim:
+
+| Ölçüm | Sonuç |
+|---|---|
+| Aktif kullanıcı | 4 |
+| `user_ui_preferences` satırı | 1 (13 kullanıcıdan) |
+| Naif tasarımda yazma tetikleyen kod noktası | 6 (`konusmaSec` 3 + panel aç/kapa 3) |
+
+**BUGÜNKÜ DESEN GECİKTİRMİYOR:** `toggleCollapsed` her tıklamada
+`persistPreferences` çağırıyor. Kenar çubuğu için kabul edilebilir —
+günde birkaç kez. Panel farklı: **her konuşma seçimi bir yazma**
+demek. Gün içinde 30 geçiş yapan 10 kullanıcı, aynı iki alanı ezmek
+için ~300 yazma üretir.
+
+**KARAR:**
+- `SonKonusmaId` → **1 saniyelik gecikme (debounce)**. Hızlı ardışık
+  geçişlerde yalnız sonuncusu anlamlıdır.
+- `MesajPaneliAcik` → **yalnız kapanışta yazma**. Açılışta yazmak,
+  "açtım hemen kapattım" durumunda iki yazma üretirdi.
+
+Beklenen: oturum başına 6 tetikleyiciden ~2 yazmaya iner.
 
 ### PANEL VE TAM SAYFA — TEK BİLEŞEN, İKİ KİP
 
