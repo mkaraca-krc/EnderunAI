@@ -1,6 +1,8 @@
 [Unit]
 Description=CC durum raporunu uretir (KUTU/1 Parca 2)
 
+OnFailure=enderun-uyari@%N.service
+
 [Service]
 Type=oneshot
 # ZAMAN AŞIMI — 2026-09-06 ÖLÇÜMÜ SONRASI EKLENDİ (bkz. cc-devir.service).

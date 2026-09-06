@@ -1,8 +1,14 @@
 [Unit]
-Description=EnderunAI geri yukleme tatbikati (uc ayda bir)
+Description=EnderunAI geri yukleme tatbikati (her gece)
 Documentation=file:///var/www/enderun-ai/DURUM.md
+
+# DUSERSE HABER VERSIN — zaman asimi/hata kosuyu durdurur,
+# durdugunu SOYLEMEK ayri istir (AK-2).
+OnFailure=enderun-uyari@%N.service
 
 [Service]
 Type=oneshot
+# 18 saniyelik is; 10 dakika fazlasiyla pay.
+TimeoutStartSec=600
 ExecStart=/usr/local/bin/enderun-geri-yukleme-tatbikati.sh
 User=root

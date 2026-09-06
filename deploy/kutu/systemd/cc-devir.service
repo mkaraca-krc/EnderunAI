@@ -4,6 +4,8 @@ Documentation=file:///var/www/enderun-ai/DURUM.md
 After=cc-oturum.service
 Requires=cc-oturum.service
 
+OnFailure=enderun-uyari@%N.service
+
 [Service]
 Type=oneshot
 # ZAMAN AŞIMI — 2026-09-06 ÖLÇÜMÜ SONRASI EKLENDİ.

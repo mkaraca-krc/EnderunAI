@@ -2211,6 +2211,33 @@ Tarihsel kalıntı, bozuk yol değil. Düzeltilmedi.
 
 ---
 
+### Kural 76 — KENDİ YAŞINI YAYINLAMAYAN KANAL GÜVENİLMEZDİR
+
+**Bir kanalın sessizliği, iyi haber ile ölümü aynı gösterir. Kanal
+kendi yaşını yayınlamıyorsa, o kanal güvenilmezdir.**
+
+Onaylandı: Mehmet, 2026-09-06, arızanın üstüne.
+
+O gün rapor kanalı 03:58'den 07:14'e kadar öldü. Dosya yerinde durdu,
+içeriği donmuş hâlde okunabiliyordu ve **okuyan için "her şey yolunda"
+ile "üretim durdu" birbirinden ayırt edilemiyordu.** Kanalın kendisi
+sağlıklı görünüyordu; ölçülmeyen şey TAZELİĞİYDİ.
+
+**İKİ AYRI ÖNLEM, İKİ AYRI ARIZAYI KARŞILAR — biri diğerinin yerine
+geçmez:**
+
+| Önlem | Neyi karşılar | Sınırı |
+|---|---|---|
+| En üstte tarih damgası + okuyana verilen eşik | Üretim TAMAMEN ölse bile işe yarar | Okuyan raporu açmazsa kimse görmez |
+| Kesinti itirafı (üretim dönünce önceki dosyanın yaşı yazılır) | Kesinti sessizce kapanmaz | Üretim dönmezse itiraf da yazılmaz |
+
+**GENELLEŞTİRME:** bu yalnız rapor dosyası için değil. Periyodik
+yazılan her çıktı — durum dosyası, dışa aktarım, gösterge beslemesi —
+kendi üretim zamanını taşımalı ve okuyana "ne kadar eskiyse bozuktur"
+eşiğini vermelidir.
+
+---
+
 ### Kural 75 — "ÖLÇÜM DÜZELTMESİ" SİLİNECEK SATIRI ÇOĞALTIYORSA, DÜZELTME DEĞİLDİR
 
 **Bir "ölçüm düzeltmesi", silinecek satır ya da dosya sayısını
@@ -2884,6 +2911,127 @@ silindi, iz bırakılmadı.
 canlılık damgası tam bunun için isteniyordu. Zaman aşımı düzeltmesi
 arızayı önler; nöbetçi de olsaydı **haber verirdi**. İkisi ayrı iş.
 
+### RAPOR KANALI ARTIK YAŞINI SÖYLÜYOR VE DÜŞTÜĞÜNDE HABER VERİYOR
+
+Kural 76'nın uygulaması. Üç parça:
+
+**1. EN ÜSTTE TARİH.** `SON GUNCELLEME` satırı raporun ilk satırlarında
+ve TR saatiyle. Hemen altında okuyana ölçüt veriliyor: *"bu rapor 2
+dakikada bir yenilenir; sizin saatinizle arasında 6 dakikadan fazla
+fark varsa üretim durmuş demektir."* Bu, üretim tamamen ölse bile
+çalışan tek önlem.
+
+**2. KESİNTİ İTİRAFI.** Rapor üretilirken önceki dosyanın yaşı
+ölçülüyor; aralığın 3 katını (6 dk) aşmışsa raporun başına kesintinin
+kaç dakika sürdüğünü yazan bir kutu düşüyor. Kesinti sessizce
+kapanamıyor.
+
+**SONDA R1, iki ayakta:** dosya 20 dakika eskitildi → kutu çıktı ve
+"20 DAKIKA DURMUSTU" yazdı. Taze dosyayla (pozitif kontrol) → kutu yok.
+
+**3. DÜŞEN BİRİM HABER VERİYOR.** `cc-devir`, `enderun-rapor` ve
+geri yükleme tatbikatı artık `OnFailure=enderun-uyari@%N.service`
+taşıyor. Uyarı betiği **dosyaya koşulsuz** yazar; e-posta ikinci kanal.
+
+**SONDA U1, iki ayakta:** `OnFailure` taşıyan atılacak bir birim
+düşürüldü → `uyari-son.txt` birimin adıyla yazıldı, günlüğe satır
+düştü. `OnFailure` satırı silindiğinde (pozitif kontrol) → hiçbir şey
+yazılmadı, günlük 0 satır.
+
+**SONDA U2 — SIR SIZMIYOR:** kuru koşu çıktılarında SMTP parolası ve
+kullanıcı adı aranıp bulunamadı (yalnız sonuç basıldı, değer değil).
+
+### İKİ ŞEY BENİ ŞANS KURTARDI — İKİSİ DE KAYDA GEÇİYOR
+
+**BİRİNCİSİ: SONDA GERÇEK E-POSTA GÖNDERMEYE ÇALIŞTI.** Sonda birimine
+`Environment=UYARI_KURU=1` yazmıştım. systemd bunu `OnFailure` ile
+tetiklenen **AYRI birime geçirmez** — bilmiyordum. Betik gerçek
+gönderim denedi ve yalnız bir tırnak hatasına takıldığı için posta
+çıkmadı. *"İlk gönderim testi sende değil bende"* kuralını tasarım
+değil, ŞANS korudu.
+
+**DÜZELTME — KAPI SÜREÇTE DEĞİL, DİSKTE:** gönderim artık
+`/etc/enderunai/uyari-posta-acik` dosyası varsa yapılıyor. Tetikleyen
+kim olursa olsun aynı kapı geçerli. Dosya YOK; ilk gerçek gönderimi
+Mehmet açacak.
+
+**İKİNCİSİ: TIRNAK HATASI.** `backend.env` **tek tırnak** kullanıyor,
+betiğim yalnız çift tırnak soyuyordu; `curl`'e tırnaklı konak adı gitti
+(`curl: (3) URL using bad/illegal format`). Sonda bunu ilk koşuda
+buldu. Düzeltildi ve ayrıştırıcının ürettiği uzunluklar kaynaktan
+okunan değerlerle birebir eşleşiyor (17/3/27/10) — değer basılmadan
+doğrulandı.
+
+### 3.1a — TATBİKAT ÜÇ AYDAN GECELİĞE İNDİ, BAŞARI DAMGASI KOYULDU
+
+**ARALIK ÖLÇÜLMEDEN SEÇİLMİŞTİ.** Gerçek maliyet:
+
+| Ölçüm | Sonuç |
+|---|---|
+| Tatbikat süresi | **18 saniye** (1,6 sn CPU) |
+| Geçici veritabanı | 58 MB, koşu sonunda düşürülüyor |
+| Eski aralık | 3 ay |
+
+18 saniyelik bir iş için üç ay savunulamaz. **Yeni aralık: her gece
+03:30** — gece yedeği 03:00'te alınıyor, yani her gece O GECENİN
+yedeği sınanıyor.
+
+**BAŞARI DAMGASI —** `/var/lib/enderun-ai/tatbikat-son-basari.txt`.
+Yalnız başarılı koşuda yazılır; betik herhangi bir `fail`'de durursa
+oraya hiç gelmez. Yani damganın yaşı *"en son ne zaman gerçekten geri
+YÜKLEYEBİLDİK"* sorusunun cevabıdır — *"en son ne zaman denedik"*
+değil. Kural 74'ün doğrudan karşılığı.
+
+**GERÇEKTEN KOŞTURULDU, VARSAYILMADI:** `db_20260906_030008.dump.gpg`
+boş bir veritabanına yüklendi, 240 tablo doğrulandı, beş tablonun
+satır sayısı canlıyla eşleşti (cheques 31/31), tatbikat veritabanı
+düşürüldü, damga yazıldı.
+
+**RAPORDA GÖRÜNÜYOR — SONDA T1, ÜÇ AYAKTA:**
+- taze damga → `0 saat once basarili`
+- damga 3 gün eskitildi → `!!! DAMGA 72 SAAT ESKI — iki gece kacirildi !!!`
+- damga kaldırıldı → `!!! DAMGA YOK — tatbikat hic basariyla kosmadi !!!`
+
+### KUTU AYRIŞMA KAPISI — İKİ KOPYA, TEK DOĞRULUK
+
+Betikler hem canlıda (`/usr/local/bin`, `/etc/systemd/system`) hem
+depoda duruyor. **Otomatik dağıtım istenmedi** (canlı kabuğa dokunur,
+ayrı karar); istenen şey **ayrışmanın görünmesi**.
+
+`deploy/kutu/ayrisma-kontrolu.sh` **19 dosyayı** karşılaştırıyor ve
+fark varsa **düşüyor** — yalnız uyarı basan bir kontrol gürültüye
+karışır, düşen kapı kararı verdirir. Betik kendiliğinden HİÇBİR ŞEY
+KOPYALAMAZ; hangisinin doğru olduğunu Mehmet söyler.
+
+**LİSTE KUTU/1'DEN GENİŞ:** `scripts/enderun-backup.sh`,
+tatbikat betiği ve `ops/systemd/` altındaki altı birim de eklendi.
+2026-09-06'da ölçüldü: yedisi de canlı kopyasıyla birebir aynıydı —
+ama bunu koruyan hiçbir şey yoktu.
+
+**POZİTİF KONTROL İÇERİDE:** liste 15'in altına düşerse kapı
+"ayrışma yok" demek yerine DÜŞER. Boşalmış bir liste sessizce yeşil
+verirdi (Kural 48).
+
+`ucuz-kapilar.sh` içine `hizli` sınıfında eklendi — hem push
+kancasında hem yayın turunda koşuyor.
+
+**SONDA A1, iki ayakta:** canlı `cc-baslat.sh`e zararsız bir satır
+eklendi → kapı düştü ve dosyayı adıyla, iki yoluyla gösterdi. Satır
+geri alındı → 19 dosya, ayrışma yok.
+
+### AK-8 KAPANDI — İKİ ÖKSÜZ BETİK SİLİNDİ
+
+`deploy/scripts/backup.sh` ve `rollback.sh` silindi. Ne yapacakları,
+neden çağrılmadıkları ve bedeli TEMIZLIK-TARAMASI.md'ye yazıldı.
+
+Mehmet: *"İkisini elle kullanmıyorum — yalnız belgelenmiş komutları
+koşuyorum."* Ve: *"belge, kodun yaptığını değil, birinin sandığını
+anlatıyormuş."*
+
+**GERİYE KALAN ÖKSÜZ KÜME — KARAR BEKLİYOR:** `verify.sh`,
+`healthcheck.sh` ve onları besleyen `common.sh` de çağrılmıyor. Karar
+yalnız iki dosya içindi; bunlar duruyor.
+
 ### 3.2 — "YEDEK" DİYEN SATIR ARTIK KİMİN KONUŞTUĞUNU SÖYLÜYOR
 
 **SORUN (Mehmet):** *"AYNI SÖZCÜK İKİ AYRI ŞEY… ben sekiz kez onay
@@ -3300,17 +3448,25 @@ ikisinin **birlikte planlanmasını** istedi.
 **ŞİMDİ KURULMAYACAK.** Madde açıldı, seçenek raporu AK-3 raporuyla
 birlikte gelecek.
 
+**ARADA YAPILAN:** sunucu İÇİNDEN gelen uyarı kanalı kuruldu
+(`enderun-uyari.sh`, dosya + e-posta). Bu AK-7'nin yerine geçmez —
+makine tamamen giderse o da susar. Boşluk kapanmadı, yalnız iç
+arızalar artık haber veriyor.
+
 ---
 
-### AK-8 — ÖKSÜZ YEDEK BETİĞİ SİLİNSİN Mİ (2026-09-06)
+### AK-8 — ÖKSÜZ YEDEK BETİĞİ — **KAPANDI: SİLİNDİ (2026-09-06)**
 
 `deploy/scripts/backup.sh` (15 satır) ve `deploy/scripts/rollback.sh`
 (12 satır) **hiçbir yerden çağrılmıyor** — ölçüldü. Kafa karışıklığının
 kaynağı bunlar: ikisi de "yedek" diyor ama veriye dokunmuyor.
 
-Bugün ikisine de başlığına açık uyarı yazıldı. **Silinip
-silinmeyecekleri açık** — silme, hâlâ elle kullanılıp kullanılmadığını
-bilmeyi gerektiriyor ve bu Mehmet'in bilgisi.
+**MEHMET'İN KARARI: SİL.** *"İkisini elle kullanmıyorum — yalnız
+belgelenmiş komutları koşuyorum."* Silindi; ne yapacakları ve neden
+çağrılmadıkları önce TEMIZLIK-TARAMASI.md'ye yazıldı.
+
+**AYNI KÜMEDEN ÜÇ DOSYA DAHA ÇAĞRILMIYOR** ve karar onları
+kapsamıyordu: `verify.sh`, `healthcheck.sh`, `common.sh`. Duruyorlar.
 
 ---
 

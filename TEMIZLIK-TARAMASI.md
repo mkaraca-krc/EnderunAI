@@ -1167,3 +1167,38 @@ Etkinleştirme günü yine sıfırlanacaklar.
 parola verilmesi kuralı kalkmadı. Bugün kapanan şey *paylaşılan tohum
 parolasının* bu iki hesapta yaşamaya devam etmesiydi, etkinleştirme
 disiplini değil.
+
+## Öksüz dağıtım betikleri — `backup.sh` ve `rollback.sh` SİLİNDİ (2026-09-06)
+
+**NE YAPACAKLARDI.** İkisi `release-foundation-rc1` döneminden kalma bir
+çiftti: `backup.sh` altı ön yüz kaynak dosyasını
+(`middleware.ts`, `app/api/auth/login/route.ts`,
+`app/api/backend/[...path]/route.ts`, `app/login/page.tsx`,
+`app/globals.css`, `components/erp/erp-shell.tsx`) damgalı bir klasöre
+kopyalıyordu; `rollback.sh` o klasörü geri yazıp ön yüz servisini
+yeniden başlatıyordu. Yani **elle kullanılan, dar kapsamlı bir "şu altı
+dosyayı geri al" aracıydı.**
+
+**NEDEN ÇAĞRILMIYORLARDI.** `safe-deploy.sh` geldiğinde geri alma işi
+onun içine taşındı: `backup_current_release()` derlenmiş çıktının
+tamamını (`publish/` ve `.next/`) kopyalıyor, geri alma da oradan
+yapılıyor. Altı dosyalık kopya gereksiz kaldı ama **silinmedi** ve
+çağıranı olmadan depoda durdu.
+
+**BEDELİ ÖLÇÜLDÜ.** İkisi de günlüğe "yedek" diye geçen bir şey
+üretiyordu ve safe-deploy'un veri yedeğiyle aynı sözcüğü paylaşıyordu.
+Mehmet sekiz kez "yedek alındı" satırına onay verirken hangisinin
+çalıştığını bilmiyordu. DURUM.md'ye *"safe-deploy her yayından önce
+ikisini de çağırıyor"* diye **yanlış** bir cümle yazılmıştı — belge,
+kodun yaptığını değil birinin sandığını anlatıyordu.
+
+**KARAR (Mehmet, 2026-09-06):** *"İkisini elle kullanmıyorum — yalnız
+belgelenmiş komutları koşuyorum."* Silindi.
+
+**GERİYE KALAN ÖKSÜZ KÜME — KARAR BEKLİYOR.** Aynı dönemden üç betik
+daha çağrılmıyor: `deploy/scripts/verify.sh`,
+`deploy/scripts/healthcheck.sh` (yalnız `verify.sh` ve silinen
+`rollback.sh` çağırıyordu), ve bunları besleyen
+`deploy/scripts/common.sh`. Silinmediler — Mehmet'in kararı yalnız iki
+dosya içindi. `common.sh` ayrıca `BACKUP_ROOT` gibi yol tanımlarını
+tutuyor; silinmesi ayrı ölçüm ister.

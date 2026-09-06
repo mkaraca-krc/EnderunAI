@@ -1,11 +1,22 @@
 [Unit]
-Description=EnderunAI geri yukleme tatbikatini uc ayda bir calistirir
+Description=EnderunAI geri yukleme tatbikatini HER GECE calistirir
 
 [Timer]
-# Ocak, Nisan, Temmuz, Ekim - ayin 1i, 04:30 (gece yedeginden sonra)
-OnCalendar=*-01,04,07,10-01 04:30:00
+# ── NEDEN GUNLUK (olculdu 2026-09-06) ──────────────────────────
+#
+# Onceki aralik UC AYDI ve olculmeden secilmisti. Gercek maliyet:
+#   sure        : 18 saniye (1.8 sn CPU)
+#   gecici disk : ~58 MB, kosu sonunda dusuruluyor
+#
+# Uc ay, 18 saniyelik bir is icin savunulamaz. Asil bedeli de olculdu:
+# tatbikat kosmadiginda HICBIR SEY OLMUYORDU; "yedekler geri
+# yuklenebiliyor mu" sorusunun cevabi uc ay boyunca gorunmez kalirdi.
+#
+# 03:30 secildi: gece yedegi 03:00'te aliniyor, yani her gece O GECENIN
+# yedegi sinaniyor. Sinanan sey en taze kopya.
+OnCalendar=*-*-* 03:30:00
 Persistent=true
-RandomizedDelaySec=600
+RandomizedDelaySec=300
 
 [Install]
 WantedBy=timers.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Enderun nobet uyarisi - dusen birim: %i
+# SABLON BIRIM: %i, dusen birimin adidir. OnFailure= satirindan gelir.
+# Kendisi OnFailure TASIMAZ - uyari birimi duserse baska bir uyari
+# tetiklemez; sonsuz dongu olurdu.
+
+[Service]
+Type=oneshot
+TimeoutStartSec=60
+ExecStart=/usr/local/bin/enderun-uyari.sh %i

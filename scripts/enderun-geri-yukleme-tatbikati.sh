@@ -85,3 +85,28 @@ done
 [ "$SORUN" -eq 0 ] || fail "Tatbikat BAŞARISIZ — yukarıdaki satırlara bakın."
 
 log "INFO" "TATBİKAT BAŞARILI — $(basename "$YEDEK") gerçek bir veritabanına yüklendi, $PROVA_TABLO tablo doğrulandı."
+
+# ── BAŞARI DAMGASI — "HİÇ KOŞMADI" SESSİZ KALMASIN ──────────────
+#
+# SORUN (ölçüldü 2026-09-06): tatbikat üç ayda bir koşuyordu ve
+# koşmadığı takdirde HİÇBİR ŞEY OLMUYORDU. Zamanlayıcının damgası da
+# işe yaramıyor — o, etkinleştirme anını da kaydediyor (Kural 74).
+# Yani "yedekler geri yükleniyor mu" sorusunun cevabı üç ay boyunca
+# görünmez kalabilirdi.
+#
+# DAMGA YALNIZ BAŞARIDA YAZILIR. Betik yukarıdaki `fail` çağrılarının
+# herhangi birinde durursa buraya HİÇ GELMEZ ve damga eskir. Yani
+# damganın yaşı, "en son ne zaman gerçekten geri yükleyebildik"
+# sorusunun cevabıdır — "en son ne zaman denedik" değil.
+#
+# Bu dosyayı NÖBET/1 ve durum raporu okuyor; yaşı beklenen aralığı
+# aşarsa uyarı üretilir.
+DAMGA="/var/lib/enderun-ai/tatbikat-son-basari.txt"
+mkdir -p "$(dirname "$DAMGA")"
+{
+    printf 'zaman=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'yedek=%s\n' "$(basename "$YEDEK")"
+    printf 'tablo=%s\n' "$PROVA_TABLO"
+} > "$DAMGA"
+chmod 644 "$DAMGA"
+log "INFO" "Başarı damgası yazıldı: $DAMGA"
