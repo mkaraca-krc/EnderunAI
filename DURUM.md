@@ -3141,6 +3141,46 @@ paketinin işi ve **AÇILMAYACAK listesinde** — Mehmet'in kararı.
 
 ---
 
+## M3/2b — **KAPANDI** (2026-09-06, Kural 71 doğrulandı)
+
+**TARAYICIDAN, MEHMET'İN OTURUMUYLA, `9678e7bb` ÜZERİNDE:**
+
+| # | Adım | Sonuç |
+|---|---|---|
+| 1 | `GET /mesajlar/kisiler?q=uakkaya` | **200** — "Uğur AKKAYA" listelendi |
+| 2 | `POST /mesajlar/konusmalar/birebir` | **200** (bir yayın önce 400'dü) |
+| 3 | `POST /mesajlar/konusmalar/{id}/mesajlar` | **200** |
+| 4 | `/mesajlar?limit=50`, `/okundu` | **200** |
+
+Konuşma `6899e7a7-70c1-420e-9827-d6bc01e360a8`, mesaj hem sol listede
+hem konuşmada göründü.
+
+**Bugünkü dört düzeltmenin dördü de tarayıcıda doğrulandı:** yer
+tutucu "en az 3 harf" (sözleşme uyuşmazlığı kapandı), boş durum metni,
+kullanıcı adıyla arama, ve boş konuşmada *"İlkini siz yazın"*.
+
+**KURAL 71 NEDEN VARDI, BUGÜN GÖRÜLDÜ.** *"Yayın, tarayıcıda bir
+etkileşim görülmeden tamam değildir."* M3/2b bir kez "kod bitti" diye
+işaretlenseydi üç ayrı arıza canlıda kalırdı: personel bağı yokluğu
+(rehber hiç kimseyi döndüremiyordu), asgari harf uyuşmazlığı, ve çift
+JSON çevrimi (konuşma açılamıyordu). Üçü de yalnız **gerçek bir
+tarayıcı denemesiyle** ortaya çıktı; uç testleri üçünde de yeşildi.
+
+### DÜRÜST SINIR — "GÖNDERDİM, GÖRDÜ" ZİNCİRİ HENÜZ TAMAM DEĞİL
+
+**Mehmet'in gözlemi (kusur değil, sınır):** mesaj gönderildikten sonra
+ekran kendini güncelledi **ama bu SignalR değil.** Ön yüzde canlı
+bağlantı hâlâ yok; gönderen taraf `useRefreshable` ile zaten yeniden
+çekiyor. **Uğur'un ekranında mesajın kendiliğinden belirmesi
+M3/2c-2'ye bağlı.**
+
+Bu ayrımın kayda geçmesi önemli: gönderen tarafın ekranı canlı
+GÖRÜNÜYOR ama canlı DEĞİL. Ölçmeden bakan biri "gerçek zamanlı
+çalışıyor" diye okuyabilirdi — bugün mesajlaşma **iki kişi arasında
+tek yönlü**: yazan görür, alan görmez.
+
+---
+
 ## M3 — KONUŞMA AÇILAMIYORDU: ÇİFT JSON ÇEVRİMİ (2026-09-06)
 
 **BULUŞ MEHMET'İN, TARAYICIDAN.** Kişi araması düzeldi, kişi bulunuyor,
@@ -3846,7 +3886,7 @@ durum değiştiği için değil, **kullanıcı istediği için** geliyor.
 statik değil **dinamik** eksende sayılıyor: statik 2937 → **2940**,
 dinamik 24 → **25**, ikisinde de gevşeklik 0.
 
-**KURAL 71 — DOĞRULAMA BEKLİYOR:** deploy sonrası Mehmet tarayıcıdan
+**KURAL 71 — DOĞRULANDI (2026-09-06):** bkz. "M3/2b — KAPANDI". Deploy sonrası Mehmet tarayıcıdan
 bir mesaj gönderecek. Bu madde onun onayına kadar "kapandı"
 yazılmaz.
 
