@@ -3050,6 +3050,97 @@ geçecek.**
 
 ---
 
+## BEKLEYEN PAKET — ÇAY/1: İÇ SİPARİŞ EKRANI (2026-09-06)
+
+**AMAÇ:** müşteri yanındayken yazı yazmadan, iki dokunuşla çay/kahve
+istemek. Sohbet mesajı değil, kendi küçük ekranı.
+
+**SIRA:** hesap paketi → mesajlaşma kullanılabilir → **ÇAY/1** →
+(en sonda) santral entegrasyonu.
+
+### SİPARİŞ EKRANI (isteyen taraf)
+
+- En üstte tek düğme **"Her zamanki"** → son siparişi aynen tekrarlar.
+  *Günün çoğu aynı sipariş; en hızlı yol yeni oluşturmak değil,
+  tekrarlamaktır.*
+- İçecek kartları: Çay · Açık çay · Türk kahvesi · Nescafe · Su · Ayran.
+  **Liste yönetilebilir olacak, koda gömülmeyecek.**
+- Türk kahvesi seçilirse: sade / orta / şekerli
+- Her kartta +/- ile adet
+- Konum: kullanıcının **varsayılan odası** önceden seçili gelir
+- "Gönder" — onay ekranı, form, açıklama kutusu YOK
+- İsteğe bağlı tek satırlık not, varsayılan **kapalı**
+
+### ÇAYCI EKRANI (çay ocağındaki tablet)
+
+- **Tek hesapla** çalışır; çaycının kendi telefonu/hesabı gerekmez
+- Yeni sipariş: ses + görsel uyarı
+- **GRUPLAMA — asıl mesele bu.** Aynı odaya gelen siparişler tek kartta:
+  *"Toplantı odası — 3 çay, 1 açık, 1 orta kahve · Mehmet, Sedat,
+  Veysel"*. Birleştirme penceresi 2-3 dakika; pencere kapandıktan
+  sonra gelen sipariş **yeni kart** açar (çaycı çıkmış olabilir)
+- Kimin istediği kartta görünür — çaycı kime götüreceğini bilmeli
+- Bekleyenler en üstte, bekleme süresi kartta yazar, uzun bekleyen
+  görsel olarak öne çıkar
+- Sipariş yoksa ekran boş bırakılmaz: **"Sipariş yok"**
+
+### DURUMLAR — ÜÇ TANE, FAZLASI GÜRÜLTÜ
+
+`Gönderildi → Görüldü → Teslim edildi`
+
+Çaycı **iki dokunuş** yapar: kart geldiğinde "Gördüm", götürünce
+"Teslim ettim" — **kart bazında, kişi bazında değil.**
+
+**"GÖRÜLDÜ" OTOMATİK OLMAYACAK.** *Kartın ekranda belirmesi, birinin
+gördüğünün kanıtı değildir* — tablet açık olabilir, çaycı ocakta
+olmayabilir. Açık dokunuşla bildirilir.
+
+> Bu, Kural 74'ün aynı ailesi: bir damganın varlığı, işin yapıldığının
+> kanıtı değildir. Orada zamanlayıcı damgası, burada ekranda beliren
+> kart.
+
+### SESSİZLİK UYARIYA DÖNÜŞÜR
+
+- 5 dakikadır "Gönderildi"de → isteyenin ekranında **"Henüz
+  görülmedi"** (sarı)
+- 15 dakikadır "Görüldü"de → **"Hazırlanıyor, gecikti"**
+- **Süreler ayarlanabilir olacak, koda gömülmeyecek**
+
+> Kural 76'nın uygulaması: sessizlik, iyi haber ile ölümü aynı
+> gösterir. Sipariş ekranı kendi yaşını yayınlıyor.
+
+### YETKİ — AYRI ANAHTAR AÇILMAYACAK (KARAR)
+
+**Hesabı olan herkes sipariş verebilir. Ayrı izin anahtarı
+AÇILMAYACAK** (Mehmet, 2026-09-06): *"çay siparişi için kapı kurmak
+aşırı."*
+
+Bu, izin kataloğunun genel çizgisinden bilinçli bir sapma ve gerekçesi
+şudur: her anahtar bir bakım yüküdür (rol atamaları, muafiyet listesi,
+kapı testleri). Korunacak bir varlık yokken açılan kapı, güvenlik
+değil gürültü üretir. Kimlik doğrulaması yeterli — aynı gerekçe
+`UserPreferencesController`'da da yazılı.
+
+### KAPSAM DIŞI — BİLEREK, SONRADAN ŞİŞİRİLMEYECEK
+
+Maliyet takibi · stok düşümü · muhasebe kaydı · kişi başı tüketim
+raporu — **YOK.** Tek ölçüm yeterli: **günlük toplam sipariş sayısı.**
+
+### ÖN KOŞULLAR — BUGÜNKÜ DURUM ÖLÇÜLDÜ (2026-09-06)
+
+| # | Ön koşul | Durum |
+|---|---|---|
+| 1 | Hesap paketi | **KISMEN** — personel bağı 12/13 kuruldu. Kalan: **9 etkinleştirme** + 2 yeni hesap. Dokuzunun da rolleri **zaten atanmış** (ölçüldü), yani iş açmak değil etkinleştirmek |
+| 2 | Mesajlaşma / bildirim altyapısı | Bildirim çekirdeği **var** (`Services/Notifications`, 8 kayıt). Mesajlaşma **doğrulama bekliyor** (Kural 71) |
+| 3 | Çay ocağına tablet + tek hesap | **YOK** — donanım ve hesap Mehmet'te |
+| 4 | Oda/konum listesi | **YOK** — mevcut hiçbir tablo oda/konum tutmuyor; yeni ve kısa bir liste gerekecek |
+
+**KRİTİK BAĞIMLILIK:** ofistekilerin hesabı olmadan bu ekran işe
+yaramaz. Dokuz pasif hesabın etkinleştirilmesi ÇAY/1'in değil, hesap
+paketinin işi ve **AÇILMAYACAK listesinde** — Mehmet'in kararı.
+
+---
+
 ## M3 — KİŞİ ARAMASI: ASIL KUSUR VERİDEYDİ (2026-09-06)
 
 **BULUŞ MEHMET'İN, TARAYICIDAN.** Ekranda kişi araması hiçbir sonuç
