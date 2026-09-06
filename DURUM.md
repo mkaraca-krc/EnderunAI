@@ -2211,6 +2211,42 @@ Tarihsel kalıntı, bozuk yol değil. Düzeltilmedi.
 
 ---
 
+### Kural 78 — SÜREÇ KİMLİĞİ ADA DEĞİL, PID'E DAYANIR
+
+**Süreç ad eşleştirmesi (`pgrep -f` / `pkill -f`) kendi komut satırını
+da eşleştirir. Süreç kimliği ada değil, PID'e veya kilit dosyasına
+dayanır.**
+
+Onaylandı: Mehmet, 2026-09-06, aynı tuzağa iki kez düştükten sonra.
+
+**BİRİNCİ KEZ:** geri yükleme tatbikatı, yedek hâlâ koşuyorsa
+beklesin diye `pgrep -f '/usr/local/bin/enderun-backup.sh'`
+kullanıyordu. Sonda sırasında tatbikat beklemeye girdi ve çıkmadı —
+eşleştirdiği şey yedek betiği değil, **sondayı koşturan kabuğun kendi
+komut satırıydı**; o satırda yolun adı geçiyordu, o kadar.
+
+**İKİNCİ KEZ, ON DAKİKA SONRA:** takılan tatbikatı temizlemek için
+`pkill -f 'bash /usr/local/bin/enderun-geri-yukleme-tatbikati.sh'`
+yazdım. Bu kez ölen, **komutu çalıştıran kabuğun kendisi** oldu
+(exit 144).
+
+**NEDEN İKİ KEZ:** ilk seferde "sonda kazası" diye geçiştirilebilirdi.
+İkinci sefer aynı sınıfın farklı bir aracıyla geldi ve gerçek olanı
+gösterdi: bir ad araması bir varlık ölçümü değildir. Aynı ada bakan
+her araç aynı hatayı yapar.
+
+**UYGULAMA:** `enderun-backup.sh` başlarken
+`/var/lib/enderun-ai/yedek-kosuyor` dosyasına kendi PID'ini yazıyor ve
+`EXIT` tuzağında siliyor. Tatbikat hem dosyanın varlığına hem
+**PID'in yaşadığına** bakıyor — bayat kilit kimseyi bekletmiyor.
+Sondayla kanıtlandı: canlı PID → 30 saniye bekledi; ölü PID → hiç
+beklemedi.
+
+**AKRABASI:** Kural 70 (*"kaynakta grep ölçüm değil, ipucudur"*). İkisi
+de aynı şeyi söyler: metin eşleşmesi, varlık kanıtı değildir.
+
+---
+
 ### Kural 77 — SINIR GEÇMEYEN BAYRAK YOK SAYILIR
 
 **Bir bayrak süreç/birim sınırını geçmiyorsa yok sayılır. Bayrak
@@ -2873,6 +2909,46 @@ zorunludur; yoksa değişikliğin işe yarayıp yaramadığı ölçülmemiş olu
 Desene kabuk savunması eklendi (`hata`/`fail` çağrısı, sıfırdan farklı
 `exit`, `|| exit` kısayolları) ve iki yönde sınandı: `9d4ffd0b` artık
 6 satırı buluyor, `f9b61709` (yalnız ön yüz bağlantısı) temiz kalıyor.
+
+---
+
+## M3/2c — MESAJLAŞMA PANELİ: KARAR KAYDI (2026-09-06)
+
+### MOBİL KIRILMA NOKTASI: 900px
+
+Dar ekranda yan panel kullanılamaz; mobilde **tam ekran konuşma**
+açılacak, panel değil.
+
+**EŞİK ÖLÇÜLEREK SEÇİLDİ, İCAT EDİLMEDİ.** `globals.css`'te bugün
+kullanılan eşikler: 620px (5 kez), 800px (4), 760px (4), **900px (3)**,
+860px (2), 1100px (2). Mesajlaşma düzeninin (`.mesaj-duzen`) kendi
+eşiği zaten **900px** — iki sütundan tek sütuna orada geçiyor.
+
+Yeni bir eşik eklemek, aynı ekranın iki farklı yerde iki farklı
+noktada kırılması demekti. Mehmet onayladı: *"mevcut düzenin kendi
+eşiği; yeni eşik icat etme."*
+
+### PANEL VE TAM SAYFA — TEK BİLEŞEN, İKİ KİP
+
+`/mesajlar` tam sayfa hâli **kaldırılmıyor**. Panel onun yerine değil,
+yanına. Ama ikisi **aynı bileşeni** kullanacak
+(`components/mesajlar/mesaj-paneli.tsx`), farkları yalnız bir kip
+parametresi olacak.
+
+Sebep bugünün tekrar eden dersi: bu kod tabanının en sık hatası aynı
+şeyin ikinci kopyası. Panel ile tam sayfa ayrı yazılsaydı, ikisi
+zamanla ayrışırdı ve **ayrışan her nokta, birinin sınamadığı bir
+noktadır.**
+
+### HATA SINIRI — PANEL KENDİ SINIRINDA
+
+`erp-shell.tsx`'te iki `HataSiniri` var: `nerede="kabuk"` (tamamı) ve
+`nerede="içerik"` (yalnız `children`). Panel, `HizirBubble` gibi
+`children`'ın DIŞINDA duracağı için "içerik" sınırının kapsamına
+girmez — dıştaki "kabuk" sınırına düşer ve **panel çökerse tüm ERP
+kabuğu düşerdi.**
+
+Panel kendi `HataSiniri`'ne sarılacak (`nerede="mesaj-paneli"`).
 
 ---
 

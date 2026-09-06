@@ -1266,3 +1266,17 @@ listesine `cc-oturum`, `cc-devir` ve geri yükleme tatbikatı girecek;
 `enderun-rapor` **girmeyecek** ve bu satır o kararın kaydıdır.
 
 **GERİ AÇMAK İÇİN:** `systemctl enable --now enderun-rapor.timer`
+
+## `HizirBubble` hata sınırı taşımıyor — AÇIK (2026-09-06)
+
+`erp-shell.tsx:683`'teki `HizirBubble`, `children`'ın **dışında**
+duruyor ve bu yüzden `nerede="içerik"` hata sınırının kapsamına
+girmiyor. Render sırasında hata alırsa dıştaki `nerede="kabuk"` sınırı
+yakalar — yani **Hızır balonu çökerse tüm ERP kabuğu düşer.**
+
+M3/2c ölçümü sırasında, mesajlaşma paneli için aynı soru sorulunca
+bulundu. Panel kendi sınırına sarılıyor; `HizirBubble` **bu pakete
+sokulmadı** (Mehmet: *"Aynı boşluk. TEMIZLIK'e yaz, bu pakete sokma."*).
+
+Düzeltmesi tek satır: `<HataSiniri nerede="hizir" bicim="govde">` ile
+sarmak. Bugün sömürülebilir bir açık değil, dayanıklılık borcu.
