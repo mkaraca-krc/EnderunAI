@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import MesajPaneli from "./mesaj-paneli";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { apiClient } from "@/lib/api/api-client";
 
 /**
@@ -42,6 +43,20 @@ export default function MesajBaloncugu() {
   const [acik, setAcik] = useState(false);
   const [sonKonusma, setSonKonusma] = useState<string | null>(null);
   const [taslakVar, setTaslakVar] = useState(false);
+
+  /*
+   * KAPATMA UYARISI — TARAYICI DİYALOĞU DEĞİL.
+   *
+   * İlk yazımda `window.confirm` kullandım ve `native-dialogs.test.ts`
+   * yayını durdurdu. Kapı haklıydı: tarayıcı diyaloğu
+   * biçimlendirilemiyor, hatayı içinde gösteremiyor ve projenin geri
+   * kalanıyla aynı görünmüyor. Projenin kendi `ConfirmDialog`'u var.
+   *
+   * GEREKÇE ALANI YOK: burada geri alınamaz bir iş yapılmıyor,
+   * yalnız yazılmamış bir taslak atılıyor. Gerekçe istemek, çay
+   * siparişine izin anahtarı koymak gibi olurdu.
+   */
+  const [kapatmaSorusu, setKapatmaSorusu] = useState(false);
 
   /*
    * TERCİH YÜKLENMEDEN YAZILMAZ.
@@ -96,18 +111,22 @@ export default function MesajBaloncugu() {
    * Her aç-kapa'da yazsaydık "açtım hemen kapattım" iki yazma
    * üretirdi. Açılış, bir sonraki kapanışta zaten kaydedilir.
    */
-  const kapat = useCallback(() => {
-    if (taslakVar) {
-      const devam = window.confirm(
-        "Yazdığınız mesaj gönderilmedi. Paneli kapatırsanız kaybolur. Kapatılsın mı?"
-      );
-      if (!devam) return;
-    }
-
+  /** Uyarısız kapatma — soruya "evet" dendikten sonra da buraya gelinir. */
+  const gercektenKapat = useCallback(() => {
+    setKapatmaSorusu(false);
     setAcik(false);
     setTaslakVar(false);
     tercihYaz({ messagePanelOpen: false });
-  }, [taslakVar, tercihYaz]);
+  }, [tercihYaz]);
+
+  const kapat = useCallback(() => {
+    if (taslakVar) {
+      setKapatmaSorusu(true);
+      return;
+    }
+
+    gercektenKapat();
+  }, [taslakVar, gercektenKapat]);
 
   const ac = useCallback(() => {
     // MOBİLDE PANEL AÇILMAZ: dar ekranda tam sayfaya gidilir.
@@ -171,6 +190,15 @@ export default function MesajBaloncugu() {
           />
         </div>
       )}
+
+      <ConfirmDialog
+        open={kapatmaSorusu}
+        title="Yazdığınız mesaj gönderilmedi"
+        description="Paneli kapatırsanız yazdığınız metin kaybolur."
+        confirmLabel="Yine de kapat"
+        onCancel={() => setKapatmaSorusu(false)}
+        onConfirm={gercektenKapat}
+      />
 
       <button
         type="button"

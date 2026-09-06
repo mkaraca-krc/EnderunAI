@@ -2211,6 +2211,47 @@ Tarihsel kalıntı, bozuk yol değil. Düzeltilmedi.
 
 ---
 
+### Kural 81 — SONDA DÜZENEĞİ ÜRETİMDEKİ YERLEŞİMİ TAKLİT ETMELİDİR
+
+**Bir sondanın düzeneği, üretimdeki yerleşimi taklit etmelidir.
+Kolaylık olsun diye kurulan yaklaşık bir model, sabotajı emebilir ve
+test hiçbir şey ölçmeden yeşil kalır. Sonda ısırmıyorsa önce SABOTAJI
+değil MODELİ sorgula.**
+
+Onaylandı: Mehmet, 2026-09-06.
+
+**DOĞURAN OLAY — M3/2c-1 PANEL TESTİ, İKİ YANLIŞ MODEL ÜST ÜSTE:**
+
+1. İki sahte "sayfa"yı da `<p>` yaptım. React aynı konumdaki **aynı
+   tipteki** bileşeni koruyor; panel sökülmedi, taslak kaybolmadı,
+   sabotaj kırmadı.
+2. Farklı bileşen tipleri verdim ama paneli
+   `<main>{children}<Panel/></main>` diye yazdım. React onu
+   **konumuna** göre korudu (0. çocuk tip değiştirip söküldü, 1. çocuk
+   aynı kaldı); sabotaj yine kırmadı.
+3. Gerçekte panel **sayfa bileşeninin kendi ağacında** olurdu. Model
+   öyle düzeltilince sonda ısırdı.
+
+İkisinde de test **yeşildi ve hiçbir şey ölçmüyordu.** İlk refleksim
+her seferinde sabotajı değiştirmekti; sorun sabotajda değil, düzenekte.
+
+**ÜÇ İHTİMALE DÖRDÜNCÜSÜ EKLENİYOR.** "İlan edilen kırmızı
+gelmediğinde üç ihtimal vardır" kuralı (savunma sağlam / savunma
+erişilemez / sonda hedefi ıskaladı) sondanın KENDİSİNE bakıyordu.
+Dördüncüsü daha sinsi: **düzenek gerçeği taklit etmiyor.** Sonda
+doğru, hedef doğru, ama sahne yanlış kurulmuş.
+
+**AKRABASI AYNI GÜN, BAŞKA BİR YERDE:** `pgrep -f` sondası
+(Kural 78). Orada da ölçümü kirleten şey düzeneğin kendisiydi —
+sondayı koşturan kabuğun komut satırı. İkisi de aynı sınıf: **ölçüm
+aracı ölçülen şeyin bir parçası hâline gelmiş.**
+
+**UYGULAMA:** bir sonda modeli kurarken sor — *"üretimde bu parça
+tam olarak nerede duruyor, ve modelim onu aynı yere mi koyuyor?"*
+Cevap "yaklaşık" ise sonda da yaklaşık ölçer.
+
+---
+
 ### Kural 80 — DENETİM KAYDINDA AKTÖR, EYLEMİ FİİLEN YAPAN TARAFTIR
 
 **Denetim kaydında aktör, eylemi FİİLEN yapan taraftır. Onay veren kişi
@@ -3138,6 +3179,87 @@ raporu — **YOK.** Tek ölçüm yeterli: **günlük toplam sipariş sayısı.**
 **KRİTİK BAĞIMLILIK:** ofistekilerin hesabı olmadan bu ekran işe
 yaramaz. Dokuz pasif hesabın etkinleştirilmesi ÇAY/1'in değil, hesap
 paketinin işi ve **AÇILMAYACAK listesinde** — Mehmet'in kararı.
+
+---
+
+## M3/2c-1 — PANEL KABUKTA YAŞIYOR (2026-09-06)
+
+**SORUN:** mesajlaşma tam sayfada kalırsa yazarken diğer ekranlarda
+çalışılamıyor. Panel her ekranda açık kalabilmeli.
+
+### TEK BİLEŞEN, İKİ KİP
+
+Gövde `components/mesajlar/mesaj-paneli.tsx`'e taşındı; `/mesajlar`
+**aynı bileşeni** `kip="tam-sayfa"` ile, panel `kip="panel"` ile
+kullanıyor. `/mesajlar` sayfası üç satırlık bir sarmalayıcıya indi.
+
+İkisi ayrı yazılsaydı zamanla ayrışırlardı — **ayrışan her nokta,
+birinin sınamadığı bir noktadır.**
+
+### KABUKTA, `children`'IN DIŞINDA, KENDİ HATA SINIRINDA
+
+`MesajBaloncugu`, `erp-shell.tsx`'te `HizirBubble`'ın yanında. Sayfa
+bileşenine konsaydı her rota değişiminde sökülürdü. `nerede="içerik"`
+sınırı yalnız `children`'ı kapsadığı için panel **kendi**
+`HataSiniri`'ne sarıldı; sarılmasaydı bir render hatası tüm ERP
+kabuğunu düşürürdü.
+
+**MODAL DEĞİL:** arka planda örtü yok, altındaki ekran tıklanabilir
+kalıyor. Panelin varlık sebebi zaten "yazarken çalışabilmek"; bir örtü
+tam da onu engellerdi.
+
+### KALICILIK — SUNUCUDA, GECİKMELİ, EZMEDEN
+
+Göç `MesajPaneliTercihi`: `MessagePanelOpen`, `LastConversationId`.
+İkisi de eklemeli; `Down` geri alınabilir.
+
+- **`localStorage` kullanılmadı** — `UserUiPreference`'ın kendi
+  gerekçesi: kullanıcı ofisten tablete geçince tercihini kaybetmemeli.
+- **`LastConversationId` yabancı anahtar DEĞİL** — konuşma silinirse
+  değer boşta kalır ve arayüz karşılığı olmayan kimliği sessizce eler
+  (`FavoritePaths` ile aynı karar).
+- **Uçtaki yeni alanlar isteğe bağlı** — bu uç tercihin TAMAMINI
+  yazıyor; panel yalnız kendi iki alanını biliyor ve tam gövde
+  gönderseydi favorileri **silerdi**. `null` = "bu alana dokunma".
+- **Yazma sıklığı:** panel durumu yalnız kapanışta, son konuşma 1 sn
+  gecikmeli.
+
+### İKİ TEST, İKİ AYRI SORU
+
+- `mesaj-paneli-kabukta.test.tsx` (2) — *"panel kabukta olursa ne
+  olur"*: rota değişiminde taslak korunuyor mu. **Sabotaj ayağı**:
+  panel sayfa bileşeninin ağacındaysa taslak kayboluyor.
+- `mesaj-paneli-yapi.test.ts` (3) — *"gerçekten kabukta mı"*:
+  baloncuk yalnız `erp-shell.tsx`'te geçer, `app/**` içinde geçmez,
+  ve kendi hata sınırında sarılıdır. Pozitif kontrolü içinde.
+
+**SONDA P1/P2 ısırdı:** baloncuk `/mesajlar`'a eklendi → yapı testi
+dosyayı adıyla gösterdi; hata sınırı kaldırıldı → üçüncü test düştü.
+
+**SONDA MODELİ İKİ KEZ YANLIŞ KURULDU** — Kural 81 buradan doğdu.
+
+### YAYIN BİR KEZ DÜŞTÜ: `window.confirm` YASAKMIŞ
+
+Taslak uyarısını `window.confirm` ile yazdım.
+`native-dialogs.test.ts` yayını durdurdu (`SONUC=UNKNOWN`, 1862 sn,
+**hiçbir servise dokunulmadı**).
+
+**KAPI HAKLIYDI.** Projenin kendi `ConfirmDialog`'u var ve gerekçesi
+yazılı: tarayıcı diyaloğu gerekçeyi zorunlu tutamıyor, hatayı içinde
+gösteremiyor, biçimlendirilemiyor. Bilmediğim bir nöbetçiydi ve tam
+olarak işini yaptı.
+
+**GEREKÇE ALANI AÇILMADI:** burada geri alınamaz bir iş yapılmıyor,
+yalnız gönderilmemiş bir taslak atılıyor. Gerekçe istemek, çay
+siparişine izin anahtarı koymak gibi olurdu (ÇAY/1 kararının aynı
+mantığı).
+
+### MOBİL VE ESC
+
+900px altında panel **hiç açılmıyor**; düğme `/mesajlar`'a götürüyor.
+Eşik ölçülerek seçildi (`.mesaj-duzen` zaten orada tek sütuna
+geçiyor). ESC ile kapanıyor; kutuda yazılmış metin varsa önce
+soruyor.
 
 ---
 
