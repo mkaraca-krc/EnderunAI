@@ -116,5 +116,15 @@
 #     rol/bolum basliklari yapisik kaliyor, belge kaymiyor.
 #   route-permissions.test.ts +1: "dashboard izne bagli" - olculmus
 #     kusurun donmemesini tutuyor.
-statik: 479
+# MATRIS/ACIL (2026-09-07): 479 -> 481, katki +2.
+#   yetki-matrisi-dogruluk.spec.ts 2:
+#     ekrandaki isaretli hucre sayisi == API grants sayisi
+#     iki rol icin sutun basina tik sayisi == o rolun grants sayisi
+#   Ikisinde de totoloji kapisi var. Ayrica HESAPLANMIS RENK olcumu:
+#   isaretsiz hucrede ✓ DOM'da duruyor, text-transparent ile
+#   gizleniyor - sinif sayan test "hepsi isaretli" gorunumunu GORMEZ.
+#
+#   Y2-4'un dort testi bu hatayi neden yakalamadi: dordu de
+#   KULLANILABILIRLIGI siniyordu, DOGRULUGU degil.
+statik: 481
 dinamik: 15

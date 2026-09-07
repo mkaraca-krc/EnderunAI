@@ -289,6 +289,32 @@ export default function PermissionMatrixPage() {
           )}
         </div>
 
+        {/*
+          ═══ KALICI OLMAYAN KALDIRMA UYARISI (SEED/1 S5) ═══
+
+          BU BİR DÜZELTME DEĞİL, DÜRÜSTLÜK. Kalıcı çözüm gelene kadar
+          kullanıcı yaptığı değişikliğin kalıcı olmadığını bilmeli.
+
+          ÖLÇÜLDÜ (2026-09-07, canlı denetim kaydı):
+            18:57  mehmet, 6 rolden dashboard.view KALDIRDI
+            20:33  sistem, aynı 6 çifti GERİ EKLEDİ (yeniden başlatma)
+          Bugüne kadar yapılan 6 kaldırmanın 6'sı da geri geldi.
+
+          SEBEP: `SeedRolePermissionsAsync` her açılışta koşulsuz
+          çalışıp `RoleCatalog`taki eksik çiftleri geri ekliyor.
+          Deneysel ölçüm: katalog 595 çift üretiyor, canlıda 597 var —
+          yani 597'nin 595'i geri gelir, yalnız 2'si kalıcı silinebilir.
+        */}
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>Kaldırdığınız izinler kalıcı olmayabilir.</strong> Bir rolden
+          izin kaldırdığınızda, sistem yeniden başladığında (yayın, sunucu
+          yeniden başlatma) o izin <strong>geri gelebilir</strong>. Ekleme
+          işlemleri kalıcıdır. Kalıcı bir kısıtlama için{" "}
+          <strong>Kullanıcı Yönetimi</strong> ekranındaki kişi bazlı{" "}
+          <strong>Kısıtla</strong> seçeneğini kullanın — kişisel kısıtlar
+          yeniden başlatmadan etkilenmez.
+        </div>
+
         {/* ── ARAMA + BÖLÜM LİSTESİ ────────────────────────────────── */}
         {matrix && (
           <div className="space-y-2">
