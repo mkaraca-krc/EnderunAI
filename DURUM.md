@@ -2252,6 +2252,40 @@ Cevap "yaklaşık" ise sonda da yaklaşık ölçer.
 
 ---
 
+**EK (Mehmet, 2026-09-07) — KURAL KENDİ YAZARINI YAKALADI:**
+
+> **"Bir düzeneğin 'doğru' varyantı üretimde karşılığı olmayan bir
+> kurgu olabilir. Sabotaj ayağı üretime benziyor da olabilir — hangisinin
+> üretim olduğunu ÖLÇ."**
+
+**NASIL ORTAYA ÇIKTI:** M3/2c-1 panel testinde iki yerleşim
+modellenmişti — panel `children`'ın DIŞINDA ("doğru") ve panel sayfa
+bileşeninin ağacında ("sabotaj"). Kural yazıldıktan saatler sonra
+Mehmet taslağın durmadığını tarayıcıdan ölçtü ve sebep bulundu:
+
+**Ortak bir layout kabuğu YOK.** `app/layout.tsx` yalnız `{children}`
+render ediyor; her sayfa kendi `<ErpShell>`'ini kuruyor. Rota
+değişiminde `{children}` konumundaki bileşen TİPİ değişiyor
+(`GorevlerPage` → `YapilacaklarPage`) ve React alt ağacın tamamını
+söküyor — kabuk, baloncuk ve panel dahil.
+
+**YANİ ÜRETİM, SABOTAJ AYAĞININ TA KENDİSİYDİ.** "Doğru" diye
+modellediğim yerleşim bu kod tabanında **hiç yok**.
+
+**PANEL AÇIK KALMASI YANILTTI:** açık/kapalı durumu sunucuda saklı ve
+yeniden okunuyor. Panel hayatta kalmıyor, **yeniden doğuyor** — ve
+sunucuda saklanmayan taslak gidiyor. Bir davranışın doğru görünmesi,
+sebebinin doğru olduğunu göstermiyor.
+
+**YAPI TESTİ DE KAÇIRDI:** *"baloncuk `children`'ın dışında"* iddiasını
+TEK BİR SAYFANIN AĞACI içinde doğruluyordu; o ağacın kendisinin
+değiştiğini görmüyordu.
+
+Mehmet: *"kural bir refleks hâline gelene kadar kendi yazarını da
+yakalar."*
+
+---
+
 ### Kural 80 — DENETİM KAYDINDA AKTÖR, EYLEMİ FİİLEN YAPAN TARAFTIR
 
 **Denetim kaydında aktör, eylemi FİİLEN yapan taraftır. Onay veren kişi
@@ -4445,6 +4479,105 @@ Yani NÖBET/1 **"servis bozuldu"yu yakalar, "sunucu öldü"yü yakalamaz.**
 Bu boşluğun kanıtı bugün elimizde: 2026-09-06 07:12'de sunucu âniden
 durdu ve hiçbir uyarı gitmedi — çünkü uyarıyı gönderecek olan da
 aynı makinedeydi. Dışarıdan bakan bir göz için AK-7 açıldı.
+
+### AK-2 — UYARI KANALI: AÇILDI AMA **KAPANMADI** (2026-09-07)
+
+GM onayıyla `/etc/enderunai/uyari-posta-acik` oluşturuldu ve **gerçek
+bir deneme gönderildi.** *"İlk gönderim testi sende değil bende"* duran
+kuralını koyan kişi açıkça kaldırdı.
+
+**ALICI:** `/etc/enderunai/uyari-alicilar.txt` (izin 600), bugünkü
+değer `mehmetkaracabey06@gmail.com`. Betik **ilk yorumsuz satırı**
+kullanıyor.
+
+**POSTA YOLU:** yerel MTA **yok**, kuyruk **yok** — `curl` ile doğrudan
+`smtps://srvc141.trwww.com:465`. *"Kuyruğa girdi"* diye bir ara durum
+yok: sunucu ya kabul eder ya reddeder.
+
+**SUNUCUNUN KENDİ CEVAPLARI — ÜÇÜ AYRI ŞEY, HANGİSİ OLDUĞU ÖLÇÜLDÜ:**
+
+    > MAIL FROM:<SMTP_FROM>                     < 250 OK
+    > RCPT TO:<...@gmail.com>                   < 250 Accepted
+    > DATA                                       < 354
+                                                 < 250 OK id=1x3Tmq-0000000Cmu9-42gJ
+
+**Reddedilmedi, kuyrukta beklemiyor — KABUL EDİLDİ.** Exim mesajı bir
+kimlikle üstlendi, TLS sertifikası doğrulandı.
+
+> **GÖNDEREN ADRESİ BURAYA YAZILMADI — VE SEBEBİ BİR ARIZA.**
+> İlk yazımda dökümü olduğu gibi yapıştırdım; `SMTP_FROM` değeri
+> `SMTP_USER` ile **birebir aynı** ve o, sır listesinde `zorunlu`
+> olarak duruyor (*"kullanıcı adı da sırdır"*). `sir-tara.py` push'u
+> durdurdu ve commit düzeltildi. **Sır depoya girmedi.**
+>
+> Kapının değeri tam olarak buydu: ben "bu yalnız bir e-posta adresi"
+> diye düşündüm, liste "bu bir kimlik bilgisi" diyordu ve liste
+> haklıydı.
+
+**AMA BU TESLİM KANITI DEĞİL.** Relay'in kabulü, Gmail'in gelen
+kutusuna koyduğunu göstermez. **AK-2 AÇIK KALIYOR** — GM postayı
+gördüğünü söyleyene kadar *"kanal tamam"* yazılmayacak.
+
+#### KİMLİK DOĞRULAMA ZİNCİRİ ÖLÇÜLDÜ
+
+| Kayıt | Durum |
+|---|---|
+| **SPF** | **GEÇİYOR** — Mehmet dışarıdan ölçtü: gönderen IP'ler `+include:_spf.turhost.com` üzerinden yetkili |
+| **DKIM anahtarı** | **VAR** — `default._domainkey`, `v=DKIM1; k=rsa`, 395 karakterlik geçerli açık anahtar (iptal edilmemiş) |
+| **DMARC** | **YOK** — `_dmarc` NXDOMAIN |
+| MTA-STS | yok |
+
+**DKIM'in sınırı:** alan adı anahtar **yayınlıyor**, ama relay'in bizim
+mesajımızı gerçekten **imzalayıp imzalamadığı** sunucudan görülemez —
+`curl` imzalamaz, imzalayacak olan Turhost'un Exim'idir. Kesin kanıt
+yalnız **teslim edilen mesajın `DKIM-Signature` başlığındadır** ve ona
+GM bakabilir.
+
+**SPF geçtiği için** "relay kabul etti ama alıcı sessizce düşürdü"
+senaryosunun en olası sebebi elendi.
+
+---
+
+### POSTA/1 — DKIM DOĞRULAMASI + DMARC KAYDI (2026-09-07, sırada)
+
+**AK-2'nin kapanmasını ENGELLEMEZ** (GM postayı alırsa kanal
+çalışıyordur) ama teslim güvenilirliğini **ölçülemez** bırakır.
+
+1. **DMARC kaydı yok.** Alıcı kendi sezgisiyle karar veriyor ve
+   hizalama sorunları görünmez kalıyor. En az `p=none` bir kayıt,
+   raporlamayı açar.
+2. **DKIM imzasının varlığı doğrulanmalı** — teslim edilen bir
+   mesajın başlıklarından, seçicisiyle birlikte.
+
+---
+
+### AK-9 — UYARI KANALININ YEDEĞİ YOK (2026-09-07)
+
+**Uyarılar tek bir kişisel adrese gidiyor.** GM ulaşamadığında kimse
+görmez. **Bildirim yolunun yedeği yok — tek disk riskiyle aynı sınıf,
+daha küçük ölçekte.**
+
+İkinci alıcı eklenip eklenmeyeceği GM'nin kararı; Mehmet sordu.
+Betik bugün **ilk satırı** kullanıyor, yani çoklu alıcı için küçük bir
+değişiklik gerekir.
+
+**Not:** dosya kanalı (`/var/lib/enderun-ai/uyari-son.txt`) koşulsuz
+yazılmaya devam ediyor — e-posta gitmese bile iz kalıyor. Ama o izi
+okuyan bir insan yoksa, kanal yine tek ayak üstünde.
+
+---
+
+### AK-2 EKSİĞİ — GÜRÜLTÜ SINIRI HENÜZ YOK
+
+Bugünkü betikte: her düşüşte bir posta gider, aynı arıza tekrarlarsa
+tekrar gider, **düzelince hiçbir şey gitmez**.
+
+İstenen üç davranış — **30 dakikalık susturma**, **"düzeldi" postası**,
+**arıza kimliğine göre ayrım** — durum tutmayı gerektiriyor ve
+**NÖBET/1'in işi**. Sırası gelince yazılacak. Bu satır, *"kanal tamam"*
+sanılmasın diye burada.
+
+---
 
 ### AK-3 — SUNUCU DIŞI YEDEK — **YAPILACAK, ŞARTLARI BELLİ (2026-09-06)**
 
