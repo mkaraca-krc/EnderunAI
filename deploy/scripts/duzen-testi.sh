@@ -152,7 +152,7 @@ log "Konuşma tohumlanıyor..."
 sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d enderun_ai_test <<SQL
 DO \$\$
 DECLARE
-  v_ben uuid; v_o uuid; v_sirket uuid; v_konusma uuid; v_konusma2 uuid; v_kisitli uuid; v_simdi timestamptz := now();
+  v_ben uuid; v_o uuid; v_sirket uuid; v_konusma uuid; v_konusma2 uuid; v_kisitli uuid; v_personel_a uuid; v_personel_b uuid; v_simdi timestamptz := now();
 BEGIN
   SELECT "Id" INTO v_ben FROM users WHERE "Username" = '${KULLANICI}';
   IF v_ben IS NULL THEN RAISE EXCEPTION 'Tohumlanan kullanıcı yok'; END IF;
@@ -168,6 +168,7 @@ BEGIN
   VALUES (gen_random_uuid(), v_ben, 0, true, false, v_simdi);
 
   DELETE FROM users WHERE "Username" IN ('duzen-karsi-taraf', 'duzen-kisitli');
+  DELETE FROM personnel WHERE "EmployeeNumber" IN ('DZN-A','DZN-B');
   INSERT INTO users
     ("Id","Username","FullName","PasswordHash","PasswordSalt","IsActive","WorkHoursExempt","CreatedAtUtc")
   SELECT gen_random_uuid(), 'duzen-karsi-taraf', 'Karsi Taraf',
@@ -245,6 +246,25 @@ BEGIN
   INSERT INTO user_data_scopes
     ("Id","UserId","ScopeType","IsActive","IsDeleted","CreatedAtUtc")
   VALUES (gen_random_uuid(), v_kisitli, 0, true, false, v_simdi);
+
+  -- ═══ PERSONEL KAYITLARI (ISG/BENIM SIZINTI OLCUMU) ═══
+  --
+  -- /isg/benim ucu personel kimligini OTURUMDAN aliyor. "Baskasinin
+  -- kaydini gosterebiliyor mu" sorusu ancak IKI kullanicinin da
+  -- personel kaydi VARSA olculebilir; kayit yoksa ikisi de 404 alir
+  -- ve olcum hicbir sey kanitlamaz (Kural 48).
+  INSERT INTO personnel
+    ("Id","CompanyId","EmployeeNumber","FirstName","LastName","Status","IsActive","IsDeleted","CreatedAtUtc")
+  VALUES (gen_random_uuid(), v_sirket, 'DZN-A', 'Duzen', 'BirinciKisi', 1, true, false, v_simdi)
+  RETURNING "Id" INTO v_personel_a;
+
+  INSERT INTO personnel
+    ("Id","CompanyId","EmployeeNumber","FirstName","LastName","Status","IsActive","IsDeleted","CreatedAtUtc")
+  VALUES (gen_random_uuid(), v_sirket, 'DZN-B', 'Duzen', 'IkinciKisi', 1, true, false, v_simdi)
+  RETURNING "Id" INTO v_personel_b;
+
+  UPDATE users SET "PersonnelId" = v_personel_a WHERE "Id" = v_ben;
+  UPDATE users SET "PersonnelId" = v_personel_b WHERE "Id" = v_o;
 
   -- DENY = Effect 2. Ucu de EKRANA baglı izinler.
   INSERT INTO user_permission_overrides

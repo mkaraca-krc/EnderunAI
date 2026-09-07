@@ -126,5 +126,10 @@
 #
 #   Y2-4'un dort testi bu hatayi neden yakalamadi: dordu de
 #   KULLANILABILIRLIGI siniyordu, DOGRULUGU degil.
-statik: 481
+# ISG/BENIM SIZINTI OLCUMU (2026-09-07): 481 -> 483, katki +2.
+#   isg-benim-sizinti.spec.ts: iki AYRI kullanici gercekten cagiriyor,
+#   kartlar farkli ve her biri cagirana ait; sorgu dizesiyle baskasinin
+#   kimligi gecirilemiyor. Pozitif kontrol: ikisinin de personel kaydi
+#   VAR (yoksa ikisi de 404 alir ve test hicbir sey kanitlamaz).
+statik: 483
 dinamik: 15
