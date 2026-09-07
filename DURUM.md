@@ -3182,6 +3182,82 @@ paketinin işi ve **AÇILMAYACAK listesinde** — Mehmet'in kararı.
 
 ---
 
+## ŞEMA SAPMA CIRCIRI — SQUASH'TAN ÖNCE, ONDAN BAĞIMSIZ (2026-09-07)
+
+**KARAR (Mehmet):** SQUASH/1 **Yol A** ile yapılacak — önce
+SEMA-KAYNAK/1, sonra temel göç **canlı şemadan**. *"Modelden üretip
+nesneleri elle eklemek YASAK."* **Bu gece başlanmayacak;** ön koşullar:
+taze yedek + canlının kopyasında tam prova + yazılı geri dönüş yordamı.
+
+Bu gece yapılan şey **cırcır**: sapmayı ölçen ve çizgide tutan bekçi.
+Gerekçe Mehmet'in: *"81'lik sapma squash'tan bağımsız bir risk. Cırcır
+kurulunca squash acele edilmesi gereken bir iş olmaktan çıkar — açık
+büyümüyor demektir."*
+
+### SAYI DÜZELTİLDİ: 81 DEĞİL, 95
+
+| Ölçüm | Değer |
+|---|---|
+| Modelden üretilen şemadaki indeks | 518 |
+| Canlıdaki indeks (PK hariç) | 599 |
+| **Modelin bilmediği** | **95** |
+| **Modelde var, canlıda YOK** | **14** |
+
+**81 NET FARKTI, SAPMA DEĞİL.** `599 − 518 = 81` iki yönlü farkın
+toplamını gizliyordu: ada göre bakınca canlıda fazladan 95, modelde
+fazladan 14 nesne var. Net fark küçük görünüyordu çünkü iki yön
+birbirini kısmen götürüyor.
+
+**İLK AYIKLAMAM DA BOZUKTU (kayda geçiyor):** desen
+`"?[A-Za-z0-9_]+"?` idi ve tırnaksız eşleşince uzun adları KIRPTI;
+sonuç 116/35 çıktı. Tırnaklı ada geçince 95/14 oldu. **Yanlış
+ayıklama, yanlış sayı üretir** — Kural 81'in ölçüme uygulanması.
+
+### YAN BULGU: MODELDE VAR, CANLIDA YOK (14)
+
+`has-pending-model-changes` **"değişiklik yok"** diyor — yani bu 14
+indeks anlık görüntüde de var, bir göç onları tanımlamış. Ama canlıda
+yoklar. **Göç geçmişinin ürettiği şema ile canlı ayrışmış.**
+
+Örneklerle doğrulandı: `visitor_records` gerçekten `ProjectId`
+indekssiz; `phone_notes`'ta ise bileşik bir indeks
+(`IX_phone_notes_ProjectId_Status`) var — yani bazıları gerçekten
+eksik, bazıları başka adla karşılanmış. Üç tablo da **0 satır**
+(kullanılmayan özellikler), bugünkü etkisi yok.
+
+**ÇİZGİYE BAĞLANMADI:** ayrı bir karar ve Mehmet'e rapor ediliyor.
+Cırcır bu sayıyı her koşuda **raporluyor** ama üzerinden düşmüyor.
+
+### CIRCIR
+
+`deploy/scripts/sema-sapma-kapisi.sh` + `deploy/bekci/sema-sapma-cizgi.txt`
+
+- **Çift yönlü:** sayı artamaz; **azaldıysa çizgi düşürülmeli**
+  (gevşeklik = görünmeyen ilerleme). SEMA-KAYNAK/1 ilerledikçe çizgi
+  kendiliğinden inecek ve 116 → 95 → … düşüşü ölçülebilir kalacak.
+- **Tarama sağlığı:** model ya da canlı tarafta 100'ün altında nesne
+  görülürse karşılaştırma anlamsızdır ve kapı **yeşil vermez**.
+- `ucuz-kapilar.sh` içinde **`agir`** sınıfta — modelden şema üretmek
+  derleme gerektiriyor, push kancasında koşamaz.
+
+**ÜÇ SONDA, ÜÇÜ DE ISIRDI:**
+- **S1:** modelde olmayan bir indeks ham SQL ile canlıya eklendi →
+  kırmızı, `IX_sonda_s1_ham_sql` adıyla listelendi. Geri alındı.
+- **S2:** çizgi 96 yapıldı → *"ÇİZGİ GEVŞEK, gevşeklik 1"*.
+- **S3:** ad ayıklaması bozuldu → *"TARAMA SAĞLIĞI DÜŞTÜ: model=0"*.
+
+### `generated_code = true` BİR ERTELEMEDİR
+
+Bu gece yayını açan `backend/.editorconfig` satırları **kalıcı çözüm
+değil.** 202 anlık görüntü büyümeye devam edecek ve her yeni göç aynı
+duvara biraz daha yaklaştıracak.
+
+**Tetikleyicisi SQUASH/1.** Squash tamamlandığında bu satırlar gözden
+geçirilmeli: göç sayısı bire indiğinde çözümleyici yükü de düşeceği
+için muafiyet gereksizleşebilir.
+
+---
+
 ## M3/2c-1 — İKİ KUSUR, İKİSİ DE ÖLÇÜMLE BULUNDU (2026-09-07)
 
 Mehmet paneli tarayıcıdan denedi ve iki şey buldu. İkisi de benim.

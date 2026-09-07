@@ -1,0 +1,21 @@
+# MODELİN BİLMEDİĞİ ŞEMA NESNESİ — ÇİZGİ
+#
+# Canlıda VAR olup EF modelinde OLMAYAN indeks sayısı. Bu nesneler
+# yalnız göçlerin ham SQL bloklarında yaşıyor.
+#
+# NEDEN ÖNEMLİ: modelden üretilecek bir temel göç (SQUASH/1) bunları
+# SESSİZCE DÜŞÜRÜR. Aralarında çek mükerrerlik koruması gibi gerçek
+# savunmalar var.
+#
+# ÇİFT YÖNLÜ: sayı ARTAMAZ (yeni savunma ham SQL'de doğmasın), ve
+# AZALDIYSA çizgi düşürülmelidir (gevşeklik = görünmeyen ilerleme).
+#
+# 2026-09-07 ölçümü: model 518 · canlı 599 · sapma 95.
+#
+# ÖNCEKİ SAYI 81 SANILIYORDU — yanlıştı. 599-518=81 NET farktı;
+# gerçek sapma ada göre 95 (ters yönde 14 nesne olduğu için net fark
+# küçük görünüyordu). Ölçüm düzeltildi.
+#
+# SEMA-KAYNAK/1 ilerledikçe bu sayı düşecek ve çizgi onunla inecek.
+
+95
