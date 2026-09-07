@@ -740,14 +740,22 @@ proxy_duman_kontrolu() {
 websocket_duman_kontrolu() {
     local yanit kod govde
 
-    # Vekil üzerinden (127.0.0.1:80, Host başlığıyla) — doğrudan
-    # Kestrel'e gitmek nginx'i ATLARDI ve ölçmek istediğimiz tam
-    # olarak nginx'in o bloğu.
-    yanit="$(curl -s -m 5 -w $'\n%{http_code}' \
-        -H "Host: ${PROXY_HOST}" \
+    # VEKİL ÜZERİNDEN — doğrudan Kestrel'e gitmek nginx'i ATLARDI ve
+    # ölçmek istediğimiz tam olarak nginx'in o bloğu.
+    #
+    # HTTPS ŞART: port 80 bloğu her isteği 301 ile HTTPS'e yolluyor;
+    # hub location'ı 443 bloğunda. HTTP'den ölçmek 301 döndürüyordu ve
+    # kontrol hiçbir zaman hedefe ULAŞMIYORDU (ölçüldü 2026-09-07).
+    #
+    # `--resolve` DNS'i atlayıp doğrudan localhost'a bağlanıyor:
+    # kontrol dış ağa ve DNS'e bağımlı olmasın. `-k` sertifika
+    # doğrulamasını atlıyor çünkü sertifika alan adına yazılmış,
+    # 127.0.0.1'e değil — burada ölçülen şey TLS değil, yönlendirme.
+    yanit="$(curl -sk -m 5 -w $'\n%{http_code}' \
+        --resolve "${PROXY_HOST}:443:127.0.0.1" \
         -H "Upgrade: websocket" \
         -H "Connection: Upgrade" \
-        "http://127.0.0.1/api/hubs/tasima-denetimi" 2>/dev/null)"
+        "https://${PROXY_HOST}/api/hubs/tasima-denetimi" 2>/dev/null)"
 
     kod="$(printf '%s' "$yanit" | tail -n 1)"
     govde="$(printf '%s' "$yanit" | head -n -1)"
@@ -755,6 +763,8 @@ websocket_duman_kontrolu() {
     if [ "$kod" != "200" ]; then
         log "WARN" "WebSocket duman kontrolü KARAR VEREMEDİ: HTTP ${kod}."
         log "WARN" "Hedef uç /api/hubs/tasima-denetimi bulunamadı ya da vekile ulaşılamadı."
+        log "WARN" "NOT: bu kurulumda TANINMAYAN yol da 401 döner (kimlik kapısı"
+        log "WARN" "yönlendirmeden önce çalışıyor) — 401 'uç yok' demek olabilir."
         log "WARN" "Yayın DURDURULMADI — bu kontrolün sorunu, yayının değil."
         return 0
     fi
