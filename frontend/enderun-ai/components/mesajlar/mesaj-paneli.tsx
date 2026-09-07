@@ -357,6 +357,18 @@ export default function MesajPaneli({
   const listeGorunsun = !panelKipi || !secili;
   const govdeGorunsun = !panelKipi || !!secili;
 
+  /*
+   * TAM SAYFA KİPİNDE BAŞLIK YOK — KABUK ZATEN YAZIYOR.
+   *
+   * Burada `erp-page-header` içinde "Mesajlar" + "Çalışma
+   * arkadaşlarınızla birebir yazışma." duruyordu; `ErpShell` de aynı
+   * başlığı aynı metinle render ediyor. Ekranda BİREBİR AYNI başlık
+   * iki kez görünüyordu (tarayıcıda ölçüldü, MESAJ/3).
+   *
+   * Sadece görüntü sorunu değildi: ikinci başlık 78 px yükseklik
+   * yiyordu ve o 78 px, composer'ı görünen alanın dışına iten
+   * bütçenin parçasıydı.
+   */
   return (
     <div className={panelKipi ? "rw mesaj-panel-govde" : "rw"}>
       {panelKipi ? (
@@ -384,12 +396,7 @@ export default function MesajPaneli({
             ✕
           </button>
         </div>
-      ) : (
-        <div className="erp-page-header">
-          <h1>Mesajlar</h1>
-          <p>Çalışma arkadaşlarınızla birebir yazışma.</p>
-        </div>
-      )}
+      ) : null}
 
       {(hata ?? konusmaKaynagi.error) && (
         <div className="erp-alert erp-alert-error">

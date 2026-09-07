@@ -4915,3 +4915,121 @@ body {
   /* Panel bu genişlikte zaten açılmıyor; görünürse de gizlenir. */
   .mesaj-panel { display: none; }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   TAM YÜKSEKLİK KİPİ — BELGE KAYMAZ, İÇERİDEKİ LİSTE KAYAR
+   ═══════════════════════════════════════════════════════════════════
+
+   ÖLÇÜLEN KUSUR (MESAJ/3, gerçek tarayıcı, 390x664):
+
+     form.mesaj-yaz      h=68   alt kenar 732   → 68 px DIŞARIDA
+     section.mesaj-govde h=465  min-h 420  max-h 464.8 (=70vh)
+     div.mesaj-duzen     h=611  display:grid   height:auto
+     div.rw              h=689  display:block  height:auto
+     div.erp-content     h=769  display:block  height:auto
+     main.erp-main       h=953  display:block  min-height:664px
+     belge: scrollHeight 953 / clientHeight 664
+
+   TEŞHİS — YÜKSEKLİK ZİNCİRİ DİYE BİR ŞEY YOKTU.
+
+   `.erp-layout`tan `.mesaj-duzen`e kadar HER kap `display:block` ve
+   `height:auto`. Görünen alan yüksekliği aşağı hiç aktarılmıyordu.
+   `.mesaj-govde` kendi `max-height:70vh`i ile BAĞIMSIZ bir kutu gibi
+   duruyor ve üstündeki sabit yükseklikleri (kenar çubuğu üst çubuğu
+   48 + sayfa başlığı 78 + ikinci başlık + dolgu = 268 px) hiç
+   bilmiyordu. 70vh + 268 px > 100vh olduğu anda composer dışarı
+   düşüyor.
+
+   BU YÜZDEN TAŞMA HER GÖRÜNÜMDE TAM 68 px: composer'ın kendi
+   yüksekliği kadar. Sayfa "biraz uzun" değil, TAM BİR ELEMAN kadar
+   uzundu.
+
+   ÇÖZÜM: `.erp-content`e kadar gerçek bir flex zinciri kuruluyor ve
+   yalnız `erp-tam-yukseklik` sınıfı taşıyan sayfada. `!important`
+   şart: `ENDERUN_AI_LAYOUT_CONFLICT_FIX_V0_3_1` bloğu `.erp-layout`
+   ve `.erp-main` için `display:block !important` yazıyor.
+
+   `dvh` KULLANILIYOR: telefonda adres çubuğu açılıp kapandıkça `vh`
+   değişmiyor ve içerik gerçek görünen alandan taşıyor. `dvh`
+   desteklenmeyen tarayıcıda bir önceki satırdaki `vh` geçerli kalır.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.erp-tam-yukseklik {
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* YÜKÜ ASIL BU KURAL TAŞIYOR — SONDAYLA ÖLÇÜLDÜ.
+   İlk sonda yalnız `.erp-tam-yukseklik`in yüksekliğini kaldırdı ve
+   test YEŞİL kaldı: dıştaki `overflow:hidden` ile birlikte `.erp-main`
+   sınırı zinciri tek başına tutuyor. Kırmızı ancak BU satır
+   kaldırılınca geldi (390x664'te 81 px dışarıda). Dıştaki yükseklik
+   yine de duruyor — kabın kendisi de büyümemeli. */
+.erp-tam-yukseklik .erp-main {
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* Üst çubuk ve sayfa başlığı KÜÇÜLMEZ: kalan yeri içerik alır. */
+.erp-tam-yukseklik .erp-topbar,
+.erp-tam-yukseklik .erp-page-header {
+  flex: 0 0 auto;
+}
+
+.erp-tam-yukseklik .erp-content {
+  flex: 1 1 auto;
+  /* min-height:0 OLMADAN flex çocuğu içeriğinden küçülemez ve
+     zincir burada kopar — taşma yine oluşurdu. */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 14px;
+}
+
+/* Hata sınırı araya bir kap koymuyor; içerik doğrudan çocuk. */
+.erp-tam-yukseklik .erp-content > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-tam-yukseklik .mesaj-duzen {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* `align-items:start` sütunları içeriğe göre kısaltıyordu; artık
+     ikisi de kabın tamamını kaplıyor. */
+  align-items: stretch;
+}
+
+/* 70vh ve 420px SABİTLERİ BU KİPTE GEÇERSİZ: yükseklik artık
+   kaptan geliyor, tahminden değil. */
+.erp-tam-yukseklik .mesaj-liste,
+.erp-tam-yukseklik .mesaj-govde {
+  min-height: 0;
+  max-height: none;
+}
+
+/* Gövde kendi içinde kaymaz — kayan tek şey akış. Composer altta
+   sabit kalır. */
+.erp-tam-yukseklik .mesaj-govde {
+  overflow: hidden;
+}
+
+/* ── PANEL KİPİ: aynı kural, ayrı kap ──────────────────────────────
+   Panel `position:fixed` olduğu için belgeyi zaten uzatmıyor; ama
+   içinde composer'ın altta SABİT kalması için aynı zincir gerekiyor.
+   `.mesaj-duzen-panel .mesaj-govde` kuralı `overflow-y:auto` diyordu:
+   o hâlde composer da akışla birlikte kayıyordu. */
+.mesaj-duzen-panel .mesaj-govde {
+  overflow: hidden;
+  max-height: none;
+}

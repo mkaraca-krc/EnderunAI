@@ -42,6 +42,25 @@ type ErpShellProps = {
    * onaylanır, yayma sonra gelir.
    */
   design?: "klasik" | "redwood";
+
+  /**
+   * Sayfa TAM OLARAK görünen alan kadar yer kaplasın; belge kaymasın.
+   *
+   * ═══ NEDEN OPT-IN ═══
+   *
+   * Varsayılan kabuk `min-height: 100vh` ve `display: block` — sayfa
+   * içeriği kadar UZAR ve belge kayar. 175 ekranın çoğu için doğrusu
+   * bu: uzun bir tablo kaymalıdır.
+   *
+   * Mesajlaşma için YANLIŞ: yazma alanı en altta duruyor ve belge
+   * uzayınca katlanmanın altına düşüyor. ÖLÇÜLDÜ (390x664, gerçek
+   * tarayıcı): composer alt kenarı 732 px, görünen alan 664 px —
+   * 68 px dışarıda; belge 953 px'e uzamış.
+   *
+   * Kabuğu global olarak değiştirmek 175 ekranın kaydırma davranışını
+   * birden değiştirirdi. Bu bayrak yalnız isteyen sayfayı etkiler.
+   */
+  tamYukseklik?: boolean;
 };
 
 
@@ -100,6 +119,7 @@ function KabukGovdesi({
   description,
   children,
   design = "klasik",
+  tamYukseklik = false,
 }: ErpShellProps) {
   /*
    * YÖNLENDİRİCİ KANCASI KABUĞU DÜŞÜREMEZ.
@@ -428,7 +448,15 @@ function KabukGovdesi({
   }
 
   return (
-    <div className={`erp-layout ${collapsed ? "erp-sidebar-collapsed" : ""}`}>
+    <div
+      className={[
+        "erp-layout",
+        collapsed ? "erp-sidebar-collapsed" : "",
+        tamYukseklik ? "erp-tam-yukseklik" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <WorkHourSessionWatcher />
       <aside className="erp-sidebar">
         <Link href="/dashboard" className="erp-brand">

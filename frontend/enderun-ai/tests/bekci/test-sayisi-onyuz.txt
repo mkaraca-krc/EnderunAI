@@ -77,5 +77,16 @@
 #     M3/2c-1'in kapanisinda yazilmisti, cizgiye o pakette
 #     tasinmamisti. Cizgi YUKARI serbest oldugu icin bu mesru bir
 #     bosluktu; burada kapatiliyor.
-statik: 465
+# MESAJ/3 PARCA 1 - DUZEN (2026-09-07): 465 -> 467, katki +2.
+#   tests/duzen/mesaj-duzeni.spec.ts - PLAYWRIGHT, vitest degil.
+#   Cira 2 saydi ve DOGRU saydi: dosyada iki test BILDIRIMI var;
+#   birincisi bir dongu icinde uc gorunum (390x664, 768x900,
+#   1920x1080) uretiyor. Cira bildirim sayiyor, durum degil —
+#   [Theory] ile ayni eksen.
+#
+#   NEDEN PLAYWRIGHT: "composer gorunen alanin icinde mi" sorusu
+#   jsdom'da cevaplanamaz (duzen motoru yok, getBoundingClientRect
+#   sifir doner) ve grep ile hic cevaplanamaz (Kural 70).
+#   Yigini deploy/scripts/duzen-testi.sh kuruyor.
+statik: 467
 dinamik: 15

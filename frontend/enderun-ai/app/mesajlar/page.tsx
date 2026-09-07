@@ -34,6 +34,14 @@ export default function MesajlarSayfasi() {
       design="redwood"
       title="Mesajlar"
       description="Çalışma arkadaşlarınızla birebir yazışma"
+      /*
+       * BELGE KAYMAZ, MESAJ LİSTESİ KAYAR.
+       *
+       * Bu ekranın yazma alanı en altta; belge uzayınca katlanmanın
+       * altına düşüyordu (ölçüldü: 390x664'te 68 px dışarıda).
+       * Gerekçenin tamamı `erp-shell.tsx` içindeki prop yorumunda.
+       */
+      tamYukseklik
     >
       <MesajPaneli kip="tam-sayfa" />
     </ErpShell>
