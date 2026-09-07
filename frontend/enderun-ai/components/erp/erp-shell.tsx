@@ -102,7 +102,24 @@ function KabukGovdesi({
   children,
   design = "klasik",
 }: ErpShellProps) {
-  const pathname = usePathname();
+  /*
+   * YÖNLENDİRİCİ KANCASI KABUĞU DÜŞÜREMEZ.
+   *
+   * `usePathname()` Next dışında (ör. bir bileşen testinde) `null`
+   * dönüyor ve kabuk onu `split` etmeye çalışıp ÇÖKÜYORDU — hata
+   * sınırı yakalıyordu ama sonuç, kullanıcı için TÜM EKRANIN
+   * kaybolmasıydı.
+   *
+   * ÖLÇÜLDÜ (2026-09-06): `/yapilacaklar` kabuğa alınınca mevcut bir
+   * test bunu ortaya çıkardı; test YEŞİL kalıyordu çünkü hata sınırı
+   * devreye giriyor ve React ağacı yeniden kuruyordu. Yani kusur
+   * hem canlıda hem testte SESSİZDİ.
+   *
+   * Kabuk uygulamanın en dış katmanı: burada bir `null`, yalnız o
+   * bileşeni değil her şeyi götürür. Varsayılan "/" kökü, menüde
+   * hiçbir şeyi seçili göstermez — zararsız ve doğru davranış.
+   */
+  const pathname = usePathname() ?? "/";
 
   useEffect(() => {
     document.title = `Enderun ERP - ${title}`;

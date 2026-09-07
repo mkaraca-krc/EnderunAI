@@ -34,8 +34,24 @@ import { apiClient } from "@/lib/api/api-client";
 /** Panelin kullanılamayacağı genişlik. `globals.css` ile aynı eşik. */
 const DAR_EKRAN_ESIGI = 900;
 
-/** Son konuşma yazımı bu kadar beklenir; hızlı geçişlerde son seçim yazılır. */
-const KONUSMA_YAZMA_GECIKMESI_MS = 1000;
+/**
+ * TERCİH YAZMA GECİKMESİ — HER İKİ ALAN İÇİN AYNI.
+ *
+ * ═══ ASİMETRİ BİR ARIZA ÜRETTİ, KAYDA GEÇİYOR ═══
+ *
+ * İlk sürümde panel durumu YALNIZ KAPANIŞTA yazılıyordu ve koda şu
+ * gerekçe yazılmıştı: *"açılış, bir sonraki kapanışta zaten
+ * kaydedilir."* **Bu cümle hiç kapatılmayan panel için yanlıştı.**
+ *
+ * Mehmet ölçtü: paneli açık bıraktı, hiç kapatmadı, sayfayı yeniledi
+ * — panel kapalı geldi. Açık bir panel "açık" olarak hiç
+ * kaydedilmemişti.
+ *
+ * İki alan artık AYNI kuralla yazılıyor: her değişiklikte, 1 saniye
+ * gecikmeyle. Gecikme hızlı aç-kapa'da tek yazma bırakıyor; asimetri
+ * ise hiçbir şey kazandırmadan bir durumu kaybediyordu.
+ */
+const TERCIH_YAZMA_GECIKMESI_MS = 1000;
 
 export default function MesajBaloncugu() {
   const router = useRouter();
@@ -65,6 +81,10 @@ export default function MesajBaloncugu() {
    */
   const tercihYuklendi = useRef(false);
   const yazmaZamani = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bekleyen = useRef<{
+    messagePanelOpen?: boolean;
+    lastConversationId?: string;
+  }>({});
 
   useEffect(() => {
     let etkin = true;
@@ -90,27 +110,36 @@ export default function MesajBaloncugu() {
     };
   }, []);
 
-  /** Tercihi kaydeder. Gönderilmeyen alanlar sunucuda DEĞİŞMEZ. */
+  /**
+   * Tercihi GECİKMELİ kaydeder. Gönderilmeyen alanlar sunucuda DEĞİŞMEZ.
+   *
+   * Bekleyen yazımlar birikiyor: art arda "panel açıldı" ve "konuşma
+   * seçildi" gelirse tek istekte gidiyorlar.
+   */
   const tercihYaz = useCallback(
     (govde: { messagePanelOpen?: boolean; lastConversationId?: string }) => {
       if (!tercihYuklendi.current) return;
 
-      void apiClient("user-preferences", {
-        method: "PUT",
-        // Menü tercihini taşımıyoruz: uç `null` alanlara DOKUNMUYOR.
-        body: { sidebarCollapsed: false, favoritePaths: null, ...govde },
-      }).catch(() => {
-        // Kaydedilemeyen bir panel tercihi için kullanıcıyı bölmeyiz.
-      });
+      bekleyen.current = { ...bekleyen.current, ...govde };
+
+      if (yazmaZamani.current) clearTimeout(yazmaZamani.current);
+
+      yazmaZamani.current = setTimeout(() => {
+        const gonderilecek = bekleyen.current;
+        bekleyen.current = {};
+
+        void apiClient("user-preferences", {
+          method: "PUT",
+          // Menü tercihini taşımıyoruz: uç `null` alanlara DOKUNMUYOR.
+          body: { sidebarCollapsed: false, favoritePaths: null, ...gonderilecek },
+        }).catch(() => {
+          // Kaydedilemeyen bir panel tercihi için kullanıcıyı bölmeyiz.
+        });
+      }, TERCIH_YAZMA_GECIKMESI_MS);
     },
     []
   );
 
-  /*
-   * PANEL DURUMU YALNIZ KAPANIŞTA YAZILIR.
-   * Her aç-kapa'da yazsaydık "açtım hemen kapattım" iki yazma
-   * üretirdi. Açılış, bir sonraki kapanışta zaten kaydedilir.
-   */
   /** Uyarısız kapatma — soruya "evet" dendikten sonra da buraya gelinir. */
   const gercektenKapat = useCallback(() => {
     setKapatmaSorusu(false);
@@ -136,7 +165,8 @@ export default function MesajBaloncugu() {
     }
 
     setAcik(true);
-  }, [router]);
+    tercihYaz({ messagePanelOpen: true });
+  }, [router, tercihYaz]);
 
   /* ESC İLE KAPANIR — taslak uyarısı `kapat` içinde. */
   useEffect(() => {
@@ -157,11 +187,7 @@ export default function MesajBaloncugu() {
 
       if (!konusmaId) return;
 
-      if (yazmaZamani.current) clearTimeout(yazmaZamani.current);
-
-      yazmaZamani.current = setTimeout(() => {
-        tercihYaz({ lastConversationId: konusmaId });
-      }, KONUSMA_YAZMA_GECIKMESI_MS);
+      tercihYaz({ lastConversationId: konusmaId });
     },
     [tercihYaz]
   );

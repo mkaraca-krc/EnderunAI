@@ -3182,6 +3182,98 @@ paketinin işi ve **AÇILMAYACAK listesinde** — Mehmet'in kararı.
 
 ---
 
+## M3/2c-1 — İKİ KUSUR, İKİSİ DE ÖLÇÜMLE BULUNDU (2026-09-07)
+
+Mehmet paneli tarayıcıdan denedi ve iki şey buldu. İkisi de benim.
+
+### 1. "PANEL HER EKRANDA" İDDİASI YANLIŞTI
+
+**ÖLÇÜM:** `/gorevler`de kenar çubuğu, üst çubuk, Hızır ve mesaj
+baloncuğu var; **`/yapilacaklar`da hiçbiri yok.** Erişilebilirlik
+ağacı yalnız sayfa içeriğini döndürüyordu.
+
+**SEBEP:** ortak bir `layout.tsx` yok — kabuk **her sayfaya tek tek**
+ekleniyor (189 sayfanın 172'sinde). Eklemeyi unutmak sessizce geçiyor
+ve ekran yine çalışıyor, yalnız menüsüz.
+
+**BOŞLUK TAM YERİNDEYDİ:** yapı testim *"baloncuk yalnız
+`erp-shell`de"* diyordu ama **hiçbir test "her sayfa `erp-shell`
+kullanır" demiyordu.** Panel doğru yerdeydi; sayfa yanlış yerdeydi.
+
+**TARAMA SONUCU:** 17 sayfa kabuksuz görünüyordu ama 5'i kabuğu
+KULLANAN bir bileşene devrediyor (`inventory-movement-form`,
+`secretariat-registry-page`) — onlar sorunsuz. Yönlendirme yapanlar ve
+giriş/portal/yazdırma ekranları meşru. **Gerçekten kabuksuz içerik
+sayfası ikiydi: `/yapilacaklar` ve `/mesajlar`.** İkincisi TUR 2'den
+kalma, aynı sınıf hata.
+
+**KAPI: `sayfa-kabuk-sozlesmesi.test.ts` (3 test).** Her içerik
+sayfası kabukta olmalı; muafiyet listesinin **her satırında gerekçe**
+var ve çürümüş muafiyet (silinmiş sayfa) de düşürüyor. Bir kademe
+devir izleniyor — ölçüldü, gerçekte kullanılan derinlik bu.
+
+**SONDA Q1 İLK DENEMEDE ISIRMADI — KURAL 81 UYGULANDI.** `/gorevler`den
+`import` satırını sildim, test yeşil kaldı. Sabotajı değil **dedektörü**
+sorguladım: `ErpShell` dizgisini dosyanın her yerinde arıyordum ve JSX
+gövdesindeki kullanım hâlâ oradaydı. Aynı gevşeklik gerçek bir
+zayıflıktı — adı yalnız YORUMDA geçen bir sayfa da testi geçerdi.
+
+`<ErpShell` desenine sıkılaştırınca **iki sayfa daha çıktı**
+(`teklifler/[id]/yazdir`, `zimmetler/[id]/tutanak`); ikisi de yazdırma
+görünümü ve gerekçeleri kendi dosyalarında zaten yazılıydı. Muafiyete
+alındılar. Sonda sonra ısırdı.
+
+### 2. PANEL YENİDEN YÜKLEMEDE AÇIK GELMİYORDU
+
+**ÖLÇÜM (Mehmet):** paneli açık bıraktı, **hiç kapatmadı**, sayfayı
+yeniledi → panel kapalı geldi.
+
+**SEBEP TASARIMDA VE GEREKÇESİ KODA YAZILMIŞTI:** `MessagePanelOpen`
+yalnız kapanışta yazılıyordu ve şu cümle duruyordu: *"açılış, bir
+sonraki kapanışta zaten kaydedilir."* **Hiç kapatılmayan panel için bu
+cümle yanlıştı.** Açık bir panel "açık" olarak hiç kaydedilmiyordu.
+
+Mehmet asimetriyi tasarım aşamasında işaret etmişti; canlıdaki
+karşılığı buydu.
+
+**DÜZELTME:** iki alan da **aynı** kuralla — her değişiklikte, 1
+saniye gecikmeyle, **tek yazıcıdan**. Bekleyen değişiklikler
+birikiyor: art arda "panel açıldı" ve "konuşma seçildi" gelirse tek
+istekte gidiyor.
+
+**KAPI: `mesaj-paneli-kalicilik.test.ts` (4 test).** Açma yolunun ve
+kapatma yolunun ikisinin de yazma çağrısı taşıdığını, ve iki alanın
+AYNI gecikmeli yazıcıdan geçtiğini tutuyor. **SONDA R1:** açma
+yolundaki çağrı silindi → kırmızı, kaybedilen davranışı adıyla
+söyleyerek.
+
+### YOL ÜSTÜNDE: KABUK BİR YÖNLENDİRİCİ KANCASI YÜZÜNDEN ÇÖKÜYORDU
+
+`/yapilacaklar` kabuğa alınınca mevcut bir test kusuru ortaya çıkardı:
+`usePathname()` Next dışında `null` dönüyor ve kabuk onu `split`
+etmeye çalışıp **çöküyordu**.
+
+**KUSUR HEM CANLIDA HEM TESTTE SESSİZDİ:** hata sınırı yakalıyor,
+React ağacı yeniden kuruyor ve **test yeşil kalıyordu.** Bir bileşen
+çöküp yeniden doğarken testin "geçti" demesi, tam olarak "yeşil hiçbir
+şey söylemiyor" durumu.
+
+Kabuk uygulamanın en dış katmanı: orada bir `null`, yalnız o bileşeni
+değil **her şeyi** götürür. `usePathname() ?? "/"` ile savunmalı
+yapıldı. `LogoutButton`'ın `useRouter` ihtiyacı ise meşru bir Next
+bağımlılığı — o testin kendi tarafında taklit edildi.
+
+### BİR TEST BEKLENTİSİ GÜNCELLENDİ (ZAYIFLATILMADI)
+
+`is-emri-bulunabilirlik.test.ts` `/yapilacaklar`da
+`<h1>Bekleyen İşler</h1>` arıyordu. Başlık `ErpShell`in `title`
+prop'una taşındı ve **kabuk onu zaten `<h1>` olarak basıyor**
+(`erp-shell.tsx:659`) — kullanıcının gördüğü şey aynı. Beklenti
+`/gorevler` ile **aynı** desene çevrildi; iddia zayıflamadı, iki ekran
+artık aynı biçimde sınanıyor.
+
+---
+
 ## M3/2c-1 — PANEL KABUKTA YAŞIYOR (2026-09-06)
 
 **SORUN:** mesajlaşma tam sayfada kalırsa yazarken diğer ekranlarda

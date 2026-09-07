@@ -37,6 +37,31 @@ const apiCagrilari: string[] = [];
  */
 const YOK_UCLARI = ["site-reports/pending-approval"];
 
+/*
+ * NEXT YÖNLENDİRİCİSİ TAKLİT EDİLİYOR.
+ *
+ * `/yapilacaklar` 2026-09-06'da ERP kabuğuna alındı (o güne kadar
+ * kabuk DIŞINDAYDI: menü, üst çubuk ve mesaj baloncuğu orada
+ * görünmüyordu). Kabuk `usePathname`/`useRouter` kullanıyor ve bunlar
+ * Next dışında çalışmıyor.
+ *
+ * Bu taklit ekranın kendi davranışını DEĞİŞTİRMİYOR: test hâlâ
+ * yükleme durumundan çıkışı ölçüyor. Yalnız kabuğun ayakta
+ * durabilmesi için gereken en az şeyi veriyor.
+ */
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/yapilacaklar",
+  useRouter: () => ({
+    push: () => {},
+    replace: () => {},
+    refresh: () => {},
+    back: () => {},
+    forward: () => {},
+    prefetch: () => {},
+  }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 vi.mock("@/lib/api/api-client", () => ({
   ApiError: class ApiError extends Error {},
   apiClient: vi.fn(async (path: string) => {

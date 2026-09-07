@@ -1,5 +1,6 @@
 "use client";
 
+import ErpShell from "@/components/erp/erp-shell";
 import MesajPaneli from "@/components/mesajlar/mesaj-paneli";
 
 /**
@@ -7,20 +8,34 @@ import MesajPaneli from "@/components/mesajlar/mesaj-paneli";
  *
  * ═══ İNCE SARMALAYICI, İKİNCİ KOPYA DEĞİL ═══
  *
- * Bu sayfanın gövdesi `components/mesajlar/mesaj-paneli.tsx` içine
- * taşındı ve panel de AYNI bileşeni kullanıyor. Fark yalnız `kip`
- * parametresinde.
+ * Gövde `components/mesajlar/mesaj-paneli.tsx` içinde ve panel de AYNI
+ * bileşeni kullanıyor. Fark yalnız `kip` parametresinde. Ayrı
+ * yazılsalardı zamanla ayrışırlardı ve AYRIŞAN HER NOKTA, BİRİNİN
+ * SINAMADIĞI BİR NOKTADIR.
  *
- * Panel ile tam sayfa ayrı yazılsaydı zamanla ayrışırlardı ve AYRIŞAN
- * HER NOKTA, BİRİNİN SINAMADIĞI BİR NOKTADIR. Bu kod tabanının en sık
- * hatası aynı şeyin ikinci kopyası; burada baştan engellendi.
+ * ═══ KABUK — TUR 2'DEN KALMA BİR EKSİK, 2026-09-06'DA KAPANDI ═══
+ *
+ * Bu sayfa `ErpShell` kullanmıyordu: menü, üst çubuk, Hızır ve mesaj
+ * baloncuğu burada YOKTU. Mehmet ölçtü ve iki ekranda birden buldu
+ * (`/yapilacaklar` ile birlikte). Kabuğun her sayfaya TEK TEK
+ * eklendiği bir düzende, eklemeyi unutmak sessizce geçiyordu.
+ *
+ * Artık `sayfa-kabuk-sozlesmesi.test.ts` bunu tutuyor.
  *
  * ═══ TAM SAYFA NEDEN DURUYOR ═══
  *
- * Panel onun YERİNE değil, YANINA geldi (Mehmet, 2026-09-06): uzun
- * konuşma okumak ve arama yapmak için geniş ekran daha iyi. Dar
- * ekranda ise panel hiç açılmaz, baloncuk buraya yönlendirir.
+ * Panel onun YERİNE değil, YANINA geldi: uzun konuşma okumak ve arama
+ * yapmak için geniş ekran daha iyi. Dar ekranda panel hiç açılmaz,
+ * baloncuk buraya yönlendirir.
  */
 export default function MesajlarSayfasi() {
-  return <MesajPaneli kip="tam-sayfa" />;
+  return (
+    <ErpShell
+      design="redwood"
+      title="Mesajlar"
+      description="Çalışma arkadaşlarınızla birebir yazışma"
+    >
+      <MesajPaneli kip="tam-sayfa" />
+    </ErpShell>
+  );
 }

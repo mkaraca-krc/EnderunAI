@@ -53,10 +53,14 @@
 # M3/2c-1 PANEL (2026-09-06): 436 → 441, katkı +5. Panelin kabukta
 #   yaşadığını davranışla (2, sabotaj ayağıyla birlikte) ve yapıyla
 #   (3) tutan testler.
+# SAYFA-KABUK + KALICILIK (2026-09-06): 441 → 448, katkı +7.
+#   "her icerik sayfasi kabukta" sozlesmesi (3) ve panel acilisinin
+#   da kaydedildigini tutan test (4). Ikisi de canlida olculen
+#   arizalardan dogdu.
 #   gorev-atama-kaskadi.test.ts 7: Tüm personel her zaman açık, boş
 #   listenin sebebini söylemesi, kaynak değişince seçimin
 #   temizlenmesi, atamanın isteğe bağlı olması, kaskad durumunun
 #   sunucuya gitmemesi, Yapacak sütununun sunucunun hesabını
 #   göstermesi.
-statik: 441
+statik: 448
 dinamik: 15

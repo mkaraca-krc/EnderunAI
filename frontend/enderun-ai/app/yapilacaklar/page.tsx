@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import ErpShell from "@/components/erp/erp-shell";
+
 import { currencyMoney } from "@/lib/format/turkish";
 import { useModuleActions } from "@/lib/auth/module-actions";
 import { usePermissions } from "@/lib/use-permissions";
@@ -275,12 +277,24 @@ export default function YapilacaklarSayfasi() {
   const hepsiBos =
     onaySayisi === 0 && bana.length === 0 && benden.length === 0 && !eksikKaynak;
 
+  /*
+   * KABUK — TUR 2'DEN ÖNCE DE EKSİKTİ, 2026-09-06'DA KAPANDI.
+   *
+   * Bu ekran `ErpShell` kullanmıyordu: kenar çubuğu, üst çubuk, Hızır
+   * ve mesaj baloncuğu burada YOKTU. Mehmet ölçtü — erişilebilirlik
+   * ağacında yalnız sayfa içeriği vardı, menü hiç görünmüyordu.
+   *
+   * Kabuğun her sayfaya TEK TEK eklendiği bir düzende, eklemeyi
+   * unutmak sessizce geçiyor. `sayfa-kabuk-sozlesmesi.test.ts` artık
+   * bunu tutuyor.
+   */
   return (
+    <ErpShell
+      design="redwood"
+      title="Bekleyen İşler"
+      description="Onayınızı bekleyen işler, size atanan ve gönderdiğiniz iş emirleri"
+    >
     <div className="rw">
-      <div className="erp-page-header">
-        <h1>Bekleyen İşler</h1>
-        <p>Onayınızı bekleyen işler, size atanan ve gönderdiğiniz iş emirleri.</p>
-      </div>
 
       {yukleniyor && <div className="erp-alert">Yükleniyor…</div>}
 
@@ -442,6 +456,7 @@ export default function YapilacaklarSayfasi() {
         </>
       )}
     </div>
+    </ErpShell>
   );
 }
 

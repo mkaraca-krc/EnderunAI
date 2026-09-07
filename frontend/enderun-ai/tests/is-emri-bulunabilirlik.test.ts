@@ -53,7 +53,19 @@ describe("iş emri bulunabilirliği", () => {
     const pano = oku("components/tasks/work-task-dashboard-widget.tsx");
 
     expect(gorevler).toContain('title="İş Emirleri"');
-    expect(yapilacaklar).toContain("<h1>Bekleyen İşler</h1>");
+
+    /*
+     * BİÇİM DEĞİŞTİ, İDDİA DEĞİŞMEDİ (2026-09-06).
+     *
+     * Burada `<h1>Bekleyen İşler</h1>` aranıyordu. `/yapilacaklar`
+     * ERP kabuğuna alınınca başlık `ErpShell`in `title` prop'una
+     * taşındı ve kabuk onu ZATEN `<h1>` olarak basıyor
+     * (`erp-shell.tsx:659`) — kullanıcının gördüğü şey aynı.
+     *
+     * Beklenti `/gorevler` ile AYNI desene çevrildi; iddia
+     * zayıflamadı, tersine iki ekran artık aynı biçimde sınanıyor.
+     */
+    expect(yapilacaklar).toContain('title="Bekleyen İşler"');
 
     // Kırıntı yolu iki adı da taşır: nereden geldiği ve nerede olduğu.
     expect(detay).toContain("Bekleyen İşler");
