@@ -26,6 +26,19 @@ namespace EnderunAI.Api.Hubs;
 ///   biri false     → `location ^~ /api/hubs/` eşleşmemiş ya da
 ///                    `proxy_set_header Upgrade` düşmüş
 ///
+/// ═══ İKİ BOOL AYNI ŞEYİ ÖLÇMÜYOR (ölçüldü 2026-09-07) ═══
+///
+///   `baglantiBasligiGeldi` → nginx `Connection`ı SABİT değer olarak
+///     yazıyor (`proxy_set_header Connection "upgrade"`). İstemci
+///     hiç göndermese bile true gelir. Yani bu bool tek başına
+///     **hub location eşleşti mi** sorusunun cevabı.
+///   `yukseltmeBasligiGeldi` → `$http_upgrade` geçirimini ölçüyor,
+///     yani istemcinin başlığının Kestrel'e ULAŞTIĞINI.
+///
+/// SONDAYLA DOĞRULANDI: hub bloğu yapılandırmadan çıkarılıp nginx
+/// yeniden yüklendiğinde ikisi de false döndü; blok geri konunca
+/// ikisi de true. İkisini birlikte istemek bu yüzden şart.
+///
 /// ═══ NEDEN GÜVENLİ ═══
 ///
 /// Çağıranın KENDİ gönderdiği iki başlığın VARLIĞINI söylüyor,
