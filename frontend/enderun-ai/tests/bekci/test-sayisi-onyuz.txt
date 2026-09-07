@@ -57,10 +57,14 @@
 #   "her icerik sayfasi kabukta" sozlesmesi (3) ve panel acilisinin
 #   da kaydedildigini tutan test (4). Ikisi de canlida olculen
 #   arizalardan dogdu.
+# PANEL KOK TASIMA (2026-09-07): 448 -> 454, katki +6.
+#   Yapi testine iki test eklendi (yon tersine cevrildi + oturum/portal
+#   kapilari), monte sayaci 2, taslak konusma basina 3.
+#   Kabul olcutu artik taslak degil MONTE SAYISI.
 #   gorev-atama-kaskadi.test.ts 7: Tüm personel her zaman açık, boş
 #   listenin sebebini söylemesi, kaynak değişince seçimin
 #   temizlenmesi, atamanın isteğe bağlı olması, kaskad durumunun
 #   sunucuya gitmemesi, Yapacak sütununun sunucunun hesabını
 #   göstermesi.
-statik: 448
+statik: 454
 dinamik: 15

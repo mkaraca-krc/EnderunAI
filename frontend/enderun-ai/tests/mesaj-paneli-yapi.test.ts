@@ -21,6 +21,7 @@ import { describe, expect, it } from "vitest";
  */
 
 const ROOT = join(__dirname, "..");
+const KOK_LAYOUT = join(ROOT, "app", "layout.tsx");
 const KABUK = join(ROOT, "components", "erp", "erp-shell.tsx");
 
 function tsxDosyalari(dizin: string): string[] {
@@ -43,41 +44,77 @@ function tsxDosyalari(dizin: string): string[] {
 }
 
 describe("mesaj paneli yerleşim sözleşmesi", () => {
-  it("kabuk dosyası okunabiliyor ve baloncuğu takıyor (POZİTİF KONTROL)", () => {
+  it("kök layout baloncuğu takıyor (POZİTİF KONTROL)", () => {
     // Tarama bozulursa aşağıdaki testler boş kümede yeşil döner
     // ve hiçbir şey ölçmezler (Kural 48).
-    const kabuk = readFileSync(KABUK, "utf8");
-    expect(kabuk).toContain("<MesajBaloncugu");
+    expect(readFileSync(KOK_LAYOUT, "utf8")).toContain("<MesajBaloncugu");
   });
 
-  it("hiçbir sayfa bileşeni baloncuğu kendi ağacına takmaz", () => {
-    const suclular = tsxDosyalari(join(ROOT, "app"))
+  it("baloncuk YALNIZ kök layout'ta — kabukta ve sayfalarda YOK", () => {
+    /*
+     * YÖN TERSİNE ÇEVRİLDİ (2026-09-07).
+     *
+     * Önceki sürüm *"baloncuk yalnız erp-shell'de"* diyordu ve o iddia
+     * YANLIŞ BİR TEMELE dayanıyordu: kabuğun rota değişiminde ayakta
+     * kaldığı sanılıyordu. Ölçüldü — kalmıyor; her sayfa kendi
+     * `<ErpShell>`'ini kuruyor ve alt ağaç tamamen sökülüyor.
+     *
+     * İKİ BALONCUK TEHLİKESİ: kabuktaki çağrı kaldırılmazsa 173
+     * sayfanın her birinde ikinci bir baloncuk doğar.
+     */
+    const suclular = [
+      ...tsxDosyalari(join(ROOT, "app")),
+      KABUK,
+    ]
+      .filter((yol) => yol !== KOK_LAYOUT)
       .filter((yol) => readFileSync(yol, "utf8").includes("<MesajBaloncugu"))
       .map((yol) => yol.replace(ROOT + "/", ""));
 
     expect(
       suclular,
-      "Bu sayfa bileşenleri mesaj baloncuğunu kendi ağaçlarına takıyor. " +
-        "Rota değişiminde sökülür: açık konuşma kapanır, yazılmış taslak " +
-        "gider.\n  - " + suclular.join("\n  - ")
+      "Baloncuk yalnız `app/layout.tsx`'te takılabilir. Başka bir yerde:\n" +
+        "  · sayfa ağacındaysa rota değişiminde SÖKÜLÜR (taslak gider,\n" +
+        "    canlı bağlantı kopar),\n" +
+        "  · kabukta da kalırsa 173 sayfada İKİNCİ BALONCUK doğar.\n  - " +
+        suclular.join("\n  - ")
     ).toEqual([]);
   });
 
-  it("baloncuk kabukta kendi hata sınırında sarılı", () => {
-    const kabuk = readFileSync(KABUK, "utf8");
+  it("baloncuk kök layout'ta kendi hata sınırında sarılı", () => {
+    const kok = readFileSync(KOK_LAYOUT, "utf8");
 
-    // Sınır etiketi ile baloncuk arasında başka bir HataSiniri açılışı
-    // olmamalı; yani baloncuk DOĞRUDAN o sınırın içinde.
-    const sinir = kabuk.indexOf('nerede="mesaj-paneli"');
-    const baloncuk = kabuk.indexOf("<MesajBaloncugu");
+    const sinir = kok.indexOf('nerede="mesaj-paneli"');
+    const baloncuk = kok.indexOf("<MesajBaloncugu");
 
-    expect(sinir, "nerede=\"mesaj-paneli\" hata sınırı bulunamadı").toBeGreaterThan(-1);
+    expect(sinir, 'nerede="mesaj-paneli" hata sınırı bulunamadı').toBeGreaterThan(-1);
     expect(baloncuk).toBeGreaterThan(sinir);
 
-    const arada = kabuk.slice(sinir, baloncuk);
+    // Kökte başka bir hata sınırı yok; sarılmazsa panel çökünce
+    // uygulamanın TAMAMI düşer.
+    const arada = kok.slice(sinir, baloncuk);
     expect(
       arada.includes("<HataSiniri"),
       "Baloncuk ile kendi hata sınırı arasında başka bir sınır açılmış."
     ).toBe(false);
+  });
+
+  it("oturum ve /portal kapıları baloncuğun İÇİNDE", () => {
+    /*
+     * Kapılar kök layout'a değil bileşenin içine kondu: kök layout bir
+     * sunucu bileşeni ve orada rota listesi tutmak, unutulacak bir şey
+     * daha demekti.
+     */
+    const kaynak = readFileSync(
+      join(ROOT, "components", "mesajlar", "mesaj-baloncugu.tsx"),
+      "utf8"
+    );
+
+    expect(kaynak, "oturum yüklenirken render engellenmiyor").toContain(
+      "if (oturumYukleniyor) return null"
+    );
+    expect(kaynak, "oturumsuz kullanıcıya panel gösteriliyor").toContain(
+      "if (!user) return null"
+    );
+    expect(kaynak, "/portal istisnası yok").toContain("PANEL_YASAK_ONEK");
   });
 });

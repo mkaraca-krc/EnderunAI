@@ -77,8 +77,17 @@ export interface MesajPaneliOzellikleri {
   onKonusmaDegisti?: (konusmaId: string | null) => void;
   /** Panel kipinde açılışta seçili gelecek konuşma. */
   baslangicKonusmaId?: string | null;
-  /** Taslak var mı — kapatma uyarısı için dışarıya bildirilir. */
-  onTaslakDegisti?: (doluMu: boolean) => void;
+  /**
+   * TASLAKLAR DIŞARIDAN GELİYOR — KONUŞMA BAŞINA.
+   *
+   * Bu bileşen panel kapandığında sökülüyor; taslağı burada tutmak
+   * kapatınca kaybetmek demekti. Baloncuk tutuyor, buraya yalnız
+   * okunacak hâli geçiyor.
+   */
+  taslaklar?: Record<string, string>;
+
+  /** Taslak değiştiğinde: hangi konuşma, ne yazıldı. */
+  onTaslakDegisti?: (konusmaId: string, metin: string) => void;
 }
 
 export default function MesajPaneli({
@@ -86,6 +95,7 @@ export default function MesajPaneli({
   onKapat,
   onKonusmaDegisti,
   baslangicKonusmaId,
+  taslaklar,
   onTaslakDegisti,
 }: MesajPaneliOzellikleri) {
   const { user } = useCurrentUser();
@@ -112,20 +122,24 @@ export default function MesajPaneli({
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
-  const [taslakHam, setTaslakHam] = useState("");
-  const taslak = taslakHam;
+  const [yerelTaslak, setYerelTaslak] = useState("");
 
   /*
-   * TASLAK DIŞARIYA BİLDİRİLİYOR — KAPATMA UYARISI İÇİN.
+   * TASLAK KONUŞMA BAŞINA OKUNUYOR.
    *
-   * Panel ESC ile kapanabiliyor. Kutuda yazılmış bir metin varken
-   * kapatmak, kullanıcının yazdığını sessizce silmek olurdu. Uyarıyı
-   * kabuk veriyor (panel kendini kapatmıyor), o yüzden bilgi yukarı
-   * çıkıyor.
+   * Dışarıdan bir sözlük geliyorsa (panel kipi) SEÇİLİ KONUŞMANIN
+   * metni gösteriliyor; A'ya yazılan B'de görünmüyor. Sözlük yoksa
+   * (tam sayfa kipi, tek başına kullanım) yerel durum kullanılıyor.
    */
+  const taslak = taslaklar ? (secili ? (taslaklar[secili] ?? "") : "") : yerelTaslak;
+
   function setTaslak(deger: string) {
-    setTaslakHam(deger);
-    onTaslakDegisti?.(deger.trim().length > 0);
+    if (taslaklar) {
+      if (secili) onTaslakDegisti?.(secili, deger);
+      return;
+    }
+
+    setYerelTaslak(deger);
   }
 
   const [kisiSorgu, setKisiSorgu] = useState("");

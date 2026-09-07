@@ -3337,6 +3337,89 @@ için muafiyet gereksizleşebilir.
 
 ---
 
+## PANEL KÖKE TAŞINDI — KABUL ÖLÇÜTÜ MONTE SAYISI (2026-09-07)
+
+**Taşımanın sebebi ölçülmüştü:** ortak layout kabuğu yok, her sayfa
+kendi ERP kabuğunu kuruyor (173 dosya), rota değişiminde `{children}`
+konumundaki bileşen tipi değişiyor ve React alt ağacın tamamını
+söküyor. Panel kabukta dururken **her ekran geçişinde yeniden
+doğuyordu.**
+
+### KABUL ÖLÇÜTÜ BELİRTİ DEĞİL, MEKANİZMA
+
+**Mehmet:** *"Taslağın durması bir BELİRTİ. Asıl hedef panelin
+SÖKÜLMEMESİ. Taslak yanlışlıkla da düzelebilir — `localStorage`'a
+yazılsa panel yine her geçişte sökülür ama taslak durur. O zaman
+'düzeldi' der, M3/2c-2'nin canlı bağlantısı yine her ekran değişiminde
+kopar."*
+
+Ölçülen şey artık metin değil, **monte sayısı**. `monteSayaci` modül
+düzeyinde tutuluyor ve `window.__mesajPaneliMonteSayisi` ile
+tarayıcıdan okunabiliyor.
+
+**SONDA — İKİ AYAK, BİRİ OLMADAN DİĞERİ HİÇBİR ŞEY SÖYLEMEZ:**
+
+| Yerleşim | Üç ekran değişiminden sonra |
+|---|---|
+| Kök (`app/layout.tsx`) | **1** |
+| Sayfa ağacı (sabotaj) | **4** |
+
+**MODELİ ÜÇÜNCÜ KEZ YANLIŞ KURDUM — KURAL 81, YİNE.** İlk denemede
+sonda ayağı **1** verdi (4 beklerken): tek bir `SayfaPanelli`
+bileşenine `Sayfa` prop'u geçiriyordum ve React aynı TİPTEKİ bileşeni
+koruyordu. Üretimde `GorevlerPage` ve `YapilacaklarPage` **ayrı
+bileşenler** ve her biri kendi kabuğunu kuruyor. Model öyle
+düzeltilince sonda ısırdı.
+
+### TASLAK KONUŞMA BAŞINA — İKİ ŞART, İKİSİ AYRI SINANIYOR
+
+`Record<konusmaId, metin>` **baloncukta** tutuluyor, panelde değil:
+panel kapandığında sökülüyor, taslağı orada tutmak kapatınca kaybetmek
+demekti. Panel kapatılınca taslaklar **silinmiyor** — kullanıcı
+"kapat" derken "yazdığımı sil" demiyor.
+
+**SONDA:** taslak tek genel alana çevrildi → **kalıcılık testi yeşil
+kaldı, ayrım testi kırmızı yandı.** İki şartın bağımsız olduğunun
+kanıtı: tek alan birinciyi geçer, ikinciyi geçemez.
+
+### RENDER KAPISI — ÜÇ SEBEP
+
+1. **Oturum yükleniyor** → hiçbir şey. Aksi hâlde giriş ekranında bir
+   an baloncuk görünür ve yanıp söner.
+2. **Oturum yok** → panel yok. **Rota listesi değil, oturum kontrolü**
+   (Mehmet): *"Liste tutmak, unutulacak bir şey daha demektir."*
+3. **`/portal`** → oturum AÇIK olsa bile panel yok. **Tek ve gerekçeli
+   istisna:** portal sayfaları dışarıya, müşteriye gösterilmek için
+   var; içeriden biri ekranını paylaştığında panelde iç yazışmalar
+   görünürdü. İhtimal küçük, bedeli veri sızıntısı.
+
+### YAPI TESTİ TERSİNE ÇEVRİLDİ
+
+Önceki sürüm *"baloncuk yalnız `erp-shell`'de"* diyordu ve **yanlış bir
+temele** dayanıyordu. Yenisi: **yalnız `app/layout.tsx`'te** — kabukta
+da kalırsa 173 sayfada **ikinci baloncuk** doğar.
+
+**DÖRT SONDA, DÖRDÜ DE ISIRDI:** baloncuk kabuğa geri kondu → dosyayı
+adıyla listeledi; `/portal` istisnası kaldırıldı → kırmızı; oturum
+kontrolü kaldırıldı → kırmızı; taslak tek alana çevrildi → ayrım testi
+kırmızı.
+
+### YOL ÜSTÜNDE: GEVŞEK METİN EŞLEŞTİRMESİ, BUGÜN ÜÇÜNCÜ KEZ
+
+`redwood-contract.test.ts` yayını durdurdu: `app/layout.tsx` ve
+`mesaj-baloncugu.tsx` *"bayraksız ErpShell açıyor"* diye işaretlendi.
+Sebep — **benim yorum metnimde `<ErpShell>` geçiyordu.**
+
+Aynı sınıf bugün üç kez çıktı: kendi `ErpShell` dedektörüm
+(`import` silmek yetmiyordu), `sema-sapma` ad ayıklayıcım (tırnaksız
+desen uzun adları kırpıyordu), ve şimdi bu. **Metin eşleşmesi varlık
+kanıtı değildir** — Kural 70'in üçüncü kez doğrulanması.
+
+Nöbetçiyi zayıflatmak yerine yorumlar yeniden yazıldı; kapı kendi
+işini doğru yapıyor, yanlış olan benim metnimdi.
+
+---
+
 ## M3/2c-1 — İKİ KUSUR, İKİSİ DE ÖLÇÜMLE BULUNDU (2026-09-07)
 
 Mehmet paneli tarayıcıdan denedi ve iki şey buldu. İkisi de benim.

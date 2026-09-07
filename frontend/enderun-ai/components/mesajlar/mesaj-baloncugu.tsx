@@ -1,27 +1,43 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 import MesajPaneli from "./mesaj-paneli";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { apiClient } from "@/lib/api/api-client";
+import { useCurrentUser } from "@/lib/use-current-user";
 
 /**
- * MESAJ BALONCUĞU — PANELİN KABUKTAKİ EVİ (M3/2c-1).
+ * MESAJ BALONCUĞU — PANELİN KÖK LAYOUT'TAKİ EVİ (M3/2c-1).
  *
- * ═══ NEDEN KABUKTA, SAYFA BİLEŞENİNDE DEĞİL ═══
+ * ═══ NEDEN KABUKTA DEĞİL, KÖKTE ═══
  *
- * Bu bileşen `erp-shell` içinde, `{children}`'ın DIŞINDA duruyor.
- * Sayfa bileşenine konsaydı her rota değişiminde SÖKÜLÜP yeniden
- * kurulurdu: açık konuşma kapanır, yazılmış taslak gider, ileride
- * eklenecek SignalR bağlantısı kopardı.
+ * İlk sürümde `erp-shell` içindeydi ve *"panel rota değişiminde
+ * sökülmez"* diye yazılmıştı. **YANLIŞTI.** Mehmet taslağın durmadığını
+ * tarayıcıdan ölçtü; sebep şuydu:
  *
- * `HizirBubble` aynı yerde ve aynı sebeple duruyor.
+ * Ortak bir layout kabuğu YOK — `app/layout.tsx` yalnız `{children}`
+ * render ediyor ve **her sayfa kendi ERP kabuğunu kuruyor** (173
+ * dosya). Rota değişiminde `{children}` konumundaki bileşen TİPİ
+ * değişiyor (`GorevlerPage` → `YapilacaklarPage`) ve React alt ağacın
+ * tamamını söküyor — kabuk, baloncuk ve panel dahil.
  *
- * Bunu `mesaj-paneli-kabukta.test.tsx` tutuyor: sahte bir kabukta
- * `children` değiştirilip panelin ayakta ve taslağın yerinde kaldığı
- * sınanıyor. Panel `children` içine taşınırsa o test kırmızı yanar.
+ * Panelin açık kalması yanıltmıştı: açık/kapalı durumu sunucuda saklı
+ * ve yeniden okunuyordu. Panel hayatta kalmıyor, **yeniden doğuyordu**.
+ *
+ * Şimdi kök layout'ta, `{children}`'ın DIŞINDA. Orası rota değişiminde
+ * yeniden kurulmuyor.
+ *
+ * ═══ KABUL ÖLÇÜTÜ BELİRTİ DEĞİL, MEKANİZMA ═══
+ *
+ * Taslağın durması bir BELİRTİ; asıl hedef panelin SÖKÜLMEMESİ. Taslak
+ * yanlışlıkla da düzelebilir (ör. `localStorage`'a yazılsa panel yine
+ * her geçişte sökülür ama taslak durur) — o zaman "düzeldi" der ve
+ * M3/2c-2'nin canlı bağlantısı yine her ekran değişiminde koparadı.
+ *
+ * Bu yüzden `monteSayaci` var: bileşenin kaç kez monte olduğunu sayıyor
+ * ve sonda ONU ölçüyor. Üç ekran değişiminden sonra 1 kalmalı.
  *
  * ═══ MOBİLDE PANEL YOK ═══
  *
@@ -53,12 +69,59 @@ const DAR_EKRAN_ESIGI = 900;
  */
 const TERCIH_YAZMA_GECIKMESI_MS = 1000;
 
+/**
+ * MONTE SAYACI — SONDANIN ÖLÇTÜĞÜ ŞEY.
+ *
+ * Modül düzeyinde tutuluyor ki bileşen sökülüp yeniden kurulsa bile
+ * sayı sıfırlanmasın. `window` üzerinden okunabiliyor: tarayıcıdan
+ * doğrulama yapan kişi konsola `__mesajPaneliMonteSayisi` yazıp
+ * bakabilir.
+ */
+let monteSayaci = 0;
+
+/**
+ * PANELİN ASLA GÖRÜNMEYECEĞİ TEK İSTİSNA — VE GEREKÇESİ.
+ *
+ * Ana kural OTURUM kontrolüdür (rota listesi değil): oturum yoksa
+ * panel yok. Liste tutmak, unutulacak bir şey daha demektir.
+ *
+ * `/portal` BU KURALIN TEK İSTİSNASI ve sebebi ayrı: portal sayfaları
+ * DIŞARIYA — müşteriye, paydaşa — gösterilmek için var. İçeriden biri
+ * o sayfayı açıp ekranını paylaştığında panelde İÇ YAZIŞMALAR
+ * görünürdü. İhtimal küçük, bedeli veri sızıntısı.
+ *
+ * Bu yüzden burada oturum AÇIK olsa bile panel render edilmiyor.
+ */
+const PANEL_YASAK_ONEK = "/portal";
+
 export default function MesajBaloncugu() {
   const router = useRouter();
+  const pathname = usePathname() ?? "/";
+  const { user, loading: oturumYukleniyor } = useCurrentUser();
+
+  useEffect(() => {
+    monteSayaci += 1;
+
+    if (typeof window !== "undefined") {
+      (window as unknown as Record<string, number>).__mesajPaneliMonteSayisi =
+        monteSayaci;
+    }
+  }, []);
 
   const [acik, setAcik] = useState(false);
   const [sonKonusma, setSonKonusma] = useState<string | null>(null);
-  const [taslakVar, setTaslakVar] = useState(false);
+  /*
+   * TASLAK KONUŞMA BAŞINA TUTULUYOR — TEK GENEL ALAN YANLIŞ OLURDU.
+   *
+   * Kullanıcı A konuşmasına yazıp B'ye geçip geri döndüğünde A'daki
+   * yazdığı durmalı; B'de A'nın metni GÖRÜNMEMELİ. Tek bir genel
+   * taslak alanı ikinci şartı bozardı.
+   *
+   * BURADA TUTULUYOR, PANELDE DEĞİL: panel kapandığında `MesajPaneli`
+   * sökülür. Taslak baloncukta durduğu için kapatıp açmak da metni
+   * kaybettirmiyor.
+   */
+  const [taslaklar, setTaslaklar] = useState<Record<string, string>>({});
 
   /*
    * KAPATMA UYARISI — TARAYICI DİYALOĞU DEĞİL.
@@ -73,6 +136,11 @@ export default function MesajBaloncugu() {
    * siparişine izin anahtarı koymak gibi olurdu.
    */
   const [kapatmaSorusu, setKapatmaSorusu] = useState(false);
+
+  /** Açık konuşmada yazılmış metin var mı — kapatma uyarısı için. */
+  const acikTaslakVar = Object.values(taslaklar).some(
+    (x) => x.trim().length > 0
+  );
 
   /*
    * TERCİH YÜKLENMEDEN YAZILMAZ.
@@ -144,18 +212,20 @@ export default function MesajBaloncugu() {
   const gercektenKapat = useCallback(() => {
     setKapatmaSorusu(false);
     setAcik(false);
-    setTaslakVar(false);
+    // TASLAKLAR SİLİNMİYOR: panel kapanınca metin kaybolmuyor, yeniden
+    // açınca yerinde duruyor. Kullanıcı "kapat" derken "yazdığımı sil"
+    // demiyor.
     tercihYaz({ messagePanelOpen: false });
   }, [tercihYaz]);
 
   const kapat = useCallback(() => {
-    if (taslakVar) {
+    if (acikTaslakVar) {
       setKapatmaSorusu(true);
       return;
     }
 
     gercektenKapat();
-  }, [taslakVar, gercektenKapat]);
+  }, [acikTaslakVar, gercektenKapat]);
 
   const ac = useCallback(() => {
     // MOBİLDE PANEL AÇILMAZ: dar ekranda tam sayfaya gidilir.
@@ -199,6 +269,20 @@ export default function MesajBaloncugu() {
     []
   );
 
+  /*
+   * ═══ RENDER KAPISI — ÜÇ AYRI SEBEP, ÜÇÜ DE SESSİZ ═══
+   *
+   * 1. OTURUM YÜKLENİYOR: hiçbir şey render edilmiyor. Aksi hâlde
+   *    giriş ekranında bir an baloncuk görünür ve yanıp söner.
+   * 2. OTURUM YOK: panel yok. Rota listesi DEĞİL, oturum kontrolü —
+   *    yeni bir oturumsuz rota eklendiğinde kimsenin liste
+   *    güncellemesi gerekmesin.
+   * 3. /portal: oturum AÇIK olsa bile panel yok (yukarıdaki gerekçe).
+   */
+  if (oturumYukleniyor) return null;
+  if (!user) return null;
+  if (pathname.startsWith(PANEL_YASAK_ONEK)) return null;
+
   return (
     <>
       {/*
@@ -212,7 +296,10 @@ export default function MesajBaloncugu() {
             onKapat={kapat}
             onKonusmaDegisti={konusmaDegisti}
             baslangicKonusmaId={sonKonusma}
-            onTaslakDegisti={setTaslakVar}
+            taslaklar={taslaklar}
+            onTaslakDegisti={(konusmaId, metin) =>
+              setTaslaklar((mevcut) => ({ ...mevcut, [konusmaId]: metin }))
+            }
           />
         </div>
       )}
