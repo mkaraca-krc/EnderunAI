@@ -46,8 +46,26 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
+/*
+ * STATİK VARLIKLAR KİMLİK KAPISINDAN GEÇMEZ.
+ *
+ * ═══ NEDEN `wav|mp3|ogg` EKLENDİ (2026-09-07, ÜRETİMDE ÖLÇÜLDÜ) ═══
+ *
+ * `/sesler/mesaj.wav` istendiğinde middleware onu KORUMALI ROTA
+ * sayıp `307 → /login` döndürüyordu. Uzantı listesi görselleri
+ * (png/jpg/svg…) dışlıyordu ama sesi dışlamıyordu.
+ *
+ * Oturum açmış kullanıcıda çerez gittiği için ses muhtemelen
+ * çalışıyordu; ama bir SES DOSYASININ kimlik kapısından geçmesi
+ * yanlış: gereksiz gecikme ve tamamen sessiz bir arıza yolu.
+ *
+ * BU KUSURU TESTİM YAKALAMADI ve sebebi ölçüldü: test `play()`
+ * ÇAĞRISINI sayıyordu, dosyanın YÜKLENDİĞİNİ değil. `play()`
+ * kaynak hiç yüklenmese de çağrılıyor. Test artık varlığın
+ * gerçekten `audio/*` olarak geldiğini de sınıyor.
+ */
 export const config = {
   matcher: [
-    "/((?!api/backend|_next/static|_next/image|favicon\\.ico|manifest\\.json|sw\\.js|.*\\.(?:png|jpg|jpeg|svg|ico|webp|webmanifest)$).*)",
+    "/((?!api/backend|_next/static|_next/image|favicon\\.ico|manifest\\.json|sw\\.js|.*\\.(?:png|jpg|jpeg|svg|ico|webp|webmanifest|wav|mp3|ogg)$).*)",
   ],
 };

@@ -316,7 +316,25 @@ export default function MesajPaneli({
     setGonderiliyor(true);
     try {
       const mesaj = await messagingService.gonder(secili, govde);
-      setMesajlar((mevcut) => [...mevcut, mesaj]);
+
+      /*
+       * KENDİ MESAJIMIZ İKİ YOLDAN GELİYOR — TEKİLLEŞTİRME BURADA DA
+       * ŞART. ÜRETİMDE ÖLÇÜLDÜ (2026-09-07, tarayıcı testi):
+       *
+       *   1. bu POST'un yanıtı
+       *   2. sunucunun yayını (gönderene DE gidiyor; başka sekmesi
+       *      açık olabilir)
+       *
+       * M3/2c-2'de tekilleştirme yalnız YAYIN yoluna konmuştu. Yayın
+       * HTTP yanıtından ÖNCE varırsa — ki yerel ağda sık oluyor —
+       * mesaj akışta İKİ KEZ görünüyordu.
+       *
+       * Yarışın hangi tarafının önce geldiğine güvenilemez; iki yol
+       * da aynı kapıdan geçiyor.
+       */
+      setMesajlar((mevcut) =>
+        mevcut.some((x) => x.id === mesaj.id) ? mevcut : [...mevcut, mesaj]
+      );
       setTaslak("");
       setHata(null);
 

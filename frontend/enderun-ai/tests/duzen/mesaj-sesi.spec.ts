@@ -121,13 +121,70 @@ async function playSayisi(sayfa: Page): Promise<number> {
   );
 }
 
-/** Otomatik oynatma kilidini açan gerçek kullanıcı etkileşimi. */
+/**
+ * Otomatik oynatma kilidini açan gerçek kullanıcı etkileşimi.
+ *
+ * ═══ NEDEN KOORDİNATA DEĞİL, ELEMANA TIKLANIYOR ═══
+ *
+ * Önce `mouse.click(5, 5)` yazıyordu ve test KARARSIZDI: aynı test
+ * bir koşuda geçip diğerinde düşüyordu. Sebep ölçüldü — (5,5)
+ * noktasında kenar çubuğunun MARKA BAĞLANTISI duruyor ve tıklama
+ * bazen `/dashboard`a gidiyordu; ölçülecek sayfa altımızdan
+ * kayıyordu.
+ *
+ * Composer girdisi hem güvenli (gezinme yok) hem de gerçek: kullanıcı
+ * zaten oraya tıklayarak yazmaya başlıyor.
+ */
 async function etkilesimYap(sayfa: Page) {
-  await sayfa.mouse.click(5, 5);
+  await sayfa.locator("form.mesaj-yaz input").click();
   await sayfa.waitForTimeout(300);
 }
 
 test.describe("mesaj sesi", () => {
+  /**
+   * SES VARLIĞI OTURUMSUZ DA ULAŞILABİLİR OLMALI.
+   *
+   * ═══ İKİ AYRI İDDİA, İKİSİ DE ÖLÇÜLDÜ ═══
+   *
+   * Bu testi önce OTURUM AÇMIŞ sayfadan yazdım ve sonda ISIRMADI:
+   * matcher düzeltmesi geri alındığında bile yeşil kaldı. Sebep
+   * ölçüldü — çerez varken middleware isteği geçiriyor. Yani test,
+   * kusurun YAŞADIĞI durumu hiç kurmuyordu (Kural 81).
+   *
+   * Üretimde ölçülen kusur OTURUMSUZ istekte: `/sesler/mesaj.wav`
+   * `307 → /login` dönüyordu, çünkü middleware'in uzantı listesinde
+   * `wav` yoktu (png/jpg/svg vardı).
+   *
+   * DÜRÜST SINIR: ses oturum açmış kullanıcıda ZATEN ÇALIŞIYORDU.
+   * Bu bir kırık özellik değil, yanlış katman — bir ses dosyasının
+   * kimlik kapısından geçmesi gereksiz gecikme ve sessiz bir arıza
+   * yolu. Test o katmanı tutuyor.
+   *
+   * Diğer testler `play()` ÇAĞRISINI sayıyor; `play()` kaynak hiç
+   * yüklenmese de çağrılır. Varlığın gerçekten `audio/*` geldiğini
+   * sınayan tek yer burası.
+   */
+  test("ses dosyası oturumsuz da audio olarak geliyor", async ({ browser }) => {
+    // TEMİZ BAĞLAM: çerez YOK. Kusurun yaşadığı durum bu.
+    const temiz = await browser.newContext({ baseURL: process.env.DUZEN_URL });
+
+    try {
+      const yanit = await temiz.request.get("/sesler/mesaj.wav");
+      const govde = await yanit.body();
+      const tur = yanit.headers()["content-type"] ?? "";
+
+      expect(yanit.status(), "Ses dosyası oturumsuz alınamadı").toBe(200);
+      expect(
+        tur,
+        `Ses dosyası audio değil, "${tur}" geldi — kimlik kapısına ` +
+          "takılıp giriş sayfası dönmüş olabilir."
+      ).toMatch(/^audio\//);
+      expect(govde.byteLength, "Ses dosyası boş").toBeGreaterThan(1000);
+    } finally {
+      await temiz.close();
+    }
+  });
+
   test.beforeEach(async ({ page }) => {
     await sesCasusu(page);
     await girisYap(page);
@@ -217,9 +274,21 @@ test.describe("mesaj sesi", () => {
     await page.locator("form.mesaj-yaz input").fill(metin);
     await page.locator("form.mesaj-yaz button[type=submit]").click();
 
-    await expect(page.locator(".mesaj-akis").getByText(metin)).toBeVisible({
-      timeout: 15000,
-    });
+    const gonderilen = page.locator(".mesaj-akis").getByText(metin);
+    await expect(gonderilen.first()).toBeVisible({ timeout: 15000 });
+
+    /*
+     * TAM BİR KEZ — İKİ KEZ DE KUSUR.
+     *
+     * Bu satır bir üretim kusurunu yakaladı: kendi mesajımız hem
+     * POST yanıtından hem sunucu yayınından geliyor ve tekilleştirme
+     * yalnız yayın yolundaydı. Yayın önce varınca mesaj akışta iki
+     * kez görünüyordu. Yarışın hangi tarafının kazandığına
+     * güvenilemez, o yüzden SAYI sınanıyor.
+     */
+    await expect
+      .poll(() => gonderilen.count(), { timeout: 5000 })
+      .toBe(1);
 
     expect(
       await playSayisi(page),

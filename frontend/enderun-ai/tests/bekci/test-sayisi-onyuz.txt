@@ -97,5 +97,13 @@
 #     kendi gonderdiginde CALMAZ (+ mesajin akista gorundugu
 #       dogrulaniyor)
 #     okunmamis mesaj sekme basligina yaziliyor (B8)
-statik: 471
+# MESAJ/3 PARCA 2 DUZELTMELERI (2026-09-07): 471 -> 472, katki +1.
+#   "ses dosyasi oturumsuz da audio olarak geliyor" - middleware
+#   uzanti listesinde wav yoktu, /sesler/mesaj.wav oturumsuz istekte
+#   307 ile /login'e gidiyordu.
+#
+#   BU TESTIN ILK HALI YANLIS YERDEN OLCUYORDU: oturum acmis sayfadan
+#   fetch ediyordu ve sonda ISIRMADI - cerez varken middleware
+#   gecirmis. Temiz baglama tasininca kirmizi verdi.
+statik: 472
 dinamik: 15
