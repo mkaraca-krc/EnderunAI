@@ -34,6 +34,8 @@ KOK="/var/www/enderun-ai"
 ON_YUZ="${KOK}/frontend/enderun-ai"
 ARKA_PORT=5156
 ON_PORT=3001
+# Vekil: uretimde nginx-in yaptigi /api/hubs ayrimini yapiyor.
+VEKIL_PORT=3002
 KULLANICI="duzen-testi"
 
 log() { echo "[duzen-testi] $*"; }
@@ -54,7 +56,7 @@ esac
 
 PAROLA="$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 24)Aa1!"
 
-ARKA_PID=""; ON_PID=""
+ARKA_PID=""; ON_PID=""; VEKIL_PID=""
 
 # ─── SÜREÇ GRUBUYLA ÖLDÜRÜLÜYOR — ÖLÇÜLMÜŞ BİR TUZAK.
 #
@@ -71,9 +73,11 @@ ARKA_PID=""; ON_PID=""
 temizle() {
   [ -n "$ARKA_PID" ] && kill -TERM -- "-${ARKA_PID}" 2>/dev/null || true
   [ -n "$ON_PID" ] && kill -TERM -- "-${ON_PID}" 2>/dev/null || true
+  [ -n "$VEKIL_PID" ] && kill -TERM -- "-${VEKIL_PID}" 2>/dev/null || true
   sleep 1
   [ -n "$ARKA_PID" ] && kill -KILL -- "-${ARKA_PID}" 2>/dev/null || true
   [ -n "$ON_PID" ] && kill -KILL -- "-${ON_PID}" 2>/dev/null || true
+  [ -n "$VEKIL_PID" ] && kill -KILL -- "-${VEKIL_PID}" 2>/dev/null || true
   wait 2>/dev/null || true
 }
 trap temizle EXIT
@@ -82,7 +86,7 @@ trap temizle EXIT
 #
 # Dolu bir port sessizce ESKİ sunucuya bağlanmak demek. Ölçmek
 # istediğimiz sürümü ölçmediğimiz bir koşu, hiç koşmamaktan kötüdür.
-for port in "$ARKA_PORT" "$ON_PORT"; do
+for port in "$ARKA_PORT" "$ON_PORT" "$VEKIL_PORT"; do
   if ss -ltn "sport = :${port}" 2>/dev/null | grep -q LISTEN; then
     oldu "Port ${port} DOLU. Önceki bir koşu kalmış olabilir; " \
          "süreci bulup durdurun (ss -ltnp sport = :${port})."
@@ -148,7 +152,7 @@ log "Konuşma tohumlanıyor..."
 sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d enderun_ai_test <<SQL
 DO \$\$
 DECLARE
-  v_ben uuid; v_o uuid; v_sirket uuid; v_konusma uuid; v_simdi timestamptz := now();
+  v_ben uuid; v_o uuid; v_sirket uuid; v_konusma uuid; v_konusma2 uuid; v_simdi timestamptz := now();
 BEGIN
   SELECT "Id" INTO v_ben FROM users WHERE "Username" = '${KULLANICI}';
   IF v_ben IS NULL THEN RAISE EXCEPTION 'Tohumlanan kullanıcı yok'; END IF;
@@ -192,6 +196,35 @@ BEGIN
          'Duzen testi mesaji ' || g || ' - satirin uzun olmasi icin biraz metin.',
          0, true, false, v_simdi
   FROM generate_series(1, 40) g;
+
+  -- İKİNCİ KONUŞMA — SES TESTİNİN "BAŞKA KONUŞMA AÇIK" AYAĞI İÇİN.
+  -- Tek konuşmayla "ekranda etkin konuşma" ile "başka konuşma"
+  -- ayrımı ÖLÇÜLEMEZDİ.
+  INSERT INTO conversations
+    ("Id","CompanyId","Type","IsArchived","IsActive","IsDeleted","CreatedAtUtc","LastMessageAtUtc")
+  VALUES (gen_random_uuid(), v_sirket, 0, false, true, false, v_simdi, v_simdi)
+  RETURNING "Id" INTO v_konusma2;
+
+  INSERT INTO conversation_members
+    ("Id","ConversationId","UserId","JoinedAtUtc","IsActive","IsDeleted","CreatedAtUtc")
+  VALUES (gen_random_uuid(), v_konusma2, v_ben, v_simdi, true, false, v_simdi),
+         (gen_random_uuid(), v_konusma2, v_o,   v_simdi, true, false, v_simdi);
+
+  INSERT INTO messages
+    ("Id","ConversationId","CompanyId","SenderUserId","Body","EditCount","IsActive","IsDeleted","CreatedAtUtc")
+  VALUES (gen_random_uuid(), v_konusma2, v_sirket, v_o, 'Ikinci konusma', 0, true, false, v_simdi);
+
+  -- KARŞI TARAFA DA KAPSAM: ses testi onun adına mesaj gönderiyor.
+  DELETE FROM user_data_scopes WHERE "UserId" = v_o;
+  INSERT INTO user_data_scopes
+    ("Id","UserId","ScopeType","IsActive","IsDeleted","CreatedAtUtc")
+  VALUES (gen_random_uuid(), v_o, 0, true, false, v_simdi);
+
+  -- KARŞI TARAFA ROL: mesaj gönderebilmesi için mesajlar.send lazım.
+  DELETE FROM user_roles WHERE "UserId" = v_o;
+  INSERT INTO user_roles ("UserId","RoleId")
+  SELECT v_o, ur."RoleId"
+  FROM user_roles ur WHERE ur."UserId" = v_ben;
 END \$\$;
 SQL
 log "Konuşma hazır."
@@ -226,8 +259,21 @@ for i in $(seq 1 60); do
 done
 log "Ön yüz hazır."
 
+log "Vekil ${VEKIL_PORT} portunda aciliyor (uretimdeki nginx-in karsiligi)..."
+VEKIL_PORT="$VEKIL_PORT" VEKIL_NEXT_PORT="$ON_PORT" VEKIL_ARKA_PORT="$ARKA_PORT" \
+  setsid node "${KOK}/deploy/scripts/duzen-vekil.mjs" > /tmp/duzen-vekil.log 2>&1 &
+VEKIL_PID=$!
+
+for i in $(seq 1 30); do
+  curl -sf -m 2 -o /dev/null "http://127.0.0.1:${VEKIL_PORT}/login" && break
+  [ "$i" -eq 30 ] && { cat /tmp/duzen-vekil.log >&2; oldu "Vekil acilmadi."; }
+  sleep 1
+done
+log "Vekil hazir."
+
 log "Playwright koşuyor..."
-DUZEN_URL="http://127.0.0.1:${ON_PORT}" \
+DUZEN_URL="http://127.0.0.1:${VEKIL_PORT}" \
 DUZEN_KULLANICI="$KULLANICI" \
 DUZEN_PAROLA="$PAROLA" \
+DUZEN_KARSI_KULLANICI="duzen-karsi-taraf" \
   npx playwright test --config=playwright.config.ts "$@"

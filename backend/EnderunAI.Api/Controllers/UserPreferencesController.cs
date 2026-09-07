@@ -11,7 +11,8 @@ public sealed record UserUiPreferenceResponse(
     bool SidebarCollapsed,
     IReadOnlyList<string> FavoritePaths,
     bool MessagePanelOpen,
-    Guid? LastConversationId);
+    Guid? LastConversationId,
+    bool MessageSoundMuted);
 
 /// <summary>
 /// KAYDETME İSTEĞİ — YENİ ALANLAR İSTEĞE BAĞLI, VE BU BİLEREK BÖYLE.
@@ -32,7 +33,8 @@ public sealed record SaveUserUiPreferenceRequest(
     bool SidebarCollapsed,
     List<string>? FavoritePaths,
     bool? MessagePanelOpen = null,
-    Guid? LastConversationId = null);
+    Guid? LastConversationId = null,
+    bool? MessageSoundMuted = null);
 
 /// <summary>
 /// Kullanıcının KENDİ arayüz tercihleri.
@@ -80,7 +82,9 @@ public sealed class UserPreferencesController(
             preference?.SidebarCollapsed ?? false,
             preference?.FavoritePaths ?? [],
             preference?.MessagePanelOpen ?? false,
-            preference?.LastConversationId));
+            preference?.LastConversationId,
+            // KAYIT YOKSA SUSTURULMAMIŞ: ses varsayılan olarak AÇIK.
+            preference?.MessageSoundMuted ?? false));
     }
 
     [HttpPut]
@@ -127,6 +131,9 @@ public sealed class UserPreferencesController(
         if (request.LastConversationId is not null)
             preference.LastConversationId = request.LastConversationId;
 
+        if (request.MessageSoundMuted is not null)
+            preference.MessageSoundMuted = request.MessageSoundMuted.Value;
+
         preference.UpdatedAtUtc = DateTime.UtcNow;
         preference.UpdatedByUserId = userId;
 
@@ -136,6 +143,7 @@ public sealed class UserPreferencesController(
             preference.SidebarCollapsed,
             preference.FavoritePaths,
             preference.MessagePanelOpen,
-            preference.LastConversationId));
+            preference.LastConversationId,
+            preference.MessageSoundMuted));
     }
 }

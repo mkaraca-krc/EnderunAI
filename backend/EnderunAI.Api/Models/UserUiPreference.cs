@@ -75,4 +75,22 @@ public sealed class UserUiPreference : BaseEntity
     /// gereksiz güncelleme üretirdi.
     /// </summary>
     public Guid? LastConversationId { get; set; }
+
+    /// <summary>
+    /// MESAJ SESİ AÇIK MI (MESAJ/3 B3).
+    ///
+    /// VARSAYILAN AÇIK — ve bu yüzden alan `MessageSoundMuted` DEĞİL
+    /// `MessageSoundEnabled` de değil: `bool` varsayılanı `false`
+    /// olduğu için "kaydı olmayan kullanıcı" sessiz kalırdı. Alan
+    /// SUSTURMAYI saklıyor; kaydı olmayan kullanıcıda `false` =
+    /// susturulmamış = ses AÇIK. Varsayılan, veritabanı varsayılanıyla
+    /// çakışmıyor.
+    ///
+    /// Bu, `MessagePanelOpen`ın tersi bir seçim ve bilerek: orada
+    /// varsayılan KAPALI istendiği için `bool` doğrudan kullanıldı.
+    ///
+    /// NEDEN AYRI İZİN ANAHTARI YOK: kullanıcının kendi arayüz
+    /// tercihi. Çay siparişine izin anahtarı koymak gibi olurdu.
+    /// </summary>
+    public bool MessageSoundMuted { get; set; }
 }

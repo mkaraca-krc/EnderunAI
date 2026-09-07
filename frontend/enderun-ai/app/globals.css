@@ -5024,6 +5024,17 @@ body {
   overflow: hidden;
 }
 
+/* SAĞ ALTTAKİ YÜZEN DÜĞMELERE YER AYRILIYOR — ÖLÇÜLMÜŞ ÇARPIŞMA.
+   Composer artık görünen alanın DİBİNDE duruyor; "Hızır'a sor"
+   (bottom 1.25rem) ve mesaj baloncuğu (bottom 5.75rem) tam oraya
+   sabitlenmiş. Tarayıcı testi yakaladı: Gönder düğmesi görünüyor ve
+   "enabled" ama tıklanamıyor — yüzen düğme işaretçi olaylarını
+   yiyor. Düzen düzeltmesinin KENDİ yan etkisi; grep ile görünmezdi.
+   3,5rem düğme + 1,25rem kenar + pay = 5,25rem. */
+.erp-tam-yukseklik .mesaj-yaz {
+  padding-right: 5.25rem;
+}
+
 /* ── PANEL KİPİ: aynı kural, ayrı kap ──────────────────────────────
    Panel `position:fixed` olduğu için belgeyi zaten uzatmıyor; ama
    içinde composer'ın altta SABİT kalması için aynı zincir gerekiyor.
@@ -5032,4 +5043,21 @@ body {
 .mesaj-duzen-panel .mesaj-govde {
   overflow: hidden;
   max-height: none;
+}
+
+/* Panel başlığındaki ses düğmesi — tam sayfa ve kapat düğmeleriyle
+   aynı ölçüde, aynı hizada. */
+.mesaj-panel-ses {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.15rem;
+}
+
+.mesaj-panel-ses[aria-pressed="false"] {
+  /* Kapalıyken soluk: durum tek bakışta okunsun. */
+  opacity: 0.55;
 }

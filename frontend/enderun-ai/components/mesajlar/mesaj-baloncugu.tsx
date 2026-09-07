@@ -10,6 +10,8 @@ import {
   canliBaglantiyiBaslat,
   canliMesajDinle,
 } from "@/lib/mesajlasma/canli-baglanti";
+import { konusmayaBakiliyor } from "@/lib/mesajlasma/etkin-konusma";
+import { kilidiAc, sesCal } from "@/lib/mesajlasma/mesaj-sesi";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { messagingService } from "@/services/messaging.service";
 import { PANEL_DAR_EKRAN_ESIGI } from "@/lib/mesajlasma/panel-esigi";
@@ -150,6 +152,16 @@ export default function MesajBaloncugu() {
    */
   const [okunmamis, setOkunmamis] = useState(0);
 
+  /*
+   * SES SUSTURULMUŞ MU (B3).
+   *
+   * Alan "susturuldu" saklıyor, "açık" değil: kaydı olmayan
+   * kullanıcıda `false` = susturulmamış = ses AÇIK. Varsayılan
+   * AÇIK istendiği için tersini saklamak, kayıt yokluğunu sessizliğe
+   * çevirirdi.
+   */
+  const [sesSusturuldu, setSesSusturuldu] = useState(false);
+
   const okunmamisTazele = useCallback(() => {
     void messagingService
       .konusmalar()
@@ -181,6 +193,7 @@ export default function MesajBaloncugu() {
   const bekleyen = useRef<{
     messagePanelOpen?: boolean;
     lastConversationId?: string;
+    messageSoundMuted?: boolean;
   }>({});
 
   useEffect(() => {
@@ -189,11 +202,13 @@ export default function MesajBaloncugu() {
     void apiClient<{
       messagePanelOpen: boolean;
       lastConversationId: string | null;
+      messageSoundMuted: boolean;
     }>("user-preferences")
       .then((tercih) => {
         if (!etkin) return;
         setAcik(tercih.messagePanelOpen ?? false);
         setSonKonusma(tercih.lastConversationId ?? null);
+        setSesSusturuldu(tercih.messageSoundMuted ?? false);
         tercihYuklendi.current = true;
       })
       .catch(() => {
@@ -214,7 +229,11 @@ export default function MesajBaloncugu() {
    * seçildi" gelirse tek istekte gidiyorlar.
    */
   const tercihYaz = useCallback(
-    (govde: { messagePanelOpen?: boolean; lastConversationId?: string }) => {
+    (govde: {
+      messagePanelOpen?: boolean;
+      lastConversationId?: string;
+      messageSoundMuted?: boolean;
+    }) => {
       if (!tercihYuklendi.current) return;
 
       bekleyen.current = { ...bekleyen.current, ...govde };
@@ -236,6 +255,18 @@ export default function MesajBaloncugu() {
     },
     []
   );
+
+  /** Ses tercihini değiştirir ve kaydeder. */
+  const sesiDegistir = useCallback(() => {
+    setSesSusturuldu((onceki) => {
+      const yeni = !onceki;
+      tercihYaz({ messageSoundMuted: yeni });
+      // AÇARKEN KİLİDİ DE AÇ: bu bir kullanıcı etkileşimi, tarayıcı
+      // tam bu anda izin veriyor. Sonraki mesajda denemek geç olurdu.
+      if (!yeni) kilidiAc();
+      return yeni;
+    });
+  }, [tercihYaz]);
 
   /** Uyarısız kapatma — soruya "evet" dendikten sonra da buraya gelinir. */
   const gercektenKapat = useCallback(() => {
@@ -309,14 +340,63 @@ export default function MesajBaloncugu() {
    * `canliBaglantiyiBaslat` ÇAĞRILDIĞINDA bağlantı zaten varsa
    * aynısını döndürüyor: panel de çağırıyor, ikinci soket açılmıyor.
    */
+  /*
+   * SES KARARI TEK YERDE — GELEN MESAJDA, KENDİ GÖNDERİMİNDE ASLA.
+   *
+   * Üç şart, üçü de ölçülebilir:
+   *   1. Mesaj BAŞKASINDAN geliyor. Sunucu yayını GÖNDERENE DE
+   *      yolluyor (başka sekmesi açık olabilir); kendi yazdığında
+   *      ses duymak rahatsız edici ve yanıltıcı olurdu (B1).
+   *   2. Kullanıcı O KONUŞMAYA BAKMIYOR. "Bakıyor" = konuşma açık
+   *      VE sekme görünür. Başka sekmedeyken ses ÇALAR (B2).
+   *   3. Ses susturulmamış (B3).
+   *
+   * Karar burada, çünkü baloncuk oturum boyunca monte kalan tek
+   * yer. Panelde olsaydı panel kapalıyken hiç ses çalmazdı — yani
+   * sesin en gerekli olduğu durumda çalışmazdı.
+   */
+  const sesSusturulduRef = useRef(sesSusturuldu);
+
+  useEffect(() => {
+    sesSusturulduRef.current = sesSusturuldu;
+  }, [sesSusturuldu]);
+
   useEffect(() => {
     if (!user) return;
 
     void canliBaglantiyiBaslat();
     okunmamisTazele();
 
-    return canliMesajDinle(() => okunmamisTazele());
+    return canliMesajDinle((gelen) => {
+      okunmamisTazele();
+
+      if (gelen.gonderenUserId === user.id) return;
+      if (konusmayaBakiliyor(gelen.konusmaId)) return;
+
+      sesCal(sesSusturulduRef.current);
+    });
   }, [user, okunmamisTazele]);
+
+  /*
+   * OTOMATİK OYNATMA KİLİDİ İLK ETKİLEŞİMDE AÇILIR (B5).
+   *
+   * Tarayıcı, kullanıcı sayfayla etkileşmeden ses çalmayı engelliyor.
+   * Dinleyiciler `once: true` ile bir kez koşuyor ve kendilerini
+   * söküyor — kalıcı bir dinleyici her tıklamada iş yapardı.
+   */
+  useEffect(() => {
+    if (!user) return;
+
+    const ac = () => kilidiAc();
+    const olaylar: (keyof WindowEventMap)[] = ["pointerdown", "keydown"];
+
+    for (const olay of olaylar)
+      window.addEventListener(olay, ac, { once: true, passive: true });
+
+    return () => {
+      for (const olay of olaylar) window.removeEventListener(olay, ac);
+    };
+  }, [user]);
 
   /*
    * SEKME BAŞLIĞI — ARKA PLANDAKİ SEKMEDE TEK GÖRÜNÜR İŞARET.
@@ -368,6 +448,8 @@ export default function MesajBaloncugu() {
         <div className="mesaj-panel" role="complementary" aria-label="Mesajlar">
           <MesajPaneli
             kip="panel"
+            sesSusturuldu={sesSusturuldu}
+            onSesiDegistir={sesiDegistir}
             onKapat={kapat}
             onKonusmaDegisti={konusmaDegisti}
             baslangicKonusmaId={sonKonusma}

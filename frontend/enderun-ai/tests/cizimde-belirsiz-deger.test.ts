@@ -108,6 +108,13 @@ const GEREKCELI_ISTISNA = new Map<string, string>([
     "services/todo.service.ts:108",
     "Gecikme hesabı; veri dönüştürme yolunda, yükleyiciden çağrılıyor.",
   ],
+  [
+    "lib/mesajlasma/mesaj-sesi.ts:119",
+    "Ses susturma aralığı (MESAJ/3 B6). `sesCal` bir OLAY işleyicisi: " +
+      "SignalR yayını geldiğinde çağrılıyor, çizimde değil. Değer " +
+      "DOM'a hiç yazılmıyor, yalnız iki çalma arasındaki süreyi " +
+      "ölçüyor. Modülde bileşen ve JSX yok.",
+  ],
 ]);
 
 function dosyalar(dizin: string, biriktir: string[] = []): string[] {

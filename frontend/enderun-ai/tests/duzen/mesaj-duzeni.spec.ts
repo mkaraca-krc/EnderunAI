@@ -59,7 +59,43 @@ async function girisYap(sayfa: Page) {
 async function konusmayiAc(sayfa: Page) {
   await sayfa.goto("/mesajlar");
 
-  const satir = sayfa.locator(".mesaj-satir").first();
+  /*
+   * DOLU KONUŞMA SIRAYA GÖRE DEĞİL, ÖLÇÜMLE SEÇİLİYOR.
+   *
+   * Önce `.first()` tıklanıyordu ve tek başına koşarken çalışıyordu.
+   * Ses testleriyle birlikte koşunca DÜŞTÜ: onlar mesaj gönderip
+   * konuşma sıralamasını değiştiriyor ve "ilk satır" artık tek
+   * mesajlık konuşma oluyordu. Testin doğruluğu, yanında hangi
+   * testin koştuğuna bağlı olamaz.
+   *
+   * Liste `LastMessageAtUtc` azalan sıralı; uçtan alınan sıra
+   * ekrandaki sırayla aynı. Mesajı en çok olan konuşmanın DİZİNİ
+   * bulunup o satır tıklanıyor.
+   */
+  const dizin = await sayfa.evaluate(async () => {
+    const liste = await fetch("/api/backend/mesajlar/konusmalar?limit=30");
+    const govde = (await liste.json()) as { kayitlar: { id: string }[] };
+    const kayitlar = govde.kayitlar ?? [];
+
+    let enIyi = 0;
+    let enCok = -1;
+
+    for (let i = 0; i < kayitlar.length; i += 1) {
+      const y = await fetch(
+        `/api/backend/mesajlar/konusmalar/${kayitlar[i].id}/mesajlar?limit=50`
+      );
+      const m = (await y.json()) as { kayitlar: unknown[] };
+      const sayi = (m.kayitlar ?? []).length;
+      if (sayi > enCok) {
+        enCok = sayi;
+        enIyi = i;
+      }
+    }
+
+    return enIyi;
+  });
+
+  const satir = sayfa.locator(".mesaj-satir").nth(dizin);
   await satir.waitFor({ timeout: 20000 });
   await satir.click();
 

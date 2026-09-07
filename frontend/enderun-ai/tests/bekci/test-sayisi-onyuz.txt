@@ -88,5 +88,14 @@
 #   jsdom'da cevaplanamaz (duzen motoru yok, getBoundingClientRect
 #   sifir doner) ve grep ile hic cevaplanamaz (Kural 70).
 #   Yigini deploy/scripts/duzen-testi.sh kuruyor.
-statik: 467
+# MESAJ/3 PARCA 2 - SESLI BILDIRIM (2026-09-07): 467 -> 471, katki +4.
+#   tests/duzen/mesaj-sesi.spec.ts - PLAYWRIGHT, gercek play() cagrisi
+#   sayiliyor ("fonksiyon var" yeterli degil):
+#     baska konusmaya gelen mesajda ses CALAR
+#     ekranda acik konusmaya gelen mesajda CALMAZ (+ mesajin geldigi
+#       ayrica dogrulaniyor - pozitif kontrol)
+#     kendi gonderdiginde CALMAZ (+ mesajin akista gorundugu
+#       dogrulaniyor)
+#     okunmamis mesaj sekme basligina yaziliyor (B8)
+statik: 471
 dinamik: 15

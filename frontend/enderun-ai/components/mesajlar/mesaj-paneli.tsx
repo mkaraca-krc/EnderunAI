@@ -6,6 +6,7 @@ import {
   canliBaglantiyiBaslat,
   canliMesajDinle,
 } from "@/lib/mesajlasma/canli-baglanti";
+import { etkinKonusmayiYaz } from "@/lib/mesajlasma/etkin-konusma";
 
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useTaslakDeposu } from "@/lib/mesajlasma/taslak-deposu";
@@ -83,6 +84,20 @@ export interface MesajPaneliOzellikleri {
   onKonusmaDegisti?: (konusmaId: string | null) => void;
   /** Panel kipinde açılışta seçili gelecek konuşma. */
   baslangicKonusmaId?: string | null;
+
+  /**
+   * Mesaj sesi susturulmuş mu ve nasıl değiştirilir (MESAJ/3 B3).
+   *
+   * PANEL SAHİBİ TAŞIYOR, PANEL SAKLAMIYOR: tercih sunucuda ve onu
+   * okuyup yazan yer `MesajBaloncugu`. Panel kendi kopyasını
+   * tutsaydı, tam sayfa ile panel ayrışır ve iki yüzeyde iki farklı
+   * cevap görünürdü — taslakta birebir bu yaşandı.
+   *
+   * İkisi de verilmezse düğme HİÇ render edilmez; tam sayfa kipinde
+   * bugün böyle.
+   */
+  sesSusturuldu?: boolean;
+  onSesiDegistir?: () => void;
   /**
    * Taslak değiştiğinde haber: hangi konuşma, ne yazıldı.
    *
@@ -100,6 +115,8 @@ export default function MesajPaneli({
   onKonusmaDegisti,
   baslangicKonusmaId,
   onTaslakDegisti,
+  sesSusturuldu,
+  onSesiDegistir,
 }: MesajPaneliOzellikleri) {
   const { user } = useCurrentUser();
   const panelKipi = kip === "panel";
@@ -184,6 +201,9 @@ export default function MesajPaneli({
    */
   async function konusmaSec(konusmaId: string) {
     setSecili(konusmaId);
+    // SES KARARI BUNU OKUYOR: ekranda açık olan konuşmaya gelen
+    // mesaj ses çalmaz (B2) — kullanıcı zaten bakıyor.
+    etkinKonusmayiYaz(konusmaId);
     onKonusmaDegisti?.(konusmaId);
     setMesajYukleniyor(true);
 
@@ -236,7 +256,22 @@ export default function MesajPaneli({
 
   useEffect(() => {
     seciliRef.current = secili;
+    etkinKonusmayiYaz(secili);
   }, [secili]);
+
+  /*
+   * BİLEŞEN GİDERSE ETKİN KONUŞMA DA GİDER.
+   *
+   * Panel kapandığında ya da `/mesajlar`tan çıkıldığında kayıt
+   * kalsaydı, kullanıcı artık bakmadığı bir konuşma için ses
+   * duymazdı — sessizlik, hatanın en zor fark edilen türü.
+   */
+  useEffect(
+    () => () => {
+      etkinKonusmayiYaz(null);
+    },
+    []
+  );
 
   useEffect(() => {
     void canliBaglantiyiBaslat();
@@ -384,6 +419,27 @@ export default function MesajPaneli({
             </button>
           )}
           <strong>{secili ? seciliKonusma?.baslik ?? "Konuşma" : "Mesajlar"}</strong>
+          {onSesiDegistir && (
+            <button
+              type="button"
+              className="mesaj-panel-ses"
+              onClick={onSesiDegistir}
+              aria-pressed={!sesSusturuldu}
+              aria-label={
+                sesSusturuldu
+                  ? "Mesaj sesini aç"
+                  : "Mesaj sesini kapat"
+              }
+              title={
+                sesSusturuldu
+                  ? "Mesaj sesi kapalı — açmak için tıklayın"
+                  : "Mesaj sesi açık — kapatmak için tıklayın"
+              }
+            >
+              {sesSusturuldu ? "🔇" : "🔊"}
+            </button>
+          )}
+
           <a className="mesaj-panel-tamsayfa" href="/mesajlar" title="Tam sayfada aç">
             ⤢
           </a>
