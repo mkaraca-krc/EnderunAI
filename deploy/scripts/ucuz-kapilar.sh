@@ -113,7 +113,21 @@ fi
 KAPILAR=(
   "hizli|kurumsal kimlik|${FE}|node scripts/kimlik-taramasi.mjs"
   "hizli|tip kontrolü|${FE}|npx tsc --noEmit -p tsconfig.json"
-  "agir|ön yüz derlemesi|${FE}|npm run build"
+  # ═══ AYRI DİZİNE DERLİYOR — CANLIYI EZMEMEK İÇİN (DAĞITIM/1) ═══
+  #
+  # BU SATIR `npm run build`i DOĞRUDAN `.next` içine koşuyordu, yani
+  # CANLININ SERVİS ETTİĞİ dizine. Kapının amacı "derleniyor mu"
+  # sorusunu cevaplamak; dağıtılacak çıktıyı üretmek DEĞİL. Ama
+  # yan etkisi canlıyı kırıyordu.
+  #
+  # ÖLÇÜLDÜ (2026-09-07 yayını, saniyede bir istek): kapı koşarken
+  # 22:33:20-22:33:30 arasında 10 istek parça 500 aldı. Sayfa 200
+  # dönüyor, parçası düşüyor — kullanıcı için "açılıyor ama bozuk".
+  # Üstelik bu, yeniden başlatmadan YEDİ DAKİKA önce.
+  #
+  # `build_frontend`e koyduğum atomik takas bunu KAPSAMIYORDU;
+  # düzeltmenin eksik olduğunu canlı ölçüm gösterdi.
+  "agir|ön yüz derlemesi|${FE}|NEXT_DIST_DIR=.next-kapi npm run build"
   "hizli|sır tarayıcı (aralık)|${REPO_ROOT}|deploy/scripts/sir-tara.py ${SIR_ARALIK_UZAK:-} ${SIR_ARALIK_YEREL:-}"
   "hizli|kutu ayrışması|${REPO_ROOT}|deploy/kutu/ayrisma-kontrolu.sh"
   "hizli|açık veritabanı|${REPO_ROOT}|deploy/scripts/acik-veritabani-kapisi.sh"

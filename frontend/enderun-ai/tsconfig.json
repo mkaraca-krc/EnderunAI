@@ -38,7 +38,9 @@
     ".next-duzen/types/**/*.ts",
     ".next-duzen/dev/types/**/*.ts",
     ".next-yeni/types/**/*.ts",
-    ".next-yeni/dev/types/**/*.ts"
+    ".next-yeni/dev/types/**/*.ts",
+    ".next-kapi/types/**/*.ts",
+    ".next-kapi/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
