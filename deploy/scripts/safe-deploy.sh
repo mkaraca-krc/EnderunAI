@@ -111,6 +111,13 @@ log() {
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [$1] $2" | tee -a "$LOG_FILE"
 }
 
+# İZLEYİCİ HER ÇIKIŞTA DURUR — arkada saniyede bir curl atan bir
+# süreç bırakmak, düzeltmeye çalıştığımız şeyin başka bir biçimi olurdu.
+temizle_izleyici() {
+    [ -n "${KESINTI_IZLEYICI_PID:-}" ] && kill "$KESINTI_IZLEYICI_PID" 2>/dev/null || true
+}
+trap temizle_izleyici EXIT
+
 fail() {
     log "ERROR" "$1"
     yarim_kosu_kendi_izini_sil
@@ -569,6 +576,95 @@ publish_backend() {
 }
 
 # ═══════════════════════════════════════════════════════════════
+# KESİNTİ İZLEYİCİSİ — KALICI KAPI, TEK SEFERLİK ÖLÇÜM DEĞİL
+# ═══════════════════════════════════════════════════════════════
+#
+# NEDEN KAPI, NEDEN ÖLÇÜM DEĞİL: bu arıza aylarca fark edilmedi.
+# 32 parça 404'ünün 19'u bu paket başlamadan önceydi ve kimse
+# görmedi — çünkü ölçen kimse yoktu. Tek seferlik bir ölçüm bugünü
+# kurtarır, yarın aynı satır geri gelir.
+#
+# NE SAYIYOR: yayın boyunca saniyede bir /login isteniyor ve
+# HTML'deki ilk JS parçası da isteniyor. Sayılan şey PARÇA hatası —
+# sayfa 200 dönüp parçası düşerse ekran kırıktır ve kullanıcı için
+# en yanıltıcı hâl budur.
+#
+# NEDEN SAYFA HATASI SAYILMIYOR: yeniden başlatma sırasında sunucu
+# birkaç saniye kapalı ve bağlantı reddediliyor (kod 000). Bu AYRI
+# ve açık bir durum; kapıyı ona bağlamak her yayında yanlış alarm
+# üretirdi. Kapı yalnız "sunucu ayakta ama bozuk içerik veriyor"
+# hâline karşı sert.
+KESINTI_IZLEYICI_PID=""
+KESINTI_KAYIT="/tmp/enderun-yayin-kesinti.txt"
+
+kesinti_izleyicisi_baslat() {
+    : > "$KESINTI_KAYIT"
+
+    (
+        while :; do
+            govde="$(curl -s -m 4 "http://127.0.0.1:3000/login" 2>/dev/null)"
+            parca="$(printf '%s' "$govde" \
+                | grep -oE '/_next/static/chunks/[A-Za-z0-9_.-]+\.js' | head -1)"
+
+            if [ -n "$parca" ]; then
+                pk="$(curl -s -o /dev/null -w '%{http_code}' -m 4 \
+                    "http://127.0.0.1:3000${parca}" 2>/dev/null)"
+                case "$pk" in
+                    200|000) : ;;
+                    *) echo "$(date -u +%H:%M:%S) PARCA ${pk} ${parca}" >> "$KESINTI_KAYIT" ;;
+                esac
+            fi
+
+            sleep 1
+        done
+    ) &
+
+    KESINTI_IZLEYICI_PID=$!
+    log "INFO" "Kesinti izleyicisi başladı (saniyede bir parça kontrolü)."
+}
+
+# ÜÇ SONUÇ, ÜÇ DAVRANIŞ (Kural 67):
+#   0 hata          -> GEÇTİ
+#   >0 hata         -> İHLAL, yayın BAŞARISIZ sayılır
+#   izleyici yoksa  -> KARAR VEREMEDİ; sessizce geçmez
+kesinti_izleyicisi_bitir() {
+    if [ -z "$KESINTI_IZLEYICI_PID" ]; then
+        log "WARN" "Kesinti kapısı KARAR VEREMEDİ: izleyici hiç başlamadı."
+        return 0
+    fi
+
+    kill "$KESINTI_IZLEYICI_PID" 2>/dev/null || true
+    wait "$KESINTI_IZLEYICI_PID" 2>/dev/null || true
+    KESINTI_IZLEYICI_PID=""
+
+    # SAYIM `wc -l` İLE — `grep -c` TUZAĞI ÖLÇÜLDÜ.
+    #
+    # `grep -c . dosya` boş dosyada "0" basar AMA çıkış kodu 1 döner.
+    # `|| echo 0` de çalışır ve çıktı "0\n0" olur; sayı
+    # karşılaştırması "integer expression expected" ile patlar ve
+    # `if` yanlış tarafa düşer. Sonuç: kapı TEMİZ bir yayında bile
+    # İHLAL verirdi — yani her yayını düşürürdü.
+    #
+    # Sondanın ilk ayağı (boş kayıt → geçmeli) tam olarak bunu
+    # yakaladı. `wc -l` boş dosyada 0 basar ve çıkış kodu 0'dır.
+    local hata
+    hata="$(wc -l < "$KESINTI_KAYIT" 2>/dev/null || echo 0)"
+    hata="${hata:-0}"
+
+    if [ "$hata" -eq 0 ]; then
+        log "INFO" "Kesinti kapısı GEÇTİ: yayın boyunca parça hatası YOK."
+        return 0
+    fi
+
+    log "ERROR" "Kesinti kapısı İHLAL: yayın sırasında ${hata} parça hatası."
+    log "ERROR" "Sunucu ayaktayken bozuk içerik verdi — kullanıcı için ekran kırık."
+    sed -n '1,10p' "$KESINTI_KAYIT" | while IFS= read -r satir; do
+        log "ERROR" "  ${satir}"
+    done
+    return 1
+}
+
+# ═══════════════════════════════════════════════════════════════
 # ÖN YÜZ DERLEMESİ AYRI DİZİNE — CANLI KESİNTİSİ İÇİN (DAĞITIM/1)
 # ═══════════════════════════════════════════════════════════════
 #
@@ -628,12 +724,33 @@ build_frontend() {
 swap_frontend() {
     [ -d "$FRONTEND_NEXT_YENI" ] || fail "Takas edilecek yeni yapı yok."
 
-    if [ -d "${FRONTEND_NEXT_DIR}/static" ]; then
-        log "INFO" "Eski parçalar yeni yapıya taşınıyor (üzerine yazmadan)..."
-        mkdir -p "${FRONTEND_NEXT_YENI}/static"
-        cp -an "${FRONTEND_NEXT_DIR}/static/." "${FRONTEND_NEXT_YENI}/static/" \
-            2>/dev/null || true
-    fi
+    # ═══ ESKİ PARÇALAR YENİ YAPIYA KOPYALANIYOR — ASIL KORUMA BU ═══
+    #
+    # MEKANİZMA DÜZELTMESİ: "eski dizini silme, adını değiştir" tek
+    # başına ÇALIŞAN SÜRECİ KURTARMAZ. Next, `distDir`i açılışta MUTLAK
+    # yola çözüyor (.../frontend/enderun-ai/.next). `mv` sonrası o yol
+    # artık YENİ yapıyı gösteriyor; eski süreç tembel bir parça okumak
+    # istediğinde `.next-eski`ye değil yine `.next`e bakar.
+    #
+    # Yani yükü taşıyan şey yeniden adlandırma değil, BU KOPYALAMA:
+    # eski dosyalar yeni yapının İÇİNDE de bulunuyor.
+    #
+    # `static/` istemci parçaları, `server/` sunucunun tembel okuduğu
+    # parçalar. İkisi de gerekiyor: kullanıcı o ana kadar hiç
+    # gitmediği bir sayfaya giderse ikisinden de okuma olur.
+    #
+    # `cp -an` ÜZERİNE YAZMAZ: yeni yapının dosyaları korunur, yalnız
+    # eskide olup yenide olmayanlar eklenir. Parça adları içerik
+    # özetli olduğu için çakışma imkânsız; eklenen dosyalar yeni
+    # sunucu için ETKİSİZDİR (kendi manifest'inde adları geçmez).
+    for alt in static server; do
+        if [ -d "${FRONTEND_NEXT_DIR}/${alt}" ]; then
+            log "INFO" "Eski ${alt}/ yeni yapıya kopyalanıyor (üzerine yazmadan)..."
+            mkdir -p "${FRONTEND_NEXT_YENI}/${alt}"
+            cp -an "${FRONTEND_NEXT_DIR}/${alt}/." "${FRONTEND_NEXT_YENI}/${alt}/" \
+                2>/dev/null || true
+        fi
+    done
 
     rm -rf "$FRONTEND_NEXT_ESKI"
 
@@ -650,6 +767,62 @@ swap_frontend() {
     }
 
     log "INFO" "Ön yüz yapısı takas edildi (atomik)."
+
+    eski_parca_kapisi
+}
+
+# ═══════════════════════════════════════════════════════════════
+# ESKİ PARÇA KAPISI — "ERKEN SİLDİM" HATASINI YAKALAYAN TEK ÖLÇÜM
+# ═══════════════════════════════════════════════════════════════
+#
+# Takas yapıldı ama sunucu HENÜZ YENİDEN BAŞLAMADI. O aralıkta çalışan
+# eski süreç, kullanıcı daha önce hiç gitmediği bir sayfaya giderse
+# TEMBEL olarak kendi eski parçasını okumak ister.
+#
+# SIK ZİYARET EDİLEN BİR SAYFAYLA SINAMAK HATAYI GİZLER: onun parçaları
+# zaten bellekte, dosya silinmiş olsa bile 200 döner. Bu yüzden kapı
+# YALNIZCA ESKİ YAPIDA BULUNAN bir parça seçiyor — yeni yapıda adı
+# geçmeyen, yani ancak diskten okunabilecek bir dosya.
+#
+#   200 -> eski parçalar erişilebilir, kopyalama tuttu
+#   404 -> eski yapı erken kayboldu; bugünkü arızanın aynısı
+eski_parca_kapisi() {
+    local eski_dizin="${FRONTEND_NEXT_ESKI}/static/chunks"
+    local yeni_dizin="${FRONTEND_NEXT_DIR}/static/chunks"
+
+    if [ ! -d "$eski_dizin" ]; then
+        log "WARN" "Eski parça kapısı ATLANDI: önceki yapı yok (ilk yayın olabilir)."
+        return 0
+    fi
+
+    # Yalnız eskide olan bir dosya bul.
+    local aday=""
+    while IFS= read -r dosya; do
+        [ -f "${yeni_dizin}/${dosya}" ] || { aday="$dosya"; break; }
+    done < <(cd "$eski_dizin" && ls -1 *.js 2>/dev/null)
+
+    if [ -z "$aday" ]; then
+        # SESSİZCE GEÇMİYOR: karşılaştıracak dosya yoksa kapı ölçüm
+        # yapmamıştır ve bunu söylemek zorundadır (Kural 48).
+        log "WARN" "Eski parça kapısı ÖLÇEMEDİ: yalnız eskide bulunan parça yok."
+        return 0
+    fi
+
+    local kod
+    kod="$(curl -s -o /dev/null -w '%{http_code}' -m 5 \
+        "http://127.0.0.1:3000/_next/static/chunks/${aday}" 2>/dev/null)"
+
+    case "$kod" in
+        200)
+            log "INFO" "Eski parça kapısı GEÇTİ (${aday} hâlâ 200)."
+            ;;
+        *)
+            log "ERROR" "Eski parça kapısı İHLAL: ${aday} -> HTTP ${kod}."
+            log "ERROR" "Takas sonrası eski parçalar erişilemez; çalışan sunucu"
+            log "ERROR" "henüz okumadığı bir parçayı isterse ekran KIRILIR."
+            return 1
+            ;;
+    esac
 }
 
 # YEDEK ALINAMAZSA YAYIN DURUR.
@@ -1037,6 +1210,15 @@ main() {
     # LİSTE BURADA DEĞİL, `ucuz-kapilar.sh` içinde — aynı betik push
     # öncesi kancada da koşuyor. İki yerde iki liste, ayrışan bir
     # nokta demekti.
+    # İZLEYİCİ UCUZ KAPILARDAN ÖNCE BAŞLIYOR.
+    #
+    # İlk yazımda `surum-yedegi` aşamasında başlatmıştım ve yorumuna
+    # "ucuz kapıların derlemesi de bu pencerede" yazmıştım — YANLIŞTI,
+    # ucuz kapılar ondan önce koşuyor. Tam da kapının yakalaması
+    # gereken 10 hata (2026-09-07 22:33) o aşamada üretilmişti; kapı
+    # orada başlasaydı onları GÖRMEZDİ.
+    kesinti_izleyicisi_baslat
+
     log "INFO" "Ucuz kapılar çalıştırılıyor (pahalı turlardan önce)..."
     if ! "${REPO_ROOT}/deploy/scripts/ucuz-kapilar.sh" 2>&1 | tee -a "$LOG_FILE"; then
         fail "Ucuz kapılardan biri düştü; pahalı turlara girilmedi."
@@ -1078,15 +1260,41 @@ main() {
     restart_services
 
     asama "saglik-kontrolu"
+
+    #
+    # KESİNTİ KAPISI SAĞLIK KAPISINDAN AYRI DEĞERLENDİRİLİYOR — VE
+    # BU BİLEREK BÖYLE.
+    #
+    # Sağlık düşerse GERİ ALMA doğru ilaç: yeni sürüm ayakta değil.
+    # Kesinti kapısı düşerse geri alma YANLIŞ ilaç olurdu:
+    #   · yeni kod sağlam (testler geçti, sağlık geçti)
+    #   · geri alma ikinci bir takas + yeniden başlatma demek,
+    #     yani aynı kırık pencereyi BİR KEZ DAHA üretmek
+    # Hastalığı tedavi ederken hastayı ikinci kez hasta etmek olurdu.
+    #
+    # Bu yüzden ihlal: yayın BAŞARISIZ sayılır (çıkış 1, OnFailure
+    # uyarısı gider, `last-deployed-commit` GÜNCELLENMEZ) ama yeni
+    # sürüm yerinde kalır. Karar kimsenin dikkatinden kaçmaz;
+    # düzeltmeyi insan yapar.
+    #
     if wait_for_health; then
-        DEPLOY_OUTCOME="SUCCESS"
-        log "INFO" "Yayın BAŞARILI."
+        if kesinti_izleyicisi_bitir; then
+            DEPLOY_OUTCOME="SUCCESS"
+            log "INFO" "Yayın BAŞARILI."
 
         # Kayıt YALNIZCA başarıda güncelleniyor. Başarısız ya da geri
         # alınmış bir yayından sonra taban eski commit'te kalmalı;
         # yoksa bir sonraki denemede o değişiklikler diff'ten düşer ve
         # backend testleri hiç koşmadan yayınlanabilirdi.
-        record_successful_deploy
+            record_successful_deploy
+        else
+            DEPLOY_OUTCOME="FAILURE"
+            log "ERROR" "YAYIN BAŞARISIZ SAYILDI: kesinti kapısı ihlal."
+            log "ERROR" "Yeni sürüm YERİNDE BIRAKILDI — geri alma ikinci bir"
+            log "ERROR" "takas + yeniden başlatma demek, yani aynı kırık"
+            log "ERROR" "pencereyi bir kez daha üretmek olurdu."
+            log "ERROR" "Son yayın kaydı GÜNCELLENMEDİ; sebebi elle incelenmeli."
+        fi
     else
         asama "geri-alma"
         rollback
