@@ -77,8 +77,42 @@ describe("yol izinleri", () => {
     expect(routePermission("/isg")).toBe("isg.view");
   });
 
+  /**
+   * KURALI OLMAYAN YOL AÇIKTIR — VARSAYILAN AÇIK TARAFA DÜŞÜYOR.
+   *
+   * ═══ ÖRNEK NEDEN DEĞİŞTİ (YETKİ/1, 2026-09-07) ═══
+   *
+   * Burada örnek `/dashboard` idi. Artık kuralı VAR ve olması da
+   * gerekiyordu: kullanıcı bazlı kısıt (Deny) o ekranda sessizce
+   * uygulanmıyordu — kısıt kaydı doğru, sunucu izni vermiyor, ama
+   * ekranda kısıta bakan kimse yoktu.
+   *
+   * SÖZLEŞME DEĞİŞMEDİ, ÖRNEK DEĞİŞTİ. Test hâlâ aynı şeyi tutuyor:
+   * eşleşen kural yoksa `routePermission` null döner ve erişim açıktır.
+   *
+   * VE BU VARSAYILAN BİR RİSK: bugün 15 ekranın kuralı yok, yani o
+   * ekranlar giriş yapmış herkese açık (ölçüldü, YETKİ/2 Y2-2).
+   * Hangi ekrana hangi iznin bağlanacağı Mehmet'in kararı (Y2-3);
+   * bu test o kararı beklerken varsayılanın NE OLDUĞUNU kayda
+   * geçiriyor — sürpriz olmasın diye.
+   */
   it("kuralı olmayan yol açıktır", () => {
-    expect(routePermission("/dashboard")).toBeNull();
+    // Kuralı bilerek olmayan bir ekran: onay merkezi (Y2-2 listesinde).
+    expect(routePermission("/onay-merkezi")).toBeNull();
+
+    // Hiç var olmayan bir yol da açık — varsayılanın kendisi.
+    expect(routePermission("/boyle-bir-ekran-yok")).toBeNull();
+  });
+
+  /**
+   * DASHBOARD ARTIK KORUNUYOR (YETKİ/1).
+   *
+   * Bu satır bir davranışı değil, ÖLÇÜLMÜŞ BİR KUSURUN DÖNMEMESİNİ
+   * tutuyor: kural silinirse kısıt yeniden sessizce uygulanmaz hale
+   * gelir ve kimse fark etmez.
+   */
+  it("dashboard izne bağlı", () => {
+    expect(routePermission("/dashboard")).toBe("dashboard.view");
   });
 });
 

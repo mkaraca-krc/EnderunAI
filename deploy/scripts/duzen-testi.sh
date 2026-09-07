@@ -104,7 +104,7 @@ done
 # Kullanıcı her koşudan ÖNCE siliniyor; tohumlayıcı yenisini kuruyor.
 log "Önceki koşunun test kullanıcısı siliniyor..."
 sudo -u postgres psql -q -d enderun_ai_test -c \
-  "DELETE FROM users WHERE \"Username\" IN ('${KULLANICI}', 'duzen-karsi-taraf');" >/dev/null
+  "DELETE FROM users WHERE \"Username\" IN ('${KULLANICI}', 'duzen-karsi-taraf', 'duzen-kisitli');" >/dev/null
 
 log "Arka uç ${ARKA_PORT} portunda açılıyor (enderun_ai_test)..."
 DB_CONNECTION="$TEST_BAGLANTI" \
@@ -152,7 +152,7 @@ log "Konuşma tohumlanıyor..."
 sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d enderun_ai_test <<SQL
 DO \$\$
 DECLARE
-  v_ben uuid; v_o uuid; v_sirket uuid; v_konusma uuid; v_konusma2 uuid; v_simdi timestamptz := now();
+  v_ben uuid; v_o uuid; v_sirket uuid; v_konusma uuid; v_konusma2 uuid; v_kisitli uuid; v_simdi timestamptz := now();
 BEGIN
   SELECT "Id" INTO v_ben FROM users WHERE "Username" = '${KULLANICI}';
   IF v_ben IS NULL THEN RAISE EXCEPTION 'Tohumlanan kullanıcı yok'; END IF;
@@ -167,7 +167,7 @@ BEGIN
     ("Id","UserId","ScopeType","IsActive","IsDeleted","CreatedAtUtc")
   VALUES (gen_random_uuid(), v_ben, 0, true, false, v_simdi);
 
-  DELETE FROM users WHERE "Username" = 'duzen-karsi-taraf';
+  DELETE FROM users WHERE "Username" IN ('duzen-karsi-taraf', 'duzen-kisitli');
   INSERT INTO users
     ("Id","Username","FullName","PasswordHash","PasswordSalt","IsActive","WorkHoursExempt","CreatedAtUtc")
   SELECT gen_random_uuid(), 'duzen-karsi-taraf', 'Karsi Taraf',
@@ -225,6 +225,33 @@ BEGIN
   INSERT INTO user_roles ("UserId","RoleId")
   SELECT v_o, ur."RoleId"
   FROM user_roles ur WHERE ur."UserId" = v_ben;
+
+  -- ═══ KISITLI KULLANICI (YETKI/1 OLCUMU) ═══
+  --
+  -- Rolu tam yetkili ama KISISEL DENY kaydi olan bir kullanici.
+  -- Canlida uakkaya'nin durumu bu: 19 kisit kayitli, cozucude
+  -- dogru okunuyor (olculdu) ama ekran acilmaya devam ediyor.
+  -- Kusurun yasadigi durumu rig'de birebir kuruyoruz (Kural 81).
+  INSERT INTO users
+    ("Id","Username","FullName","PasswordHash","PasswordSalt","IsActive","WorkHoursExempt","CreatedAtUtc")
+  SELECT gen_random_uuid(), 'duzen-kisitli', 'Kisitli Kullanici',
+         "PasswordHash", "PasswordSalt", true, true, v_simdi
+  FROM users WHERE "Id" = v_ben
+  RETURNING "Id" INTO v_kisitli;
+
+  INSERT INTO user_roles ("UserId","RoleId")
+  SELECT v_kisitli, ur."RoleId" FROM user_roles ur WHERE ur."UserId" = v_ben;
+
+  INSERT INTO user_data_scopes
+    ("Id","UserId","ScopeType","IsActive","IsDeleted","CreatedAtUtc")
+  VALUES (gen_random_uuid(), v_kisitli, 0, true, false, v_simdi);
+
+  -- DENY = Effect 2. Ucu de EKRANA baglı izinler.
+  INSERT INTO user_permission_overrides
+    ("Id","UserId","PermissionId","Effect","CreatedAtUtc")
+  SELECT gen_random_uuid(), v_kisitli, p."Id", 2, v_simdi
+  FROM permissions p
+  WHERE p."Key" IN ('dashboard.view','accounting.view','tasks.view');
 END \$\$;
 SQL
 log "Konuşma hazır."
@@ -276,4 +303,5 @@ DUZEN_URL="http://127.0.0.1:${VEKIL_PORT}" \
 DUZEN_KULLANICI="$KULLANICI" \
 DUZEN_PAROLA="$PAROLA" \
 DUZEN_KARSI_KULLANICI="duzen-karsi-taraf" \
+DUZEN_KISITLI_KULLANICI="duzen-kisitli" \
   npx playwright test --config=playwright.config.ts "$@"

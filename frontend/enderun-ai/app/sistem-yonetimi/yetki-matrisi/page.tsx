@@ -27,6 +27,20 @@ function getErrorMessage(error: unknown) {
   return "İşlem tamamlanamadı. Lütfen tekrar deneyin.";
 }
 
+/**
+ * Bölüm başlığı için kararlı bir DOM kimliği.
+ *
+ * Bölüm adları Türkçe ve boşluklu ("İnsan Kaynakları"); doğrudan `id`
+ * olarak kullanmak `querySelector`da kaçış gerektirirdi. Harf/rakam
+ * dışındaki her şey tireye çevriliyor.
+ */
+function bolumKimligi(bolum: string): string {
+  return (
+    "matris-bolum-" +
+    bolum.toLocaleLowerCase("tr").replace(/[^a-z0-9ğüşıöç]+/gi, "-")
+  );
+}
+
 export default function PermissionMatrixPage() {
   /**
    * Düğme -> uç -> izin (PermissionMatrixController):
@@ -85,15 +99,53 @@ export default function PermissionMatrixPage() {
     [matrix]
   );
 
+  /*
+   * ═══ ARAMA (YETKİ/2 Y2-4) ═══
+   *
+   * ÖLÇÜLEN SORUN: tablo 184 satır ve 41 bölüm. "Muhasebe" 122. satırda,
+   * 25. bölümde. Arama ve bölüm bağlantısı olmadığı için Mehmet
+   * "matriste muhasebe yok" diye ölçtü — VARDI, ULAŞILAMIYORDU.
+   *
+   * Arama hem izin ADINDA hem ANAHTARINDA hem BÖLÜM adında geçiyor:
+   * kullanıcı bazen "fatura" yazıyor (ad), bazen "accounting" (anahtar),
+   * bazen "muhasebe" (bölüm). Üçü de aynı yere götürmeli.
+   *
+   * Türkçe katlama: `enderunFold` yok burada; `toLocaleLowerCase("tr")`
+   * yeterli — I/ı ve İ/i ayrımı doğru çalışsın diye kültür AÇIKÇA
+   * veriliyor (kültüre bağlı varsayılan bu projede tuzak sayılıyor).
+   */
+  const [arama, setArama] = useState("");
+
   const permissionGroups = useMemo(() => {
+    const sorgu = arama.trim().toLocaleLowerCase("tr");
+
     const groups = new Map<string, PermissionDefinition[]>();
     for (const permission of matrix?.permissions ?? []) {
+      if (sorgu) {
+        const havuz = [
+          permission.name ?? "",
+          permission.key ?? "",
+          permission.module ?? "",
+          permission.description ?? "",
+        ]
+          .join(" ")
+          .toLocaleLowerCase("tr");
+
+        if (!havuz.includes(sorgu)) continue;
+      }
+
       const current = groups.get(permission.module) ?? [];
       current.push(permission);
       groups.set(permission.module, current);
     }
     return [...groups.entries()];
-  }, [matrix]);
+  }, [matrix, arama]);
+
+  /** Bölüm başlığına kaydırma — bölüm listesi bağlantıları için. */
+  const bolumeGit = useCallback((bolum: string) => {
+    const hedef = document.getElementById(bolumKimligi(bolum));
+    hedef?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, []);
 
   async function toggleCell(roleId: string, permissionKey: string, roleName: string) {
     if (!matrix) return;
@@ -201,8 +253,15 @@ export default function PermissionMatrixPage() {
       design="redwood"
       title="Yetki Matrisi"
       description="Rol × izin tablosu — bir hücreye tıklayın, anında kaydedilir"
+      /*
+       * BELGE KAYMAZ, TABLO KAYAR (YETKİ/2 Y2-4).
+       * Gerekçesi `erp-shell.tsx` içindeki prop yorumunda; buradaki
+       * somut sebep: 184 satırlık tablo sayfayı uzatınca `sticky`
+       * başlıklar ekranın dışında kalıyordu.
+       */
+      tamYukseklik
     >
-      <div className="space-y-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
         {/* Matris hücreleri anında kaydediliyor; başka yöneticinin değişikliği tazelenmeden görünmüyordu. */}
         <div className="flex justify-end">
           <Button variant="secondary" onClick={() => void load()}>Yenile</Button>
@@ -230,12 +289,59 @@ export default function PermissionMatrixPage() {
           )}
         </div>
 
+        {/* ── ARAMA + BÖLÜM LİSTESİ ────────────────────────────────── */}
+        {matrix && (
+          <div className="space-y-2">
+            <input
+              type="search"
+              value={arama}
+              onChange={(e) => setArama(e.target.value)}
+              placeholder="İzin, anahtar ya da bölüm ara — örn. fatura, accounting, muhasebe"
+              aria-label="İzin ara"
+              className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-cyan-500"
+            />
+
+            <div className="flex flex-wrap gap-1.5">
+              {permissionGroups.map(([bolum, izinler]) => (
+                <button
+                  key={bolum}
+                  type="button"
+                  // Testin çipleri ada göre tahmin etmeden bulması için.
+                  data-bolum-cip="1"
+                  onClick={() => bolumeGit(bolum)}
+                  className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:border-cyan-500 hover:text-cyan-700"
+                >
+                  {bolum} <span className="text-slate-400">{izinler.length}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* SONUÇ YOKSA SEBEBİ SÖYLENİR: boş tablo, "arama tutmadı" ile
+                "veri gelmedi"yi aynı gösterirdi. */}
+            {arama.trim() && permissionGroups.length === 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <strong>&ldquo;{arama}&rdquo; ile eşleşen izin yok.</strong> İzin
+                adı, anahtarı (ör. <code>accounting.view</code>) ya da bölüm adı
+                yazabilirsiniz.
+              </div>
+            )}
+          </div>
+        )}
+
         {loading ? (
           <div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm text-slate-500">
             Yetki matrisi yükleniyor...
           </div>
         ) : !matrix ? null : (
-          <div className="overflow-auto rounded-xl border border-slate-200 bg-white">
+          /*
+           * KAYAN ŞEY TABLO, SAYFA DEĞİL.
+           *
+           * `sticky` sınıfları BAŞTAN BERİ vardı ama işe yaramıyordu:
+           * kapsayıcının yükseklik sınırı yoktu, sayfa kayıyordu ve
+           * başlık kapsayıcının tepesine yapışıp ekranın dışında
+           * kalıyordu. Sınır konunca aynı sınıflar çalışıyor.
+           */
+          <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr>
@@ -281,7 +387,14 @@ export default function PermissionMatrixPage() {
                     <tr>
                       <td
                         colSpan={matrix.roles.length + 1}
-                        className="sticky left-0 z-10 border-b border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600"
+                        id={bolumKimligi(module)}
+                        /*
+                         * BÖLÜM BAŞLIĞI HEM SOLDA HEM ÜSTTE YAPIŞIK.
+                         * `top-[64px]`: rol başlığı satırının altına
+                         * oturuyor; ikisi üst üste binmesin diye ölçülen
+                         * başlık yüksekliği kadar aşağıda.
+                         */
+                        className="sticky left-0 top-[64px] z-[15] border-b border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600"
                       >
                         {module}
                       </td>

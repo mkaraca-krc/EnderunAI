@@ -37,6 +37,38 @@ type Rule = {
 };
 
 const RULES: Rule[] = [
+  /*
+   * ═══ DASHBOARD (YETKİ/1, 2026-09-07) ═══
+   *
+   * BURADA KURAL YOKTU ve bu, kullanıcı bazlı KISITIN sessizce
+   * uygulanmamasına yol açıyordu.
+   *
+   * ÖLÇÜLEN ZİNCİR:
+   *   · uakkaya'ya `dashboard.view` için Deny kaydı yazılmış (19 kısıt)
+   *   · sunucunun kanonik çözücüsü bunu DOĞRU okuyor — aynı SQL canlıda
+   *     koşuldu, `dashboard.view` için `izinli = false` döndü
+   *   · `/auth/me` de izni VERMİYOR (tarayıcıda ölçüldü)
+   *   · ama `routePermission("/dashboard")` **null** dönüyordu ve
+   *     `routeErisimi` null gördüğünde `true` diyor
+   *
+   * Yani kayıt doğru, çözücü doğru, uç doğru — ekranda kısıta BAKAN
+   * kimse yoktu. Kapı yokken kilidin doğru çalışması bir şey ifade
+   * etmiyor.
+   *
+   * BU KURALIN ETKİSİ ÖLÇÜLDÜ (canlı, 4 etkin kullanıcı):
+   *   mehmet   dashboard.view rolden var, kısıt yok  -> erişir
+   *   smemis   rolden var, KISITLI                   -> kesilir (istenen)
+   *   uakkaya  rolden var, KISITLI                   -> kesilir (istenen)
+   *   vtepe    rolden YOK  (Araç Sorumlusu)          -> KESİLİR
+   *
+   * `vtepe` istenmeyen bir yan etki ve gerekçesi ayrı: 15 rolün 6'sı
+   * `dashboard.view` taşımıyor (Araç Sorumlusu, Depo Sorumlusu, Finans
+   * Sorumlusu, Satın Alma Sorumlusu, Satış Personeli, Sekreterya).
+   * Bu bir ROL KAPSAMI kararı ve Mehmet'e ait (Y2-3) — burada
+   * DEĞİŞTİRİLMEDİ, raporlandı.
+   */
+  { match: "/dashboard", permission: "dashboard.view" },
+
   // --- Sistem yönetimi ---
   {
     // Şirket ayarları hem ayar hem kullanıcı yönetimi tarafından

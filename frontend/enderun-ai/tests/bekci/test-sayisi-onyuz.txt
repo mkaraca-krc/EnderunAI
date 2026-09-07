@@ -105,5 +105,16 @@
 #   BU TESTIN ILK HALI YANLIS YERDEN OLCUYORDU: oturum acmis sayfadan
 #   fetch ediyordu ve sonda ISIRMADI - cerez varken middleware
 #   gecirmis. Temiz baglama tasininca kirmizi verdi.
-statik: 472
+# YETKI/1 + YETKI/2 (2026-09-07): 472 -> 479, katki +7.
+#   Gevseklik ciranin kendi baskisindan okundu: "cizgi 472 · gercek
+#   479 · gevseklik 7". Dokum:
+#   yetki-kisit.spec.ts 2 bildirim (biri dongude 2 ekran uretiyor):
+#     sunucu kisitlanan izinleri VERMIYOR (pozitif kontrol +
+#       TOTOLOJI KAPISI: ayni izin kisitsiz kullanicida VAR)
+#     kisitli ekran acilmamali (dashboard, muhasebe)
+#   yetki-matrisi.spec.ts 4: arama suzuyor, bolum baglantisi goturuyor,
+#     rol/bolum basliklari yapisik kaliyor, belge kaymiyor.
+#   route-permissions.test.ts +1: "dashboard izne bagli" - olculmus
+#     kusurun donmemesini tutuyor.
+statik: 479
 dinamik: 15
