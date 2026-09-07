@@ -66,5 +66,16 @@
 #   temizlenmesi, atamanın isteğe bağlı olması, kaskad durumunun
 #   sunucuya gitmemesi, Yapacak sütununun sunucunun hesabını
 #   göstermesi.
-statik: 454
+# M3/2c-2 CANLI BAGLANTI (2026-09-07): 454 -> 465, katki +11.
+#   Gevseklik ciranin kendi baskisindan okundu (Kural 55/D):
+#   "cizgi 454 · gercek 465 · gevseklik 11". Dokum:
+#   canli-baglanti.test.ts 6: tasima adi window'a yaziliyor, jeton
+#     sorgu dizesine konmuyor, cikis baglantiyi kapatiyor, baglanti
+#     baloncukta kuruluyor, yeniden baglanma araliklari artan,
+#     rozet sunucudan toplaniyor.
+#   taslak-iki-yuzey.test.tsx 3 + panel-esigi-tek-kaynak.test.ts 2:
+#     M3/2c-1'in kapanisinda yazilmisti, cizgiye o pakette
+#     tasinmamisti. Cizgi YUKARI serbest oldugu icin bu mesru bir
+#     bosluktu; burada kapatiliyor.
+statik: 465
 dinamik: 15

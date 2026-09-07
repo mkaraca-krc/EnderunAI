@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import {
+  canliBaglantiyiBaslat,
+  canliMesajDinle,
+} from "@/lib/mesajlasma/canli-baglanti";
+
 import { useCurrentUser } from "@/lib/use-current-user";
+import { useTaslakDeposu } from "@/lib/mesajlasma/taslak-deposu";
 import { useRefreshable } from "@/lib/data/use-refreshable";
 import {
   MESAJ_ARAMA_EN_AZ_HARF,
@@ -78,15 +84,13 @@ export interface MesajPaneliOzellikleri {
   /** Panel kipinde açılışta seçili gelecek konuşma. */
   baslangicKonusmaId?: string | null;
   /**
-   * TASLAKLAR DIŞARIDAN GELİYOR — KONUŞMA BAŞINA.
+   * Taslak değiştiğinde haber: hangi konuşma, ne yazıldı.
    *
-   * Bu bileşen panel kapandığında sökülüyor; taslağı burada tutmak
-   * kapatınca kaybetmek demekti. Baloncuk tutuyor, buraya yalnız
-   * okunacak hâli geçiyor.
+   * TASLAĞIN KENDİSİ ARTIK PROP DEĞİL — paylaşılan `TaslakDeposu`ndan
+   * okunuyor. Prop olsaydı `/mesajlar` sayfasının onu geçirmesi
+   * gerekirdi ve geçirmediği gün (bugünkü kusur) kullanıcı yazdığını
+   * kaybederdi. Bu geri çağrı yalnız KAPATMA UYARISI için duruyor.
    */
-  taslaklar?: Record<string, string>;
-
-  /** Taslak değiştiğinde: hangi konuşma, ne yazıldı. */
   onTaslakDegisti?: (konusmaId: string, metin: string) => void;
 }
 
@@ -95,7 +99,6 @@ export default function MesajPaneli({
   onKapat,
   onKonusmaDegisti,
   baslangicKonusmaId,
-  taslaklar,
   onTaslakDegisti,
 }: MesajPaneliOzellikleri) {
   const { user } = useCurrentUser();
@@ -125,17 +128,29 @@ export default function MesajPaneli({
   const [yerelTaslak, setYerelTaslak] = useState("");
 
   /*
-   * TASLAK KONUŞMA BAŞINA OKUNUYOR.
+   * TASLAK PAYLAŞILAN DEPODAN — İKİ YÜZEY AYNI KAYNAĞI OKUYOR.
    *
-   * Dışarıdan bir sözlük geliyorsa (panel kipi) SEÇİLİ KONUŞMANIN
-   * metni gösteriliyor; A'ya yazılan B'de görünmüyor. Sözlük yoksa
-   * (tam sayfa kipi, tek başına kullanım) yerel durum kullanılıyor.
+   * Panel ve `/mesajlar` tam sayfası aynı `TaslakDeposu`nu kullanıyor.
+   * Önce panelde tutuluyordu ve tam sayfa onu görmüyordu: panelde
+   * yazıp `/mesajlar`'a giden yazdığını KAYBEDİYORDU. Dar pencerede ✉
+   * düğmesi doğrudan `/mesajlar`'a götürdüğü için bu, telefondan
+   * girenlerin tamamının yaşadığı yoldu.
+   *
+   * Depo yoksa (sağlayıcısız render) yerel duruma düşüyor — patlamak
+   * kullanıcıya mesajlaşmayı tamamen kaybettirirdi.
    */
-  const taslak = taslaklar ? (secili ? (taslaklar[secili] ?? "") : "") : yerelTaslak;
+  const depo = useTaslakDeposu();
+
+  const taslak = depo
+    ? (secili ? (depo.taslaklar[secili] ?? "") : "")
+    : yerelTaslak;
 
   function setTaslak(deger: string) {
-    if (taslaklar) {
-      if (secili) onTaslakDegisti?.(secili, deger);
+    if (depo) {
+      if (secili) {
+        depo.taslakYaz(secili, deger);
+        onTaslakDegisti?.(secili, deger);
+      }
       return;
     }
 
@@ -209,6 +224,55 @@ export default function MesajPaneli({
   useEffect(() => {
     dip.current?.scrollIntoView({ block: "end" });
   }, [mesajlar]);
+
+  /*
+   * ═══ CANLI AKIŞ ═══
+   *
+   * `secili`yi bağımlılık listesine koymak, her konuşma değişiminde
+   * aboneliği söküp yeniden kurardı. Onun yerine seçili konuşma bir
+   * ref'te tutuluyor ve abonelik BİR KEZ kuruluyor.
+   */
+  const seciliRef = useRef<string | null>(secili);
+
+  useEffect(() => {
+    seciliRef.current = secili;
+  }, [secili]);
+
+  useEffect(() => {
+    void canliBaglantiyiBaslat();
+
+    return canliMesajDinle((gelen) => {
+      /*
+       * LİSTE HER DURUMDA TAZELENİYOR: sıralama, önizleme ve
+       * okunmamış sayısı sunucuda değişti. Seçili olmayan bir
+       * konuşmaya gelen mesaj da listede görünmeli.
+       */
+      void konusmaKaynagi.refresh();
+
+      if (gelen.konusmaId !== seciliRef.current) return;
+
+      setMesajlar((mevcut) => {
+        /*
+         * KENDİ GÖNDERDİĞİMİZ MESAJ İKİ KEZ GELİYOR: bir kez
+         * `gonder()` yanıtından, bir kez yayından (sunucu gönderene
+         * de yayınlıyor — başka sekmesi açık olabilir). Kimliğe göre
+         * eleniyor; zamana göre elemek saat farkında bozulurdu.
+         */
+        if (mevcut.some((x) => x.id === gelen.id)) return mevcut;
+        return [...mevcut, gelen];
+      });
+
+      // Açık konuşmaya gelen mesaj okunmuş sayılır.
+      void messagingService
+        .okundu(gelen.konusmaId)
+        .then(() => konusmaKaynagi.refresh())
+        .catch((err) => console.warn("Okundu işaretlenemedi:", err));
+    });
+    // Abonelik BİR KEZ kurulur. `konusmaKaynagi.refresh` bağımlılığa
+    // konsaydı her tazelemede soket dinleyicisi sökülüp yeniden
+    // takılırdı; kaçan mesaj tam o aralıkta düşerdi.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function gonder() {
     const govde = taslak.trim();

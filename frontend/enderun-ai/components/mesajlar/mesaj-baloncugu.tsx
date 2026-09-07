@@ -6,7 +6,14 @@ import { useRouter, usePathname } from "next/navigation";
 import MesajPaneli from "./mesaj-paneli";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { apiClient } from "@/lib/api/api-client";
+import {
+  canliBaglantiyiBaslat,
+  canliMesajDinle,
+} from "@/lib/mesajlasma/canli-baglanti";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { messagingService } from "@/services/messaging.service";
+import { PANEL_DAR_EKRAN_ESIGI } from "@/lib/mesajlasma/panel-esigi";
+import { useTaslakDeposu } from "@/lib/mesajlasma/taslak-deposu";
 
 /**
  * MESAJ BALONCUĞU — PANELİN KÖK LAYOUT'TAKİ EVİ (M3/2c-1).
@@ -47,8 +54,7 @@ import { useCurrentUser } from "@/lib/use-current-user";
  * kırılması demekti.
  */
 
-/** Panelin kullanılamayacağı genişlik. `globals.css` ile aynı eşik. */
-const DAR_EKRAN_ESIGI = 900;
+
 
 /**
  * TERCİH YAZMA GECİKMESİ — HER İKİ ALAN İÇİN AYNI.
@@ -111,17 +117,13 @@ export default function MesajBaloncugu() {
   const [acik, setAcik] = useState(false);
   const [sonKonusma, setSonKonusma] = useState<string | null>(null);
   /*
-   * TASLAK KONUŞMA BAŞINA TUTULUYOR — TEK GENEL ALAN YANLIŞ OLURDU.
+   * TASLAK ARTIK BURADA DEĞİL, PAYLAŞILAN DEPODA.
    *
-   * Kullanıcı A konuşmasına yazıp B'ye geçip geri döndüğünde A'daki
-   * yazdığı durmalı; B'de A'nın metni GÖRÜNMEMELİ. Tek bir genel
-   * taslak alanı ikinci şartı bozardı.
-   *
-   * BURADA TUTULUYOR, PANELDE DEĞİL: panel kapandığında `MesajPaneli`
-   * sökülür. Taslak baloncukta durduğu için kapatıp açmak da metni
-   * kaybettirmiyor.
+   * Panelde tutulduğunda `/mesajlar` tam sayfası onu görmüyordu ve
+   * dar pencerede giden kullanıcı yazdığını kaybediyordu. Depo kök
+   * layout'ta; baloncuk yalnız OKUYOR (kapatma uyarısı için).
    */
-  const [taslaklar, setTaslaklar] = useState<Record<string, string>>({});
+  const taslakDeposu = useTaslakDeposu();
 
   /*
    * KAPATMA UYARISI — TARAYICI DİYALOĞU DEĞİL.
@@ -137,8 +139,35 @@ export default function MesajBaloncugu() {
    */
   const [kapatmaSorusu, setKapatmaSorusu] = useState(false);
 
+  /*
+   * ═══ OKUNMAMIŞ SAYISI SUNUCUDAN OKUNUR, SAYILMAZ ═══
+   *
+   * Gelen yayınları yerel bir sayaçla toplamak kolaydı ve YANLIŞ
+   * olurdu: başka bir sekmede okunan mesaj bu sekmenin sayacından
+   * düşmez, kaçırılan yayın hiç eklenmez, yeniden bağlanma
+   * aralığında gelenler kaybolur. Sayı her seferinde konuşma
+   * listesinden toplanıyor — sunucu ne diyorsa o.
+   */
+  const [okunmamis, setOkunmamis] = useState(0);
+
+  const okunmamisTazele = useCallback(() => {
+    void messagingService
+      .konusmalar()
+      .then((sayfa) =>
+        setOkunmamis(
+          (sayfa.kayitlar ?? []).reduce(
+            (toplam, konusma) => toplam + (konusma.okunmamisSayisi ?? 0),
+            0
+          )
+        )
+      )
+      .catch(() => {
+        // Rozet için kullanıcıyı bölmeyiz; bir sonraki olayda tazelenir.
+      });
+  }, []);
+
   /** Açık konuşmada yazılmış metin var mı — kapatma uyarısı için. */
-  const acikTaslakVar = Object.values(taslaklar).some(
+  const acikTaslakVar = Object.values(taslakDeposu?.taslaklar ?? {}).some(
     (x) => x.trim().length > 0
   );
 
@@ -229,7 +258,7 @@ export default function MesajBaloncugu() {
 
   const ac = useCallback(() => {
     // MOBİLDE PANEL AÇILMAZ: dar ekranda tam sayfaya gidilir.
-    if (window.innerWidth < DAR_EKRAN_ESIGI) {
+    if (window.innerWidth < PANEL_DAR_EKRAN_ESIGI) {
       router.push("/mesajlar");
       return;
     }
@@ -270,6 +299,52 @@ export default function MesajBaloncugu() {
   );
 
   /*
+   * ═══ CANLI BAĞLANTI BALONCUKTA KURULUYOR, PANELDE DEĞİL ═══
+   *
+   * Panel yalnız AÇIKKEN monte; bağlantı orada kurulsaydı panel
+   * kapalıyken hiç mesaj gelmez ve rozet hiç artmazdı — yani rozetin
+   * tek işe yaradığı durumda çalışmazdı. Baloncuk kök layout'ta ve
+   * oturum boyunca monte kalıyor.
+   *
+   * `canliBaglantiyiBaslat` ÇAĞRILDIĞINDA bağlantı zaten varsa
+   * aynısını döndürüyor: panel de çağırıyor, ikinci soket açılmıyor.
+   */
+  useEffect(() => {
+    if (!user) return;
+
+    void canliBaglantiyiBaslat();
+    okunmamisTazele();
+
+    return canliMesajDinle(() => okunmamisTazele());
+  }, [user, okunmamisTazele]);
+
+  /*
+   * SEKME BAŞLIĞI — ARKA PLANDAKİ SEKMEDE TEK GÖRÜNÜR İŞARET.
+   *
+   * Özgün başlık bir ref'te saklanıyor: `document.title`'ı her
+   * seferinde okuyup önek eklemek "(2) (1) Enderun AI" üretirdi.
+   */
+  const ozgunBaslik = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    ozgunBaslik.current ??= document.title;
+    const taban = ozgunBaslik.current;
+
+    document.title = okunmamis > 0 ? `(${okunmamis}) ${taban}` : taban;
+
+    return () => {
+      if (ozgunBaslik.current) document.title = ozgunBaslik.current;
+    };
+  }, [okunmamis]);
+
+  /* Panel açılınca rozet tazelenir: içeride okunanlar düşsün. */
+  useEffect(() => {
+    if (acik) okunmamisTazele();
+  }, [acik, okunmamisTazele]);
+
+  /*
    * ═══ RENDER KAPISI — ÜÇ AYRI SEBEP, ÜÇÜ DE SESSİZ ═══
    *
    * 1. OTURUM YÜKLENİYOR: hiçbir şey render edilmiyor. Aksi hâlde
@@ -296,10 +371,6 @@ export default function MesajBaloncugu() {
             onKapat={kapat}
             onKonusmaDegisti={konusmaDegisti}
             baslangicKonusmaId={sonKonusma}
-            taslaklar={taslaklar}
-            onTaslakDegisti={(konusmaId, metin) =>
-              setTaslaklar((mevcut) => ({ ...mevcut, [konusmaId]: metin }))
-            }
           />
         </div>
       )}
@@ -320,6 +391,20 @@ export default function MesajBaloncugu() {
         className="mesaj-baloncuk"
       >
         {acik ? "✕" : "✉"}
+
+        {/*
+          ROZET YALNIZ PANEL KAPALIYKEN: panel açıkken sayı zaten
+          konuşma listesinde konuşma konuşma görünüyor ve düğmenin
+          üstünde ikinci bir sayı kafa karıştırırdı.
+        */}
+        {!acik && okunmamis > 0 && (
+          <span
+            className="mesaj-baloncuk-rozet"
+            aria-label={`${okunmamis} okunmamış mesaj`}
+          >
+            {okunmamis > 99 ? "99+" : okunmamis}
+          </span>
+        )}
       </button>
     </>
   );

@@ -146,5 +146,22 @@
 #                             ÖNDEYDİ. İzinsiz rol testin içinde
 #                             üretiliyor çünkü 15 rolün 15'i artık
 #                             anahtarı taşıyor.)
-statik: 2942
+# M3/2c-2 YAYIN ANINDA YETKI (2026-09-07): 2942 -> 2946, gevseklik 4.
+#   YayinAnindaYetkiTests 4: rolu alinan uye, kisisel Deny kaydi olan
+#   uye, hesabi kapatilan uye ve konusmadan cikan uye alici
+#   listesinden duser. Her ayakta pozitif kontrol AYNI TESTIN ICINDE:
+#   A'nin listede durdugu da siniyor — "kimse alamiyor" ile "B
+#   alamiyor" ayri sey.
+#   SONDA (Kural 61): duzeltme cikarilmis halde kosuldu, ILAN EDILEN
+#   SONUC BIREBIR GELDI — 3 kirmizi (Assert.DoesNotContain: B hala
+#   alici) + 1 yesil (uyelik kapisi zaten vardi). Duzeltmeli halde 4
+#   yesil.
+# HUB YAYIN MUHAFIZI (2026-09-07): 2946 -> 2949, gevseklik 3.
+#   HubYayinMuhafiziTests 3: toptan yayin (Clients.All/Others/AllExcept/
+#   OthersInGroup) yasak; her .Group(...) cagrisi kullanici grubuna
+#   gidiyor; muhafiz isiriyor (yuzey >200 dosya + sahte ihlal
+#   yakalaniyor + mesru kullanim yanlis alarm vermiyor).
+#   TARANAMAYAN IDDIA ACIKCA YAZILI: "alicilar TAZE cozuldu mu"
+#   kaynak metninden okunamaz; onu tutan sey YayinAnindaYetkiTests.
+statik: 2949
 dinamik: 25

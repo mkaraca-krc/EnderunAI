@@ -655,6 +655,7 @@ builder.Services.AddSignalR(options =>
  *   GET  /api/portal/{token}/*        — kendi paylaşım anahtarı modeli
  *   GET  /api/company-settings/logo   — giriş ekranı logosu
  *   GET  /api/health                  — safe-deploy sağlık kontrolü
+ *   GET  /api/hubs/tasima-denetimi    — duman kontrolünün WebSocket gözü
  *
  * AuthorizeGuardTests ikinci savunma hattı olarak duruyor: fallback
  * bir gün kaldırılırsa o test controller'ları yakalar.
@@ -860,7 +861,40 @@ app.MapControllers();
  * access_log kapalı). `/api/backend/` altına konamazdı: orası bir
  * Next.js Route Handler ve WebSocket yükseltmesi yapamaz.
  */
-app.MapHub<EnderunAI.Api.Hubs.MesajHub>("/api/hubs/mesaj");
+/*
+ * SEÇENEKLER LAMBDA DEĞİL, ADLANDIRILMIŞ METOT — GEREKÇESİ ÖLÇÜLDÜ.
+ *
+ * Burada `options => { ... }` yazıldığında Release derlemesi
+ * `System.OutOfMemoryException` ile düştü (Roslyn `LocalRewriter`,
+ * IOperation ağacı). Debug geçiyordu; fark ÇÖZÜMLEYİCİLERDEN
+ * geliyor. Program.cs üst düzey deyimlerden oluşuyor, yani tamamı
+ * TEK bir `<Main>$` metodu; eklenen her lambda o metodun operasyon
+ * ağacını büyütüyor ve dosya o sınırın kenarında duruyor.
+ *
+ * Ölçüldü: HEAD Release'te temiz derliyor; yalnız bu lambda
+ * eklenince düşüyor; lambda adlandırılmış metoda çıkarılınca
+ * yeniden derliyor.
+ *
+ * BU BİR TUZAK VE KAYDA GEÇTİ: Program.cs'e eklenecek bir sonraki
+ * lambda yayını durdurabilir. Kalıcı çözüm dosyayı bölmek — ayrı
+ * bir iş.
+ */
+app.MapHub<EnderunAI.Api.Hubs.MesajHub>(
+    "/api/hubs/mesaj",
+    EnderunAI.Api.Hubs.MesajHubSecenekleri.Uygula);
+
+/*
+ * HUB YOLUNUN TAŞIMA DENETİMİ — DUMAN KONTROLÜNÜN GÖZÜ.
+ *
+ * Gerekçesi `Hubs/HubTasimaDenetimi.cs` içinde yazılı. Özeti:
+ * kimliksiz WS el sıkışması 401 alıyor ve 401, vekil `Upgrade`
+ * başlığını geçirse de geçirmese de AYNI. Ayırmayan bir ölçüm
+ * ölçüm değildir.
+ *
+ * LAMBDA DEĞİL, METOT GRUBU (AK-11).
+ */
+app.MapGet("/api/hubs/tasima-denetimi", EnderunAI.Api.Hubs.HubTasimaDenetimi.Oku)
+   .AllowAnonymous();
 
 /*
  * SAĞLIK KONTROLÜ ANONİM KALMAK ZORUNDA: safe-deploy servisleri

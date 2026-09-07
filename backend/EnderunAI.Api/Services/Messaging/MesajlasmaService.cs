@@ -78,7 +78,8 @@ public sealed class MesajlasmaService(
     AppDbContext db,
     ICurrentUserService currentUser,
     ICurrentDataScopeService dataScope,
-    IHubContext<MesajHub> hub) : IMesajlasmaService
+    IHubContext<MesajHub> hub,
+    IUserAuthorizationService yetkiCozucu) : IMesajlasmaService
 {
     /// <summary>Liste önizlemesinde gösterilen en fazla karakter.</summary>
     private const int OnizlemeUzunlugu = 120;
@@ -598,23 +599,83 @@ public sealed class MesajlasmaService(
     /// </summary>
     private async Task YayinlaAsync(Guid konusmaId, MesajOzeti ozet, CancellationToken ct)
     {
-        // GÖNDERENİN ÜYELİĞİ ÜZERİNDEN OKUNUYOR. Doğrudan
-        // `ConversationMembers` okusaydık kapı yalnız "çağıran daha
-        // önce kontrol etmişti" varsayımına dayanırdı.
+        var alicilar = await AlicilariCozAsync(konusmaId, ozet.GonderenUserId, ct);
+
+        foreach (var uye in alicilar)
+        {
+            await hub.Clients
+                .Group(MesajHub.KullaniciGrubu(uye))
+                .SendAsync("MesajGeldi", ozet, ct);
+        }
+    }
+
+    /// <summary>
+    /// ALICILAR YAYIN ANINDA ÇÖZÜLÜR — BAĞLANTI ANINDA DEĞİL.
+    ///
+    /// ═══ NEDEN AYRI VE GENEL BİR METOT ═══
+    ///
+    /// Hub bağlantısı el sıkışmada kimlik doğrular ve sonra KENDİ
+    /// BAŞINA yaşar: jeton süresi dolsa, izin alınsa, parola
+    /// değiştirilse bile soket açık kalır. Alıcıları bağlantı anındaki
+    /// bilgiye göre seçmek, o anki yetkiyi 12 saat boyunca doğru
+    /// saymak demekti.
+    ///
+    /// **Bağlantı anındaki yetki, yayın anındaki yetki değildir.**
+    ///
+    /// ═══ İKİ ŞART, İKİSİ DE O AN ═══
+    ///
+    /// 1. ÜYELİK — gönderenin kendi üyeliği üzerinden okunuyor
+    ///    (`ApplyMembership`). Doğrudan `ConversationMembers`
+    ///    okusaydık kapı "çağıran daha önce kontrol etmişti"
+    ///    varsayımına dayanırdı. Konuşmadan çıkarılan üye zaten
+    ///    düşüyordu.
+    /// 2. İZİN — `mesajlar.view`. **Bu eksikti:** izni alınan bir
+    ///    kullanıcı açık bağlantısı üzerinden mesaj almaya devam
+    ///    ediyordu (ölçüldü 2026-09-07).
+    ///
+    /// ═══ MALİYET ÖLÇÜLDÜ ═══
+    ///
+    /// Üye başına 0,14 ms (ölçüldü). Konuşma başına ortalama 2,0 üye
+    /// → ~0,3 ms. Toplu tek sorgu 0,42 ms ile daha ucuz DEĞİLDİ ve
+    /// kuralın ikinci okuyucusunu doğuruyordu; kanonik çözücü seçildi.
+    /// Üye sayısı büyürse (grup konuşmaları) burası yeniden ölçülmeli.
+    ///
+    /// ═══ SINANABİLİR OLSUN DİYE AYRI ═══
+    ///
+    /// Yayının kendisi test edilemiyor (bağlı istemci yok). Alıcı
+    /// çözümü ayrı bir metot olunca doğrudan sınanabiliyor; kapı
+    /// "yayın gitti mi" değil "kime gitmeliydi" sorusuna cevap veriyor.
+    /// </summary>
+    internal async Task<IReadOnlyList<Guid>> AlicilariCozAsync(
+        Guid konusmaId, Guid gonderenUserId, CancellationToken ct)
+    {
         var uyeler = await db.Conversations
             .AsNoTracking()
-            .ApplyMembership(ozet.GonderenUserId)
+            .ApplyMembership(gonderenUserId)
             .Where(x => x.Id == konusmaId)
             .SelectMany(x => x.Members
                 .Where(m => m.LeftAtUtc == null)
                 .Select(m => m.UserId))
             .ToListAsync(ct);
 
+        var alicilar = new List<Guid>(uyeler.Count);
+
         foreach (var uye in uyeler)
         {
-            await hub.Clients
-                .Group(MesajHub.KullaniciGrubu(uye))
-                .SendAsync("MesajGeldi", ozet, ct);
+            // KANONİK ÇÖZÜCÜ. İzni burada kendim sorgulasaydım kuralın
+            // İKİNCİ OKUYUCUSU olurdum ve `user_permission_overrides`
+            // üzerinden verilen Deny kaydını hiç görmezdim: rolünde
+            // izin duran ama kişisel olarak yasaklanmış kullanıcı
+            // mesaj almaya devam ederdi.
+            var yetki = await yetkiCozucu.GetAsync(uye, ct);
+
+            if (yetki is null || !yetki.IsActive) continue;
+            if (!yetki.Permissions.Contains(PermissionCatalog.Keys.MesajlarView))
+                continue;
+
+            alicilar.Add(uye);
         }
+
+        return alicilar;
     }
 }

@@ -3,6 +3,7 @@ import "./globals.css";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
 import MesajBaloncugu from "@/components/mesajlar/mesaj-baloncugu";
 import { HataSiniri } from "@/components/erp/hata-siniri";
+import { TaslakDeposuSaglayici } from "@/lib/mesajlasma/taslak-deposu";
 
 export const metadata: Metadata = {
   title: "Enderun ERP",
@@ -34,8 +35,17 @@ export default function RootLayout({
   return (
     <html lang="tr">
       <body>
-        {children}
-        <ServiceWorkerRegistration />
+        {/*
+          TASLAK DEPOSU HEM SAYFAYI HEM PANELİ SARIYOR.
+
+          İki yazma kutusu var — yüzen panel ve /mesajlar tam sayfası —
+          ve ikisi aynı taslağı görmeli. Depo panelde tutulsaydı panel
+          kapanınca, sayfada tutulsaydı rota değişiminde giderdi. Kök,
+          ikisinin de üstünde olan tek yer.
+        */}
+        <TaslakDeposuSaglayici>
+          {children}
+          <ServiceWorkerRegistration />
 
         {/*
           MESAJ PANELİ KÖKTE, {children}'IN DIŞINDA — VE SEBEBİ ÖLÇÜLDÜ.
@@ -56,9 +66,10 @@ export default function RootLayout({
           OTURUM/PORTAL KONTROLÜ BALONCUĞUN İÇİNDE — burada rota listesi
           tutulmuyor; bkz. mesaj-baloncugu.tsx.
         */}
-        <HataSiniri nerede="mesaj-paneli" bicim="govde">
-          <MesajBaloncugu />
-        </HataSiniri>
+          <HataSiniri nerede="mesaj-paneli" bicim="govde">
+            <MesajBaloncugu />
+          </HataSiniri>
+        </TaslakDeposuSaglayici>
       </body>
     </html>
   );

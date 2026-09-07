@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { canliBaglantiyiKapat } from "@/lib/mesajlasma/canli-baglanti";
 import { clearCurrentUserCache } from "@/lib/use-current-user";
 
 type LogoutButtonProps = {
@@ -36,6 +37,13 @@ export function LogoutButton({
       sessionStorage.removeItem("enderun-ai-sidebar-scroll");
 
       clearCurrentUserCache();
+
+      // CANLI BAĞLANTI AÇIK KALMAZ. Çerez silindi ama kurulu soket
+      // kendi başına yaşamaya devam ederdi: aynı makineyi kullanan
+      // bir sonraki kişinin ekranına önceki kullanıcının mesajları
+      // düşerdi. Jeton süresi dolduğunda sunucu düşürüyor
+      // (`CloseOnAuthenticationExpiration`) — çıkış jetonu bitirmez.
+      canliBaglantiyiKapat();
 
       router.replace("/login");
       router.refresh();

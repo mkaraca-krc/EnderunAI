@@ -55,6 +55,12 @@ FRONTEND_NEXT_ROLLBACK_DIR="${REPO_ROOT}/frontend-next-rollback"
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 
 ENV_FILE="/etc/enderunai/backend.env"
+
+# WebSocket duman kontrolü vekile 127.0.0.1'den vuruyor; nginx doğru
+# server bloğunu seçebilsin diye Host başlığı gerekiyor. Değer nginx
+# yapılandırmasındaki `server_name` ile aynı olmalı — ayrışırsa kontrol
+# varsayılan sunucuya düşer ve "karar veremedi" der (sessizce geçmez).
+PROXY_HOST="${PROXY_HOST:-enderunai.com.tr}"
 LOG_FILE="/var/log/enderun-deploy.log"
 
 # Son BAŞARIYLA yayınlanan commit. Hızlı yolun tabanı budur.
@@ -688,6 +694,85 @@ proxy_duman_kontrolu() {
     esac
 }
 
+# ═══════════════════════════════════════════════════════════════
+# WEBSOCKET DUMAN KONTROLÜ — SESSİZ LONGPOLLING DÜŞÜŞÜNE KARŞI
+# ═══════════════════════════════════════════════════════════════
+#
+# NEDEN VAR (2026-09-07): mesajlaşmanın canlı akışı SignalR
+# WebSocket'i üzerinden geliyor ve nginx'te AYRI bir location'a
+# bağlı (`location ^~ /api/hubs/`). O blok bozulursa ya da nginx
+# yeniden yüklenmezse istek `location /api`ye düşer, `Upgrade`
+# başlığı geçmez ve SignalR SESSİZCE LongPolling'e iner.
+#
+# SONUÇ: uygulama çalışıyor görünür — her mesaj için saniyede bir
+# HTTP isteği atarak. Hiçbir sağlık kontrolü ötmez. Bu düşüş bir
+# HAFTA yaşayabilir.
+#
+# ═══ NEDEN 101 BEKLENMİYOR ═══
+#
+# ÖLÇÜLDÜ: kimliksiz bir WS el sıkışması `/api/hubs/mesaj`ta
+# **401** alıyor (Kestrel, `WWW-Authenticate: Bearer`). Yayın
+# betiğinin oturum açacak kimliği yok ve OLMAMALI — sır taşımayan
+# bir kapı, sır taşıyan bir kapıdan iyidir.
+#
+# VE 401 AYIRT ETMİYOR: vekil `Upgrade` başlığını geçirse de,
+# hiç geçirmese de cevap 401. Ayırmayan bir ölçüm ölçüm değildir
+# (Kural 65 — ölçtüğünü sandığın şeyle gerçekte ölçtüğün şey).
+#
+# ═══ NASIL ÖLÇÜLÜYOR ═══
+#
+# `/api/hubs/tasima-denetimi` ANONİM bir uç ve Kestrel'e ULAŞAN
+# başlıklara bakıp iki bool döndürüyor. İstek gerçek yükseltme
+# başlıklarıyla ve VEKİL ÜZERİNDEN atılıyor:
+#
+#   {"yukseltmeBasligiGeldi":true,"baglantiBasligiGeldi":true}
+#     → hub location eşleşti VE yükseltme başlıklarını geçiriyor
+#
+# Uç `/api/hubs/` altında olduğu için nginx'in aynı bloğundan
+# geçiyor: cevap doğruysa `/api/hubs/mesaj` de aynı bloktan geçer.
+#
+# ═══ ÜÇ SONUÇ, ÜÇ DAVRANIŞ (Kural 67) ═══
+#
+#   ikisi de true  → GEÇTİ
+#   biri false     → İHLAL. Yükseltme geçmiyor; YAYIN DURUR.
+#   bağlanılamadı  → KARAR VEREMEDİ. İnsan baksın; yayını düşürmez.
+#   /başka kod
+websocket_duman_kontrolu() {
+    local yanit kod govde
+
+    # Vekil üzerinden (127.0.0.1:80, Host başlığıyla) — doğrudan
+    # Kestrel'e gitmek nginx'i ATLARDI ve ölçmek istediğimiz tam
+    # olarak nginx'in o bloğu.
+    yanit="$(curl -s -m 5 -w $'\n%{http_code}' \
+        -H "Host: ${PROXY_HOST}" \
+        -H "Upgrade: websocket" \
+        -H "Connection: Upgrade" \
+        "http://127.0.0.1/api/hubs/tasima-denetimi" 2>/dev/null)"
+
+    kod="$(printf '%s' "$yanit" | tail -n 1)"
+    govde="$(printf '%s' "$yanit" | head -n -1)"
+
+    if [ "$kod" != "200" ]; then
+        log "WARN" "WebSocket duman kontrolü KARAR VEREMEDİ: HTTP ${kod}."
+        log "WARN" "Hedef uç /api/hubs/tasima-denetimi bulunamadı ya da vekile ulaşılamadı."
+        log "WARN" "Yayın DURDURULMADI — bu kontrolün sorunu, yayının değil."
+        return 0
+    fi
+
+    if printf '%s' "$govde" | grep -q '"yukseltmeBasligiGeldi":true' \
+       && printf '%s' "$govde" | grep -q '"baglantiBasligiGeldi":true'; then
+        log "INFO" "WebSocket duman kontrolü GEÇTİ (Upgrade + Connection vekilden geçti)."
+        return 0
+    fi
+
+    log "ERROR" "WebSocket duman kontrolü İHLAL: yükseltme başlıkları vekilden GEÇMİYOR."
+    log "ERROR" "Yanıt: ${govde}"
+    log "ERROR" "SignalR sessizce LongPolling'e düşer — mesaj başına saniyede bir HTTP isteği."
+    log "ERROR" "Muhtemel sebep: nginx 'location ^~ /api/hubs/' bloğu yok ya da nginx yeniden yüklenmedi."
+    log "ERROR" "GERİ ALMA: sudo cp /etc/nginx/sites-available/enderunai.com.tr.geri-<damga>-hubsuz /etc/nginx/sites-available/enderunai.com.tr && sudo nginx -t && sudo systemctl reload nginx"
+    return 1
+}
+
 wait_for_health() {
     log "INFO" "Sağlık kontrolü başlıyor (en fazla ${HEALTH_CHECK_TIMEOUT_SECONDS}s)..."
     local elapsed=0
@@ -702,6 +787,7 @@ wait_for_health() {
         if [ "$backend_ok" -eq 1 ] && [ "$frontend_ok" -eq 1 ]; then
             log "INFO" "Sağlık kontrolü BAŞARILI (backend + frontend, ${elapsed}s içinde)."
             proxy_duman_kontrolu || return 1
+            websocket_duman_kontrolu || return 1
             return 0
         fi
 

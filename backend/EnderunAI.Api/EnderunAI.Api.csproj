@@ -11,6 +11,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- YAYIN ALICI ÇÖZÜMÜ SINANABİLSİN DİYE. `AlicilariCozAsync`
+         dışarıya açık bir uç değil; hub yayınının kendisi test
+         edilemiyor (bağlı istemci yok), alıcı listesi edilebiliyor. -->
+    <InternalsVisibleTo Include="EnderunAI.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />

@@ -4650,6 +4650,60 @@ okuyan bir insan yoksa, kanal yine tek ayak üstünde.
 
 ---
 
+### AK-10 — AÇIK BAĞLANTI SUNUCUDAN ZORLA DÜŞÜRÜLEMİYOR (2026-09-07)
+
+**M3/2c-2'de yapılan:** alıcılar **yayın anında** çözülüyor. İzni
+alınan, hesabı kapatılan, konuşmadan çıkarılan kullanıcı mesaj
+ALMIYOR — soketi açık kalsa bile.
+
+**Kayda geçen cümle (Mehmet, 2026-09-07):**
+
+> *"Hub'a eklenen her yeni yayın, alıcıyı yayın anında çözmek
+> zorundadır. Bağlantı anındaki yetki, yayın anındaki yetki
+> değildir."*
+
+**Kalan eksik:** açık bir bağlantıyı sunucudan **zorla düşürmek**
+mümkün değil. Bugün bağlantı üç yoldan kapanıyor: istemci kapatır
+(çıkış), jeton süresi dolar (`CloseOnAuthenticationExpiration`), ya da
+ağ düşer. "Bu kullanıcının bağlantısını ŞİMDİ kes" diye bir düğme yok.
+
+**Bugün neden yeterli:** yayın anındaki kapı, bağlantının açık
+kalmasını zararsız hale getiriyor — açık soket veri taşımıyor. Zorla
+düşürme, kapıyı değil **kaynağı** kapatmak olurdu; iyi olurdu ama
+şart değil.
+
+**3c BULGUSU — KULLANICI BAŞINA BAĞLANTI SINIRI YOK.** Bir kullanıcı
+kaç sekme açarsa o kadar soket kuruyor; üst sınır yok. Bugün 12
+kullanıcıyla sorun değil, ama sınırsız bir kaynak sessizce sınırsız
+kalır.
+
+---
+
+### AK-11 — Program.cs ÇÖZÜMLEYİCİ SINIRININ KENARINDA (2026-09-07)
+
+**ÖLÇÜLDÜ:** `Program.cs` içine tek bir lambda eklemek Release
+derlemesini `System.OutOfMemoryException` ile düşürdü (Roslyn
+`LocalRewriter`, IOperation ağacı). Debug geçiyordu — fark
+**çözümleyicilerden** geliyor.
+
+Kanıt sırası: HEAD Release'te temiz derliyor → yalnız Program.cs
+değişikliği geri konunca düşüyor → lambda adlandırılmış bir metoda
+çıkarılınca yeniden derliyor (`Hubs/MesajHubSecenekleri.cs`).
+
+**MEKANİZMA:** Program.cs üst düzey deyimlerden oluşuyor, yani
+**tamamı tek bir `<Main>$` metodu**. Eklenen her lambda o tek metodun
+operasyon ağacını büyütüyor ve dosya sınırın kenarında duruyor.
+
+**TUZAK:** buraya eklenecek **bir sonraki lambda yayını durdurabilir**
+ve hata mesajı sebebi söylemez. Kalıcı çözüm dosyayı bölmek — ayrı bir
+iş, bu pakette yapılmadı.
+
+*(Not: 2026-09-06'daki `.editorconfig` düzeltmesi ayrı bir OOM'du —
+göç dosyalarının çözümleyiciden muaf tutulması. Bu, ikinci ve farklı
+bir sınır.)*
+
+---
+
 ### AK-2 EKSİĞİ — GÜRÜLTÜ SINIRI HENÜZ YOK
 
 Bugünkü betikte: her düşüşte bir posta gider, aynı arıza tekrarlarsa
