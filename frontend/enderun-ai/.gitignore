@@ -49,3 +49,7 @@ next-env.d.ts
 # Playwright duzen testlerinin ciktilari (ekran goruntusu, iz)
 test-results/
 playwright-report/
+
+# Duzen testi rig-inin AYRI yapi dizini - canlinin .next-i ile
+# karismasin diye (2026-09-07 olayi).
+.next-duzen/

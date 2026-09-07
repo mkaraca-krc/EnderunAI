@@ -265,6 +265,31 @@ log "Konuşma hazır."
 #
 # `--derleme-atla` yalnız yapının taze olduğu BİLİNDİĞİNDE kullanılır.
 cd "$ON_YUZ"
+
+# ═══ AYRI YAPI DİZİNİ — CANLIYI EZMEME KAPISI ═══
+#
+# ÖLÇÜLEN OLAY (2026-09-07): bu betik `npm run build`i CANLININ
+# SERVİS ETTİĞİ dizinde koşuyordu. Canlı Next süreci 20:33:39'da
+# başlamıştı; rig 20:50:40'ta `.next`i altından değiştirdi. Çalışan
+# sunucu ESKİ manifest'i tutuyor, diskteki dosyalar YENİ — parça
+# 404'leri ve bozuk render.
+#
+# Kullanıcıya "yetki matrisi bozuldu" ve "/dokumanlar açılmıyor" diye
+# görünen şey buydu. Kod değil, dizin çakışmasıydı. Test düzeneğinin
+# canlıyı bozması, testin kendisinden daha pahalıya mal oldu.
+export NEXT_DIST_DIR=".next-duzen"
+
+# FAIL-CLOSED: dizin canlınınkiyle aynıysa HİÇ BAŞLAMA.
+if [ "$NEXT_DIST_DIR" = ".next" ] || [ -z "$NEXT_DIST_DIR" ]; then
+  oldu "Yapı dizini canlınınkiyle aynı (.next). Rig canlıyı ezerdi."
+fi
+
+# Canlı servis bu dizini mi servis ediyor — ölç, varsayma.
+CANLI_DIZIN="$(systemctl show enderunai-frontend -p WorkingDirectory --value 2>/dev/null)"
+if [ "$CANLI_DIZIN" = "$ON_YUZ" ] && [ "$NEXT_DIST_DIR" = ".next" ]; then
+  oldu "Canlı ön yüz bu dizinden servis ediyor ve yapı dizini ayrılmamış."
+fi
+
 if [ "${DERLEME_ATLA:-hayir}" = "evet" ]; then
   log "Ön yüz derlemesi ATLANDI (DERLEME_ATLA=evet)."
 else
@@ -276,7 +301,7 @@ fi
 
 log "Ön yüz ${ON_PORT} portunda açılıyor..."
 BACKEND_API_URL="http://127.0.0.1:${ARKA_PORT}" PORT="${ON_PORT}" \
-  setsid npx next start -p "${ON_PORT}" > /tmp/duzen-on.log 2>&1 &
+  setsid env NEXT_DIST_DIR="$NEXT_DIST_DIR" npx next start -p "${ON_PORT}" > /tmp/duzen-on.log 2>&1 &
 ON_PID=$!
 
 for i in $(seq 1 60); do
