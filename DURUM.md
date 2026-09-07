@@ -3232,6 +3232,47 @@ eksik, bazıları başka adla karşılanmış. Üç tablo da **0 satır**
 **ÇİZGİYE BAĞLANMADI:** ayrı bir karar ve Mehmet'e rapor ediliyor.
 Cırcır bu sayıyı her koşuda **raporluyor** ama üzerinden düşmüyor.
 
+### İKİNCİ ÇİZGİ VE MEKANİZMASI — ÖLÇÜLDÜ (2026-09-07)
+
+**Mehmet: *"önce sebebi ölç — sayı belirti, mekanizma asıl mesele."***
+
+**14'ün HİÇBİRİ hiçbir göçte geçmiyor** ve anlık görüntüde de yoklar.
+Model betiğine EF'in **yabancı anahtar konvansiyonundan** geliyorlar:
+`HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId)` bir FK
+tanımlıyor, EF de ona indeks üretiyor.
+
+**AMA CANLIDA O YABANCI ANAHTARLAR DA YOK:**
+
+| Grup | Sayı | Canlıdaki FK |
+|---|---|---|
+| Sekreterya, evrak, kargo, İK (hepsi 2026-07-2x) | **12** | **0** |
+| `progress_payments`, `purchase_orders` | 2 | 4 (farklı sebep) |
+
+Örnek: `20260725152134_AddSecretariatVisitorModule`, `visitor_records`
+tablosunu **yalnız birincil anahtarla** kurmuş — hiç `ForeignKey`
+satırı yok. Modeldeki dört ilişki hiçbir göçte karşılık bulmamış.
+
+**ASIL SEBEP DAHA GENEL — VE BU EN ÖNEMLİ CÜMLE:** EF yalnız
+**MODEL ↔ ANLIK GÖRÜNTÜ** karşılaştırır, hiçbir zaman
+**ANLIK GÖRÜNTÜ ↔ CANLI** karşılaştırmaz. Bu yüzden
+`has-pending-model-changes` *"değişiklik yok"* derken canlı şema
+göçlerin söylediğinden farklı olabiliyor — ve bugüne kadar bunu soran
+hiçbir şey yoktu.
+
+**KALINTI MI, SÜREKLİ Mİ:** modüller tek bir dönemden (Temmuz 2026) ve
+bugünkü yarım göç olayıyla (SAHA, 2026-09-03) **örtüşmüyor**. Bugün
+için **kalıntı**. Dürüst sınır: *"sürekli değil"* demek bugüne kadar
+ölçülemezdi çünkü kimse bakmıyordu. Çizgi bundan sonra bakacak.
+
+**DDL GÜNLÜĞÜ YOK:** `log_statement = none`, elle `DROP INDEX` izi
+aranamaz. Sınır gizlenmiyor.
+
+**EKSİK İNDEKSLER OLUŞTURULMADI (Mehmet):** üç tablo boş, acele yok;
+canlı şemaya gece yarısı dokunulmuyor.
+
+**SONDA S4, iki ayakta:** ikinci çizgi 13 → aşıldı, nesneleri adıyla
+listeledi; 15 → *"İKİNCİ ÇİZGİ GEVŞEK"*.
+
 ### CIRCIR
 
 `deploy/scripts/sema-sapma-kapisi.sh` + `deploy/bekci/sema-sapma-cizgi.txt`
