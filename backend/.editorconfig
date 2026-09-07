@@ -71,8 +71,25 @@ dotnet_diagnostic.CA1310.severity = warning
 # ASIL ÇÖZÜM BU DEĞİL: göçleri birleştirmek (SQUASH/1) gerçek çözüm ve
 # ayrı bir karar. Bu satırlar o karara kadar yayını açık tutuyor.
 
-[Migrations/*.cs]
+# ═══ DESEN DÜZELTİLDİ (2026-09-07) — ÖNCEKİ HÂLİ HİÇ EŞLEŞMİYORDU ═══
+#
+# Burada `[Migrations/*.cs]` yazıyordu. EditorConfig'de deseni İÇİNDE
+# `/` olan bir bölüm, .editorconfig dosyasının BULUNDUĞU dizine
+# sabitlenir. Bu dosya `backend/` altında; desen `backend/Migrations/`
+# arıyordu ve öyle bir dizin YOK — göçler
+# `backend/EnderunAI.Api/Migrations/` altında.
+#
+# Yani bu blok yazıldığı 2026-09-06'dan beri hiçbir dosyayla
+# eşleşmedi. O gün yayının geçmesi başka sebeptendi; OOM 2026-09-07'de
+# geri geldi ve yayını durdurdu (AK-11).
+#
+# `**/` öneki deseni her derinlikte eşleştirir.
+#
+# ÖLÇÜM NOTU: düzeltmenin işe yaradığı, çizgi kaydırılarak değil
+# derlemenin geçmesiyle doğrulandı.
+
+[**/Migrations/*.cs]
 generated_code = true
 
-[Migrations/**/*.cs]
+[**/Migrations/**/*.cs]
 generated_code = true

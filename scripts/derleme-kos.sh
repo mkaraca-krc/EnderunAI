@@ -76,7 +76,30 @@
 set -uo pipefail
 
 BIRIM="${DERLEME_BIRIMI:-enderun-derleme}"
-TAVAN="${DERLEME_BELLEK_TAVANI:-6500M}"
+# TAVAN 6500M -> 7200M (2026-09-07, AK-11).
+#
+# ÖLÇÜLDÜ: temiz derleme zirvesi 6,04 GB, tavan 6,06 GB idi —
+# %99,7 doluluk. Derleme bazen geçip bazen OOM ile düşüyordu ve
+# 2026-09-07 yayınını DURDURDU. Kararsızlığın sebebi tahmin değil,
+# ölçülen bu 20 MB'lık paydı.
+#
+# ESKİ YORUMDAKİ TABAN ARTIK DOĞRU DEĞİL — ÖLÇÜLDÜ (2026-09-07):
+#   enderunai-backend    14 MB      (yorumda 115 MB yazıyordu)
+#   enderunai-frontend   42 MB      (yorumda 100 MB)
+#   postgres             18 MB      (yorumda 75 MB)
+#   nginx                 5 MB
+#   toplam canlı taban  ~80 MB, "1,6 GB" değil.
+#   RAM 7894 MB, kullanılabilir 6669 MB, ayrıca 4 GB takas
+#   (2,1 GB'ı kullanımda).
+#
+# 7200M hâlâ TOPLAM RAM'İN ALTINDA: cgroup sınırı sistem geneli
+# OOM'dan ÖNCE ısırmaya devam ediyor, yani kapının varlık sebebi
+# (canlı API değil TEST ölsün) korunuyor.
+#
+# BU BİR PAY ARTIRIMI, ÇÖZÜM DEĞİL. Asıl sebep ölçülü: derlenen
+# kaynağın %92'si EF göç anlık görüntüsü (195 dosya). Gerçek çözüm
+# SQUASH/1 — Mehmet'in kararı.
+TAVAN="${DERLEME_BELLEK_TAVANI:-7200M}"
 
 if [[ $# -eq 0 ]]; then
     echo "kullanım: $0 <komut> [argümanlar...]" >&2

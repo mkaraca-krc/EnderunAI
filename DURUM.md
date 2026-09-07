@@ -4698,9 +4698,34 @@ operasyon ağacını büyütüyor ve dosya sınırın kenarında duruyor.
 ve hata mesajı sebebi söylemez. Kalıcı çözüm dosyayı bölmek — ayrı bir
 iş, bu pakette yapılmadı.
 
-*(Not: 2026-09-06'daki `.editorconfig` düzeltmesi ayrı bir OOM'du —
-göç dosyalarının çözümleyiciden muaf tutulması. Bu, ikinci ve farklı
-bir sınır.)*
+**GÜNCELLEME 2026-09-07 akşam — İKİ İDDİAM YANLIŞTI, İKİSİ DE
+ÖLÇÜMLE DÜZELTİLDİ:**
+
+**(1) 6 Eylül'deki `.editorconfig` düzeltmesi HİÇ EŞLEŞMEMİŞ.**
+Dosya `backend/` altında ve desen `[Migrations/*.cs]` yazıyordu.
+EditorConfig'de içinde `/` olan bir desen, .editorconfig'in BULUNDUĞU
+dizine sabitlenir — yani `backend/Migrations/` aranıyordu ve öyle bir
+dizin yok; göçler `backend/EnderunAI.Api/Migrations/` altında.
+"Düzeltme işe yaradı" dediğim şey hiçbir dosyaya dokunmamıştı.
+Desen `[**/Migrations/*.cs]` olarak düzeltildi.
+
+**(2) OOM "Program.cs'e lambda eklemekten" ibaret değilmiş.**
+Asıl durum ÖLÇÜLDÜ: temiz derleme zirvesi **6,04 GB**, tavan
+**6,06 GB** — %99,7 doluluk. Derleme her koşuda kıl payı geçiyor ya
+da düşüyordu. Program.cs'e eklenen lambda "sebep" değil, dolu bardağı
+taşıran son damlaydı.
+
+**YAPILAN:** desen düzeltildi + tavan 6500M → 7200M (ölçülen zirvenin
+üstüne gerçek pay). Betiğin yorumundaki canlı taban da yanlıştı ve
+düzeltildi: 1,6 GB değil **~80 MB** (backend 14, frontend 42,
+postgres 18, nginx 5).
+
+**BU BİR PAY ARTIRIMI, ÇÖZÜM DEĞİL.** Sebep ölçülü ve değişmedi:
+derlenen kaynağın %92'si EF göç anlık görüntüsü (195 dosya, 81,5 MB).
+Gerçek çözüm **SQUASH/1** ve o Mehmet'in kararı.
+
+**BEDEL:** 2026-09-07 yayını bu yüzden bir kez durdu (güvenli
+durdu — testler aşamasındaydı, hiçbir servise dokunulmadı).
 
 ---
 
