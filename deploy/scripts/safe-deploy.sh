@@ -402,7 +402,24 @@ run_backend_tests() {
             dotnet test "$BACKEND_TEST_PROJECT" --configuration Release 2>&1 | tee -a "$LOG_FILE"; then
         log "INFO" "Backend testleri geçti."
     else
-        fail "Backend testleri BAŞARISIZ. Yayın DURDURULDU, hiçbir servise dokunulmadı."
+        # ── DÜŞÜŞÜN SEBEBİ AYIRT EDİLİYOR ────────────────────────
+        #
+        # 2026-09-07: yayın bu satırda durdu ve günlükte "Backend
+        # testleri BAŞARISIZ" yazdı. HİÇBİR TEST KOŞMAMIŞTI —
+        # derleyici `System.OutOfMemoryException` ile ölmüştü.
+        #
+        # Mesaj yanlış yere baktırıyordu: hangi testin düştüğü aranıyor,
+        # oysa sorun testte değil derlemede. "Yedek" belirsizliğiyle
+        # aynı sınıf — satır, olanı değil olduğu sanılanı söylüyordu.
+        #
+        # Günlükte derleme hatası izi varsa öyle denir; yoksa test
+        # düşüşü denir. Emin olunamayan durumda İKİSİ DE söylenir —
+        # yanlış bir teşhis, teşhissizlikten kötüdür.
+        if grep -qE "OutOfMemoryException|error MSB|error CS[0-9]+|Build FAILED" "$LOG_FILE"; then
+            fail "DERLEME BAŞARISIZ (test koşmadı) — günlükte derleyici hatası var. Yayın DURDURULDU, hiçbir servise dokunulmadı."
+        else
+            fail "Backend TESTLERİ BAŞARISIZ (derleme geçti, test düştü). Yayın DURDURULDU, hiçbir servise dokunulmadı."
+        fi
     fi
 }
 
