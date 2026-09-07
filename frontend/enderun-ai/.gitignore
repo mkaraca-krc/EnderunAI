@@ -53,3 +53,8 @@ playwright-report/
 # Duzen testi rig-inin AYRI yapi dizini - canlinin .next-i ile
 # karismasin diye (2026-09-07 olayi).
 .next-duzen/
+
+# safe-deploy atomik takas dizinleri (DAGITIM/1)
+.next-yeni/
+.next-eski/
+.next-olcum/

@@ -36,7 +36,11 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts",
     ".next-duzen/types/**/*.ts",
-    ".next-duzen/dev/types/**/*.ts"
+    ".next-duzen/dev/types/**/*.ts",
+    ".next-olcum/types/**/*.ts",
+    ".next-olcum/dev/types/**/*.ts",
+    ".next-olcum-yeni/types/**/*.ts",
+    ".next-olcum-yeni/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

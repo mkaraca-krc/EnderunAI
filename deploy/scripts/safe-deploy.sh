@@ -568,11 +568,88 @@ publish_backend() {
     fi
 }
 
+# ═══════════════════════════════════════════════════════════════
+# ÖN YÜZ DERLEMESİ AYRI DİZİNE — CANLI KESİNTİSİ İÇİN (DAĞITIM/1)
+# ═══════════════════════════════════════════════════════════════
+#
+# ESKİ HÂLİ DOĞRUDAN `.next` İÇİNE YAZIYORDU ve bu, çalışan sunucunun
+# altından zemin çekmek demekti:
+#
+#   build_frontend      -> .next YENİDEN YAZILIYOR (~85 sn)
+#   backup_database     -> ~48 sn
+#   restart_services    -> ancak burada yeni sunucu
+#
+# Yani 2 dk 13 sn – 2 dk 37 sn boyunca disk YENİ, sunucu ESKİ.
+# Çalışan Next kendi manifest'indeki parça adlarını arıyor, o dosyalar
+# artık yok. ÖLÇÜLDÜ (rig, 25 sn'lik pencere): 187 istekten 24'ü
+# parça hatası. Sayfa 200 dönüyor, parçası düşüyor — kullanıcı için
+# "açılıyor ama bozuk".
+#
+# ÜRETİMDE PENCERE 5 KAT UZUN olduğu için oran daha da kötü.
+#
+# YENİ AKIŞ: derleme `.next-yeni` içine yapılıyor; `.next`e derleme
+# ve yedek boyunca HİÇ DOKUNULMUYOR. Takas yeniden başlatmadan hemen
+# önce, iki yeniden adlandırmayla.
+FRONTEND_NEXT_YENI="${FRONTEND_DIR}/.next-yeni"
+FRONTEND_NEXT_ESKI="${FRONTEND_DIR}/.next-eski"
+
 build_frontend() {
-    log "INFO" "Frontend build ediliyor..."
-    if ! (cd "$FRONTEND_DIR" && npm run build) 2>&1 | tee -a "$LOG_FILE"; then
+    log "INFO" "Frontend build ediliyor (ayrı dizin: .next-yeni)..."
+
+    rm -rf "$FRONTEND_NEXT_YENI"
+
+    if ! (cd "$FRONTEND_DIR" && NEXT_DIST_DIR=".next-yeni" npm run build) 2>&1 \
+            | tee -a "$LOG_FILE"; then
         fail "npm run build başarısız oldu."
     fi
+
+    if [ ! -f "${FRONTEND_NEXT_YENI}/BUILD_ID" ]; then
+        fail "Yeni yapı üretilmedi (.next-yeni/BUILD_ID yok)."
+    fi
+
+    log "INFO" "Yeni yapı hazır; canlının .next dizinine henüz dokunulmadı."
+}
+
+# ═══════════════════════════════════════════════════════════════
+# ATOMİK TAKAS — YENİDEN BAŞLATMADAN HEMEN ÖNCE
+# ═══════════════════════════════════════════════════════════════
+#
+# SUNUCUNUN GÖRDÜĞÜ DİZİN YA TAMAMEN ESKİ YA TAMAMEN YENİ. Aradaki
+# hâl iki `mv` arasındaki mikrosaniyeler; `mv` aynı dosya sisteminde
+# `rename(2)` demek ve atomiktir.
+#
+# ESKİ PARÇALAR KORUNUYOR — ve asıl kesintiyi bitiren şey bu:
+# takas ile yeniden başlatma arasında (birkaç saniye) ESKİ sunucu
+# hâlâ çalışıyor ve kendi parça adlarını istiyor. O dosyalar yeni
+# yapıda YOK. Parça adları içerik özetli olduğu için çakışma
+# imkânsız; eski `static/` yeni yapıya ÜZERİNE YAZMADAN kopyalanıyor
+# (`cp -an`). Böylece hem eski sunucu hem tarayıcıdaki eski sekmeler
+# ayakta kalıyor.
+swap_frontend() {
+    [ -d "$FRONTEND_NEXT_YENI" ] || fail "Takas edilecek yeni yapı yok."
+
+    if [ -d "${FRONTEND_NEXT_DIR}/static" ]; then
+        log "INFO" "Eski parçalar yeni yapıya taşınıyor (üzerine yazmadan)..."
+        mkdir -p "${FRONTEND_NEXT_YENI}/static"
+        cp -an "${FRONTEND_NEXT_DIR}/static/." "${FRONTEND_NEXT_YENI}/static/" \
+            2>/dev/null || true
+    fi
+
+    rm -rf "$FRONTEND_NEXT_ESKI"
+
+    if [ -d "$FRONTEND_NEXT_DIR" ]; then
+        mv -T "$FRONTEND_NEXT_DIR" "$FRONTEND_NEXT_ESKI" \
+            || fail "Eski yapı kenara alınamadı."
+    fi
+
+    mv -T "$FRONTEND_NEXT_YENI" "$FRONTEND_NEXT_DIR" || {
+        # GERİ AL: yeni yapı yerine konamadıysa eskisini geri koy,
+        # yoksa sunucu yapısız kalır.
+        [ -d "$FRONTEND_NEXT_ESKI" ] && mv -T "$FRONTEND_NEXT_ESKI" "$FRONTEND_NEXT_DIR"
+        fail "Yeni yapı yerine konamadı; eski yapı geri alındı."
+    }
+
+    log "INFO" "Ön yüz yapısı takas edildi (atomik)."
 }
 
 # YEDEK ALINAMAZSA YAYIN DURUR.
@@ -992,6 +1069,11 @@ main() {
     build_frontend
     asama "veritabani-yedegi"
     backup_database
+
+    # TAKAS EN SONA: yedek boyunca da canlı ESKİ yapıyı görüyor.
+    asama "on-yuz-takasi"
+    swap_frontend
+
     asama "servis-baslatma"
     restart_services
 
