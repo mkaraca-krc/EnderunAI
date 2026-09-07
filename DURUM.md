@@ -3194,6 +3194,10 @@ Gerekçe Mehmet'in: *"81'lik sapma squash'tan bağımsız bir risk. Cırcır
 kurulunca squash acele edilmesi gereken bir iş olmaktan çıkar — açık
 büyümüyor demektir."*
 
+> **O CÜMLEDEKİ "81" YANLIŞ BİR SAYIYDI** ve düzeltmesi hemen aşağıda:
+> gerçek sapma **95**. Karar değişmedi — gerekçe sayıya değil, açığın
+> ölçülmüyor olmasına dayanıyordu.
+
 ### SAYI DÜZELTİLDİ: 81 DEĞİL, 95
 
 | Ölçüm | Değer |
@@ -8053,6 +8057,12 @@ Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
    | Canlıdaki indeks (PK hariç) | **594** |
    | **Canlıda var, modelde YOK** | **116** |
 
+   > **SAYI DÜZELTMESİ (2026-09-07):** buradaki 116, iki yönlü farkın
+   > net toplamıydı. Ada göre ölçülünce iki ayrı sayı çıkıyor:
+   > **modelin bilmediği 95**, **modelde var canlıda yok 14**. İkisi
+   > de artık `sema-sapma-cizgi.txt` içinde çizgide. Aşağıdaki
+   > gerekçe ve karar geçerliliğini koruyor; değişen yalnız rakam.
+
    Bu 116 nesne yalnızca göçlerin **ham SQL bloklarında** yaşıyor;
    model ve anlık görüntü onlardan habersiz. Aralarında:
    `IX_cheques_aktif_benzersizlik` (çek mükerrerlik koruması),
@@ -8080,7 +8090,9 @@ Eşzamanlılık maddesi aynı gün paket olarak kapatıldı. Açık kalan
    | İfade/fonksiyon tabanlı | 2 | Hayır |
    | `gin`/`gist` (trigram) | 3 | Hayır |
 
-   **116'nın 111'i taşınabilir.** Kalan 5 (artı `enderun_fold`
+   **116'nın 111'i taşınabilir.** *(Sayı 2026-09-07'de düzeltildi:
+   sapma 95. Tür dağılımı yeniden ölçülmedi; oran korunuyorsa
+   taşınabilir olanlar yine ezici çoğunluk.)* Kalan 5 (artı `enderun_fold`
    fonksiyonu, `pg_trgm` uzantısı ve üretilmiş sütunlar) ham SQL
    kalır ve bu **bilinçli bir istisnadır** — DURUM.md'de
    listelenecek.

@@ -25,11 +25,29 @@
 #                             ilerledikçe kendiliğinden). Gevşeklik
 #                             bırakmak, ilerlemeyi görünmez kılar.
 #
-# ═══ İKİNCİ YÖN AYRICA RAPORLANIYOR ═══
+# ═══ İKİNCİ ÇİZGİ: "MODELDE VAR AMA CANLIDA YOK" ═══
 #
-# "Modelde var ama canlıda YOK" — göç geçmişinin ürettiği şema ile
-# canlının ayrıştığı yer. Bugün 14 ve çoğu 0 satırlı tablolarda;
-# çizgiye BAĞLANMADI çünkü ayrı bir karar (Mehmet'e rapor edildi).
+# Göç geçmişinin ürettiği şema ile canlının ayrıştığı yer. Bugün 14.
+#
+# MEKANİZMA ÖLÇÜLDÜ (2026-09-07): 14'ün 12'si, modelin YABANCI ANAHTAR
+# tanımladığı ama canlıda HİÇ yabancı anahtarı olmayan tablolarda
+# (sekreterya, evrak, kargo, İK — hepsi 2026-07-2x). Tabloyu kuran göç
+# yalnız birincil anahtarı yazmış; modeldeki `HasOne(...).HasForeignKey`
+# ilişkileri hiçbir göçte karşılık bulmamış.
+#
+# ASIL SEBEP DAHA GENEL: EF yalnız MODEL ↔ ANLIK GÖRÜNTÜ karşılaştırır,
+# hiçbir zaman ANLIK GÖRÜNTÜ ↔ CANLI karşılaştırmaz. Bu yüzden
+# `has-pending-model-changes` "değişiklik yok" derken canlı şema
+# göçlerin söylediğinden farklı olabiliyor — ve bugüne kadar bunu
+# soran hiçbir şey yoktu.
+#
+# KALINTI MI, SÜREKLİ Mİ: modüller tek bir dönemden, bugünkü yarım göç
+# olayıyla (2026-09-03) ÖRTÜŞMÜYOR. Yani bugün için kalıntı. Ama
+# "sürekli değil" demek ölçülemezdi çünkü kimse bakmıyordu; çizgi
+# bundan sonra bakacak.
+#
+# DDL GÜNLÜĞÜ YOK: `log_statement = none`, yani elle DROP INDEX izi
+# aranamaz. Bu bir sınır ve gizlenmiyor.
 #
 # KULLANIM:  sema-sapma-kapisi.sh [--liste]
 
@@ -99,10 +117,12 @@ comm -23 "$GECICI/model.txt" "$GECICI/canli.txt" > "$GECICI/eksik.txt"
 SAPMA=$(wc -l < "$GECICI/sapma.txt")
 EKSIK=$(wc -l < "$GECICI/eksik.txt")
 
-CIZGI=$(grep -vE '^\s*#|^\s*$' "$CIZGI_DOSYASI" 2>/dev/null | head -1 | tr -dc '0-9')
-[ -n "$CIZGI" ] || { hata "HATA: çizgi okunamadı: $CIZGI_DOSYASI"; exit 1; }
+CIZGI=$(grep -vE '^\s*#|^\s*$' "$CIZGI_DOSYASI" 2>/dev/null | sed -n '1p' | tr -dc '0-9')
+CIZGI_EKSIK=$(grep -vE '^\s*#|^\s*$' "$CIZGI_DOSYASI" 2>/dev/null | sed -n '2p' | tr -dc '0-9')
+[ -n "$CIZGI" ] && [ -n "$CIZGI_EKSIK" ] \
+    || { hata "HATA: iki çizgi de okunamadı: $CIZGI_DOSYASI (1. satır sapma, 2. satır eksik)"; exit 1; }
 
-echo "[sema-sapma] model ${MODEL_SAYI} · canlı ${CANLI_SAYI} · modelin bilmediği ${SAPMA} (çizgi ${CIZGI}) · modelde var canlıda yok ${EKSIK}"
+echo "[sema-sapma] model ${MODEL_SAYI} · canlı ${CANLI_SAYI} · modelin bilmediği ${SAPMA} (çizgi ${CIZGI}) · modelde var canlıda yok ${EKSIK} (çizgi ${CIZGI_EKSIK})"
 
 if [ "$LISTE" = "1" ]; then
     echo "--- MODELİN BİLMEDİĞİ ---"; cat "$GECICI/sapma.txt"
@@ -116,6 +136,22 @@ if [ "$SAPMA" -gt "$CIZGI" ]; then
     hata "Yeni nesneler:"
     comm -13 "$GECICI/model.txt" "$GECICI/canli.txt" | tail -5 | sed 's/^/  - /' >&2
     hata "Çözüm: nesneyi modele taşıyın (HasIndex / HasFilter)."
+    exit 1
+fi
+
+# ── İKİNCİ ÇİZGİ ──
+if [ "$EKSIK" -gt "$CIZGI_EKSIK" ]; then
+    hata "İKİNCİ ÇİZGİ AŞILDI: ${EKSIK} > ${CIZGI_EKSIK}."
+    hata "Modelin tanımladığı bir nesne canlıda YOK — göç geçmişi ile"
+    hata "canlı şema ayrışmış. EF bunu göremez: yalnız model ile anlık"
+    hata "görüntüyü karşılaştırır, canlıya hiç bakmaz."
+    comm -23 "$GECICI/model.txt" "$GECICI/canli.txt" | tail -5 | sed 's/^/  - /' >&2
+    exit 1
+fi
+
+if [ "$EKSIK" -lt "$CIZGI_EKSIK" ]; then
+    hata "İKİNCİ ÇİZGİ GEVŞEK: gerçek ${EKSIK}, çizgi ${CIZGI_EKSIK}."
+    hata "Çizgiyi ${EKSIK} yapın: $CIZGI_DOSYASI (2. sayı)"
     exit 1
 fi
 

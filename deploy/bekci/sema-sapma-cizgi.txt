@@ -18,4 +18,19 @@
 #
 # SEMA-KAYNAK/1 ilerledikçe bu sayı düşecek ve çizgi onunla inecek.
 
+# BİRİNCİ SAYI — modelin bilmediği (canlıda var, modelde yok)
 95
+
+# İKİNCİ SAYI — modelde var ama canlıda YOK
+#
+# MEKANİZMA ÖLÇÜLDÜ (2026-09-07): 14'ün 12'si, modelin yabancı anahtar
+# tanımladığı ama canlıda HİÇ yabancı anahtarı olmayan tablolarda
+# (sekreterya, evrak, kargo, İK — hepsi 2026-07-2x). Tabloyu kuran göç
+# yalnız birincil anahtarı yazmış.
+#
+# ASIL SEBEP: EF yalnız MODEL ↔ ANLIK GÖRÜNTÜ karşılaştırır, hiçbir
+# zaman ANLIK GÖRÜNTÜ ↔ CANLI karşılaştırmaz.
+#
+# EKSİK İNDEKSLER OLUŞTURULMADI (Mehmet, 2026-09-07): üç tablo boş,
+# acele yok; canlı şemaya gece yarısı dokunulmuyor.
+14
