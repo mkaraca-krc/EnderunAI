@@ -47,9 +47,21 @@ test("oturumsuz giriş ekranı 10 saniyede kendini yeniden yüklemiyor", async (
   await page.context().clearCookies();
 
   await page.goto("/login");
-  await page.locator("input[name='username'], input#username").first().waitFor({
-    timeout: 15_000,
-  });
+
+  /*
+   * SEÇİCİ `autocomplete` ÜZERİNDEN.
+   *
+   * İlk yazımda `input[name='username'], input#username` kullandım ve
+   * test 15 saniye bekleyip düştü. Kusur düzeltmede değil SEÇİCİDEYDİ:
+   * giriş formundaki alanların `name`i de `id`si de YOK, yalnız
+   * `autoComplete` var. Ölçtüğümü sandığım şey ile gerçekten
+   * ölçtüğüm şey ayrışmıştı (Kural 65).
+   *
+   * Etikete göre aramadım: Türkçe "İ" ile erişilebilir ad eşleşmesi
+   * bu projede daha önce sorun çıkardı.
+   */
+  const kullaniciAlani = page.locator('input[autocomplete="username"]');
+  await kullaniciAlani.first().waitFor({ timeout: 15_000 });
 
   // POZİTİF KONTROL: sayfa gerçekten yüklendi ve en az bir belge
   // isteği sayıldı. Sıfır olsaydı test hiçbir şey ölçmemiş olurdu.
@@ -67,7 +79,5 @@ test("oturumsuz giriş ekranı 10 saniyede kendini yeniden yüklemiyor", async (
   ).toBe(1);
 
   // VE ekran hâlâ kullanılabilir durumda: giriş alanı yerinde.
-  await expect(
-    page.locator("input[name='username'], input#username").first()
-  ).toBeVisible();
+  await expect(kullaniciAlani.first()).toBeVisible();
 });

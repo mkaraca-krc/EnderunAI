@@ -1237,8 +1237,29 @@ giris_dongu_kapisi() {
     sonra="$(grep -c '"GET /login' "$gunluk" 2>/dev/null || echo 0)"
     fark=$(( sonra - once ))
 
+    #
+    # ÜÇÜNCÜ SONUÇ: HİÇ TRAFİK YOKSA ÖLÇÜM YAPILMAMIŞTIR (Kural 67).
+    #
+    # İlk yazımda yalnız `fark <= 20` bakıyordum. Sıfır trafikte
+    # `0 <= 20` HER ZAMAN doğrudur; yani kapı, sistemin hiç
+    # kullanılmadığı bir anda da GEÇTİ derdi. Nitekim eb583062
+    # yayınında tam olarak bu oldu: döngüyü besleyen tarayıcı kapanmıştı,
+    # kapı "10 saniyede 0 istek" görüp GEÇTİ dedi — oysa görecek bir şey
+    # yoktu.
+    #
+    # Bugün dört kapıda düzelttiğim sınıfın aynısını kendi kapıma
+    # uygulamamışım: "kapı var" ile "kapı ölçebiliyor" ayrı şeyler.
+    #
+    # Yayını DURDURMUYOR: gece yarısı yayınında trafik olmaması
+    # olağandır. Ama GEÇTİ de demiyor.
+    if [ "$fark" -eq 0 ]; then
+        log "WARN" "Giriş döngüsü kapısı ÖLÇEMEDİ: 10 saniyede hiç /login belge isteği olmadı (trafik yok)."
+        log "WARN" "Sıfır istek, döngü olmadığının kanıtı DEĞİLDİR — ölçülecek bir şey yoktu."
+        return 0
+    fi
+
     if [ "$fark" -le 20 ]; then
-        log "INFO" "Giriş döngüsü kapısı GEÇTİ: 10 saniyede ${fark} /login belge isteği (sınır 20)."
+        log "INFO" "Giriş döngüsü kapısı GEÇTİ: 10 saniyede ${fark} /login belge isteği (sınır 20, trafik VAR)."
         return 0
     fi
 
