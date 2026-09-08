@@ -1,3 +1,15 @@
+/**
+ * Şu an giriş ekranında mıyız.
+ *
+ * `/login` ve altındaki yollar (`/login?next=...` sorgu dahil) sayılır.
+ * Sunucu tarafında (`window` yok) çağrılmaz; çağıran zaten kontrol ediyor.
+ */
+function girisEkranindaMiyiz(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.pathname === "/login"
+    || window.location.pathname.startsWith("/login/");
+}
+
 export class ApiError extends Error {
   status: number;
   payload?: unknown;
@@ -54,7 +66,31 @@ export async function apiClient<T>(
   });
 
   if (response.status === 401) {
-    if (typeof window !== "undefined") {
+    /*
+     * ═══ GİRİŞ EKRANINDAYKEN /login'E YÖNLENDİRME YOK ═══
+     *
+     * ÖLÇÜLEN KUSUR (GİRİŞ-DÖNGÜ/1, 2026-09-08): giriş ekranı sonsuz
+     * yeniden yükleme döngüsüne giriyordu. Canlıda ölçüldü: TEK
+     * tarayıcıdan 60 saniyede 1256 istek, 358 tam sayfa yüklemesi
+     * (~6 sayfa/sn, ~21 istek/sn).
+     *
+     * ZİNCİR: kök layout `MesajBaloncugu`u her rotada monte ediyor →
+     * baloncuk `auth/me` ve `user-preferences` çağırıyor → oturum
+     * açılmamışken 401 dönüyor → burası `/login`e gidiyor → sayfa
+     * baştan yükleniyor → aynı iki istek → başa dön.
+     *
+     * 401 giriş ekranında HATA DEĞİL, normal durumdur. Oraya
+     * yönlendirmek "zaten oradasın" demekle aynı şey; tek etkisi
+     * sayfayı yeniden yüklemek.
+     *
+     * KONSOL SESSİZDİ: her tam yükleme konsolu temizliyordu, bu
+     * yüzden hata görünmüyordu. Kusuru ağ kaydı gösterdi.
+     *
+     * DÜZELTME BURADA, ÇAĞIRANLARDA DEĞİL (Kural 79): yönlendirmeyi
+     * yapan tek yer burası. Çağıranlara tek tek koruma eklemek,
+     * yarın eklenen çağıranın aynı döngüyü geri getirmesi demekti.
+     */
+    if (typeof window !== "undefined" && !girisEkranindaMiyiz()) {
       window.location.href = "/login";
     }
     throw new ApiError("Oturum süresi doldu.", 401);

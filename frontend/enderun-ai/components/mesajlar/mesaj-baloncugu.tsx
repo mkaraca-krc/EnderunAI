@@ -199,6 +199,22 @@ export default function MesajBaloncugu() {
   useEffect(() => {
     let etkin = true;
 
+    /*
+     * OTURUM YOKKEN İSTEK ATILMIYOR (GİRİŞ-DÖNGÜ/1).
+     *
+     * Aşağıdaki `return null` üçlüsü (oturum yükleniyor / kullanıcı yok
+     * / portal) yalnız ARAYÜZÜ gizliyordu; `useEffect` render'ın
+     * dönüşünden bağımsız koşar. Yani baloncuk giriş ekranında
+     * görünmüyordu ama `user-preferences` isteğini yine de atıyordu
+     * ve 401 alıyordu.
+     *
+     * ASIL DÖNGÜ KIRICI `api-client` içinde (401'de giriş ekranındayken
+     * yönlendirme yok). Buradaki koruma onun yerine geçmiyor,
+     * gereksiz isteği en baştan engelliyor: giriş ekranında dakikada
+     * yüzlerce 401 üretmenin hiçbir faydası yok.
+     */
+    if (oturumYukleniyor || !user) return;
+
     void apiClient<{
       messagePanelOpen: boolean;
       lastConversationId: string | null;
@@ -220,7 +236,19 @@ export default function MesajBaloncugu() {
     return () => {
       etkin = false;
     };
-  }, []);
+    /*
+     * BAĞIMLILIK: `user` ve `oturumYukleniyor`.
+     *
+     * Dizi `[]` kalsaydı, yukarıdaki oturum koruması bir REGRESYON
+     * üretirdi: oturum asenkron çözülüyor, ilk render'da `user` null
+     * oluyor. Effect bir kez koşup çıkacak ve kullanıcı giriş yaptıktan
+     * sonra tercihleri BİR DAHA hiç okunmayacaktı — panel her açılışta
+     * kapalı ve ses ayarı varsayılan gelirdi.
+     *
+     * Yani koruma eklerken bağımlılığı da eklemek zorunlu; biri
+     * ötekisiz yanlış.
+     */
+  }, [user, oturumYukleniyor]);
 
   /**
    * Tercihi GECİKMELİ kaydeder. Gönderilmeyen alanlar sunucuda DEĞİŞMEZ.

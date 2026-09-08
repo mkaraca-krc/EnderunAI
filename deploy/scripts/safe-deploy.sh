@@ -819,6 +819,8 @@ kesinti_izleyicisi_bitir() {
 # önce, iki yeniden adlandırmayla.
 FRONTEND_NEXT_YENI="${FRONTEND_DIR}/.next-yeni"
 FRONTEND_NEXT_ESKI="${FRONTEND_DIR}/.next-eski"
+# Kapının adayı: takas ÖNCESİ seçilip buraya yazılıyor (bkz. swap_frontend).
+ESKI_PARCA_ADAYI="/tmp/enderun-eski-parca-adayi.txt"
 
 build_frontend() {
     log "INFO" "Frontend build ediliyor (ayrı dizin: .next-yeni)..."
@@ -874,6 +876,38 @@ swap_frontend() {
     # eskide olup yenide olmayanlar eklenir. Parça adları içerik
     # özetli olduğu için çakışma imkânsız; eklenen dosyalar yeni
     # sunucu için ETKİSİZDİR (kendi manifest'inde adları geçmez).
+
+    # ═══ KAPININ ADAYI, KOPYALAMADAN ÖNCE SEÇİLİYOR ═══
+    #
+    # ÖLÇÜLEN KUSUR (2026-09-08): `eski_parca_kapisi` üç yayın üst
+    # üste "ÖLÇEMEDİ: yalnız eskide bulunan parça yok" dedi. Sebep
+    # tesadüf değil, YAPISAL: kapı adayını "eskide olup yenide
+    # olmayan" diye arıyordu, ama aşağıdaki kopyalama tam da o kümeyi
+    # BOŞALTIYOR. Ölçüldü: 207 = 207, kesişim farkı 0.
+    #
+    # Yani kapı, korumak istediği şeyin ta kendisi yüzünden hiçbir
+    # zaman ölçüm yapamıyordu. Öz-sınama (S4) kapının AYIRT
+    # EDEBİLDİĞİNİ kanıtlıyor; ama sınayacak aday hiç oluşmuyordu.
+    #
+    # Aday artık BURADA, kopyalamadan önce seçiliyor ve dosyaya
+    # yazılıyor. Kapı yeniden başlatmadan sonra o parçayı soruyor:
+    # "eski süreç henüz okumadığı bir parçayı isterse bulabilir mi".
+    : > "$ESKI_PARCA_ADAYI"
+    if [ -d "${FRONTEND_NEXT_DIR}/static/chunks" ] \
+       && [ -d "${FRONTEND_NEXT_YENI}/static/chunks" ]; then
+        (cd "${FRONTEND_NEXT_DIR}/static/chunks" && ls -1 *.js 2>/dev/null) \
+            | while IFS= read -r parca; do
+                [ -f "${FRONTEND_NEXT_YENI}/static/chunks/${parca}" ] \
+                    || { echo "$parca" >> "$ESKI_PARCA_ADAYI"; break; }
+            done
+    fi
+
+    if [ -s "$ESKI_PARCA_ADAYI" ]; then
+        log "INFO" "Eski parça kapısı adayı seçildi (kopyalamadan ÖNCE): $(head -1 "$ESKI_PARCA_ADAYI")"
+    else
+        log "WARN" "Eski parça kapısı adayı YOK: yeni yapı eskinin bütün parçalarını içeriyor (ön yüz kaynağı değişmemiş olabilir)."
+    fi
+
     for alt in static server; do
         if [ -d "${FRONTEND_NEXT_DIR}/${alt}" ]; then
             log "INFO" "Eski ${alt}/ yeni yapıya kopyalanıyor (üzerine yazmadan)..."
@@ -958,24 +992,24 @@ eski_parca_kapisi_oz_sinama() {
 }
 
 eski_parca_kapisi() {
-    local eski_dizin="${FRONTEND_NEXT_ESKI}/static/chunks"
-    local yeni_dizin="${FRONTEND_NEXT_DIR}/static/chunks"
-
-    if [ ! -d "$eski_dizin" ]; then
+    if [ ! -d "${FRONTEND_NEXT_ESKI}/static/chunks" ]; then
         log "WARN" "Eski parça kapısı ÖLÇEMEDİ: önceki yapı dizini yok (ilk yayın olabilir)."
         return 0
     fi
 
-    # Yalnız eskide olan bir dosya bul.
+    # ADAY BURADA ARANMIYOR — TAKAS ÖNCESİ SEÇİLDİ.
+    #
+    # Burada aramak ölçülebilir hiçbir şey bulamıyordu: `swap_frontend`
+    # eski `static/`i yeni yapıya kopyaladığı için "yalnız eskide olan
+    # parça" kümesi takas sonrası HER ZAMAN boş. Kapı üç yayın üst
+    # üste ÖLÇEMEDİ dedi ve bu bir tesadüf değil, tanımın kendisiydi.
     local aday=""
-    while IFS= read -r dosya; do
-        [ -f "${yeni_dizin}/${dosya}" ] || { aday="$dosya"; break; }
-    done < <(cd "$eski_dizin" && ls -1 *.js 2>/dev/null)
+    [ -s "$ESKI_PARCA_ADAYI" ] && aday="$(head -1 "$ESKI_PARCA_ADAYI")"
 
     if [ -z "$aday" ]; then
-        # SESSİZCE GEÇMİYOR: karşılaştıracak dosya yoksa kapı ölçüm
-        # yapmamıştır ve bunu söylemek zorundadır (Kural 48).
-        log "WARN" "Eski parça kapısı ÖLÇEMEDİ: yalnız eskide bulunan parça yok."
+        # SESSİZCE GEÇMİYOR: aday yoksa kapı ölçüm yapmamıştır ve
+        # bunu söylemek zorundadır (Kural 48).
+        log "WARN" "Eski parça kapısı ÖLÇEMEDİ: takas öncesi yalnız eskide bulunan parça seçilemedi."
         return 0
     fi
 
@@ -1164,6 +1198,56 @@ proxy_duman_kontrolu() {
 #   biri false     → İHLAL. Yükseltme geçmiyor; YAYIN DURUR.
 #   bağlanılamadı  → KARAR VEREMEDİ. İnsan baksın; yayını düşürmez.
 #   /başka kod
+# ═══════════════════════════════════════════════════════════════════
+# GİRİŞ DÖNGÜSÜ KAPISI (GİRİŞ-DÖNGÜ/1 · GD5)
+# ═══════════════════════════════════════════════════════════════════
+#
+# ÖLÇÜLEN KUSUR (2026-09-08, canlı): giriş ekranı sonsuz yeniden
+# yükleme döngüsündeydi. TEK tarayıcıdan 60 saniyede 1256 istek, 358
+# tam sayfa yüklemesi. Konsol sessizdi; her yükleme konsolu siliyordu.
+# Kusuru Mehmet Bey tarayıcıdan gördü — biz görmedik.
+#
+# NEDEN SAĞLIK KONTROLÜ YAKALAMADI: sağlık kontrolü `/login`e BİR
+# istek atıp 200 görüyor ve geçiyor. Döngü tek istekte görünmüyor;
+# ancak sayfayı AÇIK TUTUNCA ortaya çıkıyor.
+#
+# BU KAPI NE YAPIYOR: giriş sayfasını çekip içindeki betiklerin
+# çalışacağı süre kadar (10 sn) bekleyemez — curl betik çalıştırmaz.
+# Onun yerine SUNUCU TARAFINDAN ölçüyor: 10 saniye boyunca nginx
+# kaydına düşen `/login` BELGE isteklerini sayıyor. Döngüdeki bir
+# istemci varsa sayı hızla büyür.
+#
+# EŞİK: yayın sırasında gerçek kullanıcı da giriş yapıyor olabilir.
+# Bir kullanıcının 10 saniyede birkaç kez /login açması olağan;
+# saniyede birden fazla tam yükleme değil. Sınır 20.
+#
+# ÜÇ SONUÇ (Kural 67): nginx kaydı okunamıyorsa ÖLÇEMEDİ der,
+# geçti demez.
+giris_dongu_kapisi() {
+    local gunluk="/var/log/nginx/access.log"
+
+    if [ ! -r "$gunluk" ]; then
+        log "WARN" "Giriş döngüsü kapısı ÖLÇEMEDİ: ${gunluk} okunamıyor."
+        return 0
+    fi
+
+    local once sonra fark
+    once="$(grep -c '"GET /login' "$gunluk" 2>/dev/null || echo 0)"
+    sleep 10
+    sonra="$(grep -c '"GET /login' "$gunluk" 2>/dev/null || echo 0)"
+    fark=$(( sonra - once ))
+
+    if [ "$fark" -le 20 ]; then
+        log "INFO" "Giriş döngüsü kapısı GEÇTİ: 10 saniyede ${fark} /login belge isteği (sınır 20)."
+        return 0
+    fi
+
+    log "ERROR" "Giriş döngüsü kapısı İHLAL: 10 saniyede ${fark} /login belge isteği (sınır 20)."
+    log "ERROR" "Giriş ekranı kendini yeniden yüklüyor olabilir — GİRİŞ-DÖNGÜ/1."
+    log "ERROR" "Tek tarayıcı saniyede 20+ istek üretiyorsa kesinti kendi kendini büyütür."
+    return 1
+}
+
 websocket_duman_kontrolu() {
     local yanit kod govde
 
@@ -1225,6 +1309,7 @@ wait_for_health() {
             log "INFO" "Sağlık kontrolü BAŞARILI (backend + frontend, ${elapsed}s içinde)."
             proxy_duman_kontrolu || return 1
             websocket_duman_kontrolu || return 1
+            giris_dongu_kapisi || return 1
             return 0
         fi
 
