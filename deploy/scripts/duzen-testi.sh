@@ -141,8 +141,24 @@ case "$ARKA_PUBLISH" in
   "${KOK}/publish"|"${KOK}/publish/") oldu "Rig canlının publish/ dizinini kullanamaz." ;;
 esac
 
+# RIG'İN KENDİ DİSK KÖKÜ (SIZINTI/1).
+#
+# Rig arka ucu `enderun_ai_test` ile koşuyor ama yazma kökleri sabit
+# kodluydu: yüklediği her dosya CANLI `uploads/` ve `project-files/`
+# dizinlerine düşüyordu. Rig'in canlı `.next` dizinine yazmasıyla
+# aynı sınıf — orada da çözüm ayrı dizin olmuştu.
+#
+# Fail-closed kapı (YazmaKokleri) test veritabanına bağlı bir sürecin
+# canlı köke bakmasını reddediyor; bu satırlar olmadan rig HİÇ
+# AÇILMAZ. Kapıyı gevşetmiyoruz, rig'e kendi kökünü veriyoruz.
+RIG_DISK="$(mktemp -d /tmp/duzen-rig-disk-XXXXXX)"
+log "Rig disk kökü: ${RIG_DISK} (canlı dizinlere DOKUNULMUYOR)"
+
 log "Arka uç ${ARKA_PORT} portunda açılıyor (enderun_ai_test)..."
 DB_CONNECTION="$TEST_BAGLANTI" \
+Uploads__Root="${RIG_DISK}/uploads" \
+EInvoice__ArchivePath="${RIG_DISK}/e-fatura" \
+Storage__ProjectFilesRoot="${RIG_DISK}/project-files" \
 JWT_SECRET="duzen-testi-jwt-$(head -c 16 /dev/urandom | base64 | tr -d '/+=')" \
 SEED_ADMIN_USERNAME="$KULLANICI" \
 SEED_ADMIN_PASSWORD="$PAROLA" \

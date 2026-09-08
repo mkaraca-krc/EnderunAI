@@ -22,8 +22,21 @@
 set -uo pipefail
 
 BIRIM="${1:-bilinmeyen-birim}"
+
+# İKİNCİ ARGÜMAN: hangi olay (NÖBET/1 · K8).
+#   dustu   — varsayılan, OnFailure'dan gelir.
+#   duzeldi — nobet.sh'den gelir; düşmüş bir birim toparlanınca.
+# AYRI BİR BETİK YAZILMADI: teslim yolu (SMTP, alıcı listesi, posta
+# kapısı, kuru koşu) TEK yerde kalmalı. İkinci bir yol açsaydım biri
+# düzeltilip öteki unutulurdu (Kural 79).
+OLAY="${2:-dustu}"
+
 GUNLUK="/var/log/enderun-uyari.log"
 SON="/var/lib/enderun-ai/uyari-son.txt"
+
+# GÜRÜLTÜ SINIRI DURUMU — NÖBET/1 · K8.
+DURUM_DIZINI="/var/lib/enderun-ai/nobet"
+SUSTURMA_SANIYE="${UYARI_SUSTURMA_SANIYE:-1800}"
 ALICI_DOSYASI="/etc/enderunai/uyari-alicilar.txt"
 ORTAM="/etc/enderunai/backend.env"
 
@@ -33,7 +46,17 @@ ZAMAN="$(TZ=Europe/Istanbul date '+%Y-%m-%d %H:%M:%S') TR"
 DURUM="$(systemctl show "$BIRIM" -p Result -p ExecMainStatus -p ActiveState --value 2>/dev/null | tr '\n' ' ')"
 SON_SATIRLAR="$(journalctl -u "$BIRIM" -n 8 --no-pager -o cat 2>/dev/null)"
 
-GOVDE="ENDERUN AI — BIRIM DUSTU
+if [ "$OLAY" = "duzeldi" ]; then
+    GOVDE="ENDERUN AI — BIRIM DUZELDI
+
+birim  : ${BIRIM}
+zaman  : ${ZAMAN}
+durum  : ${DURUM}
+
+Onceki ariza kapandi. Bu posta, arizanin bittigini bildirir.
+"
+else
+    GOVDE="ENDERUN AI — BIRIM DUSTU
 
 birim  : ${BIRIM}
 zaman  : ${ZAMAN}
@@ -42,11 +65,57 @@ durum  : ${DURUM}
 son gunluk satirlari:
 ${SON_SATIRLAR}
 "
+fi
 
 # ── KANAL 1: DOSYA — KOŞULSUZ ───────────────────────────────────
+#
+# SUSTURMA BU KANALI ETKİLEMEZ. Gürültü sınırı POSTAYA konuyor;
+# dosya ve günlük her olayda yazılıyor. Susturulan bir arızanın
+# hiçbir izi kalmasaydı, "30 dakikadır sessiz" ile "hiç olmadı"
+# birbirinden ayrılamazdı.
 mkdir -p "$(dirname "$SON")"
 printf '%s\n' "$GOVDE" > "$SON"
-printf '%s [UYARI] birim=%s durum=%s\n' "$ZAMAN" "$BIRIM" "$DURUM" >> "$GUNLUK"
+
+# ── GÜRÜLTÜ SINIRI — ARIZA KİMLİĞİNE GÖRE (NÖBET/1 · K8) ────────
+#
+# ÖNCEKİ DAVRANIŞ: her düşüşte bir posta, aynı arıza tekrarlarsa
+# tekrar posta, düzelince hiçbir şey. Beş dakikada bir yeniden
+# başlayan bir birim, posta kutusunu doldurup asıl uyarıyı boğardı.
+#
+# KİMLİK NEDEN DURUMU DA İÇERİYOR: aynı birimin AYNI şekilde
+# düşmesi tekrar, FARKLI şekilde düşmesi YENİ BİLGİDİR. İkincisi
+# susturulmaz.
+KIMLIK="$(printf '%s|%s' "$BIRIM" "$DURUM" | md5sum | cut -c1-12)"
+DURUM_DOSYASI="${DURUM_DIZINI}/$(printf '%s' "$BIRIM" | tr '/@' '__').durum"
+SIMDI="$(date +%s)"
+mkdir -p "$DURUM_DIZINI"
+
+ONCEKI_KIMLIK=""
+ONCEKI_SON=0
+if [ -r "$DURUM_DOSYASI" ]; then
+    # SOURCE EDİLMİYOR: kendi yazdığımız dosya bile olsa, `.` ile
+    # okumak bir kod çalıştırma yüzeyidir. Alanlar tek tek ayrıştırılıyor.
+    ONCEKI_KIMLIK="$(sed -n 's/^kimlik=//p' "$DURUM_DOSYASI" | head -1)"
+    ONCEKI_SON="$(sed -n 's/^son=//p' "$DURUM_DOSYASI" | head -1)"
+    case "$ONCEKI_SON" in (*[!0-9]*|"") ONCEKI_SON=0 ;; esac
+fi
+
+if [ "$OLAY" = "dustu" ]; then
+    printf 'kimlik=%s\nson=%s\nhal=DUSTU\nbirim=%s\n' \
+        "$KIMLIK" "$SIMDI" "$BIRIM" > "$DURUM_DOSYASI"
+
+    if [ "$ONCEKI_KIMLIK" = "$KIMLIK" ] \
+       && [ "$(( SIMDI - ONCEKI_SON ))" -lt "$SUSTURMA_SANIYE" ]; then
+        printf '%s [SUSTURULDU] birim=%s kimlik=%s aynı arıza %s sn önce bildirildi (sınır %s sn)\n' \
+            "$ZAMAN" "$BIRIM" "$KIMLIK" "$(( SIMDI - ONCEKI_SON ))" "$SUSTURMA_SANIYE" >> "$GUNLUK"
+        exit 0
+    fi
+else
+    # Düzeldi: arıza kaydı kapanıyor.
+    rm -f "$DURUM_DOSYASI"
+fi
+
+printf '%s [UYARI] olay=%s birim=%s durum=%s\n' "$ZAMAN" "$OLAY" "$BIRIM" "$DURUM" >> "$GUNLUK"
 
 # ── KANAL 2: E-POSTA — EKSİK OLAN NE İSE ADIYLA SÖYLENİR ────────
 eksik() { printf '%s [POSTA-YOK] %s\n' "$ZAMAN" "$1" >> "$GUNLUK"; exit 0; }
@@ -84,7 +153,14 @@ trap 'rm -f "$MESAJ"' EXIT
 {
     printf 'From: %s\n' "$SMTP_FROM"
     printf 'To: %s\n' "$ALICI"
-    printf 'Subject: [ENDERUN] birim dustu: %s\n' "$BIRIM"
+    # KONU DA OLAYI SÖYLER: gövde "DUZELDI" derken konunun "dustu"
+    # demesi, posta kutusunda bakan kişiyi yanıltırdı — ve çoğu kişi
+    # yalnız konuya bakar.
+    if [ "$OLAY" = "duzeldi" ]; then
+        printf 'Subject: [ENDERUN] birim duzeldi: %s\n' "$BIRIM"
+    else
+        printf 'Subject: [ENDERUN] birim dustu: %s\n' "$BIRIM"
+    fi
     printf 'Content-Type: text/plain; charset=UTF-8\n\n'
     printf '%s\n' "$GOVDE"
 } > "$MESAJ"
@@ -110,9 +186,22 @@ if [ ! -f "$POSTA_KAPISI" ]; then
     exit 0
 fi
 
-if [ "${UYARI_KURU:-0}" = "1" ]; then
-    printf '%s [KURU-KOSU] e-posta olusturuldu, GONDERILMEDI (%s bayt, alici tanimli)\n' \
-        "$ZAMAN" "$(wc -c < "$MESAJ")" >> "$GUNLUK"
+# KURU KOŞU KAPISI — ORTAMDA **VE** DİSKTE.
+#
+# 2026-09-08'de bu betiği sondalarken kuru koşuyu systemd şablonuna
+# `Environment=UYARI_KURU=1` drop-in'i ile açtım. Şablon üzerinden
+# tetiklenen çağrılar kuru koştu; ama `nobet.sh` bu betiği DOĞRUDAN
+# çağırıyor ve drop-in o yolu hiç görmedi. Sonuç: sondanın "düzeldi"
+# ayağı GERÇEK BİR POSTA gönderdi.
+#
+# Gönderim kapısı bu dersi zaten almıştı ("kapı artık sürecin
+# ortamında değil, DİSKTE duruyor; tetikleyen kim olursa olsun aynı
+# kapı geçerli") — kuru koşu kapısı almamıştı. Şimdi aldı.
+KURU_DOSYASI="/etc/enderunai/uyari-kuru"
+if [ -f "$KURU_DOSYASI" ] || [ "${UYARI_KURU:-0}" = "1" ]; then
+    printf '%s [KURU-KOSU] e-posta olusturuldu, GONDERILMEDI (%s bayt, alici tanimli, kaynak=%s)\n' \
+        "$ZAMAN" "$(wc -c < "$MESAJ")" \
+        "$([ -f "$KURU_DOSYASI" ] && echo dosya || echo ortam)" >> "$GUNLUK"
     exit 0
 fi
 

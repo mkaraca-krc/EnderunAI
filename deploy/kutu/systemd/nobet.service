@@ -1,0 +1,10 @@
+[Unit]
+Description=EnderunAI nobetci - duzeldi bildirimi (NOBET/1 K8)
+# KENDISI OnFailure TASIMAZ: nobetci duserse onu bildirecek olan
+# yine kendisidir; dongu kurmak yerine sessiz kalmayi sectik.
+# Nobetcinin kendi saglıgı AK-7'nin (disaridan bakan goz) isi.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/nobet.sh
+User=root

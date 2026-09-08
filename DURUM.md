@@ -12459,3 +12459,67 @@ imkânsız). Ama `hakedis.view` izni olan **10 kullanıcının 10'unun da**
 `user_data_scopes` kaydı var — yani hepsi kapsam kısıtlı, hepsi
 kapsamları dışındaki hakediş belgelerini görebilir. Bugün 4 dosya var
 ve hepsi aynı kişinin; mekanizma açık, sızıntı henüz yok.
+
+## NÖBET/1 · K8 — 1. VE 2. ADIM (2026-09-08)
+
+### Ölçüm: uyarı kanalı vardı, ama en önemli birimlere bağlı değildi
+
+| birim | OnFailure (öncesi) |
+|---|---|
+| cc-devir, enderun-rapor, geri-yükleme-tatbikatı | bağlı |
+| **enderunai-backend** | **YOK** |
+| **enderunai-frontend** | **YOK** |
+| **enderun-backup** | **YOK** |
+
+Yani canlıyı taşıyan üç birim düştüğünde kimseye haber gitmiyordu.
+
+**Tarihsel not, düzeltilerek:** 2026-08-25 03:00'te gecelik yedek üç
+kez `[ERROR] ŞİFRELEME ANAHTARI YOK` yazdı ama systemd `Finished /
+Deactivated successfully` dedi — betik 0 ile çıkıyordu, yani OnFailure
+bağlı olsaydı bile ateşlenmezdi. Bunu "bugünkü kusur" diye raporlamadan
+önce git'e bakıldı: aynı gün `44fbec4d` ile düzeltilmiş. Bugün eksik
+olan tek şey OnFailure satırıydı.
+
+### 1. adım — bağlantı
+
+Drop-in ile (`ops/systemd/enderunai-*.service.d/uyari.conf`). Ana birim
+dosyaları depoda değil, yalnız `/etc`'te; drop-in tek dosya silinerek
+geri alınır. Üçü de `ayrisma-kontrolu.sh` listesine girdi (19 → 24 dosya).
+
+**SINIR:** `Restart=always` olduğu için OnFailure ancak birim
+`StartLimitBurst`'ü aşıp `failed` durumuna düştüğünde ateşlenir — ısrarlı
+çökme haber verilir, kendini toparlayan tek bir yeniden başlatma
+verilmez. Bilinçli: gürültü asıl uyarıyı boğar.
+
+### 2. adım — gürültü sınırı ve "düzeldi"
+
+- Arıza kimliği = `md5(birim | systemd durum özeti)`. **Aynı** arıza 30
+  dakika susturuluyor; **farklı** şekilde düşmek yeni bilgidir,
+  susturulmaz.
+- Susturma yalnız POSTAYA uygulanıyor. Dosya kanalı ve günlük her
+  olayda yazıyor — yoksa "30 dakikadır sessiz" ile "hiç olmadı"
+  ayırt edilemezdi.
+- `nobet.sh` + `nobet.timer` (5 dk): açık arıza kayıtlarını gezip
+  toparlanan birim için "düzeldi" postası gönderiyor ve kaydı kapatıyor.
+  `OnFailure=` yalnız düşüşte ateşlendiği için toparlanmayı görecek
+  kimse yoktu.
+- **oneshot ayrımı:** yedek gibi birimler başarıyla bitince `active`
+  olmaz, `inactive` olur. Yalnız "active mi" diye sorulsaydı bu birimler
+  asla düzelmiş sayılmaz ve "düzeldi" postası hiç gitmezdi. `is-failed`
+  tek başına da yetmez: elle durdurulmuş sürekli bir servis de failed
+  değildir ama ayakta değildir.
+- Teslim yolu tek: `nobet.sh` postayı kendi göndermiyor,
+  `enderun-uyari.sh`'i çağırıyor (Kural 79).
+
+### SONDADA YAPILAN HATA — KURU KOŞU KAPISI ORTAMDAYDI
+
+Sondayı kurarken kuru koşuyu systemd şablonuna
+`Environment=UYARI_KURU=1` drop-in'i ile açtım. Şablon üzerinden
+tetiklenen çağrılar kuru koştu; ama `nobet.sh` betiği DOĞRUDAN çağırıyor
+ve drop-in o yolu görmedi. **Sondanın "düzeldi" ayağı gerçek bir posta
+gönderdi.**
+
+Gönderim kapısı bu dersi zaten almıştı — *"kapı artık sürecin ortamında
+değil, DİSKTE duruyor; tetikleyen kim olursa olsun aynı kapı geçerli"* —
+kuru koşu kapısı almamıştı. `/etc/enderunai/uyari-kuru` eklendi ve
+doğrudan çağrıyla sınandı: `kaynak=dosya`, posta gitmedi.

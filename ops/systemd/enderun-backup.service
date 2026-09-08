@@ -1,6 +1,17 @@
 [Unit]
 Description=EnderunAI günlük veritabanı + uploads yedeği
 After=postgresql.service
+# NÖBET/1 · K8 — YEDEK DÜŞERSE HABER VER.
+#
+# Bu birim Restart=no ile koşuyor: düştüğünde tekrar denenmiyor ve
+# 2026-09-08'e kadar hiçbir yere haber de gitmiyordu. Yedek son
+# savunma hattı; sessiz düşmesi en pahalı sessizlik.
+#
+# TARİHSEL NOT: 2026-08-25 03:00'te betik üç kez "ŞİFRELEME ANAHTARI
+# YOK" yazdı ama systemd "Finished / Deactivated successfully" dedi —
+# betik 0 ile çıkıyordu. O kusur aynı gün 44fbec4d ile düzeltildi
+# (artık exit 1). Yani bugün eksik olan tek şey bu satırdı.
+OnFailure=enderun-uyari@%N.service
 
 [Service]
 Type=oneshot

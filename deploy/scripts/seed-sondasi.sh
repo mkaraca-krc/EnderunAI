@@ -29,8 +29,22 @@ PID=""
 temizle() { [ -n "$PID" ] && kill -TERM -- "-${PID}" 2>/dev/null; sleep 1; [ -n "$PID" ] && kill -KILL -- "-${PID}" 2>/dev/null; true; }
 trap temizle EXIT
 
+# SONDANIN KENDİ DİSK KÖKÜ (SIZINTI/1).
+#
+# Bu sonda uygulamayı `enderun_ai_test` ile ayağa kaldırıyor ama
+# yazma kökleri sabit kodlu olduğu için dosyalarını CANLI dizinlere
+# bırakıyordu. Kökler artık dışarıdan veriliyor ve fail-closed kapı
+# (YazmaKokleri) canlı kökle başlamayı reddediyor — verilmezse bu
+# betik hiç açılmaz. Kapıyı gevşetmek yerine sondaya kendi kökü
+# verildi.
+SONDA_DISK="$(mktemp -d /tmp/seed-sonda-disk-XXXXXX)"
+trap 'rm -rf "$SONDA_DISK"' EXIT
+
 ac() {
   DB_CONNECTION="$TEST" JWT_SECRET="seed-sonda-$(head -c 9 /dev/urandom | base64 | tr -d '/+=')" \
+  Uploads__Root="${SONDA_DISK}/uploads" \
+  EInvoice__ArchivePath="${SONDA_DISK}/e-fatura" \
+  Storage__ProjectFilesRoot="${SONDA_DISK}/project-files" \
   ASPNETCORE_URLS="http://127.0.0.1:${PORT}" \
     setsid dotnet "${SONDA_PUBLISH:-${KOK}/publish}/EnderunAI.Api.dll" > /tmp/seed-sonda-arka.log 2>&1 &
   PID=$!

@@ -44,6 +44,9 @@ ESLESMELER=(
   "systemd/enderun-rapor.service|/etc/systemd/system/enderun-rapor.service"
   "systemd/enderun-rapor.timer|/etc/systemd/system/enderun-rapor.timer"
   "systemd/enderun-uyari@.service|/etc/systemd/system/enderun-uyari@.service"
+  "bin/nobet.sh|/usr/local/bin/nobet.sh"
+  "systemd/nobet.service|/etc/systemd/system/nobet.service"
+  "systemd/nobet.timer|/etc/systemd/system/nobet.timer"
 
   # ── KUTU/1 DIŞI, AMA AYNI SINIF ───────────────────────────────
   #
@@ -62,6 +65,16 @@ ESLESMELER=(
   "../../ops/systemd/enderun-geri-yukleme-tatbikati.timer|/etc/systemd/system/enderun-geri-yukleme-tatbikati.timer"
   "../../ops/systemd/smtp-port-watch.service|/etc/systemd/system/smtp-port-watch.service"
   "../../ops/systemd/smtp-port-watch.timer|/etc/systemd/system/smtp-port-watch.timer"
+
+  # NÖBET/1 · K8 — UYARI DROP-IN'LERİ.
+  #
+  # enderunai-backend ve enderunai-frontend'in ANA birim dosyaları
+  # depoda YOK, yalnız /etc'te duruyor. Onları buraya taşımak ayrı
+  # bir iş; ama uyarı bağlantısı depoda duruyor ve ayrışırsa
+  # görülmeli — sessizce silinmiş bir OnFailure, hiç yazılmamış
+  # olandan daha tehlikeli: yazıldığı sanılır.
+  "../../ops/systemd/enderunai-backend.service.d/uyari.conf|/etc/systemd/system/enderunai-backend.service.d/uyari.conf"
+  "../../ops/systemd/enderunai-frontend.service.d/uyari.conf|/etc/systemd/system/enderunai-frontend.service.d/uyari.conf"
 )
 
 ayrisan=0

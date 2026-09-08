@@ -1,0 +1,13 @@
+[Unit]
+Description=EnderunAI nobetci - bes dakikada bir toparlanma kontrolu
+
+[Timer]
+# BES DAKIKA: "duzeldi" postasinin gecikmesi en fazla bu kadar.
+# Daha sik kosmanin faydasi yok — susturma siniri 30 dakika ve
+# arizanin bittigini bes dakika icinde ogrenmek yeterli.
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
