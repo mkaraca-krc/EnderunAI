@@ -263,6 +263,61 @@ require_clean_git_tree() {
     fi
 }
 
+# ═══════════════════════════════════════════════════════════════
+# AĞAÇ YAYIN BOYUNCA DEĞİŞMEDİ Mİ (Y1)
+# ═══════════════════════════════════════════════════════════════
+#
+# ÖLÇÜLEN AÇIK — VE BENİM KENDİ İHLALİMDEN ÇIKTI (2026-09-08):
+# `require_clean_git_tree` yayının BAŞINDA koşuyor. Ben yayın
+# ortasında çalışma ağacına yeni bir dosya ekledim; kapı çoktan
+# geçmişti ve COMMIT EDİLMEMİŞ KOD canlıya derlenecekti. Fark edip
+# dosyayı kenara aldım — ama kapı bunu yakalamıyordu.
+#
+# Bu, "kapı doğru soruyu YANLIŞ ZAMANDA soruyor" sınıfı. Derleme
+# adımından hemen önce aynı soru TEKRAR soruluyor ve ayrıca
+# başlangıçtaki commit ile karşılaştırılıyor: yayın hangi koddan
+# başladıysa onu yayınlamalı.
+YAYIN_BASLANGIC_SHA=""
+
+agac_baslangicini_kaydet() {
+    YAYIN_BASLANGIC_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+    log "INFO" "Yayın başlangıç commit'i: ${YAYIN_BASLANGIC_SHA:0:8}"
+}
+
+agac_hala_ayni_mi() {
+    # SESSİZCE GEÇMEZ: başlangıç kaydedilmemişse kapı ölçüm
+    # yapamamıştır ve bunu söylemek zorundadır (Kural 48).
+    if [ -z "$YAYIN_BASLANGIC_SHA" ]; then
+        log "WARN" "Ağaç kapısı ÖLÇEMEDİ: başlangıç commit'i kaydedilmemiş."
+        return 0
+    fi
+
+    local simdi
+    simdi="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+
+    if [ "$simdi" != "$YAYIN_BASLANGIC_SHA" ]; then
+        log "ERROR" "AĞAÇ DEĞİŞTİ: yayın ${YAYIN_BASLANGIC_SHA:0:8} ile başladı,"
+        log "ERROR" "şimdi ${simdi:0:8}. Yayın hangi koddan başladıysa onu yayınlamalı."
+        return 1
+    fi
+
+    local kirli
+    kirli="$(git -C "$REPO_ROOT" status --porcelain)"
+
+    if [ -n "$kirli" ]; then
+        log "ERROR" "AĞAÇ KİRLENDİ: yayın koşarken çalışma ağacına dokunuldu."
+        log "ERROR" "Commit edilmemiş kod derlenip canlıya çıkardı."
+        printf '%s
+' "$kirli" | head -10 | while IFS= read -r satir; do
+            log "ERROR" "  ${satir}"
+        done
+        return 1
+    fi
+
+    log "INFO" "Ağaç kapısı GEÇTİ: yayın boyunca çalışma ağacı değişmedi."
+    return 0
+}
+
 resolve_test_db_connection() {
     if [ -n "${TEST_DB_CONNECTION:-}" ]; then
         return
@@ -1144,6 +1199,9 @@ main() {
         fail "Silinen savunma satırları beyan edilmemiş (Kural 72)."
     fi
 
+    # Başlangıç commit'i de pull'DAN SONRA kaydediliyor — aynı gerekçe.
+    agac_baslangicini_kaydet
+
     # Kapsam pull'DAN SONRA belirleniyor: HEAD ancak o noktada kesin.
     resolve_test_scope
     log "INFO" "Test kapsamı: ${TEST_SCOPE} (${TEST_SCOPE_REASON})"
@@ -1245,6 +1303,11 @@ main() {
     run_frontend_tests
     asama "surum-yedegi"
     backup_current_release
+    # DERLEME ADIMINDAN HEMEN ÖNCE: buradan sonrası artık canlıya
+    # gidecek ikiliyi üretiyor.
+    asama "agac-kapisi"
+    agac_hala_ayni_mi || fail "Çalışma ağacı yayın sırasında değişti (Y1)."
+
     asama "yayinlama"
     publish_backend
     asama "on-yuz-derleme"
