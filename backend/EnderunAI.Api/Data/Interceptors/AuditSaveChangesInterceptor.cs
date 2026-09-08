@@ -25,6 +25,9 @@ public sealed class AuditSaveChangesInterceptor(
         typeof(AccountingVoucher),
         typeof(EmployerPortalLink),
         typeof(RolePermission),
+        // SEED/1 SB3: kaldırma kaydı da denetim izine giriyor —
+        // kim, ne zaman, hangi rol+izin.
+        typeof(RolePermissionRevocation),
         typeof(UserPermissionOverride),
         typeof(UserDataScope),
         typeof(RoleWorkHourWindow),

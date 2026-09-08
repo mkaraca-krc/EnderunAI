@@ -290,29 +290,32 @@ export default function PermissionMatrixPage() {
         </div>
 
         {/*
-          ═══ KALICI OLMAYAN KALDIRMA UYARISI (SEED/1 S5) ═══
+          ═══ UYARI METNİ DEĞİŞTİ — ESKİSİ ARTIK YANLIŞ (SEED/1 SB6) ═══
 
-          BU BİR DÜZELTME DEĞİL, DÜRÜSTLÜK. Kalıcı çözüm gelene kadar
-          kullanıcı yaptığı değişikliğin kalıcı olmadığını bilmeli.
+          Önceki metin "kaldırdığınız izinler kalıcı olmayabilir"
+          diyordu ve O ZAMAN DOĞRUYDU: tohumlayıcı her açılışta
+          katalogdaki eksik çiftleri geri ekliyordu.
 
-          ÖLÇÜLDÜ (2026-09-07, canlı denetim kaydı):
-            18:57  mehmet, 6 rolden dashboard.view KALDIRDI
-            20:33  sistem, aynı 6 çifti GERİ EKLEDİ (yeniden başlatma)
-          Bugüne kadar yapılan 6 kaldırmanın 6'sı da geri geldi.
+          Artık kaldırma KALICI. Kaldırılan çift `role_permission_revocations`
+          tablosuna yazılıyor ve tohumlayıcı ona bakıyor.
 
-          SEBEP: `SeedRolePermissionsAsync` her açılışta koşulsuz
-          çalışıp `RoleCatalog`taki eksik çiftleri geri ekliyor.
-          Deneysel ölçüm: katalog 595 çift üretiyor, canlıda 597 var —
-          yani 597'nin 595'i geri gelir, yalnız 2'si kalıcı silinebilir.
+          SONDA (SB4): kaldır → arka ucu yeniden başlat → hâlâ kaldırılmış mı.
+            kaldırma kaydı YOKken : 1 → 0 → 1  (geri geldi, kırmızı)
+            kaldırma kaydı VARken : 1 → 0 → 0  (kaldı, yeşil)
+
+          ESKİ METNİ BIRAKMADIM: yanlış bir uyarı, uyarı olmamasından
+          kötüdür — kullanıcı ona göre davranış geliştirir.
+
+          BU METİN NİYE HÂLÂ VAR: kaldırmanın nereye yazıldığını ve
+          rol seviyesi ile kişi seviyesinin farkını söylüyor. İkisi
+          farklı araç ve karıştırılırsa yanlış olan uygulanır.
         */}
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <strong>Kaldırdığınız izinler kalıcı olmayabilir.</strong> Bir rolden
-          izin kaldırdığınızda, sistem yeniden başladığında (yayın, sunucu
-          yeniden başlatma) o izin <strong>geri gelebilir</strong>. Ekleme
-          işlemleri kalıcıdır. Kalıcı bir kısıtlama için{" "}
-          <strong>Kullanıcı Yönetimi</strong> ekranındaki kişi bazlı{" "}
-          <strong>Kısıtla</strong> seçeneğini kullanın — kişisel kısıtlar
-          yeniden başlatmadan etkilenmez.
+        <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <strong>Değişiklikler anında ve kalıcı olarak kaydedilir.</strong> Bir
+          rolden kaldırdığınız izin, sistem yeniden başlasa da kaldırılmış
+          kalır. Bu ayar <strong>role</strong> ait; tek bir kişiyi
+          kısıtlamak için <strong>Kullanıcı Yönetimi</strong> ekranındaki{" "}
+          <strong>Kısıtla</strong> seçeneğini kullanın.
         </div>
 
         {/* ── ARAMA + BÖLÜM LİSTESİ ────────────────────────────────── */}

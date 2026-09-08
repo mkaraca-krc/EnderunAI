@@ -69,6 +69,37 @@ const RULES: Rule[] = [
    */
   { match: "/dashboard", permission: "dashboard.view" },
 
+  /*
+   * ═══ KORUMASIZ EKRANLAR BAĞLANDI (KARAR 2, 2026-09-08) ═══
+   *
+   * ÖLÇÜLDÜ: 188 ekranın 15'i hiçbir kurala bağlı değildi. Kuralı
+   * olmayan ekranda `routePermission` null döner ve `routeErisimi`
+   * true der — yani giriş yapmış HERKES girer.
+   *
+   * MEVCUT ANAHTARLA BAĞLANANLAR: karşılığı katalogda zaten vardı.
+   * YENİ ANAHTAR GEREKENLER: `assets.view`, `assets.service.view`,
+   * `approvals.view`, `management.view` bu pakette YARATILDI ve
+   * katalogda yalnız Admin + Genel Müdür'e verildi. Dar başlıyor.
+   *
+   * SIRA ÖNEMLİ: `/demirbas/servis` genel `/demirbas` kuralından
+   * ÖNCE gelmeli, yoksa servis ekranı da `assets.view` ile açılırdı.
+   *
+   * AÇIK BIRAKILANLAR VE GEREKÇELERİ:
+   *   /login, /yetkisiz, /parola, kök  — oturum öncesi ya da herkese
+   *   /isg/benim — ÖLÇÜLDÜ, kendi kaydından başkasını göstermiyor:
+   *     iki ayrı kullanıcı gerçekten çağırdı, kartlar farklı geldi,
+   *     sorgu dizesiyle başkasının kimliği geçirilemedi
+   *     (isg-benim-sizinti.spec.ts)
+   *   /portal/[token] — jetonla dışarıya açık ayrı yüzey; jeton
+   *     ömrü/iptali ayrı iş olarak sıraya alındı
+   */
+  { match: "/demirbas/servis", permission: "assets.service.view" },
+  { match: "/demirbas", permission: "assets.view" },
+  { match: "/onay-merkezi", permission: "approvals.view" },
+  { match: "/yonetim", permission: "management.view" },
+  { match: "/yapilacaklar", permission: "tasks.view" },
+  { match: "/personel", permission: "personnel.view" },
+
   // --- Sistem yönetimi ---
   {
     // Şirket ayarları hem ayar hem kullanıcı yönetimi tarafından

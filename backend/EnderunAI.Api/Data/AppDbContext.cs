@@ -329,6 +329,13 @@ public sealed class AppDbContext(
 
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+
+    /// <summary>
+    /// Rolden KALDIRILMIŞ izinler (SEED/1). Tohumlayıcı bu kayda
+    /// bakarak geri eklemiyor. Gerekçesi modelin kendi yorumunda.
+    /// </summary>
+    public DbSet<RolePermissionRevocation> RolePermissionRevocations =>
+        Set<RolePermissionRevocation>();
     public DbSet<UserPermissionOverride> UserPermissionOverrides => Set<UserPermissionOverride>();
     public DbSet<UserDataScope> UserDataScopes => Set<UserDataScope>();
     public DbSet<UserUiPreference> UserUiPreferences => Set<UserUiPreference>();
@@ -430,6 +437,7 @@ public sealed class AppDbContext(
         ConfigureHrRecruitment(modelBuilder);
         ConfigureEmployerPortal(modelBuilder);
         ConfigureSecurityAuditEvents(modelBuilder);
+        ConfigureRolePermissionRevocations(modelBuilder);
         ConfigureMarketData(modelBuilder);
         ConfigureRbac(modelBuilder);
         ConfigureWorkHourAccess(modelBuilder);
@@ -842,6 +850,40 @@ public sealed class AppDbContext(
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasQueryFilter(x => !x.IsDeleted);
+        });
+    }
+
+    /// <summary>
+    /// Kaldırma kaydı — rol+izin çifti başına EN FAZLA BİR satır.
+    ///
+    /// Benzersizlik kapısı veritabanında: iki kez kaldırma denemesi
+    /// (çift tıklama, yarış) ikinci bir satır üretmesin. İki satır
+    /// olsaydı "kaldırıldı mı" sorusu hâlâ doğru cevaplanırdı ama
+    /// temizleme ve sayım yanıltıcı olurdu.
+    ///
+    /// SİLME DAVRANIŞI: rol ya da izin silinirse kaldırma kaydı da
+    /// düşer (Cascade). Öksüz bir kaldırma kaydı, artık var olmayan
+    /// bir çift için tohumlamayı engellemeye çalışırdı — zararsız
+    /// ama anlamsız; anlamsız kayıt zamanla yanlış okunur.
+    /// </summary>
+    private static void ConfigureRolePermissionRevocations(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RolePermissionRevocation>(entity =>
+        {
+            entity.ToTable("role_permission_revocations");
+
+            entity.HasIndex(item => new { item.RoleId, item.PermissionId })
+                .IsUnique();
+
+            entity.HasOne(item => item.Role)
+                .WithMany()
+                .HasForeignKey(item => item.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(item => item.Permission)
+                .WithMany()
+                .HasForeignKey(item => item.PermissionId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

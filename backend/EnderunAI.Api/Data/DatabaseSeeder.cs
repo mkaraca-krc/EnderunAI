@@ -266,6 +266,22 @@ public static class DatabaseSeeder
             .Select(item => (item.RoleId, item.PermissionId))
             .ToHashSet();
 
+        /*
+         * KULLANICININ KALDIRDIĞI ÇİFTLER GERİ EKLENMEZ (SEED/1).
+         *
+         * ÖLÇÜLEN KUSUR: bu döngü katalogdaki her eksik çifti geri
+         * ekliyordu. Matristen kaldırılan izin bir sonraki yeniden
+         * başlatmada geri geliyordu ve bunu kimse görmüyordu —
+         * ekran çalışıyor, yalnız kısıtlama kayboluyordu.
+         *
+         * Kararı `RolIzinKurali` veriyor; burada YENİDEN YAZILMIYOR.
+         */
+        var kaldirilmislar = (await db.RolePermissionRevocations
+                .Select(item => new { item.RoleId, item.PermissionId })
+                .ToListAsync())
+            .Select(item => (item.RoleId, item.PermissionId))
+            .ToHashSet();
+
         foreach (var definition in RoleCatalog.Roles)
         {
             if (!roleIdsByName.TryGetValue(definition.Name, out var roleId))
@@ -276,8 +292,13 @@ public static class DatabaseSeeder
                 if (!permissionIdsByKey.TryGetValue(key, out var permissionId))
                     continue;
 
-                if (existingGrants.Contains((roleId, permissionId)))
+                if (!RolIzinKurali.TohumlanmaliMi(
+                        katalogdaVar: true,
+                        zatenVar: existingGrants.Contains((roleId, permissionId)),
+                        kaldirilmis: kaldirilmislar.Contains((roleId, permissionId))))
+                {
                     continue;
+                }
 
                 db.RolePermissions.Add(new RolePermission
                 {

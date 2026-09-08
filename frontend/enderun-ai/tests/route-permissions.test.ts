@@ -97,11 +97,50 @@ describe("yol izinleri", () => {
    * geçiriyor — sürpriz olmasın diye.
    */
   it("kuralı olmayan yol açıktır", () => {
-    // Kuralı bilerek olmayan bir ekran: onay merkezi (Y2-2 listesinde).
-    expect(routePermission("/onay-merkezi")).toBeNull();
-
-    // Hiç var olmayan bir yol da açık — varsayılanın kendisi.
+    /*
+     * ÖRNEK İKİNCİ KEZ DEĞİŞTİ — VE SEBEBİ KAYDA DEĞER.
+     *
+     * Önce `/dashboard` idi; YETKİ/1'de kural aldı.
+     * Sonra `/onay-merkezi` yaptım; KARAR 2'de o da kural aldı.
+     *
+     * Ders: örnek olarak "bugün kuralsız" bir EKRAN seçmek, testi
+     * o ekranın geleceğine bağlıyor. Artık örnek HİÇ VAR OLMAYAN
+     * bir yol — varsayılanın kendisini sınıyor ve hiçbir ekranın
+     * kaderine bağlı değil.
+     */
     expect(routePermission("/boyle-bir-ekran-yok")).toBeNull();
+    expect(routePermission("/hicbir-zaman-olmayacak/alt-yol")).toBeNull();
+  });
+
+  /**
+   * KORUMASIZ EKRANLAR BAĞLANDI (KARAR 2).
+   *
+   * Bu satırlar bir davranışı değil, ÖLÇÜLMÜŞ BİR AÇIĞIN
+   * KAPANDIĞINI tutuyor: 188 ekranın 15'i hiçbir kurala bağlı
+   * değildi ve giriş yapmış herkese açıktı.
+   */
+  it("eski korumasız ekranlar artık izne bağlı", () => {
+    expect(routePermission("/demirbas")).toBe("assets.view");
+    expect(routePermission("/demirbas/servis")).toBe("assets.service.view");
+    expect(routePermission("/onay-merkezi")).toBe("approvals.view");
+    expect(routePermission("/yonetim")).toBe("management.view");
+    expect(routePermission("/yapilacaklar")).toBe("tasks.view");
+    expect(routePermission("/personel")).toBe("personnel.view");
+  });
+
+  /**
+   * BİLEREK AÇIK KALANLAR — gerekçeleri kural dosyasında yazılı.
+   *
+   * `/isg/benim` burada çünkü açık kalması bir ÖLÇÜME dayanıyor
+   * (isg-benim-sizinti.spec.ts): iki ayrı kullanıcı gerçekten
+   * çağırdı, kartlar farklı geldi, sorgu dizesiyle başkasının
+   * kimliği geçirilemedi.
+   */
+  it("bilerek açık ekranlar açık kaldı", () => {
+    expect(routePermission("/login")).toBeNull();
+    expect(routePermission("/yetkisiz")).toBeNull();
+    expect(routePermission("/parola")).toBeNull();
+    expect(routePermission("/isg/benim")).toBeNull();
   });
 
   /**

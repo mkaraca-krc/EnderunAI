@@ -1,3 +1,4 @@
+using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Contracts;
 using EnderunAI.Api.Data;
 using EnderunAI.Api.Models;
@@ -11,7 +12,9 @@ namespace EnderunAI.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "Admin,Genel Müdür")]
 [Route("api/user-management/permission-matrix")]
-public sealed class PermissionMatrixController(AppDbContext db) : ControllerBase
+public sealed class PermissionMatrixController(
+    AppDbContext db,
+    ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
     [RequirePermission(PermissionCatalog.Keys.UserManagementView)]
@@ -40,7 +43,22 @@ public sealed class PermissionMatrixController(AppDbContext db) : ControllerBase
 
         return Ok(new
         {
-            permissions = PermissionCatalog.Permissions,
+            /*
+             * KULLANIMDAN KALKMIŞ İZİNLER MATRİSTE GÖSTERİLMİYOR
+             * (KARAR 3b). Kayıtları SİLİNMİYOR — yalnız ekrandan
+             * çıkarılıyor.
+             *
+             * Ölçüldü: bu 7 anahtarın veritabanında 26 rol kaydı ve
+             * 17 kişisel kaydı var (5'i açıkça izin veren). Silmek
+             * sessizce yetki değiştirirdi; göstermek ise hiçbir şeyi
+             * korumayan satırlar için YANLIŞ GÜVEN veriyordu.
+             *
+             * Kayıtlar duruyor: `security_audit_events` ve
+             * `role_permissions` üzerinden hâlâ ölçülebilirler.
+             */
+            permissions = PermissionCatalog.Permissions
+                .Where(item => !item.KullanimdanKalkti)
+                .ToList(),
             roles,
             grants
         });
@@ -79,17 +97,58 @@ public sealed class PermissionMatrixController(AppDbContext db) : ControllerBase
             item => item.RoleId == role.Id && item.PermissionId == permission.Id,
             cancellationToken);
 
-        if (request.Granted && existing is null)
+        /*
+         * ═══ KALDIRMA KAYDI — YAZAN TEK YER BURASI (SEED/1 SB2) ═══
+         *
+         * Tohumlayıcı her açılışta katalogdaki eksik çiftleri geri
+         * ekliyor. Kullanıcının kaldırdığı bir izin, bu kayıt olmadan
+         * bir sonraki yeniden başlatmada GERİ GELİYORDU — ve kimse
+         * görmüyordu: ekran çalışıyor, yalnız kısıtlama kayboluyordu.
+         *
+         * Kaldırma kaydı bu ucun DIŞINDA yazılmaz. `RolIzinKaydiTekYer`
+         * muhafızı bunu tutuyor; ikinci bir yazma yolu açılırsa kural
+         * iki yerde yaşamaya başlar ve biri unutulur (Kural 79).
+         *
+         * SİMETRİ ŞART: açma işlemi kaydı SİLER. Silmezse kullanıcı
+         * izni geri verse bile tohumlayıcı bir daha o çifte
+         * dokunmazdı; bugünkü kusurun aynadaki hâli olurdu.
+         */
+        var kaldirmaKaydi = await db.RolePermissionRevocations
+            .SingleOrDefaultAsync(
+                item => item.RoleId == role.Id && item.PermissionId == permission.Id,
+                cancellationToken);
+
+        if (request.Granted)
         {
-            db.RolePermissions.Add(new RolePermission
+            if (existing is null)
             {
-                RoleId = role.Id,
-                PermissionId = permission.Id
-            });
+                db.RolePermissions.Add(new RolePermission
+                {
+                    RoleId = role.Id,
+                    PermissionId = permission.Id
+                });
+            }
+
+            if (kaldirmaKaydi is not null)
+                db.RolePermissionRevocations.Remove(kaldirmaKaydi);
         }
-        else if (!request.Granted && existing is not null)
+        else
         {
-            db.RolePermissions.Remove(existing);
+            if (existing is not null)
+                db.RolePermissions.Remove(existing);
+
+            // KAYIT HER HÂLDE YAZILIYOR — izin zaten yoksa bile.
+            // "Kapalı kalsın" isteği, o an kapalı olmasından
+            // bağımsız bir KARARDIR ve tohumlayıcı onu bilmeli.
+            if (kaldirmaKaydi is null)
+            {
+                db.RolePermissionRevocations.Add(new RolePermissionRevocation
+                {
+                    RoleId = role.Id,
+                    PermissionId = permission.Id,
+                    RevokedByUserId = currentUser.UserId
+                });
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);

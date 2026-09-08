@@ -4,7 +4,30 @@ public sealed record PermissionDefinition(
     string Key,
     string Module,
     string Name,
-    string Description);
+    string Description,
+    /// <summary>
+    /// KULLANIMDAN KALKTI — MATRİSTE GİZLENİR, SİLİNMEZ (KARAR 3b).
+    ///
+    /// ═══ NEDEN SİLİNMİYOR ═══
+    ///
+    /// Ölçüldü (2026-09-07, canlı): bu anahtarların
+    /// `role_permissions` tablosunda 26, `user_permission_overrides`
+    /// tablosunda 17 kaydı var — 17'nin 5'i açıkça İZİN VEREN kayıt.
+    /// Silmek sessizce yetki değiştirirdi.
+    ///
+    /// ═══ NEDEN GİZLENİYOR ═══
+    ///
+    /// Matriste 184 satır var; hiçbir şeyi korumayan 7 satır hem yer
+    /// kaplıyor hem YANLIŞ GÜVEN veriyor — "bu izin işaretli, demek
+    /// ki korunuyor" diye okunuyor.
+    ///
+    /// ═══ ÖLÇÜMÜN SINIRI AÇIKÇA ═══
+    ///
+    /// "Ölü" tespiti KAYNAK REFERANS SAYIMIDIR, çalışma anı ölçümü
+    /// değil. Silme kararı, çalışma anında hiç çağrılmadıkları
+    /// ölçüldükten sonra verilecek (Mehmet).
+    /// </summary>
+    bool KullanimdanKalkti = false);
 
 public static class PermissionCatalog
 {
@@ -31,6 +54,30 @@ public static class PermissionCatalog
     {
         // Genel
         public const string DashboardView = "dashboard.view";
+
+        /*
+         * ═══ KORUMASIZ EKRANLAR İÇİN YENİ ANAHTARLAR (KARAR 2) ═══
+         *
+         * ÖLÇÜLDÜ (2026-09-07): 188 ekranın 15'i hiçbir izne bağlı
+         * değildi; `routePermission` null dönünce `routeErisimi` true
+         * diyor, yani o ekranlar giriş yapmış HERKESE açıktı.
+         *
+         * Bunların dördü için katalogda karşılık gelen bir anahtar
+         * HİÇ YOKTU — önce yaratılması gerekiyordu:
+         *   /demirbas, /demirbas/[id]  -> assets.view
+         *   /demirbas/servis           -> assets.service.view
+         *   /onay-merkezi              -> approvals.view
+         *   /yonetim                   -> management.view
+         *
+         * DAR BAŞLIYOR: katalogda yalnız Admin ve Genel Müdür'e
+         * veriliyor (Mehmet'in kararı). Geniş başlayıp daraltmak
+         * kimsede iz bırakmaz; dar başlayıp açmak ise her adımı
+         * görünür kılar.
+         */
+        public const string AssetsView = "assets.view";
+        public const string AssetsServiceView = "assets.service.view";
+        public const string ApprovalsView = "approvals.view";
+        public const string ManagementView = "management.view";
         public const string CompaniesView = "companies.view";
         public const string CompaniesManage = "companies.manage";
 
@@ -371,11 +418,15 @@ public static class PermissionCatalog
     public static readonly IReadOnlyList<PermissionDefinition> Permissions =
     [
         new(Keys.DashboardView, "Genel", "Dashboard", "Genel özet ve göstergeleri görüntüler."),
+        new(Keys.AssetsView, "Demirbaş", "Demirbaşları görüntüleme", "Demirbaş listesini ve kartlarını görüntüler."),
+        new(Keys.AssetsServiceView, "Demirbaş", "Demirbaş servis kayıtları", "Demirbaş bakım ve servis kayıtlarını görüntüler."),
+        new(Keys.ApprovalsView, "Genel", "Onay merkezi", "Kendisine düşen onay taleplerini görüntüler."),
+        new(Keys.ManagementView, "Genel", "Yönetim göstergeleri", "Yönetim özet ekranını görüntüler."),
         new(Keys.CompaniesView, "Organizasyon", "Şirket ve şubeleri görüntüleme", "Şirket ve şube kartlarını görüntüler."),
         new(Keys.CompaniesManage, "Organizasyon", "Şirket ve şube yönetimi", "Şirket ve şube kaydı oluşturur ve günceller."),
 
         new(Keys.ProjectsView, "Projeler", "Projeleri görüntüleme", "Proje kayıtlarını görüntüler."),
-        new(Keys.ProjectsManage, "Projeler", "Proje yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı proje yönetim izni."),
+        new(Keys.ProjectsManage, "Projeler", "Proje yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı proje yönetim izni.", KullanimdanKalkti: true),
         new(Keys.ProjectsCreate, "Projeler", "Proje oluşturma", "Yeni proje kaydı oluşturur."),
         new(Keys.ProjectsEdit, "Projeler", "Proje düzenleme", "Mevcut proje kaydını günceller."),
         new(Keys.ProjectsDelete, "Projeler", "Proje silme/arşivleme",
@@ -399,7 +450,7 @@ public static class PermissionCatalog
         new(Keys.EmployerPortalDelete, "İşveren Portalı", "Portal bağlantısı iptali", "İşveren portalı bağlantısını iptal eder."),
 
         new(Keys.PurchasingView, "Satın Alma", "Satın almayı görüntüleme (eski)", "Geçiş dönemi için korunan geniş kapsamlı görüntüleme izni."),
-        new(Keys.PurchasingManage, "Satın Alma", "Satın alma yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı yönetim izni."),
+        new(Keys.PurchasingManage, "Satın Alma", "Satın alma yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı yönetim izni.", KullanimdanKalkti: true),
         new(Keys.PurchasingApprove, "Satın Alma", "Satın alma onayı (eski)", "Geçiş dönemi için korunan geniş kapsamlı onay izni."),
 
         new(Keys.PurchasingRequestsView, "Satın Alma - Talep", "Talepleri görüntüleme", "Satın alma taleplerini görüntüler."),
@@ -439,9 +490,9 @@ public static class PermissionCatalog
         new(Keys.PersonnelDelete, "Personel", "Personel silme", "Personel kaydını siler."),
 
         new(Keys.AttendanceView, "İnsan Kaynakları", "Puantajı görüntüleme (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
-        new(Keys.AttendanceManage, "İnsan Kaynakları", "Puantaj yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
+        new(Keys.AttendanceManage, "İnsan Kaynakları", "Puantaj yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin.", KullanimdanKalkti: true),
         new(Keys.PayrollView, "İnsan Kaynakları", "Ücret ve bordroyu görüntüleme (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
-        new(Keys.PayrollManage, "İnsan Kaynakları", "Ücret ve bordro yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
+        new(Keys.PayrollManage, "İnsan Kaynakları", "Ücret ve bordro yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin.", KullanimdanKalkti: true),
 
         new(Keys.AttendancePayrollView, "Puantaj-Maaş", "Görüntüleme", "Puantaj, izin, fazla mesai, maaş ve bordro kayıtlarını görüntüler."),
         new(Keys.AttendancePayrollCreate, "Puantaj-Maaş", "Oluşturma", "Puantaj, izin, fazla mesai, maaş ve bordro kaydı oluşturur."),
@@ -460,7 +511,7 @@ public static class PermissionCatalog
         new(Keys.SubcontractorApprove, "Taşeron", "Taşeron onayı", "Taşeron hakedişini ve avansını onaylar."),
 
         new(Keys.HakedisView, "Hakediş", "Hakedişi görüntüleme", "Hakediş, metraj ve fiyat farkı kayıtlarını görüntüler."),
-        new(Keys.HakedisManage, "Hakediş", "Hakediş yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
+        new(Keys.HakedisManage, "Hakediş", "Hakediş yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin.", KullanimdanKalkti: true),
         new(Keys.HakedisApprove, "Hakediş", "Hakediş onayı", "Hakediş ve fiyat farkı kayıtlarını onaylar."),
         new(Keys.HakedisCreate, "Hakediş", "Hakediş oluşturma", "Yeni hakediş, metraj veya fiyat farkı kaydı oluşturur."),
         new(Keys.HakedisEdit, "Hakediş", "Hakediş düzenleme", "Taslak hakediş, metraj veya fiyat farkı kaydını günceller."),
@@ -469,7 +520,7 @@ public static class PermissionCatalog
         new(Keys.FinanceView, "Finans", "Finansı görüntüleme", "Finans merkezi ve ödeme verilerini görüntüler."),
         new(Keys.BankAccountView, "Banka Hesapları", "Banka hesaplarını görüntüleme", "Şirket banka hesaplarını ve maskeli IBAN'ı görüntüler."),
         new(Keys.ChartImport, "Hesap Planı Aktarımı", "Hesap planını dosyadan aktarma", "Dosyadan toplu hesap ekler. Mevcut hesapları GÜNCELLEMEZ, eksik üst hesap OLUŞTURMAZ."),
-        new(Keys.FinanceManage, "Finans", "Finans yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
+        new(Keys.FinanceManage, "Finans", "Finans yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin.", KullanimdanKalkti: true),
         new(Keys.FinanceApprove, "Finans", "Finans onayı", "Ödeme ve finans işlemlerini onaylar."),
         new(Keys.FinanceCreate, "Finans", "Finans kaydı oluşturma", "Tahsilat, ödeme ve finans kaydı oluşturur."),
         new(Keys.CashFlowView, "Finans", "Nakit akış projeksiyonu", "Likidite takvimini görüntüler; bordro çıkışı elden dahil tam tutarla görünür."),
@@ -501,7 +552,7 @@ public static class PermissionCatalog
         new(Keys.CurrentAccountsApprove, "Cari", "Cari kart onayı", "Onay bekleyen cari kartı onaylar."),
 
         new(Keys.AccountingView, "Muhasebe", "Muhasebeyi görüntüleme", "Hesap planı, fiş ve defterleri görüntüler."),
-        new(Keys.AccountingManage, "Muhasebe", "Muhasebe yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
+        new(Keys.AccountingManage, "Muhasebe", "Muhasebe yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin.", KullanimdanKalkti: true),
         new(Keys.AccountingCreate, "Muhasebe", "Fiş oluşturma", "Yeni muhasebe fişi (taslak) oluşturur."),
         new(Keys.AccountingEdit, "Muhasebe", "Fiş düzenleme", "Taslak muhasebe fişini günceller."),
         new(Keys.AccountingDelete, "Muhasebe", "Fiş silme", "Muhasebe fişini siler."),

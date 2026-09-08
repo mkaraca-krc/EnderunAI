@@ -163,5 +163,16 @@
 #   yakalaniyor + mesru kullanim yanlis alarm vermiyor).
 #   TARANAMAYAN IDDIA ACIKCA YAZILI: "alicilar TAZE cozuldu mu"
 #   kaynak metninden okunamaz; onu tutan sey YayinAnindaYetkiTests.
-statik: 2949
+# SEED/1(b) (2026-09-08): 2949 -> 2957, gevseklik 8. Dokum:
+#   RolIzinKuraliTests          1 statik + 4 dinamik ([Theory] +
+#     4 [InlineData]) - kuralin dort hali: katalogda+yok+kaldirilmamis
+#     -> EKLE; zaten var -> ekleme; KALDIRILMIS -> ekleme (kusurun
+#     kendisi); katalogda yok -> ekleme.
+#   RolIzinKaydiTekYerTests     3 - kaldirma kaydina yalniz matris
+#     toggle'i yaziyor; muhafiz isiriyor (yuzey + sahte ihlal +
+#     mesru okuma yanlis alarm vermiyor); toggle hem yaziyor hem
+#     siliyor ("kimse yazmiyor" da testi gecerdi).
+#   KaldirmaKaydiOksuzKalmazTests 1 - izin silinince kaldirma kaydi
+#     da duser (Cascade), oksuz kayit birikemez.
+statik: 2957
 dinamik: 25
