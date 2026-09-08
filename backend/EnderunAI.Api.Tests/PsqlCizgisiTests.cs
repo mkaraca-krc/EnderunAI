@@ -34,8 +34,38 @@ public sealed class PsqlCizgisiTests
 {
     private const string CizgiDosyasi = "deploy/psql-cizgisi.txt";
 
-    /// <summary>Aracın kendisi sayılmaz — psql'i o çağıracak.</summary>
-    private const string Arac = "deploy/scripts/vt-sorgu.sh";
+    /// <summary>
+    /// PSQL'İ SAHİPLENEN ARAÇLAR VE GEREKÇELERİ.
+    ///
+    /// ═══ NEDEN ÇİZGİYE SATIR EKLEMİYORUZ ═══
+    ///
+    /// Çizginin başlığı açık: "LİSTE YALNIZCA KÜÇÜLÜR." Bir aracı
+    /// çizgiye yazmak o kuralı çiğnerdi ve bir daha kimse kuralı
+    /// ciddiye almazdı.
+    ///
+    /// Ama ARAÇ ile ÇAĞIRICI ayrı şeyler. Çizgi, "psql'i doğrudan
+    /// çağıran işlevsel betikler" borcunu sayıyor. Bu sözlükteki
+    /// dosyalar borç değil, borcun ÖDENDİĞİ yer: psql'i onlar
+    /// sahiplenir ki başkası doğrudan çağırmasın.
+    ///
+    /// Gerekçe ZORUNLU — gerekçesiz bir araç, sessiz bir istisnadır.
+    /// (Aynı disiplin: CoverageBaselineTests.Istisnalar.)
+    /// </summary>
+    private static readonly Dictionary<string, string> Araclar = new()
+    {
+        ["deploy/scripts/vt-sorgu.sh"] =
+            "ÖLÇÜM YOLU (Y3). Veritabanı adını zorunlu kılar, bakım " +
+            "veritabanlarını reddeder, her çıktının başına " +
+            "current_database() ve satır sayısını basar. Yanlış " +
+            "veritabanını ölçmek iki kez olduğu için var.",
+
+        ["deploy/scripts/prova-zemini.sh"] =
+            "PROVA ZEMİNİ KURMA YOLU (PZ2). `vt-sorgu.sh`ten GEÇEMEZ: " +
+            "CREATE/DROP DATABASE ve REVOKE CONNECT bakım " +
+            "veritabanına bağlanmayı gerektirir ve vt-sorgu bunu " +
+            "TASARIM GEREĞİ reddeder. İkisi farklı işler — biri " +
+            "var olan veritabanını ölçer, öteki zemin yaratır.",
+    };
 
     private static readonly string[] AtlanacakDizinler =
     [
@@ -57,7 +87,7 @@ public sealed class PsqlCizgisiTests
         Assert.True(
             yeni.Count == 0,
             "YENİ DOĞRUDAN psql ÇAĞRISI:\n  " + string.Join("\n  ", yeni) +
-            $"\n\nÖlçüm için {Arac} kullanın: veritabanı adını zorunlu kılar, " +
+            "\n\nÖlçüm için deploy/scripts/vt-sorgu.sh kullanın: veritabanı adını zorunlu kılar, " +
             "bakım veritabanlarını reddeder ve current_database() ile satır " +
             "sayısını her çıktının başına basar. İşlevsel bir çağrıysa " +
             $"{CizgiDosyasi} dosyasını GEREKÇESİYLE güncelleyin.");
@@ -105,13 +135,30 @@ public sealed class PsqlCizgisiTests
             "Bilinen çağrı bulunamadı: scripts/enderun-backup.sh");
     }
 
-    /// <summary>Araç yerinde mi — çizgi ona yönlendiriyor.</summary>
+    /// <summary>Araçlar yerinde mi — çizgi onlara yönlendiriyor.</summary>
     [Fact]
-    public void OlcumAraci_Mevcut()
+    public void Araclar_Mevcut()
     {
-        Assert.True(
-            File.Exists(Path.Combine(DepoKoku(), Arac)),
-            $"Ölçüm aracı yok: {Arac}. Çizgi var olmayan bir araca yönlendiremez.");
+        foreach (var (yol, _) in Araclar)
+        {
+            Assert.True(
+                File.Exists(Path.Combine(DepoKoku(), yol)),
+                $"Araç yok: {yol}. Çizgi var olmayan bir araca yönlendiremez.");
+        }
+    }
+
+    /// <summary>
+    /// GEREKÇESİZ ARAÇ OLAMAZ — sessiz bir istisna, karardır.
+    /// </summary>
+    [Fact]
+    public void Araclar_GerekcesizOlamaz()
+    {
+        foreach (var (yol, gerekce) in Araclar)
+        {
+            Assert.False(
+                string.IsNullOrWhiteSpace(gerekce),
+                $"{yol} araç listesinde ama gerekçesi yok.");
+        }
     }
 
     // ---------------------------------------------------------------
@@ -129,7 +176,7 @@ public sealed class PsqlCizgisiTests
         {
             var goreli = Path.GetRelativePath(kok, dosya).Replace('\\', '/');
 
-            if (goreli == Arac) continue;
+            if (Araclar.ContainsKey(goreli)) continue;
 
             var adet = File.ReadLines(dosya)
                 .Where(s => !s.TrimStart().StartsWith('#'))

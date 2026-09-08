@@ -129,10 +129,36 @@ elif [ "${DERLEME_ATLA:-hayir}" = "evet" ]; then
     || oldu "Atlanacak publish yok: ${ARKA_PUBLISH}"
 else
   log "Arka uç publish ediliyor (ayrı dizin, canlının publish/ dizinine DOKUNULMUYOR)..."
+  #
+  # ═══ ÜÇ SONUÇ: ÖLÇTÜ+GEÇTİ / ÖLÇTÜ+DÜŞTÜ / ÖLÇEMEDİ (Kural 67) ═══
+  #
+  # ÖLÇÜLEN KUSUR (2026-09-08): rig, yayının backend testleri koşarken
+  # başlatıldı. `derleme-kos.sh` tek örnek kapısıyla çıkış 75 verdi
+  # ("ZATEN KOŞAN BİR DERLEME VAR"). Rig bunu "Arka uç publish
+  # başarısız" diye raporladı ve KIRMIZI verdi.
+  #
+  # O kırmızı ürüne ait DEĞİLDİ — test hiç koşmadı. Bir sonraki okuyan
+  # (ben de olabilirim) kırmızıyı ürüne yazardı. "Kırmızı, bulgunun
+  # değil ENGELİN işareti olabilir" ayrımı burada araca konuyor.
+  #
+  # 75 = derleme-kos.sh'nin "başkası koşuyor" kodu; ondan ayırt
+  # ediliyor. Gerçek derleme hatası hâlâ DÜŞTÜ olarak raporlanıyor.
   DERLEME_BELLEK_TAVANI="${DERLEME_BELLEK_TAVANI:-7200M}" \
     "${KOK}/scripts/derleme-kos.sh" dotnet publish "${KOK}/backend/EnderunAI.Api" \
-      -c Release -o "$ARKA_PUBLISH" --nologo -v q > /tmp/duzen-publish.log 2>&1 \
-    || { tail -20 /tmp/duzen-publish.log >&2; oldu "Arka uç publish başarısız."; }
+      -c Release -o "$ARKA_PUBLISH" --nologo -v q > /tmp/duzen-publish.log 2>&1
+  publish_kodu=$?
+
+  if [ "$publish_kodu" = "75" ]; then
+    log "ÖLÇEMEDİ: derleme koşucusu meşgul (başka bir derleme sürüyor)."
+    log "ÖLÇEMEDİ: rig hiçbir şey ölçmedi — bu bir ÜRÜN BULGUSU DEĞİLDİR."
+    log "ÖLÇEMEDİ: koşan iş bitince tekrar çalıştırın."
+    exit 3
+  fi
+
+  if [ "$publish_kodu" != "0" ]; then
+    tail -20 /tmp/duzen-publish.log >&2
+    oldu "Arka uç publish başarısız (çıkış ${publish_kodu})."
+  fi
   log "Arka uç publish hazır."
 fi
 
