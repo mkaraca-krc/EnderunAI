@@ -199,21 +199,27 @@ for kapi in "${KAPILAR[@]}"; do
     (cd "$dizin" && eval "$komut")
     kapi_kodu=$?
 
-    case "$kapi_kodu" in
-        0)
-            log "    ✓ $ad ($(( $(date +%s) - kapi_basladi ))s)"
-            ;;
-        3)
-            olcemedi=$((olcemedi + 1))
-            OLCEMEYENLER+=("$ad")
-            log "    ⊘ $ad ÖLÇEMEDİ ($(( $(date +%s) - kapi_basladi ))s) — bu kapı bu koşumda hiçbir şey ölçmedi."
-            ;;
-        *)
-            hata "DÜŞTÜ: $ad"
-            hata "Bu kapı ucuzdur; pahalı turlara girmeden durduruldu."
-            exit 1
-            ;;
-    esac
+    # ÖLÇEMEDİ ÖNCE ELENİYOR; DÜŞÜŞ SATIRLARI YERİNDE KALIYOR.
+    #
+    # İlk yazımda düşüş satırlarını bir `case` bloğunun içine aldım.
+    # Davranış aynıydı ama satırlar girintileriyle birlikte kaydı ve
+    # Kural 72 kapısı bunu "3 savunma satırı SİLİNDİ" diye okudu —
+    # HAKLIYDI: kapı metne bakar, niyete değil. Savunma satırlarını
+    # kaydırmadan, önüne bir muhafız cümlesi koyarak çözüldü.
+    if [ "$kapi_kodu" = "3" ]; then
+        olcemedi=$((olcemedi + 1))
+        OLCEMEYENLER+=("$ad")
+        log "    ⊘ $ad ÖLÇEMEDİ ($(( $(date +%s) - kapi_basladi ))s) — bu kapı bu koşumda hiçbir şey ölçmedi."
+        continue
+    fi
+
+    if [ "$kapi_kodu" != "0" ]; then
+        hata "DÜŞTÜ: $ad"
+        hata "Bu kapı ucuzdur; pahalı turlara girmeden durduruldu."
+        exit 1
+    fi
+
+    log "    ✓ $ad ($(( $(date +%s) - kapi_basladi ))s)"
 done
 
 if [ "$olcemedi" -gt 0 ]; then
