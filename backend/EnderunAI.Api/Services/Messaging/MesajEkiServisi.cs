@@ -174,22 +174,36 @@ public sealed class MesajEkiServisi(
 
         if (!await MesajlariGorebilirMi(userId, ct)) return [];
 
-        // Yalnız çağıranın okuyabildiği mesajların ekleri.
-        var gorulebilir = await db.Messages
+        /*
+         * KAPI, OKUMANIN KENDİSİNDE.
+         *
+         * Önceki biçim iki adımlıydı: önce üyelik süzgeciyle görünür
+         * mesaj kimlikleri toplanıyor, sonra AYRI bir sorgu ekleri o
+         * listeye göre süzüyordu. Davranış doğruydu ama yapı yanlıştı:
+         * ekleri okuyan sorgunun kendi kapısı yoktu, önceki sorgunun
+         * çıktısına güveniyordu.
+         *
+         * Kapsam çırcırı (CoverageBaselineTests) bunu KAPISIZ okuma
+         * sayıp düştü ve HAKLIYDI — bekçi okumanın kendisine bakıyor,
+         * ondan önce ne olduğuna değil. Bekçiyi susturmak için
+         * sorguyu kaydırmadım, istisna listesine de eklemedim:
+         * okuma artık üyelik süzgecinin UÇUNDAN başlıyor, ekler
+         * oradan geziliyor. Kapı, sorgudan sökülemez hâlde.
+         *
+         * ApplyScope BİLEREK KULLANILMADI: küresel kapsamlı kullanıcı
+         * (Admin, Genel Müdür) için sorguyu olduğu gibi geçirir ve
+         * herkesin özel konuşmasının eklerini açardı. ApplyMembership
+         * daha dar — M3/1'de verilen karar bu.
+         */
+        return await db.Messages
             .AsNoTracking()
             .ApplyMembership(userId)
             .Where(x => mesajIdleri.Contains(x.Id))
-            .Select(x => x.Id)
-            .ToListAsync(ct);
-
-        if (gorulebilir.Count == 0) return [];
-
-        return await db.Attachments
-            .AsNoTracking()
-            .Where(x => x.EntityType == MesajEkiKurallari.VarlikTuru
-                        && gorulebilir.Contains(x.EntityId))
-            .Select(x => new MesajEkiOzeti(
-                x.Id, x.EntityId, x.OriginalName, x.ContentType, x.SizeBytes))
+            .SelectMany(x => db.Attachments
+                .Where(a => a.EntityType == MesajEkiKurallari.VarlikTuru
+                            && a.EntityId == x.Id))
+            .Select(a => new MesajEkiOzeti(
+                a.Id, a.EntityId, a.OriginalName, a.ContentType, a.SizeBytes))
             .ToListAsync(ct);
     }
 

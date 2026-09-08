@@ -40,6 +40,13 @@ FRONTEND_DIR="${REPO_ROOT}/frontend/enderun-ai"
 
 BACKEND_PUBLISH_DIR="${REPO_ROOT}/publish"
 BACKEND_ROLLBACK_DIR="${REPO_ROOT}/publish-rollback"
+# S6 — BACKEND DE ATOMİK TAKASLA GİRİYOR.
+# `dotnet publish -o publish/` çalışan servisin okuduğu dizinin
+# ÜSTÜNE yazıyordu: publish 40-90 sn sürüyor ve bu süre boyunca
+# dizin yarı eski yarı yeni. Ön yüzde aynı kusur ölçülmüş, kesinti
+# izleyicisinde 24 parça hatası olarak görünmüştü (DAĞITIM/1).
+BACKEND_PUBLISH_YENI="${REPO_ROOT}/publish-yeni"
+BACKEND_PUBLISH_ESKI="${REPO_ROOT}/publish-eski"
 FRONTEND_NEXT_DIR="${FRONTEND_DIR}/.next"
 FRONTEND_NEXT_ROLLBACK_DIR="${REPO_ROOT}/frontend-next-rollback"
 
@@ -462,6 +469,21 @@ run_backend_tests() {
     log "INFO" "Backend testleri çalıştırılıyor..."
     resolve_test_db_connection
 
+    # BU KOŞUMUN GÜNLÜK BAŞLANGICI.
+    #
+    # 2026-09-08: yayın "DERLEME BAŞARISIZ (test koşmadı)" diyerek
+    # durdu. Derleme geçmişti; 3156 test geçmiş, biri düşmüştü.
+    # Aşağıdaki ayırt etme grep'i BİRİKEN günlüğün TAMAMINA bakıyor
+    # ve bir gün önceki (07-09 00:11 ve 17:06) OutOfMemoryException
+    # satırlarını buluyordu. Teşhis, bugünün değil dünkü koşumun
+    # kanıtına dayanıyordu.
+    #
+    # Kural 65'in ta kendisi: ölçtüğümü sandığım şey (bu koşum) ile
+    # gerçekten ölçtüğüm şey (bütün geçmiş) ayrışmıştı. Üstelik bu
+    # satırın YORUMU tam da yanlış teşhisin kötülüğünü anlatıyordu.
+    local gunluk_baslangic
+    gunluk_baslangic=$(wc -l < "$LOG_FILE")
+
     # TEST KOŞUCU ÜZERİNDEN (2026-08-26): tek örnek, kendi cgroup'u,
     # bellek tavanı. Doğrudan çağrı, durdurulduğunda ardında 4,5 GB'lık
     # yetim Roslyn süreci bırakıyordu ve ikinci koşu makineyi OOM'a
@@ -483,7 +505,9 @@ run_backend_tests() {
         # Günlükte derleme hatası izi varsa öyle denir; yoksa test
         # düşüşü denir. Emin olunamayan durumda İKİSİ DE söylenir —
         # yanlış bir teşhis, teşhissizlikten kötüdür.
-        if grep -qE "OutOfMemoryException|error MSB|error CS[0-9]+|Build FAILED" "$LOG_FILE"; then
+        # YALNIZ BU KOŞUMUN DİLİMİ okunuyor.
+        if tail -n "+$((gunluk_baslangic + 1))" "$LOG_FILE" \
+                | grep -qE "OutOfMemoryException|error MSB|error CS[0-9]+|Build FAILED"; then
             fail "DERLEME BAŞARISIZ (test koşmadı) — günlükte derleyici hatası var. Yayın DURDURULDU, hiçbir servise dokunulmadı."
         else
             fail "Backend TESTLERİ BAŞARISIZ (derleme geçti, test düştü). Yayın DURDURULDU, hiçbir servise dokunulmadı."
@@ -612,7 +636,10 @@ gocleri_dogrula() {
 }
 
 publish_backend() {
-    log "INFO" "Backend publish ediliyor: ${BACKEND_PUBLISH_DIR}"
+    log "INFO" "Backend publish ediliyor: ${BACKEND_PUBLISH_YENI} (canlı dizine DOKUNULMUYOR)"
+
+    # Yarım kalmış bir önceki denemenin artığı kalmasın.
+    rm -rf "$BACKEND_PUBLISH_YENI"
 
     # KOŞUCU ÜZERİNDEN — publish YAYININ EN AĞIR DERLEMESİDİR.
     #
@@ -625,9 +652,41 @@ publish_backend() {
     # ile başlayan HER derleme çağrısını arıyor (Kural 31: komuta bak,
     # tek bir kelimeye değil).
     if ! "${REPO_ROOT}/scripts/derleme-kos.sh" \
-            dotnet publish "$BACKEND_DIR" -c Release -o "$BACKEND_PUBLISH_DIR" 2>&1 | tee -a "$LOG_FILE"; then
+            dotnet publish "$BACKEND_DIR" -c Release -o "$BACKEND_PUBLISH_YENI" 2>&1 | tee -a "$LOG_FILE"; then
         fail "dotnet publish başarısız oldu."
     fi
+
+    # ÇIKTI GERÇEKTEN ÜRETİLDİ Mİ. `dotnet publish` sıfırla dönüp
+    # yarım bir dizin bırakabilir; takas ettiğimiz şeyin çalışabilir
+    # olduğunu takastan ÖNCE bilmek zorundayız.
+    if [ ! -f "${BACKEND_PUBLISH_YENI}/EnderunAI.Api.dll" ]; then
+        fail "publish başarılı göründü ama EnderunAI.Api.dll yok: ${BACKEND_PUBLISH_YENI}"
+    fi
+}
+
+# BACKEND TAKASI — İKİ RENAME, YENİDEN BAŞLATMADAN HEMEN ÖNCE.
+#
+# ESKİ DİZİN DİSKTE KALIYOR: `publish-eski` bir sonraki yayına kadar
+# silinmiyor. Çalışan süreç henüz eşlenmemiş bir derlemeyi (uydu
+# derlemesi, geç yüklenen bir bağımlılık) okumak isterse dosya
+# yerinde duruyor.
+swap_backend() {
+    [ -d "$BACKEND_PUBLISH_YENI" ] || fail "Takas edilecek yeni backend yayını yok."
+
+    rm -rf "$BACKEND_PUBLISH_ESKI"
+
+    if [ -d "$BACKEND_PUBLISH_DIR" ]; then
+        mv -T "$BACKEND_PUBLISH_DIR" "$BACKEND_PUBLISH_ESKI" \
+            || fail "Backend takası: eski yayın kenara alınamadı."
+    fi
+
+    mv -T "$BACKEND_PUBLISH_YENI" "$BACKEND_PUBLISH_DIR" || {
+        # GERİ SAR: canlı dizin boş kalmasın.
+        [ -d "$BACKEND_PUBLISH_ESKI" ] && mv -T "$BACKEND_PUBLISH_ESKI" "$BACKEND_PUBLISH_DIR"
+        fail "Backend takası: yeni yayın yerine konamadı, eskiye dönüldü."
+    }
+
+    log "INFO" "Backend takası tamam (eski yayın ${BACKEND_PUBLISH_ESKI} dizininde bekliyor)."
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -670,12 +729,29 @@ kesinti_izleyicisi_baslat() {
                 esac
             fi
 
+            # S6 — ARKA UÇ DA İZLENİYOR.
+            #
+            # DG2 yalnız ön yüz parçalarına bakıyordu. Ama `dotnet
+            # publish` de canlı dizinin üstüne yazıyordu: çalışan
+            # süreç yarım yazılmış bir derlemeyi okursa 500 verir ve
+            # bunu kimse görmezdi — yayın "BAŞARILI" derdi.
+            #
+            # 000 SAYILMIYOR: yeniden başlatmanın ~2 saniyesi zaten
+            # kabul edilmiş bir risk (S5). Burada aranan şey o değil,
+            # servis AYAKTAYKEN bozulan cevap.
+            bk="$(curl -s -o /dev/null -w '%{http_code}' -m 4 \
+                "http://127.0.0.1:5155/api/health" 2>/dev/null)"
+            case "$bk" in
+                200|000) : ;;
+                *) echo "$(date -u +%H:%M:%S) ARKAUC ${bk} /api/health" >> "$KESINTI_KAYIT" ;;
+            esac
+
             sleep 1
         done
     ) &
 
     KESINTI_IZLEYICI_PID=$!
-    log "INFO" "Kesinti izleyicisi başladı (saniyede bir parça kontrolü)."
+    log "INFO" "Kesinti izleyicisi başladı (saniyede bir: ön yüz parçası + arka uç sağlığı)."
 }
 
 # ÜÇ SONUÇ, ÜÇ DAVRANIŞ (Kural 67):
@@ -707,11 +783,11 @@ kesinti_izleyicisi_bitir() {
     hata="${hata:-0}"
 
     if [ "$hata" -eq 0 ]; then
-        log "INFO" "Kesinti kapısı GEÇTİ: yayın boyunca parça hatası YOK."
+        log "INFO" "Kesinti kapısı GEÇTİ: yayın boyunca ön yüz parçası ve arka uç sağlığı hatasız."
         return 0
     fi
 
-    log "ERROR" "Kesinti kapısı İHLAL: yayın sırasında ${hata} parça hatası."
+    log "ERROR" "Kesinti kapısı İHLAL: yayın sırasında ${hata} bozuk cevap (PARCA = ön yüz, ARKAUC = arka uç)."
     log "ERROR" "Sunucu ayaktayken bozuk içerik verdi — kullanıcı için ekran kırık."
     sed -n '1,10p' "$KESINTI_KAYIT" | while IFS= read -r satir; do
         log "ERROR" "  ${satir}"
@@ -841,12 +917,52 @@ swap_frontend() {
 #
 #   200 -> eski parçalar erişilebilir, kopyalama tuttu
 #   404 -> eski yapı erken kayboldu; bugünkü arızanın aynısı
+# ─────────────────────────────────────────────────────────────────
+# ESKİ PARÇA KAPISI (S4)
+#
+# ÜÇ SONUÇ, ÜÇ CÜMLE (Kural 67). "GEÇTİ" ile "ÖLÇEMEDİ" günlükte
+# birbirine karışmayacak: ikisi de yayını sürdürüyor ama biri kanıt,
+# öteki kanıtsızlık. Karıştıklarında bekçi yeşil görünerek ölür.
+#   GEÇTİ    → ölçüm yapıldı, eski parça hâlâ servis ediliyor.
+#   ÖLÇEMEDİ → ölçüm YAPILAMADI; kapı bu koşumda hiçbir şey söylemedi.
+#   İHLAL    → ölçüm yapıldı, eski parça kayıp.
+# ─────────────────────────────────────────────────────────────────
+
+# ÖZ-SINAMA: KAPI ISIRIYOR MU?
+#
+# Bu kapının en sinsi kırılma biçimi sessizce her zaman 200 dönmesi
+# olurdu — Next bir yeniden yazma kuralıyla /_next altındaki her yolu
+# yakalarsa kapı sonsuza dek "GEÇTİ" der ve hiçbir şey ölçmez.
+# Bu yüzden ölçümden ÖNCE, KESİNLİKLE OLMAYAN bir parça isteniyor:
+# oraya 200 dönüyorsa kapının ayırt etme gücü yoktur ve bunu ÖLÇEMEDİ
+# diye söylemesi gerekir.
+#
+# Beyan (Kural 61): olmayan parça için beklenen KIRMIZI (200 değil);
+# gerçek parça için beklenen YEŞİL (200).
+eski_parca_kapisi_oz_sinama() {
+    local sahte="sonda-$(date +%s)-olmayan-parca.js"
+    local kod
+
+    kod="$(curl -s -o /dev/null -w '%{http_code}' -m 5 \
+        "http://127.0.0.1:3000/_next/static/chunks/${sahte}" 2>/dev/null)"
+
+    if [ "$kod" = "200" ]; then
+        log "WARN" "Eski parça kapısı ÖZ-SINAMADA KALDI: olmayan bir parça"
+        log "WARN" "için de 200 dönüyor. Kapı 'geçti' dese bile hiçbir şey"
+        log "WARN" "ölçmüyor demektir — bu koşumda ölçüm YOK sayılacak."
+        return 1
+    fi
+
+    log "INFO" "Eski parça kapısı öz-sınaması tamam (olmayan parça -> HTTP ${kod}; ayırt ediyor)."
+    return 0
+}
+
 eski_parca_kapisi() {
     local eski_dizin="${FRONTEND_NEXT_ESKI}/static/chunks"
     local yeni_dizin="${FRONTEND_NEXT_DIR}/static/chunks"
 
     if [ ! -d "$eski_dizin" ]; then
-        log "WARN" "Eski parça kapısı ATLANDI: önceki yapı yok (ilk yayın olabilir)."
+        log "WARN" "Eski parça kapısı ÖLÇEMEDİ: önceki yapı dizini yok (ilk yayın olabilir)."
         return 0
     fi
 
@@ -863,13 +979,19 @@ eski_parca_kapisi() {
         return 0
     fi
 
+    # Önce kapının kendisi sınanıyor; ayırt edemiyorsa sonucu ÖLÇEMEDİ.
+    if ! eski_parca_kapisi_oz_sinama; then
+        log "WARN" "Eski parça kapısı ÖLÇEMEDİ (öz-sınama). Aday parça: ${aday}."
+        return 0
+    fi
+
     local kod
     kod="$(curl -s -o /dev/null -w '%{http_code}' -m 5 \
         "http://127.0.0.1:3000/_next/static/chunks/${aday}" 2>/dev/null)"
 
     case "$kod" in
         200)
-            log "INFO" "Eski parça kapısı GEÇTİ (${aday} hâlâ 200)."
+            log "INFO" "Eski parça kapısı GEÇTİ: ${aday} hâlâ 200 (ölçüm yapıldı)."
             ;;
         *)
             log "ERROR" "Eski parça kapısı İHLAL: ${aday} -> HTTP ${kod}."
@@ -1158,8 +1280,34 @@ yayınlanacaksa: DEPLOY_BRANCH=${current} $0"
     log "INFO" "Yayın dalı doğrulandı: ${current}"
 }
 
+# MESAİ SAATİ UYARISI (S5) — DURDURMAZ, SÖYLER.
+#
+# Yeniden başlatma boşluğu ~2 saniye ve kabul edilmiş bir risk.
+# Kabul edilmiş olması, saat 11:00'de farkında olmadan alınmasını
+# gerektirmiyor: yayın mesai içindeyse bunu YÜKSEK SESLE söylüyor.
+#
+# ENGELLEMİYOR. Acil bir güvenlik düzeltmesini mesai yüzünden
+# durdurmak, kesintiden daha pahalıya patlar. Karar operatörde;
+# betiğin işi kararı bilgili kılmak.
+#
+# SAAT DİLİMİ: sunucu UTC, kullanıcılar Türkiye'de. Mesai
+# Europe/Istanbul'a göre okunuyor — UTC ile karşılaştırsaydık
+# pencere üç saat kayar ve uyarı tam da öğlen vaktinde susardı.
+mesai_uyarisi() {
+    local saat
+    saat=$(TZ=Europe/Istanbul date +%-H)
+
+    if [ "$saat" -ge 9 ] && [ "$saat" -lt 18 ]; then
+        log "WARN" "MESAİ SAATİ: şu an $(TZ=Europe/Istanbul date '+%H:%M') (Türkiye). Yeniden başlatma sırasında ~2 sn'lik bir kesinti olacak ve kullanıcılar ekranda görecek. Yayın DURDURULMADI."
+    else
+        log "INFO" "Mesai dışı ($(TZ=Europe/Istanbul date '+%H:%M') Türkiye) — yeniden başlatma boşluğu kullanıcıya denk gelmeyecek."
+    fi
+}
+
 main() {
     log "INFO" "===== safe-deploy başladı ====="
+
+    mesai_uyarisi
 
     yarim_kosu_denetle
 
@@ -1316,7 +1464,8 @@ main() {
     backup_database
 
     # TAKAS EN SONA: yedek boyunca da canlı ESKİ yapıyı görüyor.
-    asama "on-yuz-takasi"
+    asama "takas"
+    swap_backend
     swap_frontend
 
     asama "servis-baslatma"

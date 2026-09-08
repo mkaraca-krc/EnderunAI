@@ -88,3 +88,15 @@ icmal-dosyalari/
 # Duzen rig-inin AYRI arka uc publish dizini (canlinin publish/ dizinine
 # dokunmasin diye - 2026-09-08).
 publish-duzen/
+
+# YAYIN SIRASINDA OLUSAN GECICI DIZINLER (DAGITIM/1 + S6).
+# Atomik takas iki rename ile yapiliyor: once -yeni'ye uretiliyor,
+# sonra canli dizin -eski'ye aliniyor. Ikisi de calisma agacinda
+# gorunur ve izlenmemeleri sart — aksi halde agac temizlik kapisi
+# (Y1) kendi urettigimiz cikti yuzunden duser.
+publish-yeni/
+publish-eski/
+frontend/**/.next-yeni/
+frontend/**/.next-eski/
+frontend/**/.next-kapi/
+frontend/**/.next-duzen/
