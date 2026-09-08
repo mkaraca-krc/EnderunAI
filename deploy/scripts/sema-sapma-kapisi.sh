@@ -72,14 +72,34 @@ export PATH="$PATH:/root/.dotnet/tools"
 
 # ── MODELDEN ŞEMA ──
 #
-# `--no-build` deneniyor; ikili yoksa derleme yapılıyor. Derleme
-# `derleme-kos.sh` üzerinden geçiyor: bellek tavanı ve tek örnek
-# kapısı orada.
-if ! (cd "$PROJE" && dotnet ef dbcontext script --context AppDbContext --no-build -o "$GECICI/model.sql" >/dev/null 2>&1); then
-    "${REPO_ROOT}/scripts/derleme-kos.sh" dotnet build "$PROJE/EnderunAI.Api.csproj" -v q --nologo >/dev/null 2>&1
-    (cd "$PROJE" && dotnet ef dbcontext script --context AppDbContext --no-build -o "$GECICI/model.sql" >/dev/null 2>&1) \
-        || { hata "HATA: modelden şema üretilemedi."; exit 1; }
+# ═══ ÖNCE DERLE, SONRA MODELİ ÜRET ═══
+#
+# ÖNCEKİ HÂLİ VE ÖLÇÜLEN KUSURU (2026-09-08): önce `--no-build`
+# deneniyordu ve `bin/` doluysa BAŞARILI oluyordu. Ama o ikili
+# ÇALIŞMA AĞACINDAKİ KAYNAĞA AİT OLMAK ZORUNDA DEĞİL.
+#
+# Nitekim değildi: KATALOG/1 kodu geri alındıktan (revert) sonra
+# çalışma ağacında `RoleManualPermissionGrant` HİÇBİR YERDE yoktu,
+# ama `bin/` içinde önceki derlemeden kalmıştı. Kapı modelde
+# `role_manual_permission_grants` indekslerini gördü ve "modelde var
+# canlıda yok: 16 > 14" diyerek yayını durdurdu.
+#
+# Kapı yanlış değildi — YANLIŞ ŞEYE bakıyordu. Ölçtüğünü sandığı şey
+# (bugünkü kaynak) ile gerçekten ölçtüğü şey (eski bir derleme
+# çıktısı) ayrışmıştı (Kural 65).
+#
+# Derleme artık HER ZAMAN önce koşuyor. `derleme-kos.sh` üzerinden:
+# bellek tavanı ve tek örnek kapısı orada. Artımlı derleme değişiklik
+# yoksa zaten saniyeler sürüyor; bedeli, yanlış ölçümün bedelinden
+# küçük.
+if ! "${REPO_ROOT}/scripts/derleme-kos.sh" \
+        dotnet build "$PROJE/EnderunAI.Api.csproj" -v q --nologo >/dev/null 2>&1; then
+    hata "HATA: proje derlenemedi; model üretilemez."
+    exit 1
 fi
+
+(cd "$PROJE" && dotnet ef dbcontext script --context AppDbContext --no-build -o "$GECICI/model.sql" >/dev/null 2>&1) \
+    || { hata "HATA: modelden şema üretilemedi."; exit 1; }
 
 # ── AD AYIKLAMA ──
 #
