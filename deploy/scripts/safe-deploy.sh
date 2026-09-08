@@ -725,13 +725,44 @@ katalog_silme_kapisi() {
         log "WARN" "   ${satir}"
     done
 
-    if git -C "$REPO_ROOT" log -1 --pretty=%B | grep -qE '^KATALOG-SİLME:'; then
-        log "INFO" "Katalog silme kapısı GEÇTİ: silme işleme mesajında BEYAN EDİLMİŞ."
+    #
+    # ═══ BEYAN, YAYIN ARALIĞINDA ARANIR — TEK İŞLEMEDE DEĞİL ═══
+    #
+    # ÖLÇÜLEN KUSUR (kapının ilk gerçek sınavı, 2026-09-08): kapı
+    # `git log -1` ile YALNIZ HEAD'e bakıyordu. Beyan `a7b22d7d`de
+    # duruyordu ama HEAD `ee69df19`di (arada üç işleme daha vardı) ve
+    # kapı "beyan YOK" diyerek yayını durdurdu.
+    #
+    # Kapı doğru şeyi ölçtü (2 silme, doğru liste) ama YANLIŞ KAPSAMDA
+    # aradı. Bir yayın tek bir işleme değil, bir ARALIKTIR.
+    #
+    # Taban `LAST_DEPLOYED_COMMIT_FILE`tan geliyor — test kapsamı kararı
+    # da aynı tabanı kullanıyor, yani "bu yayın neyi taşıyor"
+    # sorusunun cevabı zaten orada.
+    #
+    # TABAN OKUNAMAZSA: HEAD'e düşülüyor ve bu SÖYLENİYOR. Sessizce
+    # dar kapsama düşmek, kapıyı yanlış yere baktırmanın aynısı olurdu.
+    local beyan_araligi="HEAD~1..HEAD"
+    local taban=""
+
+    if [ -r "$LAST_DEPLOYED_COMMIT_FILE" ]; then
+        taban="$(tr -d '[:space:]' < "$LAST_DEPLOYED_COMMIT_FILE")"
+    fi
+
+    if [ -n "$taban" ] && git -C "$REPO_ROOT" cat-file -e "${taban}^{commit}" 2>/dev/null; then
+        beyan_araligi="${taban}..HEAD"
+    else
+        log "WARN" "Katalog silme kapısı: yayın tabanı okunamadı, beyan YALNIZ son işlemede aranıyor."
+    fi
+
+    if git -C "$REPO_ROOT" log "$beyan_araligi" --pretty=%B \
+            | grep -qE '^KATALOG-SİLME:'; then
+        log "INFO" "Katalog silme kapısı GEÇTİ: silme BEYAN EDİLMİŞ (${beyan_araligi})."
         return 0
     fi
 
     log "ERROR" "Katalog silme kapısı İHLAL: ${silinecek} rol izni silinecek ama"
-    log "ERROR" "işleme mesajında 'KATALOG-SİLME:' satırı YOK."
+    log "ERROR" "yayın aralığında (${beyan_araligi}) 'KATALOG-SİLME:' satırı YOK."
     log "ERROR" "Silmek meşru bir iş; SESSİZCE silmek değil. Yetki tablolarında"
     log "ERROR" "beyansız bir kesim, Kural 72'nin kapattığı sınıfın aynısıdır."
     log "ERROR" "İşleme mesajına şu biçimde bir satır ekleyin:"
