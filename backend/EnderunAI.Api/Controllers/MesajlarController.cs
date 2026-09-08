@@ -40,7 +40,9 @@ using Microsoft.AspNetCore.Mvc;
 [ApiController]
 [Authorize]
 [Route("api/mesajlar")]
-public sealed class MesajlarController(IMesajlasmaService mesajlar) : ControllerBase
+public sealed class MesajlarController(
+    IMesajlasmaService mesajlar,
+    IMesajEkiServisi ekler) : ControllerBase
 {
     /// <summary>Sayfa boyu tavanı — istemci daha fazlasını isteyemez.</summary>
     private const int EnFazlaLimit = 50;
@@ -152,5 +154,77 @@ public sealed class MesajlarController(IMesajlasmaService mesajlar) : Controller
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // EKLER (MESAJ/3 Parça 3)
+    // ═══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Mesaja dosya ekler.
+    ///
+    /// İZİN: `mesajlar.send` — ek göndermek mesaj göndermenin
+    /// parçası. Üyelik kapısı ayrıca serviste; ikisi ayrı şey
+    /// sınıyor (anahtar = özelliği kullanabilir mi, üyelik = BU
+    /// konuşmanın tarafı mı).
+    /// </summary>
+    [HttpPost("mesajlar/{mesajId:guid}/ekler")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarSend)]
+    [RequestSizeLimit(MesajEkiKurallari.DosyaBasinaEnFazlaBayt
+                      * MesajEkiKurallari.MesajBasinaEnFazlaDosya)]
+    public async Task<IActionResult> EkYukle(
+        Guid mesajId, [FromForm] IFormFileCollection dosyalar, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await ekler.EkleAsync(mesajId, [.. dosyalar], ct));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // "Yetkin yok" ile "yok" AYNI cevabı alıyor: hangi
+            // mesajların var olduğunu sızdırmamak için.
+            return NotFound(new { message = "Mesaj bulunamadı." });
+        }
+        catch (InvalidOperationException hata)
+        {
+            // SEBEP SÖYLENİYOR: kullanıcı neden reddedildiğini
+            // görmeli, yoksa aynı dosyayı tekrar dener.
+            return BadRequest(new { message = hata.Message });
+        }
+    }
+
+    /// <summary>Verilen mesajların eklerini listeler.</summary>
+    [HttpGet("ekler")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarView)]
+    public async Task<IActionResult> EkleriListele(
+        [FromQuery] Guid[] mesajId, CancellationToken ct) =>
+        Ok(await ekler.ListeleAsync(mesajId ?? [], ct));
+
+    /// <summary>
+    /// Eki indirir — YETKİ KONTROLÜ YAPAN UÇ (C5).
+    ///
+    /// Dosyalar statik URL'den servis EDİLMİYOR; her indirme bu
+    /// uçtan geçiyor ve çağıranın hem konuşmanın katılımcısı hem
+    /// izinli olduğu KANONİK çözücüyle doğrulanıyor.
+    ///
+    /// C6 BAŞLIKLARI:
+    ///   Content-Disposition: attachment  — `File(..., dosyaAdı)`
+    ///     üçüncü parametresiyle geliyor; tarayıcıda inline açılmaz.
+    ///   X-Content-Type-Options: nosniff  — BAŞLIK/1 middleware'i
+    ///     her yanıta ekliyor (tek kanonik yer).
+    /// </summary>
+    [HttpGet("ekler/{ekId:guid}/indir")]
+    [RequirePermission(PermissionCatalog.Keys.MesajlarView)]
+    public async Task<IActionResult> EkIndir(Guid ekId, CancellationToken ct)
+    {
+        var sonuc = await ekler.IndirAsync(ekId, ct);
+
+        if (sonuc is null)
+            return NotFound(new { message = "Ek bulunamadı." });
+
+        var akis = new FileStream(
+            sonuc.TamYol, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        return File(akis, sonuc.ContentType, sonuc.Ad);
     }
 }

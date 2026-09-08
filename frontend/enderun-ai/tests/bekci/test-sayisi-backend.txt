@@ -193,5 +193,24 @@
 #   koymustum ama yorumuna "borunun basinda" yazmistim - yorum ile
 #   kod ayrismisti. Kimlik katmaninin urettigi 401 benim katmanima
 #   HIC ULASMIYORDU. UseRouting'ten once alindi.
-statik: 2976
+# MESAJ/3 PARCA 3 - ARKA UC (2026-09-08): 2976 -> 3006, gevseklik 30.
+#   MesajEkiKurallariTests 27 durum: izinli/yasakli uzanti, CIFT
+#     UZANTI (rapor.pdf.exe - davranis varsayilmadi, olculdu), yol
+#     iceren ad, boyut siniri TAM SINIRDA ve bir bayt ustunde, bos
+#     dosya, bos ad, uzantisiz ad, her kararin anlamli mesaji,
+#     POZITIF KONTROL (ayni boyut, uzantiya gore ayri karar).
+#   MesajEkiErisimTests 3: C7 iki kol + pozitif kontrol.
+#
+#   C7 SONDASI IKI KOL ICIN DE GOSTERILDI:
+#     uyelik kapisi kaldirildi -> Kol A KIRMIZI
+#     izin  kapisi kaldirildi -> Kol B KIRMIZI
+#     ikisi de yerinde         -> uc test YESIL
+#
+#   SONDA KENDI TESTIMDE TOTOLOJI BULDU: Kol B once IndirAsync
+#   uzerinden olcuyordu ve o zaten null donuyordu (diskte gercek
+#   dosya yok). Izin kapisi kaldirildiginda Kol B YESIL kaldi.
+#   ListeleAsync'e tasindi - diske dokunmuyor, bos liste ancak izin
+#   kapisinin eseri olabilir. Ayrica GERCEK BIR EKSIK ortaya cikti:
+#   ListeleAsync izin kontrolu HIC YAPMIYORDU.
+statik: 3006
 dinamik: 25
