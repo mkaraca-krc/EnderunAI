@@ -12436,34 +12436,6 @@ namespace EnderunAI.Api.Migrations
                     b.ToTable("rfq_supplier_quotation_items", (string)null);
                 });
 
-            modelBuilder.Entity("EnderunAI.Api.Models.RoleManualPermissionGrant", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("GrantedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("GrantedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PermissionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PermissionId");
-
-                    b.HasIndex("RoleId", "PermissionId")
-                        .IsUnique();
-
-                    b.ToTable("role_manual_permission_grants", (string)null);
-                });
-
             modelBuilder.Entity("EnderunAI.Api.Models.RolePermission", b =>
                 {
                     b.Property<Guid>("RoleId")
@@ -19208,25 +19180,6 @@ namespace EnderunAI.Api.Migrations
                     b.Navigation("RfqItem");
 
                     b.Navigation("RfqSupplierQuotation");
-                });
-
-            modelBuilder.Entity("EnderunAI.Api.Models.RoleManualPermissionGrant", b =>
-                {
-                    b.HasOne("EnderunAI.Api.Models.Permission", "Permission")
-                        .WithMany()
-                        .HasForeignKey("PermissionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("EnderunAI.Api.Models.AppRole", "Role")
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Permission");
-
-                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("EnderunAI.Api.Models.RolePermission", b =>

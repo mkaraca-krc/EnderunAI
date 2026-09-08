@@ -25,50 +25,24 @@ namespace EnderunAI.Api.Tests;
 public sealed class RolIzinKuraliTests
 {
     /// <summary>
-    /// DOĞRULUK TABLOSUNUN DÖRT SATIRI — hepsi tek yerde tanımlı
-    /// olduğu için hepsi tek yerde sınanabiliyor (KATALOG/1).
-    ///
-    /// Eski biçim üç girdiliydi (`katalogdaVar, zatenVar, kaldirilmis`)
-    /// ve bir EYLEM soruyordu: "ekleyeyim mi". Eylem sorusu tek
-    /// yönlüdür — silme yönünü ifade edemez. Yeni biçim bir DURUM
-    /// söylüyor: "bulunmalı mı".
+    /// KURALIN DÖRT HÂLİ — hepsi tek yerde tanımlı olduğu için
+    /// hepsi tek yerde sınanabiliyor.
     /// </summary>
     [Theory]
-    // katalogda VAR + kaldırma YOK -> BULUNSUN
+    // katalogda, yok, kaldırılmamış -> EKLE
     [InlineData(true, false, false, true)]
-    // katalogda VAR + kaldırma VAR -> BULUNMASIN (SEED/1'in kusuru)
+    // katalogda, ZATEN VAR -> ekleme (tekrar üretme)
     [InlineData(true, true, false, false)]
-    // katalogda YOK + elle ekleme YOK -> BULUNMASIN (AC1'in kusuru)
+    // katalogda, yok, ama KALDIRILMIŞ -> EKLEME (kusurun kendisi)
+    [InlineData(true, false, true, false)]
+    // katalogda YOK -> ekleme
     [InlineData(false, false, false, false)]
-    // katalogda YOK + elle ekleme VAR -> BULUNSUN
-    [InlineData(false, false, true, true)]
     public void Kural_DortHalde_DogruKararVeriyor(
-        bool katalogdaVar, bool kaldirilmis, bool elleEklendi, bool beklenen)
+        bool katalogdaVar, bool zatenVar, bool kaldirilmis, bool beklenen)
     {
         Assert.Equal(
             beklenen,
-            RolIzinKurali.BulunmaliMi(katalogdaVar, kaldirilmis, elleEklendi));
-    }
-
-    /// <summary>
-    /// KATALOG ÜYELİĞİ HANGİ KAYDIN GEÇERLİ OLDUĞUNU SEÇER.
-    ///
-    /// İki kayıt aynı anda bulunabilir: bir izin elle verilip sonra
-    /// katalog**a** girebilir, ya da tersi. Kuralın bu durumda ne
-    /// yaptığı belirsiz kalmamalı — belirsiz bir kural, yarın iki
-    /// farklı okuyucuya iki farklı cevap verir.
-    /// </summary>
-    [Theory]
-    // katalogda VAR: kaldırma kaydı karar verir, elle ekleme yok sayılır
-    [InlineData(true, true, true, false)]
-    // katalogda YOK: elle ekleme karar verir, kaldırma yok sayılır
-    [InlineData(false, true, true, true)]
-    public void IkiKayitBirdenVarsa_KatalogUyeligiSecer(
-        bool katalogdaVar, bool kaldirilmis, bool elleEklendi, bool beklenen)
-    {
-        Assert.Equal(
-            beklenen,
-            RolIzinKurali.BulunmaliMi(katalogdaVar, kaldirilmis, elleEklendi));
+            RolIzinKurali.TohumlanmaliMi(katalogdaVar, zatenVar, kaldirilmis));
     }
 }
 
@@ -155,67 +129,6 @@ public sealed class RolIzinKaydiTekYerTests
             "Kaldırma kaydına matris toggle'ı DIŞINDA yazan dosya(lar): "
             + string.Join(", ", kacaklar)
             + ". Kural iki yerde yaşarsa biri unutulur (Kural 79).");
-    }
-
-    /// <summary>
-    /// AYNI MUHAFIZ, SİMETRİK KAYIT İÇİN (KATALOG/1 · KT1).
-    ///
-    /// Elle ekleme kaydı, uzlaştırıcının bir satırı SİLMEMESİNİ
-    /// söylüyor. Kontrolsüz yazılabilseydi, katalog dışı herhangi bir
-    /// satır "bilerek verildi" damgası alıp silinmekten kurtulurdu —
-    /// yani AC1'in kusuru geri gelirdi, üstelik meşru görünerek.
-    /// </summary>
-    [Fact]
-    public void ElleEklemeKaydina_YalnizMatrisToggleI_Yaziyor()
-    {
-        var izinliler = new[]
-        {
-            "PermissionMatrixController.cs",
-            "AppDbContext.cs",
-        };
-
-        var yazanlar = new List<string>();
-
-        foreach (var yol in KaynakDosyalari())
-        {
-            var govde = YorumsuzGovde(File.ReadAllText(yol));
-
-            if (Regex.IsMatch(
-                    govde,
-                    @"RoleManualPermissionGrants\s*\.\s*(Add|Remove|RemoveRange|AddRange)"))
-            {
-                yazanlar.Add(Path.GetFileName(yol));
-            }
-        }
-
-        var kacaklar = yazanlar.Except(izinliler, StringComparer.Ordinal).ToList();
-
-        Assert.True(
-            kacaklar.Count == 0,
-            "Elle ekleme kaydına matris toggle'ı DIŞINDA yazan dosya(lar): "
-            + string.Join(", ", kacaklar)
-            + ". Kural iki yerde yaşarsa biri unutulur (Kural 79).");
-    }
-
-    /// <summary>
-    /// POZİTİF KONTROL (Kural 48): muhafız gerçekten yazan bir dosya
-    /// bulabiliyor mu. Hiçbir şey bulamadığı için yeşil olan bir kapı
-    /// ile, ihlal olmadığı için yeşil olan kapı aynı görünür.
-    /// </summary>
-    [Fact]
-    public void Muhafiz_BilinenYazaniBulabiliyor()
-    {
-        var bulundu = KaynakDosyalari()
-            .Where(y => Path.GetFileName(y) == "PermissionMatrixController.cs")
-            .Select(y => YorumsuzGovde(File.ReadAllText(y)))
-            .Any(govde =>
-                Regex.IsMatch(govde, @"RolePermissionRevocations\s*\.\s*Add")
-                && Regex.IsMatch(govde, @"RoleManualPermissionGrants\s*\.\s*Add"));
-
-        Assert.True(
-            bulundu,
-            "Muhafız, matris toggle'ında bilinen iki yazmayı bulamadı — " +
-            "desen ya da dosya listesi yanlış yere bakıyor.");
     }
 
     /// <summary>

@@ -108,67 +108,6 @@ public sealed class OdemePlaniUcIzinTests(DatabaseFixture fixture)
         Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    /// <summary>
-    /// YETKİ/3 · YT1 — ADMİN'İN GERÇEKTE NE ALDIĞI, ÇAĞIRARAK.
-    ///
-    /// ═══ BU TEST BİR KARAR DEĞİL, BİR ÖLÇÜMDÜR ═══
-    ///
-    /// Bu dosyanın kendi başlığı *"Ödeme onayı Genel Müdür'ün işi ve
-    /// Admin'e bile kendiliğinden gitmiyor"* diyor. Veritabanı da öyle
-    /// diyor: katalogda 147 izin var, Genel Müdür 147'sini taşıyor,
-    /// Admin 146'sını — eksik olan tam da `payment.plan.approve`.
-    ///
-    /// Ama `PermissionAuthorizationMiddleware` Admin rolünü gören her
-    /// isteği izin kontrolüne HİÇ SOKMADAN geçiriyor. Yani niyet ile
-    /// gerçek ayrışmış olabilir ve bunu kod okuyarak değil ÇAĞIRARAK
-    /// bilmek gerekiyor (Kural 70).
-    ///
-    /// Test bugünkü DAVRANIŞI yazıyor, doğru olduğunu iddia etmiyor.
-    /// Hangisinin doğru olduğu Mehmet'in kararı (YETKİ/3 · YT4):
-    ///   · Admin her izne sahip olmalıysa çözüm veritabanına o izni
-    ///     EKLEMEK — arayüzü ya da middleware'i değil.
-    ///   · Admin ayrıcalıklı olmamalıysa çözüm middleware'deki
-    ///     kısayolu kaldırmak.
-    /// Karar verilince bu testin iddiası da onunla birlikte değişir.
-    /// </summary>
-    [Fact]
-    public async Task YalnizAdmin_KararUcunda_403_ALMIYOR()
-    {
-        var (_, satirId) = await PlanKurAsync();
-
-        var client = await TestUserFactory.CreateClientWithRolesAsync(
-            fixture, "op-yalniz-admin", ["Admin"]);
-
-        var response = await client.PostAsJsonAsync(
-            $"/api/odeme-planlari/satirlar/{satirId}/karar",
-            new { karar = (int)OdemeSatirKarari.Onaylandi, onaylananTutar = 10_000m });
-
-        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
-    /// <summary>
-    /// KARŞIT AYAK — ÖLÇÜM TOTOLOJİ OLMASIN (Kural 48).
-    ///
-    /// Yukarıdaki test tek başına "uç zaten kimseye 403 vermiyor"
-    /// durumunda da yeşil kalırdı. Bu ayak, aynı uç aynı gövdeyle
-    /// izinsiz bir role GERÇEKTEN 403 veriyor mu diye soruyor.
-    /// İkisi birlikte, Admin'in ayrıcalıklı olduğunu gösteriyor.
-    /// </summary>
-    [Fact]
-    public async Task AyniUc_IzinsizRole_403_Veriyor()
-    {
-        var (_, satirId) = await PlanKurAsync();
-
-        var client = await TestUserFactory.CreateClientWithRolesAsync(
-            fixture, "op-karsit", ["Depo Sorumlusu"]);
-
-        var response = await client.PostAsJsonAsync(
-            $"/api/odeme-planlari/satirlar/{satirId}/karar",
-            new { karar = (int)OdemeSatirKarari.Onaylandi, onaylananTutar = 10_000m });
-
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
     /// <summary>GENEL MÜDÜR KARAR UCUNDA 403 ALMAZ.</summary>
     [Fact]
     public async Task GenelMudur_KararUcunda_403_Almaz()
