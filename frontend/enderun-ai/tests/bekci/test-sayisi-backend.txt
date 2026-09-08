@@ -212,5 +212,17 @@
 #   ListeleAsync'e tasindi - diske dokunmuyor, bos liste ancak izin
 #   kapisinin eseri olabilir. Ayrica GERCEK BIR EKSIK ortaya cikti:
 #   ListeleAsync izin kontrolu HIC YAPMIYORDU.
-statik: 3006
+# Y2 - pkill -f YASAGI (2026-09-08): 3006 -> 3009, gevseklik 3.
+#   PkillYasagiTests: hicbir betik pkill -f kullanmiyor; muhafiz
+#   isiriyor (yuzey >10 betik + sahte ihlal yakalaniyor + pgrep -f
+#   ve yorumdaki bahis yanlis alarm vermiyor); ALTERNATIF var ve
+#   kendini disliyor.
+#
+#   NEDEN: pkill -f bu oturumda DORT KEZ cagiran kabugu oldurdu
+#   (cikis 144) ve bir kez bir duzenlemenin yarida kalmasina yol
+#   acti. Dort kez tekrarlanan hata dikkat sorunu degil ARAC
+#   sorunudur. Yasak tek basina cozum degil - alternatifi olmayan
+#   yasak insani yasagi delmeye iter; o yuzden ucuncu test
+#   surec-durdur.sh'in VARLIGINI ve kendini disladigini tutuyor.
+statik: 3009
 dinamik: 25
