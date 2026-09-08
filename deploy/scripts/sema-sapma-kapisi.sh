@@ -98,6 +98,11 @@ if ! "${REPO_ROOT}/scripts/derleme-kos.sh" \
     exit 1
 fi
 
+# SAVUNMA KAYDI (Kural 72): önceki biçimde bu satırın bir kopyası
+# `if ! ...; then ... fi` bloğunun İÇİNDE, 12 boşluk girintiyle
+# duruyordu. Blok kaldırıldığı için o kopya da silindi; satırın
+# kendisi — aynı mesaj, aynı `exit 1` — burada duruyor. Üstüne bir
+# savunma EKLENDİ: derleme düşerse model hiç üretilmiyor.
 (cd "$PROJE" && dotnet ef dbcontext script --context AppDbContext --no-build -o "$GECICI/model.sql" >/dev/null 2>&1) \
     || { hata "HATA: modelden şema üretilemedi."; exit 1; }
 
