@@ -843,6 +843,23 @@ using (var scope = app.Services.CreateScope())
 
 app.UseExceptionHandler();
 
+/*
+ * GÜVENLİK BAŞLIKLARI — BORUNUN GERÇEKTEN BAŞINDA (BAŞLIK/1).
+ *
+ * İLK YAZIMIMDA SONA KOYMUŞTUM ve yorumuna "borunun başında"
+ * yazmıştım — YORUM İLE KOD AYRIŞMIŞTI. Test yakaladı: kimlik
+ * katmanının ürettiği 401 yanıtı benim katmanıma HİÇ ULAŞMIYORDU,
+ * çünkü `UseAuthentication` ondan önce kısa devre yapıyor.
+ *
+ * Şimdi `UseRouting`ten de önce: hangi katman yanıtı üretirse
+ * üretsin `OnStarting` geri çağrısı kayıtlı oluyor.
+ *
+ * LAMBDA DEĞİL, TİP (AK-11): Program.cs çözümleyici bellek
+ * sınırının kenarında; buraya eklenen bir lambda Release
+ * derlemesini OOM ile düşürmüştü.
+ */
+app.UseMiddleware<EnderunAI.Api.Security.GuvenlikBasliklariMiddleware>();
+
 app.UseRouting();
 
 app.UseCors("Frontend");

@@ -183,5 +183,15 @@
 #
 #   Gevseklik 16: [Theory] bildirimleri + [InlineData] satirlari
 #   birlikte sayiliyor (cira bildirim sayar).
-statik: 2973
+# BASLIK/1 - nosniff (2026-09-08): 2973 -> 2976, gevseklik 3.
+#   GuvenlikBasliklariTests: kimliksiz 401, anonim 200 ve GOVDESIZ
+#   204 yanitlarinda basligin GERCEKTEN gittigi cagrilarak olculuyor.
+#   Her testte pozitif kontrol var (beklenen durum kodu once
+#   dogrulaniyor, yoksa baska bir seyi olcmus oluruz).
+#
+#   TEST BIR KUSUR YAKALADI: middleware'i once borunun SONUNA
+#   koymustum ama yorumuna "borunun basinda" yazmistim - yorum ile
+#   kod ayrismisti. Kimlik katmaninin urettigi 401 benim katmanima
+#   HIC ULASMIYORDU. UseRouting'ten once alindi.
+statik: 2976
 dinamik: 25
