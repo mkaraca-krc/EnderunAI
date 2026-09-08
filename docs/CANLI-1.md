@@ -238,6 +238,17 @@ gidiyordu.
 **Konsol sessizdi** — her tam yükleme konsolu siliyordu. Kusuru yalnız
 ağ kaydı gösterdi; test de oradan bakıyor.
 
+**503 ayağı da yeşil, ve sebebi önemli.** Yayın sırasında arka uç 503
+verirken giriş ekranı 10 saniye açık tutuldu (Mehmet, canlı ölçüm):
+sayfanın kendi attığı istek **0**, belge yüklemesi **1**. Bir gün önce
+aynı koşulda 10 saniyede **862** istek vardı.
+
+Sayfa 503'ü *zarifçe karşılamadı* — 503'e yol açan çağrıyı **hiç
+yapmadı**. İkinci katman (baloncuk oturumsuzken istek atmıyor) devrede.
+**Yapılmayan çağrının hatasında döngü olamaz** ve bu, "hatayı iyi
+karşıla"dan daha sağlam bir sonuçtur: iyi karşılama kodu bozulabilir,
+hiç yapılmayan çağrı bozulamaz.
+
 **Kapı:** `safe-deploy` içindeki `giris_dongu_kapisi`, yayın sonrası
 10 saniyede `/login` belge isteği 20'yi aşarsa İHLAL veriyor. Sağlık
 kontrolü bunu yakalayamıyordu: tek istek atıp 200 görüyor, döngü ancak

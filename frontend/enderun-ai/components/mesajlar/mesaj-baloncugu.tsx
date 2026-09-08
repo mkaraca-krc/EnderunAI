@@ -212,6 +212,24 @@ export default function MesajBaloncugu() {
      * yönlendirme yok). Buradaki koruma onun yerine geçmiyor,
      * gereksiz isteği en baştan engelliyor: giriş ekranında dakikada
      * yüzlerce 401 üretmenin hiçbir faydası yok.
+     *
+     * ═══ AMA ÖLÇÜM BUNUN DAHA DEĞERLİ OLDUĞUNU GÖSTERDİ ═══
+     *
+     * 2026-09-08, canlı: yayın sırasında arka uç 503 verirken giriş
+     * ekranı 10 saniye açık tutuldu.
+     *   sayfanın kendi attığı istek : 0
+     *   belge yüklemesi             : 1
+     * Bir gün önce aynı koşulda 10 saniyede 862 istek vardı.
+     *
+     * Sayfa 503'ü ZARİFÇE KARŞILAMADI — 503'e yol açan çağrıyı HİÇ
+     * YAPMADI. Fark önemli: iyi karşılama kodu bir gün bozulabilir,
+     * hiç yapılmayan çağrı bozulamaz. YAPILMAYAN ÇAĞRININ HATASINDA
+     * DÖNGÜ OLAMAZ.
+     *
+     * Yani bu koruma "gereksiz istek engelleme"den ibaret değil;
+     * arka uç TÜMÜYLE düştüğünde de giriş ekranını ayakta tutan şey.
+     * `api-client` yalnız 401'de yönlendirmiyor; 5xx bir başka yola
+     * girseydi burası son savunma olurdu.
      */
     if (oturumYukleniyor || !user) return;
 
