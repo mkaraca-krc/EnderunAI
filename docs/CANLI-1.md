@@ -26,6 +26,29 @@ Son güncelleme: 2026-09-08
 
 ---
 
+## ⚠ KATALOG ARTIK ROL İZİNLERİNİN KAYNAĞIDIR (KATALOG/1, 2026-09-08)
+
+**`RoleCatalog.cs`'ten bir (rol, izin) çifti kaldırmak, CANLI YETKİYİ
+DEĞİŞTİRİR.** Her servis yeniden başlatmasında uzlaştırıcı koşuyor ve
+katalogdan çıkan her çift veritabanından siliniyor.
+
+Bu istenen davranıştır — katalog kaldırması bir aydır veritabanına
+ulaşmıyordu (AC1). Ama yeni bir yüzey açıyor: dikkatsiz bir düzenleme
+bir sonraki yeniden başlatmada yetkileri **sessizce** değiştirir.
+KATALOG/1'den önce tohumlayıcı yalnız eklediği için bu risk yoktu.
+
+**Bunu okuyan kişi neyi değiştirdiğini bilsin.** `RoleCatalog.cs`te bir
+satır silmek, o rolü taşıyan kullanıcıların yetkisini kaldırmaktır.
+
+**Kapı var, ama silmeyi engellemiyor — beyansız silmeyi engelliyor:**
+yayın kuru koşuyu koşturuyor, silinecek çift varsa tam listeyi basıyor,
+ve işleme mesajında satır başında `KATALOG-SİLME:` yoksa İHLAL veriyor.
+Silmek meşru bir iş; sessizce silmek değil.
+
+**İSTİSNA YOK:** elle verilmiş izinler (`role_manual_permission_grants`)
+uzlaştırıcı tarafından korunuyor. Katalog dışı bir izni kalıcı kılmanın
+yolu matristen açmaktır — toggle o kaydı yazar.
+
 ## K1 — Yetki ısırıyor
 
 **Yeşil için gereken ölçüm:** kısıtlanmış bir kullanıcının kısıtlı

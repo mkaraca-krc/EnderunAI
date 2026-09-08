@@ -664,6 +664,81 @@ publish_backend() {
     fi
 }
 
+# ═══════════════════════════════════════════════════════════════════
+# KATALOG SİLME KAPISI (KATALOG/1 · KS1)
+# ═══════════════════════════════════════════════════════════════════
+#
+# ═══ NEDEN VAR: KATALOG/1 YENİ BİR YÜZEY AÇTI ═══
+#
+# KATALOG/1'den sonra katalog, rol izinlerinin FİİLİ KAYNAĞI. Her
+# yeniden başlatmada uzlaştırıcı koşuyor ve katalogdan çıkan her çift
+# veritabanından SİLİNİYOR.
+#
+# İstenen davranış bu. Ama yan etkisi şu: `RoleCatalog.cs`te dikkatsiz
+# bir düzenleme, bir sonraki yeniden başlatmada CANLI YETKİLERİ
+# SESSİZCE değiştirir. Tohumlayıcı yalnız eklerken bu risk yoktu.
+#
+# Nitekim bugün tam olarak bunun kurbanı olundu, ters yönden:
+# `4e55a24a` (2026-08-06) katalogdan iki `ProjectsDelete` satırı
+# kaldırdı ve KİMSE FARK ETMEDİ — çünkü o gün silme yönü çalışmıyordu.
+# Bir ay sonra AC1 ölçümüyle bulundu.
+#
+# ═══ KAPI NE YAPIYOR ═══
+#
+# Yayınlanacak İKİLİ ile canlı veritabanına karşı kuru koşu yapıyor
+# (OKUMA — kuru koşu hiçbir şey yazmaz, bkz. KatalogKuruKosu).
+# Silinecek çift varsa TAM LİSTEYİ basıyor.
+#
+# SİLME YAYINI DURDURMUYOR — silmek meşru bir iş. Ama BEYAN EDİLMEMİŞ
+# silme durduruyor: işleme mesajında satır başında `KATALOG-SİLME:`
+# yoksa İHLAL. Gerekçe tek cümlede: silmek meşru, sessizce silmek değil.
+#
+# Kural 72'nin ("sildiğini söyle") yetki tablolarındaki karşılığı.
+katalog_silme_kapisi() {
+    local dll="${BACKEND_PUBLISH_YENI}/EnderunAI.Api.dll"
+
+    if [ ! -f "$dll" ]; then
+        log "WARN" "Katalog silme kapısı ÖLÇEMEDİ: yayınlanacak ikili yok (${dll})."
+        return 0
+    fi
+
+    local cikti
+    cikti="$(DB_CONNECTION="$(grep -E '^DB_CONNECTION=' "$ENV_FILE" | sed -E "s/^DB_CONNECTION=//" | tr -d \'\")" \
+        dotnet "$dll" --katalog-kuru-kosu 2>/dev/null | grep '^\[katalog-kuru\]\|^  -\|^  +')"
+
+    if [ -z "$cikti" ]; then
+        log "WARN" "Katalog silme kapısı ÖLÇEMEDİ: kuru koşu çıktı üretmedi."
+        return 0
+    fi
+
+    local silinecek
+    silinecek="$(printf '%s' "$cikti" | sed -n 's/.*SİLİNECEK = \([0-9]*\).*/\1/p' | head -1)"
+    case "$silinecek" in (*[!0-9]*|"") silinecek=0 ;; esac
+
+    if [ "$silinecek" -eq 0 ]; then
+        log "INFO" "Katalog silme kapısı GEÇTİ: bu yayın hiçbir rol iznini silmiyor."
+        return 0
+    fi
+
+    log "WARN" "KATALOG SİLME: bu yayın ${silinecek} rol iznini SİLECEK:"
+    printf '%s\n' "$cikti" | grep '^  -' | while IFS= read -r satir; do
+        log "WARN" "   ${satir}"
+    done
+
+    if git -C "$REPO_ROOT" log -1 --pretty=%B | grep -qE '^KATALOG-SİLME:'; then
+        log "INFO" "Katalog silme kapısı GEÇTİ: silme işleme mesajında BEYAN EDİLMİŞ."
+        return 0
+    fi
+
+    log "ERROR" "Katalog silme kapısı İHLAL: ${silinecek} rol izni silinecek ama"
+    log "ERROR" "işleme mesajında 'KATALOG-SİLME:' satırı YOK."
+    log "ERROR" "Silmek meşru bir iş; SESSİZCE silmek değil. Yetki tablolarında"
+    log "ERROR" "beyansız bir kesim, Kural 72'nin kapattığı sınıfın aynısıdır."
+    log "ERROR" "İşleme mesajına şu biçimde bir satır ekleyin:"
+    log "ERROR" "    KATALOG-SİLME: <n> rol izni siliniyor — <gerekçe>"
+    return 1
+}
+
 # BACKEND TAKASI — İKİ RENAME, YENİDEN BAŞLATMADAN HEMEN ÖNCE.
 #
 # ESKİ DİZİN DİSKTE KALIYOR: `publish-eski` bir sonraki yayına kadar
@@ -1570,6 +1645,9 @@ main() {
     backup_database
 
     # TAKAS EN SONA: yedek boyunca da canlı ESKİ yapıyı görüyor.
+    asama "katalog-silme-kapisi"
+    katalog_silme_kapisi || fail "Beyan edilmemiş katalog silmesi (KS1)."
+
     asama "takas"
     swap_backend
     swap_frontend
