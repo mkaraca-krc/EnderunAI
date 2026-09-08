@@ -5061,3 +5061,108 @@ body {
   /* Kapalıyken soluk: durum tek bakışta okunsun. */
   opacity: 0.55;
 }
+
+/* ═══ MESAJ EKLERİ (MESAJ/3 Parça 3) ═══════════════════════════════ */
+
+/* Gerçek dosya girdisi gizli: tarayıcının kendi düğmesi ekranın geri
+   kalanıyla uyuşmuyor ve biçimlendirilemiyor. `display:none` DEĞİL —
+   o hâlde bazı tarayıcılar odaklanamıyor ve klavyeyle erişilemez
+   oluyor. Görsel olarak kaldırılıyor, erişilebilirlik korunuyor. */
+.mesaj-ek-girdi {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mesaj-ek-dugme {
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--erp-border, #cbd5e1);
+  border-radius: 6px;
+  background: var(--erp-surface, #fff);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.mesaj-ek-dugme:disabled { opacity: 0.45; cursor: not-allowed; }
+.mesaj-ek-dugme:hover:not(:disabled) { border-color: var(--erp-accent, #0e7490); }
+
+.mesaj-ek-alani {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem 0;
+}
+
+.mesaj-ek-secili {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.2rem 0.4rem 0.2rem 0.55rem;
+  border: 1px solid var(--erp-border, #cbd5e1);
+  border-radius: 999px;
+  background: var(--erp-surface, #fff);
+  font-size: 0.75rem;
+}
+
+/* Uzun dosya adı satırı taşırmasın; ad kısalsın, boyut hep görünsün. */
+.mesaj-ek-ad {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+
+.mesaj-ek-secili small { color: var(--erp-muted, #64748b); }
+
+.mesaj-ek-secili button {
+  border: 0;
+  background: transparent;
+  color: var(--erp-muted, #64748b);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 0.1rem;
+}
+
+.mesaj-ek-secili button:hover { color: #dc2626; }
+.mesaj-ek-secili button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.mesaj-ek-ilerleme {
+  font-size: 0.75rem;
+  color: var(--erp-accent, #0e7490);
+  font-weight: 600;
+}
+
+.mesaj-ek-hata {
+  font-size: 0.75rem;
+  color: #b91c1c;
+  flex-basis: 100%;
+}
+
+/* Gönderilmiş mesajın içindeki ek — indirme bağlantısı. */
+.mesaj-ek {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 65%);
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.75rem;
+}
+
+.mesaj-ek:hover { background: rgb(255 255 255 / 90%); }
+.mesaj-ek small { opacity: 0.7; }
+.mesaj-ek-simge { flex: 0 0 auto; }

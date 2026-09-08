@@ -100,7 +100,7 @@ async function konusmayiAc(sayfa: Page) {
   await satir.click();
 
   // Composer görünene kadar bekle — ölçülecek şey o.
-  await sayfa.locator("form.mesaj-yaz input").waitFor({ timeout: 20000 });
+  await sayfa.locator("form.mesaj-yaz input[type=text]").waitFor({ timeout: 20000 });
 
   /*
    * MESAJLARIN GELMESİ BEKLENİYOR — YARIŞ KOŞULU ÖLÇÜLDÜ.

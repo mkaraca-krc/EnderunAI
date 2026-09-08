@@ -32,14 +32,36 @@ public sealed class PermissionMatrixController(
             })
             .ToListAsync(cancellationToken);
 
-        var grants = await db.RolePermissions
-            .AsNoTracking()
-            .Select(item => new
-            {
-                item.RoleId,
-                PermissionKey = item.Permission.Key
-            })
-            .ToListAsync(cancellationToken);
+        /*
+         * GRANTS DA GİZLENEN İZİNLERE GÖRE SÜZÜLÜYOR (KARAR 3b).
+         *
+         * ÖLÇÜLMÜŞ TUTARSIZLIK: `permissions` süzülüyordu ama
+         * `grants` süzülmüyordu. Ekran satırları `permissions`ten
+         * geldiği için görüntü DOĞRUYDU — ama yanıt, ekranda hiç
+         * karşılığı olmayan kayıtlar taşıyordu.
+         *
+         * Bunu tarayıcı testi yakaladı: "sütun başına tik sayısı ==
+         * o rolün grants sayısı" iddiası düştü, çünkü grants ekranda
+         * olmayan satırları da sayıyordu.
+         *
+         * Sessiz bir tutarsızlıktı: kimse hata görmezdi, yalnız
+         * veriye dayanan her sayım yanlış çıkardı.
+         */
+        var gorunurAnahtarlar = PermissionCatalog.Permissions
+            .Where(item => !item.KullanimdanKalkti)
+            .Select(item => item.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var grants = (await db.RolePermissions
+                .AsNoTracking()
+                .Select(item => new
+                {
+                    item.RoleId,
+                    PermissionKey = item.Permission.Key
+                })
+                .ToListAsync(cancellationToken))
+            .Where(item => gorunurAnahtarlar.Contains(item.PermissionKey))
+            .ToList();
 
         return Ok(new
         {

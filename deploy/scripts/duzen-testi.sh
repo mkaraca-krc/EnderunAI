@@ -106,6 +106,41 @@ log "Önceki koşunun test kullanıcısı siliniyor..."
 sudo -u postgres psql -q -d enderun_ai_test -c \
   "DELETE FROM users WHERE \"Username\" IN ('${KULLANICI}', 'duzen-karsi-taraf', 'duzen-kisitli');" >/dev/null
 
+# ═══ ARKA UÇ AYRI DİZİNE PUBLISH EDİLİYOR ═══
+#
+# ÖLÇÜLEN TUZAK: rig arka ucu CANLININ `publish/` dizininden
+# çalıştırıyordu — yani en son DAĞITILAN derlemeden. Çalışma
+# ağacındaki arka uç değişiklikleri rig'de HİÇ görünmüyordu.
+#
+# Bir kez tam olarak bunu yaşadım: matris ucundaki grants süzmesini
+# yazdım, testi koştum, düştü. Sebep düzeltmenin yanlış olması
+# değil, rig'in eski ikiliyi çalıştırmasıydı. Ön yüzde `.next` için
+# çözdüğüm sorunun arka uç hâli.
+#
+# `SONDA_PUBLISH` verilirse o kullanılır (seed sondası bunu yapıyor);
+# yoksa çalışma ağacından TAZE publish alınır.
+ARKA_PUBLISH="${SONDA_PUBLISH:-${ON_YUZ}/../../publish-duzen}"
+
+if [ -n "${SONDA_PUBLISH:-}" ]; then
+  log "Arka uç publish DIŞARIDAN verildi: ${SONDA_PUBLISH}"
+elif [ "${DERLEME_ATLA:-hayir}" = "evet" ]; then
+  log "Arka uç publish ATLANDI (DERLEME_ATLA=evet) — mevcut kullanılacak."
+  [ -f "${ARKA_PUBLISH}/EnderunAI.Api.dll" ] \
+    || oldu "Atlanacak publish yok: ${ARKA_PUBLISH}"
+else
+  log "Arka uç publish ediliyor (ayrı dizin, canlının publish/ dizinine DOKUNULMUYOR)..."
+  DERLEME_BELLEK_TAVANI="${DERLEME_BELLEK_TAVANI:-7200M}" \
+    "${KOK}/scripts/derleme-kos.sh" dotnet publish "${KOK}/backend/EnderunAI.Api" \
+      -c Release -o "$ARKA_PUBLISH" --nologo -v q > /tmp/duzen-publish.log 2>&1 \
+    || { tail -20 /tmp/duzen-publish.log >&2; oldu "Arka uç publish başarısız."; }
+  log "Arka uç publish hazır."
+fi
+
+# FAIL-CLOSED: canlının publish dizini ASLA kullanılmasın.
+case "$ARKA_PUBLISH" in
+  "${KOK}/publish"|"${KOK}/publish/") oldu "Rig canlının publish/ dizinini kullanamaz." ;;
+esac
+
 log "Arka uç ${ARKA_PORT} portunda açılıyor (enderun_ai_test)..."
 DB_CONNECTION="$TEST_BAGLANTI" \
 JWT_SECRET="duzen-testi-jwt-$(head -c 16 /dev/urandom | base64 | tr -d '/+=')" \
@@ -114,7 +149,7 @@ SEED_ADMIN_PASSWORD="$PAROLA" \
 SEED_ADMIN_FULLNAME="Duzen Testi" \
 ASPNETCORE_URLS="http://127.0.0.1:${ARKA_PORT}" \
 ASPNETCORE_ENVIRONMENT="Production" \
-  setsid dotnet "${KOK}/publish/EnderunAI.Api.dll" > /tmp/duzen-arka.log 2>&1 &
+  setsid dotnet "${ARKA_PUBLISH}/EnderunAI.Api.dll" > /tmp/duzen-arka.log 2>&1 &
 ARKA_PID=$!
 
 # ÖLÇÜLDÜ: boş bir enderun_ai_test'te tohumlama 120 sn'yi aşıyor

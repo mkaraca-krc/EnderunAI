@@ -18,17 +18,39 @@ export async function apiClient<T>(
   path: string,
   options: ApiOptions = {}
 ): Promise<T> {
+  /*
+   * ═══ FormData AYRI YOLDAN GEÇİYOR (MESAJ/3 Parça 3) ═══
+   *
+   * Dosya yüklemesi `multipart/form-data` ve o başlığın SINIR
+   * (boundary) değerini TARAYICI üretmek zorunda. Elle
+   * `Content-Type` koyarsak sınır eksik kalır ve sunucu gövdeyi
+   * çözemez — istek 400 döner, sebebi de görünmez.
+   *
+   * Ayrıca `FormData` JSON'a çevrilmez; `JSON.stringify(FormData)`
+   * sessizce `"{}"` üretir ve dosya HİÇ GİTMEZ. Sessiz olduğu için
+   * en tehlikeli hâli budur.
+   *
+   * DÜZELTME KANONİK YERDE: ikinci bir istemci yazmak yerine bu
+   * fonksiyon iki gövde türünü de biliyor (Kural 79).
+   */
+  const formDataMi =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
+
   const response = await fetch(`/api/backend/${path.replace(/^\/+/, "")}`, {
     ...options,
     cache: "no-store",
     headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.body && !formDataMi
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...(options.headers ?? {}),
     },
     body:
       options.body === undefined
         ? undefined
-        : JSON.stringify(options.body),
+        : formDataMi
+          ? (options.body as FormData)
+          : JSON.stringify(options.body),
   });
 
   if (response.status === 401) {

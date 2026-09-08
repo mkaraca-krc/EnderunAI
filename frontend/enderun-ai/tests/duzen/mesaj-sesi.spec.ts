@@ -136,7 +136,7 @@ async function playSayisi(sayfa: Page): Promise<number> {
  * zaten oraya tıklayarak yazmaya başlıyor.
  */
 async function etkilesimYap(sayfa: Page) {
-  await sayfa.locator("form.mesaj-yaz input").click();
+  await sayfa.locator("form.mesaj-yaz input[type=text]").click();
   await sayfa.waitForTimeout(300);
 }
 
@@ -202,7 +202,7 @@ test.describe("mesaj sesi", () => {
     expect(kimlikler.length, "İki konuşma tohumlanmalıydı").toBeGreaterThan(1);
 
     await page.locator(".mesaj-satir").first().click();
-    await page.locator("form.mesaj-yaz input").waitFor({ timeout: 20000 });
+    await page.locator("form.mesaj-yaz input[type=text]").waitFor({ timeout: 20000 });
     await etkilesimYap(page);
 
     const acikKonusma = await page.evaluate(() =>
@@ -234,7 +234,7 @@ test.describe("mesaj sesi", () => {
     const kimlikler = await konusmaKimlikleri(page);
 
     await page.locator(".mesaj-satir").first().click();
-    await page.locator("form.mesaj-yaz input").waitFor({ timeout: 20000 });
+    await page.locator("form.mesaj-yaz input[type=text]").waitFor({ timeout: 20000 });
     await etkilesimYap(page);
 
     const once = await playSayisi(page);
@@ -265,13 +265,13 @@ test.describe("mesaj sesi", () => {
   test("kendi gönderdiği mesajda ses çalmaz", async ({ page }) => {
     await page.goto("/mesajlar");
     await page.locator(".mesaj-satir").first().click();
-    await page.locator("form.mesaj-yaz input").waitFor({ timeout: 20000 });
+    await page.locator("form.mesaj-yaz input[type=text]").waitFor({ timeout: 20000 });
     await etkilesimYap(page);
 
     const once = await playSayisi(page);
     const metin = "kendi mesajim " + Date.now();
 
-    await page.locator("form.mesaj-yaz input").fill(metin);
+    await page.locator("form.mesaj-yaz input[type=text]").fill(metin);
     await page.locator("form.mesaj-yaz button[type=submit]").click();
 
     const gonderilen = page.locator(".mesaj-akis").getByText(metin);
@@ -308,7 +308,7 @@ test.describe("mesaj sesi", () => {
     const digerId = kimlikler[1];
 
     await page.locator(".mesaj-satir").first().click();
-    await page.locator("form.mesaj-yaz input").waitFor({ timeout: 20000 });
+    await page.locator("form.mesaj-yaz input[type=text]").waitFor({ timeout: 20000 });
 
     await karsiTarafGonder(page, digerId, "baslik testi " + Date.now());
 

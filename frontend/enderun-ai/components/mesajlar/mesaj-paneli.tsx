@@ -7,6 +7,12 @@ import {
   canliMesajDinle,
 } from "@/lib/mesajlasma/canli-baglanti";
 import { etkinKonusmayiYaz } from "@/lib/mesajlasma/etkin-konusma";
+import {
+  ACCEPT,
+  MESAJ_BASINA_EN_FAZLA_DOSYA,
+  boyutMetni,
+  dosyayiDenetle,
+} from "@/lib/mesajlasma/ek-kurallari";
 
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useTaslakDeposu } from "@/lib/mesajlasma/taslak-deposu";
@@ -18,6 +24,7 @@ import {
 import {
   messagingService,
   type MesajOzeti,
+  type MesajEkiOzeti,
   type KisiOzeti,
 } from "@/services/messaging.service";
 
@@ -174,6 +181,18 @@ export default function MesajPaneli({
     setYerelTaslak(deger);
   }
 
+  /*
+   * ═══ EKLER (MESAJ/3 Parça 3, C10) ═══
+   *
+   * Seçilen dosyalar gönderilmeden ÖNCE listeleniyor ve tek tek
+   * kaldırılabiliyor. Yükleme ilerlemesi görünür.
+   */
+  const [seciliDosyalar, setSeciliDosyalar] = useState<File[]>([]);
+  const [ekIlerleme, setEkIlerleme] = useState<number | null>(null);
+  const [ekHatasi, setEkHatasi] = useState<string | null>(null);
+  const [ekler, setEkler] = useState<Record<string, MesajEkiOzeti[]>>({});
+  const dosyaGirdisi = useRef<HTMLInputElement | null>(null);
+
   const [kisiSorgu, setKisiSorgu] = useState("");
   const [kisiler, setKisiler] = useState<KisiOzeti[]>([]);
   const [kisiAcik, setKisiAcik] = useState(false);
@@ -216,8 +235,30 @@ export default function MesajPaneli({
        * burada ters çevriliyor. Sunucunun sırasını değiştirmek
        * sayfalamayı bozardı.
        */
-      setMesajlar([...(yanit.kayitlar ?? [])].reverse());
+      const gelenler = [...(yanit.kayitlar ?? [])].reverse();
+      setMesajlar(gelenler);
       setHata(null);
+
+      /*
+       * EKLER AYRI ÇAĞRIDA — VE BİLEREK.
+       *
+       * Mesaj yükünün içine gömseydik, eki olmayan konuşmalarda da
+       * her mesaj için boş bir alan taşınırdı. Ayrıca ekler yalnız
+       * izinli çağırana dönüyor; ayrı uç o kapıyı görünür kılıyor.
+       *
+       * HATASI MESAJLARI DÜŞÜRMÜYOR: ek listesi gelmezse akış yine
+       * okunur. Ek, mesajın kendisinden daha az kritiktir.
+       */
+      void messagingService
+        .ekleriGetir(gelenler.map((m) => m.id))
+        .then((liste) => {
+          const gruplu: Record<string, MesajEkiOzeti[]> = {};
+          for (const ek of liste) {
+            (gruplu[ek.mesajId] ??= []).push(ek);
+          }
+          setEkler(gruplu);
+        })
+        .catch((err) => console.warn("Ekler getirilemedi:", err));
     } catch (err) {
       setHata(err instanceof Error ? err.message : "Mesajlar yüklenemedi.");
     } finally {
@@ -309,9 +350,63 @@ export default function MesajPaneli({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function dosyalariSec(liste: FileList | null) {
+    if (!liste) return;
+
+    const yeni: File[] = [];
+    let hata: string | null = null;
+
+    for (const dosya of Array.from(liste)) {
+      const karar = dosyayiDenetle(dosya);
+
+      if (!karar.kabul) {
+        // SEBEP DOSYA ADIYLA SÖYLENİYOR: birden çok dosya seçilmişse
+        // hangisinin neden reddedildiği görünmeli.
+        hata = `${dosya.name}: ${karar.sebep}`;
+        continue;
+      }
+
+      yeni.push(dosya);
+    }
+
+    /*
+     * SAYIM KONTROLÜ GÜNCELLEYİCİNİN DIŞINDA — ÖLÇÜLMÜŞ HATA.
+     *
+     * İlk yazımda sınır aşımını `setSeciliDosyalar((mevcut) => ...)`
+     * güncelleyicisinin İÇİNDE hesaplıyor ve dıştaki `hata`
+     * değişkenine yazıyordum. React güncelleyiciyi ÇİZİM SIRASINDA
+     * çalıştırıyor; `setEkHatasi(hata)` ondan ÖNCE koşuyor ve
+     * `hata` hâlâ null oluyordu. Uyarı hiç görünmüyordu.
+     *
+     * Tarayıcı testi yakaladı: altıncı dosya eleniyordu ama sebebi
+     * ekranda yazmıyordu — yani kullanıcı için "dosyam kayboldu".
+     */
+    const birlesik = [...seciliDosyalar, ...yeni];
+    const kirpilmis = birlesik.slice(0, MESAJ_BASINA_EN_FAZLA_DOSYA);
+
+    if (birlesik.length > MESAJ_BASINA_EN_FAZLA_DOSYA) {
+      hata = `Bir mesaja en fazla ${MESAJ_BASINA_EN_FAZLA_DOSYA} dosya eklenebilir.`;
+    }
+
+    setSeciliDosyalar(kirpilmis);
+    setEkHatasi(hata);
+
+    // AYNI DOSYA TEKRAR SEÇİLEBİLSİN: input değeri temizlenmezse
+    // kullanıcı kaldırdığı dosyayı yeniden seçemez (change olayı
+    // aynı değer için tetiklenmiyor).
+    if (dosyaGirdisi.current) dosyaGirdisi.current.value = "";
+  }
+
+  function dosyayiKaldir(dizin: number) {
+    setSeciliDosyalar((mevcut) => mevcut.filter((_, i) => i !== dizin));
+    setEkHatasi(null);
+  }
+
   async function gonder() {
     const govde = taslak.trim();
-    if (!govde || !secili || gonderiliyor) return;
+    // EKLİ AMA METİNSİZ MESAJ DA GÖNDERİLEBİLİR: "şu dosyaya bak"
+    // demek için ayrıca cümle kurmak zorunda kalmasın.
+    if ((!govde && seciliDosyalar.length === 0) || !secili || gonderiliyor) return;
 
     setGonderiliyor(true);
     try {
@@ -336,6 +431,43 @@ export default function MesajPaneli({
         mevcut.some((x) => x.id === mesaj.id) ? mevcut : [...mevcut, mesaj]
       );
       setTaslak("");
+
+      /*
+       * ═══ EKLER MESAJDAN SONRA YÜKLENİYOR — VE BU C10'UN GEREĞİ ═══
+       *
+       * Uç ekleri BİR MESAJA bağlıyor, yani mesaj önce var olmalı.
+       * Sonucu şu: yükleme düşerse MESAJ KAYBOLMUYOR — zaten
+       * gönderildi. Kullanıcı yazdığını kaybetmiyor, yalnız dosya
+       * gitmiyor ve sebebini görüyor.
+       *
+       * Alternatif (önce yükle, sonra mesaj) daha kötüydü: yükleme
+       * uzun sürerken mesaj hiç gitmemiş olurdu ve kullanıcı
+       * yazdığını bekletirdi.
+       */
+      if (seciliDosyalar.length > 0) {
+        setEkHatasi(null);
+        setEkIlerleme(0);
+
+        try {
+          const yeniEkler = await messagingService.ekle(
+            mesaj.id,
+            seciliDosyalar,
+            setEkIlerleme
+          );
+
+          setEkler((mevcut) => ({ ...mevcut, [mesaj.id]: yeniEkler }));
+          setSeciliDosyalar([]);
+        } catch (err) {
+          // DOSYALAR LİSTEDE KALIYOR: kullanıcı tekrar deneyebilsin.
+          setEkHatasi(
+            err instanceof Error
+              ? `Mesaj gönderildi ama dosya yüklenemedi: ${err.message}`
+              : "Mesaj gönderildi ama dosya yüklenemedi."
+          );
+        } finally {
+          setEkIlerleme(null);
+        }
+      }
       setHata(null);
 
       // Liste sırası ve önizleme sunucuda değişti; yeniden okunuyor.
@@ -618,7 +750,28 @@ export default function MesajPaneli({
                       className={benim ? "mesaj mesaj-benim" : "mesaj"}
                     >
                       {!benim && <small>{m.gonderenAd}</small>}
-                      <p>{m.govde}</p>
+                      {m.govde && <p>{m.govde}</p>}
+
+                      {/*
+                        EKLER MESAJIN İÇİNDE, BAĞLANTI OLARAK.
+                        Adres `/api/backend/...` üzerinden yetki
+                        kontrollü uca gidiyor; statik dosya yolu YOK.
+                        `download` özniteliği yok — sunucu zaten
+                        `Content-Disposition: attachment` gönderiyor
+                        ve karar sunucuda olmalı.
+                      */}
+                      {(ekler[m.id] ?? []).map((ek) => (
+                        <a
+                          key={ek.id}
+                          className="mesaj-ek"
+                          href={messagingService.ekIndirmeYolu(ek.id)}
+                        >
+                          <span className="mesaj-ek-simge">📎</span>
+                          <span className="mesaj-ek-ad">{ek.ad}</span>
+                          <small>{boyutMetni(ek.boyutBayt)}</small>
+                        </a>
+                      ))}
+
                       <time>{saat(m.gonderimZamani)}</time>
                     </div>
                   );
@@ -627,6 +780,40 @@ export default function MesajPaneli({
                 <div ref={dip} />
               </div>
 
+              {/* ── SEÇİLEN DOSYALAR: gönderilmeden ÖNCE görünür ── */}
+              {(seciliDosyalar.length > 0 || ekHatasi || ekIlerleme !== null) && (
+                <div className="mesaj-ek-alani">
+                  {seciliDosyalar.map((dosya, i) => (
+                    <span key={`${dosya.name}-${i}`} className="mesaj-ek-secili">
+                      <span className="mesaj-ek-ad">{dosya.name}</span>
+                      <small>{boyutMetni(dosya.size)}</small>
+                      <button
+                        type="button"
+                        onClick={() => dosyayiKaldir(i)}
+                        aria-label={`${dosya.name} dosyasını kaldır`}
+                        disabled={ekIlerleme !== null}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+
+                  {/* İLERLEME: 20 MB'lık bir dosyada ilerlemesiz
+                      bekleme, donmuş ekrandan ayırt edilemez. */}
+                  {ekIlerleme !== null && (
+                    <span className="mesaj-ek-ilerleme" role="status">
+                      Yükleniyor… %{ekIlerleme}
+                    </span>
+                  )}
+
+                  {ekHatasi && (
+                    <span className="mesaj-ek-hata" role="alert">
+                      {ekHatasi}
+                    </span>
+                  )}
+                </div>
+              )}
+
               <form
                 className="mesaj-yaz"
                 onSubmit={(e) => {
@@ -634,6 +821,42 @@ export default function MesajPaneli({
                   void gonder();
                 }}
               >
+                {/* ── ATAÇ ── */}
+                <input
+                  ref={dosyaGirdisi}
+                  type="file"
+                  multiple
+                  accept={ACCEPT}
+                  className="mesaj-ek-girdi"
+                  onChange={(e) => dosyalariSec(e.target.files)}
+                  /*
+                   * ETİKET DÜĞMEDEN FARKLI — ÖLÇÜLMÜŞ ÇAKIŞMA.
+                   *
+                   * `input[type=file]` erişilebilirlik ağacında da
+                   * "button" rolünde görünüyor. İkisine aynı etiketi
+                   * verince ekran okuyucu ve test aynı adı taşıyan
+                   * İKİ düğme görüyordu.
+                   */
+                  aria-label="Dosya seçici"
+                />
+                <button
+                  type="button"
+                  className="mesaj-ek-dugme"
+                  onClick={() => dosyaGirdisi.current?.click()}
+                  disabled={
+                    gonderiliyor ||
+                    ekIlerleme !== null ||
+                    seciliDosyalar.length >= MESAJ_BASINA_EN_FAZLA_DOSYA
+                  }
+                  title={
+                    seciliDosyalar.length >= MESAJ_BASINA_EN_FAZLA_DOSYA
+                      ? `En fazla ${MESAJ_BASINA_EN_FAZLA_DOSYA} dosya`
+                      : "Dosya ekle"
+                  }
+                  aria-label="Dosya ekle"
+                >
+                  📎
+                </button>
                 <input
                   type="text"
                   value={taslak}
@@ -644,7 +867,11 @@ export default function MesajPaneli({
                 <button
                   type="submit"
                   className="erp-btn erp-btn-primary"
-                  disabled={gonderiliyor || taslak.trim().length === 0}
+                  disabled={
+                    gonderiliyor ||
+                    ekIlerleme !== null ||
+                    (taslak.trim().length === 0 && seciliDosyalar.length === 0)
+                  }
                 >
                   {gonderiliyor ? "Gönderiliyor…" : "Gönder"}
                 </button>

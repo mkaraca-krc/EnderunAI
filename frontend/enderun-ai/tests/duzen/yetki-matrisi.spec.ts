@@ -115,17 +115,36 @@ test("bölüm bağlantısı o bölüme götürüyor", async ({ page }) => {
 
   const cip = cipler.nth(dizin);
   await cip.click();
-  await page.waitForTimeout(800);
 
   const baslik = page.locator('[id^="matris-bolum-"]').filter({ hasText: /MUHASEBE/i }).first();
-  const kutu = await baslik.boundingBox();
 
+  /*
+   * KAYDIRMANIN OTURMASI BEKLENİYOR — SABİT SÜRE DEĞİL.
+   *
+   * Önce `waitForTimeout(800)` vardı ve test KARARSIZDI: kaydırma
+   * `behavior: "smooth"` ve süresi içeriğin uzunluğuna bağlı.
+   * KARAR 3b ile 7 satır gizlenince tablo kısaldı, zamanlama
+   * değişti ve başlık 772 px'te yakalandı — görünen alanın 5 px
+   * altında.
+   *
+   * SINIRI GEVŞETMEDİM. Ölçülen iddia "bölüme GÖTÜRÜYOR mu";
+   * animasyonun ne kadar sürdüğü o iddianın parçası değil. Artık
+   * başlık görünen alana girene kadar bekleniyor; hiç girmezse
+   * test düşüyor.
+   */
+  await expect
+    .poll(
+      async () => {
+        const k = await baslik.boundingBox();
+        return k ? Math.round(k.y) : Number.MAX_SAFE_INTEGER;
+      },
+      { timeout: 10000 }
+    )
+    .toBeLessThan(GORUNUM.height);
+
+  const kutu = await baslik.boundingBox();
   expect(kutu, "Muhasebe bölüm başlığı bulunamadı").not.toBeNull();
-  expect(
-    kutu!.y,
-    `Bölüm başlığı görünen alanda değil (y=${Math.round(kutu!.y)})`
-  ).toBeLessThan(GORUNUM.height);
-  expect(kutu!.y).toBeGreaterThan(-1);
+  expect(kutu!.y, "Başlık yukarı kaçtı").toBeGreaterThan(-1);
 });
 
 test("rol başlıkları ve bölüm başlıkları kaydırırken üstte kalıyor", async ({ page }) => {

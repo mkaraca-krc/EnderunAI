@@ -84,3 +84,7 @@ poz-dosyalari/
 /*.xls
 icmal-dosyalari/
 
+
+# Duzen rig-inin AYRI arka uc publish dizini (canlinin publish/ dizinine
+# dokunmasin diye - 2026-09-08).
+publish-duzen/

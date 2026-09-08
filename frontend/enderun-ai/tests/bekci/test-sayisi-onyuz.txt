@@ -139,5 +139,24 @@
 #   /dashboard, sonra /onay-merkezi kullaniyordu; ikisi de kural aldi.
 #   Artik HIC VAR OLMAYAN bir yol kullaniliyor - varsayilanin kendisi
 #   siniliyor, hicbir ekranin kaderine bagli degil.
-statik: 485
+# MESAJ/3 PARCA 3 ARAYUZU (2026-09-08): 485 -> 492, katki +7.
+#   ek-sinirlari-tek-kaynak.test.ts 3: boyut, dosya sayisi ve izinli
+#     uzanti listesi sunucudakiyle AYNI. Sonda ile dogrulandi -
+#     istemci sinirini 50 MB yaptim: kirmizi; zip'i cikardim: kirmizi.
+#   mesaj-ek-arayuzu.spec.ts 4 (PLAYWRIGHT): atac dugmesi ve dosya
+#     girdisi var (gizli AMA erisilebilir - display:none degil),
+#     secilen dosya listeleniyor ve kaldirilabiliyor, izinsiz uzanti
+#     reddediliyor ve SEBEBI gorunuyor, bes dosya aliniyor altincisi
+#     alinmiyor (pozitif kontrol: besi ALINIYOR).
+#
+#   ARAYUZ TESTI IKI GERCEK KUSUR YAKALADI:
+#   1) Dosya sayisi uyarisi HIC GORUNMUYORDU: sinir asimini
+#      setSeciliDosyalar guncelleyicisinin ICINDE hesaplayip distaki
+#      degiskene yaziyordum; React guncelleyiciyi cizim sirasinda
+#      kosuyor, setEkHatasi ondan ONCE kosuyor ve deger hala null
+#      oluyordu. Kullanici icin "dosyam kayboldu".
+#   2) input[type=file] erisilebilirlik agacinda da "button"
+#      rolunde; ataç dugmesiyle ayni etiketi tasiyinca iki eleman
+#      ayni adla gorunuyordu.
+statik: 492
 dinamik: 15
