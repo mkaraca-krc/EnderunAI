@@ -8,6 +8,23 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
     public const string TestJwtSecret = "test-only-jwt-secret-never-used-in-production-0123456789";
     public const string TestDatabaseName = "enderun_ai_test";
 
+    /// <summary>
+    /// TESTLERİN KENDİ DİSK KÖKÜ (SIZINTI/1 · SZ1).
+    ///
+    /// Bu alan olmadan `UploadService`, `EInvoiceArchive` ve
+    /// `ProjectDocumentsController` sabit kodlanmış CANLI dizinlere
+    /// yazıyordu: satırlar `enderun_ai_test`e gidip her koşuda
+    /// siliniyor, dosyalar canlı diskte kalıyordu. Ölçüldü
+    /// (2026-09-08): uploads/ 16.696 dosya (12'si gerçek),
+    /// project-files/ 3.250 dosya (0'ı gerçek).
+    ///
+    /// SÜRECE ÖZEL: aynı makinede iki test koşumu birbirinin
+    /// dosyalarını görmesin diye PID ile ayrılıyor.
+    /// </summary>
+    public static readonly string TestDiskKoku = Path.Combine(
+        Path.GetTempPath(),
+        $"enderun-test-disk-{Environment.ProcessId}");
+
     public static readonly string TestConnectionString = ResolveTestConnectionString();
 
     protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
@@ -17,6 +34,13 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("MigrationRecovery:AllowAutomaticDatabaseUpdate", "true");
         builder.UseSetting("Logging:LogLevel:Default", "Warning");
         builder.UseSetting("Logging:LogLevel:Microsoft.EntityFrameworkCore", "Warning");
+
+        // SZ1 — ÜÇ KÖK DE GEÇİCİ DİZİNE. Kökler artık dışarıdan
+        // veriliyor (YazmaKokleri); burada verilmezse fail-closed
+        // kapı süreci başlatmaz.
+        builder.UseSetting("Uploads:Root", Path.Combine(TestDiskKoku, "uploads"));
+        builder.UseSetting("EInvoice:ArchivePath", Path.Combine(TestDiskKoku, "e-fatura"));
+        builder.UseSetting("Storage:ProjectFilesRoot", Path.Combine(TestDiskKoku, "project-files"));
 
         Environment.SetEnvironmentVariable("SEED_ADMIN_USERNAME", "test.admin");
         Environment.SetEnvironmentVariable("SEED_ADMIN_PASSWORD", "TestAdmin!2026Secure");

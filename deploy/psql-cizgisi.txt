@@ -1,0 +1,17 @@
+# DOĞRUDAN psql ÇAĞRISI ÇİZGİSİ (Y3).
+# Ölçüm psql'i deploy/scripts/vt-sorgu.sh üzerinden geçer.
+# Buradaki satırlar işlevsel betikler: yedek, göç, rig, kapı.
+# LİSTE YALNIZCA KÜÇÜLÜR. Yeni bir doğrudan çağrı eklenemez.
+# Biçim: dosya:adet
+deploy/scripts/acik-veritabani-kapisi.sh:2
+deploy/scripts/departman-dagilimi.sh:1
+deploy/scripts/duzen-testi.sh:2
+deploy/scripts/goc-provasi.sh:10
+deploy/scripts/goc-uygula.sh:1
+deploy/scripts/safe-deploy.sh:1
+deploy/scripts/seed-sondasi.sh:2
+deploy/scripts/sema-karsilastir.sh:1
+deploy/scripts/sema-sapma-kapisi.sh:1
+scripts/enderun-backup.sh:2
+scripts/enderun-geri-yukleme-tatbikati.sh:1
+scripts/enderun-yedek-uzak.py:1

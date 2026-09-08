@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Http;
 
 namespace EnderunAI.Api.Services.Upload;
@@ -6,8 +7,14 @@ public sealed class UploadService : IUploadService
 {
     private const long MaxFileSize = 50 * 1024 * 1024;
 
-    private readonly string _uploadRoot =
-        "/var/www/enderun-ai/uploads";
+    // KÖK ARTIK SABİT DEĞİL — bkz. YazmaKokleri (SIZINTI/1).
+    // Sabit olduğu sürece testler canlı diske yazıyordu.
+    private readonly string _uploadRoot;
+
+    public UploadService(IConfiguration configuration)
+    {
+        _uploadRoot = YazmaKokleri.Yukleme(configuration);
+    }
 
     private static readonly HashSet<string> AllowedExtensions =
         new(StringComparer.OrdinalIgnoreCase)

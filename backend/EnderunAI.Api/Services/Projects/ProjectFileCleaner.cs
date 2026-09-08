@@ -23,11 +23,19 @@ public sealed class ProjectFileCleaner(
     IConfiguration configuration,
     ILogger<ProjectFileCleaner> logger) : IProjectFileCleaner
 {
-    private const string DefaultStorageRoot = "/var/www/enderun-data/project-files";
-
+    // VARSAYILAN KÖK BURADA YAZMIYOR (SIZINTI/1 · Kural 79).
+    //
+    // Bu sınıf kökün İKİNCİ OKUYUCUSUYDU ve kendi varsayılanını
+    // taşıyordu. Yazıcı (ProjectDocumentsController) ile silici
+    // arasında en tehlikeli ayrışma budur: biri bir dizine yazarken
+    // öteki başka bir dizinde siler.
+    //
+    // Fail-closed kapı silme yolunda AYRICA doğru: test
+    // veritabanına bağlı bir süreç, canlı proje dosyalarını
+    // silmeye hiç kalkışmasın.
     public bool DeleteProjectFiles(Guid projectId)
     {
-        var root = configuration["Storage:ProjectFilesRoot"] ?? DefaultStorageRoot;
+        var root = Upload.YazmaKokleri.ProjeDosyalari(configuration);
         var projectFolder = Path.Combine(root, projectId.ToString());
 
         // Kök dizinin kendisinin silinmesine hiçbir koşulda izin verilmez.

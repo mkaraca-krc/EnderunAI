@@ -22,9 +22,14 @@ namespace EnderunAI.Api.Controllers;
 public sealed class ProjectDocumentsController(
     AppDbContext db,
     ICurrentDataScopeService dataScope,
-    ICurrentUserService currentUser) : ControllerBase
+    ICurrentUserService currentUser,
+    IConfiguration configuration) : ControllerBase
 {
-    private const string StorageRoot = "/var/www/enderun-data/project-files";
+    // KÖK SABİT DEĞİL — bkz. Services/Upload/YazmaKokleri (SIZINTI/1).
+    // Buradaki sabit yüzünden ProjectDocumentsTests canlı diske 3.250
+    // dosya bıraktı; project_documents tablosunda 0 satır var.
+    private string StorageRoot =>
+        Services.Upload.YazmaKokleri.ProjeDosyalari(configuration);
     private const long MaxTotalUploadBytes = 100 * 1024 * 1024;
 
     private static readonly HashSet<string> AllowedExtensions =

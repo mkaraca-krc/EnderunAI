@@ -24,19 +24,19 @@ public interface IEInvoiceArchive
 /// </summary>
 public sealed class EInvoiceArchive : IEInvoiceArchive
 {
+    private readonly string root;
+
     /// <summary>
     /// Yüklenen belgelerle aynı kök: yedekleme betiği burayı zaten
     /// yedekliyor, fatura asılları da kapsama girsin.
+    ///
+    /// Varsayılan yol ARTIK BURADA YAZMIYOR: kendi sabitini taşıyan
+    /// her sınıf, kapının ikinci okuyucusu olur ve kapıyı ıskalar
+    /// (Kural 79). Tek çözücü: YazmaKokleri.
     /// </summary>
-    private const string DefaultRoot = "/var/www/enderun-ai/uploads/e-fatura";
-
-    private readonly string root;
-
     public EInvoiceArchive(IConfiguration configuration)
     {
-        var configured = configuration["EInvoice:ArchivePath"];
-
-        root = string.IsNullOrWhiteSpace(configured) ? DefaultRoot : configured;
+        root = Services.Upload.YazmaKokleri.EFaturaArsivi(configuration);
     }
 
     public async Task<string> SaveAsync(

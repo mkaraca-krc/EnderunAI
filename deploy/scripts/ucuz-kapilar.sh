@@ -136,6 +136,8 @@ KAPILAR=(
 )
 
 YALNIZ_HIZLI=0
+olcemedi=0
+OLCEMEYENLER=()
 
 case "${1:-}" in
     --liste)
@@ -180,13 +182,43 @@ for kapi in "${KAPILAR[@]}"; do
     log "[$sira] $ad"
     kapi_basladi=$(date +%s)
 
-    if ! (cd "$dizin" && eval "$komut") ; then
-        hata "DÜŞTÜ: $ad"
-        hata "Bu kapı ucuzdur; pahalı turlara girmeden durduruldu."
-        exit 1
-    fi
+    #
+    # ÜÇ SONUÇ, ÜÇ CÜMLE (Kural 67) — KAPI SINIFI TARAMASI, 2026-09-08.
+    #
+    # Bu döngü ikili idi: 0 ise "✓", değilse düşür. Üçüncü hâl —
+    # KAPI HİÇBİR ŞEY ÖLÇEMEDİ — "✓" olarak görünüyordu.
+    #
+    # ÖLÇÜLDÜ: `sır tarayıcı (aralık)` yayın turunda commit aralığı
+    # boş olduğu için hiçbir şey taramıyor ve günlüğe "✓" basıyordu.
+    # 74 kapı koşumunun 10'unda "Taranacak commit yok." yazıp
+    # yanına onay işareti koymuş. Yani onay işareti, taramanın
+    # yapıldığını değil, ÇÖKMEDİĞİNİ söylüyordu.
+    #
+    # ÇIKIŞ KODU 3 = ÖLÇEMEDİ. Yayını durdurmuyor (ölçememek, hata
+    # bulmakla aynı şey değil) ama ✓ ALMIYOR ve sonda sayılıyor.
+    (cd "$dizin" && eval "$komut")
+    kapi_kodu=$?
 
-    log "    ✓ $ad ($(( $(date +%s) - kapi_basladi ))s)"
+    case "$kapi_kodu" in
+        0)
+            log "    ✓ $ad ($(( $(date +%s) - kapi_basladi ))s)"
+            ;;
+        3)
+            olcemedi=$((olcemedi + 1))
+            OLCEMEYENLER+=("$ad")
+            log "    ⊘ $ad ÖLÇEMEDİ ($(( $(date +%s) - kapi_basladi ))s) — bu kapı bu koşumda hiçbir şey ölçmedi."
+            ;;
+        *)
+            hata "DÜŞTÜ: $ad"
+            hata "Bu kapı ucuzdur; pahalı turlara girmeden durduruldu."
+            exit 1
+            ;;
+    esac
 done
 
-log "Ucuz kapıların hepsi geçti ($(( $(date +%s) - basladi ))s)."
+if [ "$olcemedi" -gt 0 ]; then
+    log "Ucuz kapılar bitti ($(( $(date +%s) - basladi ))s): düşen yok, ANCAK ${olcemedi} kapı ÖLÇEMEDİ:"
+    for ad in "${OLCEMEYENLER[@]}"; do log "    ⊘ ${ad}"; done
+else
+    log "Ucuz kapıların hepsi ÖLÇTÜ ve geçti ($(( $(date +%s) - basladi ))s)."
+fi

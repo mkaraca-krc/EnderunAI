@@ -12317,3 +12317,145 @@ Kanıt, sabotajın kırmızı ürettiğini GÖRMEKTİR.
 `S3d`'nin yorumu düzeltildi: artık erken çıkışı koruduğunu iddia
 etmiyor. Yanlış bir yorum, olmayan bir yorumdan daha zararlıdır —
 sonraki okuyucu o iddiaya güvenip sınamayı atlar.
+
+## SIZINTI/1 — TESTLER CANLI DİSKE YAZIYORDU (2026-09-08)
+
+### Yanlış çerçeveden doğru bulguya
+
+Başlangıçtaki tanım *"16.455 öksüz dosya"* idi ve YANLIŞTI. Ölçüm üç
+ayrı yoldan aynı yere çıktı:
+
+1. **İçerik parmak izi** — 16.634 dosyanın md5'i alındı. Ortanca dosya
+   boyutu **20 bayt**. En sık altı içerik 9.969 dosyayı kaplıyor ve
+   ikisi test kaynağına kadar sürüldü: `%PDF-1.4 test`
+   (`IsgSiteDocumentTests.cs:64`, 3.934 dosya) ve `test-belge-icerigi`
+   (`PersonnelDocumentTests.cs:74`, 3.087 dosya). e-fatura'da 6.657
+   dosyanın 6.656'sı beş sabit test adı taşıyor.
+2. **Zamansal yoğunlaşma** — 397 dağıtım test turunun ±30 dk
+   pencereleri takvim zamanının %14,1'ini kaplıyor ama dosyaların
+   %61,4'ü oraya düşüyor: **4,4× zenginleşme**.
+3. **Eşleşme** — `site-daily-reports`'ta fikstür dışı 4 dosyanın adı,
+   `project_site_daily_report_photos` tablosundaki 4 satırın
+   `StoredFileName` değerleriyle **4/4** tutuyor. e-fatura'da da
+   fikstür dışı 4 dosya ↔ 4 `SourceXmlPath`.
+
+**Öksüz dosya yok.** Gerçek yükleme eksiksiz kayıtlı; kayıtsız olanların
+hepsi test çıktısı.
+
+### Doğal deney
+
+Koşan bir dağıtımın test turu sırasında canlı `uploads/` sayıldı:
+16.615 → 16.655 (+40). Aynı aralıkta nginx'te **0** yükleme isteği,
+**59** toplam istek (log yazıyor — pozitif kontrol). Üreten test:
+`CollaborationTests.cs:368`, gerçek `UploadService` ile.
+
+### Sebep ve düzeltme
+
+Üç sabit kodlanmış kök vardı: `UploadService`, `EInvoiceArchive`,
+`ProjectDocumentsController`. Testler bu servisleri sahtelemeden
+çağırıyor; satırları `enderun_ai_test`e gidip her koşuda siliniyor,
+DOSYALAR canlı diskte kalıyordu.
+
+- `Services/Upload/YazmaKokleri.cs` — üç kökün TEK çözücüsü.
+- **Fail-closed kapı**: `enderun_ai_test`e bağlı bir süreç canlı bir
+  yazma köküne (ya da onun ALT dizinine) bakıyorsa istisna fırlıyor.
+  Kapı `Program.cs`'te servis çözülmeden çağrılıyor — ihlal ilk
+  yüklemede değil, BAŞLANGIÇTA patlıyor.
+- Test işareti olarak ayrı bir bayrak KULLANILMADI: unutulabilir bir
+  bayrak unutulduğu gün sessizce açık kalır. Zaten sabitlenmiş olan
+  veritabanı adı kullanılıyor.
+- `ProjectFileCleaner` de aynı çözücüye bağlandı — kökün ikinci
+  okuyucusuydu ve kendi varsayılanını taşıyordu (Kural 79). Yazıcı ile
+  silici arasındaki ayrışma en tehlikelisidir.
+
+### Ölçülen boyut (SZ5)
+
+| | dosya | bayt | diskte |
+|---|---:|---:|---:|
+| uploads/ gerçek | 12 | 50,0 MB | |
+| uploads/ test | 16.684 | 18,7 MB | |
+| project-files/ test | 3.250 | 21 KB | 34 MB |
+| **toplam sızıntı** | **19.934** | **18,7 MB** | |
+
+**Yedeği şişirmiyor:** tar+gzip ölçüldü — tüm `uploads/` 41 MB,
+yalnız gerçek dosyalar 40 MB. Fark ~1 MB ve 0,2 sn. Asıl maliyet
+blok israfı: 21 KB'lık `project-files/` diskte 34 MB yer kaplıyor.
+**Dosyalar SİLİNMEDİ** — temizleme kararı Mehmet'te.
+
+## KAPI SINIFI TARAMASI — "BU KOŞUM" SANILAN BİRİKMİŞ DURUM (2026-09-08)
+
+Yayın kapısı, biriken günlüğün TAMAMINI grepleyip bir gün önceki
+`OutOfMemoryException` satırlarını bugünün teşhisi sandı: "DERLEME
+BAŞARISIZ" dedi, oysa derleme geçmiş, 3156 testten biri düşmüştü.
+
+Taranan yüzey: 29 kabuk betiği, 8 ucuz kapı, safe-deploy'un kendi
+kapıları, C# muhafız testleri ve kalıcı her kaynak (dağıtım günlüğü,
+yedek günlüğü, kesinti kaydı, yarım-koşu dosyası, son-koşu dosyası,
+anlık görüntü dizinleri, depo dışı fikstür dosyaları).
+
+**İki örnek bulundu, ikisi de düzeltildi:**
+
+1. `safe-deploy.sh` derleme/test ayırt etmesi — artık yalnız bu
+   koşumun günlük dilimini okuyor.
+2. `sir-tara.py` — aralık boşken 0 dönüyordu ve kapı döngüsü bunu
+   **✓** olarak basıyordu. 74 kapı koşumunun 10'unda "Taranacak commit
+   yok." yazıp yanına onay işareti koymuş. Yayın turunda aralık HER
+   ZAMAN boş: safe-deploy önce `git pull` yapıyor. Yani bu kapı
+   yayınlarda hiç tarama yapmadan onay veriyordu.
+
+Kök sebep kapının kendisinde değil, **döngüde**: `ucuz-kapilar.sh`
+ikili idi (0 → ✓, değilse düşür). Üçüncü hâl — ÖLÇEMEDİ — yoktu.
+Çıkış kodu **3 = ÖLÇEMEDİ** eklendi; yayını durdurmuyor ama ✓ almıyor
+ve sonda ayrıca listeleniyor.
+
+**Sınıfta OLMAYANLAR (doğru yazılmışlar):** `yarim_kosu_denetle`
+(PID'e bakıyor), `KESINTI_KAYIT` (her koşumda sıfırlanıyor),
+`SON_KOSU_DOSYASI` (başta siliniyor), `eski_parca_kapisi` (önceki
+yapıyı BİLEREK okuyor), `SkippableFact` testleri (atlama gerekçesi
+açık), yedek kapısı (çıkış koduna bakıyor, duruma değil).
+
+## Y3 — ÖLÇÜM İÇİN TEK VERİTABANI YOLU (2026-09-08)
+
+Yanlış veritabanını ölçmek iki kez oldu: `audit_logs` (boş; doğru tablo
+`security_audit_events`, 1.972 satır) ve `psql -d "$DB"` çağrısında
+$DB'nin boş kalması (psql sessizce `postgres`e bağlandı, "0/100
+eşleşme" bir an gerçek sanıldı).
+
+`deploy/scripts/vt-sorgu.sh`: veritabanı adı zorunlu, bakım
+veritabanları (`postgres`, `template0/1`) reddediliyor, her çıktının
+başında psql'in kendi bildirdiği `current_database()` ve satır sayısı.
+İstenen ad ile bağlanılan ad tutmazsa DURUYOR — Kural 65'in doğrudan
+panzehiri.
+
+`deploy/psql-cizgisi.txt` + `PsqlCizgisiTests`: 12 dosyada 25 doğrudan
+çağrı donduruldu. Hepsi işlevsel (yedek, göç, rig, kapı); sorun ÖLÇÜM
+çağrılarındaydı. Liste yalnızca küçülür.
+
+## HAKEDİŞ-EK/1 — HK1 CEVABI: KASITLI (2026-09-08)
+
+`HakedisController.Upload` dosyayı diske yazıp analiz edip dönüyor,
+veritabanına kayıt YAZMIYOR. "Tasarım gereği" denmişti; ölçüldü:
+
+- Beş uç var: `upload`, `files` (liste), `files/{ad}` (indir),
+  `files/{ad}/analyze`, DELETE.
+- Ekran var: `app/hakedis/dosyalar/page.tsx`,
+  `services/hakedis-file.service.ts` üzerinden `hakedis/files`
+  çağırıyor.
+- İzin bağlantısı var: `/hakedis` → `hakedis.view`.
+- Ekranın kendi yorumu tasarımı anlatıyor: *"ANALİZ SONUCU ÖNERİDİR,
+  KAYIT DEĞİL."*
+
+**Kusur değil.** Liste diskten okunuyor; 4 dosya da ekrandan
+erişilebilir. HK2/HK3 tetiklenmedi, dosyalara dokunulmadı.
+
+### Ama ölçüm başka bir şey buldu: liste KAPSAMSIZ
+
+`GetFiles("hakedis")` dizindeki HER dosyayı, `hakedis.view` izni olan
+HERKESE döndürüyor. Şirket, proje ya da yükleyen süzgeci yok — dosyalar
+tek düz dizinde ve kayıtları olmadığı için süzülecek veri de yok.
+
+Ölçüldü: canlıda **1 şirket** var (şirketler arası sızıntı bugün
+imkânsız). Ama `hakedis.view` izni olan **10 kullanıcının 10'unun da**
+`user_data_scopes` kaydı var — yani hepsi kapsam kısıtlı, hepsi
+kapsamları dışındaki hakediş belgelerini görebilir. Bugün 4 dosya var
+ve hepsi aynı kişinin; mekanizma açık, sızıntı henüz yok.

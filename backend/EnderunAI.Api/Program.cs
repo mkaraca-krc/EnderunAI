@@ -56,6 +56,20 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Finance.OdemePlaniService>();
 builder.Services.AddHostedService<
     EnderunAI.Api.Services.Finance.HaftalikOdemePlaniBackgroundService>();
 
+//
+// YAZMA KÖKÜ KAPISI, BAŞLANGIÇTA (SIZINTI/1 · SZ2).
+//
+// Kapı `YazmaKokleri` içinde ama servisler SINGLETON/SCOPED — ilk
+// kullanımda çözülüyorlar. Kapı orada kalsaydı ihlal ancak İLK
+// YÜKLEMEDE patlardı: süreç ayakta, ekranlar açık, kapı sessiz.
+// Emir "süreç BAŞLAMASIN" idi ve doğrusu bu: yanlış kökle ayakta
+// duran bir süreç, ne zaman yazacağı bilinmeyen bir sızıntıdır.
+//
+// Üç kök de burada, servis çözülmeden çağrılıyor.
+EnderunAI.Api.Services.Upload.YazmaKokleri.Yukleme(builder.Configuration);
+EnderunAI.Api.Services.Upload.YazmaKokleri.EFaturaArsivi(builder.Configuration);
+EnderunAI.Api.Services.Upload.YazmaKokleri.ProjeDosyalari(builder.Configuration);
+
 builder.Services.AddSingleton<IUploadService, UploadService>();
 // Aktif e-posta kanalı. Sunucu sağlayıcısı 465'i açtığı için varsayılan
 // SMTP; Brevo kodu yerinde duruyor ve EMAIL_PROVIDER=brevo ile tek satır

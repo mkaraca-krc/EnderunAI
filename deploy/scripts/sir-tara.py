@@ -209,8 +209,20 @@ def main():
 
     shalar = commitler(sys.argv[1:])
     if not shalar:
-        print("[sir-tara] Taranacak commit yok.")
-        return 0
+        # ÇIKIŞ KODU 3 = ÖLÇEMEDİ, 0 DEĞİL.
+        #
+        # 0 döndürdüğü sürece çağıran bunu "geçti" sayıyor ve
+        # günlüğe onay işareti basıyordu. Ölçüldü (2026-09-08):
+        # yayın turunda aralık HER ZAMAN boş — safe-deploy önce
+        # `git pull` yapıyor, uzak ile yerel eşitleniyor. Yani bu
+        # kapı yayınlarda hiç tarama yapmadan onay veriyordu;
+        # gerçek işini yalnız push öncesi kancada yapıyor.
+        #
+        # Taramanın YAPILMAMIŞ olması bir hata değil — ama
+        # yapılmış gibi görünmesi hataydı.
+        print("[sir-tara] ÖLÇEMEDİ: taranacak commit yok "
+              "(aralık boş). Bu bir onay DEĞİLDİR.")
+        return 3
 
     if len(shalar) > UST_SINIR:
         print(f"[sir-tara] ARALIK ÇOK BÜYÜK: {len(shalar)} commit "
