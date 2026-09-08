@@ -349,6 +349,27 @@ BEGIN
   SELECT gen_random_uuid(), v_kisitli, p."Id", 2, v_simdi
   FROM permissions p
   WHERE p."Key" IN ('dashboard.view','accounting.view','tasks.view');
+
+  -- ═══ TERCİH TOHUMU — KURAL 81'İN TERCİH HÂLİ ═══
+  --
+  -- ÖLÇÜLEN BOŞLUK (2026-09-08): PL1 kusuru YALNIZ lastConversationId
+  -- DOLUYSA tetikleniyor. Taze kullanıcıda o alan null olur, panel
+  -- seçimsiz açılır ve kusur HİÇ ÜREMEZ — test yeşil verir ve YALAN
+  -- SÖYLER.
+  --
+  -- Mehmet'in canlı hesabında alan doluydu (Uğur AKKAYA konuşması) ve
+  -- kusuru o yüzden gördü. Rig üretime benzemezse kusuru göremez;
+  -- benzerlik yalnız ağ ve dizin değil, VERİ ve TERCİH için de geçerli.
+  DELETE FROM user_ui_preferences WHERE "UserId" = v_ben;
+
+  -- FavoritePaths NOT NULL ve varsayılanı yok: ilk denemede
+  -- verilmedi ve tohum düştü. ON_ERROR_STOP sayesinde sessizce
+  -- geçmedi — o kapının varlık sebebi tam olarak buydu.
+  INSERT INTO user_ui_preferences
+    ("Id","UserId","SidebarCollapsed","FavoritePaths","IsActive","IsDeleted",
+     "CreatedAtUtc","LastConversationId","MessagePanelOpen","MessageSoundMuted")
+  VALUES (gen_random_uuid(), v_ben, false, ARRAY[]::text[], true, false,
+          v_simdi, v_konusma, false, false);
 END \$\$;
 SQL
 log "Konuşma hazır."

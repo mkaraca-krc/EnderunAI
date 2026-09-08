@@ -218,12 +218,30 @@ export default function MesajPaneli({
    * kendisinde yüklemek hem kuralı çözüyor hem de doğrusu: veri,
    * durum değiştiği için değil, kullanıcı istediği için geliyor.
    */
-  async function konusmaSec(konusmaId: string) {
-    setSecili(konusmaId);
-    // SES KARARI BUNU OKUYOR: ekranda açık olan konuşmaya gelen
-    // mesaj ses çalmaz (B2) — kullanıcı zaten bakıyor.
-    etkinKonusmayiYaz(konusmaId);
-    onKonusmaDegisti?.(konusmaId);
+  /*
+   * ═══ VERİ YÜKLEME, SEÇİMDEN AYRI (PL1) ═══
+   *
+   * ÖLÇÜLEN KUSUR (2026-09-08): panel açılışta `baslangicKonusmaId` ile
+   * SEÇİLİ geliyordu ama `konusmaSec()` çağrılmadığı için mesajlar HİÇ
+   * İSTENMİYORDU. Ekran "Bu konuşmada henüz mesaj yok" diyordu ve
+   * kullanıcı bunu VERİ KAYBI sanıyordu.
+   *
+   *   secili = useState(baslangicKonusmaId ?? null)   ← satır 144
+   *   `[secili]` bağımlı tek efekt yalnız seciliRef yazıyordu.
+   *
+   * Tam sayfa etkilenmiyordu: ona `baslangicKonusmaId` verilmiyor,
+   * kullanıcı tıklıyor, `konusmaSec()` koşuyor.
+   *
+   * ═══ NEDEN AYRI FONKSİYON ═══
+   *
+   * Açılıştaki GERİ YÜKLEME ile kullanıcının YENİ SEÇİMİ aynı şey
+   * değil. İkincisi `etkinKonusmayiYaz` ve `onKonusmaDegisti` yan
+   * etkilerini tetiklemeli; birincisi tetiklememeli — yoksa panel her
+   * açılışta zaten yazılı olan tercihi tekrar yazar.
+   *
+   * Veri yükleme ikisinde de AYNI ve tek yerde.
+   */
+  async function mesajlariYukle(konusmaId: string) {
     setMesajYukleniyor(true);
 
     try {
@@ -277,6 +295,39 @@ export default function MesajPaneli({
       .then(() => konusmaKaynagi.refresh())
       .catch((err) => console.warn("Okundu işaretlenemedi:", err));
   }
+
+  /** Kullanıcının yeni seçimi: durum + yan etkiler + veri. */
+  async function konusmaSec(konusmaId: string) {
+    setSecili(konusmaId);
+    // SES KARARI BUNU OKUYOR: ekranda açık olan konuşmaya gelen
+    // mesaj ses çalmaz (B2) — kullanıcı zaten bakıyor.
+    etkinKonusmayiYaz(konusmaId);
+    onKonusmaDegisti?.(konusmaId);
+
+    await mesajlariYukle(konusmaId);
+  }
+
+  /*
+   * AÇILIŞTA GERİ YÜKLEME — SEÇİLİ GELEN KONUŞMANIN MESAJLARI.
+   *
+   * Yalnız BİR KEZ, mount'ta. `secili` bağımlılığa konsaydı her seçim
+   * değişiminde ikinci bir yükleme koşardı — `konusmaSec` zaten
+   * yüklüyor.
+   *
+   * Yan etki YOK: `etkinKonusmayiYaz` ve `onKonusmaDegisti`
+   * çağrılmıyor. Bu bir kullanıcı seçimi değil, var olan seçimin
+   * verisinin gelmesi.
+   */
+  const acilistaYuklendi = useRef(false);
+
+  useEffect(() => {
+    if (acilistaYuklendi.current) return;
+    if (!secili) return;
+
+    acilistaYuklendi.current = true;
+    void mesajlariYukle(secili);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secili]);
 
   /*
    * TEK EFEKT: yeni mesaj gelince akışın dibine kaydır.

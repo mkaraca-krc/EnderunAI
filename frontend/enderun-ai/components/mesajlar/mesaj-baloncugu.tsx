@@ -189,6 +189,29 @@ export default function MesajBaloncugu() {
    * tercihini ezerdi — kenar çubuğunda aynı korumanın aynısı.
    */
   const tercihYuklendi = useRef(false);
+
+  /*
+   * ═══ KULLANICI DOKUNDUYSA TERCİH YANITI ONU EZMEZ ═══
+   *
+   * ÖLÇÜLEN YARIŞ (rig, 2026-09-08): kullanıcı tercih yanıtı gelmeden
+   * baloncuğa tıklıyor → `setAcik(true)` çalışıyor, panel açılıyor.
+   * Ama `tercihYaz` o anda `tercihYuklendi.current` false olduğu için
+   * YAZMIYOR. Saniyeler sonra tercih GET'i dönüyor ve
+   * `setAcik(tercih.messagePanelOpen ?? false)` ile paneli KAPATIYOR.
+   *
+   * Rig ölçümü: panel açıldı, 3 saniye açık kaldı, 20 saniyelik
+   * pencerede kendiliğinden kapandı. DOM'da `.mesaj-panel` yok,
+   * baloncuk ✉ (kapalı).
+   *
+   * PENCEREYİ BEN GENİŞLETTİM: GİRİŞ-DÖNGÜ/1'de tercih efektini
+   * `[]`den `[user, oturumYukleniyor]`e çevirdim; tercihler artık
+   * oturum çözülene kadar bekliyor. Önce mount anında geliyorlardı.
+   *
+   * KURAL: sunucudan gelen tercih, KULLANICININ O ARADA VERDİĞİ
+   * KARARI ezemez. Kullanıcı dokunduysa tercih yalnız yazılır,
+   * okunmaz.
+   */
+  const kullaniciDokundu = useRef(false);
   const yazmaZamani = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bekleyen = useRef<{
     messagePanelOpen?: boolean;
@@ -240,10 +263,17 @@ export default function MesajBaloncugu() {
     }>("user-preferences")
       .then((tercih) => {
         if (!etkin) return;
+
+        // YAZMA KAPISI HER HÂLDE AÇILIYOR: tercih artık okundu, bundan
+        // sonraki değişiklikler sunucuya gidebilir.
+        tercihYuklendi.current = true;
+
+        // Kullanıcı bu arada dokunduysa DURUM EZİLMEZ (yarış).
+        if (kullaniciDokundu.current) return;
+
         setAcik(tercih.messagePanelOpen ?? false);
         setSonKonusma(tercih.lastConversationId ?? null);
         setSesSusturuldu(tercih.messageSoundMuted ?? false);
-        tercihYuklendi.current = true;
       })
       .catch(() => {
         // Tercih okunamazsa panel kapalı başlar ve YAZMA KAPALI kalır:
@@ -316,6 +346,7 @@ export default function MesajBaloncugu() {
 
   /** Uyarısız kapatma — soruya "evet" dendikten sonra da buraya gelinir. */
   const gercektenKapat = useCallback(() => {
+    kullaniciDokundu.current = true;
     setKapatmaSorusu(false);
     setAcik(false);
     // TASLAKLAR SİLİNMİYOR: panel kapanınca metin kaybolmuyor, yeniden
@@ -334,6 +365,8 @@ export default function MesajBaloncugu() {
   }, [acikTaslakVar, gercektenKapat]);
 
   const ac = useCallback(() => {
+    kullaniciDokundu.current = true;
+
     // MOBİLDE PANEL AÇILMAZ: dar ekranda tam sayfaya gidilir.
     if (window.innerWidth < PANEL_DAR_EKRAN_ESIGI) {
       router.push("/mesajlar");

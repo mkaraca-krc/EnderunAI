@@ -1,0 +1,124 @@
+# DERSLER — ölçülmüş tuzakların indeksi
+
+> **Yeni bir YARDIMCI ya da SONDA yazmadan önce bu dosyayı oku.**
+> Kapı yok, muhafız yok — bu bir okuma alışkanlığı. Zorlamaya
+> kalkılırsa tören olur, işe yaramaz.
+
+## Bu dosya neden var
+
+2026-09-08'de **dört kez** aynı şey oldu: ölçülmüş bir ders kodun
+yorumunda duruyordu ve yeni kod yazılırken okunmadı. Dördü de bir rig
+turuna ya da düşmüş bir yayına mal oldu.
+
+Yorumların yeri doğru — o kodu **düzenleyen** kişi görüyor. Sorun,
+**başka bir yerde yeni kod yazan** kişinin görmemesi. Eksik olan yasak
+değil, **indeks**.
+
+## Kural
+
+- Her ders **tek satır** + kaynağı. Gerekçe **kodda kalır**.
+- **Kopya tutma.** İki yerde duran gerekçe ayrışır ve hangisinin güncel
+  olduğu bilinmez.
+- **Bu dosyayı doldurmaya çalışma.** Yalnız "ders koddaydı, okumadım"
+  vakası yaşandığında satır eklenir.
+
+  **Satır sayısı artıyorsa iyi. Artmıyorsa kimse eklemiyordur** — dosya
+  bitmiş demek değil, kimsenin bakmadığı demek. Bu dosyanın sağlığı
+  içeriğiyle değil, BÜYÜME HIZIYLA ölçülür. Aylardır aynı satırda
+  duruyorsa ya kimse yeni yardımcı yazmıyordur (olası değil) ya da
+  yazanlar buraya dönmüyordur (olası).
+
+---
+
+## Ölçüm disiplini
+
+- **Yeni ölçüm tasarlamadan önce, eldeki ölçümlerin NE KANITLADIĞINI
+  tek tek yaz.** 2026-09-08'de iki kez fazladan ölçüm yazmaya kalkıldı
+  ve ikisinde de eldeydi: "gecikmesiz ayak" = birinci testin kendisi,
+  "izolasyon turu" = kırmızı turların yapılandırması
+  → `frontend/enderun-ai/tests/duzen/mesaj-paneli-acilir.spec.ts`
+
+  **Bu, bu dosyanın çözdüğü sınıfın KARDEŞİ ama aynısı değil.**
+  Yukarıdaki maddeler "başkasının yazdığı dersi okumamak"; bu madde
+  "kendi ürettiğin ölçümün ne söylediğini çıkarmamak". İkisi de elde
+  olanı görmemek — biri dışarıdan geleni, öteki kendi ürettiğini.
+
+- **Bir adayı elerken hangi yolla elediğini yaz: ÖLÇÜLDÜ mü, KOD
+  OKUMASINA GÖRE ZAYIF mı.** İkisi farklı ağırlıkta; karıştırılırsa
+  çıkarım ölçüm gibi sunulur. (PANEL/1'de dört aday kod okuyarak
+  "elendi" denildi, gerçek kusur dördü de değildi.)
+
+- **Kırmızı, bulgunun değil ENGELİN işareti olabilir.** Test hiç koştu
+  mu, sonda doğru yere mi vurdu, altyapı meşgul müydü — kırmızıyı ürüne
+  yazmadan önce bunları ayır
+  → `deploy/scripts/duzen-testi.sh` (publish adımının ÖLÇEMEDİ kodu)
+
+## Test ve rig
+
+- **`page.request` çerez taşımaz**; veri uçlarını sayfa içinden `fetch`
+  ile çağır (giriş `page.request.post` ile yapılabilir)
+  → `frontend/enderun-ai/tests/duzen/mesaj-sesi.spec.ts:47`
+
+- **Test zemini, uygulamanın o veriyi okuduğu yoldan kurulur.**
+  Veritabanına doğrudan yazmak yalnız uygulamanın hiç yazmadığı
+  veriler için meşrudur
+  → `frontend/enderun-ai/tests/duzen/mesaj-paneli-acilir.spec.ts`
+    (`tercihleriKur`)
+
+- **Testler sunucuda kalıcı durum bırakır**; her test kendi başlangıç
+  varsayımını kurmalı, yoksa sıraya gizlice bağımlı olur
+  → `frontend/enderun-ai/tests/duzen/mesaj-paneli-acilir.spec.ts`
+    (`paneliAc`, sıra bağımlılığı gerekçesi)
+
+- **Bir elemanın yokluğunu bildirmeden önce, var olduğu bilinen bir
+  durumda seçicinin onu bulduğunu göster** (Kural 48'in DOM tarafı)
+  → `frontend/enderun-ai/tests/duzen/mesaj-paneli-acilir.spec.ts`
+    (seçici pozitif kontrolü)
+
+## Kabuk ve süreç
+
+- **`pkill -f <desen>` kendi kabuğunu da öldürür**; `surec-durdur.sh`
+  kullan (port / PID dosyası / desen + kendini dışlama)
+  → `deploy/scripts/surec-durdur.sh:7`
+
+- **`psql` SQL hatasında bile 0 döner**; tohumlama betiklerinde
+  `-v ON_ERROR_STOP=1` şart, yoksa kapı sessizce açık kalır
+  → `deploy/scripts/duzen-testi.sh:224`
+
+- **`grep -c .` boş dosyada "0" basar ama çıkış kodu 1 döner**;
+  `|| echo 0` ile birleşince "0\n0" üretir. Sayım için `wc -l` kullan
+  → `deploy/scripts/safe-deploy.sh` (`kesinti_izleyicisi_bitir`)
+
+- **`timeout` sarmalayıcıyı öldürür, süreç ağacını değil**; ağır
+  derlemeleri `derleme-kos.sh` üzerinden koştur (kendi cgroup'u var)
+  → `scripts/derleme-kos.sh`
+
+## Derleme ve ölçüm
+
+- **`dotnet ef ... --no-build` bayat ikili okur**; ölçümden önce her
+  zaman derle, yoksa kaynağı değil eski çıktıyı ölçersin
+  → `deploy/scripts/sema-sapma-kapisi.sh:75`
+
+- **`dotnet ef` derleme hatasını göstermez** ("Build failed" der);
+  gerçek hata metni için ayrı bir `dotnet build` koş
+  → bu dosya (2026-09-08, KATALOG/1 göçü iki denemede kayboldu)
+
+- **Veritabanı adını asla tahmin etme**; ölçüm `vt-sorgu.sh` üzerinden
+  geçer (ad zorunlu, bakım veritabanları reddedilir, her çıktının
+  başında `current_database()`)
+  → `deploy/scripts/vt-sorgu.sh`
+
+- **Kendi çıktını `tail`/`head` ile kırpıp sonuç çıkarma**;
+  `vt-sorgu.sh` 50 satırdan fazlasını basmaz, tam listeyi dosyaya yazar
+  → `deploy/scripts/vt-sorgu.sh` (satır sınırı gerekçesi)
+
+- **Prova zemini şema sadık olabilir ama veri sadık olmayabilir**;
+  gerçek kimlik gerektiren iddiaları `prova-zemini.sh --veri` ile kur
+  → `deploy/scripts/prova-zemini.sh`
+
+## Kapılar
+
+- **"Kapı var" ile "kapı ölçebiliyor" ayrı şeyler.** Her kapı için
+  ayrıca sor: ölçtüğü şey **taze** mi, ve **ölçemediğinde** bunu
+  söylüyor mu (Kural 67'nin üçüncü sonucu)
+  → `deploy/scripts/safe-deploy.sh` (`eski_parca_kapisi` öz-sınaması)
