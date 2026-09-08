@@ -39,6 +39,32 @@ set -euo pipefail
 
 YASAK_VERITABANLARI=("postgres" "template0" "template1")
 
+# ── SATIR SINIRI (Y4) ──────────────────────────────────────────────
+#
+# ═══ NEDEN VAR ═══
+#
+# Üç kez kendi sorgu çıktımı `tail` ile kırpıp KIRPILMIŞ HÂLİ
+# ÜZERİNDEN akıl yürüttüm ve üçünde de kırpmayı kaldırınca sonuç
+# değişti (2026-09-08):
+#   · `projects.create` yalnız Teknik Ofis'te sanıldı — alfabetik
+#     olarak öndeki üç rol kesilmişti.
+#   · `RolePermission` denetim olaylarının 08-08'de başladığı
+#     sanıldı — 08-02'deki 423 olay kesilmişti.
+#   · Aynı hata bir kez daha, aynı gün.
+#
+# Üçünü de kendim yakaladım; ama pkill (4 kez) ve psql (2 kez) gibi
+# bu da TEKRARLAYAN bir sınıf. İlaç aynı: dikkat değil, ARAÇ.
+#
+# ═══ NEDEN "UYARI BAS" DEĞİL "BASMA" ═══
+#
+# Sonuna uyarı basmak yetmez: çıktıyı `tail` ile kesen kişi uyarıyı
+# görür ama `head` ile kesen görmez. Asıl çözüm, aracın BÜYÜK ÇIKTI
+# BASMAMASI — tam liste dosyaya yazılıyor ve yol veriliyor. Kırpacak
+# bir şey kalmıyor; tam listeye bakmak BİLİNÇLİ bir eylem oluyor.
+#
+# `--tam` ile sınır kaldırılabilir; bilerek yapılan bir şey.
+SATIR_SINIRI="${VT_SORGU_SINIRI:-50}"
+
 kullanim() {
     cat >&2 <<'K'
 KULLANIM: vt-sorgu.sh --vt <veritabani_adi> (--sql "<sorgu>" | --dosya <yol>)
@@ -62,6 +88,7 @@ while [ $# -gt 0 ]; do
         --vt)    VT="${2:-}";    shift 2 || kullanim ;;
         --sql)   SQL="${2:-}";   shift 2 || kullanim ;;
         --dosya) DOSYA="${2:-}"; shift 2 || kullanim ;;
+        --tam)   SATIR_SINIRI=0;     shift    ;;
         *) echo "[vt-sorgu] Bilinmeyen seçenek: $1" >&2; kullanim ;;
     esac
 done
@@ -131,4 +158,19 @@ TABLO="$(calistir -Atc "SELECT count(*) FROM information_schema.tables WHERE tab
 echo "[vt-sorgu] veritabanı = ${BAGLANILAN}  (current_database(), psql'in kendi beyanı)"
 echo "[vt-sorgu] public şemasında ${TABLO} tablo  ·  sonuç ${SATIR} satır"
 echo "[vt-sorgu] ────────────────────────────────────────────────"
-cat "$CIKTI"
+
+if [ "$SATIR_SINIRI" -gt 0 ] && [ "$SATIR" -gt "$SATIR_SINIRI" ]; then
+    TAM_LISTE="$(mktemp /tmp/vt-sorgu-tam-XXXXXX.txt)"
+    cp "$CIKTI" "$TAM_LISTE"
+
+    head -n "$SATIR_SINIRI" "$CIKTI"
+
+    echo "[vt-sorgu] ════════════════════════════════════════════════"
+    echo "[vt-sorgu] ⚠ KIRPILDI: ${SATIR} satırın ilk ${SATIR_SINIRI} tanesi gösterildi."
+    echo "[vt-sorgu] ⚠ TAM LİSTE: ${TAM_LISTE}"
+    echo "[vt-sorgu] ⚠ BU ÇIKTIDAN SONUÇ ÇIKARMA — eksik satırlar sonucu değiştirir."
+    echo "[vt-sorgu] ⚠ Tamamı için: --tam (ya da VT_SORGU_SINIRI=0)"
+    echo "[vt-sorgu] ════════════════════════════════════════════════"
+else
+    cat "$CIKTI"
+fi
