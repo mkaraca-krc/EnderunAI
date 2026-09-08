@@ -12523,3 +12523,41 @@ Gönderim kapısı bu dersi zaten almıştı — *"kapı artık sürecin ortamı
 değil, DİSKTE duruyor; tetikleyen kim olursa olsun aynı kapı geçerli"* —
 kuru koşu kapısı almamıştı. `/etc/enderunai/uyari-kuru` eklendi ve
 doğrudan çağrıyla sınandı: `kaynak=dosya`, posta gitmedi.
+
+## PROVA ZEMİNİ — KURAL 81'İN VERİTABANI HÂLİ (2026-09-08)
+
+**Kural 81 ("rig üretimi imite etmeli") yalnız ağ, port ve dizin için
+değil — VERİ için de geçerli.**
+
+Aynı gün, aynı zemin (`enderun_squash_olcum`) üzerinde iki iddia
+kanıtlanmaya çalışıldı ve biri kanıtlandı, öteki kanıtlanamadı:
+
+| iddia | gereken | sonuç |
+|---|---|---|
+| SQUASH/1 geri alma (`__EFMigrationsHistory`) | şema + provanın kendi doldurduğu veri | **kanıtlandı** — parmak izi `8709ef5e` → değişti → `8709ef5e` |
+| KATALOG/1 geri alma (`role_permissions`) | **gerçek kimlikler** (RoleId, PermissionId) | **kanıtlanamadı** — yabancı anahtar ihlali |
+
+Zemin taze veritabanına göç uygulanarak kurulmuştu: **şeması canlıyla
+birebir, verisi boş.** İlk iddia için yeterliydi, ikincisi için değil.
+
+**Ayrım artık araçta, hatırlanacak bir şey değil:**
+`deploy/scripts/prova-zemini.sh --sema` yapı sadık bir zemin kurar ve
+"gerçek kimlik gerektiren bir iddiayı burada kanıtlayamazsın" uyarısını
+gerekçesiyle basar; `--veri` canlıdan kopyalar. Zemin adı zorunlu,
+korunan adlar reddediliyor, ve zemin `PUBLIC`'e kapalı doğuyor.
+
+**Sessizce geçmedi, gürültüyle düştü.** Yanlış zemin bir yanlış güvence
+üretseydi çok daha pahalı olurdu: "geri alma kanıtlandı" denip
+kanıtlanmamış olurdu.
+
+### Yan bulgu — yabancı anahtar gerçekten zorlanıyor
+
+FK ihlali, `role_permissions.PermissionId`'nin `permissions` tablosuna
+**gerçek bir yabancı anahtarla** bağlı olduğunu kanıtladı: öksüz izin
+referansı oluşturulamıyor.
+
+Bu, AC2'de bulunan 8 cascade silmenin mekanizmasını da doğruluyor —
+izin satırı silinince bağlantı satırı **veritabanı düzeyinde**
+gidiyor, uygulama düzeyinde değil. Denetim izinin o kör noktası bir
+ihmal değil, cascade'in doğası: EF'in `SaveChanges` yoluna hiç
+uğramıyor.
