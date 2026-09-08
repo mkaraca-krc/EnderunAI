@@ -28,6 +28,9 @@ public sealed class AuditSaveChangesInterceptor(
         // SEED/1 SB3: kaldırma kaydı da denetim izine giriyor —
         // kim, ne zaman, hangi rol+izin.
         typeof(RolePermissionRevocation),
+        // KATALOG/1: elle ekleme kaydı da denetim izine giriyor —
+        // "bu satır neden silinmedi" sorusunun cevabı burada duracak.
+        typeof(RoleManualPermissionGrant),
         typeof(UserPermissionOverride),
         typeof(UserDataScope),
         typeof(RoleWorkHourWindow),
