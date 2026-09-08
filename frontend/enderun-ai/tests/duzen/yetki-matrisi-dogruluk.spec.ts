@@ -55,10 +55,22 @@ test("ekrandaki ✓ sayısı API'nin grants sayısına eşit", async ({ page }) 
   expect(veri.roles.length, "Rol listesi boş").toBeGreaterThan(5);
 
   /*
-   * BEKLENEN İŞARETLİ SAYISI.
-   * Ekran Admin sütununu her zaman işaretli gösteriyor; API'de de
-   * Admin'in tam listesi olmayabilir. Beklenen sayı EKRANIN kuralıyla
-   * hesaplanıyor ki iki taraf aynı soruyu cevaplasın.
+   * ═══ KÂHİN VERİDEN TÜRETİLİYOR, EKRANIN KURALINDAN DEĞİL ═══
+   *
+   * ÖNCEKİ HÂLİ VE ÖLÇÜLEN GEVŞEKLİĞİ (YETKİ/3 · YT3, 2026-09-08):
+   * beklenen sayı `adminRolleri.has(rol.id) || grantKumesi.has(...)`
+   * ile hesaplanıyordu — yani "Admin sütunu hep işaretlidir" kuralı
+   * BEKLENTİNİN İÇİNE konmuştu. Sınadığı davranışı kâhinine kopyalayan
+   * bir test, o davranış hakkında hiçbir şey söyleyemez: Admin
+   * sütununda veride olmayan bir tik belirse test yeşil kalırdı.
+   *
+   * Nitekim kaldı. Mehmet farkı ELLE buldu: ekranda Admin sütununda
+   * 140 tik, API'de 139 grant; eksik olan `payment.plan.approve`.
+   * Test 580 = 580 diyordu çünkü 580'i ekranın kuralıyla üretmişti.
+   *
+   * ŞİMDİ: Admin DIŞINDAKİ roller için beklenti yalnız veriden
+   * geliyor. Admin sütunu aşağıda AYRI ve ADI KONMUŞ bir iddiayla
+   * ölçülüyor — gizli varsayım, görünür bir sayıya dönüştü.
    */
   const grantKumesi = new Set(
     veri.grants.map((x) => `${x.roleId}::${x.permissionKey}`)
@@ -70,12 +82,21 @@ test("ekrandaki ✓ sayısı API'nin grants sayısına eşit", async ({ page }) 
   let beklenen = 0;
   for (const rol of veri.roles) {
     for (const izin of veri.permissions) {
-      if (adminRolleri.has(rol.id) || grantKumesi.has(`${rol.id}::${izin.key}`))
-        beklenen += 1;
+      // Admin sütunu bu sayımın DIŞINDA — aşağıda kendi adı konmuş
+      // iddiasıyla ölçülüyor.
+      if (adminRolleri.has(rol.id)) continue;
+
+      if (grantKumesi.has(`${rol.id}::${izin.key}`)) beklenen += 1;
     }
   }
 
-  const toplamHucre = veri.roles.length * veri.permissions.length;
+  const adminSutunlari = veri.roles
+    .map((r, i) => ({ r, i }))
+    .filter((x) => adminRolleri.has(x.r.id))
+    .map((x) => x.i);
+
+  const toplamHucre =
+    (veri.roles.length - adminSutunlari.length) * veri.permissions.length;
 
   // Beklenen, TÜM hücrelerden az olmalı — yoksa test hiçbir şey ayırmaz.
   expect(
@@ -83,15 +104,73 @@ test("ekrandaki ✓ sayısı API'nin grants sayısına eşit", async ({ page }) 
     "Beklenen işaretli sayısı tüm hücrelere eşit; test kırık ekranı ayırt edemezdi"
   ).toBeLessThan(toplamHucre);
 
-  const ekranda = await page.evaluate(() =>
-    document.querySelectorAll("table tbody button.bg-emerald-500").length
-  );
+  // EKRANDAKİ TİKLER DE ADMİN SÜTUNU HARİÇ SAYILIYOR — iki taraf
+  // aynı evreni saymazsa karşılaştırma anlamsız olur.
+  const ekranda = await page.evaluate((haric: number[]) => {
+    let n = 0;
+    for (const tr of document.querySelectorAll("table tbody tr")) {
+      const hucreler = tr.querySelectorAll("td");
+      for (let i = 1; i < hucreler.length; i += 1) {
+        if (haric.includes(i - 1)) continue;
+        if (hucreler[i].querySelector("button.bg-emerald-500")) n += 1;
+      }
+    }
+    return n;
+  }, adminSutunlari);
 
   expect(
     ekranda,
     `Ekranda ${ekranda} işaretli hücre var, olması gereken ${beklenen} ` +
-      `(toplam hücre ${toplamHucre}). Ekran veriyle uyuşmuyor.`
+      `(toplam hücre ${toplamHucre}, Admin sütunu hariç). Ekran veriyle uyuşmuyor.`
   ).toBe(beklenen);
+
+  /*
+   * ═══ ADMİN SÜTUNU — GİZLİ VARSAYIM, GÖRÜNÜR SAYIYA ═══
+   *
+   * Ekran Admin sütununda HER hücreye koşulsuz tik basıyor
+   * (`yetki-matrisi/page.tsx`: `role.name === "Admin" || grantSet.has(...)`).
+   * Veri ise Admin için daha az grant döndürüyor.
+   *
+   * Bu fark eskiden kâhinin içine gömülüydü ve test onu göremiyordu.
+   * Artık ADI KONMUŞ bir sayı: kaç tik gösteriliyor, veride kaç var,
+   * fark kaç. Fark değişirse test düşer ve sebebini söyler.
+   *
+   * BU BİR KARAR DEĞİL, BUGÜNKÜ DAVRANIŞIN KAYDI (YETKİ/3 · YT4).
+   * Mehmet "Admin her izne sahip olmalı" derse çözüm veritabanına o
+   * izni eklemek olur ve fark 0'a iner — o zaman bu iddia da değişir.
+   */
+  for (const sutun of adminSutunlari) {
+    const adminRol = veri.roles[sutun];
+
+    const adminEkranda = await page.evaluate((i: number) => {
+      let n = 0;
+      for (const tr of document.querySelectorAll("table tbody tr")) {
+        const td = tr.querySelectorAll("td")[i + 1];
+        if (td?.querySelector("button.bg-emerald-500")) n += 1;
+      }
+      return n;
+    }, sutun);
+
+    const adminVeride = veri.grants.filter(
+      (g) => g.roleId === adminRol.id
+    ).length;
+
+    // Ekran bütün satırları işaretliyor: sayı izin sayısına eşit olmalı.
+    expect(
+      adminEkranda,
+      `Admin sütununda ${adminEkranda} tik var; ekran kuralı gereği ` +
+        `${veri.permissions.length} olmalıydı.`
+    ).toBe(veri.permissions.length);
+
+    // VE veriyle arasındaki fark açıkça yazılıyor.
+    expect(
+      adminEkranda - adminVeride,
+      `ADMİN SAPMASI: ekranda ${adminEkranda} tik, veride ${adminVeride} ` +
+        `grant. Fark ${adminEkranda - adminVeride}. Bu fark YETKİ/3 ile ` +
+        `kayda geçti; değiştiyse karar verilmiş demektir ve bu iddia ` +
+        `güncellenmeli.`
+    ).toBe(1);
+  }
 
   /*
    * ═══ GÖRÜNEN ✓ SAYISI — SINIF SAYMAK YETMEZ ═══

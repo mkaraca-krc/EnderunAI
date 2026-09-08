@@ -336,6 +336,15 @@ public sealed class AppDbContext(
     /// </summary>
     public DbSet<RolePermissionRevocation> RolePermissionRevocations =>
         Set<RolePermissionRevocation>();
+
+    /// <summary>
+    /// KATALOG DIŞI ELLE VERİLMİŞ İZİNLER (KATALOG/1).
+    /// Kaldırma kaydının simetriği: uzlaştırıcı, katalogda olmayan bir
+    /// satırı silmeden önce buraya bakıyor. Gerekçesi modelin kendi
+    /// yorumunda.
+    /// </summary>
+    public DbSet<RoleManualPermissionGrant> RoleManualPermissionGrants =>
+        Set<RoleManualPermissionGrant>();
     public DbSet<UserPermissionOverride> UserPermissionOverrides => Set<UserPermissionOverride>();
     public DbSet<UserDataScope> UserDataScopes => Set<UserDataScope>();
     public DbSet<UserUiPreference> UserUiPreferences => Set<UserUiPreference>();
@@ -438,6 +447,7 @@ public sealed class AppDbContext(
         ConfigureEmployerPortal(modelBuilder);
         ConfigureSecurityAuditEvents(modelBuilder);
         ConfigureRolePermissionRevocations(modelBuilder);
+        ConfigureRoleManualPermissionGrants(modelBuilder);
         ConfigureMarketData(modelBuilder);
         ConfigureRbac(modelBuilder);
         ConfigureWorkHourAccess(modelBuilder);
@@ -871,6 +881,32 @@ public sealed class AppDbContext(
         modelBuilder.Entity<RolePermissionRevocation>(entity =>
         {
             entity.ToTable("role_permission_revocations");
+
+            entity.HasIndex(item => new { item.RoleId, item.PermissionId })
+                .IsUnique();
+
+            entity.HasOne(item => item.Role)
+                .WithMany()
+                .HasForeignKey(item => item.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(item => item.Permission)
+                .WithMany()
+                .HasForeignKey(item => item.PermissionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    /// <summary>
+    /// Kaldırma kaydıyla AYNI şekil: aynı benzersiz indeks, aynı cascade.
+    /// İki kayıt aynı kuralın iki yüzü; biri farklı davranırsa
+    /// uzlaştırma asimetrik olur ve fark sessizce kalır.
+    /// </summary>
+    private static void ConfigureRoleManualPermissionGrants(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RoleManualPermissionGrant>(entity =>
+        {
+            entity.ToTable("role_manual_permission_grants");
 
             entity.HasIndex(item => new { item.RoleId, item.PermissionId })
                 .IsUnique();

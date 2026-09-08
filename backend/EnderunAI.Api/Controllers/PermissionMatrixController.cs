@@ -140,6 +140,28 @@ public sealed class PermissionMatrixController(
                 item => item.RoleId == role.Id && item.PermissionId == permission.Id,
                 cancellationToken);
 
+        /*
+         * KATALOG DIŞI İZNİN ELLE EKLEME KAYDI (KATALOG/1 · KT1).
+         *
+         * Kaldırma kaydının SİMETRİĞİ. Uzlaştırıcı artık katalogda
+         * olmayan satırları SİLİYOR; elle verilmiş bir izni de
+         * silmemesi için "bu bilerek verildi" diyen bir kayda
+         * ihtiyacı var. `RolePermission` satırının kendisi nereden
+         * geldiğini söylemiyor.
+         *
+         * YAZAN TEK YER BURASI — `RolIzinKaydiTekYer` muhafızı
+         * tutuyor. İkinci bir yazma yolu açılırsa kural iki yerde
+         * yaşamaya başlar ve biri unutulur (Kural 79).
+         */
+        var katalogdaVar = RoleCatalog.Roles.Any(tanim =>
+            string.Equals(tanim.Name, role.Name, StringComparison.OrdinalIgnoreCase)
+            && tanim.PermissionKeys.Contains(permission.Key, StringComparer.OrdinalIgnoreCase));
+
+        var elleEklemeKaydi = await db.RoleManualPermissionGrants
+            .SingleOrDefaultAsync(
+                item => item.RoleId == role.Id && item.PermissionId == permission.Id,
+                cancellationToken);
+
         if (request.Granted)
         {
             if (existing is null)
@@ -153,11 +175,27 @@ public sealed class PermissionMatrixController(
 
             if (kaldirmaKaydi is not null)
                 db.RolePermissionRevocations.Remove(kaldirmaKaydi);
+
+            // Katalogda olmayan bir izin açıldıysa kayıt yazılır;
+            // yoksa uzlaştırıcı bir sonraki açılışta geri alırdı.
+            if (!katalogdaVar && elleEklemeKaydi is null)
+            {
+                db.RoleManualPermissionGrants.Add(new RoleManualPermissionGrant
+                {
+                    RoleId = role.Id,
+                    PermissionId = permission.Id,
+                    GrantedByUserId = currentUser.UserId
+                });
+            }
         }
         else
         {
             if (existing is not null)
                 db.RolePermissions.Remove(existing);
+
+            // Kapatıldı: elle verme kararı geri alınıyor.
+            if (elleEklemeKaydi is not null)
+                db.RoleManualPermissionGrants.Remove(elleEklemeKaydi);
 
             // KAYIT HER HÂLDE YAZILIYOR — izin zaten yoksa bile.
             // "Kapalı kalsın" isteği, o an kapalı olmasından

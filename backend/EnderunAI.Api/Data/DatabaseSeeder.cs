@@ -253,59 +253,201 @@ public static class DatabaseSeeder
         await db.SaveChangesAsync();
     }
 
-    private static async Task SeedRolePermissionsAsync(AppDbContext db)
+    /// <summary>
+    /// KATALOG İLE VERİTABANI ARASINDAKİ FARK (KATALOG/1).
+    ///
+    /// Kararı `RolIzinKurali.BulunmaliMi` veriyor; burada YENİDEN
+    /// YAZILMIYOR. Bu metot yalnız üç kümeyi okuyup kuralı her çifte
+    /// uyguluyor ve farkı döndürüyor. YAZMIYOR — yazmayı çağıran
+    /// yapıyor. Kuru koşu (KT2) da aynı metodu çağırıyor; ölçülen ile
+    /// uygulanan aynı hesap olsun diye.
+    /// </summary>
+    internal static async Task<(
+        List<(string Rol, string Izin, Guid RoleId, Guid PermissionId)> Eklenecek,
+        List<(string Rol, string Izin, Guid RoleId, Guid PermissionId)> Silinecek,
+        int MevcutSayi,
+        bool ElleEklemeTablosuVar)>
+        RolIzinFarkiniHesaplaAsync(AppDbContext db)
     {
-        var roleIdsByName = await db.Roles
-            .ToDictionaryAsync(role => role.Name, role => role.Id, StringComparer.OrdinalIgnoreCase);
-        var permissionIdsByKey = await db.Permissions
-            .ToDictionaryAsync(permission => permission.Key, permission => permission.Id, StringComparer.OrdinalIgnoreCase);
+        var roller = await db.Roles.AsNoTracking()
+            .Select(r => new { r.Id, r.Name }).ToListAsync();
+        var izinler = await db.Permissions.AsNoTracking()
+            .Select(p => new { p.Id, p.Key }).ToListAsync();
 
-        var existingGrants = (await db.RolePermissions
-                .Select(item => new { item.RoleId, item.PermissionId })
+        var roleIdsByName = roller.ToDictionary(
+            r => r.Name, r => r.Id, StringComparer.OrdinalIgnoreCase);
+        var permissionIdsByKey = izinler.ToDictionary(
+            p => p.Key, p => p.Id, StringComparer.OrdinalIgnoreCase);
+
+        var rolAdi = roller.ToDictionary(r => r.Id, r => r.Name);
+        var izinAdi = izinler.ToDictionary(p => p.Id, p => p.Key);
+
+        var mevcut = (await db.RolePermissions.AsNoTracking()
+                .Select(x => new { x.RoleId, x.PermissionId }).ToListAsync())
+            .Select(x => (x.RoleId, x.PermissionId)).ToHashSet();
+
+        var kaldirilmislar = (await db.RolePermissionRevocations.AsNoTracking()
                 .ToListAsync())
-            .Select(item => (item.RoleId, item.PermissionId))
-            .ToHashSet();
+            .Select(RolIzinKurali.Anahtar).ToHashSet();
 
         /*
-         * KULLANICININ KALDIRDIĞI ÇİFTLER GERİ EKLENMEZ (SEED/1).
+         * TABLO YOKSA BOŞ SAYILIR — AMA SESSİZCE DEĞİL.
          *
-         * ÖLÇÜLEN KUSUR: bu döngü katalogdaki her eksik çifti geri
-         * ekliyordu. Matristen kaldırılan izin bir sonraki yeniden
-         * başlatmada geri geliyordu ve bunu kimse görmüyordu —
-         * ekran çalışıyor, yalnız kısıtlama kayboluyordu.
+         * Kuru koşu (KT2) canlıya karşı, göç UYGULANMADAN koşuyor:
+         * "önce kuru koşu, canlıya dokunma". O anda tablo henüz yok.
+         * Boş kabul etmek doğru sonucu verir (bugün hiç elle ekleme
+         * kaydı olamaz) ama bu bir VARSAYIMDIR ve çağırana
+         * bildiriliyor; rapor onu basıyor.
          *
-         * Kararı `RolIzinKurali` veriyor; burada YENİDEN YAZILMIYOR.
+         * Kural 48: varsayımı gizlenmiş bir ölçüm, ölçüm değildir.
          */
-        var kaldirilmislar = (await db.RolePermissionRevocations
-                .Select(item => new { item.RoleId, item.PermissionId })
-                .ToListAsync())
-            .Select(item => (item.RoleId, item.PermissionId))
-            .ToHashSet();
+        var elleEklemeTablosuVar = true;
+        HashSet<(Guid, Guid)> elleEklenenler;
 
-        foreach (var definition in RoleCatalog.Roles)
+        try
         {
-            if (!roleIdsByName.TryGetValue(definition.Name, out var roleId))
+            elleEklenenler = (await db.RoleManualPermissionGrants.AsNoTracking()
+                    .ToListAsync())
+                .Select(RolIzinKurali.Anahtar).ToHashSet();
+        }
+        catch (Npgsql.PostgresException hata) when (hata.SqlState == "42P01")
+        {
+            elleEklemeTablosuVar = false;
+            elleEklenenler = [];
+        }
+
+        // KATALOĞUN ÜRETTİĞİ ÇİFTLER.
+        var katalogCiftleri = new HashSet<(Guid, Guid)>();
+
+        foreach (var tanim in RoleCatalog.Roles)
+        {
+            if (!roleIdsByName.TryGetValue(tanim.Name, out var roleId))
                 continue;
 
-            foreach (var key in definition.PermissionKeys.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var anahtar in tanim.PermissionKeys
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (!permissionIdsByKey.TryGetValue(key, out var permissionId))
-                    continue;
+                if (permissionIdsByKey.TryGetValue(anahtar, out var permissionId))
+                    katalogCiftleri.Add((roleId, permissionId));
+            }
+        }
 
-                if (!RolIzinKurali.TohumlanmaliMi(
-                        katalogdaVar: true,
-                        zatenVar: existingGrants.Contains((roleId, permissionId)),
-                        kaldirilmis: kaldirilmislar.Contains((roleId, permissionId))))
-                {
-                    continue;
-                }
+        /*
+         * UZLAŞTIRMA EVRENİ — ÜÇ KÜMENİN BİRLEŞİMİ.
+         *
+         * Yalnız katalogu gezseydik silinecekleri hiç göremezdik;
+         * yalnız veritabanını gezseydik eklenecekleri göremezdik.
+         * Kuralın karar verebilmesi için her iki taraftan gelen ve
+         * elle işaretlenmiş her çift evrende olmalı.
+         */
+        var evren = new HashSet<(Guid, Guid)>(katalogCiftleri);
+        evren.UnionWith(mevcut);
+        evren.UnionWith(elleEklenenler);
 
-                db.RolePermissions.Add(new RolePermission
-                {
-                    RoleId = roleId,
-                    PermissionId = permissionId
-                });
-                existingGrants.Add((roleId, permissionId));
+        var eklenecek = new List<(string, string, Guid, Guid)>();
+        var silinecek = new List<(string, string, Guid, Guid)>();
+
+        foreach (var cift in evren)
+        {
+            var bulunmali = RolIzinKurali.BulunmaliMi(
+                katalogdaVar: katalogCiftleri.Contains(cift),
+                kaldirilmis: kaldirilmislar.Contains(cift),
+                elleEklendi: elleEklenenler.Contains(cift));
+
+            var var_mi = mevcut.Contains(cift);
+
+            if (bulunmali == var_mi) continue;
+
+            // Ad çözülemeyen çift ATLANMIYOR, "?" ile raporlanıyor:
+            // sessizce düşürmek, farkın bir parçasını gizlerdi.
+            var satir = (
+                rolAdi.TryGetValue(cift.Item1, out var rn) ? rn : "?",
+                izinAdi.TryGetValue(cift.Item2, out var pn) ? pn : "?",
+                cift.Item1, cift.Item2);
+
+            if (bulunmali) eklenecek.Add(satir); else silinecek.Add(satir);
+        }
+
+        return (eklenecek, silinecek, mevcut.Count, elleEklemeTablosuVar);
+    }
+
+    /// <summary>
+    /// KATALOG İLE VERİTABANINI UZLAŞTIRIR — İKİ YÖNLÜ (KATALOG/1).
+    ///
+    /// ═══ ÖNCEKİ DAVRANIŞ VE ÖLÇÜLEN KUSURU ═══
+    ///
+    /// Bu metot yalnız EKLİYORDU: katalogdaki eksik çiftleri yazıyor,
+    /// fazlalıkları hiç görmüyordu. Sonuç (AC1, 2026-09-08):
+    /// `projects.delete` 2026-08-02'de iki role verildi, 2026-08-06'da
+    /// katalogdan kaldırıldı, ve bugüne kadar o iki rolde kaldı.
+    ///
+    /// Fiilî açık kapı yoktu ama onu kapatan şey TESADÜFTÜ: tek aktif
+    /// taşıyıcının izni kişisel olarak kısıtlıydı, öteki rolü taşıyan
+    /// aktif kullanıcı yoktu. Tesadüfe dayanan bir savunma, savunma
+    /// değildir.
+    ///
+    /// ═══ ŞİMDİ ═══
+    ///
+    /// Farkı `RolIzinFarkiniHesaplaAsync` çıkarıyor, kararı
+    /// `RolIzinKurali.BulunmaliMi` veriyor. Bu metot yalnız uyguluyor.
+    /// Kuru koşu (KT2) AYNI hesabı çağırıyor — ölçülen ile uygulanan
+    /// aynı olsun diye.
+    /// </summary>
+    private static async Task SeedRolePermissionsAsync(AppDbContext db)
+    {
+        var (eklenecek, silinecek, _, elleEklemeTablosuVar) =
+            await RolIzinFarkiniHesaplaAsync(db);
+
+        // TOHUMLAYICI TAHAMMÜL ETMEZ: göç uygulanmadan tohumlama
+        // koşuyorsa silme kararı EKSİK bilgiyle verilir ve elle
+        // verilmiş izinler silinir. Kuru koşu boş sayabilir, uygulama
+        // sayamaz.
+        if (!elleEklemeTablosuVar)
+        {
+            throw new InvalidOperationException(
+                "role_manual_permission_grants tablosu yok. Uzlaştırma " +
+                "eksik bilgiyle silme yapamaz — göç uygulanmalı.");
+        }
+
+        foreach (var (_, _, roleId, permissionId) in eklenecek)
+        {
+            db.RolePermissions.Add(new RolePermission
+            {
+                RoleId = roleId,
+                PermissionId = permissionId
+            });
+        }
+
+        if (silinecek.Count > 0)
+        {
+            /*
+             * SİLME TEK TEK YÜKLENEREK — `ExecuteDelete` İLE DEĞİL.
+             *
+             * `ExecuteDelete` doğrudan SQL üretir ve EF'in
+             * SaveChanges yoluna hiç uğramaz; denetim interceptor'ı
+             * onu göremez. AC2'de ölçülen kör noktanın (cascade,
+             * ham SQL) üçüncüsünü kendi elimle açmış olurdum.
+             */
+            var anahtarlar = silinecek
+                .Select(x => (x.RoleId, x.PermissionId))
+                .ToHashSet();
+
+            // ROL KİMLİKLERİ SORGUDAN ÖNCE ÇIKARILIYOR.
+            // `anahtarlar.Select(...)` sorgunun İÇİNDE kalsaydı EF bir
+            // demet koleksiyonu üzerinde projeksiyon çevirmeye
+            // çalışırdı; çeviremeyip ya patlar ya da sessizce belleğe
+            // düşerdi. İkincisi daha kötü: tablo tamamen belleğe
+            // çekilirdi ve kimse fark etmezdi.
+            var rolIdleri = anahtarlar.Select(a => a.RoleId).Distinct().ToList();
+
+            var satirlar = await db.RolePermissions
+                .Where(x => rolIdleri.Contains(x.RoleId))
+                .ToListAsync();
+
+            foreach (var satir in satirlar)
+            {
+                if (anahtarlar.Contains((satir.RoleId, satir.PermissionId)))
+                    db.RolePermissions.Remove(satir);
             }
         }
 

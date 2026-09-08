@@ -18,6 +18,18 @@ using Microsoft.IdentityModel.Tokens;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 
+//
+// KURU KOŞU — HER ŞEYDEN ÖNCE (KATALOG/1 · KT2).
+//
+// `CreateBuilder`dan SONRAYA konsaydı geç kalırdı: normal açılış yolu
+// göç uygular ve tohumlar. Kuru koşu o akışa girseydi, "bakacağım"
+// derken YAZMIŞ olurdu. Burada yakalanıyor, kendi bağlamını kuruyor,
+// farkı basıp çıkıyor.
+if (args.Contains(EnderunAI.Api.Security.KatalogKuruKosu.Bayrak))
+{
+    return await EnderunAI.Api.Security.KatalogKuruKosu.CalistirAsync();
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString =
@@ -991,5 +1003,17 @@ app.MapGet("/api/health/govdesiz", () => Results.NoContent())
 EnderunAI.Api.Security.UcKapisi.UcKapisiAcilisDenetimi.Dogrula(app);
 
 app.Run();
+
+// KURU KOŞU BAYRAĞI GİRİŞ NOKTASINI `Task<int>` YAPTI.
+//
+// `return await KatalogKuruKosu.CalistirAsync();` bir DEĞER
+// döndürüyor; o andan itibaren derleyici bütün yolların değer
+// döndürmesini istiyor (CS0161). `app.Run()` kapanışa kadar
+// blokluyor, döndüğünde süreç normal bitmiştir: 0.
+//
+// Bu satır olmadan proje DERLENMİYORDU — ve kusur `dotnet ef` içinde
+// "Build failed" diye görünüp göç üretmemesine yol açtı; hata metni
+// ancak ayrı bir `dotnet build` ile göründü.
+return 0;
 
 public partial class Program;

@@ -3,43 +3,67 @@ using EnderunAI.Api.Models;
 namespace EnderunAI.Api.Security;
 
 /// <summary>
-/// ROL İZNİ TOHUMLANIR MI — TEK KURAL, TEK YER (SEED/1 SB1).
+/// ROL İZNİ BULUNMALI MI — TEK KURAL, TEK YER (SEED/1 SB1 + KATALOG/1).
 ///
-/// ═══ KURAL ═══
+/// ═══ DOĞRULUK TABLOSU ═══
 ///
-///     ekle EĞER (katalogda var) VE (kaldırma kaydı yok)
+///   katalogda VAR  + kaldırma kaydı YOK   → BULUNSUN
+///   katalogda VAR  + kaldırma kaydı VAR   → BULUNMASIN
+///   katalogda YOK  + elle ekleme YOK      → BULUNMASIN
+///   katalogda YOK  + elle ekleme VAR      → BULUNSUN
 ///
-/// ═══ NEDEN AYRI BİR SINIF ═══
+/// Tek cümlede: KATALOGDA VARSA kaldırma kaydı karar verir, YOKSA
+/// elle ekleme kaydı karar verir.
 ///
-/// Kural bugün tek yerden çağrılıyor (`DatabaseSeeder`). Yarın ikinci
-/// bir çağıran çıkarsa — bir göç, bir yönetim ucu, bir toplu içe
-/// aktarma — kuralı ORADA yeniden yazmak zorunda kalmasın diye.
+/// ═══ NEDEN İKİ YÖN ═══
 ///
-/// Kural 79: bir kusur birden çok okuyucuda yaşıyorsa düzeltme
-/// okuyucuda değil kaynakta yapılır. Burası o kaynak.
+/// SEED/1(b) yalnız EKLEME yönünü kapatmıştı: tohumlayıcı, kullanıcının
+/// kaldırdığı çifti geri koymuyor. SİLME yönü açık kalmıştı — katalogdan
+/// ÇIKARILAN bir izin veritabanında süresiz kalıyordu.
 ///
-/// ═══ NEDEN BU KADAR KÜÇÜK BİR ŞEY İÇİN ═══
+/// ÖLÇÜLDÜ (AC1, 2026-09-08): `projects.delete` 2026-08-02'de iki role
+/// verildi, 2026-08-06'da katalogdan kaldırıldı, ve bugün hâlâ o iki
+/// rolde duruyor. Tohumlayıcı yalnız ekler; hiç silmez.
 ///
-/// Küçük olduğu için değil, SESSİZ olduğu için. Bu kural yanlış
-/// yazılırsa kimse hata görmez: izin geri gelir, ekran çalışır,
-/// yalnız kısıtlama kaybolur. Görünmeyen bir kuralın tek savunması
-/// tek yerde durmasıdır.
+/// ═══ NEDEN "ZATEN VAR MI" ARTIK SORULMUYOR ═══
+///
+/// Eski `TohumlanmaliMi(katalogdaVar, zatenVar, kaldirilmis)` bir
+/// EYLEM soruyordu: "ekleyeyim mi". Eylem sorusu tek yönlüdür ve
+/// silme yönünü ifade edemez.
+///
+/// Bu kural bir DURUM söylüyor: "bu çift bulunmalı mı". Uzlaştırıcı
+/// istenen durumu mevcut durumla karşılaştırıp farkı kapatıyor;
+/// eklemek de silmek de aynı cümleden çıkıyor. İki ayrı kural
+/// yazılsaydı biri düzeltilip öteki unutulurdu (Kural 79).
+///
+/// ═══ NEDEN BU KADAR KÜÇÜK BİR ŞEY İÇİN AYRI SINIF ═══
+///
+/// Küçük olduğu için değil, SESSİZ olduğu için. Yanlış yazılırsa
+/// kimse hata görmez: izin geri gelir ya da sessizce kaybolur, ekran
+/// yine çalışır. Görünmeyen bir kuralın tek savunması tek yerde
+/// durmasıdır.
 /// </summary>
 public static class RolIzinKurali
 {
     /// <summary>
-    /// Bu rol+izin çifti tohumlanmalı mı.
+    /// Bu rol+izin çifti veritabanında BULUNMALI MI.
     /// </summary>
     /// <param name="katalogdaVar">`RoleCatalog` bu çifti tanımlıyor mu.</param>
-    /// <param name="zatenVar">Veritabanında hâlihazırda duruyor mu.</param>
     /// <param name="kaldirilmis">Kullanıcı bu çifti matristen kaldırmış mı.</param>
-    public static bool TohumlanmaliMi(
-        bool katalogdaVar, bool zatenVar, bool kaldirilmis) =>
-        katalogdaVar && !zatenVar && !kaldirilmis;
+    /// <param name="elleEklendi">Kullanıcı katalog dışı bu çifti elle vermiş mi.</param>
+    public static bool BulunmaliMi(
+        bool katalogdaVar, bool kaldirilmis, bool elleEklendi) =>
+        katalogdaVar ? !kaldirilmis : elleEklendi;
 
     /// <summary>
     /// Kaldırma kaydı kümesi için anahtar. Tek biçim, tek yer.
     /// </summary>
     public static (Guid RoleId, Guid PermissionId) Anahtar(
         RolePermissionRevocation kayit) => (kayit.RoleId, kayit.PermissionId);
+
+    /// <summary>
+    /// Elle ekleme kaydı için aynı anahtar biçimi.
+    /// </summary>
+    public static (Guid RoleId, Guid PermissionId) Anahtar(
+        RoleManualPermissionGrant kayit) => (kayit.RoleId, kayit.PermissionId);
 }
