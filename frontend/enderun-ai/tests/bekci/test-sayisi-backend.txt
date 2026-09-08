@@ -174,5 +174,14 @@
 #     siliyor ("kimse yazmiyor" da testi gecerdi).
 #   KaldirmaKaydiOksuzKalmazTests 1 - izin silinince kaldirma kaydi
 #     da duser (Cascade), oksuz kayit birikemez.
-statik: 2957
+# MESAJ/3 C2 - DOSYA ICERIK DENETIMI (2026-09-08): 2957 -> 2973, +16.
+#   DosyaIcerikDenetimiTests: 6 gercek imza + 6 calistirilabilir
+#   dosya (MZ) her uzantiyla reddediliyor + Turkce duz metin kabul +
+#   tanimayan tur "Tanimadim" + bos dosya red + POZITIF KONTROL
+#   (ayni uzanti: dogru icerik kabul, yanlis icerik red - denetim
+#   gercekten AYIRT ediyor, her seye "uymuyor" demiyor).
+#
+#   Gevseklik 16: [Theory] bildirimleri + [InlineData] satirlari
+#   birlikte sayiliyor (cira bildirim sayar).
+statik: 2973
 dinamik: 25
