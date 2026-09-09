@@ -92,7 +92,21 @@ değil, **indeks**.
   6'sının EŞLEŞMEYEN YOLLARDA çalıştığı görüldü.
   → `backend/EnderunAI.Api.Tests/KabaAnahtarTuretmeEnvanteriTests.cs`
 
-- **Düzenlemeden önce desenin KAÇ YERE uyduğunu ölç.** "Bir yere
+- **Düzenlemeden önce desenin KAÇ YERE uyduğunu ölç — ve HİÇ UYUP
+  UYMADIĞINI.** İki yüzü var, ikisi de SESSİZ:
+  · fazla eşleşme -> ilgisiz bir yeri de bozar
+  · sıfır eşleşme -> hiçbir şey yapmaz, ama "düzelttim" sanırsın
+
+  9 Eylül, ikinci yüz: `duzen-testi.sh`'e ÖLÇEMEDİ yolu eklediğimi
+  sandım; desenim `5156` literalini arıyordu, kod `${ARKA_PORT}`
+  kullanıyordu. `str.replace` bulamadığında HATA VERMEZ. Yamanın
+  tuttuğunu varsaysaydım, kapıyı ölü bırakıp "canlandırdım" diye
+  yazacaktım — o gece canlandırdığımız kusurun birebir tekrarı.
+  Ölçüm (çıkış 1, ÖLÇEMEDİ satırları yok) yakaladı.
+
+  KURAL: her yamaya `assert` koy; tutmayan yama, yapılmamış yamadır.
+
+- **(ilk yüz)** "Bir yere
   uyuyordur" varsayımı, ölçmeden yapılan her varsayım gibi, er geç
   ilgisiz bir yeri de yakalar.
   9 Eylül: `PermissionMatrixController`'da bir `SaveChanges` desenini
@@ -238,6 +252,31 @@ değil, **indeks**.
   → `deploy/scripts/prova-zemini.sh`
 
 ## Kapılar
+
+- **BİR KAPI, EN AZ BİR KEZ KIRMIZI YANMADAN VAR SAYILMAZ.**
+  Kapının VARLIĞI, İŞLERLİĞİ değildir. *(Kural Mehmet Bey'e ait,
+  9 Eylül; ikimizin adına duruyor.)*
+
+  O gün üç kez düşüldü:
+  · ben "kapı yok" dedim — VARDI (`require_clean_git_tree`,
+    fail-closed; kirli ağaçla yayın 0. saniyede durdu)
+  · Mehmet Bey "kapı var" dedi — ÖLÜYDÜ (`duzen-testi.sh`'in üçüncü
+    sonuç yolu: `set -euo pipefail` altında çıplak çağrı düşünce betik
+    sonlanıyor, `publish_kodu=$?` satırına HİÇ GELİNMİYORDU)
+  · ikimiz de KODU OKUYARAK karar verdik
+
+  Ölü kapı ancak koşturarak görüldü: çıkış 75, ÖLÇEMEDİ satırlarının
+  hiçbiri basılmadı. Düzeltmeden sonra aynı koşullarda çıkış 3 ve üç
+  satır da bastı. Tek fark `|| publish_kodu=$?`.
+
+  KIRMIZISI KURULAMAYAN KAPI, "KAPI" DEĞİL "OKUMA"DIR — öyle
+  etiketlenir (bkz. kaba-anahtar iddiası: kırmızı koşulu `UcKapisi`
+  ayaktayken kurulamıyor).
+
+- **KABUK DESENİ ŞÜPHESİ:** `set -e` / `pipefail` altında çıplak bir
+  çağrı, ardından `$?` yakalayan her yer aynı ölü kapı şeklini
+  taşıyabilir. Grep bunları ŞÜPHELİ olarak bulur; kanıt değildir.
+  Her biri ateşlenerek sınanır (ATEŞLEME/1).
 
 - **"Kapı var" ile "kapı ölçebiliyor" ayrı şeyler.** Her kapı için
   ayrıca sor: ölçtüğü şey **taze** mi, ve **ölçemediğinde** bunu

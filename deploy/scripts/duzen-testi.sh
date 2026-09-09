@@ -41,6 +41,28 @@ KULLANICI="duzen-testi"
 log() { echo "[duzen-testi] $*"; }
 oldu() { log "HATA: $*" >&2; exit 1; }
 
+# ═══ "AÇILMADI" TEK BİR ŞEY DEĞİL — SEBEBİ AYIRT EDİLİR ═══
+#
+# ÖLÇÜLDÜ (2026-09-09): test veritabanı yokken arka uç
+# `3D000 database does not exist` ile hiç açılmıyor. Rig ise
+# "300 sn'de açılmadı" diyordu — doğru ama SEBEBİ GİZLEYEN bir mesaj.
+# Okuyan kişi ağ, port, bellek gibi yerlerde arıyor (ölçüldü: aradım).
+#
+# Veritabanı yokluğu bir ÜRÜN bulgusu değil, ZEMİN eksikliğidir:
+# sonuç ÖLÇEMEDİ (çıkış 3), İHLAL (çıkış 1) değil.
+arka_uc_acilmadi() {
+    if ! bash "${KOK}/deploy/scripts/vt-sorgu.sh" --vt enderun_ai \
+         --sql "SELECT 1 FROM pg_database WHERE datname = 'enderun_ai_test'" 2>/dev/null \
+       | grep -q "^1$"; then
+        log "ÖLÇEMEDİ: test veritabanı YOK ve arka uç onu KENDİSİ KURMUYOR."
+        log "ÖLÇEMEDİ: rig hiçbir ÜRÜN davranışı ölçmedi."
+        log "ÖLÇEMEDİ: bir arka uç test turu koşturun (veritabanını o kurar), sonra tekrar deneyin."
+        exit 3
+    fi
+
+    oldu "Arka uç ${ARKA_PORT} 300 sn'de açılmadı."
+}
+
 # ─── Test veritabanı bağlantısı — canlıdan TÜRETİLİYOR, canlıya
 #     DOKUNULMUYOR. Ad `enderun_ai_test` olarak sabitleniyor ve
 #     doğrulanıyor: yanlış veritabanına açılmak veri kaybı demekti.
@@ -102,9 +124,41 @@ done
 # tıklanamadı" gibi görünüyordu — asıl sebep parola uyuşmazlığıydı.
 #
 # Kullanıcı her koşudan ÖNCE siliniyor; tohumlayıcı yenisini kuruyor.
+# VERİTABANI HENÜZ OLMAYABİLİR — VE BU BİR HATA DEĞİL.
+#
+# ÖLÇÜLDÜ (2026-09-09): arka uç testleri `enderun_ai_test`'i DÜŞÜRÜP
+# yeniden kuruyor. Rig o aradan sonra koşarsa bu adım "database does
+# not exist" ile patlıyor ve rig ilk satırda ölüyordu — oysa
+# temizlenecek bir artık YOK, yani yapılacak iş de yok.
+#
+# Veritabanını arka uç kendi açılışında göçlerle kuruyor; bu adım
+# yalnız ÖNCEKİ KOŞUNUN artığını siliyor. Yokluk, başarısızlık değil.
 log "Önceki koşunun test kullanıcısı siliniyor..."
-sudo -u postgres psql -q -d enderun_ai_test -c \
-  "DELETE FROM users WHERE \"Username\" IN ('${KULLANICI}', 'duzen-karsi-taraf', 'duzen-kisitli');" >/dev/null
+# VARLIK SORGUSU `vt-sorgu.sh` ÜZERİNDEN — DOĞRUDAN psql DEĞİL.
+#
+# İlk yazımda `psql -d postgres` çağrıldı ve `PsqlCizgisiTests` yayını
+# DÜŞÜRDÜ: "duzen-testi.sh: 4 çağrı (çizgi 2)". Çıra haklıydı ve daha
+# iyi bir yol gösterdi — `pg_database` CANLI veritabanından da
+# sorulabiliyor, yani ölçüm kanonik araçtan geçebiliyor. Çizgiyi
+# yükseltmek gerekmedi.
+if bash "${KOK}/deploy/scripts/vt-sorgu.sh" --vt enderun_ai \
+     --sql "SELECT 1 FROM pg_database WHERE datname = 'enderun_ai_test'" 2>/dev/null \
+   | grep -q "^1$"; then
+    sudo -u postgres psql -q -d enderun_ai_test -c \
+      "DELETE FROM users WHERE \"Username\" IN ('${KULLANICI}', 'duzen-karsi-taraf', 'duzen-kisitli');" >/dev/null
+else
+    # MESAJ ÖLÇÜLEREK DÜZELTİLDİ (2026-09-09).
+    #
+    # İlk yazımda burada "arka uç açılışta kuracak" yazıyordu. ÖLÇÜM
+    # TERSİNİ SÖYLEDİ: veritabanı hiç yokken arka uç açılmıyor,
+    # `3D000 database does not exist` ile düşüyor ve rig "300 sn'de
+    # açılmadı" diyor — gerçek sebebi GİZLEYEN bir mesaj.
+    #
+    # Olmayan bir davranışı vaat eden günlük satırı, sessiz bir kapıdan
+    # kötüdür: okuyanı yanlış yere bakmaya gönderir.
+    log "Test veritabanı yok — temizlenecek artık da yok."
+    log "DİKKAT: arka uç veritabanını KENDİSİ KURMUYOR. Açılmazsa sebep bu."
+fi
 
 # ═══ ARKA UÇ AYRI DİZİNE PUBLISH EDİLİYOR ═══
 #
@@ -143,10 +197,22 @@ else
   #
   # 75 = derleme-kos.sh'nin "başkası koşuyor" kodu; ondan ayırt
   # ediliyor. Gerçek derleme hatası hâlâ DÜŞTÜ olarak raporlanıyor.
+  # `|| publish_kodu=$?` ŞART — YOKSA AŞAĞISI ÖLÜ KOD.
+  #
+  # ÖLÇÜLDÜ (2026-09-09): betikte `set -euo pipefail` açık. Çıplak bir
+  # çağrı düştüğü anda kabuk betiği SONLANDIRIYOR; `publish_kodu=$?`
+  # satırına ve altındaki 75 kontrolüne HİÇ GELİNMİYORDU.
+  #
+  # Yani yukarıda uzun uzun anlatılan "üç sonuç" düzeltmesi yazılmıştı
+  # ama HİÇ KOŞMUYORDU: rig 75 ile çıkıyor, ÖLÇEMEDİ satırlarının hiçbiri
+  # basılmıyordu. Kapı vardı, ateşlenemiyordu.
+  #
+  # `|| ...` çağrıyı bileşik bir komuta çeviriyor ve `set -e` ateşlemiyor.
+  publish_kodu=0
   DERLEME_BELLEK_TAVANI="${DERLEME_BELLEK_TAVANI:-7200M}" \
     "${KOK}/scripts/derleme-kos.sh" dotnet publish "${KOK}/backend/EnderunAI.Api" \
-      -c Release -o "$ARKA_PUBLISH" --nologo -v q > /tmp/duzen-publish.log 2>&1
-  publish_kodu=$?
+      -c Release -o "$ARKA_PUBLISH" --nologo -v q > /tmp/duzen-publish.log 2>&1 \
+    || publish_kodu=$?
 
   if [ "$publish_kodu" = "75" ]; then
     log "ÖLÇEMEDİ: derleme koşucusu meşgul (başka bir derleme sürüyor)."
@@ -200,7 +266,7 @@ ARKA_PID=$!
 # TOHUMLUYORDU. Sınır ölçüme göre 300 sn'ye çekildi.
 for i in $(seq 1 150); do
   curl -sf -m 2 "http://127.0.0.1:${ARKA_PORT}/api/health" >/dev/null 2>&1 && break
-  [ "$i" -eq 150 ] && { tail -20 /tmp/duzen-arka.log >&2; oldu "Arka uç ${ARKA_PORT} 300 sn'de açılmadı."; }
+  [ "$i" -eq 150 ] && { tail -20 /tmp/duzen-arka.log >&2; arka_uc_acilmadi; }
   sleep 2
 done
 log "Arka uç hazır."
@@ -253,8 +319,22 @@ BEGIN
   FROM users WHERE "Id" = v_ben
   RETURNING "Id" INTO v_o;
 
+  -- RIG KENDİ ZEMİNİNİ KURAR (Kural 81).
+  --
+  -- ÖLÇÜLMÜŞ KUSUR (2026-09-09): burada yalnız SELECT vardı ve şirket
+  -- yoksa "Sirket yok" ile patlıyordu. Yani rig, enderun_ai_test'te
+  -- şirket olmasını BAŞKA BİR TESTİN ARTIĞINA güveniyordu. Filtreli
+  -- bir arka uç koşusundan sonra o artık yoktu ve rig iki kez üst üste
+  -- düştü. Kırmızı "ürün bozuk" gibi okunuyordu; oysa ZEMİN yoktu.
+  --
+  -- Zemin başkasının artığıysa, rig'in kırmızısı test SIRASINA bağlı
+  -- hale gelir — ve sıraya bağlı bir ölçüm ölçüm değildir.
   SELECT "Id" INTO v_sirket FROM companies LIMIT 1;
-  IF v_sirket IS NULL THEN RAISE EXCEPTION 'Sirket yok'; END IF;
+  IF v_sirket IS NULL THEN
+    INSERT INTO companies ("Id","Code","Name","IsActive","IsDeleted","CreatedAtUtc")
+    VALUES (gen_random_uuid(), 'DZN', 'Duzen Rig Sirketi', true, false, v_simdi)
+    RETURNING "Id" INTO v_sirket;
+  END IF;
 
   INSERT INTO conversations
     ("Id","CompanyId","Type","IsArchived","IsActive","IsDeleted","CreatedAtUtc","LastMessageAtUtc")
@@ -372,7 +452,30 @@ BEGIN
           v_simdi, v_konusma, false, false);
 END \$\$;
 SQL
-log "Konuşma hazır."
+# ═══ TOHUMLAMANIN POZİTİF KONTROLÜ (Kural 48) ═══
+#
+# `ON_ERROR_STOP` SQL hatasını yakalar ama "hata yok" ile "zemin kuruldu"
+# aynı şey değil: bir INSERT sessizce 0 satır etkilemiş olabilir.
+# Zeminin VAR OLDUĞU ayrıca ölçülüyor.
+#
+# ZEMİN YOKSA SONUÇ ÖLÇEMEDİ'DİR, İHLAL DEĞİL: rig hiçbir ürün
+# davranışı ölçmemiştir. Aynı çıkış kodu (3) kullanılıyor — üçüncü
+# sonuç için ikinci bir yol açılmıyor.
+zemin_sayisi="$(bash "${KOK}/deploy/scripts/vt-sorgu.sh" --vt enderun_ai_test \
+  --sql "SELECT (SELECT count(*) FROM companies) || ',' || (SELECT count(*) FROM conversations)" 2>/dev/null \
+  | grep -E '^[0-9]+,[0-9]+$' | head -1)"
+
+zemin_sirket="${zemin_sayisi%%,*}"
+zemin_konusma="${zemin_sayisi##*,}"
+
+if [ -z "$zemin_sayisi" ] || [ "${zemin_sirket:-0}" -lt 1 ] || [ "${zemin_konusma:-0}" -lt 1 ]; then
+    log "ÖLÇEMEDİ: zemin kurulamadı (şirket=${zemin_sirket:-?} konuşma=${zemin_konusma:-?})."
+    log "ÖLÇEMEDİ: rig hiçbir ÜRÜN davranışı ölçmedi — bu bir ÜRÜN BULGUSU DEĞİLDİR."
+    log "ÖLÇEMEDİ: tohumlama çıktısına bakın; testlerin kırmızısı buradan gelmiş olabilir."
+    exit 3
+fi
+
+log "Konuşma hazır. (zemin ölçüldü: şirket=${zemin_sirket} konuşma=${zemin_konusma})"
 
 # ─── ÖN YÜZ DERLENİYOR — SESSİZ ESKİ YAPI TUZAĞI.
 #
