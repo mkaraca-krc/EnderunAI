@@ -92,9 +92,46 @@ export PATH="$PATH:/root/.dotnet/tools"
 # bellek tavanı ve tek örnek kapısı orada. Artımlı derleme değişiklik
 # yoksa zaten saniyeler sürüyor; bedeli, yanlış ölçümün bedelinden
 # küçük.
-if ! "${REPO_ROOT}/scripts/derleme-kos.sh" \
-        dotnet build "$PROJE/EnderunAI.Api.csproj" -v q --nologo >/dev/null 2>&1; then
-    hata "HATA: proje derlenemedi; model üretilemez."
+#
+# ÜÇ SONUÇ, ÜÇ MESAJ (Kural 67) — VE KANIT ATILMIYOR.
+#
+# ÖLÇÜLDÜ (2026-09-09): bu kapı yayını "proje derlenemedi" diyerek
+# durdurdu. Proje AYNI KOMUTLA sorunsuz derleniyordu; kapının derlemesi
+# 1.7 saniye CPU harcayıp düşmüştü, yani hiç derlemeye başlamamıştı.
+# SEBEP ÖĞRENİLEMEDİ, çünkü çıktı `>/dev/null 2>&1` ile atılıyordu.
+#
+# Kapı yanlış değildi; SÖYLEDİĞİ ŞEY yanlıştı. "Derlenemedi" bir
+# İHLAL beyanıdır ve kaynakta hata olduğunu söyler; oysa aynı çıkış
+# kodu "koşucu meşgul" (75) ya da "süreç öldürüldü" anlamına da
+# gelebiliyordu. Ölçememeyi ihlal diye raporlamak, bugün birkaç kez
+# görülen sınıfın aynısı.
+#
+# ÜÇÜ DE YAYINI DURDURUR (kapalı-düşen); ayrım RAPORDA, davranışta
+# değil. Gevşetme yok — yalnız kapı ne ölçtüğünü artık söylüyor.
+#
+DERLEME_KAYDI="$GECICI/derleme.log"
+"${REPO_ROOT}/scripts/derleme-kos.sh" \
+    dotnet build "$PROJE/EnderunAI.Api.csproj" -v q --nologo >"$DERLEME_KAYDI" 2>&1
+DERLEME_KODU=$?
+
+if [ "$DERLEME_KODU" -eq 75 ]; then
+    hata "ÖLÇEMEDİ: derleme koşucusu MEŞGUL (çıkış 75, EX_TEMPFAIL)."
+    hata "Bu bir şema sapması bulgusu DEĞİLDİR — ölçüm hiç yapılmadı."
+    exit 1
+fi
+
+if [ "$DERLEME_KODU" -ne 0 ]; then
+    # DERLEYİCİ HATASI MI, BAŞKA BİR ŞEY Mİ: ayrımı çıktının kendisi
+    # söyler. Derleyici hatası yoksa "derlenemedi" demeyi hak etmiyoruz.
+    if grep -qE ": error [A-Z]+[0-9]+" "$DERLEME_KAYDI"; then
+        hata "HATA: proje derlenemedi; model üretilemez."
+        grep -E ": error [A-Z]+[0-9]+" "$DERLEME_KAYDI" | head -5 >&2
+    else
+        hata "ÖLÇEMEDİ: derleme çıkış $DERLEME_KODU verdi ama çıktıda"
+        hata "DERLEYİCİ HATASI YOK. Ölçüm yapılamadı; şema hakkında"
+        hata "bu koşudan hiçbir sonuç çıkmaz."
+        tail -15 "$DERLEME_KAYDI" >&2
+    fi
     exit 1
 fi
 
