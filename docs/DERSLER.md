@@ -107,6 +107,45 @@ değil, **indeks**.
   Çözüm ikisinden birini seçmek değil, mutasyonu korumanın devrettiği
   işin İÇİNE almak oldu — o zaman bekleyen ilgisiz yazım hiç olmuyor.
 
+- **DÖRDÜNCÜ SONUÇ SINIFI: BAK-VE-KARAR.** *(Mehmet Bey adlandırdı,
+  9 Eylül.)* Üç sonucumuz vardı — GEÇTİ / İHLAL / ÖLÇEMEDİ. Dördüncüsü
+  bunların hiçbiri değil.
+
+  **Tanım:** iddianın bozulması, kusurun VARLIĞINI değil, ölçümün
+  GEÇERLİLİĞİNİN BİLİNEMEZ olduğunu gösterir. "Dünya iyileşmiş de
+  olabilir, ölçüm ölmüş de olabilir."
+
+  **Doğru tepki:** koşarak düzeltmek DEĞİL — bakıp hangisi olduğuna
+  karar vermek.
+
+  **Raporda İHLAL'den AYRI SATIRDA görünür.** Ayrılmazsa bir gün biri
+  onu ihlal sanıp "düzeltir" ve iyi haberi geri alır.
+
+  Bugünkü örnekler (bozulduklarında ne anlama geldikleriyle):
+  · `adaylar.Count > 0` — türetmeye düşen uç kalmadı. Her uca nitelik
+    konmuş OLABİLİR (iyi haber) ya da süzgeç kırılmıştır.
+  · `tumUclar.Count > 800` — uç numaralandırması öldü ya da uygulama
+    gerçekten küçüldü.
+  · K5 `olculen.length >= 14` — bir ekran bilerek kaldırılmış olabilir
+    ya da tarama erken bitmiştir.
+  · *(zaten vardı, adı yoktu)* `test-sayisi-ratchet` → "tarama boşa
+    düşmüyor" ve "çıranın saydığı metot koşucununkiyle tutuyor".
+    İkincisinin mesajı bunu zaten sezmiş: "KOŞUCU SAYIMI ESKİ OLABİLİR".
+
+- **"KAPI YOK" CÜMLESİ, KAPININ OLMADIĞININ ÖLÇÜMÜ OLMADAN YAZILAMAZ.**
+  Yokluk iddiası da pozitif kontrol ister — hem YAZANA hem KABUL EDENE.
+  *(Ders ikimize ait, 9 Eylül.)*
+
+  Ben: "`publish` depo kökünden derliyor" ölçümdü; "demek ki işlenmemiş
+  kod sessizce canlıya çıkar" ÇIKARIMDI ve yanlıştı —
+  `require_clean_git_tree` yayının başında zaten fail-closed duruyordu.
+  Mehmet Bey: o çıkarımı doğrulatmadan üstüne yeni bir kapı kurmamı
+  istedi; yokluk iddiasını pozitif kontrolsüz kabul etti.
+
+  ÖLÇÜM (sonradan yapıldı): iki izlenmeyen dosya ağaçtayken yayın
+  denendi, SIFIRINCI SANİYEDE durdu. Kapı vardı ve çalışıyordu.
+  → `deploy/scripts/safe-deploy.sh` (`require_clean_git_tree`)
+
 ## Test ve rig
 
 - **`page.request` çerez taşımaz**; veri uçlarını sayfa içinden `fetch`

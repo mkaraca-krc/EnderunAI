@@ -304,6 +304,40 @@ public sealed class KabaAnahtarTuretmeEnvanteriTests(
          * bayrakla kapatılırsa ya da açılış sırası değişirse, sayının
          * artışını burada görürüz.
          */
+        /*
+         * ═══ ÖNCE ÖLÇÜMÜN YAŞADIĞINI KANITLA (Kural 48) ═══
+         *
+         * `kabaSayisi == 0` tek başına, ENVANTER BOŞALDIĞINDA DA yeşil
+         * yanar: yansıma süzgeci kırılır, `EndpointDataSource` boş
+         * döner, sayı 0 çıkar ve test hiçbir şey ölçmediği hâlde
+         * geçer. Sıfır, yokluğun kanıtı değildir.
+         *
+         * Bu yüzden iddialar SIRALI: önce ölçümün yaşadığı, sonra
+         * bulgunun kendisi. 1 ya da 2 sıfırlanırsa test kırmızı yanar —
+         * çünkü o an ÖLÇÜM ölmüştür, dünya değişmemiştir.
+         *
+         * ═══ BU İKİ İDDİA "BAK-VE-KARAR" SINIFINDANDIR ═══
+         *
+         * Bozulmaları KUSUR göstermez; ölçümün geçerliliğinin
+         * bilinemez olduğunu gösterir. İHLAL'den ayrı okunmalı:
+         * biri bunları ihlal sanıp "düzeltirse" iyi haberi geri alır.
+         *
+         * ALT SINIR, TAM SAYI DEĞİL: bugün 824 uç var. Tam sayı
+         * yazılsaydı her yeni uçta test kırılır ve gürültü, bir gün
+         * gerçek bir kırılmayı gizlerdi.
+         */
+        Assert.True(
+            tumUclar.Count > 800,
+            $"ÖLÇÜM ÖLDÜ: numaralandırılan uç sayısı {tumUclar.Count} (alt sınır 800). " +
+            "Yansıma süzgeci ya da uç kaynağı kırılmış olabilir. Bu hâlde " +
+            "aşağıdaki 'kaba anahtar 0' bulgusu HİÇBİR ŞEY söylemez.");
+
+        Assert.True(
+            adaylar.Count > 0,
+            "ÖLÇÜM ÖLDÜ: türetme dalına düşen uç sayısı 0 (bugün 32 olmalı). " +
+            "Niteliksiz uç kalmamış olabilir — ya da süzgeç kırılmıştır. " +
+            "İkisi ayırt edilmeden 'kaba anahtar 0' bulgusu okunamaz.");
+
         Assert.True(
             kabaSayisi == 0,
             $"KABA ANAHTARA TÜRETİLEN UÇ SAYISI {kabaSayisi} (çizgi 0).\n" +

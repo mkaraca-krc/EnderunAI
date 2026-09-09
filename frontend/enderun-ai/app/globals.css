@@ -5227,3 +5227,61 @@ body {
 .mesaj-ek:hover { background: rgb(255 255 255 / 90%); }
 .mesaj-ek small { opacity: 0.7; }
 .mesaj-ek-simge { flex: 0 0 auto; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   K5 — 390 px'TE SAYFA YATAY KAYMASI (ölçülerek bulundu)
+   ═══════════════════════════════════════════════════════════════════
+
+   ÖLÇÜM (rig, 390x664, belge scrollWidth vs innerWidth):
+
+     /dashboard              661 -> taşma 271
+     /finans/kasa-banka      486 -> taşma  96
+     /finans/odeme-planlari  399 -> taşma   9
+
+   AYRIM: sayfanın kayması kusurdur; geniş bir tablonun KENDİ KABINDA
+   kayması kusur DEĞİLDİR. `/finans/odeme-planlari`'nda 525 px'lik
+   tablo `div.erp-table-scroll` içinde doğru şekilde kayıyordu ve
+   sayfayı taşıran o değildi — 80 px'lik bir araç çubuğu düğmesiydi.
+   Bu ayrım yapılmasaydı doğru tasarım "düzeltilerek" bozulurdu.
+
+   ─── (b) GENİŞ OLMAK İÇİN SEBEBİ OLMAYAN İÇERİK: SARMALASIN ───
+
+   `.erp-toolbar` ve `.erp-actions` `display:flex` ve `flex-wrap` YOK.
+   Düğme sırası sığmayınca sarmalamak yerine sayfayı taşırıyordu.
+   Bir düğme sırasının yatay kaydırılması kusurdur: tablo değil,
+   kaydırılacak bir içerik değil — alt satıra inmesi gerekir.
+
+   `gap` de eklendi: sarmalanan satırlar birbirine yapışmasın.
+   Geniş ekranda etkisi YOK — sarmalama yalnız sığmadığında devreye
+   girer.
+
+   ─── (c) GENİŞLİĞİ ÇİVİLEYEN DÜZEN KURALI: KURAL DÜZELTİLDİ ───
+
+   `.enderun-dashboard-layout` ızgarası 390'da tek sütuna düşüyordu
+   (medya sorgusu ÇALIŞIYORDU) ama sütun 630.67 px kalıyordu:
+
+     section.enderun-dashboard-layout  w=330  cols=630.672px
+
+   Sebep `1fr`'in kendisi: `1fr` = `minmax(auto, 1fr)` ve `auto` alt
+   sınırı MIN-CONTENT'tir. İçeriğin min-content genişliği 630 px
+   olduğu için sütun küçülmeyi REDDEDİYORDU.
+
+   PN4'teki `min-height: 0` kusurunun aynı ailesi: varsayılan otomatik
+   alt sınır, küçülmeyi reddettirir. `minmax(0, 1fr)` alt sınırı
+   sıfırlıyor ve sütun kaba sığıyor.
+
+   Bu bir düzen YENİDEN TASARIMI değil, tek kural düzeltmesi — o yüzden
+   yapıldı; yeniden tasarıma dönüşseydi durup sebebi yazacaktım.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.erp-toolbar,
+.erp-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 1200px) {
+  .enderun-dashboard-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

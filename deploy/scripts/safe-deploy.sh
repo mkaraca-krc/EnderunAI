@@ -262,12 +262,30 @@ yarim_kosu_denetle() {
     esac
 }
 
+# ═══════════════════════════════════════════════════════════════
+# AĞAÇ TEMİZ Mİ — VE GEÇTİĞİNDE DE KONUŞUR
+# ═══════════════════════════════════════════════════════════════
+#
+# `git status --porcelain` İZLENMEYEN dosyaları da listeler (`??`).
+# Yayın depo kökünden derlediği için bu şart: izlenmeyen bir dosya da
+# derlenip canlıya çıkardı.
+#
+# ÖLÇÜLDÜ (2026-09-09): iki izlenmeyen dosya ağaçtayken yayın
+# denendi ve SIFIRINCI SANİYEDE durdu — test turuna, derlemeye
+# girmedi. Kapı fail-closed ve çalışıyor.
+#
+# GEÇTİĞİNDE DE YAZAR, VE SATIRI KAPININ KENDİ KOD YOLU YAZAR:
+# ayrı bir `echo` ile yazılsaydı satır doğru görünürken kapı devre
+# dışı olabilirdi ve günlük YALAN SÖYLERDİ. Sessiz bir kapı ile
+# kaldırılmış bir kapı, günlükte ayırt edilemez.
 require_clean_git_tree() {
     cd "$REPO_ROOT" || fail "Repo dizinine gidilemedi: $REPO_ROOT"
 
     if [ -n "$(git status --porcelain)" ]; then
         fail "Repo'da commit edilmemiş değişiklikler var — güvenli yayın için önce commit/stash yapın."
     fi
+
+    log "INFO" "Ağaç temiz, yayınlanan commit: $(git rev-parse HEAD)"
 }
 
 # ═══════════════════════════════════════════════════════════════

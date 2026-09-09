@@ -400,6 +400,14 @@ describe("test sayısı cırcırı", () => {
    * çizgiye dönüşürdü. Sessiz düşüşün karşılığı usuldedir (yukarıya
    * bakınız), mekanizmada değil.
    */
+  /*
+   * BAK-VE-KARAR SINIFI (adlandırıldı 2026-09-09).
+   *
+   * Bu iddia bozulursa kusur var demek DEĞİLDİR: tarama ölmüş olabilir
+   * ya da kod tabanı gerçekten küçülmüş olabilir. İHLAL'den ayrı
+   * okunur; koşarak "düzeltilmez", bakılıp hangisi olduğuna karar
+   * verilir.
+   */
   it("tarama boşa düşmüyor", () => {
     expect(arkaUc.dosyaSayisi).toBeGreaterThan(200);
     expect(arkaUc.sayim.statik).toBeGreaterThan(2000);
@@ -407,6 +415,13 @@ describe("test sayısı cırcırı", () => {
     expect(onYuz.sayim.statik).toBeGreaterThan(250);
   });
 
+  /*
+   * BAK-VE-KARAR SINIFI (adlandırıldı 2026-09-09).
+   *
+   * Bozulması "test kayboldu" demek olabileceği gibi "sayaç yeni bir
+   * özniteliği tanımıyor" ya da "koşucu sayımı bayat" da demek olabilir
+   * — aşağıdaki mesaj bunu zaten anlatıyordu, sınıfın adı yoktu.
+   */
   it("çıranın saydığı metot, koşucunun bulduğuyla TUTUYOR", () => {
     /*
      * ═══ BİR SAYAÇ YALNIZ TANIDIĞINI SAYAR ═══

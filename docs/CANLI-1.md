@@ -198,6 +198,34 @@ izin gerçekten kalkar." Bu cümlenin İKİNCİ yarısı henüz doğru değil:
 reddediyor. Adım 5 (matrisi Admin sütununa açmak) bitmeden bu cümle
 yazılmayacak — yarısı doğru bir cümle, yanlış cümleden kötüdür.
 
+## Yayın kaynağı ağaçtır — engelleyen kapı VAR (ölçüldü 2026-09-09)
+
+`safe-deploy` `dotnet publish`'i DEPO KÖKÜNDEN koşturuyor; yani çalışma
+ağacındaki izlenmeyen bir dosya da derlenip canlıya çıkabilirdi.
+
+**Bunu engelleyen kapı ZATEN VARDI ve fail-closed:**
+`require_clean_git_tree`, `git status --porcelain` boş değilse yayını
+durduruyor — `--porcelain` izlenmeyen dosyaları (`??`) da listeler.
+İkinci bir kontrol daha var: `agac_hala_ayni_mi` derlemeden hemen önce
+aynı soruyu tekrar soruyor ve başlangıç commit'iyle karşılaştırıyor
+(yayın ortasında ağaca dokunulmasına karşı).
+
+**NASIL ÖLÇÜLDÜ:** iki izlenmeyen dosya ağaçtayken yayın başlatıldı.
+
+    [ERROR] Repo'da commit edilmemiş değişiklikler var — ...
+    Sonuç: UNKNOWN · Süre: 0s
+
+Sıfırıncı saniyede durdu; test turuna ve derlemeye hiç girmedi.
+
+**"KAPATILDI" DEĞİL — ZATEN KAPALIYMIŞ.** Bu bulgu, "kapı yok"
+çıkarımının ölçülmeden yazılmasından doğdu; ölçüm tersini söyledi.
+
+**EKLENEN TEK ŞEY:** kapı artık GEÇTİĞİNDE de günlüğe yazıyor —
+`Ağaç temiz, yayınlanan commit: <sha>`. Satırı kapının kendi kod yolu
+yazıyor, ayrı bir `echo` değil: ayrı yazılsaydı satır doğru görünürken
+kapı devre dışı olabilirdi. Sessiz bir kapı ile kaldırılmış bir kapı
+günlükte ayırt edilemez; artık edilebiliyor.
+
 ## GÖRÜNÜRLÜK/1 — "7 ölü izin" YANLIŞ İFADEYDİ (2026-09-09)
 
 KATALOG/1'den beri hem Mehmet Bey hem ben "7 gizli ÖLÜ izin" diyorduk.
