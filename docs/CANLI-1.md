@@ -9,7 +9,7 @@ gereken ölçüm**, ve o ölçümün **bugünkü sonucu**. Durum üç değerden
 biri: `YEŞİL` (ölçüldü, geçti) · `KISMEN` (bir kısmı ölçüldü) ·
 `AÇIK` (ölçülmedi ya da düştü).
 
-Son güncelleme: 2026-09-08
+Son güncelleme: 2026-09-09
 
 | # | madde | durum |
 |---|---|---|
@@ -123,6 +123,29 @@ görünen alanda kalıyor, ölçüm gerçek tarayıcıyla yapıldı.
 **Neden KISMEN:** yalnız mesajlaşma ekranı ölçüldü. Diğer ekranlar
 için telefon çözünürlüğünde ölçüm YAPILMADI.
 
+## Yayınlanan düzeltmeler ve doğrulama durumu (2026-09-09)
+
+| paket | yayın | Mehmet Bey'in canlı doğrulaması |
+|---|---|---|
+| PANEL/1 (panel mesaj yüklemiyordu) | `6ad8d54a` | **DOĞRULANDI** |
+| PN4 (yazma alanı panelden taşıyordu) | `5847b45e` | **DOĞRULANDI** |
+| YT4 Adım 3 (Admin kısayolu kaldırıldı) | `c753d797` | **DOĞRULANDI** |
+
+**PN4 + PANEL/1 dayanağı** (canlı, 1536×695, Mehmet Bey'in ölçümü):
+
+    panel        {üst 48,  alt 535}
+    yazma alanı  {üst 138, alt 182}   PANEL_İÇİNDE: true
+    taşma        -353  (düzeltme öncesi +80 DIŞARIDA idi)
+    mesajlar geldi (2 mesaj) · "henüz mesaj yok" yalanı YOK · ataç düğmesi var
+
+**YT4 Adım 3 dayanağı** (canlı, yetki matrisi API'si, Mehmet oturumu):
+
+    payment.plan.approve : yalnız Genel Müdür, Admin'de YOK
+    Admin                : 140 iznin 139'u — eksik olan tek izin o
+    Genel Müdür          : 140/140
+    /user-management/users · /permission-matrix · /company-settings ·
+    /odeme-planlari : hepsi 200. Kısayol kalkınca kimse kilitlenmedi.
+
 ## Admin ayrıcalığı — YETKİ/3 · YT4 (2026-09-09)
 
 `PermissionAuthorizationMiddleware` içinde bir kısayol vardı:
@@ -174,6 +197,91 @@ izin gerçekten kalkar." Bu cümlenin İKİNCİ yarısı henüz doğru değil:
 `PermissionMatrixController:101` Admin sütununun değiştirilmesini
 reddediyor. Adım 5 (matrisi Admin sütununa açmak) bitmeden bu cümle
 yazılmayacak — yarısı doğru bir cümle, yanlış cümleden kötüdür.
+
+## GÖRÜNÜRLÜK/1 — "7 ölü izin" YANLIŞ İFADEYDİ (2026-09-09)
+
+KATALOG/1'den beri hem Mehmet Bey hem ben "7 gizli ÖLÜ izin" diyorduk.
+**Bu ifade ölçülmeden aylarca taşındı ve yanlıştı.** Doğrusu:
+**7 gizli ama YÜRÜRLÜKTE izin.**
+
+`KullanimdanKalkti` işareti, UYGULAMADAN kalktı anlamına gelmiyordu.
+
+### Yedi anahtar — iki olgu, ayrı ayrı ölçüldü
+
+| anahtar | `role_permissions`'ta | matris API'sinde | rol sayısı |
+|---|---|---|---|
+| `accounting.manage` | VAR | **YOK** | 4 |
+| `attendance.manage` | VAR | **YOK** | 3 |
+| `finance.manage` | VAR | **YOK** | 3 |
+| `hakedis.manage` | VAR | **YOK** | 4 |
+| `payroll.manage` | VAR | **YOK** | 3 |
+| `projects.manage` | VAR | **YOK** | 4 |
+| `purchasing.manage` | VAR | **YOK** | 5 |
+
+**`RoleCatalog`'da YOK DEĞİLLER — VARLAR.** `K` yansımayı
+`PermissionCatalog.Keys` *sabitleri* üzerinde yapıyor, `Permissions`
+meta listesi üzerinde değil. Yani uzlaştırıcı bu satırları her açılışta
+YENİDEN ÜRETİYOR. "Kalan artık satır" değil, **etkin verilen izinler**.
+Gizli olan tek şey MATRİS GÖRÜNTÜSÜYDÜ.
+
+### Yürürlükte olduklarının kanıtı
+
+    PermissionAuthorizationMiddleware.ResolveRequiredPermission:
+      7/7 anahtarı da döndürüyor (satır 162,167,181,190,196,204,242)
+    açık RequirePermission niteliğinde:
+      attendance.manage 6 uç · accounting.manage 5 uç · finance.manage 4 uç
+
+`accounting.manage`'i bir rolden kaldırmak isteyen kullanıcı onu
+ekranda BULAMIYORDU; middleware ise onu aramaya devam ediyordu.
+
+### Toplam uzlaştırma — fark 7 değil, 26
+
+    role_permissions toplam : 603
+    matris API grant        : 577
+    fark                    :  26
+
+26 = yedi anahtarın rol sayıları toplamı (4+3+3+4+3+4+5).
+**Yalnız Admin'de değil — 9 farklı rolde:** Admin, Genel Müdür,
+Finans Sorumlusu, Ön Muhasebe, İK Sorumlusu, Teknik Koordinatör,
+Teknik Ofis, Depo Sorumlusu, Satın Alma Sorumlusu, Şantiye Şefi.
+
+Aynı fark izin sayısında da görünüyor: Admin `role_permissions`'ta
+**146**, matris API'sinde **139**. İki sayı FARKLI KÜMELERİ sayıyor;
+aradaki 7, yukarıdaki anahtarların Admin'deki kayıtları.
+
+### Nereden geldi
+
+`32a0a9a2` (2026-09-08, "SEED/1(b) + KARAR 2 + KARAR 3(b)") bu yedi
+izni `KullanimdanKalkti: true` işaretledi. **Kataloğdan düşürülmediler**
+— "satırlar neden kaldı" sorusunun cevabı yok, çünkü kaldırılmadılar.
+
+### Ne yapıldı
+
+`c6433e58` — bayrak kaldırıldı, izinler matriste göründü:
+izin 140 -> 147 · hücre 2100 -> 2205 · grant 577 -> 603.
+Uygulama davranışı DEĞİŞMEDİ; yalnız görünürlük.
+Muhafız: `PermissionMatrisiGorunurlukTests` (matrisi çağırarak ölçüyor).
+
+### Deny sızıntısı ARANDI, BULUNMADI
+
+Soru: `accounting.edit` üzerinde Deny olan bir kullanıcı, rolünde
+`accounting.manage` varsa muhasebe kaydını düzenleyebiliyor mu?
+
+    Deny VAR  -> 403          (Deny ısırıyor)
+    Deny YOK  -> 403 değil    (pozitif kontrol: uç bu role açık)
+
+**Sızıntı yok.** Uç açık `[RequirePermission(AccountingEdit)]` taşıyor
+ve yoldan türetme yalnız nitelik YOKSA çalışıyor.
+`accounting.edit` 7 ucu, `accounting.manage` 5 FARKLI ucu koruyor;
+kesişmiyorlar.
+
+DÜRÜST SINIR: bir uçta ölçüldü, tüm uçlarda değil.
+
+### Sırada: KABA-İZİN/1
+
+7 kaba izni ince izinlere devredip gerçekten emekliye ayırmak.
+15+ ucun yetkisine dokunur; pilot baskısı varken YAPILMAZ.
+Yalnız ölçüm ve tasarım, Mehmet Bey'in onayı beklenecek.
 
 ## K6 — Yedek kanıtlı
 

@@ -70,6 +70,16 @@ değil, **indeks**.
   → `frontend/enderun-ai/tests/duzen/mesaj-paneli-tasma.spec.ts`
     (`PN4_YUKSEKLIK=1` — türetim kümesinin dışındaki üç nokta)
 
+- **Bir işareti, anlamını ölçmeden taşıma.** `KullanimdanKalkti`
+  ("kullanımdan kalktı") işareti UYGULAMADAN kalktı anlamına
+  gelmiyordu. Yedi izin bu işaretle matristen gizlendi; yedisi de
+  middleware'de ve `RequirePermission` niteliklerinde YÜRÜRLÜKTEYDİ.
+  Kullanıcı kaldıramadığı bir yetkiyi taşımaya devam etti.
+  *(9 Eylül. Bu ders ikimize de ait: "7 ölü izin" ifadesini aylarca
+  ikimiz de ölçmeden kullandık — gizleyen işareti okuduk, gizlenen
+  şeyin ne yaptığını sormadık.)*
+  → `backend/EnderunAI.Api.Tests/PermissionMatrisiGorunurlukTests.cs`
+
 ## Test ve rig
 
 - **`page.request` çerez taşımaz**; veri uçlarını sayfa içinden `fetch`
