@@ -4905,13 +4905,74 @@ body {
   overflow: hidden;
 }
 
-.mesaj-duzen-panel .mesaj-liste,
-.mesaj-duzen-panel .mesaj-govde {
+/* ═══════════════════════════════════════════════════════════════════
+   PANELDE KAYAN ŞEY MESAJ LİSTESİDİR, GÖVDE DEĞİL (PN4)
+   ═══════════════════════════════════════════════════════════════════
+
+   ÖLÇÜLEN KUSUR (rig, dolu konuşma, 1024/1152/1280/1440x800):
+
+     .mesaj-panel   alt kenar 640   (height: min(32rem, 100vh-13rem))
+     form.mesaj-yaz alt kenar 720   → 80 px DIŞARIDA, dört genişlikte de
+
+   TAŞMA GENİŞLİKTEN BAĞIMSIZ ve TAM composer yüksekliği kadar: sorun
+   duyarlı yerleşim değil, YÜKSEKLİK ZİNCİRİ. Panel `overflow:hidden`
+   olduğu için composer kısmen değil TAMAMEN görünmez oluyordu.
+
+   ÜRETEN DEĞİŞKEN MESAJ SAYISI, GENİŞLİK DEĞİL: boş konuşmada
+   (08.09 ölçümü, 1536x639) composer panelin 263 px İÇİNDEYDİ. Liste
+   dolunca dışarı çıkıyor.
+
+   TEŞHİS: `.mesaj-govde` KAYDIRILABİLİR yapılmıştı. Gövde kaydığı
+   için içindeki `.mesaj-akis` küçülmek ZORUNDA KALMIYOR; doğal
+   yüksekliğine büyüyor ve composer'ı gövdenin görünen alanının altına
+   itiyor. Yani kaydırma bir katman YUKARIDAYDI.
+
+   ÇÖZÜM: gövde kırpar (`overflow: hidden`), LİSTE kayar
+   (`flex: 1 1 0` + `min-height: 0`). `min-height: 0` şart: flex
+   öğesinin varsayılan `min-height: auto` değeri, içeriğinden küçülmeyi
+   REDDETTİRİR ve zinciri tam burada koparır.
+
+   `max-height: none`: taban kuraldaki `70vh` panelde 560 px demek ve
+   panelin kendi 512 px'inden büyük — bugün bağlamıyor ama kısa
+   ekranda bağlar ve aynı kusuru geri getirirdi.
+
+   /mesajlar TAM SAYFASINDA aynı zincir daha önce kurulmuştu
+   (`erp-tam-yukseklik`, aşağıda). Panelin içine uygulanmamıştı.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.mesaj-duzen-panel .mesaj-liste {
   min-height: 0;
   overflow-y: auto;
 }
 
-@media (max-width: 900px) {
+.mesaj-duzen-panel .mesaj-govde {
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+}
+
+.mesaj-duzen-panel .mesaj-akis {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/*
+ * SINIR DIŞLAYICI: 900 DAHİL DEĞİL (PN4-3'te ölçüldü).
+ *
+ * JS eşiği `innerWidth < PANEL_DAR_EKRAN_ESIGI` yazıyor
+ * (mesaj-baloncugu.tsx:371) — yani TAM 900'de ekran dar SAYILMIYOR ve
+ * panel AÇILIYOR. CSS ise `max-width: 900px` ile 900'ü DAHİL edip
+ * paneli gizliyordu.
+ *
+ * SONUÇ, ÖLÇÜLDÜ: 900x800'de baloncuk paneli açıyor, CSS onu
+ * gizliyor; kullanıcı ne panel ne yönlendirme alıyor. PN4 taraması bu
+ * genişlikte 60 saniye bekleyip ÖLÇEMEDİ verdi ve kusur böyle çıktı.
+ *
+ * Tek-kaynak testi bunu görmüyordu çünkü SAYIYI karşılaştırıyordu
+ * (900 = 900), KAPSAYICILIĞI değil. Test artık sınırın dışlayıcı
+ * olduğunu da sınıyor.
+ */
+@media (max-width: 899.98px) {
   /* Panel bu genişlikte zaten açılmıyor; görünürse de gizlenir. */
   .mesaj-panel { display: none; }
 }

@@ -26,7 +26,7 @@ function cssEsigi(): number {
   // Panel gizleme kuralını içeren bloğu bul; başka 900px blokları da
   // var (`.mesaj-duzen`), onlara bakmıyoruz.
   const bloklar = [
-    ...CSS.matchAll(/@media\s*\(max-width:\s*(\d+)px\)\s*\{([\s\S]*?)\n\}/g),
+    ...CSS.matchAll(/@media\s*\(max-width:\s*([\d.]+)px\)\s*\{([\s\S]*?)\n\}/g),
   ];
 
   const panelBloklari = bloklar.filter((b) => b[2].includes(".mesaj-panel"));
@@ -45,16 +45,44 @@ function cssEsigi(): number {
 describe("panel genişlik eşiği tek kaynak", () => {
   it("CSS'teki eşik okunabiliyor ve makul (POZİTİF KONTROL)", () => {
     const esik = cssEsigi();
-    expect(Number.isInteger(esik)).toBe(true);
+
+    /*
+     * `isInteger` DEĞİL `isFinite`: eşik artık 899.98 (dışlayıcı
+     * sınır). Tam sayı olması, bu pozitif kontrolün koruduğu şey
+     * DEĞİLDİ — koruduğu şey ayıklamanın NaN/boş üretmemesi.
+     * Tam sayı iddiası eşiğin tam sayı olduğu dönemden kalmıştı.
+     */
+    expect(Number.isFinite(esik)).toBe(true);
     expect(esik).toBeGreaterThan(300);
   });
 
-  it("CSS literali TS sabitiyle AYNI", () => {
+  /*
+   * SAYI DEĞİL, SINIR SINANIYOR (PN4-3, 2026-09-09).
+   *
+   * Eski hâli `toBe(PANEL_DAR_EKRAN_ESIGI)` idi ve GEÇİYORDU: CSS
+   * `max-width: 900px`, sabit 900, sayılar eşit. Ama JS `< 900`
+   * (dışlayıcı), CSS `<= 900` (kapsayıcı) demekti ve TAM 900'de panel
+   * açılıp CSS tarafından gizleniyordu — testin kendi yorumunun
+   * uyardığı durum, testin ölçmediği yerden geçti.
+   *
+   * Sayı eşitliği ayrışmayı yakalar, SINIR HATASINI yakalamaz. İki
+   * iddia birlikte gerekiyor.
+   */
+  it("CSS eşiği DIŞLAYICI: sabitin altında gizler, sabitte gizlemez", () => {
     expect(
       cssEsigi(),
+      "CSS eşiği sabite eşit ya da büyük. `max-width: N` N'i DAHİL " +
+        "eder; JS ise `< N` diyor. Tam N pikselde baloncuk paneli açar, " +
+        "CSS gizler ve kullanıcı panelsiz KALIR."
+    ).toBeLessThan(PANEL_DAR_EKRAN_ESIGI);
+  });
+
+  it("CSS eşiği sabitten UZAKLAŞMAMIŞ (1 px'ten yakın)", () => {
+    expect(
+      PANEL_DAR_EKRAN_ESIGI - cssEsigi(),
       "globals.css'teki eşik ile PANEL_DAR_EKRAN_ESIGI ayrışmış. " +
         "Baloncuk bir genişlikte yönlendirirken CSS başka bir " +
         "genişlikte gizler; arada kullanıcı panelsiz ve yönlendirmesiz kalır."
-    ).toBe(PANEL_DAR_EKRAN_ESIGI);
+    ).toBeLessThanOrEqual(1);
   });
 });
