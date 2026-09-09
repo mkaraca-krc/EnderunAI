@@ -226,10 +226,14 @@ Gizli olan tek şey MATRİS GÖRÜNTÜSÜYDÜ.
 
 ### Yürürlükte olduklarının kanıtı
 
-    PermissionAuthorizationMiddleware.ResolveRequiredPermission:
-      7/7 anahtarı da döndürüyor (satır 162,167,181,190,196,204,242)
     açık RequirePermission niteliğinde:
       attendance.manage 6 uç · accounting.manage 5 uç · finance.manage 4 uç
+
+DÜZELTME (2026-09-09): burada ikinci bir dayanak daha yazılmıştı —
+"middleware yoldan türetmede 7/7 anahtarı döndürüyor". O cümle KOD
+OKUMASIYDI, ölçüm değil. Ölçünce gerçek uçların HİÇBİRİNİN türetmeye
+düşmediği görüldü (aşağıda). Sonuç değişmiyor: anahtarlar 15 ucun
+açıkça istemesiyle yürürlükte. Ama dayanağın biri yanlıştı.
 
 `accounting.manage`'i bir rolden kaldırmak isteyen kullanıcı onu
 ekranda BULAMIYORDU; middleware ise onu aramaya devam ediyordu.
@@ -262,6 +266,64 @@ izin 140 -> 147 · hücre 2100 -> 2205 · grant 577 -> 603.
 Uygulama davranışı DEĞİŞMEDİ; yalnız görünürlük.
 Muhafız: `PermissionMatrisiGorunurlukTests` (matrisi çağırarak ölçüyor).
 
+### Yoldan türetme — ölçülen tam tablo (2026-09-09)
+
+**ENVANTER, YANSIMAYLA.** `EndpointDataSource` çalışma anında
+numaralandırıldı, nitelik `GetOrderedMetadata` ile okundu —
+middleware'in izin ararken kullandığı ÇAĞRININ AYNISI. Grep DEĞİL.
+
+    toplam uç 824 · hepsi RouteEndpoint (kaçan tip yok)
+    niteliksiz api/ uç : 32   (ilk sayım 27'ydi; süzgeç `api/` arıyordu,
+                               hub rotaları `/api/hubs/...` diye geliyor
+                               ve KAÇMIŞLARDI — süzgecin kendisi de
+                               ölçülmesi gereken bir şeymiş)
+    bunlardan kaba anahtara türetilen : 0
+
+**"DALLAR ULAŞILAMAZ" DEĞİL.** Eşleşmeyen yollara YAZMA yöntemiyle
+gidildiğinde 7 kaba anahtardan 6'sı üretiliyor:
+
+    POST /api/muhasebe/olmayan-uc    -> 403  accounting.manage
+    POST /api/finans/olmayan-uc      -> 403  finance.manage
+    POST /api/hakedis/olmayan-uc     -> 403  hakedis.manage
+    POST /api/puantaj/olmayan-uc     -> 403  attendance.manage
+    POST /api/bordro/olmayan-uc      -> 403  payroll.manage
+    POST /api/satin-alma/olmayan-uc  -> 403  purchasing.manage
+
+Bu yollarda İŞLEYİCİ YOK — kapıdan sonra 404. Veriye ulaşılamıyor.
+
+**A4 — TÜRETME NULL DÖNÜNCE KAPI AÇIK (fail-open), ÖLÇÜLDÜ.**
+İzni SIFIR kullanıcı (katalog dışı boş rolle kurulmuş) gerçek uçlarda:
+
+    GET /api/user-preferences        -> 200  (veri döndü)
+    GET /api/auth/me                 -> 200
+    POZİTİF KONTROL, aynı kullanıcı:
+    GET /api/accounting-accounts     -> 403  requiredPermission: accounting.view
+
+**A5 — `UcKapisi`'NİN KÖR NOKTASI YOK, ÖLÇÜLDÜ.**
+İki geçici uç eklendi, ikisi de niteliksiz: biri middleware yol
+kalıbına DÜŞEN (`api/accounting/...`), biri DÜŞMEYEN (`api/zzz-...`).
+
+    UÇ KAPISI — UYGULAMA AÇILAMAZ.
+    BEYANSIZ UÇ (2):
+      - SondaKalibaDusen.Getir      (api/accounting/sonda-kaliba-dusen)
+      - SondaKalibaDusmeyen.Getir   (api/zzz-sonda-kaliba-dusmeyen)
+
+Kapı yol kalıplarına BAKMIYOR; her `api/` ucundan beyan istiyor.
+Uçlar silinince açılış geri geldi (kaldırmanın pozitif kontrolü).
+
+**ZİNCİR, ÜÇ HALKASI DA ÖLÇÜLMÜŞ:** middleware fail-open → ama
+`UcKapisi` beyansız uç bırakmıyor → dolayısıyla fail-open yalnız
+BİLEREK muaf edilmiş uçlara uygulanıyor.
+
+TEK HALKA OLDUĞU İÇİN KIRILGAN: kapı bir bayrakla kapatılırsa ya da
+açılış sırası değişirse fail-open sessizce geri gelir. İkinci halka
+(A7) sıraya alındı — henüz YOK.
+
+**A6 — `projects.manage` kalıbı DOĞRU.** Kalıp `"/api/projects"` /
+`"/api/project"` arıyor; gerçek rotalar da İngilizce
+(`api/projects/{id}/...`, `api/project-extra-works`). `/api/projeler`
+diye bir rota yok — 404 alması beklenen davranış, kalıp kusuru değil.
+
 ### Deny sızıntısı ARANDI, BULUNMADI
 
 Soru: `accounting.edit` üzerinde Deny olan bir kullanıcı, rolünde
@@ -270,12 +332,25 @@ Soru: `accounting.edit` üzerinde Deny olan bir kullanıcı, rolünde
     Deny VAR  -> 403          (Deny ısırıyor)
     Deny YOK  -> 403 değil    (pozitif kontrol: uç bu role açık)
 
-**Sızıntı yok.** Uç açık `[RequirePermission(AccountingEdit)]` taşıyor
-ve yoldan türetme yalnız nitelik YOKSA çalışıyor.
+**Sızıntı yok** — ama ilk turda bu YANLIŞ AYAKLA ölçülmüştü: seçilen uç
+`[RequirePermission(AccountingEdit)]` TAŞIYORDU, yani türetmenin hiç
+devreye girmediği durum ölçülüp sonuç genellenmişti. Yukarıdaki envanter
+doğru ayağı ölçüyor: türetmeye düşen 32 ucun 0'ı kaba anahtar üretiyor.
 `accounting.edit` 7 ucu, `accounting.manage` 5 FARKLI ucu koruyor;
 kesişmiyorlar.
 
 DÜRÜST SINIR: bir uçta ölçüldü, tüm uçlarda değil.
+
+### EKSİK/1'e yazıldı: izin taksonomisi sızıntısı
+
+Eşleşmeyen yollarda 404 yerine 403 dönülüyor ve yanıt gövdesi
+`requiredPermission` alanını taşıyor. Kimlikli bir kullanıcı, bir yol
+ailesinin hangi izni istediğini öğrenebiliyor:
+
+    POST /api/bordro/olmayan-uc -> 403 {"requiredPermission":"payroll.manage"}
+
+Veri sızmıyor; sızan şey YETKİ HARİTASI. Pilot öncesi engelleyici
+değil, sıraya alındı — DOKUNULMADI.
 
 ### Sırada: KABA-İZİN/1
 

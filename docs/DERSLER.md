@@ -80,6 +80,33 @@ değil, **indeks**.
   şeyin ne yaptığını sormadık.)*
   → `backend/EnderunAI.Api.Tests/PermissionMatrisiGorunurlukTests.cs`
 
+- **Bir SAYIMDAN bir SONUÇ çıkarma.** *(Bu satır Mehmet Bey'e ait,
+  kendi hatası için yazdı; ikimizin adına duruyor.)*
+
+  > "'Gerçek uçlardan hiçbiri düşmüyor' ÖLÇÜMDÜ; 'o kod hiç çalışmıyor'
+  > benim ÇIKARIMIMDI. Sayım ölçümdür; sayımın SEBEBİ hakkındaki cümle
+  > ölçüm değildir."
+
+  9 Eylül, A: 32 gerçek ucun 0'ı kaba anahtara türetiliyordu — doğru
+  sayım. Oradan "dallar ulaşılamaz" sonucu çıkarıldı. Ölçünce dalların
+  6'sının EŞLEŞMEYEN YOLLARDA çalıştığı görüldü.
+  → `backend/EnderunAI.Api.Tests/KabaAnahtarTuretmeEnvanteriTests.cs`
+
+- **Düzenlemeden önce desenin KAÇ YERE uyduğunu ölç.** "Bir yere
+  uyuyordur" varsayımı, ölçmeden yapılan her varsayım gibi, er geç
+  ilgisiz bir yeri de yakalar.
+  9 Eylül: `PermissionMatrixController`'da bir `SaveChanges` desenini
+  değiştirdim; desen İKİ yere uyuyordu ve ilgisiz bir eylemi (rolün
+  veri kapsamı güncellemesi) de değişmeze bağladım. Fark edip geri
+  aldım.
+
+- **İki kısıt çatışınca birini seçme — çatışmanın DOĞMADIĞI yapıya geç.**
+  9 Eylül: kilitlenme koruması işlem içindeki değişikliği görmeliydi
+  (aynı bağlantı şart) ama geri alırken ilgisiz bekleyen yazımları
+  düşürmemeliydi (ayrı bağlantı şart). İkisi aynı anda sağlanamıyordu.
+  Çözüm ikisinden birini seçmek değil, mutasyonu korumanın devrettiği
+  işin İÇİNE almak oldu — o zaman bekleyen ilgisiz yazım hiç olmuyor.
+
 ## Test ve rig
 
 - **`page.request` çerez taşımaz**; veri uçlarını sayfa içinden `fetch`
@@ -101,6 +128,15 @@ değil, **indeks**.
   durumda seçicinin onu bulduğunu göster** (Kural 48'in DOM tarafı)
   → `frontend/enderun-ai/tests/duzen/mesaj-paneli-acilir.spec.ts`
     (seçici pozitif kontrolü)
+
+- **VAR OLMAYAN BİR ADLA ARAYIP "YOK" SONUCUNA VARMA.** Aradığın adın
+  gerçekten var olduğunu önce göster.
+  · 8 Eylül: `.mesaj-baloncuk-panel` seçicisiyle arandı, "panel
+    açılmıyor" denildi; seçici bayattı, panel açılıyordu.
+  · 9 Eylül (A6): `/api/projeler/...` yoluna istek atıldı, 404 geldi ve
+    "kalıp tutmuyor" sanıldı. Gerçek rotalar İngilizce
+    (`api/projects/...`); kalıp DOĞRUYDU, yanlış olan test yoluydu.
+    Bu kez çıkarım yapılmadan önce yakalandı.
 
 - **Yeni sonda yazarken, çalışan bir sondanın kurulumundan BAŞLA;
   hatırladığını yazma.** 2026-09-09'da PN4 sondası sekiz tur döndü ve

@@ -10,6 +10,26 @@ namespace EnderunAI.Api.Security.UcKapisi;
 /// TEST İLE AYNI TARAYICI: burada da, testte de
 /// <see cref="UcKapisiDenetimi.BeyansizlariBul"/> çağrılır. İki ayrı
 /// tarayıcı yazılsaydı biri gevşetilip diğeri kalırdı.
+///
+/// ═══ BEYANSIZ UÇ ÇIRASI AYRICA YAZILMADI ═══
+///
+/// "Niteliksiz uç sayısı = 0" için ayrı bir çıra testi YOK, çünkü bu
+/// kapı onu AÇILIŞTA uyguluyor: beyansız uç varsa uygulama hiç
+/// başlamıyor. Ayrı çıra ikinci bir kapı olur ve iki kapı bir gün
+/// ayrışır (Kural 79).
+///
+/// ÖLÇÜLDÜ (2026-09-09, A5): iki geçici uç eklendi — biri
+/// `PermissionAuthorizationMiddleware`'in yol kalıplarına DÜŞEN
+/// (`api/accounting/...`), biri DÜŞMEYEN (`api/zzz-...`). İkisi de
+/// yakalandı: "BEYANSIZ UÇ (2)". Kapı yol kalıplarına BAKMIYOR, her
+/// `api/` ucundan beyan istiyor — kalıp dışı kör noktası YOK.
+/// Uçlar silinince açılış geri geldi (kaldırmanın pozitif kontrolü).
+///
+/// BU KAPI TEK HALKADIR. `ResolveRequiredPermission` null döndüğünde
+/// middleware isteği GEÇİRİYOR (fail-open, A4'te ölçüldü: izni sıfır
+/// kullanıcı `/api/user-preferences`ten 200 alıyor). Fail-open'ın
+/// zararsız olmasının tek sebebi bu kapının beyansız uç bırakmaması.
+/// İkinci halka (A7) sıraya alındı.
 /// </summary>
 public static class UcKapisiAcilisDenetimi
 {
