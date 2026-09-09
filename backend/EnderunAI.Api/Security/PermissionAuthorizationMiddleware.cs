@@ -50,11 +50,40 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             permissions = authorization.Permissions;
         }
 
-        if (roleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase))
-        {
-            await next(context);
-            return;
-        }
+        /*
+         * ADMIN KISAYOLU KALDIRILDI (YETKİ/3 · YT4, 2026-09-09).
+         *
+         * Buradaki blok `roleNames.Contains("Admin")` görünce BÜTÜN
+         * izin kontrollerini atlıyordu. Etkisi ölçüldü (YT1, çağırarak):
+         * Admin rolündeki bir kullanıcı `payment.plan.approve` iznine
+         * SAHİP OLMADAN ödeme planını onaylayabiliyordu.
+         *
+         * BU BİR FAZLADAN YETKİ DEĞİL, YAZILI BİR KARARIN ÇİĞNENMESİYDİ:
+         * `RoleCatalog.SensitiveKeys` "ödeme onayı Admin'e GİTMEZ (ÖP/1a
+         * · İ2)" diyor. Katalog bir şey diyordu, middleware başka bir şey
+         * yapıyordu ve kazanan middleware'di.
+         *
+         * KALDIRMANIN ETKİSİ ÖLÇÜLDÜ, VARSAYILMADI (2026-09-09, canlı):
+         *   · Admin'in eksik olduğu izin TAM OLARAK BİR: payment.plan.approve
+         *     (permissions 147, Admin grant 146)
+         *   · O izni isteyen uç TAM OLARAK BİR: OdemePlanlariController:180
+         *   · Admin rolündeki tek kullanıcı `mehmet` ve o izni GENEL MÜDÜR
+         *     rolünden zaten taşıyor
+         *   · Admin kullanıcısında Deny kaydı YOK
+         * Yani hiçbir kullanıcının fiilî erişimi değişmiyor; değişen tek
+         * şey, İ2'nin nihayet yürürlüğe girmesi.
+         *
+         * BU BLOK NEDEN "SAVUNMA" DEĞİL: bir kapı değil, kapıların
+         * ETRAFINDAN GEÇEN yoldu. Kaldırılması yüzeyi daraltıyor.
+         *
+         * İKİ DAVRANIŞ BİLEREK DEĞİŞTİ:
+         *   1. Admin'e konulan bir Deny kaydı artık ISIRIR (bugün Deny
+         *      yok; YETKİ/1'in Admin'e de uygulanması).
+         *   2. `sub` çözümlenemeyen bir jetonda roller yalnız talep
+         *      listesinden okunuyor ve izin kümesi boş kalıyor; böyle bir
+         *      jeton eskiden kısayoldan geçiyordu, artık 403 alır.
+         * İkisi de sıkılaştırma.
+         */
 
         // Asıl kaynak: action/controller üzerindeki [RequirePermission]
         // attribute'ları (birden fazlası varsa herhangi biri yeterli).

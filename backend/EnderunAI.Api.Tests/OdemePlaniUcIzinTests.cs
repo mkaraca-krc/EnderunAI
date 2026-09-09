@@ -109,35 +109,69 @@ public sealed class OdemePlaniUcIzinTests(DatabaseFixture fixture)
     }
 
     /// <summary>
-    /// YETKİ/3 · YT1 — ADMİN'İN GERÇEKTE NE ALDIĞI, ÇAĞIRARAK.
+    /// YETKİ/3 · YT4 — YALNIZ ADMİN ÖDEME ONAYLAYAMAZ (İ2 YÜRÜRLÜKTE).
     ///
-    /// ═══ BU TEST BİR KARAR DEĞİL, BİR ÖLÇÜMDÜR ═══
+    /// ═══ BU TESTİN İDDİASI BİR KEZ ÇEVRİLDİ, GEREKÇESİYLE ═══
     ///
-    /// Bu dosyanın kendi başlığı *"Ödeme onayı Genel Müdür'ün işi ve
-    /// Admin'e bile kendiliğinden gitmiyor"* diyor. Veritabanı da öyle
-    /// diyor: katalogda 147 izin var, Genel Müdür 147'sini taşıyor,
-    /// Admin 146'sını — eksik olan tam da `payment.plan.approve`.
+    /// Eski hâli `YalnizAdmin_KararUcunda_403_ALMIYOR` idi ve
+    /// `Assert.NotEqual(Forbidden, ...)` diyordu. O test bir KARAR
+    /// değil, bir DAVRANIŞ KAYDIYDI: `PermissionAuthorizationMiddleware`
+    /// Admin rolünü gören her isteği izin kontrolüne hiç sokmadan
+    /// geçiriyordu ve test bunu ÇAĞIRARAK yazıyordu (Kural 70).
     ///
-    /// Ama `PermissionAuthorizationMiddleware` Admin rolünü gören her
-    /// isteği izin kontrolüne HİÇ SOKMADAN geçiriyor. Yani niyet ile
-    /// gerçek ayrışmış olabilir ve bunu kod okuyarak değil ÇAĞIRARAK
-    /// bilmek gerekiyor (Kural 70).
+    /// Kendi yorumunda süresini ilan etmişti: *"Test bugünkü davranışı
+    /// yazıyor, doğru olduğunu iddia etmiyor... Karar verilince bu
+    /// testin iddiası da onunla birlikte değişir."*
     ///
-    /// Test bugünkü DAVRANIŞI yazıyor, doğru olduğunu iddia etmiyor.
-    /// Hangisinin doğru olduğu Mehmet'in kararı (YETKİ/3 · YT4):
-    ///   · Admin her izne sahip olmalıysa çözüm veritabanına o izni
-    ///     EKLEMEK — arayüzü ya da middleware'i değil.
-    ///   · Admin ayrıcalıklı olmamalıysa çözüm middleware'deki
-    ///     kısayolu kaldırmak.
-    /// Karar verilince bu testin iddiası da onunla birlikte değişir.
+    /// KARAR VERİLDİ (2026-09-09, YT4): Admin ayrıcalıklı olmamalı.
+    /// Middleware'deki kısayol kaldırıldı; `RoleCatalog`'un zaten
+    /// söylediği şey (ÖP/1a · İ2 — ödeme onayı Admin'e GİTMEZ) nihayet
+    /// yürürlüğe girdi. Katalog bir şey diyordu, middleware başka bir
+    /// şey yapıyordu; kazanan artık katalog.
+    ///
+    /// TEST GEVŞETİLMEDİ, SIKILAŞTIRILDI: iddia "403 almıyor"dan
+    /// "403 alıyor"a çevrildi. Aynı dosyadaki üç kontrol ayağı bunu
+    /// denetlenebilir kılıyor — uç hâlâ AYIRT EDİYOR, herkese 403
+    /// vermiyor.
     /// </summary>
     [Fact]
-    public async Task YalnizAdmin_KararUcunda_403_ALMIYOR()
+    public async Task YalnizAdmin_KararUcunda_403_ALIYOR()
     {
         var (_, satirId) = await PlanKurAsync();
 
         var client = await TestUserFactory.CreateClientWithRolesAsync(
             fixture, "op-yalniz-admin", ["Admin"]);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/odeme-planlari/satirlar/{satirId}/karar",
+            new { karar = (int)OdemeSatirKarari.Onaylandi, onaylananTutar = 10_000m });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    /// <summary>
+    /// DÖRDÜNCÜ AYAK — CANLIDA VAR OLAN TEK YAPILANDIRMA.
+    ///
+    /// Öteki üç ayak yalnız-Admin, izinsiz rol ve yalnız-Genel Müdür
+    /// durumlarını kapsıyor. CANLIDAKİ tek Admin kullanıcısı (`mehmet`)
+    /// İKİ ROLÜ BİRLİKTE taşıyor ve o birleşimi hiçbir ayak ölçmüyordu.
+    ///
+    /// NEDEN ÖNEMLİ: kısayolu kaldırma kanıtının bir maddesi "mehmet
+    /// Genel Müdür rolünden onaylamaya devam eder" idi. Bu bir ÇIKARIMDI,
+    /// ölçüm değil. Bu ayak onu ölçüme çeviriyor.
+    ///
+    /// VE YARIN İÇİN: rol birleştirme mantığı (birden fazla rolün izin
+    /// kümelerinin birleşimi) bir gün değişirse, uyaran tek şey bu ayak
+    /// olur. Öteki üçü tek rollü kullanıcılarla koştuğu için o değişimi
+    /// göremez.
+    /// </summary>
+    [Fact]
+    public async Task AdminVeGenelMudur_BirlikteKararUcunda_403_ALMAZ()
+    {
+        var (_, satirId) = await PlanKurAsync();
+
+        var client = await TestUserFactory.CreateClientWithRolesAsync(
+            fixture, "op-admin-gm", ["Admin", "Genel Müdür"]);
 
         var response = await client.PostAsJsonAsync(
             $"/api/odeme-planlari/satirlar/{satirId}/karar",
@@ -152,7 +186,12 @@ public sealed class OdemePlaniUcIzinTests(DatabaseFixture fixture)
     /// Yukarıdaki test tek başına "uç zaten kimseye 403 vermiyor"
     /// durumunda da yeşil kalırdı. Bu ayak, aynı uç aynı gövdeyle
     /// izinsiz bir role GERÇEKTEN 403 veriyor mu diye soruyor.
-    /// İkisi birlikte, Admin'in ayrıcalıklı olduğunu gösteriyor.
+    ///
+    /// KISAYOL KALKTIKTAN SONRA ROLÜ DEĞİŞTİ: eskiden "Admin
+    /// ayrıcalıklı" iddiasının karşıt ayağıydı; şimdi "uç herkese 403
+    /// vermiyor, AYIRT EDİYOR" iddiasının ayağı. Yalnız-Admin'in 403
+    /// alması tek başına anlamsız olurdu — uç tamamen kırılmış olsaydı
+    /// da o test yeşil verirdi (Kural 48).
     /// </summary>
     [Fact]
     public async Task AyniUc_IzinsizRole_403_Veriyor()

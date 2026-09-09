@@ -123,6 +123,58 @@ görünen alanda kalıyor, ölçüm gerçek tarayıcıyla yapıldı.
 **Neden KISMEN:** yalnız mesajlaşma ekranı ölçüldü. Diğer ekranlar
 için telefon çözünürlüğünde ölçüm YAPILMADI.
 
+## Admin ayrıcalığı — YETKİ/3 · YT4 (2026-09-09)
+
+`PermissionAuthorizationMiddleware` içinde bir kısayol vardı:
+`roleNames.Contains("Admin")` görünce BÜTÜN izin kontrollerini
+atlıyordu. Kaldırıldı.
+
+**Bu bir "fazladan yetki" değildi, YAZILI BİR KARARIN ÇİĞNENMESİYDİ.**
+`RoleCatalog.SensitiveKeys` "ödeme onayı Admin'e GİTMEZ (ÖP/1a · İ2)"
+diyordu; middleware "Admin her şeyi yapar" diyordu ve kazanan
+middleware'di. İki yerde iki ayrı karar, hangisinin kazandığı hiçbir
+yerde yazılı değildi.
+
+### Kaldırmadan önce ölçülenler (2026-09-09 15:37 UTC)
+
+    kod: PermissionCatalog.Keys      147
+    vt : permissions                 147   (kod ile birebir)
+    vt : Admin rolünün grant sayısı  146
+    fark                               1 -> payment.plan.approve
+
+    o izni isteyen uç : TEK — OdemePlanlariController.cs:180
+    Admin rolündeki kullanıcı : TEK — mehmet
+    mehmet'in rolleri : Admin + Genel Müdür
+    payment.plan.approve'u taşıyan rol : Genel Müdür
+    mehmet'in Deny kaydı : 0
+
+Middleware kısayolun ötesinde YALNIZ izin kontrolü yapıyor; hesap-aktif
+kontrolü kısayoldan ÖNCE geliyor ve atlanmıyordu. Veri kapsamı, üyelik
+ve mesai kontrolleri başka katmanlarda.
+
+### DAVRANIŞ DEĞİŞİKLİĞİ — altı ay sonra okuyan için
+
+**Adım 3'ten sonra, YALNIZ Admin rolü verilen bir kullanıcı ödeme planı
+onaylayamaz** (`payment.plan.approve` Genel Müdür'de). **Bu kasıtlıdır —
+İ2 kararı.** Bugün `mehmet` etkilenmiyor çünkü her iki rolü de taşıyor.
+
+Yeni bir Admin hesabı açıp "neden onaylayamıyorum" diye soran biri
+olursa cevabı budur: eksiklik değil, karar. Onay yetkisi isteniyorsa
+Genel Müdür rolü verilir ya da İ2 kararı açıkça gözden geçirilir.
+
+İki davranış daha bilerek değişti:
+1. Admin'e konulan bir **Deny kaydı artık ısırır** (bugün Deny yok).
+2. `sub` çözümlenemeyen bir jeton eskiden kısayoldan geçiyordu;
+   artık 403 alır.
+
+### Henüz YAZILAMAYAN cümle
+
+"Admin artık ayrıcalıklı değildir; matriste Admin'den kaldırılan bir
+izin gerçekten kalkar." Bu cümlenin İKİNCİ yarısı henüz doğru değil:
+`PermissionMatrixController:101` Admin sütununun değiştirilmesini
+reddediyor. Adım 5 (matrisi Admin sütununa açmak) bitmeden bu cümle
+yazılmayacak — yarısı doğru bir cümle, yanlış cümleden kötüdür.
+
 ## K6 — Yedek kanıtlı
 
 **Yeşil için gereken ölçüm:** yedeğin GERİ YÜKLENEREK doğrulanması —
