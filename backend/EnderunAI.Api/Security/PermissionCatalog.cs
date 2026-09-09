@@ -426,7 +426,7 @@ public static class PermissionCatalog
         new(Keys.CompaniesManage, "Organizasyon", "Şirket ve şube yönetimi", "Şirket ve şube kaydı oluşturur ve günceller."),
 
         new(Keys.ProjectsView, "Projeler", "Projeleri görüntüleme", "Proje kayıtlarını görüntüler."),
-        new(Keys.ProjectsManage, "Projeler", "Proje yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı proje yönetim izni.", KullanimdanKalkti: true),
+        new(Keys.ProjectsManage, "Projeler", "Proje yönetimi (kapsayıcı)", "KAPSAYICI İZİN — tek başına şu ince izinlerin tamamını verir: projects.create · projects.edit · projects.delete · projects.view. Aynı yetki İKİ YOLDAN verilebilir; birini kaldırmak yetmez."),
         new(Keys.ProjectsCreate, "Projeler", "Proje oluşturma", "Yeni proje kaydı oluşturur."),
         new(Keys.ProjectsEdit, "Projeler", "Proje düzenleme", "Mevcut proje kaydını günceller."),
         new(Keys.ProjectsDelete, "Projeler", "Proje silme/arşivleme",
@@ -450,7 +450,7 @@ public static class PermissionCatalog
         new(Keys.EmployerPortalDelete, "İşveren Portalı", "Portal bağlantısı iptali", "İşveren portalı bağlantısını iptal eder."),
 
         new(Keys.PurchasingView, "Satın Alma", "Satın almayı görüntüleme (eski)", "Geçiş dönemi için korunan geniş kapsamlı görüntüleme izni."),
-        new(Keys.PurchasingManage, "Satın Alma", "Satın alma yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı yönetim izni.", KullanimdanKalkti: true),
+        new(Keys.PurchasingManage, "Satın Alma", "Satın alma yönetimi (kapsayıcı)", "KAPSAYICI İZİN — tek başına şu ince izinlerin tamamını verir: purchasing.view/approve ve talep · RFQ · sipariş · mal kabul altındaki tüm ince izinler. Aynı yetki İKİ YOLDAN verilebilir; birini kaldırmak yetmez."),
         new(Keys.PurchasingApprove, "Satın Alma", "Satın alma onayı (eski)", "Geçiş dönemi için korunan geniş kapsamlı onay izni."),
 
         new(Keys.PurchasingRequestsView, "Satın Alma - Talep", "Talepleri görüntüleme", "Satın alma taleplerini görüntüler."),
@@ -490,9 +490,9 @@ public static class PermissionCatalog
         new(Keys.PersonnelDelete, "Personel", "Personel silme", "Personel kaydını siler."),
 
         new(Keys.AttendanceView, "İnsan Kaynakları", "Puantajı görüntüleme (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
-        new(Keys.AttendanceManage, "İnsan Kaynakları", "Puantaj yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin.", KullanimdanKalkti: true),
+        new(Keys.AttendanceManage, "İnsan Kaynakları", "Puantaj yönetimi (kapsayıcı)", "KAPSAYICI İZİN — tek başına şu ince izinlerin tamamını verir: attendance.view · attendance.payroll.view/create/edit/delete/approve. Aynı yetki İKİ YOLDAN verilebilir; birini kaldırmak yetmez."),
         new(Keys.PayrollView, "İnsan Kaynakları", "Ücret ve bordroyu görüntüleme (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin."),
-        new(Keys.PayrollManage, "İnsan Kaynakları", "Ücret ve bordro yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin.", KullanimdanKalkti: true),
+        new(Keys.PayrollManage, "İnsan Kaynakları", "Ücret ve bordro yönetimi (kapsayıcı)", "KAPSAYICI İZİN — tek başına şu ince izinlerin tamamını verir: payroll.view. Aynı yetki İKİ YOLDAN verilebilir; birini kaldırmak yetmez."),
 
         new(Keys.AttendancePayrollView, "Puantaj-Maaş", "Görüntüleme", "Puantaj, izin, fazla mesai, maaş ve bordro kayıtlarını görüntüler."),
         new(Keys.AttendancePayrollCreate, "Puantaj-Maaş", "Oluşturma", "Puantaj, izin, fazla mesai, maaş ve bordro kaydı oluşturur."),
@@ -511,7 +511,7 @@ public static class PermissionCatalog
         new(Keys.SubcontractorApprove, "Taşeron", "Taşeron onayı", "Taşeron hakedişini ve avansını onaylar."),
 
         new(Keys.HakedisView, "Hakediş", "Hakedişi görüntüleme", "Hakediş, metraj ve fiyat farkı kayıtlarını görüntüler."),
-        new(Keys.HakedisManage, "Hakediş", "Hakediş yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin.", KullanimdanKalkti: true),
+        new(Keys.HakedisManage, "Hakediş", "Hakediş yönetimi (kapsayıcı)", "KAPSAYICI İZİN — tek başına şu ince izinlerin tamamını verir: hakedis.view/create/edit/delete/approve. Aynı yetki İKİ YOLDAN verilebilir; birini kaldırmak yetmez."),
         new(Keys.HakedisApprove, "Hakediş", "Hakediş onayı", "Hakediş ve fiyat farkı kayıtlarını onaylar."),
         new(Keys.HakedisCreate, "Hakediş", "Hakediş oluşturma", "Yeni hakediş, metraj veya fiyat farkı kaydı oluşturur."),
         new(Keys.HakedisEdit, "Hakediş", "Hakediş düzenleme", "Taslak hakediş, metraj veya fiyat farkı kaydını günceller."),
@@ -520,7 +520,7 @@ public static class PermissionCatalog
         new(Keys.FinanceView, "Finans", "Finansı görüntüleme", "Finans merkezi ve ödeme verilerini görüntüler."),
         new(Keys.BankAccountView, "Banka Hesapları", "Banka hesaplarını görüntüleme", "Şirket banka hesaplarını ve maskeli IBAN'ı görüntüler."),
         new(Keys.ChartImport, "Hesap Planı Aktarımı", "Hesap planını dosyadan aktarma", "Dosyadan toplu hesap ekler. Mevcut hesapları GÜNCELLEMEZ, eksik üst hesap OLUŞTURMAZ."),
-        new(Keys.FinanceManage, "Finans", "Finans yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin.", KullanimdanKalkti: true),
+        new(Keys.FinanceManage, "Finans", "Finans yönetimi (kapsayıcı)", "KAPSAYICI İZİN — tek başına şu ince izinlerin tamamını verir: finance.view/create/edit/delete/approve. Aynı yetki İKİ YOLDAN verilebilir; birini kaldırmak yetmez."),
         new(Keys.FinanceApprove, "Finans", "Finans onayı", "Ödeme ve finans işlemlerini onaylar."),
         new(Keys.FinanceCreate, "Finans", "Finans kaydı oluşturma", "Tahsilat, ödeme ve finans kaydı oluşturur."),
         new(Keys.CashFlowView, "Finans", "Nakit akış projeksiyonu", "Likidite takvimini görüntüler; bordro çıkışı elden dahil tam tutarla görünür."),
@@ -552,7 +552,7 @@ public static class PermissionCatalog
         new(Keys.CurrentAccountsApprove, "Cari", "Cari kart onayı", "Onay bekleyen cari kartı onaylar."),
 
         new(Keys.AccountingView, "Muhasebe", "Muhasebeyi görüntüleme", "Hesap planı, fiş ve defterleri görüntüler."),
-        new(Keys.AccountingManage, "Muhasebe", "Muhasebe yönetimi (eski)", "Geçiş dönemi için korunan geniş kapsamlı izin.", KullanimdanKalkti: true),
+        new(Keys.AccountingManage, "Muhasebe", "Muhasebe yönetimi (kapsayıcı)", "KAPSAYICI İZİN — tek başına şu ince izinlerin tamamını verir: accounting.view/create/edit/delete/approve. Aynı yetki İKİ YOLDAN verilebilir; birini kaldırmak yetmez."),
         new(Keys.AccountingCreate, "Muhasebe", "Fiş oluşturma", "Yeni muhasebe fişi (taslak) oluşturur."),
         new(Keys.AccountingEdit, "Muhasebe", "Fiş düzenleme", "Taslak muhasebe fişini günceller."),
         new(Keys.AccountingDelete, "Muhasebe", "Fiş silme", "Muhasebe fişini siler."),

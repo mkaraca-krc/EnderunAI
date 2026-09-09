@@ -66,17 +66,37 @@ public sealed class PermissionMatrixController(
         return Ok(new
         {
             /*
-             * KULLANIMDAN KALKMIŞ İZİNLER MATRİSTE GÖSTERİLMİYOR
-             * (KARAR 3b). Kayıtları SİLİNMİYOR — yalnız ekrandan
-             * çıkarılıyor.
+             * GİZLEME YETENEĞİ DURUYOR AMA BUGÜN HİÇBİR İZİN GİZLİ
+             * DEĞİL (GÖRÜNÜRLÜK/1, 2026-09-09).
              *
-             * Ölçüldü: bu 7 anahtarın veritabanında 26 rol kaydı ve
-             * 17 kişisel kaydı var (5'i açıkça izin veren). Silmek
-             * sessizce yetki değiştirirdi; göstermek ise hiçbir şeyi
-             * korumayan satırlar için YANLIŞ GÜVEN veriyordu.
+             * ═══ ÖNCEKİ GEREKÇE YANLIŞTI, ÖLÇÜLDÜ ═══
              *
-             * Kayıtlar duruyor: `security_audit_events` ve
-             * `role_permissions` üzerinden hâlâ ölçülebilirler.
+             * Burada eskiden şu yazıyordu: "göstermek, HİÇBİR ŞEYİ
+             * KORUMAYAN satırlar için yanlış güven veriyordu". Bu cümle
+             * ölçülmemişti ve YANLIŞTI. Gizlenen 7 anahtarın hepsi
+             * YÜRÜRLÜKTEYDİ:
+             *
+             *   · `PermissionAuthorizationMiddleware.ResolveRequiredPermission`
+             *     yoldan türetmede YEDİSİNİ DE döndürüyor (satır 162-242)
+             *   · ayrıca açık `RequirePermission` niteliğinde:
+             *     attendance.manage 6 uç · accounting.manage 5 uç ·
+             *     finance.manage 4 uç
+             *
+             * Yani 9 role verilmiş, fiilen uygulanan ve matriste
+             * GÖRÜNMEYEN izinlerdi. `accounting.manage`'i bir rolden
+             * kaldırmak isteyen kullanıcı onu ekranda BULAMIYORDU; ama
+             * middleware onu istemeye devam ediyordu.
+             *
+             * "Kullanımdan kalktı" işareti, UYGULAMADAN kalktı anlamına
+             * gelmiyordu — ve bu ayrım aylarca yapılmadı.
+             *
+             * ═══ NEDEN SÜZGEÇ SİLİNMEDİ ═══
+             *
+             * Gerçekten emekliye ayrılmış bir izni gizlemek meşru bir
+             * yetenek. Silinen şey yanlış İNANÇ, mekanizma değil.
+             * `PermissionMatrisiGorunurlukTests` bugünkü durumu tutuyor:
+             * bir izni gizlemek isteyen, o testi de değiştirmek ve
+             * gizlediği şeyin hiçbir uçta aranmadığını GÖSTERMEK zorunda.
              */
             permissions = PermissionCatalog.Permissions
                 .Where(item => !item.KullanimdanKalkti)
