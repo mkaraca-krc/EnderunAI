@@ -13,7 +13,7 @@ Son güncelleme: 2026-09-08
 
 | # | madde | durum |
 |---|---|---|
-| K1 | Yetki ısırıyor | KISMEN |
+| K1 | Yetki ısırıyor | **YEŞİL** |
 | K2 | Hassas ekranlar izne bağlı | KISMEN |
 | K3 | Yayın güvenilir | KISMEN |
 | K4 | Kırık ekran yok | YEŞİL |
@@ -59,9 +59,28 @@ ekranı GERÇEKTEN açamadığı, kod okuyarak değil ÇAĞIRARAK gösterilmeli
 (`/dashboard` ve `/muhasebe` kısıtlıyken açılmıyor). Kalıcılık ayağı
 ölçüldü: kaldırma kaydı tablosu var, tohumlayıcı ona bakıyor.
 
-**Neden KISMEN:** Mehmet kendi doğrulamasını yapmadı. Ayrıca
-KATALOG/1 açık — katalogdan çıkarılan bir izin veritabanında kalıyor
-(AC1). Fiilî açık kapı bugün yok ama onu kapatan şey tesadüf.
+**YEŞİL (2026-09-09).** Üç yön de kapandı ve üçü de ölçüldü:
+
+| yön | paket | kanıt |
+|---|---|---|
+| kullanıcı Deny çalışıyor | YETKİ/1 | rig'de çağırarak |
+| rol kaldırması kalıcı | SEED/1b | yeniden başlatmada sağ çıkıyor |
+| katalog kaldırması ULAŞIYOR | KATALOG/1 | canlıda uygulandı |
+
+KATALOG/1 yayını (`70bb6e96`, 2026-09-09) `projects.delete` iznini
+iki rolden kaldırdı ve ölçüm İKİ BAĞIMSIZ KAYNAKTAN uyuştu:
+
+    sunucu SQL (ben)     : role_permissions 605 -> 603
+    tarayıcı (Mehmet Bey): toplam grant     579 -> 577
+    projects.delete      : 4 rol -> 2 rol (Admin, Genel Müdür)
+
+İki sayı arasındaki 26 fark, 7 gizli ölü iznin rol kayıtları; yayından
+önce ayrıca uzlaştırılmıştı. Denetim izi de düştü:
+`security_audit_events` içinde `RolePermission/Deleted` 6 -> 8.
+
+Uzlaştırıcının iki yönü de rig'de sondayla ölçüldü (U4): katalogda
+olmayan çift SİLİNİYOR, elle ekleme kaydı olan çift KALIYOR — iki satır
+arasındaki tek fark o kayıttı.
 
 ## K2 — Hassas ekranlar izne bağlı
 

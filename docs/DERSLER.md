@@ -75,6 +75,25 @@ değil, **indeks**.
   → `frontend/enderun-ai/tests/duzen/mesaj-paneli-acilir.spec.ts`
     (seçici pozitif kontrolü)
 
+- **Yeni sonda yazarken, çalışan bir sondanın kurulumundan BAŞLA;
+  hatırladığını yazma.** 2026-09-09'da PN4 sondası sekiz tur döndü ve
+  altısı ÖLÇEMEDİ ile bitti: giriş adımını, eşik değerini, panelin
+  iplik davranışını ve tam sayfanın liste davranışını dördünü de kodda
+  okuyarak değil DÜŞEREK öğrendim. Dördü de yanı başımdaki çalışan
+  sondada ya da kaynakta yazılıydı
+  → `frontend/enderun-ai/tests/duzen/mesaj-paneli-acilir.spec.ts`
+    (`girisYap`, `tercihleriKur`, `paneliAc` yorumları)
+
+- **Bir TARAMA, ölçemediği noktada durup ötekileri kaybetmemeli.**
+  Nokta başına sonuç ver: ölçülen sayıyla, ölçülemeyen sebebiyle.
+  Aynı koşuda hem bulgu hem ÖLÇEMEDİ olabilir
+  → `frontend/enderun-ai/tests/duzen/mesaj-paneli-tasma.spec.ts`
+
+- **Değiştirdiğini sandığın değişkeni ÖLÇ.** "2 mesajla koştum" dedim,
+  konuşmada 41 mesaj vardı ve yanlış sonuç raporladım. Sayımı sondaya
+  ekleyince çıktı
+  → aynı dosya (`konuşmada ÖLÇÜLEN N mesaj` başlığı)
+
 ## Kabuk ve süreç
 
 - **`pkill -f <desen>` kendi kabuğunu da öldürür**; `surec-durdur.sh`
