@@ -53,6 +53,23 @@ değil, **indeks**.
   yazmadan önce bunları ayır
   → `deploy/scripts/duzen-testi.sh` (publish adımının ÖLÇEMEDİ kodu)
 
+- **Tek ölçüm noktasından türetilen formül hipotez değildir; o noktanın
+  başka bir yazılışıdır.** Ayırt edici güç ancak TÜRETİM KÜMESİNİN
+  DIŞINDAKİ noktalarda ölçülür.
+  *(Bu satır Mehmet Bey'e ait — kendi hipotezi için yazdı.)*
+
+  9 Eylül, PN4: h=800'de ölçülen 80 px taşmadan türetilen
+  `max(0, 100vh - 45rem)` formülü yalnız h=800'de tuttu; 700/900/1000
+  çürüttü. AYNI TURDA benim `max-height:70vh` alternatifim de tek
+  noktadan türetilmişti ve hiçbir noktada tutmadı. İki hipotez, aynı
+  hata: türetildiği yerde "doğrulanmış" görünmek.
+
+  Kardeş ders, aynı sayfada: ölçemediğin noktayı "ötekiler gibidir"
+  diye geçme. İkisi de tek şeyi söylüyor — **ölçülmemiş nokta,
+  ölçülmüş noktanın kopyası değildir.**
+  → `frontend/enderun-ai/tests/duzen/mesaj-paneli-tasma.spec.ts`
+    (`PN4_YUKSEKLIK=1` — türetim kümesinin dışındaki üç nokta)
+
 ## Test ve rig
 
 - **`page.request` çerez taşımaz**; veri uçlarını sayfa içinden `fetch`
