@@ -34,11 +34,29 @@ public static class TestUserFactory
         Guid companyId) =>
         CreateClientWithRolesAsync(fixture, usernameSuffix, roleNames, companyId);
 
+    /// <summary>ORTAK PAROLA — sondalar da bunu kullanır.</summary>
+    public const string Parola = "TestRole!2026Secure";
+
+    /// <summary>
+    /// Kullanıcı + istemci, KİMLİĞİYLE BİRLİKTE.
+    ///
+    /// NEDEN AYRI DÖNÜŞ: muafiyet sondaları "A'nın kaydını B görebiliyor
+    /// mu" diye soruyor ve bunun için A'nın kimliğini bilmek zorundalar.
+    /// Sondanın kendi kullanıcı üreteci olsaydı iki üreteç bir gün
+    /// ayrışırdı; tek kaynak burada kalıyor.
+    /// </summary>
+    public sealed record TestKullanicisi(HttpClient Istemci, Guid Id, string KullaniciAdi);
+
     public static async Task<HttpClient> CreateClientWithRolesAsync(
+        DatabaseFixture fixture, string usernameSuffix, string[] roleNames,
+        Guid? scopedCompanyId = null) =>
+        (await KullaniciKurAsync(fixture, usernameSuffix, roleNames, scopedCompanyId)).Istemci;
+
+    public static async Task<TestKullanicisi> KullaniciKurAsync(
         DatabaseFixture fixture, string usernameSuffix, string[] roleNames,
         Guid? scopedCompanyId = null)
     {
-        const string password = "TestRole!2026Secure";
+        const string password = Parola;
 
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -96,6 +114,6 @@ public static class TestUserFactory
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", token);
 
-        return client;
+        return new TestKullanicisi(client, user.Id, username);
     }
 }

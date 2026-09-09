@@ -170,14 +170,39 @@ public sealed class NotificationsController(
         if (notification is null)
             return NotFound(new { message = "Bildirim bulunamadı." });
 
-        // GÖREMEDİĞİNİ DEĞİŞTİREMEZ: yetkisi olmayan kullanıcı
-        // listede görmediği bir bildirimi kapatamamalı.
+        if (currentUser.UserId is not Guid cagiranId)
+            return Unauthorized();
+
+        /*
+         * KANONİK KAPI (BİLDİRİM/1).
+         *
+         * Burada eskiden yalnız `RequiredPermission` kontrol ediliyordu.
+         * Kişisel bildirimde o alan boş olduğu için geriye HİÇBİR
+         * kontrol kalmıyordu ve giriş yapmış herhangi bir kullanıcı,
+         * kimliğini bildiği bir kişisel bildirimi başkası adına
+         * okundu/kapalı/ertelenmiş yapabiliyordu.
+         *
+         * İki koşul VE ile bağlı; kural `BildirimErisimKurali`'nda
+         * tek yerde duruyor ve `MarkPersonalRead` da aynı yerden
+         * geçiyor — iki ayrı kilit kalmadı.
+         */
         var permissions = await ResolvePermissionsAsync(cancellationToken);
 
-        if (notification.RequiredPermission is string required &&
-            !permissions.Contains(required))
+        switch (BildirimErisimKurali.Degerlendir(
+                    notification.TargetUserId,
+                    notification.RequiredPermission,
+                    cagiranId,
+                    permissions))
         {
-            return Forbid();
+            // VARLIĞI AÇIKLAMAZ: başkasının kişisel bildirimi, o kimlik
+            // hiç yokmuş gibi cevaplanır.
+            case BildirimErisimKurali.Sonuc.SahibiDegil:
+                return NotFound(new { message = "Bildirim bulunamadı." });
+
+            // GÖREMEDİĞİNİ DEĞİŞTİREMEZ: yetkisi olmayan kullanıcı
+            // listede görmediği bir bildirimi kapatamamalı.
+            case BildirimErisimKurali.Sonuc.IzinYok:
+                return Forbid();
         }
 
         var now = DateTime.UtcNow;
@@ -284,13 +309,41 @@ public sealed class NotificationsController(
         if (currentUser.UserId is not Guid userId)
             return Unauthorized();
 
-        // KENDİ BİLDİRİMİ: başkasının satırını okundu işaretleyemez.
+        /*
+         * KENDİ BİLDİRİMİ: başkasının satırını okundu işaretleyemez.
+         *
+         * KİLİT SORGUDAN KURALA TAŞINDI (BİLDİRİM/1 BN2). Buradaki
+         * `x.UserId == userId` süzgeci DOĞRUYDU ve sonda onu yeşil
+         * ölçtü — ama kardeş uçlardaki kilit YOKTU ve iki farklı yerde
+         * duran iki kilit, birinin unutulduğunu göstermez. Artık ikisi
+         * de `BildirimErisimKurali`'ndan geçiyor: kural değişirse iki
+         * yol da birden değişir.
+         *
+         * İZİN KOŞULU DA EKLENDİ: alıcı satırı üzerinden gidilse bile
+         * bağlı bildirimin `RequiredPermission` alanı varsa aranıyor.
+         * Eskiden bu yol izni hiç sormuyordu.
+         */
         var alici = await db.NotificationRecipients
-            .SingleOrDefaultAsync(
-                x => x.Id == recipientId && x.UserId == userId, cancellationToken);
+            .Include(x => x.Notification)
+            .SingleOrDefaultAsync(x => x.Id == recipientId, cancellationToken);
 
         if (alici is null)
             return NotFound(new { message = "Bildirim bulunamadı." });
+
+        var izinler = await ResolvePermissionsAsync(cancellationToken);
+
+        switch (BildirimErisimKurali.Degerlendir(
+                    alici.UserId,
+                    alici.Notification?.RequiredPermission,
+                    userId,
+                    izinler))
+        {
+            case BildirimErisimKurali.Sonuc.SahibiDegil:
+                return NotFound(new { message = "Bildirim bulunamadı." });
+
+            case BildirimErisimKurali.Sonuc.IzinYok:
+                return Forbid();
+        }
 
         alici.ReadAtUtc ??= DateTime.UtcNow;
         alici.UpdatedAtUtc = DateTime.UtcNow;
