@@ -145,7 +145,21 @@ export default function MesajPaneli({
     baslangicKonusmaId ?? null
   );
   const [mesajlar, setMesajlar] = useState<MesajOzeti[]>([]);
-  const [mesajYukleniyor, setMesajYukleniyor] = useState(false);
+  /*
+   * AÇILIŞTA SEÇİLİ KONUŞMA VARSA BAŞLANGIÇ DURUMU "YÜKLENİYOR".
+   *
+   * `false` ile başlayıp efektin ilk satırında `true` yazmak, olmayan
+   * bir geçişi anlatıyordu: panel o konuşmayla açılıyorsa ilk kareden
+   * itibaren yükleniyor durumdadır. Doğru ifade başlangıç değeridir.
+   *
+   * Yan kazanç: efekt artık SENKRON durum yazmıyor —
+   * `react-hooks/set-state-in-effect` çırası ilerlemiyor. Çırayı
+   * kaydırmamak için yapılan bir numara değil; kaydırmayı gereksiz
+   * kılan doğru ifade.
+   */
+  const [mesajYukleniyor, setMesajYukleniyor] = useState(
+    baslangicKonusmaId != null
+  );
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -243,7 +257,17 @@ export default function MesajPaneli({
    */
   async function mesajlariYukle(konusmaId: string) {
     setMesajYukleniyor(true);
+    await mesajlariGetir(konusmaId);
+  }
 
+  /*
+   * SAF GETİRME — YÜKLENİYOR BAYRAĞINI AÇMAZ, YALNIZ KAPATIR.
+   *
+   * Bayrağı açmak ÇAĞIRANIN işi: kullanıcı seçiminde bir geçiş var
+   * (`mesajlariYukle` açar), açılışta ise geçiş yok, başlangıç durumu
+   * zaten "yükleniyor".
+   */
+  async function mesajlariGetir(konusmaId: string) {
     try {
       const yanit = await messagingService.mesajlar(konusmaId);
 
@@ -325,7 +349,8 @@ export default function MesajPaneli({
     if (!secili) return;
 
     acilistaYuklendi.current = true;
-    void mesajlariYukle(secili);
+    // BAYRAK AÇILMIYOR: başlangıç durumu zaten "yükleniyor" (satır ~150).
+    void mesajlariGetir(secili);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secili]);
 
