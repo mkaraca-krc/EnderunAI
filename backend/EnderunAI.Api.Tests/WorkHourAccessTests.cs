@@ -377,4 +377,67 @@ public sealed class WorkHourAccessTests(DatabaseFixture fixture)
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(payload.GetProperty("user").GetProperty("workHoursExempt").GetBoolean());
     }
+
+    /// <summary>
+    /// ÇIKIŞ ÇAĞRISI MESAİ REDDİ DİYE KAYDA GEÇMEZ (Kural 80).
+    ///
+    /// ÖLÇÜLDÜ (rig, 2026-09-10): mesaisi biten kullanıcının çıkışında
+    /// Next rotası arka uca `POST /api/auth/logout` gönderiyor; mesai ara
+    /// katmanı onu 401 ile reddedip denetime `WorkHoursSessionRejected`
+    /// yazıyordu. İz, OLMAYAN bir olayı anlatıyordu: kullanıcı oturumunu
+    /// kapatıyordu, mesai kapısına takılmıyordu.
+    ///
+    /// KIRMIZIYA DÖNERSE: her mesai sonu çıkışı denetimde ikinci, sahte
+    /// bir mesai reddi olarak görünür ve "kaç kişi mesai dışında
+    /// çalışmaya çalıştı" sayısı şişer.
+    /// </summary>
+    [Fact]
+    public async Task CikisUcu_MesaiDisindaReddedilmez_VeSahteRetYazilmaz()
+    {
+        var (username, password, userId, _) = await CreateNoWindowUserAsync("logout-exempt");
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.TemporaryAccessGrants.Add(new TemporaryAccessGrant
+            {
+                UserId = userId,
+                GrantedByUserId = userId,
+                ExpiresAtUtc = DateTime.UtcNow.AddMinutes(10)
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var client = fixture.Factory.CreateClient();
+        var token = await AuthHelper.LoginAsync(client, username, password);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var grant = await db.TemporaryAccessGrants.SingleAsync(g => g.UserId == userId);
+            grant.ExpiresAtUtc = DateTime.UtcNow.AddMinutes(-1);
+            await db.SaveChangesAsync();
+        }
+
+        async Task<int> MesaiRedSayisi()
+        {
+            using var scope = fixture.Factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            return await db.SecurityAuditEvents.CountAsync(
+                e => e.ActorUserId == userId && e.Action == "WorkHoursSessionRejected");
+        }
+
+        // Pozitif kontrol: kapı bu kullanıcı için GERÇEKTEN kapalı ve
+        // reddi denetime yazıyor — aşağıdaki "yazılmadı" iddiası boş değil.
+        var me = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, me.StatusCode);
+        Assert.Equal(1, await MesaiRedSayisi());
+
+        var cikis = await client.PostAsync("/api/auth/logout", content: null);
+        var govde = await cikis.Content.ReadAsStringAsync();
+
+        Assert.DoesNotContain("outsideWorkHours", govde);
+        Assert.Equal(1, await MesaiRedSayisi());
+    }
 }

@@ -33,7 +33,11 @@ public sealed class WorkHourAccessMiddleware(RequestDelegate next)
             path.StartsWith("/api/swagger") ||
             path.StartsWith("/api/auth/login") ||
             path.StartsWith("/api/auth/access-requests") ||
-            path.StartsWith("/api/auth/work-hours-status"))
+            path.StartsWith("/api/auth/work-hours-status") ||
+            // Çıkış bir mesai ihlali DEĞİL: mesaisi biten kullanıcının
+            // çıkış çağrısı reddedilip denetime `WorkHoursSessionRejected`
+            // yazılıyordu — iz, olmayan bir olayı anlatıyordu (Kural 80).
+            path.StartsWith("/api/auth/logout"))
         {
             await next(context);
             return;
