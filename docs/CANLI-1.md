@@ -879,6 +879,38 @@ kararıyla ayrı iş, sıranın başında.
 - **(d) Ara tedbir önerisi (UYGULANMADI, karar Mehmet Bey'in):** bkz.
   aynı günkü rapor.
 
+### Karar 1 (smemis ara tedbiri) — ölçüm ve sonuç: DURUM B, oturum DÜŞÜRÜLMEDİ
+
+Mehmet Bey kararı tek soruya bağladı: smemis'ten ALINAN izin, jetondan
+okuyan altı yoldan birini kapsıyor mu?
+
+- **Alınan izin, yedekten ölçüldü** (denetim silmeleri görmediği için):
+  11:53 öncesi son yedek (`db_20260910_105140`, şifre çözümü diske
+  yazılmadan) ile canlı karşılaştırıldı — tarama sağlığı 84/84.
+  Değişen İKİ kayıt: `dashboard.view` üzerindeki Deny KALDIRILMIŞ (rol
+  veriyor → smemis dashboard'u KAZANDI) ve `approvals.view` üzerine Deny
+  EKLENMİŞ (rol zaten vermiyor → etkin değişiklik yok). Rol aynı.
+  **smemis'ten hiçbir izin alınmadı.**
+- **Çağırarak (eşdeğer):** smemis'in gerçek jetonu elde yok ve BASILMADI
+  (gerçek kişinin kimliğine bürünmek olurdu). Aynı izin durumu test
+  veritabanında birebir kuruldu (canlı Teknik Ofis 26 izni + önce/sonra
+  84 Deny); ÖNCE durumunda basılan jeton, SONRA durumunda basılanın
+  ALT KÜMESİ çıktı (eskide fazladan izin: yok; tazede fazladan:
+  `dashboard.view`). Altı yolun okuduğu girdi bu; KPI iki jetonla birebir
+  aynı. Yorum ucu ayağı AYIRT ETMEDİ (iki jetonla da 404 — var olmayan
+  varlıkta izinden önce dönüyor), kanıt sayılmadı.
+- **Sonuç:** Durum B. Eski jeton (11:51:57) bugünkü durumdan DAHA AZ
+  izin taşıyor — güvenli yönde eski. Jeton **23:51 UTC (02:51 İstanbul,
+  11 Eylül)** sönüyor; o saate kadar da mesai kapısı (pencere 09:00)
+  bütün isteklerini kesiyor.
+
+**Ölçüm sırasında düşülen tuzak:** `vt-sorgu.sh` sonucu 50 satırda
+kesiyor ve bunu kendi başlığında "⚠ BU ÇIKTIDAN SONUÇ ÇIKARMA" diye
+söylüyor. Başlık satırlarını `grep -v "^\[vt"` ile atıyordum; ilk
+karşılaştırma "34 kayıt kaldırılmış" gösterdi — aracın kesmesiydi.
+`count(*)` ile 84 görülünce yakalandı, `VT_SORGU_SINIRI` ile yeniden
+yapıldı.
+
 ### Kapsam kapısı — YOK (ölçüldü)
 
 Son gerçek yayın (`6dec0211`) tabandan beri 5 commit taşıdığını

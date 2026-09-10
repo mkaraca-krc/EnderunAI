@@ -299,3 +299,19 @@ değil, **indeks**.
   Aynı gece aynı hata ters yönde de yapılmıştı ("kapı yok" / "kapı
   var"). Yönü önemli değil: OKUMAYLA VERİLEN HER HÜKÜM ŞÜPHELİDİR,
   "var" da "yok" da.
+
+- **ÖLÇÜM ARACININ KENDİ UYARISINI SÜZGEÇLE SİLME.** Bir aracın "bu
+  çıktı eksik" diyen satırı, çıktının EN önemli satırıdır. *(Benim
+  adıma, 10 Eylül.)*
+
+  JETON/1'de `vt-sorgu.sh` sonucu 50 satırda kesti ve başlığında
+  "⚠ BU ÇIKTIDAN SONUÇ ÇIKARMA — eksik satırlar sonucu değiştirir"
+  yazdı. Ben çıktıyı temiz görmek için `grep -v "^\[vt"` ile başlığı
+  atıyordum; karşılaştırma "34 izin kaydı kaldırılmış" dedi — oysa
+  hiçbiri kaldırılmamıştı. Bir kullanıcının oturumu bu yanlış farka
+  dayanılarak düşürülebilirdi. `count(*)` ile iki tarafın 84 olduğu
+  görülünce yakalandı.
+
+  UYGULAMA: bir aracın çıktısını süzüyorsan, önce süzülen satırlara
+  bak; karşılaştırmadan önce iki tarafın sayısını bağımsız bir sayımla
+  eşitle (tarama sağlığı sayacı).
