@@ -12561,3 +12561,26 @@ izin satırı silinince bağlantı satırı **veritabanı düzeyinde**
 gidiyor, uygulama düzeyinde değil. Denetim izinin o kör noktası bir
 ihmal değil, cascade'in doğası: EF'in `SaveChanges` yoluna hiç
 uğramıyor.
+
+
+## BEKLEYEN PAKET — DASHBOARD/2: İZİNLİ SAYFA, İZİNSİZ YAN UÇLAR YÜZÜNDEN KENDİNİ YETKİSİZ SANIYOR (2026-09-10)
+
+**Kaynak:** DASHBOARD/1 ölçümünün yan bulgusu (rig, dar rol:
+`projects.view` + `tasks.view`). Mehmet Bey kararıyla kayda alındı;
+ölçüm DASHBOARD/1 bitince yapılacak — ŞİMDİ DEĞİL.
+
+**Gözlenen:** `/projeler` dar kullanıcıda AÇILIYOR (izni var), ama sayfa
+kullanıcının izni olmayan yan uçları çağırıyor — `companies`,
+`current-accounts`, `branches` → **403** — ve ekranın üstünde kırmızı
+**"Bu işlem için yetkiniz bulunmuyor."** şeridi çıkıyor (metin arka
+ucun: `PermissionAuthorizationMiddleware.cs:125`). Mesaj panelinde de
+aynısı: `mesajlar/konusmalar` → 403.
+
+**Aile:** DASHBOARD/1 ile aynı — KISMİ RET, TAM RET GİBİ YORUMLANIYOR.
+DASHBOARD/1 yayına girer girmez dar kullanıcı iniş sayfasında bununla
+karşılaşacak.
+
+**ÖLÇÜM İSTEĞİ (sıra: DASHBOARD/1'den sonra):** kaç sayfa, izni olmayan
+bir yan uç çağırdığı için yanlış hata gösteriyor? Dışlama yöntemiyle
+sayılacak; tarama sağlığı sayacı zorunlu (taranan sayfa sayısı, sayfa
+başına yan uç sayısı; 0 sayfa taranmışsa "0 ihlal" geçersiz).
