@@ -584,6 +584,18 @@ Yani o gece anlatılan yol yoktu. Ama kuralın kendisi iki **başka**,
 - Satırı silinmiş bir kullanıcının mesajı artık "mesainiz bitti" değil,
   "hesap pasif veya bulunamadı".
 
+**Yayında (Mehmet Bey kararı, madde 5 — kayda geçsin):** `6dec0211`,
+2026-09-10 10:53 UTC. İzleyici artık kendiliğinden çıkış YAPMIYOR;
+kararı sunucu veriyor; pencere kapandıktan sonra çıkışın gecikmesi
+**en fazla 60 saniye** (izleyicinin yoklama aralığı).
+
+**Yayın öncesi ölçüm (madde 1):** canlıda 4 aktif kullanıcı; 1'i
+ad üzerinden muaf (Admin/GM), **3'ü muaf değil** ve üçü de o anda
+pencere içindeydi (09:00–18:00, İstanbul 12:59; açık geçici erişim
+yok). Kapanışa 5 saat vardı. Yayından sonra canlı günlükte
+`sebep=MesaiDisi` satırı 0, ön yüzde `CIKIS` satırı 0, denetimde mesai
+reddi 0 — kimse işinin ortasında atılmadı.
+
 ### Nasıl ölçüldü
 
 | ayak | düzeltmeden önce | sonra |
@@ -631,6 +643,8 @@ her GET cevabını Cache Storage'a koyuyor. Rig'de bir oturumdan sonra
 dahil) ve **çıkıştan sonra 26'sı da duruyordu.** MESAJ/4 için konan
 kural ("SW hiçbir şeyi önbelleğe almaz") zaten var olan bir SW
 tarafından ihlal ediliyor.
+→ **SW/1 ile düzeltildi** (aşağıda, "kişisel veri"); (a) sızıntısı orada
+ÇAĞRILARAK ölçüldü.
 ÖLÇÜLMEYEN iki sonuç (kod okuması, hüküm değil): SW ağ hatasında bu
 kayıtları geri veriyor — (a) aynı tarayıcıda sonraki kullanıcıya
 öncekinin cevabı dönebilir; (b) önbellekteki bayat bir `mesai-disi`
@@ -659,3 +673,79 @@ muafiyetten sonra sahte ret kalkar ama arka uç denetiminde çıkış kaydı
 YİNE olmaz; çıkışın tek izi ön yüz günlüğündeki
 `CIKIS kullanici=… tetikleyen=…` satırı (GÜNLÜK/1). Next rotasının
 yorumu da bunu söylüyor: "backend does not expose token revocation yet".
+
+## SW/1 — KİŞİSEL VERİ: tarayıcı önbelleğinde kimlikli cevap kalmaz (2026-09-10)
+
+### Kişisel veri (KVKK)
+
+Şantiye tabletleri **ortak kullanılıyor**. Önceki service worker her
+GET cevabını tarayıcının Cache Storage'ına yazıyordu; bir oturumdan
+sonra **26 kimlikli API cevabı** (kimlik bilgisi `auth/me`, personel
+listesi `hr/personnel`, kârlılık özeti, mesaj listesi…) cihazdaydı ve
+**çıkıştan sonra da duruyordu.** Bu, bir çalışanın ve şirketin kişisel/
+ticari verisinin, oturumu kapatılmış ortak bir cihazda kalması demekti.
+
+**Ölçülen sızıntı (çağrılarak, rig):** A kullanıcısı oturum açıp gezdi,
+oturum düğmesiz kapandı (jeton süresi dolması gibi), B aynı tarayıcıda
+oturum açtı ve ağ kesildi. B'nin `auth/me` çağrısı **200 döndü ve
+içinden A'nın kimliği çıktı.** Ortak tablette bir sonraki kişi,
+öncekinin verisini görüyordu. (Önceki kayıtta bu "kod okuması,
+ölçülmedi" diye yazılmıştı; artık ölçüldü.)
+
+### Karar (Mehmet Bey, 2026-09-10)
+
+a) Kimlikli hiçbir cevap önbelleğe alınmaz (MESAJ/4 kuralı zaten buydu).
+b) Yeni SW etkinleşirken eski önbellekler silinir — kod düzeltmesi tek
+   başına bugünkü kayıtları temizlemez.
+c) Çıkışta da temizlik.
+d–f) Sondalar: aşağıda.
+
+### Ne yapıldı
+
+- `public/sw.js` artık **hiçbir şeyi önbelleğe almıyor**; `fetch`
+  dinleyicisi yok, istekler SW'ye hiç uğramıyor. Çevrimdışı "son
+  cevap" özelliği bilinçli olarak bırakıldı: bayat ya da BAŞKASININ
+  cevabını göstermektense hata göstermek doğrudur.
+- Etkinleşirken **köken üzerindeki bütün önbellekler** siliniyor
+  (uygulama Cache Storage'ı SW dışında kullanmıyor — ölçüldü).
+- Çıkış (`lib/auth/cikis.ts`, düğme ve mesai izleyicisi aynı yoldan)
+  önbelleği boşaltıyor; temizlik başarısız olsa da çıkış yapılır.
+
+### Nasıl ölçüldü
+
+| sonda | eski SW | yeni SW |
+|---|---|---|
+| (d) gezinti sonrası kimlikli kayıt | **27** (KIRMIZI) | 0 |
+| (d) çıkış sonrası önbellek | — (önceki adımda düştü) | boş; kırmızısı mutasyonla gösterildi (temizlik kaldırılınca kayıt kaldı) |
+| (d) tarayıcı kapat-aç sonrası kimlikli kayıt | — | 0 (kalıcılık bir nöbetçi kayıtla kanıtlandı) |
+| (e) sabotaj: eski adla + yabancı adla doldurulmuş önbellek, yeni SW etkinleşir | `enderun-erp-v1` KALDI (KIRMIZI) | hepsi silindi |
+| (e') GERÇEK güncelleme yolu: eski SW kayıtlı ve önbelleği kendisi doldurmuş, yeni `sw.js` iniyor | — | 168 → **0** |
+| (f) ağ kesikken B'ye dönen | **A'nın kimliği, 200** (KIRMIZI) | hiçbir şey (`fetch` hatası); çevrimiçi kontrolde B kendi kimliğini alıyor |
+
+(e') bir ayrıntı gösterdi: güncellemenin indiği ilk gezinmede, yeni SW
+etkinleşene kadar ESKİ SW kaydetmeye devam ediyor (106 → 168). Yeni SW
+etkinleşince hepsi siliniyor ve yeniden yüklemeden sonra da 0 kalıyor.
+
+### Sınırlar — dürüst cümle
+
+- Eski kayıtlar bir cihazdan ancak o cihaz uygulamayı **bir kez daha
+  açtığında** silinir (yeni SW o anda iner). Uygulamayı bir daha hiç
+  açmayan bir tablette dünün kayıtları kalır; sunucu bunu uzaktan
+  silemez.
+- Çıkış temizliği yalnız çıkış düğmesi ve mesai izleyicisi yolunda
+  koşuyor. Jeton süresi dolması gibi DÜĞMESİZ oturum sonlarında
+  temizlik yok — ama yeni SW hiçbir şey kaydetmediği için temizlenecek
+  bir şey de birikmiyor ((f) ayağı tam bu durumu ölçüyor).
+
+### DAVRANIŞ DEĞİŞİKLİĞİ — altı ay sonra okuyan için
+
+Uygulama çevrimdışıyken artık son görülen sayfayı/cevabı GÖSTERMİYOR;
+ağ yoksa hata görünür. Bu bilinçli: önbellekten dönen cevap bayat da
+olabilir, başka bir kullanıcınınki de.
+
+### PWA kurulabilirliği bozulmadı — ölçüldü
+
+`fetch` dinleyicisini kaldırmanın uygulamanın "ana ekrana eklenebilir"
+olmasını bozup bozmadığı tahmin edilmedi: Chrome'un kendi
+`Page.getInstallabilityErrors` cevabı eski ve yeni SW'de alındı. İkisinde
+de kurulabilirlik hatası **YOK**, manifest hatası **0**.
