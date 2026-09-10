@@ -26,7 +26,13 @@ export default function WorkHourSessionWatcher() {
       loggingOutRef.current = true;
 
       try {
-        await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
+        // GÜNLÜK/1: çıkışı KİM tetikledi, günlükte görünsün.
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: "mesai-izleyicisi" }),
+        });
       } catch {
         // Backend'e ulaşılamasa bile kullanıcı login'e yönlendirilir.
       }

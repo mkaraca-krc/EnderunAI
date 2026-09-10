@@ -7,7 +7,8 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(
         HttpContext context,
-        IUserAuthorizationService userAuthorizationService)
+        IUserAuthorizationService userAuthorizationService,
+        ILogger<PermissionAuthorizationMiddleware> logger)
     {
         if (context.User.Identity?.IsAuthenticated != true)
         {
@@ -38,6 +39,14 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
 
             if (authorization is null || !authorization.IsActive)
             {
+                // GÜNLÜK/1: bu karar sessizdi ve 9 Eylül'de teşhis
+                // edilemedi. Sekiz sebepten biri olarak yazılıyor.
+                ErisimGunlugu.Ret(
+                    logger,
+                    ErisimRetSebebi.HesapPasif,
+                    userId,
+                    context.Request.Path.Value);
+
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 await context.Response.WriteAsJsonAsync(new
                 {
@@ -104,6 +113,12 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
                 return;
             }
 
+            ErisimGunlugu.Ret(
+                logger,
+                ErisimRetSebebi.IzinYok,
+                Guid.TryParse(userIdValue, out var kid1) ? kid1 : null,
+                context.Request.Path.Value);
+
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsJsonAsync(new
             {
@@ -125,6 +140,12 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             await next(context);
             return;
         }
+
+        ErisimGunlugu.Ret(
+            logger,
+            ErisimRetSebebi.IzinYokYoldan,
+            Guid.TryParse(userIdValue, out var kid2) ? kid2 : null,
+            context.Request.Path.Value);
 
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         await context.Response.WriteAsJsonAsync(new

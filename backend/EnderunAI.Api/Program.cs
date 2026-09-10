@@ -298,6 +298,9 @@ builder.Services.AddScoped<EnderunAI.Api.Services.Notifications.NotificationScan
 // devam). Yeni tetikleyici eklemek için tek yapılacak şey
 // INotificationSource uygulayan bir sınıf yazıp buraya kaydetmek.
 builder.Services.AddHostedService<
+    EnderunAI.Api.Services.Notifications.ErisimGunluguOzetService>();
+
+builder.Services.AddHostedService<
     EnderunAI.Api.Services.Notifications.NotificationScanBackgroundService>();
 
 // Finans tetikleyicileri.
@@ -523,6 +526,67 @@ builder.Services
          */
         options.Events = new JwtBearerEvents
         {
+            /*
+             * ═══ JWT KATMANI HİÇBİR RET KAYDETMİYORDU (GÜNLÜK/1) ═══
+             *
+             * `OnAuthenticationFailed` ve `OnChallenge` işleyicisi YOKTU:
+             * jeton yokluğu, süresi dolması ve imza hatası SESSİZDİ.
+             * 9 Eylül'de bir oturum kaybının sebebi tam olarak bu yüzden
+             * bulunamadı — 30 dakikalık pencerede 2034 satır vardı ve
+             * hepsi EF komut kaydıydı.
+             *
+             * Üç sebep üç farklı hikâyedir; ayrılmazsa teşhis tahmine
+             * düşer.
+             */
+            OnAuthenticationFailed = context =>
+            {
+                var sebep = context.Exception switch
+                {
+                    Microsoft.IdentityModel.Tokens.SecurityTokenExpiredException =>
+                        EnderunAI.Api.Security.ErisimRetSebebi.SuresiDolmus,
+                    // `SecurityTokenSignatureKeyNotFoundException` AYRI KOL
+                    // DEĞİL: derleyici ölçtü — o tip bu tipten türüyor ve
+                    // ikinci kol onu zaten kapsıyor (CS8510). Ayrı yazmak
+                    // ulaşılamaz kod olurdu.
+                    Microsoft.IdentityModel.Tokens.SecurityTokenInvalidSignatureException =>
+                        EnderunAI.Api.Security.ErisimRetSebebi.ImzaGecersiz,
+                    _ => EnderunAI.Api.Security.ErisimRetSebebi.JetonGecersiz
+                };
+
+                EnderunAI.Api.Security.ErisimGunlugu.Ret(
+                    context.HttpContext.RequestServices
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("ErisimGunlugu"),
+                    sebep,
+                    null,
+                    context.Request.Path.Value);
+
+                return Task.CompletedTask;
+            },
+
+            /*
+             * JETON HİÇ GELMEDİ — `OnAuthenticationFailed` bunu GÖRMEZ,
+             * çünkü doğrulanacak bir şey yoktur. Ayrı işleyici şart.
+             *
+             * `AuthenticateFailure` doluysa sebep zaten yukarıda
+             * yazıldı; burada İKİNCİ KEZ yazılmaz.
+             */
+            OnChallenge = context =>
+            {
+                if (context.AuthenticateFailure is null)
+                {
+                    EnderunAI.Api.Security.ErisimGunlugu.Ret(
+                        context.HttpContext.RequestServices
+                            .GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("ErisimGunlugu"),
+                        EnderunAI.Api.Security.ErisimRetSebebi.JetonYok,
+                        null,
+                        context.Request.Path.Value);
+                }
+
+                return Task.CompletedTask;
+            },
+
             OnMessageReceived = context =>
             {
                 if (context.Request.Path.StartsWithSegments("/api/hubs"))
@@ -606,6 +670,21 @@ builder.Services
                     var gunluk = context.HttpContext.RequestServices
                         .GetRequiredService<ILoggerFactory>()
                         .CreateLogger("OturumGecerliligi");
+
+                    /*
+                     * SEKİZLİ KÜMEYE ALINDI (GÜNLÜK/1).
+                     *
+                     * Bu satır serbest metindi: sayılamıyor,
+                     * gruplanamıyor ve öteki yedi sebeple aynı yerden
+                     * okunamıyordu. Ret sebebi artık tek kanaldan
+                     * geçiyor; ayrıntı (jeton üretim zamanı var mı)
+                     * ikinci satırda korunuyor.
+                     */
+                    EnderunAI.Api.Security.ErisimGunlugu.Ret(
+                        gunluk,
+                        EnderunAI.Api.Security.ErisimRetSebebi.OturumIptal,
+                        kullaniciId,
+                        context.Request.Path.Value);
 
                     gunluk.LogWarning(
                         "Jeton reddedildi: parola değişimi sonrası eski oturum. " +

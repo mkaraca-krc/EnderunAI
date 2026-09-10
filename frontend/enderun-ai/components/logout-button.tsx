@@ -22,10 +22,13 @@ export function LogoutButton({
     setFailed(false);
 
     try {
+      // GÜNLÜK/1: çıkışı KİM tetikledi, günlükte görünsün.
       const response = await fetch("/api/auth/logout", {
         method: "POST",
         cache: "no-store",
         credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "kullanici-dugmesi" }),
       });
 
       if (!response.ok) {
