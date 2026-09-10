@@ -1,5 +1,22 @@
 # DURUM — açık işler ve yol haritası
 
+> ## ⛔ YAYIN YASAĞI — 2026-09-10 (Mehmet Karacabey kararı)
+>
+> **Kapsam kapısı kurulup sondasıyla doğrulanana kadar HİÇBİR YAYIN
+> yapılmaz.** Gerekçe: main'de SW/1 commit'leri (`e92b8c41`, `e4d54cdc`)
+> duruyor ve bugün onları durduracak bir mekanizma yok — hangi iş için
+> olursa olsun ilk yayın, son yayından (`6dec0211`) bu yana main'e giren
+> her şeyi canlıya taşır. Kapsam kapısının yokluğu ölçüldü: son yayın 5
+> commit taşıdığını biliyordu ama ilan edilen kapsamla karşılaştırmadı
+> (bkz. `docs/CANLI-1.md`, "Kapsam kapısı — YOK").
+>
+> Yasak, kapı kurulup "ilgisiz commit → KIRMIZI" ve "yalnız paket
+> commit'leri → YEŞİL" sondaları koştuktan sonra kalkar; kalktığı gün bu
+> blok, sonda sonuçlarıyla birlikte güncellenir.
+>
+> Onay yalnız YAYIN için gerekir; push yayın değildir. Kayıt commit'leri
+> onaysız push edilir (Mehmet Karacabey, 2026-09-10).
+
 > ## BURADAN BAŞLA (temiz bağlam için)
 >
 > **Bu dosyayı baştan sona oku, sonra hiçbir şeye dokunmadan
