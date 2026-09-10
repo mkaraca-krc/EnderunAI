@@ -130,6 +130,10 @@ KAPILAR=(
   "agir|ön yüz derlemesi|${FE}|NEXT_DIST_DIR=.next-kapi npm run build"
   "hizli|sır tarayıcı (aralık)|${REPO_ROOT}|deploy/scripts/sir-tara.py ${SIR_ARALIK_UZAK:-} ${SIR_ARALIK_YEREL:-}"
   "hizli|kutu ayrışması|${REPO_ROOT}|deploy/kutu/ayrisma-kontrolu.sh"
+  # Kapsam kapısının KANITI kapıyla birlikte yaşar: sonda geçici bir
+  # depoda "ilgisiz commit → KIRMIZI" ve "yalnız paket → YEŞİL" koşar.
+  # Kapı bozulursa (ör. ilan dışı denetimi kapanırsa) burada düşer.
+  "hizli|yayın kapsamı sondası|${REPO_ROOT}|deploy/scripts/test-yayin-kapsami.sh"
   "hizli|açık veritabanı|${REPO_ROOT}|deploy/scripts/acik-veritabani-kapisi.sh"
   "agir|şema sapması|${REPO_ROOT}|deploy/scripts/sema-sapma-kapisi.sh"
   "agir|sır bekçisi (tüm depo)|${BE}|dotnet test EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj -v q --nologo --filter FullyQualifiedName~SecretInSourceGuardTests"

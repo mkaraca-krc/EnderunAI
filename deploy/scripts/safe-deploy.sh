@@ -278,6 +278,20 @@ yarim_kosu_denetle() {
 # ayrı bir `echo` ile yazılsaydı satır doğru görünürken kapı devre
 # dışı olabilirdi ve günlük YALAN SÖYLERDİ. Sessiz bir kapı ile
 # kaldırılmış bir kapı, günlükte ayırt edilemez.
+# Yayın kapsamı kapısının safe-deploy'daki TEK çağrı yeri (gerekçe
+# `main` içindeki blokta). Fonksiyon, sonda onu yayın betiğini yükleyip
+# gerçek bağlantısıyla (taban dosyası, HEAD, YAYIN_KAPSAMI) koşabilsin
+# diye ayrı: `deploy/scripts/test-yayin-kapsami.sh`.
+yayin_kapsami_kapisi() {
+    log "INFO" "Yayın kapsamı denetleniyor (ilan: ${YAYIN_KAPSAMI:-YOK})..."
+    if ! "${REPO_ROOT}/deploy/scripts/yayin-kapsami.sh" \
+            --taban "$(cat "$LAST_DEPLOYED_COMMIT_FILE" 2>/dev/null)" \
+            --uc HEAD \
+            --kapsam "${YAYIN_KAPSAMI:-}" 2>&1 | tee -a "$LOG_FILE"; then
+        fail "Yayın kapsamı kapısı geçmedi — paket ilan edilen kapsamla birebir değil (ya da karar verilemedi)."
+    fi
+}
+
 require_clean_git_tree() {
     cd "$REPO_ROOT" || fail "Repo dizinine gidilemedi: $REPO_ROOT"
 
@@ -1552,6 +1566,21 @@ main() {
     if ! git pull 2>&1 | tee -a "$LOG_FILE"; then
         fail "git pull başarısız oldu."
     fi
+
+    # ═══ YAYIN KAPSAMI KAPISI (2026-09-10) — PAKET İLANI AŞAMAZ ═══
+    #
+    # Bu betik neyi taşıdığını biliyordu ama neyi taşıması gerektiğini
+    # sormuyordu: `6dec0211` 5 commit taşıdı, liste hiçbir ilanla
+    # karşılaştırılmadı. Push'la main'e giren SW/1 commit'leri bu yüzden
+    # ilk yayınla sessizce çıkacaktı (Mehmet Karacabey yayını yasakladı).
+    #
+    # İLAN: `YAYIN_KAPSAMI` = bu yayının taşıyacağı commit kimlikleri
+    # (boşluk/virgül). systemd-run ile başlatılırken verilir:
+    #   --property=Environment=YAYIN_KAPSAMI="<id> <id> ..."
+    # İlan yoksa, paket ilanla birebir değilse ya da karar verilemezse
+    # (taban yok, paket boş) yayın BURADA durur — pahalı turlardan önce.
+    # Sonda: deploy/scripts/test-yayin-kapsami.sh (ucuz kapılarda da koşar).
+    yayin_kapsami_kapisi
 
     # SİLİNEN SAVUNMA KONTROLÜ — YAYIN ÖNCESİ İKİNCİ AĞ.
     #
