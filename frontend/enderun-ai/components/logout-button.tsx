@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { cikisIstegi } from "@/lib/auth/cikis";
 import { useState } from "react";
 
 import { canliBaglantiyiKapat } from "@/lib/mesajlasma/canli-baglanti";
@@ -23,13 +24,7 @@ export function LogoutButton({
 
     try {
       // GÜNLÜK/1: çıkışı KİM tetikledi, günlükte görünsün.
-      const response = await fetch("/api/auth/logout", {
-        method: "POST",
-        cache: "no-store",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "kullanici-dugmesi" }),
-      });
+      const response = await cikisIstegi("kullanici-dugmesi");
 
       if (!response.ok) {
         throw new Error("Oturum kapatılamadı.");

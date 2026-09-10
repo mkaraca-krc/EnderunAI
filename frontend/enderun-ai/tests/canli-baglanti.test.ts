@@ -55,11 +55,24 @@ describe("canlı mesaj bağlantısı", () => {
   it("cikis_dugmesi_baglantiyi_kapatir", () => {
     const cikis = oku("components/logout-button.tsx");
 
+    // KORUNAN İDDİA: çıkış düğmesi canlı bağlantıyı KAPATIR.
     expect(cikis).toContain("canliBaglantiyiKapat");
-    // POZİTİF KONTROL: dosya gerçekten çıkış akışı — yalnız adı
-    // geçen bir dosyayı okumuş olmayalım.
+
+    /*
+     * POZİTİF KONTROL: dosya gerçekten çıkış akışı — yalnız adı geçen
+     * bir dosyayı okumuş olmayalım.
+     *
+     * ÇIPA TAŞINDI (GÜNLÜK/1, 2026-09-10): eskiden `/api/auth/logout`
+     * metni aranıyordu. Çıkış çağrısı `lib/auth/cikis.ts` ortak
+     * modülüne alındı (iki çağıran aynı sebep kümesini kullansın diye)
+     * ve adres artık bu dosyada geçmiyor.
+     *
+     * KORUNAN İDDİA DEĞİŞMEDİ — yalnız çıpa, çağrının YENİ ADINA
+     * bağlandı. `cikisIstegi` çıkış akışına özgü; başka bir dosyada
+     * tesadüfen bulunmaz.
+     */
     expect(cikis).toContain("clearCurrentUserCache");
-    expect(cikis).toContain("/api/auth/logout");
+    expect(cikis).toContain("cikisIstegi");
   });
 
   /**

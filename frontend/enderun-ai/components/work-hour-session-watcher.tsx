@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "@/lib/api/api-client";
+import { cikisIstegi } from "@/lib/auth/cikis";
 
 type WorkHoursStatus = {
   isAllowed: boolean;
@@ -27,12 +28,10 @@ export default function WorkHourSessionWatcher() {
 
       try {
         // GÜNLÜK/1: çıkışı KİM tetikledi, günlükte görünsün.
-        await fetch("/api/auth/logout", {
-          method: "POST",
-          cache: "no-store",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "mesai-izleyicisi" }),
-        });
+        // Çağrı `lib/auth/cikis` üzerinden: bu dosya `apiClient` de
+        // kullanıyor ve iki kalıbı karıştırmak gövde sözleşmesi
+        // kapısını düşürüyordu.
+        await cikisIstegi("mesai-izleyicisi");
       } catch {
         // Backend'e ulaşılamasa bile kullanıcı login'e yönlendirilir.
       }
