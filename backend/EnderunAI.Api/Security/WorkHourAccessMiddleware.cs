@@ -56,6 +56,25 @@ public sealed class WorkHourAccessMiddleware(RequestDelegate next)
             return;
         }
 
+        if (evaluation.Karar == MesaiKarari.Belirlenemedi)
+        {
+            // MESAİ/1 — BU KAPI KARAR VEREMİYORSA ÇEKİLİR, UYDURMAZ.
+            //
+            // Kullanıcı satırı okunamadı. Bu "mesai dışı" DEĞİL; eskiden
+            // öyle etiketleniyordu ve satırı silinmiş kullanıcı "mesainiz
+            // bitti" cevabı alıyor, denetime sahte bir mesai reddi
+            // yazılıyordu (ölçüldü, 2026-09-10).
+            //
+            // Soru hesabın VARLIĞI ve bunun sahibi sıradaki izin ara
+            // katmanı: aynı satırı okuyup yoksa 401 HesapPasif veriyor ve
+            // günlüğe doğru sebeple yazıyor. Bu çekilmenin güvenliği o
+            // katmana BAĞLI — `OkunamayanSatirMesaiDisiDegildirTests`
+            // bağımlılığı kilitliyor: hesap katmanı geçirirse test 200
+            // görür ve kırmızı yanar.
+            await next(context);
+            return;
+        }
+
         db.SecurityAuditEvents.Add(new SecurityAuditEvent
         {
             ActorUserId = userId,

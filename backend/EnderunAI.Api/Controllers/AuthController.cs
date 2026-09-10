@@ -211,6 +211,19 @@ public sealed class AuthController(
         }
 
         var workHourEvaluation = await workHourAccessService.EvaluateAsync(user.Id, cancellationToken);
+
+        // MESAİ/1: kullanıcı az önce okundu; karar yine de verilemediyse
+        // bu bir yarış — "mesai dışı" diye REDDEDİLMEZ, denetime sahte
+        // mesai reddi yazılmaz. Giriş açılmaz (kapı kapalı kalır) ama
+        // sebep doğru söylenir.
+        if (workHourEvaluation.Karar == MesaiKarari.Belirlenemedi)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Mesai durumu şu an doğrulanamadı, lütfen tekrar deneyin."
+            });
+        }
+
         if (!workHourEvaluation.IsAllowed)
         {
             db.SecurityAuditEvents.Add(new SecurityAuditEvent
@@ -348,12 +361,28 @@ public sealed class AuthController(
             return Unauthorized(new { message = "Oturum kullanıcısı doğrulanamadı." });
 
         var evaluation = await workHourAccessService.EvaluateAsync(userId, cancellationToken);
+
+        // MESAİ/1: karar verilemediyse 200 DEĞİL 503 — "yeniden dene".
+        // 200 + `isAllowed:false` izleyiciye "mesai dışı" demekle aynıydı;
+        // 503'te izleyici çıkış yapmaz, bir sonraki yoklamada tekrar sorar.
+        // Eski ön yüz paketleri de 503'te çıkış yapmıyor (apiClient atar,
+        // izleyici yakalar) — yayın geçişinde de güvenli.
+        if (evaluation.Karar == MesaiKarari.Belirlenemedi)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                karar = evaluation.Karar.Metin(),
+                message = "Mesai durumu şu an doğrulanamadı; yeniden denenecek."
+            });
+        }
+
         var minutesRemaining = evaluation.WindowEndsAtUtc is null
             ? (int?)null
             : Math.Max(0, (int)Math.Ceiling((evaluation.WindowEndsAtUtc.Value - DateTime.UtcNow).TotalMinutes));
 
         return Ok(new
         {
+            karar = evaluation.Karar.Metin(),
             isAllowed = evaluation.IsAllowed,
             isExempt = evaluation.IsExempt,
             windowEndsAtUtc = evaluation.WindowEndsAtUtc,

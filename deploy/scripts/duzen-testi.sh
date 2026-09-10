@@ -295,7 +295,7 @@ log "Konuşma tohumlanıyor..."
 sudo -u postgres psql -q -v ON_ERROR_STOP=1 -d enderun_ai_test <<SQL
 DO \$\$
 DECLARE
-  v_ben uuid; v_o uuid; v_sirket uuid; v_konusma uuid; v_konusma2 uuid; v_kisitli uuid; v_personel_a uuid; v_personel_b uuid; v_simdi timestamptz := now();
+  v_ben uuid; v_o uuid; v_sirket uuid; v_konusma uuid; v_konusma2 uuid; v_kisitli uuid; v_personel_a uuid; v_personel_b uuid; v_mesai uuid; v_mesai_rol uuid; v_simdi timestamptz := now();
 BEGIN
   SELECT "Id" INTO v_ben FROM users WHERE "Username" = '${KULLANICI}';
   IF v_ben IS NULL THEN RAISE EXCEPTION 'Tohumlanan kullanıcı yok'; END IF;
@@ -310,7 +310,11 @@ BEGIN
     ("Id","UserId","ScopeType","IsActive","IsDeleted","CreatedAtUtc")
   VALUES (gen_random_uuid(), v_ben, 0, true, false, v_simdi);
 
-  DELETE FROM users WHERE "Username" IN ('duzen-karsi-taraf', 'duzen-kisitli');
+  DELETE FROM users WHERE "Username" IN ('duzen-karsi-taraf', 'duzen-kisitli', 'duzen-mesai');
+  DELETE FROM role_work_hour_windows WHERE "RoleId" IN (SELECT "Id" FROM roles WHERE "Name" = 'DuzenMesai');
+  DELETE FROM role_permissions WHERE "RoleId" IN (SELECT "Id" FROM roles WHERE "Name" = 'DuzenMesai');
+  DELETE FROM user_roles WHERE "RoleId" IN (SELECT "Id" FROM roles WHERE "Name" = 'DuzenMesai');
+  DELETE FROM roles WHERE "Name" = 'DuzenMesai';
   DELETE FROM personnel WHERE "EmployeeNumber" IN ('DZN-A','DZN-B');
   INSERT INTO users
     ("Id","Username","FullName","PasswordHash","PasswordSalt","IsActive","WorkHoursExempt","CreatedAtUtc")
@@ -403,6 +407,39 @@ BEGIN
   INSERT INTO user_data_scopes
     ("Id","UserId","ScopeType","IsActive","IsDeleted","CreatedAtUtc")
   VALUES (gen_random_uuid(), v_kisitli, 0, true, false, v_simdi);
+
+  -- ═══ MESAİ KULLANICISI (MESAİ/1 OLCUMU) ═══
+  --
+  -- Rig'deki diger kullanicilarin HEPSI Admin rolunu tasiyor ve
+  -- WorkHourAccessService Admin'i ADINDAN muaf tutuyor (YT2). Yani
+  -- mesai kapisi rig'de HIC calismiyordu: gercek bir "mesai disi"
+  -- karari uretilemiyordu ve izleyicinin cikis ayagi olculemezdi.
+  --
+  -- Rol Admin'in izinlerini tasiyor (ekranlar acilsin) ama ADI Admin
+  -- degil; penceresi YOK. Sonda pencereyi API ile acip kapatiyor —
+  -- karari gercek arka uc veriyor, taklit degil.
+  INSERT INTO roles ("Id","Name","Description","DataScopePolicy")
+  VALUES (gen_random_uuid(), 'DuzenMesai', 'MESAI/1 rig rolu', 0)
+  RETURNING "Id" INTO v_mesai_rol;
+
+  INSERT INTO role_permissions ("RoleId","PermissionId")
+  SELECT DISTINCT v_mesai_rol, rp."PermissionId"
+  FROM role_permissions rp
+  JOIN user_roles ur ON ur."RoleId" = rp."RoleId"
+  WHERE ur."UserId" = v_ben;
+
+  INSERT INTO users
+    ("Id","Username","FullName","PasswordHash","PasswordSalt","IsActive","WorkHoursExempt","CreatedAtUtc")
+  SELECT gen_random_uuid(), 'duzen-mesai', 'Mesai Kullanici',
+         "PasswordHash", "PasswordSalt", true, false, v_simdi
+  FROM users WHERE "Id" = v_ben
+  RETURNING "Id" INTO v_mesai;
+
+  INSERT INTO user_roles ("UserId","RoleId") VALUES (v_mesai, v_mesai_rol);
+
+  INSERT INTO user_data_scopes
+    ("Id","UserId","ScopeType","IsActive","IsDeleted","CreatedAtUtc")
+  VALUES (gen_random_uuid(), v_mesai, 0, true, false, v_simdi);
 
   -- ═══ PERSONEL KAYITLARI (ISG/BENIM SIZINTI OLCUMU) ═══
   --
@@ -550,4 +587,5 @@ DUZEN_KULLANICI="$KULLANICI" \
 DUZEN_PAROLA="$PAROLA" \
 DUZEN_KARSI_KULLANICI="duzen-karsi-taraf" \
 DUZEN_KISITLI_KULLANICI="duzen-kisitli" \
+DUZEN_MESAI_KULLANICI="duzen-mesai" \
   npx playwright test --config=playwright.config.ts "$@"

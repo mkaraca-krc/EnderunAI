@@ -4,11 +4,24 @@ import { useEffect, useRef, useState } from "react";
 import { apiClient } from "@/lib/api/api-client";
 import { cikisIstegi } from "@/lib/auth/cikis";
 
+/*
+ * ═══ KALICI ÇIKIŞI YALNIZ GERÇEK BİR "MESAİ DIŞI" KARARI ÜRETİR (MESAİ/1) ═══
+ *
+ * Eskiden `!status.isAllowed` çıkış yapıyordu: çıkış bir kararın
+ * VARLIĞINA değil, bir iznin YOKLUĞUNA bağlıydı. `isAllowed` taşımayan
+ * HER 200 cevabı — bir HTML sayfası, eksik bir gövde — çerezi kalıcı
+ * olarak siliyordu (ölçüldü, `mesai-izleyicisi-karar.test.tsx`).
+ *
+ * Artık sunucu kararı AÇIKÇA söylüyor (`karar`) ve çıkış yalnız
+ * "mesai-disi"de. Başka her cevap "karar yok" demek: oturum düşürülmez,
+ * bir sonraki yoklamada yeniden sorulur.
+ */
 type WorkHoursStatus = {
-  isAllowed: boolean;
-  isExempt: boolean;
-  windowEndsAtUtc: string | null;
-  minutesRemaining: number | null;
+  karar?: string;
+  isAllowed?: boolean;
+  isExempt?: boolean;
+  windowEndsAtUtc?: string | null;
+  minutesRemaining?: number | null;
 };
 
 const POLL_INTERVAL_MS = 60_000;
@@ -43,27 +56,30 @@ export default function WorkHourSessionWatcher() {
       if (loggingOutRef.current) return;
 
       try {
-        const status = await apiClient<WorkHoursStatus>("auth/work-hours-status");
+        const status = await apiClient<WorkHoursStatus | null>("auth/work-hours-status");
         if (!active) return;
 
-        if (!status.isAllowed) {
+        if (status?.karar === "mesai-disi") {
           await forceLogout();
           return;
         }
 
-        if (status.isExempt || status.minutesRemaining === null) {
+        // Okunamayan ya da beklenmeyen cevap: karar yok, oturum kalır.
+        if (status?.karar !== "izinli") return;
+
+        if (status.isExempt || status.minutesRemaining == null) {
           setMinutesRemaining(null);
           return;
         }
 
-        if (status.minutesRemaining <= 0) {
-          await forceLogout();
-          return;
-        }
-
-        setMinutesRemaining(status.minutesRemaining);
+        // `minutesRemaining <= 0` artık çıkış YAPMIYOR: sunucunun "izinli"
+        // dediği bir cevapta istemcinin kendi çıkarımıydı. Pencere
+        // kapandıysa bir sonraki yoklama "mesai-disi" der; arka uç ara
+        // katmanı o arada her isteği zaten kesiyor.
+        setMinutesRemaining(Math.max(0, status.minutesRemaining));
       } catch {
-        // apiClient 401'de zaten /login'e yönlendiriyor; ağ hatalarında sessiz geç.
+        // apiClient 401'de zaten /login'e yönlendiriyor; geçici hatalarda
+        // (5xx, ağ) sessiz geç — bir sonraki yoklama yeniden sorar.
       }
     }
 

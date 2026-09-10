@@ -17,11 +17,50 @@ public interface IWorkHourAccessService
     Task<WorkHourEvaluation> EvaluateAsync(Guid userId, CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// MESAİ/1 — ÜÇ DEĞERLİ KARAR, İKİ DEĞERLİ DEĞİL.
+///
+/// Eskiden sonuç yalnız `IsAllowed` taşıyordu ve "kullanıcı satırı
+/// okunamadı" da `false` dönüyordu — yani "mesai dışı" ile AYNI
+/// cevaptı. Çağıran ikisini ayırt edemiyordu. ÖLÇÜLDÜ (2026-09-10):
+/// satırı silinmiş kullanıcı "Mesai saatiniz sona erdiği için
+/// oturumunuz kapatıldı" cevabı alıyor, denetime sahte bir
+/// `WorkHoursSessionRejected` yazılıyordu.
+///
+/// OKUNAMAYAN BİR SATIR "MESAİ DIŞI" DEĞİLDİR. Kalıcı çıkışı yalnız
+/// `MesaiDisi` üretebilir; `Belirlenemedi` bir KARAR değil, kararın
+/// verilemediğinin beyanıdır.
+/// </summary>
+public enum MesaiKarari
+{
+    Izinli = 1,
+    MesaiDisi = 2,
+    Belirlenemedi = 3
+}
+
+public static class MesaiKarariMetni
+{
+    /// <summary>
+    /// İzleyicinin okuduğu sözleşme. Ön yüz YALNIZ "mesai-disi"
+    /// gördüğünde çıkış yapar; bu metin değişirse izleyici gerçek
+    /// mesai dışını tanıyamaz (bkz. `mesai-izleyicisi.spec.ts`).
+    /// </summary>
+    public static string Metin(this MesaiKarari karar) => karar switch
+    {
+        MesaiKarari.Izinli => "izinli",
+        MesaiKarari.MesaiDisi => "mesai-disi",
+        _ => "belirlenemedi"
+    };
+}
+
 public sealed record WorkHourEvaluation(
-    bool IsAllowed,
+    MesaiKarari Karar,
     bool IsExempt,
     DateTime? WindowEndsAtUtc,
-    string? Reason);
+    string? Reason)
+{
+    public bool IsAllowed => Karar == MesaiKarari.Izinli;
+}
 
 public sealed class WorkHourAccessService(AppDbContext db) : IWorkHourAccessService
 {
@@ -48,16 +87,16 @@ public sealed class WorkHourAccessService(AppDbContext db) : IWorkHourAccessServ
             .SingleOrDefaultAsync(cancellationToken);
 
         if (user is null)
-            return new WorkHourEvaluation(false, false, null, "Kullanıcı bulunamadı.");
+            return new WorkHourEvaluation(MesaiKarari.Belirlenemedi, false, null, "Kullanıcı satırı okunamadı.");
 
         if (user.RoleNames.Contains("Admin", StringComparer.OrdinalIgnoreCase) ||
             user.RoleNames.Contains("Genel Müdür", StringComparer.OrdinalIgnoreCase))
         {
-            return new WorkHourEvaluation(true, true, null, null);
+            return new WorkHourEvaluation(MesaiKarari.Izinli, true, null, null);
         }
 
         if (user.WorkHoursExempt)
-            return new WorkHourEvaluation(true, true, null, null);
+            return new WorkHourEvaluation(MesaiKarari.Izinli, true, null, null);
 
         var nowUtc = DateTime.UtcNow;
         var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, TurkeyTimeZone);
@@ -99,8 +138,8 @@ public sealed class WorkHourAccessService(AppDbContext db) : IWorkHourAccessServ
         }
 
         if (latestEndUtc is not null)
-            return new WorkHourEvaluation(true, false, latestEndUtc, null);
+            return new WorkHourEvaluation(MesaiKarari.Izinli, false, latestEndUtc, null);
 
-        return new WorkHourEvaluation(false, false, null, OutsideWindowMessage);
+        return new WorkHourEvaluation(MesaiKarari.MesaiDisi, false, null, OutsideWindowMessage);
     }
 }
