@@ -2211,6 +2211,47 @@ Tarihsel kalıntı, bozuk yol değil. Düzeltilmedi.
 
 ---
 
+### Kural 82 — BİR ÖLÇÜM YALNIZ ÖLÇTÜĞÜ YOLU KANITLAR
+
+**"Şunu ölçtüm" ile "başkası yok" iki ayrı iddiadır ve ikincisi ayrı
+kanıt ister. Bir ölçümün sonucu, ölçülen yolun ötesine genellenecekse
+kapsam DIŞLAMA yöntemiyle taranır — tarama sağlığı sayacıyla (taranan
+dosya sayısı, bulunan toplam); bilinen bir örneği bulamayan tarama
+geçersizdir.**
+
+Onaylandı: Mehmet, 2026-09-10.
+
+**DOĞURAN OLAY — ÖLÇÜM 6, "ARKA UÇ İZNİ JETONDAN OKUMUYOR":**
+
+1. Ölçüm 6'da (izin değişince hangi kapı ne zaman görür) TEK bir yol
+   ölçüldü: `PermissionAuthorizationMiddleware` → `GET /projects`. Jeton
+   hâlâ `projects.view` taşırken uç 403 verdi. Doğruydu.
+2. Sonuç raporda **"arka uç"** diye genellendi: "arka uç izni jetondan
+   okumuyor, veri korunuyor; yanlış olan yalnız sayfa kapısı." Bu
+   cümle, ölçülmemiş her arka uç yolu için de hüküm veriyordu.
+3. Aynı gün C yolunun (a) adımında "jetondaki izni okuyan HER yer"
+   dışlama yöntemiyle sayıldı (ön yüzde 310, arka uçta 615 dosya). Arka
+   uçta `CurrentUserService.cs:61` çıktı: `ICurrentUserService.HasPermission
+   / IsInRole / Roles` jetondan okuyor ve onunla karar veren altı yol
+   var — çek geri alma, sipariş işlemi, fatura GM onayı, satın alma onay
+   aşaması, KPI görünürlüğü, yorum erişimi.
+4. Kod okumasıyla yetinilmedi, ÇAĞRILARAK ölçüldü: `salary.view` rolden
+   silindi, AYNI jetonla `auth/me` "yok" derken yönetim KPI ucu "Bordro
+   maliyeti"ni vermeye devam etti; yeniden girişte kayboldu.
+
+**İDDİAYI KURAN DA ÇÜRÜTEN DE AYNI ÖLÇÜCÜYDÜ** (Claude). Çürütme bir
+denetçiden gelmedi; bir sonraki işin sayımından geldi — sayım dışlama
+yöntemiyle yapıldığı için. Aynı sayım yöntemi Ölçüm 6'da uygulansaydı
+iddia hiç kurulmazdı. Kuralın dersi burada: genelleme cümlesi yazılırken
+tarama yoksa, cümle "ölçtüğüm yol şu; diğerleri taranmadı" diye yazılır.
+
+**AKRABASI:** "Kapı yok cümlesi, kapının olmadığının ölçümü olmadan
+yazılamaz" (9 Eylül) ve Kural 70 (okuyarak değil çağırarak ölç). 82
+bunların kapsam hâlidir: çağırarak ölçülmüş doğru bir sonuç bile,
+ölçülmeyen yollara taşındığında okumayla verilmiş bir hüküm olur.
+
+---
+
 ### Kural 81 — SONDA DÜZENEĞİ ÜRETİMDEKİ YERLEŞİMİ TAKLİT ETMELİDİR
 
 **Bir sondanın düzeneği, üretimdeki yerleşimi taklit etmelidir.
