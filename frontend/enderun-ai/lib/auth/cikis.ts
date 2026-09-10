@@ -31,12 +31,37 @@
  */
 export type CikisSebebi = "kullanici-dugmesi" | "mesai-izleyicisi";
 
-export function cikisIstegi(sebep: CikisSebebi): Promise<Response> {
-  return fetch("/api/auth/logout", {
-    method: "POST",
-    cache: "no-store",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ reason: sebep }),
-  });
+/**
+ * SW/1 — OTURUM KAPANINCA TARAYICI ÖNBELLEĞİ BOŞALTILIR.
+ *
+ * SW artık hiçbir şeyi önbelleğe almıyor ve etkinleşirken eskileri
+ * siliyor; bu, KENDİ başına yeterli olmalı. Çıkıştaki temizlik ikinci
+ * kat: SW güncellemesi henüz inmemiş bir cihazda (eski SW hâlâ etkin)
+ * ortak tablette bir sonraki kullanıcıya veri kalmasın.
+ *
+ * Temizlik `finally` içinde: çıkış isteği ağ hatasıyla düşse de önbellek
+ * boşaltılır. Temizliğin kendisi başarısız olursa ÇIKIŞ DURMAZ.
+ */
+export async function onbellekleriBosalt(): Promise<void> {
+  if (typeof caches === "undefined") return;
+  try {
+    const adlar = await caches.keys();
+    await Promise.all(adlar.map((ad) => caches.delete(ad)));
+  } catch {
+    // Çıkış, temizlik başarısız diye durmaz.
+  }
+}
+
+export async function cikisIstegi(sebep: CikisSebebi): Promise<Response> {
+  try {
+    return await fetch("/api/auth/logout", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: sebep }),
+    });
+  } finally {
+    await onbellekleriBosalt();
+  }
 }
