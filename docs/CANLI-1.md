@@ -526,7 +526,31 @@ sayfanın kendi attığı istek **0**, belge yüklemesi **1**. Bir gün önce
 aynı koşulda 10 saniyede **862** istek vardı.
 
 Sayfa 503'ü *zarifçe karşılamadı* — 503'e yol açan çağrıyı **hiç
-yapmadı**. İkinci katman (baloncuk oturumsuzken istek atmıyor) devrede.
+yapmadı**. ~~İkinci katman (baloncuk oturumsuzken istek atmıyor) devrede.~~
+
+> **KAYIT DÜZELTMESİ (2026-09-10) — üstü çizili cümle YANLIŞTI.**
+> Nasıl yakalandı: DASHBOARD/1 ölçümünde giriş akışının ağ kaydı
+> sırayla ve zaman damgasıyla alındı (rig, `enderun_ai_test`). Çerezsiz
+> `/login` sayfası açıldıktan ~1 sn sonra **bir** `GET
+> /api/backend/auth/me` atılıyor ve **401** alıyor.
+> Kimin attığı: `/login`'de monte olan kök layout bileşenlerinden
+> `auth/me` soran YALNIZ `MesajBaloncugu` (taşıdığı `useCurrentUser`,
+> `lib/use-current-user.ts:43`); `TaslakDeposuSaglayici` ve `HataSiniri`
+> sormuyor. Baloncuğun koruması (`mesaj-baloncugu.tsx:257`) kendi VERİ
+> isteklerini (`user-preferences`, konuşmalar) tutuyor — ama oturumun
+> var olup olmadığını öğrenmek için sorduğu `auth/me`'yi tutmuyor, tutamaz.
+> Doğrusu: **baloncuk oturumsuzken tek bir oturum sorusu (`auth/me`)
+> atıyor; veri isteği atmıyor.**
+> Döngü yine YOK: 401 `/login`'de yönlendirme üretmiyor (birinci katman,
+> `api-client.ts` giriş ekranı koruması) — ölçümde belge yüklemesi 1.
+> Yani döngüyü tutan asıl katman birinci katman; ikinci katman sanıldığı
+> kadar değil, kısmen devrede.
+> **Açıklanmamış çelişki:** yukarıdaki 9 Eylül canlı ölçümü "sayfanın
+> kendi attığı istek 0" diyor; bugünkü rig ölçümü 1 buldu. Fark
+> ölçülmedi — o günkü ölçümün süzgeci, 503 koşulu ya da o tarihten beri
+> değişen kod olabilir; hiçbiri sınanmadı. Davranış bu turda
+> DEĞİŞTİRİLMEDİ (zararsız); yalnız kayıt gerçeğe döndürüldü.
+
 **Yapılmayan çağrının hatasında döngü olamaz** ve bu, "hatayı iyi
 karşıla"dan daha sağlam bir sonuçtur: iyi karşılama kodu bozulabilir,
 hiç yapılmayan çağrı bozulamaz.
