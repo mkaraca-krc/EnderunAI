@@ -560,6 +560,9 @@ yapmadı**. ~~İkinci katman (baloncuk oturumsuzken istek atmıyor) devrede.~~
 > eski SW isteği ağ kaydından gizlemiyor (ağ-önce çalışıyor; önbellekten
 > yalnız ağ hatasında veriyor). 9 Eylül'ün koşulu (yayın sırasında 503)
 > yayın olmadan üretilemediği için ÖLÇÜLMEDİ; çelişki o koşul için açık.
+> **Karar (Mehmet Bey, 2026-09-10):** aynı sonda SW/1 yayınının yeniden
+> başlatma penceresinde canlıda koşturulacak. O ana kadar K10 çelişkisi
+> "açıklanamadı" olarak durur.
 
 **Yapılmayan çağrının hatasında döngü olamaz** ve bu, "hatayı iyi
 karşıla"dan daha sağlam bir sonuçtur: iyi karşılama kodu bozulabilir,
@@ -837,3 +840,50 @@ dashboard'a inemez.
 eskitir. B'nin dört ayaklı sondasına T2 ve T3 ayakları girmeli (öneri).
 
 **Karar bekliyor:** düzeltme yolu (Mehmet Bey).
+
+## JETON/1 — güvenlik kusuru: bazı arka uç kararları jetondaki ESKİ izinle veriliyor (2026-09-10)
+
+**Kusur:** `ICurrentUserService.HasPermission / IsInRole / Roles` jetondan
+okuyor; çek geri alma, sipariş işlemi, fatura GM onayı, satın alma onay
+aşaması, KPI görünürlüğü ve yorum erişimi bununla karar veriyor. İzni
+azaltılan kullanıcı, jetonu ölene kadar (≤12 sa) bu yollarda eski
+izniyle çalışır — çağrılarak ölçüldü (Ölçüm 6 düzeltmesi). Mehmet Bey
+kararıyla ayrı iş, sıranın başında.
+
+### Bugünkü maruziyet (koda dokunmadan ölçüldü, 15:0x–15:2x UTC)
+
+- **(a) Son 12 saatte izni değişmiş olabilecek:** yalnız `smemis`
+  (11:53:16 UTC, mehmet kaydetti: rol ataması + 84 Deny yeniden yazıldı).
+  **Azaltma olup olmadığı KANITLANAMIYOR:** kullanıcı kaydetme rolleri ve
+  kişisel izinleri `ExecuteDeleteAsync` ile siliyor
+  (`UserManagementController:533,543,585`) ve bu yol denetim kesicisini
+  atlıyor — silmeler denetimde YOK. Bilinen: rol aynı (09:57 UTC'de
+  Teknik Ofis ölçülmüştü), kısıt sayısı 8 Eylül tablosundakiyle aynı (84).
+  Büyük olasılıkla aynı kısıtların yeniden kaydı. Rol matrisi: 24 saatte
+  değişiklik yok (`RolePermission` izlenen silmeyle denetleniyor).
+- **(b) Eski jeton:** smemis 11:51:23'te parola sıfırlandı (damga),
+  11:51:57'de giriş (jeton-1, kaydetmeden ÖNCE basıldı), 11:53:34'te
+  tekrar giriş (jeton-2, taze). Jeton-1'in ömrü 23:51:57 UTC. Jeton
+  düzeyinde iz tutulmadığı için aynı tarayıcıda jeton-2 ile ezilip
+  ezilmediği bilinemiyor. **Ama mesai kapısı onu kendiliğinden
+  kapatıyor:** smemis muaf değil, pencere 09:00–18:00 İstanbul, açık
+  geçici erişim yok; mesai kapısı veritabanından taze okuyup bütün arka
+  uç isteklerini kesiyor. Jeton-1, pencere bir daha açılmadan (yarın
+  09:00) ölüyor (02:51 İstanbul).
+- **(c) Parola değişmeden oturum düşürme — ölçüldü (xUnit):** yalnız
+  `PasswordChangedAtUtc` veritabanına yazılınca damgasız kullanıcıda
+  oturum ≤61 sn'de düşüyor (negatif önbellek 60 sn) ve kullanıcı AYNI
+  parolayla hemen girebiliyor. Damgalı kullanıcıda (önbellekte pozitif,
+  süresiz) çalışan süreçte ETKİSİZ (61 sn sonra hâlâ 200); yeniden
+  başlatmada reddediliyor. API yok — doğrudan veritabanı yazımı gerekir.
+- **(d) Ara tedbir önerisi (UYGULANMADI, karar Mehmet Bey'in):** bkz.
+  aynı günkü rapor.
+
+### Kapsam kapısı — YOK (ölçüldü)
+
+Son gerçek yayın (`6dec0211`) tabandan beri 5 commit taşıdığını
+biliyordu ("[sir-tara] 5 commit"), ama bu listeyi ilan edilmiş bir
+kapsamla karşılaştıran satır yok; betiğin ilan edilmiş kapsamı alacağı
+bir girdisi de yok (`main "$@"` argüman okumuyor). Sıradaki ilk yayın,
+hangi iş için olursa olsun, SW/1 kodunu (`e92b8c41`) da canlıya taşır.
+JETON/1 yayınından önce kapatılacak (Mehmet Bey kararı).
