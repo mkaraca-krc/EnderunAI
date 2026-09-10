@@ -14,6 +14,15 @@
 > commit'leri → YEŞİL" sondaları koştuktan sonra kalkar; kalktığı gün bu
 > blok, sonda sonuçlarıyla birlikte güncellenir.
 >
+> **KOŞUL KARŞILANDI (2026-09-10, `46bac7fb`):** kapı kuruldu
+> (`deploy/scripts/yayin-kapsami.sh`, safe-deploy'da `git pull`un hemen
+> arkasında). Sonda 14/14 (ilgisiz commit → KIRMIZI, yalnız paket →
+> YEŞİL, safe-deploy'un kendi çağrısı ilansız/ilgisizde DURUR); iki
+> mutasyonda tam beklenen ayaklar düştü. **Bundan sonra her yayın
+> `YAYIN_KAPSAMI` ilanı ister** — ilansız yayın ilk adımda durur; SW/1
+> commit'leri ancak AÇIKÇA ilan edilirse çıkar. Kayıt commit'leri de
+> ilan edilmek zorunda.
+>
 > Onay yalnız YAYIN için gerekir; push yayın değildir. Kayıt commit'leri
 > onaysız push edilir (Mehmet Karacabey, 2026-09-10).
 

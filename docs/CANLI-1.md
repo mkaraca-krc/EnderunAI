@@ -919,3 +919,9 @@ kapsamla karşılaştıran satır yok; betiğin ilan edilmiş kapsamı alacağı
 bir girdisi de yok (`main "$@"` argüman okumuyor). Sıradaki ilk yayın,
 hangi iş için olursa olsun, SW/1 kodunu (`e92b8c41`) da canlıya taşır.
 JETON/1 yayınından önce kapatılacak (Mehmet Bey kararı).
+
+**KURULDU (2026-09-10, `46bac7fb`).** `deploy/scripts/yayin-kapsami.sh`:
+paket (son yayın..HEAD) ilan edilen kapsamla (`YAYIN_KAPSAMI`) birebir
+değilse ya da karar verilemezse yayın `git pull`un hemen arkasında,
+pahalı turlardan önce durur. Sonda 14/14; gerçek depoda kuru koşuda
+ilan yalnız SW/1 iken 8 kayıt commit'ini adıyla KAPSAM DIŞI saydı.
