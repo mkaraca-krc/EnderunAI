@@ -17,7 +17,8 @@ public sealed class WorkHourAccessMiddleware(RequestDelegate next)
     public async Task InvokeAsync(
         HttpContext context,
         IWorkHourAccessService workHourAccessService,
-        AppDbContext db)
+        AppDbContext db,
+        ILogger<WorkHourAccessMiddleware> logger)
     {
         if (context.User.Identity?.IsAuthenticated != true)
         {
@@ -94,6 +95,11 @@ public sealed class WorkHourAccessMiddleware(RequestDelegate next)
             OccurredAtUtc = DateTime.UtcNow
         });
         await db.SaveChangesAsync(context.RequestAborted);
+
+        // GÜNLÜK/1: bu 401 sessizdi — denetim tablosuna yazılıyordu ama
+        // günlüğe DÜŞMÜYORDU; "neden çıkarıldı?" sorusu günlükten
+        // cevaplanamıyordu (ölçüldü, `ErisimGunluguMesaiTests`).
+        ErisimGunlugu.Ret(logger, ErisimRetSebebi.MesaiDisi, userId, context.Request.Path.Value);
 
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         await context.Response.WriteAsJsonAsync(new

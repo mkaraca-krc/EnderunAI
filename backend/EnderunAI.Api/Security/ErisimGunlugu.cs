@@ -60,7 +60,18 @@ public enum ErisimRetSebebi
     IzinYok = 7,
 
     /// <summary>İzin yok — yoldan türetilen izinden.</summary>
-    IzinYokYoldan = 8
+    IzinYokYoldan = 8,
+
+    /// <summary>
+    /// Mesai penceresi kapalı — oturum mesai ara katmanında kesildi.
+    ///
+    /// SONRADAN EKLENDİ, ÇÜNKÜ ÖLÇÜM EKSİĞİ GÖSTERDİ (2026-09-10): ilk
+    /// sekiz sebep "her 401/403 kararı" diye yayına alındı ama
+    /// `WorkHourAccessMiddleware`in 401'i HİÇ satır yazmıyordu. Muaf
+    /// olmayan personelin oturumunun en sık düşeceği yol buydu ve
+    /// günlükte izi yoktu.
+    /// </summary>
+    MesaiDisi = 9
 }
 
 public static class ErisimGunlugu
