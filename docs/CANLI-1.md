@@ -645,8 +645,17 @@ kazandığı yarışa bağlı: kullanıcı mesai sebebini görmeyebilir.
 Bu, 10 Eylül'deki "ilk gözlemde TAM URL" dersini de etkiler:
 **`reason` yokluğu, sebebin mesai olmadığını kanıtlamaz.**
 
-**3. Arka uç çıkış ucu mesai muafiyet listesinde yok — ÖLÇÜLDÜ.**
-Mesaisi biten kullanıcının çıkış çağrısı arka uçta `MesaiDisi` ile
-reddediliyor (rig günlüğü). Çerezi Next sildiği için çıkış yine
-gerçekleşiyor; ama arka uç tarafında çıkış kaydı yerine mesai reddi
-düşüyor.
+**3. Arka uç çıkış çağrısı mesai reddi diye kayda geçiyordu — DÜZELTİLDİ
+(Mehmet Bey kararı, aynı yayın).** Mesaisi biten kullanıcının çıkışında
+Next rotası arka uca `POST /api/auth/logout` gönderiyor; mesai ara
+katmanı onu 401 ile reddedip denetime `WorkHoursSessionRejected`
+yazıyordu. İz, olmayan bir olayı anlatıyordu (Kural 80). Yol muafiyet
+listesine alındı; test önce KIRMIZI, sonra yeşil.
+
+**İlk yazımdaki yanlış:** burada "arka uçta çıkış kaydı YERİNE mesai
+reddi düşüyor" yazmıştım. Ölçüm düzeltti: **arka uçta çıkış ucu HİÇ
+YOK** — muaf kullanıcının çağrısı 404 dönüyor (rig günlüğü). Yani
+muafiyetten sonra sahte ret kalkar ama arka uç denetiminde çıkış kaydı
+YİNE olmaz; çıkışın tek izi ön yüz günlüğündeki
+`CIKIS kullanici=… tetikleyen=…` satırı (GÜNLÜK/1). Next rotasının
+yorumu da bunu söylüyor: "backend does not expose token revocation yet".
