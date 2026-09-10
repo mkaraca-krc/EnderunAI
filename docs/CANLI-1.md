@@ -550,6 +550,16 @@ yapmadı**. ~~İkinci katman (baloncuk oturumsuzken istek atmıyor) devrede.~~
 > ölçülmedi — o günkü ölçümün süzgeci, 503 koşulu ya da o tarihten beri
 > değişen kod olabilir; hiçbiri sınanmadı. Davranış bu turda
 > DEĞİŞTİRİLMEDİ (zararsız); yalnız kayıt gerçeğe döndürüldü.
+>
+> **HİPOTEZ ÖLÇÜLDÜ (2026-09-10, Mehmet Bey'in hipotezi):** "canlıda eski
+> SW `auth/me`'yi önbellekten verdi, istek ağda görünmedi." Canlı,
+> oturumsuz `/login`, beş kip (SW serbest ilk yükleme; SW kontrol ederken
+> iki yeniden yükleme; SW engelli iki yükleme): her kipte `auth/me`
+> hem Playwright'ta hem DevTools'un kendi ağ kaydında (CDP `Network`)
+> **tam bir kez, 401** görünüyor. **Normal koşulda hipotez ÇÜRÜDÜ** —
+> eski SW isteği ağ kaydından gizlemiyor (ağ-önce çalışıyor; önbellekten
+> yalnız ağ hatasında veriyor). 9 Eylül'ün koşulu (yayın sırasında 503)
+> yayın olmadan üretilemediği için ÖLÇÜLMEDİ; çelişki o koşul için açık.
 
 **Yapılmayan çağrının hatasında döngü olamaz** ve bu, "hatayı iyi
 karşıla"dan daha sağlam bir sonuçtur: iyi karşılama kodu bozulabilir,
@@ -798,10 +808,23 @@ birebir.
   ve parola değişimi (`app/api/auth/login/route.ts:78`,
   `change-password/route.ts:92`) — arada TAZELEME YOK. 65 sn ölçüldü;
   12 saat, jetonun ömrü ve tazeleme yokluğundan çıkarım.
-- Arka uç izni jetondan OKUMUYOR: T2'de jeton hâlâ `projects.view`
-  taşırken uç 403 verdi. İzin her istekte veritabanından
-  (`PermissionAuthorizationMiddleware` → `UserAuthorizationService`,
-  main'de önbelleksiz). **Veri korunuyor; yanlış olan yalnız sayfa kapısı.**
+- ~~Arka uç izni jetondan OKUMUYOR~~ — **EKSİKTİ, aynı gün düzeltildi.**
+  Doğru olan: ANA veri kapısı (`PermissionAuthorizationMiddleware` →
+  `UserAuthorizationService`, main'de önbelleksiz) izni her istekte
+  veritabanından okuyor; T2'de jeton hâlâ `projects.view` taşırken uç
+  403 verdi. AMA `ICurrentUserService.HasPermission / IsInRole / Roles`
+  JETONDAN okuyor (`CurrentUserService.cs:61`) ve bununla karar veren
+  arka uç yolları var: çek geri alma (`ChequesController:151,199`),
+  sipariş işlemi (`PurchaseOrderService:334`), tedarikçi faturası GM onayı
+  (`SupplierInvoiceService:284`, rol), satın alma onay aşaması
+  (`ProcurementApprovalService:1215–1220`, izin + rol), KPI görünürlüğü
+  (`ManagementKpiService:270`), yorum/ek erişimi
+  (`CollaborationController:128`). **ÇAĞRILARAK ölçüldü (xUnit, gerçek
+  hat):** `salary.view` rolden silindi, AYNI jetonla `auth/me`
+  "salary.view yok" derken `GET /api/yonetim/kpi` "Bordro maliyeti"
+  KPI'sını VERMEYE DEVAM ETTİ; yeniden girişte kayboldu. Yani bu yollar
+  için veri kapısı da jeton ömrü boyunca eski. Nasıl yakalandı: C'nin
+  (a) adımında "jetondaki izni okuyan her yer" sayılırken.
 
 **Sonuç:** sayfa kapısı jeton ömrü boyunca (≤12 sa) ya da yeniden
 girişe kadar ESKİ kararla çalışıyor; menü ve veri kapısı anında. İki
