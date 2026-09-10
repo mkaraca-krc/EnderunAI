@@ -115,34 +115,50 @@ public sealed class TokenCookieSizeTests
     }
 
     /// <summary>
-    /// Bayrak yalnız çerez boyutunu çözmekle kalmamalı; izinleri
-    /// TOKEN'DAN okuyan tüketiciler de onu tanımalı. Tanımazsa tam
-    /// yetkili kullanıcı "hiç izni yok" görünür ve
-    /// <c>HasPermission</c>'a dayanan her şey — elden tutar maskesi
-    /// dahil — sessizce kapanır. Bu testin ilk hâli canlıya
-    /// çıkmadan üç entegrasyon testini kırdı; kilitli kalsın.
+    /// SÖZLEŞME ÇEVRİLDİ — JETON/1 (2026-09-10, Mehmet Karacabey onayı).
+    ///
+    /// Bu testin önceki hâli "izinleri TOKEN'DAN okuyan tüketiciler
+    /// bayrağı tanımalı" diyor ve <c>CurrentUserService</c>'in jetondan
+    /// okuduğunu KİLİTLİYORDU. JETON/1 tam o davranışı kusur olarak
+    /// ölçtü: jeton 12 saat yaşıyor, izni alınan kullanıcı eski izniyle
+    /// karar aldırıyordu (kapanmış iptal yetkisi alındıktan sonra aynı
+    /// jetonla ödenmiş çek geri alındı). Artık izin istek başına kanonik
+    /// çözücüden gelir (<c>IstekYetkisi</c>); jeton bir izin KAYNAĞI
+    /// değildir.
+    ///
+    /// Test iki şeyi korumaya devam ediyor:
+    ///   1. KODLAMA doğru — bayrak çözülünce katalogdaki her izin çıkar.
+    ///      Jetondan izin talepleri çıkarılana kadar (JETON/1 adım 2)
+    ///      onu okuyan ön yüz ara katmanı hâlâ var; bayrağı tanımazsa
+    ///      tam yetkili kullanıcı "hiç izni yok" görünür.
+    ///   2. YENİ SÖZLEŞME — aynı jeton CurrentUserService için kaynak
+    ///      değil: istekte kanonik anlık görüntü yoksa KAPALI.
     /// </summary>
     [Fact]
-    public void FullPermissionFlag_GrantsPermissionsToTokenConsumers()
+    public void FullPermissionFlag_DecodesToCatalog_ButTokenIsNotAPermissionSource()
     {
         var token = CreateService().Create(
             CreateUser(), ["Admin"], AllPermissionKeys());
 
-        var principal = new ClaimsPrincipal(new ClaimsIdentity(
-            new JwtSecurityTokenHandler().ReadJwtToken(token).Claims,
-            "Test"));
+        var claims = new JwtSecurityTokenHandler().ReadJwtToken(token).Claims.ToArray();
 
+        // 1. Kodlama: bayrak → bütün katalog.
+        var cozulen = JetonIzinKodlamasi.Oku(alan =>
+            claims.Where(c => c.Type == alan).Select(c => c.Value));
+        Assert.Equal(PermissionCatalog.Permissions.Count, cozulen.Count);
+
+        // 2. Sözleşme: jeton izin kaynağı değil.
         var accessor = new HttpContextAccessor
         {
-            HttpContext = new DefaultHttpContext { User = principal },
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test")),
+            },
         };
-
         var currentUser = new CurrentUserService(accessor);
 
-        Assert.True(currentUser.HasPermission(PermissionCatalog.Keys.DashboardView));
-        Assert.Equal(
-            PermissionCatalog.Permissions.Count,
-            currentUser.Permissions.Count);
+        Assert.False(currentUser.HasPermission(PermissionCatalog.Keys.DashboardView));
+        Assert.Empty(currentUser.Permissions);
     }
 
     // ═══════════════════════════════════════════════════════════════

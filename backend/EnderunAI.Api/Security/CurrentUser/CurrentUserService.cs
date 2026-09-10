@@ -37,33 +37,56 @@ public sealed class CurrentUserService(
         Principal?.FindFirstValue("fullName") ??
         Principal?.FindFirstValue(ClaimTypes.GivenName);
 
-    public IReadOnlyCollection<string> Roles =>
-        Principal?
-            .FindAll(ClaimTypes.Role)
-            .Select(claim => claim.Value)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray()
-        ?? [];
-
     /// <summary>
-    /// TOKEN'DAKİ İZİNLER — KODLAMAYI ÇÖZEN TEK YER BURASI DEĞİL.
+    /// JETON/1 — İZİN VE ROL JETONDAN DEĞİL, KANONİK ÇÖZÜCÜDEN.
     ///
-    /// Çözme <see cref="JetonIzinKodlamasi"/> içinde. Burada alan adı
-    /// geçmiyor ve GEÇMEMELİ: üç kodlama (hepsi / tümleyen / liste)
-    /// iki ayrı yerde yorumlansaydı biri güncellenip diğeri kalırdı.
+    /// Eskiden `Roles` jetondaki rol taleplerini, `Permissions` jetondaki
+    /// izin taleplerini okuyordu. Jeton 12 saat yaşıyor; izni alınan
+    /// kullanıcı bu süre boyunca eski izniyle karar aldırıyordu (ölçüldü:
+    /// kapanmış iptal yetkisi alındıktan sonra aynı jetonla ödenmiş çek
+    /// geri alındı). Artık kaynak, `PermissionAuthorizationMiddleware`'in
+    /// bu istek için çözdüğü anlık görüntü (<see cref="IstekYetkisi"/>).
     ///
-    /// Somut tehlike: `all_permissions` bayrağını TEK BAŞINA okuyan
-    /// bir tüketici, yanındaki `not_permissions` listesini görmez ve
-    /// kullanıcıya OLMAYAN bir yetkiyi verirdi. Okuma da bu yüzden
-    /// tek kapıdan geçiyor.
+    /// ═══ KAPALI DÜŞER (fail-closed) ═══
+    ///
+    /// Aşağıdakilerin HERHANGİ BİRİNDE izin ve rol BOŞ döner; jetona geri
+    /// düşülmez — "emin değilim, izin vereyim" yok:
+    ///   · istek bağlamı yok (arka plan işi, başlangıç kodu)
+    ///   · bu istekte anlık görüntü yok (ara katman koşmadı ya da çözemedi)
+    ///   · anlık görüntü başka bir kullanıcıya ait
+    ///   · hesap pasif
+    ///   · WebSocket bağlantısı — bağlantının ömrü bir isteğin ömrü
+    ///     değildir; açılıştaki görüntü saatlerce eskiyebilir
+    ///
+    /// Arka plan işleri bu servisi KURUYOR (denetim kesicisi `UserId`
+    /// okuyor, ölçüldü) ama izin üyesini çağırmıyor; bu yüzden anlık
+    /// görüntü kurucuda değil, yalnız sorulduğunda okunur.
     /// </summary>
+    private UserAuthorizationSnapshot? Yetki
+    {
+        get
+        {
+            var baglam = httpContextAccessor.HttpContext;
+            if (baglam is null || baglam.WebSockets.IsWebSocketRequest)
+                return null;
+
+            var yetki = IstekYetkisi.Al(baglam);
+            if (yetki is null || !yetki.IsActive || UserId is not Guid kimlik || yetki.UserId != kimlik)
+                return null;
+
+            return yetki;
+        }
+    }
+
+    public IReadOnlyCollection<string> Roles =>
+        Yetki?.RoleNames.Distinct(StringComparer.OrdinalIgnoreCase).ToArray() ?? [];
+
     public IReadOnlyCollection<string> Permissions =>
-        JetonIzinKodlamasi.Oku(alan =>
-            Principal?.FindAll(alan).Select(claim => claim.Value) ?? []);
+        Yetki?.Permissions ?? [];
 
     public bool IsInRole(string role) =>
         !string.IsNullOrWhiteSpace(role) &&
-        Principal?.IsInRole(role) == true;
+        Roles.Contains(role, StringComparer.OrdinalIgnoreCase);
 
     public bool HasPermission(string permission) =>
         !string.IsNullOrWhiteSpace(permission) &&

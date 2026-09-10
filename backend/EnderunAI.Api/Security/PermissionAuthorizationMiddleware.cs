@@ -57,6 +57,10 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
 
             roleNames = authorization.RoleNames.ToArray();
             permissions = authorization.Permissions;
+
+            // JETON/1: bu isteğin geri kalanı (ICurrentUserService) izni ve
+            // rolü BURADAN okur, jetondan değil. Yalnız bu isteğin ömrü.
+            IstekYetkisi.Koy(context, authorization);
         }
 
         /*
