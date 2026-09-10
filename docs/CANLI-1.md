@@ -925,3 +925,51 @@ paket (son yayın..HEAD) ilan edilen kapsamla (`YAYIN_KAPSAMI`) birebir
 değilse ya da karar verilemezse yayın `git pull`un hemen arkasında,
 pahalı turlardan önce durur. Sonda 14/14; gerçek depoda kuru koşuda
 ilan yalnız SW/1 iken 8 kayıt commit'ini adıyla KAPSAM DIŞI saydı.
+
+### JETON/1 — 1. adım: arka uç tek kaynağa (2026-09-10, `da502ef2`, YAYINLANMADI)
+
+`CurrentUserService` izni ve rolü artık istek başına kanonik çözücüden
+okuyor (`IstekYetkisi`, `HttpContext.Items`); jetona geri düşüş yok,
+her belirsizlikte kapalı. Mehmet Bey'in dört kaydı:
+
+1. **Kapalı düşer** — çözücü sabote edilince para yolu kapalı (T4);
+   ara katmanda fail-open + jetona geri düşüş mutasyonunda T4 KIRMIZI.
+2. **İstek dışına taşmaz** — `Items`, statik/singleton/AsyncLocal yok;
+   süreç çapında önbellek mutasyonunda B, A'nın izniyle çek geri aldı
+   → T5 KIRMIZI. Kimlik denetimi açıkken aynı taşma RED'e dönüşüyor
+   (güvenli yön).
+3. **HTTP dışı bağlamlar** — 7 istek-dışı kök; 4'ü servisi denetim
+   kesicisi üzerinden kuruyor (yalnız `UserId`); izin üyesini çağıran
+   sınıfa ulaşan istek-dışı yol 0 (615 dosya, 7/7 kök, 6/6 hedef).
+4. **Ek sorgu yok — ölçüldü** — 4 uç × 5 çağrı, önce/sonra birebir aynı.
+
+Para yolu, düzeltmeden ÖNCE çağrılarak ölçüldü: kapanmış iptal yetkisi
+izin matrisinden alındıktan sonra aynı jetonla ödenmiş çek geri alındı
+(200). Sonra 403, çek dokunulmadan.
+
+### Aynı taramada bulunan: `[Authorize(Roles = "Admin,Genel Müdür")]` jetondaki rolü okuyor (ÖLÇÜLDÜ, düzeltilmedi)
+
+4 controller: `UserManagement`, `AccessRequests`, `PermissionMatrix`,
+`SecurityAudit`. ASP.NET rol kapısı jetondaki rolü okuyor. Ölçüldü:
+kullanıcı Admin + izni taşıyan ikinci bir rol; Admin rolü alındı →
+AYNI jetonla kullanıcı yönetimi ucu **200**; yeniden girişte 403.
+Maruziyet dar (izni başka rolden taşımaya devam etmesi gerekiyor; taze
+izin denetimi aynı istekte ayrıca koşuyor) ama gerçek. Onaylanan
+değişikliğin dışında — karar bekliyor.
+
+### Sıra ölçümle değişti: 1 → 3 (C) → 2
+
+Adım 2'nin (jetondan izin taleplerini çıkarmak) ön koşulu "okuyucu 0".
+Ölçüldü: arka uç ürün kodunda okuyucu 0, ön yüzde 1 (`middleware.ts` —
+C'nin kaldıracağı sayfa kapısı). Talepler C'den önce çıkarılsaydı ara
+katman jetonda izin bulamaz ve kurala bağlı HER sayfada herkes
+`/yetkisiz`e düşerdi. Bu yüzden C, 2'den önce.
+
+### Düzenek tehlikesi (test altyapısı, ürün değil)
+
+Bir testin açtığı ikinci host (`WithWebHostBuilder`) başlarken katalog
+uzlaştırması koşuyor ve elle-verilme kaydı OLMAYAN rol izinlerini
+siliyor (ölçüldü: 4 → 0). İzinleri doğrudan tabloya yazan testler
+(ör. `ChequeReversalTests.ClientWithAsync`) başka bir test ikinci host
+açtığında izinsiz kalabilir. HİPOTEZ (ölçülmedi): DURUM.md §7'deki
+"kararsız suite" ile ilgili olabilir.
