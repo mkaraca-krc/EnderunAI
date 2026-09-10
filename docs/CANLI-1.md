@@ -773,3 +773,44 @@ olabilir, başka bir kullanıcınınki de.
 olmasını bozup bozmadığı tahmin edilmedi: Chrome'un kendi
 `Page.getInstallabilityErrors` cevabı eski ve yeni SW'de alındı. İkisinde
 de kurulabilirlik hatası **YOK**, manifest hatası **0**.
+
+## ÖLÇÜM 6 — izin değişince hangi kapı ne zaman görür (2026-09-10)
+
+**Soru (Mehmet Bey):** Genel Müdür izni canlıda değiştiriyor ve ANINDA
+etki bekliyor. İniş kararını ara katman jetondan veriyorsa, izin
+değişikliği ne zaman geçerli olur?
+
+**Ölçüm:** rig, dar rol, oturum KAPATILMADAN izin değiştirildi; her
+geçişte t+0 ve t+65 sn. 13 satırın 13'ü önceden ilan edilen beklentiyle
+birebir.
+
+| geçiş | sayfa kapısı (Next ara katmanı, JETON) | menü (`auth/me`) ve veri kapısı (arka uç) |
+|---|---|---|
+| T1 rolle izin VERİLDİ | `/yetkisiz` — ESKİ karar sürüyor | menü hemen görüyor |
+| T2 rolden izin ALINDI | `/dashboard` AÇILIYOR — eski karar | menü hemen kaybediyor; `GET /projects` **hemen 403** |
+| T3 kişisel Deny EKLENDİ | `/dashboard` açılıyor — eski karar | menü hemen kaybediyor |
+| T4 kişisel Deny KALDIRILDI (uakkaya senaryosu) | `/yetkisiz` — eski karar | menü hemen görüyor |
+| T5 yeniden giriş | güncel | güncel |
+
+**Mekanizma (ölçüldü + okundu):**
+- Jeton girişteki izinleri İÇİNDE taşıyor; ömrü **12,0 saat**
+  (`exp−iat`, ölçüldü). Jetonu yeniden yazan yalnız iki yer var: giriş
+  ve parola değişimi (`app/api/auth/login/route.ts:78`,
+  `change-password/route.ts:92`) — arada TAZELEME YOK. 65 sn ölçüldü;
+  12 saat, jetonun ömrü ve tazeleme yokluğundan çıkarım.
+- Arka uç izni jetondan OKUMUYOR: T2'de jeton hâlâ `projects.view`
+  taşırken uç 403 verdi. İzin her istekte veritabanından
+  (`PermissionAuthorizationMiddleware` → `UserAuthorizationService`,
+  main'de önbelleksiz). **Veri korunuyor; yanlış olan yalnız sayfa kapısı.**
+
+**Sonuç:** sayfa kapısı jeton ömrü boyunca (≤12 sa) ya da yeniden
+girişe kadar ESKİ kararla çalışıyor; menü ve veri kapısı anında. İki
+yönde de menü ile sayfa kapısı birbirinden farklı şey söylüyor. Bu,
+DASHBOARD/1'i de kapsayan daha büyük kusur: iniş kararı jetondan
+verilirse, uakkaya'nın Deny'i kaldırıldığında da 12 saate kadar
+dashboard'a inemez.
+
+**B ile bağı:** B'nin çözücü önbelleği veri kapısını da TTL kadar
+eskitir. B'nin dört ayaklı sondasına T2 ve T3 ayakları girmeli (öneri).
+
+**Karar bekliyor:** düzeltme yolu (Mehmet Bey).
