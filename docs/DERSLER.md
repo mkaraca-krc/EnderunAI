@@ -282,3 +282,20 @@ değil, **indeks**.
   ayrıca sor: ölçtüğü şey **taze** mi, ve **ölçemediğinde** bunu
   söylüyor mu (Kural 67'nin üçüncü sonucu)
   → `deploy/scripts/safe-deploy.sh` (`eski_parca_kapisi` öz-sınaması)
+
+- **KODDA DURAN MEKANİZMA, KURULABİLEN MEKANİZMA DEĞİLDİR.**
+  "Bu yol kodda var" ile "bu yol çalışıyor" ayrı cümlelerdir; ikincisi
+  ancak zincir uçtan uca ÇAĞRILARAK söylenir. Bir halkayı okumak,
+  önündeki halkaların ona izin verdiğini göstermez. *(Benim adıma,
+  10 Eylül.)*
+
+  MESAİ/1'de "okunamayan satır → 200 `isAllowed:false` → kalıcı çıkış"
+  zinciri kodda okundu ve "doğrulandı" diye bildirildi. Çağrılınca
+  izleyici ucu 401 HesapPasif döndü: izin ara katmanı eksik kullanıcıyı
+  controller'a ulaşmadan reddediyordu. Zincir yoktu. Ölçüm ise iki
+  BAŞKA kusur buldu (yanlış "mesainiz bitti" etiketi; HTML-200'de çerez
+  silme) — tahmin edilen yerde değil, çağrılan yerde.
+
+  Aynı gece aynı hata ters yönde de yapılmıştı ("kapı yok" / "kapı
+  var"). Yönü önemli değil: OKUMAYLA VERİLEN HER HÜKÜM ŞÜPHELİDİR,
+  "var" da "yok" da.

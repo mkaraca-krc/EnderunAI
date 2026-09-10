@@ -540,3 +540,113 @@ sayfa açık tutulunca çıkıyor.
 var — `app/sirketler/page.tsx:8`, `app/subeler/page.tsx:8`,
 `app/cariler/page.tsx:153`. Üçü de kimlikli sayfalarda, `/login`de
 koşmuyor; ama kanonik korumayı atlıyorlar.
+
+## MESAİ/1 — okunamayan satır "mesai dışı" değildir (2026-09-10)
+
+**Kural (Mehmet Bey):** okunamayan bir kullanıcı satırı "mesai dışı"
+DEĞİLDİR. Geçici hatada oturum düşürülmez, yeniden denenir. Kalıcı
+çıkışı yalnız gerçek bir "mesai dışı" kararı üretebilir.
+
+### Önce bir düzeltme — 10 Eylül gecesi söylenen yanlış cümle
+
+"Okunamayan satır → izleyici ucu 200 `isAllowed:false` → izleyici
+çıkış çağırır → kalıcı çıkış" zinciri **kod okunarak** "doğrulandı"
+diye bildirildi. **Çağrılınca kurulamadığı görüldü:** satırı silinmiş
+kullanıcı izleyici ucunda **401 HesapPasif** alıyor — izin ara katmanı
+onu controller'a ulaşmadan reddediyor. Geçici veritabanı hatası da
+istisna fırlatıyor → 500 → izleyici çıkış YAPMIYOR (ölçüldü).
+
+Yani o gece anlatılan yol yoktu. Ama kuralın kendisi iki **başka**,
+ölçülmüş kusura uyuyordu:
+
+### Ölçülen iki kusur
+
+| # | kusur | ölçüm |
+|---|---|---|
+| 1 | Satırı okunamayan kullanıcı "**Mesai saatiniz sona erdiği için oturumunuz kapatıldı**" alıyor; denetime sahte `WorkHoursSessionRejected` yazılıyordu | xUnit, gerçek HTTP hattı: KIRMIZI → yeşil |
+| 2 | İzleyici `isAllowed` taşımayan **her** 200 cevabında çerezi siliyordu (HTML gövde, eksik gövde) | gerçek tarayıcı, rig: çerez silindi → KIRMIZI; düzeltmeden sonra yeşil |
+
+### Ne değişti
+
+- Mesai değerlendirmesi üç değerli: **izinli / mesai-disi / belirlenemedi**.
+  Satır okunamazsa `belirlenemedi` — mesai kapısı karar vermekten
+  çekilir, hesabın varlığını soran izin ara katmanı cevaplar
+  (401 HesapPasif, günlüğe doğru sebeple).
+- İzleyici ucu kararı açıkça söylüyor (`karar`). `belirlenemedi` → 503.
+- İzleyici **yalnız** `karar: "mesai-disi"` ile çıkış yapıyor.
+
+### DAVRANIŞ DEĞİŞİKLİĞİ — altı ay sonra okuyan için
+
+- İzleyici artık "0 dakika kaldı" hesabıyla **kendiliğinden** çıkış
+  yapmıyor. Pencere kapanınca çıkışı bir sonraki yoklamada (en geç
+  60 sn) sunucunun "mesai-disi" kararı yapar; o arada arka uç ara
+  katmanı her isteği zaten kesiyor.
+- Satırı silinmiş bir kullanıcının mesajı artık "mesainiz bitti" değil,
+  "hesap pasif veya bulunamadı".
+
+### Nasıl ölçüldü
+
+| ayak | düzeltmeden önce | sonra |
+|---|---|---|
+| gerçek arka uç, pencere kapatıldı → çıkış VAR (pozitif) | KIRMIZI (`karar` yok) | yeşil — gerçek arka uç `mesai-disi`, çerez silindi, adres `/login?reason=work-hours`, ön yüz günlüğü `CIKIS … tetikleyen=mesai-izleyicisi` |
+| düzenek kontrolü (yakalanmış mesai-disi görülüyor) | yeşil | yeşil |
+| 503 / 500 / ağ hatası → çıkış YOK | yeşil | yeşil |
+| 200 HTML / 200 karar-yok → çıkış YOK | **KIRMIZI** (çerez silindi) | yeşil |
+
+Doğuştan yeşil muhafızların kırmızısı **mutasyonla** gösterildi
+(arka uç: 3/3 kırmızı, pozitif kontrol yeşil kaldı; ön yüz: `catch`
+dalı çıkış yaparsa 4/4 kırmızı; "izinli değilse çık" yapılırsa 3/3
+kırmızı). Her ayak en az bir kez kırmızı yandı.
+
+### Bu düzeltmenin DAYANDIĞI şey — ve B ile bağı
+
+Mesai kapısının `belirlenemedi`de çekilmesi, sıradaki izin ara
+katmanının eksik kullanıcıyı reddetmesine BAĞLI. Bu bağ
+`OkunamayanSatirMesaiDisiDegildirTests` ile kilitli: hesap katmanı
+eksik kullanıcıyı geçirirse test 200 görür ve kırmızı yanar (mutasyonla
+gösterildi). **B'nin çözücü önbelleği bu bağı etkiler** — öneri: B'nin dört
+ayaklı sondasına bu test de girsin.
+
+### Henüz yazılamayan cümle
+
+"Mesai dışı kalan personelin oturumu doğru sebeple kapanıyor" — canlıda
+muaf olmayan bir kullanıcıyla gözlenmedi. Rig'de gerçek arka uçla
+ölçüldü; canlıda değil.
+
+### GÜNLÜK/1 deliği — aynı ölçüm yolunda bulundu
+
+GÜNLÜK/1 "her 401/403 kararı tek satır" diye yayına alındı, ama mesai
+ara katmanının 401'i **hiç satır yazmıyordu** (ölçüldü: gerçek hatta
+günlük sağlayıcısı dinlendi; `JetonYok` satırı görüldü, mesai satırı
+yok). Dokuzuncu sebep eklendi: `MesaiDisi`. 10 Eylül'deki "bir sonraki
+oluşta sistem sebebi kendisi yazacak" cümlesi, muaf olmayan personel
+için bu düzeltme yayına girene kadar **eksikti**.
+
+### Ölçüm sırasında bulunan, DÜZELTİLMEYEN üç şey (BAK-VE-KARAR)
+
+**1. Service worker kimlikli cevapları saklıyor — ÖLÇÜLDÜ.** `public/sw.js`
+her GET cevabını Cache Storage'a koyuyor. Rig'de bir oturumdan sonra
+**26 `/api/backend/*` cevabı** önbellekteydi (`auth/me`, `hr/personnel`,
+`projects/profitability-summary`, `mesajlar/konusmalar`, `ai/dashboard`
+dahil) ve **çıkıştan sonra 26'sı da duruyordu.** MESAJ/4 için konan
+kural ("SW hiçbir şeyi önbelleğe almaz") zaten var olan bir SW
+tarafından ihlal ediliyor.
+ÖLÇÜLMEYEN iki sonuç (kod okuması, hüküm değil): SW ağ hatasında bu
+kayıtları geri veriyor — (a) aynı tarayıcıda sonraki kullanıcıya
+öncekinin cevabı dönebilir; (b) önbellekteki bayat bir `mesai-disi`
+gövdesi ağ hatasında izleyiciye verilirse, MESAİ/1'in kuralı SW
+üzerinden yeniden ihlal edilir.
+
+**2. Mesai kapanınca yönlendirme yarışı — ÖLÇÜLDÜ.** 401 alan her
+bileşen `apiClient` üzerinden SEBEPSİZ `/login`e, izleyici
+`/login?reason=work-hours`e yönlendiriyor. Bir koşuda ~0,8 saniyede
+25 belge yüklemesi (16 tamam, 9 iptal) görüldü. Hangi adresin
+kazandığı yarışa bağlı: kullanıcı mesai sebebini görmeyebilir.
+Bu, 10 Eylül'deki "ilk gözlemde TAM URL" dersini de etkiler:
+**`reason` yokluğu, sebebin mesai olmadığını kanıtlamaz.**
+
+**3. Arka uç çıkış ucu mesai muafiyet listesinde yok — ÖLÇÜLDÜ.**
+Mesaisi biten kullanıcının çıkış çağrısı arka uçta `MesaiDisi` ile
+reddediliyor (rig günlüğü). Çerezi Next sildiği için çıkış yine
+gerçekleşiyor; ama arka uç tarafında çıkış kaydı yerine mesai reddi
+düşüyor.
