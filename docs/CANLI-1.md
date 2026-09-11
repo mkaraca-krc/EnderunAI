@@ -973,3 +973,92 @@ siliyor (ölçüldü: 4 → 0). İzinleri doğrudan tabloya yazan testler
 (ör. `ChequeReversalTests.ClientWithAsync`) başka bir test ikinci host
 açtığında izinsiz kalabilir. HİPOTEZ (ölçülmedi): DURUM.md §7'deki
 "kararsız suite" ile ilgili olabilir.
+
+## C — güvenlik kanıtı: sayfa kapısı kalkınca veri kapısı tek başına tutuyor mu (2026-09-11, ÖLÇÜLDÜ, YEŞİL)
+
+**Mehmet Bey'in ön koşulu:** ara katman yalnız kimliğe bakarken izni
+olmayan kullanıcı yasak adresi ELLE yazsın; kimlik taşıyan tek bir 200
+varsa C durur.
+
+**Düzenek:** rig; ara katmandan izin denetimi kaldırılmış hâl
+(commit'siz, ölçümden sonra geri alındı ve saklandı); kabukta içerik
+kapısı YOK — en kötü durum, sayfa tamamen çiziliyor ve bütün veri
+istekleri gidiyor. Arka uç JETON/1 1. adımı taşıyor (yayınlanacak olan).
+Dar kullanıcı: yalnız `projects.view` + `tasks.view`.
+
+**1. koşu — istenen 6 adres** (finans ×2, İK, bordro, muhasebe, satın
+alma): her adreste sayfa veri istekleri 403; 200'lerin tamamı kullanıcının
+kendi oturumu (`auth/me`, `user-preferences`, `work-hours-status`, mesaj
+merkezi el sıkışması) ya da SAHİP OLDUĞU izin.
+
+**2. koşu — Kural 82: BÜTÜN menü rotaları.** Tarama sağlığı: `menu.ts`'ten
+116 rota çıkarıldı, 116 ziyaret edildi, 1167 arka uç cevabı toplandı
+(200=732, 403=434, 401=0, diğer=1). Kendi oturumu dışında 200 dönen
+FARKLI uç: 4 — `projects`, `masraf-merkezleri` (ikisi `projects.view`
+ister), `tasks`, `tasks/dashboard` (ikisi `tasks.view` ister). Dördü de
+kullanıcının SAHİP OLDUĞU izinle açılıyor. "Diğer=1": personel kaydı
+olmayan kullanıcının `isg/benim` ucu 404 (beklenen).
+
+**Sonuç:** 116 rotada izinsiz dönen 200 YOK. Hüküm içerik boşluğuna
+değil KAPININ KARARINA göre verildi (rig'de veri az; boş bir 200 bir şey
+kanıtlamaz). "Veri kapısı sınırdır" artık bu 116 rota için ölçülmüş bir
+cümle; menü dışı rotalar (ör. detay sayfaları) taranmadı.
+
+**Yan not — ölçüm sırasında:** oluşturulan kullanıcının ilk isteği bir
+koşuda `OturumIptal` aldı (aynı saniyede basılan jeton). Sonda 1,2 sn
+bekleyecek şekilde değiştirildi — ama bu bir düzenek kararı değil,
+aşağıdaki DAMGA ölçümüne bağlandı.
+
+## DAMGA SINIRI — parola damgası saniyeye yuvarlanıyor: üretim yolları çarpıyor mu (2026-09-11)
+
+**Mehmet Bey:** "Bir sondayı bekleme ekleyerek susturmak, ölçüm aletini
+köreltmektir. Sınır davranışının kasıtlı olduğunu ancak ölçerek
+söyleyebilirsin." Gerçek HTTP hattı, her yol 20 ardışık deneme, iki koşu:
+
+| yol | yeni jeton reddedilen | not |
+|---|---|---|
+| (a) kullanıcı KENDİ parolasını değiştirir → dönen jetonla hemen istek | **0/20** (iki koşuda da) | uç jetonu bilerek damganın SONRAKİ saniyesiyle basıyor |
+| (a) pozitif kontrol: ESKİ jeton | reddedilen 15/20, 14/20 | **5–6/20 eski jeton parola değiştikten sonra da geçti** |
+| (c1) yönetici oluşturur → kullanıcı hemen girer | giriş 20/20 başarılı; **ilk istek 401: 10/20** | |
+| (c2) yönetici parolayı sıfırlar → kullanıcı hemen girer | giriş 20/20 başarılı; **ilk istek 401: 11/20** | |
+
+**Okuma:** kod yolu sınıra ÇARPIYOR. İki ayrı sınır davranışı var:
+1. **Aynı saniyede giriş:** giriş jetonu `iat = şimdi` ile basılıyor; damga
+   bir sonraki saniyeye yuvarlandığı için aynı saniyede basılan jeton
+   reddediliyor. Kullanıcı başarılı giriş yapıp ilk istekte 401 alır
+   (tarayıcıda ÖLÇÜLMEDİ; `apiClient` 401'i sebepsiz `/login`e çeviriyor).
+2. **"Gelecekten" jeton:** kendi parola değişiminin döndürdüğü jeton bir
+   sonraki saniyeyle basıldığı için, aynı saniye içindeki İKİNCİ bir
+   değişiklik onu geçersiz kılamıyor.
+
+**İnsan zamanlamasıyla erişim:** ikisi de aynı saniye içinde iki işlem
+ister (hesap açılıp BİR SANİYE İÇİNDE giriş; iki parola değişikliği bir
+saniye içinde). Arayüzden erişilemez; otomasyon ve rig bu sınıra çarpar.
+
+**Öneri — yuvarlama yönü değil HASSASİYET:** damgayı aşağı yuvarlamak
+aynı saniyede basılmış ESKİ jetonu geçirir (güvenlik kaybı); bugünkü
+yukarı yuvarlama meşru aynı-saniye girişini reddeder ve "gelecekten"
+jeton açığını doğurur. İkisini birden çözen: jetona saniye altı üretim
+iddiası (ör. milisaniye) eklemek ve damgayla TAM karşılaştırmak; iddiası
+olmayan eski jetonlar bugünkü kurala düşer. Ayrı paket: **DAMGA/1**
+(DURUM.md, bekleyen paketler). Karar Mehmet Bey'in.
+
+Rig sondalarındaki 1,2 sn bekleme bu ölçümün gerekçesiyle KALIYOR.
+
+## Dünkü (10 Eylül) SIGKILL 137 — kanıtlı hüküm (2026-09-11)
+
+10 Eylül 19:13:45'te başlayan `dotnet test` (`JetonTekKaynakTests`) 44
+dakika sonra (19:57:48) 137 ile öldü; ~2 dk süren bir koşu. O gün sebep
+raporda "oturum" diye söylendi ama KAYDA GEÇMEDİ. Bugün ölçüldü:
+- Süreç bellek tavanlı `enderun-derleme.scope`'ta DEĞİLDİ (düz
+  `dotnet test`, `MemoryMax` yok).
+- OOM izi ARANDI, YOK: `journalctl -k` (aralıkta 75 satır, hiçbiri OOM),
+  `journalctl` tüm birimler, `dmesg`, `/var/log/kern.log`, `/var/log/syslog`.
+- Sonuç, oturumun yeniden başladığı dakikada teslim edildi (20:01:33
+  "Continue from where you left off").
+
+**Hüküm:** bellek sınırı DEĞİL; SIGKILL oturum kesilmesiyle uyumlu.
+AÇIK: koşunun neden 44 dakika sürdüğü (takılma) BİLİNMİYOR.
+Bugünkü rig derlemesinin scope zirvesi 6,3 GB (sınır 7 GB, takas 2 GB)
+ayrı bir olay; "peak" sayfa önbelleğini de sayıyor, yani 6,3 GB yerleşik
+bellek değil — gerçek marj bu sayıdan okunamaz.
