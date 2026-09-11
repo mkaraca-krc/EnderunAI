@@ -1162,3 +1162,26 @@ olasılık düşük, kalıcılık ve etki gerçek). Kanıt rig/xUnit: JETON/1 T2
 düzeltmeden önce 200, sonra 403, çek dokunulmadan) ve T4 (çözücü
 sabote → kapalı). Canlıda ölçmek için test şirketinde bir deneme çeki
 gerekir — karar Mehmet Bey'in.
+
+**Karar (Mehmet Bey, 11 Eylül): canlıda deneme çeki AÇILMAZ** — test
+şirketinde bile olsa o veri gerçek defterde durur. Üçüncü yol önerildi:
+storno EDİLEMEZ durumda gerçek bir çekle ucu çağırmak (yetkisi alınmış
+jeton → 403; yetkisi olan jeton → iş kuralı 409; çek durumu önce/sonra
+aynı). Bunun güvenli olması için "storno edilemez" koşulunun YETKİ
+KAPISINDAN SONRA gelen bir iş kuralı olması şart — önce gelirse
+(satır sürümü, iptal edilmiş çek) kapı hiç koşmaz ve ayırt etmez.
+
+**Ölçüldü (canlı, salt okuma):** 31 çek; kapanmış ve iptal edilmemiş 5;
+bu 5'in **5'i de storno edilebilir** (son geri alınmamış hareketin önceki
+durumu dolu). Yetki kapısından sonraki iki red koşulunu (geri alınacak
+hareket yok / son hareket ilk kayıt) sağlayan çek: 0. Stornonun içindeki
+koşullar (bağlı fiş, zaten geri alınmış) kesin red garantisi vermiyor.
+Yani pozitif kontrol (b) gerçek bir çeki storno ederdi; (a) da düzeltme
+tutmasaydı aynısını yapardı.
+
+**CANLI PARA YOLU ÖLÇÜLMEDİ — gerekçe: gerçek muhasebe verisi.** Uygun
+durumda çek yok. Kanıt rig/xUnit: JETON/1 T2 (kapanmış iptal yetkisi
+alındıktan sonra aynı jetonla geri alma — düzeltmeden önce 200, sonra
+403, çek dokunulmadan) ve T4 (çözücü sabote → kapalı). Canlıda ölçülen
+iki yol: KPI ve kullanıcı yönetimi (yukarıdaki tablo). Sınırı bilmek,
+sınırı yok saymaktan iyidir.
