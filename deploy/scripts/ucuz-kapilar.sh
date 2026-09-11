@@ -134,6 +134,10 @@ KAPILAR=(
   # depoda "ilgisiz commit → KIRMIZI" ve "yalnız paket → YEŞİL" koşar.
   # Kapı bozulursa (ör. ilan dışı denetimi kapanırsa) burada düşer.
   "hizli|yayın kapsamı sondası|${REPO_ROOT}|deploy/scripts/test-yayin-kapsami.sh"
+  # Derleme kilidinin ölü scope muhafazası (2026-09-11): sahte systemd
+  # araçlarıyla beş ayak — canlı koşu beklenir, ölü scope temizlenir,
+  # okunamayan durumda kapalı düşülür.
+  "hizli|derleme kilidi ölü scope sondası|${REPO_ROOT}|deploy/scripts/test-derleme-kos.sh"
   "hizli|açık veritabanı|${REPO_ROOT}|deploy/scripts/acik-veritabani-kapisi.sh"
   "agir|şema sapması|${REPO_ROOT}|deploy/scripts/sema-sapma-kapisi.sh"
   "agir|sır bekçisi (tüm depo)|${BE}|dotnet test EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj -v q --nologo --filter FullyQualifiedName~SecretInSourceGuardTests"

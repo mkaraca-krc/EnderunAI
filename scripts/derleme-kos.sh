@@ -106,13 +106,43 @@ if [[ $# -eq 0 ]]; then
     exit 64
 fi
 
-# ── KAPI 1: zaten koşan var mı ────────────────────────────────────
+# ── KAPI 1: zaten koşan var mı — ÖLÜ SCOPE AYRI SAYILIR ───────────
+#
+# ÖLÇÜLEN OLAY (2026-09-11): başarıyla biten bir derlemeden sonra scope
+# İÇİNDE SÜREÇ YOKKEN (TasksCurrent=0) "active (running)" kaldı. Bu kapı
+# onu "koşan derleme" saydı; bir sonraki rig "ÖLÇEMEDİ: meşgul" ile
+# durdu ve kilit elle bulunana kadar boş işgal edildi. Sessizlik "her
+# şey yolunda" demek olmamalı: ölü scope YÜKSEK SESLE yazılır.
+#
+# ÜÇ DURUM, ÜÇ KARAR (sonda: deploy/scripts/test-derleme-kos.sh):
+#   görev = 0          → ÖLÜ: yazılır, durdurulur, derleme başlar
+#   görev = sayı > 0   → CANLI: 75 (bekle)
+#   görev okunamıyor   → KARAR VEREMEDİM: 75 (kapalı düşer — göremediğin
+#                        bir şeyi öldürme)
+gorev_sayisi() { systemctl show "${BIRIM}.scope" -p TasksCurrent --value 2>/dev/null; }
+
 if systemctl is-active --quiet "${BIRIM}.scope" 2>/dev/null; then
-    echo "ZATEN KOŞAN BİR DERLEME VAR (${BIRIM}.scope) — yenisi BAŞLATILMADI." >&2
-    echo "Bitmesini bekleyin ya da durdurun: systemctl stop ${BIRIM}.scope" >&2
-    systemd-cgls "/system.slice/${BIRIM}.scope" 2>/dev/null | head -10 >&2
-    exit 75   # EX_TEMPFAIL — geçici engel, hata değil
+    gorev="$(gorev_sayisi)"
+    if [[ "$gorev" == "0" ]]; then
+        echo "ÖLÜ SCOPE: ${BIRIM}.scope etkin görünüyor ama İÇİNDE SÜREÇ YOK (TasksCurrent=0)." >&2
+        echo "ÖLÜ SCOPE: kilidi boş işgal ediyor — durduruluyor, derleme başlatılacak." >&2
+        systemctl stop "${BIRIM}.scope" 2>/dev/null || true
+        if systemctl is-active --quiet "${BIRIM}.scope" 2>/dev/null; then
+            echo "ÖLÜ SCOPE DURDURULAMADI — yeni derleme BAŞLATILMADI." >&2
+            exit 75
+        fi
+    elif [[ "$gorev" =~ ^[0-9]+$ ]]; then
+        echo "ZATEN KOŞAN BİR DERLEME VAR (${BIRIM}.scope, ${gorev} görev) — yenisi BAŞLATILMADI." >&2
+        echo "Bitmesini bekleyin ya da durdurun: systemctl stop ${BIRIM}.scope" >&2
+        systemd-cgls "/system.slice/${BIRIM}.scope" 2>/dev/null | head -10 >&2
+        exit 75   # EX_TEMPFAIL — geçici engel, hata değil
+    else
+        echo "KAPI 1 karar veremedim: ${BIRIM}.scope etkin ama görev sayısı okunamadı ('${gorev}')." >&2
+        echo "Kapalı düşülüyor — derleme BAŞLATILMADI. Elle bakın: systemctl status ${BIRIM}.scope" >&2
+        exit 75
+    fi
 fi
+echo "derleme kilidi temiz (${BIRIM}.scope koşmuyor)." >&2
 
 # Önceki koşudan kalmış ölü scope varsa temizle (yoksa ad çakışır).
 systemctl reset-failed "${BIRIM}.scope" 2>/dev/null || true
@@ -153,6 +183,16 @@ systemd-run \
     -- "$@" "${DOTNET_ARGS[@]}"
 
 cikis=$?
+
+# ── ÖLÜ KALMA DENETİMİ — koşu bitti, scope boş hâlde etkin mi? ─────
+# 2026-09-11'deki olayın kendisi: derleme başarıyla bitti ama scope
+# boş kaldı ve bir SONRAKİ koşunun kilidini işgal etti. Burada
+# yakalanırsa bir sonraki koşuya hiç kalmaz. Çıkış kodu KORUNUR.
+if systemctl is-active --quiet "${BIRIM}.scope" 2>/dev/null \
+   && [[ "$(gorev_sayisi)" == "0" ]]; then
+    echo "ÖLÜ KALDI: koşu bitti ama ${BIRIM}.scope boş hâlde etkin — durduruluyor." >&2
+    systemctl stop "${BIRIM}.scope" 2>/dev/null || true
+fi
 
 # ── ASKI: geride derleyici sunucusu bırakma ───────────────────────
 # Çıkış kodu KORUNUYOR: kapatma başarısız olsa bile derlemenin
