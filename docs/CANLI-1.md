@@ -935,7 +935,7 @@ değilse ya da karar verilemezse yayın `git pull`un hemen arkasında,
 pahalı turlardan önce durur. Sonda 14/14; gerçek depoda kuru koşuda
 ilan yalnız SW/1 iken 8 kayıt commit'ini adıyla KAPSAM DIŞI saydı.
 
-### JETON/1 — 1. adım: arka uç tek kaynağa (2026-09-10, `da502ef2`, YAYINLANMADI)
+### JETON/1 — 1. adım: arka uç tek kaynağa (2026-09-10, `da502ef2`; YAYINLANDI 2026-09-11 `51e4c6c7` — aşağıda)
 
 `CurrentUserService` izni ve rolü artık istek başına kanonik çözücüden
 okuyor (`IstekYetkisi`, `HttpContext.Items`); jetona geri düşüş yok,
@@ -1114,3 +1114,51 @@ AÇIK: koşunun neden 44 dakika sürdüğü (takılma) BİLİNMİYOR.
 Bugünkü rig derlemesinin scope zirvesi 6,3 GB (sınır 7 GB, takas 2 GB)
 ayrı bir olay; "peak" sayfa önbelleğini de sayıyor, yani 6,3 GB yerleşik
 bellek değil — gerçek marj bu sayıdan okunamaz.
+
+## JETON/1 (izin + rol) — YAYINLANDI ve canlıda ölçüldü (2026-09-11)
+
+**Paket ilanı (Mehmet Bey):** "JETON/1 — jetondaki eskiyen yetki
+kararlarının tamamı: izin + rol." Yayın `51e4c6c7`, 09:02:01 UTC;
+arka uç testleri 3213/3213.
+
+**Kapsam kapısının ilk gerçek sınavı:** paket `6dec0211..51e4c6c7`,
+23 commit. SW/1 kodu (`e92b8c41`) main'de geri alındı (`b36019bc`) ama
+ikisi de aralıkta kaldığı için kapı onları commit düzeyinde görür:
+- İlanda SW/1 çifti YOK → **KIRMIZI (çıkış 1)**, iki commit adıyla
+  "KAPSAM DIŞI", "Yayın DURDU".
+- İlan paketin tam listesi (SW/1 çifti birbirini iptal eden çift olarak)
+  → **YEŞİL (0)**, 23/23. Gerçek yayının içinde de YEŞİL.
+- SW/1'in net etkisi ölçüldü: üç dosyada tabana göre fark 0; paketin
+  kayıt dışı net farkı 18 dosya — yalnız JETON/1, ROL/1, kapsam kapısı,
+  ölü scope muhafazası. Ön yüzde değişen dosya YOK.
+
+**Yayın öncesi:** 4 aktif kullanıcı; Admin rolünde tek kişi (mehmet —
+Admin + GM, ROL/1 onu etkilemez); muaf olmayan 3 kişinin 3'ü pencerede.
+**Yayın sonrası:** ret satırı (HesapPasif/OturumIptal/MesaiDisi/RolYok)
+0, ön yüz CIKIS 0 — kimse atılmadı.
+
+**Canlı ölçüm (çağırarak).** Geçici rol + geçici hesap
+(`olcum-jeton1-0911090239`, mesai muaf) doğrudan veritabanına yazıldı,
+ölçümden sonra SİLİNDİ (kalan satır 0). Cevap gövdeleri yazdırılmadı.
+Doğrudan SQL yazımı denetim kesicisini atladı; bu kayıt o yazımın izidir
+(girişlerin AppUser güncellemeleri denetimde, silinmiş kimlik
+`32f30701-…` ile duruyor).
+
+| adım | yönetim KPI "Bordro maliyeti" | kullanıcı yönetimi |
+|---|---|---|
+| 1 zemin (Admin + `salary.view` + `user-management.view`) | var (200) | 200 |
+| 2 AYNI jeton, `salary.view` ve Admin alındı | **yok** (200, KPI düştü) | **403** |
+| 3 AYNI jeton, Admin geri verildi (ters yön) | var | **200** (yeniden giriş gerekmeden) |
+
+Canlı günlük: `ERISIM-RET sebep=RolYok kullanici=32f30701-… yol=/api/user-management/users`
+— onuncu sebep üretimde çalışıyor.
+
+**ÇEK GERİ ALMA CANLIDA ÖLÇÜLMEDİ — bilinçli.** `ChequeService`
+kapanmış çekte yetkiyi çeki yükledikten SONRA, stornodan ÖNCE
+denetliyor. Canlıda gerçek bir çekle "403 alıyor mu" denemek, düzeltme
+tutmasaydı gerçek bir para hareketini storno etmek demekti (Kural 83:
+olasılık düşük, kalıcılık ve etki gerçek). Kanıt rig/xUnit: JETON/1 T2
+(kapanmış iptal yetkisi alındıktan sonra aynı jetonla geri alma:
+düzeltmeden önce 200, sonra 403, çek dokunulmadan) ve T4 (çözücü
+sabote → kapalı). Canlıda ölçmek için test şirketinde bir deneme çeki
+gerekir — karar Mehmet Bey'in.
