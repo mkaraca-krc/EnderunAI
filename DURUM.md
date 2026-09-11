@@ -12705,3 +12705,26 @@ SONRA. Yayını geciktirmiyor.** Gerekçe:
   zamanlamasıyla üretilemez.
 Çözüm yönü ONAYLI: milisaniye üretim iddiası + tam karşılaştırma.
 Doğuran kural: Kural 83.
+
+
+## BEKLEYEN PAKET — DENETIM/1: VERİTABANINA DOĞRUDAN YAZAN, DENETİM İZİ BIRAKMIYOR (2026-09-11)
+
+**Kaynak:** JETON/1 canlı ölçümü — geçici ölçüm hesabı doğrudan
+veritabanına yazıldı ve denetim kesicisini (`AuditSaveChangesInterceptor`)
+ATLADI. Mehmet Bey: "bu cümle bir ölçüm sonucu değil, bir AÇIK."
+
+**Anlamı:** veritabanına doğrudan yazan herkes — insan ya da bizim
+betiklerimiz — denetim izi bırakmadan kayıt değiştirebiliyor. Kural 80'in
+(aktör = fiilen yapan) bir dişlisi eksik: aktörü kaydeden mekanizma
+atlanabiliyorsa kayıt eksiksiz değildir.
+
+**Aynı ailede daha önce ölçülmüş:** kullanıcı kaydetme rolleri, kişisel
+izinleri ve veri kapsamını `ExecuteDeleteAsync` ile siliyor
+(`UserManagementController:533,543,585`) — bu yol da kesiciyi atlıyor;
+rol/izin SİLMELERİ denetimde yok (JETON/1 maruziyet ölçümü, 10 Eylül).
+
+**ŞİMDİ DÜZELTME YOK — ÖLÇÜM İSTENİYOR (sırası gelince):**
+- Denetim izi hangi katmanda üretiliyor — uygulama mı, veritabanı mı?
+- Doğrudan yazma hangi yollarla mümkün (psql, betikler, göçler, EF
+  toplu işlemleri)?
+- Veritabanı düzeyinde (tetikleyici) bir iz mümkün mü, maliyeti ne?
