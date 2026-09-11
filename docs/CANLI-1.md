@@ -1004,6 +1004,12 @@ değil KAPININ KARARINA göre verildi (rig'de veri az; boş bir 200 bir şey
 kanıtlamaz). "Veri kapısı sınırdır" artık bu 116 rota için ölçülmüş bir
 cümle; menü dışı rotalar (ör. detay sayfaları) taranmadı.
 
+**Kapsam sınırı ve ŞART (Mehmet Bey, 11 Eylül — Kural 82):** detay
+sayfaları varlık verisinin yaşadığı yerdir; kapsam açığı orada olur.
+C ön yüzü yayına çıkmadan ÖNCE detay rotalarından bir örneklem aynı
+yöntemle taranacak: en az 10 rota, farklı modüllerden, en az biri
+finans, biri İK, biri bordro.
+
 **Yan not — ölçüm sırasında:** oluşturulan kullanıcının ilk isteği bir
 koşuda `OturumIptal` aldı (aynı saniyede basılan jeton). Sonda 1,2 sn
 bekleyecek şekilde değiştirildi — ama bu bir düzenek kararı değil,
@@ -1086,7 +1092,15 @@ raporda "oturum" diye söylendi ama KAYDA GEÇMEDİ. Bugün ölçüldü:
 - Sonuç, oturumun yeniden başladığı dakikada teslim edildi (20:01:33
   "Continue from where you left off").
 
-**Hüküm:** bellek sınırı DEĞİL; SIGKILL oturum kesilmesiyle uyumlu.
+**Hüküm:** bellek sınırı DEĞİL. Kanıtlanmadı; zamanlama korelasyonu
+oturum/terminal katmanını işaret ediyor. Sunucu tarafında OOM izi yok.
+Tekrarlarsa aranacak ilk yer oturum katmanı.
+**Korelasyon neden kanıt sayılmadı:** sonucun oturumun yeniden başladığı
+DAKİKADA teslim edilmesi, SIGKILL'in oturum kesilmesinden geldiğiyle
+uyumlu — ama tersini de anlatabilir: süreç zaten ölmüştü (ya da takılıp
+bir başka nedenle öldürülmüştü) ve sonucu oturum yeniden başlayınca
+TESLİM EDİLDİ. Teslim anı, ölüm anı değil; ölüm anına ait bağımsız bir
+kayıt (oturum katmanının öldürme günlüğü ya da sürecin kendi izi) yok.
 AÇIK: koşunun neden 44 dakika sürdüğü (takılma) BİLİNMİYOR.
 Bugünkü rig derlemesinin scope zirvesi 6,3 GB (sınır 7 GB, takas 2 GB)
 ayrı bir olay; "peak" sayfa önbelleğini de sayıyor, yani 6,3 GB yerleşik
