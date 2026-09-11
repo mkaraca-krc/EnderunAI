@@ -71,7 +71,14 @@ public enum ErisimRetSebebi
     /// olmayan personelin oturumunun en sık düşeceği yol buydu ve
     /// günlükte izi yoktu.
     /// </summary>
-    MesaiDisi = 9
+    MesaiDisi = 9,
+
+    /// <summary>
+    /// Rol yok — `[RolGerekli]` kapısı, taze anlık görüntüden (ROL/1).
+    /// Eskiden `[Authorize(Roles = …)]` jetondaki rolden karar veriyor ve
+    /// reddi SESSİZ dönüyordu.
+    /// </summary>
+    RolYok = 10
 }
 
 public static class ErisimGunlugu

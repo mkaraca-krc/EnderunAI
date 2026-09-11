@@ -8,7 +8,9 @@ using Microsoft.EntityFrameworkCore;
 namespace EnderunAI.Api.Controllers;
 
 [ApiController]
-[Authorize(Roles = "Admin,Genel Müdür")]
+[Authorize]
+// ROL/1: rol kapısı jetondan değil taze anlık görüntüden (bkz. RolGerekliAttribute).
+[RolGerekli("Admin", "Genel Müdür")]
 [Route("api/security-audit")]
 public sealed class SecurityAuditController(AppDbContext db) : ControllerBase
 {

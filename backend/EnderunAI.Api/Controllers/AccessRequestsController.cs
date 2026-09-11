@@ -18,7 +18,9 @@ namespace EnderunAI.Api.Controllers;
 /// keser.
 /// </summary>
 [ApiController]
-[Authorize(Roles = "Admin,Genel Müdür")]
+[Authorize]
+// ROL/1: rol kapısı jetondan değil taze anlık görüntüden (bkz. RolGerekliAttribute).
+[RolGerekli("Admin", "Genel Müdür")]
 [Route("api/access-requests")]
 public sealed class AccessRequestsController(AppDbContext db) : ControllerBase
 {

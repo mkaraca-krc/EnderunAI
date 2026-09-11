@@ -16,13 +16,12 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
             return;
         }
 
-        var roleNames = context.User
-            .FindAll(ClaimTypes.Role)
-            .Select(claim => claim.Value)
-            .Concat(context.User.FindAll("role").Select(claim => claim.Value))
-            .Concat(context.User.FindAll("roles").Select(claim => claim.Value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        // ROL/1: burada jetondaki rol talepleri toplanıyordu. Kullanıcı
+        // kimliği çözülünce veritabanındaki rollerle eziliyordu ve hiçbir
+        // kararda kullanılmıyordu — ölü bir kopya okuyucusu. Kaldırıldı:
+        // yarın biri onu "rol burada var" diye kullanırsa eskiyen jeton rolü
+        // yeniden karar verirdi. Rol yalnız taze anlık görüntüden okunur.
+        UserAuthorizationSnapshot? authorization = null;
 
         var userIdValue =
             context.User.FindFirstValue(ClaimTypes.NameIdentifier) ??
@@ -33,7 +32,7 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
 
         if (Guid.TryParse(userIdValue, out var userId))
         {
-            var authorization = await userAuthorizationService.GetAsync(
+            authorization = await userAuthorizationService.GetAsync(
                 userId,
                 context.RequestAborted);
 
@@ -55,12 +54,38 @@ public sealed class PermissionAuthorizationMiddleware(RequestDelegate next)
                 return;
             }
 
-            roleNames = authorization.RoleNames.ToArray();
             permissions = authorization.Permissions;
 
             // JETON/1: bu isteğin geri kalanı (ICurrentUserService) izni ve
             // rolü BURADAN okur, jetondan değil. Yalnız bu isteğin ömrü.
             IstekYetkisi.Koy(context, authorization);
+        }
+
+        // ── ROL/1: ROL KAPISI — izinle AYNI geçiş noktası, AYNI taze anlık görüntü ──
+        //
+        // `[Authorize(Roles = …)]` rolü jetondan okuyordu (12 saat eski) ve
+        // reddi sessizdi. `[RolGerekli]` burada değerlendirilir. Anlık
+        // görüntü yoksa (kimlik çözülemedi) rol listesi BOŞ sayılır →
+        // KAPALI düşer; jetondaki role geri dönüş YOK.
+        var rolGerekli = context.GetEndpoint()?.Metadata.GetMetadata<RolGerekliAttribute>();
+        if (rolGerekli is not null)
+        {
+            var roller = authorization?.RoleNames ?? [];
+            if (!rolGerekli.Roller.Any(rol => roller.Contains(rol, StringComparer.OrdinalIgnoreCase)))
+            {
+                ErisimGunlugu.Ret(
+                    logger,
+                    ErisimRetSebebi.RolYok,
+                    Guid.TryParse(userIdValue, out var kid0) ? kid0 : null,
+                    context.Request.Path.Value);
+
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    message = "Bu işlem için yetkiniz bulunmuyor."
+                });
+                return;
+            }
         }
 
         /*
