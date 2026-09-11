@@ -12770,3 +12770,38 @@ makinenin verebileceğinden büyük; (2) üretime AYRILMIŞ bellek
 **veritabanında YOK (0)**. Çekirdek OOM anında muhtemelen en büyük süreci
 (derleme) seçer ama ayrılmış bellek olmadığı için bu bir GARANTİ değil,
 olasılık. En zayıf nokta veritabanı: ölürse ERP düşer.
+
+**1. SORU ÖLÇÜLDÜ (2026-09-11) — GC tavanı hipotezi ÇÜRÜDÜ.**
+
+Önce çalışma zamanının gördüğü tavan ölçüldü: bugünkü `GCHeapHardLimitPercent=5A`
+→ **6480 MB** (%90 × 7200M hipotezi doğru); mutlak `DOTNET_GCHeapHardLimit`
+verilince çalışma zamanı ONU esas alıyor (3072 MB ölçüldü) — derleme
+koşucusuna dokunmadan kademe kurulabildi.
+
+Kademe (derleme koşucusu içinde, `memory.stat` örneklemesiyle; temiz
+derleme `--no-incremental` + tüm test koşusu; üst kademe düşünce altına
+inilmedi):
+
+| GC tavanı | derleme | süre | anon zirve | takas | test koşusu |
+|---|---|---|---|---|---|
+| 6480 MB (bugün) | başarılı | 4 dk 25 sn | 6367 MB | 281 MB | 3218/3218, 28 dk 47 sn, **anon 1727 MB** |
+| 5120 MB | **OOM** (Roslyn, `EnderunAI.Api`) | 5 dk 23 sn | 5302 MB | 0 | — |
+| 4096 MB | **OOM** (Roslyn, `EnderunAI.Api`) | 2 dk 42 sn | 4270 MB | 0 | — |
+| 3072 / 2560 MB | ölçülmedi (üst kademe düştü) | | | | |
+
+Düşüş sebebi çıktıdan doğrulandı: `System.OutOfMemoryException` C#
+derleyicisinde, `EnderunAI.Api.csproj` derlenirken — ilgisiz bir hata değil.
+
+**Sonuç:**
+- Derleme 6,5 GB'ı "izin verildiği için" ALMIYOR — 5 GB'tan fazlasına
+  GERÇEKTEN ihtiyaç duyuyor (5,1–6,4 GB arası; tam sınır ölçülmedi).
+- Bellek iştahı TEST koşusunda değil, DERLEMEDE: testler 1,7 GB'ta kalıyor.
+- Derleme koşucusunun yorumundaki ölçüm bununla tutarlı: derlenen
+  kaynağın %92'si EF göç anlık görüntüsü (195 dosya).
+- Tavanı düşürerek üretime nefes aldırmak MÜMKÜN DEĞİL; ölçüm "3 GB'da
+  çalışıyorsa sorun bitti" dalını kapattı.
+
+**Seçenekler (ölçümden sonra — karar Mehmet Bey'in):** derlemeyi başka
+makineye taşımak · makineye bellek eklemek · SQUASH/1'i öne almak
+(göç anlık görüntüleri derlemenin bellek yükünün asıl kaynağı olarak
+işaret ediliyor — SQUASH/1'in etkisi ölçülmedi).
