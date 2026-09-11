@@ -2237,6 +2237,37 @@ Tarihsel kalıntı, bozuk yol değil. Düzeltilmedi.
 
 ---
 
+### Kural 83 — BİR AÇIĞIN CİDDİYETİ ÜÇ ÇARPANIN SONUCUDUR
+
+**Bir açığın ciddiyeti üç çarpanın sonucudur: giriş koşulunun
+ulaşılabilirliği × jetonu kimin elinde tuttuğu × kalıcılık. Tek boyuta
+bakan eşik yanıltır.**
+
+Onaylandı: Mehmet, 2026-09-11.
+
+**DOĞURAN OLAY — DAMGA/1 PENCERE ÖLÇÜMÜ:**
+
+1. Eşiği Mehmet Bey koydu: "pencere 1 saniyeyi aşıyorsa DAMGA/1 her
+   şeyin önüne geçer, JETON/1 yayını dahil." Eşik tek boyutluydu: SÜRE.
+2. Ölçüm (20 kullanıcı, +2 sn/+10 sn/+60 sn/+5 dk) iki boyutu ayırdı:
+   kalıcılık SINIRSIZ (içeri giren eski jeton zamanla düşmüyor, 7/7), ama
+   giriş koşulu insan eliyle ULAŞILAMAZ (aynı saniyede iki parola
+   değişimi) ve jetonu tutan, değişimi yapan istemcinin KENDİSİ
+   (girişte basılan hiçbir eski jeton hiçbir adımda geçmedi, 0/20).
+3. Harfiyle kural "önüne geçer" diyordu; üç çarpanın ikisi sıfıra yakındı.
+   Kuralı ölçüm düzeltti.
+
+**ÖLÇÜCÜNÜN DAVRANIŞI (kayda değer):** Claude Code kuralın harfini
+bildirdi ve kararı geri verdi — kuralı kendi başına esnetmedi; kuralın
+YANLIŞ BOYUTU ölçtüğünü gösterdi. Doğru davranış bu: eşik yanlışsa onu
+sessizce yok saymak değil, ölçümle görünür kılıp sahibine götürmek.
+
+**UYGULAMA:** bir eşik koyarken ya da uygularken üç soruyu ayrı sor —
+kim ulaşabilir, kimin elinde, ne kadar sürer. Birinin sıfır olması
+çarpımı sıfırlar; birinin sonsuz olması çarpımı tek başına büyütmez.
+
+---
+
 ### Kural 82 — BİR ÖLÇÜM YALNIZ ÖLÇTÜĞÜ YOLU KANITLAR
 
 **"Şunu ölçtüm" ile "başkası yok" iki ayrı iddiadır ve ikincisi ayrı
@@ -12663,3 +12694,14 @@ otomasyon ve rig çarpar.
 **Öneri:** yuvarlama yönünü değiştirmek değil, jetona saniye altı üretim
 iddiası eklemek ve damgayla tam karşılaştırmak (iddiasız eski jetonlar
 bugünkü kurala düşer). Öncelik ve onay: Mehmet Bey.
+
+**KARAR (Mehmet Bey, 2026-09-11): SIRASI İKİNCİ — JETON/1 yayınından
+SONRA. Yayını geciktirmiyor.** Gerekçe:
+- Girişte basılan eski jeton HİÇBİR adımda geçmedi (0/20 × 4 adım,
+  +5 dk'ya kadar) — parola değişiminin asıl vaadi tutuyor.
+- Geçen tek jeton, değişimi yapan istemcinin kendi elindeki jeton;
+  üçüncü şahıs erişimi değil.
+- Giriş koşulu aynı saniyede iki parola değişimi; arayüzden insan
+  zamanlamasıyla üretilemez.
+Çözüm yönü ONAYLI: milisaniye üretim iddiası + tam karşılaştırma.
+Doğuran kural: Kural 83.
