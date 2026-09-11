@@ -1152,8 +1152,10 @@ TESLİM EDİLDİ. Teslim anı, ölüm anı değil; ölüm anına ait bağımsız
 kayıt (oturum katmanının öldürme günlüğü ya da sürecin kendi izi) yok.
 AÇIK: koşunun neden 44 dakika sürdüğü (takılma) BİLİNMİYOR.
 Bugünkü rig derlemesinin scope zirvesi 6,3 GB (sınır 7 GB, takas 2 GB)
-ayrı bir olay; "peak" sayfa önbelleğini de sayıyor, yani 6,3 GB yerleşik
-bellek değil — gerçek marj bu sayıdan okunamaz.
+ayrı bir olay. ~~"peak" sayfa önbelleğini de sayıyor, yani 6,3 GB
+yerleşik bellek değil — gerçek marj bu sayıdan okunamaz.~~ **ÖLÇÜLDÜ,
+YANLIŞTI (11 Eylül):** zirvenin ~%97'si YERLEŞİK bellek (bkz. "Bellek —
+gerçek marj").
 
 ## JETON/1 (izin + rol) — YAYINLANDI ve canlıda ölçüldü (2026-09-11)
 
@@ -1225,3 +1227,48 @@ alındıktan sonra aynı jetonla geri alma — düzeltmeden önce 200, sonra
 403, çek dokunulmadan) ve T4 (çözücü sabote → kapalı). Canlıda ölçülen
 iki yol: KPI ve kullanıcı yönetimi (yukarıdaki tablo). Sınırı bilmek,
 sınırı yok saymaktan iyidir.
+
+
+## Bellek — derleme scope'unun gerçek marjı (2026-09-11, ÖLÇÜLDÜ)
+
+**Soru (Mehmet Bey):** scope zirvesi iki kez 6,3 GB / 7 GB; ama bu değer
+sayfa önbelleğini de sayıyorsa gerçek marj ne?
+
+**Ölçüm:** rig'in derlemesinin aynısı (`dotnet publish` arka uç, Release)
+derleme koşucusu içinde; örnekleyici saniyede bir scope'un `memory.stat`
+dosyasından anon ve file'ı ayrı okudu (268 örnek, 4 dk 39 sn).
+
+| | değer |
+|---|---|
+| **anon (yerleşik) zirve** | **6178 MB** |
+| file (sayfa önbelleği) zirve | 228 MB |
+| current zirve / çekirdek `memory.peak` | 6340 / 6357 MB |
+| takas zirve | **410 MB** |
+| tek sürecin en yüksek yerleşik belleği (`time -v`) | **6491 MB** |
+| scope sınırı | `MemoryMax=7200M` + `MemorySwapMax=2G` |
+| makine toplamı / derleme dışı tüketim | 7894 MB / ~1,4 GB |
+
+**Sonuç:**
+- Zirvenin ~%97'si yerleşik bellek; "sayfa önbelleği şişiriyor" varsayımı
+  bu iş yükünde YANLIŞ (kendi cümlemdi, düzeltildi).
+- Scope içi gerçek marj **~1 GB (%14)** ve derleme o sırada 410 MB'ı
+  takasa itiyor — DAR.
+- Makine düzeyinde marj neredeyse YOK: 6,5 GB derleme + ~1,4 GB diğerleri
+  ≈ 7,9 GB toplam. Oturum katmanının iki kez "bellek azaldı" diye görev
+  durdurmasının açıklaması bu (çekirdek OOM izi iki seferde de yok).
+
+**Sınırı yükseltmek ÖNERİLMİYOR — ölçüm Mehmet Bey'in "darsa yükselt"
+dalına karşı çıkıyor:** sınır zaten fiziksel belleğe dayanmış. 7200M'in
+üstü, canlı API'nin de koştuğu makinede sistem çapında OOM riskini
+büyütür; cgroup'un "canlı API değil TEST ölsün" amacını ters çevirir.
+
+**Hipotez (ÖLÇÜLMEDİ):** 6491 MB ≈ `DOTNET_GCHeapHardLimitPercent=5A`
+(%90) × 7200 MB = 6480 MB. Çöp toplayıcı kendisine verilen tavana kadar
+dolduruyor olabilir — yani sayı derlemenin İHTİYACI değil İZİN VERİLEN
+tavan. Daha düşük bir yüzdeyle aynı derleme ölçülmeden bu söylenemez
+(derleme koşucusundaki eski ölçüm: 4G tavanla test turu 3,46 GB'da
+OOM — gerçek ihtiyaç da yüksek).
+
+**Seçenekler (karar Mehmet Bey'in):** SQUASH/1'i öne almak (derlenen
+kaynağın %92'si EF göç anlık görüntüsü — derleme koşucusu yorumu);
+makineye bellek; GC yüzdesini düşürüp ölçmek.
