@@ -1272,3 +1272,32 @@ OOM — gerçek ihtiyaç da yüksek).
 **Seçenekler (karar Mehmet Bey'in):** SQUASH/1'i öne almak (derlenen
 kaynağın %92'si EF göç anlık görüntüsü — derleme koşucusu yorumu);
 makineye bellek; GC yüzdesini düşürüp ölçmek.
+
+## DAMGA/1 yayını — GERİ ALMA TETİĞİ (yayından ÖNCE ilan edildi, 2026-09-11)
+
+Mehmet Bey: "Eşiği olayın ortasında belirlemek, eşik koymamaktır."
+
+**Ölçülen (M):** canlı arka uç günlüğünde oturum düzeyindeki 401'ler —
+`ERISIM-RET sebep ∈ {OturumIptal, JetonGecersiz, ImzaGecersiz,
+SuresiDolmus, HesapPasif}` (ilk satır 1, `ERISIM-RET-TEKRAR … tekrar=xN`
+N sayılır) + ön yüz günlüğünde `CIKIS` satırları.
+**Dışarıda:** `JetonYok` (jetonsuz istek — giriş sayfasının ölçülmüş tek
+`auth/me`'si), `IzinYok`/`IzinYokYoldan`/`RolYok` (yetki, oturum değil),
+`MesaiDisi` (saate bağlı). DAMGA/1 bu yollara dokunmuyor.
+
+**Taban (B):** yayın başlamadan önceki 30 dakika (eski kod koşarken).
+**Pencere:** yeni arka uç sağlıklı olduktan sonraki 30 dakika.
+
+**TETİK: M > max(3 × B, 5) → yayın geri alınır.**
+- N = 3: 4 kullanıcılı sistemde B büyük olasılıkla 0–2. DAMGA/1'in
+  bozabileceği şey doğrulamanın kendisi — bozulursa HER kimlikli istek
+  reddedilir ve M yüzlere çıkar; 3 kat bunu kaçırmaz.
+- Taban 5: B = 0 iken tek tük süre dolması / eski oturum gibi gürültü
+  geri alma tetiklemesin.
+
+**Geri alma yolu (önceden belirlendi):** yayın betiği önceki derlenmiş
+çıktıyı `publish-rollback`'e kopyalıyor (JETON/1 sürümü). DAMGA/1 yalnız
+arka uç: `publish-rollback` → `publish`, arka uç yeniden başlatılır,
+sağlık beklenir (~1 dk, kısa 503). Bilinen yan etki: geri alma anına kadar
+DAMGA/1 ile parolasını değiştiren kullanıcının jetonu (`damga + 1 ms`)
+eski saniye kuralında reddedilir — yeniden giriş.
