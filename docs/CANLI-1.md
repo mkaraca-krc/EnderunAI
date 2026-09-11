@@ -713,6 +713,15 @@ yorumu da bunu söylüyor: "backend does not expose token revocation yet".
 
 ## SW/1 — KİŞİSEL VERİ: tarayıcı önbelleğinde kimlikli cevap kalmaz (2026-09-10)
 
+> **DURUM (2026-09-11): KOD MAIN'DE GERİ ALINDI — ayrı yayın bekliyor.**
+> Mehmet Bey kararı (B yolu): SW/1, JETON/1 ile aynı pakete girmez; üç
+> koşulundan (a) yalnız vekil ölçüyle, (c) canlıda hiç ölçülemiyor.
+> `e92b8c41` revert edildi (`b36019bc`); SW/1 dosyalarında tabana göre
+> net fark 0; geri-revert kuru provasında üç dosya `e92b8c41` ile birebir
+> döndü. Bu bölümdeki ölçümler kodla birlikte geçerli; SW/1 ayrı yayınında
+> (c) için rig ölçümü kanıt sayılacak ve "CANLIDA ÖLÇÜLMEDİ" diye
+> kaydedilecek.
+
 ### Kişisel veri (KVKK)
 
 Şantiye tabletleri **ortak kullanılıyor**. Önceki service worker her
