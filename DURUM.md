@@ -12728,3 +12728,26 @@ rol/izin SİLMELERİ denetimde yok (JETON/1 maruziyet ölçümü, 10 Eylül).
 - Doğrudan yazma hangi yollarla mümkün (psql, betikler, göçler, EF
   toplu işlemleri)?
 - Veritabanı düzeyinde (tetikleyici) bir iz mümkün mü, maliyeti ne?
+
+
+## BEKLEYEN PAKET — BELLEK/1: ÜRETİMİ DERLEMEDEN KORUMAK (2026-09-11)
+
+**İLKE (Mehmet Bey, 2026-09-11 — ölçümden bağımsız, şimdi kayıtta):**
+"Derleme ve testler, canlı API'yi aç bırakamayacak bir sınırla koşar.
+Sınır, üretimin ihtiyacını koruyacak şekilde belirlenir; derlemenin hızı
+ikinci sıradadır."
+
+**Asıl mesele:** sınırın dar olması değil — DERLEME İLE CANLI API AYNI
+MAKİNEDE ve makine marjı ~0 (ölçüldü: derleme ~6,5 GB yerleşik + ~1,4 GB
+diğerleri ≈ 7,9 GB toplam). Bir derleme canlı ERP'yi OOM ile düşürebilir;
+bugüne kadar düşmemiş olması kanıt değil, şans.
+
+**ÖLÇÜM SIRASI:**
+1. En ucuz: GC tavanı hipotezi (6491 MB ≈ %90 × 7200 MB). GC yığın sınırı
+   kademeli düşürülür (4 GB, 3 GB, 2,5 GB); her kademede derleme + test
+   koşusunun başarısı ve SÜRESİ tabloya. 3 GB'da çalışıyorsa sınır oraya
+   çekilir; yavaş derleme kabul edilen takas.
+2. Canlı API süreci bir bellek sınırı (cgroup) içinde mi, çıplak mı?
+   Çıplaksa üretim korumasız.
+Hipotez tutmazsa seçenekler (ölçümden SONRA konuşulur): derlemeyi başka
+makineye taşımak, bellek eklemek, SQUASH/1'i öne almak.
