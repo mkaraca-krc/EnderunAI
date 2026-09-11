@@ -1045,6 +1045,35 @@ olmayan eski jetonlar bugünkü kurala düşer. Ayrı paket: **DAMGA/1**
 
 Rig sondalarındaki 1,2 sn bekleme bu ölçümün gerekçesiyle KALIYOR.
 
+### Pencere ölçümü — eski jeton NE KADAR geçiyor (2026-09-11, Mehmet Bey'in tek sorusu)
+
+20 kullanıcı; her biri giriş yaptı (**G** = giriş jetonu), 1,1 sn sonra
+parolasını ARKA ARKAYA iki kez değiştirdi (**D1** = ilk değişimin
+döndürdüğü jeton, **D2** = ikincininki). İkinci değişiklikten sonra aynı
+jetonlar dört adımda denendi. Beklentiler önceden ilan edildi; birebir tuttu.
+
+| değişiklikten sonra | G geçen | D1 geçen (aynı saniye) | D1 geçen (farklı saniye) | D2 (kontrol) |
+|---|---|---|---|---|
+| +2 sn | 0/20 | **7/7** | 0/13 | 20/20 |
+| +10 sn | 0/20 | **7/7** | 0/13 | 20/20 |
+| +60 sn | 0/20 | **7/7** | 0/13 | 20/20 |
+| +5 dk | 0/20 | **7/7** | 0/13 | 20/20 |
+
+**Pencerenin iki boyutu:**
+- **Giriş koşulu ≤ 1 sn:** geçen eski jeton YALNIZ, parola değişimi ucunun
+  döndürdüğü ve sonraki değişiklikle AYNI saniyede basılmış jeton
+  (D1'in `iat`'ı = sonraki damganın sınırı). Girişte basılan hiçbir eski
+  jeton, hiçbir adımda geçmedi.
+- **Süre SINIRSIZ:** içeri giren jeton zamanla düşmüyor — +5 dk'da hâlâ
+  7/7. Kural (`uretim >= SonrakiSaniye(damga)`) zaman içermiyor; eşitlik
+  bir kez sağlandıysa jeton ömrü boyunca (12 sa) geçerli kalır. 5 dk
+  ölçüldü; 12 sa kuraldan çıkarım.
+
+**"Parolamı değiştirdim, artık güvendeyim" cümlesi için:** saldırganın
+jetonu girişte basılmışsa (parolayı bilen birinin açtığı oturum) —
+ölçüldü, her adımda 0/20 — söz tutuyor. Tutmadığı sınıf: parola değişim
+ucunun döndürdüğü, sonraki değişiklikle aynı saniyede basılmış jeton.
+
 ## Dünkü (10 Eylül) SIGKILL 137 — kanıtlı hüküm (2026-09-11)
 
 10 Eylül 19:13:45'te başlayan `dotnet test` (`JetonTekKaynakTests`) 44
