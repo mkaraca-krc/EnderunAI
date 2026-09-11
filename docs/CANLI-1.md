@@ -1089,6 +1089,46 @@ jetonu girişte basılmışsa (parolayı bilen birinin açtığı oturum) —
 ölçüldü, her adımda 0/20 — söz tutuyor. Tutmadığı sınıf: parola değişim
 ucunun döndürdüğü, sonraki değişiklikle aynı saniyede basılmış jeton.
 
+### DAMGA/1 düzeltmesi — ölçüldü (2026-09-11, YAYINLANMADI)
+
+**Çözüm (onaylı):** jetona imzalı `uretim_ms` iddiası; damgayla
+milisaniye tabanında TAM karşılaştırma (jeton damganın milisaniyesinden
+SONRA basılmışsa geçerli; aynı milisaniye kapalı). Kendi parola değişimi
+jetonu `damga + 1 ms` ile basıyor — "gelecekten saniye" kalktı.
+**Geçiş:** `uretim_ms` taşımayan ESKİ jeton bugünkü saniye kuralıyla
+değerlendiriliyor — yayın anında oturumda olan kimse atılmaz; eski
+jetonlar en geç 12 saatte söner.
+
+**Sondalar (DamgaHassasiyetTests — saniye başına hizalı, deterministik):**
+
+| sonda | düzeltmeden önce | sonra |
+|---|---|---|
+| H1 aynı saniyede iki değişim → D1 | **5/5 GEÇTİ (KIRMIZI)** | reddedildi |
+| H1 pozitif: D2 | geçti | geçti |
+| H2 gerileme: girişte basılan eski jeton | reddedildi | reddedildi |
+| H3 hesap aç + hemen giriş, ilk istek | **5/5 401 (KIRMIZI)** | 200 |
+| H3 sıfırla + hemen giriş, ilk istek | **5/5 401 (KIRMIZI)** | 200 |
+| H4 geçiş: eski biçimli jeton (damga yok / sonra değişim) | 200 / 401 | 200 / 401 |
+| H5 yeni jeton `uretim_ms` taşır | **KIRMIZI** | yeşil |
+
+Mutasyon (doğrulayıcı `uretim_ms`'i yok sayar): H1, H2, H3 KIRMIZI.
+İlgili aileler 97/97 (eski saniye kuralını sınayan ParolaDegistirmeTests
+dahil — geçişin gerileme kilidi).
+
+**c1/c2 ("giriş başarılı ama ilk istek 401") KAPANDI:** giriş ayrı bir
+istek olduğu için damgadan en az birkaç ms sonra basılıyor; H3 5/5 + 5/5.
+
+**Pencere ölçümü AYNEN tekrarlandı (20 kullanıcı, aynı sonda):**
+
+| değişiklikten sonra | G — önce | G — sonra | D1 aynı saniye — önce | D1 aynı saniye — sonra | D1 farklı saniye — önce / sonra | D2 — önce / sonra |
+|---|---|---|---|---|---|---|
+| +2 sn | 0/20 | 0/20 | **7/7** | **0/5** | 0/13 / 0/15 | 20/20 / 20/20 |
+| +10 sn | 0/20 | 0/20 | **7/7** | **0/5** | 0/13 / 0/15 | 20/20 / 20/20 |
+| +60 sn | 0/20 | 0/20 | **7/7** | **0/5** | 0/13 / 0/15 | 20/20 / 20/20 |
+| +5 dk | 0/20 | 0/20 | **7/7** | **0/5** | 0/13 / 0/15 | 20/20 / 20/20 |
+
+(Aynı saniyeye düşen D1 sayısı koşuya göre değişiyor: 7/20 ve 5/20.)
+
 ## Dünkü (10 Eylül) SIGKILL 137 — kanıtlı hüküm (2026-09-11)
 
 10 Eylül 19:13:45'te başlayan `dotnet test` (`JetonTekKaynakTests`) 44
