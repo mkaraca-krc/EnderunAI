@@ -12651,3 +12651,15 @@ karşılaşacak.
 bir yan uç çağırdığı için yanlış hata gösteriyor? Dışlama yöntemiyle
 sayılacak; tarama sağlığı sayacı zorunlu (taranan sayfa sayısı, sayfa
 başına yan uç sayısı; 0 sayfa taranmışsa "0 ihlal" geçersiz).
+
+## BEKLEYEN PAKET — DAMGA/1: PAROLA DAMGASI SANİYE SINIRINDA İKİ YÖNLÜ KUSURLU (2026-09-11)
+
+**Ölçüldü (CANLI-1, "DAMGA SINIRI"):** aynı saniyede basılan giriş jetonu
+reddediliyor (oluştur/sıfırla + hemen giriş: ilk istek 401, ~%50); kendi
+parola değişiminin döndürdüğü "gelecekten" jeton aynı saniyedeki ikinci
+değişiklikte geçerli kalıyor (5–6/20). İnsan zamanlamasıyla erişilemez;
+otomasyon ve rig çarpar.
+
+**Öneri:** yuvarlama yönünü değiştirmek değil, jetona saniye altı üretim
+iddiası eklemek ve damgayla tam karşılaştırmak (iddiasız eski jetonlar
+bugünkü kurala düşer). Öncelik ve onay: Mehmet Bey.
