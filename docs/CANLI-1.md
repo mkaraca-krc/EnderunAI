@@ -1301,3 +1301,18 @@ arka uç: `publish-rollback` → `publish`, arka uç yeniden başlatılır,
 sağlık beklenir (~1 dk, kısa 503). Bilinen yan etki: geri alma anına kadar
 DAMGA/1 ile parolasını değiştiren kullanıcının jetonu (`damga + 1 ms`)
 eski saniye kuralında reddedilir — yeniden giriş.
+
+## DAMGA/1 — YAYINLANDI, tetik penceresi temiz (2026-09-11)
+
+Yayın `9402c5cd`, 12:16:19 UTC (arka uç 12:15:56'da ayağa kalktı);
+arka uç testleri 3218/3218. Kapsam kapısı gerçek yayında YEŞİL 8/8
+(paketin kayıt dışı net farkı yalnız DAMGA/1'in 5 dosyası).
+
+- **(a) Yayın öncesi:** 4 aktif; muaf olmayan 3'ün 3'ü pencerede (14:27 İstanbul).
+- **(b) Geri alma tetiği (önceden ilan):** taban B (yayın öncesi 30 dk) = **0**
+  (1153 satır tarandı). Pencere 12:16:19 → 12:47:17 UTC, 5 dakikada bir
+  sayıldı: M her sayımda **0**, son sayım 2179 satır → **M=0 ≤ 5, tetik YOK.**
+- **(c) Çağırarak:** yayından ÖNCE eski kodla giriş yapan geçici hesabın
+  `uretim_ms`'siz ESKİ jetonu yayından sonra **200** (oturumda olan düşmedi);
+  yeni girişin jetonu `uretim_ms` taşıyor (şimdiye 29 ms) ve **200**. Geçici
+  hesap silindi, kalan satır 0.

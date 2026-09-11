@@ -12751,3 +12751,22 @@ bugüne kadar düşmemiş olması kanıt değil, şans.
    Çıplaksa üretim korumasız.
 Hipotez tutmazsa seçenekler (ölçümden SONRA konuşulur): derlemeyi başka
 makineye taşımak, bellek eklemek, SQUASH/1'i öne almak.
+
+**2. SORU ÖLÇÜLDÜ (2026-09-11) — canlı API çıplak mı?**
+
+| süreç | `MemoryMax` | ayrılmış (`memory.min`/`low`) | `OOMScoreAdjust` |
+|---|---|---|---|
+| canlı API (`enderunai-backend`) | sınırsız | **0** | −500 |
+| ön yüz (`enderunai-frontend`) | sınırsız | **0** | −500 |
+| **PostgreSQL** | sınırsız | **0** | **0** |
+| derleme scope'u | 7200M (+2G takas) | — | varsayılan |
+
+`systemd-oomd` kapalı. Ölçüm anında canlı API RSS 129 MB, `oom_score` 360.
+
+**Okuma:** üretime SINIR koymak onu korumaz — kendi sınırında
+öldürülebilir yapar. Koruyan üç şey: (1) derlemenin sınırı — var ama
+makinenin verebileceğinden büyük; (2) üretime AYRILMIŞ bellek
+(`memory.min`) — YOK; (3) OOM önceliği — API ve ön yüzde var (−500),
+**veritabanında YOK (0)**. Çekirdek OOM anında muhtemelen en büyük süreci
+(derleme) seçer ama ayrılmış bellek olmadığı için bu bir GARANTİ değil,
+olasılık. En zayıf nokta veritabanı: ölürse ERP düşer.
