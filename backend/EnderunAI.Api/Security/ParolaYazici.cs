@@ -59,6 +59,8 @@ public sealed class ParolaYazici(
         user.PasswordChangedAtUtc = simdi;
         oturumGecerliligi.Kaydet(user.Id, simdi);
 
-        return IOturumGecerliligi.JetonSaniyesi(simdi);
+        // DAMGA/1: yeni jeton damganın BİR milisaniye sonrasıyla basılır
+        // (eskiden bir SONRAKİ SANİYEYLE — "gelecekten" jeton).
+        return IOturumGecerliligi.JetonUretimi(simdi);
     }
 }

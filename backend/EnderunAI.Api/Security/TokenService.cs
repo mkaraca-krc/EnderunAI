@@ -11,6 +11,9 @@ public sealed class TokenService(IConfiguration configuration)
     /// <summary>`enderun_token=` — çerez boyutuna adı da dahil.</summary>
     private const int CerezAdiUzunlugu = 14;
 
+    /// <summary>DAMGA/1 — jetonun milisaniye üretim iddiası (Unix ms).</summary>
+    public const string UretimMilisaniyesiAlani = "uretim_ms";
+
     /// <param name="uretimZamani">
     /// Jetonun `iat` iddiası. Boşsa şimdiki zaman.
     ///
@@ -28,6 +31,8 @@ public sealed class TokenService(IConfiguration configuration)
         var secret = configuration["Jwt:Secret"]
             ?? Environment.GetEnvironmentVariable("JWT_SECRET")
             ?? throw new InvalidOperationException("JWT_SECRET tanımlı değil.");
+
+        var uretim = uretimZamani ?? DateTime.UtcNow;
 
         var roleNames = roles
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -53,10 +58,16 @@ public sealed class TokenService(IConfiguration configuration)
              * ekleme sessizce bir sınırı aşamaz.
              */
             new(JwtRegisteredClaimNames.Iat,
-                new DateTimeOffset(
-                        uretimZamani ?? DateTime.UtcNow,
-                        TimeSpan.Zero)
+                new DateTimeOffset(uretim, TimeSpan.Zero)
                     .ToUnixTimeSeconds().ToString(),
+                ClaimValueTypes.Integer64),
+            // DAMGA/1: saniye çözünürlüğü parola damgasıyla aynı saniyede
+            // basılan jetonu ayırt edemiyordu (ölçüldü: aynı saniyede giriş
+            // reddediliyor, "gelecekten" jeton ikinci değişikliği aşıyordu).
+            // İmzalı milisaniye iddiası damgayla TAM karşılaştırılır.
+            new(UretimMilisaniyesiAlani,
+                new DateTimeOffset(uretim, TimeSpan.Zero)
+                    .ToUnixTimeMilliseconds().ToString(),
                 ClaimValueTypes.Integer64)
         };
 

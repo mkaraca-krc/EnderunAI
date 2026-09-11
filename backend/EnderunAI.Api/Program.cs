@@ -639,6 +639,17 @@ builder.Services
                         .FromUnixTimeSeconds(saniye).UtcDateTime;
                 }
 
+                // DAMGA/1: imzalı milisaniye üretim iddiası. Yoksa (eski
+                // jeton) doğrulayıcı saniye kuralına düşer — geçiş.
+                DateTime? hassasUretim = null;
+                var uretimMs = context.Principal?.FindFirst(
+                    EnderunAI.Api.Security.TokenService.UretimMilisaniyesiAlani)?.Value;
+                if (long.TryParse(uretimMs, out var milisaniye))
+                {
+                    hassasUretim = DateTimeOffset
+                        .FromUnixTimeMilliseconds(milisaniye).UtcDateTime;
+                }
+
                 var gecerlilik = context.HttpContext.RequestServices
                     .GetRequiredService<EnderunAI.Api.Security.IOturumGecerliligi>();
                 var db = context.HttpContext.RequestServices
@@ -646,7 +657,8 @@ builder.Services
 
                 if (!await gecerlilik.GecerliAsync(
                         kullaniciId, uretim, db,
-                        context.HttpContext.RequestAborted))
+                        context.HttpContext.RequestAborted,
+                        hassasUretim))
                 {
                     /*
                      * REDDİN KAYDI — TEŞHİS EDİLEBİLİR, SIRRI ELE

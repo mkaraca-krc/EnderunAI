@@ -62,14 +62,29 @@ public interface IOturumGecerliligi
         OturumGecerliligi.SonrakiSaniye(degisimUtc);
 
     /// <summary>
+    /// DAMGA/1 — değişimden sonra basılacak jetonun `uretim_ms` iddiası:
+    /// damganın milisaniye tabanından BİR milisaniye sonrası. Artık
+    /// "gelecekten saniye" yok: aynı saniyedeki ikinci değişiklik bu
+    /// jetonu geçersiz kılar (iki değişikliğin aynı MİLİSANİYEDE olması
+    /// gerekir; ardışık HTTP ile imkânsız).
+    /// </summary>
+    static DateTime JetonUretimi(DateTime degisimUtc) =>
+        OturumGecerliligi.MilisaniyeTaban(degisimUtc).AddMilliseconds(1);
+
+    /// <summary>
     /// Jeton hâlâ geçerli mi? <paramref name="jetonUretimUtc"/> jetonun
     /// `iat` iddiası.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="hassasUretimUtc"/> jetonun `uretim_ms` iddiası
+    /// (DAMGA/1). VARSA milisaniye kuralı, YOKSA (eski jeton) saniye kuralı.
+    /// </remarks>
     Task<bool> GecerliAsync(
         Guid kullaniciId,
         DateTime? jetonUretimUtc,
         AppDbContext db,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        DateTime? hassasUretimUtc = null);
 }
 
 public sealed class OturumGecerliligi : IOturumGecerliligi
@@ -122,11 +137,16 @@ public sealed class OturumGecerliligi : IOturumGecerliligi
             DateTimeKind.Utc)
         .AddSeconds(1);
 
+    /// <summary>Verilen anın milisaniye tabanı (alt milisaniye atılır).</summary>
+    public static DateTime MilisaniyeTaban(DateTime an) =>
+        new(an.Ticks - (an.Ticks % TimeSpan.TicksPerMillisecond), DateTimeKind.Utc);
+
     public async Task<bool> GecerliAsync(
         Guid kullaniciId,
         DateTime? jetonUretimUtc,
         AppDbContext db,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DateTime? hassasUretimUtc = null)
     {
         var tazeMi =
             _onbellek.TryGetValue(kullaniciId, out var kayit) &&
@@ -161,6 +181,30 @@ public sealed class OturumGecerliligi : IOturumGecerliligi
          * DEPLOY SONUCU: bu sürüm yayınlandığı anda `iat` taşımayan
          * TÜM mevcut jetonlar reddedilir — herkes yeniden giriş yapar.
          * Bu bilinçli ve ilan edilmiştir.
+         */
+        /*
+         * ═══ DAMGA/1 — MİLİSANİYE KURALI (yeni jeton) ═══
+         *
+         * Jeton imzalı `uretim_ms` taşıyorsa damgayla milisaniye tabanında
+         * TAM karşılaştırılır: jeton, damganın milisaniyesinden SONRA
+         * basılmışsa geçerli. Aynı milisaniye kapalı düşer.
+         *
+         * Saniye kuralının iki kusuru ölçülmüştü: aynı saniyede basılan
+         * giriş jetonu reddediliyordu (oluştur/sıfırla + hemen giriş, ilk
+         * istek 401) ve "gelecekten" basılan değişim jetonu aynı saniyedeki
+         * ikinci değişikliği aşıp ömrü boyunca geçerli kalıyordu.
+         */
+        if (hassasUretimUtc is DateTime hassas)
+            return MilisaniyeTaban(hassas) > MilisaniyeTaban(zaman);
+
+        /*
+         * ═══ GEÇİŞ — ESKİ JETON: SANİYE KURALI ═══
+         *
+         * `uretim_ms` taşımayan jeton DAMGA/1 yayınından önce basılmıştır.
+         * Kapalı düşürülseydi yayın anında oturumda olan HERKES atılırdı
+         * (Mehmet Bey: kabul edilmez). Eski kural aynen korunuyor; eski
+         * jetonlar en geç 12 saatte söner ve kural kendiliğinden devreden
+         * çıkar. Sonda: DamgaHassasiyetTests.H4.
          */
         if (jetonUretimUtc is not DateTime uretim)
             return false;
