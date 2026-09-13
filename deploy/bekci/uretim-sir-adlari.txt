@@ -44,3 +44,4 @@ zorunlu | ANTHROPIC_API_KEY | /etc/enderunai/backend.env | Hizir icin model eris
 zorunlu | TATBIKAT_DB_PAROLASI | /etc/enderunai/tatbikat.env | Geri yukleme tatbikatinin DB rolu. Uygulama sureci OKUMAMALI, o yuzden ayri dosyada.
 henuz-yok | PORTAL_TOKEN_ANAHTARI | - | Portal tokenlari kayit basina uretiliyor, ortamda tek bir anahtar yok. Merkezi bir anahtara gecilirse zorunlu'ya tasinir.
 henuz-yok | VAPID_PRIVATE_KEY | - | M3 (mobil bildirim) ile gelecek. Geldigi gun zorunlu'ya tasinmali.
+henuz-yok | METAL_API_KEY | - | Metal fiyat servisi anahtari. BUGUN TANIMLI DEGIL ve entegrasyon olu. TANIMLAMADAN ONCE SART (olculdu 2026-09-13): MetalPriceApiLmeSource anahtari SORGU DIZGESINDE tasiyor ve System.Net.Http.HttpClient gunlugu tam URI yaziyor (7 gunde 252 istek satiri). Ya saticinin baslik yolu olculup oraya gecilecek ya System.Net.Http.HttpClient gunluk seviyesi kisilacak; yoksa anahtar journale duser.

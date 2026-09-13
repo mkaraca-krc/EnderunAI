@@ -15425,3 +15425,149 @@ kullanılacağı ve kimin açacağı Mehmet Bey'in kararı. Toplu uç
 olmadığı için işlem kart başına ~1 dakika.
 
 **Bu satır, salı sabahı fark edilmemesi için buraya yazıldı.**
+
+## KARTLAR NEDEN PASİF — KAYNAK ÖLÇÜMÜ (2026-09-13)
+
+**GÜNCELLEME: 9 kartı aktifleştirme işi DÜŞTÜ** (Genel Müdür kararı:
+kartlar sıfırdan kurulacak). Kaynak ölçümü duruyor ve önceliği arttı.
+
+### ÜÇ VARSAYILAN, AYRI AYRI
+
+| kaynak | değer |
+|---|---|
+| **kod** — `BaseEntity.IsActive` | `= true` |
+| **veritabanı** — `inventory_items."IsActive"` | **varsayılan YOK**, NOT NULL → ne gönderilirse o |
+| **form / uç** — `CreateInventoryItemRequest` | `IsActive` alanı **YOK**; oluşturma ucu hiç yazmıyor |
+
+Yani üç yolun hiçbiri pasif üretmiyor.
+
+### ÖLÇÜM — ÇAĞIRARAK, KODDAN OKUYARAK DEĞİL (Kural 70)
+
+Prova zemininde ekranın gövdesiyle kart açıldı:
+
+    POST /api/inventory/items → 200  {"code":"END0013"}
+    END0013 | AKTİF=true | oluşturan=VAR
+
+**Bugün ekrandan açılan kart AKTİF doğuyor.** (Yol boyunca iki doğrulama
+da ısırdı: kategoriye izinli olmayan birim 400, zorunlu özellik eksik
+400 — kart bunlar geçilmeden doğmuyor.)
+
+### 9 KART NE ZAMAN VE NASIL PASİFLEŞTİ
+
+    oluşturma : 2026-08-05 … 2026-08-10, CreatedByUserId DOLU (ekrandan)
+    güncelleme: 9'unun da UpdatedAtUtc = 2026-08-19 11:48:21.055681
+                UpdatedByUserId = NULL (8'inde)
+
+Dokuzu da **aynı mikro saniyede** — tek bir `SaveChanges`. O dakikada
+**başka hiçbir tablo** güncellenmemiş (warehouses 0/6, projects 0/4,
+current_accounts 0/153, accounting_accounts 0/1115 kontrol edildi).
+
+19 Ağustos göçleri **12:08**'de başlıyor; güncelleme **11:48** — göç
+değil. Kodda stok kartını toplu pasifleştiren **hiçbir yol yok**
+(`IsActive = false` yazan 10 yerin hiçbiri `InventoryItem` değil).
+
+**SONUÇ: kod dışı, tek seferlik bir işlem** (elle SQL ya da o gün koşup
+kaybolmuş bir betik). Aktör yok, denetim satırı yok — denetim o tarihte
+stok kartlarını kapsamıyordu (DENETIM/2 bugün açtı).
+
+**Semptom değil kaynak sorusuna cevap: KAYNAK SAĞLAM.** Pasif doğuş
+diye bir şey yok; 9 kart bir defalık bir müdahaleyle pasifleşmiş.
+Sıfırdan kurulacak kartlar aktif doğacak.
+
+---
+
+## TOPLU KART YOLU — VARSAYILANLAR (kartlar kurulmadan ÖNCE)
+
+Kart üreten **iki** yol var: `InventoryController.CreateItem` (ekran) ve
+`RecipeImportService` (reçete içe aktarımı). Üçüncü yol yok.
+
+| alan | EKRAN | İÇE AKTARMA | değerlendirme |
+|---|---|---|---|
+| `Code` | üreticiden `END####` | **dosyadan** | biçim denetimi eklendi (14. madde); dosya kodu eşleme anahtarı |
+| `InventoryCategoryId` | **zorunlu**, birim ve özellikler ona göre doğrulanıyor | **YAZILMIYOR (null)** | ↓ aşağıda |
+| `Category` (eski serbest metin) | yazılmıyor | `"Reçete aktarımı"` | iki paralel kavram |
+| `Unit` | kategorinin izinli birimlerinden olmalı | dosyadan, **doğrulanmıyor** | kategori yoksa doğrulanacak kural da yok |
+| `Type` | istekten | sabit `Material` | reçete bağlamında düşünülmüş |
+| `VatRate` | istekten | **null** | ↓ aşağıda |
+| `SupplyKind` | istekten | varsayılan `Stocked` | makul |
+| `IsActive` | yazılmıyor → **true** | yazılmıyor → **true** | ikisinde de doğru |
+| Marka/Model/Barkod/Açıklama | istekten | yok | zararsız |
+
+### HANGİ VARSAYILAN DÜŞÜNÜLMÜŞ, HANGİSİ DEĞİL
+
+**DÜŞÜNÜLMÜŞ — kategorisiz kartın muhasebe tarafı.**
+`InventoryAccountResolver.ResolveKindAsync` → `kind ?? Consumable`,
+gerekçesi kodda yazılı: *"153'e yazılan bir sarf malzeme mali tabloda
+satılabilir mal gibi görünür"*. Yani kategorisiz kart 150/740 tarafına
+düşüyor — güvenli taraf, bilinçli seçim.
+
+**DÜŞÜNÜLMEMİŞ — `VatRate` null.** Ekran yolu KDV'yi isteyip yazıyor,
+içe aktarma hiç yazmıyor. Reçete dosyasında KDV sütunu yok, o yüzden
+"yazacak bir şey yok" ile "sıfır kabul et" arasındaki fark
+düşünülmemiş; alan `decimal?` olduğu için sessizce null kalıyor.
+
+**PARALEL KAVRAM — `Category` serbest metin vs `InventoryCategoryId`.**
+E2'deki `ShelfLocation` ile aynı hastalık. Ölçüldü ve bir kusur doğurmuş
+(aşağıda).
+
+### YANLIŞ VARSAYILANLA 100 KART AÇILIRSA GERİ DÖNÜŞ
+
+| alan | geri dönüş |
+|---|---|
+| `IsActive` | kolay — tek alan, toplu uç yok ama SQL/ekran ile düzeltilir |
+| `VatRate` | kolay (hareket yoksa); hareket varsa fişler yeniden hesaplanmalı |
+| `InventoryCategoryId` | **zor** — kategori birim ve özellik kurallarını taşıyor; sonradan atamak birim uyuşmazlığı doğurabilir |
+| `Code` | **çok zor** — kod eşleme anahtarı; değiştirmek her yeniden aktarımda **kopya kart** doğurur (bu yüzden içe aktarma, biçimsiz kodu üretmek yerine REDDEDİYOR) |
+
+**ÖNERİ (karar sizde):** kartlar kurulmadan önce içe aktarma yoluna
+`InventoryCategoryId` ve `VatRate` eklensin; kategori zorunlu olsun.
+Yoksa yüzlerce kart kategorisiz doğar ve birim/özellik kuralları hiç
+uygulanmaz.
+
+### KARTLAR KURULMADAN YAKALANAN GERÇEK KUSUR
+
+Liste ekranı Kategori sütununda **eski serbest metni** basıyordu
+(`row.category`), oysa uç doğru alanı zaten veriyor:
+
+    END0013 → category: null · categoryLabel: "Özel İmalat"   → listede "—"
+    END0001 → category: "AYDINLATMA" · categoryLabel: "AYDINLATMA"
+
+Yani **ekrandan açılan her yeni kart Kategori sütununda "—" görünecekti**
+— sıfırdan kurulacak kartların hepsi. `lib/inventory/kategori-etiketi.ts`
+tek kaynak oldu; mutasyon (eski alanı tercih et) **2 test kırmızı**,
+geri alınca **4/4 yeşil**, `tsc` 0.
+
+---
+
+## PASİF KART SERVİS AÇIĞI — ÖLÇÜM VE ÖNERİ (karar sizde)
+
+### (a) CANLIDA PASİF KARTA AİT HAREKET VAR MI — HAYIR, HİÇ YOK
+
+    stock_movements 0 · warehouse_stocks 0 · goods_receipts 0 · purchase_orders 0
+
+**Engelleme hiçbir geçmiş akışı kırmaz** — kıracak geçmiş yok.
+
+### (b) İŞ KURALI — ÖLÇÜME DAYALI ÖNERİ
+
+Bugünkü ölçüm: pasif kart çıkışı **200** ile kabul ediyor ve muhasebe
+fişi üretiyor; engel yalnız seçicide.
+
+Düz "pasif karta hareket yasak" kuralının tuzağı var: **stoğu üzerinde
+kalmış bir arşiv kartı hiç boşaltılamaz.** Bu yüzden öneri iki yönlü:
+
+| hareket | öneri | gerekçe |
+|---|---|---|
+| **stok ARTIRAN** (mal kabul, iade dönüşü, sayım fazlası) | **YASAK** | arşivlenmiş karta yeni mal girmemeli |
+| **stok AZALTAN** (çıkış, transfer çıkışı, sayım noksanı) | **İZİNLİ** | arşiv kartının kalan stoğu boşaltılabilmeli |
+
+Ayrıca: stoğu varken pasifleştirilen kart için **uyarı** (engel değil).
+
+Hata mesajı teşhis edilebilir olacak: *"Bu malzeme kartı pasif"* —
+"Beklenmeyen bir hata" değil. K3'ten sonra `ArgumentException`
+(ParamName null) zaten 400 + mesaj olarak dönüyor.
+
+**Sonda tanımı hazır:** pasif karta stok artıran hareket → bugün **200**
+(KIRMIZI), düzeltmeden sonra **4xx**; pozitif kontrol: aktif kart
+**200**, ve pasif kartta stok azaltan hareket **200** (izinli kalmalı).
+
+**Kod yazılmadı — kararınızı bekliyorum.**

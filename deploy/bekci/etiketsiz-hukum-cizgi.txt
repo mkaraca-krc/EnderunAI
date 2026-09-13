@@ -1,0 +1,12 @@
+# ETİKETSİZ HÜKÜM ÇIRASI — ÖLÇÜLEN ÇİZGİ (2026-09-13)
+#
+# "Etiketsiz hüküm" = davranış hakkında bir şey söyleyen, ama yanında
+# ne ölçüm izi ne `[ÖLÇÜLMEDİ]` etiketi olan satır (Kural 88).
+#
+# ÇİZGİ BİR HEDEF DEĞİL, BUGÜNÜN ÖLÇÜSÜ. Beklenen yön: AZALMA.
+# Artış KIRMIZI DEĞİL, BİLGİ — borç toplu denetimle değil TEMASLA erir:
+# bir dosyaya iş için dokunduğunda oradaki hükümleri etiketlersin.
+#
+# biçim: <kume> <sayi>
+belge 1756
+kod 5542

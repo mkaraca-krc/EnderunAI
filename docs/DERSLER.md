@@ -318,6 +318,23 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 89 — İLK GÜN GÜRÜLTÜYLE KIRMIZI YANAN KAPI, YARIN KİMSENİN
+  BAKMADIĞI KAPIDIR.** Bir kapının eşiği, kontrol ETTİĞİMİZ şeye
+  çizilir; kontrol etmediğimiz gürültüye değil.
+
+  Mehmet Bey'in tasarım ilkesi (2026-09-13). Doğuşu: sorgu dizgesi
+  çırasının ilk sürümü, adı sır çağrıştıran her parametreyi koşulsuz
+  kırmızı yakıyordu ve **ilk koşuda kırmızı yandı** — `passwd`.
+  Ölçüldü: `/cgi-bin/nas_sharing.cgi` yoluna gelen bir saldırı
+  yoklamasıydı ve **404** almıştı. Saldırganın ne gönderdiğini biz
+  belirlemiyoruz.
+
+  Kural ölçüme dayandırıldı: sırlı ad **2xx ile SUNULDUYSA** kırmızı;
+  değilse adıyla BİLGİ kovasında sayılır. Aynı ilkenin ikinci
+  uygulaması: etiketsiz hüküm çırası artışta **kırmızı yakmaz**, bilgi
+  verir — yeni kod yazmayı cezalandıran bir kapı ilk haftada devre dışı
+  bırakılır.
+
 - **KURAL 87 (ADAY — Mehmet Bey'in metni) — DOĞRULARKEN ÖLÇTÜĞÜN
   KÜMENİN İSTENEN KÜMEYLE AYNI OLDUĞUNU ÖNCE GÖSTER.** *"Hepsi
   yapıldı" cümlesi, maddelerin tek tek adıyla eşleştirilmeden

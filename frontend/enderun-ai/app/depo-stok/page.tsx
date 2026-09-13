@@ -42,6 +42,7 @@ import {
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { kartDurumEtiketi, kartDurumIsareti } from "@/lib/inventory/kart-durumu";
+import { kategoriEtiketi } from "@/lib/inventory/kategori-etiketi";
 import { malzemeTipiEtiketi } from "@/lib/inventory/malzeme-tipi";
 import {
   stokArtiranHareket,
@@ -506,7 +507,14 @@ export default function InventoryOperationsPage() {
         </div>
       ),
     },
-    { key: "kategori", header: "Kategori", value: (row) => row.category || "—" },
+    {
+      key: "kategori",
+      header: "Kategori",
+      // `category` ESKİ serbest metin; yapılandırılmış kategori
+      // `categoryLabel` içinde geliyor. Eskisini basmak, ekrandan açılan
+      // her yeni kartı "—" gösteriyordu (ölçüldü 2026-09-13).
+      value: (row) => kategoriEtiketi(row),
+    },
     { key: "tip", header: "Tip", value: (row) => malzemeTipiEtiketi(row.type) },
     {
       key: "stok",
