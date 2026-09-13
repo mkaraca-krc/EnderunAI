@@ -1,3 +1,4 @@
+using System.Reflection;
 using EnderunAI.Api.Data.Interceptors;
 using EnderunAI.Api.Security.CurrentUser;
 using EnderunAI.Api.Services.Costing;
@@ -1041,6 +1042,55 @@ app.MapGet("/api/hubs/tasima-denetimi", EnderunAI.Api.Hubs.HubTasimaDenetimi.Oku
  * FallbackPolicy açıldığında işaretsiz bırakılsaydı 401 dönerdi ve
  * HER DEPLOY sağlık kontrolünde patlardı.
  */
+/*
+ * ═══ SÜRÜM/1 — CANLIYA "SEN HANGİ KODSUN?" DİYE SORULABİLMELİ ═══
+ *
+ * ÖLÇÜLDÜ (2026-09-13): `/api/health` yalnız `status/service/utc`
+ * döndürüyordu. "Şu düzeltme canlıda mı?" sorusu bu yüzden dosya
+ * tarihleriyle cevaplanıyordu — OTURUM/1'de `.next` parça tarihlerine
+ * bakmak zorunda kaldım ve bayat artıklar yüzünden neredeyse yanlış
+ * hüküm verecektim. Dosya tarihi bir KANIT DEĞİL, bir ipucudur.
+ *
+ * Commit kimliği yayında `-p:SourceRevisionId=<sha>` ile gömülüyor ve
+ * `AssemblyInformationalVersion` içinde `+<sha>` olarak geliyor.
+ * GÖMÜLMEMİŞSE "bilinmiyor" yazılır — sessizce boş bırakmak, sürümü
+ * bilmediğimizi BİLDİĞİMİZ hâli gizlerdi.
+ *
+ * `yapiUtc`, çalışan derlemenin dosya damgasıdır: sürüm gömülmese bile
+ * "ne zamanki yapı koşuyor" sorusu cevaplanabilsin.
+ *
+ * ANONİM KALIYOR: safe-deploy bu uca jetonsuz bakıyor. Sızan bilgi
+ * commit kimliği; depo zaten GitHub'da ve bu bilgi olmadan yayının
+ * doğrulanması dosya arkeolojisine dönüyor.
+ */
+// `GetEntryAssembly()` KULLANILMIYOR: test konağında giriş derlemesi
+// API DEĞİL (ölçüldü 2026-09-13 — 2023 tarihli bir çalıştırıcı dosyası
+// okundu ve muhafız testi bunu yakaladı). Sürüm, API derlemesinin
+// kendisinden okunur.
+var apiDerlemesi = typeof(Program).Assembly;
+
+var surumBilgisi = apiDerlemesi
+    .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?
+    .InformationalVersion;
+
+var surumKimlik = string.IsNullOrWhiteSpace(surumBilgisi) ? "bilinmiyor" : surumBilgisi;
+
+DateTime? yapiUtc = null;
+try
+{
+    var yol = apiDerlemesi.Location;
+    if (!string.IsNullOrWhiteSpace(yol) && File.Exists(yol))
+    {
+        yapiUtc = File.GetLastWriteTimeUtc(yol);
+    }
+}
+catch (IOException)
+{
+    // Dosya okunamazsa sürüm ucu ÇALIŞMAYA DEVAM EDER; yapı zamanı
+    // boş kalır. Sağlık ucunu düşürmek, ölçüm uğruna canlıyı
+    // riske atmaktır.
+}
+
 app.MapGet("/api/health", () =>
 {
     return Results.Ok(new
@@ -1048,6 +1098,8 @@ app.MapGet("/api/health", () =>
         status = "ok",
         service = "EnderunAI.Api",
         utc = DateTime.UtcNow,
+        surum = surumKimlik,
+        yapiUtc,
     });
 }).AllowAnonymous();
 

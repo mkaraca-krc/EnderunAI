@@ -5,8 +5,29 @@ import MesajBaloncugu from "@/components/mesajlar/mesaj-baloncugu";
 import { HataSiniri } from "@/components/erp/hata-siniri";
 import { TaslakDeposuSaglayici } from "@/lib/mesajlasma/taslak-deposu";
 
+/*
+ * ═══ SÜRÜM/1 — TARAYICIDAKİ YAPI DIŞARIDAN ÖLÇÜLEBİLİR OLMALI ═══
+ *
+ * ÖLÇÜLDÜ (2026-09-13): canlı HTML hiçbir yapı kimliği taşımıyordu
+ * (App Router `__NEXT_DATA__.buildId` basmıyor). "Kullanıcı yeni yapıyı
+ * mı görüyor?" sorusu bu yüzden sunucudaki `.next` parça tarihlerine
+ * bakılarak cevaplanmak zorunda kaldı — ve o dizinde BAYAT ARTIKLAR
+ * vardı (OTURUM/1: 09-11 12:13 canlı yapı, 09-10 04:11 artık).
+ *
+ * Meta etiketi curl ile okunabiliyor:
+ *     curl -s https://enderunai.com.tr/login | grep enderun-surum
+ *
+ * Değer yayında `NEXT_PUBLIC_SURUM` ile geliyor; gelmezse
+ * "bilinmiyor" yazılır — boş bırakmak, bilmediğimizi bildiğimiz hâli
+ * gizlerdi.
+ */
+export const ENDERUN_SURUM = process.env.NEXT_PUBLIC_SURUM ?? "bilinmiyor";
+
 export const metadata: Metadata = {
   title: "Enderun ERP",
+  other: {
+    "enderun-surum": ENDERUN_SURUM,
+  },
   description: "Enderun Enerji kurumsal yönetim platformu",
   manifest: "/manifest.json",
   icons: {

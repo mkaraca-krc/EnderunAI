@@ -15677,3 +15677,71 @@ Yanlış bir **yeşil**. Okuma da araca taşındı:
 `say.sh --etiketten-sayi 'İDDİA'` yüzde parçalarını eler, etiketli
 satırın ilk gerçek sayısını verir, sayı yoksa **ÖLÇEMEDİ (çıkış 3)**.
 Çıra artık onu kullanıyor.
+
+## SÜRÜM/1 — CANLIYA "SEN HANGİ KODSUN?" DİYE SORULABİLİR (2026-09-13)
+
+**KAPSAM NOTU:** SÜRÜM/1'in yazılı tanımı hiçbir yerde yoktu — yalnız
+salı sırasında adı geçiyordu. Uydurmak yerine ÖLÇTÜM ve kapsamı
+ölçülen boşluktan türettim; aşağıdaki iş budur. Başka bir şey
+kastedildiyse söyleyin.
+
+### ÖLÇÜLEN BOŞLUK
+
+| soru | bugünkü cevap yolu |
+|---|---|
+| Arka uçta hangi kod koşuyor? | `/api/health` → `status/service/utc` — **sürüm YOK** |
+| Ön yüzde hangi yapı servis ediliyor? | HTML'de yapı kimliği **YOK** (App Router `__NEXT_DATA__.buildId` basmıyor) |
+| Hangi commit yayınlandı? | `/var/lib/enderun-ai/last-deployed-commit` — bir **dosya**, çalışan sistemin beyanı değil |
+
+Yani "şu düzeltme canlıda mı?" sorusu **dosya tarihleriyle**
+cevaplanıyordu. OTURUM/1'de tam bunu yapmak zorunda kaldım: `.next`
+parça tarihleri (09-11 12:13 canlı yapı / 09-10 04:11 bayat artık).
+**Dosya tarihi ipucudur, kanıt değildir** — ve o dizinde artıklar vardı.
+
+Ek ölçüm: kayıtlı son yayın **`9402c5cd`**, bugünkü `main`'e göre
+**33 commit canlıda yok**. Canlı DLL 09-11 11:43 yapımı, servis 09-12
+06:30'da yeniden başlamış (yeni yapı değil, yalnız restart).
+
+### YAPILAN
+
+**Arka uç** — `/api/health` artık sürüm taşıyor:
+
+    {"status":"ok","service":"EnderunAI.Api","utc":"…",
+     "surum":"1.0.0+abc1234","yapiUtc":"2026-09-13T23:05:04Z"}
+
+Commit yayında `-p:SourceRevisionId=<sha>` ile gömülüyor
+(`safe-deploy.sh`), `AssemblyInformationalVersion` içinde `+<sha>`
+olarak geliyor. Gömülmemişse **"bilinmiyor"** yazılır — boş bırakmak,
+bilmediğimizi bildiğimiz hâli gizlerdi.
+
+**Ön yüz** — kök düzene meta etiketi kondu, yayında
+`NEXT_PUBLIC_SURUM` ile dolduruluyor:
+
+    curl -s https://enderunai.com.tr/login | grep enderun-surum
+
+**ÇAĞIRARAK ÖLÇÜLDÜ (Kural 70):** prova zemininde sahte sha ile
+yayımlandı, rig kaldırıldı, uç çağrıldı → `surum: "1.0.0+abc1234"`,
+`yapiUtc` dolu. Beklenti (Kural 61) önceden yazılmıştı ve tuttu.
+
+### MUHAFIZ TESTİ GERÇEK BİR KIRILGANLIK BULDU
+
+`SurumUcuTests` ilk koşuda **kırmızı yandı**: yapı zamanı
+**2023-05-15** çıktı. Sebep: `Assembly.GetEntryAssembly()` test
+konağında **API derlemesi değil**, çalıştırıcının kendisi. Üretimde
+doğru çalışıyordu ama dayanak yanlıştı; `typeof(Program).Assembly` ile
+API derlemesi açıkça adreslendi.
+
+**MUTASYON:** sürüm alanları uçtan kaldırıldı → **tam 1 KIRMIZI**
+(sürüm testi), **jetonsuz erişim pozitif kontrolü yeşil kaldı**.
+Geri alındı → 2/2 yeşil.
+
+İkinci test bilerek var: safe-deploy bu uca **jetonsuz** bakıyor; sürüm
+alanı eklerken ucu yanlışlıkla yetkiye bağlamak **her yayını**
+düşürürdü.
+
+### SINIR — DÜRÜSTÇE
+
+Sürüm ancak **yayından sonra** görünür: canlı bugün 33 commit geride ve
+eski yapıyı koşuyor, `/api/health` orada hâlâ sürümsüz. İlk gerçek
+ölçüm salı yayınından sonra yapılacak — o an `surum` alanındaki sha ile
+`last-deployed-commit` birebir eşleşmeli.

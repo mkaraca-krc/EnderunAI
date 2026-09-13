@@ -683,8 +683,22 @@ publish_backend() {
     # Nöbetçi test de yalnız `dotnet test` arıyordu; artık `dotnet`
     # ile başlayan HER derleme çağrısını arıyor (Kural 31: komuta bak,
     # tek bir kelimeye değil).
+    # ═══ SÜRÜM GÖMÜLÜYOR (SÜRÜM/1, 2026-09-13) ═══
+    #
+    # `-p:SourceRevisionId` derlenen çıktının
+    # `AssemblyInformationalVersion` alanına `+<sha>` ekler ve
+    # `/api/health` bunu `surum` olarak döndürür. Böylece "şu düzeltme
+    # canlıda mı?" sorusu dosya tarihine değil ÇAĞRIYA cevap verir.
+    #
+    # ÖLÇÜLEN SEBEP: OTURUM/1'de bu soruyu `.next` parça tarihleriyle
+    # cevaplamak zorunda kaldık; dizinde bayat artıklar vardı ve yanlış
+    # hüküm bir adım uzaktaydı.
+    surum_sha="$(cd "$REPO_ROOT" && git rev-parse --short HEAD 2>/dev/null || echo 'bilinmiyor')"
+    log "INFO" "Yayınlanan sürüm çıktıya gömülüyor: ${surum_sha}"
+
     if ! "${REPO_ROOT}/scripts/derleme-kos.sh" \
-            dotnet publish "$BACKEND_DIR" -c Release -o "$BACKEND_PUBLISH_YENI" 2>&1 | tee -a "$LOG_FILE"; then
+            dotnet publish "$BACKEND_DIR" -c Release -o "$BACKEND_PUBLISH_YENI" \
+            -p:SourceRevisionId="$surum_sha" 2>&1 | tee -a "$LOG_FILE"; then
         fail "dotnet publish başarısız oldu."
     fi
 
@@ -965,7 +979,13 @@ build_frontend() {
 
     rm -rf "$FRONTEND_NEXT_YENI"
 
-    if ! (cd "$FRONTEND_DIR" && NEXT_DIST_DIR=".next-yeni" npm run build) 2>&1 \
+    # SÜRÜM/1: yapı kimliği HTML'e gömülüyor; "kullanıcı yeni yapıyı mı
+    # görüyor" sorusu curl ile cevaplanabilsin (bkz. app/layout.tsx).
+    on_yuz_surum="$(cd "$REPO_ROOT" && git rev-parse --short HEAD 2>/dev/null || echo 'bilinmiyor')"
+    log "INFO" "Ön yüz sürümü gömülüyor: ${on_yuz_surum}"
+
+    if ! (cd "$FRONTEND_DIR" && NEXT_DIST_DIR=".next-yeni" \
+            NEXT_PUBLIC_SURUM="$on_yuz_surum" npm run build) 2>&1 \
             | tee -a "$LOG_FILE"; then
         fail "npm run build başarısız oldu."
     fi
