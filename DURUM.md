@@ -13043,3 +13043,44 @@ Sabah aynı yol 6,94 sn ölçülmüştü, Kol C'de 0,584 sn. Sebep: sabah API
 iki gün boşta kalmış + arka arkaya derlemelerle TAM soğumuştu (455 MB
 takasta); Kol C'de 375 MB takasta ve sayfalar daha "ılık"tı. Her iki sayı
 da aynı yönü gösteriyor; büyüklük soğukluğun derecesine bağlı.
+
+---
+
+## SQUASH/1 ETKİSİ ÖLÇÜLDÜ (2026-09-13) — TEK SAYI: 1400 MB
+
+Mehmet Bey'in istediği ölçüm: ayrı çalışma dalında, squash edilmiş göç
+kümesiyle temiz derleme, anon zirvesi. Canlıya hiçbir şey uygulanmadı,
+veritabanına dokunulmadı.
+
+| | göç dosyası | boyut | derleme anon zirve | süre |
+|---|---|---|---|---|
+| bugünkü depo | 413 | 92 MB | **6251–6375 MB** | ~4 dk |
+| squash | 4 | 2 MB | **1400 MB** | 1 dk 45 sn |
+
+Derleme kodu 0, `error` satırı 0.
+
+**Okuma: göç dosyaları derlemenin bellek yükünün neredeyse TAMAMI.**
+6,3 GB'ın ~4,9 GB'ı (yaklaşık %78) buradan geliyor. Bunun sebebi her
+göçün `.Designer.cs` dosyasının TAM BİR MODEL ANLIK GÖRÜNTÜSÜ taşıması:
+409 göç = 409 kopya model.
+
+**Bu, BELLEK/1'in bütün resmini değiştirir.** Bugüne kadar konuşulan
+seçenekler — derlemeyi başka makineye taşımak, makineye bellek eklemek —
+SQUASH/1 yapılırsa GEREKSİZ hâle gelir: derleme 1,4 GB'a inerse canlı ERP
+ile aynı makinede rahatça sığar, takasa itme sorunu da kendiliğinden
+biter (ayırma ve ısıtma yine de kalır — ikisi de başka yolları korur).
+
+### YÖNTEM VE DÜRÜST SINIRLARI
+
+- Gerçek `dotnet ef migrations` çağrısı YAPILMADI: tasarım zamanı
+  fabrikası veritabanına bağlanabilir; bu ölçüm için canlıya dokunmak
+  yasaktı. Onun yerine squash'ın YAPISAL sonucu taklit edildi —
+  bir göç + Designer + `AppDbContextModelSnapshot` bırakıldı, gerisi
+  silindi.
+- Üretilen yapı DAĞITILAMAZ (göç geçmişi uyuşmaz). Yalnız bellek ölçümü.
+- Ölçüm ayrı bir `git worktree`de koştu; ana çalışma ağacı hiç
+  değişmedi (ölçüm sırasında `git status` ile doğrulandı) ve ağaç
+  ölçüm sonunda kaldırıldı.
+- Gerçek squash'ın ek işleri var (üretim `__EFMigrationsHistory`
+  tablosunun yeniden tohumlanması, geri alma yolu). Bu ölçüm onların
+  RİSKİNİ değil, KAZANCINI söylüyor.
