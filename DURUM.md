@@ -15144,3 +15144,58 @@ beş kopya etiket haritasının bedeli daha önce ölçülmüştü.
 `tests/kart-durumu.test.ts` 3 test, 3 yeşil. Mutasyon (aktif kart da
 işaretlensin) → **tam 1 kırmızı**: *"listede YALNIZ pasif kart
 işaretlenir"*. Geri alındı → 3/3 yeşil. `tsc --noEmit` çıkış 0.
+
+## GÜNLÜK/1 · A — SAKLAMA 90 GÜN + IP'SİZ SÜRESİZ ÖZET (2026-09-13)
+
+### YAPILDI
+
+`/etc/logrotate.d/nginx`: **`rotate 14` → `rotate 90`**, gerekçesi
+dosyanın içine amaca bağlanarak yazıldı (olay incelemesi + düzeltme
+etkisinin doğrulanması). Yedek: `/etc/logrotate.d/nginx.geri-20260913`.
+
+Doğrulama: `logrotate -d` → *"rotating pattern: /var/log/nginx/*.log
+after 1 days (**90 rotations**)"*, gerçek hata satırı **0**.
+
+> **KENDİ SÜZGECİM YİNE YANLIŞ KIRMIZI VERDİ (Kural 86).** İlk
+> kontrolüm `grep -ci error` idi ve **95** saydı — hepsi
+> `/var/log/nginx/**error.log**` dosya adıydı. Dosya adını hata sanan
+> bir denetim, sağlam bir yapılandırmayı bozuk gösterir. Doğru ölçüm
+> (`grep error | grep -v 'error\.log'`) → **0**.
+
+### IP'SİZ ÖZET — SÜRESİZ SAKLANIR
+
+`deploy/scripts/gunluk-ozet.sh` + `enderun-gunluk-ozet.timer`
+(her gece **00:10**, logrotate 00:00'dan sonra — donmuş `access.log.1`
+üzerinde).
+
+Biçim: `{tarih | uç kalıbı | durum kodu | adet}`. Uç kalıbı ham yol
+değil: UUID → `:id`, sayı → `:n`, uzun belirteç → `:tkn`; sorgu dizgesi
+**atılıyor**.
+
+**ÖLÇÜM (12 Eylül, tam gün — 6.832 istek):**
+
+| | |
+|---|---|
+| özet satırı | **3.335** |
+| boyut | **128 kB** |
+| yıllık kestirim | ~47 MB |
+
+**KİŞİSEL VERİ DENETİMİ — POZİTİF KONTROLLÜ:**
+
+| arama | özette | kaynakta |
+|---|---|---|
+| IPv4 dizgesi | **0** | **6.832** |
+| sorgu dizgesi (`?`) | 0 | 1.856 (13 Eylül) |
+| kullanıcı ajanı (`Mozilla`) | 0 | her satırda |
+| referer (`https://`) | 0 | çoğu satırda |
+
+Kaynakta 6.832 bulan arama özette 0 buluyor — **boş küme kör aramadan
+gelmiyor.** Tek IPv6 "eşleşmesi" başlıktaki ISO zaman damgasıydı
+(`19:29:09`), IP değil; bakmadan geçilmedi.
+
+### KVKK — SORU OLARAK KAYDEDİLDİ, ZARFA KONDU
+
+Günlük IP taşıyor. **Aydınlatma metninde erişim günlüğü ve saklama
+süresi yazıyor mu, 90 gün oradaki süreyle uyuşuyor mu?** Hukuk tarafı;
+`docs/SUNUCU-DISI-KOPYA.md` içine, sunucu dışı kopya kararıyla aynı
+zarfa kondu.

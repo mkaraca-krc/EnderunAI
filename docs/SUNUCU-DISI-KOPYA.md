@@ -124,3 +124,25 @@ maliyeti koyar; aktarım kararını koymaz.
 3. Anahtar emanet yolu (K1/K2/K3)
 4. `uploads` için artımlı taşıma yapılsın mı (maliyetin %90'ı orada)
 5. Yıllık anahtar tatbikatının takvimi
+
+---
+
+## AYNI ZARF — GÜNLÜK SAKLAMA VE AYDINLATMA METNİ SORUSU (2026-09-13)
+
+Erişim günlüğü saklama süresi **15 → 90 gün** yapıldı (gerekçe:
+olay incelemesi + düzeltme etkisinin doğrulanması; maliyet ≈ 13 MB).
+Günlük **IP taşıyor**, yani kişisel veri.
+
+**SORU (hukuk tarafı, bende değil):** aydınlatma metninde erişim
+günlüğü tutulduğu ve **saklama süresi** yazıyor mu? 90 gün orada yazan
+süreyle uyuşuyor mu?
+
+Ayrıca IP'siz günlük özet kuruldu
+(`deploy/scripts/gunluk-ozet.sh`, her gece 00:10):
+`{tarih, uç kalıbı, durum kodu, adet}` — IP yok, sorgu dizgesi yok,
+kullanıcı yok, referer/ajan yok. **Süresiz saklanıyor** çünkü tek bir
+kişiye bağlanamıyor. Ölçüldü (12 Eylül, tam gün): **3.335 satır,
+128 kB** → yılda ~47 MB.
+
+Bu soru, sunucu dışı kopya kararıyla **aynı zarfta**: ikisi de veri
+nerede, ne kadar süre durur sorusunun parçası.
