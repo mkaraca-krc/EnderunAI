@@ -18,6 +18,25 @@
 #     Zeminde o izin satırı YOKTU ve komut yabancı anahtar ihlaliyle
 #     düştü. KANIT ÜRETİLEMEDİ.
 #
+# ═══ KURAL 85 — ZEMİN SIRSIZ KURULUR (2026-09-13) ═══
+#
+#   PROVA ZEMİNİ CANLI SIRLARLA DEĞİL, KENDİ ÜRETTİĞİ GERÇEK OLMAYAN
+#   DEĞERLERLE KURULUR. Canlı sırrı okuması gereken bir rig, rig'in
+#   değil YAPILANDIRMANIN kusurudur.
+#
+#     · veritabanı → Postgres YEREL SOKETİ + `peer` kimlik doğrulaması:
+#         Host=/var/run/postgresql;Database=<prova>;Username=postgres
+#       ve süreç `sudo -u postgres` ile koşar. Hiçbir yerde parola yok.
+#     · JWT        → SABİT, gerçek olmayan prova dizgesi.
+#
+#   SABİT olması ŞART. `duzen-testi.sh:254` her başlatmada RASTGELE
+#   JWT_SECRET üretiyor; canlıda sır `backend.env` içinde sabittir ve
+#   yeniden başlatmayı sağ geçer. Rastgele sırlı bir zeminde "yeniden
+#   başlatma jetonu düşürüyor mu" ölçümü YALANCI 401 verir — üretimin
+#   değil düzeneğin kusurunu ölçersiniz (Kural 81).
+#
+#   Böyle kurulamayan bir zemin çıkarsa DOLANILMAZ; Mehmet Bey'e gelinir.
+#
 # ═══ AYRIM ═══
 #
 #   ŞEMA SADIK  : taze veritabanına göç uygulanarak kurulur. Yapı

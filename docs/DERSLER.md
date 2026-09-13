@@ -162,6 +162,45 @@ değil, **indeks**.
 
 ## Test ve rig
 
+- **KURAL 85 — PROVA ZEMİNİ CANLI SIRLARLA DEĞİL, KENDİ ÜRETTİĞİ
+  GERÇEK OLMAYAN DEĞERLERLE KURULUR.** Canlı sırrı okuması gereken bir
+  rig, rig'in değil YAPILANDIRMANIN kusurudur.
+
+  Mehmet Bey'in kuralı (2026-09-13, OTURUM/1 (b)). Otomatik kip, süreç
+  ortamını dosyaya kopyalamayı ve `backend.env`'den bağlantı türetmeyi
+  reddetti. **Engel doğrudur, aşılmaz.** Doğru yol sırsız zemindir:
+
+    · veritabanı → Postgres YEREL SOKETİ + `peer` kimlik doğrulaması
+      `Host=/var/run/postgresql;Database=<prova>;Username=postgres`
+      (süreç `sudo -u postgres` ile koşar, hiçbir yerde parola yok)
+    · JWT        → SABİT, gerçek olmayan prova dizgesi
+
+  SABİT olması şart, rastgele değil: `duzen-testi.sh:254` her başlatmada
+  rastgele `JWT_SECRET` üretiyor; canlıda sır `backend.env`de sabittir ve
+  yeniden başlatmayı sağ geçer. Rastgele sırlı bir zeminde yeniden
+  başlatma ölçümü YALANCI 401 verir (bkz. Kural 81).
+
+  Böyle kurulamayan bir zemin çıkarsa DOLANILMAZ, Mehmet Bey'e gelinir.
+
+- **LİSTEYE ÖLÇÜLMEMİŞ İŞ KOYMAK, ölçülmemiş hüküm yazmanın listedeki
+  hâlidir.** (Mehmet Bey'in kendi adına yazdırdığı ders, 2026-09-13.)
+
+  OTURUM/1 (a) "yapılacak iş" diye yazılmıştı; ölçülünce ZATEN CANLIDA
+  çıktı. Bir kapının kırmızı yanmadan var sayılmaması gibi, bir işin de
+  ölçülmeden "yapılacak" sayılmaması gerekir.
+
+  UYGULAMA: pakete iş eklerken o işin HÂLÂ yapılmamış olduğunun ölçümü
+  yazılır; yoksa madde "ölçülmedi" diye işaretlenir.
+
+- **`.next/static` ARTIK BİRİKTİRİR: "dosyada var" CANLIDA VAR DEMEK
+  DEĞİLDİR.** Eski yapıların parçaları silinmeden kalıyor; bir kalıbı
+  pakette görmek onun yayında olduğunu KANITLAMAZ.
+
+  OTURUM/1 (a): `"mesai-disi"` karşılaştırmasını içeren paketler
+  2026-09-11 12:13 (canlı yapı), eski `!isAllowed` kalıbını taşıyanlar
+  2026-09-10 04:11 (bayat artık). Kanıt kod okuması değil DOSYA
+  TARİHLERİ oldu.
+
 - **`page.request` çerez taşımaz**; veri uçlarını sayfa içinden `fetch`
   ile çağır (giriş `page.request.post` ile yapılabilir)
   → `frontend/enderun-ai/tests/duzen/mesaj-sesi.spec.ts:47`
@@ -229,6 +268,32 @@ değil, **indeks**.
   → `scripts/derleme-kos.sh`
 
 ## Derleme ve ölçüm
+
+- **KURAL 84 — OKUMA ALETİ, ÖLÇTÜĞÜN AYRIMI KORUMAK ZORUNDADIR.**
+  `Passed!` ile `Failed!`'ı aynı dizgeye indiren bir süzgeç, ölçümü
+  değil ÖLÇÜMÜN CEVABINI siler.
+
+  Mehmet Bey'in koyduğu genel hâl. Doğuşu: `sed 's/.*EnderunAI\.Api\.Tests\.//'`
+  ile test özetini okudum; süzgeç `Passed!  - ... - EnderunAI.Api.Tests.dll`
+  satırını `dll (net8.0)`a indirdi — ve aynı süzgeç `Failed!` satırını da
+  AYNI dizgeye indirirdi. Ayırt etmem gereken iki hâl tek hâle çökmüştü.
+  Önceki hâli (2026-09-13, STOK/1): "bir süzgeç, kapsamadığı şeyi 'yok'
+  diye gösterir" — kapsam sorunu. Genel hâli daha geniş: süzgeç kapsasa
+  bile AYRIMI yok edebilir.
+
+  UYGULAMA: bir ölçümün cevabını taşıyan alanı kırpan hiçbir süzgeç
+  kullanılmaz. Önce ham çıktı dosyaya alınır, süzgeç ondan sonra gelir.
+
+- **ALT MADDE (Kural 84) — BİR DOĞRULAMAYI KOŞMADAN ÖNCE O KOŞUNUN
+  ORTAM GEREKSİNİMLERİNİ KURUN.** 17 testin 38 ms'de düşmesi bulgu
+  değil, DÜZENEK ARIZASIDIR.
+
+  `dotnet test`i `TEST_DB_CONNECTION`/`JWT_SECRET` kurmadan çağırdım;
+  17 test 38 ms'de kırmızı yandı. Bir an gerçek bir bulgu sandım.
+  Süre tek başına ele verir: 17 test 38 ms'de KOŞAMAZ.
+
+  UYGULAMA: kırmızıyı bulguya çevirmeden önce süreye ve ilk
+  başarısızlığın gerekçesine bak. Gerekçesiz toplu kırmızı = düzenek.
 
 - **`dotnet ef ... --no-build` bayat ikili okur**; ölçümden önce her
   zaman derle, yoksa kaynağı değil eski çıktıyı ölçersin
