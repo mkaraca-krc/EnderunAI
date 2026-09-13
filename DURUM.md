@@ -14064,3 +14064,129 @@ Bugün alınan 6 karar için tarandı (arka uç **318** test dosyası, ön yüz
 
 **GERÇEK SAYI: 0.** Her eşleşme tek tek açıldı ve dışlama gerekçesi
 yazıldı; "0" boş bir taramadan değil, elenmiş 28 satırdan geliyor.
+
+---
+
+## DENETIM/1 — ÖLÇÜLDÜ (2026-09-13). ÖNCE KENDİ CÜMLEMİ DÜZELTİYORUM
+
+**YANLIŞ YAZMIŞTIM:** *"audit_logs canlıda toplam 0 satır — mekanizmanın
+tamamı ölü."* Yarısı doğru, bütünü YANILTICI. Ölçüm:
+
+`security_audit_events` canlıda **dolu ve çalışıyor** — `Created` 1468,
+`Updated` 576, `Deleted` 95 satır. Yani "kim ne yaptı" denetimi VAR.
+Ölü olan, ondan ayrı bir **yetim tablo**.
+
+### (a) `audit_logs` ne zamandır var
+
+Göç `20260720083747_AddAuditLogInfrastructure` — **2026-07-20**, yaklaşık
+iki ay. Hiçbir göç tabloyu düşürmemiş; canlıda duruyor.
+
+### (b) Hiç mi yazılmadı, yazılıp mı silindi → **HİÇ YAZILMADI**
+
+| ölçüm | değer |
+|---|---|
+| `pg_stat_user_tables.n_tup_ins` | **0** |
+| `n_tup_del` / `n_tup_upd` / ölü satır | 0 / 0 / 0 |
+| `pg_stat_database.stats_reset` | **HİÇ** (sayaç hiç sıfırlanmamış → 0 güvenilir) |
+
+Ama asıl kanıt istatistikte değil **kodda**: `AuditLog` diye bir varlık
+sınıfı **YOK** (`find AuditLog*.cs` boş), `DbSet` **YOK**,
+`AuditLogs.Add` / `new AuditLog` **0 eşleşme**. `ModelSnapshot` tabloyu
+**hiç tanımıyor** (0 eşleşme).
+
+**Tablo bir YETİM:** göç kurmuş, model sonradan varlığı kaybetmiş, tablo
+canlıda kalmış. Bu, `sema-sapma-kapisi.sh`ın saydığı sınıfın ta kendisi —
+"modelin bilmediği nesne".
+
+Geriye kalan tek iz bir İZİN ANAHTARI:
+`audit-log.view` → *"Sistem denetim kayıtlarını (kim ne yaptı)
+görüntüler."* **2 role verilmiş.** Ekranı besleyen
+`SecurityAuditController` ise `SecurityAuditEvents` okuyor — yani ekran
+çalışıyor, ama adı yetim tabloyu işaret ediyor.
+
+### (c) YAZMA YOLU NEREDE KESİLİYOR — ölçüldü, tahmin değil
+
+`audit_logs` için yazma yolu **hiç yok**.
+
+Gerçek denetim yolu `AuditSaveChangesInterceptor` ve **18 varlık türünden
+oluşan bir İZİN LİSTESİ** taşıyor: `AppUser, UserRole, Personnel,
+Project, ProjectCostTransaction, PurchaseOrder, PurchaseRequest,
+AccountingVoucher, EmployerPortalLink, RolePermission,
+RolePermissionRevocation, RoleManualPermissionGrant,
+UserPermissionOverride, UserDataScope, RoleWorkHourWindow,
+AccessRequest, TemporaryAccessGrant, ProjectDocument`.
+
+**`AccountingAccount` bu listede YOK.** E4 bayrak değişikliğinin denetim
+izi bırakmamasının sebebi budur. Listede olmayan diğerleri:
+`InventoryItem`, `WarehouseStock`, `StockMovement`, `GoodsReceipt`,
+`CurrentAccount`, `Cheque`…
+
+### (d) EYLEM YAPILDI, ÖLÇÜLDÜ (prova zemininde — canlı kimlik engeli aşağıda)
+
+| eylem | varlık listede mi | `security_audit_events` | `audit_logs` |
+|---|---|---|---|
+| satın alma talebi oluştur | **EVET** (`PurchaseRequest`) | **+1** | +0 |
+| hesap bayrağı değiştir | **HAYIR** (`AccountingAccount`) | **+0** | +0 |
+| kendi tercihini değiştir | hayır (`UserPreference`) | +0 | +0 |
+
+**POZİTİF KONTROL GEÇTİ:** listede olan varlık satır üretiyor, olmayan
+üretmiyor. Yani "0" aletin sessizliği değil, GERÇEK boşluk.
+
+### (e) Prova zemini de 0 — fark yok
+
+`audit_logs` her ikisinde de 0. Zemin canlıyla aynı; fark yok.
+
+### HÜKÜM
+
+1. **`audit_logs` yetim tablo** — düşürülmeli ya da model geri
+   getirilmeli. Bugün hiçbir şey yapmıyor ama izin adı ve ekran başlığı
+   onu vaat ediyor.
+2. **Asıl denetim çalışıyor ama KAPSAMI DAR:** 18 tür. Muhasebe hesabı,
+   stok kartı, stok hareketi, mal kabul, cari ve çek **kapsam dışı.**
+   Kural 80'in ("aktör = fiilen yapan") dayandığı iz, bu türlerde YOK.
+3. **KURAL:** *Bir mekanizmanın kodda durması, kurulmuş olması demek
+   değildir.* Bunun en pahalı örneği: iki ay boyunca var sanılan bir
+   denetim tablosu, hiç yazılmamış; ve çalışan denetimin kapsamı
+   kimse bakmadığı için dar kalmış.
+
+---
+
+## KURAL 84 (yeni)
+
+**"BİR SÜZGEÇ, KAPSAMADIĞI ŞEYİ 'YOK' DİYE GÖSTERİR."**
+
+Doğuran olay (2026-09-13): mal kabulün uçtan uca testi
+`FullyQualifiedName~GoodsReceiptAccounting` süzgecinin DIŞINDAYDI
+(`WarehouseIntegrationTests` sınıfında). Süzgeç onu görmedi ve hüküm
+"mal kabulün testi yok" olacaktı. Süzgeç genişletilince 24 test kırmızı
+yandı — kapsam vardı.
+
+**Sonuç: bir YOKLUK iddiası, süzgecin KAPSAMI BEYAN EDİLMEDEN
+kurulamaz.** Kural 82'nin kardeşi: 82 ölçümün GENİŞLİĞİNİ, 84 aracın
+KÖR NOKTASINI konu alır.
+
+Uygulama: her "X yok" cümlesinin yanında şu durmalı — *neyi taradım,
+neyi taramadım.*
+
+---
+
+## CARİ SEED KUSURU — KAYDEDİLDİ, DÜZELTME BEKLİYOR
+
+Ölçüm: `RequiresProject = true` kodda değil, **2026-07-24 tarihli seed
+JSON'unda**. Müşterinin gerçek cari listesi hesap planına gömülürken
+320.x (331), 120.x (56), 159.x (30) satırlarının hepsine **tek dakikada**
+basılmış. Bilinçli karar izi yok. Dosya repoya girerken (`1a66bec8`)
+cari satırları temizlenmiş.
+
+**ASIL BULGU — ve kayda geçen cümle bu:**
+
+> **"Yeni bir şirket kurulduğunda bu kusur kendiliğinden geri gelir."**
+
+Çünkü bugünkü seed'de `320`, `120`, `159` **ANA hesapları hâlâ
+`requiresProject: true`** ve eşleşmemiş cariler ana hesaba yazılıyor.
+
+### YASAK (Mehmet Bey'in kararı)
+
+**Mali müşavir cevabı gelmeden YENİ ŞİRKET SEED'LENMEYECEK.** Cevap
+gelmeden seed koşulursa kusur, düzeltmeyi beklediğimiz hâliyle yeni
+şirkete de kopyalanır.
