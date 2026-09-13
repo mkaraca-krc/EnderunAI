@@ -15000,3 +15000,95 @@ KATALOG/1'den kurtarma yordamına kadar bu haftanın işi de giderdi.
    önceki uçtan beri giren **22**.
 
 Veri tarafı hâlâ açık: sunucu dışı yedek kopya yok → `docs/SUNUCU-DISI-KOPYA.md`.
+
+## GÜNLÜK/1 — ÖLÇÜM VE TEK DEĞİŞİKLİK (2026-09-13)
+
+Soru ikiydi: erişim günlüğü ne kadar saklanmalı, ve istek seviyesi
+günlüğü açılmalı mı.
+
+### (1) BİR KAYDIMIZ YANLIŞMIŞ — DÜZELTİLDİ
+
+*"Sorgu dizgeleri günlüğe yazılmıyor, bu korunmalı"* yazıyordu.
+**Yanlış.** `log_format maskeli` alanı `$maskeli_uri` kullanıyor,
+onun varsayılanı `$request_uri` — ve o **sorgu dizgesini içerir**.
+Bugünkü dosyada 7.686 satırın **1.856'sı** sorgu dizgesi taşıyor.
+
+**Ama riski ölçülmemişti; ölçüldü.** 18 günlük dosyasında hassas
+parametre ADI araması:
+
+    access_token 0 · token 0 · jeton 0 · password 0 · parola 0
+    secret 0 · key 0 · apikey 0 · api_key 0 · code 0 · refresh_token 0
+
+**Pozitif kontrol (Kural 48):** aynı desen bilinen parametreleri buluyor
+— `companyId` 991, `negotiateVersion` 320, `startDate` 128. Arama
+sessiz değil; sıfırlar gerçek.
+
+Yolda jeton taşıyan tek uç (`/portal/<token>`) zaten maskeleniyor
+(`portal-token-maskeleme.conf`). SignalR uçları yalnız `id` taşıyor,
+`access_token` taşımıyor. **Bugünkü erişim günlüğü sır taşımıyor** —
+ama bu, biçimin sorgu dizgesini yazdığı gerçeğini değiştirmiyor:
+yarın eklenecek bir uç jetonu sorgu dizgesinde taşırsa günlüğe düşer.
+
+### (2) HACİM — SAKLAMA SÜRESİ UCUZ
+
+| ölçüm | değer |
+|---|---|
+| bugün (18:55'e kadar) | 7.690 istek, 1,7 MB |
+| dün (tam gün) | 6.832 istek, 1,3 MB |
+| arşiv (gzip) ortalama | **145 KB/gün** |
+| bugünkü saklama | `logrotate daily, rotate 14` → **15 gün** |
+| /var/log/nginx toplamı | 4,9 MB |
+
+**90 güne çıkarmanın maliyeti ≈ 13 MB. 365 gün ≈ 53 MB.** Diskte 124 GB
+boş. Yani saklama süresi bir maliyet sorusu DEĞİL; kişisel veri (IP)
+saklama süresi sorusu. **Bu yüzden karar Mehmet Bey'de kalıyor;
+uygulamadım.** Değişiklik tek satır: `/etc/logrotate.d/nginx` içinde
+`rotate 14` → `rotate 90`.
+
+### (3) İSTEK SEVİYESİ GÜNLÜĞÜ — HAYIR. ASIL EKSİK BAŞKAYDI.
+
+OTURUM/1'in cevaplayamadığı soru "kaç istek geldi" değil, **"401'in
+SEBEBİ neydi"**. Ölçüldü: canlı yapılandırmada
+`Microsoft.AspNetCore: Warning`, oysa JwtBearer ret sebebini
+**Information**'da yazıyor. Sonuç: son 3 günde sebep satırı **0**.
+Bütün istekleri günlüğe yazmak bu soruyu yine cevaplamazdı.
+
+**Prova zemininde ÇAĞIRARAK ölçüldü (Kural 70):**
+
+| çağrı | durum | günlükteki sebep |
+|---|---|---|
+| geçerli jeton | 200 | — |
+| biçimsiz jeton | 401 | `IDX14100: JWT is not well formed` |
+| **imzası bozuk jeton** | 401 | **`IDX10503: Signature validation failed`** |
+
+İkincisi, OTURUM/1'de sorduğumuz sorunun tam cevabı: jeton mu bozuldu,
+anahtar mı değişti, süresi mi doldu — üçü ayrı IDX kodu.
+
+**SIZINTI RİSKİ ÖLÇÜLDÜ, VARSAYILMADI:** jeton içeriği günlükte
+`[PII of type … is hidden]` diye gizleniyor; jetonun 30 karakterlik bir
+parçası günlükte **0 kez** geçti.
+
+**HACİM:** son beş günde 401 sayısı 40–113/gün. Eklenecek satır sayısı
+bu mertebede — ölçülemeyecek kadar küçük.
+
+**YAPILAN TEK DEĞİŞİKLİK:** `appsettings.json` →
+`"Microsoft.AspNetCore.Authentication": "Information"`. Tüm istek
+günlüğü AÇILMADI; yalnız kimlik doğrulama kategorisi.
+
+### (4) YAN BULGU — GİRİŞ-DÖNGÜ/1'İN DÜZELTİLDİĞİ BAĞIMSIZ OLARAK DOĞRULANDI
+
+Günlükte 08/Eylül'de **64.531 adet 401** göründü (son günler 40–113).
+Yollar: `auth/me` 32.113 ve `user-preferences` 32.102 — çiftler hâlinde,
+8 kaynaktan, saatte 16.735'e kadar. Bu yeni bir bulgu DEĞİL:
+GİRİŞ-DÖNGÜ/1'in parmak izi. Düzeltme `3b9f09a8`, **08.09 13:01**; saatlik
+dağılım 13:00'te 4.452, 15:00'te **2**. Düzeltmenin etkisi, kodu okuyarak
+değil trafiği sayarak doğrulandı.
+
+Bu aynı zamanda (2)'nin gerekçesi: bu doğrulama ancak günlük DURUYORSA
+yapılabiliyor. 15 günlük pencere, 16 gün önceki bir düzeltmeyi
+doğrulanamaz yapar.
+
+### KARAR BEKLEYEN — TEK MADDE
+
+Erişim günlüğü saklama süresi: **15 gün → ?** (90 gün ≈ 13 MB,
+365 gün ≈ 53 MB). Maliyet değil, kişisel veri saklama kararı.
