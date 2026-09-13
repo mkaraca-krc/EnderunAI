@@ -13401,3 +13401,119 @@ Sıra: (1) muhasebe fiş tipi · (2) fiş durumu · (3) hesap türü
 (Borç/Alacak) · (4) sipariş durumu · (5) talep önceliği/durumu ·
 (6) poz disiplini/durumu · (7) personel durumu · (8) RFQ durumu ·
 (9) mal kabul durumu · (10) rozet renkleri.
+
+---
+
+## STOK/1 — UÇTAN UCA PROVA (2026-09-13)
+
+**Zemin:** `enderun_stok_prova` — canlıdan birebir kopya (6 depo, 9 kart,
+153 cari, 4 proje, 1115 hesap, 0 hareket), kendi arka ucu 5157'de.
+**CANLIYA HİÇBİR KAYIT AÇILMADI.**
+
+Mehmet Bey'in uyarısı doğrulandı: *"Veri sıfır olduğu için ekranların
+açılması işleyişin doğru olduğunu göstermiyor."* Bütün ekranlar 200
+dönüyordu; **çevrimi koşturunca ÜÇ ENGEL çıktı.**
+
+### ZİNCİRİN KENDİSİ: STOK GİRİŞİ 11 ADIM
+
+Doğrudan sipariş açan uç YOK; sipariş yalnız RFQ'dan doğuyor, mal kabul
+yalnız siparişten. Ölçülen tam yol:
+
+    talep → onaya gönder → onayla → RFQ oluştur → RFQ gönder →
+    tedarikçi teklifi → ihale → RFQ'dan sipariş → onaya gönder →
+    onayla → mal kabul
+
+Ara bulgu: **ihale (award) siparişi DOĞURMUYOR**, yalnız kazananı
+işaretliyor; sipariş ayrı bir uçla (`create-from-rfq`) kuruluyor.
+Ölçülerek görüldü (award'dan sonra `purchase_orders` 0 satır).
+
+### ═══ E3 · ENGEL — CANLIDAKİ 9 KARTIN HEPSİ PASİF ═══
+
+`GoodsReceiptService` stok kartını `x.IsActive` şartıyla arıyor. Canlıda
+**9 kartın tamamı `IsActive = false`.**
+
+ÇAĞIRARAK KANITLANDI — aynı istek, tek değişken:
+
+    kart pasifken : PUT …/draft → 400 "Seçilen stok kartlarından biri bulunamadı…"
+    kart aktifken : PUT …/draft → 200
+
+**Sonuç: salı günü hiçbir mal kabul kalemi bağlanamaz, stok sisteme
+GİREMEZ.** Düzeltmesi ucuz (kartları aktif etmek) ama ÖNCE fark
+edilmeliydi; ekran açılıyor diye çalıştığı sanılıyordu.
+
+### ═══ E4 · ENGEL — MAL KABUL FİŞLENEMİYOR (HTTP 500) ═══
+
+    System.ArgumentException: 150 hesabında proje seçimi zorunludur.
+      at GoodsReceiptAccountingPoster.PostAsync … satır 113
+
+`GoodsReceiptAccountingPoster` fiş satırlarını **`ProjectId: null`** ile
+kuruyor (satır 86 ve 107). Hesap planında **150, 153 ve 740 proje
+zorunlu** (1115 hesabın **485'i** proje istiyor). Stok hesabı ancak 150
+ya da 153 olabildiği için mal kabul **HİÇBİR KOŞULDA** fişlenemiyor.
+
+**Düzeltme mümkün:** `purchase_orders.ProjectId` dolu — proje bilgisi
+zincirde zaten var, üretici okumuyor.
+
+### ═══ E5 · ENGEL — PROJESİZ DEPO ÇIKIŞI DA DÜŞÜYOR (HTTP 500) ═══
+
+    System.ArgumentException: 770 hesabında masraf merkezi zorunludur.
+
+Projesiz çıkışta `StockConsumptionPoster` 770'e yazıyor ama masraf
+merkezi geçmiyor. Aynı aile: **üretici, hesabın zorunlu tuttuğu boyutu
+vermiyor.** Projeli çıkış çalışıyor (aşağıda), projesiz çıkış çalışmıyor.
+
+### ═══ K3 · KUSUR — DOĞRULAMA HATASI 500 OLARAK DÖNÜYOR ═══
+
+E4 ve E5'in ikisi de kullanıcıya şunu gösteriyor:
+
+    500 · "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin…"
+
+Oysa ikisi de **doğrulama hatası**: sebebi bellidir, söylenebilir ve
+kullanıcı düzeltebilir (projeyi/masraf merkezini seç). 500 + "tekrar
+deneyin" mesajı kullanıcıyı sonsuz tekrara yollar. Doğrusu 400 ve
+sebebi yazan bir mesaj.
+
+### ÇALIŞAN AYAKLAR — SAYILARLA
+
+| akış | sonuç | sayı |
+|---|---|---|
+| mal kabul (100 × 25 TL) | ✓ | depo stok **0 → 100**, ortalama maliyet **0 → 25,00** |
+| mal kabul fişi | ✓ | **150 borç 2500 / 379.01 alacak 2500** (GR-IR eşlemesi doğru) |
+| projeli çıkış (10 adet) | ✓ | stok 100 → 90, fiş **740.03.09 borç 250 / 150 alacak 250** |
+| **transfer 30 adet A→B** | ✓ | kaynak 85 → 55, hedef 0 → 30, **toplam 85 DEĞİŞMEDİ** |
+| **transfer YÖNÜ** | ✓ | kaynağa **TransferOut=3**, hedefe **TransferIn=2** |
+| negatif stok denemesi | ✓ | mevcut 90, çıkış 590 → **409 "Stok yetersiz."**, stok değişmedi |
+| sayım farkı (−5) | ✓ | stok 90 → 85, hareket **Adjustment=5**, fiş **689.02 borç 125 / 150 alacak 125** |
+
+**TRANSFERİN YÖNÜ ARTIK OKUMAYA DEĞİL ÖLÇÜME DAYANIYOR.** Dünkü etiket
+düzeltmesi (2 = giriş, 3 = çıkış) gerçek bir transferle doğrulandı.
+
+**NEGATİF STOK SORUSU CEVAPLANDI:** sistem negatif stoğa **izin
+vermiyor** (`409 "Stok yetersiz."`) ve bu bilinçli bir kontrol
+(`if (source.Quantity < request.Quantity)`), kaza değil.
+
+### KÜÇÜK BULGULAR
+
+- **Fiş bağı belge düzeyinde.** Mal kabul hareketinde
+  `AccountingVoucherId` boş ama `goods_receipts.AccountingVoucherId`
+  DOLU. İlk okumamda "fiş yok" sandım; düzeltildi — eksiklik değil,
+  farklı düzey. Çıkış ve sayım hareketlerinde bağ hareket düzeyinde var.
+- **Transfer fiş üretmiyor ve gerekçesi kodda YAZILI DEĞİL.** Aynı
+  şirket içi transfer toplam stok değerini değiştirmediği için
+  savunulabilir, ama kayıtsız bir sessizlik. Yazılmalı.
+
+### RİG AYARI — AÇIKÇA KAYDA GEÇİYOR
+
+E4 zincirin geri kalanını ölçmeyi engelliyordu. **Yalnız prova
+zemininde** 150 ve 153 hesaplarının `RequiresProject` bayrağı geçici
+olarak kapatıldı; canlıda ikisi de `true` olarak DURUYOR (ölçümle
+doğrulandı). Bu bir ürün düzeltmesi DEĞİL, ölçüme devam edebilmek için
+rig ayarıdır. E4 düzeltilmeden canlıda mal kabul fişlenemez.
+
+### RİG HATALARIM (Kural 81)
+
+- İlk transfer denemesi `404 "Hedef depo bulunamadı"` verdi. Sebep
+  üründe değildi: seçtiğim `DEPO-TEST-01` deposu **silinmiş**
+  (`IsDeleted = true`). Aktif depoyla tekrarlandı, geçti.
+- İlk tedarikçi seçimim farklı şirketten geldi; `Roles & 2` (tedarikçi)
+  ve `Status = 2` (onaylı) süzgeçleriyle düzeltildi.
