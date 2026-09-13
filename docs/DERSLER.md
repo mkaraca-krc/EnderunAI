@@ -318,6 +318,39 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 87 (ADAY — Mehmet Bey'in metni) — DOĞRULARKEN ÖLÇTÜĞÜN
+  KÜMENİN İSTENEN KÜMEYLE AYNI OLDUĞUNU ÖNCE GÖSTER.** *"Hepsi
+  yapıldı" cümlesi, maddelerin tek tek adıyla eşleştirilmeden
+  kurulamaz.*
+
+  Doğuşu (2026-09-13): bir turda "bu mesaj bir öncekinin aynısı, hepsi
+  yapıldı" yazdım. Ölçtüğüm şeyler gerçekten oradaydı; ama küme
+  düzeyinde baktım, madde madde eşleştirmedim — ve bilerek karara
+  bıraktığım bir maddeyi ("saklama süresi") "hepsi" cümlesi örttü.
+  Yanlış kümeye bakan bir doğrulama, eksiği "tamam" diye gösterir
+  (Kural 84'ün doğrulama tarafı).
+
+  UYGULAMA: tamamlandı raporu, istenen maddelerin ADIYLA yazılır; her
+  adın karşısında ya sonuç ya "yapılmadı, sebebi şu" durur. "Hepsi",
+  "tamamı", "eksik yok" sözcükleri tek başına rapor değildir.
+
+- **KURAL 88 — ETİKETSİZ HÜKÜM YAZILMAZ.** Her hüküm satırının yanında
+  ya ÖLÇÜM YÖNTEMİ ya `[ÖLÇÜLMEDİ]` etiketi bulunur. **Bu kural kod
+  yorumlarına da uygulanır.**
+
+  Gerekçesi KAYIT/1: bu hafta üç yanlış kayıt TESADÜFEN yakalandı —
+  K10 ("istek atmıyor"), GÜNLÜK/1 ("sorgu dizgeleri yazılmıyor"),
+  S1 (kod yorumu "zaten `isActive` ile ayırıyor"). Üçü de hükümdü,
+  üçünün de yanında ölçüm yoktu.
+
+  **BİR YORUM DA BİR KAYITTIR VE YANLIŞ OLABİLİR.** S1'de ölçülen
+  cümle şuydu: ***yorum, yapıldığı SANILAN bir şeyi anlatıyordu.***
+  Kod okuyan herkes o yoruma güvenip tabloyu kontrol etmedi.
+
+  Araç: `deploy/scripts/kayit-taramasi.py` — hüküm adaylarını
+  ÖLÇÜLMÜŞ / İDDİA diye ayırır, kapsamı ve pozitif kontrolü basar.
+  Hüküm AVLAR, hüküm KANITLAMAZ.
+
 - **KURAL 86 — BİR ALETİN YANLIŞ KIRMIZISI, YANLIŞ YEŞİLİ KADAR
   TEHLİKELİDİR.** Felaket anında sağlam yedeği reddettirir. Kurtarma
   yolundaki her alet, doğru yeşil kadar doğru kırmızı da vermek

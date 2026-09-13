@@ -15199,3 +15199,89 @@ Günlük IP taşıyor. **Aydınlatma metninde erişim günlüğü ve saklama
 süresi yazıyor mu, 90 gün oradaki süreyle uyuşuyor mu?** Hukuk tarafı;
 `docs/SUNUCU-DISI-KOPYA.md` içine, sunucu dışı kopya kararıyla aynı
 zarfa kondu.
+
+## KAYIT/1 — KAPSAM GENİŞLEDİ: KOD YORUMLARI DA KAYITTIR (2026-09-13)
+
+Bu hafta üç yanlış kayıt **tesadüfen** yakalandı: K10 ("istek atmıyor"),
+GÜNLÜK/1 ("sorgu dizgeleri yazılmıyor"), S1 (kod yorumu "zaten
+`isActive` ile ayırıyor"). Tesadüfe bırakılamaz.
+
+Araç: `deploy/scripts/kayit-taramasi.py`. **Hüküm AVLAR, hüküm
+KANITLAMAZ** — çıktısı adaydır.
+
+### (a) BELGELERDEKİ HÜKÜMLER — ÖLÇÜLMÜŞ / İDDİA
+
+**TARAMA SAĞLIĞI:** 8 belge, **17.789 satır**; 974 kod dosyası,
+**303.131 satır**, 36.205 yorum satırı. Pozitif kontrol: süzgeç hem
+ÖLÇÜLMÜŞ hem İDDİA üretiyor (1.185 / 1.741) — tek kovaya düşmüyor,
+yani kör değil.
+
+| | belge | kod yorumu |
+|---|---|---|
+| hüküm adayı | 2.926 | 6.168 |
+| **ÖLÇÜLMÜŞ** | 1.185 | 630 |
+| **İDDİA** | **1.741 (%60)** | **5.539 (%90)** |
+| — önem YÜKSEK | 342 | 1.181 |
+| — önem ORTA | 69 | 99 |
+| — önem DÜŞÜK | 1.330 | 4.259 |
+
+**Kod yorumlarında iddia oranı %90** — belgelerden çok daha kötü. Yorum
+yazarken ölçüm iliştirme alışkanlığı hiç yok.
+
+### (c) SIRALAMA — "YANLIŞSA NE OLUR"
+
+Önem: sır/yetki/kimlik · yedek/veri kaybı · para/muhasebe = YÜKSEK.
+İkinci ölçüt **mutlak niceleyici** (*asla, hiçbir, her zaman, zaten,
+garanti*): böyle bir hüküm **tek karşı örnekle çöker** ve üstüne karar
+kurulur. YÜKSEK önemli iddia 1.523; bunların **187'si** mutlak
+niceleyicili. Kod yorumu tarafında 145'i.
+
+**Sezgisel sıralama yetmedi, üstüne yargı koydum ve ölçütü yazıyorum:**
+araç geçmiş ANLATISI ile duran HÜKÜM'ü ayıramıyor (kapanmış bir
+bölümdeki "hiçbir şey gönderilmedi" cümlesi de listeye giriyor). Beşliyi
+*duran, yük taşıyan, yanlışsa para/güvenlik/yasal defteri vuran*
+hükümlerden seçtim.
+
+### (d) EN ÜSTTEKİ BEŞ — ÖLÇÜLDÜ
+
+| # | hüküm | yanlışsa | sonuç |
+|---|---|---|---|
+| 1 | `Models/PersonnelExtraPayment.cs:13` — *"Resmi muhasebeye HİÇBİR fiş yazmaz"* | resmî olmayan ödeme yasal deftere girer | **DOĞRU** |
+| 2 | `Models/SubcontractorLedger.cs:72` — *"Resmî muhasebeye HİÇBİR fiş yazmaz"* | aynı | **DOĞRU** |
+| 3 | `Models/WorkHourAccess.cs:7` — *"Admin/GM … her zaman istisnasız izinli"* | mesai kısıtı yanlış kişide çalışır | **DOĞRU** (incelik aşağıda) |
+| 4 | `Models/InventoryItem.cs:108` — *"Ağırlıklı ortalama birim maliyet her zaman TRY"* | maliyetler sessizce para birimi karıştırır | **DOĞRU** |
+| 5 | `DURUM.md:7343` — *"Sır hiçbir çıktıya yazılmaz, yalnız adı"* | tarayıcının kendisi sır sızdırır | **DOĞRU** |
+
+**Ölçüm yöntemleri:**
+
+1–2. Model adını geçen `Services`/`Controllers` dosyalarından
+`AccountingVoucher` da geçen **0** dosya. **POZİTİF KONTROL (Kural 48):**
+aynı yöntem fiş YAZAN sınıflarda **GoodsReceipt 6**, **StockCountVoucher 2**,
+**DepodanZimmet 2** dosya buluyor — sıfırlar kör aramadan gelmiyor.
+
+3. `WorkHourAccessService.cs:92-95`: rol kontrolü koşulsuz `Izinli`
+döndürüyor. Canlıda `role_work_hour_windows` → **Admin 0, Genel Müdür 0**
+satır; iddianın ikinci yarısı da tutuyor.
+**İNCELİK:** rol kontrolünden ÖNCE `user is null` dalı var ve
+`Belirlenemedi` döndürüyor. Yani "istisnasız izinli" değil, "istisnasız
+izinli KARAR VERİLEBİLDİĞİNDE". Bu bir çürütme değil; yorumun kesinliği
+gerçeğin bir tık üstünde.
+
+4. İki yazma yolu da çeviriyor:
+`GoodsReceiptService.cs:681` → `orderItem.NetUnitPrice * purchaseOrder.ExchangeRate`;
+`SupplierInvoiceStockPoster.cs:132/258` → `item.UnitPrice * invoice.ExchangeRate`.
+TRY siparişte `ExchangeRate=1`, formül tek tip.
+
+5. Sahte sır düzeneğiyle (gerçek sırra dokunulmadan) koşturuldu:
+çıktıda sırrın **değeri 0 kez**, **adı 1 kez** (`GERÇEK ÜRETİM SIRRI:
+SAHTE_ANAHTAR`), çıkış 1.
+
+**BEŞİ DE DOĞRU ÇIKTI.** Ama bu, kalan 1.518 yüksek önemli iddia
+hakkında hiçbir şey söylemez (Kural 82).
+
+### (e) BUNDAN SONRAKİ BİÇİM — KURAL 88
+
+Her hüküm satırının yanında **ya ölçüm yöntemi ya `[ÖLÇÜLMEDİ]`
+etiketi**. Kod yorumlarına da uygulanır. DERSLER'e Kural 88 olarak
+geçti; S1'in cümlesi gerekçe olarak aynen kondu: *"yorum, yapıldığı
+sanılan bir şeyi anlatıyordu."*
