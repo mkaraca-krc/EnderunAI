@@ -13366,3 +13366,38 @@ eşleme: **64**; **BİRDEN ÇOK DOSYADA TEKRARLANAN: 13**.
 **DÜZELTİLMEDİ.** Salıdan sonra hepsi tek seferde tek kaynağa bağlanacak
 (Mehmet Bey'in kararı). Bu üçüncü örnekti; kalıp olduğu artık sayıyla
 sabit.
+
+---
+
+## SALI PROVA LİSTESİ (yayın sonrası yapılacaklar)
+
+Bu bölüm, yayın koşarken/koştuktan sonra UNUTULMAMASI gerekenleri tek
+yerde tutar. Her madde bir EYLEM ve bir SAHİP taşır.
+
+| # | eylem | sahip | neden şimdi değil |
+|---|---|---|---|
+| 1 | **`END0003` tipi `Consumable` yapılacak — EKRANDAN** | **Mehmet Bey** | Denetim izinde GERÇEK kullanıcının kimliği durmalı. Canlı kullanıcı parolası ne ajana ne başkasına geçer. Yayından ÖNCE yapılsaydı kart bir süre doğru veriyle YANLIŞ etiket gösterirdi. |
+| 2 | Isıtma adımının yayın günlüğünde göründüğü doğrulanacak | ajan | `safe-deploy` çıktısında `ISITMA SONUÇ` satırı aranacak |
+| 3 | Yayın sonrası ilk isteğin süresi ölçülecek | ajan | ISINMA/1'in canlıdaki ilk gerçek sınavı |
+
+**Madde 1'in gerekçesi kayıtta:** kart 2026-08-05'te "Sarf malzemesi"
+seçilerek açıldı, o günkü ekran etiketleri ters eşliydi ve veriye
+`Equipment(1)` yazıldı. Düzeltme notu olarak şu cümle yazılmalı:
+*"Ekran etiketleri ters olduğu için yanlış tip kaydedilmiş."*
+
+---
+
+## SIRAYA ALINDI — 13 TEKRARLANAN SAYI→ETİKET EŞLEMESİ (salıdan sonra)
+
+Ölçüm yukarıda ("AYNI HASTALIK BAŞKA KAÇ YERDE"). Hepsi tek seferde tek
+kaynağa bağlanacak; şimdi DOKUNULMAYACAK.
+
+**SIRA: muhasebe fiş tipi (4 dosya) EN BAŞTA.** Gerekçe Mehmet Bey'in:
+*yanlış etiketli bir fiş tipi, yanlış etiketli bir malzemeden pahalıya
+gelir.* Malzeme tipi kusuru bir izole bandı yanlış gösteriyordu; fiş
+tipi kusuru yasal defterde bir kaydı yanlış sınıflandırır.
+
+Sıra: (1) muhasebe fiş tipi · (2) fiş durumu · (3) hesap türü
+(Borç/Alacak) · (4) sipariş durumu · (5) talep önceliği/durumu ·
+(6) poz disiplini/durumu · (7) personel durumu · (8) RFQ durumu ·
+(9) mal kabul durumu · (10) rozet renkleri.

@@ -422,3 +422,9 @@ değil, **indeks**.
   UYGULAMA: yeni bir muhafız yazarken yorumuna GÖRMEDİĞİ kanalı da yaz.
   Kapsam yazılmazsa, muhafızın yeşili "kusur yok" diye okunur — oysa
   yalnız "baktığım yerde kusur yok" demektir (Kural 82'nin muhafız hâli).
+
+- **BİR MUHAFIZIN YANLIŞ ALARMI, ONUN GERÇEKTEN OKUDUĞUNUN KANITIDIR.**
+  *(2026-09-13.)* Malzeme tipi muhafızı ilk koşusunda bir `<h3>Demirbaş</h3>`
+  BAŞLIĞINI ihlal saydı. Desen daraltıldı — ama o yanlış alarm olmasaydı
+  muhafızın dosyaları gerçekten açtığını değil, yalnız yeşil yandığını
+  görmüş olurduk. Sessiz yeşil, gürültülü kırmızıdan daha az bilgi taşır.
