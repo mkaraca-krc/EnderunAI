@@ -14866,3 +14866,75 @@ başarı damgası (03:33) ve yedek dizini (457 dosya) el değmedi.
    `UZAK_YEDEK_ETKIN=hayir`; KVKK yurt dışı aktarım değerlendirmesi
    bekliyor. Sunucu giderse yedek de gider — bu hâlâ böyle.
 2. **Canlıya geri yükleme adımları yazılı değil** → paket C.
+
+## PAKET C — CANLIYA GERİ YÜKLEME YORDAMI (2026-09-13)
+
+YEDEK/1 (d) bunu açık bırakmıştı: *"Canlıyı geri yükleyen bir betik YOK…
+felaket anının adımları yazılı değil."* Bir taslak 09-05'te yazılıp
+geçici dizinde bırakılmış ve sunucu yeniden başlayınca kaybolmuştu
+(Kural 73). Bu sefer depoda.
+
+**ÜRÜN:** `scripts/enderun-kurtarma.sh` + `docs/KURTARMA.md`
+(betik yoksa elle yürünecek adımlar da belgede).
+
+### MUHAFIZLAR — DÖRDÜ DE ISIRDI
+
+| sonda | sonuç |
+|---|---|
+| canlı hedef, onay yok | reddetti, gereken dizgeyi söyledi; canlı el değmedi (13 kullanıcı) |
+| canlı hedef, yanlış onay dizgesi (`evet`) | reddetti |
+| damga başka yedeğe ait | yükleme başlamadan reddetti |
+| damga hiç yok | reddetti — "karşılaştırılamayan yedek YÜKLENMEZ" |
+| hedef `postgres` (bakım VT) | reddetti |
+
+### ÜÇ DOĞRULAMA KAPISI — HER BİRİ AYRI AYRI KIRMIZI YANDIRILDI
+
+| kapı | mutasyon | sonuç |
+|---|---|---|
+| 1 · satır sayıları | damgada `AccountingPeriods` 0 → 7 | çıkış 1, farkı tablo adıyla gösterdi, **servisleri kaldırmadı** |
+| 2 · göç geçmişi | (mutasyon gerekmedi) | bekleyen göçü doğru bildirdi: `YetimAuditLogsTablosuDusuruldu` → `goc-uygula.sh` |
+| 3 · sahiplik | `--role` kaldırıldı | çıkış 1, "postgres (242 tablo)", **servisleri kaldırmadı** |
+
+### PROVANIN BULDUĞU İKİ GERÇEK KUSUR
+
+**(1) `--role` olmadan sahiplik yanlış.** İlk sürüm `--no-owner` ile
+yükleyip sonra `reassign owned by current_user` yapıyordu. Prova ölçtü:
+242 tablo `enderun_user` yerine **`postgres`** sahipliğinde kaldı ve
+devir komutu *"cannot reassign ownership of objects owned by role
+postgres"* ile düştü. Gerçek kurtarmada uygulama kendi tablolarının
+sahibi olmazdı — felaketin üstüne felaket. Düzeltme: yükleme
+`pg_restore --role=enderun_user` ile yapılıyor, sahiplik baştan doğru; ve
+bu artık **doğrulama 3** olarak kapıya bağlandı.
+
+**(2) Kendi doğrulama aletim yanlış kırmızı verdi.** `gpg | head -c 5 |
+grep -q '^PGDMP'` — `head` boruyu kapatınca `gpg` SIGPIPE ile ölüyor ve
+`pipefail` açıkken boru, `grep` eşleşse bile başarısız sayılıyor. Sağlam
+bir yedeği "AÇILAMADI" diye reddetti. Bayt dizgesi önce değişkene
+alınıyor, karar ondan sonra veriliyor. *Bir doğrulama aletinin yanlış
+kırmızısı, yanlış yeşili kadar tehlikelidir: felaket anında sağlam
+yedeği reddettirir.*
+
+### KURAL 84 ÜÇÜNCÜ KEZ ISIRDI — BETİĞE GÖMÜLDÜ
+
+Göç geçmişi denetimini yazarken `Migrations/*.cs` saydım: **214 değil 207**
+çıktı ve "canlıda kodda olmayan 7 göç var" diye yanlış alarm ürettim.
+Yedi göç `Migrations/HumanResources/` altındaydı. Doğru kapsamla: kodda
+**214**, canlıda **213**, tam bir bekleyen göç (salının yetim tablo
+düşürmesi), yetim geçmiş satırı **yok**. Betikteki arama artık `find`
+ile özyinelemeli ve gerekçesi yorumda duruyor.
+
+### ÖLÇÜLMEYEN — DÜRÜSTÇE
+
+Servis durdurma/kaldırma ve `healthcheck.sh` adımları **canlı hedefte hiç
+koşturulmadı**; prova kipinde bilerek atlanıyor ve atlandıkları günlüğe
+yazılıyor. Canlıda denemek canlıyı düşürmek demekti. Ölçülen: ön denetim,
+geri dönüş kopyası mantığı (kod yolu), düşür/kur, yükleme, üç doğrulama —
+prova hedefinde uçtan uca, 10 saniye.
+
+Prova veritabanı düşürüldü; canlı VT, servisler ve yedek dizini (457
+dosya) el değmedi.
+
+### HÂLÂ AÇIK — BENDE DEĞİL
+
+Sunucu dışı kopya yok. Sunucu giderse bu yordamın yükleyeceği dosya da
+yoktur. KVKK kararı bekliyor.
