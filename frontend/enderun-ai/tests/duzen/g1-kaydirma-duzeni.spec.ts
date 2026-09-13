@@ -140,6 +140,39 @@ test("G1: kaydırma sırasında kenar çubuğu yerinden oynuyor mu", async ({ pa
   );
 
   /*
+   * ═══ POZİTİF KONTROL (Kural 48) ═══
+   *
+   * "Sapma 0" tek başına iki şeyin kanıtı olabilir: düzen sağlamdır,
+   * YA DA ölçüm aleti sapmayı göremiyor. Ayırmak için sapma BİLEREK
+   * üretilir: kenar çubuğunun `position: sticky` kuralı kaldırılır;
+   * o zaman çubuk sayfayla birlikte yukarı kaymalı ve `top` değeri
+   * 0'dan UZAKLAŞMALIDIR. Kontrol sapma göstermezse yukarıdaki "sapma
+   * yok" sonucu hiçbir şey söylemez.
+   */
+  const kontrol = await page.evaluate(async () => {
+    const kenar = document.querySelector(".erp-sidebar") as HTMLElement | null;
+    if (!kenar) return -1;
+    const eski = kenar.style.position;
+    kenar.style.position = "static"; // sapmayı BİLEREK üret
+    window.scrollTo(0, 0);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    window.scrollBy(0, 300);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    const sapma = Math.abs(kenar.getBoundingClientRect().top);
+    kenar.style.position = eski; // geri al
+    return Math.round(sapma);
+  });
+  console.log(`POZİTİF KONTROL (sticky kaldırıldı): sapma ${kontrol}px — ` +
+    `alet ${kontrol > TOLERANS ? "sapmayı GÖRÜYOR ✓" : "sapmayı GÖREMİYOR ✗"}`);
+
+  expect(
+    kontrol,
+    "POZİTİF KONTROL DÜŞTÜ: sapma bilerek üretildiği hâlde ölçülemedi. " +
+      "Bu hâlde yukarıdaki 'sapma yok' sonucu düzenin sağlamlığını DEĞİL, " +
+      "ölçüm aletinin körlüğünü gösteriyor olabilir.",
+  ).toBeGreaterThan(TOLERANS);
+
+  /*
    * ÖLÇÜM SAĞLIĞI (Kural 48). "Sapma yok" sonucu, HİÇ KARE
    * ÖRNEKLENMEDİĞİNDE de doğrudur. Önce aletin çalıştığı kanıtlanır.
    */

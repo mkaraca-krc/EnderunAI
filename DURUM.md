@@ -13517,3 +13517,34 @@ rig ayarıdır. E4 düzeltilmeden canlıda mal kabul fişlenemez.
   (`IsDeleted = true`). Aktif depoyla tekrarlandı, geçti.
 - İlk tedarikçi seçimim farklı şirketten geldi; `Roles & 2` (tedarikçi)
   ve `Status = 2` (onaylı) süzgeçleriyle düzeltildi.
+
+### G1 — KAYDIRMA SIRASINDA BOZUK DÜZEN: TEKRARLANMADI (kapatıldı)
+
+Sonda: `tests/duzen/g1-kaydirma-duzeni.spec.ts`. Kenar çubuğu
+`position: sticky; top: 0` — doğru davranış, kaydırma boyunca
+`getBoundingClientRect().top` değerinin **0'da kalması**. Bozulma, o
+değerin 0'dan sapmasıdır. Kusur "bir kare" sürdüğü için örnekleme
+tarayıcının kendi çizim döngüsünde (`requestAnimationFrame`) yapıldı —
+kareler arasında ölçseydik tam o kareyi kaçırır ve aletin körlüğünü
+bulgu diye yazardık.
+
+| tur | örneklenen kare | en büyük sapma | yatay taşma |
+|---|---|---|---|
+| 1–5 | 123 (her tur) | **0 px** | 0 px |
+
+**TOPLAM 615 KARE · SAPMA GÖRÜLEN TUR 0/5.**
+
+**POZİTİF KONTROL (Kural 48):** `sticky` kuralı bilerek kaldırıldı ve
+aynı ölçüm **300 px sapma** raporladı. Yani alet sapmayı GÖRÜYOR;
+"sapma yok" sonucu düzenin sağlamlığını gösteriyor, aletin körlüğünü
+değil.
+
+**HÜKÜM: kusur değil, kayda geçirilip KAPATILDI.** Mehmet Bey'in kendi
+ihtimali ("ekran görüntüsü kaydırma animasyonu sırasında alınmış
+olabilir") ölçümle uyumlu — tarayıcı kaydırma sırasında sticky öğeyi
+geçici olarak geride bırakabilir ve ekran görüntüsü o anı yakalamış
+olabilir; DOM ölçümünde böyle bir an yok.
+
+**DÜRÜST SINIR:** ölçüm 1536 px'te ve `/depo-stok`ta yapıldı, programlı
+kaydırmayla. Fare tekerleği/dokunmatik ivmeli kaydırmanın ürettiği
+kareler ölçülmedi.
