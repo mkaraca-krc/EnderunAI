@@ -14305,3 +14305,103 @@ yerde, fiş/satır için ham SQL INSERT **sıfır**. `CreateAsync` ve
 `UpdateAsync` ikisi de `ValidateAndPrepareLinesAsync`'ten geçiyor.
 **Kontrol her yolda koşuyor** — yani boyut kuralı hiçbir yerde sessizce
 atlanmıyor.
+
+---
+
+## DENETIM/2 — İZİN LİSTESİ DIŞLAMA LİSTESİNE ÇEVRİLDİ (2026-09-13)
+
+### (a) VARSAYILAN ARTIK "DENETLENİR"
+
+`AuditSaveChangesInterceptor` 18 türlük bir **izin** listesi taşıyordu.
+Listede olmayanlar: `Cheque`, `CurrentAccount`, `StockMovement`,
+`GoodsReceipt`, `InventoryItem`, `AccountingAccount` — **paranın
+yaşadığı yer.** Çek değiştirildiğinde, cari bakiyesi elle
+düzeltildiğinde, hesap bayrağı çevrildiğinde hiçbir iz kalmıyordu.
+
+Kusur yapısal: izin listesinde **yarın eklenen varlık korumasız doğar.**
+Artık her `BaseEntity` denetleniyor; dışarıda kalmak için gerekçe
+yazmak gerekiyor.
+
+### (b) DIŞLAMA GEREKÇELERİ — HEPSİ ÖLÇÜLDÜ
+
+| tür | gerekçe | ölçüm |
+|---|---|---|
+| `SecurityAuditEvent` | **yapısal** — kendini denetlemek sonsuz döngü | — |
+| `ExchangeRate` | aktörü yok | **255/255 satır `CreatedByUserId` null** |
+| `CommodityPrice` | aktörü yok | **92/92 null** |
+| `Notification` | aktörü yok | **11/11 null** |
+
+**Tek ölçüt: Kural 80'in dayanağı yoksa.** Denetim kaydı "kim yaptı"ya
+cevap verir; aktörü olmayan satırda verecek cevap yok.
+
+**HACİM GEREKÇE OLARAK KULLANILMADI — çünkü ölçüm izin vermedi** (aşağı).
+
+### (c) HACİM ÖLÇÜLDÜ
+
+| ölçüm | değer |
+|---|---|
+| 30 günde tüm iş tablolarında yeni kayıt | **797** |
+| bugünkü denetim üretimi | **703 / 30 gün = 23,4 satır/gün** |
+| tablo bugünkü boyutu | 2107 satır · **672 kB** (~320 bayt/satır) |
+| tam kapsamda kaba tahmin | ~50–80 satır/gün → **yılda ~10 MB** |
+
+**Saklama süresi belirlemeye gerek yok.** Gürültü adayları da ölçümde
+gürültülü çıkmadı (`notifications` 30 günde 10 güncelleme,
+`user_ui_preferences` 3).
+
+**ÖLÇÜM ALETİ ÖNCE YANLIŞTI:** ilk hacim ölçümümü
+`pg_stat_user_tables`ten aldım ve "toplam 392 ekleme+güncelleme" çıktı —
+oysa `security_audit_events` tek başına 2107 satır. Sayaçlar geri yükleme
+sonrası eksik kalmış; `stats_reset=HİÇ` olması onları güvenilir
+yapmıyor. Hacim tablolardan yeniden ölçüldü.
+
+### (d) SONDALAR — `DenetimKapsamiTests`, mutasyonla kanıtlı
+
+| iddia | mutasyon altında |
+|---|---|
+| muhasebe hesabı oluşturma + **bayrak değiştirme** iz bırakır | **KIRMIZI** |
+| çek oluşturma + **tutar değiştirme** iz bırakır | **KIRMIZI** |
+| cari oluşturma iz bırakır | **KIRMIZI** |
+| stok kartı oluşturma iz bırakır | **KIRMIZI** |
+| **(e)** eski izin listesinde HİÇ olmayan tür (depo) de denetlenir | **KIRMIZI** |
+| **pozitif kontrol:** eskiden de kapsamda olan tür (proje) üretmeye devam | yeşil |
+| **ölçüm sağlığı:** dışlanan tür (kur) iz bırakmıyor | yeşil |
+
+Mutasyon = beş türü dışlama listesine koymak (eski davranış): **5 kırmızı,
+2 yeşil.** İki kontrol de doğru ayırıyor; sondalar taşıyıcı.
+
+### YETİM TABLO DÜŞÜRÜLDÜ + İZİN AÇIKLAMASI DÜZELTİLDİ
+
+Göç: `20260913144150_YetimAuditLogsTablosuDusuruldu`. `Down` tabloyu üç
+indeksiyle birebir geri kuruyor. **Veri kaybı yok:** 0 satır, 0 ekleme.
+
+**ŞEMA SAPMA ÇIRASI — ÖNCE/SONRA:** `audit_logs`ın **3 non-PK indeksi**
+o 95'in içindeydi (ölçülerek doğrulandı). Göç canlıda koşunca çıra
+**95 → 92** düşmeli; `deploy/bekci/sema-sapma-cizgi.txt` o gün 92'ye
+çekilecek. (Bugün hâlâ 95; göç uygulanmadı.)
+
+İzin açıklaması gerçeğe uyduruldu: eskiden *"Sistem denetim kayıtlarını
+(kim ne yaptı) görüntüler"* diyordu ve yanında boş tablo duruyordu —
+ikisi birlikte **"denetim kaydımız var, işte tablo" diye boş tabloya
+baktıran bir tuzak** kuruyordu. Yeni metin kaynağı adıyla söylüyor:
+`security_audit_events`.
+
+### GÖÇ PROVASI KAPISI DOĞRU ISIRDI
+
+`goc-provasi.sh` yıkıcı işlemi yakaladı ve commit mesajında
+`YIKICI-BEYAN: audit_logs` satırını şart koştu. Kendi muhafızımız,
+kendi yıkıcı göçümüzü durdurdu.
+
+---
+
+## BEKLEYEN: GÜNLÜK SAKLAMA SÜRESİ
+
+nginx erişim günlüğü yalnız **15 gün** tutuluyor (14–29 Ağustos yok,
+dönmüş). Bu bir ÖLÇÜM SINIRI: geçmişi soramayacağımız bir pencere var ve
+bugün "8 kırık yol kaç kez denendi" sorusunun yarısını ölçemedik.
+Journal 16 Temmuz'dan beri duruyor ama `Request starting` seviyesi kapalı
+olduğu için denemeleri sayamıyor.
+
+**KARAR BEKLİYOR:** erişim günlüğü saklama süresi ne olmalı, ve istek
+seviyesi günlüğü açılmalı mı (hacim ve sır sızıntısı riskiyle birlikte
+değerlendirilecek — sorgu dizgeleri günlüğe yazılmıyor, bu korunmalı).

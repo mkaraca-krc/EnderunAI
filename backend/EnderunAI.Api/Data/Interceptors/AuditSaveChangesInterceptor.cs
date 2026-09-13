@@ -13,30 +13,47 @@ public sealed class AuditSaveChangesInterceptor(
     IHttpContextAccessor httpContextAccessor)
     : SaveChangesInterceptor
 {
-    private static readonly HashSet<Type> AuditedEntityTypes =
+    /// <summary>
+    /// DENETLENMEYECEK TÜRLER — VARSAYILAN "DENETLENİR".
+    ///
+    /// ═══ NEDEN DIŞLAMA LİSTESİ (2026-09-13) ═══
+    ///
+    /// Burası 18 türlük bir İZİN listesiydi ve kimse kapsamını
+    /// ölçmemişti. Ölçüm şunu gösterdi: `Cheque`, `CurrentAccount`,
+    /// `StockMovement`, `GoodsReceipt`, `InventoryItem` ve
+    /// `AccountingAccount` listede YOKTU — yani **çek değiştirildiğinde,
+    /// cari bakiyesi elle düzeltildiğinde, hesap bayrağı çevrildiğinde
+    /// sistemde hiçbir iz kalmıyordu.** Paranın yaşadığı yer.
+    ///
+    /// İzin listesinin kusuru yapısaldır: yarın eklenen varlık
+    /// KORUMASIZ doğar ve bunu kimse fark etmez. Dışlama listesinde ise
+    /// korumalı doğar; dışlamak için gerekçe yazmak gerekir.
+    ///
+    /// ═══ HER DIŞLAMA ÖLÇÜLDÜ, TAHMİN EDİLMEDİ ═══
+    ///
+    /// Hacim bir gerekçe DEĞİL: 30 günde tüm iş tablolarında 797 yeni
+    /// kayıt var, bugünkü denetim üretimi 23,4 satır/gün, tablo 2107
+    /// satır = 672 kB (~320 bayt/satır). Tam kapsamda bile yılda ~10 MB.
+    ///
+    /// Geçerli tek ölçüt: KURAL 80'İN DAYANAĞI YOKSA. Denetim kaydı
+    /// "kim yaptı" sorusuna cevap verir; aktörü olmayan satırda
+    /// verecek cevap yoktur.
+    /// </summary>
+    private static readonly HashSet<Type> DenetlenmeyenTurler =
     [
-        typeof(AppUser),
-        typeof(UserRole),
-        typeof(Personnel),
-        typeof(Project),
-        typeof(ProjectCostTransaction),
-        typeof(PurchaseOrderEntity),
-        typeof(PurchaseRequest),
-        typeof(AccountingVoucher),
-        typeof(EmployerPortalLink),
-        typeof(RolePermission),
-        // SEED/1 SB3: kaldırma kaydı da denetim izine giriyor —
-        // kim, ne zaman, hangi rol+izin.
-        typeof(RolePermissionRevocation),
-        // KATALOG/1: elle ekleme kaydı da denetim izine giriyor —
-        // "bu satır neden silinmedi" sorusunun cevabı burada duracak.
-        typeof(RoleManualPermissionGrant),
-        typeof(UserPermissionOverride),
-        typeof(UserDataScope),
-        typeof(RoleWorkHourWindow),
-        typeof(AccessRequest),
-        typeof(TemporaryAccessGrant),
-        typeof(ProjectDocument)
+        // YAPISAL — kendini denetlemek sonsuz döngü üretir.
+        typeof(SecurityAuditEvent),
+
+        // ÖLÇÜLDÜ (2026-09-13): 255/255 satır aktörsüz (CreatedByUserId
+        // null). Kuru fiyat verisi; makine çekiyor, insan yapmıyor.
+        typeof(Models.Market.ExchangeRate),
+
+        // ÖLÇÜLDÜ: 92/92 satır aktörsüz. Aynı gerekçe.
+        typeof(Models.Market.CommodityPrice),
+
+        // ÖLÇÜLDÜ: 11/11 satır aktörsüz. Sistem üretiyor; okundu
+        // işaretlemesi de kullanıcının "yaptığı" bir iş değil.
+        typeof(Models.Notifications.Notification),
     ];
 
     public override InterceptionResult<int> SavingChanges(
@@ -123,7 +140,13 @@ public sealed class AuditSaveChangesInterceptor(
 
         foreach (var entry in entries)
         {
-            if (!AuditedEntityTypes.Contains(entry.Entity.GetType()))
+            // VARSAYILAN DENETLENİR. Yeni bir varlık türü eklendiğinde
+            // hiçbir şey yapılmasa da denetim izine girer; dışarıda
+            // kalması için buraya gerekçesiyle yazılması gerekir.
+            if (entry.Entity is not BaseEntity)
+                continue;
+
+            if (DenetlenmeyenTurler.Contains(entry.Entity.GetType()))
                 continue;
 
             var action = entry.State switch
@@ -192,6 +215,20 @@ public sealed class AuditSaveChangesInterceptor(
         AccessRequest ar => (ar.Id, $"UserId={ar.UserId} Status={ar.Status}"),
         TemporaryAccessGrant g => (g.Id, $"UserId={g.UserId} ExpiresAtUtc={g.ExpiresAtUtc:o}"),
         ProjectDocument pd => (pd.Id, $"ProjectId={pd.ProjectId} {pd.Folder}/{pd.FileName} v{pd.VersionNumber}"),
+        /*
+         * VARSAYILAN — ÖZEL ÖZET YAZILMAMIŞ TÜR DE KAYDA GİRER.
+         *
+         * Eskiden bu dal `(null, null)` dönüyordu ve zaten yalnız izin
+         * listesindeki türler buraya geliyordu. Artık her `BaseEntity`
+         * geliyor: kimliği yazmamak, kaydı "bir şey değişti ama neyi
+         * bilmiyoruz"a çevirirdi.
+         *
+         * Özet YOK bırakılıyor (null): tür başına anlamlı bir özet
+         * uydurmak, yanlış özet üretmekten kötüdür. Tür adı ve kimlik
+         * zaten kaydın kendisinde duruyor.
+         */
+        BaseEntity be => (be.Id, null),
+
         _ => (null, null)
     };
 }

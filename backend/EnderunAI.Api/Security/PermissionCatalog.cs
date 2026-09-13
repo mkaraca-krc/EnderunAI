@@ -598,7 +598,13 @@ public static class PermissionCatalog
         new(Keys.CompanySettingsView, "Şirket Ayarları", "Görüntüleme", "Şirket kurumsal bilgilerini görüntüler."),
         new(Keys.CompanySettingsEdit, "Şirket Ayarları", "Düzenleme", "Şirket kurumsal bilgilerini (unvan, vergi, IBAN, logo) günceller."),
 
-        new(Keys.AuditLogView, "Audit Log", "Görüntüleme", "Sistem denetim kayıtlarını (kim ne yaptı) görüntüler."),
+        // AÇIKLAMA GERÇEĞE UYDURULDU (2026-09-13). Eskiden "Sistem denetim
+        // kayıtlarını (kim ne yaptı) görüntüler" diyordu ve yanında iki ay
+        // boyunca hiç yazılmamış bir `audit_logs` tablosu duruyordu; ikisi
+        // birlikte "denetim kaydımız var, işte tablo" diye boş tabloya
+        // baktıran bir tuzak kuruyordu. Ekran gerçekte
+        // `security_audit_events` okuyor ve o tablo doludur.
+        new(Keys.AuditLogView, "Güvenlik ve Denetim Kayıtları", "Görüntüleme", "Güvenlik ve denetim olaylarını (giriş denemeleri, yetki değişiklikleri, kayıt oluşturma/güncelleme/silme) görüntüler. Kaynak: security_audit_events."),
 
         new(Keys.IsgView, "İSG", "Görüntüleme", "OSGB sözleşmesi, sağlık raporu, eğitim, sertifika ve saha İSG belgelerini görüntüler."),
         new(Keys.IsgCreate, "İSG", "Kayıt oluşturma", "Yeni İSG kaydı (rapor, eğitim, sertifika, belge) oluşturur."),
