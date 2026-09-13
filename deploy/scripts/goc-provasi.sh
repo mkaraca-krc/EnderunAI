@@ -377,9 +377,41 @@ fi
 # Kapatma: burada BİR KEZ derlenir, sonraki bütün `dotnet ef`
 # çağrıları `--no-build` ile AYNI ikiliyi okur. Bekleyen küme de,
 # uygulanan küme de tek kaynaktan gelir.
+#
+# ═══ AĞIR İŞ TEK SIRADAN GEÇER (2026-09-13) ═══
+#
+# Bu derleme eskiden DOĞRUDAN çağrılıyordu, yani `derleme-kos.sh`ın
+# systemd scope'unun DIŞINDAN. Sonucu bugün ölçüldü: göç provası ile
+# bir test derlemesi aynı anda koştu ve derleyici OOM ile öldü
+# (`csc.dll exited with code 137`). BELLEK/1'in üçüncü ısırığı.
+#
+# NEDEN YENİ BİR KİLİT DOSYASI YAZILMADI: `derleme-kos.sh` bunu
+# BİLEREK yapmıyor ve gerekçesi kendi yorumunda duruyor — "kilidi
+# tutan süreç OOM ile ölürse kilit dosyası YALAN SÖYLER". Karşılıklı
+# dışlamayı systemd scope adı sağlıyor: ikinci `--unit=enderun-derleme`
+# denemesini systemd'nin kendisi reddediyor ve scope, süreç ölünce
+# kendiliğinden kayboluyor. Bayat kilit sorunu yok, `pgrep -f` yok
+# (Kural 78). Doğru hamle yeni bir mekanizma kurmak değil, bu çağrıyı
+# MEVCUT kapıdan geçirmek.
+#
+# 75 = "başkası koşuyor". Prova o zaman ölçemedi sayılır (çıkış 3),
+# düştü sayılmaz: ölçememek ile ölçüp kusur bulmak aynı şey değil.
+#
 log "Derleniyor (bir kez) — bütün ölçümler aynı çıktıyı okuyacak."
 derleme="$(mktemp)"
-if ! dotnet build "${REPO_ROOT}/backend/EnderunAI.Api" --nologo -v q >"$derleme" 2>&1; then
+"${REPO_ROOT}/scripts/derleme-kos.sh" \
+    dotnet build "${REPO_ROOT}/backend/EnderunAI.Api" --nologo -v q >"$derleme" 2>&1
+derleme_kodu=$?
+
+if [ "$derleme_kodu" -eq 75 ]; then
+    hata "ÖLÇEMEDİ: başka bir ağır iş (derleme/test) koşuyor — prova sıraya girmedi."
+    hata "ÖLÇEMEDİ: o iş bitince tekrar çalıştırın."
+    rm -f "$derleme"
+    sudo -u postgres dropdb --if-exists "$PROVA_DB" >/dev/null 2>&1
+    exit 3
+fi
+
+if [ "$derleme_kodu" -ne 0 ]; then
     hata "KARAR VEREMEDİ: proje DERLENMEDİ — prova yapılamadı."
     hata "Bu bir göç hatası değil, derleme hatası:"
     tail -15 "$derleme" | sed 's/^/           /' >&2

@@ -14087,7 +14087,24 @@ iki ay. Hiçbir göç tabloyu düşürmemiş; canlıda duruyor.
 |---|---|
 | `pg_stat_user_tables.n_tup_ins` | **0** |
 | `n_tup_del` / `n_tup_upd` / ölü satır | 0 / 0 / 0 |
-| `pg_stat_database.stats_reset` | **HİÇ** (sayaç hiç sıfırlanmamış → 0 güvenilir) |
+| `pg_stat_database.stats_reset` | HİÇ |
+
+> **DÜZELTME (aynı gün, birkaç tur sonra): YUKARIDAKİ SAYAÇLAR
+> DAYANAKSIZ.** O an "stats_reset HİÇ, yani 0 güvenilir" yazmıştım.
+> Sonra DENETIM/2 hacim ölçümünde aynı görünüm `security_audit_events`
+> için **116 ekleme** dedi — oysa tabloda **2107 satır** var. Sayaçlar
+> geri yükleme sonrası eksik kalıyor ve `stats_reset=HİÇ` onları
+> güvenilir yapmıyor.
+>
+> **HÜKÜM YİNE DE AYAKTA, AMA BAŞKA KANITLA:** `audit_logs`ın hiç
+> yazılmadığı sayaçtan değil **koddan** biliniyor — `AuditLog` varlık
+> sınıfı YOK, `DbSet` YOK, `AuditLogs.Add`/`new AuditLog` **0
+> eşleşme**, `AppDbContextModelSnapshot` tabloyu **hiç tanımıyor**, ve
+> tabloda **`count(*) = 0`** (sayaç değil, gerçek sayım). Yazacak kod
+> olmadığı için yazılamazdı.
+>
+> Bozuk çıkan bir alet, o aletle ölçülmüş her şeyi şüpheli yapar —
+> bu yüzden kayıtların tamamı tarandı (aşağı).
 
 Ama asıl kanıt istatistikte değil **kodda**: `AuditLog` diye bir varlık
 sınıfı **YOK** (`find AuditLog*.cs` boş), `DbSet` **YOK**,
@@ -14405,3 +14422,76 @@ olduğu için denemeleri sayamıyor.
 **KARAR BEKLİYOR:** erişim günlüğü saklama süresi ne olmalı, ve istek
 seviyesi günlüğü açılmalı mı (hacim ve sır sızıntısı riskiyle birlikte
 değerlendirilecek — sorgu dizgeleri günlüğe yazılmıyor, bu korunmalı).
+
+---
+
+## pg_stat BULAŞMA TARAMASI (2026-09-13)
+
+**Kural:** *bozuk çıkan bir alet, o aletle ölçülmüş her şeyi şüpheli
+yapar.* `pg_stat_user_tables` sayaçları bugün yanlış çıktı
+(`security_audit_events`: sayaç 116, gerçek 2107). Sayaca dayanan başka
+hüküm var mı diye tarandı.
+
+**TARAMA SAĞLIĞI:** 5 kayıt dosyası (DURUM.md 14.407 satır + `docs/*.md`),
+38 betik tarandı. Desen: `pg_stat|n_tup_|n_live_tup|n_dead_tup|stats_reset`.
+Pozitif kontrol: aynı yöntem `vt-sorgu`/`information_schema` kullanan
+üç dosyayı da buluyor — tarama sessiz değil.
+
+| yer | kullanım | hüküm |
+|---|---|---|
+| `DURUM.md:14090` (DENETIM/1) | "stats_reset HİÇ → 0 ekleme güvenilir" | **BULAŞMIŞ — düzeltildi.** Hüküm koda yeniden dayandırıldı (varlık yok, DbSet yok, 0 eşleşme, snapshot tanımıyor, `count(*)=0`). |
+| `DURUM.md:14353` (DENETIM/2) | bulaşmanın kendi kaydı | doğru, düzeltmenin ta kendisi |
+| `scripts/enderun-backup.sh:220` | `pg_stat_user_tables` **yalnız TABLO LİSTESİ** olarak; satır sayısı `count(*)` ile `query_to_xml` üzerinden | **TEMİZ** — sayaç okumuyor |
+| `scripts/enderun-geri-yukleme-tatbikati.sh:253` | aynı desen | **TEMİZ** |
+| `deploy/scripts/goc-provasi.sh:258,737` | `pg_stat_activity` — canlı oturum görünümü, sayaç değil | **TEMİZ** |
+
+**BULAŞAN HÜKÜM SAYISI: 1.** Düzeltildi ve yeni dayanağı yazıldı.
+Yedekleme ve geri yükleme tatbikatının temiz çıkması önemli: yedek
+doğrulaması sayaca değil **gerçek satır sayımına** dayanıyor.
+
+**DERS:** `pg_stat_*` görünümlerini **liste** için kullanmak güvenli,
+**sayı** için kullanmak değil. Geri yükleme, `pg_restore`, `COPY` ve
+istatistik toplayıcının gecikmesi sayaçları sessizce yanlışlar.
+
+---
+
+## AĞIR İŞ SIRASI — BELLEK/1'İN ÜÇÜNCÜ ISIRIĞI KAPATILDI (2026-09-13)
+
+**Olay:** göç provası ile bir test derlemesi aynı anda koştu, derleyici
+OOM ile öldü (`csc.dll exited with code 137`).
+
+### YENİ KİLİT DOSYASI YAZILMADI — VE SEBEBİ ÖNEMLİ
+
+`derleme-kos.sh` kilit dosyasını **bilerek** kullanmıyor; gerekçesi
+kendi yorumunda: *"kilidi tutan süreç OOM ile ölürse kilit dosyası
+YALAN SÖYLER."* Karşılıklı dışlamayı **systemd scope adı** sağlıyor:
+ikinci `--unit=enderun-derleme` denemesini systemd reddediyor ve scope,
+süreç ölünce kendiliğinden kayboluyor.
+
+Yani mekanizma **zaten vardı ve bayat kilit sorunu yoktu**; `pgrep -f`
+de yok (Kural 78). Eksik olan tek şey, `goc-provasi.sh`ın ağır
+derlemesini o kapının DIŞINDAN çağırmasıydı — 9 `dotnet` çağrısından
+biri. Doğru hamle yeni mekanizma kurmak değil, o çağrıyı mevcut kapıdan
+geçirmekti.
+
+### SONDA — ÜÇ AYAK
+
+| ölçüm | sonuç |
+|---|---|
+| iki ağır iş aynı anda: ikincinin çıkış kodu | **75** ("başkası koşuyor") ve scope'u kimin tuttuğunu yazdı |
+| derleme koşarken göç provası | **çıkış 3 — ÖLÇEMEDİ**, "prova sıraya girmedi" |
+| **pozitif kontrol:** hiçbir ağır iş yokken göç provası | **çıkış 0 — PROVA GEÇTİ** |
+
+Üçüncüsü olmadan ilk ikisi "kapı çalışıyor"u değil "prova hep düşüyor"u
+gösteriyor olabilirdi.
+
+**75 ≠ başarısız.** Prova o durumda **ölçemedi** sayılıyor (çıkış 3),
+düştü sayılmıyor: ölçememek ile ölçüp kusur bulmak aynı şey değil.
+
+### YIKICI BEYAN KAPISI DA AYNI KOŞUDA DOĞRULANDI
+
+`YIKICI BEYAN EŞLEŞTİ: audit_logs` → commit mesajındaki beyan tuttu ve
+prova devam etti. Kapı hem durdurmayı hem geçirmeyi gösterdi.
+
+**BELLEK/1'in asıl ölçümü (GC tavanı) hâlâ yapılmadı** — bu tedbir onu
+ikame etmiyor, yalnız iş kaybettiren çarpışmayı kesiyor.

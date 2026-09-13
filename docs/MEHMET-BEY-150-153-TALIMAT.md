@@ -31,28 +31,47 @@ Durum · Hesap Kodu (gri, değiştirilemez) · Hesap Adı · Hesap Karakteri ·
 sonra **çerçeveli üç kutucuk kartı** gelir. Her kart **solda bir onay
 kutusu**, sağında **kalın başlık** ve altında küçük açıklama taşır:
 
+**ŞU AN ekranda göreceğiniz hâl:**
+
 ```
 ┌──────────────────────────────────────────────────────────┐
 │ ☑  Kayıt Yapılabilir                                      │
 │    Muhasebe fişlerinde bu hesaba kayıt girilebilir.       │
 ├──────────────────────────────────────────────────────────┤
-│ ☑  Proje Zorunlu              ← BU KARTTAKİ KUTUYU AÇIN   │
+│ ☑  Proje Zorunlu                  ← İŞARETLİ (bugünkü hâl)│
 │    Fiş satırında proje seçimi zorunlu olur.               │
 ├──────────────────────────────────────────────────────────┤
-│ ☐  Masraf Merkezi Zorunlu     ← DOKUNMAYIN                │
+│ ☐  Masraf Merkezi Zorunlu                                 │
 │    Fiş satırında masraf merkezi seçilmelidir.             │
 └──────────────────────────────────────────────────────────┘
 ```
 
+**İŞ BİTTİĞİNDE olması gereken hâl:**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ ☑  Kayıt Yapılabilir              ← DEĞİŞMEDİ             │
+├──────────────────────────────────────────────────────────┤
+│ ☐  Proje Zorunlu                  ← İŞARET KALDIRILDI     │
+├──────────────────────────────────────────────────────────┤
+│ ☐  Masraf Merkezi Zorunlu         ← DEĞİŞMEDİ             │
+└──────────────────────────────────────────────────────────┘
+```
+
 ### 4. Yap
-**"Proje Zorunlu"** kartındaki onay kutusunun **işaretini kaldırın**
-(tıklayınca ☑ → ☐ olur).
+**"Proje Zorunlu"** kartındaki onay kutusuna tıklayıp **işareti
+KALDIRIN**: ☑ → ☐
+
+Yani kutu **boşalacak**. İşaretlemiyorsunuz, işareti **siliyorsunuz**.
 
 **"Masraf Merkezi Zorunlu"** ve **"Kayıt Yapılabilir"** kartlarına
 **dokunmayın.**
 
-### 5. Kaydet
+### 5. Kaydet ve GÖZLE DOĞRULA
 Sayfanın altındaki **"Değişiklikleri Kaydet"** düğmesine basın.
+
+**Kaydettikten sonra "Proje Zorunlu" kutusu BOŞ (☐) görünmeli.**
+Hâlâ işaretliyse kayıt geçmemiştir — bana yazın, siz tekrar denemeyin.
 
 ### 6. Aynısını 153 için tekrarlayın
 Hesap Planı'na dönün, aramaya `153` yazın,
@@ -66,7 +85,8 @@ Hesap Planı'na dönün, aramaya `153` yazın,
 |---|---|---|
 | "Güncellendi" mesajı | tamam | ikinciye geçin |
 | **"Proje Zorunlu" kutusu zaten boşsa** | biri daha önce yapmış | dokunmayın, bana yazın |
-| **Hesap Adı'nı yanlışlıkla değiştirdiyseniz** | kaydetmeden sayfadan çıkın | baştan başlayın |
+| **Yanlışlıkla BAŞKA bir kutuya dokunduysanız** | henüz kaydedilmedi | **"Değişiklikleri Kaydet"e BASMAYIN**, sayfadan çıkın (sol menüden başka bir yere gidin), sonra baştan başlayın |
+| **Hesap Adı'nı yanlışlıkla değiştirdiyseniz** | aynı durum | Kaydet'e basmadan sayfadan çıkın, baştan başlayın |
 | Kaydetmede hata mesajı | sayfa eskimiş olabilir | sayfayı yenileyip tekrar deneyin |
 
 **Başka hiçbir hesaba dokunmayın.** Özellikle `320`, `120` ve `159`
