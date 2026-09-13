@@ -65,6 +65,20 @@ public static class TestDataFactory
         {
             if (existing.Contains(code)) return;
 
+            // ═══ BOYUT BAYRAKLARI ÜRETİMDEN DEVRALINIYOR ═══
+            //
+            // Eskiden bu satırlar YOKTU ve hesaplar boyutsuz kuruluyordu.
+            // Sonuç: stok muhasebesi testleri yeşilken üretimde hat hiç
+            // çalışmıyordu (canlıda 150/153/770/740.03.09/379.01'e ait
+            // tek fiş satırı yok, 2026-09-13 ölçümü). Zemin üretimi
+            // taklit etmiyordu — Kural 81.
+            //
+            // Bilinmeyen kod için varsayılan `false`: yeni bir hesap
+            // sessizce "boyut zorunlu" olmasın. Muhafız
+            // (`FiksturHesapYapilandirmasiTests`) beyan edilmemiş kodu
+            // ayrıca yakalar.
+            var ayar = UretimHesapYapilandirmasi.Bul(code);
+
             db.AccountingAccounts.Add(new AccountingAccount
             {
                 CompanyId = companyId,
@@ -72,7 +86,9 @@ public static class TestDataFactory
                 Name = name,
                 Level = 3,
                 Nature = (AccountingAccountNature)nature,
-                IsPostingAllowed = posting
+                IsPostingAllowed = posting,
+                RequiresProject = ayar?.ProjeZorunlu ?? false,
+                RequiresCostCenter = ayar?.MasrafMerkeziZorunlu ?? false,
             });
         }
 

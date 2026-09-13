@@ -13376,9 +13376,19 @@ yerde tutar. Her madde bir EYLEM ve bir SAHİP taşır.
 
 | # | eylem | sahip | neden şimdi değil |
 |---|---|---|---|
+| 0 | **Kullanılacak malzeme kartları SEÇİLEREK aktif edilecek — EKRANDAN, TOPLUCA DEĞİL** | **Mehmet Bey** |
 | 1 | **`END0003` tipi `Consumable` yapılacak — EKRANDAN** | **Mehmet Bey** | Denetim izinde GERÇEK kullanıcının kimliği durmalı. Canlı kullanıcı parolası ne ajana ne başkasına geçer. Yayından ÖNCE yapılsaydı kart bir süre doğru veriyle YANLIŞ etiket gösterirdi. |
 | 2 | Isıtma adımının yayın günlüğünde göründüğü doğrulanacak | ajan | `safe-deploy` çıktısında `ISITMA SONUÇ` satırı aranacak |
 | 3 | Yayın sonrası ilk isteğin süresi ölçülecek | ajan | ISINMA/1'in canlıdaki ilk gerçek sınavı |
+| 4 | **150 ve 153 hesaplarında `RequiresProject` → false** | **onay bekliyor** | Plan yazılı (yukarıda). `hesap-bayragi.sh --uygula`; geri alma komutu provada iki yönde denendi. |
+| 5 | **İlk gerçek mal kabulünde fişin 150/379.01'e düştüğü kontrol edilecek** | Mehmet Bey + ajan | Canlıda sonda için mal kabul AÇILMAYACAK (Kural 83). Doğrulama, zaten yapılacak ilk gerçek işlemde yapılır. |
+| 6 | `hesap-beyan-sapmasi.sh` sapması 2 → 0 düşmeli, çizgi 0'a çekilmeli | ajan | Bayrak değişikliğinin canlıda uygulandığının ölçüsü |
+
+**Madde 0'ın gerekçesi:** 9 kartın topluca pasife alınması 2026-08-19'da
+BİLİNÇLİ bir "temiz başlangıç" kararıydı (commit `97399296`, elle
+koşulmuş tek seferlik UPDATE, tekrar koşmaz). Topluca aktif etmek o
+kararı geri alır. Gerçekten kullanılacak kartlar seçilerek açılmalı;
+liste ekranı arşivi zaten gösteriyor.
 
 **Madde 1'in gerekçesi kayıtta:** kart 2026-08-05'te "Sarf malzemesi"
 seçilerek açıldı, o günkü ekran etiketleri ters eşliydi ve veriye
@@ -13700,3 +13710,291 @@ kural oldu", 11:26:54) mesajında bunu kendisi yazıyor: *"Veri arşivi
 etmek o kararı geri alır. Doğru hamle: mal kabulde GERÇEKTEN kullanılacak
 kartları seçerek açmak. Liste ekranı arşivi zaten gösteriyor
 (`includeInactive=true`).
+
+---
+
+## E4 KAPANDI — SORUN ÜRETİCİDE DEĞİL BAYRAKTAYDI (2026-09-13)
+
+**İLKE (Mehmet Bey):** *"Proje ve masraf merkezi SONUÇ hesaplarının
+boyutudur (6xx/7xx). Bilanço hesabında (1xx-5xx) boyut zorunluluğu,
+düşünülmüş bir karar değilse hatadır."*
+
+### HEDEFLİ KÜME — ÖLÇÜLDÜ, TAHMİN EDİLMEDİ
+
+Dört kırık yolun dokunabileceği TÜM hesaplar çözümleyiciden çıkarıldı
+(`InventoryAccountResolver` sabitleri), sonra canlıdaki bayrakları
+okundu. Bilanço tarafında dokunulan hesaplar: **150, 153, 379, 379.01**.
+
+| hesap | sınıf | proje ÖNCE | proje SONRA | masraf merkezi | işlem |
+|---|---|---|---|---|---|
+| **150** İlk Madde ve Malzeme | BİLANÇO | **true** | **false** | false (dokunulmadı) | **değişti** |
+| **153** Ticari Mallar | BİLANÇO | **true** | **false** | false (dokunulmadı) | **değişti** |
+| 379 Diğer Borç ve Gider Karş. | BİLANÇO | false | false | false | dokunulmadı |
+| 379.01 Faturası Gelmemiş Mal | BİLANÇO | false | false | false | dokunulmadı |
+| 621 Satılan Tic. Mallar Mal. | SONUÇ | false | false | false | dokunulmadı |
+| 649.03 Stok Sayım Fazlaları | SONUÇ | false | false | false | dokunulmadı |
+| 689.02 Stok Sayım Noksanları | SONUÇ | false | false | false | dokunulmadı |
+| 740 Hizmet Üretim Maliyeti | SONUÇ | true | true | true | dokunulmadı |
+| 740.03.09 Kullanılan Malz. | SONUÇ | true | true | true | dokunulmadı |
+| 770 Genel Yönetim Giderleri | SONUÇ | false | false | true | dokunulmadı |
+
+**Değişen hesap sayısı: 2.** Göç YAZILMADI — bayrak ekrandan
+düzenlenebiliyor (`/muhasebe/hesap-plani/{id}`), geri alınabilir.
+Değişiklik **uygulamanın kendi ucundan** yapıldı
+(`PUT /api/accounting-accounts/{id}`), ham SQL ile değil.
+
+**ŞU AN NEREDE UYGULANDI:** prova zemininde (canlının kopyası).
+**CANLIDA HENÜZ DEĞİL** — ölçümle doğrulandı: canlıda 150=true,
+153=true olarak duruyor. Yayınla birlikte ekrandan uygulanacak.
+
+### SAYIMDA MASRAF MERKEZİ
+
+`StockCountVoucherPoster` masraf merkezini artık deponun şubesinden
+okuyor (aynı kademe). **Bugün zorunlu değil** — 689.02 ve 649.03'te
+`RequiresCostCenter=false` (ölçüldü); bu satır bir hatayı kapatmıyor,
+VERİYİ tamamlıyor. Sayım farkının projesi yoktur (kodun kendi yorumu
+bunu zaten söylüyor ve doğru), masraf merkezi vardır.
+
+### ÇAĞIRARAK DOĞRULANDI — DÖRT YOL DA ÇALIŞIYOR
+
+| yol | sonuç | fiş |
+|---|---|---|
+| mal kabul | stok 0 → 100, maliyet 25,00 | **150 borç 2500 / 379.01 alacak 2500** |
+| projesiz çıkış | stok −1 | **770 borç 25 / 150 alacak 25**, merkez=**MERKEZ** |
+| projesiz sayım | stok 153 → 151 | **689.02 borç 50 / 150 alacak 50**, merkez=**MERKEZ** |
+| depodan zimmet | stok 151 → 150 | **770 borç 25 / 150 alacak 25**, merkez=**MERKEZ** |
+
+Dördü de daha önce 500 veriyordu.
+
+### KALAN ENVANTER — DEĞİŞTİRİLMEDİ (salıdan sonra)
+
+| sınıf | hesap | proje zorunlu | masraf merkezi zorunlu |
+|---|---|---|---|
+| 1 Dönen Varlıklar | 195 | **98** | 0 |
+| 2 Duran Varlıklar | 157 | 0 | 0 |
+| 3 Kısa Vadeli Yab. Kaynak | 429 | **332** | 0 |
+| 4 Uzun Vadeli Yab. Kaynak | 37 | 0 | 0 |
+| 5 Özkaynaklar | 37 | 0 | 0 |
+| 6 Gelir Tablosu | 81 | 13 | 0 |
+| 7 Maliyet | 147 | 42 | **89** |
+| 9 Nazım | 30 | 0 | 0 |
+
+**BİLANÇO (1-5): 430 hesap proje zorunlu, 0 masraf merkezi.**
+**SONUÇ (6-7): 55 proje, 89 masraf merkezi** — tutarlı ve düşünülmüş.
+
+430'un dağılımı, kalıbı açık ediyor:
+
+| ana hesap | adet | ne |
+|---|---|---|
+| **320** | **332** | her tedarikçi alt hesabı |
+| **120** | **57** | her müşteri alt hesabı |
+| **159** | **31** | verilen sipariş avansları |
+| 150 / 153 / 152 / 151 | 4 / 4 / 1 / 1 | stok alt hesapları |
+
+**430'un 420'si cari alt hesabı** — cari açıldıkça konmuş toplu
+varsayılan. Düşünülmüş bir karar değil.
+
+### MALİ MÜŞAVİRE SORULACAK — İKİNCİ MADDE
+
+> "Bilanço hesaplarında (120 Alıcılar, 150/153 Stoklar, 320 Satıcılar)
+> proje/masraf merkezi zorunluluğu istiyor musunuz, yoksa bu boyutlar
+> yalnız gelir-gider hesaplarında mı tutulsun?"
+
+Birinci madde açılış fişinin karşı hesabıydı (yukarıda).
+
+---
+
+## E4 — "KAPANDI" DEMEDİM: SINIF AÇIK, DÖRT YOL KAPANDI (2026-09-13)
+
+### (7) TAM TEST KOŞUSU — 3237 test, TEK KIRMIZI
+
+`InventoryItemCreationTests.Kod_OtomatikVeArtan`. **Ürün kusuru değil,
+bayat varsayım:** test eski kod biçimini (`^[0-9]+$`, öneksiz, ≥100001)
+doğruluyordu; 14. maddeyle `END`+4 haneye geçilmişti. İddia güncellendi.
+
+**FİKSTÜR DEĞİŞİKLİĞİ HİÇBİR TESTİ KIRMIZIYA DÖNDÜRMEDİ — ve bu bir
+başarı değil, ölçülmesi gereken bir şeydi.** Fikstür taşıyıcı mı yoksa
+hâlâ atıl mı? Mutasyonla sınandı: beyan DÜZELTME ÖNCESİ üretim hâline
+alındı (150/153 proje zorunlu) →
+
+    StockConsumptionAccountingTests.ProjesizCikis_770eYazilir            KIRMIZI
+    StockConsumptionAccountingTests.SayimFarki_NoksanVeFazla_…           KIRMIZI
+    StockConsumptionAccountingTests.GirisCikisVeSayimSonrasi_Mutabakat…  KIRMIZI
+    StockedSaleAccountingTests.StokluFatura_MaliyetYazarVeStokDuser      KIRMIZI
+    StockedSaleAccountingTests.Maliyet_SatistaDondurulur                 KIRMIZI
+    StockedSaleAccountingTests.SatirKari_MaliyetYetkisiOlmayanaGosterilmez KIRMIZI
+    FiksturHesapYapilandirmasiTests.Beyan_BoyutZorunluluguIceriyor       KIRMIZI
+
+**Yedi test.** Bugüne kadar var olmayan bir dünyada yeşil kalıyorlarmış.
+Fikstür artık taşıyıcı.
+
+### (4) BEYAN SAPMA ÖLÇÜMÜ — `deploy/scripts/hesap-beyan-sapmasi.sh`
+
+Beyan bir BELGEDİR, canlı sorgusu değil; kapatılabilir bir sınır
+kapatıldı. Şema sapma circiriyle aynı desen: çift yönlü çizgi, ve
+`ucuz-kapilar.sh` içinde AĞIR kapı olarak kayıtlı.
+
+**BUGÜNKÜ SAPMA: 2** — `150` ve `153`, beyan `proje=false` derken canlı
+`true`. Sayaç aynı zamanda BEKLEYEN CANLI İŞİN İZLEYİCİSİ: uygulanınca
+2 → 0 düşer, çizgi 0'a çekilir.
+
+| mutasyon | çıkış kodu |
+|---|---|
+| bugünkü hâl | **0** (yeşil) |
+| beyanda bir hesap daha ayrışsın | **1** (çizgi aşıldı) |
+| çizgi gevşetilsin (3) | **1** (gevşeklik) |
+| beyan dosyası bozulsun | **3** (ÖLÇEMEDİ) |
+| geri al | **0** |
+
+**ALETİN KENDİ HATASI ÖNCE ÇIKTI:** ilk yazımda psql'in `t`/`f`
+yazdığını VARSAYMIŞTIM; Postgres `||` ile birleştirilen boole'yi
+`true`/`false` yazıyor ve gerisini "false" saydığım için **olmayan 3
+sapma** raporladım. Ölçüldü, düzeltildi; artık tanınmayan değer
+sessizce "false" olmuyor, **ÖLÇEMEDİ** veriyor.
+
+### (2) ASIL KAPSAM ÖLÇÜLDÜ — 12 YOL, **8'İ BUGÜN KIRIK**
+
+`320`/`120` altında **389 hesap**, hepsi `RequiresProject=true`.
+
+**ÖNCE İKİ DÜZELTME:**
+1. Bu yollar artık **500 değil 400** veriyor — K3 düzeltmesi sayesinde
+   kullanıcı *"320.xx hesabında proje seçimi zorunludur."* görüyor.
+2. **Doğrulamayı ATLAYAN fiş yazma yolu YOK.** `new AccountingVoucher`
+   tek yerde, ham SQL fiş INSERT sıfır. Yani "kontrol koşmuyor" ihtimali
+   ELENDİ — çalışan yollar projeyi GERÇEKTEN geçiriyor.
+
+| # | yol | hesap | durum |
+|---|---|---|---|
+| 1 | alış faturası onayı | 320 | **KIRIK** — 14 faturanın 10'u projesiz |
+| 2 | satış faturası defterleme | 120 | **KIRIK** — 13 faturanın 0'ı defterlenmiş |
+| 3 | perakende → satış faturası | 120 | **KOŞULSUZ KIRIK** (ProjectId hiç atanmıyor) |
+| 4 | perakende kayıtlı satış fişi | 120 | **KOŞULSUZ KIRIK** (`ProjectId: null` sabit) |
+| 5 | tahsilat (kasa/banka) | 120 | **KIRIK** — projesiz tahsilatta |
+| 6 | ödeme (kasa/banka) | 320 | **KIRIK** — projesiz ödemede |
+| 7 | çek fişi | 320/120 | çalışıyor (31/31 çek projeli) |
+| 8 | çek dağılım satırı | 320/120 | **KIRIK** (proje yok + MM var senaryosu) |
+| 9 | **kur değerlemesi** | 120 **ve** 320 | **KOŞULSUZ KIRIK — %100** |
+| 10 | taşeron hakediş | 120 | çalışıyor (`ProjectId` nullable DEĞİL — yapısal garanti) |
+| 11 | ters/iade fişi | 320/120 | çalışıyor (orijinalden kopyalıyor) |
+| 12 | manuel yevmiye | seçilir | çalışıyor |
+
+**Kırık: 8 · Çalışan: 4 · Ölçülemedi: 0.**
+**Hiç denenmediği için fark edilmemiş: 6.**
+
+**EN AĞIR ÜÇÜ:**
+- **Kur değerlemesi ölü.** `CurrencyValuationService:333,343` `ProjectId:
+  null` sabit, hesap doğrudan 120/320. Ekran var, "Defterle" düğmesi
+  var, **ilk cari satırında kesin 400**. Modül canlıya çıktığından beri
+  hiç çalıştırılmamış (0 koşu).
+- **Perakende iki yerden birden kırık** — ve yorum *"Perakende satış bir
+  projeye ait değil"* diyor. Yani `null` KASITLI; hesap planındaki
+  `120.RequiresProject=true` bu kararla ÇELİŞİYOR. Tasarım çatışması.
+- **Ekran yalan söylüyor:** kasa-banka formunda etiket birebir
+  **"Proje (opsiyonel)"**, arka uç aynı alanı zorunlu kılıyor.
+
+Tarama sağlığı: 1048 `.cs`, `AccountingVoucherLineRequest` kuran 8 dosya
+tek tek okundu, 17 fiş üretici giriş noktası, atlama yolu araması 0.
+
+### (3) KAYNAK — VARSAYIMIM YANLIŞTI (Kural 79)
+
+"Bir mekanizma her cari açılışında `true` koyuyor" demiştim. **Öyle bir
+mekanizma YOK.** Ölçüm:
+
+- Cari açılışı muhasebe hesabı **DOĞURMUYOR**
+  (`CurrentAccountsController.Create` yalnız `CurrentAccounts.Add`).
+  Cari↔hesap bağı sonradan **unvan eşleştirmesiyle** kuruluyor.
+- `RequiresProject` veritabanı varsayılanı **YOK** (`column_default` boş,
+  göçte `defaultValue` yok). Entity varsayılanı `false`, form varsayılanı
+  `false`.
+- `true`, **2026-07-24 tarihli tek bir seed JSON'unun içinde yazılı**:
+  müşterinin gerçek cari listesi hesap planına gömülürken her satıra
+  `requiresProject: true` basılmış. 320.x 331 adet, 120.x 56, 159.x 30 —
+  **hepsi tek dakikada** (2026-07-24 07:50), hepsi `true`.
+- 07-24'ten sonra **tek bir cari hesabı bile açılmamış**; buna karşılık
+  151 yeni cari açılmış (120'si hiçbir hesaba bağlı değil).
+
+**YENİ CARİ BUGÜN AYNI KUSURLA DOĞMUYOR.** Ama: bugünkü seed dosyasında
+`320`, `120`, `159` **ANA hesapları hâlâ `requiresProject:true`** ve
+eşleşmemiş cariler ana hesaba yazılıyor → **yeni bir şirket seed'lenirse
+kusur ana hesap düzeyinde tekrar doğar.** Kaynak dosya düzeltmesi
+gerekiyor (göç değil, JSON).
+
+### DENETİM İZİ (planın (d) maddesi) — DENETIM/1'E GİRİYOR
+
+Hesap bayrağı değişikliği **satır düzeyinde** iz bırakıyor
+(`UpdatedByUserId` + `UpdatedAtUtc`, ölçüldü: PUT sonrası ikisi de dolu).
+Ama `audit_logs` tablosuna **hiçbir şey yazmıyor.**
+
+**POZİTİF KONTROL:** `audit_logs` canlıda **toplam 0 satır** — tablo
+hiç kullanılmıyor. `security_audit_events` ise 2107 satır dolu, yani
+sorgu ve tablo okuma yöntemi çalışıyor. Yani sorun "hesap değişikliği
+denetlenmiyor" değil, **`audit_logs` mekanizmasının tamamı ölü.**
+DENETIM/1'in kapsamına yazıldı.
+
+---
+
+## E4 CANLI UYGULAMA PLANI — ONAY BEKLİYOR (yazılı, uygulanmadı)
+
+Bu bir **VERİ** değişikliği, kod değil: kapsam kapısı görmez, safe-deploy
+görmez, geri alma otomatik değil. O yüzden plan önce yazıldı.
+
+### (a) TAM HEDEF — iki satır
+
+| kimlik | kod | ad | ÖNCE | SONRA |
+|---|---|---|---|---|
+| `a0a51f3c-9be6-407a-a907-b2f3861574b9` | **150** | İlk Madde ve Malzeme | `RequiresProject = true` | `false` |
+| `cdc88a87-5ace-45c4-9723-63c45962758f` | **153** | Ticari Mallar | `RequiresProject = true` | `false` |
+
+`RequiresCostCenter` İKİSİNDE DE `false` ve **DOKUNULMUYOR** — komut
+mevcut değeri aynen geri yazıyor. Başka hiçbir hesaba dokunulmuyor.
+
+### (b) UYGULAMA YOLU — uygulamanın kendi ucu
+
+`deploy/scripts/hesap-bayragi.sh --uygula --uc <canlı> --kullanici X --parola Y`
+
+`PUT /api/accounting-accounts/{id}` çağırır. Ham SQL YOK: doğrulama,
+eşzamanlılık kontrolü (`Surum`) ve satır düzeyi iz devrede kalır.
+Parola argümanla gelir, hiçbir yere yazılmaz.
+
+### (c) GERİ ALMA — tek komut, ÖNCEDEN YAZILDI VE DENENDİ
+
+`deploy/scripts/hesap-bayragi.sh --geri-al --uc <canlı> --kullanici X --parola Y`
+
+**PROVA ZEMİNİNDE KOŞULDU, İKİ YÖNDE DE:**
+
+    --geri-al : 150 proje False → True   (PUT 200)  ·  153 False → True   (PUT 200)  çıkış 0
+    --uygula  : 150 proje True  → False  (PUT 200)  ·  153 True  → False  (PUT 200)  çıkış 0
+
+Komut **idempotent**: hedef değer zaten yerindeyse "dokunulmadı" der.
+
+### (d) DENETİM İZİ — ÖLÇÜLDÜ
+
+Satır düzeyinde **VAR** (`UpdatedByUserId` + `UpdatedAtUtc` doluyor).
+`audit_logs` tablosuna **YOK** — ve ölçüm gösterdi ki o tablo canlıda
+toplam 0 satır, yani mekanizmanın tamamı ölü. **DENETIM/1 kapsamına
+yazıldı.** Bu, uygulamayı engellemiyor ama bilinerek yapılıyor.
+
+### (e) UYGULAMA SONRASI DOĞRULAMA — ÖNCEDEN İLAN
+
+**KURAL 83 GEÇERLİ: MAL KABUL GERÇEK MUHASEBE VERİSİ ÜRETİR.**
+Canlıda mal kabul denemesi **yapılmayacak** — gerçek defterde duracak bir
+fiş ve gerçek bir stok hareketi doğar. Bu yüzden canlı doğrulama
+ÖLÇÜLEBİLDİĞİ KADAR yapılacak:
+
+| doğrulama | canlıda yapılır mı | nasıl |
+|---|---|---|
+| bayrak değişti mi | **EVET** | `hesap-beyan-sapmasi.sh` → sapma 2 → **0** olmalı |
+| mal kabul fişleniyor mu | **HAYIR** | gerçek stok hareketi + gerçek fiş doğar (Kural 83). Prova zemininde ölçüldü: 150 borç 2500 / 379.01 alacak 2500 |
+| projesiz çıkış | **HAYIR** | aynı gerekçe; provada ölçüldü (770/150, merkez=MERKEZ) |
+| projesiz sayım | **HAYIR** | aynı gerekçe; provada ölçüldü (689.02/150, merkez=MERKEZ) |
+| depodan zimmet | **HAYIR** | aynı gerekçe; provada ölçüldü (770/150, merkez=MERKEZ) |
+
+**DÜRÜST SINIR, AÇIKÇA:** dört yol canlıda ÇAĞIRARAK doğrulanmayacak;
+kanıt veri sadık prova zemininden geliyor (canlının birebir kopyası,
+aynı hesap planı, aynı depolar, aynı cariler). Bu, Mehmet Bey'in
+"canlı muhasebeye sonda için kayıt açmıyoruz" kuralının gereği.
+
+Gerçek doğrulama, salı günü **ilk gerçek mal kabulünde** olacak; o
+işlem zaten yapılacak bir iştir, sonda değildir. O anda fişin
+150/379.01'e düştüğü kontrol edilecek — **salı prova listesine madde
+olarak eklendi.**

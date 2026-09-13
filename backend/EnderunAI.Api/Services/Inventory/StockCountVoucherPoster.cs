@@ -64,6 +64,22 @@ public sealed class StockCountVoucherPoster(
         var reference = session.DocumentNumber;
         var lines = new List<AccountingVoucherLineRequest>();
 
+        //
+        // MASRAF MERKEZİ SAYIMDA DA YAZILIYOR (2026-09-13, Mehmet Bey'in
+        // kararı). Sayım farkının PROJESİ yoktur — aşağıdaki yorum bunu
+        // anlatıyor ve doğru — ama MASRAF MERKEZİ vardır: fark hangi
+        // deponun şubesinde doğduysa oranın gideridir.
+        //
+        // BUGÜN ZORUNLU DEĞİL: 689.02 ve 649.03 hesaplarında
+        // `RequiresCostCenter = false` (ölçüldü). Yani bu satır bir
+        // hatayı kapatmıyor, VERİYİ TAMAMLIYOR; bayrak yarın açılırsa
+        // bu yol kendiliğinden hazır olur.
+        //
+        var masrafMerkezi = await db.Warehouses
+            .Where(x => x.Id == session.WarehouseId)
+            .Select(x => x.Branch.CostCenterCode ?? x.Branch.Code)
+            .SingleOrDefaultAsync(cancellationToken);
+
         AccountingVoucherLineRequest Line(
             Guid accountId, string description, decimal debit, decimal credit) =>
             new(
@@ -78,7 +94,7 @@ public sealed class StockCountVoucherPoster(
                 // etiketi konsaydı fire, hiç ilgisi olmayan bir
                 // projenin maliyetine yazılırdı.
                 ProjectId: null,
-                CostCenterCode: null,
+                CostCenterCode: masrafMerkezi,
                 DocumentNumber: reference,
                 DocumentDate: session.CountDate,
                 DueDate: null);

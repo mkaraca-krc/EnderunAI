@@ -140,6 +140,9 @@ KAPILAR=(
   "hizli|derleme kilidi ölü scope sondası|${REPO_ROOT}|deploy/scripts/test-derleme-kos.sh"
   "hizli|açık veritabanı|${REPO_ROOT}|deploy/scripts/acik-veritabani-kapisi.sh"
   "agir|şema sapması|${REPO_ROOT}|deploy/scripts/sema-sapma-kapisi.sh"
+  # Zeminin beyan ettiği hesap yapılandırması canlıdan ayrışamaz —
+  # ayrışırsa testler ürünü değil kendini sınar (2026-09-13 ölçümü).
+  "agir|hesap beyan sapması|${REPO_ROOT}|deploy/scripts/hesap-beyan-sapmasi.sh"
   "agir|sır bekçisi (tüm depo)|${BE}|dotnet test EnderunAI.Api.Tests/EnderunAI.Api.Tests.csproj -v q --nologo --filter FullyQualifiedName~SecretInSourceGuardTests"
 )
 

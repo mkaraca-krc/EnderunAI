@@ -117,10 +117,22 @@ public sealed class InventoryItemCreationTests(DatabaseFixture fixture)
         var secondCode = (await second.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("code").GetString()!;
 
-        // Ön ek YOK, yalnız rakam.
-        Assert.Matches("^[0-9]+$", firstCode);
-        Assert.True(long.Parse(firstCode) >= 100_001);
-        Assert.Equal(long.Parse(firstCode) + 1, long.Parse(secondCode));
+        // BİÇİM 2026-09-13'te DEĞİŞTİ (Mehmet Bey'in kararı, madde 14).
+        // Eskiden öneksiz/dolgusuz sıra (100001) üretiliyordu; canlıda
+        // zaten END0001…END0009 ve END004/END005 vardı, yani ilk yeni
+        // kartta listede ÜÇÜNCÜ biçim belirecekti. Artık tek biçim:
+        // END + 4 hane dolgu, mevcut en büyük numaradan devam.
+        //
+        // BU TESTİN ESKİ İDDİASI ÜRÜN KUSURU DEĞİL, BAYAT VARSAYIMDI.
+        Assert.Matches("^END[0-9]{4,}$", firstCode);
+        Assert.Matches("^END[0-9]{4,}$", secondCode);
+
+        long Numara(string kod) => long.Parse(kod[3..]);
+
+        Assert.Equal(Numara(firstCode) + 1, Numara(secondCode));
+
+        // Dolgu garanti: 1 sayısı "END1" değil "END0001" olur.
+        Assert.DoesNotMatch("^END[0-9]{1,3}$", firstCode);
     }
 
     /// <summary>
