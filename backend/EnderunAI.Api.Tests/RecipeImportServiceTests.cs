@@ -184,10 +184,21 @@ public sealed class RecipeImportServiceTests(DatabaseFixture fixture)
     {
         var context = await CreateContextAsync(("KBL-01", "NYA Kablo", "m"));
 
+        /*
+         * DAVRANIŞ DEĞİŞTİ (2026-09-13): reçete aktarımı ARTIK KART AÇMIYOR.
+         *
+         * Gerekçe ölçüldü: bu yol kartı `InventoryCategoryId` yazmadan
+         * açıyordu; ekran yolu ise kategoriyi zorunlu tutup birim ve
+         * özellikleri ona göre doğruluyor. Kategorisiz kart, kuralların
+         * hiç uygulanmadığı karttır. Dosya kategori sütunu taşımadığı
+         * için kapı fail-closed kapatıldı.
+         *
+         * Bu test eski davranışı sabitliyordu; yeni kuralı sabitleyecek
+         * biçimde çevrildi — SİLİNMEDİ, çünkü asıl iddiası hâlâ
+         * geçerli: reçete MEVCUT kartlara doğru bağlanmalı.
+         */
         var parsed = Parsed(
             Row(context.PositionCode, "KBL-01", "NYA Kablo", quantity: 12m, waste: 5m),
-            // Kod KALIBA UYGUN olmalı: 2026-09-13'ten beri reçete aktarımı
-            // kalıp dışı kodla kart AÇMIYOR (bkz. KalipDisiKod_KartAcmaz).
             Row(context.PositionCode, "END0501", "Buat", quantity: 2m, unit: "adet", rowNumber: 3));
 
         var options = new RecipeImportOptions(
@@ -196,15 +207,16 @@ public sealed class RecipeImportServiceTests(DatabaseFixture fixture)
         var preview = await WithServiceAsync((service, _) =>
             service.PreviewAsync(parsed, options, CancellationToken.None));
 
-        Assert.Equal(2, preview.ValidRows);
-        Assert.Equal(1, preview.NewInventoryItemCount);
+        // Kartı OLAN satır geçerli; kartı OLMAYAN satır artık elenir.
+        Assert.Equal(1, preview.ValidRows);
+        Assert.Equal(0, preview.NewInventoryItemCount);
 
         var result = await WithServiceAsync((service, _) =>
             service.CommitAsync(parsed, options, CancellationToken.None));
 
         Assert.Equal(1, result.CreatedRecipes);
-        Assert.Equal(1, result.CreatedInventoryItems);
-        Assert.Equal(2, result.ImportedMaterials);
+        Assert.Equal(0, result.CreatedInventoryItems);
+        Assert.Equal(1, result.ImportedMaterials);
 
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -215,7 +227,7 @@ public sealed class RecipeImportServiceTests(DatabaseFixture fixture)
 
         Assert.True(recipe.IsDefault);
         Assert.Equal(1, recipe.Version);
-        Assert.Equal(2, recipe.Materials.Count);
+        Assert.Single(recipe.Materials);
 
         // HER MALZEME STOK KARTINA BAĞLI — eksik hesabının ön şartı.
         Assert.All(recipe.Materials, x => Assert.NotNull(x.InventoryItemId));
@@ -289,6 +301,12 @@ public sealed class RecipeImportServiceTests(DatabaseFixture fixture)
             await db.SaveChangesAsync();
         }
 
+        /*
+         * ESKİ İDDİA: "aynı malzeme iki pozda geçerse kart BİR KEZ açılır."
+         * YENİ KURAL (2026-09-13): kart HİÇ açılmaz — kategori bilgisi yok.
+         * Testin yeni iddiası: kartı olmayan malzeme iki pozda da geçse
+         * SESSİZCE kart doğurmaz; iki satır da elenir.
+         */
         var result = await WithServiceAsync((service, _) => service.CommitAsync(
             Parsed(
                 Row(context.PositionCode, "END0601", "Ortak malzeme"),
@@ -296,8 +314,8 @@ public sealed class RecipeImportServiceTests(DatabaseFixture fixture)
             new RecipeImportOptions(context.CompanyId, CreateMissingInventoryItems: true),
             CancellationToken.None));
 
-        Assert.Equal(2, result.CreatedRecipes);
-        Assert.Equal(1, result.CreatedInventoryItems);
+        Assert.Equal(0, result.CreatedRecipes);
+        Assert.Equal(0, result.CreatedInventoryItems);
     }
     /// <summary>
     /// EŞDEĞER YAZIM ARTIK UYUŞMAZLIK SAYILMIYOR.

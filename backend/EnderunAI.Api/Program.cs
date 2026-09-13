@@ -47,6 +47,7 @@ var jwtSecret =
     );
 
 builder.Services.AddScoped<AuditSaveChangesInterceptor>();
+builder.Services.AddSingleton<PasifKartHareketiInterceptor>();
 
 builder.Services.AddDbContext<AppDbContext>(
     (serviceProvider, options) =>
@@ -54,7 +55,9 @@ builder.Services.AddDbContext<AppDbContext>(
         options.UseNpgsql(connectionString);
         options.AddInterceptors(
             serviceProvider.GetRequiredService<
-                AuditSaveChangesInterceptor>());
+                AuditSaveChangesInterceptor>(),
+            serviceProvider.GetRequiredService<
+                PasifKartHareketiInterceptor>());
     });
 
 builder.Services.AddDbContext<HrDbContext>(options =>

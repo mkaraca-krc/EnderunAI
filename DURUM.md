@@ -15571,3 +15571,109 @@ Hata mesajı teşhis edilebilir olacak: *"Bu malzeme kartı pasif"* —
 **200**, ve pasif kartta stok azaltan hareket **200** (izinli kalmalı).
 
 **Kod yazılmadı — kararınızı bekliyorum.**
+
+## PASİF KART KURALI — UYGULANDI (2026-09-13, Mehmet Bey onayı)
+
+### KURAL
+
+| hareket | pasif kartta |
+|---|---|
+| stok **ARTIRAN** — mal kabul, iade dönüşü, sayım fazlası, transfer **hedefi** | **YASAK** |
+| stok **AZALTAN** — çıkış, transfer **kaynağı**, sayım noksanı | **İZİNLİ** |
+| stoğu varken pasifleştirme | uyarı, engel değil |
+
+**Mesaj ne olduğunu değil NE YAPILACAĞINI söylüyor:**
+*"Bu malzeme kartı pasif. Kullanmak için malzeme kartından aktif edin."*
+
+> **BİLİNÇLİ KISIT, KUSUR DEĞİL:** pasif kartta sayım **fazlası**
+> girilmesi gerekiyorsa kart geçici olarak aktif edilir, düzeltme
+> yapılır, kart tekrar pasife alınır. Arşiv kartına sessizce mal
+> girmesini engellemenin bedeli budur ve kabul edilmiştir.
+
+### NEREYE KONDU — KESİCİ, ÇAĞRI YERLERİ DEĞİL (Kural 79)
+
+`new StockMovement` **ölçüldü: 6 dosyada 11 yer.** Her birine kontrol
+koymak, yarın eklenen 12.'nin kontrolsüz kalması demekti. Kural
+`Data/Interceptors/PasifKartHareketiInterceptor.cs` içinde, hareketin
+**yazıldığı tek noktada** duruyor.
+
+`Adjustment` listede sabit değil: işareti **miktara** bakılarak
+belirleniyor (fazla artırır, noksan azaltır). Kart izlenmiyorsa tek bir
+`AsNoTracking` sorgusu açılıyor; kart hiç bulunamazsa kural
+uygulanmıyor — yabancı anahtar kısıtı zaten düşürür, "aktif varsay"
+demek sessiz muafiyet olurdu.
+
+### SONDA — DÖRT AYAK, POZİTİF KONTROLLER ATLANMADI
+
+| ayak | beklenen | sonuç |
+|---|---|---|
+| pasif kart + sayım **fazlası** | 400 + mesaj | ✓ |
+| **aktif** kart + sayım fazlası (pozitif kontrol) | 200 | ✓ |
+| **pasif** kart + **çıkış** (pozitif kontrol) | 200, stok 5→3 | ✓ |
+| pasif kart + sayım **noksanı** (pozitif kontrol) | 200 | ✓ |
+
+Üçüncü ayak olmadan kural, **stoğu üstünde kalmış arşiv kartını sonsuza
+kilitlerdi** — gizli bir kilit. Bu yüzden ayrı test.
+
+**MUTASYON — "düzeltmeden önceki hâl" gösterildi:** kesicinin kaydı
+kaldırıldı → **tam 1 KIRMIZI** (`PasifKart_StokArtiranHareket_Reddedilir`),
+üç pozitif kontrol **yeşil kaldı**. Geri alındı → 4/4 yeşil.
+
+---
+
+## İÇE AKTARMA — KATEGORİSİZ KART KAPISI KAPATILDI (a maddesi)
+
+`RecipeImportService` kartı `InventoryCategoryId` **yazmadan** açıyordu;
+yalnız serbest metin `Category = "Reçete aktarımı"`. Ekran yolu ise
+kategoriyi zorunlu tutuyor ve **birim ile özellikleri ona göre
+doğruluyor** (izinsiz birim 400, eksik zorunlu özellik 400 — ikisi de
+prova zemininde ölçüldü).
+
+Yani aynı ürün iki kapıdan **farklı sıkılıkta** doğuyordu. Kategorisiz
+kart, kuralların hiç uygulanmadığı karttır.
+
+Reçete dosyası bugün **kategori sütunu taşımıyor** → kapı **fail-closed**
+kapatıldı: bu yol artık kart AÇMIYOR, satır gerekçesiyle eleniyor.
+**AÇILMA KOŞULU** koda yazıldı: dosyaya kategori sütunu eklenip
+`InventoryCategoryId` çözülebildiğinde engel kalkar ve kategorisi
+çözülemeyen SATIR reddedilir.
+
+**VatRate salıdan sonra** (ekran yolu zaten istiyor; içe aktarma pilotta
+kullanılmayacak).
+
+### KIRMIZIYA DÖNEN İKİ TEST — SİLİNMEDİ, ÇEVRİLDİ
+
+`Aktarim_ReceteyiVeKartiKurar` ve `AyniMalzemeIkiPozda_KartBirKezAcilir`
+**eski davranışı sabitliyordu** ("aktarım kart açar"). İkisi de yeni
+kuralı sabitleyecek biçimde çevrildi ve neyin niçin değiştiği testin
+içine yazıldı. Asıl iddiaları duruyor: reçete **mevcut** kartlara doğru
+bağlanmalı. Koşu: **29/29 yeşil**.
+
+### `Code` EŞLEME ANAHTARIDIR — "KODLARI DÜZELTELİM" DENMESİN
+
+İçe aktarma, kartı dosyadaki kodla eşleştiriyor
+(`context.ItemsByCode[row.MaterialCode]`). **Bir kartın kodu
+değiştirilirse, aynı dosyanın bir sonraki aktarımı o kartı bulamaz ve
+HER AKTARIMDA bir mükerrer kart daha açar.**
+
+Bu yüzden aktarım, kalıba uymayan kodu üreticiden yeni kod vererek
+"düzeltmiyor" — **reddediyor**. Sessizce yeniden adlandırmak, mükerrer
+kart üretmenin yoludur.
+
+**Bu not, ileride birinin "kodları düzeltelim" demesini engellemek için
+yazıldı.** Kod değiştirilecekse önce içe aktarma eşleştirmesinin nasıl
+çalıştığı ölçülmeli.
+
+---
+
+## `say.sh --etiketten-sayi` — KURAL 84'ÜN DÖRDÜNCÜ ÖRNEĞİ ARACA TAŞINDI
+
+Etiketsiz hüküm çırası `grep -oE '[0-9]+' | head -2` ile iki sayı
+okumaya çalıştı ve **aynı satırdaki yüzdeyi ikinci küme sandı**:
+
+    İDDİA : 1756  (%59)   →  okunan: 1756 ve 59  →  "5483 AZALDI"
+
+Yanlış bir **yeşil**. Okuma da araca taşındı:
+`say.sh --etiketten-sayi 'İDDİA'` yüzde parçalarını eler, etiketli
+satırın ilk gerçek sayısını verir, sayı yoksa **ÖLÇEMEDİ (çıkış 3)**.
+Çıra artık onu kullanıyor.

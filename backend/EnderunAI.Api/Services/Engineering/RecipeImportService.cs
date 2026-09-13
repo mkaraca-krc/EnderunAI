@@ -466,11 +466,31 @@ public sealed class RecipeImportService(AppDbContext db) : IRecipeImportService
                 "Kodu düzeltin ya da malzemeyi önce stok kartı ekranından açın.");
         }
 
-        return new RecipeImportPreviewRow(
-            row.RowNumber, row.PositionCode, position.Name,
-            row.MaterialCode, row.MaterialName, row.Quantity, row.Unit,
-            row.WastePercent, RecipeImportAction.CreateItem,
-            "Stok kartı açılacak", null,
-            row.PositionCodeInherited, null);
+        //
+        // ═══ KATEGORİSİZ KART ÜRETİLMEZ (2026-09-13) ═══
+        //
+        // ÖLÇÜLDÜ: bu yol kartı `InventoryCategoryId` YAZMADAN açıyordu;
+        // yalnız serbest metin `Category = "Reçete aktarımı"`. Ekran yolu
+        // ise kategoriyi ZORUNLU tutuyor ve birim ile özellikleri ona göre
+        // doğruluyor (izinsiz birim 400, eksik zorunlu özellik 400).
+        //
+        // Yani aynı ürün iki kapıdan farklı sıkılıkta doğuyordu:
+        // kategorisiz kart, birim ve özellik kurallarının HİÇ
+        // uygulanmadığı karttır — sessizce yanlış kart.
+        //
+        // Reçete dosyası bugün kategori sütunu TAŞIMIYOR. Bu yüzden kapı
+        // fail-closed kapatıldı: kart açma, kategori bilgisi gelene kadar
+        // yok. Geri dönüşü en zor alan da bu (kategori birim ve özellik
+        // kurallarını taşır; sonradan atamak birim uyuşmazlığı doğurur).
+        //
+        // AÇILMA KOŞULU: dosyaya kategori sütunu eklenip
+        // `InventoryCategoryId` çözülebildiğinde bu engel kalkar ve
+        // kategorisi çözülemeyen SATIR reddedilir.
+        //
+        return Skip(
+            $"Stok kartı açılacaktı ama reçete aktarımı KATEGORİ bilgisi taşımıyor. " +
+            $"Kategorisiz kart, birim ve özellik kurallarının uygulanmadığı karttır. " +
+            $"\"{row.MaterialCode}\" kartını malzeme kartı ekranından açın, sonra " +
+            "aktarımı tekrarlayın.");
     }
 }

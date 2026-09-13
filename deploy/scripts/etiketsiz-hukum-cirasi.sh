@@ -32,11 +32,11 @@ CIKTI="$(python3 "$KOK/scripts/kayit-taramasi.py" 2>/dev/null)" || {
     echo "[etiketsiz-hüküm] ÖLÇEMEDİ: tarayıcı koşmadı."; exit 3; }
 
 # İki "İDDİA" satırı: birincisi belge, ikincisi kod yorumu.
-# HER SATIRIN İLK SAYISI alınır. `grep -oE '[0-9]+' | head -2` YANLIŞTI:
-# aynı satırdaki yüzdeyi (%59) ikinci küme sanıp "5483 azaldı" dedi
-# (2026-09-13, kendi provamda yakalandı — aletin yanlış yeşili).
-mapfile -t SAYILAR < <(printf '%s\n' "$CIKTI" | grep -E '^\s+İDDİA' \
-    | sed -E 's/.*İDDİA[^0-9]*([0-9]+).*/\1/' | head -2)
+# Sayı okuma ARACA taşındı: `grep -oE '[0-9]+' | head -2` aynı satırdaki
+# yüzdeyi (%59) ikinci küme sanıp "5483 azaldı" demişti — aletin yanlış
+# yeşili (2026-09-13). `say.sh --etiketten-sayi` yüzdeyi eler.
+mapfile -t SAYILAR < <(printf '%s\n' "$CIKTI" \
+    | "$KOK/scripts/say.sh" --etiketten-sayi 'İDDİA' | head -2)
 [ "${#SAYILAR[@]}" -eq 2 ] || { echo "[etiketsiz-hüküm] ÖLÇEMEDİ: sayı okunamadı."; exit 3; }
 
 belge_cizgi="$(awk '$1=="belge"{print $2}' "$CIZGI")"

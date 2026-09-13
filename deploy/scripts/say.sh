@@ -45,6 +45,38 @@
 #
 set -uo pipefail
 
+# ═══ ETİKETTEN SAYI OKUMA — YÜZDE TUZAĞI (2026-09-13) ═══
+#
+# Kural 84'ün bugünkü DÖRDÜNCÜ örneği: etiketsiz hüküm çırası
+# `grep -oE '[0-9]+' | head -2` ile iki sayı okumaya çalıştı ve AYNI
+# satırdaki yüzdeyi ikinci küme sandı:
+#
+#     İDDİA : 1756  (%59)     →  okunan: 1756 ve 59
+#
+# Sonuç: "5483 AZALDI" diye yanlış bir YEŞİL. Sayı okuyan her yer aynı
+# tuzağa düşebilir; bu yüzden okuma da araca taşındı:
+#
+#     say.sh --etiketten-sayi 'İDDİA' < cikti.txt
+#
+# Yüzde işareti taşıyan parçalar SAYILMAZ; etiketli satırın ilk gerçek
+# sayısı basılır, satır başına bir satır.
+if [ "${1:-}" = "--etiketten-sayi" ]; then
+    ETIKET="${2:?--etiketten-sayi için etiket gerekli}"
+    BULUNDU=0
+    while IFS= read -r satir; do
+        case "$satir" in *"$ETIKET"*) ;; *) continue ;; esac
+        # %NN ve NN% parçalarını at, sonra ilk sayıyı al.
+        temiz="$(printf '%s' "$satir" | sed -E 's/%[0-9]+//g; s/[0-9]+%//g')"
+        sayi="$(printf '%s' "${temiz#*$ETIKET}" | grep -oE '[0-9]+' | head -1)"
+        [ -n "$sayi" ] && { printf '%s\n' "$sayi"; BULUNDU=$((BULUNDU+1)); }
+    done
+    if [ "$BULUNDU" -eq 0 ]; then
+        echo "[say] ÖLÇEMEDİ: '$ETIKET' etiketli satırda sayı yok." >&2
+        exit 3
+    fi
+    exit 0
+fi
+
 KOK=""; DESEN=""; ICERIK=""; DUZ=0; LISTE=0; SADE=0
 HARICLER=()
 
