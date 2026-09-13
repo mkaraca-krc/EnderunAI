@@ -15092,3 +15092,55 @@ doğrulanamaz yapar.
 
 Erişim günlüğü saklama süresi: **15 gün → ?** (90 gün ≈ 13 MB,
 365 gün ≈ 53 MB). Maliyet değil, kişisel veri saklama kararı.
+
+## S1 — "DURUM" TEK SÖZCÜK, İKİ KAVRAM (2026-09-13)
+
+Mehmet Bey canlıda gördü: END0001 kartının detayında sağ üstte **"Pasif"**,
+listede DURUM sütunu **"Normal"**. Soru: çelişiyorlar mı?
+
+### ÖLÇÜM — ÇELİŞMİYORLAR, AYRI KAVRAMLAR
+
+| yer | kaynak | anlamı |
+|---|---|---|
+| liste `Durum` sütunu | `criticalItemIds.has(row.id)` | **stok seviyesi** — herhangi bir deposunda asgarinin altında mı |
+| kart detayı rozeti | `!item.isActive` | **kart aktifliği** — kart arşivlenmiş mi |
+
+Aynı sözcüğü paylaşan iki ölçü. Kullanıcının ayırt edememesi
+kullanıcının değil, başlığın kusuru.
+
+### İKİNCİ BULGU — KODDAKİ YORUM YANLIŞTI
+
+`app/depo-stok/page.tsx:174` şöyle diyordu: *"Uç varsayılan olarak
+arşivlenmiş kartları gizliyor; burada açıkça isteniyor... **Ekran zaten
+`item.isActive` ile ayırıyor.**"*
+
+Ölçüldü: **ayırmıyordu.** Tablonun 12 sütununun hiçbirinde `isActive`
+kullanılmıyor; `isActive` yalnız üstteki özet sayacında geçiyor. Yorum,
+yapıldığı sanılan bir şeyi anlatıyordu.
+
+### ÜÇÜNCÜ BULGU — SORUN TEORİK DEĞİLDİ
+
+Canlıda **9 malzeme kartının 9'u da PASİF** (`IsActive=false`).
+Yani listedeki **her** "Normal" satırı, aslında pasif bir kartı
+gösteriyordu ve bunu söyleyen hiçbir işaret yoktu.
+
+### DÜZELTME — YENİ SÜTUN EKLEMEDEN
+
+K5-ÜST/1 dersi: 1201–1440 px arasında tablo zaten taşıyordu; 13. sütun
+eklemek o kusuru geri getirirdi. Bu yüzden:
+
+1. Sütun başlığı **"Durum" → "Stok Durumu"**. Sütun yalnız seviyeyi
+   anlatıyor ve artık bunu söylüyor.
+2. Pasif kart, **Malzeme sütununda** adın yanında gri rozetle
+   işaretleniyor. Aktif kart işaretsiz — gürültü üretmesin.
+3. Dışa aktarımda da görünüyor: ekranda rozet, CSV'de `· Pasif`.
+4. Yanlış yorum düzeltildi; neyin ölçülüp neyin sanıldığı yazıldı.
+
+Etiketler `lib/inventory/kart-durumu.ts` içinde **tek kaynakta** —
+beş kopya etiket haritasının bedeli daha önce ölçülmüştü.
+
+### KAPI KIRMIZI YANDI
+
+`tests/kart-durumu.test.ts` 3 test, 3 yeşil. Mutasyon (aktif kart da
+işaretlensin) → **tam 1 kırmızı**: *"listede YALNIZ pasif kart
+işaretlenir"*. Geri alındı → 3/3 yeşil. `tsc --noEmit` çıkış 0.

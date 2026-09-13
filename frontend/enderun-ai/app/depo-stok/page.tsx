@@ -41,6 +41,7 @@ import {
 
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { kartDurumEtiketi, kartDurumIsareti } from "@/lib/inventory/kart-durumu";
 import { malzemeTipiEtiketi } from "@/lib/inventory/malzeme-tipi";
 import {
   stokArtiranHareket,
@@ -171,7 +172,10 @@ export default function InventoryOperationsPage() {
            * YÖNETİM EKRANI ARŞİVİ DE GÖRÜR. Uç varsayılan olarak
            * arşivlenmiş kartları gizliyor (seçiciler görmesin diye);
            * burada açıkça isteniyor ki kart geri açılabilsin.
-           * Ekran zaten `item.isActive` ile ayırıyor.
+           * Ekran pasif kartı Malzeme sütununda rozetle işaretliyor
+           * (S1, 2026-09-13). ÖNCE İŞARETLEMİYORDU ve bu yorum
+           * "ayırıyor" diyordu — yorum doğruydu sanılıyordu, ölçülünce
+           * tabloda hiçbir isActive kullanımı olmadığı çıktı.
            */
           inventoryService.getItems({ includeInactive: true }),
           purchaseRequestService.getAll({
@@ -458,7 +462,15 @@ export default function InventoryOperationsPage() {
       key: "malzeme",
       header: "Malzeme",
       value: (row) =>
-        [row.name, row.brand, row.model].filter(Boolean).join(" · "),
+        [
+          row.name,
+          row.brand,
+          row.model,
+          // Dışa aktarımda da görünmeli: ekranda rozet, CSV'de sözcük.
+          kartDurumIsareti(row.isActive),
+        ]
+          .filter(Boolean)
+          .join(" · "),
       render: (row) => (
         <div className="flex items-center gap-3">
           {row.coverPhotoId && (
@@ -471,7 +483,14 @@ export default function InventoryOperationsPage() {
           )}
 
           <div className="min-w-0">
-            <div className="font-medium text-slate-900">{row.name}</div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-slate-900">{row.name}</span>
+              {!row.isActive && (
+                <span className="inline-flex shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                  {kartDurumEtiketi(row.isActive)}
+                </span>
+              )}
+            </div>
 
             <div className="text-xs text-slate-500">
               {[row.brand, row.model].filter(Boolean).join(" · ") ||
@@ -559,7 +578,15 @@ export default function InventoryOperationsPage() {
     },
     {
       key: "durum",
-      header: "Durum",
+      /*
+       * BAŞLIK "Durum" DEĞİL "Stok Durumu" (S1, 2026-09-13).
+       *
+       * Kartın kendi durumu (Aktif/Pasif) ile stok seviyesi
+       * (Normal/Kritik) iki ayrı kavram; tek sözcüğü paylaşınca
+       * kullanıcı ayırt edemedi. Bu sütun YALNIZ stok seviyesidir;
+       * kartın aktifliği Malzeme sütununda işaretleniyor.
+       */
+      header: "Stok Durumu",
       value: (row) => (criticalItemIds.has(row.id) ? "Kritik" : "Normal"),
       render: (row) => (
         <span
