@@ -15285,3 +15285,87 @@ Her hüküm satırının yanında **ya ölçüm yöntemi ya `[ÖLÇÜLMEDİ]`
 etiketi**. Kod yorumlarına da uygulanır. DERSLER'e Kural 88 olarak
 geçti; S1'in cümlesi gerekçe olarak aynen kondu: *"yorum, yapıldığı
 sanılan bir şeyi anlatıyordu."*
+
+## SORGU DİZGESİ ÇIRASI — SÜREKLİ ÖLÇÜM + YAPISAL MUHAFAZA (2026-09-13)
+
+"Bugün 0" yarını bağlamaz. İki ayrı soru, iki ayrı araç:
+
+| araç | soru | ne zaman |
+|---|---|---|
+| `deploy/scripts/sorgu-dizgesi-cirasi.sh` | **trafikte** ne oldu | her gece 00:20 (`enderun-sorgu-cirasi.timer`) |
+| `SorguDizgesindeSirYasagiTests` | **kaynakta** ne olabilir | her test koşusu |
+
+### KAPSAM DIŞLAMAYLA — VE NEDEN
+
+Kara liste (`token|password ara`) yalnız AKLA GELEN adı bulur; yarın
+`oturumAnahtari` gelirse yakalamaz. Bu yüzden tersi:
+`deploy/bekci/sorgu-parametre-beyaz-liste.txt` — **42 bilinen zararsız
+ad**, her biri öbeklenmiş; **listede olmayan her yeni ad raporlanır.**
+
+Liste tahminle değil ölçümle kuruldu: 16 günlük erişim günlüğünde
+`/api/` uçlarında **40 ayrı parametre adı** vardı.
+
+### KOVALAR — İLK GÜN GÜRÜLTÜYLE KIRMIZI YANAN KAPI, YARIN BAKILMAYAN KAPIDIR
+
+İlk sürüm sır çağrıştıran her adı koşulsuz kırmızı yakıyordu ve **ilk
+koşuda kırmızı yandı**: `passwd`. Ölçtüm — `/cgi-bin/nas_sharing.cgi`
+yoluna gelen bir saldırı yoklamasıydı ve **404** almıştı.
+
+Saldırganın ne gönderdiğini biz belirlemiyoruz. Kural ölçüme
+dayandırıldı: sır çağrıştıran ad **2xx ile SUNULDUYSA** kırmızı; 404/3xx
+ise adıyla BİLGİ kovasında sayılır.
+
+| kova | bugünkü değer |
+|---|---|
+| `/api/` uçlarında liste dışı ad | **0** (40 ad tarandı) |
+| sunulan (2xx) isteklerde sırlı ad | **0** |
+| sunulmayan isteklerde sırlı ad (BİLGİ) | 1 — `passwd`, 404 |
+| `/api/` dışında liste dışı ad (BİLGİ) | 62 — saldırı taraması |
+
+**POZİTİF KONTROL ÇIRAYA İLİŞTİRİLDİ:** `companyId` bulunamazsa çıra
+**ÖLÇEMEDİ (çıkış 3)** der. Bugün: *"pozitif kontrol GEÇTİ: 'companyId'
+bulundu (994 kez)"* — her koşuda basılıyor.
+
+### BEŞ AYAKLI SINAMA — İKİ YÖN DE (Kural 86)
+
+| ayak | sonuç |
+|---|---|
+| temiz zemin | çıkış **0** |
+| `/api/` ucuna yeni parametre | **KIRMIZI**, adıyla, çıkış 1 |
+| sunulan istekte `access_token` | **KIRMIZI**, çıkış 1 |
+| aynı jeton ama 404 | BİLGİ, çıkış **0** |
+| `companyId` yok | **ÖLÇEMEDİ**, çıkış 3 |
+
+Ara düzeltme: BİLGİ satırı bir kez **başlığı basıp içeriği yuttu**
+(`comm` sıralanmamış girdiyle). Bilgi satırının kendisi yanıltıcıydı;
+`grep -vxF` ile düzeltildi.
+
+### YAPISAL MUHAFAZA GERÇEK BİR ŞEY BULDU
+
+`SorguDizgesindeSirYasagiTests` ilk koşuda **kırmızı yandı**:
+
+    backend/EnderunAI.Api/Services/Market/MetalPriceApiLmeSource.cs:56
+    $"v1/timeframe?api_key={Uri.EscapeDataString(apiKey)}"
+
+**ÖLÇÜM (hüküm vermeden önce):**
+- Bu **giden** bir çağrı (metalpriceapi); bizim erişim günlüğümüze
+  düşmez, satıcının şeması bu.
+- **Ama kendi journalimize düşebilir:** `System.Net.Http.HttpClient`
+  günlüğü tam URI yazıyor. Son 7 günde **252 HttpClient istek satırı**
+  var, yani günlükleme açık.
+- Journalde `api_key=` → **0 kez** (7 gün, 837.177 satır tarandı).
+- `METAL_API_KEY` canlıda **TANIMLI DEĞİL** (ne süreç ortamında ne
+  `backend.env`'de) — entegrasyon şu an **ölü**, sızıntı **yok**.
+
+**KOŞULLU İSTİSNA (gerekçesi testin içinde):** anahtar tanımlanmadan
+**ÖNCE** ya satıcının başlık yolu ölçülmeli ya
+`System.Net.Http.HttpClient` günlük seviyesi kısılmalı. Yoksa anahtarın
+tanımlandığı gün tam URI journale düşer.
+
+İstisnalar gerekçesiz olamaz (`HerIstisna_GerekceliOlmali`) ve dosya
+taşınırsa liste çürümesin diye varlıkları sınanıyor
+(`Istisnalar_HalaGecerliOlmali`).
+
+**MUHAFIZ MUTASYONLA SINANDI:** yasak deseni körleştirildi →
+`Tarama_BosaDusmuyor_POZITIF_KONTROL` **kırmızı** yandı; geri alındı →
+**4/4 yeşil**. Kör dedektörü, dedektörün kendi testi yakalıyor.

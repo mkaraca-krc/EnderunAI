@@ -1,0 +1,68 @@
+# SORGU DİZGESİ BEYAZ LİSTESİ — /api/ UÇLARINDA BİLİNEN ZARARSIZ PARAMETRELER
+#
+# NEDEN DIŞLAMAYLA: "hassas ad ara" yaklaşımı ancak AKLA GELEN adı bulur.
+# Yarın `oturumAnahtari` diye bir parametre eklenirse hiçbir kara liste
+# onu yakalamaz. Burada tersi yapılıyor: bilinenler yazılır, LİSTEDE
+# OLMAYAN HER YENİ AD raporlanır.
+#
+# KAPSAM (Kural 84): yalnız `/api/` ile başlayan yollar — bizim
+# sunduğumuz uçlar. Saldırı taramalarının uydurduğu parametreler
+# (`phpinfo`, `cmd`, `rest_route`…) bizim yüzeyimiz değildir; çıra
+# onları ayrı kovada BİLGİ olarak sayar, kırmızı yakmaz.
+#
+# ÖLÇÜM TARİHİ: 2026-09-13, 16 günlük erişim günlüğü (access.log +
+# access.log.1 + 14 arşiv). O anda /api/ uçlarında 40 ayrı ad vardı.
+#
+# Yeni bir ad meşruysa BURAYA EKLENİR — ve eklerken gerekçesi yazılır.
+
+# ── kimlik/kapsam ───────────────────────────────────────────────────
+companyId          # çok şirketli kapsam süzgeci
+projectId          # proje kapsamı
+personnelId        # personel kapsamı
+assignedToUserId   # atanan kullanıcı süzgeci
+entityType         # genel varlık başvurusu (tip)
+entityId           # genel varlık başvurusu (kimlik)
+mesajId            # mesaj akışı imleci
+id                 # SignalR bağlantı kimliği (negotiate sonrası)
+roles              # rol süzgeci
+
+# ── sayfalama / sıralama ────────────────────────────────────────────
+limit
+take
+page
+pageSize
+direction
+q                  # serbest arama metni
+
+# ── tarih aralığı ───────────────────────────────────────────────────
+startDate
+endDate
+days
+months
+year
+month
+effectiveDate
+
+# ── durum / tür süzgeçleri ──────────────────────────────────────────
+status
+kind
+type
+requestType
+isActive
+includeInactive
+includeDecided
+belowMinimumOnly
+overdueOnly
+currency
+from
+to
+
+# ── taşıma / istemci ────────────────────────────────────────────────
+negotiateVersion   # SignalR anlaşma sürümü
+v                  # önbellek kırıcı
+cb                 # önbellek kırıcı
+path               # istemci yönlendirme yolu
+url                # istemci yönlendirme hedefi
+os                 # istemci platform bilgisi (sürüm denetimi)
+arch               # istemci mimari bilgisi (sürüm denetimi)
+commit             # istemci yapı kimliği (sürüm denetimi)
