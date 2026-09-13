@@ -13183,3 +13183,60 @@ gerçek kusurla: 1280 px → 1 taşan, çizgi 0. Sonra çizgi bugünkü ölçüm
 **DÜRÜST SINIR:** dört genişlik körlüğü kapatmıyor, daraltıyor. 1366 ve
 1440 hâlâ ölçülmüyor; Mehmet Bey'in canlı ölçümüne göre oralarda da
 taşma var (48 px ve 24 px) ve kapı onları GÖRMEZ.
+
+---
+
+## STOK/1 — KARARLAR (2026-09-13, Mehmet Bey)
+
+### E1 — AÇILIŞ STOĞU: YOL 1 SEÇİLDİ, SALIDAN SONRA
+
+Yeni `Opening` stok hareket tipi eklenecek. **Yol 2 (siparişsiz alış
+faturası) REDDEDİLDİ:** `SupplierCurrentAccountId` zorunlu olduğu için
+her açılış kalemi 320'de **gerçek olmayan bir tedarikçi borcu** doğurur.
+Cari defteri olmayan bir borçla açılır ve sonradan kapatılması gerekir —
+mali müşavirin itiraz edeceği ve geri alması acı olan şey tam budur.
+Muhasebede `AccountingVoucherType.Opening` zaten var; stokta da karşılığı
+olmalı.
+
+**Karşı hesap (500/570/632) kararı MALİ MÜŞAVİRE sorulacak.** Ne Mehmet
+Bey ne ben veriyoruz — yasal deftere giren bir karar.
+
+**SALI İÇİN SONUÇ: açılış stoğu GİRİLMEYECEK.** Stok ilk mal kabulden
+itibaren oluşacak. Bu temiz bir başlangıç: kartların miktarı 0 ve
+ortalama maliyeti 0 olduğu için ilk gerçek alış ağırlıklı ortalamayı
+bozmadan kurar (0 miktar, hesaba hiç girmez).
+
+**TEK ŞART:** o güne kadar **hiçbir sayım/düzeltme kaydı girilmesin.**
+Girilirse maliyeti sıfır açılış hikâyesi geri gelir. Uyarı sayım
+ekranına yazıldı (`app/depo-stok/sayim/page.tsx`) — hub'a değil, çünkü
+zarar eylemin yapıldığı yerde doğuyor.
+
+### E2 — RAF: AŞAMA 1 (KART SEVİYESİ), SALIDAN SONRA
+
+Sorulan soru "bu malzeme hangi rafta" ve cevabı **kart seviyesinde raf
+alanıdır**; altyapı zaten var, **göç gerekmiyor**. Yapılacak: bölge/raf
+oluşturma ekranı, malzeme kartı formunun `zoneId`/`shelfId` göndermesi,
+raf QR'ı (`shelfQrTarget` hazır, hiç çağrılmıyor).
+
+**Hareket seviyesinde raf: ŞİMDİLİK HAYIR.** `stock_movements`'a konum
+kolonu ve raf bazlı bakiye ÖLÇÜLMÜŞ bir ihtiyaca dayanmıyor; her çıkışta
+raf sormak, henüz hiç kullanılmamış bir modüle günlük yük bindirir.
+İhtiyaç doğarsa o zaman ve ölçümle alınır.
+
+**İki paralel raf kavramı:** `goods_receipt_items.ShelfLocation` serbest
+metin alanı ARTIK KULLANILMAYACAK diye işaretlenecek; **mevcut verisi
+silinmeyecek**, olduğu gibi kalacak. Yapılandırılmış zone/shelf tek
+kaynak olacak; form üzerinde görünüyorsa kaldırılacak.
+
+### K1 — ÖLÇÜM DÜZELTİLDİ
+
+"İki ekran menüde yok" hükmü YANLIŞTI (bkz. DERSLER, 13 Eylül): menü
+grubu kapalıyken ölçülmüştü. Grup açıkken 14 bağlantı var, ikisi de
+içinde. **Geçerli kalan kısım:** hub'ın Hızlı İşlemler'inde yoklardı —
+eklendi (5 kart → 7).
+
+**Genelleme (değerli kısım):** gerçekten ulaşılamayan **5 iş ekranı**
+var — `/insan-kaynaklari/gunluk-puantaj`, `/perakende`,
+`/perakende/fiyatlar`, `/perakende/raporlar`, `/sekreterya`. **SALIDAN
+SONRA** ele alınacak ve **menüye eklemeden önce her birinin çalıştığı
+ölçülecek** — hiç kullanılmamış ekranları menüye koyup pilota sunmayalım.

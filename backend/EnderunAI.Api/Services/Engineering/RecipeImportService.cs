@@ -2,6 +2,7 @@ using EnderunAI.Api.Data;
 using EnderunAI.Api.Services.Units;
 using EnderunAI.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using EnderunAI.Api.Services.Inventory;
 
 namespace EnderunAI.Api.Services.Engineering;
 
@@ -434,6 +435,35 @@ public sealed class RecipeImportService(AppDbContext db) : IRecipeImportService
             return Skip(
                 "Stok kartı açılacak ama malzeme kodu yok. " +
                 "Malzeme kodu sütununu eşleyin.");
+        }
+
+        //
+        // ═══ AÇIK KAPI KAPATILDI (2026-09-13) ═══
+        //
+        // Bu yol, dosyadaki kodu OLDUĞU GİBİ yeni bir stok kartına
+        // yazıyordu: kalıp denetimi yoktu. Kart açma ekranı artık kodu
+        // `InventoryCodeService`ten otomatik alıyor (END + 4 hane), ama
+        // reçete aktarımı o üreticiyi HİÇ ÇAĞIRMIYOR — yani biçim
+        // birliğini delen tek kapı burasıydı.
+        //
+        // NEDEN ÜRETİCİDEN KOD VERİLMİYOR, NEDEN REDDEDİLİYOR:
+        // dosyadaki kod bir EŞLEŞTİRME ANAHTARI
+        // (`context.ItemsByCode[row.MaterialCode]`). Kartı üreticinin
+        // verdiği başka bir kodla açsaydık, AYNI dosyanın bir sonraki
+        // aktarımı o kartı kodundan bulamaz ve HER AKTARIMDA bir
+        // mükerrer kart daha açardı. Reddetmek, sessizce yeniden
+        // adlandırmaktan güvenli.
+        //
+        // Kalıba UYAN kod reddedilmez: mevcut kartla eşleşmediyse zaten
+        // yukarıdaki kod/ad eşleştirmesinden geçmiştir.
+        //
+        if (!InventoryCodeService.Kalip.IsMatch(row.MaterialCode.Trim().ToUpperInvariant()))
+        {
+            return Skip(
+                $"Malzeme kodu biçime uymuyor: \"{row.MaterialCode}\". " +
+                $"Beklenen biçim {InventoryCodeService.OnEk} + " +
+                $"{InventoryCodeService.HaneSayisi} hane (örn. {InventoryCodeService.OnEk}0010). " +
+                "Kodu düzeltin ya da malzemeyi önce stok kartı ekranından açın.");
         }
 
         return new RecipeImportPreviewRow(

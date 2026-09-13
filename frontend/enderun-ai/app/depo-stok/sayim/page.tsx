@@ -135,6 +135,23 @@ export default function StockCountPage() {
       title="Stok Sayımı / Düzeltme"
       description="Fiziksel sayım sonucunu girin; fark otomatik hesaplanıp düzeltme hareketi olarak kaydedilir"
     >
+      {/*
+        AÇILIŞ STOĞU UYARISI (2026-09-13, Mehmet Bey'in kararı).
+
+        Sisteme devir/açılış stoğu girecek bir belge tipi YOK ve bu
+        ekran onun yerine KULLANILAMAZ: düzeltme hareketi birim
+        maliyeti kullanıcıdan almaz, kartın mevcut ortalamasını yazar.
+        Ortalama sıfırsa sıfır kalır, muhasebe fişi hiç kesilmez ve
+        sonraki gerçek alışta ağırlıklı ortalama kalıcı olarak dilüe
+        olur (ölçüldü). Stok ilk mal kabulden itibaren oluşacak.
+      */}
+      <div className="erp-alert">
+        Açılış/devir stoğu bu ekrandan GİRİLMEZ: düzeltme hareketi birim
+        maliyeti sormaz, kartın mevcut ortalamasını yazar — ortalaması
+        sıfır olan bir kartta stok miktarı artar ama maliyeti sıfır kalır
+        ve sonraki gerçek alışın maliyetini kalıcı olarak bozar.
+      </div>
+
       {error && <div className="erp-alert error">{error}</div>}
       {notice && <div className="erp-alert">{notice}</div>}
 

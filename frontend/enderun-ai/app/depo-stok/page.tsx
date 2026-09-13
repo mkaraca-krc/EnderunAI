@@ -41,6 +41,11 @@ import {
 
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import {
+  stokArtiranHareket,
+  stokAzaltanHareket,
+  stokHareketEtiketi,
+} from "@/lib/inventory/hareket-tipi";
 
 function formatNumber(value: number): string {
   return amount(value);
@@ -63,23 +68,12 @@ function typeLabel(type: number): string {
   return "Stok";
 }
 
-function movementLabel(type: number): string {
-  const labels: Record<number, string> = {
-    0: "Giriş",
-    1: "Çıkış",
-    2: "Transfer Çıkış",
-    3: "Transfer Giriş",
-  };
-
-  return labels[type] ?? `Hareket ${type}`;
-}
-
 function movementClass(type: number): string {
-  if (type === 0 || type === 3) {
+  if (stokArtiranHareket(type)) {
     return "bg-emerald-100 text-emerald-800";
   }
 
-  if (type === 1 || type === 2) {
+  if (stokAzaltanHareket(type)) {
     return "bg-amber-100 text-amber-800";
   }
 
@@ -341,11 +335,10 @@ export default function InventoryOperationsPage() {
     );
 
     const todayIssues = todayMovements
-      .filter(
-        (movement) =>
-          movement.type === 1 ||
-          movement.type === 2,
-      )
+      // ÇIKIŞ = depodan azaltan hareket. Burada bir zamanlar
+      // `type === 2` (TransferIn, yani GİRİŞ) da çıkış sayılıyordu ve
+      // günlük çıkış toplamı transfer girişleriyle şişiyordu.
+      .filter((movement) => stokAzaltanHareket(movement.type))
       .reduce(
         (sum, movement) =>
           sum + movement.quantity,
@@ -431,14 +424,14 @@ export default function InventoryOperationsPage() {
     {
       key: "hareket",
       header: "Hareket",
-      value: (row) => movementLabel(row.type),
+      value: (row) => stokHareketEtiketi(row.type),
       render: (row) => (
         <span
           className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${movementClass(
             row.type,
           )}`}
         >
-          {movementLabel(row.type)}
+          {stokHareketEtiketi(row.type)}
         </span>
       ),
     },
@@ -705,7 +698,7 @@ export default function InventoryOperationsPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <QuickAction
               title="Malzeme Talepleri"
               description="Talep ve onay akışı"
@@ -739,6 +732,27 @@ export default function InventoryOperationsPage() {
               description="Yeni stok veya demirbaş kartı"
               href="/depo-stok/yeni"
               icon="+"
+            />
+
+            {/*
+              DEPOLAR ve STOK SAYIMI buraya 2026-09-13'te eklendi.
+              İkisi de sol menüde ZATEN VARDI (menu.ts) — ölçüldü — ama
+              hub'ın hızlı işlemlerinde yoktu. Depo tanımlamak ve sayım
+              yapmak günlük depo işi; hub "günlük depo işlemlerine hızlı
+              erişim" diyorsa ikisi de burada olmalı.
+            */}
+            <QuickAction
+              title="Depolar"
+              description="Depo tanımlama ve düzenleme"
+              href="/depo-stok/depolar"
+              icon="▤"
+            />
+
+            <QuickAction
+              title="Stok Sayımı"
+              description="Tekil sayım ve miktar düzeltme"
+              href="/depo-stok/sayim"
+              icon="○"
             />
           </div>
         </section>

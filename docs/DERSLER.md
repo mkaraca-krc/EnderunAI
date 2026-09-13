@@ -346,3 +346,32 @@ değil, **indeks**.
   UYGULAMA: bir sürecin bellek ihtiyacını ölçmeden önce ONU ISIT;
   yerleşik kümeyi ısınmış hâlde ölç; ayırmayı (`memory.min`) o sayıdan
   türet. Sırayı bozarsan ölçtüğün şey ihtiyaç değil, baskının izidir.
+
+- **GÖRMEDİĞİM DURUMU, O ŞEYİN YOKLUĞU SANDIM.** Bir şeyin YOKLUĞUNU
+  iddia etmeden önce, onu GÖSTERECEK KOŞULUN kurulduğunu göstermeliyim.
+  *(Mehmet Bey'in kendi düzeltmesi, 13 Eylül — bu ailenin üçüncü
+  örneği.)*
+
+  STOK/1'de "sol menüde DEPO VE STOK altında tek bağlantı var" diye
+  ölçüldü ve `/depo-stok/depolar` ile `/depo-stok/sayim` "menüde yok"
+  sayıldı. Ölçüm menü grubu KAPALIYKEN alınmıştı; kenar çubuğu bir
+  akordeon ve kapalı grup yalnız başlığını gösteriyor. Sonra "açayım"
+  diye tıklanan şey grubu kapatmıştı. Grup gerçekten açıkken 14
+  bağlantı var, ikisi de içinde.
+
+  Üç bağımsız ölçüm aksini söylüyordu — depo HEAD'i, canlıda yayında
+  olan commit, ve canlıda SERVİS EDİLEN `.next` yapısı — ve ikisi
+  `route-permissions` listesinde hiç geçmediği için izne de bağlı
+  değildi. Yani "yok" hükmü, aracın değil GÖZLEM KOŞULUNUN eksikliğiydi.
+
+  UYGULAMA: "X yok" demeden önce bir POZİTİF KONTROL kur — aynı koşulda
+  VAR OLDUĞUNU BİLDİĞİN bir kardeşi göster. Menüde bir öğe arıyorsan,
+  o grupta gördüğün başka bir öğeyi de say; sıfır çıkıyorsa aradığın
+  şey yok değil, GÖREMİYORSUNDUR.
+
+  AYNI AİLENİN ÖNCEKİ İKİSİ: (1) K5 kapısı yalnız 390 px ölçüyordu ve
+  1201–1440 arasındaki taşmayı "yok" diye raporluyordu — kusur kapının
+  BAKMADIĞI genişlikteydi. (2) `postgresql.service` meta birimi
+  okunup "OOM koruması yok" denmişti — koruma vardı, ölçülen birimin
+  süreci yoktu. Üçünde de ölçüm aleti çalışıyordu; ÖLÇÜM KOŞULU
+  kurulmamıştı.

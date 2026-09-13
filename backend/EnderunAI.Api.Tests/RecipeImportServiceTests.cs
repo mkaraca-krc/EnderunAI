@@ -186,7 +186,9 @@ public sealed class RecipeImportServiceTests(DatabaseFixture fixture)
 
         var parsed = Parsed(
             Row(context.PositionCode, "KBL-01", "NYA Kablo", quantity: 12m, waste: 5m),
-            Row(context.PositionCode, "BUAT-01", "Buat", quantity: 2m, unit: "adet", rowNumber: 3));
+            // Kod KALIBA UYGUN olmalı: 2026-09-13'ten beri reçete aktarımı
+            // kalıp dışı kodla kart AÇMIYOR (bkz. KalipDisiKod_KartAcmaz).
+            Row(context.PositionCode, "END0501", "Buat", quantity: 2m, unit: "adet", rowNumber: 3));
 
         var options = new RecipeImportOptions(
             context.CompanyId, CreateMissingInventoryItems: true);
@@ -289,8 +291,8 @@ public sealed class RecipeImportServiceTests(DatabaseFixture fixture)
 
         var result = await WithServiceAsync((service, _) => service.CommitAsync(
             Parsed(
-                Row(context.PositionCode, "ORTAK-01", "Ortak malzeme"),
-                Row(context.PositionCode + "-B", "ORTAK-01", "Ortak malzeme", rowNumber: 3)),
+                Row(context.PositionCode, "END0601", "Ortak malzeme"),
+                Row(context.PositionCode + "-B", "END0601", "Ortak malzeme", rowNumber: 3)),
             new RecipeImportOptions(context.CompanyId, CreateMissingInventoryItems: true),
             CancellationToken.None));
 
@@ -308,10 +310,10 @@ public sealed class RecipeImportServiceTests(DatabaseFixture fixture)
     [Fact]
     public async Task EsdegerBirimYazimi_KartaBaglanir()
     {
-        var context = await CreateContextAsync(("BUAT-01", "Buat", "Adet"));
+        var context = await CreateContextAsync(("END0501", "Buat", "Adet"));
 
         var preview = await WithServiceAsync((service, _) => service.PreviewAsync(
-            Parsed(Row(context.PositionCode, "BUAT-01", "Buat", unit: "Ad")),
+            Parsed(Row(context.PositionCode, "END0501", "Buat", unit: "Ad")),
             new RecipeImportOptions(context.CompanyId, CreateMissingInventoryItems: false),
             CancellationToken.None));
 

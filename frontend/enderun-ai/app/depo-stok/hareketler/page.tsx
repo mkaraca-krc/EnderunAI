@@ -14,22 +14,20 @@ import {
   inventoryMovementService,
   type InventoryMovement,
 } from "@/services/inventory-movement.service";
-
-const MOVEMENT_LABELS: Record<number, string> = {
-  0: "Giriş",
-  1: "Çıkış",
-  2: "Transfer çıkış",
-  3: "Transfer giriş",
-  4: "İade",
-  5: "Sayım düzeltme",
-  6: "Sayım",
-};
+import {
+  STOK_HAREKET_TIPI,
+  stokArtiranHareket,
+  stokAzaltanHareket,
+  stokHareketEtiketi,
+} from "@/lib/inventory/hareket-tipi";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 /** Giriş yeşil, çıkış sarı, düzeltme mavi — rozet tek bakışta okunur. */
 function movementColor(type: number) {
-  if (type === 0 || type === 3 || type === 4) return "green";
-  if (type === 1 || type === 2) return "yellow";
+  if (stokAzaltanHareket(type)) return "yellow";
+  if (stokArtiranHareket(type) || type === STOK_HAREKET_TIPI.Return) {
+    return "green";
+  }
   return "blue";
 }
 
@@ -51,10 +49,10 @@ const columns: DataTableColumn<InventoryMovement>[] = [
     key: "hareket",
     header: "Hareket",
     value: (movement) =>
-      MOVEMENT_LABELS[movement.type] ?? `Hareket ${movement.type}`,
+      stokHareketEtiketi(movement.type),
     render: (movement) => (
       <span className={`erp-status ${movementColor(movement.type)}`}>
-        {MOVEMENT_LABELS[movement.type] ?? `Hareket ${movement.type}`}
+        {stokHareketEtiketi(movement.type)}
       </span>
     ),
   },

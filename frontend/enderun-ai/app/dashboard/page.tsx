@@ -28,6 +28,10 @@ import WorkTaskDashboardWidget from "@/components/tasks/work-task-dashboard-widg
 
 import { apiClient } from "@/lib/api/api-client";
 import { accessRequestService } from "@/services/access-request.service";
+import {
+  STOK_HAREKET_TIPI,
+  stokHareketEtiketi,
+} from "@/lib/inventory/hareket-tipi";
 
 import {
   aiAnalysisService,
@@ -643,13 +647,6 @@ export default function DashboardPage() {
       2: ["İptal", "red"],
     } as const;
 
-    const movementType = {
-      0: "Stok Girişi",
-      1: "Stok Çıkışı",
-      2: "Transfer Çıkışı",
-      3: "Transfer Girişi",
-    } as const;
-
     const stockActivities: DashboardActivity[] =
       stockMovements.map((item) => ({
         id: item.id,
@@ -663,12 +660,13 @@ export default function DashboardPage() {
         documentNumber: item.referenceNumber,
         activityDate: item.movementDate,
         href: "/depo-stok/hareketler",
-        statusLabel:
-          movementType[
-            item.type as keyof typeof movementType
-          ] ?? "Stok Hareketi",
+        statusLabel: stokHareketEtiketi(item.type),
+        // Depodan AZALTAN hareketler sarı. `TransferIn = 2` depoya
+        // GİRİŞTİR; burada bir zamanlar `type === 2` sarı yazıyordu ve
+        // transfer girişini çıkış gibi boyuyordu (2026-09-13 ölçümü).
         statusTone:
-          item.type === 1 || item.type === 2
+          item.type === STOK_HAREKET_TIPI.Issue ||
+          item.type === STOK_HAREKET_TIPI.TransferOut
             ? "yellow"
             : "green",
       }));
