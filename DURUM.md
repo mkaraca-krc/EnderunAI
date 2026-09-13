@@ -14565,3 +14565,70 @@ insan olur, denetim izine düşer).
 Mehmet Bey üretir; ajan sır üretmez. `/etc/enderunai/ajan.env` (root,
 0600). Sohbete, kayda, günlüğe, commit mesajına, betik içine
 YAZILMAYACAK. Sohbete düşerse yanmış sayılır ve değiştirilir.
+
+---
+
+## AJAN/1 — ÜÇ EKLEME (2026-09-13). KİMLİK SALIDAN SONRA AÇILACAK
+
+**Tasarım onaylandı, kimlik AÇILMADI.** Gerekçe kendi dürüstlük notum:
+okuma işlemleri denetim kaydı üretmiyor, iz yalnız **15 gün** duran
+erişim günlüğünde. İzi 15 günden kısa tutulamayan bir kimlik açmak,
+izlenebilirlik iddiasını olduğundan güçlü gösterir. Ayrıca salı bir
+pilot geçişi — canlıya yeni hesap eklemek için en kötü gün. AJAN/1 salı
+listesindeki **hiçbir işi açmıyor**, bekleyebilir.
+
+**SIRA:** (1) günlük saklama süresi kararı → (2) kimlik açılır →
+(3) altı ayaklı sonda geçer → (4) ancak sonra kullanılır.
+
+### 1. GEÇERLİLİK TARİHİ — çıraya dördüncü dal
+
+`deploy/bekci/ajan-gecerlilik.txt` (bugün: **2026-10-13**, 30 gün).
+Çıra kimliğin oluşturma tarihine değil bu tarihe bakar.
+
+| durum | çıkış |
+|---|---|
+| tarih geçerli | **0** |
+| tarih **dolmuş** | **1** — "kimlik kapatılmalı ya da süresi BİLİNÇLİ uzatılmalı" |
+| tarih dosyası **yok** | **3 — ÖLÇEMEDİ** ("son kullanma tarihi olmayan servis kimliği kabul edilmez") |
+| geri alındı | **0** |
+
+Süre uzatmak dosyayı elle düzenleyip commit'lemeyi gerektirir:
+**unutulmuş hesap kırmızı yanar, uzatılmışın kararı kayıtta durur.**
+Gerekçe ölçülmüş: bu hafta "geçici"nin kalıcılaştığını İKİ KEZ gördük
+(rig ayarı 150/153; arşiv UPDATE'i 9 kart). Üçüncüsü bu olmasın.
+
+### 2. HASSASİYET SIRALAMASI — teklife yazıldı
+
+| sıra | izin | neden |
+|---|---|---|
+| **1 — EN HASSAS** | `audit-log.view` | tüm şirkette kimin ne yaptığını okur |
+| 2 | `finance.view` · `current-accounts.view` | ticari veri: çek, cari bakiye |
+| 3 | `accounting.view` · `inventory.view` · `purchasing-receipts.view` | yapılandırma ve operasyon; kişi/bakiye taşımıyor |
+
+> **ÇİZGİ DARALIRSA İLK DÜŞECEK OLAN `audit-log.view`'DİR.**
+> Diğer beşi ölçümün KENDİSİ; bu biri ölçümün KOLAYLIĞI — onsuz
+> DENETIM/2 doğrulaması Mehmet Bey'in ekrandan bakmasıyla da yapılır.
+
+Bir gün daraltma gerekirse **tartışma değil, kayıt konuşur.**
+
+### 3. B PAKETİYLE KESİŞİM — ŞİMDİ YAZILDI
+
+B'nin değişmezi: *"`user-management.edit`'i fiilen taşıyan en az bir
+ETKİN KULLANICI kalmalı."*
+
+> **İLKE: SERVİS KİMLİKLERİ, İNSAN GEREKTİREN DEĞİŞMEZLERDE İNSAN
+> SAYILMAZ.**
+
+Kural bugünün izin listesine değil ilkeye bağlı. Gerekçe: değişmezin
+koruduğu şey "bir hesap var mı" değil **"yetkiyi kullanabilecek bir
+İNSAN var mı"**. Parolası bir dosyada duran, salt okuyan, son kullanma
+tarihi olan bir kimlik o soruya cevap veremez. Sayıya dahil edilirse
+değişmez **kâğıt üstünde sağlanır ama fiilen kilitlenme yaşanır**.
+
+**B'NİN SONDASINA EKLENECEK AYAK (B yazılırken):** *servis kimliği son
+taşıyıcı konumuna geçemez* — son `user-management.edit` taşıyıcısı bir
+servis kimliğine indirgenirse **KIRMIZI**.
+
+**ŞART:** AJAN/1'e herhangi bir **yönetim izni** eklenmesi düşünülürse
+bu ayak ÖNCE yazılmalıdır. Bugün ajanın o izni yok, çakışma pratikte
+doğmuyor.

@@ -39,6 +39,22 @@ Her satırın gerekçesi, bu hafta **fiilen yapmak zorunda kaldığım** bir
 | 5 | `CurrentAccountsView` | cari kartları; 320/120 hesaplarının kullanıldığı yollar |
 | 6 | `AuditLogView` | denetim olaylarının gerçekten düştüğünü canlıda görmek (DENETIM/2 doğrulaması) |
 
+### HASSASİYET SIRALAMASI — altı izin eşit değil
+
+Daraltma gerekirse **tartışma değil, kayıt konuşsun** diye sıra
+önceden yazılıyor:
+
+| sıra | izin | neden bu sırada |
+|---|---|---|
+| **1 — EN HASSAS** | `audit-log.view` | **Tüm şirkette kimin ne yaptığını okur.** Tek bir izinle bütün kullanıcıların eylem geçmişi görünür. |
+| 2 | `finance.view` · `current-accounts.view` | Ticari veri: çek kayıtları, cari bakiyeler. |
+| 3 | `accounting.view` · `inventory.view` · `purchasing-receipts.view` | Yapılandırma ve operasyon verisi; kişi ya da bakiye taşımıyor. |
+
+> **ÇİZGİ DARALIRSA İLK DÜŞECEK OLAN `audit-log.view`'DİR.**
+> Onsuz DENETIM/2'nin canlı doğrulaması yapılamaz; o doğrulama
+> Mehmet Bey'in ekrandan bakmasıyla da yapılabilir. Diğer beşi
+> ölçümün kendisidir, bu biri ölçümün kolaylığıdır.
+
 **AÇIKÇA İSTENMEYENLER** — teklifin bir parçası olarak yazılıyor:
 `SalaryView`, `PayrollView`, `AttendancePayrollView`,
 `PersonnelDocumentView`, `PersonnelView`, `MesajlarView`,
@@ -140,6 +156,24 @@ karşılaştırır.
   **doğrudan KIRMIZI**, sayıya bakmadan.
 - Kimlik henüz yoksa **ÖLÇEMEDİ (çıkış 3)** — "izin yok" ile "kullanıcı
   yok" aynı görünmemeli.
+- **Kimlik GEÇERLİLİK TARİHİNDEN eskiyse KIRMIZI** (aşağı).
+
+### GEÇERLİLİK TARİHİ — duran hesap amacından uzun yaşar
+
+Kimliğe bir **son kullanma tarihi** verilir:
+`deploy/bekci/ajan-gecerlilik.txt` içinde tek satır `YYYY-AA-GG`.
+Çıra, kimliğin `CreatedAtUtc`'sine değil **bu tarihe** bakar: bugün o
+tarihten sonraysa **KIRMIZI**.
+
+**Neden:** bu hafta "geçici"nin kalıcılaştığını İKİ KEZ ölçtük — rig
+ayarı (150/153 `RequiresProject` kapatması) ve arşiv UPDATE'i (9 kartın
+pasife alınması). Üçüncüsü bu olmasın.
+
+**Süre uzatmak bilinçli bir karar olsun:** tarihi ileri almak, dosyayı
+elle düzenlemeyi ve commit'lemeyi gerektirir. Unutulmuş bir hesap
+kırmızı yanar; uzatılmış bir hesabın kararı kayıtta durur.
+
+Önerilen ilk süre: **kimliğin açıldığı günden 30 gün.**
 
 `ucuz-kapilar.sh`a kimlik kurulduğu gün eklenir.
 
@@ -155,3 +189,34 @@ karşılaştırır.
 4. `ajan-izin-cizgisi.sh` `ucuz-kapilar.sh`a eklenir, çizgi 6'da kilitlenir.
 5. Ölçüm yoksa kimlik kullanılmaz; duran bir anahtar değil, **ölçüm
    için alınıp bırakılan** bir araçtır.
+
+
+---
+
+## 7. KİLİTLENME DEĞİŞMEZİYLE ÇAKIŞMA (B paketiyle kesişim)
+
+B paketinin değişmezi: *"`user-management.edit`'i fiilen taşıyan en az
+bir **ETKİN KULLANICI** kalmalı."* Amacı, sistemin kendini kilitlemesini
+önlemek — yetkiyi son taşıyan kişinin yetkisi alınamaz.
+
+**AJAN/1 o sayıya DAHİL EDİLMEYECEK.**
+
+Bugün ajanın `user-management.edit` izni yok, yani çakışma pratikte
+doğmuyor. Ama kural **bugünün izin listesine değil İLKEYE** bağlanıyor:
+
+> **SERVİS KİMLİKLERİ, İNSAN GEREKTİREN DEĞİŞMEZLERDE İNSAN SAYILMAZ.**
+
+Gerekçe: değişmezin koruduğu şey "bir hesap var mı" değil, **"yetkiyi
+kullanabilecek bir İNSAN var mı"**. Parolası bir dosyada duran, salt
+okuyan, son kullanma tarihi olan bir kimlik o soruya cevap veremez.
+Sayıya dahil edilirse, değişmez **kağıt üstünde sağlanır ama fiilen
+kilitlenme yaşanır**: son insan yetkisini kaybeder, sistem "ajan var"
+diye buna izin verir ve kimse içeri giremez.
+
+**B'nin sondasına eklenecek ayak:** *servis kimliği son taşıyıcı
+konumuna geçemez* — yani son `user-management.edit` taşıyıcısı bir
+servis kimliğine indirgenirse **KIRMIZI**.
+
+Bu ayak B paketiyle birlikte yazılacak; AJAN/1 kurulmadan önce
+yazılması ŞART değildir (ajanın o izni yok), ama **AJAN/1'e herhangi
+bir yönetim izni eklenmesi düşünülürse önce bu ayak yazılmalıdır.**

@@ -33,6 +33,7 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CIZGI_DOSYASI="${REPO_ROOT}/deploy/bekci/ajan-izin-cizgisi.txt"
+GECERLILIK_DOSYASI="${REPO_ROOT}/deploy/bekci/ajan-gecerlilik.txt"
 AJAN_KULLANICI="${AJAN_KULLANICI:-ajan-olcum}"
 # Hedef veritabanı ayarlanabilir — YALNIZ bu kapının kendi sondası için.
 # Varsayılan canlıdır; sonda prova zemininde koşup dalların ısırdığını
@@ -107,5 +108,34 @@ if [ "$SAYI" -lt "$CIZGI" ]; then
     exit 1
 fi
 
-echo "[ajan-izin] çizgi tam: ${SAYI}/${CIZGI} · yazma izni yok · rol bağı yok"
+# ── DÖRDÜNCÜ DAL: GEÇERLİLİK TARİHİ ─────────────────────────────────
+#
+# Duran hesap, amacından uzun yaşar. Bu hafta "geçici"nin
+# kalıcılaştığını İKİ KEZ ölçtük (rig ayarı: 150/153; arşiv UPDATE'i:
+# 9 kart). Üçüncüsü bu olmasın.
+#
+# Süre uzatmak BİLİNÇLİ bir karar olsun diye dosya elle düzenlenip
+# commit'lenir; unutulmuş hesap kırmızı yanar, uzatılmışın kararı
+# kayıtta durur.
+if [ ! -f "$GECERLILIK_DOSYASI" ]; then
+    hata "ÖLÇEMEDİ: geçerlilik dosyası yok: $GECERLILIK_DOSYASI"
+    hata "ÖLÇEMEDİ: son kullanma tarihi olmayan bir servis kimliği kabul edilmez."
+    exit 3
+fi
+
+SON_GUN="$(grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "$GECERLILIK_DOSYASI" | head -1)"
+if [ -z "$SON_GUN" ]; then
+    hata "ÖLÇEMEDİ: geçerlilik tarihi okunamadı (YYYY-AA-GG bekleniyor)."
+    exit 3
+fi
+
+BUGUN="$(date -u +%F)"
+if [[ "$BUGUN" > "$SON_GUN" ]]; then
+    hata "GEÇERLİLİK DOLDU: son kullanma ${SON_GUN}, bugün ${BUGUN}."
+    hata "Kimlik ya kapatılmalı (shred -u /etc/enderunai/ajan.env) ya da"
+    hata "süresi BİLİNÇLİ olarak uzatılmalı: ${GECERLILIK_DOSYASI}"
+    exit 1
+fi
+
+echo "[ajan-izin] çizgi tam: ${SAYI}/${CIZGI} · yazma izni yok · rol bağı yok · geçerli (son gün ${SON_GUN})"
 exit 0
