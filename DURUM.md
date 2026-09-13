@@ -15369,3 +15369,59 @@ taşınırsa liste çürümesin diye varlıkları sınanıyor
 **MUHAFIZ MUTASYONLA SINANDI:** yasak deseni körleştirildi →
 `Tarama_BosaDusmuyor_POZITIF_KONTROL` **kırmızı** yandı; geri alındı →
 **4/4 yeşil**. Kör dedektörü, dedektörün kendi testi yakalıyor.
+
+## 9/9 PASİF KART — SALI İÇİN AÇIK RİSK (2026-09-13, ölçüldü)
+
+Canlıda **9 malzeme kartının 9'u da pasif** (`IsActive=false`). Üç soru
+soruldu, üçü de prova zemininde **çağırarak** ölçüldü (Kural 70).
+
+### (1) PASİF KART LİSTEDE GÖRÜNÜYOR MU? — EKRANA GÖRE DEĞİŞİYOR
+
+| yol | çağrı | sonuç (prova: 12 kart, 4 aktif) |
+|---|---|---|
+| yönetim ekranı `/depo-stok` | `getItems({includeInactive:true})` | **12** — hepsi görünüyor |
+| **seçiciler** (hareket formları) | varsayılan uç | **4** — yalnız aktif |
+
+`InventoryController.cs:95`: `if (!includeInactive) query = query.Where(x => x.IsActive);`
+
+**CANLIYA ÇEVİRİSİ: aktif kart 0 → hareket formlarındaki malzeme
+seçicisi BOŞ gelir.** Salı pilotunda kullanıcı mal kabul / çıkış /
+transfer ekranını açtığında seçecek malzeme bulamaz.
+
+(S1 düzeltmesinden sonra yönetim listesinde her satır artık "Pasif"
+rozeti taşıyor — yani sessizce değil, görünür şekilde boş.)
+
+### (2) PASİF KARTA HAREKET GİRİLEBİLİYOR MU? — EVET, ENGEL YOK
+
+İki ayaklı ölçüm, aynı kart, aynı gövde:
+
+| ayak | durum | sonuç |
+|---|---|---|
+| kart **AKTİF** (pozitif kontrol) | **200** | `CIKIS-2026-000008`, muhasebe fişi üretildi |
+| kart **PASİF** | **200** | `CIKIS-2026-000009`, muhasebe fişi üretildi |
+
+**Engelleme yalnız SEÇİCİ düzeyinde; servis düzeyinde yok.** Kimlik
+elindeyse (eski bir sekme, kaydedilmiş bir istek, API çağrısı) pasif
+karta hareket girer ve **yasal deftere fiş yazar**.
+
+Bu bir düzeltme önerisi değil, ÖLÇÜM: pasif kart "arşivlenmiş" demek
+değil, yalnız "seçicide görünmüyor" demek.
+
+### (3) AKTİFLEŞTİRME — EKRAN İŞİ, TOPLU UÇ YOK
+
+`app/depo-stok/malzeme/[id]/page.tsx:535` — kart düzenleme formunda
+aktif/pasif anahtarı **var**. Toplu aktifleştirme ucu **yok**
+(`InventoryController` içinde `isActive` toplu güncelleme yolu 0).
+
+Yani **9 kart tek tek, ekrandan** açılacak. Bu, canlı düzeltmeleri
+Mehmet Bey'in ekrandan yaptığı kayıtlı kararla uyumlu (denetim izinde
+gerçek kullanıcının kimliği durur).
+
+### SALI SABAHI İÇİN KARAR GEREKEN
+
+Pilotta kullanılacak kartlar **aktif olmalı**, yoksa hareket ekranları
+boş seçiciyle açılır. **Kim, ne zaman:** 9 kartın hangilerinin pilotta
+kullanılacağı ve kimin açacağı Mehmet Bey'in kararı. Toplu uç
+olmadığı için işlem kart başına ~1 dakika.
+
+**Bu satır, salı sabahı fark edilmemesi için buraya yazıldı.**
