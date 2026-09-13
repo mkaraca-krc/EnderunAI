@@ -203,6 +203,14 @@ bilgi "doğrulama 1 geçti: $(grep -vc '^#' "$DAMGA") tablonun satır sayısı d
 # `Migrations/*.cs` diye aramak 7 İK göçünü görmez ve "canlıda fazla
 # satır var" diye YANLIŞ alarm üretir (2026-09-13'te üretti).
 KOD_GOC="$(find "$GOC_DIZINI" -name '*.cs' ! -name '*.Designer.cs' ! -name '*ModelSnapshot.cs' -printf '%f\n' 2>/dev/null | sed 's/\.cs$//' | sort)"
+
+# Kapsamı GÜNLÜĞE bas: sayının yanında kök ve desen görünsün. Yanlış kök,
+# ancak kapsam yazılıysa fark edilir (say.sh, Kural 84). Aracın yokluğu
+# kurtarmayı DURDURMAZ — felaket anında depo eksik olabilir.
+if [ -x "$KOK/deploy/scripts/say.sh" ]; then
+    bilgi "göç dosyası taraması: $("$KOK/deploy/scripts/say.sh" --kok "$GOC_DIZINI" --desen '*.cs' \
+        --haric '*.Designer.cs' --haric '*ModelSnapshot.cs' 2>/dev/null || echo 'ÖLÇEMEDİ')"
+fi
 VT_GOC="$(sudo -u postgres psql -Aqt -d "$HEDEF" -c 'select "MigrationId" from "__EFMigrationsHistory" order by 1' 2>/dev/null)"
 
 if [ -z "$KOD_GOC" ] || [ -z "$VT_GOC" ]; then

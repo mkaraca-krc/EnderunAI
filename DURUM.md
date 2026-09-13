@@ -14938,3 +14938,65 @@ dosya) el değmedi.
 
 Sunucu dışı kopya yok. Sunucu giderse bu yordamın yükleyeceği dosya da
 yoktur. KVKK kararı bekliyor.
+
+## ARAÇ — `say.sh`: KURAL 84 ARAÇLA KAPATILDI (2026-09-13)
+
+Kural 84 bugün **üç kez** ısırdı (test özetini kırpan `sed`, asıl testi
+kapsamayan `--filter`, alt klasörü görmeyen `ls Migrations/*.cs`).
+Üç kez tekrarlayan hata disiplinle değil araçla kapatılır.
+
+`deploy/scripts/say.sh` — iki tasarım kararı:
+
+1. **Özyineleme VARSAYILAN.** Tek klasör isteniyorsa açıkça istenir (`--duz`).
+2. **Taranan da basılır.** `214   [kök=… · desen=*.cs · özyinelemeli ·
+   hariç=*.Designer.cs *ModelSnapshot.cs]` — kapsam hatası ancak kapsam
+   görünürse fark edilir. Çıplak "207" hiçbir şey söylemez.
+
+**SIFIRIN İKİ ANLAMI AYRILDI:** kök yoksa **ÖLÇEMEDİ, çıkış 3**; kök var
+ama eşleşme yoksa **0, çıkış 0**. Taranmadığı hâlde "0" basan bir alet,
+yokluğu kanıtlıyormuş gibi görünür.
+
+Tam o hata artık yan yana görünüyor:
+
+    214   [… · özyinelemeli]
+    207   [… · YALNIZ ÜST KLASÖR]
+
+**MUHAFIZ + MUTASYON (Kural 86: iki yön de sınandı).**
+`SayAraciTests` 4 test. Mutasyon: özyineleme varsayılanı kaldırıldı +
+kök yokken sessiz sıfır → **tam 2 KIRMIZI** (`Ozyineleme_Varsayilan`,
+`OlmayanKok_OLCEMEDI`). Geri alındı → **4/4 YEŞİL**.
+
+### ÇEVRİLEN VE ÇEVRİLMEYEN SAYIMLAR
+
+Ölçüm üreten dosya-desen sayımı depoda **iki yerde**:
+
+- `scripts/enderun-kurtarma.sh` → **çevrildi**; göç taramasının kapsamı
+  artık kurtarma günlüğüne basılıyor. Aracın yokluğu kurtarmayı
+  DURDURMUYOR (felaket anında depo eksik olabilir).
+- `scripts/enderun-backup.sh:301` (şifrelenmemiş düz dosya sayımı) →
+  **BİLEREK ÇEVRİLMEDİ.** Yedek betiği son savunma hattıdır ve depo
+  yolundan bağımsız koşabilmelidir; `/var/www/enderun-ai/deploy/...`
+  bağımlılığı eklemek onu zayıflatırdı.
+
+Geri kalan `wc -l`/`grep -c` çağrıları dosya değil, zaten üretilmiş
+çıktının SATIRINI sayıyor — bu aracın konusu değil.
+
+## KOD DA SUNUCUDAYDI — KAPATILDI (2026-09-13)
+
+`main`, `origin/main`in **22 commit** önündeydi (19 değil; bugün üç
+commit daha eklendi) ve itilmemişti. Sunucu gitse yedeklerle birlikte
+KATALOG/1'den kurtarma yordamına kadar bu haftanın işi de giderdi.
+
+1. **Sır taraması:** `sir-tara.py origin/main main` → *"Temiz: 22 commit,
+   83 dosya sürümü tarandı."* (Alet taradığını da basıyor — say.sh ile
+   aynı ilke.)
+2. **Tarayıcının ısırdığı ayrıca kanıtlandı (Kural 48).** Gerçek sırra
+   dokunmadan: `REPO_ROOT` geçici bir depoya çevrildi, sahte bir sır
+   listesi ve sahte bir `.env` kuruldu, sahte değer bir commit'e
+   yazıldı. Tarayıcı yakaladı: *"e26d57c4 · sizinti.py:1 → GERÇEK
+   ÜRETİM SIRRI"*, çıkış 1. Boş küme artık kanıt.
+3. **İtildi ve ÖLÇÜLDÜ:** `git ls-remote origin refs/heads/main` →
+   **07765bae** (yerel main ile aynı). `origin/main..main` kalan **0**,
+   önceki uçtan beri giren **22**.
+
+Veri tarafı hâlâ açık: sunucu dışı yedek kopya yok → `docs/SUNUCU-DISI-KOPYA.md`.

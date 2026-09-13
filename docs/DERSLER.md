@@ -318,6 +318,21 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 86 — BİR ALETİN YANLIŞ KIRMIZISI, YANLIŞ YEŞİLİ KADAR
+  TEHLİKELİDİR.** Felaket anında sağlam yedeği reddettirir. Kurtarma
+  yolundaki her alet, doğru yeşil kadar doğru kırmızı da vermek
+  zorundadır.
+
+  Mehmet Bey'in kuralı (2026-09-13, paket C). Doğuşu: kurtarma betiğinin
+  ön denetimi `gpg --decrypt | head -c 5 | grep -q '^PGDMP'` yazıyordu.
+  `head` boruyu kapatınca `gpg` SIGPIPE ile ölüyor ve `pipefail` açıkken
+  boru, `grep` EŞLEŞSE BİLE başarısız sayılıyor. Sağlam bir yedek
+  "AÇILAMADI" diye reddedildi.
+
+  UYGULAMA: bir kapının yalnız kırmızı yanabildiğini göstermek yetmez;
+  DOĞRU durumda YEŞİL yandığı da ayrıca gösterilir. Kurtarma, yedek ve
+  yayın yolundaki her denetimde iki yön de sınanır.
+
 - **BİR KAPI, EN AZ BİR KEZ KIRMIZI YANMADAN VAR SAYILMAZ.**
   Kapının VARLIĞI, İŞLERLİĞİ değildir. *(Kural Mehmet Bey'e ait,
   9 Eylül; ikimizin adına duruyor.)*
