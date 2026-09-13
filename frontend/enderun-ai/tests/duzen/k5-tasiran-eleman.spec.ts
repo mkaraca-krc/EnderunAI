@@ -26,6 +26,25 @@ const PAROLA = process.env.DUZEN_PAROLA;
 
 const EKRANLAR = ["/dashboard", "/finans/kasa-banka", "/finans/odeme-planlari"];
 
+/*
+ * ═══ NEDEN BİRDEN ÇOK GENİŞLİK (K5-ÜST/1, 2026-09-13) ═══
+ *
+ * Bu sonda 390'da yazıldı ve 390'ı düzeltti. Mehmet Bey canlıdan elle
+ * ölçünce taşmanın 1201–1440 arasında YAŞADIĞI çıktı (1201→70px,
+ * 1280→70px, 1366→48px, 1440→24px, 1536→0). Tek genişlikte koşan bir
+ * ölçüm aleti, başka genişlikteki kusuru göremez ve görmediğini
+ * "yok" diye raporlar.
+ *
+ * 1280 seçildi çünkü `.enderun-dashboard-layout`ın tek sütuna düşme
+ * medya sorgusu `max-width:1200px` — yani 1201 ve üstü İKİ SÜTUNLU
+ * dalı ölçen ilk genişlik. 390 korundu: eski ölçümün zemini.
+ */
+type Olcek = { genislik: number; yukseklik: number };
+const OLCEKLER: Olcek[] = [
+  { genislik: 390, yukseklik: 664 },
+  { genislik: 1280, yukseklik: 800 },
+];
+
 async function girisYap(sayfa: Page) {
   expect(KULLANICI, "DUZEN_KULLANICI yok — rig'i duzen-testi.sh ile koşturun").toBeTruthy();
   const yanit = await sayfa.request.post("/api/auth/login", {
@@ -38,7 +57,10 @@ test("K5: hangi eleman sayfayı taşırıyor", async ({ page }) => {
   test.setTimeout(600_000);
 
   await girisYap(page);
-  await page.setViewportSize({ width: 390, height: 664 });
+
+  for (const olcek of OLCEKLER) {
+  await page.setViewportSize({ width: olcek.genislik, height: olcek.yukseklik });
+  console.log(`\n########## ${olcek.genislik}x${olcek.yukseklik} ##########`);
 
   for (const yol of EKRANLAR) {
     await page.goto(yol, { waitUntil: "domcontentloaded", timeout: 60_000 });
@@ -165,5 +187,6 @@ test("K5: hangi eleman sayfayı taşırıyor", async ({ page }) => {
         `  ${s.etiket.padEnd(38)} sağ=${String(s.sag).padStart(5)} genişlik=${String(s.genislik).padStart(5)}  ${not}`
       );
     }
+  }
   }
 });

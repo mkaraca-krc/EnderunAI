@@ -1,12 +1,31 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * K5 — TELEFONDAN KULLANILABİLİYOR MU (CANLI/1).
+ * K5 — EKRANA SIĞIYOR MU (CANLI/1).
  *
- * 14 ekran, 390x664. Soru üç parçalı ve ÜÇÜ AYRI RAPORLANIR:
+ * 14 ekran, DÖRT GENİŞLİK. Soru üç parçalı ve ÜÇÜ AYRI RAPORLANIR:
  *   1. Ekran AÇILIYOR MU        — hata sınırına düşmüyor mu
  *   2. YATAY TAŞMA VAR MI       — scrollWidth <= innerWidth
  *   3. İSTEMCİ HATASI VAR MI    — console error / sayfa hatası
+ *
+ * ═══ NEDEN DÖRT GENİŞLİK — ASIL DERS BURADA (2026-09-13) ═══
+ *
+ * Bu kapı 14 Eylül'e kadar YALNIZ 390'ı ölçüyordu ve yeşildi. Mehmet Bey
+ * canlıdan elle ölçünce şu çıktı:
+ *
+ *     390 / 950 / 1000 / 1150  → yatay kayma 0
+ *     1201 → 70px · 1280 → 70px · 1366 → 48px · 1440 → 24px · 1536 → 0
+ *
+ * Yani kusur, kapının BAKMADIĞI genişliklerde duruyordu ve tam olarak
+ * bu yüzden kaçtı. TEK GENİŞLİK ÖLÇEN KAPI, ÖTEKİ GENİŞLİKLERİ KORUMAZ —
+ * ve "yeşil" yazarak korunduğu izlenimi verir. Bir ölçüm yalnız ölçtüğü
+ * yolu kanıtlar (Kural 82); bir genişlik de yalnız kendini.
+ *
+ * Seçilen dört genişlik körlüğü kapatmıyor, DARALTIYOR: 390 telefon,
+ * 768 tablet, 1280 dizüstü (medya sorgusunun ÜSTÜ — kaçan kusurun
+ * yaşadığı bölge), 1536 masaüstü. DÜRÜST SINIR: aradaki genişlikler
+ * (ör. 1366, 1440) hâlâ ölçülmüyor; 1280 ve 1536 yeşilken ikisinin
+ * arasında taşma OLABİLİR.
  *
  * ═══ TARAMA TEK NOKTADA İPTAL OLMAZ ═══
  *
@@ -20,7 +39,7 @@ import { expect, test, type Page } from "@playwright/test";
  * Rig'in verisi ince. Bir ekranın boş görünmesi kusur DEĞİL, veri
  * yokluğu olabilir. O yüzden bu sonda "veri gösteriyor mu" diye
  * SORMUYOR — sorsaydı rig inceliğini kusur diye raporlardı (Kural 65).
- * Ölçtüğü şey TELEFONA SIĞIYOR MU ve AÇILIYOR MU.
+ * Ölçtüğü şey EKRANA SIĞIYOR MU ve AÇILIYOR MU.
  *
  * ═══ GİRİŞ YARDIMCISI KOPYALANDI, HATIRLANMADI ═══
  *
@@ -48,6 +67,38 @@ const EKRANLAR = [
   "/raporlar",
 ];
 
+type Olcek = { ad: string; genislik: number; yukseklik: number };
+
+const OLCEKLER: Olcek[] = [
+  { ad: "telefon", genislik: 390, yukseklik: 664 },
+  { ad: "tablet", genislik: 768, yukseklik: 1024 },
+  { ad: "dizüstü", genislik: 1280, yukseklik: 800 },
+  { ad: "masaüstü", genislik: 1536, yukseklik: 864 },
+];
+
+/*
+ * ═══ ÇİZGİ — YALNIZ AŞAĞI İNER ═══
+ *
+ * Her genişlik için "taşan ekran sayısı" üst sınırı. Değerler
+ * 2026-09-13'te ÖLÇÜLEREK kondu, tahminle değil. Bir sayı düşerse
+ * (düzeltme yapıldıysa) çizgi O GÜN aşağı çekilir; YUKARI ÇEKİLMEZ.
+ * Yukarı çekmek, kapıyı kusurun peşinden sürüklemek olur.
+ *
+ * Sayılar burada AYRI AYRI duruyor, toplam olarak değil: toplam,
+ * bir genişlikteki düzelmenin bir başkasındaki gerilemeyi örtmesine
+ * izin verirdi.
+ */
+const CIZGI: Record<number, number> = {
+  390: 0,
+  768: 0,
+  // BİLİNEN BORÇ — K5-ÜST/1: `/dashboard` 1280'de +72px taşıyor
+  // (`.erp-quick-grid` sağ sütunda 4 sütun çiviliyor). Kusur
+  // SINIFLANDIRILDI, düzeltmesi Mehmet Bey'in kararını bekliyor.
+  // K5-ÜST/1 kapanınca BU SAYI 0'A İNECEK.
+  1280: 1,
+  1536: 0,
+};
+
 async function girisYap(sayfa: Page) {
   expect(KULLANICI, "DUZEN_KULLANICI yok — rig'i duzen-testi.sh ile koşturun").toBeTruthy();
 
@@ -57,20 +108,18 @@ async function girisYap(sayfa: Page) {
   expect(yanit.status(), "Giriş: " + (await yanit.text()).slice(0, 200)).toBe(200);
 }
 
-test("K5: 14 ekran 390x664'te açılıyor ve yatay taşmıyor", async ({ page }) => {
-  test.setTimeout(900_000);
+type Satir = {
+  yol: string;
+  olcemedi?: string;
+  genislik?: number;
+  tasma?: number;
+  hataSayisi?: number;
+  hataOrnegi?: string;
+};
 
-  await girisYap(page);
-  await page.setViewportSize({ width: 390, height: 664 });
+async function olcekiTara(sayfa: Page, olcek: Olcek): Promise<Satir[]> {
+  await sayfa.setViewportSize({ width: olcek.genislik, height: olcek.yukseklik });
 
-  type Satir = {
-    yol: string;
-    olcemedi?: string;
-    genislik?: number;
-    tasma?: number;
-    hataSayisi?: number;
-    hataOrnegi?: string;
-  };
   const satirlar: Satir[] = [];
 
   for (const yol of EKRANLAR) {
@@ -78,16 +127,16 @@ test("K5: 14 ekran 390x664'te açılıyor ve yatay taşmıyor", async ({ page })
     const dinle = (m: { type: () => string; text: () => string }) => {
       if (m.type() === "error") hatalar.push(m.text().slice(0, 120));
     };
-    page.on("console", dinle);
+    sayfa.on("console", dinle);
     const sayfaHatasi = (e: Error) => hatalar.push("pageerror: " + e.message.slice(0, 120));
-    page.on("pageerror", sayfaHatasi);
+    sayfa.on("pageerror", sayfaHatasi);
 
     try {
-      await page.goto(yol, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      await sayfa.goto(yol, { waitUntil: "domcontentloaded", timeout: 60_000 });
       // Yerleşim otursun; ağ boşta kalmayabilir (yoklama var).
-      await page.waitForTimeout(2_500);
+      await sayfa.waitForTimeout(2_500);
 
-      const olcum = await page.evaluate(() => ({
+      const olcum = await sayfa.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,
         innerWidth: window.innerWidth,
       }));
@@ -105,72 +154,126 @@ test("K5: 14 ekran 390x664'te açılıyor ve yatay taşmıyor", async ({ page })
         olcemedi: hata instanceof Error ? hata.message.slice(0, 110) : String(hata),
       });
     } finally {
-      page.off("console", dinle);
-      page.off("pageerror", sayfaHatasi);
+      sayfa.off("console", dinle);
+      sayfa.off("pageerror", sayfaHatasi);
     }
   }
 
-  console.log("\n=== K5 TARAMASI (390x664) ===");
-  console.log(
-    "ekran".padEnd(30) + "scrollW".padStart(9) + "taşma".padStart(7) + "  hata"
-  );
-  for (const s of satirlar) {
-    if (s.olcemedi) {
-      console.log(s.yol.padEnd(30) + "   ÖLÇEMEDİ — " + s.olcemedi);
+  return satirlar;
+}
+
+test("K5: 14 ekran dört genişlikte açılıyor ve yatay taşmıyor", async ({ page }) => {
+  test.setTimeout(1_800_000);
+
+  await girisYap(page);
+
+  const sonuc = new Map<number, Satir[]>();
+
+  for (const olcek of OLCEKLER) {
+    try {
+      sonuc.set(olcek.genislik, await olcekiTara(page, olcek));
+    } catch (hata) {
+      // Bir ÖLÇEK tamamen düşerse ötekiler yine ölçülür; eksiklik
+      // aşağıdaki tarama sağlığı sayacında KIRMIZI olarak görünür.
+      console.log(
+        `\n!! ${olcek.genislik}px ÖLÇEĞİ DÜŞTÜ: ` +
+          (hata instanceof Error ? hata.message.slice(0, 160) : String(hata))
+      );
+    }
+  }
+
+  const ozet: { genislik: number; tasan: number; cizgi: number; kirmizi: boolean }[] = [];
+
+  for (const olcek of OLCEKLER) {
+    const satirlar = sonuc.get(olcek.genislik);
+    console.log(`\n=== K5 TARAMASI — ${olcek.genislik}x${olcek.yukseklik} (${olcek.ad}) ===`);
+
+    if (!satirlar) {
+      console.log("ÖLÇEK HİÇ ÖLÇÜLEMEDİ");
       continue;
     }
+
+    console.log("ekran".padEnd(30) + "scrollW".padStart(9) + "taşma".padStart(7) + "  hata");
+    for (const s of satirlar) {
+      if (s.olcemedi) {
+        console.log(s.yol.padEnd(30) + "   ÖLÇEMEDİ — " + s.olcemedi);
+        continue;
+      }
+      console.log(
+        s.yol.padEnd(30) +
+          String(s.genislik).padStart(9) +
+          String(s.tasma).padStart(7) +
+          "  " +
+          (s.hataSayisi ? `${s.hataSayisi} · ${s.hataOrnegi}` : "-")
+      );
+    }
+
+    const olculen = satirlar.filter((s) => !s.olcemedi);
+    const olcemeyen = satirlar.filter((s) => s.olcemedi).map((s) => s.yol);
+    const tasan = olculen.filter((s) => (s.tasma ?? 0) > 0);
+    const hatali = olculen.filter((s) => (s.hataSayisi ?? 0) > 0).map((s) => s.yol);
+
     console.log(
-      s.yol.padEnd(30) +
-        String(s.genislik).padStart(9) +
-        String(s.tasma).padStart(7) +
-        "  " +
-        (s.hataSayisi ? `${s.hataSayisi} · ${s.hataOrnegi}` : "-")
+      `ÖLÇÜLEN ${olculen.length}/${satirlar.length}` +
+        (olcemeyen.length ? `  ·  ÖLÇEMEDİ: ${olcemeyen.join(", ")}` : "")
     );
+    console.log(
+      `YATAY TAŞAN : ${tasan.length}  ` +
+        tasan.map((s) => `${s.yol}(+${s.tasma}px)`).join(", ")
+    );
+    console.log(`İSTEMCİ HATASI: ${hatali.length}  ${hatali.join(", ")}`);
+
+    const cizgi = CIZGI[olcek.genislik] ?? 0;
+    ozet.push({
+      genislik: olcek.genislik,
+      tasan: tasan.length,
+      cizgi,
+      kirmizi: olculen.length < EKRANLAR.length || tasan.length > cizgi,
+    });
   }
 
-  const olculen = satirlar.filter((s) => !s.olcemedi);
-  const olcemeyen = satirlar.filter((s) => s.olcemedi).map((s) => s.yol);
-  const tasan = olculen.filter((s) => (s.tasma ?? 0) > 0).map((s) => s.yol);
-  const hatali = olculen.filter((s) => (s.hataSayisi ?? 0) > 0).map((s) => s.yol);
+  console.log("\n=== K5 ÖZET (genişlik başına AYRI) ===");
+  console.log("genişlik".padEnd(12) + "taşan".padStart(7) + "çizgi".padStart(7) + "  durum");
+  for (const s of ozet) {
+    console.log(
+      `${s.genislik}px`.padEnd(12) +
+        String(s.tasan).padStart(7) +
+        String(s.cizgi).padStart(7) +
+        (s.kirmizi ? "  KIRMIZI" : "  yeşil")
+    );
+  }
+  console.log(`ÖLÇÜLEN GENİŞLİK: ${ozet.length}/${OLCEKLER.length}`);
 
-  console.log(
-    `\nÖLÇÜLEN ${olculen.length}/${satirlar.length}` +
-      (olcemeyen.length ? `  ·  ÖLÇEMEDİ: ${olcemeyen.join(", ")}` : "")
-  );
-  console.log(`YATAY TAŞAN : ${tasan.length}  ${tasan.join(", ")}`);
-  console.log(`İSTEMCİ HATASI: ${hatali.length}  ${hatali.join(", ")}`);
-
-  /*
-   * TEK İDDİA: ÖLÇÜM YAPILDI MI.
-   *
-   * Taşma ve istemci hatası bu turda RAPORLANIYOR, kapıya
-   * BAĞLANMIYOR — karar Mehmet Bey'in ("önce listeyi getir").
-   * Ama sondanın kendisi ölçebilmiş olmalı: ölçülemeyen ekran kalırsa
-   * liste eksiktir ve eksik liste, "temiz" diye okunabilir.
-   */
   /*
    * ═══ ÖNCE ÖLÇÜMÜN YAŞADIĞINI KANITLA (Kural 48) ═══
    *
    * "Taşma 0" tek başına, HİÇ EKRAN ÖLÇÜLMEDİĞİNDE de doğrudur.
-   * Liste boşalırsa ya da tarama erken biterse `tasan` yine boş çıkar
-   * ve sonda yeşil yanar — ölçüm ölmüş, dünya değişmemiş olur.
-   *
-   * Bu yüzden önce ÖLÇÜLEN EKRAN SAYISI sınanıyor.
+   * Liste boşalırsa, bir ölçek düşerse ya da tarama erken biterse
+   * taşan sayısı yine 0 çıkar ve sonda yeşil yanar — ölçüm ölmüş,
+   * dünya değişmemiş olur.
    *
    * BU İDDİA "BAK-VE-KARAR" SINIFINDANDIR: bozulması kusur göstermez.
-   * Bir ekran bilerek kaldırılmış OLABİLİR (o zaman liste güncellenir)
+   * Bir genişlik bilerek çıkarılmış OLABİLİR (o zaman liste güncellenir)
    * ya da tarama erken bitmiştir (o zaman sebep aranır). İHLAL'den
    * ayrı okunmalı.
    */
   expect(
-    olculen.length,
-    `ÖLÇÜM ÖLDÜ: yalnız ${olculen.length} ekran ölçüldü (14 olmalı). ` +
+    ozet.length,
+    `ÖLÇÜM ÖLDÜ: yalnız ${ozet.length} genişlik ölçüldü (${OLCEKLER.length} olmalı). ` +
       "Taşma bulgusu bu hâlde hiçbir şey söylemez."
-  ).toBeGreaterThanOrEqual(EKRANLAR.length);
+  ).toBe(OLCEKLER.length);
 
+  for (const s of ozet) {
+    expect(
+      s.tasan,
+      `${s.genislik}px: ${s.tasan} ekran yatay taşıyor, çizgi ${s.cizgi}. ` +
+        "Çizgi YALNIZ AŞAĞI iner — yukarı çekmek kapıyı kusurun peşinden sürüklemek olur."
+    ).toBeLessThanOrEqual(s.cizgi);
+  }
+
+  const eksikOlcek = ozet.filter((s) => s.kirmizi && s.tasan <= s.cizgi);
   expect(
-    olcemeyen,
-    `ÖLÇEMEDİ kalan ekran(lar): ${olcemeyen.join(", ")} — liste EKSİK, ` +
-      "bu ekranlar hakkında hiçbir sonuç yok"
+    eksikOlcek.map((s) => s.genislik),
+    "Bu genişlik(ler)de 14 ekranın hepsi ölçülemedi — liste EKSİK"
   ).toEqual([]);
 });

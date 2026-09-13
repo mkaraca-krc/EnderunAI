@@ -13084,3 +13084,102 @@ biter (ayırma ve ısıtma yine de kalır — ikisi de başka yolları korur).
 - Gerçek squash'ın ek işleri var (üretim `__EFMigrationsHistory`
   tablosunun yeniden tohumlanması, geri alma yolu). Bu ölçüm onların
   RİSKİNİ değil, KAZANCINI söylüyor.
+
+---
+
+## K5-ÜST/1 — 1280 px'TE `/dashboard` TAŞMASI (2026-09-13)
+
+Mehmet Bey canlıdan ölçtü; ben prova zemininde çağırarak doğruladım.
+
+    390 / 768 / 1536 → taşma 0
+    1280            → /dashboard +72 px   (canlıda +70 px)
+
+**K5 GERİLEMESİ DEĞİL.** 390 düzeltmesi yerinde duruyor; bu, kapının
+BAKMADIĞI bir genişlikte önceden var olan kusur.
+
+### ÜÇLÜ SINIFLANDIRMA — ÖLÇÜLEN ATA ZİNCİRİ
+
+    a                                            w= 106  min-width=auto
+    div.erp-quick-grid                           w= 274  display=grid
+                                 cols=85.14px 86.02px 92.23px 105.59px
+    div.erp-panel.dashboard-quick-actions-widget w= 320
+    aside                                        w= 320
+    section.enderun-dashboard-layout             w=1016  cols=678px 320px
+    body                                         w=1280
+
+**SINIF: (c) GENİŞLİĞİ ÇİVİLEYEN DÜZEN KURALI.** Gerekçe ölçümden:
+
+- (a) meşru geniş içerik DEĞİL: taşıran şey dört kısa kısayol bağlantısı,
+  kaydırılması gereken bir tablo değil. Sondanın "kayan atası var mı"
+  kontrolü de `KAYAN ATASI YOK` dedi — yani sayfayı taşırıyor.
+- (b) sebepsiz geniş içerik DEĞİL: içeriğin kendi min-content genişlikleri
+  85–106 px, makul.
+- (c) KURAL: `.erp-quick-grid{grid-template-columns:repeat(4,1fr)}`.
+  `1fr` = `minmax(auto,1fr)` ve `auto` alt sınırı MIN-CONTENT'tir; dört
+  sütunun min-content toplamı 369 px + boşluklar, kap ise 274 px. Sütunlar
+  küçülmeyi REDDEDİYOR. Ölçülen sütun genişliklerinin EŞİT OLMAMASI
+  (85/86/92/106) bunun kanıtı: eşit `1fr` dağıtımı değil, min-content
+  tabanına oturmuş sütunlar.
+
+Bu, 390'da düzeltilen kusurun AYNI AİLESİ (`1fr` → `minmax(0,1fr)`) ve
+PN4'teki `min-height:0` kusurunun aynı ailesi: varsayılan otomatik alt
+sınır küçülmeyi reddettirir.
+
+**Mehmet Bey'in okuması kısmen doğrulandı, kısmen düzeltildi:**
+`minmax(320px,.8fr)`ın 320 px'lik tabanı 1280'de BAĞLAYICI DEĞİL — `fr`
+oranının kendisi zaten 320 px veriyor (998 × 0,8/2,5 = 319,4). Yani sağ
+sütunun dar olması tabandan değil orandan geliyor; taşmayı yapan, o dar
+sütunun İÇİNDEKİ dört sütunlu ızgara.
+
+### İKİNCİ BULGU — ÖLÜ DÜZELTME (aynı seçici iki kez tanımlı)
+
+`globals.css` içinde `.erp-quick-grid` İKİ KEZ tanımlı:
+
+| satır | kural |
+|---|---|
+| 664 | `repeat(2, minmax(0, 1fr))` · gap 12 |
+| **1092** | **`repeat(4, 1fr)`** · gap 10 ← SONRA GELDİĞİ İÇİN KAZANIYOR |
+
+Aynı özgüllük, sonraki kazanır. Yani 664'teki `minmax(0,1fr)` düzeltmesi
+YAZILMIŞ AMA HİÇ ÇALIŞMIYOR — sessizce ölü. Bir düzeltmenin varlığı,
+etkisinin kanıtı değil.
+
+### DÜZELTME YAPILMADI — KARAR ÇATALI VAR
+
+`.erp-quick-grid` 10'dan fazla ekranda kullanılıyor (gösterge panosu,
+cari ekstre, demirbaş, iadeler, iş programı, kur değerlemesi, kasa
+ödeme defteri…). Üç seçenek ve hepsinin görsel bedeli farklı:
+
+1. `repeat(4, minmax(0,1fr))` — en küçük dokunuş, taşmayı keser; ama dar
+   sütunda dört sütun 63 px'e iner, etiketler sıkışır.
+2. 1092'deki kopyayı SİLMEK — 664'teki ölü düzeltme canlanır, her yerde
+   2 sütun olur; gösterge panosunda doğru, GENİŞ kaplarda seyrek görünür.
+3. Kabı esas alan sarma: `repeat(auto-fit, minmax(min(120px,100%), 1fr))`
+   — dar kapta 2, geniş kapta çok sütun; en doğrusu ama 10+ ekranın
+   görünümünü değiştirir.
+
+Üçü de "tek kural düzeltmesi" sınırını aşıp 10+ ekranın görünümüne
+dokunduğu için KARAR MEHMET BEY'İN. Ölçüm hazır, düzeltme bekliyor.
+
+### K5 KAPISI DÖRT GENİŞLİĞE ÇIKARILDI
+
+Kapı 390'dan başka genişliğe bakmıyordu ve kusuru TAM BU YÜZDEN kaçırdı.
+Artık 390 / 768 / 1280 / 1536 ölçüyor, her biri AYRI sayı raporluyor
+(toplam değil — toplam, bir genişlikteki düzelmenin başkasındaki
+gerilemeyi örtmesine izin verirdi). Çizgi yalnız aşağı iner. Ölçülen
+genişlik 4'ün altına düşerse KIRMIZI (BAK-VE-KARAR: ölçüm ölmüş olabilir).
+
+**KAPI İLK KOŞUSUNDA KIRMIZI YANDI** ve sahte bir mutasyonla değil,
+gerçek kusurla: 1280 px → 1 taşan, çizgi 0. Sonra çizgi bugünkü ölçüme
+(1280 → 1) çekildi; K5-ÜST/1 kapanınca 0'a inecek.
+
+| genişlik | taşan | çizgi |
+|---|---|---|
+| 390 | 0 | 0 |
+| 768 | 0 | 0 |
+| 1280 | **1** (`/dashboard` +72px) | 1 (bilinen borç) |
+| 1536 | 0 | 0 |
+
+**DÜRÜST SINIR:** dört genişlik körlüğü kapatmıyor, daraltıyor. 1366 ve
+1440 hâlâ ölçülmüyor; Mehmet Bey'in canlı ölçümüne göre oralarda da
+taşma var (48 px ve 24 px) ve kapı onları GÖRMEZ.
