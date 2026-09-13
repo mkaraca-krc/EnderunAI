@@ -181,13 +181,34 @@ public sealed class DepodanZimmetService(
         // GİDER YAZILIR MI — karar tek yerde (ZimmetGiderKurali).
         var giderYazilir = ZimmetGiderKurali.GiderYazilir(kalem.Type);
 
+        var masrafMerkezi = istek.ProjectId.HasValue
+            ? await db.Projects
+                .Where(x => x.Id == istek.ProjectId.Value)
+                .Select(x => x.Code)
+                .SingleOrDefaultAsync(cancellationToken)
+            : null;
+
+        if (string.IsNullOrWhiteSpace(masrafMerkezi))
+        {
+            masrafMerkezi = await db.Warehouses
+                .Where(x => x.Id == cikisHareketi.WarehouseId)
+                .Select(x => x.Branch.CostCenterCode ?? x.Branch.Code)
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+
         if (giderYazilir && maliyetler.Count > 0)
         {
             cikisHareketi.AccountingVoucherId = await consumptionPoster.PostIssueAsync(
                 istek.CompanyId,
                 maliyetler[0],
                 istek.ProjectId,
-                projectCode: null,
+                // MASRAF MERKEZİ ARTIK GEÇİLİYOR (E5 yan bulgusu,
+                // 2026-09-13). Burada `null` sabitti; zimmet gider
+                // yazdığında 740'a düşüyor ve 740 masraf merkezini
+                // zorunlu tutuyor — yani bu yol PROJE SEÇİLSE BİLE
+                // patlıyordu. Üç kademe: proje kodu → deponun şubesinin
+                // masraf merkezi → şube kodu.
+                projectCode: masrafMerkezi,
                 reference: cikisHareketi.ReferenceNumber,
                 movementDate: tarih,
                 movementId: cikisHareketi.Id,

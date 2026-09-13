@@ -13548,3 +13548,155 @@ olabilir; DOM ölçümünde böyle bir an yok.
 **DÜRÜST SINIR:** ölçüm 1536 px'te ve `/depo-stok`ta yapıldı, programlı
 kaydırmayla. Fare tekerleği/dokunmatik ivmeli kaydırmanın ürettiği
 kareler ölçülmedi.
+
+---
+
+## E4 + E5 + K3 — TEK SINIF OLARAK ÖLÇÜLDÜ VE DÜZELTİLDİ (2026-09-13)
+
+Sınıf: **"fiş üreticileri, hesabın zorunlu kıldığı boyutu (proje /
+masraf merkezi) geçirmiyor."**
+
+### (a) FİŞ ÜRETİCİSİ ENVANTERİ
+
+Fiş kuran 7 üretici var (+4 altyapı dosyası). Canlı hesap planı:
+**485 hesap proje**, **89 hesap masraf merkezi** zorunlu. Masraf merkezi
+zorunluluğu keyfî değil — 7'li (maliyet/gider) sınıfın tamamına tutarlı
+konmuş (740: 39, 770: 44, 710/720/730/760/780: 6).
+
+| üretici | proje | masraf merkezi | yazdığı hesaplar | patlar mı |
+|---|---|---|---|---|
+| `GoodsReceiptAccountingPoster` | **null** | null | 150/153 · 379.01 | **EVET** (150/153 proje ister) |
+| `StockConsumptionPoster` (projeli) | geçiyor | geçiyor | 740.03.09 · 150/153 | hayır (ölçüldü, çalıştı) |
+| `StockConsumptionPoster` (projesiz) | null | **null** | 770 · 150/153 | **EVET** (770 merkez, 150 proje ister) |
+| `StockCountVoucherPoster` | **null** | null | 150/153 · 689.02 · 649.03 | **EVET** (150/153) |
+| `DepodanZimmetService` | geçiyor | **HER ZAMAN null** | 740 | **EVET — projeyle bile** |
+| `RetailSaleVoucherPoster` | null | null | (satış hesapları) | ölçülmedi |
+| `VatAccrualService` | null | geçiyor | 191 · 391 (boyutsuz) | hayır |
+| `CurrencyValuationService` | null | null | 646 · 656 (boyutsuz) | hayır |
+| `AccountingIntegrationService` | 30'un 6'sı null | 30'un 5'i null | 320, 720, 740, 770… | kısmen |
+
+### (b) KAÇ YOL PATLAYACAKTI: **DÖRT** (stok modülünde)
+
+mal kabul · projesiz çıkış · projesiz sayım/düzeltme · depodan zimmet.
+Salı sabahı sırayla patlayacaklardı.
+
+**EN AĞIR KANIT:** canlıda `accounting_voucher_lines` içinde
+150/153/770/740.03.09/379.01 hesaplarına ait **TEK SATIR YOK.**
+Stok→muhasebe hattı üretimde **hiç çalışmamış.**
+
+**KENDİ RAPORUMU DÜZELTTİM:** "sayım/düzeltme çalışıyor" demiştim.
+Çalışmıyormuş — kendi rig ayarım (150/153 proje zorunluluğunu kapatmam)
+maskelemişti. Zorunluluk geri açılınca projesiz sayım da 500 verdi,
+projeli sayım geçti.
+
+### NEDEN MEVCUT TESTLER YAKALAMADI (Kural 81)
+
+`TestDataFactory.EnsureStockAccountsAsync` hesapları
+`RequiresProject`/`RequiresCostCenter` **bayrakları olmadan** kuruyor.
+Zemin üretimi taklit etmiyordu: stok muhasebesi testleri yeşilken üretim
+hiç çalışmıyordu. Yeni sonda bayrakları bilerek üretimdeki gibi kuruyor.
+
+### (c) DÜZELTİLEN: E5 — MASRAF MERKEZİ ÜÇ KADEMELİ
+
+**Varsayılan uydurulmadı, ölçülerek bulundu:** `branches.CostCenterCode`
+zaten var, dolu (**`MERKEZ`**, Merkez Ofis, `IsHeadOffice=t`) ve canlıda
+10 çek fişi satırında fiilen kullanılıyor. Altı deponun altısı da bu
+şubeye bağlı. Emsal kod da hazırdı: `AccountingIntegrationService:283`
+aynı üç kademeyi zaten yazıyor.
+
+Kademe: **proje kodu → deponun şubesinin masraf merkezi → şube kodu.**
+`InventoryController` (çıkış + düzeltme) ve `DepodanZimmetService`
+bağlandı. **Göç gerekmedi.**
+
+ÇAĞIRARAK DOĞRULANDI — projesiz çıkış fişi:
+
+    770 Genel Yönetim Giderleri | borç 25,00 | masraf merkezi=MERKEZ | proje=BOŞ
+    150 İlk Madde ve Malzeme    | alacak 25,00 | masraf merkezi=MERKEZ | proje=BOŞ
+
+### (c) DÜZELTİLMEYEN: E4 — KARAR MUHASEBEDE
+
+E4'ün istenen düzeltmesi ("üretici projeyi belgeden okusun") **ölçümle
+çelişiyor ve uygulanmadı.** Üç gerekçe:
+
+1. **Kodun yerleşik gerekçesine ters.** `StockConsumptionPoster:69-72`:
+   *"Mal kabulde proje yazılmıyordu çünkü depoya giren mal henüz bir
+   projenin maliyeti değil, BİLANÇO KALEMİYDİ."* Projeyi mal kabulde
+   yazmak, proje maliyetini çıkışta değil GİRİŞTE tanımak demek —
+   defterin anlamını değiştirir.
+2. **Sayımda okunacak proje YOK.** Merkez deposunun sayım farkının
+   projesi yoktur. "Belgeden oku" oraya uygulanamaz.
+3. **Bayrağın kendisi şüpheli.** `150/153` bilanço hesabı. Aynı bayrak
+   **430 bilanço hesabında** açık — içinde **`120 Alıcılar`** ve HER
+   müşteri alt hesabı (120.001, 120.002, …). Bir alıcı alt hesabının
+   proje istemesi düşünülmüş bir karar değil, **toplu varsayılan**
+   görünüyor.
+
+**BEKLEYEN KARAR (Mehmet Bey + mali müşavir):** 150/153 (ve muhtemelen
+diğer bilanço hesapları) `RequiresProject = false` mı olmalı? Bayrak
+ekrandan düzenlenebiliyor (`/muhasebe/hesap-plani/{id}`), göç gerekmez.
+Karar verilmeden mal kabul ve projesiz sayım fişlenemez.
+
+### (d) ORTAK SONDA — `FisBoyutZorunluluguTests`
+
+Üretici başına değil, **kapının kendisine**: `AccountingVoucherService`in
+satır doğrulaması. Yarın eklenecek onuncu üretici de bu kapıdan geçecek.
+
+| iddia | sonuç |
+|---|---|
+| proje zorunlu hesaba **projesiz** → KIRMIZI | ✓ |
+| aynı hesap **projeyle** → yeşil (pozitif kontrol) | ✓ |
+| masraf merkezi zorunlu hesaba **merkezsiz** → KIRMIZI | ✓ |
+| aynı hesap **merkezle** → yeşil (pozitif kontrol) | ✓ |
+| boyutsuz hesap her hâlde geçer (ölçüm sağlığı) | ✓ |
+
+### K3 — SINIF DÜZELTMESİ: DOĞRULAMA 400, ÇÖKÜŞ 500
+
+Ayrım **ölçülerek** kuruldu: depoda 207 `throw new ArgumentException`
+var; **199'u `paramName` taşımıyor** (düz Türkçe iş kuralı mesajı),
+8'i taşıyor (programlama sözleşmesi — .NET mesaja "(Parameter 'x')"
+ekler, kullanıcıya gösterilmemeli).
+
+- `ArgumentException` (paramName **yok**) → **400 + kendi mesajı**
+- `*ValidationException` türleri → **400 + kendi mesajı**
+- `ArgumentException` (paramName **var**), `InvalidOperationException`
+  ve geri kalan her şey → **500 + genel mesaj** (değişmedi)
+
+`InvalidOperationException` bilerek dışarıda: 66 dosyada geçiyor ve
+çoğu "bu duruma hiç düşmemeliydi" anlamında; 400'e çevirmek gerçek
+çöküşleri sessizleştirirdi.
+
+Doğrulama ihlali günlükten **silinmiyor**, seviyesi `Warning`'e
+düşüyor: sessizce yutulursa "kullanıcı neden ilerleyemiyor" sorusunun
+izi kalmaz, `Error` kalırsa gerçek çöküşler gürültüde kaybolur.
+
+**MUTASYONLAR:**
+
+| mutasyon | sonuç |
+|---|---|
+| doğrulama dalını kaldır (eski hâl, hepsi 500) | 3 iddia KIRMIZI ✓ |
+| **hepsini 400 yap (gizli hata yutma)** | pozitif kontrol KIRMIZI ✓ — ayrıca mevcut `PortalUcundaIslenmeyenHata` muhafızı da yandı |
+| geri al | 6/6 yeşil |
+
+**ÇAĞIRARAK DOĞRULANDI:** projesiz çıkış denemesi artık
+
+    400 · "150 hesabında proje seçimi zorunludur."
+
+eskiden `500 · "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin…"`
+
+### E3 — KAYNAK BULUNDU, TEKRAR KOŞMAZ
+
+9 kartın `UpdatedAtUtc` damgası **mikrosaniyesine kadar aynı**
+(2026-08-19 11:48:21.055681) ve `UpdatedByUserId` boş → tek bir elle
+çalıştırılmış `UPDATE`. Commit `97399296` ("S0: stok kartı arşivi gerçek
+kural oldu", 11:26:54) mesajında bunu kendisi yazıyor: *"Veri arşivi
+(9 kart) bu yayından SONRA çalıştırılacak."* 21,5 dakika sonra koşulmuş.
+
+**Göç değil** (207 göç dosyası tarandı; `inventory_items` üzerinde
+`UPDATE`/`defaultValue:false` yazan tek göç yok), **seeder değil**
+(`DatabaseSeeder` kartlara dokunmuyor), **zamanlanmış iş değil**
+(tek cron: bellek ölçümü). **TEKRAR KOŞMAZ.**
+
+**AMA BİLİNÇLİ BİR KARARDI** ("temiz başlangıç"). 9 kartı topluca aktif
+etmek o kararı geri alır. Doğru hamle: mal kabulde GERÇEKTEN kullanılacak
+kartları seçerek açmak. Liste ekranı arşivi zaten gösteriyor
+(`includeInactive=true`).

@@ -1092,12 +1092,25 @@ public sealed class InventoryController(
         // maliyeti sıfır olan kart hiç faturalı girmemiş demektir,
         // maliyeti bilinmiyordur. Sıfır tutarlı fiş kesmek bilgi
         // üretmez, kesmemekse farkı mutabakat raporunda görünür bırakır.
-        var projectCode = request.ProjectId.HasValue
-            ? await db.Projects
-                .Where(x => x.Id == request.ProjectId.Value)
-                .Select(x => x.Code)
-                .SingleOrDefaultAsync(cancellationToken)
-            : null;
+        //
+        // MASRAF MERKEZİ ÜÇ KADEMELİ ÇÖZÜLÜYOR (E5, ölçüldü 2026-09-13).
+        //
+        // Eskiden yalnız proje kodu geçiliyordu; proje seçilmeyince
+        // masraf merkezi BOŞ kalıyordu. Ekran "Proje (boş = merkez
+        // sarfiyatı)" diyor, yani projesiz çıkış MEŞRU bir yol — ama
+        // projesiz çıkış 770'e yazıyor ve hesap planında 770 masraf
+        // merkezini ZORUNLU tutuyor (7'li sınıfın 89 hesabının hepsinde
+        // aynı kural). Sonuç: her merkez sarfiyatı denemesi
+        // "770 hesabında masraf merkezi zorunludur" ile düşüyordu.
+        //
+        // Varsayılan YENİ BİR AYAR DEĞİL: `branches.CostCenterCode`
+        // zaten var, dolu ("MERKEZ", Merkez Ofis) ve canlıda çek
+        // fişlerinde fiilen kullanılıyor. Altı deponun altısı da bir
+        // şubeye bağlı. Desen `AccountingIntegrationService`ten birebir
+        // alındı — orada aynı üç kademe zaten yazılı.
+        //
+        var projectCode = await CozMasrafMerkeziAsync(
+            db, request.ProjectId, stock.WarehouseId, cancellationToken);
 
         if (totalCost > 0)
         {
@@ -1312,12 +1325,9 @@ public sealed class InventoryController(
 
         if (varianceCost > 0)
         {
-            var projectCode = request.ProjectId.HasValue
-                ? await db.Projects
-                    .Where(x => x.Id == request.ProjectId.Value)
-                    .Select(x => x.Code)
-                    .SingleOrDefaultAsync(cancellationToken)
-                : null;
+            // Masraf merkezi üç kademeli — yukarıdaki gerekçe.
+            var projectCode = await CozMasrafMerkeziAsync(
+                db, request.ProjectId, stock.WarehouseId, cancellationToken);
 
             movement.AccountingVoucherId = await consumptionPoster.PostAdjustmentAsync(
                 stock.Warehouse.CompanyId,
@@ -1347,4 +1357,36 @@ public sealed class InventoryController(
 
     private static DateTime ToUtc(DateTime value) =>
         DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    /// <summary>
+    /// MASRAF MERKEZİ: proje kodu → deponun şubesinin masraf merkezi →
+    /// şube kodu.
+    ///
+    /// Hesap planında 7'li sınıfın 89 hesabı masraf merkezini zorunlu
+    /// tutuyor (740, 770, 720…). Projesiz çıkış 770'e yazdığı için kod
+    /// boş kalamaz. "Merkez" karşılığı uydurulmuyor: `branches`
+    /// tablosundaki gerçek değer okunuyor.
+    /// </summary>
+    private static async Task<string?> CozMasrafMerkeziAsync(
+        Data.AppDbContext db,
+        Guid? projectId,
+        Guid warehouseId,
+        CancellationToken cancellationToken)
+    {
+        if (projectId.HasValue)
+        {
+            var projeKodu = await db.Projects
+                .Where(x => x.Id == projectId.Value)
+                .Select(x => x.Code)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(projeKodu)) return projeKodu;
+        }
+
+        return await db.Warehouses
+            .Where(x => x.Id == warehouseId)
+            .Select(x => x.Branch.CostCenterCode ?? x.Branch.Code)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
 }
