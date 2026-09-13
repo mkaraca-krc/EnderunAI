@@ -14190,3 +14190,118 @@ cari satırları temizlenmiş.
 **Mali müşavir cevabı gelmeden YENİ ŞİRKET SEED'LENMEYECEK.** Cevap
 gelmeden seed koşulursa kusur, düzeltmeyi beklediğimiz hâliyle yeni
 şirkete de kopyalanır.
+
+---
+
+## (4) KAYNAK METNİNDE İDDİA KURAN TESTLER — SAYILDI (2026-09-13)
+
+**Tarama sağlığı:** 421 test dosyası (326 arka uç `.cs` + 95 ön yüz),
+3181 test vakası (2657 `[Fact]/[Theory]` + 524 `it()/test()`).
+
+| sınıf | vaka | hüküm |
+|---|---|---|
+| **(A) yapısal muhafaza** | **~174** | kapsam boşluğu DEĞİL — metni korumak için VAR ve doğru araç |
+| **(B) davranış iddiası metinle** | **12 arka uç + ~32 ön yüz** | etkisizleşmiş savunma adayı |
+| **(B) içinden GERÇEK BOŞLUK** | **3 tam + 2 kısmi (arka uç), ~30 (ön yüz)** | aşağıda |
+
+(A) örnekleri — yöntemin çalıştığının kanıtı: `PkillYasagiTests`,
+`SecretInSourceGuardTests`, `AuthorizeGuardTests`, `RolTekKaynakTests`,
+`StockMovementContractTests`, cırcırlar. Bunlar metni korumak İÇİN var.
+
+### GERÇEK BOŞLUK #1 KAPATILDI — `MalKabulFisIcerigiTests`
+
+`GoodsReceiptAccountingTests.cs:47` şunu iddia ediyordu:
+`code.IndexOf("accountingPoster.PostAsync")`. Mal kabulü çağıran testler
+VARDI ama **hiçbiri üretilen fişi okumuyordu** — yalnız stok, maliyet ve
+hareket satırı.
+
+**MUTASYONLA KANITLANDI:** `accountingPoster.PostAsync` çağrısı devre
+dışı bırakıldı →
+
+| test | sonuç |
+|---|---|
+| **`MalKabulFisIcerigiTests` (yeni)** | **KIRMIZI** |
+| `WarehouseIntegrationTests` (10 test) | yeşil |
+| `GoodsReceiptAccountingTests` (metin testi) | **yeşil** |
+
+Metin testi göremedi çünkü **dizge kaynakta hâlâ duruyordu**. Tanımı
+gereği etkisizleşmiş savunma: korumayı değil, korumanın ADINI koruyor.
+
+Yeni sonda fişin İÇERİĞİNİ sınıyor: 150/153 borç 250 · 379.01 alacak
+250 · fiş denk · KDV (191/391) yazılmıyor · ölçüm sağlığı sayacı.
+
+### KALAN BOŞLUKLAR — sıraya alındı, bugün kapatılmadı
+
+- `GoodsReceiptAccountingTests.cs:71` (KDV yazılmıyor iddiası) — yeni
+  sonda bunu da kapsıyor (`DoesNotContain 191/391`). **Kapandı.**
+- `HizirMerkezKuraliTests.cs:79` — boşluk ama dosya bunu KENDİSİ yazıyor:
+  çağrı bugün davranışsal olarak etkisiz (kural her çağrıda `null`
+  dönüyor), yakalayacak davranış testi yazılamaz. **Dürüst muhafız.**
+- Kısmi: `GoodsReceiptAccountingTests.cs:95` (GR-IR dalı),
+  `ParolaPolitikasiTekYerTests.cs:133` (kullanıcı OLUŞTURMA yolunda
+  zayıf parola reddi sınanmıyor).
+- **Ön yüz ~30** — jsdom harness'ı VAR ve 25 gerçek render testi koşuyor,
+  ama hepsi yeniden kullanılabilir bileşenleri sınıyor; **hiçbiri
+  `app/**/page.tsx` ekranını render etmiyor.** Çek ekranı, iş emri
+  kaskadı, personel-departman ekranı, poz listesi: metinle kurulmuş
+  iddiaların davranışsal karşılığı yok. **Alet elde olduğu hâlde
+  kullanılmamış.** Çıra: bugün ~30, hedef artmaması.
+
+---
+
+## (3) SEKİZ KIRIK YOL — EKRAN, DÜĞME, VE 30 GÜNLÜK KULLANIM
+
+| # | yol | ekran | düğme | kullanıcı ne yapmaya çalışıyor |
+|---|---|---|---|---|
+| 1 | alış faturası onayı | `/muhasebe/faturalar/[id]` | **"Onayla ve Fişleştir"** | tedarikçi faturasını muhasebeye atmak |
+| 2 | satış faturası defterleme | `/muhasebe/satis-faturalari/[id]` | **"Kesinleştir ve Fiş Oluştur"** | kestiği satış faturasını defterlemek |
+| 3 | perakende → fatura | `/perakende` | **"Onayla"** | bekleyen perakende satışı onaylamak |
+| 4 | perakende satış fişi | `/perakende` | **"Satışı Tamamla"** | kayıtlı müşteriye satışı kapatmak |
+| 5 | tahsilat | `/finans/kasa-banka` | **"+ Tahsilat / Ödeme"** | kasaya gelen parayı cariden düşmek |
+| 6 | ödeme | `/finans/kasa-banka` | aynı modal | tedarikçiye ödeme kaydı girmek |
+| 7 | çek dağılımı | `/finans/cekler` | **"+ Dağılım Satırı"** | çeki masraf merkezine dağıtmak |
+| 8 | kur değerlemesi | `/muhasebe/kur-degerlemesi` | **"Değerleme Fişini Kes"** | ay sonu kur farkı fişi |
+
+### KULLANIM SAYIMI — ÖLÇÜLDÜ
+
+**Kapsam beyanı (Kural 84):** nginx erişim günlüğü 394.787 satır ama
+yalnız **30 Ağu – 13 Eyl (15 gün)** — 14–29 Ağustos DÖNMÜŞ, yok.
+Journal 2.849.338 satır, **16 Tem – 13 Eyl**, 30 günü tamamen kapsıyor —
+ama `Request starting/finished` seviyesi kapalı olduğu için **denemeleri
+sayamıyor**, yalnız küresel işleyiciye düşen hataları sayıyor.
+Kontrol sondası: aynı yöntemle `POST /api/auth/login` **89 istek**,
+`/api/backend/*` altına 15 günde **129 POST** sayıldı — yöntem çalışıyor.
+
+| # | istek (15g) | 400 | 500 | journal hatası (30g) |
+|---|---|---|---|---|
+| 1 | **1** | 1 | 0 | 0 |
+| 2 | 0 | – | – | **1 × 500** (19 Ağu 11:24, `120 hesabında proje seçimi zorunludur`) |
+| 3–8 | **0** | – | – | 0 |
+
+Journal'daki 21 `TraceId=` satırının tamamı 500; **doğrulama ihlali
+satırı yok** (400 dalı bugüne kadar yoktu).
+
+**HÜKÜM — sayıya dayanıyor:** 30 günde bu sekiz yola toplam **1 POST**
+ve **1 çarpma** düştü. Aynı pencerede 129 POST ve 89 giriş sayılabiliyor.
+Yani **sekizi de "kırık ama pratikte hiç kullanılmıyor"** — ACİL DEĞİL.
+
+**ASIL ACİL OLAN BAŞKA:** sekiz yoldan **altısında** (2,3,4,5,6,8)
+denetleyici `ArgumentException`'ı yakalamıyordu ve kullanıcı
+*"Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin"* görüyordu — yani
+yollar "kırık" değil, **teşhis edilemez şekilde kırık**. K3 düzeltmesi
+(`cfb635b4`) bunu 400 + gerçek sebebe çevirdi ama **ölçüm penceresinin
+tamamı boyunca yoktu.** Canlıya açıldığı gün sekizi birden sessizce
+çökerdi ve kimse sebebini göremezdi.
+
+Okuma ekranları çalışıyor: `GET /cheques` 43, `/cash-accounts` 26,
+`/supplier-invoices` 22 — **insanlar bu modüllere giriyor, bakıyor, ama
+yazmıyor.**
+
+### KAYDEDİLDİ — İYİ HABER
+
+**Doğrulamayı ATLAYAN fiş yazma yolu YOK.** `new AccountingVoucher` tek
+yerde (`AccountingVoucherService:188`), `AccountingVouchers.Add` tek
+yerde, fiş/satır için ham SQL INSERT **sıfır**. `CreateAsync` ve
+`UpdateAsync` ikisi de `ValidateAndPrepareLinesAsync`'ten geçiyor.
+**Kontrol her yolda koşuyor** — yani boyut kuralı hiçbir yerde sessizce
+atlanmıyor.
