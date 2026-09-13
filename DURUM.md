@@ -14495,3 +14495,73 @@ prova devam etti. Kapı hem durdurmayı hem geçirmeyi gösterdi.
 
 **BELLEK/1'in asıl ölçümü (GC tavanı) hâlâ yapılmadı** — bu tedbir onu
 ikame etmiyor, yalnız iş kaybettiren çarpışmayı kesiyor.
+
+---
+
+## AJAN/1 TEKLİFİ — SALT OKUMA (2026-09-13, kurulmadı)
+
+Tam metin: `docs/AJAN-1-TEKLIF.md`. **Hiçbir kullanıcı açılmadı.**
+
+**SINIR (Mehmet Bey):** salt okuma. **Canlıda yazma YOK — hiçbir
+kapsamda, "asgari izinle" bile değil.** Üç gerekçe, üçü de bu hafta
+ölçüldü: (1) hesap verebilirlik — yazabilen ajan bütün düzeltmeleri
+"AJAN" imzalı yapar ve hesap verebilirlik tam inşa ettiğimiz yerde
+kaybolur; (2) sürekli duran anahtar sürekli duran risktir — bu hafta
+İKİ kez "geçici" ayar kalıcılaştı; (3) yazma yetkisi olan ajan er geç
+"şunu hızlıca düzelteyim" der, o an ölçmeden düzeltmenin başladığı andır.
+
+### ALTI İZİN — HER BİRİ BİR ÖLÇÜMDEN TÜRETİLDİ
+
+Katalogda 147 izin var, 47'si okuma; teklif **6** istiyor:
+`accounting.view` (150/153 bayrağı, fiş satırları) ·
+`inventory.view` (stok/depo/hareket) ·
+`purchasing-receipts.view` (mal kabul) ·
+`finance.view` (çek — DENETIM/2'nin "paranın yaşadığı yer" ayağı) ·
+`current-accounts.view` (320/120 yolları) ·
+`audit-log.view` (denetim izinin canlıda düştüğünü görmek).
+
+**Açıkça istenmeyenler yazıldı:** ücret, bordro, puantaj, özlük,
+personel, mesaj, işveren portalı. `hasAllPermissions` VERİLMEYECEK.
+
+### ÇIRA KURULDU VE DÖRT DALI DA SINANDI
+
+`deploy/scripts/ajan-izin-cizgisi.sh` · çizgi **6**.
+
+| durum | çıkış |
+|---|---|
+| kimlik canlıda YOK | **3 — ÖLÇEMEDİ** ("izin yok" ile aynı görünmüyor) |
+| tam 6 izin · yazma yok · rol yok | **0** |
+| 7 izin | **1** çizgi aşıldı |
+| 5 izin | **1** çizgi gevşek |
+| 6 izin ama biri yazma (`inventory.create`) | **1** koşulsuz kırmızı |
+| role bağlı (146 izin rolden) | **1** koşulsuz kırmızı |
+
+Sonda **prova zemininde** koşuldu (hedef VT `AJAN_VT` ile veriliyor,
+varsayılan canlı); canlıya dokunulmadı — koşu sonunda canlı ölçümü yine
+`3` (kullanıcı yok) verdi. Prova zemininin rolleri geri yüklendi.
+
+**Rol bağı koşulsuz kırmızı, çünkü:** rol değişince ajanın erişimi
+sessizce genişler ve sayaç bunu yakalayamaz. İzinler doğrudan
+atanmalı ki sayılabilsin.
+
+### DÜRÜST SINIR — AJANIN KENDİ İZİ ZAYIF
+
+Okuma işlemleri denetim kaydı ÜRETMEZ; `security_audit_events` yalnız
+`Created/Updated/Deleted` yazıyor. Yani DENETIM/2 genişlemesi bu
+kimliği KAPSAMAZ. İz, erişim günlüğünden gelir (ayırt edici
+`User-Agent: EnderunAjan/1`) — ama nginx günlüğü **15 gün** tutuluyor.
+**Bu yüzden "günlük saklama süresi" bekleyen maddesinin AJAN/1'den
+ÖNCE karara bağlanması önerilir.**
+
+### KAPATMA — TEK KOMUT, CANLIYA DOKUNMADAN
+
+`shred -u /etc/enderunai/ajan.env` → parola dosyası gidince ajan giriş
+yapamaz; canlıda hiçbir değişiklik gerekmez, kimseyi beklemek gerekmez.
+Kalıcı kapatma için Mehmet Bey hesabı ekrandan pasife alır (aktör gerçek
+insan olur, denetim izine düşer).
+
+### PAROLA
+
+Mehmet Bey üretir; ajan sır üretmez. `/etc/enderunai/ajan.env` (root,
+0600). Sohbete, kayda, günlüğe, commit mesajına, betik içine
+YAZILMAYACAK. Sohbete düşerse yanmış sayılır ve değiştirilir.

@@ -428,3 +428,40 @@ değil, **indeks**.
   BAŞLIĞINI ihlal saydı. Desen daraltıldı — ama o yanlış alarm olmasaydı
   muhafızın dosyaları gerçekten açtığını değil, yalnız yeşil yandığını
   görmüş olurduk. Sessiz yeşil, gürültülü kırmızıdan daha az bilgi taşır.
+
+- **KENDİYLE ÇELİŞEN BELGE, YANLIŞ BELGEDEN KÖTÜDÜR.** Yanlış belge bir
+  kez yanıltır; çelişen belge HER OKUYUCUYU FARKLI yanıltır ve kimse
+  çeliştiğini fark etmez. *(Mehmet Bey'in kuralı, 13 Eylül.)*
+
+  `docs/MEHMET-BEY-150-153-TALIMAT.md`in şemasına "BU KUTUYU AÇIN"
+  yazdım; aynı belgenin 4. adımı "işaretini kaldırın" diyordu. İkisi
+  ters. Hata ölçümde değildi — talimatı ekranı OKUYARAK yazmıştım ve
+  ölçüm doğruydu. Hata GÖRSEL YARDIMCIDAYDI: şemanın yanına ölçülen
+  DURUMU değil NİYETİ yazdım, ve "kutuyu aç" Türkçede "işaretle" diye
+  okunuyor.
+
+  UYGULAMA: bir talimatta aynı eylem iki kez anlatılıyorsa (metin +
+  şema, metin + örnek), ikisi de ÖLÇÜLEN durumdan yazılsın. Şema
+  "şu an böyle / iş bitince böyle" diye İKİ hâli göstersin; tek hâl
+  gösteren şema, okuyucunun hangisi olduğunu tahmin etmesini ister.
+
+- **`pg_stat_*` GÖRÜNÜMLERİ LİSTE İÇİN GÜVENLİ, SAYI İÇİN DEĞİL.**
+  *(Mehmet Bey'in kuralı, 13 Eylül.)*
+
+  `pg_stat_user_tables.n_tup_ins` `security_audit_events` için **116**
+  dedi; tabloda **2107** satır vardı. Sayaçlar geri yükleme, `pg_restore`
+  ve `COPY` sonrası eksik kalıyor ve `pg_stat_database.stats_reset`in
+  "HİÇ" olması onları güvenilir YAPMIYOR.
+
+  Aynı gün bu alete dayanarak "audit_logs hiç yazılmadı, sayaç
+  güvenilir" diye hüküm vermiştim. Hüküm doğruydu ama DAYANAĞI
+  çürüktü; koda yeniden dayandırıldı (varlık sınıfı yok, `DbSet` yok,
+  0 eşleşme, snapshot tanımıyor, `count(*)=0`).
+
+  UYGULAMA: tablo ADLARINI `pg_stat_*`ten almak güvenli — yedekleme ve
+  geri yükleme tatbikatı tam bunu yapıyor ve sayıyı `count(*)` ile
+  ayrıca hesaplıyor. SAYI lazımsa `count(*)` yazın.
+
+  VE GENEL KURAL: **bozuk çıkan bir alet, o aletle ölçülmüş her şeyi
+  şüpheli yapar.** Alet bozulunca kayıtların tamamı taranır; bulaşan
+  hüküm ya yeniden dayandırılır ya "dayanaksız" diye işaretlenir.
