@@ -398,3 +398,27 @@ değil, **indeks**.
   BAHSEDEN komutları (belge yazmak gibi) engellemiyor — kendi belgesini
   yazmayı yasaklayan bir kapı kullanılamaz hâle gelir. 12 varyantla
   sınandı; kanca ateşlendiği ölçülerek doğrulandı.
+
+- **BİR MUHAFIZIN VARLIĞI DEĞİL KAPSAMI ÖLÇÜLÜR.** Yeşil bir muhafız,
+  KAPSAMADIĞI kanalı da yeşil gösterir. Her muhafız için tek satır:
+  **hangi kanalları görür, hangilerini görmez.** *(Mehmet Bey'in
+  kuralı, 13 Eylül.)*
+
+  `PkillYasagiTests` yeşildi ve gerçekten çalışıyordu — ama yalnız
+  depodaki `.sh` dosyalarını tarıyor. Etkileşimli kabuk çağrıları onun
+  kör noktasıydı ve beşinci olay tam oradan geçti. "Araç vardı, muhafız
+  yeşildi, kanal açıktı."
+
+  Bu depodaki muhafızların kapsamı (13 Eylül itibarıyla):
+
+  | muhafız | GÖRÜR | GÖRMEZ |
+  |---|---|---|
+  | `PkillYasagiTests` | `deploy/` + `scripts/` altındaki `.sh` | etkileşimli kabuk, Python/JS betikleri |
+  | `pkill-kancasi.sh` (PreToolUse) | bu oturumun Bash çağrıları | başka oturumlar, doğrudan terminal |
+  | `stok-hareket-etiketi` yapısal muhafazası | `app/components/services/hooks` içindeki `.ts(x)` | `lib/`, arka uç, e-posta/PDF şablonları |
+  | `malzeme-tipi` yapısal muhafazası | aynı dört dizin | aynı boşluklar |
+  | K5 düzen kapısı | 390 / 768 / 1280 / 1536 px | aradaki genişlikler (1366, 1440) |
+
+  UYGULAMA: yeni bir muhafız yazarken yorumuna GÖRMEDİĞİ kanalı da yaz.
+  Kapsam yazılmazsa, muhafızın yeşili "kusur yok" diye okunur — oysa
+  yalnız "baktığım yerde kusur yok" demektir (Kural 82'nin muhafız hâli).

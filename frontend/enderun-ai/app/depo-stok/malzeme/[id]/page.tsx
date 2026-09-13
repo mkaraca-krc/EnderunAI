@@ -23,16 +23,14 @@ import {
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import { InventoryPhotoGallery } from "@/components/inventory/photo-gallery";
 import { SUPPLY_KIND_LABELS } from "@/services/inventory.service";
+import {
+  MALZEME_TIPI_SECENEKLERI,
+  malzemeTipiEtiketi,
+} from "@/lib/inventory/malzeme-tipi";
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR");
 
 const UNITS = ["Adet", "Metre", "Kg", "Takım", "Kutu", "Paket", "Rulo"];
-
-const TYPE_LABELS: Record<number, string> = {
-  0: "Stok malzemesi",
-  1: "Sarf malzemesi",
-  2: "Demirbaş",
-};
 
 /** CurrentAccountStatus.Approved */
 const APPROVED_STATUS = 2;
@@ -226,7 +224,7 @@ export default function InventoryItemDetailPage() {
     <ErpShell
       design="redwood"
       title={`${item.code} — ${item.name}`}
-      description={`${TYPE_LABELS[item.type] ?? "Malzeme"} · ${item.companyName}`}
+      description={`${malzemeTipiEtiketi(item.type)} · ${item.companyName}`}
     >
       {error && <div className="erp-alert error">{error}</div>}
       {notice && <div className="erp-alert">{notice}</div>}
@@ -393,9 +391,17 @@ export default function InventoryItemDetailPage() {
                 value={form.type}
                 onChange={(event) => update("type", event.target.value)}
               >
-                <option value="0">Stok malzemesi</option>
-                <option value="1">Sarf malzemesi</option>
-                <option value="2">Demirbaş</option>
+                {/*
+                  SEÇENEKLER TEK KAYNAKTAN. Elle yazıldığında 1 ve 2
+                  ters eşlenmişti ve kullanıcı "Sarf" seçerken veriye
+                  Equipment yazılıyordu (END0003 böyle oluştu);
+                  "Yedek Parça" ise hiç seçilemiyordu.
+                */}
+                {MALZEME_TIPI_SECENEKLERI.map((secenek) => (
+                  <option key={secenek.deger} value={String(secenek.deger)}>
+                    {secenek.etiket}
+                  </option>
+                ))}
               </select>
             </label>
 

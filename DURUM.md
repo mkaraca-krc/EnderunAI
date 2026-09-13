@@ -13253,3 +13253,116 @@ Mehmet Bey'in hazırladığı metin, aynen:
 **CEVAP GELMEDEN `Opening` hareket tipinin MUHASEBE AYAĞI YAZILMAYACAK.**
 Karşı hesap kararı (500 / 570 / 632 …) ne bende ne Mehmet Bey'de: yasal
 deftere giren bir karar ve muhasebecinin.
+
+---
+
+## MALZEME TİPİ — BEŞ KOPYA, DÖRDÜ YANLIŞ (2026-09-13)
+
+### ÖLÇÜM: KUSUR VERİ YAZDIRDI, ETİKETTE KALMADI
+
+Arka uç: `Material=0, Equipment=1, Consumable=2, SparePart=3`.
+
+| değer | arka uç | kart açma (bugün) | düzenleme | liste | detay | servis tipi |
+|---|---|---|---|---|---|---|
+| 0 | Material | Malzeme ✓ | Stok malzemesi ✓ | Stok ✓ | Stok malzemesi ✓ | ✓ |
+| 1 | Equipment | Ekipman ✓ | **Sarf** ✗ | **Sarf** ✗ | **Sarf** ✗ | ✓ |
+| 2 | Consumable | Sarf ✓ | **Demirbaş** ✗ | **Demirbaş** ✗ | **Demirbaş** ✗ | ✓ |
+| 3 | SparePart | Yedek Parça ✓ | **YOK** ✗ | **YOK** ✗ | **YOK** ✗ | **`0\|1\|2` — 3'ü REDDEDİYOR** ✗ |
+
+**FORMUN GEÇMİŞİ ÖLÇÜLDÜ — düzeltmenin gerekçesi bu.** 5 Ağustos
+2026'da KART AÇMA formu da ters eşlemeyi kullanıyordu (git ile
+doğrulandı, commit `6457753a`):
+
+    0 → Stok malzemesi    1 → Sarf malzemesi    2 → Demirbaş
+
+Canlıdaki `END0003 İZOLE BANT` tam o gün açıldı (`CreatedAtUtc`
+2026-08-05 12:00), `Type = 1` yazıldı ve **hiç düzenlenmedi**
+(`UpdatedByUserId` BOŞ). Yani kullanıcı **"Sarf malzemesi" seçti,
+veriye `Equipment` yazıldı.** Kaydın tipi kullanıcının hatası değil,
+EKRANIN hatası. Kart açma formu sonradan düzeltilmiş, düzenleme formu
+ve etiketler düzeltilmemiş.
+
+### DÜZELTME — İKİSİ BİRDEN (Mehmet Bey'in kararı)
+
+Etiketi tek başına düzeltmek ekranı doğru, veriyi yanlış bırakırdı;
+kullanıcı "Demirbaş" yazan bir izole bant görür ve hangisinin yanlış
+olduğunu anlayamazdı. Etkilenen kart sayısı BİR; bölmenin riski işin
+kendisinden büyük.
+
+- `lib/inventory/malzeme-tipi.ts` tek kaynak (etiket + açılır liste
+  seçenekleri). Sözcükler ölçümde DOĞRU çıkan kart açma formundan alındı.
+- Beş kopyanın hepsi bağlandı — **doğru olan kart açma formu dahil**:
+  doğru bir kopya da kopyadır, bir sonraki değişiklikte ayrışır.
+- `services/inventory.service.ts` tipi `0|1|2|3` yapıldı; `SparePart`
+  artık TypeScript tarafından da kabul ediliyor.
+
+### SONDA — ÜÇ İDDİA, ÜÇÜ DE MUTASYONLA KIRMIZI GÖSTERİLDİ
+
+| iddia | mutasyon | ısırdı mı |
+|---|---|---|
+| (a) her etiket enum değeriyle aynı yöne bakıyor | 1 ile 2'yi ters çevir | **evet** |
+| (b) enum'un HER üyesinin etiketi var (kapsam) | `SparePart` etiketini sil | **evet** |
+| (c) yapısal muhafaza: üçüncü kopya açılamaz | altıncı kopya aç | **evet** |
+
+(b) iddiası olsaydı `SparePart=3`ün eksikliği zaten yakalanırdı: eksik
+bir enum üyesi hiçbir yerde HATA vermez, sadece görünmez olur.
+
+**Muhafız ilk yazımında YANLIŞ ALARM verdi:** desen düpedüz "Demirbaş"
+sözcüğünü arıyordu ve `tool-asset-alert-widget.tsx`teki bir `<h3>`
+BAŞLIĞINI ihlal saydı. Desen kopyanın İMZASINA daraltıldı (açılır liste
+seçeneği ya da sayı→etiket satırı). Yanlış alarmın kendisi muhafızın
+gerçekten dosya okuduğunun kanıtıydı.
+
+**HAREKET TİPİ SONDASI ÖLÇÜLDÜ: üç iddia ZATEN VARDI.** Mehmet Bey
+eksik olduğunu düşünmüştü; `tests/stok-hareket-etiketi.test.ts` altı
+iddia taşıyor ve (a) "yön etiketleri", (b) "her enum üyesinin etiketi
+var", (c) "başka hiçbir dosya kendi transfer etiketini yazmıyor" üçü de
+içinde. Ekleme yapılmadı.
+
+### VERİ DÜZELTMESİ — PROVA ZEMİNİNDE KANITLANDI, CANLIDA BEKLİYOR
+
+`END0003` prova zemininde (canlının birebir kopyası) **uygulamanın
+kendi yolundan** düzeltildi — ham SQL değil, `PUT /api/inventory/items`:
+
+    ÖNCE : Type=1  UpdatedByUserId=YOK
+    SONRA: Type=2  UpdatedByUserId=70a5012f-…  (denetim izi yazıldı)
+    Açıklama alanına sebep yazıldı: "…ekran etiketleri ters eşliydi…"
+
+**CANLIDA HENÜZ YAPILMADI ve sebebi dürüstçe yazılıyor:** canlı uçta
+işlem yapmak bir kullanıcı kimliği gerektiriyor; elimde canlı kullanıcı
+parolası yok ve bunun için canlıya kullanıcı açmak daha büyük bir
+müdahale olurdu. Doğru sıra zaten şu: **önce salı yayını** (etiketler
+düzelir, düzenleme formu dört doğru seçeneği gösterir), **sonra tek
+tıkla düzeltme** — o zaman kullanıcı "Sarf" seçer, veriye `Consumable`
+yazılır ve denetim izi gerçek kullanıcının kimliğiyle düşer. Yayından
+önce yapılsaydı kart bir süre doğru veriyle YANLIŞ etiket gösterirdi.
+
+### POZİTİF KONTROL
+
+Canlıdaki 9 kartın tip dağılımı: **8 × `Material=0`**, **1 × `Equipment=1`
+(END0003)**. Düzeltmeden sonra prova zemininde END0003 `Consumable=2`
+ve ekranda "Sarf" görünüyor. Kalan 8 kart `Material` → "Malzeme"
+(eskiden "Stok" / "Stok malzemesi" yazıyordu; değer doğruydu, sözcük
+değişti).
+
+### AYNI HASTALIK BAŞKA KAÇ YERDE — SAYILDI, DÜZELTİLMEDİ
+
+431 dosya tarandı. Ön yüzde sayı→etiket eşleme bloğu: **85**; farklı
+eşleme: **64**; **BİRDEN ÇOK DOSYADA TEKRARLANAN: 13**.
+
+| kaç dosya | eşleme |
+|---|---|
+| 4 | muhasebe fiş tipi (Açılış, Kapanış, Mahsup…) |
+| 3 | fiş durumu (Kesinleşti, Taslak, İptal) |
+| 3 | talep önceliği (Düşük, Kritik, Normal…) |
+| 3 | sipariş durumu (Kısmi Teslim, Onay Bekliyor…) |
+| 3 | poz disiplini (Elektrik, Fiber, Genel…) |
+| 3 | poz durumu (Aktif, Arşiv, Pasif…) |
+| 3 | personel durumu (Aday, Aktif, Askıda…) |
+| 2 | rozet rengi (green, red, yellow) |
+| 2 | hesap türü (Alacak, Borç, Borç/Alacak) |
+| 2 | RFQ durumu · 2 talep durumu · 2 mal kabul durumu · 2 fatura rengi |
+
+**DÜZELTİLMEDİ.** Salıdan sonra hepsi tek seferde tek kaynağa bağlanacak
+(Mehmet Bey'in kararı). Bu üçüncü örnekti; kalıp olduğu artık sayıyla
+sabit.

@@ -11,6 +11,7 @@ import {
   type InventoryItemType,
 } from "@/services/inventory.service";
 import { projectService, type ProjectListItem } from "@/services/project.service";
+import { MALZEME_TIPI_SECENEKLERI } from "@/lib/inventory/malzeme-tipi";
 
 /**
  * STOK KARTI AÇMA — KATEGORİ GÜDÜMLÜ (S2).
@@ -404,10 +405,16 @@ export default function CreateInventoryItemPage() {
               value={type}
               onChange={(e) => setType(Number(e.target.value) as InventoryItemType)}
             >
-              <option value={0}>Malzeme</option>
-              <option value={1}>Ekipman</option>
-              <option value={2}>Sarf</option>
-              <option value={3}>Yedek Parça</option>
+              {/*
+                Bu form ÖLÇÜMDE DOĞRU çıkan taraftı; yine de tek
+                kaynağa bağlandı — doğru bir kopya da kopyadır ve
+                bir sonraki değişiklikte ayrışır.
+              */}
+              {MALZEME_TIPI_SECENEKLERI.map((secenek) => (
+                <option key={secenek.deger} value={secenek.deger}>
+                  {secenek.etiket}
+                </option>
+              ))}
             </select>
           </label>
 

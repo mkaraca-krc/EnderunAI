@@ -1,6 +1,12 @@
 import { apiClient } from "@/lib/api/api-client";
 
-export type InventoryItemType = 0 | 1 | 2;
+/**
+ * Arka uçtaki `InventoryItemType`: Material=0, Equipment=1,
+ * Consumable=2, SparePart=3. `3` 2026-09-13'e kadar BURADA YOKTU ve
+ * TypeScript "Yedek Parça"yı reddediyordu — etiket kusurunun sessiz
+ * kardeşi. Etiketler `lib/inventory/malzeme-tipi.ts`te.
+ */
+export type InventoryItemType = 0 | 1 | 2 | 3;
 
 /**
  * TEDARİK TİPİ (S9) — üçü birbirini dışlar.

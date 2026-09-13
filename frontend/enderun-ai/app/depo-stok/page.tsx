@@ -41,6 +41,7 @@ import {
 
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { malzemeTipiEtiketi } from "@/lib/inventory/malzeme-tipi";
 import {
   stokArtiranHareket,
   stokAzaltanHareket,
@@ -60,12 +61,6 @@ function formatDateTime(value: string): string {
     dateStyle: "short",
     timeStyle: "short",
   });
-}
-
-function typeLabel(type: number): string {
-  if (type === 1) return "Sarf";
-  if (type === 2) return "Demirbaş";
-  return "Stok";
 }
 
 function movementClass(type: number): string {
@@ -493,7 +488,7 @@ export default function InventoryOperationsPage() {
       ),
     },
     { key: "kategori", header: "Kategori", value: (row) => row.category || "—" },
-    { key: "tip", header: "Tip", value: (row) => typeLabel(row.type) },
+    { key: "tip", header: "Tip", value: (row) => malzemeTipiEtiketi(row.type) },
     {
       key: "stok",
       header: "Toplam Stok",
