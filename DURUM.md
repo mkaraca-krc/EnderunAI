@@ -12758,7 +12758,7 @@ makineye taşımak, bellek eklemek, SQUASH/1'i öne almak.
 |---|---|---|---|
 | canlı API (`enderunai-backend`) | sınırsız | **0** | −500 |
 | ön yüz (`enderunai-frontend`) | sınırsız | **0** | −500 |
-| **PostgreSQL** | sınırsız | **0** | **0** |
+| ~~**PostgreSQL**~~ | sınırsız | **0** | ~~**0**~~ → **−900** (düzeltme ↓) |
 | derleme scope'u | 7200M (+2G takas) | — | varsayılan |
 
 `systemd-oomd` kapalı. Ölçüm anında canlı API RSS 129 MB, `oom_score` 360.
@@ -12767,9 +12767,44 @@ makineye taşımak, bellek eklemek, SQUASH/1'i öne almak.
 öldürülebilir yapar. Koruyan üç şey: (1) derlemenin sınırı — var ama
 makinenin verebileceğinden büyük; (2) üretime AYRILMIŞ bellek
 (`memory.min`) — YOK; (3) OOM önceliği — API ve ön yüzde var (−500),
-**veritabanında YOK (0)**. Çekirdek OOM anında muhtemelen en büyük süreci
+~~veritabanında YOK (0)~~ **veritabanında DA VAR (−900); aşağıdaki
+düzeltmeye bakınız.** Çekirdek OOM anında muhtemelen en büyük süreci
 (derleme) seçer ama ayrılmış bellek olmadığı için bu bir GARANTİ değil,
-olasılık. En zayıf nokta veritabanı: ölürse ERP düşer.
+olasılık.
+
+---
+
+### DÜZELTME (2026-09-13) — "PostgreSQL'in OOM önceliği 0" CÜMLESİ YANLIŞTI
+
+Yukarıdaki tabloda **veritabanı satırı hatalı ölçülmüş.** Sebebi: ben
+`postgresql.service`'i okumuşum. O bir **meta birim** — hiçbir süreci
+yoktur, yalnız gerçek küme birimini tetikler. Gerçek küme birimi
+`postgresql@16-main.service` ve bugün, hiçbir şey uygulamadan önce:
+
+| ölçülen | değer |
+|---|---|
+| `postgresql@16-main.service` birim `OOMScoreAdjust` | **−900** |
+| postmaster (ana süreç) `/proc/<pid>/oom_score_adj` | **−900** |
+| 9 çocuk sürecin her biri | **0** |
+| postmaster ortamında `PG_OOM_ADJUST_FILE` | `/proc/self/oom_score_adj` (var) |
+| `PG_OOM_ADJUST_VALUE` | ayarlı değil → çocuklar varsayılan 0'a döner |
+
+Yani **PostgreSQL'in kendi tavsiye ettiği asimetri dağıtım tarafından
+zaten kurulu:** koruma postmaster'a verilir, çocuk süreçler öldürülebilir
+kalır (bir çocuk ölürse küme kurtarma yapar; postmaster ölürse ERP düşer).
+Mehmet Bey'in "körlemesine uygulamayın, ikisinin FARKLI olduğunu gösterin"
+talimatının istediği ölçüm bu — ve fark zaten mevcut.
+
+**KARAR: değişiklik YOK, PostgreSQL yeniden başlatılmadı.** Uygulanacak
+bir şey olmadığı için "önce/sonra" ölçümü de yok; bunun yerine
+"uygulamadan önceki durum zaten hedef durum" ölçüldü.
+
+**DERS (asıl olan):** bir systemd birimini ölçerken, ölçtüğüm birimin
+**süreç sahibi** olduğunu doğrulamadım. Meta birimler her alanı boş/
+varsayılan gösterir ve bu "koruma yok" gibi okunur. Kural 82'nin systemd
+hâli: *bir birim ölçümü yalnız o birimi kanıtlar; süreç başka birimdeyse
+hiçbir şeyi kanıtlamaz.* Doğrulama biçimi: `systemctl show -p MainPID` ile
+birimin gerçekten bir süreci var mı diye bak, sonra `/proc/<pid>`'den OKU.
 
 **1. SORU ÖLÇÜLDÜ (2026-09-11) — GC tavanı hipotezi ÇÜRÜDÜ.**
 
@@ -12805,3 +12840,206 @@ derleyicisinde, `EnderunAI.Api.csproj` derlenirken — ilgisiz bir hata değil.
 makineye taşımak · makineye bellek eklemek · SQUASH/1'i öne almak
 (göç anlık görüntüleri derlemenin bellek yükünün asıl kaynağı olarak
 işaret ediliyor — SQUASH/1'in etkisi ölçülmedi).
+
+---
+
+## BELLEK/1 — `memory.min` DENEMESİ (2026-09-13)
+
+### Bulgu 1 — TEK BAŞINA YAZILAN AYIRMA KÂĞIT ÜSTÜNDE KALIYOR
+
+cgroup v2'de `memory.min` koruması **yukarıdan aşağı dağıtılır**: bir
+çocuğun etkin koruması, atalarının ayırdığından büyük olamaz. Servislere
+640/256/384 MB yazıldığında ata dilimler ölçüldü:
+
+| dilim | `memory.min` (yazmadan önce) |
+|---|---|
+| `/system.slice` | 0 |
+| `/system.slice/system-postgresql.slice` | 0 |
+
+Yani üç ayırma da etkisizdi. Çekirdek 6.8 `memory.effective_min` diye bir
+dosya sunmuyor; bu yüzden "etkin koruma" DOSYADAN OKUNAMAZ — zinciri
+elle kurmak ve doğrulamak gerekiyor. Kurulan zincir:
+
+    /system.slice                              1280 MB
+      /system-postgresql.slice                  384 MB
+        /postgresql@16-main.service             384 MB
+      /enderunai-backend.service                640 MB
+      /enderunai-frontend.service               256 MB
+
+Derleme scope'u (`enderun-derleme.scope`) AYNI `system.slice` altında bir
+kardeş. 1280 MB'ın tamamı üç servis tarafından talep edildiği için
+derlemeye pay kalmıyor — istenen davranış tam olarak bu.
+`systemctl set-property` hiçbir servisi yeniden başlatmadı (`NRestarts=0`,
+`ActiveEnterTimestamp` değişmedi).
+
+### Bulgu 2 — AYIRMA KARŞILANABİLİR (doğrulayıcı koşu YEŞİL)
+
+Mehmet Bey'in şartı: "Ayırmayı, doğrulayan derlemeyi koşturmadan
+bırakmayın."
+
+| koşu | derleme | anon zirve | takas | tam test |
+|---|---|---|---|---|
+| kontrol (ayırma YOK) | kod=0, 4 dk 32 sn | 6375 MB | 105 MB | — |
+| **doğrulayıcı (ayırma VAR)** | **kod=0, 3 dk 59 sn** | **6251 MB** | **201 MB** | **3218/3218, 24 dk 32 sn, anon 2621 MB** |
+
+`OutOfMemoryException` 0, yeni OOM izi yok. **Ayırma bırakıldı.**
+
+### Bulgu 3 — AMA AYIRMA BUGÜN FİİLEN ETKİSİZ
+
+**Bu satır önemli: etkisiz bir korumayı "kurulu" diye yazmak, dekor
+kapının bellek hâli olur.** Bugün ölçülen:
+
+| servis | `memory.min` | yerleşik anon | takasta |
+|---|---|---|---|
+| `enderunai-backend` | 640 MB | **18–20 MB** | **455 MB** |
+| `enderunai-frontend` | 256 MB | 21 MB | 93 MB |
+| `postgresql@16-main` | 384 MB | 0–3 MB | 103 MB |
+
+`memory.min` GELECEKTEKİ geri kazanımı engeller; TAKASTAKİ sayfayı geri
+getirmez. 640 MB ayrılan süreç elinde 20 MB tutuyorsa korunacak bir şey
+yoktur. **Bugünkü durum: ayırma kurulu ama koruduğu bir şey yok.**
+
+**Boyut ölçülemez durumda, sıralama hatası (Mehmet Bey'in düzeltmesi):**
+süreç 20 MB tuttuğu için değil, SIKIŞTIRILDIĞI için 20 MB. Soğuk hâlden
+ayırma boyutu türetmek daireseldir. Doğru sıra: ısıt → yerleşik kümeyi
+ölç → `memory.min`'i O SAYIDAN türet. 640/256/384 ölçüm gelene kadar
+olduğu gibi duruyor, **geçici** sayıdır.
+
+### Bulgu 4 — ASIL ZARAR "DÜŞÜRMEK" DEĞİL, "SOĞUTMAK"
+
+Bugüne kadar soru "derleme canlıyı OOM ile düşürür mü" idi. Ölçüm başka
+bir şey gösterdi: düşürmüyor, ama her derlemede canlıyı takasa itiyor ve
+bedeli ilk kullanıcı ödüyor.
+
+| yol | ilk istek (derlemeden sonra) | ısınmış |
+|---|---|---|
+| arka uç, gerçek kimlik yolu | **6,94 sn** | 0,086 sn |
+| ön yüz `/login` | **2,19 sn** | 0,12 sn |
+
+Çözüm ISINMA/1 (aşağıda): bedeli yayın betiği öder.
+
+### KİRLENEN ÖLÇÜM VE TALİMATIN ÜSTÜNE ÖLÇÜMÜ KOYMAK
+
+İlk doğrulayıcı koşuyu, kontrol koşusunun makine yüküne eşitlemek için
+kendi elimle 2578 MB safra ekleyerek koştum; o koşu OOM'a düştü
+(`global_oom`, derleme scope'u). Talimat "OOM olursa ayırmayı geri alın"
+diyordu. UYGULAMADIM, çünkü ölçüm sebebin ayırma olmadığını gösteriyordu:
+ayırmanın koruyacak yerleşiği yoktu (Bulgu 3) ve safrasız koşu kod=0
+verdi. Mehmet Bey onayladı: *"Ölçüm, OOM'un sebebinin sizin eklediğiniz
+safra olduğunu gösteriyorsa talimatı körlemesine uygulamak hatalı
+olurdu."*
+
+Aynı koşuda "ayırma tutmadı, API 6 MB'a indi" diye yazdım; zaman serisi
+bunu çürüttü — API koşu BAŞLARKEN zaten 6 MB'taydı (ilk=6, dip=6). O
+koşu onu sıkıştırmamıştı, önceki derleme sıkıştırmıştı.
+
+### EKSİK/1'e yazıldı: `memory.swap.max`
+
+Canlı servislerin takasa yazılmasını yasaklamak semptomu kökten keserdi.
+YAPILMADI. Yanlış kurulursa 7 saniyelik gecikmeyi SERVİS ÖLÜMÜNE çevirir:
+sıkışma anında çekirdeğin geri kazanacak anon sayfası kalmaz ve OOM'a
+gider. **Semptom hafif, yeni risk ağır.** Mehmet Bey'in kararı: canlıya
+geçmeden bu takas yapılmaz; squash ölçümünden sonra yeniden bakılacak.
+
+### Bulgu 5 — "FİİLEN ETKİSİZ" HÜKMÜ ÖLÇÜMLE DEĞİŞTİ (aynı gün)
+
+Bulgu 3'te "ayırma kurulu ama koruduğu bir şey yok" yazdım. O cümle
+YAZILDIĞI AN doğruydu (servisler takastaydı, yerleşikleri 20 MB) ama
+GENEL bir hüküm değildi. Servisler ısınıp yerleşikleri 218 MB'a çıkınca
+ayırmanın ne yaptığı ölçülebilir hâle geldi.
+
+**KOL C — tek değişken ayırma.** Aynı makine, aynı temiz derleme:
+
+| | ayırma VAR | ayırma YOK |
+|---|---|---|
+| derleme sonrası API yerleşiği | **218 MB** | **22 MB** |
+| API takasta | 146 MB | 375 MB |
+| ısıtmasız ilk istek — arka uç | 0,010 sn | **0,584 sn** |
+| ısıtmasız ilk istek — ön yüz | 0,009 sn | **0,728 sn** |
+| ikinci istek (ısınmış) | 0,006 sn | 0,032 sn |
+
+**`memory.min` ÇALIŞIYOR.** Sabahki etkisizlik ayırmanın değil, korunacak
+yerleşiğin yokluğunun sonucuydu — Mehmet Bey'in "sıkıştırıldığı için
+20 MB, dairesel akıl yürütüyorsunuz" düzeltmesi birebir doğrulandı.
+
+### BOYUTLANDIRMA — ÖLÇÜLEN ZİRVEDEN TÜRETİLDİ
+
+Isınmış yerleşik küme canlıda tek başına ölçülemiyor (gerçek kullanıcı
+yükü üretmek canlı deftere kayıt açmak demek olurdu). Bunun yerine
+12 Eylül'deki servis başlangıcından bu yana GERÇEK ÜRETİM KULLANIMININ
+bıraktığı `memory.peak` kullanıldı:
+
+| servis | ölçülen zirve | ayırma | not |
+|---|---|---|---|
+| `enderunai-backend` | 507 MB | **512 MB** | 640'tan indirildi |
+| `enderunai-frontend` | 300 MB | **320 MB** | 256'dan yükseltildi |
+| `postgresql@16-main` | 343 MB | **384 MB** | `shared_buffers`=128 MB dahil |
+| `/system.slice` (ata) | — | **1216 MB** | 1280'den indirildi |
+
+Toplam 1280 → 1216 MB, yani DÜŞTÜ; 1280 ile geçen doğrulayıcı derleme bu
+değeri zaten kanıtlıyor (daha az baskı, aynı sonuç). Bu yüzden yeni bir
+doğrulayıcı derleme koşturulmadı — gerekçesi bu, atlandığı için değil.
+
+**DÜRÜST SINIR:** `memory.peak` toplam zirvedir, geri kazanılabilir sayfa
+önbelleğini de içerir; gerçek "çalışan küme" bundan küçüktür. Yani ayırma
+CÖMERT tarafta. Gerçek çok kullanıcılı yük altında yeniden ölçülmeli.
+Ayrıca Postgres'in belleği `anon`'da GÖRÜNMEZ (paylaşımlı bellek
+`shmem`/`file` olarak sayılır) — `anon`a bakıp "Postgres bellek
+kullanmıyor" demek ölçüm hatası olurdu.
+
+---
+
+## ISINMA/1 — YAYIN BETİĞİ ISITMA ADIMI (2026-09-13)
+
+`deploy/scripts/isitma.sh`, `safe-deploy.sh`'te sağlık kontrolünden SONRA,
+kesinti kapısından ÖNCE koşuyor. Sağlık ucu gövdesiz ve ucuz; arka ucun
+ağır yollarına (EF modeli, Npgsql havuzu, kimlik boru hattı) hiç
+dokunmuyor — "ayakta mı" sorusunu yanıtlıyor, "hızlı mı" sorusunu değil.
+
+**Isıtma canlıya KAYIT AÇMIYOR:** var olmayan bir kullanıcı adıyla giriş
+denemesi yapıyor. `LoginAttemptService` yalnız bellekte tutuyor
+(veritabanına yazmaz) ve sayacı IP başına işletiyor. IP
+`X-Forwarded-For`ın ilk değerinden okunuyor — ÇAĞIRARAK kanıtlandı:
+
+    aynı sentetik IP'den 1–5. deneme → 401, 6. deneme → 429 (kilit)
+    farklı IP → 401 · XFF'siz 127.0.0.1 → 400 (kilitlenmedi)
+
+Bu yüzden ısıtma her koşuda YENİ ve asla yönlendirilemeyen bir RFC 5737
+TEST-NET-1 adresi (192.0.2.x) kullanır ve 3 denemede kalır (eşik 5).
+Gerçek kullanıcıların geldiği vekil IP'sinin sayacına dokunulsaydı **bir
+yayın tüm kullanıcıları 15 dakika kilitleyebilirdi.**
+
+Isıtma başarısızlığı yayını DÜŞÜRMEZ (sağlık zaten geçti, sürüm ayakta)
+ama sessiz de geçmez: `WARN` günlüğe yazılır.
+
+### A/B ÖLÇÜMÜ VE POZİTİF KONTROL (Kural 48)
+
+| kol | kurulum | ısıtmasız ilk istek |
+|---|---|---|
+| A | ayırma VAR, ısıtma ATLANDI | arka uç 0,010 sn · ön yüz 0,009 sn |
+| B | ayırma VAR, ısıtma KOŞTU | arka uç 0,004 sn · ön yüz 0,004 sn |
+| **C** | **ayırma YOK, ısıtma ATLANDI** | **arka uç 0,584 sn · ön yüz 0,728 sn** |
+
+**A ile B arasında anlamlı fark YOK ve bu bir başarısızlık değil, bir
+bulgu:** `memory.min` ayırması servisleri zaten RAM'de tuttuğu için
+ısıtılacak soğuk sayfa kalmamıştı. İki tedbir aynı hastalığa bakıyor.
+
+**Pozitif kontrol Kol C'dir ve ISIRDI:** ayırma kaldırılınca süre 140 kat
+arttı (0,004 → 0,584 sn). Yani ölçüm aleti duyarsız değil; A ve B'nin
+hızlı çıkması gerçekten "soğuk sayfa yok" demek. Bu kontrol olmasaydı
+"ısıtma işe yarıyor" diye yazacaktım — oysa ölçülen şey ısıtmanın değil
+AYIRMANIN eseriydi.
+
+**ISITMA YİNE DE KALIYOR, GEREKÇESİ AYRI BİR YOL:** yayın servisleri
+YENİDEN BAŞLATIR. Yeni süreç JIT'lenmemiş ve havuzları boştur; `memory.min`
+o soğukluğa ÇARE DEĞİL (koruyacak yerleşik henüz doğmamıştır). Isıtmanın
+asıl kazandığı yer orası. DÜRÜST SINIR: yeniden başlatma sonrası ısınma
+farkı HENÜZ ÖLÇÜLMEDİ — canlı servisleri ölçüm için yeniden başlatmak
+kullanıcıya dokunan bir eylem; prova zemininde ölçülecek.
+
+### SABAHKİ ÖLÇÜMLE NEDEN ARADAKİ FARK
+
+Sabah aynı yol 6,94 sn ölçülmüştü, Kol C'de 0,584 sn. Sebep: sabah API
+iki gün boşta kalmış + arka arkaya derlemelerle TAM soğumuştu (455 MB
+takasta); Kol C'de 375 MB takasta ve sayfalar daha "ılık"tı. Her iki sayı
+da aynı yönü gösteriyor; büyüklük soğukluğun derecesine bağlı.

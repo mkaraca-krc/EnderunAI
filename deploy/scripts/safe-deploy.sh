@@ -1752,6 +1752,29 @@ main() {
     # düzeltmeyi insan yapar.
     #
     if wait_for_health; then
+
+        # ISINMA — SAĞLIKTAN SONRA, KESİNTİ KAPISINDAN ÖNCE.
+        #
+        # Sağlık kontrolü "ayakta mı" sorusunu yanıtlar, "hızlı mı"
+        # sorusunu değil: gövdesiz sağlık ucu arka ucun ağır yollarına
+        # (EF modeli, Npgsql havuzu, kimlik boru hattı) dokunmaz.
+        # Derleme canlıyı takasa ittiği için yayından sonraki İLK gerçek
+        # istek 6,94 sn ölçüldü (2026-09-13). O bedeli buradan itibaren
+        # yayın betiği öder, ilk kullanıcı değil.
+        #
+        # Isıtma BAŞARISIZLIĞI yayını düşürmez: sağlık zaten geçti, yeni
+        # sürüm ayakta. Isıtma bir hız tedbiri; onun için geri alma
+        # yapmak çalışan bir sürümü indirmek olurdu. Ama sessiz de
+        # geçilmez — uyarı günlüğe yazılır, yoksa çalışmadığı gün fark
+        # edilmez ve dekor bir adıma dönüşür.
+        asama "isitma"
+        if "${REPO_ROOT}/deploy/scripts/isitma.sh" 2>&1 | tee -a "$LOG_FILE"; then
+            log "INFO" "Isıtma tamam."
+        else
+            log "WARN" "Isıtma uyarı verdi; yayın başarısız SAYILMADI (ayrıntı yukarıda)."
+        fi
+
+        asama "kesinti-kapisi"
         if kesinti_izleyicisi_bitir; then
             DEPLOY_OUTCOME="SUCCESS"
             log "INFO" "Yayın BAŞARILI."

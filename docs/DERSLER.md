@@ -315,3 +315,34 @@ değil, **indeks**.
   UYGULAMA: bir aracın çıktısını süzüyorsan, önce süzülen satırlara
   bak; karşılaştırmadan önce iki tarafın sayısını bağımsız bir sayımla
   eşitle (tarama sağlığı sayacı).
+
+- **BİR BİRİM ÖLÇÜMÜ, O BİRİMİN GERÇEKTEN SÜREÇ SAHİBİ OLDUĞU
+  DOĞRULANMADAN HİÇBİR ŞEYİ KANITLAMAZ.** *(Benim adıma, 13 Eylül.)*
+
+  BELLEK/1'de "PostgreSQL'in OOM önceliği 0, en zayıf nokta veritabanı"
+  diye kayda geçtim. Ölçtüğüm birim `postgresql.service`'ti — o bir
+  **meta birim**, hiçbir süreci yok, yalnız gerçek küme birimini
+  tetikliyor. Meta birim her alanı boş/varsayılan gösterir ve bu
+  "koruma yok" gibi okunur. Gerçek birim `postgresql@16-main.service`
+  ve `OOMScoreAdjust=-900`; postmaster'ın `oom_score_adj` değeri −900,
+  çocuk süreçlerinki 0 — yani Postgres'in kendi tavsiye ettiği asimetri
+  dağıtım tarafından zaten kurulmuş. Yanlış kayda dayanarak canlı
+  veritabanına "koruma ekleme" işi yapılacaktı; gereksiz bir yeniden
+  başlatma riskiydi.
+
+  UYGULAMA: bir systemd biriminin bir alanını okumadan önce
+  `systemctl show -p MainPID <birim>` ile birimin bir süreci olduğunu
+  göster; sonra değeri `/proc/<pid>/` altından, yani çekirdeğin gördüğü
+  yerden OKU. Birim dosyası niyeti, `/proc` gerçeği söyler.
+
+- **SIKIŞTIRILMIŞ BİR SÜREÇTEN "İHTİYACI NE KADAR" SORUSU
+  CEVAPLANMAZ — DAİRESELDİR.** *(Mehmet Bey'in düzeltmesi, 13 Eylül.)*
+
+  BELLEK/1'de canlı API'nin yerleşiği 20 MB ölçüldü ve "demek ki 640
+  MB'lık ayırma fazla" diye yazdım. Yanlış: süreç 20 MB tuttuğu için
+  değil, derleme onu takasa ittiği için 20 MB'taydı (455 MB'ı takasta).
+  Soğuk hâlden çalışan küme boyutu türetmek, sonucu sebep sanmaktır.
+
+  UYGULAMA: bir sürecin bellek ihtiyacını ölçmeden önce ONU ISIT;
+  yerleşik kümeyi ısınmış hâlde ölç; ayırmayı (`memory.min`) o sayıdan
+  türet. Sırayı bozarsan ölçtüğün şey ihtiyaç değil, baskının izidir.
