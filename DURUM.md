@@ -13998,3 +13998,69 @@ Gerçek doğrulama, salı günü **ilk gerçek mal kabulünde** olacak; o
 işlem zaten yapılacak bir iştir, sonda değildir. O anda fişin
 150/379.01'e düştüğü kontrol edilecek — **salı prova listesine madde
 olarak eklendi.**
+
+---
+
+## "3237 TEST NEDEN E4'Ü GÖRMEDİ?" — SORU SORULDU, CEVAP ÖLÇÜLDÜ (2026-09-13)
+
+Mehmet Bey'in sorusu doğru soruydu: mutasyon "fikstür atıl mı"yı
+cevaplar; sorulması gereken **"dört yolun uçtan uca testi var mı"**.
+
+### ÖLÇÜM — fikstürde 150/153 tekrar `proje zorunlu` (E4 öncesi canlı hâl)
+
+**BEKLENTİM (önceden ilan edildi):** dört yolun testleri kırmızı olmalı;
+olmayan yol = uçtan uca muhasebe testi yok.
+
+| yol | kırmızıya dönen test | sonuç |
+|---|---|---|
+| projesiz çıkış | `StockConsumptionAccountingTests.ProjesizCikis_770eYazilir` (+2) | **KAPSANIYOR** |
+| projesiz sayım | `StockCountTests` ×6 + `SayimFarki_NoksanVeFazla_…` | **KAPSANIYOR** |
+| depodan zimmet | `DepodanZimmetTests` ×6 | **KAPSANIYOR** |
+| **mal kabul** | `WarehouseIntegrationTests.PostingGoodsReceipt_…` + `PurchaseReturnTests` ×7 + `Issue_WithoutProject_…` | **KAPSANIYOR** |
+
+**TOPLAM 24 TEST KIRMIZI.** Dördü de kapsanıyor: **fikstür taşıyıcı,
+boşluk yok, mesele kapandı.**
+
+### AMA ÖNCE YANLIŞ HÜKÜM VERDİM — VE SEBEBİ KAYDA DEĞER
+
+İlk koşumda süzgecim `FullyQualifiedName~GoodsReceiptAccounting`ti ve
+mal kabul kırmızı yanmadı. "Mal kabulün uçtan uca testi yok" diye
+yazacaktım. **Yanlıştı:** mal kabulü gerçekten fişleyen test BAŞKA BİR
+SINIFTA (`WarehouseIntegrationTests`). Ad süzgeci onu görmedi.
+
+Kural 81'in test süzgeci hâli: **bir süzgeç, kapsamadığı sınıfı "yok"
+diye gösterir.** Süzgeci genişletince kapsam ortaya çıktı. Önce rig
+sorgulandı, sonra hüküm verildi.
+
+### YİNE DE BİR BULGU KALDI — KAYNAK OKUYAN TEST
+
+`GoodsReceiptAccountingTests` **hiçbir mutasyonda kırmızı yanmadı ve
+yanamaz**: mal kabulü hiç çağırmıyor, servis KAYNAK METNİNDE dizge
+arıyor:
+
+    Assert.Matches(@"invoice\.GoodsReceiptId is not null", code);
+    Assert.Matches(@"ResolveGoodsReceivedNotInvoicedAccountAsync", code);
+    code.IndexOf("accountingPoster.PostAsync")
+
+Yani "kodda şu satır geçiyor" diyor, "davranış şu" demiyor — bizim
+yasakladığımız *okumayla hüküm* biçiminin test hâli. Davranışı
+`WarehouseIntegrationTests` koruyor; bu sınıf **yapısal muhafaza**
+olarak kalabilir ama korumadığı şeyi koruyor sanılmamalı. Adı ve
+yorumu bunu söylemeli — küçük iş, sıraya alındı.
+
+### GEÇERSİZLEŞMİŞ KARARI KODLAYAN BAŞKA TEST — **SIFIR**
+
+Bugün alınan 6 karar için tarandı (arka uç **318** test dosyası, ön yüz
+**95** test dosyası):
+
+| karar | eski biçim/kural | bulunan | hüküm |
+|---|---|---|---|
+| malzeme kodu END+4 | `100001`, öneksiz | 2 dosya | **ikisi de benim açıklama YORUMUM**, iddia değil → 0 |
+| hareket tipi 2=giriş | ters etiket sabiti | 0 | — |
+| malzeme tipi 1=Ekipman | `1:"Sarf"`, `2:"Demirbaş"` | 0 | — |
+| reçete kodu kalıbı | kalıp dışı kod | 23 satır | hepsi `RecipeImportParserTests` — **ayrıştırıcı** testi; ayrıştırıcının işi biçim denetimi DEĞİL okuma → ihlal değil |
+| doğrulama 400 döner | 500 bekleyen iddia | 3 satır | 1 yorum · 1 `NotEqual(500)` (uyumlu) · 1 `SensitivePathMaskingTests` **bilerek `InvalidOperationException` atıyor** → yeni kurala göre DOĞRU şekilde 500 bekliyor |
+| 150/153 proje zorunlu değil | `RequiresProject = true` | 0 (beyan dosyası hariç) | — |
+
+**GERÇEK SAYI: 0.** Her eşleşme tek tek açıldı ve dışlama gerekçesi
+yazıldı; "0" boş bir taramadan değil, elenmiş 28 satırdan geliyor.
