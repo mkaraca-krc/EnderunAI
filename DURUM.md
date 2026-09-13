@@ -14784,3 +14784,85 @@ Sızıntı yolu **yok**. 2. aday elenmiş hâlde kalıyor.
 bulmamıştır (Kural 82: ölçüm yalnız ölçtüğü yolu kanıtlar). Prova zemini
 canlı değildir: aynı yayım çıktısı ve aynı kod, farklı veritabanı ve
 farklı sır kaynağı. Kalan hat GÜNLÜK/1'dir.
+
+## YEDEK/1 — SALI ÖNCESİ ÖLÇÜM (2026-09-13)
+
+Önceki ölçüm 2026-09-04'ten. O gün bugün değildir; zincir yeniden ölçüldü.
+
+### (1) ZİNCİR BUGÜN ÇALIŞIYOR
+
+- `enderun-backup.timer` **enabled**, son koşu **2026-09-13 03:00:48**,
+  çıkış **0**. En yeni döküm `db_20260913_030048.dump.gpg` (5.007.079 bayt).
+- `enderun-geri-yukleme-tatbikati` artık **her gece** koşuyor (09-04'te
+  "üç ayda bir"di). **05.09→13.09 arası dokuz gece, boşluksuz, dokuzu da
+  BAŞARILI.** Bugünkü: 242 tablonun satır sayısı damgayla TAM eşleşti.
+- 08.09 günlüğündeki `No space left on device` satırları systemd'nin
+  **inotify izleme tanıtıcısı** ile ilgili; disk değil. O gece tatbikat
+  yine geçti (241 tablo).
+
+### (2) DAMGA DÖNGÜSEL DEĞİL — ÖLÇÜLDÜ
+
+Tatbikatın karşılaştırdığı satır damgası dökümden değil, **canlıdan ve
+dökümle AYNI `pg_export_snapshot()` görüntüsünden** üretiliyor
+(`enderun-backup.sh:188-220`): bir oturum `repeatable read` açıp görüntüyü
+dışa aktarıyor, `pg_dump --snapshot=` onu kullanıyor, sayım da aynı
+görüntüden. Üçü de aynı ana bakıyor. Görüntü alınamazsa **yedek de
+alınmıyor** (fail-closed).
+
+**KAPSAM SORUSU SORULDU (Kural 84):** damga tablo listesini
+`pg_stat_user_tables`'tan alıyor. Listelemediği bir tablo olsaydı tatbikat
+"TAM eşleşti" der, o tabloyu hiç karşılaştırmamış olurdu.
+
+| kaynak | tablo |
+|---|---|
+| `information_schema` temel tablo | **242** |
+| `pg_stat_user_tables` | **242** |
+| bugünkü damga dosyası | **242** |
+
+Küme farkı **boş** (iki yönde de). Kapsam tam. (Not: `pg_stat_*` burada
+LİSTE olarak kullanılıyor, SAYI olarak değil — 09-13 dersiyle tutarlı.)
+
+### (3) KAPI KIRMIZI YANDI — YENİ OLUMSUZ KONTROL
+
+**Açık kalan boşluk:** 04.09'daki olumsuz kontrol *bozuk dosyayı*
+sınamıştı (gpg/pg_restore düşüyor). Betik **06.09'da damga
+karşılaştırmasıyla yeniden yazıldı** ve asıl tehlikeli yol — *döküm
+sorunsuz açılıyor ama satırlar eksik* — **hiç kırmızı yanmamıştı.**
+
+Betiğin kendisi kullanıldı; yalnız `BACKUP_DIR` ve başarı damgası yolu
+geçici kopyaya çevrildi. Canlı yedek dizinine hiçbir şey yazılmadı.
+
+| ayak | değişiklik | sonuç |
+|---|---|---|
+| düzenek kontrolü | bozulmamış kopya | çıkış **0**, "242 tablo TAM eşleşti" |
+| **olumsuz kontrol** | damgada `AccountingPeriods` 0 → 1 | çıkış **1**, *"Damga ile geri yüklenen kopya UYUŞMUYOR"* + farkı **tablo adıyla** gösterdi (`< AccountingPeriods\|1` / `> AccountingPeriods\|0`) |
+
+Kapı hem yeşil hem kırmızı yanabiliyor ve kırmızı yanarken **hangi tablo**
+olduğunu söylüyor. Tatbikat kendi prova veritabanını düşürdü, gerçek
+başarı damgası (03:33) ve yedek dizini (457 dosya) el değmedi.
+
+### (4) SAKLAMA SÜRESİ ARTIK ÖLÇÜLMÜŞ BİR SAYI
+
+09-04'te "mtime'a bağlı bir yan etki, ölçülmüş sayı değil" diye kalmıştı.
+Ölçüldü:
+
+- Kural `RETENTION_DAYS=30`, süzgeç `find -mtime +30` — **dosya adındaki
+  tarihi değil mtime'ı** kullanıyor.
+- 457 dosyanın **316'sında ad ≠ mtime**. En büyük öbek: **326 dosya,
+  mtime 2026-08-25** (o gün geçmiş yedekler toplu şifrelenmişti),
+  adları 08-08..08-25.
+- **FİİLÎ AZAMİ SAKLAMA: 48 gün** (kural 30 diyor). Yön **hep fazla
+  saklama**, asla eksik.
+- 25.09'da o 326 dosya tek gecede düşecek (457 → ~131, 20G → ~6G). Ama
+  onlar ADA göre de 30 günü çoktan geçmiş dosyalar; doğru bir kuralın
+  zaten sileceği şeyler. **Kurtarılabilirlik riski yok.**
+- 09-04'teki beklentim ("henüz hiçbir şey silinmedi") **yanlış çıktı**:
+  613 → 457, ada göre en eski 08-02 → 08-08. Adı 08-02..08-07 olan
+  dosyalar gerçek mtime'larıyla duruyordu ve 30 günü doldurup silindiler.
+
+### AÇIK KALAN — BENDE DEĞİL
+
+1. **Sunucu dışı kopya YOK.** `enderun-yedek-uzak.py` yazılı ama
+   `UZAK_YEDEK_ETKIN=hayir`; KVKK yurt dışı aktarım değerlendirmesi
+   bekliyor. Sunucu giderse yedek de gider — bu hâlâ böyle.
+2. **Canlıya geri yükleme adımları yazılı değil** → paket C.
