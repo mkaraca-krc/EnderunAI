@@ -14632,3 +14632,155 @@ servis kimliğine indirgenirse **KIRMIZI**.
 **ŞART:** AJAN/1'e herhangi bir **yönetim izni** eklenmesi düşünülürse
 bu ayak ÖNCE yazılmalıdır. Bugün ajanın o izni yok, çakışma pratikte
 doğmuyor.
+
+---
+
+## PAKET — OTURUM/1: GEÇİCİ ARIZA KALICI ÇIKIŞA DÖNÜŞTÜ (2026-09-09 ölçümü)
+
+### BELİRTİ — canlıdan ölçüldü
+
+    22:18 UTC   K5 yayını
+    ~22:2x      GET /api/backend/auth/me → 503 (yayın penceresi)
+    ~22:2x      aynı uç → 401 ×6, 1,5 sn arayla
+    22:41:17Z   aynı uç → 401 — yayından 23 DAKİKA sonra hâlâ
+    22:41:17Z   GET /dashboard → ara katman yönlendiriyor
+    tarayıcıda görünür çerez YOK, localStorage BOŞ, kullanıcı hiç çıkış yapmadı
+
+**Isınma penceresi bunu açıklamıyor:** 23 dakika ısınma değildir ve ara
+katman jetonu YEREL çözüyor.
+
+### ELENEN SEKİZ ADAY — hepsi ölçüldü, TEKRAR EDİLMEYECEK
+
+1. Data Protection anahtarları — JWT bearer kullanılıyor, çerez oturumu yok
+2. JWT imza anahtarı — `JWT_SECRET` sabit
+3. Ön yüz 503'ü 401 gibi ele alıyor — yalnız 401'de yönlendiriyor
+4. Ara katman arka uca soruyor — yerel çözüyor
+5. Jeton süresi doldu — 12 saat ömür, 3+ saat kalmıştı
+6. Vekil `Set-Cookie` geçiriyor — başlıklar sıfırdan kuruluyor
+7. Mesai izleyicisi — `mehmet` Admin+GM, muaf
+8. Parola damgası — `PasswordChangedAtUtc` NULL
+
+### KÖK SEBEP: **BULUNAMADI. DURUM = ÖLÇEMEDİ.**
+
+"Çözüldü" YAZILMIYOR. Kanıt kaybı Mehmet Bey'de: `/login`e düşüldüğünde
+tam URL (`?reason=…` var mıydı) kaydedilmeden sayfa yenilendi; geri
+getirilemiyor.
+
+**Kök sebep avı SALIDAN SONRA.** GÜNLÜK/1 yayına girdikten sonra bu soru
+tahminle değil KAYITLA cevaplanacak — GÜNLÜK/1 sıraya bu yüzden alındı.
+
+### SALI KAPSAMI — kök sebep bulunmasa da yapılacak iki iş
+
+**(a) MESAİ İZLEYİCİSİ DÜZELTMESİ — asıl iş.**
+Mekanizma: `work-hour-session-watcher`, HTTP 200 gövdesinde
+`isAllowed:false` görünce `/api/auth/logout` çağırıyor ve çerez
+siliniyor → **kalıcı çıkış**. `WorkHourAccessService` ise KULLANICI
+SATIRI OKUNAMAZSA tam olarak bunu döndürüyor. Yani **fail-closed bir
+OKUMA HATASI, kalıcı bir ÇIKIŞA çevriliyor.**
+
+Mehmet Bey muaf olduğu için onda tetiklenmiyor; **muaf olmayan her
+personelde tetiklenir** ve salı pilotunda muaf olmayan kullanıcı var.
+
+**İLKE: okunamayan bir kullanıcı satırı "mesai dışı" DEĞİLDİR.** Geçici
+hatada oturum düşürülmez, yeniden denenir. Kalıcı çıkışı yalnız gerçek
+bir "mesai dışı" kararı üretebilir.
+
+**(b) RIG'DE YENİDEN BAŞLATMA ÖLÇÜMÜ** — aşağıda.
+
+### (a) SONUÇ — DÜZELTME ZATEN CANLIDA, MUTASYONLA DOĞRULANDI (2026-09-13)
+
+**Bulgu: (a) yapılacak iş değil, YAPILMIŞ iş.** Ölçmeden "yapılacak"
+diye yazmıştım; ölçünce canlıda çalışır hâlde çıktı.
+
+Arka uç — `Security/WorkHourAccessService.cs:90`:
+
+    if (user is null)
+        return new WorkHourEvaluation(
+            MesaiKarari.Belirlenemedi, false, null, "Kullanıcı satırı okunamadı.");
+
+Ön yüz — `components/work-hour-session-watcher.tsx:62`:
+
+    if (status?.karar === "mesai-disi")   // yalnız AÇIK karar çıkış yaptırır
+    // Okunamayan ya da beklenmeyen cevap: karar yok, oturum kalır.
+
+Yani karar alanı `Belirlenemedi` iken ön yüz çıkış yapmıyor: fail-closed
+okuma hatası artık kalıcı çıkışa çevrilmiyor.
+
+**CANLIDA OLDUĞUNUN KANITI (dosya tarihleri, kod okuması değil):**
+`"mesai-disi"` karşılaştırmasını içeren paketler **2026-09-11 12:13**
+(canlı yapı). Eski `!isAllowed` kalıbını taşıyan paketler
+**2026-09-10 04:11** — `.next/static` içinde kalmış bayat artıklar.
+
+**MUTASYON — kapı en az bir kez KIRMIZI yandı:**
+
+| ayak | değişiklik | sonuç |
+|---|---|---|
+| ön yüz taban | — | 10/10 YEŞİL |
+| ön yüz mutasyon | `karar === "mesai-disi"` → `isAllowed === false` | 1 KIRMIZI: *"200 ama karar alanı yok (eski/eksik gövde) → çıkış YOK"* |
+| ön yüz geri alındı | — | 10/10 YEŞİL |
+| arka uç taban | — | `[FAIL]` satırı YOK |
+| arka uç mutasyon | `Belirlenemedi` → `MesaiDisi` | **2 KIRMIZI**: `SatiriOlmayanKullanici_MesaiDisiDiyeEtiketlenmez`, `Degerlendirme_SatirYoksa_KararBelirlenemedi` |
+| arka uç geri alındı | — | `[FAIL]` satırı YOK |
+
+**KENDİ ÖLÇÜM HATAM, KAYDA GEÇİYOR (Kural 84).** Sonucu okurken
+`sed 's/.*EnderunAI\.Api\.Tests\.//'` süzgeci kullandım; bu süzgeç
+`Passed!` satırını da kırpıp geriye `dll (net8.0)` bıraktı — ve aynı
+kırpma `Failed!` satırını da aynı dizgeye indirirdi. **Süzgecim, ayırt
+etmem gereken iki hâli tek hâle indirmişti.** Ayrıca doğrulama koşusunu
+ortam değişkenlerini kurmadan çağırdım; 17 test 38 ms'de düştü — bu bir
+bulgu değil, düzenek arızasıydı. Geçerli kanıt `[FAIL]` satırlarının
+varlığı/yokluğudur ve o kanıt yukarıdaki tablodadır.
+
+### (b) SONUÇ — YENİDEN BAŞLATMA JETONU DÜŞÜRMÜYOR (2026-09-13, prova zemini)
+
+**DÜZENEK KUSURU ÖNCE DÜZELTİLDİ (Kural 81).** İlk niyetim mevcut prova
+arka ucunu (5157) yeniden başlatmaktı. Ölçmeden önce baktım:
+`duzen-testi.sh:254` her başlatmada **rastgele** `JWT_SECRET` üretiyor.
+Canlıda ise sır `/etc/enderunai/backend.env` içinde **sabit**. O düzenekle
+ölçseydim kaçınılmaz olarak 401 çıkardı ve bunu "yeniden başlatma jetonu
+düşürüyor" diye yazardım — üretimin değil, düzeneğin kusuru olurdu.
+Bu yüzden **5158'de ayrı, sabit sırlı** bir zemin kuruldu (5157'ye
+dokunulmadı). Zemin ayrıca **sırsız**: Postgres yerel soketi (peer
+kimlik doğrulaması, parola yok), JWT için gerçek olmayan sabit dizge.
+
+| ayak | ölçüm | sonuç |
+|---|---|---|
+| POZ-1 | yeniden başlatma YOK, hemen | `/api/auth/me` = **200** |
+| POZ-2 | yeniden başlatma YOK, 45 sn sonra | `/api/auth/me` = **200** |
+| TUR 1 | **aynı sırla** yeniden başlatma, aynı jeton | ilk HTTP cevabı **200** (t+13,5 sn); ısınma sonrası **200**; görülen tüm kodlar: **[200]** |
+| TUR 2 | **farklı sırla** (olumsuz kontrol) | ilk HTTP cevabı **401** (t+12,6 sn); ısınma sonrası **401**; görülen tüm kodlar: **[401]** |
+
+**Ayrım korundu:** yeniden başlatmadan sonraki ilk ~13 saniyede arka uç
+HİÇ cevap vermiyor — 51 kez *bağlantı kurulamadı*. Bu bir hüküm değildir;
+vekil bunu 502/503 görür, **401 görmez**.
+
+**SORUNUN CEVABI:** ısınma sonrası **200** geliyor → *jeton sağlam, kusur
+yeniden başlatmada değil.* Ve daha keskini: yeniden başlatma penceresinin
+**hiçbir anında** 401 üretilmedi. Yani **401 üretmek için arka ucun ayakta
+olup jetonu etkin biçimde REDDETMESİ gerekir**; "ısınma" bir 401 kaynağı
+DEĞİLDİR. 09.09'daki altı 401 ısınmayla açıklanamaz — bu artık çıkarım
+değil, ölçüm.
+
+**Sonda kör değil (Kural 48):** olumsuz kontrol 401'i gördü. Boş küme
+değil.
+
+**OLUMSUZ KONTROLÜN AÇTIĞI SORU — ve ölçülüp KAPATILDI.** Farklı sırla
+yeniden başlatma, canlıdaki belirtinin *tıpatıp aynısını* üretti: anında
+401, 23 dakika sonra da 401, yeni girişle düzelir. 2. aday ("JWT_SECRET
+sabit") bu yüzden yeniden ölçüldü — okunarak değil, **sağlamasıyla**:
+
+- `/etc/enderunai/backend.env` son değişiklik: **2026-08-24 10:59** —
+  olaydan 16 gün önce. Yayın sırrı yeniden yazmıyor.
+- `safe-deploy.sh:379` kendi sürecine `JWT_SECRET="TEST-deploy-script-…"`
+  ihraç ediyor; ama arka uç `systemctl restart enderunai-backend` ile
+  kalkıyor ve birim yalnız `EnvironmentFile=/etc/enderunai/backend.env`
+  kullanıyor — betiğin ortamı systemd'ye geçmez.
+- Canlı süreçte `JWT_SECRET` tam **1** kez tanımlı ve `TEST-deploy-script`
+  öneki **taşımıyor** (değer okunmadı, yalnız önek sınandı).
+
+Sızıntı yolu **yok**. 2. aday elenmiş hâlde kalıyor.
+
+**KÖK SEBEP HÂLÂ ÖLÇEMEDİ.** (b) bir adayı elemiştir, kök sebebi
+bulmamıştır (Kural 82: ölçüm yalnız ölçtüğü yolu kanıtlar). Prova zemini
+canlı değildir: aynı yayım çıktısı ve aynı kod, farklı veritabanı ve
+farklı sır kaynağı. Kalan hat GÜNLÜK/1'dir.
