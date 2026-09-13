@@ -375,3 +375,26 @@ değil, **indeks**.
   okunup "OOM koruması yok" denmişti — koruma vardı, ölçülen birimin
   süreci yoktu. Üçünde de ölçüm aleti çalışıyordu; ÖLÇÜM KOŞULU
   kurulmamıştı.
+
+- **ÜÇÜNCÜ KEZ TEKRARLAYAN BİR İNSAN/ARAÇ HATASI, KURALLA DEĞİL ARAÇLA
+  KAPATILIR.** *(Mehmet Bey'in kuralı, 13 Eylül.)*
+
+  Desenli süreç öldürme (`pkill` + tam-komut-satırı bayrağı) bu depoda
+  BEŞ kez çağıran kabuğun kendisini öldürdü — desen, çağıran komutun
+  kendi satırında da geçiyor. Dördüncüden sonra doğru şey yapılmıştı:
+  `deploy/scripts/surec-durdur.sh` yazıldı (kendini ve atasını dışlar)
+  ve `PkillYasagiTests` muhafızı kondu.
+
+  **Beşincisi yine de oldu (13 Eylül) ve sebebi öğretici: hata
+  tekrarlamadı, ARAÇ BİR KANALI KAPSAMIYORDU.** Muhafız yalnız depodaki
+  `.sh` dosyalarını tarıyor; etkileşimli kabuk çağrılarını göremez. Araç
+  vardı, muhafız yeşildi, kanal açıktı.
+
+  UYGULAMA: bir tekrar daha olduğunda önce "yasak neden tutmadı" diye
+  değil, **"aracın kapsamadığı kanal hangisi"** diye sorun. Buradaki
+  cevap bir PreToolUse kancası oldu
+  (`deploy/scripts/pkill-kancasi.sh`): komut konumundaki desenli
+  öldürme çağrısını reddediyor, aracı adıyla söylüyor, ve deseni
+  BAHSEDEN komutları (belge yazmak gibi) engellemiyor — kendi belgesini
+  yazmayı yasaklayan bir kapı kullanılamaz hâle gelir. 12 varyantla
+  sınandı; kanca ateşlendiği ölçülerek doğrulandı.

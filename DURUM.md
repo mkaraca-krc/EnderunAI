@@ -13240,3 +13240,16 @@ var — `/insan-kaynaklari/gunluk-puantaj`, `/perakende`,
 `/perakende/fiyatlar`, `/perakende/raporlar`, `/sekreterya`. **SALIDAN
 SONRA** ele alınacak ve **menüye eklemeden önce her birinin çalıştığı
 ölçülecek** — hiç kullanılmamış ekranları menüye koyup pilota sunmayalım.
+
+### MALİ MÜŞAVİRE SORULACAK (STOK/1 · E1)
+
+Mehmet Bey'in hazırladığı metin, aynen:
+
+> "Depolarımızdaki mevcut malzemeyi ERP'ye açılış stoğu olarak
+> gireceğiz. Stok hesaplarının (153 ticari mal, 150 sarf) karşısına
+> hangi hesabı çalıştırmalıyız? Açılış fişinde kullanılacak karşı
+> hesabı ve fişin tarihini söyler misiniz?"
+
+**CEVAP GELMEDEN `Opening` hareket tipinin MUHASEBE AYAĞI YAZILMAYACAK.**
+Karşı hesap kararı (500 / 570 / 632 …) ne bende ne Mehmet Bey'de: yasal
+deftere giren bir karar ve muhasebecinin.
