@@ -205,34 +205,51 @@ public sealed class ReceteAktarimiKodBicimiTests(DatabaseFixture fixture)
     /// KIRMIZIYA DÖNERSE: kalıp denetimi büyük/küçük harfe takılır ve
     /// kullanıcının küçük harf yazdığı GEÇERLİ kod reddedilir. Kod
     /// zaten büyük harfe çevrilerek yazılıyor; denetim de öyle bakmalı.
+    ///
+    /// DAVRANIŞ DEĞİŞTİ (2026-09-14): reçete aktarımı artık KART AÇMIYOR
+    /// (kategori bilgisi taşımıyor, bkz. RecipeImportService). Bu testin
+    /// asıl iddiası hâlâ geçerli ve BURADA KİLİTLENİYOR: küçük harfli
+    /// GEÇERLİ kod, "biçime uymuyor" diye reddedilmemeli — artık farklı
+    /// bir gerekçeyle (KATEGORİ) eleniyor. İki gerekçe karışırsa kalıp
+    /// denetimi sessizce bozulabilir.
     /// </summary>
     [Fact]
-    public async Task KucukHarfliKalibaUyanKod_Kabul()
+    public async Task KucukHarfliKalibaUyanKod_BicimeTakilmaz()
     {
         var (sirket, poz) = await ZeminAsync();
 
         var onizleme = await OnizleAsync(sirket, Satir(poz, "end0888", "Küçük Harfli Kod"));
         var satir = Assert.Single(onizleme.Rows);
 
-        Assert.Equal(RecipeImportAction.CreateItem, satir.Action);
-        Assert.Null(satir.Error);
+        Assert.Equal(RecipeImportAction.Skip, satir.Action);
+        Assert.DoesNotContain("biçime uymuyor", satir.Error ?? string.Empty);
+        Assert.Contains("KATEGORİ", satir.Error ?? string.Empty);
     }
 
     /// <summary>
-    /// POZİTİF KONTROL (Kural 48). Bu olmadan yukarıdaki "hepsi atlandı"
-    /// sonucu, kuralın çalıştığının değil ÖNİZLEMENİN HİÇ KART AÇMADIĞININ
-    /// kanıtı olabilirdi.
+    /// POZİTİF KONTROL (Kural 48) — AMA ARTIK BAŞKA BİR AYRIM ÜZERİNDE.
+    ///
+    /// Eskiden "kalıba uyan kod KART AÇAR" diyordu ve kalıp denetiminin
+    /// boşa düşmediğini böyle gösteriyordu. 2026-09-14'te reçete
+    /// aktarımı kart açmayı bıraktı (kategori bilgisi yok), yani o
+    /// ayrım kayboldu.
+    ///
+    /// YERİNE KONAN AYRIM: kalıba UYAN kod ile UYMAYAN kod **farklı
+    /// gerekçeyle** eleniyor. İkisi de "Skip" ama sebepleri ayrı; bu
+    /// olmadan "hepsi atlandı" sonucu kalıp denetiminin çalıştığının
+    /// değil, ÖNİZLEMENİN HER ŞEYİ ELEDİĞİNİN kanıtı olurdu.
     /// </summary>
     [Fact]
-    public async Task KalibaUyanKod_KartAcar()
+    public async Task KalibaUyanKod_BicimDegil_KategoriGerekcesiyleElenir()
     {
         var (sirket, poz) = await ZeminAsync();
 
         var onizleme = await OnizleAsync(sirket, Satir(poz, "END0777", "Uygun Kodlu Malzeme"));
         var satir = Assert.Single(onizleme.Rows);
 
-        Assert.Equal(RecipeImportAction.CreateItem, satir.Action);
-        Assert.Null(satir.Error);
-        Assert.Equal(1, onizleme.NewInventoryItemCount);
+        Assert.Equal(RecipeImportAction.Skip, satir.Action);
+        Assert.DoesNotContain("biçime uymuyor", satir.Error ?? string.Empty);
+        Assert.Contains("KATEGORİ", satir.Error ?? string.Empty);
+        Assert.Equal(0, onizleme.NewInventoryItemCount);
     }
 }

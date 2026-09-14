@@ -97,6 +97,15 @@ public sealed class SecretInSourceGuardTests
             "EF'in ürettiği göç adları (\"20260804132300_NetEsasli…\") " +
             "43 karakteri aşıyor ve biçime uyuyor; hepsi yanlış alarm. " +
             "Elle yazılmıyorlar. GERÇEK SIR kontrolü yine de bakıyor.",
+
+        ["/deploy/geri-alma/"] =
+            "Göç GERİ ALMA SQL'leri — `dotnet ef migrations script` " +
+            "üretiyor ve içlerinde göç KİMLİĞİ geçiyor " +
+            "(\"20260913144150_YetimAuditLogsTablosuDusuruldu\"). " +
+            "`/Migrations/` muafiyetiyle AYNI sınıf yanlış alarm; tek " +
+            "farkı dosyanın başka dizinde durması. ÖLÇÜLDÜ 2026-09-14: " +
+            "gece tam takımın ilk koşusunda bu satır kırmızı yaktı ve " +
+            "sır değildi. GERÇEK SIR kontrolü bu dizine yine bakıyor.",
     };
 
     /*

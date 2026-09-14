@@ -16521,3 +16521,54 @@ koşulamadıysa `OLCEMEDI`, derleme kilidi meşgulse (çıkış 75) yine
 
 **Yarın 01:00'de koşacak — yayından 3,5 saat önce.** Bugünkü kırmızı
 gibi bir şey varsa yayın sabahı değil, gece öğrenilir.
+
+## GECE TAM TAKIM — İLK KOŞUSUNDA ÜÇ KIRMIZI BULDU (2026-09-14)
+
+Kurulur kurulmaz elle koşturuldu. **3.259 test, 3.256 geçti, 3 düştü.**
+Süre 2.813 sn (47 dk). **Üçü de yayın sabahı 04:30'da görünecekti.**
+
+### 1 · YANLIŞ KIRMIZI — `SecretInSourceGuardTests`
+
+    deploy/geri-alma/20260913144150-geri.sql:33
+      ->  20260913144150_YetimAuditLogsTablosuDusuruldu
+
+Bu bir **göç kimliği**, sır değil. Bekçide zaten `/Migrations/`
+muafiyeti vardı, aynı gerekçeyle ("EF'in ürettiği adlar biçime uyuyor,
+hepsi yanlış alarm"). Dün yazdığım geri alma SQL'i **başka bir dizinde**
+duruyor diye muafiyetin dışında kaldı.
+
+`/deploy/geri-alma/` muafiyete **gerekçesiyle** eklendi. Gerçek sır
+kontrolü o dizine yine bakıyor.
+
+### 2–3 · GERÇEK KIRMIZI — KAÇIRDIĞIM TEST SINIFI (Kural 84, bugünkü 5.)
+
+    ReceteAktarimiKodBicimiTests.KalibaUyanKod_KartAcar          [FAIL]
+    ReceteAktarimiKodBicimiTests.KucukHarfliKalibaUyanKod_Kabul  [FAIL]
+
+Dün içe aktarmanın kart açma kapısını kapattım ve testlerini
+güncelledim — **ama yalnız `RecipeImportServiceTests`'i.** Bu iki test
+aynı davranışı ayrı bir sınıfta sabitliyordu.
+
+**SÜZGECİN NEDEN KAÇIRDIĞI ÖLÇÜLDÜ:** sınıfın adı
+`ReceteAktarimiKodBicimiTests`, **dosyanın** adı `StokKoduBicimiTests.cs`.
+Ben `--filter FullyQualifiedName~StokKoduBicimi` koştum; süzgeç **tür
+adına** bakıyor, dosya adına değil. Dosya adına güvenip "bu sınıfı
+koştum" sandım.
+
+**İkisi de silinmedi, çevrildi** — ve çevirirken testin *asıl iddiası*
+korundu: eskiden "kalıba uyan kod kart açar" diyerek kalıp denetiminin
+boşa düşmediğini gösteriyorlardı. O ayrım kayboldu; yerine **"kalıba
+uyan ile uymayan kod FARKLI GEREKÇEYLE eleniyor"** ayrımı kondu.
+Yoksa "hepsi atlandı" sonucu, kalıp denetiminin çalıştığının değil
+önizlemenin her şeyi elediğinin kanıtı olurdu (Kural 48).
+
+Koşum: **8/8 yeşil.**
+
+### BU İŞİN DEĞERİ, İLK GÜNDE ÖLÇÜLDÜ
+
+Gece tam takım daha ilk koşusunda, yayından **14 saat önce**, yayın
+penceresini kurtardı. Kurulmasaydı bu üç kırmızı 04:30'da,
+`safe-deploy`in test adımında görünecekti: yayın durur, pencere yanar,
+insanlar gelmeden bitirme şansı kaybolurdu.
+
+*Yayın sabahı öğrenilen her şey, bir gece önce öğrenilebilirdi.*
