@@ -16296,3 +16296,102 @@ trafik yok, ve **boş küme her iddiayı doğrular** (Kural 48).
 **Nöbet penceresi:** yayın 04:30–05:30, doğrulama hemen (çağırarak),
 eşik izleme **06:00–09:00 UTC** arası — trafiğin gerçekten geldiği ilk
 üç saat.
+
+
+## YAYIN HAZIRLIĞI — İKİ DÜZELTME VE İKİ YENİ BULGU (2026-09-14)
+
+### DÜZELTME 1 — YAZMA GECİKMESİ EŞİĞİ: ALETLER KARIŞMIŞTI
+
+Haklı uyarı: taban **provadan** (83 ms), eşik **canlıda** (250 ms)
+konmuştu. İki farklı zeminin sayısı yan yana duruyordu.
+
+**CANLIDA ÖLÇEMEDİM — SEBEBİ KURALIN KENDİSİ.** Kimlikli bir canlı uca
+çağrı yapmam gerekir; canlı kullanıcı parolası bana geçmiyor. Kimliksiz
+yazma ucu da yok (`AllowAnonymous` taşıyan uçlar: giriş, portal,
+şirket ayarı okuma).
+
+**BUNUN YERİNE İKİ ZEMİNİN AYNI DAVRANIP DAVRANMADIĞINI ÖLÇTÜM:**
+
+| | canlı `enderun_ai` | prova `enderun_stok_prova` |
+|---|---|---|
+| boyut | 59 MB | 57 MB |
+| postgres örneği | **aynı** (tek örnek, yerel soket) | **aynı** |
+| okuma (20 ölçüm, ortanca) | 0,15 ms | 0,20 ms |
+| yazma (2.000 satır INSERT) | **6,3 ms** | 5,0 ms |
+
+Canlı yazmada **~1,27× daha yavaş**. Yani prova tabanı (83 ms) canlıda
+kabaca **105 ms**'e karşılık gelir.
+
+**EŞİK DÜŞÜRÜLDÜ: 250 ms → 180 ms** (≈ türetilmiş canlı tabanın 1,7×'i).
+
+> **ETİKET — SESSİZCE BIRAKILMIYOR:** bu eşik **prova tabanına
+> dayanıyor; canlı uç tabanı ÖLÇÜLMEDİ.** İki zeminin aynı makinede
+> benzer davrandığı ölçüldü, ama bu bir *vekil*dir, canlı ucun kendi
+> ölçümü değildir.
+
+### DÜZELTME 2 — ŞART 2'NİN SAYISI, AÇIKÇA
+
+**A3'TEN BEKLENEN 4xx ARTIŞI ≈ 0,17 adet/gün** (6 günde 1 istek).
+
+Dayanak: 7 günlük journalde (667.752 satır) `ArgumentException`
+**0**; `/api/` altındaki 44 adet 5xx'in **43'ü 502**, geriye **1 gerçek
+500** kalıyor ve A3 en fazla onu 400'e çevirebilirdi.
+
+> **İLAN: yayından sonra 4xx'te kayda değer bir artış GÖRÜLMEMELİ.**
+> Görülürse bu **A3'ün başarısı değil, bir sorundur** ve incelenir.
+> (Eşik 4 zaten "İNCELE" diyor; gerekçesi budur.)
+
+### BULGU — "43 ADET 502 YALNIZ RESTART" HÜKMÜ DENETLENDİ
+
+Bu bir hükümdü; ölçüldü. 6 günün systemd kayıtlarından **71 başlatma/
+durdurma olayı** çıkarıldı, her 502'nin dakikası bunlarla eşleştirildi:
+
+| | adet |
+|---|---|
+| bir başlatma olayının **±3 dk** içinde | **43** |
+| **eşleşmeyen** | **0** |
+
+Hüküm doğrulandı. (71 olay çoktur ama hepsi bu oturumun prova/test
+yeniden başlatmaları ve yayınlarıdır.)
+
+### BULGU — BÖLME PLANI OLDUĞU GİBİ UYGULANAMIYOR: A3 İLE A4 AYNI COMMİT'TE
+
+`cfb635b4` **hem** `GlobalExceptionHandler`ı (A3) **hem** E5'in
+çıkış/zimmet masraf merkezi kademesini (A4) taşıyor. Ayrı yayınlara
+koyamam; commit'i bölmek 04:30'da gereksiz risk olurdu.
+
+**SONUÇ: Yayın 1, E5'in çıkış/zimmet ayağını da içeriyor.**
+`ab87be32` (sayım fişi posteri, E5'in diğer ayağı) Yayın 2'de kalıyor;
+o değişiklik "veriyi tamamlıyor, hata kapatmıyor" diye kayıtlı —
+bölünmesi güvenli.
+
+### YAYIN 1 DALI HAZIRLANDI — `yayin-1`
+
+`safe-deploy` dalın UCUNU yayınlar, alt küme yayınlayamaz. Bu yüzden
+canlı commit üzerine üç commit seçilerek alındı:
+
+    f82c1c79  E5 + K3        (A3 + A4)
+    81d628e9  DENETIM/2      (A5 + göç)
+    c758ab9a  GÜNLÜK/1       (A6)
+
+**12 dosya.** `DURUM.md` bilerek alınmadı (her commit ona ekliyor,
+tek çakışma kaynağı oydu; kayıt `main`de kalır).
+
+**SIZMA DENETİMİ — Yayın 2'ye ait olanlar dalda YOK:**
+`kart-durumu.ts` ✓ · `PasifKartHareketiInterceptor.cs` ✓ ·
+`kategori-etiketi.ts` ✓ · `app/layout.tsx` ✓
+
+### KAPSAM KAPISI — YEŞİL (ve paket büyüdü)
+
+    38 commit'in 38'i ilan edilmiş; ilan dışı 0.   (çıkış 0)
+
+**35 değil 38:** hazırlık sırasında üç commit daha eklendi (taban
+ölçümleri, eşik tasarımı, geri-al.sh). Üçü de B/C kovasında;
+**A kovası hâlâ 10 commit.**
+
+### (a) YEDEK TAZELİĞİ — YEŞİL
+
+    döküm   : db_20260914_030149.dump.gpg (5.007.264 bayt, damgalı)
+    tatbikat: 2026-09-14T03:35:05Z BAŞARILI — 242 tablo TAM eşleşme, 11 sn
+
+Yayın yarın sabah olduğu için **15/09 sabahı tekrar doğrulanacak.**
