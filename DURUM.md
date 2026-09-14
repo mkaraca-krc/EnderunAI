@@ -15829,3 +15829,240 @@ ayrı bir karar (kapalı arama uzayı olduğu için küçük bir metin
 muhafızıyla kapatılabilir).
 
 **B KAPANDI.**
+
+# ═══════════════════════════════════════════════════════════════════
+# SALI YAYINI — PAKET DÖKÜMÜ (2026-09-14, onay için)
+# ═══════════════════════════════════════════════════════════════════
+
+Canlı commit **`9402c5cd`** → yayınlanacak **`28723fa1`**.
+**35 commit, 74 dosya** (önceki raporumda "34" demiştim — bu sayı
+ölçüldü, düzeltildi).
+
+## 1) ÜÇ KOVA
+
+| kova | commit | dosya |
+|---|---|---|
+| **A — çalışma zamanı davranışı** | **10** | **25** |
+| **B — altyapı (betik/kapı)** | 11 | 21 |
+| **C — yalnız kayıt/belge/test** | 14 | 28 |
+
+Her commit EN YÜKSEK etkili kovasına yazıldı (A > B > C); dosya
+sayıları kova bazında ayrı sayıldı.
+
+> **PAKETİN DIŞINDA, ZATEN CANLIDA:** logrotate `rotate 90`,
+> `enderun-gunluk-ozet.timer`, `enderun-sorgu-cirasi.timer` — bunlar
+> depo dosyası değil, sunucuya doğrudan uygulandı ve şu an çalışıyor.
+> Yayınla gelmiyorlar, geri alma da onları geri almaz.
+
+## 2) KOVA A — TEK TEK
+
+### A1 · `ccf1363e` — transfer etiketleri + kod üreticisi END+4
+**Değişen:** `InventoryCodeService` (kod `END0010` biçimi, mevcut en
+büyükten tohumlanır), `RecipeImportService` (biçimsiz kodu reddeder),
+dört ekranda hareket etiketleri tek kaynağa.
+**Kullanıcı ne görecek:** transfer satırları artık doğru yönde
+("Transfer Giriş"/"Transfer Çıkış" ters değil); yeni kart kodu `END0010`.
+**Yayın sonrası ölçüm (çağırarak):** ekrandan bir kart aç →
+`POST /api/inventory/items` dönen `code` `^END[0-9]{4,}$` kalıbına uysun;
+hareket listesinde bir transferin iki ucunun etiketi ters olmasın.
+**Bozulursa belirtisi:** yeni kart kodu `END` öneki almaz ya da mevcut
+kodla çakışır (409/500); transfer etiketleri ters görünür.
+**Göç:** yok. **Geri alınabilir:** evet (kod).
+
+### A2 · `c4391c0b` — malzeme tipi tek kaynağa, SparePart kurtarıldı
+**Değişen:** beş kopya etiket haritası tek dosyaya; `SparePart` (Yedek
+Parça) seçeneği forma geri geldi.
+**Kullanıcı ne görecek:** kart formunda dördüncü tip seçeneği;
+listelerde tip etiketleri tutarlı.
+**Ölçüm:** kart formunda tip listesi 4 seçenek; `type=3` ile kart aç →
+listede "Yedek Parça" yazsın.
+**Bozulursa:** tip alanı boş ya da "Bilinmeyen" görünür.
+**Göç:** yok. **Geri alınabilir:** evet.
+
+### A3 · `cfb635b4` — K3 istisna sınıflandırması **(SİSTEM GENELİ)**
+**Değişen:** `GlobalExceptionHandler` — `ArgumentException`
+(ParamName **null**) artık **400 + mesaj**; geri kalan her şey 500
+kalıyor.
+**Kullanıcı ne görecek:** doğrulama hatalarında "Beklenmeyen bir hata"
+yerine gerçek sebep ("Miktar sıfırdan büyük olmalıdır").
+**Ölçüm:** kasıtlı geçersiz bir istek at (ör. miktar 0) → **400** ve
+gövdede Türkçe mesaj; kasıtlı bir çökme yolu → hâlâ **500**.
+**Bozulursa:** gerçek çökmeler 400 gibi görünür ve **izlemede
+kaybolur** — en sinsi belirti bu.
+**Göç:** yok. **Geri alınabilir:** evet.
+**BLAST YARIÇAPI: HER UÇ.**
+
+### A4 · `cfb635b4` + `ab87be32` — E5 masraf merkezi kademesi
+**Değişen:** çıkış/zimmet/sayım fişlerinde masraf merkezi
+proje → şube masraf merkezi → şube kodu sırasıyla çözülüyor.
+**Kullanıcı ne görecek:** muhasebe fişlerinde masraf merkezi dolu.
+**Ölçüm:** projesiz bir depo çıkışı yap → dönen `accountingVoucherId`
+ile fişi oku, masraf merkezi **boş olmasın**.
+**Bozulursa:** 7'li hesaplarda masraf merkezi zorunluluğu **500**
+üretir (E4 sınıfının belirtisi).
+**Göç:** yok. **Geri alınabilir:** evet.
+
+### A5 · `6148e28d` — denetim kapsamı **(SİSTEM GENELİ)** + **GÖÇ**
+**Değişen:** denetim kesicisi izin listesinden **dışlama listesine**
+çevrildi → varsayılan artık "denetlenir". Dört tür bilerek dışarıda
+(SecurityAuditEvent, ExchangeRate, CommodityPrice, Notification).
+Ayrıca `PermissionCatalog` içinde bir iznin ADI ve AÇIKLAMASI
+düzeltildi. **GÖÇ: `audit_logs` yetim tablosu düşürülüyor.**
+**Kullanıcı ne görecek:** izin ekranında "Audit Log" yerine "Güvenlik
+ve Denetim Kayıtları"; denetim ekranında çok daha fazla satır.
+**Ölçüm:** bir malzeme kartı güncelle → `security_audit_events`'te
+o kayda ait `Updated` satırı oluşsun (sayıyı önce/sonra karşılaştır).
+**Bozulursa:** her yazma bir denetim satırı daha üretir →
+**tablo büyümesi ve yazma gecikmesi**. İzlenecek sayaç aşağıda.
+**Göç geri alınabilir mi: EVET — PROVA EDİLDİ (aşağıda).**
+
+### A6 · `01535628` — kimlik doğrulama günlük seviyesi
+**Değişen:** `appsettings.json` →
+`Microsoft.AspNetCore.Authentication: Information`.
+**Kullanıcı ne görecek:** hiçbir şey (sunucu tarafı).
+**Ölçüm:** geçersiz jetonla bir çağrı at → journalde
+`Bearer was not authenticated. Failure message: IDX…` satırı çıksın.
+**Bozulursa:** journal hacmi artar. Ölçülen beklenti: **40–113
+satır/gün** (401 sayısı kadar).
+**Göç:** yok. **Geri alınabilir:** evet.
+
+### A7 · `22ed2b71` — S1: "Stok Durumu" + pasif rozeti
+**Değişen:** sütun başlığı "Durum" → "Stok Durumu"; pasif kart
+Malzeme sütununda gri rozetle işaretli.
+**Kullanıcı ne görecek:** tam bunu.
+**Ölçüm:** `/depo-stok` aç → başlık "Stok Durumu"; pasif kart satırında
+"Pasif" rozeti.
+**Bozulursa:** rozet her satırda çıkar ya da hiç çıkmaz.
+**Göç:** yok. **Geri alınabilir:** evet.
+
+### A8 · `704fe9c4` — Kategori sütunu doğru alanı basıyor
+**Değişen:** liste `categoryLabel`e düştü (eski serbest metin yerine).
+**Kullanıcı ne görecek:** ekrandan açılan kartlar artık Kategori
+sütununda **"—" değil**, gerçek kategori adı.
+**Ölçüm:** yeni kart aç → listede kategorisi görünsün.
+**Bozulursa:** eski kartlarda kategori "—" olur.
+**Göç:** yok. **Geri alınabilir:** evet.
+
+### A9 · `5fbcb7ac` — pasif kart kuralı + içe aktarma kapısı
+**Değişen:** stok **artıran** hareket pasif kartta yasak (kesici),
+azaltan izinli; reçete aktarımı artık **kart açmıyor**.
+**Kullanıcı ne görecek:** pasif karta mal kabul/sayım fazlası →
+**400: "Bu malzeme kartı pasif. Kullanmak için malzeme kartından aktif
+edin."**; reçete aktarımında kartı olmayan satır eleniyor.
+**Ölçüm:** pasif kartla sayım fazlası dene → 400 + o mesaj; aktif kartla
+aynı işlem → 200; pasif kartta çıkış → 200.
+**Bozulursa:** **aktif kartta da engel çıkarsa pilot durur** — en
+tehlikeli belirti bu, pozitif kontrol bu yüzden var.
+**Göç:** yok. **Geri alınabilir:** evet.
+
+### A10 · `95a28ade` — sürüm ucu
+**Değişen:** `/api/health` `surum` + `yapiUtc` döndürüyor; ön yüz HTML'i
+`enderun-surum` meta etiketi taşıyor.
+**Kullanıcı ne görecek:** hiçbir şey.
+**Ölçüm:** `curl /api/health` → `surum` alanındaki sha,
+`last-deployed-commit` ile **birebir eşleşsin**; `curl /login | grep
+enderun-surum` → aynı sha.
+**Bozulursa:** sağlık ucu gövdesi bozulursa yayın sağlık kontrolü
+etkilenmez (ölçüldü: `healthcheck.sh` yalnız **HTTP kodunu** okuyor).
+**Göç:** yok. **Geri alınabilir:** evet.
+
+## 3) BÖLME ÖNERİSİ — İKİYE BÖLÜNSÜN
+
+**Ölçüt:** aynı anda çıkan iki değişiklik, arıza anında sebebi ayırt
+etmeyi zorlaştırır. **A kovasında birbirinden bağımsız 10 risk var.**
+İkisinin blast yarıçapı **her istek/her yazma**:
+
+- **A3 (K3 istisna sınıflandırması)** → her uç
+- **A5 (denetim kapsamı + göç)** → her yazma
+
+Kalan sekizi **stok modülüne ve arayüze** kapalı; bir arıza olursa
+belirtisi zaten o modülü işaret eder.
+
+**ÖNERİ:**
+
+| | kapsam | içerik |
+|---|---|---|
+| **Yayın 1** | sistem geneli | A3 · A5 (göç dahil) · A6 |
+| **ara** | **30–45 dk ölçüm** | aşağıdaki sayaçlar |
+| **Yayın 2** | stok + arayüz | A1 · A2 · A4 · A7 · A8 · A9 · A10 |
+
+**NEDEN SİSTEM GENELİ ÖNCE:** bozulursa, stok modülü hâlâ BİLİNEN İYİ
+sürümde olur — değişken sayısı iki. Tersini yapsaydık, arıza anında
+"stok değişiklikleri mi, istisna sınıfı mı" sorusu ayırt edilemezdi.
+
+**TEK YAYIN ALTERNATİFİ:** mümkün ama bedeli şu — bir arıza çıkarsa
+10 bağımsız aday arasında ayrım yapmak için tek aracımız geri alma
+olur, ve geri alma **hepsini** geri alır.
+
+## 4) GERİ ALMA — TEK KOMUT, PROVASI KOŞULDU
+
+**`deploy/scripts/geri-al.sh --uygula`**
+
+`safe-deploy` içindeki `rollback()` YALNIZ yayın koşusu sırasında,
+sağlık penceresi içinde çalışıyor. Pencere kapandıktan sonra tek
+komut YOKTU; yazıldı.
+
+**PROVA (`--prova`) KOŞULDU, canlıya dokunmadan:**
+
+    arka uç yedeği HAZIR: 75M, dll 2026-09-11 08:22:46
+    ön yüz yedeği HAZIR: 87M, BUILD_ID e-eNBPos2KFQbKiWgrDOo
+    şu anki arka uç: dll 2026-09-11 11:43:15
+    ön koşullar tam · GÖÇ GERİ ALINMAZ uyarısı basıldı
+
+Ön koşul denetimi "dizin var mı" ile yetinmiyor; **çalıştırılabilir
+çekirdeği** arıyor (`EnderunAI.Api.dll`, `BUILD_ID`) — yarım bir
+publish de dizin olarak vardır.
+
+### GÖÇ GERİ ALMA — AYRI VE **PROVA EDİLDİ**
+
+Kod geri alma göçü geri almaz. `audit_logs` göçü için geri alma SQL'i
+üretildi ve **canlı şemadan kopya bir veritabanında ileri/geri
+koşuldu:**
+
+| adım | sonuç |
+|---|---|
+| ileri | `audit_logs` gitti, tablo 242 → **241**, geçmişe satır eklendi |
+| geri | tablo **geri geldi**, **4 indeks** (canlıyla aynı), geçmişten satır silindi, 242 |
+| sütun karşılaştırması | **BİREBİR** |
+
+Bu göç için geri alma zararsız: `audit_logs` iki aydır **yetim** —
+varlık sınıfı yok, `DbSet` yok, yazan kod yok, 0 satır.
+
+### GERİ ALMA TETİĞİ — EŞİKLER ÖNCEDEN İLAN EDİLİYOR
+
+Olayın ortasında eşik belirlemek, eşik koymamaktır.
+
+| sayaç | nasıl ölçülür | eşik | karar |
+|---|---|---|---|
+| 5xx oranı | nginx erişim günlüğü, yayından sonraki 15 dk | **> %1** (taban: bugün ≈0) | **GERİ AL** |
+| 401 oranı | aynı | **> %5** (taban: 40–113/gün ≈ %1) | **GERİ AL** |
+| sağlık ucu | `healthcheck.sh` | 30 sn içinde 200 değil | **otomatik geri alma** |
+| pilot bloke | pasif/aktif kart hareketi | **aktif** kartta 4xx | **GERİ AL** (A9) |
+| denetim yazma gecikmesi | yazma uçlarının süresi | yayın öncesine göre **> 2×** | **GERİ AL** (A5) |
+| denetim satır artışı | `security_audit_events` sayısı | saatte **> 10.000** | önce incele, 2 saat sürerse geri al |
+| journal hacmi | `journalctl --disk-usage` | günde **> 500 MB** artış | seviyeyi geri al (A6), tam geri alma değil |
+
+## 5) YAYIN ÖNCESİ ÖLÇÜM — KİM ÇALIŞIYOR
+
+| ölçüm | değer |
+|---|---|
+| toplam kullanıcı | **13** |
+| **aktif** kullanıcı | **4** |
+| `WorkHoursExempt` bayraklı | **0** |
+| Admin/Genel Müdür rolü (her zaman muaf) | **1** |
+| → **muaf olmayan aktif kullanıcı** | **3** |
+| şu an açık oturum (vekil: `work-hours-status` çağıran kaynak) | **1** |
+
+**SAAT ÖNERİSİ — giriş olaylarından ölçüldü** (15 günde 66 başarılı
+giriş; tek temiz insan sinyali bu — istek sayıları açık sekmelerin 30
+saniyelik yoklamasıyla ve saldırı taramasıyla bulaşık):
+
+    giriş olan saatler (UTC): 06–22
+    giriş OLMAYAN saatler   : 23–05
+
+**Önerilen pencere: 04:30–05:30 UTC (07:30–08:30 TRT).** Gece yedeği
+(03:00) ve geri yükleme tatbikatı (03:33) bitmiş olur; en erken
+gözlenen giriş 06:00 UTC (09:00 TRT) — yani insanlar gelmeden önce.
+
+**Pilot saati sizinle birlikte seçilecek.** Yayın 2 için önerim, Yayın
+1'den 30–45 dk sonra ve yine 06:00 UTC'den önce.
