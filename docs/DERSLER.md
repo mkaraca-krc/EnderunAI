@@ -318,6 +318,26 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 90 — SÜZGEÇLİ TEST KOŞUSU, KOŞMADIĞIN TESTLER HAKKINDA
+  HİÇBİR ŞEY SÖYLEMEZ.** Kural 84'ün test hâli.
+
+  Doğuşu (2026-09-14): `PsqlCizgisiTests` **iki gündür kırmızıydı**
+  (paket C'nin kurtarma betiği 5 doğrudan `psql` çağrısı ekledi, çizgi
+  0'dı). Görmedim, çünkü paket C'den beri her koşum `--filter` ile
+  yapıldı. Tam takımı ilk kez yayın hazırlığında koşturdum.
+
+  `safe-deploy` tam takımı süzgeçsiz koşuyor — yani bu kırmızı **yayın
+  sabahı 04:30'da**, yayın penceresinin içinde görünecekti. İyi bir
+  kapı, ama pahalı bir saat.
+
+  UYGULAMA: **gece tam takım** kuruldu (`scripts/gece-tam-takim.sh` +
+  `enderun-tam-takim.timer`, her gece 01:00 UTC). Damga dosyası sonucu
+  **ve yaşını** yazar; koşu olmadıysa `OLCEMEDI` yazar —
+  **sessizlik yeşil değildir.** Derleme kilidi meşgulse (çıkış 75) de
+  `OLCEMEDI`: "yeşil" demek en tehlikeli yanlış olurdu.
+
+  *Yayın sabahı öğrenilen her şey, bir gece önce öğrenilebilirdi.*
+
 - **KURAL 89 — İLK GÜN GÜRÜLTÜYLE KIRMIZI YANAN KAPI, YARIN KİMSENİN
   BAKMADIĞI KAPIDIR.** Bir kapının eşiği, kontrol ETTİĞİMİZ şeye
   çizilir; kontrol etmediğimiz gürültüye değil.

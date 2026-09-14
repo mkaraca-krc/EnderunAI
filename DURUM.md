@@ -16421,3 +16421,103 @@ betiğine bağlanmamıştı.) Gerekçe çizgi dosyasının içinde duruyor.
 
 **DERS:** süzgeçli test koşusu, koşmadığın testler hakkında hiçbir şey
 söylemez (Kural 84'ün test tarafı). Yayın öncesi tam takım şart.
+
+## BÖLME KARARI — ÖLÇÜM BÖLMEYE KARŞI ÇIKTI (2026-09-14)
+
+Bölmeyi ben önerdim, siz onayladınız. **Hazırlık sırasında üç şey
+ölçüldü ve üçü de bölmenin aleyhine çıktı.** Kendi önerimi savunmak
+diye bir şey yok.
+
+### (a) SENTETİK DALLA HANGİ KORUMAYI KAYBEDİYORUZ
+
+`require_expected_branch` (satır 1534) çalışma ağacının dalını
+`DEPLOY_BRANCH` ile karşılaştırıyor. `DEPLOY_BRANCH=yayin-1` verilince
+**denetim GEÇER** — çünkü karşılaştırma tutar.
+
+**Kaybedilen tek koruma:** "yanlış dalı kazara canlıya çıkarma".
+Bilerek geçersiz kılınca o koruma kalmaz; başka hiçbir kapı atlanmaz
+(kapsam, testler, göç, yedek, sağlık, geri alma aynen uygulanır).
+**Testler süzgeçsiz koşuyor** — tam takım.
+
+### (b) ASIL BULGU — KAPSAM KAPISI YAYIN 2'Yİ DURDURUYOR
+
+Yayın 1'den sonra `last-deployed-commit` = `c758ab9a` olur. O commit
+**main'in atası DEĞİL** (kiraz toplama yeni SHA üretir). Ölçüldü:
+
+    [yayin-kapsami] ÖLÇEMEDİ: taban (c758ab9a) uç'un (38521ad5)
+                    atası değil — paket tanımsız.
+    [yayin-kapsami] Yayın DURDU — karar verilemeyen paket geçirilmez.
+    çıkış=2
+
+**Yayın 2 kapıda durur.** Aşmanın tek yolu `last-deployed-commit`'i
+elle geri yazmak — yani **kapıya yalan söylemek.** Yapmayız.
+
+### (c) İKİNCİ BULGU — İKİ YAYIN PENCEREYE SIĞMIYOR
+
+Son yayının süresi ölçüldü (günlükten):
+
+    2026-09-11T11:28:24Z  safe-deploy başladı
+    2026-09-11T12:16:19Z  Yayın BAŞARILI
+    → 48 dakika
+
+İki yayın + 30–45 dk ara = **~131 dakika**. 04:30'da başlarsak
+**06:41'de biter** — ilk kullanıcı 06:00'da giriyor. Pencerenin amacı
+tam da "insanlar çalışmadan bitsin"di.
+
+### (d) VE BÖLMENİN KAZANCI ZATEN ÇOĞUNLUKLA NOMİNAL
+
+Bölmenin faydası **gerçek trafik altında** ayırt edebilmek. Ama
+ölçüldü: 04:30–05:30'da `/api/` trafiği 4 günde **1 istek**. İki yayın
+da ilk kullanıcıdan önce bitecekti — yani 06:00'da giren kullanıcı
+için **her iki hâlde de 10 değişiklik birden canlıda** olacaktı.
+
+Ek olarak A3 ile A4 zaten aynı commit'te; bölme onları da ayıramıyor.
+
+### ÖNERİM: TEK YAYIN — `main`, TEK SEFERDE
+
+| | bölme | tek yayın |
+|---|---|---|
+| kapsam kapısı | **Yayın 2'de ÖLÇEMEDİ ile durur** | yeşil (ölçüldü, 38/38) |
+| pencereye sığma | 131 dk → 06:41 | **48 dk → ~05:18** |
+| dal denetimi | bilerek atlanır | uygulanır |
+| yayınlanan kod | main'de hiç var olmamış sentetik ağaç | **main'in kendisi** |
+| geri alma | iki ayrı hâl | tek komut, tek hâl |
+| ilk kullanıcı ne görür | 10 değişiklik birden | 10 değişiklik birden |
+
+**GERÇEK AYIRT ETME İSTENİYORSA tek yol: yayınları GÜNE bölmek.**
+Yayın 1 salı, Yayın 2 çarşamba — araya gerçek trafik girer. Bedeli:
+pilot ilk gününü **ters transfer etiketleriyle** ve Kategori sütununda
+**"—"** ile geçirir. (Kapsam kapısı sorunu bu seçenekte de çözülmeli.)
+
+**Kararı siz vereceksiniz.** Benim tercihim **tek yayın**: bölmenin
+bedeli ölçüldü ve kazancı ölçülemedi.
+
+### (c2) TEMİZLİK — `yayin-1` DALI
+
+Tek yayına geçilirse: dal yerelde ve origin'de **silinir** (yarın biri
+onu main sanmasın). Bölme sürdürülürse: yayın bittikten sonra silinir.
+Silme komutu: `git branch -D yayin-1 && git push origin --delete yayin-1`.
+
+### YAYIN 2 SONRASI DOĞRULAMA — AĞAÇ main İLE BİREBİR Mİ
+
+Bölme uygulanırsa doğrulama listesine eklenir (beklenen **0 dosya**):
+
+    git -C /var/www/enderun-ai status --porcelain     → boş
+    git rev-parse HEAD == git rev-parse origin/main   → eşit
+    curl /api/health | surum sha == last-deployed-commit
+
+Fark çıkarsa **DUR**.
+
+## GECE TAM TAKIM KURULDU
+
+`scripts/gece-tam-takim.sh` + `enderun-tam-takim.timer` — **her gece
+01:00 UTC** (yedek 03:00 ve tatbikat 03:33 ile derleme kilidi için
+yarışmasın).
+
+Damga: `/var/lib/enderun-ai/tam-takim-son.txt` — sonuç, **yaş**, süre,
+geçen/düşen/toplam, dal ve commit. **Sessizlik yeşil değildir:**
+koşulamadıysa `OLCEMEDI`, derleme kilidi meşgulse (çıkış 75) yine
+`OLCEMEDI`.
+
+**Yarın 01:00'de koşacak — yayından 3,5 saat önce.** Bugünkü kırmızı
+gibi bir şey varsa yayın sabahı değil, gece öğrenilir.
