@@ -16395,3 +16395,29 @@ tek çakışma kaynağı oydu; kayıt `main`de kalır).
     tatbikat: 2026-09-14T03:35:05Z BAŞARILI — 242 tablo TAM eşleşme, 11 sn
 
 Yayın yarın sabah olduğu için **15/09 sabahı tekrar doğrulanacak.**
+
+### YAYIN ÖNCESİ TAM TAKIM — İKİ SONUÇ, BİRİ GERÇEK BULGU
+
+**`yayin-1` dalı (çalışma ağacında): 3.235 test, 3.229 geçti, 6 düştü.**
+**`main` (gerçek yol): aynı sınıflarda 12/13 — yalnız 1 kırmızı.**
+
+Ayrım: `yayin-1`deki 6 kırmızının 5'i **çalışma ağacı yolu artefaktı**
+(`/tmp/yayin1-agaci` ≠ `/var/www/enderun-ai`; `YazmaKokuKapisiTests`
+canlı kök yolunu arıyor). Altıncısı ise **gerçek**:
+
+    PsqlCizgisiTests.YeniDogrudanPsqlCagrisi_Eklenmemis
+    scripts/enderun-kurtarma.sh: 5 çağrı (çizgi 0)
+
+**ÇIRA KENDİ YAZDIĞIM BETİĞİ YAKALADI** ve **iki gündür kırmızıydı** —
+çünkü paket C'den beri hep **süzgeçli** test koştum, tam takımı bir kez
+bile koşmadım. Yayın hazırlığı olmasa yayın kapısında öğrenecektim.
+
+**Çözüm çizgiyi gerekçesiyle güncellemek oldu, çağrıları değiştirmek
+değil:** kurtarma betiği son savunma hattıdır ve `vt-sorgu.sh`e
+bağlanması, felaket anında `/var/www/enderun-ai/deploy/...` erişilebilir
+olmasına bağımlılık yaratırdı — kurtarmanın gerektiği an tam da o
+dizinin eksik olabileceği andır. (Aynı gerekçeyle `say.sh` de yedek
+betiğine bağlanmamıştı.) Gerekçe çizgi dosyasının içinde duruyor.
+
+**DERS:** süzgeçli test koşusu, koşmadığın testler hakkında hiçbir şey
+söylemez (Kural 84'ün test tarafı). Yayın öncesi tam takım şart.
