@@ -16196,3 +16196,103 @@ yani hiç ateşlenmezdi: eşik değil, süstü.
 | **A3** | kasıtlı geçersiz istek at → kod; kasıtlı çökme yolu → kod | **400** ve **500** |
 | **A5** | bir kart güncelle, `security_audit_events` sayısını önce/sonra al | **+1 veya daha fazla**; saatlik üretim < 500 |
 | **A6** | geçersiz jetonla çağır → `journalctl | grep IDX` | `IDX10503`/`IDX14100` satırı **VAR**; journal artışı < 500 MB/gün |
+
+## EŞİK TASARIMI — YÜZDE DÜŞTÜ, ADET GELDİ (2026-09-14)
+
+### (c) TABANIN PENCERESİ — HANGİ ARALIK, NEDEN DIŞLANDI
+
+**Taban penceresi: 09–14 Eylül (6 gün).**
+**DIŞLANAN: 08 Eylül.** Sebep: GİRİŞ-DÖNGÜ/1 o gün tek başına
+**64.531 adet 401** üretti (`auth/me` 32.113 + `user-preferences`
+32.102, çiftler hâlinde, saatte 16.735'e kadar). Düzeltme `3b9f09a8`
+aynı gün 13:01'de girdi ve fırtına 13:00'ten sonra bitti.
+
+O gün tabana katılsaydı: 401 oranı **%1,29 yerine %24,31** görünürdü ve
+"401 arttı" diyen her eşik sonsuza kadar sağır kalırdı.
+
+> **Bu paragraf kuralın kendisi:** taban kurulurken hangi pencerenin
+> neden dışlandığı YAZILMADAN taban kurulmaz. Yoksa yarın biri "6 günde
+> 44" der ve nereden geldiğini bilmez.
+
+### (b) DIŞLAMA — SALDIRI TARAMASI EŞİĞE GİRMEZ, ÖLÇÜLDÜ
+
+| küme | istek | payı |
+|---|---|---|
+| **`/api/` DIŞI — DIŞLANIR** | 27.564 | **%75,5** |
+| — bunların 4xx'i | **6.484** | saldırı yoklaması |
+| **`/api/` — eşiğe girer** | 8.943 | %24,5 |
+
+Dışlananlar bizim uçlarımız değil: `/boaform/admin/formLogin`,
+`/cgi-bin/nas_sharing.cgi`, `/.env` türevleri, `/wp-admin`,
+`/.github/workflows/*`, `/phpinfo`… Gecede 4xx oranını **%92,86**'ya
+çıkaran şey bunlar. Saldırganın ne gönderdiğini biz belirlemiyoruz
+(Kural 89).
+
+### KENDİ UÇLARIMIZIN TABANI — 6 GÜN, `/api/` ALTINDA
+
+| | toplam | günlük | saatlik tepe |
+|---|---|---|---|
+| istek | 8.943 | 156–2.875 | — |
+| 4xx | 711 (%7,95) | 62–171 | **72** |
+| — 401 | 426 | 37–110 | 57 |
+| **5xx** | **44** (%0,49) | 29/7/8/**0**/**0**/**0** | **8** |
+
+**5xx'in 43'ü 502** (yeniden başlatma), **1 tanesi gerçek 500**.
+Son üç gün (12, 13, 14 Eylül) **sıfır**.
+
+### (a) + (d) YENİ EŞİKLER — ADET, VE HER BİRİNİN EYLEMİ
+
+| # | sayaç (yalnız `/api/`) | ölçülen taban | **eşik (ADET)** | **ateşlenirse NE YAPILIR** |
+|---|---|---|---|---|
+| 1 | gerçek 5xx (502 hariç) | 6 günde **1** | **1 saatte ≥ 3** | **GERİ AL** |
+| 2 | 502 | yalnız restart penceresi | sağlık yeşilden **10 dk sonra ≥ 1** | **GERİ AL** |
+| 3 | 401 | günde 37–110, tepe saat 57 | **1 saatte ≥ 150** | **GERİ AL** |
+| 4 | 4xx (401 hariç) | günde ~47, tepe saat 72 | **1 saatte ≥ 200** | **İNCELE** — A3 bazı 500'leri 400'e çevirir; artış beklenen olabilir |
+| 5 | yazma gecikmesi (ortanca) | prova: **83 ms** | canlıda **> 250 ms** | **GERİ AL** |
+| 6 | denetim satırı | 24,7/gün | **1 saatte > 500** | **İNCELE**; 2 saat sürerse GERİ AL |
+| 7 | denetim satırı (gün) | 24,7/gün | **> 2.000/gün** | **GERİ AL** |
+| 8 | journal büyümesi | — | **> 500 MB/gün** | **YALNIZ A6 geri alınır** (tam geri alma değil) |
+| 9 | pilot bloke (A9, Yayın 2) | — | **aktif** kartta 4xx **≥ 1** | **GERİ AL** |
+
+**5xx için "3" sayısının gerekçesi:** taban 6 günde 1 adet
+(≈0,17/gün). Bir saatte 3, günlük tabanın **18 katının** tek saate
+sıkışması demektir. 1 seçseydik tek bir geçici ağ hatası yayını geri
+aldırırdı; 10 seçseydik gerçek bir arıza bir saat boyunca açık kalırdı.
+
+**Yüzde eşikleri kaldırıldı.** Gerekçe ölçüm: 142 istekli bir saatte
+8 hata **%5,63** eder; 2.554 istekli bir saatte aynı 8 hata **%0,31**.
+Bu hacimde yüzde, gürültüyü sinyal gibi gösterir.
+
+### ⚠ YAYIN PENCERESİNDE EŞİKLER KÖR — ÖLÇÜLDÜ
+
+**04:30–05:30 UTC'de gerçek trafik YOK.** Son 6 günün o penceresinde:
+
+| gün | toplam istek | **`/api/`** |
+|---|---|---|
+| 10 Eylül | 56 | **1** |
+| 11 Eylül | 10 | **0** |
+| 12 Eylül | 8 | **0** |
+| 13 Eylül | 27 | **0** |
+
+**Dört günde toplam 1 adet `/api/` isteği.** (Geri kalanı saldırı
+taraması.) İlk giriş 06:00 UTC'de başlıyor.
+
+**SONUÇ: yayından sonraki ilk saatte eşikler hiçbir şey ölçemez.**
+"Eşikler yeşil" cümlesi o saatte **hiçbir şey kanıtlamaz** — ölçecek
+trafik yok, ve **boş küme her iddiayı doğrular** (Kural 48).
+
+**BU YÜZDEN İKİ KURAL:**
+
+1. **Eşik, trafik yoksa GEÇTİ demez — ÖLÇEMEDİ der.** Bir saat
+   `/api/` istek sayısı **< 50** ise o saatin eşik değerlendirmesi
+   `ÖLÇEMEDİ` olarak kaydedilir. Eşikler ancak trafik geldiğinde
+   (gözlenen ilk giriş 06:00 UTC) anlam kazanır.
+
+2. **Yayın sonrası doğrulama eşiklerle DEĞİL, BENİM ÇAĞIRDIĞIM
+   ÖLÇÜMLERLE yapılır** — A3, A5, A6 için ayrı ayrı, üç ayrı sonuç.
+   Eşikler ikinci savunma hattıdır ve 06:00 UTC'den sonra devreye
+   girer.
+
+**Nöbet penceresi:** yayın 04:30–05:30, doğrulama hemen (çağırarak),
+eşik izleme **06:00–09:00 UTC** arası — trafiğin gerçekten geldiği ilk
+üç saat.
