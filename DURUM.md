@@ -15745,3 +15745,87 @@ Sürüm ancak **yayından sonra** görünür: canlı bugün 33 commit geride ve
 eski yapıyı koşuyor, `/api/health` orada hâlâ sürümsüz. İlk gerçek
 ölçüm salı yayınından sonra yapılacak — o an `surum` alanındaki sha ile
 `last-deployed-commit` birebir eşleşmeli.
+
+## B — DAMGA MUHAFIZI: ÖLÇÜLDÜ, İKİ EKSİK KAPATILDI (2026-09-14)
+
+**ÖNCE ÖLÇTÜM, "YAPILACAK" DİYE YAZMADIM.** B'nin kararı önceki bir
+oturumda verilmişti (*"C UYGULANACAK — araya giricinin davranış testi;
+A ve B uygulanmayacak"*). Listeye koymadan önce yapılmış mı diye
+baktım — **C yapılmıştı.**
+
+### YAPILMIŞ OLAN — ÖLÇÜMLE DOĞRULANDI
+
+`AuditSaveChangesInterceptor` `ChangeTracker.Entries<BaseEntity>()`
+üzerinden `Modified` olan her varlığa `UpdatedAtUtc = now` yazıyor
+(satır 100 ve 122). `DamgaMuhafiziTests` **üç ayakla** duruyor:
+
+| test | ne tutuyor |
+|---|---|
+| `AccountingAccount_DegistiginceDamgaIlerler` | asıl iddia |
+| `BaskaBirVarlik_DegistiginceDamgaIlerler` | kapsamın **tür bazlı daraltılmadığı** |
+| `YeniKayit_OlusturmaDamgasiniAlir` | oluşturma damgası |
+
+**MUTASYON — kapsam daraltıldı** (`Entries<BaseEntity>` →
+`Entries<AccountingAccount>`): **tam 1 KIRMIZI**
+(`BaskaBirVarlik_DegistiginceDamgaIlerler`), hesap ayağı **yeşil
+kaldı** — yani test tam da daraltmayı yakalıyor. Geri alındı → 3/3.
+
+> **İLK MUTASYONUM SAYILMADI.** `Models.Accounting.AccountingAccount`
+> yazdım, derleme `CS0234` ile düştü. **Derleme hatası kırmızı test
+> değildir** — mutasyon hiç uygulanmamıştı (Kural 81: sonda ısırmadıysa
+> önce düzeneği sorgula). Ad alanı ölçüldü (`EnderunAI.Api.Models`),
+> mutasyon tekrarlandı.
+
+### EKSİK OLAN BİRİNCİ ŞEY — DAR TARAMA (EK maddesi), ŞİMDİ YAPILDI
+
+Soru kapalı bir arama uzayı: `accounting_accounts`'a **izleyiciyi
+atlayarak** yazan var mı?
+
+**KAPSAM:** 1.051 `.cs` dosyası (özyinelemeli, `say.sh`).
+
+| API | kullanım |
+|---|---|
+| `ExecuteUpdateAsync` | 3 |
+| `ExecuteDeleteAsync` | 5 |
+| `ExecuteSqlRaw(Async)` | 4 |
+| `ExecuteSqlInterpolated` | 0 |
+| `FromSqlRaw` | 0 |
+
+**On iki kullanımın HEDEFİ tek tek okundu** — aynı satırda arayan bir
+süzgeç `db.AccountingAccounts` ile `.ExecuteUpdateAsync` ayrı
+satırlardaysa kaçırırdı (Kural 84), bu yüzden her kullanımın ata
+satırları tarandı:
+
+    UserRoles ×2 · UserPermissionOverrides · UserDataScopes
+    EmployerPortalLinks · ProjectBoqItems · DocumentCategories ×2
+    db.Database (ham SQL) ×4
+
+Ham SQL'lerin dördü de okundu: iki satır kilidi (`FOR UPDATE`:
+`warehouse_stocks`, `odeme_plani_satirlari`) ve proje silme
+(`DELETE FROM projects` + 16 bağımlı tablo).
+
+**POZİTİF KONTROL:** aynı tarama proje silmede **16 DELETE** buluyor —
+arama kör değil. O 16'nın içinde `accounting_accounts` **yok**.
+
+**SONUÇ:** *Bugün izleyiciyi atlayan yazma YOK; eklenirse damga atlanır
+ve araya girici görmez.*
+
+### EKSİK OLAN İKİNCİ ŞEY — RİSKİN YER DEĞİŞTİRDİĞİ NOTU
+
+**Damga sorumluluğu servislerde değil, `SaveChanges` araya
+giricisindedir.** Dolayısıyla risk *"bir yol unutur"* DEĞİL:
+
+1. **araya girici kaldırılır ya da kapsamı daraltılır** →
+   `DamgaMuhafiziTests` yakalar (yukarıda mutasyonla gösterildi),
+2. **bir yazma izleyiciyi atlar** (`ExecuteUpdate`/`ExecuteDelete`/ham
+   SQL) → **hiçbir test yakalamaz**, bugün böyle bir yazma yok.
+
+Muhafız buna göre kurulmuştur.
+
+**DÜRÜST SINIR:** 2. madde için otomatik bekçi YOK. Bugünkü güvence
+tek seferlik bir taramadır ve yarın eklenen bir `ExecuteUpdateAsync`'i
+kimse durdurmaz. Bu bir eksikliktir, kayda böyle geçiyor — kapatılması
+ayrı bir karar (kapalı arama uzayı olduğu için küçük bir metin
+muhafızıyla kapatılabilir).
+
+**B KAPANDI.**
