@@ -16066,3 +16066,133 @@ gözlenen giriş 06:00 UTC (09:00 TRT) — yani insanlar gelmeden önce.
 
 **Pilot saati sizinle birlikte seçilecek.** Yayın 2 için önerim, Yayın
 1'den 30–45 dk sonra ve yine 06:00 UTC'den önce.
+
+## YAYIN ÖNCESİ TABAN ÖLÇÜMLERİ — ŞART 1 ve 2 (2026-09-14)
+
+### ŞART 1a — DURUM KODU TABANI
+
+**KAPSAM:** son 7 gün, nginx erişim günlüğü. **08 Eylül HARİÇ** —
+o gün GİRİŞ-DÖNGÜ/1 fırtınası 64.531 adet 401 üretti ve tabanı
+yalancı şişirir (kirli tabanla: 267.382 istek, %24,31 401).
+
+**TEMİZ TABAN — 36.372 istek, 6 gün, 121 saat dilimi:**
+
+| | oran | mutlak |
+|---|---|---|
+| 4xx | **%19,78** | 7.194 |
+| — 401 | **%1,29** | 468 (günde 40–113) |
+| **5xx** | **%0,121** | **44** |
+
+**4xx'in %19,78'i yanıltıcı:** neredeyse tamamı saldırı taramasının
+404'leri. Gece saatlerinde tek tek: `10/Eyl 04:00 → 78/84 = %92,86`.
+Yani **4xx oranı bir kapı olamaz** — gürültü baskın.
+
+**5xx'in 44'ü tek tek okundu:**
+
+| uç | adet | kod |
+|---|---|---|
+| `POST /api/hubs/mesaj/negotiate` | 33 | **502** |
+| `GET /api/hubs/mesaj` | 7 | **502** |
+| `GET /api/backend/auth/work-hours-status` | 3 | **502** |
+| `GET /api/backend/cash-flow/projeksiyon` | **1** | **500** |
+
+**43'ü 502 — arka uç yeniden başlarken.** Yani **yayının kendisi 502
+üretecek.** Gerçek uygulama hatası: **6 günde 1 adet**. Son 3 gündür
+(12, 13, 14 Eylül) **sıfır 5xx**.
+
+**SONUÇ — "%1" çıpasız bir sayıydı:** yoğun bir saatte %1 hiç
+ateşlenmez; sessiz bir saatte 8 hata **%5,63** eder (09/Eyl 23:00,
+142 istek). Eşik **mutlak sayı + oran** olmalı ve **502'ler yeniden
+başlatma penceresinde sayılmamalı.**
+
+### ŞART 1b — YAZMA GECİKMESİ TABANI
+
+nginx günlük biçimi `$request_time` **taşımıyor** → canlıdan geçmişe
+dönük gecikme ölçülemez. Canlıya yazmak yasak. Bu yüzden **prova
+zemininde** (veri sadık kopya) ölçüldü — **canlı değil, etiketi bu.**
+
+**Uç:** `POST /api/inventory/issues` (stok yazar + muhasebe fişi keser).
+**Ölçüm sayısı:** her yapı için 12, hepsi 200.
+
+| yapı | ortanca | en düşük |
+|---|---|---|
+| **bugünkü canlı yapı** | **83 ms** | 64 ms |
+| yeni yapı, yalnız A5 (denetim kapsamı) | **86 ms** | 63 ms |
+| yeni yapı, A5 + A9 birlikte | 135 ms | 89 ms |
+
+**A5'in maliyeti ≈ +3 ms — gürültü içinde.** Tahminim yanlıştı: "7
+INSERT × 7 ms ≈ 50 ms" diye çıkarım yapmıştım, **ölçüm çürüttü.**
+
+> **135 ms SAYISI KONTROLLÜ DEĞİL — ÖLÇEMEDİ.** Üç koşu farklı kalem,
+> farklı miktar ve **biriken veritabanı** üzerinde yapıldı (her 12
+> çıkış 84 denetim satırı ekliyor). A9'un gecikmeye katkısı bu
+> ölçümden **çıkarılamaz**; A9 zaten Yayın 2'de ve **Yayın 2'den önce
+> kontrollü olarak tekrar ölçülecek.**
+
+### ŞART 1c — DENETİM SATIRI: ÖNCE TAHMİN, SONRA ÖLÇÜM
+
+**TAHMİNİM (ölçümden önce yazıldı):** 50–300 satır/gün (bugünkü
+~24'ün 2–13 katı).
+
+**ÖLÇÜM:**
+
+| | değer |
+|---|---|
+| bugünkü üretim (7 gün) | **24,7 satır/gün** (günlük aralık 1–97) |
+| dışlanan 4 tür hariç, 7 günde DOKUNULAN satır | 17 → **2,4/gün** |
+| **tek bir depo çıkışının ürettiği denetim satırı** | **7,0** |
+
+**TAHMİNİM YANLIŞTI, İKİ YÖNDEN:** "dokunulan satır" ölçümü 2,4/gün
+dedi (tahminimin çok altı), ama **iş eylemi başına 7 satır** çıktı —
+yani asıl çarpan eylem sayısı. Pilotta günde 20–50 stok eylemi
+olursa: **140–350 satır/gün**. Tahmin aralığım tesadüfen bu bandı
+kapsıyor ama **gerekçem yanlıştı**; doğru gerekçe "eylem × 7".
+
+### ŞART 2 — A3'ÜN BAŞARISI GERİLEME GİBİ GÖRÜNECEK: BEKLENEN DEĞER
+
+A3 bazı 500'leri 400'e çevirir. **Beklenen: 5xx düşer, 4xx artar.**
+Ne kadar?
+
+**ÖLÇÜLDÜ (7 günlük journal, 667.752 satır tarandı):**
+
+| aranan | bulunan |
+|---|---|
+| `ArgumentException` | **0** |
+| "Beklenmeyen bir hata" | **0** |
+| gerçek 500 dönen istek (nginx) | **1** (6 günde) |
+
+**BEKLENEN 4xx ARTIŞI: ~0, üst sınır 6 günde 1 istek.** Çünkü son 7
+günde A3'ün çevireceği tek bir istisna bile oluşmadı; 5xx'lerin 43'ü
+502'ydi ve A3 onlara dokunmaz.
+
+**Bu, A3'ün değersiz olduğu anlamına GELMEZ** — pilot yeni yollar
+kullanacak ve doğrulama hataları oradan çıkacak. Ama **yayın sabahı
+4xx'te gözle görülür bir artış BEKLENMİYOR**; görülürse o bir bulgudur,
+"beklenen gerileme" değildir.
+
+### YENİDEN KURULAN EŞİKLER — HEPSİ TABANA ÇİPALI
+
+| sayaç | taban (ölçülen) | eşik | karar |
+|---|---|---|---|
+| **gerçek 5xx** (502 hariç) | 6 günde **1** | **15 dk içinde ≥ 5** *veya* saatte ≥ 10 | **GERİ AL** |
+| **502** | yalnız restart penceresinde | sağlık yeşilden **10 dk sonra** hâlâ 502 varsa | **GERİ AL** |
+| 401 | günde 40–113 (%1,29) | **saatte ≥ 150** (≈ günlük tavanın üstü) | **GERİ AL** |
+| 4xx toplam | %19,78 (gürültü baskın) | **eşik YOK** — kapı olarak kullanılmaz | — |
+| yazma gecikmesi | **83 ms** ortanca (prova) | canlıda ortanca **> 250 ms** (≈3×) | **GERİ AL** |
+| denetim satırı | 24,7/gün | **saatte > 500** *(beklenen tavanın ~20×'i)* | önce incele; 2 saat sürerse **GERİ AL** |
+| denetim satırı (gün) | 24,7/gün | **> 2.000/gün** | **GERİ AL** |
+| journal | — | günde **> 500 MB** artış | yalnız **A6** geri alınır |
+| pilot bloke | — | **aktif** kartta 4xx | **GERİ AL** (A9 · Yayın 2) |
+
+**"10.000/saat" eşiği kaldırıldı** — beklenen değerin 400 katıydı,
+yani hiç ateşlenmezdi: eşik değil, süstü.
+
+### YAYIN SONRASI — ÜÇ DEĞİŞİKLİK, ÜÇ AYRI ÖLÇÜM
+
+"Hepsi yolunda" kabul edilmiyor:
+
+| | ölçüm | beklenen |
+|---|---|---|
+| **A3** | kasıtlı geçersiz istek at → kod; kasıtlı çökme yolu → kod | **400** ve **500** |
+| **A5** | bir kart güncelle, `security_audit_events` sayısını önce/sonra al | **+1 veya daha fazla**; saatlik üretim < 500 |
+| **A6** | geçersiz jetonla çağır → `journalctl | grep IDX` | `IDX10503`/`IDX14100` satırı **VAR**; journal artışı < 500 MB/gün |

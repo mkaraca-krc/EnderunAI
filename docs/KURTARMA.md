@@ -133,6 +133,65 @@ nesnelerinin devrini reddeder.
 
 ---
 
+---
+
+# YAYIN GERİ ALMA (kurtarmadan AYRI iş)
+
+Veritabanı kaybı değil, **yeni sürüm arızası** için. Kurtarma yordamı
+veriyi geri getirir; bu bölüm KODU ve ŞEMAYI geri alır.
+
+## G1 — KOD: TEK KOMUT
+
+    deploy/scripts/geri-al.sh --prova     # önce bu: ön koşulları sınar
+    deploy/scripts/geri-al.sh --uygula    # geri alır
+
+Yaptığı: `publish/` ← `publish-rollback/`, `.next/` ← `frontend-next-rollback/`,
+servisleri yeniden başlatır, `healthcheck.sh` koşar. Eski hâli
+`*.geri-alinan` olarak bırakır (silmez).
+
+**Ön koşul denetimi "dizin var mı" ile yetinmez**: `EnderunAI.Api.dll`
+ve `BUILD_ID` aranır — yarım bir publish de dizin olarak vardır.
+
+## G2 — GÖÇ: AYRI KOMUT, SQL ÖNCEDEN YAZILI
+
+**`geri-al.sh` GÖÇÜ GERİ ALMAZ.** Şema değişikliği içeren bir yayında
+kod geri alınır, şema ileride kalır.
+
+**Sabahın körü kimse SQL üretmeye çalışmasın** — 2026-09-14 yayınındaki
+tek göç için geri alma SQL'i depoda hazır ve **prova edilmiştir**:
+
+    deploy/geri-alma/20260913144150-geri.sql
+
+Koşma:
+
+    sudo -u postgres psql -d enderun_ai -v ON_ERROR_STOP=1 \
+        -f /var/www/enderun-ai/deploy/geri-alma/20260913144150-geri.sql
+
+Yaptığı: `audit_logs` tablosunu üç indeksiyle geri kurar ve göç
+geçmişinden satırı siler.
+
+**PROVA SONUCU (2026-09-14, canlı şemadan kopya veritabanında):**
+
+| adım | sonuç |
+|---|---|
+| ileri | `audit_logs` düştü, tablo 242 → **241**, geçmişe satır eklendi |
+| geri | tablo geri geldi, **4 indeks** (canlıyla aynı), geçmişten satır silindi, 242 |
+| sütun karşılaştırması | **BİREBİR** |
+
+**Bu göç zararsız tarafta:** `audit_logs` iki aydır yetim — varlık
+sınıfı yok, `DbSet` yok, yazan kod yok, 0 satır. Yine de yazıldı:
+**kolay adımın yazılmaması, zor adımın yazılmamasını normalleştirir.**
+
+Yeni bir göç için geri alma SQL'i şöyle üretilir:
+
+    cd backend/EnderunAI.Api
+    DB_CONNECTION=... dotnet ef migrations script <hedef> <onceki> \
+        --context AppDbContext -o ../../deploy/geri-alma/<hedef>-geri.sql
+
+ve **koşulmadan önce prova veritabanında denenir.**
+
+---
+
 ## ÖLÇÜLMEMİŞ KALAN — DÜRÜSTÇE
 
 Bu yordamın **3, 9 ve healthcheck adımları canlı hedefte hiç
