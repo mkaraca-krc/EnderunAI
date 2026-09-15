@@ -205,8 +205,18 @@ if [ -n "$tum_kalemler" ]; then
         beyan="$YIKICI_BEYAN"
         log "(sınama kipi: beyan ortam değişkeninden okundu)"
     else
-        beyan="$(git -C "$REPO_ROOT" log --format=%B -1 HEAD 2>/dev/null \
-                 | grep -E '^YIKICI-BEYAN:' | sed 's/^YIKICI-BEYAN:[[:space:]]*//' || true)"
+        #
+        # BEYAN OKUMA TEK KAYNAKTA: `yikici-beyan-oku.sh`.
+        #
+        # Buraya ancak BEKLEYEN YIKICI GÖÇ varken ulaşılıyor; yani mantık
+        # burada kalsaydı sondalanması için sahte göç üretmek gerekirdi.
+        # Ayrı betik, gerçek kodun sınanmasını mümkün kılıyor.
+        #
+        # ÖLÇÜLEN KUSUR (2026-09-15): beyan göçü getiren commit'te
+        # yazılıydı ama 20 adım geride kaldı; yalnız HEAD'e bakan kapı
+        # onu görmedi ve yayını durdurdu. Bir yayın bir ARALIK taşır.
+        #
+        beyan="$("${BASH_SOURCE%/*}/yikici-beyan-oku.sh" "$REPO_ROOT" 2> >(sed 's/^/[goc-provasi] beyan /' >&2) || true)"
     fi
 
     if [ -z "$beyan" ]; then

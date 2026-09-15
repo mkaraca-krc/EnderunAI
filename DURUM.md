@@ -17026,3 +17026,56 @@ yalancı kalmasın.
 > verdi. Mutasyon `python` ile uygulandı, o zaman ısırdı.
 
 **Tek seferlik tarama bir fotoğraftır; muhafız bir alışkanlıktır.**
+
+## YIKICI BEYAN KAPISI DÜZELTİLDİ — ARALIĞA BAKIYOR (2026-09-15)
+
+Bugün yayını **yanlış durdurdu**: beyan göçü getiren commit'te
+(`6148e28d`) satır başında yazılıydı ve kapının dört şartını da
+karşılıyordu, ama yayın gününe kadar 20 adım geride kaldı. Kapı yalnız
+`log -1 HEAD`e bakıyordu.
+
+**Bir yayın bir commit değil, bir ARALIK taşır.**
+
+### MEKANİZMA GERÇEK VERİYLE ÖLÇÜLDÜ
+
+| arama | sonuç |
+|---|---|
+| `6148e28d` mesajında beyan | **var (1)** |
+| aralık `9402c5cd..6148e28d` | **`YIKICI-BEYAN: audit_logs`** |
+| yalnız HEAD (`fecbabf6`, o günkü uç) | **0** ← yanlış durdurmanın kendisi |
+
+### OKUMA TEK KAYNAĞA ÇIKARILDI — VE NEDEN
+
+İlk sondam **kopya** üzerinde çalışıyordu; `diff` bunu yakaladı
+(*"blok ayrışmış — sonda betiği temsil etmiyor"*). İki kopya, zamanla
+iki davranış demektir.
+
+Sebep yapısaldı: mantık `goc-provasi.sh` içindeydi ve oraya **ancak
+bekleyen yıkıcı göç varken** ulaşılıyordu — sınamak için sahte göç
+üretmek gerekirdi. Bu yüzden okuma ayrı betiğe çıkarıldı:
+**`deploy/scripts/yikici-beyan-oku.sh`**. Artık sonda **gerçek kodu**
+sınıyor.
+
+### DAVRANIŞ
+
+Beyan **paket aralığında** (son yayın..HEAD) aranır. Taban yoksa ya da
+HEAD'in atası değilse **HEAD'e düşer ve bunu AÇIKÇA söyler**
+(`kaynak: YALNIZ HEAD …`). Sessizce daraltmak, kapının neye baktığını
+gizlerdi.
+
+### SONDA — BEŞ AYAK, KALICI
+
+`deploy/scripts/yikici-beyan-sondasi.sh`, **ucuz kapılara bağlandı**
+(artık her push ve her yayın öncesi koşuyor):
+
+| ayak | beklenen | sonuç |
+|---|---|---|
+| beyan 4 commit geride, taban var | bulur (0) | ✓ |
+| taban dosyası yok | HEAD'e düşer, beyan yok (1) | ✓ |
+| taban HEAD'in atası değil | HEAD'e düşer, beyan yok (1) | ✓ |
+| beyan HEAD'de, taban yok (**pozitif kontrol**) | bulur (0) | ✓ |
+| aralıkta iki beyan | ikisini de toplar (0) | ✓ |
+
+**Ucuz kapılar tam koşusu: düşen yok** (`yıkıcı beyan okuyucusu ✓ 1s`).
+Tek `ÖLÇEMEDİ`: sır tarayıcı (aralık) — itilecek yeni commit olmadığı
+için tarayacak şey yoktu; bu doğru davranış.
