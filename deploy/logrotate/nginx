@@ -1,0 +1,34 @@
+/var/log/nginx/*.log {
+	daily
+	missingok
+	# SAKLAMA 90 GÜN (2026-09-13). Önce 14'tü.
+	#
+	# AMACA BAĞLI GEREKÇE — iki iş için tutuluyor:
+	#   1. OLAY İNCELEMESİ: OTURUM/1'de 401'lerin geçmişi soruldu ve
+	#      pencere dışında kaldığı için yarısı ölçülemedi.
+	#   2. DÜZELTME ETKİSİNİN DOĞRULANMASI: GİRİŞ-DÖNGÜ/1'in düzeldiği,
+	#      kodu okuyarak değil 08 Eylül'ün 401 sayısının 64.531'den
+	#      113'e düşmesiyle gösterildi. 15 günlük pencere, 16 gün
+	#      önceki bir düzeltmeyi doğrulanamaz yapar.
+	#
+	# MALİYET ÖLÇÜLDÜ: gzip arşiv ortalama 145 kB/gün → 90 gün ≈ 13 MB.
+	# Diskte 124 GB boş. Maliyet sorusu değil, kişisel veri süresi sorusu.
+	#
+	# IP'SİZ ÖZET AYRI VE SÜRESİZ: deploy/scripts/gunluk-ozet.sh
+	# {tarih, uç kalıbı, durum, adet} — 90 gün DOLDUĞUNDA ham günlük
+	# silinir ama sayılabilir tarih kalır.
+	rotate 90
+	compress
+	delaycompress
+	notifempty
+	create 0640 www-data adm
+	sharedscripts
+	prerotate
+		if [ -d /etc/logrotate.d/httpd-prerotate ]; then \
+			run-parts /etc/logrotate.d/httpd-prerotate; \
+		fi \
+	endscript
+	postrotate
+		invoke-rc.d nginx rotate >/dev/null 2>&1
+	endscript
+}

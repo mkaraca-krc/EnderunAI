@@ -1,0 +1,11 @@
+[Unit]
+Description=Her gece IP'siz gunluk ozet (logrotate'ten SONRA)
+
+[Timer]
+# logrotate.timer 00:00'da kosuyor; ozet donmus access.log.1 uzerinde
+# 00:10'da calisir. Once kosarsa dunun dosyasi henuz donmemis olur.
+OnCalendar=*-*-* 00:10:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -9,6 +9,30 @@ server {
     proxy_busy_buffers_size 64k;
     large_client_header_buffers 4 32k;
 
+    # ─────────────────────────────────────────────────────────────
+    # CC RAPOR DOSYASI — TEK DOSYA, SALT OKUNUR (KUTU/1 Parça 2).
+    #
+    # NEDEN DİZİN DEĞİL TEK DOSYA: `location ^~ /rapor-.../` yazsaydım
+    # o dizine ileride düşen HER dosya yayınlanırdı. `location =` tam
+    # eşleşmedir: yalnız `son.txt` sunulur, kardeşi bile sunulmaz.
+    # Dizin listelemesi sorusu böylece hiç doğmuyor.
+    #
+    # YOL BİR YETKİ BELGESİDİR: 32 karakterlik rastgele parça,
+    # tahmin edilemez olduğu için erişimi o sınırlıyor. Bu yüzden
+    # dosyaya SIR YAZILMAZ — parola, belirteç, bağlantı dizesi,
+    # kişisel veri geçmez; içerik teknik özettir.
+    #
+    # Erişim günlüğü AYRI dosyada: yolu kimin okuduğu, yayın
+    # günlüğünün gürültüsüne karışmasın.
+    location = /rapor-e99f29e0c5f0175281af016a10d75b64/son.txt {
+        alias /var/www/enderun-rapor/son.txt;
+        default_type text/plain;
+        charset utf-8;
+        add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+        add_header Cache-Control "no-store" always;
+        access_log /var/log/nginx/enderun-rapor-erisim.log;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
@@ -41,6 +65,41 @@ location ^~ /api/auth/ {
 
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+    }
+
+    # ── SIGNALR HUB — WEBSOCKET İÇİN AYRI VE DAR YOL ─────────────
+    #
+    # NEDEN AYRI: ön yüz her şeyi /api/backend/[...path] Next vekilinden
+    # geçiriyor ama o bir `route.ts` — yalnız GET/POST/PUT/PATCH/DELETE
+    # dışa aktarıyor ve WebSocket YÜKSELTMESİNİ GEÇİRMEZ.
+    #
+    # NEDEN /api'ye eklemek yerine ayrı location: `location /api`
+    # tüm arka uç yüzeyi demek; oraya Upgrade eklemek yükseltmeyi 122
+    # controller'a birden açardı. Dar olan seçildi.
+    #
+    # ^~ ÖNEKİ: bu blok eşleşince nginx regex location'lara BAKMAZ.
+    # /api/hubs/ ile başlamayan hiçbir yol buraya düşmez.
+    #
+    # ÇEREZ: enderun_token httpOnly + sameSite=lax. WS el sıkışması
+    # aynı alan adına yapılan bir GET'tir, yani same-site — lax kısıtı
+    # yalnız cross-site istekleri etkiler, çerez gider. Arka uç bu
+    # çerezi YALNIZ /api/hubs yolunda okuyor (Program.cs).
+    location ^~ /api/hubs/ {
+        proxy_pass http://127.0.0.1:5155;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Uzun ömürlü bağlantı: varsayılan 60 sn okuma zaman aşımı
+        # WebSocket'i her dakika kopartırdı.
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
     }
 
     location /api {

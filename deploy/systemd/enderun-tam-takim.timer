@@ -1,0 +1,11 @@
+[Unit]
+Description=Her gece tam test takimi (01:00 UTC — yedekten ve tatbikattan ONCE)
+
+[Timer]
+# 01:00 secildi: kosu ~36 dk suruyor, 03:00'teki yedek ve 03:33'teki
+# tatbikat ile derleme kilidi icin yarismasin.
+OnCalendar=*-*-* 01:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

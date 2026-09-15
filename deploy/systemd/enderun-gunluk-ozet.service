@@ -1,0 +1,7 @@
+[Unit]
+Description=EnderunAI IP'siz gunluk erisim ozeti (suresiz arsiv)
+Documentation=file:///var/www/enderun-ai/deploy/scripts/gunluk-ozet.sh
+
+[Service]
+Type=oneshot
+ExecStart=/var/www/enderun-ai/deploy/scripts/gunluk-ozet.sh

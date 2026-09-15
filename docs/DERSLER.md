@@ -318,6 +318,31 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 91 — BİR KAPI, KULLANICININ GÖRDÜĞÜ KATMANI ÖLÇMÜYORSA,
+  ÖLÇTÜĞÜ KATMAN TEMİZKEN DE YALAN SÖYLER.** Her kapı için tek satır:
+  **hangi katmanı görür.**
+
+  Mehmet Bey'in kuralı (2026-09-15). Doğuşu: yayın kesinti kapısı
+  *"yayın boyunca ön yüz parçası ve arka uç sağlığı hatasız"* dedi ve
+  **doğru söyledi** — ölçtüğü iki yüzey gerçekten temizdi. Aynı
+  pencerede **nginx 8 adet 502** kaydetti (`auth/me`, `companies`,
+  `user-preferences`, `masraf-merkezleri`, `work-hours-status`) ve
+  oturumdaki kullanıcı onları gördü.
+
+  **Sorun eşikte değil KATMANDAYDI.** Cümle "hiç hata olmadı" diye
+  okunuyordu; ölçtüğü o değildi.
+
+  UYGULAMA: kapı vekil (nginx) katmanına bağlandı ve cümlesi ölçtüğü
+  katmanı **adıyla** söylüyor:
+  *"GEÇTİ · UYGULAMA KATMANI … · VEKİL KATMANI (nginx): N adet 502
+  (takas penceresi, beklenen), 502 dışı 5xx: M."*
+  Ölçemezse **ÖLÇEMEDİ** der — "kullanıcının gördüğü katman hakkında
+  hüküm YOK".
+
+  AYRIM: **502** takas penceresidir, beklenen ve ölçülmüş bedeldir
+  (6–14 sn); sayılır, kırmızı yakmaz. **502 dışı 5xx** uygulama
+  hatasıdır; kapı ona karşı serttir.
+
 - **KURAL 90 — SÜZGEÇLİ TEST KOŞUSU, KOŞMADIĞIN TESTLER HAKKINDA
   HİÇBİR ŞEY SÖYLEMEZ.** Kural 84'ün test hâli.
 

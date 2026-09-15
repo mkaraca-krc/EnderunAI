@@ -139,6 +139,7 @@ KAPILAR=(
   # okunamayan durumda kapalı düşülür.
   "hizli|derleme kilidi ölü scope sondası|${REPO_ROOT}|deploy/scripts/test-derleme-kos.sh"
   "hizli|yıkıcı beyan okuyucusu|${REPO_ROOT}|deploy/scripts/yikici-beyan-sondasi.sh"
+  "hizli|kesinti vekil katmanı sondası|${REPO_ROOT}|deploy/scripts/kesinti-vekil-sondasi.sh"
   "hizli|açık veritabanı|${REPO_ROOT}|deploy/scripts/acik-veritabani-kapisi.sh"
   "agir|şema sapması|${REPO_ROOT}|deploy/scripts/sema-sapma-kapisi.sh"
   # Zeminin beyan ettiği hesap yapılandırması canlıdan ayrışamaz —

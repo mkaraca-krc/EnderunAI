@@ -101,7 +101,7 @@ gitmemeli (kesinti kapısı), ve göç zinciri canlı şemayı birebir
 atomik takas hem ön yüzde hem arka uçta. Göç zinciri canlı şemayı
 birebir üretiyor (5801=5801, 0/0).
 
-**Neden KISMEN:** SQUASH/1 uygulanmadı; yeniden başlatmanın ~2 sn'lik
+**Neden KISMEN:** SQUASH/1 uygulanmadı; yeniden başlatmanın ÖLÇÜLEN 6-14 sn'lik
 boşluğu kabul edilmiş risk olarak duruyor (S5 uyarısı var, engel yok).
 
 ## K4 — Kırık ekran yok

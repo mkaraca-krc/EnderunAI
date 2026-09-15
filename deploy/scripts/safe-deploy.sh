@@ -863,8 +863,30 @@ swap_backend() {
 KESINTI_IZLEYICI_PID=""
 KESINTI_KAYIT="/tmp/enderun-yayin-kesinti.txt"
 
+KESINTI_NGINX_GUNLUK="/var/log/nginx/access.log"
+KESINTI_NGINX_BASLANGIC=""
+
 kesinti_izleyicisi_baslat() {
     : > "$KESINTI_KAYIT"
+
+    # ═══ KULLANICININ GÖRDÜĞÜ KATMAN — nginx ═══
+    #
+    # ÖLÇÜLEN KUSUR (2026-09-15 yayını): kapı "hatasız" dedi ve DOĞRU
+    # söyledi — ama yalnız iki yüzeyi izliyordu (ön yüz parçası + arka
+    # uç sağlık ucu). Aynı pencerede nginx 8 adet 502 kaydetti:
+    # `auth/me`, `companies`, `user-preferences`, `masraf-merkezleri`,
+    # `work-hours-status`. Kullanıcı bunları gördü, kapı görmedi.
+    #
+    # Bir kapı, kullanıcının gördüğü katmanı ölçmüyorsa, ölçtüğü katman
+    # temizken de yalan söyler. Bu yüzden vekil katmanı da sayılıyor.
+    #
+    # SATIR SAYISIYLA PENCERE: günlük append-only; başlangıçtaki satır
+    # sayısı alınır, sonunda ondan sonrası okunur. Zaman ayrıştırmaktan
+    # hem hızlı hem sağlam — AMA günlük yayın sırasında dönerse sayı
+    # küçülür; o hâl ÖLÇEMEDİ'dir, sessizce 0 sayılmaz.
+    if [ -r "$KESINTI_NGINX_GUNLUK" ]; then
+        KESINTI_NGINX_BASLANGIC="$(wc -l < "$KESINTI_NGINX_GUNLUK" 2>/dev/null || echo "")"
+    fi
 
     (
         while :; do
@@ -888,8 +910,10 @@ kesinti_izleyicisi_baslat() {
             # süreç yarım yazılmış bir derlemeyi okursa 500 verir ve
             # bunu kimse görmezdi — yayın "BAŞARILI" derdi.
             #
-            # 000 SAYILMIYOR: yeniden başlatmanın ~2 saniyesi zaten
-            # kabul edilmiş bir risk (S5). Burada aranan şey o değil,
+            # 000 SAYILMIYOR: yeniden başlatma boşluğu kabul edilmiş
+            # bir risktir (S5). SÜRESİ ÖLÇÜLDÜ (2026-09-11 ve 09-15):
+            # kullanıcının gördüğü kesinti 14 sn ve 6 sn — "~2 sn"
+            # DEĞİL. Eski yorum yedi kat yanılıyordu. Burada aranan şey o değil,
             # servis AYAKTAYKEN bozulan cevap.
             bk="$(curl -s -o /dev/null -w '%{http_code}' -m 4 \
                 "http://127.0.0.1:5155/api/health" 2>/dev/null)"
@@ -934,12 +958,44 @@ kesinti_izleyicisi_bitir() {
     hata="$(wc -l < "$KESINTI_KAYIT" 2>/dev/null || echo 0)"
     hata="${hata:-0}"
 
+    # ── VEKİL KATMANI (nginx) — KULLANICININ GÖRDÜĞÜ ────────────────
+    #
+    # Ölçüm TEK KAYNAKTA: `kesinti-vekil-katmani.sh` (sondası var).
+    # Burada tutulsaydı sınamak için sahte yayın gerekirdi.
+    local ngx_cikti="" ngx_kod=0 ngx_durum="ÖLÇEMEDİ" ngx_502=0 ngx_diger=0
+    if [ -n "$KESINTI_NGINX_BASLANGIC" ]; then
+        ngx_cikti="$("${REPO_ROOT}/deploy/scripts/kesinti-vekil-katmani.sh" "$KESINTI_NGINX_BASLANGIC" 2>/dev/null || true)"
+        ngx_kod=$?
+        case "$ngx_cikti" in
+            *"durum=ölçüldü"*)
+                ngx_durum="ölçüldü"
+                ngx_502="$(sed -nE 's/.*502=([0-9]+).*/\1/p' <<<"$ngx_cikti")"
+                ngx_diger="$(sed -nE 's/.*diger=([0-9]+).*/\1/p' <<<"$ngx_cikti")"
+                ;;
+            *) log "WARN" "Kesinti kapısı · vekil katmanı ÖLÇEMEDİ: ${ngx_cikti:-çıktı yok}" ;;
+        esac
+    else
+        log "WARN" "Kesinti kapısı · vekil katmanı ÖLÇEMEDİ: başlangıç satırı alınamadı."
+    fi
+
+    if [ "$ngx_durum" = "ölçüldü" ] && [ "${ngx_diger:-0}" -gt 0 ]; then
+        log "ERROR" "Kesinti kapısı İHLAL · VEKİL KATMANI: /api/ üzerinde ${ngx_diger} adet 502 DIŞI 5xx."
+        log "ERROR" "Bu bir takas penceresi değil, uygulama hatasıdır."
+        return 1
+    fi
+
     if [ "$hata" -eq 0 ]; then
-        log "INFO" "Kesinti kapısı GEÇTİ: yayın boyunca ön yüz parçası ve arka uç sağlığı hatasız."
+        # CÜMLE ÖLÇTÜĞÜ KATMANI ADIYLA SÖYLER — "hatasız" demez.
+        log "INFO" "Kesinti kapısı GEÇTİ · UYGULAMA KATMANI (ön yüz parçası + /api/health): bozuk cevap yok."
+        if [ "$ngx_durum" = "ölçüldü" ]; then
+            log "INFO" "Kesinti kapısı · VEKİL KATMANI (nginx, /api/): ${ngx_502} adet 502 (takas penceresi, beklenen), 502 dışı 5xx: ${ngx_diger}."
+        else
+            log "WARN" "Kesinti kapısı · VEKİL KATMANI: ÖLÇEMEDİ — kullanıcının gördüğü katman hakkında hüküm YOK."
+        fi
         return 0
     fi
 
-    log "ERROR" "Kesinti kapısı İHLAL: yayın sırasında ${hata} bozuk cevap (PARCA = ön yüz, ARKAUC = arka uç)."
+    log "ERROR" "Kesinti kapısı İHLAL · UYGULAMA KATMANI: ${hata} bozuk cevap (PARCA = ön yüz, ARKAUC = arka uç)."
     log "ERROR" "Sunucu ayaktayken bozuk içerik verdi — kullanıcı için ekran kırık."
     sed -n '1,10p' "$KESINTI_KAYIT" | while IFS= read -r satir; do
         log "ERROR" "  ${satir}"
@@ -1546,7 +1602,8 @@ yayınlanacaksa: DEPLOY_BRANCH=${current} $0"
 
 # MESAİ SAATİ UYARISI (S5) — DURDURMAZ, SÖYLER.
 #
-# Yeniden başlatma boşluğu ~2 saniye ve kabul edilmiş bir risk.
+# Yeniden başlatma boşluğu kabul edilmiş bir risk. SÜRESİ ÖLÇÜLDÜ:
+# 6-14 saniye (11 Eylül 14 sn · 15 Eylül 6 sn, isitma.sh yarıya indirdi).
 # Kabul edilmiş olması, saat 11:00'de farkında olmadan alınmasını
 # gerektirmiyor: yayın mesai içindeyse bunu YÜKSEK SESLE söylüyor.
 #
@@ -1562,7 +1619,7 @@ mesai_uyarisi() {
     saat=$(TZ=Europe/Istanbul date +%-H)
 
     if [ "$saat" -ge 9 ] && [ "$saat" -lt 18 ]; then
-        log "WARN" "MESAİ SAATİ: şu an $(TZ=Europe/Istanbul date '+%H:%M') (Türkiye). Yeniden başlatma sırasında ~2 sn'lik bir kesinti olacak ve kullanıcılar ekranda görecek. Yayın DURDURULMADI."
+        log "WARN" "MESAİ SAATİ: şu an $(TZ=Europe/Istanbul date '+%H:%M') (Türkiye). Yeniden başlatma KESİNTİSİ ÖLÇÜLDÜ: 6-14 saniye 502 (11 Eylül 14 sn, 15 Eylül 6 sn; isitma.sh yarıya indirdi). Kullanıcı bu sürede hata görür; oturumu DÜŞMEZ ama o an gönderilen kayıt KAYDEDİLMEZ. MESAİ SAATİNDE YAYIN YAPILMAZ — sabah erken ya da akşam geç. Yayın DURDURULMADI."
     else
         log "INFO" "Mesai dışı ($(TZ=Europe/Istanbul date '+%H:%M') Türkiye) — yeniden başlatma boşluğu kullanıcıya denk gelmeyecek."
     fi

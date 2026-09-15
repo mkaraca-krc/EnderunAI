@@ -17079,3 +17079,91 @@ gizlerdi.
 **Ucuz kapılar tam koşusu: düşen yok** (`yıkıcı beyan okuyucusu ✓ 1s`).
 Tek `ÖLÇEMEDİ`: sır tarayıcı (aralık) — itilecek yeni commit olmadığı
 için tarayacak şey yoktu; bu doğru davranış.
+
+# ═══════════════════════════════════════════════════════════════════
+# ÜÇ İŞ — YAYIN SONRASI SON TUR (2026-09-15)
+# ═══════════════════════════════════════════════════════════════════
+
+## 1 · KESİNTİ KAPISI VEKİL KATMANINA BAĞLANDI
+
+**Sorun eşikte değil KATMANDAYDI.** Kapı *"yayın boyunca ön yüz parçası
+ve arka uç sağlığı hatasız"* dedi ve **doğru söyledi** — ölçtüğü iki
+yüzey temizdi. Aynı pencerede **nginx 8 adet 502** kaydetti ve
+oturumdaki kullanıcı onları gördü.
+
+**Kural 91 DERSLER'e geçti** (Mehmet Bey'in metni): *bir kapı,
+kullanıcının gördüğü katmanı ölçmüyorsa, ölçtüğü katman temizken de
+yalan söyler.*
+
+**Cümle daraltıldı, katman adıyla söyleniyor:**
+
+    GEÇTİ · UYGULAMA KATMANI (ön yüz parçası + /api/health): bozuk cevap yok.
+          · VEKİL KATMANI (nginx, /api/): N adet 502 (takas penceresi,
+            beklenen), 502 dışı 5xx: M.
+
+Ölçemezse **ÖLÇEMEDİ** der: *"kullanıcının gördüğü katman hakkında
+hüküm YOK"*. Ayrım: **502** takas penceresidir (beklenen, 6–14 sn),
+sayılır ama kırmızı yakmaz; **502 dışı 5xx** uygulama hatasıdır → İHLAL.
+
+**Ölçüm tek kaynağa çıkarıldı** (`kesinti-vekil-katmani.sh`) — içeride
+kalsaydı sınamak için sahte yayın gerekirdi. **Dört ayaklı sonda ucuz
+kapılara bağlandı, iki yön de gösterildi:**
+
+| ayak | sonuç |
+|---|---|
+| yalnız 502 | **GEÇER** (çıkış 0, `502=2`) |
+| 502 dışı 5xx | **KIRMIZI** (çıkış 1, `diger=1`) |
+| günlük dönmüş | **ÖLÇEMEDİ** (çıkış 3) — sessiz 0 yok |
+| hiç 5xx yok (pozitif kontrol) | **GEÇER** (çıkış 0) |
+
+## 2 · "~2 SN" İDDİASI ÖLÇÜMLE DEĞİŞTİRİLDİ
+
+Betik mesai saatinde *"~2 sn'lik bir kesinti olacak"* diye uyarıyordu.
+**Ölçüm: 6–14 saniye** — 11 Eylül **14 sn**, 15 Eylül **6 sn**
+(`isitma.sh` yarıya indirdi). İddia **yedi kat** yanılıyordu.
+
+İddia **dört yerde** duruyordu (uyarı mesajı + iki kod yorumu +
+`CANLI-1.md`); dördü de ölçümle değiştirildi. Tarama pozitif
+kontrollüydü.
+
+> **PRATİK SONUÇ — BETİĞE VE BELGEYE GİRDİ:**
+> **Her yayın 6–14 saniye 502 üretir. Mesai saatinde yayın yapılmaz;
+> yayın sabah erken ya da akşam geç yapılır.**
+> Kullanıcı bu sürede hata görür, **oturumu düşmez**, ama o an
+> gönderilen kayıt **kaydedilmez**.
+
+## 3 · ŞART 4 — ELLE YAPILMIŞ YAPILANDIRMA ENVANTERİ
+
+**NEDEN ÖNEMLİ:** kurtarma yordamı veritabanını ve kodu geri getirir,
+**elle yapılmış yapılandırmayı getirmez.** `/etc` altındaki hiçbir şey
+ne veri yedeğinde ne kod deposundadır. **Sunucu dışı kopya da yokken,
+envanteri olmayan her elle ayar sunucuyla birlikte kaybolur** — veri ve
+kod geri gelir, sistem yine çalışmaz.
+
+**KAPSAM:** `/etc/systemd/system`, `/etc/logrotate.d`, `/etc/nginx`,
+`/etc/enderunai`, cron. **ÖLÇÜT:** "adı deploy/ içinde geçiyor"
+YETMEZ — **aynı adlı kopya** aranır ve `diff` ile karşılaştırılır.
+*(İlk taramam gevşek ölçüt kullandı; `test-safe-deploy-fastpath.sh`
+içinde "nginx" geçmesi bile "depoda var" saydırdı.)*
+
+**SONUÇ: 24 dosya · kopyası olmayan 9 · ayrışmış 2.**
+Pozitif kontrol: `oom-korumasi.conf` "birebir" dedi — tarama kör değil.
+
+**EN CAN ALICISI:** `enderunai-backend.service` ve
+`enderunai-frontend.service` — **sistemi ayağa kaldıran iki birim yalnız
+sunucuda duruyordu.** Bu haftanın üç zamanlayıcısı da öyle.
+
+Dokuzu depoya alındı (`deploy/systemd/`, `deploy/nginx/`,
+`deploy/logrotate/`), ayrışan ikisi tazelendi
+(`ops/nginx/enderunai.com.tr` **59 satır** geride kalmıştı).
+Geri getirme adımları `docs/KURTARMA.md`'de.
+
+> **GERİ GETİRİLEMEYEN, AÇIKÇA:** `/etc/enderunai/` içindeki sırlar
+> depoda yoktur ve olmayacaktır. **`backup-key` kaybolursa şifreli
+> yedeklerin hiçbiri açılamaz** — kurtarmanın tek geri dönüşsüz noktası
+> budur ve anahtar emaneti kararının sebebidir.
+
+---
+
+**BU ÜÇ İŞLE DURULDU.** Yeni iş açılmıyor: sistem canlı, gerçek kullanım
+başlıyor ve bundan sonraki bilgi ölçümden değil **kullanımdan** gelecek.

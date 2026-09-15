@@ -1,0 +1,8 @@
+[Unit]
+Description=EnderunAI gece tam test takimi (yayin sabahi degil, bir gece once)
+Documentation=file:///var/www/enderun-ai/scripts/gece-tam-takim.sh
+
+[Service]
+Type=oneshot
+TimeoutStartSec=3600
+ExecStart=/var/www/enderun-ai/scripts/gece-tam-takim.sh

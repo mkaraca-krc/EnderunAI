@@ -192,6 +192,106 @@ ve **koşulmadan önce prova veritabanında denenir.**
 
 ---
 
+---
+
+# ELLE YAPILMIŞ YAPILANDIRMA — KURTARMANIN KAPSAMADIĞI ŞEY
+
+## NEDEN BU BÖLÜM VAR
+
+**Kurtarma yordamı veritabanını ve kodu geri getirir; elle yapılmış
+yapılandırmayı GETİRMEZ.** `/etc` altındaki hiçbir şey ne veri
+yedeğinde ne kod deposundadır — orada değilse hiçbir yerde değildir.
+
+**Sunucu dışı kopya da olmadığı düşünülürse: envanteri olmayan her elle
+ayar, sunucuyla birlikte kaybolur.** Veritabanı geri gelir, kod geri
+gelir, ve sistem yine ÇALIŞMAZ — çünkü servis birimi, vekil
+yapılandırması, zamanlayıcı ve günlük döndürme kuralı yoktur.
+
+## ENVANTER (2026-09-15)
+
+**TARAMA KAPSAMI — nereye bakıldı:** `/etc/systemd/system`,
+`/etc/logrotate.d`, `/etc/nginx` (nginx.conf + sites-available +
+conf.d), `/etc/enderunai`, cron (root crontab + `/etc/cron.d`).
+
+**ÖLÇÜT:** "adı deploy/ içinde geçiyor" YETMEZ — depoda **aynı adlı bir
+kopya** aranır ve içerik `diff` ile karşılaştırılır. (İlk taramam gevşek
+ölçüt kullandı ve `test-safe-deploy-fastpath.sh` içinde "nginx" geçmesi
+bile "depoda var" saydırdı.)
+
+**SONUÇ:** 24 dosya sınandı · kopyası olmayan **9** · ayrışmış **2**.
+**Pozitif kontrol:** bilerek depoda olan `oom-korumasi.conf` "birebir"
+dedi — tarama kör değil.
+
+### KOPYASI OLMAYAN 9 DOSYA — DEPOYA ALINDI
+
+| dosya | nereye |
+|---|---|
+| `enderunai-backend.service` | `deploy/systemd/` |
+| `enderunai-frontend.service` | `deploy/systemd/` |
+| `enderun-gunluk-ozet.service` / `.timer` | `deploy/systemd/` |
+| `enderun-sorgu-cirasi.service` / `.timer` | `deploy/systemd/` |
+| `enderun-tam-takim.service` / `.timer` | `deploy/systemd/` |
+| `/etc/nginx/nginx.conf` | `deploy/nginx/nginx.conf` |
+
+**En can alıcısı:** `enderunai-backend.service` ve
+`enderunai-frontend.service` — **sistemi ayağa kaldıran iki birim**
+yalnız sunucuda duruyordu. Ayrıca bu haftanın üç zamanlayıcısı
+(IP'siz özet, sorgu çırası, gece tam takım) da yalnız sunucudaydı.
+
+**SIR DENETİMİ:** kopyalanan dosyalarda sır yok. Servis birimleri
+`backend.env`i `EnvironmentFile` ile **referans ediyor**, içeriğini
+gömmüyor. `nginx.conf`taki iki "token" eşleşmesi **yorum satırı**.
+Sır tarayıcı: temiz.
+
+### AYRIŞMIŞ 2 DOSYA — TAZELENDİ
+
+| dosya | durum |
+|---|---|
+| `/etc/logrotate.d/nginx` | depoda yoktu; `deploy/logrotate/nginx` olarak alındı (**rotate 90** dahil) |
+| `sites-available/enderunai.com.tr` | `ops/nginx/` kopyası **59 satır** geride kalmıştı; tazelendi |
+
+### DEPODA OLAN (kurtarma kapsar) — 13 dosya
+
+`enderun-backup.*`, `enderun-geri-yukleme-tatbikati.*`,
+`enderun-rapor.*`, `enderun-uyari@.service`, `nobet.*`,
+`conf.d/portal-token-maskeleme.conf`, `sites-available/srv.enderunai.com.tr`,
+`/etc/logrotate.d/enderun-bellek`, `/etc/cron.d/enderun-bellek-izle`.
+
+### KURTARMADA GERİ GETİRME — ADIMLAR
+
+Kod geri geldikten sonra, `/etc` boşsa:
+
+    # 1) servis birimleri ve zamanlayıcılar
+    sudo cp deploy/systemd/*.service deploy/systemd/*.timer /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now enderunai-backend enderunai-frontend
+    sudo systemctl enable --now enderun-backup.timer \
+         enderun-geri-yukleme-tatbikati.timer enderun-gunluk-ozet.timer \
+         enderun-sorgu-cirasi.timer enderun-tam-takim.timer
+
+    # 2) vekil
+    sudo cp deploy/nginx/nginx.conf /etc/nginx/nginx.conf
+    sudo cp deploy/nginx/portal-token-maskeleme.conf /etc/nginx/conf.d/
+    sudo cp ops/nginx/enderunai.com.tr /etc/nginx/sites-available/
+    sudo nginx -t && sudo systemctl reload nginx
+
+    # 3) günlük döndürme
+    sudo cp deploy/logrotate/nginx /etc/logrotate.d/nginx
+
+### GERİ GETİRİLEMEYEN — AÇIKÇA
+
+**`/etc/enderunai/` içindeki sırlar depoda YOKTUR ve olmayacaktır**
+(`backend.env`, `backup-key`, `tatbikat.env`, `backup-remote.env`).
+
+Bunlar kaybolursa:
+- `backend.env` → yeni sırlarla yeniden kurulur; **tüm oturumlar düşer**
+  (JWT sırrı değişir) ve veritabanı parolası eşleştirilmelidir.
+- **`backup-key` kaybolursa ŞİFRELİ YEDEKLERİN HİÇBİRİ AÇILAMAZ.**
+  Bu, kurtarmanın tek geri dönüşsüz noktasıdır ve
+  `docs/SUNUCU-DISI-KOPYA.md`deki anahtar emaneti kararının sebebidir.
+
+---
+
 ## ÖLÇÜLMEMİŞ KALAN — DÜRÜSTÇE
 
 Bu yordamın **3, 9 ve healthcheck adımları canlı hedefte hiç

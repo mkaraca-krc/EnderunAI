@@ -1,0 +1,17 @@
+[Unit]
+Description=Enderun AI Backend
+After=network.target
+
+[Service]
+
+WorkingDirectory=/var/www/enderun-ai/publish
+EnvironmentFile=/etc/enderunai/backend.env
+
+ExecStart=/usr/bin/dotnet /var/www/enderun-ai/publish/EnderunAI.Api.dll
+Restart=always
+RestartSec=5
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://0.0.0.0:5155
+
+[Install]
+WantedBy=multi-user.target
