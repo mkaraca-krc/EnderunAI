@@ -331,3 +331,42 @@ ramak kaldı — Kural 93, aynı gece üçüncü kez.
 `ls <glob> | wc -l` eklenirse kırmızı yanar; akıştaki satır sayımlarını
 YAKALAMAZ (yanlış kırmızı yakmasın diye ayrıca sınandı). Mutasyon:
 çıplak glob geri konuldu → **tam 1 kırmızı**; geri alınca 4/4.
+
+### Nöbet penceresi — SONUÇ (22:48–23:23 UTC)
+
+| tetik | eşik | ölçülen | sonuç |
+|---|---|---|---|
+| T1 502 dışı 5xx | > 0 | **0** | temiz |
+| T2 401 | > 5 | **0** | temiz |
+| T3 çıkış | > 2 | **0** | temiz |
+| T4 sağlık | ≠ 200 | **200** | temiz |
+
+Pencere toplamı: 68 istek, **41 `/api/`**.
+
+**AMA KOVA BAZINDA ÖLÇEMEDİ.** Beş kovanın beşinde de `/api/` = 4,
+yani ilan ettiğim 5'lik tabanın altında. Pencere BÜTÜNÜ ölçülebilir
+(41 istek / 35 dk ≈ 70 saat⁻¹, 50'lik tabanın üstünde) ve o düzeyde
+dört tetik de temiz; **5 dakikalık çözünürlükte ise hiçbir şey
+kanıtlanmadı.** İkisi birden yazılıyor çünkü "tetikler yeşil" cümlesi
+tek başına yanıltıcı olurdu.
+
+Başarılı giriş: **0** — canlıda hâlâ kimse giriş yapmadı.
+
+---
+
+## 2.5 duzen-testi.sh rig zemini · **ZATEN KAPALIYMIŞ**
+
+Üç şart da yerinde, ölçüldü:
+
+1. **Şirketi kendisi tohumluyor** — `SELECT ... FROM companies LIMIT 1;
+   IF v_sirket IS NULL THEN INSERT INTO companies ...` (satır 336-341).
+2. **Tohumlamanın kendi pozitif kontrolü var** — SQL hatasızlığı yeterli
+   sayılmıyor; şirket ve konuşma sayısı tohumlamadan SONRA ayrıca
+   sayılıyor (satır 501-503, `vt-sorgu.sh` üzerinden). Betiğin kendi
+   cümlesi: *"'hata yok' ile 'zemin kuruldu' aynı şey değil: bir INSERT
+   sessizce 0 satır etkilemiş olabilir."*
+3. **Zemin kurulamazsa ÖLÇEMEDİ, İHLAL değil** — çıkış **3**, ve üç ayrı
+   satırla "rig hiçbir ÜRÜN davranışı ölçmedi" deniyor (satır 509-512).
+
+Değiştirilecek bir şey bulamadım; **dokunmadım.** Bu, gece listesinde
+zaten kapalı çıkan DÖRDÜNCÜ madde.
