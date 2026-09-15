@@ -16759,3 +16759,152 @@ Kiraz toplama yeni SHA üretir; Yayın 1'den sonra `last-deployed-commit`
 main'in atası olmaz ve **Yayın 2 kapıda durur.** Aşmanın tek yolu
 `last-deployed-commit`'i elle yazmak — **kapıya yalan söylemek**.
 Bu yüzden tek yayın öneriliyor.
+
+# ═══════════════════════════════════════════════════════════════════
+# YAYIN — 2026-09-15, TEK YAYIN (main), BAŞARILI
+# ═══════════════════════════════════════════════════════════════════
+
+**`9402c5cd` → `1c9fdaa3` · 45 commit · 80 dosya · mesai içi (14:03 TRT)**
+**Onay: Mehmet Bey. Operatör: Claude.**
+
+## YAYIN ÖNCESİ — ÜÇ KAPI
+
+| kapı | sonuç |
+|---|---|
+| gece tam takım (01:34) | **YEŞİL** 3.259/3.259, düşen 0 |
+| yedek + tatbikat (03:01 / 03:31) | **YEŞİL** 242 tablo tam eşleşme, 13 sn |
+| kapsam kapısı | **YEŞİL** 45/45 ilan edilmiş, ilan dışı 0 |
+
+## İKİ KAPI YAYINI DURDURDU — İKİSİ DE HAKLIYDI
+
+### 1 · YIKICI BEYAN KAPISI
+
+`goc-provasi.sh` beyanı **yalnız `HEAD`'in** commit mesajında arıyor
+(satır 208). Geçerli beyan `6148e28d`'de yazılıydı ama 20 adım geride
+kalmıştı. **Canlıya dokunulmadan durdu.**
+
+Beyan yayın anında, **somut olarak** tekrarlandı: hangi tablo (21 sütun,
+3 indeks), neden (yetim — 0 satır, 0 kod yolu, 2 ay yazılmamış), geri
+alınırsa ne olur (boş tablo geri gelir, SQL depoda ve provalı). Beyan
+yayın günlüğüne de yazıldı.
+
+**Kapı kusuru `docs/CANLI-1.md`'ye kaydedildi:** bir yayın bir commit
+ARALIĞI taşır; `HEAD`'e bakan kapı erken yazılıp geç yayınlanan her
+paketi yanlış durdurur. **Silinen-savunma kapısındaki aynı kusurun
+ikinci örneği.** Düzeltme geçişten sonra — kapı yayın dakikasında
+değiştirilmedi.
+
+### 2 · ŞEMA SAPMA ÇIRASI — İKİ YÖNLÜ ÇALIŞTI
+
+Göç uygulandıktan sonra: **gerçek 92, çizgi 95, gevşeklik 3 → DÜŞTÜ.**
+Sebep ölçüldü: `audit_logs`un üç indeksi "modelin bilmediği nesneler"
+kümesindeydi; tablo gidince onlar da gitti.
+
+**Çizginin ALTINA düşmek de kırmızıdır** — gevşeklik kazanılan
+ilerlemeyi görünmez kılar. Çizgi gerekçesiyle 92'ye çekildi.
+
+## GÖÇ — CANLIDA
+
+Prova **canlının kopyasında** koştu, sonra canlıya uygulandı:
+
+| | önce | sonra |
+|---|---|---|
+| tablo | 242 | **241** |
+| `audit_logs` | var | **yok** |
+| göç geçmişi | 213 | **214** |
+
+## KESİNTİ — **6 SANİYE** (ölçüldü)
+
+    12:33:48  systemd: Stopped / Started (aynı saniye)
+    12:33:49  ilk 502
+    12:33:54  son 502   → 8 istek 502 aldı
+    12:33:54+ aynı kaynaktan 34×200, 4×304
+
+11 Eylül'de **14 saniyeydi**; ısıtma adımı yarıya indirdi.
+
+> **KESİNTİ KAPISININ CÜMLESİ, ÖLÇTÜĞÜNDEN GENİŞ.** Günlükte
+> *"yayın boyunca ön yüz parçası ve arka uç sağlığı hatasız"* yazıyor
+> ve bu **doğru** — ama kapı yalnız o iki yüzeyi izliyor. nginx aynı
+> pencerede **8 adet 502** kaydetti (`auth/me`, `companies`,
+> `user-preferences`, `masraf-merkezleri`, `work-hours-status`).
+> Cümle "hiç hata olmadı" diye okunuyor; ölçtüğü o değil.
+
+### OTURUMDAKİ KULLANICI — ETKİLENDİ, DÜŞMEDİ
+
+Yayın sırasında **bir kullanıcı sistemdeydi** (09:55'te girmiş, 60
+saniyede bir yoklayan açık sekme). Bunu yayın başlamadan önce ölçtüm ve
+Mehmet Bey'e bildirdim; karar "devam" oldu çünkü bekleme bedeli
+(A1a — kalıcı yanlış kod biçimi) daha büyüktü.
+
+**Ölçülen sonuç:** 8 istek 502 aldı, ardından **aynı kaynaktan 34×200 +
+4×304** geldi ve **yeni yapının parçaları yüklendi**. **Çıkış yok,
+yeniden giriş yok** (`auth/logout` bugün 0; iki giriş de yayından
+önceydi: 09:55 ve 10:52). *"502 oturumu düşürmez"* hükmü canlıda
+doğrulandı.
+
+## YAYIN SONRASI DOĞRULAMA — ÜÇ AYRI SONUÇ
+
+| # | ölçüm | sonuç |
+|---|---|---|
+| 1 | ısıtma + sağlık + proxy/WebSocket duman | **GEÇTİ** |
+| 2 | sürüm ucu ↔ yayın kaydı ↔ git HEAD | **GEÇTİ** — üçü de `1c9fdaa3`; ön yüz meta `enderun-surum=1c9fdaa3` |
+| 3 | duman testi 7 sayfa | **GEÇTİ** — `/login` 200, korumalı 6 sayfa 307, **5xx yok** |
+| 4 | yeni kart kodu | **ÖLÇEMEDİ (canlıda)** — aşağıda |
+| 5 | etiketler canlı pakette | **GEÇTİ** — aşağıda |
+| **A3** | geçersiz istek 400 / çökme 500 | **ÖLÇEMEDİ (canlıda)** |
+| **A5** | yazma → denetim satırı | **ÖLÇEMEDİ (canlıda)** |
+| **A6** | geçersiz jeton → IDX satırı | **GEÇTİ** |
+
+### A6 — GEÇTİ, ÇAĞIRARAK
+
+    biçimsiz jeton → 401 · IDX14100: JWT is not well formed
+    imzası bozuk   → 401 · IDX10503: Signature validation failed
+    sebep satırı: önce 0 → sonra 2
+
+### A3 ve A5 — NEDEN ÖLÇEMEDİ
+
+**Canlıda kimlikli çağrı yapamıyorum**; canlı kullanıcı parolası bana
+geçmiyor (kuralın kendisi). `AllowAnonymous` uçlarının hiçbiri
+`ArgumentException` üretmiyor, hiçbiri yazma yapmıyor.
+
+- **A3** bir doğrulama hatası tetiklemeyi gerektiriyor → kimlik şart.
+- **A5** bir YAZMA gerektiriyor; yayından beri canlıda **0 yazma** oldu,
+  dolayısıyla **0 denetim satırı**. Bu başarısızlık değil: ölçülecek
+  olay yok. *Trafik yoksa GEÇTİ denmez.*
+
+**MEHMET BEY EKRANDAN İKİ ADIMDA KAPATABİLİR:**
+
+1. **A3** — depo çıkışında miktara **0** yazıp kaydet →
+   *"Miktar sıfırdan büyük olmalıdır."* görmeli
+   (eski davranış: "Beklenmeyen bir hata").
+2. **A5** — herhangi bir malzeme kartında bir alanı değiştirip kaydet →
+   denetim ekranında o kayda ait **Updated** satırı görünmeli.
+
+### 4 — YENİ KART KODU: VERİTABANINDAN ÖLÇÜLDÜ, YAZILMADI
+
+Canlıda en büyük `END` numarası **9**. Üretici mevcut en büyükten
+tohumlanıyor → **yeni kart `END0010` olmalı.** Canlıda kart açmak gerçek
+veri üretir ve kimliğim yok; **doğrulama Mehmet Bey'in ilk kartında**
+yapılacak: kod `END0010` ve kart **AKTİF** doğmalı.
+
+### 5 — ETİKETLER CANLI PAKETTE (bayat artık tuzağına düşmeden)
+
+`.next/static` **220 parçadan 17'si bayat**; bu yüzden arama yalnız
+**bu yapıya ait 203 parçada** yapıldı (BUILD_ID `recmec6doMapwBag810LE`,
+12:32:44):
+
+| dizge | bu yapıda |
+|---|---|
+| `Transfer giriş` / `Transfer çıkış` | **3 parça** |
+| `Sayım düzeltme` | 3 parça |
+| `Yedek Parça` | 3 parça |
+| `Stok Durumu` | 1 parça |
+| `categoryLabel` | 1 parça |
+
+**POZİTİF KONTROL:** eski büyük harfli biçim (`Transfer Giriş`)
+**yalnız 11 Eylül damgalı bayat parçada** var — yeni yapıda yok.
+
+> **KENDİ ARAMA HATAMI DÜZELTTİM:** ilk aramam `"Transfer Giriş"`
+> (büyük harf) idi ve yalnız bayat parçada eşleşti; bir an "yeni yapıda
+> yok" sonucuna varacaktım. Gerçek etiket `"Transfer giriş"`.
+> Var olmayan adla arayıp "yok" demek — aynı tuzak, bugün altıncı kez.
