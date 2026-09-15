@@ -383,6 +383,24 @@ değil, **indeks**.
   ölçüm kullanılmıştır" diye işaretlenir. Tek yerde düzeltilmiş bir
   ölçüm, düzeltilmemiş sayılır.
 
+  **ALT MADDE — İDDİA İLE KAYIT AYRILIR.** *(Mehmet Bey, 2026-09-15.)*
+
+  Kural 94 bugünkü **İDDİALAR** için geçerlidir, geçmişin
+  **KAYITLARI** için değil. O gün doğru olan bir ölçüm yeniden
+  yazılmaz, **işaretlenir**. Geçmişin kaydını bugünün sayısıyla
+  düzeltmek, denetim kaydından satır silmekle aynı ailedir: defter o an
+  ne bilindiğini değil, **bugün ne bilindiğini** anlatmaya başlar.
+
+  AYIRT ETME ÖLÇÜTÜ: cümle "şu an böyledir" diyorsa İDDİADIR —
+  düzeltilir. "Şu tarihte şöyle ölçüldü" diyorsa KAYITTIR — işaretlenir.
+  6,94 sn sayısı `isitma.sh` ve `safe-deploy.sh`te iddiaydı
+  (değiştirildi), `DURUM.md`de kayıttı (yerinde işaretlendi).
+
+  VE İŞARET, İŞARETLEDİĞİ YERDE DURUR: aynı sayı `DURUM.md`de iki ayrı
+  yerde geçiyordu ve ilk işaret ikincisinden 140 satır uzaktaydı.
+  **140 satır uzaktaki bir işaret, işaret sayılmaz** — ikincisi de
+  yerinde işaretlendi.
+
 - **KURAL 93 — ISIRMAYAN BİR SONDA, KUSURUN YOKLUĞUNU GÖSTERMEZ;
   SONDANIN YANLIŞ YERE BAKTIĞINI DA GÖSTEREBİLİR.** Bir sonda yeşil
   verdiğinde önce sorulacak soru: **bu sonda ısırabileceği bir koşulda

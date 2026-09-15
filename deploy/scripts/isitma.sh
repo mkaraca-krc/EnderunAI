@@ -218,6 +218,9 @@ echo "ISITMA SONUÇ arka-uc ilk=${ilk_arka}s sonra=${son_arka##* }s | on-yuz ilk
 # değil sondanın ısırabileceği koşulda olmadığının kanıtıdır (Kural 93).
 # Elle koşumda bu satır GÖRMEZDEN GELİNİR; hüküm, yayın günlüğündeki
 # koşumdan okunur.
+#
+# TEK CÜMLEYLE: BU ALETİN TEK GEÇERLİ KOŞUM ANI, YENİDEN BAŞLATMADAN
+# HEMEN SONRASIDIR. Başka her an "ISITTI" der ve hiçbir şey ölçmez.
 esik_ms=50
 ilk_ms="$(awk -v v="$ilk_arka" 'BEGIN{printf "%d", v*1000}' 2>/dev/null || echo 9999)"
 if [ "$ilk_ms" -le "$esik_ms" ]; then
