@@ -1316,3 +1316,29 @@ arka uç testleri 3218/3218. Kapsam kapısı gerçek yayında YEŞİL 8/8
   `uretim_ms`'siz ESKİ jetonu yayından sonra **200** (oturumda olan düşmedi);
   yeni girişin jetonu `uretim_ms` taşıyor (şimdiye 29 ms) ve **200**. Geçici
   hesap silindi, kalan satır 0.
+
+---
+
+## KAPI KUSURU — YIKICI BEYAN KAPISI YALNIZ HEAD'İ OKUYOR (2026-09-15)
+
+**Yıkıcı beyan kapısı yayın aralığını değil yalnız `HEAD`'i okuyor;
+20 commit geride duran geçerli bir beyanı göremedi. Yayın günü beyan
+tekrarlanarak geçildi, kapı düzeltilmedi.**
+
+Ölçüm: `deploy/scripts/goc-provasi.sh:208`
+
+    beyan="$(git -C "$REPO_ROOT" log --format=%B -1 HEAD ...
+
+Beyan aslında göçü getiren commit'te (`6148e28d`, 2026-09-13) satır
+başında yazılıydı ve kapının dört şartını da karşılıyordu. Ama o commit
+yayın gününe kadar 20 adım geride kaldı; kapı yalnız `HEAD`'e baktığı
+için **geçerli bir beyanı görmedi** ve yayını durdurdu.
+
+**AYNI AİLENİN İKİNCİ ÖRNEĞİ:** silinen-savunma kapısında da aynı kusur
+tespit edilmişti — bir yayın bir **commit ARALIĞI** taşır, tek bir
+commit değil. Aralığa bakmayan her kapı, erken yazılıp geç yayınlanan
+her paketi yanlış durdurur.
+
+**DÜZELTME GEÇİŞTEN SONRA:** beyan araması `son yayın..HEAD` aralığına
+bakmalı. Yayın dakikasında kapı değiştirilmedi — kapıyı ihtiyaç anında
+gevşetmek, kapıyı kaldırmakla aynı kapıya çıkar.
