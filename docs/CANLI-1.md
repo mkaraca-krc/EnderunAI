@@ -1345,6 +1345,31 @@ gevşetmek, kapıyı kaldırmakla aynı kapıya çıkar.
 
 ---
 
+## ⚠ DENETİM KAYDINDA SONDA KAYNAKLI `LoginFailed` SATIRLARI VAR — GERÇEK OLAY DEĞİLDİR
+
+**15.09.2026 akşamı sonda kaynaklı 22 adet `LoginFailed` satırı
+vardır (18:30:30–19:26:15 UTC); gerçek güvenlik olayı DEĞİLDİR.**
+
+Bunlar giriş hız sınırının ve GÜNLÜK/1 kaydının canlıda
+doğrulanmasıdır. Ayırt etmek için tek ölçüt yeter: `ActorUsername`
+`sonda-` ile başlar (`sonda-k1..k5`, `sonda-kul-hedef`, `sonda-poz*`,
+`sonda-vekil-*`). Bunlar var olmayan kullanıcı adlarıdır; hiçbir
+gerçek hesabın sayacına dokunulmamıştır.
+
+**AYRICA, SÜREKLİ BİR KAYNAK: `isitma-` önekli satırlar.** Her yayının
+ısıtma adımı (`deploy/scripts/isitma.sh`) arka uca kasıtlı başarısız
+bir giriş atıyor; GÜNLÜK/1 açıldığından beri bu da denetim satırı
+yazıyor. Yani **her yayın 3-4 adet `LoginFailed` üretir** ve bu
+tekrarlayacaktır. `ActorUsername` `isitma-yok-` ile başlar, IP
+`192.0.2.233` (TEST-NET-3, gerçek olmayan adres).
+
+**SATIRLAR SİLİNMEDİ ve silinmeyecek.** Denetim kaydından satır
+silmek, kaydın kendisine güveni bozar — "bazı satırlar temizleniyor"
+diyen bir defter delil olmaktan çıkar. Gürültü, silmekle değil
+ETİKETLE çözülür; etiket bu bölümdür.
+
+---
+
 ## VEKİL/1 — VEKİL `X-Forwarded-For`'U DÜŞÜRÜYOR: IP BAZLI KISIT BAZI AKIŞLARDA ORTAK ANAHTARDA (2026-09-15, ÖLÇÜLDÜ, DÜZELTİLMEDİ)
 
 **Nasıl bulundu:** akşam yayınının pozitif kontrolünü koşarken sondamı

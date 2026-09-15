@@ -318,6 +318,47 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 95 — "DAHA DOĞRU GÖRÜNEN" BİR SATIR, DÜZELTMENİN KENDİSİNİ
+  İPTAL EDEBİLİR.** Bir düzeltmenin yanına, onu bozacak "iyileştirmeyi"
+  ADIYLA yasaklayan bir not bırakılır.
+
+  Mehmet Bey'in kuralı (2026-09-15). Bu not bir kusuru değil,
+  **GELECEKTEKİ bir kusuru** engeller.
+
+  DOĞUŞU: VEKİL/1 düzeltmesi, istemci adres zincirini arka uca AYNEN
+  geçiriyor. Bunu okuyan birinin "vekiller kendi adresini zincire
+  ekler, standart budur" deyip `${zincir}, 127.0.0.1` yazması son
+  derece makul görünür. Ama arka uç zincirin SON elemanını okur — o
+  satır yazıldığı anda son eleman herkeste `127.0.0.1` olur ve IP
+  bazlı hız sınırı SESSİZCE tek kovaya iner: kimse ısırmaz, hiçbir
+  test kırmızı yanmaz, hiçbir günlük satırı düşmez. Düzeltme yerinde
+  durur ve işlevi yoktur.
+
+  UYGULAMA: bir düzeltmenin yanına yalnız "ne yaptığı" değil, **hangi
+  makul görünen değişikliğin onu iptal edeceği** de yazılır; ve o
+  değişiklik bir testle adlandırılır (burada `ZINCIRE_EKLEME_YAPMAZ`).
+  Yasak yorumda kalırsa yorum okunmaz — teste bağlanırsa ısırır.
+
+- **KURAL 94 — BİR ÖLÇÜM DÜZELTİLİNCE, ONUNLA YAZILMIŞ HER CÜMLE
+  TARANIR.** Düzeltme, ölçümün yazıldığı YERDE bitmez.
+
+  Mehmet Bey'in kuralı (2026-09-15). "Bozuk çıkan bir alet, o aletle
+  ölçülmüş her şeyi şüpheli yapar" kuralının kardeşi: orada ALET
+  bozulur, burada ÖLÇÜMÜN KENDİSİ düzelir — sonuç aynı, tarama şart.
+
+  DOĞUŞU: giriş uç ölçümünü yanlış uca (`/api/backend/auth/login`)
+  dayandırmıştım. Düzeltince yalnız nginx yapılandırma yorumunu
+  değiştirmek yetmedi; aynı sayılar **Kural 92'nin gövdesinde** de
+  yazılıydı ve orada düzeltilmeseydi kuralın kendisi çürük bir
+  dayanakla ayakta kalacaktı. Hüküm ikisinde de doğruydu — yanlış olan
+  DAYANAKTI, ve dayanak düzeltilmeden hüküm güvenilir değildir.
+
+  UYGULAMA: bir sayı ya da uç adı düzeltildiğinde, o sayının geçtiği
+  HER yer aranır (yapılandırma yorumu, DERSLER, CANLI-1, commit
+  mesajı, kod yorumu). Bulunan her yer ya düzeltilir ya "burada eski
+  ölçüm kullanılmıştır" diye işaretlenir. Tek yerde düzeltilmiş bir
+  ölçüm, düzeltilmemiş sayılır.
+
 - **KURAL 93 — ISIRMAYAN BİR SONDA, KUSURUN YOKLUĞUNU GÖSTERMEZ;
   SONDANIN YANLIŞ YERE BAKTIĞINI DA GÖSTEREBİLİR.** Bir sonda yeşil
   verdiğinde önce sorulacak soru: **bu sonda ısırabileceği bir koşulda
