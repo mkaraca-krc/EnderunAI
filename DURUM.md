@@ -16980,3 +16980,49 @@ değil.
 Not: Yayın sırasındaki 6 saniyelik kesinti de bu düşmenin sebebi
 değildir — o kesintide dönen kod **502**'ydi ve istemci yalnız **401**'de
 çıkış yaptırıyor; ayrıca bugün `auth/logout` sayısı **0**.
+
+## (b) AÇIĞI KAPATILDI — İZLEYİCİYİ ATLAYAN YAZMA MUHAFIZI (2026-09-15)
+
+Dün kendi yazdığım dürüst sınır: *"bir yazma izleyiciyi atlarsa hiçbir
+test yakalamaz; bugünkü güvence tek seferlik bir taramadır ve yarın
+eklenen bir yazmayı kimse durdurmaz."* Onay alındı, kapatıldı.
+
+**`IzleyiciyiAtlayanYazmaTests`** — dışlamayla kapalı kapı.
+
+### NEDEN ÖNEMLİ
+
+`ExecuteUpdateAsync` / `ExecuteDeleteAsync` / ham SQL **`SaveChanges`i
+hiç çağırmaz.** O yazmalarda `UpdatedAtUtc` yazılmaz, denetim satırı
+oluşmaz, **yumuşak silme devreye girmez — satır gerçekten gider.**
+
+### KAPSAM DIŞLAMAYLA
+
+Bugünkü **8 dosyada 12 kullanımın hepsi işlevsel** (satır kilidi, proje
+silme, izin temizliği, tohumlama). Hepsini bir gecede çevirmek gereksiz
+risk. Bunun yerine: **bilinenler gerekçesiyle listelendi, listede
+olmayan her YENİ kullanım kırmızı yakıyor.**
+
+Gerekçe **80 karakterden kısa olamaz** — "niçin güvenli" anlatılmalı.
+*Muhafız ilk koşuda benim kendi iki gerekçemi kısa bulup kırmızı yaktı;
+ikisi de `FOR UPDATE` satır kilidiydi ve "veri değiştirmez" demek
+yetmiyordu.*
+
+**Ölü istisna da kırmızı:** dosya taşınmış ya da çağrı kaldırılmışsa
+`Istisnalar_HalaGecerliOlmali` "listeden ÇIKARIN" diyor — liste
+yalancı kalmasın.
+
+### DÖRT AYAKLI SINAMA
+
+| ayak | sonuç |
+|---|---|
+| bugünkü hâl | **4/4 YEŞİL** |
+| `CompanySettingsController`a yeni `ExecuteUpdateAsync` eklendi | **KIRMIZI** — `YeniAtlayanYazma_Eklenmemis`, dosya:satır ve gerekçe metniyle |
+| geri alındı | **4/4 YEŞİL** |
+| dedektör körleştirildi (desen `ASLA_ESLESMEZ_XYZ`) | **2 KIRMIZI** — pozitif kontrol + ölü istisna denetimi |
+
+> **ÜÇÜNCÜ AYAKTA DÜZENEĞİ SORGULADIM (Kural 81):** ilk körleştirme
+> denemem `sed` deseni tutmadığı için **uygulanmamıştı** ve test 4/4
+> yeşil dönmüştü. O yeşili kanıt sayacaktım; sayaç (`grep -c` = 0) ele
+> verdi. Mutasyon `python` ile uygulandı, o zaman ısırdı.
+
+**Tek seferlik tarama bir fotoğraftır; muhafız bir alışkanlıktır.**
