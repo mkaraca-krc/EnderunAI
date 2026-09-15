@@ -17294,3 +17294,73 @@ savunma hattıydı.
 
 **Katman 2 için önerim: akşam mesai sonrası yayın.** Kararı siz
 verirsiniz.
+
+## AKŞAM YAYIN PAKETİ HAZIR — KATMAN 2 + GÜNLÜK/1 PARÇASI (2026-09-15)
+
+**Karar: akşam mesai sonrası, tek kesinti.** Katman 1 (nginx) canlıda ve
+gözlenen selin tamamını uydurulamayan gerçek TCP adresiyle kesiyor.
+
+### PAKETTE NE VAR
+
+**① Katman 2 — uygulama sınırı (iki kusur düzeltildi)**
+
+- `X-Forwarded-For`ta **son eleman** alınıyor (ilk eleman istemcinin
+  gönderdiğiydi; uydurma başlıkla sınır atlatılabiliyordu — ölçüldü).
+- **İki ayrı sayaç**: `ip:` eşik **5**, `kul:` eşik **10**. Kullanıcı
+  adı eşiği cömert çünkü o kilit **gerçek bir insanı** etkiler ve
+  hizmet engelleme yüzeyidir. Kilit **süreli** (≤15 dk), kalıcı değil.
+- Başarılı giriş **iki sayacı da sıfırlar**.
+- Parola değiştirme akışı da aynı anahtar alanına (`ip:`) alındı —
+  iki ad alanı sessiz bir tutarsızlık olurdu.
+
+**② GÜNLÜK/1 parçası — başarısız giriş kullanıcı adıyla kayda geçiyor**
+
+Ölçülen boşluğun kapatılması: *"hangi kullanıcı adları denendi"* sorusu
+**ÖLÇEMEDİ** kalmıştı. Artık `LoginFailed` denetim satırı yazılıyor:
+**kullanıcı adı · IP · zaman · sonuç**. Sebep alanı ayırıyor:
+*kullanıcı yok / hesap pasif / parola yanlış* — ama bu **yalnız denetim
+kaydında**; kullanıcıya dönen mesaj tek tip.
+
+**PAROLA ASLA YAZILMAZ.**
+
+**Sel altında kaydın kendisi yük olmasın diye sınırlı:** her reddedilen
+isteğe satır yazılmıyor. `RecordFailure` artık "bu çağrıyla kilitlendi
+mi" döndürüyor; kilit **anında bir kez** işaretleniyor. Üst sınır:
+anahtar başına 15 dakikada ~5–10 satır.
+
+### SINAMA — 8/8 YEŞİL, POZİTİF KONTROLLER DAHİL
+
+| test | tutuyor |
+|---|---|
+| `NormalGirisDizisi_TAKILMAZ` | **pozitif kontrol** — yanlış, yanlış, doğru → kilit YOK |
+| `IpEsigi_AsilincaKilitlenir` | 5'te kilitler, süre ≤15 dk |
+| `KullaniciAdiEsigi_DAHA_COMERT` | 9 denemede kilitlemez, 10'da kilitler |
+| `IkiSayac_BIRBIRINDEN_BAGIMSIZ` | IP kilidi kullanıcıyı kilitlemez |
+| `KilitKALICI_DEGIL_SureliOlmali` | kalıcı kilit YASAK |
+| `YanlisParola_KullaniciAdiyla_KaydaGecer` | ad + IP + sebep yazılıyor |
+| `OLMAYAN_Kullanici_da_KaydaGecer` | saldırı tam olarak bu — kaydedilmezse dövülen hesap görünmez |
+| `PAROLA_ASLA_KAYDA_GECMEZ` | doğru ve yanlış parola, hiçbir alanda yok |
+
+**MUTASYON — en sert şart sınandı:** denetim kaydına parola eklendi →
+`PAROLA_ASLA_KAYDA_GECMEZ` **KIRMIZI**, diğer ikisi yeşil kaldı. Geri
+alındı → 3/3. O test ayrıca **boş küme tuzağına** karşı korumalı:
+önce "ölçecek kayıt var mı" diye bakıyor (Kural 48).
+
+### YAYIN ÖNCESİ ZORUNLU AYAK
+
+**Pozitif kontrol canlıda tekrar koşturulacak** — bugün canlıda ilk kez
+insanlar giriş yapacak ve o ayak en kritik olanı: *normal giriş dizisi
+(yanlış parola → doğru parola) sınıra TAKILMAMALI.*
+
+### KAYDA GEÇEN İKİ KURAL
+
+**Kural 92** (Mehmet Bey): *bir sayının büyüklüğü tehdidin varlığı
+değildir; hangi kapıya vurulduğu ölçülmeden hacim yalnız gürültüdür.*
+109.495 isteğin en büyük iki dilimi **kendi giriş döngüsü kusurumuzun
+izi** çıktı — kendi yaramızı saldırı sanmaktan ölçüm kurtardı.
+
+**Yapılandırmaya yazılan uyarı:** `location =` (tam eşleşme) bilerek
+seçildi; `^~ /api/backend/auth/` yazmak `work-hours-status`u da
+sınırlardı ve **kendi kullanıcılarımızı keserdi** (tek kullanıcı, tek
+günde 166 çağrı). Gerekçe `giris-hiz-siniri.conf` içinde, genişletmeye
+kalkan okuyucunun göreceği yerde.

@@ -44,6 +44,45 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
+    # ── GİRİŞ UCU — HIZ SINIRI (2026-09-15) ─────────────────────
+    #
+    # TAM EŞLEŞME (`location =`) BİLEREK: `^~ /api/backend/auth/`
+    # yazsaydım `work-hours-status` da sınırlanırdı — o uç her açık
+    # sekmeden DAKİKADA BİR çağrılıyor ve sınırlanması oturumları
+    # kırardı. Sınır YALNIZ giriş POST'una.
+    location = /api/backend/auth/login {
+        limit_req zone=giris_post burst=10 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /api/auth/login {
+        limit_req zone=giris_post burst=10 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Giriş SAYFASI — saldırının vurduğu yüzey. Sınır daha cömert:
+    # normal kullanıcı sayfayı birkaç kez yükler, saniyede birden
+    # fazla SÜREKLİ yüklemez.
+    location = /login {
+        limit_req zone=giris_sayfa burst=30 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
 location ^~ /api/auth/ {
     proxy_pass http://127.0.0.1:3000;
     proxy_http_version 1.1;

@@ -224,8 +224,48 @@ public sealed class AuthController(
             // İKİ SAYAÇ AYRI: IP 5 denemede, kullanıcı adı 10 denemede
             // kilitlenir. Kullanıcı adı eşiği cömert çünkü o kilit
             // gerçek bir insanı etkiler.
-            loginAttemptService.RecordFailure(ipAnahtari);
-            loginAttemptService.RecordFailure(kullaniciAnahtari, esik: 10);
+            var ipKilitlendi = loginAttemptService.RecordFailure(ipAnahtari);
+            var kullaniciKilitlendi = loginAttemptService.RecordFailure(kullaniciAnahtari, esik: 10);
+
+            //
+            // ═══ BAŞARISIZ GİRİŞ KAYDA GEÇER (GÜNLÜK/1, 2026-09-15) ═══
+            //
+            // ÖLÇÜLEN BOŞLUK: 16 günlük saldırı incelemesinde "hangi
+            // kullanıcı adları denendi" sorusu **ÖLÇEMEDİ** kaldı —
+            // sistem başarısız girişi kullanıcı adıyla kaydetmiyordu.
+            // nginx de gövdeyi yazmaz (doğrusu da budur).
+            //
+            // Kullanıcı adı sayacı geldiğine göre bu kayıt ŞART: sayaç
+            // yanıyor ama KİME KARŞI yandığını göremezsek uyarı sağır
+            // kalır.
+            //
+            // PAROLA ASLA YAZILMAZ. Yazılan: kullanıcı adı, IP, zaman,
+            // sonuç. `sebep` alanı hesabın var olup olmadığını AYIRIR
+            // ama bu yalnız denetim kaydındadır — kullanıcıya dönen
+            // mesaj tek tiptir ("Kullanıcı adı veya şifre hatalı").
+            //
+            db.Set<SecurityAuditEvent>().Add(new SecurityAuditEvent
+            {
+                ActorUserId = user?.Id,
+                ActorUsername = username,
+                Action = "LoginFailed",
+                EntityType = nameof(AppUser),
+                EntityId = user?.Id,
+                DetailsJson = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    sebep = user is null
+                        ? "kullanıcı yok"
+                        : !user.IsActive ? "hesap pasif" : "parola yanlış",
+                    ipKilitlendi,
+                    kullaniciKilitlendi
+                }),
+                IpAddress = ipAddress,
+                UserAgent = Request.Headers.UserAgent.ToString(),
+                OccurredAtUtc = DateTime.UtcNow
+            });
+
+            await db.SaveChangesAsync(cancellationToken);
+
             return Unauthorized(new { message = "Kullanıcı adı veya şifre hatalı." });
         }
 

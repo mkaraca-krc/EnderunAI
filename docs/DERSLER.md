@@ -318,6 +318,30 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 92 — BİR SAYININ BÜYÜKLÜĞÜ TEHDİDİN VARLIĞI DEĞİLDİR.**
+  Hangi kapıya vurulduğu ölçülmeden, hacim yalnız gürültüdür.
+
+  Mehmet Bey'in kuralı (2026-09-15). Doğuşu: `/login` sayfasına 16
+  günde **109.495 istek** görüldü ve "kapı zorlama denemesi" hükmü
+  kuruldu. Ölçüm başka şey söyledi:
+
+  · saldırı kümesinin gerçek giriş ucuna (`POST …/auth/login`) dokunma
+    sayısı **SIFIR** — POST'ları 404 veren yollara ve PHP sömürü
+    adreslerine gitti, yani **genel bir tarayıcıydı, hedefli değil**;
+  · 109.495'in en büyük iki dilimi (38.039 + 33.529) **bizim
+    kullanıcılarımızın adreslerinden** geliyordu — GİRİŞ-DÖNGÜ/1'in,
+    yani **kendi kusurumuzun izi**;
+  · gerçek uca gelen 96 POST'un 71'i başarılıydı ve hepsi bizim
+    kullanıcılarımızdı. **Saldırı kümesinden tek başarılı giriş yok.**
+
+  **İki ders bir arada:** hacimden tehdit çıkarılmaz (hangi kapı?), ve
+  **kendi yaramızı saldırı sanmamak için trafiğin kaynağı ayrılır.**
+
+  UYGULAMA: bir trafik yığını görüldüğünde önce üç soru ölçülür —
+  **hangi uca**, **hangi kaynaktan**, **sonucu ne**. Üçü ölçülmeden
+  "saldırı" yazılmaz; ölçüldükten sonra da sayı değil, o üç cevap
+  yazılır.
+
 - **KURAL 91 — BİR KAPI, KULLANICININ GÖRDÜĞÜ KATMANI ÖLÇMÜYORSA,
   ÖLÇTÜĞÜ KATMAN TEMİZKEN DE YALAN SÖYLER.** Her kapı için tek satır:
   **hangi katmanı görür.**

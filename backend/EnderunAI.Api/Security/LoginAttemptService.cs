@@ -23,7 +23,13 @@ public interface ILoginAttemptService
 {
     bool IsLocked(string anahtar, out TimeSpan remaining);
 
-    void RecordFailure(string anahtar, int esik = 5);
+    /// <summary>
+    /// Başarısızlığı sayar. **Dönüş: bu çağrıyla KİLİTLENDİ mi.**
+    /// Çağıran, kilit ANINDA bir denetim satırı yazsın diye —
+    /// her reddedilen isteğe satır yazmak sel altında kaydın kendisini
+    /// yük hâline getirirdi.
+    /// </summary>
+    bool RecordFailure(string anahtar, int esik = 5);
 
     void RecordSuccess(string anahtar);
 }
@@ -69,7 +75,7 @@ public sealed class LoginAttemptService : ILoginAttemptService
         return true;
     }
 
-    public void RecordFailure(string ipAddress, int esik = MaxFailures)
+    public bool RecordFailure(string ipAddress, int esik = MaxFailures)
     {
         var now = DateTime.UtcNow;
 
@@ -91,10 +97,17 @@ public sealed class LoginAttemptService : ILoginAttemptService
                 return existing;
             });
 
+        // ZATEN KİLİTLİYSE "yeni kilitlendi" DEME: çağıran her
+        // reddedilen istekte denetim satırı yazmasın.
+        var oncedenKilitli = state.LockedUntilUtc is not null && state.LockedUntilUtc > now;
+
         if (state.FailureCount >= esik)
         {
             state.LockedUntilUtc = now.Add(LockDuration);
+            return !oncedenKilitli;
         }
+
+        return false;
     }
 
     public void RecordSuccess(string ipAddress)
