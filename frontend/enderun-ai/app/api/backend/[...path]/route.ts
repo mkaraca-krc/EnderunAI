@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { istemciAdresiniIlet } from "@/lib/vekil/istemci-adresi";
 
 const BACKEND_URL =
   process.env.BACKEND_API_URL?.replace(/\/+$/, "") ||
@@ -29,6 +30,11 @@ async function proxy(
   });
 
   const headers = new Headers();
+
+  // VEKİL/1: istemci adresi arka uca taşınır. Bu satır olmadan arka uç
+  // her isteği 127.0.0.1 sanar; denetim kaydının IP sütunu ve IP bazlı
+  // hız sınırı ikisi de anlamsızlaşır. Gerekçe: lib/vekil/istemci-adresi.ts
+  istemciAdresiniIlet(request.headers, headers);
 
   const contentType = request.headers.get("content-type");
   if (contentType) {

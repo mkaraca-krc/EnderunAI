@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { istemciAdresiniIlet } from "@/lib/vekil/istemci-adresi";
 
 const rawBackendUrl =
   process.env.BACKEND_API_URL ??
@@ -42,12 +43,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // VEKİL/1: bu rota istemci adresini taşımıyordu ve arka uçtaki
+    // deneme sayacı HERKESİ 127.0.0.1 anahtarında topluyordu — bir
+    // kullanıcının 5 hatası tüm kullanıcıları 15 dakika kilitliyordu.
+    const arkaUcBasliklari = new Headers({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    });
+    istemciAdresiniIlet(request.headers, arkaUcBasliklari);
+
     const backend = await fetch(`${backendApiUrl}/auth/change-password`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: arkaUcBasliklari,
       body: JSON.stringify(body),
       cache: "no-store",
     });

@@ -318,6 +318,32 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 93 — ISIRMAYAN BİR SONDA, KUSURUN YOKLUĞUNU GÖSTERMEZ;
+  SONDANIN YANLIŞ YERE BAKTIĞINI DA GÖSTEREBİLİR.** Bir sonda yeşil
+  verdiğinde önce sorulacak soru: **bu sonda ısırabileceği bir koşulda
+  hiç ısırdı mı?**
+
+  Mehmet Bey'in kuralı (2026-09-15). Kural 48'in (boş küme her iddiayı
+  doğrular) SONDA hâli: 48 ölçülen KÜMEYİ, 93 ölçen ALETİ sorgular.
+
+  DOĞUŞU — benim hatam. Akşam yayınının pozitif kontrolünü koşarken
+  giriş uç sondasını `/api/backend/auth/login`e attım. Sahte
+  `X-Forwarded-For` başlığı kilidi atlatmadı ve tam "atlatma açığı yok"
+  yazacaktım. Sebep şuydu: o uçtaki vekil rotası XFF'i ARKA UCA HİÇ
+  İLETMİYOR. Yani sonda başlığı gönderiyordu, başlık yolda düşüyordu,
+  arka uç onu hiç görmüyordu — **sonda hiçbir şey ölçmüyor ve yeşil
+  görünüyordu.**
+
+  Üstelik uç yanlıştı: ölçtüm, gerçek kullanıcılardan
+  `/api/backend/auth/login`e 16 günde TEK istek gelmemiş; giriş sayfası
+  `/api/auth/login` çağırıyor. Doğru uçta tekrarlayınca sonda ısırdı —
+  başlıksız 429, sahte başlıkla 401 — ve açık kanıtlandı.
+
+  UYGULAMA: her sondanın yanında ISIRDIĞI bir koşum bulunacak. "Bu
+  sonda şu koşulda KIRMIZI yanar" cümlesi yazılmadan sondanın yeşili
+  rapora girmez. Bu, "bir kapı en az bir kez KIRMIZI yanmadan var
+  sayılmaz" kuralının sondalara uzantısıdır.
+
 - **KURAL 92 — BİR SAYININ BÜYÜKLÜĞÜ TEHDİDİN VARLIĞI DEĞİLDİR.**
   Hangi kapıya vurulduğu ölçülmeden, hacim yalnız gürültüdür.
 
@@ -331,8 +357,16 @@ değil, **indeks**.
   · 109.495'in en büyük iki dilimi (38.039 + 33.529) **bizim
     kullanıcılarımızın adreslerinden** geliyordu — GİRİŞ-DÖNGÜ/1'in,
     yani **kendi kusurumuzun izi**;
-  · gerçek uca gelen 96 POST'un 71'i başarılıydı ve hepsi bizim
+  · gerçek uca gelen POST'ların çoğu başarılıydı ve hepsi bizim
     kullanıcılarımızdı. **Saldırı kümesinden tek başarılı giriş yok.**
+
+  DÜZELTME (2026-09-15 akşamı, Kural 93'ün doğduğu ölçüm): bu maddeyi
+  ilk yazarken "gerçek uç" diye `/api/backend/auth/login`i göstermiş ve
+  sayıları oraya yazmıştım. GERÇEK UÇ `/api/auth/login`DİR. Sayılar
+  doğru uçta yeniden ölçüldü: 97 dış POST · 72 BAŞARILI (hepsi bizim
+  kullanıcılarımız) · 8×401 (7'si kendi yanlış yazmamız, 1'i dışarıdan
+  tek deneme) · 16×499 · 1×403 · saldırı kümesinden SIFIR. Hüküm
+  değişmedi, DAYANAĞI düzeldi — ve bu tam olarak Kural 82'dir.
 
   **İki ders bir arada:** hacimden tehdit çıkarılmaz (hangi kapı?), ve
   **kendi yaramızı saldırı sanmamak için trafiğin kaynağı ayrılır.**

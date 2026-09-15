@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { istemciAdresiniIlet } from "@/lib/vekil/istemci-adresi";
 
 const rawBackendUrl =
   process.env.BACKEND_API_URL ??
@@ -83,11 +84,16 @@ export async function POST(
 
   if (token) {
     try {
+      // VEKİL/1: çıkış da denetim satırı yazıyor; adres taşınmazsa o
+      // satırın IP sütunu 127.0.0.1 olur.
+      const arkaUcBasliklari = new Headers({
+        authorization: `Bearer ${token}`,
+      });
+      istemciAdresiniIlet(request.headers, arkaUcBasliklari);
+
       await fetch(`${backendApiUrl}/auth/logout`, {
         method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
+        headers: arkaUcBasliklari,
         cache: "no-store",
         signal: AbortSignal.timeout(5_000),
       });

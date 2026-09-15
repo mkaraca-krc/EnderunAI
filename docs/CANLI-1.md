@@ -1396,12 +1396,36 @@ Paket XFF'in SON elemanını alıyor. XFF hiç yoksa `RemoteIpAddress`e
 düşüyor — yani bu iki akışta bugünküyle aynı davranış. Giriş yolunda
 ise düzeltiyor (aşağıdaki ölçüm).
 
-### Düzeltme (SIRADA, bu gece açılmadı)
+### Düzeltme HAZIR — YAYINLANMADI (2026-09-15 gecesi)
 
-Vekil rotalarına XFF iletimi eklenecek:
-`app/api/backend/[...path]/route.ts` ve
-`app/api/auth/change-password/route.ts`. `app/api/auth/login/route.ts`
-zaten doğru biçimi gösteriyor; kopyalanacak.
+Mehmet Bey'in kararı: ayrı kesinti açılmayacak, **bir sonraki akşam
+yayınıyla** çıkacak. Sebep (b): dün akşam yayınladığımız GÜNLÜK/1'in
+IP sütunu bugünden itibaren yalan söylüyor, uzun bekletilemez.
+
+Tek kaynak: `frontend/enderun-ai/lib/vekil/istemci-adresi.ts`.
+Bağlanan rota (5'i de): `api/backend/[...path]`, `api/auth/login`,
+`api/auth/change-password`, `api/auth/logout`, `api/auth/access-requests`.
+İkisi adresi zaten taşıyordu (`login`, `access-requests`) — onlar da
+ortak kaynağa alındı ki üç kopya üç davranışa ayrışmasın.
+
+**EN TEHLİKELİ DÜZENLEME — ZİNCİRE EKLEME YAPMAK.** Arka uç zincirin
+SON elemanını okur. Vekil kendi adresini sona eklerse son eleman
+`127.0.0.1` olur ve 2026-09-15 akşamı yayınlanan hız sınırı SESSİZCE
+çöker (herkes tek kovada). Bu yüzden zincir AYNEN geçiriliyor ve
+`ZINCIRE_EKLEME_YAPMAZ` testi tam bunu bekliyor.
+
+Muhafız: `frontend/enderun-ai/tests/vekil-istemci-adresi.test.ts`
+(8 test). Mutasyonla sınandı — zincire ekleme → 3 kırmızı
+(`ZINCIRE_EKLEME_YAPMAZ` başta); bir rotadan çağrının silinmesi →
+tam 1 kırmızı (kaynak muhafızı); geri alınca 8/8. Ön yüz tam takımı
+83 dosya / 642 test yeşil.
+
+**Yayın sonrası ölçüm aleti hazır:** `deploy/scripts/vekil-adres-olcumu.sh`
+— iki farklı adresten iki istek atar, denetim kaydına İKİ FARKLI IP
+düşmesini bekler (Mehmet Bey'in tarif ettiği pozitif kontrol). Kayıt
+oluşmazsa ya da istek hız sınırına takılırsa ÖLÇEMEDİ (çıkış 3) der,
+onay vermez. Yayından ÖNCE koşulursa KIRMIZI vermeli — ölçümün
+ısırdığının kanıtı o olacak (Kural 93).
 
 ---
 

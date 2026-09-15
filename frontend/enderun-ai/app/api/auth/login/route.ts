@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { istemciAdresiniIlet } from "@/lib/vekil/istemci-adresi";
 
 const rawBackendUrl =
   process.env.BACKEND_API_URL ??
@@ -19,19 +20,19 @@ export async function POST(
   try {
     const body = await request.json();
 
-    const clientIp =
-      request.headers.get("x-forwarded-for") ??
-      request.headers.get("x-real-ip") ??
-      "";
+    // VEKİL/1: bu rota adresi ZATEN taşıyordu — giriş yolunun canlıda
+    // gerçek IP görmesinin sebebi buydu. Mantık ortak kaynağa alındı ki
+    // üç rota zamanla üç davranışa ayrışmasın (yıkıcı-beyan dersi).
+    const arkaUcBasliklari = new Headers({
+      "Content-Type": "application/json",
+    });
+    istemciAdresiniIlet(request.headers, arkaUcBasliklari);
 
     const backend = await fetch(
       `${backendApiUrl}/auth/login`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(clientIp ? { "X-Forwarded-For": clientIp } : {}),
-        },
+        headers: arkaUcBasliklari,
         body: JSON.stringify(body),
         cache: "no-store",
       }
