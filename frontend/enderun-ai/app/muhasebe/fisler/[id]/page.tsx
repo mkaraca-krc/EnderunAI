@@ -1,4 +1,5 @@
 "use client";
+import { FIS_TIPI_ETIKETLERI } from "@/lib/muhasebe/fis-tipi";
 
 import Link from "next/link";
 import {
@@ -18,16 +19,11 @@ import {
   accountingVoucherService,
   type AccountingVoucherDetail,
   type AccountingVoucherStatus,
-  type AccountingVoucherType,
 } from "@/services/accounting-voucher.service";
 
-const typeLabels: Record<AccountingVoucherType, string> = {
-  0: "Mahsup",
-  1: "Tahsil",
-  2: "Tediye",
-  3: "Açılış",
-  4: "Kapanış",
-};
+// TEK KAYNAK: lib/muhasebe/fis-tipi.ts (2026-09-16).
+// Burada altı kopyadan biri duruyordu; üçü farklı biçimdeydi.
+const typeLabels = FIS_TIPI_ETIKETLERI;
 
 const statusLabels: Record<
   AccountingVoucherStatus,

@@ -370,3 +370,78 @@ Başarılı giriş: **0** — canlıda hâlâ kimse giriş yapmadı.
 
 Değiştirilecek bir şey bulamadım; **dokunmadım.** Bu, gece listesinde
 zaten kapalı çıkan DÖRDÜNCÜ madde.
+
+---
+
+## 2.2 K5 — dört genişlik · **KOD BİTTİ, SINIFLANDIRMA ÖLÇEMEDİ**
+
+Sonda `390 · 768 · 1280 · 1536`e çıkarıldı. Her genişliğin NEDEN
+seçildiği yazıldı (768 hiç ölçülmemişti; 1536 taşmanın sıfırlandığı üst
+uç — nerede bittiğini ölçmeden "düzeldi" denemez).
+
+**KAPI EKLENDİ:** ölçülen genişlik sayısı 4'ün altına düşerse KIRMIZI.
+Sonda yalnız rapor basıyordu; biri diziden bir ölçek silse ya da bir
+viewport sessizce kurulamasa YİNE YEŞİL YANARDI (Kural 90). Ayrıca
+**istenen değil OLAN genişlik** sayılıyor: `setViewportSize` başka bir
+değere düşerse o ölçek sayılmıyor ve satır "ÖLÇEMEDİ" diyor.
+
+**SINIFLANDIRMA YAPILAMADI — ÖLÇEMEDİ.** Sonda rig gerektiriyor
+(`duzen-testi.sh`: arka uç + ön yüz + vekil + Playwright) ve rig iki
+kez BELLEK YETERSİZLİĞİNDEN düştü. Tahmin yazılmadı. Artık süreç
+kalmadı, portlar temiz.
+
+> SIRA BAĞIMLILIĞI: talimat 2.2'yi 2.5'ten önce koymuştu ama 2.2 rig'e
+> muhtaç; bağımlılık ters yönde.
+
+---
+
+## 2.6 Enum süpürmesi — muhasebe fiş tipi · **BİTTİ**
+
+**Talimat 4 dosya diyordu; ölçüm ALTI buldu, sonda YEDİNCİYİ buldu.**
+
+| biçim | dosya |
+|---|---|
+| `Record<AccountingVoucherType, string>` | `fisler/page.tsx` · `fisler/[id]/page.tsx` |
+| `Record<number, string>` — **tür denetimi kayıp** | `yevmiye/page.tsx` · `buyuk-defter/page.tsx` |
+| elle `<option value={n}>` — **YAZMA YOLU** | `fisler/yeni/page.tsx` · `fisler/[id]/duzenle/page.tsx` |
+| elle `<option value="n">` — **süzgeç, dizge değerli** | `fisler/page.tsx` ← **yapısal sonda buldu** |
+
+Yedincisi ilk taramamda görünmedi çünkü değerleri DİZGE tutuyordu
+(`value="0"`, `value={0}` değil). Kendi gözümle bulamadığım kopyayı
+sonda buldu.
+
+**TÜR DENETİMİNİ SIKMAK İKİ GERÇEK KUSUR ÇIKARDI.** Tek kaynak
+`Record<AccountingVoucherType, string>` yazılınca derleyici,
+`Record<number, string>` kullanan iki dosyanın **düz bir sayıyla
+indekslediğini** gösterdi (TS7053). Kayıp olan denetim tam buydu; o iki
+yer `fisTipiEtiketi()`ne bağlandı ve bilinmeyen değer artık sessiz
+geçmiyor, adıyla basılıyor.
+
+### Üç sonda, üçü de mutasyonla kırmızı
+
+| sonda | mutasyon | sonuç |
+|---|---|---|
+| 1 yön | Tahsil ↔ Tediye | **3 kırmızı** |
+| 2 bütünlük (arka uç enum'undan okunuyor) | arka uca `Devir = 5` eklendi | **1 kırmızı** |
+| 3 yapısal | elle `<option>Tahsil` geri kondu | **1 kırmızı** |
+
+Geri alınca 11/11.
+
+**KENDİ YANLIŞ KIRMIZIM:** yapısal sondanın ilk deseni
+`<option value={0..4}>` idi ve `hesap-plani` ekranlarındaki **Borç /
+Alacak** listesini de yakaladı — başka bir enum. Desen etikete
+daraltıldı; hem ısırdığı hem de başka enum'u yakalamadığı ayrıca
+sınandı (Kural 84: sonda ölçtüğü ayrımı korumak zorundadır).
+
+**Öteki 12 eşlemeye DOKUNULMADI.**
+
+### Yan bulgu — test sayısı çırası gevşek
+
+Çıra yeşil (kaynak 2716 = koşucu 2716) ama kendi çıktısı şunu yazıyor:
+`arka uç: çizgi 3009 · gerçek 3127 · gevşeklik 118` ve
+`ön yüz: çizgi 492 · gerçek 559 · gevşeklik 67`.
+
+Çizgi gerçeğin epey altında ve çıra bunu **yalnız bilgi olarak** basıyor,
+kırmızı yakmıyor. "Çizginin ALTINDA olmak da kırmızıdır" kuralına
+aykırı. Bu boşluk benim eklediğim testlerden gelmiyor (önceden vardı);
+çizgi sıkmak bilinçli bir karar olduğu için DOKUNMADIM.

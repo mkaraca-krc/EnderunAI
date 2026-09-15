@@ -1,4 +1,5 @@
 "use client";
+import { fisTipiEtiketi } from "@/lib/muhasebe/fis-tipi";
 
 import Link from "next/link";
 import {
@@ -49,13 +50,6 @@ const initialFilters: FilterForm = {
 
 const date = new Intl.DateTimeFormat("tr-TR");
 
-const voucherTypeLabels: Record<number, string> = {
-  0: "Mahsup",
-  1: "Tahsil",
-  2: "Tediye",
-  3: "Açılış",
-  4: "Kapanış",
-};
 
 export default function JournalPage() {
   const [companies, setCompanies] = useState<
@@ -216,7 +210,11 @@ export default function JournalPage() {
     {
       key: "fisTipi",
       header: "Fiş Tipi",
-      value: (line) => voucherTypeLabels[line.voucherType] ?? "Bilinmiyor",
+      // TİP DENETİMİ GERİ GELDİ (2026-09-16). Burası `Record<number,
+      // string>` ile yazılmıştı ve düz bir sayıyla indeksliyordu; tek
+      // kaynağa bağlanınca derleyici yakaladı. `fisTipiEtiketi`
+      // bilinmeyen değeri SESSİZ geçmez, adıyla basar.
+      value: (line) => fisTipiEtiketi(line.voucherType),
     },
     { key: "satir", header: "Satır", numeric: true, value: (line) => line.lineNumber },
     {

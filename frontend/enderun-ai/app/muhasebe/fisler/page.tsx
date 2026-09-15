@@ -1,4 +1,5 @@
 "use client";
+import { FIS_TIPI_ETIKETLERI, FIS_TIPI_SECENEKLERI } from "@/lib/muhasebe/fis-tipi";
 
 import Link from "next/link";
 import {
@@ -21,7 +22,6 @@ import {
   accountingVoucherService,
   type AccountingVoucherListItem,
   type AccountingVoucherStatus,
-  type AccountingVoucherType,
 } from "@/services/accounting-voucher.service";
 
 import {
@@ -31,13 +31,9 @@ import {
 
 const date = new Intl.DateTimeFormat("tr-TR");
 
-const typeLabels: Record<AccountingVoucherType, string> = {
-  0: "Mahsup",
-  1: "Tahsil",
-  2: "Tediye",
-  3: "Açılış",
-  4: "Kapanış",
-};
+// TEK KAYNAK: lib/muhasebe/fis-tipi.ts (2026-09-16).
+// Burada altı kopyadan biri duruyordu; üçü farklı biçimdeydi.
+const typeLabels = FIS_TIPI_ETIKETLERI;
 
 const statusLabels: Record<AccountingVoucherStatus, string> = {
   0: "Taslak",
@@ -268,12 +264,16 @@ export default function AccountingVouchersPage() {
               }
             >
               <option value="">Tümü</option>
-              <option value="0">Mahsup</option>
-              <option value="1">Tahsil</option>
-              <option value="2">Tediye</option>
-              <option value="3">Açılış</option>
-              <option value="4">Kapanış</option>
-            </select>
+              {/* YEDİNCİ KOPYA (2026-09-16): bu süzgeç listesi değerleri
+                  DİZGE tuttuğu için ilk taramada görünmemişti. Tek
+                  kaynağa bağlandı; `String(...)` süzgecin dizge
+                  sözleşmesini koruyor. */}
+              {FIS_TIPI_SECENEKLERI.map((secenek) => (
+                <option key={secenek.deger} value={String(secenek.deger)}>
+                  {secenek.etiket}
+                </option>
+              ))}
+</select>
           </label>
 
           <label>

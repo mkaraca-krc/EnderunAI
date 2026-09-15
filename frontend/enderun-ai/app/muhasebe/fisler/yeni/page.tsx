@@ -1,4 +1,5 @@
 "use client";
+import { FIS_TIPI_SECENEKLERI } from "@/lib/muhasebe/fis-tipi";
 
 import Link from "next/link";
 import { SearchableSelect } from "@/components/ui";
@@ -465,11 +466,13 @@ export default function NewAccountingVoucherPage() {
                   }))
                 }
               >
-                <option value={0}>Mahsup</option>
-                <option value={1}>Tahsil</option>
-                <option value={2}>Tediye</option>
-                <option value={3}>Açılış</option>
-                <option value={4}>Kapanış</option>
+                {/* TEK KAYNAK: lib/muhasebe/fis-tipi.ts — elle yazılmış
+                    liste YAZMA YOLUNDAYDI, en tehlikeli kopya oydu. */}
+                {FIS_TIPI_SECENEKLERI.map((secenek) => (
+                  <option key={secenek.deger} value={secenek.deger}>
+                    {secenek.etiket}
+                  </option>
+                ))}
               </select>
             </label>
 

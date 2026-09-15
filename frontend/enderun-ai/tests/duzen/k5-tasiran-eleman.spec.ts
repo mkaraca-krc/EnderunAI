@@ -40,10 +40,40 @@ const EKRANLAR = ["/dashboard", "/finans/kasa-banka", "/finans/odeme-planlari"];
  * dalı ölçen ilk genişlik. 390 korundu: eski ölçümün zemini.
  */
 type Olcek = { genislik: number; yukseklik: number };
+/*
+ * DÖRT GENİŞLİK (2026-09-16). Öncesinde iki taneydi (390, 1280) ve
+ * aradaki band ölçülmüyordu.
+ *
+ * NEDEN BU DÖRDÜ:
+ *   390  telefon — eski ölçümün zemini, korunuyor.
+ *   768  tablet eşiği — tek sütuna düşme ile iki sütun arasındaki
+ *        geçişin ALT ucu. Hiç ölçülmemişti.
+ *   1280 iki sütunlu dalın ilk genişliği (`max-width:1200px` medya
+ *        sorgusunun ÜSTÜ). Mehmet Bey'in elle ölçtüğü taşma burada
+ *        en büyüktü (70 px).
+ *   1536 taşmanın SIFIRLANDIĞI genişlik — üst uç. Taşmanın nerede
+ *        bittiğini ölçmeden "düzeldi" denemez.
+ *
+ * ELLE ÖLÇÜM (Mehmet Bey, canlı): 1201→70px · 1280→70 · 1366→48 ·
+ * 1440→24 · 1536→0. Yani taşma 1201-1440 bandında YAŞIYOR ve tek
+ * genişlikte koşan bir sonda onu HİÇ GÖRMEZ.
+ */
 const OLCEKLER: Olcek[] = [
   { genislik: 390, yukseklik: 664 },
+  { genislik: 768, yukseklik: 1024 },
   { genislik: 1280, yukseklik: 800 },
+  { genislik: 1536, yukseklik: 864 },
 ];
+
+/*
+ * KAPI: ÖLÇÜLEN GENİŞLİK SAYISI 4'ÜN ALTINA DÜŞERSE KIRMIZI.
+ *
+ * Sonda rapor basıyor; raporun kendisi hüküm vermiyordu. Bir gün biri
+ * diziden bir ölçek silerse ya da bir viewport sessizce kurulamazsa,
+ * sonda YİNE YEŞİL YANARDI ve daha az ölçtüğünü kimse görmezdi —
+ * Kural 90: süzgeçli koşu, koşmadığın hakkında hiçbir şey söylemez.
+ */
+const BEKLENEN_OLCEK_SAYISI = 4;
 
 async function girisYap(sayfa: Page) {
   expect(KULLANICI, "DUZEN_KULLANICI yok — rig'i duzen-testi.sh ile koşturun").toBeTruthy();
@@ -58,8 +88,23 @@ test("K5: hangi eleman sayfayı taşırıyor", async ({ page }) => {
 
   await girisYap(page);
 
+  const olculenGenislikler: number[] = [];
+
   for (const olcek of OLCEKLER) {
   await page.setViewportSize({ width: olcek.genislik, height: olcek.yukseklik });
+
+  // Viewport GERÇEKTEN kuruldu mu — istenen genişlik değil, OLAN genişlik
+  // sayılıyor. `setViewportSize` sessizce başka bir değere düşerse ölçüm
+  // başka bir genişliği ölçmüş olur ve etiketi yalan söyler.
+  const olanGenislik = await page.evaluate(() => window.innerWidth);
+  if (olanGenislik === olcek.genislik) {
+    olculenGenislikler.push(olanGenislik);
+  } else {
+    console.log(
+      `  !! ÖLÇEMEDİ: viewport ${olcek.genislik} istendi, ${olanGenislik} oldu — bu ölçek sayılmıyor.`
+    );
+  }
+
   console.log(`\n########## ${olcek.genislik}x${olcek.yukseklik} ##########`);
 
   for (const yol of EKRANLAR) {
@@ -189,4 +234,18 @@ test("K5: hangi eleman sayfayı taşırıyor", async ({ page }) => {
     }
   }
   }
+
+  /*
+   * HÜKÜM — sondanın kapsamı kendi kendini beyan eder.
+   * Rapor satırları göz içindir; bu satır makinenin okuduğudur.
+   */
+  console.log(
+    `\n=== K5 KAPSAM: ${olculenGenislikler.length}/${BEKLENEN_OLCEK_SAYISI} genişlik ölçüldü (${olculenGenislikler.join(", ")}) ===`
+  );
+  expect(
+    olculenGenislikler.length,
+    `K5 yalnız ${olculenGenislikler.length} genişlik ölçtü; ${BEKLENEN_OLCEK_SAYISI} bekleniyor. `
+      + `Ölçülenler: ${olculenGenislikler.join(", ") || "(hiç)"}. `
+      + "Eksik ölçüm, temiz ölçüm değildir (Kural 90)."
+  ).toBe(BEKLENEN_OLCEK_SAYISI);
 });
