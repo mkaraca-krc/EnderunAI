@@ -1342,3 +1342,109 @@ her paketi yanlış durdurur.
 **DÜZELTME GEÇİŞTEN SONRA:** beyan araması `son yayın..HEAD` aralığına
 bakmalı. Yayın dakikasında kapı değiştirilmedi — kapıyı ihtiyaç anında
 gevşetmek, kapıyı kaldırmakla aynı kapıya çıkar.
+
+---
+
+## VEKİL/1 — VEKİL `X-Forwarded-For`'U DÜŞÜRÜYOR: IP BAZLI KISIT BAZI AKIŞLARDA ORTAK ANAHTARDA (2026-09-15, ÖLÇÜLDÜ, DÜZELTİLMEDİ)
+
+**Nasıl bulundu:** akşam yayınının pozitif kontrolünü koşarken sondamı
+`/api/backend/auth/login` ucuna atmıştım. Sahte `X-Forwarded-For`
+başlığı ısırmadı ve "açık yok" diye yanlış hüküm kurmama ramak kaldı.
+Sebebini ararken asıl kusur çıktı.
+
+### Ölçüm
+
+`frontend/enderun-ai/app/api/backend/[...path]/route.ts` arka uca giden
+isteğe YENİ bir `Headers` kuruyor ve yalnız üç başlığı kopyalıyor:
+`content-type`, `accept`, `authorization`. `app/api/auth/change-password/route.ts`
+de aynı (yalnız `Content-Type` + `Authorization`). **`X-Forwarded-For`
+İLETİLMİYOR.**
+
+Buna karşılık `app/api/auth/login/route.ts` XFF'i AÇIKÇA iletiyor
+(satır 22-33) — giriş yolu bu yüzden gerçek IP'yi görüyor.
+
+Denetim kaydından doğrulandı:
+
+| olay | IpAddress |
+|---|---|
+| `Created` (742 satır) | `127.0.0.1` |
+| `Updated` (525 satır) | `127.0.0.1` |
+| `LoginRejectedOutsideWorkHours` | GERÇEK IP (5.25.151.146, 178.241.120.124, 31.223.72.51) |
+
+### İki sonucu var
+
+**(a) Parola değiştirme kısıtı HERKES İÇİN TEK ANAHTARDA.**
+`change-password` XFF taşımadığı için uygulama her kullanıcıyı
+`127.0.0.1` görüyor. Bir kullanıcının 5 başarısız denemesi, TÜM
+kullanıcıların parola değiştirmesini 15 dakika kilitler. 2026-09-15
+akşamı sondayla kendim tetikledim, gözle doğruladım.
+
+**(b) Denetim kaydının `IpAddress` alanı yazma olaylarında kullanışsız.**
+"Kim, nereden" sorusunun "nereden" yarısı `/api/backend/*` üzerinden
+gelen her olayda `127.0.0.1`. Kural 80'in IP ayağı bu yolda ölçülemiyor.
+
+### Şiddet (Kural 83)
+
+Erişilebilirlik: yalnız oturum açmış kullanıcı (jeton şart).
+Jeton sahibi: kendi jetonuyla, başkasının verisine erişmiyor.
+Kalıcılık: 15 dakika, kendi kendine açılıyor.
+**Sır sızması YOK, veri riski YOK — hizmet engelleme.**
+
+### Akşam paketi bunu KÖTÜLEŞTİRMİYOR
+
+Paket XFF'in SON elemanını alıyor. XFF hiç yoksa `RemoteIpAddress`e
+düşüyor — yani bu iki akışta bugünküyle aynı davranış. Giriş yolunda
+ise düzeltiyor (aşağıdaki ölçüm).
+
+### Düzeltme (SIRADA, bu gece açılmadı)
+
+Vekil rotalarına XFF iletimi eklenecek:
+`app/api/backend/[...path]/route.ts` ve
+`app/api/auth/change-password/route.ts`. `app/api/auth/login/route.ts`
+zaten doğru biçimi gösteriyor; kopyalanacak.
+
+---
+
+## GİRİŞ HIZ SINIRI — XFF ATLATMASI CANLIDA KAPANDI (2026-09-15, YAYIN `4bc57cdd`)
+
+Kırmızı/yeşil aynı komutla, aynı uçta, yayının iki yakasında ölçüldü.
+Uç: `/api/auth/login` (GERÇEK giriş ucu — giriş sayfasının çağırdığı).
+
+**YAYINDAN ÖNCE** (canlı kod `1c9fdaa3`, XFF'in İLK elemanını alıyor):
+
+```
+baslıksız                      -> HTTP 429  ("10 dakika sonra")
+X-Forwarded-For: 198.51.100.77 -> HTTP 401   ← KİLİT ATLANDI
+```
+
+**YAYINDAN SONRA** (`4bc57cdd`, SON elemanı alıyor):
+
+```
+baslıksız                                    -> HTTP 429
+X-Forwarded-For: 198.51.100.77               -> HTTP 429
+X-Forwarded-For: 203.0.113.5, 198.51.100.9   -> HTTP 429
+```
+
+Son eleman güvenilir çünkü nginx `$proxy_add_x_forwarded_for` ile
+gerçek eşi SONA ekliyor; istemcinin yazdığı her şey önde kalıyor.
+
+### Kullanıcı adı sayacı — dağıtık saldırıya karşı ölçüldü
+
+KATMAN: UYGULAMA (127.0.0.1:5155, nginx atlanarak — IP anahtarını
+değiştirebilmek için; nginx'ten geçen her sondanın anahtarı
+`127.0.0.1` oluyor).
+
+10 AYRI IP'den AYNI kullanıcı adına 10 deneme: IP sayacı hiç dolmadı
+(her IP 1 deneme), 10.'da KULLANICI kilitlendi, 11. istek 429 aldı.
+Yani IP döndürerek kaçış kapalı.
+
+### Kayıt (GÜNLÜK/1) — ölçüldü
+
+`LoginFailed` satırları: kullanıcı adı · IP · zaman · sebep.
+Kullanılan TÜM anahtarlar: `sebep`, `ipKilitlendi`, `kullaniciKilitlendi`.
+Kilit YALNIZ tetiklendiği anda bir kez işaretleniyor (5. ve 10. satır),
+reddedilen istekler satır üretmiyor — kayıt hacmi sınırlı.
+
+**PAROLA YOK.** Boş küme kanıt olmadığı için (Kural 48) arama önce
+pozitif kontrolden geçirildi: `sonda-k5` araması 1 satır buldu,
+parola dizgeleri 0 satır, `parola|password|sifre|şifre` alan adı 0.
