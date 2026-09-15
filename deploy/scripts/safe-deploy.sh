@@ -63,6 +63,33 @@ DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 
 ENV_FILE="/etc/enderunai/backend.env"
 
+# ═══ HOME GÜVENCESİ — systemd-run ALTINDA ÖLÇÜLDÜ (2026-09-15) ═══
+#
+# `systemd-run` geçici birime HOME VERMEZ. HOME yokken `dotnet`in NuGet
+# katmanı daha ilk derlemede patlıyor:
+#     "Required environment variable 'HOME' is not set."
+# Bu, akşam yayınının 11. ucuz kapısını (şema sapması) düşürdü. Kapı
+# doğru davrandı — "proje derlenemedi; model üretilemez" dedi, yanlış
+# yeşil vermedi — ama düşme sebebi ŞEMA DEĞİL, KOŞUM TAKIMIYDI.
+#
+# DERS (Kural 84 alt kuralı): bir doğrulama turunun ortam gereklerini
+# turdan ÖNCE kurmak gerekir; ortam yüzünden yanan kırmızı bulgu değil
+# rig kusurudur. Buraya yazılmasının sebebi: yayını elle başlatan
+# kişinin bunu hatırlamak zorunda kalmaması.
+#
+# root'un ev dizini yoksa yazılabilir bir yedeğe düşülüyor; DOTNET_CLI_HOME
+# da ayrıca veriliyor çünkü NuGet önce ONA bakıyor.
+if [ -z "${HOME:-}" ]; then
+    if [ -d /root ] && [ -w /root ]; then
+        export HOME=/root
+    else
+        export HOME=/tmp/enderun-yayin-home
+        mkdir -p "$HOME"
+    fi
+    export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-$HOME}"
+    echo "[safe-deploy] HOME tanımsızdı; $HOME olarak ayarlandı (systemd-run)." >&2
+fi
+
 # WebSocket duman kontrolü vekile 127.0.0.1'den vuruyor; nginx doğru
 # server bloğunu seçebilsin diye Host başlığı gerekiyor. Değer nginx
 # yapılandırmasındaki `server_name` ile aynı olmalı — ayrışırsa kontrol
