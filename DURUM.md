@@ -13730,6 +13730,20 @@ etmek o kararı geri alır. Doğru hamle: mal kabulde GERÇEKTEN kullanılacak
 kartları seçerek açmak. Liste ekranı arşivi zaten gösteriyor
 (`includeInactive=true`).
 
+> **KARAR GERİ ALINDI — 2026-09-15 gecesi, Mehmet Bey.** Dokuz kartın
+> dokuzu da AKTİF edildi; tek tek, malzeme kartındaki "Kart aktif"
+> kutusundan, uygulamanın kendi yolundan. Gerekçe: **stok modülünün
+> kullanılabilir olması.** "Seçerek açmak" yerine hepsinin açılması
+> bilinçli bir tercihtir — 19 Ağustos'un "temiz başlangıç" kararı
+> bununla yürürlükten kalkmıştır.
+>
+> ÖLÇÜLDÜ (veritabanından, bağımsız olarak): `inventory_items` içinde
+> silinmemiş 9 kart var, **9'u da aktif, pasif kalan 0**. Denetim
+> kaydında 10 adet `Updated · InventoryItem` satırı, aktör `mehmet`,
+> 2026-09-15 20:40:48-20:44:23 UTC (23:40-23:44 TRT).
+> Ekran ayağı: `/depo-stok/cikis` ve `/depo-stok/transfer` Malzeme
+> açılır listesi 0 → 9 seçenek (Mehmet Bey ölçtü).
+
 ---
 
 ## E4 KAPANDI — SORUN ÜRETİCİDE DEĞİL BAYRAKTAYDI (2026-09-13)

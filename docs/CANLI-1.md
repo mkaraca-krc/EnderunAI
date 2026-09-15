@@ -1504,3 +1504,59 @@ reddedilen istekler satır üretmiyor — kayıt hacmi sınırlı.
 **PAROLA YOK.** Boş küme kanıt olmadığı için (Kural 48) arama önce
 pozitif kontrolden geçirildi: `sonda-k5` araması 1 satır buldu,
 parola dizgeleri 0 satır, `parola|password|sifre|şifre` alan adı 0.
+
+---
+
+## E3 CANLIDA ÇÖZÜLDÜ + SALI PROVA MADDELERİ KAPANDI (2026-09-15 gecesi)
+
+**Bu bölümdeki 10 denetim satırı GERÇEK İŞLEMDİR, sonda değildir.**
+Yukarıdaki `sonda-` / `isitma-` etiket bölümüyle KARIŞTIRILMAMALIDIR —
+tam tersine, bunlar denetim kaydının çalıştığının kanıtıdır.
+
+### Yapılan (Mehmet Bey, kendi oturumundan, uygulamanın kendi ekranından)
+
+| iş | ekran ayağı (Mehmet Bey ölçtü) | veritabanı ayağı (bağımsız doğrulandı) |
+|---|---|---|
+| 9 kartın 9'u AKTİF edildi, tek tek | `/depo-stok/cikis` ve `/depo-stok/transfer` Malzeme listesi **0 → 9 seçenek** | silinmemiş 9 kart, **9'u aktif, pasif kalan 0** |
+| END0003 tipi Ekipman → Sarf | kart ekranda "Sarf" görünüyor | `Type=2` = `Consumable` (enum'dan doğrulandı) |
+
+**E3 artık yalnız "kaynak ölçüldü" değil — CANLIDA ÇÖZÜLDÜ.**
+Salı prova listesindeki END0003 maddesi KAPANDI.
+
+Bu, 19 Ağustos'taki "temiz başlangıç" arşiv kararını GERİ ALIR. Kararı
+Mehmet Bey verdi, gerekçe stok modülünün kullanılabilir olması;
+ayrıntısı `DURUM.md`de o kararın yanına işlendi.
+
+### Denetim kaydı (bağımsız ölçüm)
+
+10 satır · `Updated` · `InventoryItem` · aktör **`mehmet`** ·
+2026-09-15 **20:40:48 – 20:44:23 UTC** (23:40–23:44 TRT).
+
+> **VEKİL/1'İN İLK GERÇEK ZARARI BURADA GÖRÜNÜYOR.** Bu on satırın
+> hepsinde `IpAddress = 127.0.0.1`. Sonda değil, genel müdürün kendi
+> işlemleri — ve "nereden" sorusunun cevabı kayıtta YOK. Düzeltme
+> hazır, bir sonraki yayında çıkıyor.
+
+### Bekleyen üç ölçümün durumu
+
+| ölçüm | durum |
+|---|---|
+| **A3** — miktar 0 | **GEÇTİ.** 0 → 400 · "Miktar sıfırdan büyük olmalıdır." (eskiden 500 · "Beklenmeyen bir hata") |
+| **A5** — kart alanı düzenleme → denetim satırı | **GEÇTİ.** 15.09.2026 23:40:48 TRT · mehmet · Updated · InventoryItem |
+| **END0010** — yeni kartın AKTİF doğması | **ÖLÇEMEDİ.** Canlıya sahte kart bırakmamak için yeni kart açılmadı; Mehmet Bey ilk gerçek kartını açtığında bedava ölçülecek. O ana kadar tahmin yazılmayacak. |
+
+### DÜZELTME — "madde 2 hâlâ sırada" doğru değil: ÇOKTAN CANLIDA
+
+Talimat madde 2'yi (pasif kartta stok ARTIRAN hareket yasak, AZALTAN
+serbest) bekleyen iş olarak sayıyordu. **Ölçüm başka söylüyor ve
+ölçüme uyuluyor:** `PasifKartHareketiInterceptor` `5fbcb7ac` ile Salı
+paketinde çıkmış, `4bc57cdd` ağacında var, `Program.cs:51,61`de
+kayıtlı — yani **şu anda canlıda koşuyor**. Kural da tam istenen
+kural: `Receipt/TransferIn/Return/Count` ve `Adjustment > 0` engelli,
+azaltanlar serbest. 4 testi var.
+
+**AMA CANLI AYAĞI ÖLÇEMEDİ** ve bugün ölçülemez: kapı hiç ısırmadı ve
+artık **pasif kart kalmadığı için** sonda atacak zemin yok. Canlıya
+pasif kart açmak "ölçüm için canlıya yazmak" olurdu; yapılmadı.
+Mehmet Bey ilk kartı arşivlediğinde, tıpkı END0010 gibi, bedava
+ölçülecek.
