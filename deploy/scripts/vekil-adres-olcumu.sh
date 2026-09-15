@@ -50,6 +50,7 @@
 #
 set -uo pipefail
 
+KOK_DIZIN="${KOK_DIZIN:-/var/www/enderun-ai}"
 UC="${UC:-http://127.0.0.1:3000/api/backend/auth/login}"
 VT="${VT:-enderun_ai}"
 DAMGA="sonda-vekil-$(date -u +%s)"
@@ -82,12 +83,21 @@ if [ "$kod_a" = "429" ] || [ "$kod_b" = "429" ]; then
     exit 3
 fi
 
-satirlar="$(sudo -u postgres psql -d "$VT" -At -F'|' -c "
-    select \"ActorUsername\", \"IpAddress\"
+# ÖLÇÜM KANONİK ARAÇTAN GEÇER — DOĞRUDAN psql DEĞİL.
+#
+# İlk yazımımda burada `sudo -u postgres psql` vardı ve `PsqlCizgisiTests`
+# bunu yakalayıp 2026-09-15 gece YAYINI DURDURDU (çizgi 0, ben 1 yaptım).
+# Çıra haklıydı: `vt-sorgu.sh` veritabanı adını ZORUNLU kılar, bakım
+# veritabanlarını reddeder ve her çıktının başına `current_database()`
+# basar — yani "yanlış veritabanını ölçtüm" hatası yapılamaz. Bu betik
+# tam da bir ölçüm aleti olduğu için o güvenceye en çok ihtiyacı olan
+# yer burası. Çizgiyi yükseltmek gerekmedi.
+satirlar="$("${KOK_DIZIN}/deploy/scripts/vt-sorgu.sh" --vt "$VT" --sql "
+    select \"ActorUsername\" || '|' || coalesce(\"IpAddress\", '')
     from security_audit_events
     where \"Action\" = 'LoginFailed'
       and \"ActorUsername\" like '${DAMGA}%'
-    order by \"OccurredAtUtc\";" 2>/dev/null)"
+    order by \"OccurredAtUtc\";" 2>/dev/null | grep -E '^sonda-vekil-')"
 
 adet="$(printf '%s\n' "$satirlar" | grep -c . || true)"
 if [ "$adet" != "2" ]; then

@@ -45,3 +45,26 @@ PENCERE: 30 dakika, **5 dakikada bir** sayılır.
 ÖLÇEMEDİ KURALI: bir kovada `/api/` isteği **< 5** ise o kova
 "GEÇTİ" değil **ÖLÇEMEDİ** yazılır — trafik yokken boş küme her
 iddiayı doğrular.
+
+### YAYIN DENEMESİ 1 — DURDU (21:39 UTC), CANLIYA DOKUNULMADI
+
+Arka uç testleri: **3271 testin 1'i düştü**, 27 dk 4 sn.
+Düşen: `PsqlCizgisiTests.YeniDogrudanPsqlCagrisi_Eklenmemis`.
+
+**KAPI HAKLIYDI VE KUSUR BENİMDİ.** Dün gece yazdığım
+`deploy/scripts/vekil-adres-olcumu.sh` doğrudan `sudo -u postgres psql`
+çağırıyordu; çizgi 0, ben 1 yaptım. Çıra bunu yakalayıp yayını
+durdurdu — yani **bir ölçüm aleti, ölçüm disiplinini ihlal ederek**
+canlıya çıkmak üzereydi.
+
+DÜZELTME: istisna EKLENMEDİ, çağrı kanonik araca çevrildi
+(`vt-sorgu.sh` — veritabanı adını zorunlu kılar, bakım veritabanlarını
+reddeder, `current_database()` basar). Bir ölçüm aletinin bu güvenceye
+en çok ihtiyacı olan yer burasıydı.
+
+DOĞRULANDI: `PsqlCizgisiTests` 5/5 yeşil; alet dönüşümden sonra da
+doğru ısırıyor (KIRMIZI, çıkış 1 — düzeltme henüz yayında değil).
+Canlı sürüm dokunulmadan `1.0.0+4bc57cdd`, iki servis ayakta.
+
+NOT: doğrulama koşusu 2 `sonda-vekil-` satırı daha yazdı (yayından
+gelmiyor).
