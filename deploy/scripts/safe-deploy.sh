@@ -1860,11 +1860,17 @@ main() {
         # ISINMA — SAĞLIKTAN SONRA, KESİNTİ KAPISINDAN ÖNCE.
         #
         # Sağlık kontrolü "ayakta mı" sorusunu yanıtlar, "hızlı mı"
-        # sorusunu değil: gövdesiz sağlık ucu arka ucun ağır yollarına
-        # (EF modeli, Npgsql havuzu, kimlik boru hattı) dokunmaz.
-        # Derleme canlıyı takasa ittiği için yayından sonraki İLK gerçek
-        # istek 6,94 sn ölçüldü (2026-09-13). O bedeli buradan itibaren
-        # yayın betiği öder, ilk kullanıcı değil.
+        # sorusunu değil: sağlık ucu bir `MapGet`tir ve MVC denetleyici
+        # boru hattına hiç girmez.
+        #
+        # SAYI YENİLENDİ (2026-09-15, Kural 94). Burada "ilk gerçek
+        # istek 6,94 sn" yazıyordu; o ölçüm 2026-09-13'te yayın sırası
+        # kurulmadan önce elle alınmıştı ve BUGÜN GEÇERLİ DEĞİL.
+        # Bugün soğuk başlangıcın bedelini YUKARIDAKİ SAĞLIK YOKLAMA
+        # DÖNGÜSÜ emiyor (12-14 sn sürüyor); ısıtmaya kalan bedel son
+        # iki yayında 0,2277 ve 0,2267 sn ölçüldü ve ısınmış hâl
+        # 0,008-0,029 sn. Yani bu adımın ilk kullanıcıya kazandırdığı
+        # süre ~0,22 SANİYEDİR. Ölçümün ayrıntısı isitma.sh başlığında.
         #
         # Isıtma BAŞARISIZLIĞI yayını düşürmez: sağlık zaten geçti, yeni
         # sürüm ayakta. Isıtma bir hız tedbiri; onun için geri alma

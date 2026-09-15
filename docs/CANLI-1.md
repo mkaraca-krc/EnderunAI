@@ -1363,6 +1363,13 @@ yazıyor. Yani **her yayın 3-4 adet `LoginFailed` üretir** ve bu
 tekrarlayacaktır. `ActorUsername` `isitma-yok-` ile başlar, IP
 `192.0.2.233` (TEST-NET-3, gerçek olmayan adres).
 
+**DOĞRULAMA KOŞUSU (2026-09-15 ~19:5x UTC): 2 adet `isitma-yok-`
+satırı daha eklendi ve bunlar BİR YAYINDAN GELMİYOR.** `isitma.sh`
+değiştirildikten sonra betik elle bir kez koşturuldu (`ISITMA_DENEME=1`)
+— değişikliği çağırmadan doğrulamanın yolu yoktu (Kural 70). Yayın
+günlüğünde o saatte yayın yoktur; sayım yapan kişi bu iki satırı yayın
+başına düşen orana KATMAMALIDIR.
+
 **SATIRLAR SİLİNMEDİ ve silinmeyecek.** Denetim kaydından satır
 silmek, kaydın kendisine güveni bozar — "bazı satırlar temizleniyor"
 diyen bir defter delil olmaktan çıkar. Gürültü, silmekle değil

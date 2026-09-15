@@ -318,6 +318,30 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 96 — DENETİM KAYDINA İSTİSNA ÖĞRETMEK YALNIZ BÜTÜNLÜĞÜ
+  AZALTMAZ; İSTİSNANIN ANAHTARI SALDIRGANIN ELİNE GEÇER.**
+
+  Kullanıcı adı önekine bakan bir istisna, **kaydı susturma yöntemini
+  kodun içine yazmaktır.** Ayrıca istisnalar kalıcıdır ve genişler:
+  kayda bir kez "şunu yazma" öğretmek, sonraki "şunu da yazma"nın
+  gerekçesidir.
+
+  DOĞUŞU (2026-09-15): ısıtma adımı her yayında 4 sahte başarısız giriş
+  yazıyordu — yılda yüzlerce sahte güvenlik olayı. Dört seçenek
+  sıralandı; "denetim yazıcısına `isitma-` önekini atlamayı öğret"
+  seçeneği EN SONA kondu ve Mehmet Bey ikinci seçeneği (yazma yapmayan
+  bir denetleyici çağrısı) seçti.
+
+  İSTİSNANIN SOMUT ZARARI: önek `isitma-yok-` olsaydı, o önekle deneyen
+  HERKESİN başarısız girişleri kayda hiç düşmezdi. Yani gürültüyü
+  susturmak için yazdığımız satır, gerçek bir saldırganın kaydın dışında
+  kalmak için kullanacağı satır olurdu.
+
+  UYGULAMA: gürültü SİLMEKLE ya da SUSTURMAKLA değil, **kaynağını
+  ortadan kaldırarak** çözülür; olmuyorsa ETİKETLE. "Bazı satırları
+  temizleyen bir defter delil olmaktan çıkar" kuralının kardeşi: bazı
+  satırları hiç yazmayan defter de öyle.
+
 - **KURAL 95 — "DAHA DOĞRU GÖRÜNEN" BİR SATIR, DÜZELTMENİN KENDİSİNİ
   İPTAL EDEBİLİR.** Bir düzeltmenin yanına, onu bozacak "iyileştirmeyi"
   ADIYLA yasaklayan bir not bırakılır.

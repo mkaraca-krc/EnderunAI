@@ -12918,6 +12918,20 @@ bedeli ilk kullanıcı ödüyor.
 
 Çözüm ISINMA/1 (aşağıda): bedeli yayın betiği öder.
 
+> **⚠ BU SAYILAR O GÜNÜN KOŞULLARINA AİTTİR — BUGÜNKÜ YAYINDA GEÇERLİ
+> DEĞİLDİR (işaretlendi 2026-09-15, Kural 94).** Ölçüm, yayın sırası
+> kurulmadan önce elle alınmıştı. Bugün sıra restart → **sağlık
+> yoklama döngüsü (12-14 sn)** → duman testleri → giriş döngüsü kapısı
+> (10 sn) → ısıtma; soğuk başlangıcın bedelini sağlık döngüsü emiyor.
+> Yeniden ölçülen değer: ısıtmanın ilk arka uç çağrısı **0,2277 ve
+> 0,2267 sn** (son iki yayın), ısınmış hâl 0,008-0,029 sn. Bileşen:
+> `SELECT` 2 ms, `INSERT` 10 ms, geri kalan ~215 ms MVC boru hattı
+> JIT'i. Ayrıntı: `deploy/scripts/isitma.sh` başlığı.
+>
+> Aşağıdaki "SABAHKİ ÖLÇÜMLE NEDEN ARADAKİ FARK" bölümü de bu sayıya
+> dayanır ve aynı işareti taşır: o bölüm 13 Eylül'ün İÇİNDEKİ iki
+> ölçümü karşılaştırır, bugünkü yayın sırasını değil.
+
 ### KİRLENEN ÖLÇÜM VE TALİMATIN ÜSTÜNE ÖLÇÜMÜ KOYMAK
 
 İlk doğrulayıcı koşuyu, kontrol koşusunun makine yüküne eşitlemek için
@@ -13038,6 +13052,11 @@ farkı HENÜZ ÖLÇÜLMEDİ — canlı servisleri ölçüm için yeniden başlat
 kullanıcıya dokunan bir eylem; prova zemininde ölçülecek.
 
 ### SABAHKİ ÖLÇÜMLE NEDEN ARADAKİ FARK
+
+> **⚠ 6,94 sn BUGÜN GEÇERLİ DEĞİL** (işaretlendi 2026-09-15, Kural 94):
+> aşağısı 13 Eylül'ün İÇİNDEKİ iki ölçümü karşılaştırır. Bugünkü yayın
+> sırasında karşılığı 0,2277/0,2267 sn'dir; bkz. bu belgede "Bulgu 4"
+> altındaki işaret ve `deploy/scripts/isitma.sh` başlığı.
 
 Sabah aynı yol 6,94 sn ölçülmüştü, Kol C'de 0,584 sn. Sebep: sabah API
 iki gün boşta kalmış + arka arkaya derlemelerle TAM soğumuştu (455 MB
