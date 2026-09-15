@@ -181,8 +181,24 @@ public sealed class AuthController(
         CancellationToken cancellationToken)
     {
         var ipAddress = ResolveClientIp();
+        var username = request.Username.Trim().ToLowerInvariant();
 
-        if (loginAttemptService.IsLocked(ipAddress, out var remaining))
+        //
+        // ═══ İKİ AYRI SAYAÇ: IP ve KULLANICI ADI ═══
+        //
+        // Yalnız IP saymak dağıtık denemeyi (çok IP, tek hesap) hiç
+        // görmezdi. Yalnız kullanıcı adı saymak ise hizmet engelleme
+        // yüzeyi açardı. İkisi ayrı sayılıyor; ikisi de SÜRELİ.
+        //
+        // KULLANICI ADI EŞİĞİ DAHA CÖMERT (10, IP'de 5): kullanıcı adı
+        // kilidi GERÇEK BİR İNSANI etkiler. Parolayı iki-üç kez yanlış
+        // girmek sorun olmamalı (geçiş günü şartı).
+        //
+        var ipAnahtari = $"ip:{ipAddress}";
+        var kullaniciAnahtari = $"kul:{username}";
+
+        if (loginAttemptService.IsLocked(ipAnahtari, out var remaining)
+            || loginAttemptService.IsLocked(kullaniciAnahtari, out remaining))
         {
             var minutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
             return StatusCode(429, new
@@ -191,7 +207,6 @@ public sealed class AuthController(
             });
         }
 
-        var username = request.Username.Trim().ToLowerInvariant();
         var user = await db.Users
             .Include(item => item.UserRoles)
             .ThenInclude(userRole => userRole.Role)
@@ -206,7 +221,11 @@ public sealed class AuthController(
                 user.PasswordHash,
                 user.PasswordSalt))
         {
-            loginAttemptService.RecordFailure(ipAddress);
+            // İKİ SAYAÇ AYRI: IP 5 denemede, kullanıcı adı 10 denemede
+            // kilitlenir. Kullanıcı adı eşiği cömert çünkü o kilit
+            // gerçek bir insanı etkiler.
+            loginAttemptService.RecordFailure(ipAnahtari);
+            loginAttemptService.RecordFailure(kullaniciAnahtari, esik: 10);
             return Unauthorized(new { message = "Kullanıcı adı veya şifre hatalı." });
         }
 
@@ -249,7 +268,10 @@ public sealed class AuthController(
             });
         }
 
-        loginAttemptService.RecordSuccess(ipAddress);
+        // BAŞARILI GİRİŞ İKİ SAYACI DA SIFIRLAR: doğru parolayı giren
+        // kullanıcı, önceki yanlış denemeleri yüzünden cezalandırılmaz.
+        loginAttemptService.RecordSuccess(ipAnahtari);
+        loginAttemptService.RecordSuccess(kullaniciAnahtari);
 
         user.LastLoginAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
@@ -293,7 +315,7 @@ public sealed class AuthController(
     {
         var ipAddress = ResolveClientIp();
 
-        if (loginAttemptService.IsLocked(ipAddress, out var remaining))
+        if (loginAttemptService.IsLocked($"ip:{ipAddress}", out var remaining))
         {
             var minutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
             return StatusCode(429, new
@@ -310,11 +332,11 @@ public sealed class AuthController(
             !user.IsActive ||
             !passwordService.Verify(request.Password, user.PasswordHash, user.PasswordSalt))
         {
-            loginAttemptService.RecordFailure(ipAddress);
+            loginAttemptService.RecordFailure($"ip:{ipAddress}");
             return Unauthorized(new { message = "Kullanıcı adı veya şifre hatalı." });
         }
 
-        loginAttemptService.RecordSuccess(ipAddress);
+        loginAttemptService.RecordSuccess($"ip:{ipAddress}");
 
         var reason = request.Reason.Trim();
         if (string.IsNullOrWhiteSpace(reason))
@@ -441,12 +463,30 @@ public sealed class AuthController(
 
     private string ResolveClientIp()
     {
+        //
+        // ═══ İLK DEĞİL SON ELEMAN — ÖLÇÜLEN ATLATMA (2026-09-15) ═══
+        //
+        // `X-Forwarded-For`un İLK elemanı İSTEMCİNİN GÖNDERDİĞİ değerdir;
+        // nginx gerçek adresi `$proxy_add_x_forwarded_for` ile SONA ekler.
+        // İlk elemanı almak, giriş hız sınırını istemcinin kontrolüne
+        // bırakıyordu.
+        //
+        // ÖLÇÜLDÜ: IP kilitliyken (429), uydurma `X-Forwarded-For` ile
+        // aynı uca üç istek → üçü de **401**. Yani kilit atlanıyordu;
+        // saldırgan her istekte başlığı değiştirerek sınırı sonsuza
+        // kadar sıfırlayabilirdi.
+        //
+        // SON eleman vekilin EKLEDİĞİ adrestir; istemci ona dokunamaz.
+        // (Tek vekil var: nginx. Vekil zinciri uzarsa bu seçim gözden
+        // geçirilmeli.)
+        //
         var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
         if (!string.IsNullOrWhiteSpace(forwardedFor))
         {
-            var first = forwardedFor.Split(',')[0].Trim();
-            if (!string.IsNullOrWhiteSpace(first))
-                return first;
+            var parcalar = forwardedFor.Split(',');
+            var sonuncu = parcalar[^1].Trim();
+            if (!string.IsNullOrWhiteSpace(sonuncu))
+                return sonuncu;
         }
 
         return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";

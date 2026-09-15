@@ -17167,3 +17167,130 @@ Geri getirme adımları `docs/KURTARMA.md`'de.
 
 **BU ÜÇ İŞLE DURULDU.** Yeni iş açılmıyor: sistem canlı, gerçek kullanım
 başlıyor ve bundan sonraki bilgi ölçümden değil **kullanımdan** gelecek.
+
+# ═══════════════════════════════════════════════════════════════════
+# GİRİŞ HIZ SINIRI — ÖLÇÜM VE KURULUM (2026-09-15)
+# ═══════════════════════════════════════════════════════════════════
+
+## ÖLÇÜM ÖNCE: SALDIRI SANDIĞIMIZ ŞEY NEYDİ
+
+**Kapsam:** 16 günün tüm erişim günlükleri, **431.660 satır**.
+
+| ölçüm | değer |
+|---|---|
+| `/login` sayfasına istek | **109.495** |
+| ayrı kaynak | **621** |
+| en çok istek atan iki kaynak | `78.175.x.x` **38.039** · `31.223.x.x` **33.529** — **BİZİM KULLANICILARIMIZ** (GİRİŞ-DÖNGÜ/1'in izi) |
+| saldırı kümesi | `185.177.x.x` — **altı IP**, toplam ~22.000 |
+
+### SALDIRGAN GERÇEK GİRİŞ UCUNA HİÇ DOKUNMADI
+
+`185.177` kümesinin `POST /api/backend/auth/login` sayısı: **SIFIR**.
+POST'ları `/login` (404) ve `phpunit/eval-stdin.php` gibi PHP sömürü
+yollarına gitti — **hedefli parola denemesi değil, genel bir PHP/WordPress
+tarayıcısı.**
+
+### EN ÖNEMLİ SORU: BAŞARILI OLAN VAR MI — **HAYIR**
+
+Gerçek giriş ucuna 16 günde **96 POST**: **71 başarılı**, 8 × 401,
+1 × 403, 16 × 499 (istemci bağlantıyı kapattı).
+
+**71 başarılı girişin hepsi `78.175.x.x` ve `31.223.x.x` adreslerinden**
+— yani bizim kullanıcılarımız. Saldırı kümesinden **tek bir başarılı
+giriş yok.**
+
+8 × 401'in **yedisi** bizim kullanıcılarımızın adreslerinden (normal
+parola yanlışı). **Biri** `136.144.x.x`ten: `curl/8.5.0` ile
+`POST /api/auth/login`, **401**. O adres tarayıcının Referer'ında geçen
+adresti — gerçek uca tek dokunuş, başarısız.
+
+### HANGİ KULLANICI ADLARI DENENDİ — **ÖLÇEMEDİ, VE BU BİR BULGU**
+
+**Cevap veremiyorum çünkü sistem kaydetmiyor.** `security_audit_events`
+içinde giriş olayı olarak yalnız `LoginRejectedOutsideWorkHours` (6 adet)
+var; **yanlış parola denemesi kullanıcı adıyla kayda geçmiyor.**
+nginx de gövdeyi yazmıyor (doğrusu da bu).
+
+> **YENİ BULGU — BAŞARISIZ GİRİŞ DENETLENMİYOR.** Bugün kimin hangi
+> hesabı denediğini söyleyemiyoruz. Portal jetonunda aynı boşluk
+> kayıtlıydı (DURUM.md: *"başarısız token denemesi kayda geçmiyor"*) —
+> **aynı ailenin ikinci örneği.** Düzeltme sıraya alındı, bu turda
+> yapılmadı.
+
+## KURULAN SINIR — İKİ KATMAN
+
+### KATMAN 1 · nginx, IP başına — **CANLIDA, KESİNTİSİZ**
+
+`/etc/nginx/conf.d/giris-hiz-siniri.conf` + üç `location` bloğu.
+**`systemctl reload`** ile yüklendi — **restart değil, kesinti yok.**
+
+| bölge | sınır | nereye |
+|---|---|---|
+| `giris_post` | 20r/m + burst 10 | `= /api/backend/auth/login`, `= /api/auth/login` |
+| `giris_sayfa` | 60r/m + burst 30 | `= /login` |
+
+**TAM EŞLEŞME (`location =`) BİLEREK:** `^~ /api/backend/auth/`
+yazsaydım `work-hours-status` da sınırlanırdı — o uç her açık sekmeden
+**dakikada bir** çağrılıyor; sınırlanması oturumları kırardı.
+
+**KIRMIZI–YEŞİL (ölçüldü):**
+
+| ayak | sonuç |
+|---|---|
+| insan hızında 3 deneme (yanlış, yanlış, doğru) | **401 · 401 · 401 — 429 YOK** ✓ |
+| 40 hızlı POST | **38 engellendi** |
+| error.log | `limiting requests … zone "giris_post"` — **17 satır** |
+
+> **KENDİ CÜMLEMİ ÖLÇTÜM VE YANLIŞ ÇIKTI.** Yapılandırmaya
+> *"error.log'a `limit_req` satırı düşer (warn)"* yazmıştım. Ölçüm:
+> **0 eşleşme.** Sebep: `nginx.conf` içinde `error_log … ;` seviyesiz,
+> yani varsayılan **`error`** — `warn` satırları oraya hiç yazılmaz.
+> `limit_req_log_level error` yapıldı, sonra **17 satır** göründü.
+
+### KATMAN 2 · uygulama — ZATEN VARDI, İKİ KUSURU ÖLÇÜLDÜ
+
+Ölçerken bulundu: uygulamada **zaten** bir sınır var —
+*"Çok fazla başarısız giriş denemesi. Lütfen 13 dakika sonra tekrar
+deneyin."* (`LoginAttemptService`: 5 deneme / 15 dk pencere / 15 dk
+**süreli** kilit). Kalıcı kilit yok — Şart 2 zaten karşılanmış.
+
+**KUSUR 1 — SINIR ATLATILABİLİYORDU (ölçüldü):**
+
+    başlıksız istek           → 429 (kilitli)
+    X-Forwarded-For: 203.0.113.7 → 401
+    X-Forwarded-For: 203.0.113.8 → 401
+    X-Forwarded-For: 203.0.113.9 → 401
+
+Sebep: `ResolveClientIp()` başlığın **İLK** elemanını alıyordu; o
+**istemcinin gönderdiği** değerdir. nginx gerçek adresi
+`$proxy_add_x_forwarded_for` ile **SONA** ekler. Saldırgan her istekte
+başlığı değiştirip sınırı sonsuza kadar sıfırlayabilirdi.
+**Düzeltme: son eleman alınıyor.**
+
+**KUSUR 2 — YALNIZ IP SAYILIYORDU.** Dağıtık deneme (çok IP, tek hesap)
+hiç sayılmazdı. **Düzeltme: iki ayrı sayaç** — `ip:<adres>` ve
+`kul:<kullanıcı>`.
+
+**EŞİKLER CÖMERT VE FARKLI:** IP **5**, kullanıcı adı **10**.
+Kullanıcı adı kilidi **gerçek bir insanı** etkiler ve hizmet engelleme
+yüzeyidir; bu yüzden daha cömert. Başarılı giriş **iki sayacı da
+sıfırlar** — doğru parolayı giren kişi önceki yanlışları yüzünden
+cezalandırılmaz.
+
+**TESTLER (5/5 yeşil):** pozitif kontrol (yanlış-yanlış-doğru →
+takılmaz) · IP eşiği 5'te kilitler · kullanıcı eşiği 10'a kadar
+kilitlemez · iki sayaç bağımsız · **kilit kalıcı değil, ≤15 dk**.
+
+### DURUM: KATMAN 1 CANLIDA, KATMAN 2 YAYINI BEKLİYOR
+
+Katman 2 kod değişikliğidir → yayın gerektirir → **6–14 saniye 502**.
+Kendi ölçtüğümüz kural: **mesai saatinde yayın yapılmaz.** Pilot bugün
+başlıyor.
+
+**Pratik güvence bugün yerinde:** gözlenen saldırı yüzeyi (sayfa
+seline) **nginx katmanında, gerçek TCP adresiyle** sınırlanıyor ve o
+adres **uydurulamaz**. Atlatılabilen katman (uygulama) zaten ikinci
+savunma hattıydı.
+
+**Katman 2 için önerim: akşam mesai sonrası yayın.** Kararı siz
+verirsiniz.

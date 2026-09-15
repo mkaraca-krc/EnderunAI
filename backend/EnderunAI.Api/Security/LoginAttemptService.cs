@@ -2,17 +2,39 @@ using System.Collections.Concurrent;
 
 namespace EnderunAI.Api.Security;
 
+/// <summary>
+/// GİRİŞ DENEME SAYACI — ANAHTAR BAZLI (IP ve KULLANICI ADI AYRI).
+///
+/// ═══ NEDEN İKİ ANAHTAR (2026-09-15) ═══
+///
+/// Yalnız IP saymak iki yönden eksikti:
+///   · dağıtık bir deneme (çok IP, tek hesap) hiç sayılmazdı,
+///   · tek IP'nin arkasındaki bir ofisin tamamı birlikte sayılırdı.
+///
+/// Anahtar önekle ayrılıyor: `ip:&lt;adres&gt;` ve `kul:&lt;kullanıcı&gt;`.
+///
+/// ═══ KİLİT SÜRELİDİR, KALICI DEĞİL ═══
+///
+/// Kalıcı hesap kilidi, saldırganın elinde HİZMET ENGELLEME aracına
+/// dönüşür: kullanıcı adını bilen herkes o hesabı kapatabilirdi.
+/// Kilit kendiliğinden açılır.
+/// </summary>
 public interface ILoginAttemptService
 {
-    bool IsLocked(string ipAddress, out TimeSpan remaining);
+    bool IsLocked(string anahtar, out TimeSpan remaining);
 
-    void RecordFailure(string ipAddress);
+    void RecordFailure(string anahtar, int esik = 5);
 
-    void RecordSuccess(string ipAddress);
+    void RecordSuccess(string anahtar);
 }
 
 public sealed class LoginAttemptService : ILoginAttemptService
 {
+    /// <summary>
+    /// IP için eşik. KULLANICI ADI için çağıran daha cömert bir eşik
+    /// verir — kullanıcı adı kilidi gerçek bir insanı etkiler ve
+    /// hizmet engelleme yüzeyidir.
+    /// </summary>
     private const int MaxFailures = 5;
     private static readonly TimeSpan LockDuration = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan AttemptWindow = TimeSpan.FromMinutes(15);
@@ -47,7 +69,7 @@ public sealed class LoginAttemptService : ILoginAttemptService
         return true;
     }
 
-    public void RecordFailure(string ipAddress)
+    public void RecordFailure(string ipAddress, int esik = MaxFailures)
     {
         var now = DateTime.UtcNow;
 
@@ -69,7 +91,7 @@ public sealed class LoginAttemptService : ILoginAttemptService
                 return existing;
             });
 
-        if (state.FailureCount >= MaxFailures)
+        if (state.FailureCount >= esik)
         {
             state.LockedUntilUtc = now.Add(LockDuration);
         }
