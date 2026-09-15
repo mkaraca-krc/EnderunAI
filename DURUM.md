@@ -16908,3 +16908,53 @@ yapılacak: kod `END0010` ve kart **AKTİF** doğmalı.
 > (büyük harf) idi ve yalnız bayat parçada eşleşti; bir an "yeni yapıda
 > yok" sonucuna varacaktım. Gerçek etiket `"Transfer giriş"`.
 > Var olmayan adla arayıp "yok" demek — aynı tuzak, bugün altıncı kez.
+
+## GERİ ALMA PENCERESİ — 30 DAKİKA, KAPANDI (12:37 → 13:08)
+
+Yedi ölçüm, beş dakikada bir. Tetikler yayından **önce** ilan edilmişti.
+
+| saat | `/api/` istek | 5xx | 502 | 401 | 4xx (401 hariç) | çıkış | denetim | sürüm |
+|---|---|---|---|---|---|---|---|---|
+| 12:37 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | `1.0.0+1c9fdaa3` |
+| 12:42 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | aynı |
+| 12:47 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | aynı |
+| 12:52 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | aynı |
+| 12:57 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | aynı |
+| 13:02 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | aynı |
+| 13:08 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | aynı |
+
+**HİÇBİR TETİK ATEŞLEMEDİ.** Tek 401 kimliklendi:
+`GET /api/.env` (81.x.x) — **saldırı yoklaması**, bizim ucumuzun
+kullanıcısı değil. Bizim uçlarımızda **0 hata**.
+
+### ⚠ BU PENCERE "GEÇTİ" DEĞİL, **ÖLÇEMEDİ**
+
+Kendi kuralımız: *"Eşik, trafik yoksa GEÇTİ demez — ÖLÇEMEDİ der.
+Saatlik `/api/` istek sayısı < 50 ise o saatin değerlendirmesi
+ÖLÇEMEDİ'dir."*
+
+**30 dakikada `/api/` isteği: 1.** Eşiklerin hiçbiri ateşlenecek kadar
+veri görmedi. **Sessizlik onay değildir.**
+
+### PENCEREDE GERÇEKTEN ÖLÇÜLEN
+
+| ölçüm | sonuç |
+|---|---|
+| sürüm ucu, 7 ölçümün 7'sinde | `1.0.0+1c9fdaa3` — **değişmedi** |
+| arka uç sağlığı | **200** |
+| ön yüz `/login` | **200** |
+| bugün `auth/logout` | **0** — hiç oturum düşmedi |
+| her türden 5xx (bizim uçlarımızda) | **0** |
+
+### AÇIK KALAN — GERÇEK KULLANIM GELİNCE ÖLÇÜLECEK
+
+**A3**, **A5** ve **yeni kart kodu** hâlâ ÖLÇEMEDİ. Bunlar ancak bir
+kullanıcı ekrandan iş yapınca ölçülebilir; canlıda kimlikli çağrı
+yapamıyorum. Üç adım Mehmet Bey'de:
+
+1. depo çıkışında miktar **0** → *"Miktar sıfırdan büyük olmalıdır."*
+2. bir kartta alan değiştir → denetim ekranında **Updated** satırı
+3. ilk yeni kart → kod **END0010**, kart **AKTİF**
+
+**Yayın kapandı. Sistem `1c9fdaa3` sürümünde, sağlıklı, kimse
+düşmedi — ama "çalışıyor" demek için gerçek kullanım gerekiyor.**
