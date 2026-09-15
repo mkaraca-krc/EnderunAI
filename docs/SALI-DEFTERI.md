@@ -289,3 +289,45 @@ Yani iki liste BİLEREK ayrı. Birleştirmek yazılı bir kararı geri alır.
 ## 2.2 — K5 sondası zaten var, 390 ve 1280'de koşuyor
 tests/duzen/k5-tasiran-eleman.spec.ts. 768 ve 1536 eklenecek.
 Playwright gerektiriyor; bellek 130MB iken açılmadı, yayından sonra.
+
+---
+
+## 2.4 say.sh — Kural 84'ü araca çevirme · **BİTTİ**
+
+**İlk üç madde zaten kapalıydı** (ölçüldü, `say.sh` başlığından):
+özyineleme varsayılan · taranan kapsam her koşuda basılıyor · yüzde
+tuzağı `--etiketten-sayi` ile kapalı.
+
+**Dördüncü madde ölçülünce daralttı.** "Çıplak ls/find/grep sayımlarını
+buna çevirin" — taradım: `deploy/scripts` + `scripts` altında **21**
+tane var. AMA çoğu `printf '%s\n' "$x" | grep -c .` biçiminde ve bunlar
+**akıştaki satırı** sayıyor, dosya taramıyor. `say.sh` "şu kök altında
+şu desene uyan kaç dosya var" sorusunu yanıtlar; farklı soru.
+Hepsini çevirmek araç taşımacılığı olurdu ve kodu kötüleştirirdi —
+**çevirmedim.**
+
+Gerçek hedef glob'la DOSYA sayanlardı. Biri gerçekten kusurluydu:
+
+`sorgu-dizgesi-cirasi.sh` **saydığı küme ile okuduğu küme farklıydı**:
+
+```
+okunan : access.log + access.log.1 + access.log.*.gz
+sayılan: access.log*                ← HEPSİ
+```
+
+Bugün ikisi de 17 veriyor (ölçüldü; `delaycompress` sayesinde yalnız
+`.1` sıkıştırılmamış). Sapma bugün YOK — ama iki liste ayrı ayrı
+bakımdaydı, yani sapma bir gün gelirdi ve çıra "17 dosya tarandı"
+derken 16'sını tarardı. Liste **tek kaynağa** indirildi; okuma ve
+sayım aynı diziden besleniyor.
+
+Ek olarak ÖLÇEMEDİ dalı eklendi: okunacak günlük yoksa çıra "temiz"
+demiyor, **çıkış 3** veriyor. Pozitif kontrolle kanıtlandı (boş dizin →
+ÖLÇEMEDİ). Sondam önce yanlış değişkeni çevirdi (`GUNLUK_DIZINI`,
+doğrusu `SORGU_CIRA_GUNLUK`) ve "ısırmadı" diye yanlış hüküm kurmama
+ramak kaldı — Kural 93, aynı gece üçüncü kez.
+
+**KALICI PARÇA — MUHAFIZ:** `CiplakGlobSayimiTests` (4 test). Yeni bir
+`ls <glob> | wc -l` eklenirse kırmızı yanar; akıştaki satır sayımlarını
+YAKALAMAZ (yanlış kırmızı yakmasın diye ayrıca sınandı). Mutasyon:
+çıplak glob geri konuldu → **tam 1 kırmızı**; geri alınca 4/4.

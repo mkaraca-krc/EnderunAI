@@ -60,13 +60,52 @@ SIR_DESENI='(token|jeton|password|parola|passwd|secret|sir|apikey|api_key|auth|c
 BEYAZ="$(grep -oE '^[A-Za-z_][A-Za-z0-9_.-]*' "$LISTE" | sort -u)"
 [ -n "$BEYAZ" ] || { echo "[sorgu-çıra] ÖLÇEMEDİ: beyaz liste boş — hiçbir şey sınanmaz." >&2; exit 3; }
 
+# ═══ SAYILAN KÜME = OKUNAN KÜME (2026-09-16, Kural 84) ═══
+#
+# Burada iki ayrı liste vardı ve ayrı ayrı bakılıyordu:
+#
+#   okunan : access.log + access.log.1 + access.log.*.gz
+#   sayılan: access.log*            ← HEPSİ
+#
+# Bugün ikisi de 17 veriyor (ölçüldü) çünkü `delaycompress` ile yalnız
+# `.1` sıkıştırılmamış kalıyor. AMA rotasyon düzeni değişirse —
+# `delaycompress` kalkarsa, `.2` bir süre sıkıştırılmamış kalırsa, ya da
+# başka bir son ek girerse — sayı OKUNMAYAN dosyaları da sayar ve çıra
+# "17 dosya tarandı" derken 16'sını tarar. Kapsamını fazla beyan eden bir
+# ölçüm, eksik ölçtüğünü gizler.
+#
+# ÇÖZÜM: liste BİR KEZ kuruluyor; hem okuma hem sayım ondan besleniyor.
+#
+# NEDEN `say.sh` DEĞİL: o araç "şu kök altında şu desene uyan kaç dosya
+# var" sorusunu yanıtlar. Buradaki soru farklı — "GERÇEKTEN OKUDUĞUM
+# küme kaç dosya". Deseni araca taşımak ikinci bir desen kopyası
+# üretirdi; asıl kusur zaten iki kopyaydı.
+GUNLUK_DOSYALARI=()
+for _d in "$GUNLUK_DIZINI"/access.log "$GUNLUK_DIZINI"/access.log.1 \
+          "$GUNLUK_DIZINI"/access.log.*.gz; do
+    [ -r "$_d" ] && GUNLUK_DOSYALARI+=("$_d")
+done
+
 gunlukler() {
-    cat "$GUNLUK_DIZINI"/access.log "$GUNLUK_DIZINI"/access.log.1 2>/dev/null
-    zcat "$GUNLUK_DIZINI"/access.log.*.gz 2>/dev/null
+    local d
+    for d in "${GUNLUK_DOSYALARI[@]}"; do
+        case "$d" in
+            *.gz) zcat -- "$d" 2>/dev/null ;;
+            *)    cat  -- "$d" 2>/dev/null ;;
+        esac
+    done
 }
 
-DOSYA_SAYISI=$(ls "$GUNLUK_DIZINI"/access.log* 2>/dev/null | wc -l)
+DOSYA_SAYISI=${#GUNLUK_DOSYALARI[@]}
 SATIR_SAYISI=$(gunlukler | wc -l)
+
+# SIFIR İKİ ANLAMA GELİR (Kural 84/48): okunacak dosya yoksa bu bir
+# "temiz" sonucu değil, ölçememektir.
+if [ "$DOSYA_SAYISI" -eq 0 ]; then
+    echo "[sorgu-çıra] ÖLÇEMEDİ: $GUNLUK_DIZINI altında okunabilir erişim günlüğü yok." >&2
+    echo "[sorgu-çıra] Bu bir onay DEĞİLDİR." >&2
+    exit 3
+fi
 
 adlar() {  # $1: yol süzgeci (grep -E deseni)
     gunlukler \
