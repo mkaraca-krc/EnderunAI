@@ -16958,3 +16958,25 @@ yapamıyorum. Üç adım Mehmet Bey'de:
 
 **Yayın kapandı. Sistem `1c9fdaa3` sürümünde, sağlıklı, kimse
 düşmedi — ama "çalışıyor" demek için gerçek kullanım gerekiyor.**
+
+## OTURUM DÜŞMESİ — NORMAL SÜRE DOLMASI, OTURUM/1 DEĞİL (2026-09-15)
+
+Mehmet Bey'in oturumu düştü. **Sebep: jeton ömrünün dolması.** Son giriş
+13.09; jeton ömrü **12 saat**.
+
+**ÖLÇÜLDÜ (kod):**
+
+    Security/TokenService.cs:95        expires: DateTime.UtcNow.AddHours(12)
+    Controllers/AuthController.cs:173  expiresInSeconds = 43200   (= 12 saat)
+
+İki yer de aynı sayıyı söylüyor; "12 saat" artık etiketsiz bir hüküm
+değil.
+
+> **OTURUM/1'E ADAY OLARAK AÇILMADI.** OTURUM/1'in belirtisi
+> *"jeton ömrü dolmadan, 3+ saat kalmışken düşme"*ydi (09.09 ölçümü).
+> Burada jeton **gerçekten** dolmuş. Aynı görünen iki olayı aynı
+> pakete koymak, paketi çözülemez yapardı.
+
+Not: Yayın sırasındaki 6 saniyelik kesinti de bu düşmenin sebebi
+değildir — o kesintide dönen kod **502**'ydi ve istemci yalnız **401**'de
+çıkış yaptırıyor; ayrıca bugün `auth/logout` sayısı **0**.
