@@ -16572,3 +16572,190 @@ penceresini kurtardı. Kurulmasaydı bu üç kırmızı 04:30'da,
 insanlar gelmeden bitirme şansı kaybolurdu.
 
 *Yayın sabahı öğrenilen her şey, bir gece önce öğrenilebilirdi.*
+
+# ═══════════════════════════════════════════════════════════════════
+# PENCERE GEÇTİ — MESAİ İÇİ YAYIN DEĞERLENDİRMESİ (2026-09-15, 09:20 UTC)
+# ═══════════════════════════════════════════════════════════════════
+
+**Yayın YAPILMADI.** Onaylanan pencere (04:30–05:30 UTC) geçti.
+
+**GECE TAM TAKIM 01:34'TE YEŞİL:** 3.259/3.259, düşen **0**, süre 2.092
+sn, dal `main`, commit `f8f9fa58`. **main yayına hazır.**
+
+## 1) ŞU ANDA SİSTEMDE KİM VAR — HİÇ KİMSE
+
+| ölçüm | değer |
+|---|---|
+| son 2 saat toplam istek | **47** |
+| son 2 saat **`/api/`** istek | **0** |
+| açık oturum (vekil: `work-hours-status`) | **0** |
+| **bugün** `work-hours-status` çağrısı | **0** — gün boyu tek açık oturum yok |
+| **bugün başarılı giriş** | **0** |
+| bugün `/api/` istek | 821 — **tamamı saldırı yoklaması** (`/api/.env`, `/api/wp-config.bak`, `phpunit/eval-stdin.php`…) |
+
+> **KENDİ SÜZGECİMİ DÜZELTİYORUM:** ilk ölçümümde "son 1 saatte 23.515
+> istek" çıktı. Süzgecim `awk '$0 > d'` idi — satırı **dizge olarak**
+> karşılaştırıyor, zaman süzmüyor. Doğru süzgeçle (saat dilimi
+> deseniyle) gerçek sayı **47**. Sayım hatasıydı, trafik değil.
+
+### AYRI BULGU — GECE SALDIRISI (yayınla ilgisiz, kayda geçiyor)
+
+`185.x.x` bloğundan **dört kaynak**, 03:00–04:00 UTC arasında
+`GET /login`e **11.087 istek** attı (saatte 5.558 + 5.529). Referrer
+`https://136.144.213.33/`, ajan Chrome/Edge taklidi.
+
+- `POST /login` denemeleri **11 adet ve hepsi 404** — gerçek giriş ucu
+  `/api/backend/auth/login`; yanlış adrese vuruyorlar.
+- **Başarılı giriş: 0.** Bugün de dün de.
+- Dün aynı desen vardı (891 istek).
+
+Sistemi düşürmedi, kimlik denemesi yapmadı. **Karar sizde:** hız sınırı
+(nginx `limit_req`) ya da IP engeli isteniyor mu — ayrı iş olarak sıraya
+alınabilir.
+
+## 2) MESAİ İÇİ YAYININ BEDELİ — ÜÇ SAYI
+
+### (i) KESİNTİ: **14 SANİYE** (ölçüldü, tahmin değil)
+
+11 Eylül yayınından, nginx erişim günlüğü + systemd:
+
+    12:15:53  systemd: Stopping enderunai-backend
+    12:15:55  ilk 502   ← kullanıcı burada görmeye başlıyor
+    12:15:56  systemd: Started enderunai-backend
+    12:16:03  son 502
+    12:16:09  ilk başarılı 200  ← kullanıcı burada kurtuluyor
+
+**Süreç 3 saniyede kalkıyor ama ilk başarılı cevap 14 saniye sonra**
+(ısınma). Ön yüz yeniden başlatması ayrı, üstüne eklenir.
+
+> **BETİKTEKİ İDDİA YANLIŞ:** `safe-deploy.sh` mesai saatinde
+> *"~2 sn'lik bir kesinti olacak"* diye uyarıyor. Ölçüm **14 sn** —
+> **7 kat**. Bu bir hüküm ve ölçümle çelişiyor (Kural 88); düzeltilecek.
+
+### (ii) KULLANICI NE GÖRÜYOR: HATA — AMA OTURUM KAYBI YOK
+
+Kesintide dönen kod **502**. İstemci kodu yalnız **401**'de `/login`e
+yönlendiriyor (`api-client.ts:68`); 502'de **yönlendirme yok, çerez
+silinmiyor**. Yani:
+
+- açık ekranda **veri yüklenmez / hata görünür**,
+- **oturum düşmez**, sayfa yenilenince kaldığı yerden devam eder,
+- o anda **gönderilmekte olan bir kayıt** varsa 502 alır ve
+  **kaydedilmez** — kullanıcı tekrar göndermek zorundadır.
+
+### (iii) GÖÇ AÇIK BİR İŞLEMİ BOZAR MI — HAYIR
+
+| ölçüm | değer |
+|---|---|
+| `audit_logs` satır sayısı | **0** |
+| tabloya açık kilit | **0** |
+| canlı kodda tabloya dokunan yol | **0** (2 dosyada geçiyor, ikisi de **yorum**) |
+| pozitif kontrol: `security_audit_events` geçen dosya | **170** — arama kör değil |
+
+Göç `goc-uygula.sh` ile **koddan önce** uygulanıyor; o sırada çalışan
+eski kod da bu tabloya dokunmuyor. `DROP TABLE` ACCESS EXCLUSIVE kilidi
+alır ama **bekleyecek okuyucu yok**.
+
+## 3) PİLOT BUGÜN ESKİ KODLA YÜRÜRSE
+
+| # | değişiklik | pilot kullanıcısı bugün ne yaşar |
+|---|---|---|
+| **A1a** | **kod üreticisi** | **EN AĞIRI — aşağıda** |
+| A1b | ters transfer etiketi | Transfer satırlarında giriş/çıkış **ters okunur**; kullanıcı stoğun hangi yöne gittiğini yanlış görür |
+| A2 | Yedek Parça tipi | Kart açarken **dört yerine üç tip** görür; yedek parçayı yanlış tipe yazar, sonra düzeltmek kart güncellemesi ister (kolay) |
+| A3 | anlaşılır hata | Doğrulama hatasında **"Beklenmeyen bir hata"** görür; neyi yanlış yaptığını bilemez, destek ister |
+| A7 | Stok Durumu + pasif rozeti | Sütun "Durum" der, pasif kart **işaretsizdir**; ama pilot yeni (aktif) kart açacağı için etkisi düşük |
+| A8 | Kategori sütunu | **Açtığı her yeni kart Kategori sütununda "—" görünür** — kategori seçmiş olsa bile. Kafa karıştırır, veri doğrudur |
+| A9 | pasif kart kuralı | Aşağıda |
+
+### A1a — KOD BİÇİMİ: BUGÜN AÇILAN KART KALICI OLARAK YANLIŞ BİÇİMDE DOĞAR
+
+**ÖLÇÜLDÜ.** Canlıdaki üretici (yayınlanmış sürüm) kodu
+**`100001, 100002…`** diye üretiyor (önek YOK, altı hane).
+Yeni sürüm **`END0010`** üretiyor.
+
+Canlıdaki 9 kart `END0001…END0009` biçiminde. **Bugün eski kodla
+açılan kartlar `100010` gibi doğar** ve:
+
+- kart kodu **eşleştirme anahtarıdır, değiştirilmez** (değiştirilirse
+  reçete aktarımı her seferinde mükerrer kart açar — bu tespit dün
+  kayda geçti),
+- yeni sürümün içe aktarma denetimi `^END[0-9]{4,}$` bekliyor →
+  **bugün açılan kartlar o kapıdan kalıcı olarak geçemez.**
+
+**Yani bugün kart açılırsa, katalog iki biçimli doğar ve düzeltmesi
+kolay değildir.** Pilotun ilk işi kart açmaksa, bu tek başına
+"yayın kart açılmadan önce yapılmalı" demektir.
+
+### A9 — PASİF KARTA HAREKET: BUGÜN RİSK **DÜŞÜK**, SEBEBİ ÖLÇÜLDÜ
+
+Servis düzeyinde engel yok (200 + fiş üretir). **Ama seçiciler yalnız
+aktif kartları getiriyor** (ölçüldü: 12 kartın 4'ü döndü). Canlıdaki 9
+kartın 9'u pasif → **ekrandan seçilemezler.** Risk yalnız doğrudan API
+çağrısı ya da eski sekmeden gelir.
+
+**Yanlış kart kullanılırsa düzeltme ne kadar zor:** hareket yalnız stok
+satırı değil, **muhasebe fişi de** üretir. Yasal defterdeki kayıt
+silinmez, **ters kayıtla** düzeltilir — mali müşavir işi. Yani veri
+düzeltmesi **orta-zor**, ama bugün bu senaryonun ekrandan **oluşma yolu
+kapalı.**
+
+## 4) ÜÇ SEÇENEK
+
+| | (a) şimdi / öğle arası | (b) akşam mesai sonrası | (c) yarın 04:30 UTC |
+|---|---|---|---|
+| **pilotun bozulma riski** | Yayın sırasında pilot başlarsa 14 sn hata görür; **ama şu an sistemde kimse yok** | Pilot bugün çalıştıysa iş bitmiş olur | **Pilot bugün eski kodla çalışır** → A1a kalıcı kod biçimi hasarı |
+| **kesinti bedeli** | 14 sn, **şu anda maruz kalan 0 kullanıcı** | 14 sn, muhtemelen 0 kullanıcı | 14 sn, 0 kullanıcı |
+| **geri alma kolaylığı** | Aynı (tek komut + göç SQL'i) | Aynı | Aynı |
+| **ek risk** | yok | yayın 48 dk; 17:00'de başlarsa 17:48'de biter — **nöbet tutacak saat kalır** | **bir gün daha gecikme** |
+
+### TERCİHİM: **(a) ŞİMDİ**
+
+Gerekçeler, hepsi ölçüme bağlı:
+
+1. **Maruz kalacak kullanıcı sıfır.** Bugün hiç giriş yok, açık oturum
+   yok, `/api/` insan trafiği yok. Mesai içi yayının bütün bedeli
+   "kullanıcı 14 sn hata görür"dü; **görecek kullanıcı yok.**
+2. **Bekleme bedeli artıyor, azalmıyor.** Pilot bugün başlar ve kart
+   açarsa, o kartlar **kalıcı olarak yanlış kod biçiminde** doğar (A1a).
+   Yayın kart açılmadan önce yapılmalı.
+3. **Paket bugün en hazır hâlinde:** gece tam takım 01:34'te yeşil
+   (3.259/3.259), kapsam kapısı yeşil, yedek ve tatbikat bu sabah
+   yeşil, geri alma ve göç geri alma provalı. Beklemek bu tazeliği
+   eskitir.
+4. **Nöbet için gün ışığı var:** şimdi yayınlarsak 48 dk sürer, ~10:15
+   UTC'de biter ve mesai sonuna kadar **7 saat nöbet penceresi** kalır.
+   Yarın 04:30'da yayınlarsak nöbeti gecenin sonunda tutarız.
+
+**(b) akşam** ikinci tercihim — riski aynı, ama nöbet saatleri daha
+kısa. **(c) yarın** en kötüsü: tek kazancı "mesai dışı" ve o kazanç
+bugün zaten bedava.
+
+**Karar sizde. Genel Müdür'ün pilot cevabını bekliyorum; "pilot bugün
+başlamıyor" derse (a) hâlâ en iyisi, "bugün başlıyor" derse (a) ACİL
+olur çünkü kart açılmadan önce yayın gerekir.**
+
+## DÜN YARIM KALAN İKİ ÖLÇÜM — SONUÇLARI
+
+### (i) `safe-deploy` main dışı dalda hangi kapıları aynı uyguluyor
+
+`require_expected_branch` (satır 1534) çalışma ağacının dalını
+`DEPLOY_BRANCH` ile karşılaştırır. `DEPLOY_BRANCH=yayin-1` verilince
+**denetim GEÇER** (karşılaştırma tutar).
+
+**Kaybedilen tek koruma: "yanlış dalı kazara canlıya çıkarma".**
+Başka hiçbir kapı atlanmaz — kapsam kapısı, **süzgeçsiz tam test
+takımı**, göç kapısı, veri yedeği, sağlık kontrolü ve otomatik geri
+alma aynen uygulanır.
+
+### (ii) Yayın 1'den sonra kapsam kapısı Yayın 2'yi nasıl görüyor
+
+    [yayin-kapsami] ÖLÇEMEDİ: taban (c758ab9a) uç'un (38521ad5)
+                    atası değil — paket tanımsız.
+    [yayin-kapsami] Yayın DURDU — karar verilemeyen paket geçirilmez.
+    çıkış=2
+
+Kiraz toplama yeni SHA üretir; Yayın 1'den sonra `last-deployed-commit`
+main'in atası olmaz ve **Yayın 2 kapıda durur.** Aşmanın tek yolu
+`last-deployed-commit`'i elle yazmak — **kapıya yalan söylemek**.
+Bu yüzden tek yayın öneriliyor.
