@@ -42,6 +42,11 @@ import {
 import { projectService, type ProjectListItem } from "@/services/project.service";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { kartDurumEtiketi, kartDurumIsareti } from "@/lib/inventory/kart-durumu";
+import {
+  stokSeviyesi,
+  stokSeviyesiEtiketi,
+  stokSeviyesiAciklamasi,
+} from "@/lib/inventory/stok-seviyesi";
 import { kategoriEtiketi } from "@/lib/inventory/kategori-etiketi";
 import { malzemeTipiEtiketi } from "@/lib/inventory/malzeme-tipi";
 import {
@@ -160,6 +165,9 @@ export default function InventoryOperationsPage() {
 
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [seviyeTanimliIds, setSeviyeTanimliIds] = useState<Set<string>>(
+    new Set()
+  );
   const [error, setError] = useState("");
 
   const loadDashboard = useCallback(async () => {
@@ -189,11 +197,26 @@ export default function InventoryOperationsPage() {
 
       setProjects(await projectService.getAll().catch(() => []));
 
-      const levelData = await stockLevelService
-        .list({ belowMinimumOnly: true })
-        .catch(() => [] as StockLevelRow[]);
+      /*
+       * İKİ AYRI ÇAĞRI, BİLEREK (S1, 2026-09-16).
+       *
+       * "Kritik mi" sorusunun cevabı SUNUCUDA hesaplanıyor
+       * (`belowMinimumOnly`). Aynı hesabı burada tekrarlamak iki kopya,
+       * zamanla iki davranış demekti. İkinci çağrı bambaşka bir soruyu
+       * sorar: "bu kartın asgari seviyesi TANIMLI MI?" — cevabı yoksa
+       * sütun `Normal` değil `—` yazar.
+       */
+      const [levelData, tumSeviyeler] = await Promise.all([
+        stockLevelService
+          .list({ belowMinimumOnly: true })
+          .catch(() => [] as StockLevelRow[]),
+        stockLevelService.list().catch(() => [] as StockLevelRow[]),
+      ]);
 
       setCriticalLevels(levelData);
+      setSeviyeTanimliIds(
+        new Set(tumSeviyeler.map((satir) => satir.inventoryItemId))
+      );
 
       setItems(inventoryData);
       setRequests(requestData);
@@ -587,26 +610,46 @@ export default function InventoryOperationsPage() {
     {
       key: "durum",
       /*
-       * BAŞLIK "Durum" DEĞİL "Stok Durumu" (S1, 2026-09-13).
+       * BAŞLIK "Durum" DEĞİL "Stok Seviyesi" (S1; 2026-09-13'te
+       * "Stok Durumu" oldu, 2026-09-16'da "Stok Seviyesi").
        *
-       * Kartın kendi durumu (Aktif/Pasif) ile stok seviyesi
-       * (Normal/Kritik) iki ayrı kavram; tek sözcüğü paylaşınca
-       * kullanıcı ayırt edemedi. Bu sütun YALNIZ stok seviyesidir;
-       * kartın aktifliği Malzeme sütununda işaretleniyor.
+       * Kartın kendi durumu (Aktif/Pasif) ile stok seviyesi iki ayrı
+       * kavram; "durum" sözcüğü ikisini karıştırıyordu. Bu sütun YALNIZ
+       * stok seviyesidir; kartın aktifliği Malzeme sütununda rozetle
+       * işaretlenir.
+       *
+       * ÜÇÜNCÜ HÂL (2026-09-16, ölçümle): sütun iki hâl tanıyordu ve
+       * kritik olmayan her satıra `Normal` yazıyordu. Canlıda ölçüldü:
+       * warehouse_stock_levels 0 satır, warehouse_stocks 0, hareket 0 —
+       * yani dokuz kartın dokuzunda `Normal` yazıyordu ve bu ölçülmemiş
+       * bir hükümdü. Seviye tanımlı değilse artık `—` yazıyor.
+       * Bilmemek iyi haber değildir.
        */
-      header: "Stok Durumu",
-      value: (row) => (criticalItemIds.has(row.id) ? "Kritik" : "Normal"),
-      render: (row) => (
-        <span
-          className={
-            criticalItemIds.has(row.id)
-              ? "inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800"
-              : "inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800"
-          }
-        >
-          {criticalItemIds.has(row.id) ? "Kritik" : "Normal"}
-        </span>
-      ),
+      header: "Stok Seviyesi",
+      value: (row) =>
+        stokSeviyesiEtiketi(
+          stokSeviyesi(seviyeTanimliIds.has(row.id), criticalItemIds.has(row.id))
+        ),
+      render: (row) => {
+        const seviye = stokSeviyesi(
+          seviyeTanimliIds.has(row.id),
+          criticalItemIds.has(row.id)
+        );
+        const bicim =
+          seviye === "kritik"
+            ? "bg-amber-100 text-amber-800"
+            : seviye === "normal"
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-slate-100 text-slate-600";
+        return (
+          <span
+            title={stokSeviyesiAciklamasi(seviye)}
+            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${bicim}`}
+          >
+            {stokSeviyesiEtiketi(seviye)}
+          </span>
+        );
+      },
     },
     {
       key: "ac",
