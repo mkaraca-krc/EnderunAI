@@ -17,9 +17,15 @@
 # küçük görünüyordu). Ölçüm düzeltildi.
 #
 # SEMA-KAYNAK/1 ilerledikçe bu sayı düşecek ve çizgi onunla inecek.
+#
+# 2026-09-15: 95 -> 92. SEBEP: yetim `audit_logs` tablosu düşürüldü
+# (göç 20260913144150). Tablonun üç indeksi modelin bilmediği nesneler
+# arasındaydı; tablo gidince onlar da gitti. Kapı bunu YAKALADI ve
+# yayını durdurdu — çıra iki yönlü: çizginin ALTINA düşmek de kırmızıdır,
+# çünkü gevşeklik kazanılan ilerlemeyi görünmez kılar.
 
 # BİRİNCİ SAYI — modelin bilmediği (canlıda var, modelde yok)
-95
+92
 
 # İKİNCİ SAYI — modelde var ama canlıda YOK
 #
