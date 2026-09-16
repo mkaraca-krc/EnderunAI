@@ -619,3 +619,45 @@ KALDIRILMADI; ilk gerçek gönderimi Mehmet Bey yapacak ve etiket o gün
 Ayrıca ayrışma kapısı gerçek bir eksik yakaladı: gece sunucuya
 eklediğim `OnFailure=enderun-kirmizi-kaydet` satırları depo
 kopyalarında yoktu. Beş birimin kopyası eşitlendi.
+
+---
+
+## ⚠ BULGU — GECENİN BÜTÜN "BELLEK YETERSİZ" DÜŞMELERİNİN SEBEBİ (2026-09-16)
+
+### Ne bulundu
+
+Tekrarlanan `dotnet test` koşuları arkada **Roslyn derleme sunucusu**
+(`VBCSCompiler`) bırakıyor ve o süreç büyüyor. Ölçüm:
+
+```
+VBCSCompiler PID 573406 : 5.500.888 kB RSS  (~5,5 GB)
+makine toplam           : 7.894 MB
+o anda kullanılabilir   : 650 MB
+```
+
+İki süreç PID ile kapatıldıktan sonra **kullanılabilir bellek
+650 MB → 6.161 MB**. Canlı arka uca (PID 507422) dokunulmadı, sağlık
+200 kaldı.
+
+### Neyi açıklıyor
+
+Gece boyunca şunlar "sistem belleği azaldığı için" öldürüldü:
+K5 rig'i (İKİ kez) · yayın bekleyicisi (üç kez) · anonim uç mutasyon
+turu. Hepsinin ortak sebebi büyük olasılıkla buydu; bu yüzden
+**2.2 sınıflandırması ÖLÇEMEDİ kaldı.**
+
+### `dotnet build-server shutdown` YETMEDİ
+
+Resmî yol çağrıldı ve *"VB/C# compiler server shut down successfully"*
+dedi — **ama iki süreç de ayakta kaldı** (bellek 597→611 MB, yani
+değişmedi). Süreçler ancak PID ile TERM edilince gitti.
+
+DERS: bir temizlik komutunun "başarılı" demesi, temizlendiğini
+göstermez. Ölçü, komutun çıktısı değil BELLEĞİN KENDİSİ.
+
+### Yapılmadı — karar bekliyor
+
+Test/yayın turlarının sonuna bir temizlik adımı koymak mantıklı
+görünüyor ama kendi başıma eklemedim: `safe-deploy` içinde süreç
+öldürmek, yanlış PID seçilirse canlıyı düşürür. Doğru tasarım
+(hangi süreç, hangi ölçütle, canlıyı nasıl korur) bir karar konusu.

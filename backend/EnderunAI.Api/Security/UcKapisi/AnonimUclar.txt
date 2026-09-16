@@ -1,0 +1,45 @@
+# ANONİM UÇ BEYAN LİSTESİ — [AllowAnonymous] TAŞIYAN HER UÇ VE GEREKÇESİ
+#
+# BİÇİM:  kategori | METOT yol | gerekçe
+#
+# ═══ NEDEN AYRI LİSTE (MuafUclar.txt ile BİRLEŞTİRİLMEDİ) ═══
+#
+# `MuafUclar.txt`in kendi başlığı birleştirmeyi gerekçesiyle reddediyor:
+# *"[AllowAnonymous] taşıyan uçlar bu listede DEĞİLDİR — anonimlik zaten
+# gürültülü bir beyandır, sessiz yokluk değil."* O liste "kimliği var,
+# yetki niteliği yok, ÇÜNKÜ..." diyen uçları taşır; bu liste "kimlik
+# HİÇ İSTENMİYOR, ÇÜNKÜ..." diyenleri. İki soru farklı; yazılı bir
+# kararı geri almak için sebep yok (Mehmet Bey onayladı, 2026-09-16).
+#
+# ═══ KURAL ═══
+#
+# `[AllowAnonymous]` taşıyan her uç BURADA olmak zorunda. Sayı bu
+# listenin üstüne çıkarsa `AnonimUcCirasiTests` KIRMIZI yanar —
+# anonim yüzey sessizce genişleyemez.
+#
+# ═══ KATEGORİLER ═══
+#
+#   jetonsuz-dogum   Jeton BURADA üretilir; jeton istemek döngü olurdu.
+#   jetonsuz-kimlik  Çağıranın jetonu YOK ama kimliği işleyicinin İÇİNDE
+#                    kanıtlanıyor (parola, imzalı bağlantı). Anonimlik
+#                    niteliktedir, işleyicide DEĞİL.
+#   oturumsuz-alici  Cevabı OTURUMU OLMAYAN bir istemci çekiyor (posta
+#                    istemcisi, işveren tarayıcısı). Jeton taşıyamaz.
+#   izleme           Yayın/izleme uçları; jetonsuz bakılır, veri taşımaz.
+#
+# ───────────────────────────────────────────────────────────────────
+
+jetonsuz-dogum  | POST /api/auth/login | Jeton bu uçta üretilir; kimlik doğrulaması için jeton istemek tanım gereği döngü olurdu. Koruma anonimlikte değil hız sınırında: nginx 20r/m + uygulama sayacı (IP 5, kullanıcı adı 10, süreli).
+
+jetonsuz-kimlik | POST /api/auth/access-requests | ANONİM DEĞİL, JETONSUZ. İşleyicinin içinde `passwordService.Verify` çalışıyor — kimlik PAROLAYLA kanıtlanıyor. Çağıranın jetonu yoktur çünkü jeton zaten reddedilmiştir (ör. mesai dışı) ve kişi istisna talep etmektedir; `[Authorize]` konsaydı uç tanım gereği erişilemez olurdu. Hız sınırına tabidir (`ip:` sayacı) ve yalnız onay bekleyen bir talep satırı yazar, hiçbir yetki vermez.
+
+oturumsuz-alici | GET /api/company-settings/logo | Bu ucun TAM URL'i `EmployerPortalLinkController.cs:355`te kuruluyor ve İŞVERENE GİDEN E-POSTA ŞABLONUNA gömülüyor; `PortalController` de kullanıyor. E-postadaki `<img>`i alıcının POSTA İSTEMCİSİ çeker — jetonu da çerezi de yoktur. Kimlik istenirse o e-postalarda ve anonim işveren portalında logo görünmez. Sızan bilgi: şirket logosu — antetli kâğıtta zaten umumi. Yanıt 1 saat önbelleklenir, logo yoksa 404.
+
+oturumsuz-alici | GET /api/portal            | İşveren portalı: erişim İMZALI BAĞLANTI JETONUYLA sağlanır, oturum jetonuyla değil. Sınıf düzeyinde `[AllowAnonymous]`; yetki, bağlantı jetonunun doğrulanmasıyla işleyicide kurulur (`PortalTokenRejected` denetim olayı bunun izidir).
+oturumsuz-alici | GET /api/portal/ilerleme   | Aynı imzalı bağlantı kapısı; işveren ilerleme özetini görür.
+oturumsuz-alici | GET /api/portal/reports    | Aynı imzalı bağlantı kapısı; rapor listesi.
+oturumsuz-alici | GET /api/portal/photos/{id}| Aynı imzalı bağlantı kapısı; fotoğraf İNDİRME ucu kapsamlanmazsa sızıntı ekrandan değil BAĞLANTIDAN olur, o yüzden jeton doğrulaması burada da geçilir.
+
+izleme | GET /api/health            | `safe-deploy` servisleri yeniden başlattıktan SONRA bu uca jetonsuz bakıyor; işaretlenmeseydi FallbackPolicy 401 döndürür ve HER YAYIN sağlık kontrolünde patlardı. Taşıdığı bilgi: durum, servis adı, UTC, commit kimliği, yapı zamanı. Commit kimliği depoda zaten umumi.
+izleme | GET /api/health/govdesiz   | Gövdesiz (204) sağlık ucu; vekil duman kontrolü için. Hiçbir veriye dokunmaz.
+izleme | GET /api/hubs/tasima-denetimi | SignalR taşıma denetimi okuması; vekilin Upgrade/Connection başlıklarını geçirdiğini doğrulamak için. Veri taşımaz.

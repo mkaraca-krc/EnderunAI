@@ -1,0 +1,15 @@
+# ANONİM UÇ ÇİZGİSİ
+#
+# `[AllowAnonymous]` / `.AllowAnonymous()` BİLDİRİM NOKTASI sayısı.
+# Uç sayısı değil BİLDİRİM sayısıdır: `PortalController` sınıf
+# düzeyinde tek bildirim taşır ama dört uç açar. İkisi ayrı sayılır
+# ve ikisi de `AnonimUclar.txt`te yazılıdır (10 satır).
+#
+# ÜSTÜNE ÇIKMAK KIRMIZI: anonim yüzey sessizce genişleyemez. Yeni bir
+# anonim uç meşruysa önce `AnonimUclar.txt`e gerekçesiyle yazılır,
+# SONRA bu sayı elle yükseltilir — yani genişleme bilinçli bir hareket
+# olur.
+#
+# ALTINA DÜŞMEK DE KIRMIZI: gevşek bir çizgi, kaldırılmış bir anonim
+# ucun geri gelmesini gizler (Kural: çizginin altı da kırmızıdır).
+bildirim: 7
