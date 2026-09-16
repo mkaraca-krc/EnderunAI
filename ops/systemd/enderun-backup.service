@@ -12,6 +12,7 @@ After=postgresql.service
 # betik 0 ile çıkıyordu. O kusur aynı gün 44fbec4d ile düzeltildi
 # (artık exit 1). Yani bugün eksik olan tek şey bu satırdı.
 OnFailure=enderun-uyari@%N.service
+OnFailure=enderun-kirmizi-kaydet@%n.service
 
 [Service]
 Type=oneshot

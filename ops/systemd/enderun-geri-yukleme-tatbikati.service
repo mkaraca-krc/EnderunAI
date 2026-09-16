@@ -5,6 +5,7 @@ Documentation=file:///var/www/enderun-ai/DURUM.md
 # DUSERSE HABER VERSIN — zaman asimi/hata kosuyu durdurur,
 # durdugunu SOYLEMEK ayri istir (AK-2).
 OnFailure=enderun-uyari@%N.service
+OnFailure=enderun-kirmizi-kaydet@%n.service
 
 [Service]
 Type=oneshot

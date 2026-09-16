@@ -79,6 +79,21 @@ gecersiz_govde() {  # zorunlu alanlar eksik -> 400 beklenir
   curl -s -o /dev/null -m 30 -w '%{http_code} %{time_total}' \
     -X POST "${URL}/api/auth/login" -H 'Content-Type: application/json' -d '{}'
 }
+bugunku_isitma() {  # KOL D: bugün ısıtmanın yaptığı çağrı — olmayan kullanıcı
+  curl -s -o /dev/null -m 60 -w '%{http_code} %{time_total}' \
+    -X POST "${URL}/api/auth/login" -H 'Content-Type: application/json' \
+    -H "X-Forwarded-For: 192.0.2.$(( (RANDOM % 250) + 2 ))" \
+    -d "{\"username\":\"isitma-yok-$RANDOM\",\"password\":\"IsitmaGecersiz!$RANDOM\"}"
+}
+var_olan_yanlis_parola() {  # KOL E: kullanıcı VAR -> passwordService.Verify ÇALIŞIR
+  # Parola BİLİNMİYOR ve bilinmesi gerekmiyor: yanlış parola da Verify
+  # adımını koşturur. Canlı parola kullanılmıyor, test veritabanındaki
+  # mevcut bir kullanıcı kullanılıyor.
+  curl -s -o /dev/null -m 60 -w '%{http_code} %{time_total}' \
+    -X POST "${URL}/api/auth/login" -H 'Content-Type: application/json' \
+    -H "X-Forwarded-For: 192.0.2.$(( (RANDOM % 250) + 2 ))" \
+    -d "{\"username\":\"${RIG_KULLANICI:-test.admin}\",\"password\":\"kesinlikle-yanlis-$RANDOM\"}"
+}
 gercek_giris() {    # biçimi doğru, kullanıcı yok -> 401 beklenir
   curl -s -o /dev/null -m 60 -w '%{http_code} %{time_total}' \
     -X POST "${URL}/api/auth/login" -H 'Content-Type: application/json' \
@@ -92,51 +107,69 @@ denetim_say() {
     | grep -E '^[0-9]+$' | head -1
 }
 
-echo "════ KOL A — KONTROL: ön çağrı YOK ════"
-ac
-a_giris="$(gercek_giris)"
-log "A ilk giriş      -> ${a_giris}"
-kapat
+TEKRAR="${ISINMA_TEKRAR:-3}"
 
-echo "════ KOL B — ADAY: önce geçersiz gövde ════"
-ac
-once="$(denetim_say)"
-b_gecersiz="$(gecersiz_govde)"
-log "B geçersiz gövde -> ${b_gecersiz}   (400 beklenir)"
-sonra="$(denetim_say)"
-log "B denetim satırı : önce=${once:-?} sonra=${sonra:-?}   (DEĞİŞMEMELİ)"
-b_giris="$(gercek_giris)"
-log "B ilk giriş      -> ${b_giris}"
-kapat
+# ÜÇER KEZ, EN İYİ VE ORTANCA (2026-09-16).
+#
+# Tek atış %70 sapma verdi (A: 0,2718 ve 0,4575). Tek koşuyla hüküm
+# kurulamaz. Her kol TEKRAR kez soğuk başlatılıyor; hem EN İYİ hem
+# ORTANCA yazılıyor — en iyi "en uygun koşulda ne oluyor", ortanca
+# "tipik olarak ne oluyor" sorusunu yanıtlar. İkisi birden yazılmazsa
+# okuyan hangisini gördüğünü bilemez.
+kol_kos() {  # $1 ad, $2 ön-çağrı fonksiyonu ("-" ise yok)
+    local ad="$1" on="$2" i sure liste=""
+    echo "════ KOL ${ad} ════"
+    for i in $(seq 1 "$TEKRAR"); do
+        ac
+        if [ "$on" != "-" ]; then
+            local o; o="$($on)"
+            log "  ${ad}.${i} ön-çağrı   -> ${o}"
+        fi
+        sure="$(gercek_giris)"
+        log "  ${ad}.${i} ilk giriş  -> ${sure}"
+        liste="${liste} ${sure##* }"
+        kapat
+    done
+    printf '%s|%s\n' "$ad" "$(echo $liste)" >> "$SONUC"
+}
 
-a_sn="${a_giris##* }"; b_sn="${b_giris##* }"
-echo "════ SONUÇ ════"
-log "A (ön çağrı yok)      ilk giriş: ${a_sn}s"
-log "B (geçersiz gövde ön) ilk giriş: ${b_sn}s"
-awk -v a="$a_sn" -v b="$b_sn" 'BEGIN{
-  printf "[isinma-adayi] fark: %.4fs  (A-B)\n", a-b;
+SONUC="$(mktemp)"; trap 'rm -f "$SONUC"' EXIT
+
+kol_kos "A (ön çağrı YOK)"              -
+kol_kos "B (geçersiz gövde 400)"        gecersiz_govde
+kol_kos "D (bugünkü ısıtma çağrısı)"    bugunku_isitma
+kol_kos "E (var olan kullanıcı, yanlış parola)" var_olan_yanlis_parola
+
+echo "════ SONUÇ — ${TEKRAR} koşu/kol ════"
+awk -F'|' '{
+  n=split($2, v, " ");
+  for (i=1;i<=n;i++) for (j=i+1;j<=n;j++) if (v[j]+0 < v[i]+0) { t=v[i]; v[i]=v[j]; v[j]=t }
+  eniyi=v[1]+0; ortanca=v[int((n+1)/2)]+0;
+  printf "[isinma-adayi] %-46s en iyi %.4fs  ortanca %.4fs   (%s)\n", $1, eniyi, ortanca, $2;
+}' "$SONUC"
+
+a_sn="$(awk -F'|' '/^A /{n=split($2,v," "); for(i=1;i<=n;i++) for(j=i+1;j<=n;j++) if(v[j]+0<v[i]+0){t=v[i];v[i]=v[j];v[j]=t} print v[int((n+1)/2)]+0}' "$SONUC")"
+b_sn="$(awk -F'|' '/^B /{n=split($2,v," "); for(i=1;i<=n;i++) for(j=i+1;j<=n;j++) if(v[j]+0<v[i]+0){t=v[i];v[i]=v[j];v[j]=t} print v[int((n+1)/2)]+0}' "$SONUC")"
+d_sn="$(awk -F'|' '/^D /{n=split($2,v," "); for(i=1;i<=n;i++) for(j=i+1;j<=n;j++) if(v[j]+0<v[i]+0){t=v[i];v[i]=v[j];v[j]=t} print v[int((n+1)/2)]+0}' "$SONUC")"
+e_sn="$(awk -F'|' '/^E /{n=split($2,v," "); for(i=1;i<=n;i++) for(j=i+1;j<=n;j++) if(v[j]+0<v[i]+0){t=v[i];v[i]=v[j];v[j]=t} print v[int((n+1)/2)]+0}' "$SONUC")"
+echo
+log "ortancalar:  A=${a_sn}  B=${b_sn}  D=${d_sn}  E=${e_sn}"
+
+awk -v a="$a_sn" -v b="$b_sn" -v d="$d_sn" -v e="$e_sn" 'BEGIN{
   #
-  # HÜKÜM DAR TUTULUYOR — ÖLÇÜM GÜRÜLTÜLÜ (2026-09-16, ölçüldü).
+  # HUKUM DAR TUTULUYOR — OLCUM GURULTULU (2026-09-16, olculdu).
+  # Tek atis %70 sapma verdi; bu yuzden her kol 3 kez kosuluyor ve
+  # ORTANCA karsilastiriliyor. "KISMEN dustu" diyen dal gurultu
+  # okuyordu, kaldirildi.
   #
-  # Aynı A kolu iki koşuda 0,2718 ve 0,4575 sn verdi: %70 sapma. Makine
-  # paylaşımlı ve yüklü; tek atışlık süreler 0,27 ile 0,33 arasını
-  # AYIRT EDEMEZ. Ilk yazimda buraya "KISMEN düştü" diyen bir dal
-  # koymuştum — o dal GÜRÜLTÜ OKUYORDU ve kaldırıldı.
-  #
-  # Geriye yalnız gürültüden ETKİLENMEYEN soru kaldı: hedef 0,05 hedefine
-  # ulaşıldı mı? B en iyi hâlinde 0,29 çıktı — on kat uzak. Bu hüküm
-  # sapmaya rağmen ayakta.
-  #
-  # "Ne kadar yardım etti" sorusunu cevaplamak için TEKRAR gerekir:
-  # her kolu en az 3 kez soğuk başlatıp ortancayı almadan o cümle
-  # kurulmaz.
-  if (b+0 <= 0.05) {
-    print "[isinma-adayi] ADAY İŞE YARIYOR: B <= 0,05s.";
-  } else if (b+0 >= 0.20) {
-    print "[isinma-adayi] ADAY YETMİYOR: B >= 0,20s — hedefin (0,05) kat kat üstünde.";
-    print "[isinma-adayi] Bu hüküm ölçüm sapmasından ETKİLENMEZ.";
-  } else {
-    print "[isinma-adayi] ÖLÇEMEDİ: B ara bölgede (0,05-0,20). Tek atış bunu ayırt edemez;";
-    print "[isinma-adayi] her kolu en az 3 kez soğuk başlatıp ortancayı alın.";
-  }
+  print "";
+  if (d+0 > 0 && d+0 < a+0 * 0.5)
+    print "[isinma-adayi] D << A: BUGUNKU ISITMA CAGRISI ISE YARIYOR.";
+  else
+    print "[isinma-adayi] D ~ A: BUGUNKU ISITMA CAGRISI DA ISITMIYOR -> secenek 1 olcumle hakli.";
+  if (e+0 > 0 && e+0 < a+0 * 0.5)
+    print "[isinma-adayi] E << A: MALIYETIN YERI PAROLA OZET DOGRULAMASI (hipotez DOGRULANDI).";
+  else
+    print "[isinma-adayi] E ~ A: parola ozeti degil (hipotez CURUDU).";
+  printf "[isinma-adayi] hedef 0,05 -> A=%.4f B=%.4f D=%.4f E=%.4f\n", a, b, d, e;
 }'

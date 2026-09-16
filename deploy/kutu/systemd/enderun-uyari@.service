@@ -4,6 +4,27 @@ Description=Enderun nobet uyarisi - dusen birim: %i
 # Kendisi OnFailure TASIMAZ - uyari birimi duserse baska bir uyari
 # tetiklemez; sonsuz dongu olurdu.
 
+
+#
+# ═══ E-POSTA AYAĞI KANAL DEĞİLDİR (2026-09-16, ölçüldü) ═══
+#
+# /var/log/enderun-uyari.log taraması: gönderim satırı 0, kuru koşu
+# satırı 3. Yani bu birim BİR KEZ BİLE e-posta TESLİM ETMEDİ.
+#
+# Mehmet Bey'in kuralı: bir kez bile teslim etmemiş bir kanal, hiç
+# yanmamış bir kapıyla aynı sınıftadır. Bu yüzden e-posta ayağı "yedek
+# kanal" diye SAYILMAZ ve ona güvenilerek başka bir uyarı yolu
+# zayıflatılmaz.
+#
+# TEK GÜVENİLİR YOL: okunmamış kırmızılar defteri
+# (/var/lib/enderun-ai/okunmamis-kirmizilar.txt) + yayın uçuş öncesi
+# kapısı (deploy/scripts/okunmamis-kirmizi-kapisi.sh). O kapı yayını
+# DURDURUR; bir kırmızı en geç bir sonraki yayında görülür.
+#
+# E-POSTA AYAĞI KALDIRILMADI: ilk gerçek gönderimi Mehmet Bey yapacak.
+# Gönderim gerçekleştiği gün bu etiket ÖLÇÜMLE güncellenir — o güne
+# kadar "kanal değil" etiketi KALICIDIR.
+#
 [Service]
 Type=oneshot
 TimeoutStartSec=60

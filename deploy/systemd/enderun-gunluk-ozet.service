@@ -1,6 +1,7 @@
 [Unit]
 Description=EnderunAI IP'siz gunluk erisim ozeti (suresiz arsiv)
 Documentation=file:///var/www/enderun-ai/deploy/scripts/gunluk-ozet.sh
+OnFailure=enderun-kirmizi-kaydet@%n.service
 
 [Service]
 Type=oneshot

@@ -1,6 +1,7 @@
 [Unit]
 Description=EnderunAI sorgu dizgesi cirasi (yeni parametre adi raporu)
 Documentation=file:///var/www/enderun-ai/deploy/scripts/sorgu-dizgesi-cirasi.sh
+OnFailure=enderun-kirmizi-kaydet@%n.service
 
 [Service]
 Type=oneshot

@@ -554,3 +554,68 @@ veritabanında (günlükle ölçüldü). Bir sonraki adım ③'ü tasarlamak
 değil, **kalan bedelin nerede olduğunu ölçmek** olmalı.
 
 **Canlıda hiçbir değişiklik yapılmadı; giriş çağrısı ısıtmada duruyor.**
+
+### KOL D ve E — dört kol, üçer koşu (2026-09-16)
+
+| kol | ortanca | en iyi | üç koşu |
+|---|---|---|---|
+| A (ön çağrı yok) | **0,4335** | 0,4196 | 0,4196 · 0,4335 · 0,4636 |
+| B (geçersiz gövde 400) | **0,3454** | 0,3380 | 0,3454 · 0,3607 · 0,3380 |
+| **D (bugünkü ısıtma çağrısı)** | **0,0449** | 0,0382 | 0,0582 · 0,0382 · 0,0450 |
+| **E (var olan kullanıcı, yanlış parola)** | **0,0402** | 0,0392 | 0,0392 · 0,0402 · 0,0445 |
+
+#### SEÇENEK ① ÖLÇÜMDE DÜŞTÜ
+
+D (0,045) ≈ A'nın onda biri. **Bugünkü ısıtma çağrısı işe yarıyor.**
+Çıkarmak ilk kullanıcıya **~0,39 sn** kaybettirir; "kaybedilen bir şey
+olmaz" varsayımı yanlıştı. Çağrı yerinde duruyor.
+
+#### HİPOTEZ (parola özeti) ÇÜRÜDÜ
+
+E ≈ D. Oysa D `passwordService.Verify`ı **hiç çalıştırmaz** (kullanıcı
+yok → kısa devre). Verify çalışmadan da aynı ısınma elde ediliyor;
+maliyetin yeri parola özeti DEĞİL.
+
+#### ÇÜRÜRKEN ÖLÇTÜRDÜĞÜ ŞEY — Verify'ın kendi bedeli
+
+Ön-çağrıların KENDİ süreleri:
+
+```
+D ön-çağrı (Verify YOK) : 0,458 s
+E ön-çağrı (Verify VAR) : 0,784 · 0,887 · 0,781 s
+```
+
+Aradaki **~0,32 sn** Verify'ın bedeli. Özet kasıtlı yavaştır; yani
+**gerçek bir kullanıcının başarılı girişi, ısıtmadan bağımsız olarak
+bu bedeli ödeyecek.** Bu ölçüm, o 0,32'nin ne kadarının tek seferlik
+JIT ne kadarının kalıcı özet maliyeti olduğunu AYIRMIYOR — ayrı ölçüm
+konusu, tahmin yazılmadı.
+
+#### MALİYETİN YERİ DARALDI
+
+B işleyiciye girmiyor (model doğrulamasında duruyor) → 0,345.
+D işleyiciye giriyor → 0,045.
+Fark işleyici GÖVDESİNDE: EF sorgu boru hattı + `SaveChanges`/izleyici
+zinciri. Ham SQL değil (rig günlüğü: 1-6 ms).
+
+**③ TASARLANMADI.** Yazma yapmayan bir aday yalnız SELECT'i ısıtırsa
+`SaveChanges` zinciri soğuk kalabilir; D ve E'nin ikisi de satır
+yazıyor. Bir sonraki ölçüm bunu ayırmalı.
+
+**Canlıda hiçbir değişiklik yapılmadı.**
+
+---
+
+## E-POSTA UYARISI — "KANAL DEĞİL" ETİKETİ YAZILDI
+
+ÖLÇÜM: `/var/log/enderun-uyari.log` içinde gönderim satırı **0**, kuru
+koşu satırı **3**. Birim bir kez bile e-posta teslim etmemiş.
+
+Etiket `enderun-uyari@.service`in içine yazıldı (hem canlı hem depo
+kopyası; kutu ayrışma kapısı 24 dosyada ayrışma yok diyor). Ayak
+KALDIRILMADI; ilk gerçek gönderimi Mehmet Bey yapacak ve etiket o gün
+ölçümle güncellenecek.
+
+Ayrıca ayrışma kapısı gerçek bir eksik yakaladı: gece sunucuya
+eklediğim `OnFailure=enderun-kirmizi-kaydet` satırları depo
+kopyalarında yoktu. Beş birimin kopyası eşitlendi.

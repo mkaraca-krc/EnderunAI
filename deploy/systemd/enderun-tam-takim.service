@@ -1,6 +1,7 @@
 [Unit]
 Description=EnderunAI gece tam test takimi (yayin sabahi degil, bir gece once)
 Documentation=file:///var/www/enderun-ai/scripts/gece-tam-takim.sh
+OnFailure=enderun-kirmizi-kaydet@%n.service
 
 [Service]
 Type=oneshot
