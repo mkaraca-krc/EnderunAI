@@ -255,8 +255,12 @@ reddetmiş. **2xx yok, çalışan hiçbir şey yok, sızan hiçbir şey yok.**
 
 ### ASIL KUSUR: KIRMIZININ GİDECEĞİ YER YOK
 
-`/etc/systemd/system/enderun-sorgu-cirasi.service` içinde **`OnFailure=`
-YOK**, hiçbir bildirim yolu yok. Çıra doğru çalıştı, doğru yandı ve
+**DÜZELTME (2026-09-16, Kural 94):** ilk yazdığım "hiçbir bildirim
+yolu yok" cümlesi YANLIŞTI. Yol VARDI — `enderun-uyari@` şablonu,
+dosya + e-posta kanallı — ve `enderun-backup` ile
+`enderun-geri-yukleme-tatbikati` ona BAĞLIYDI. Kırmızı yanan birim
+(`enderun-sorgu-cirasi`) **bağlı değildi.** Doğru cümle: kanal
+kurmak yetmez, kanala bağlanmayan kapı kanalı olmayanla aynıdır. Çıra doğru çalıştı, doğru yandı ve
 **kimseye ulaşmadı**. Kural 89'un kardeşi: *kırmızısı kimseye ulaşmayan
 bir kapı, kapı değildir.*
 
@@ -445,3 +449,58 @@ sınandı (Kural 84: sonda ölçtüğü ayrımı korumak zorundadır).
 kırmızı yakmıyor. "Çizginin ALTINDA olmak da kırmızıdır" kuralına
 aykırı. Bu boşluk benim eklediğim testlerden gelmiyor (önceden vardı);
 çizgi sıkmak bilinçli bir karar olduğu için DOKUNMADIM.
+
+---
+
+## 1) KIRMIZININ GİDECEĞİ YER · **KURULDU, KIRMIZI-YEŞİL KANITLI**
+
+**TEŞHİSİM DÜZELTİLDİ (Kural 94).** "Hiçbir bildirim yolu yok" dedim;
+ölçüm çürüttü. Yol VARDI — `enderun-uyari@` şablonu (dosya + e-posta,
+susturma mantığıyla) — ve `enderun-backup` ile
+`enderun-geri-yukleme-tatbikati` ona BAĞLIYDI. Kırmızı yanan birim
+bağlı değildi. **Kanal kurmak yetmez; kanala bağlanmayan kapı, kanalı
+olmayanla aynıdır.**
+
+Kurulan (yeni teslim kanalı DEĞİL — okunan yerlere bağlandı):
+
+| parça | dosya |
+|---|---|
+| kaydedici | `deploy/scripts/kirmizi-kaydet.sh` |
+| şablon birim | `deploy/systemd/enderun-kirmizi-kaydet@.service` |
+| kapı | `deploy/scripts/okunmamis-kirmizi-kapisi.sh` |
+| okundu işaretle | `deploy/scripts/kirmizi-okundu.sh` |
+| defter | `/var/lib/enderun-ai/okunmamis-kirmizilar.txt` |
+| arşiv | `/var/lib/enderun-ai/okunan-kirmizilar.txt` |
+
+**Beş birimin beşi de bağlandı** (sorgu-cirasi · tam-takim · gunluk-ozet
+· backup · geri-yukleme-tatbikati). Mevcut `enderun-uyari@`ye
+DOKUNULMADI; ikisi farklı iş (haber vermek / yayını durdurmak).
+
+### Kırmızı-yeşil — uçtan uca, gerçek yoldan
+
+```
+1. defter boş           → kapı GEÇTİ (çıkış 0)
+2. sahte kırmızı        → systemd OnFailure ile deftere DÜŞTÜ
+3. kapı                 → KIRMIZI (çıkış 1)
+4. ucuz kapılar         → "DÜŞTÜ: okunmamış kırmızı", pahalı turlara GİRİLMEDİ
+5. kirmizi-okundu.sh    → satır ARŞİVE taşındı (silinmedi), not ve zamanla
+6. kapı                 → GEÇTİ (çıkış 0)
+7. ucuz kapılar         → ✓ okunmamış kırmızı
+```
+
+Beyaz listeye hiçbir şey eklenmedi; 15 Eylül'ün kırmızısı doğru bir
+kırmızıydı (7 istek, hepsi 401, sızan yok).
+
+---
+
+## 4) TEST SAYISI ÇIRASI · **ÇİZGİ GERÇEĞE ÇEKİLDİ**
+
+```
+önce : arka uç çizgi 3009 · gerçek 3127 · gevşeklik 118
+       ön yüz  çizgi  492 · gerçek  559 · gevşeklik  67
+sonra: gevşeklik 0 · 0   (dinamik de: 25/25, 16/16)
+```
+
+Gerekçe çizgi dosyalarının içine yazıldı: gevşek bir çizgi ilerlemeyi
+de gerilemeyi de gizler, çıra süse döner. Boşluk gece eklenen
+testlerden gelmiyordu; birikmiş borçtu.

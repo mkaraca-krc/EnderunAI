@@ -158,5 +158,13 @@
 #   2) input[type=file] erisilebilirlik agacinda da "button"
 #      rolunde; ataç dugmesiyle ayni etiketi tasiyinca iki eleman
 #      ayni adla gorunuyordu.
-statik: 492
-dinamik: 15
+statik: 559
+dinamik: 16
+
+# ÇİZGİ GERÇEĞE ÇEKİLDİ (2026-09-16).
+# Önceki çizgi 492 idi ve gerçek 559'ti —
+# 67 testlik GEVŞEKLİK vardı. Çıra bunu yalnız BİLGİ olarak
+# basıyordu; oysa çizginin ALTINA düşmek de kırmızıdır — gevşek bir
+# çizgi, ilerlemeyi de gerilemeyi de gizler ve çıra süse döner.
+# Bu boşluk 2026-09-16 gecesinde eklenen testlerden GELMİYOR;
+# birikmiş bir borçtu ve o gece kapatıldı.

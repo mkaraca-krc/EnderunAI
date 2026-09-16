@@ -128,6 +128,17 @@ KAPILAR=(
   # `build_frontend`e koyduğum atomik takas bunu KAPSAMIYORDU;
   # düzeltmenin eksik olduğunu canlı ölçüm gösterdi.
   "agir|ön yüz derlemesi|${FE}|NEXT_DIST_DIR=.next-kapi npm run build"
+  # OKUNMAMIŞ KIRMIZI KAPISI (2026-09-16).
+  #
+  # ÖLÇÜLEN OLAY: `enderun-sorgu-cirasi` 15 Eylül 00:20'de kırmızı yandı
+  # ve 15 SAAT kimse görmedi. Bildirim yolu vardı (`enderun-uyari@`) ama
+  # o birim ONA BAĞLI DEĞİLDİ. Kanal kurmak yetmiyor; kanala bağlanmayan
+  # kapı, kanalı olmayan kapıyla aynı.
+  #
+  # Bu kapı üst sınırı koyar: okunmamış kırmızı varsa YAYIN DURUR, yani
+  # bir kırmızı en geç BİR SONRAKİ YAYINDA görülür. Ucuz kümede, pahalı
+  # turlardan önce.
+  "hizli|okunmamış kırmızı|${REPO_ROOT}|deploy/scripts/okunmamis-kirmizi-kapisi.sh"
   "hizli|sır tarayıcı (aralık)|${REPO_ROOT}|deploy/scripts/sir-tara.py ${SIR_ARALIK_UZAK:-} ${SIR_ARALIK_YEREL:-}"
   "hizli|kutu ayrışması|${REPO_ROOT}|deploy/kutu/ayrisma-kontrolu.sh"
   # Kapsam kapısının KANITI kapıyla birlikte yaşar: sonda geçici bir

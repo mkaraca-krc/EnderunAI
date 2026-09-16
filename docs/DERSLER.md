@@ -318,6 +318,48 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 98 — SIRADAKİ BİR İŞE BAŞLAMADAN ÖNCE, HÂLÂ AÇIK OLDUĞUNU
+  ÖLÇ.** Kapalı bir işi yeniden yapmak zaman kaybıdır; kapalı bir işi
+  "yaptım" diye yazmak ise **kaydı bozar**.
+
+  Mehmet Bey'in kuralı (2026-09-16). Doğuşu: bir gece listesindeki
+  **dört madde** ölçünce zaten kapalı çıktı — S1'in iki alt maddesi,
+  rig zemininin üç şartı birden, ve "sırada" denen pasif kart kuralı
+  (çoktan canlıda koşuyordu). Liste daha eski bir durumdan yazılmıştı.
+
+  İKİNCİ CÜMLE BİRİNCİDEN AĞIR: zaman kaybı ucuzdur. Kapalı bir işi
+  "yapıldı" diye yazmak, defterin o günkü resmini bozar ve sonraki her
+  karar o bozuk resimden verilir.
+
+  UYGULAMA: bir maddeye başlarken ilk adım ölçümdür, iş değil. Rapor
+  üç kova ister: **gerçekten yapılan · zaten kapalıymış · ölçülemedi.**
+
+- **KURAL 97 — KİMSEYE ULAŞMAYAN BİR KIRMIZI, YANMAMIŞ KIRMIZIYLA AYNI
+  SINIFTIR.** Her kapının İKİ sorusu vardır: **ısırıyor mu**, ve
+  **ısırdığında kim görüyor?**
+
+  Mehmet Bey'in kuralı (2026-09-16). Doğuşu: `enderun-sorgu-cirasi`
+  15 Eylül 00:20'de kırmızı yandı — doğru yandı, doğru şeyi söyledi —
+  ve **15 saat kimse görmedi**. Tesadüfen bir birim taramasında
+  bulundu.
+
+  ÖNEMLİ DÜZELTME (Kural 94): ilk teşhisim "bildirim yolu yok" idi;
+  ÖLÇÜM BUNU ÇÜRÜTTÜ. Yol VARDI (`enderun-uyari@` şablonu, dosya +
+  e-posta kanallı) ve iki birim ona bağlıydı. Kırmızı yanan birim
+  **ona bağlı değildi.** Doğru cümle şudur: *kanal kurmak yetmez;
+  kanala bağlanmayan bir kapı, kanalı olmayan kapıyla aynıdır.*
+
+  UYGULAMA — kırmızı OKUNAN bir yere bağlanır, yeni bir kanal
+  kurulmaz (yeni kanal yeni sır ister ve bir gün sessizce düşer):
+    1. Düşen her zamanlayıcı birimi `OnFailure=` ile tek bir
+       **okunmamış kırmızılar** defterine yazar.
+    2. Sabah raporu o defteri okur ve EN BAŞA basar.
+    3. Yayın uçuş öncesinde bir kapı: okunmamış kırmızı varsa
+       **YAYIN DURUR**. Üst sınır budur — bir kırmızı en geç bir
+       sonraki yayında görülür.
+    4. "Okundu" SİLMEK DEĞİLDİR: satır arşive, okuma zamanı ve notla
+       taşınır.
+
 - **KURAL 96 — DENETİM KAYDINA İSTİSNA ÖĞRETMEK YALNIZ BÜTÜNLÜĞÜ
   AZALTMAZ; İSTİSNANIN ANAHTARI SALDIRGANIN ELİNE GEÇER.**
 

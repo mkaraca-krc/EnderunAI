@@ -1,0 +1,15 @@
+# OKUNMAMIŞ KIRMIZI KAYDEDİCİ (şablon birim)
+#
+# Her zamanlayıcı biriminde `OnFailure=enderun-kirmizi-kaydet@%n.service`
+# satırı var. Bir birim sıfır olmayan çıkışla biterse systemd BUNU
+# çağırır ve kırmızı deftere düşer.
+#
+# NEDEN ŞABLON: tek bir kaydedici, birimin adını `%i` ile alıyor. Her
+# birim için ayrı bir kaydedici birim yazmak, altı kopya ve zamanla
+# altı davranış demekti.
+[Unit]
+Description=EnderunAI okunmamış kırmızı kaydedici (%i)
+
+[Service]
+Type=oneshot
+ExecStart=/var/www/enderun-ai/deploy/scripts/kirmizi-kaydet.sh %i
