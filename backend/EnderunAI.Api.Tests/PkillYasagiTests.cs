@@ -67,6 +67,37 @@ public sealed class PkillYasagiTests
             .ToList();
     }
 
+    /// <summary>
+    /// GEREKÇELİ İSTİSNA — TEK BİR DOSYA.
+    ///
+    /// Aracın KENDİSİ `pgrep -f` kullanmak zorunda: eşleşenleri bulup
+    /// hemen ardından KENDİNİ ve ATASINI dışlıyor. Yasağın amacı o
+    /// dışlamayı zorunlu kılmaktı; aracı yasaklamak yasağın kendisini
+    /// uygulanamaz yapardı.
+    /// </summary>
+    private static readonly Dictionary<string, string> GerekceliIstisnalar = new()
+    {
+        ["pkill-kancasi.sh"] =
+            "Kapının KENDİSİ. Yasağı uygulayabilmek için yasaklanan kalıbı "
+            + "hem desende hem reddetme metninde ADIYLA taşımak zorunda. "
+            + "Bu, gece üçüncü kez çıkan aynı aile: YASAĞI ANLATAN DOSYA, "
+            + "YASAĞIN İHLALİ SANILIYOR (AnonimUcCirasi ve fiş tipi sondası "
+            + "da aynı ayrımı yapmak zorunda kaldı).",
+
+        ["surec-durdur.sh"] =
+            "Aracın kendisi. `pgrep -f` çağırıp hemen ardından $KENDI ve $ATA "
+            + "pid'lerini dışlıyor — yasağın var olma sebebi tam bu dışlamadır.",
+    };
+
+    /// <summary>İDDİA: ölü istisna bırakılmıyor.</summary>
+    [Fact]
+    public void OluIstisnaBirakilmaz()
+    {
+        var adlar = BetikDosyalari().Select(Path.GetFileName).ToHashSet();
+        foreach (var ad in GerekceliIstisnalar.Keys)
+            Assert.True(adlar.Contains(ad), $"İstisna artık geçersiz (betik yok): {ad}");
+    }
+
     /// <summary>Yorumlar atılıyor — kapı kendi gerekçesini ihlal saymasın.</summary>
     private static string YorumsuzGovde(string metin) =>
         string.Join("\n", metin.Split('\n')
@@ -80,10 +111,13 @@ public sealed class PkillYasagiTests
 
         foreach (var yol in BetikDosyalari())
         {
+            var ad = Path.GetFileName(yol);
+            if (GerekceliIstisnalar.ContainsKey(ad)) continue;
+
             var govde = YorumsuzGovde(File.ReadAllText(yol));
 
             if (Regex.IsMatch(govde, @"\b(pkill|pgrep)\s+(-\w+\s+)*-\w*f"))
-                ihlaller.Add(Path.GetFileName(yol));
+                ihlaller.Add(ad);
         }
 
         Assert.True(
@@ -112,8 +146,14 @@ public sealed class PkillYasagiTests
         Assert.Matches(@"\b(pkill|pgrep)\s+(-\w+\s+)*-\w*f",
             YorumsuzGovde("pkill -9 -f something"));
 
-        // `pgrep -f` MEŞRU: okuma, öldürme değil.
-        Assert.DoesNotMatch(@"\b(pkill|pgrep)\s+(-\w+\s+)*-\w*f",
+        // `pgrep -f` ARTIK YASAK — ESKİ İNANÇ ÖLÇÜMLE ÇÜRÜDÜ (2026-09-16).
+        //
+        // Burada "pgrep -f MEŞRU: okuma, öldürme değil" yazıyordu. O cümle
+        // yanlıştı: `pgrep -f <desen>` çağıran kabuğun KENDİ komut satırını
+        // da eşleştirir ve bulunan pid öldürülünce kabuk ölür. 16 Eylül'de
+        // tam bunu yaptım (çıkış 144). Okuma da masum değil: `pgrep -fc`
+        // kendi boru hattını SAYAR ("kalan: 4" yazdım, gerçek 0'dı).
+        Assert.Matches(@"\b(pkill|pgrep)\s+(-\w+\s+)*-\w*f",
             YorumsuzGovde("pgrep -f \"next start\""));
 
         // Yorumdaki bahis ihlal sayılmıyor.
