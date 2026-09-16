@@ -1,0 +1,12 @@
+# 05:45 UTC = 08:45 TRT — Mehmet Bey 09:00'da masada.
+# Diğer birimler de UTC ile yazılı; biçim korundu ki iki ayrı zaman
+# kavramı aynı dosyada karışmasın.
+[Unit]
+Description=EnderunAI sabah raporu zamanlayicisi (08:45 TRT)
+
+[Timer]
+OnCalendar=*-*-* 05:45:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

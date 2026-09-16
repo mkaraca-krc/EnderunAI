@@ -1,0 +1,16 @@
+# SABAH RAPORU — HATIRLAMAYA BAĞLI DEĞİL.
+#
+# 16 Eylül raporu 09:00'da hazır olmadı, 13:09'da yazıldı. Kusur
+# disiplinde değil yapıdaydı (Mehmet Bey).
+#
+# OnFailure ZORUNLU: rapor ÜRETİLEMEZSE bu da bir kırmızıdır ve
+# okunmamış kırmızılar defterine düşer. "Rapor yok" ile "rapor temiz"
+# birbirine karışmasın diye; sessiz bir eksiklik, temiz bir sonuç gibi
+# görünür.
+[Unit]
+Description=EnderunAI sabah raporu (okunmamış kırmızı ilk satırda)
+OnFailure=enderun-kirmizi-kaydet@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/var/www/enderun-ai/deploy/scripts/sabah-raporu.sh
