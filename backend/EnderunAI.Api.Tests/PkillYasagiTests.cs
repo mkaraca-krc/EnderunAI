@@ -4,7 +4,7 @@ using Xunit;
 namespace EnderunAI.Api.Tests;
 
 /// <summary>
-/// `pkill -f` YASAK — TEKRARLAYAN İNSAN HATASI ARAÇLA ÇÖZÜLÜR (Y2).
+/// `pkill -f` ve `pgrep -f` YASAK — TEKRARLAYAN İNSAN HATASI ARAÇLA ÇÖZÜLÜR (Y2).
 ///
 /// ═══ ÖLÇÜLEN OLAY ═══
 ///
@@ -21,6 +21,20 @@ namespace EnderunAI.Api.Tests;
 /// ve atasını asla öldürmüyor.
 ///
 /// ═══ MUAFİYET YOK — VE BU BİLEREK ═══
+///
+/// ═══ `pgrep -f` DE EKLENDİ (2026-09-16) ═══
+///
+/// Kapsam `pkill`le sınırlıydı ve boşluk canlıda ısırdı: kancanın KENDİ
+/// tavsiye metni *"pgrep ile pid'i bulup kill kullanın"* diyordu. O yol
+/// aynı tuzağı taşıyor — `pgrep -f &lt;desen&gt;` çağıran kabuğun kendi komut
+/// satırını da eşleştirir; bulunan pid öldürülünce kabuk ölür. 16 Eylül
+/// 2026'da tam bunu yaptım (çıkış 144), üstelik kural depoda YAZILIYKEN.
+/// Bilinen bir tuzağa düşmek, kuralın yetmediğinin kanıtıdır — bu yüzden
+/// kural araca taşındı.
+///
+/// İkinci hâli SAYMADIR: `pgrep -fc` ve `ps | grep -c` kendi boru
+/// hattını da sayar. Aynı gün "kalan: 4" yazdım, gerçek sıfırdı.
+/// Güvenli yol: `surec-durdur.sh --listele --desen &lt;metin&gt;`.
 ///
 /// Meşru bir `pkill -f` kullanımı düşünemiyorum; çıkarsa muafiyet
 /// listesi değil, aracın eksiği tartışılmalı.
@@ -68,7 +82,7 @@ public sealed class PkillYasagiTests
         {
             var govde = YorumsuzGovde(File.ReadAllText(yol));
 
-            if (Regex.IsMatch(govde, @"\bpkill\s+(-\w+\s+)*-\w*f"))
+            if (Regex.IsMatch(govde, @"\b(pkill|pgrep)\s+(-\w+\s+)*-\w*f"))
                 ihlaller.Add(Path.GetFileName(yol));
         }
 
@@ -93,17 +107,17 @@ public sealed class PkillYasagiTests
             BetikDosyalari().Count > 10,
             $"Taranan betik sayısı beklenenden az ({BetikDosyalari().Count}).");
 
-        Assert.Matches(@"\bpkill\s+(-\w+\s+)*-\w*f",
+        Assert.Matches(@"\b(pkill|pgrep)\s+(-\w+\s+)*-\w*f",
             YorumsuzGovde("pkill -f \"next start\""));
-        Assert.Matches(@"\bpkill\s+(-\w+\s+)*-\w*f",
+        Assert.Matches(@"\b(pkill|pgrep)\s+(-\w+\s+)*-\w*f",
             YorumsuzGovde("pkill -9 -f something"));
 
         // `pgrep -f` MEŞRU: okuma, öldürme değil.
-        Assert.DoesNotMatch(@"\bpkill\s+(-\w+\s+)*-\w*f",
+        Assert.DoesNotMatch(@"\b(pkill|pgrep)\s+(-\w+\s+)*-\w*f",
             YorumsuzGovde("pgrep -f \"next start\""));
 
         // Yorumdaki bahis ihlal sayılmıyor.
-        Assert.DoesNotMatch(@"\bpkill\s+(-\w+\s+)*-\w*f",
+        Assert.DoesNotMatch(@"\b(pkill|pgrep)\s+(-\w+\s+)*-\w*f",
             YorumsuzGovde("# pkill -f kullanmayin"));
     }
 

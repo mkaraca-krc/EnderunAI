@@ -744,3 +744,84 @@ Tek simgelik düzeltme belli (`1fr` → `minmax(0, 1fr)`, ya da 1092'deki
 kopyanın kaldırılması) ama **uygulamadım**: görev sınıflandırmaydı, ve
 iki kopyadan HANGİSİNİN kalacağı (2 sütun mu 4 sütun mu) bir tasarım
 kararı — ölçüm o soruyu cevaplamıyor.
+
+---
+
+## KARAR ① — QUICK-GRID: 4 SÜTUNLU KOPYA SİLİNDİ
+
+Mehmet Bey'in gerekçesi: ızgara 320 px'lik dar `aside` içinde; dört
+sütun demek sütun başına ~80 px demek ve bağlantı metni sığmıyor —
+taşmanın sebebi bu. İki sütun ~150 px verir, okunur.
+
+**Düzeltme "4'ü `minmax(0,1fr)` yapmak" DEĞİLDİ.** Kopyanın kendisi
+kaldırıldı; iki kopyadan birini düzeltmek ikinci davranışı korumaktı.
+
+| satır | ne yapıldı |
+|---|---|
+| 664 (taban, `repeat(2, minmax(0,1fr))`) | **KALDI** — tek tanım |
+| 1092 (taban, `repeat(4, 1fr)`) | **SİLİNDİ** |
+| 1097 (`@media(max-width:1000px)` → `repeat(2,1fr)`) | **SİLİNDİ** — 664 zaten 2 sütun; üstelik `1fr` (çivileyen biçim) |
+| 1013 (`@media (max-width:760px)` → `1fr`) | **KALDI** — meşru mobil davranış |
+| `.erp-quick-grid a{...}` | **KALDI** — farklı seçici; işaretlemede sınıf yok, bağlantıları asıl o biçimlendiriyor |
+
+`.erp-quick-grid a` kuralını da silseydim bağlantılar çerçevesiz ve
+dolgusuz kalırdı — "kopyayı sil" talimatı o seçiciyi kapsamıyordu,
+ölçtüm ve ayırdım.
+
+### DÜZELTME CANLIDA DOĞRULANDI — kırmızı/yeşil aynı aletle
+
+```
+önce  (iki kopya, repeat(4,1fr) kazanıyor) : 1280 → 72 px taşma
+sonra (tek tanım, repeat(2,minmax(0,1fr))) : 1280 → 0
+```
+
+Dört genişlik de temiz (390 · 768 · 1280 · 1536), kapsam kapısı 4/4,
+sonda `1 passed`. Rig'in canlıyı taklit ettiği aynı ölçümde kanıtlıydı
+(Mehmet Bey tarayıcıdan 70 px, rig 72 px).
+
+**Muhafız:** `QuickGridTekTanimTests` (4 test). `@media` blokları
+ayıklanıp TABAN tanım sayılıyor; `.erp-quick-grid a` tanım sayılmıyor.
+Mutasyon: ikinci taban tanım → **1 kırmızı**; `minmax(0,1fr)` → `1fr`
+→ **1 kırmızı**. Geri alınca 4/4.
+
+---
+
+## KARAR ④ — İKİ HATA ARACA TAŞINDI
+
+**Hata 1 — kendini öldürme.** `pgrep -f VBCSCompiler` çağıran kabuğun
+kendi komut satırını eşleştirdi; bulunan pid öldürülünce kabuk öldü
+(çıkış 144). **Kural 78 depoda yazılıydı ve yine düştüm** — kuralın
+yetmediğinin kanıtı.
+
+**Hata 2 — kendini sayma.** `ps | grep -c` kendi boru hattını saydı;
+"kalan: 4" yazdım, gerçek **0**'dı. `grep -ci error`ın `error.log`
+dosya adlarını sayması ile aynı aile.
+
+**KANCANIN KENDİ TAVSİYESİ TUZAĞA YÖNLENDİRİYORDU.** Reddetme metni
+*"pgrep ile pid'i bulup kill &lt;pid&gt; kullanın"* diyordu — yani tam
+beni öldüren yolu öneriyordu. Metin düzeltildi.
+
+Yapılanlar:
+
+| yer | değişiklik |
+|---|---|
+| `surec-durdur.sh` | **`--listele --desen <metin>`** kipi: ÖLDÜRMEZ, PID+RSS basar ve SAYIYI verir; kendini ve atasını dışlar |
+| `pkill-kancasi.sh` | yasak desen `pgrep`i de kapsıyor; tavsiye metni düzeltildi |
+| `PkillYasagiTests` | `\b(pkill\|pgrep)\s+...-f` arıyor |
+
+`--listele` çağırarak sınandı: deseni kendi komut satırında taşımasına
+rağmen `VBCSCompiler` için **0** verdi (kendini saymadı), canlı arka uç
+için **1** (529 MB) — yani hem dışlıyor hem buluyor.
+
+### Yan tuzak — `systemctl show` yanılttı
+
+`--collect` ile başlatılan bir birim bitince SİLİNİYOR ve
+`systemctl show` o birim için **varsayılan** döndürüyor: günlükte
+`FAILURE` yazarken `Result=success` okudum. Birim sonucu artık
+günlükten okunuyor, `show`dan değil.
+
+### Kendi kuralımı çiğnedim
+
+"Rig'i başka hiçbir ağır işle aynı anda koşturmayın" talimatına rağmen
+rig koşarken `dotnet test` başlattım; publish SIGTERM aldı (143) ve
+**doğrulama koşusu düştü**. Tekrarı tek başına koşuldu.

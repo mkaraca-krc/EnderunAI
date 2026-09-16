@@ -45,7 +45,7 @@ komut="$(printf '%s' "$girdi" | jq -r '.tool_input.command // empty' 2>/dev/null
 #
 # Bayrak tarafı hem kısa hem uzun biçimi ve araya giren başka bayrakları
 # kapsar: `-f`, `--full`, `-9 -f`, `--signal TERM -f`.
-YASAK='(^|[;&|(])[[:space:]]*(sudo[[:space:]]+)*pkill[[:space:]]+([^[:space:]]+[[:space:]]+)*(--full|-[a-zA-Z0-9]*f)([[:space:]=]|$)'
+YASAK='(^|[;&|(])[[:space:]]*(sudo[[:space:]]+)*(pkill|pgrep)[[:space:]]+([^[:space:]]+[[:space:]]+)*(--full|-[a-zA-Z0-9]*f)([[:space:]=]|$)'
 
 
 if printf '%s' "$komut" | grep -Eq -- "$YASAK"; then
@@ -54,7 +54,7 @@ if printf '%s' "$komut" | grep -Eq -- "$YASAK"; then
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
     "permissionDecision": "deny",
-    "permissionDecisionReason": "Desenli süreç öldürme YASAK: desen çağıran kabuğun kendi komut satırında da geçtiği için kabuğu öldürür (bu depoda 5 kez oldu, en sonuncusu 2026-09-13). Yerine: deploy/scripts/surec-durdur.sh --port <n> | --desen <metin> | --pid-dosyasi <yol>. O araç kendini ve atasını dışlar. Tek bir süreç öldürecekseniz pgrep ile pid'i bulup 'kill <pid>' kullanın."
+    "permissionDecisionReason": "Desenli süreç öldürme YASAK: desen çağıran kabuğun kendi komut satırında da geçtiği için kabuğu öldürür (bu depoda 5 kez oldu, en sonuncusu 2026-09-13). Yerine: deploy/scripts/surec-durdur.sh --port <n> | --desen <metin> | --pid-dosyasi <yol>. O araç kendini ve atasını dışlar. pgrep -f DE YASAK: o da çağıran kabuğun kendi komut satırını eşleştirir ve bulunan pid'i öldürünce kabuk ölür (2026-09-16'da oldu). Saymak/incelemek için: surec-durdur.sh --listele --desen <metin> — kendini ve atasını dışlar, sayıyı da basar."
   }
 }
 JSON

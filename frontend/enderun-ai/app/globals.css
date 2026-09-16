@@ -661,6 +661,26 @@ body {
   font-size: 13px;
 }
 
+/*
+ * TEK TANIM — İKİNCİ TANIM EKLEMEYİN (K5-ÜST/1, 2026-09-16).
+ *
+ * ÖLÇÜLEN KUSUR: bu dosyada `.erp-quick-grid` İKİ KEZ tanımlıydı.
+ * Doğrusu buradaydı; aşağıda (küçültülmüş blokta) `repeat(4, 1fr)`
+ * yazan bir kopya vardı ve kaynak sırası gereği O KAZANIYORDU.
+ *
+ * ZARAR ÖLÇÜLDÜ: dashboard 1280 px'te sayfayı 72 px taşırıyordu
+ * (Mehmet Bey tarayıcıdan 70 px ölçtü — iki bağımsız ölçüm aynı yeri
+ * gösterdi). Izgara 320 px'lik dar `aside` içinde; dört sütun demek
+ * sütun başına ~80 px demek ve bağlantı metni sığmıyor.
+ *
+ * `1fr` DEĞİL `minmax(0, 1fr)`: `1fr` aslında `minmax(auto, 1fr)`tir
+ * ve asgarisi `auto` olduğu için sütun, içeriğinin doğal genişliğinin
+ * ALTINA inmeyi REDDEDER. Taşmanın mekanizması tam budur.
+ *
+ * DÜZELTME "4'ü minmax yapmak" DEĞİLDİ: kopyanın kendisi kaldırıldı.
+ * İki kopyadan birini düzeltmek ikinci davranışı korumaktı.
+ * Muhafız: `QuickGridTekTanimTests` — ikinci taban tanım kırmızı yakar.
+ */
 .erp-quick-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1089,12 +1109,12 @@ body {
 .erp-nav{display:grid;gap:4px}.erp-nav-item{padding:12px;border-radius:9px;color:#c7dcdd;text-decoration:none}.erp-nav-item:hover,.erp-nav-item.active{color:#fff;background:#ffffff18}.erp-sidebar-footer{margin-top:auto;padding:16px 8px;border-top:1px solid #ffffff18;display:flex;gap:10px}.erp-user-avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#286264}
 .erp-main{min-width:0}.erp-topbar{padding:22px 30px;background:var(--erp-panel);border-bottom:1px solid var(--erp-border)}.erp-topbar h1{margin:0}.erp-topbar p{margin:6px 0 0;color:var(--erp-muted)}.erp-content{padding:28px 30px}
 .erp-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.erp-toolbar button,.erp-actions button{background:var(--erp-primary);color:var(--erp-panel);border:0;border-radius:8px;padding:11px 16px;font-weight:700;cursor:pointer}
-.erp-stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}.erp-stat-card,.erp-panel,.erp-form-card,.erp-table-card{background:var(--erp-panel);border:1px solid var(--erp-border);border-radius:12px;box-shadow:0 3px 15px #1123390a}.erp-stat-card{padding:20px;text-decoration:none;color:inherit}.erp-stat-card strong{display:block;font-size:32px;margin:12px 0}.erp-stat-card small{color:var(--erp-muted)}.erp-panel{padding:22px}.erp-mt{margin-top:18px}.erp-quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.erp-quick-grid a{border:1px solid var(--erp-border);border-radius:8px;padding:14px;text-decoration:none;color:inherit}
+.erp-stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}.erp-stat-card,.erp-panel,.erp-form-card,.erp-table-card{background:var(--erp-panel);border:1px solid var(--erp-border);border-radius:12px;box-shadow:0 3px 15px #1123390a}.erp-stat-card{padding:20px;text-decoration:none;color:inherit}.erp-stat-card strong{display:block;font-size:32px;margin:12px 0}.erp-stat-card small{color:var(--erp-muted)}.erp-panel{padding:22px}.erp-mt{margin-top:18px}.erp-quick-grid a{border:1px solid var(--erp-border);border-radius:8px;padding:14px;text-decoration:none;color:inherit}
 .erp-alert{padding:13px 15px;border-radius:8px;margin-bottom:15px}.erp-alert.success{background:var(--color-semantic-success-tint);color:var(--color-semantic-success)}.erp-alert.error{background:var(--color-semantic-danger-tint);color:var(--color-semantic-danger)}
 .erp-form-card{padding:22px;margin-bottom:18px}.erp-form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.erp-form-grid label{display:grid;gap:7px}.erp-form-grid label span{font-size:13px;font-weight:600}.erp-form-grid .span-2{grid-column:span 2}.erp-form-grid input,.erp-form-grid select,.erp-form-grid textarea{width:100%;padding:11px;border:1px solid var(--erp-border);border-radius:8px;font:inherit}.erp-actions{display:flex;justify-content:flex-end;margin-top:18px}.erp-check{display:flex!important;align-items:center;gap:8px}.erp-check input{width:auto}
 .erp-role-grid{display:flex;flex-wrap:wrap;gap:8px}.erp-role-grid label{display:flex;align-items:center;gap:6px;border:1px solid var(--erp-border);border-radius:8px;padding:9px}.erp-role-grid input{width:auto}
 .erp-table-card{overflow:auto}.erp-table{width:100%;border-collapse:collapse}.erp-table th,.erp-table td{padding:14px 16px;border-top:1px solid var(--erp-border);text-align:left;font-size:13px}.erp-table th{background:var(--erp-bg)}.erp-table td small{display:block;color:var(--erp-muted);margin-top:4px}.erp-status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:700}.erp-status.green{background:var(--color-semantic-success-tint);color:var(--color-semantic-success)}.erp-status.gray{background:var(--erp-bg);color:var(--erp-muted)}.erp-status.blue{background:var(--color-brand-primary-tint);color:var(--erp-primary)}.erp-status.yellow{background:var(--color-semantic-warning-tint);color:var(--color-semantic-warning)}
-@media(max-width:1000px){.erp-stat-grid{grid-template-columns:repeat(2,1fr)}.erp-quick-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:760px){.erp-layout{grid-template-columns:1fr}.erp-sidebar{position:relative;height:auto}.erp-content{padding:18px}.erp-form-grid{grid-template-columns:1fr}.erp-form-grid .span-2{grid-column:span 1}}
+@media(max-width:1000px){.erp-stat-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:760px){.erp-layout{grid-template-columns:1fr}.erp-sidebar{position:relative;height:auto}.erp-content{padding:18px}.erp-form-grid{grid-template-columns:1fr}.erp-form-grid .span-2{grid-column:span 1}}
 
 
 
