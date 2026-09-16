@@ -4,7 +4,11 @@ import {
   DataTable,
   type DataTableColumn,
 } from "@/components/ui/data-table";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  sentetikSatir,
+  sentetikSayisi,
+} from "@/lib/denetim/sentetik-satir";
 
 import ErpShell from "@/components/erp/erp-shell";
 import {
@@ -126,6 +130,11 @@ export default function SecurityAuditPage() {
   /* Sayfa sunucuda atlanıyor: kütük yalnız büyür. */
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  /*
+   * VARSAYILAN KAPALI — denetim ekranının varsayılanı EKSİKSİZ olmalı.
+   * Gizlemeyi kullanıcı bilerek seçer (2026-09-16, Mehmet Bey).
+   */
+  const [sentetikGizle, setSentetikGizle] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -155,6 +164,18 @@ export default function SecurityAuditPage() {
     })();
   }, [load]);
 
+  /*
+   * GİZLEME YALNIZ GÖRÜNTÜLEMEDE. Kayıt eksiksiz; `total` hâlâ
+   * SUNUCUDAKİ gerçek sayı ve öyle kalıyor — gizlenen satırlar o
+   * sayıdan düşülmüyor. Düşseydi ekran, kütükte olmayan bir toplam
+   * gösterirdi.
+   */
+  const gizlenen = useMemo(() => sentetikSayisi(events), [events]);
+  const gorunenSatirlar = useMemo(
+    () => (sentetikGizle ? events.filter((e) => !sentetikSatir(e.actorUsername)) : events),
+    [events, sentetikGizle]
+  );
+
   return (
     <ErpShell
       design="redwood"
@@ -178,6 +199,16 @@ export default function SecurityAuditPage() {
               />
             </div>
 
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={sentetikGizle}
+                onChange={(event) => setSentetikGizle(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              Sonda ve ısıtma satırlarını gizle
+            </label>
+
             <Button onClick={() => void load()} disabled={loading}>
               {loading ? "Yükleniyor..." : "Yenile"}
             </Button>
@@ -190,16 +221,44 @@ export default function SecurityAuditPage() {
           </div>
         )}
 
+        {/*
+          * UYARI ÖLÇÜMLE DEĞİŞTİ (2026-09-16, Kural 94).
+          *
+          * Burada "IP alanı şu an güvenilmez" yazıyordu. VEKİL/1
+          * düzeltmesi 2026-09-15 22:48 UTC'de yayınlandı ve aynı aletle
+          * doğrulandı: iki farklı adresten iki istek, kayda İKİ FARKLI
+          * IP düştü (önce ikisi de 127.0.0.1'di).
+          *
+          * Ama uyarı KALDIRILMADI, DARALTILDI: düzeltmeden ÖNCEKİ
+          * satırlar hâlâ 127.0.0.1 taşıyor ve asıl yanıltıcı olan onlar.
+          * "Alan güvenilir" demek, o satırları da güvenilir göstermek
+          * olurdu.
+          */}
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <strong>IP adresi alanı şu an güvenilmez.</strong> Uygulama
-          proxy&apos;si istemci adresini backend&apos;e iletmediği için giriş
-          dışındaki işlemler <code>127.0.0.1</code> olarak kaydediliyor.
-          Alan olduğu gibi gösteriliyor; düzeltilene kadar IP&apos;ye
-          dayanarak sonuç çıkarmayın.
+          <strong>15.09.2026 22:48&apos;den ÖNCEKİ satırlarda IP alanı
+          güvenilmez.</strong> O tarihe kadar uygulama proxy&apos;si
+          istemci adresini backend&apos;e iletmiyordu; giriş dışındaki
+          işlemler <code>127.0.0.1</code> olarak kaydedildi. Düzeltme
+          yayınlandı ve ölçümle doğrulandı — <strong>o tarihten sonraki
+          satırların IP&apos;si gerçektir.</strong> Eski satırlar
+          silinmedi; IP&apos;ye dayanarak sonuç çıkarırken tarihe bakın.
         </div>
 
+        {/*
+          * GİZLENEN SAYISI HER ZAMAN YAZILIR — sessizce düşürülmez.
+          * Kaç satırın gizlendiğini görmeyen kullanıcı, eksiksiz bir
+          * liste gördüğünü sanır.
+          */}
+        {sentetikGizle && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">
+            Bu sayfada <strong>{gizlenen}</strong> sonda/ısıtma satırı
+            gizlendi. Kayıt eksiksizdir; toplam sayı ({total}) gizlenen
+            satırları da içerir.
+          </div>
+        )}
+
         <DataTable
-          rows={events}
+          rows={gorunenSatirlar}
           columns={columns}
           rowKey={(event) => event.id}
           loading={loading}
