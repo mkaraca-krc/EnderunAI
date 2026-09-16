@@ -504,3 +504,53 @@ sonra: gevşeklik 0 · 0   (dinamik de: 25/25, 16/16)
 Gerekçe çizgi dosyalarının içine yazıldı: gevşek bir çizgi ilerlemeyi
 de gerilemeyi de gizler, çıra süse döner. Boşluk gece eklenen
 testlerden gelmiyordu; birikmiş borçtu.
+
+---
+
+## 2) ISITMA ADAYI (geçersiz gövde) · **ÖLÇÜLDÜ, DÜŞTÜ** — canlıya dokunulmadı
+
+Ölçüm rig'de yapıldı: **aynı yayım çıktısı** (`publish/`),
+`enderun_ai_test`, ayrı port (5158), kendi disk kökü. Canlıda 0 sn
+kesinti. Hazırlık yoklaması `/api/health` ile — o bir `MapGet`,
+denetleyici boru hattına girmez, ölçümü ısıtmaz.
+
+| kol | koşu 1 | koşu 2 |
+|---|---|---|
+| **A** (ön çağrı yok, kontrol) | 0,2718 s | 0,4575 s |
+| **B** (önce geçersiz gövde → 400) | 0,2915 s | 0,3705 s |
+
+Geçersiz gövde **400 döndü** ve **denetim satırı yazmadı** (12→12 ve
+14→14, iki koşuda da doğrulandı) — yani adayın "yazmaz" iddiası doğru.
+**Ama giriş yolunu ısıtmıyor.** Hedef 0,05; B'nin en iyisi 0,29 — on
+kat uzak.
+
+### Maliyet veritabanında DEĞİL
+
+Rig günlüğü: ilk `DbCommand` 42 ms (bağlantı), geri kalanı 1-6 ms.
+`FROM users` sorgusu başlangıçta zaten koşuyor. Yani 0,27-0,45 sn'lik
+bedel EF sorgu derlemesi değil.
+
+### İKİ RİG KUSURU — ikisi de bende
+
+1. **Kol C geçersiz çıktı.** "Yazan anonim uç" diye `access-requests`
+   çağırdım; **400** döndü (yük biçimi yanlış), hiçbir şey yazmadı,
+   yani ölçtüğünü sandığım şeyi ölçmedi. Düzeltmedim, **KALDIRDIM**:
+   o uç `[Required] Password` alanı istiyor ve **parola taşıyan bir
+   ucu her yayında ısıtma için çağırmak yanlış olur.**
+
+2. **Ölçüm gürültülü.** Aynı A kolu iki koşuda 0,2718 ve 0,4575 verdi
+   — %70 sapma. Aletin ilk hükmünde "KISMEN düştü" diyen bir dal
+   vardı; o dal **gürültü okuyordu** ve kaldırıldı. Hüküm daraltıldı:
+   `B ≥ 0,20` → yetmiyor (sapmadan etkilenmez) · `B ≤ 0,05` → yarıyor
+   · arası → **ÖLÇEMEDİ**, "her kolu 3 kez soğuk başlatıp ortancayı
+   alın" der.
+
+### Karar hazır değil — ölçümle birlikte geliyor
+
+Aday ② düştü. Geriye ③ kalıyor ama **③'ün ne yapması gerektiği henüz
+bilinmiyor**: maliyet ne genel MVC boru hattında (logo denendi), ne
+denetleyici etkinleştirmede (geçersiz gövde denendi), ne de
+veritabanında (günlükle ölçüldü). Bir sonraki adım ③'ü tasarlamak
+değil, **kalan bedelin nerede olduğunu ölçmek** olmalı.
+
+**Canlıda hiçbir değişiklik yapılmadı; giriş çağrısı ısıtmada duruyor.**
