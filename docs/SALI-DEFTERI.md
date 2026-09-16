@@ -643,8 +643,25 @@ o anda kullanılabilir   : 650 MB
 
 Gece boyunca şunlar "sistem belleği azaldığı için" öldürüldü:
 K5 rig'i (İKİ kez) · yayın bekleyicisi (üç kez) · anonim uç mutasyon
-turu. Hepsinin ortak sebebi büyük olasılıkla buydu; bu yüzden
-**2.2 sınıflandırması ÖLÇEMEDİ kaldı.**
+turu.
+
+> **DÜZELTME (2026-09-16, Kural 94).** İlk yazdığım "hepsinin ortak
+> sebebi buydu" cümlesi FAZLA GENİŞTİ ve ölçüm onu çürüttü.
+>
+> Derleme sunucuları temizlendikten SONRA, kullanılabilir bellek
+> **6.194 MB** iken K5 rig'i ÜÇÜNCÜ kez öldürüldü — üstelik **iki
+> satırlık çıktıyla**, yani hiç başlayamadan. O anda makinede büyük
+> süreç yoktu.
+>
+> Aynı rig **`systemd-run` altında sorunsuz ilerledi.** Yani K5'i
+> öldüren şey sistem belleği değil, **koşturduğum arka plan görev
+> gözcüsüydü**. Derleme sunucusu bulgusu GEÇERLİ (5,5 GB gerçekten
+> geri geldi) ama **K5 düşmelerini AÇIKLAMIYOR**; iki ayrı olayı tek
+> sebebe bağlamıştım.
+>
+> DERS: bir sebep bulunca, o sebeple açıklanabilecek HER olayı ona
+> bağlamak cazip olur. Açıklamanın kapsamı da ölçülmeli — "bu bulgu
+> şunu da açıklar" ayrı bir iddiadır ve ayrı kanıt ister.
 
 ### `dotnet build-server shutdown` YETMEDİ
 
