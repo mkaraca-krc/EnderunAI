@@ -825,3 +825,66 @@ günlükten okunuyor, `show`dan değil.
 "Rig'i başka hiçbir ağır işle aynı anda koşturmayın" talimatına rağmen
 rig koşarken `dotnet test` başlattım; publish SIGTERM aldı (143) ve
 **doğrulama koşusu düştü**. Tekrarı tek başına koşuldu.
+
+---
+
+## KARAR ③ — DERLEYİCİ SUNUCUSU KAYNAĞINDA KESİLDİ
+
+Mehmet Bey: *"safe-deploy'a temizlik EKLEMEYİN. Kaynağı kesin."*
+Süreç öldürme yayın betiğine girmedi.
+
+### Dört kol ölçüldü — tahmin edilmedi
+
+| kol | bayrak | süre | kalıntı |
+|---|---|---|---|
+| A | yok (bugünkü hâl) | 268 sn | **1** |
+| B | `UseSharedCompilation=false` | 249 sn | **0** |
+| C | `nodeReuse=false` | 252 sn | **1** |
+| D | ikisi birden | 270 sn | **0** |
+
+**Yalnız B çalışıyor.** `nodeReuse` MSBuild işçi düğümlerini yönetir,
+Roslyn derleyici sunucusunu DEĞİL — bu yüzden **eklenmedi**. D, B'den
+iyi değil, yalnız daha yavaş. "Ne olur ne olmaz" diye çalışmayan bir
+bayrak eklemek, sonraki okuyucuya onun çalıştığını söylerdi.
+
+**BEDEL ÖLÇÜLEMEDİ:** 249 / 268 / 270 farkları, A kolunun kendi koşular
+arası sapmasının (244 ↔ 268) içinde. Paylaşılan sunucuyu kapatmanın
+ölçülebilir bir maliyeti çıkmadı.
+
+### İLK ÖLÇÜMÜM GEÇERSİZDİ — kendi rig kusurum
+
+İlk turda B/C/D 3-5 saniye sürdü ve kalıntı 0 verdi. Sebep: kollar
+arasında ara çıktı (`obj/`) duruyordu, koşular **artımlıydı ve hiçbir
+şey derlemedi**. Ve hiçbir şey derlemeyen bir koşu derleyici sunucusu
+da BAŞLATMAZ — yani "kalıntı=0" bayrağın işe yaradığını değil,
+**derleme olmadığını** gösteriyordu. Ölçüm her kolda kaynak damgası
+tazelenerek tekrarlandı; A tekrarında 268 sn çıktı (ilk turdaki 244 ile
+tutarlı), yani taban sağlam.
+
+### Uygulanan
+
+`safe-deploy.sh` içindeki `dotnet publish` ve `dotnet test` çağrılarına
+**yalnız** `-p:UseSharedCompilation=false`.
+
+**Muhafız:** `PaylasilanDerleyiciKapaliTests` (4 test) — her `dotnet
+publish|test` çağrısı bayrağı taşımalı, ve `nodeReuse` eklenmemiş
+olmalı. Mutasyon: bayrak kaldırıldı → 1 kırmızı; `nodeReuse` eklendi →
+1 kırmızı. Geri alınca 4/4.
+
+### GECENİN DÖRDÜNCÜ AYNI HATASI
+
+Muhafızın ilk deseni `fail "dotnet publish başarısız oldu."` satırını —
+bir HATA MESAJINI — çağrı sandı. Aynı ayrımı bu gece dört kez yapmak
+zorunda kaldım:
+
+| sonda | bahsi çağrı sandığı yer |
+|---|---|
+| `AnonimUcCirasiTests` | `UcKapisiDenetimi` — niteliği adıyla anlatıyor |
+| fiş tipi yapısal sondası | `hesap-planı` Borç/Alacak — başka enum |
+| `PkillYasagiTests` | `pkill-kancasi.sh` — yasağı adıyla anlatıyor |
+| `PaylasilanDerleyiciKapaliTests` | `fail "..."` — hata mesajı |
+
+İkinci bir kusur daha: devam satırı desenim yanlıştı — devamı "içinde
+`\` olan satır" diye arıyordu, oysa devam ÖNCEKİ satırın `\` ile
+bitmesiyle belirlenir ve **son devam satırında ters eğik çizgi yoktur**;
+bayrak tam oradaydı. Düzeltildi ve çok satırlı örnekle ayrıca sınandı.

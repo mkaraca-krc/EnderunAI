@@ -548,7 +548,8 @@ run_backend_tests() {
     # yetim Roslyn süreci bırakıyordu ve ikinci koşu makineyi OOM'a
     # sokuyordu — bir oturumda üç kez. Bkz. scripts/derleme-kos.sh.
     if "${REPO_ROOT}/scripts/derleme-kos.sh" \
-            dotnet test "$BACKEND_TEST_PROJECT" --configuration Release 2>&1 | tee -a "$LOG_FILE"; then
+            dotnet test "$BACKEND_TEST_PROJECT" --configuration Release \
+                -p:UseSharedCompilation=false 2>&1 | tee -a "$LOG_FILE"; then
         log "INFO" "Backend testleri geçti."
     else
         # ── DÜŞÜŞÜN SEBEBİ AYIRT EDİLİYOR ────────────────────────
@@ -724,7 +725,30 @@ publish_backend() {
     log "INFO" "Yayınlanan sürüm çıktıya gömülüyor: ${surum_sha}"
 
     if ! "${REPO_ROOT}/scripts/derleme-kos.sh" \
+    # ═══ PAYLAŞILAN DERLEYİCİ SUNUCUSU KAPALI (2026-09-16, ölçüldü) ═══
+    #
+    # `dotnet` varsayılan olarak arkada bir Roslyn derleyici sunucusu
+    # (`VBCSCompiler`) bırakır ve o süreç BÜYÜR. Ölçüldü: bir tanesi
+    # 5,5 GB tutuyordu; PID ile kapatınca kullanılabilir bellek
+    # 650 MB -> 6.161 MB'a çıktı. Makine marjı zaten dar.
+    #
+    # DÖRT KOL ÖLÇÜLDÜ (her kolda GERÇEK derleme, publish geçici dizine):
+    #   A bayraksız ................ 268 sn · kalıntı 1
+    #   B UseSharedCompilation=false 249 sn · kalıntı 0   <- İŞE YARAYAN
+    #   C nodeReuse=false .......... 252 sn · kalıntı 1   <- İŞE YARAMIYOR
+    #   D ikisi birden ............. 270 sn · kalıntı 0   <- B'den iyi değil
+    #
+    # `nodeReuse` MSBuild işçi düğümlerini yönetir, Roslyn sunucusunu
+    # DEĞİL — bu yüzden EKLENMEDİ. İkisini birden körlemesine koymak,
+    # hangisinin çalıştığını bilmemek demekti.
+    #
+    # BEDEL ÖLÇÜLEMEDİ: 249/268/270 farkları, A kolunun kendi koşular
+    # arası sapmasının (244 <-> 268) içinde kalıyor.
+    #
+    # SÜREÇ ÖLDÜRME YAYIN BETİĞİNE GİRMİYOR (Mehmet Bey): yanlış PID
+    # canlıyı düşürür. Çözüm temizlik değil, sunucunun HİÇ DOĞMAMASI.
             dotnet publish "$BACKEND_DIR" -c Release -o "$BACKEND_PUBLISH_YENI" \
+                -p:UseSharedCompilation=false \
             -p:SourceRevisionId="$surum_sha" 2>&1 | tee -a "$LOG_FILE"; then
         fail "dotnet publish başarısız oldu."
     fi
