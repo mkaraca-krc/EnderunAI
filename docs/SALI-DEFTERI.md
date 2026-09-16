@@ -678,3 +678,69 @@ Test/yayın turlarının sonuna bir temizlik adımı koymak mantıklı
 görünüyor ama kendi başıma eklemedim: `safe-deploy` içinde süreç
 öldürmek, yanlış PID seçilirse canlıyı düşürür. Doğru tasarım
 (hangi süreç, hangi ölçütle, canlıyı nasıl korur) bir karar konusu.
+
+---
+
+## 2.2 K5 — SINIFLANDIRMA **YAPILDI** (ÖLÇEMEDİ kapandı)
+
+Rig `systemd-run` altında koştu ve **4/4 genişlik ölçüldü**; kapsam
+kapısı da ilk gerçek koşusunda yeşil yandı.
+
+### Rig canlıyı doğruladı (Kural 81)
+
+| genişlik | rig taşma | Mehmet Bey (tarayıcı, canlı) |
+|---|---|---|
+| 390 | 0 | — |
+| 768 | 0 | — |
+| **1280** | **72 px** | **70 px** |
+| 1536 | **0** | **0** |
+
+İki bağımsız ölçüm aynı yeri gösterdi. Rig'in canlıyı taklit ettiği
+böylece ölçülmüş oldu — varsayılmadı.
+
+### Taşan tek ekran: `/dashboard`
+
+`kasa-banka` ve `odeme-planlari` dört genişlikte de temiz.
+
+### Ata zinciri — çivi tek satırda görünüyor
+
+```
+a                                            w= 106  min-width=AUTO   ← taşıran
+div.erp-quick-grid                           w= 274  min-width=0px  cols=85,1 86,0 92,2 105,6  (toplam 369!)
+div.erp-panel.dashboard-quick-actions-widget w= 320  min-width=0px
+aside                                        w= 320  min-width=auto
+section.enderun-dashboard-layout             w=1016  cols=678px 320px
+```
+
+Sütunlar toplamı **369 px**, kap **274 px**. Fark taşma.
+
+### SINIFLANDIRMA: **ÇİVİLEYEN KURAL** (üçüncü kova)
+
+Ne "meşru geniş" (tablo değil, dört küçük bağlantı) ne de "sebepsiz
+geniş" (içerik zaten küçük). Bir CSS kuralı küçülmeyi YASAKLIYOR.
+
+`app/globals.css` içinde `.erp-quick-grid` **İKİ KEZ** tanımlı:
+
+```
+satır  664 : grid-template-columns: repeat(2, minmax(0, 1fr))   ← DOĞRU
+satır 1092 : grid-template-columns: repeat(4, 1fr)              ← SONRA, kazanıyor
+```
+
+Aynı özgüllük; kaynak sırası gereği sonraki kazanır. Ve fark tam
+sebeptir: **`1fr` = `minmax(auto, 1fr)`** — asgarisi `auto` olduğu için
+her sütun içeriğinin doğal genişliğinin ALTINA inmeyi reddeder.
+`minmax(0, 1fr)` sıfıra kadar iner.
+
+**DÜZELTME DOSYADA ZATEN YAZILI VE EZİLİYOR.** Biri 664'te doğrusunu
+yazmış; 1092'deki küçültülmüş blok onu geçersiz kılıyor. Bu, fiş tipi
+eşlemesiyle aynı aile: **iki kopya, zamanla iki davranış.**
+
+1000 px altında `@media` iki sütuna düşürdüğü için 768 temiz; üstünde
+dört sütun `1fr` ile kalıyor ve 320 px'lik `aside` içinde patlıyor.
+
+### YAPILMADI
+
+Tek simgelik düzeltme belli (`1fr` → `minmax(0, 1fr)`, ya da 1092'deki
+kopyanın kaldırılması) ama **uygulamadım**: görev sınıflandırmaydı, ve
+iki kopyadan HANGİSİNİN kalacağı (2 sütun mu 4 sütun mu) bir tasarım
+kararı — ölçüm o soruyu cevaplamıyor.
