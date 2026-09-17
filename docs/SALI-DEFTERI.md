@@ -1239,3 +1239,25 @@ Yani geri dönüş **yalnız derlenmiş çıktıyı** değiştirir.
 ### Uçuş öncesi
 
 `kullanılabilir bellek 6.089 MB` (eşik 2.048) → bellek kapısı **geçer**.
+
+---
+
+## ÇIRA/2 — YARININ İŞİ (2026-09-17 gecesi, DOKUNULMADI)
+
+Mehmet Bey'in kararı: sorgu dizgesi çırasının **kırmızı tanımı
+değişecek** (Kural 99).
+
+| sonuç | yeni davranış |
+|---|---|
+| gizli bir yola **2xx** sunulduysa | **KIRMIZI** — dağıtımı durdurur |
+| iç ayrıntı sızdıran **5xx** | **KIRMIZI** |
+| **401/403/404** ile karşılanan deneme | **KIRMIZI DEĞİL** — günlük raporda satır |
+
+**Yasak iki çözüm:** beyaz liste · "önceki koşuya göre yeni ad"
+karşılaştırması (kapının kimlik fonksiyonu saldırganın dizgesine
+dayanamaz).
+
+**Neden yarın, bugün değil:** A dağıtımı ve kabul ölçümleri önce
+bitecek. Ama yarın, çünkü çıra **~1 Ekim'e kadar her gece** kırmızı
+yanacak (14 Eylül satırları penceresinde) ve **her dağıtımı
+tıkayacak.**

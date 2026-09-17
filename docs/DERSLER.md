@@ -318,6 +318,41 @@ değil, **indeks**.
 
 ## Kapılar
 
+- **KURAL 99 — BİR KAPI, SALDIRGANIN GÖNDERDİĞİNE DEĞİL, BİZİM NE CEVAP
+  VERDİĞİMİZE BAKAR.** Onun dizgesine bakan kapının **anahtarı ondadır.**
+
+  Mehmet Bey'in kuralı (2026-09-17). Doğuşu: sorgu dizgesi çırası
+  `/api/` yollarında beyaz listede olmayan parametre adı görünce kırmızı
+  yanıyordu. 14 Eylül'de bir tarayıcı `cmd`, `host`, `sql` parametreleri
+  gönderdi; **yedi istek, hepsi 401, tek kaynak, 2xx yok, sızan yok** —
+  yani sistem işini yapmıştı. Buna rağmen çıra **her gece** kırmızı
+  yandı, çünkü o satırlar 17 günlük penceresinde duruyordu. Üstelik
+  okunmamış kırmızı kapısı kurulduktan sonra **dağıtımı da tıkadı.**
+
+  **KIRMIZININ DOĞRU TANIMI — bizim cevabımız yanlışsa:**
+  · herkese açık olmaması gereken bir yola **2xx** sunulduysa,
+  · ya da iç ayrıntı sızdıran bir **5xx** döndüyse.
+
+  **KIRMIZI DEĞİL:** 401/403/404 ile karşılanan denemeler. Sayısı,
+  kaynağı ve hedef yolları **günlük raporda satır olarak** durur —
+  körleşmesin, ama kapıyı tıkamasın.
+
+  ═══ İKİ YANLIŞ ÇÖZÜM, İKİSİ DE YASAK ═══
+
+  **Beyaz liste yok.** `cmd`/`host`/`sql` bizim meşru parametrelerimiz
+  değil; onları listeye eklemek kapıyı yeşile boyamaktır.
+
+  **"Önceki koşuya göre yeni ad" karşılaştırması yok.** Kapının kimlik
+  fonksiyonu **saldırganın yazdığı dizgeye dayanamaz**; dayanırsa o
+  fonksiyonu öğrenen kişi sessizleşir — adı bir kez gönderip
+  "bilinen"e çevirir, sonra serbestçe kullanır.
+
+  ═══ KURAL 89 İLE BAĞI ═══
+
+  Her gece yanan kapı iki gün sonra kimsenin bakmadığı kapıdır. Bu
+  vakada daha kötüsü oldu: kapı yalnız körleşmedi, **dağıtım yolunu
+  tıkadı**. Gürültülü bir kapı, kapı olmaktan çıkıp engele dönüşür.
+
 - **KURAL 98 — SIRADAKİ BİR İŞE BAŞLAMADAN ÖNCE, HÂLÂ AÇIK OLDUĞUNU
   ÖLÇ.** Kapalı bir işi yeniden yapmak zaman kaybıdır; kapalı bir işi
   "yaptım" diye yazmak ise **kaydı bozar**.
