@@ -52,3 +52,42 @@ yolundan çıkarılır, A (K5 düzeltmesi) önce iner.
 4. Kabul ölçütü değişmedi: **dağıtım derlemesinden sonra kalan
    `VBCSCompiler` = 0**, ve derleme süresi maliyeti ölçülüp yazılacak.
 5. Ayrı bir dağıtımda denenecek.
+
+---
+
+## `KesintiVadesi.cs` — vade türetme (2026-09-17, **kod yazıldı, kullanılmadan iptal**)
+
+### Ne yapıyordu
+
+Proje tarihlerinden sözleşme vadesini türetiyor ve üç hâl döndürüyordu:
+`Kisa` (bitiş yılı = başlangıç yılı) · `Uzun` · `Belirsiz` (tarih yok).
+Uzun ve Belirsiz hâllerde **fiş üretilmiyordu** (fail-closed).
+
+### Neden iptal edildi
+
+Mali müşavirin cevabı iki soruyu birden kapattı:
+
+1. **295 doğru, 293 sürçmeymiş** — ölçümün gösterdiği buydu.
+2. **"Siz 193'e yazın, biz ayırırız"** — uzun vadeli sınıflandırmayı
+   müşavir dönem sonunda kendisi yapıyor.
+
+İkincisi bu dosyayı tamamen gereksiz kıldı: sistem **her zaman 193'e**
+yazacak, 295'e hiç yazmayacak. Vade türetmeye, ikinci hesap alanına ve
+uzun-vade fail-closed'ına gerek kalmadı.
+
+### Ve bir kusur daha kapandı
+
+Mehmet Bey ayrıca şunu söyledi: **yıllara sari bayrağı proje
+tarihlerinden TÜRETİLMEZ.** Boş bitiş tarihinden çıkarım yapmak sessiz
+yanlış sonuç üretir — kaçınmaya çalıştığımız kusurun aynısı. Bayrak
+**açık** olacak (kural satırındaki `IsActive`), varsayılanı açık,
+kullanıcı kapatabilecek.
+
+Yani bu dosyanın çözmeye çalıştığı problem, **doğru çözümde hiç
+yoktu**.
+
+### Saklanma sebebi
+
+Denenip vazgeçilen tasarım, kararın kendisi kadar bilgi taşır. Biri
+ileride "vadeye göre hesap ayıralım mı" diye sorarsa cevabı burada:
+**sorulmuştu, müşavir gerek olmadığını söyledi.**

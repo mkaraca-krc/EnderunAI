@@ -1,61 +1,54 @@
-# GÖÇ PLANI — HAKEDİŞ KESİNTİ TÜRLERİ (2026-09-17)
+# GÖÇ PLANI — HAKEDİŞ KESİNTİ TÜRLERİ (2026-09-17, **sadeleşmiş hâl**)
 
 **Durum: PLAN. Kod yazılmadı, göç üretilmedi, şema değişmedi.**
-Mehmet Bey'in onayı bekleniyor.
+
+> **BU PLAN İKİNCİ HÂLİDİR.** İlk hâli iki hesap alanı, proje
+> tarihlerinden vade türetme ve uzun-vade fail-closed'ı içeriyordu.
+> Mali müşavirin cevabı üçünü birden gereksiz kıldı (aşağıda). İlk
+> tasarım `deploy/park/KesintiVadesi.cs` içinde, gerekçesiyle duruyor.
 
 ---
 
-## ⚠ ÖNCE BİR SORU — 293 mü 295 mi?
+## MÜŞAVİR CEVABI — İKİ SORU BİRDEN KAPANDI
 
-Karar metni: *"Hesap 193; sözleşme uzun vadeye yayılıyorsa **293**."*
+| soru | cevap |
+|---|---|
+| uzun vade hesabı 293 mü 295 mi? | **295 doğru, 293 sürçmeymiş** (ölçümün gösterdiği) |
+| mahsup ne zaman sınıflandırılır? | **"Siz 193'e yazın, biz ayırırız"** — müşavir dönem sonunda ayırıyor |
 
-**ÖLÇÜM BUNUNLA ÇELİŞİYOR.** Bu şirketin CANLI hesap planında:
+**Sonuç: sistem HER ZAMAN 193'e yazar, 295'e hiç yazmaz.** 295, müşavirin
+dönem sonunda kullandığı hesaptır; **koda girmez.**
 
-```
-193  PEŞİN ÖDENEN VERGİLER VE FONLAR        (Diğer Dönen Varlıklar)
-293  GELECEK YILLAR İHTİYACI STOKLAR        ← STOK hesabı
-295  PEŞİN ÖDENEN VERGİLER VE FONLAR        ← 193'ün uzun vadeli karşılığı
-```
+### Bunun iptal ettikleri
 
-`295` canlıda **var** (1 adet, ölçüldü). Tekdüzen planda 193'ün duran
-varlık karşılığı 295'tir; 293 stoktur.
-
-**293'e stopaj yazmak, peşin ödenen vergiyi stok hesabına kaydetmek
-olur.** Büyük olasılıkla 295'in sürçmesi — ama tahmin etmiyorum.
-
-> **BU SORU CEVAPLANMADAN uzun vade ayağı kodlanmayacak.** Kısa vade
-> (193) ayağı tartışmasız; istenirse önce o çıkar.
+- ❌ İkinci hesap alanı (`LongTermAccountingAccountId`) — **gerekmiyor**
+- ❌ Vade türetme kuralı (bitiş yılı > başlangıç yılı) — **yok**
+- ❌ Uzun vade hesabı seçilmemişse fail-closed — **konusuz**
+- ❌ Bitiş tarihi NULL ise fiş üretmeme — **düştü**
 
 ---
 
-## İYİ HABER — GEREKENİN ÇOĞU ZATEN VAR
+## YILLARA SARİ BAYRAĞI — TÜRETİLMEZ, AÇIKÇA SEÇİLİR
 
-Ölçüldü: `progress_payment_deduction_rules` **zaten proje kapsamlı** ve
-aradığımız alanların çoğunu taşıyor.
+Mehmet Bey (17.09): *"Boş bitiş tarihinden çıkarım yapmak sessiz yanlış
+sonuç üretir — kaçındığımız kusurun aynısı."*
 
-| ihtiyaç | mevcut alan | durum |
-|---|---|---|
-| sözleşme/proje bazlı kural | `ProjectId` | **VAR** |
-| oran | `Rate` | **VAR** |
-| açık/kapalı bayrağı | `IsActive` | **VAR** |
-| otomatik uygulansın mı | `IsAutomatic` | **VAR** |
-| hesaplama tabanı | `CalculationBase` | **VAR** |
-| **muhasebe hesabı** | — | **YOK** ← eklenecek |
+Bayrak **açık** olacak, **varsayılanı AÇIK**, kullanıcı kapatabilecek.
 
-Hakediş `ProjectId`ye bağlı (sözleşmeye değil), yani kural tablosunun
-kapsamı zaten doğru yerde.
-
-Vade bilgisi de var: `projects.PlannedStartDate/PlannedEndDate`,
-`ContractDate`, `ContractDeadlineDate`.
+**Yeni kolon gerekmiyor:** `progress_payment_deduction_rules.IsActive`
+zaten var ve tam bu işi görüyor — kural satırı aktifse stopaj uygulanır,
+kapatılırsa uygulanmaz. Tek yılda biten bir işte Mehmet Bey satırı
+kapatır.
 
 ---
 
 ## DEĞİŞİKLİKLER
 
-### 1. Enum — üç yeni üye (kod, göç değil)
+### 1. Enum — üç yeni üye (plan aynen korundu)
 
-`HakedisDeductionType`e **sona** eklenir; mevcut değerler DEĞİŞMEZ
-(değer kaydırmak canlı satırların türünü sessizce değiştirirdi):
+Sona eklenir; **mevcut değerler DEĞİŞMEZ** (değer kaydırmak canlı
+satırların türünü sessizce değiştirirdi). `OhsPenalty = 7` **sabit** —
+gecikme cezası ondan ayrı tür.
 
 ```
 IncomeTaxWithholding = 10   // STOPAJ
@@ -63,108 +56,32 @@ StampDuty            = 11   // DAMGA VERGİSİ
 ContractPenalty      = 12   // GECİKME CEZASI (sözleşme)
 ```
 
-`OhsPenalty = 7` **dokunulmaz** — gecikme cezası ondan AYRI tür.
-
-### 2. Göç — kural tablosuna hesap alanı
+### 2. Göç — kural tablosuna TEK hesap alanı
 
 ```
 ALTER TABLE progress_payment_deduction_rules
   ADD COLUMN "AccountingAccountId" uuid NULL;
 ```
 
-**TEK KOLON — `LongTermAccountingAccountId` ŞİMDİ EKLENMİYOR.** Planın
-ilk hâlinde iki kolon vardı; 2b maddesi bunu değiştirdi. Müşavir
-seçenek (a)yı seçerse o kolon hiç gerekmeyecek. Gerekmeyebilecek bir
-kolonu şimdi eklemek, sonra kaldırmak gerekirse veri taşıma işi doğurur.
+**Tür başına tek hesap.** İki alanlı ara tasarım iptal edildi.
 
-Uzun vade ayağı kararlaştığında ayrı bir göçle eklenir — o göç de
-yıkıcı olmayacak (NULL kolon).
+Kolon **NULL** açılıyor; tabloda **0 satır** var (ölçüldü), yani veri
+taşıma yok.
 
-**İKİ ALAN, TEK ALAN DEĞİL — mimari notun karşılığı.** Mehmet Bey:
-*"Tek alanlı tasarım uzun vadeli sözleşmede sessizce yanlış hesaba
-yazar."* Kısa vade hesabı ve uzun vade hesabı ayrı tutuluyor; hangisinin
-kullanılacağını sözleşme vadesi belirliyor.
+### 3. Tür → hesap eşlemesi
 
-İkisi de **NULL** açılıyor: mevcut 0 satır var, yani veri taşıma yok.
-
-### 2b. AYRIM "YILLARA SARİ MI" DEĞİL, "MAHSUP NE ZAMAN" (Mehmet Bey, 17.09)
-
-**Bu, planın ilk hâlindeki varsayımı düzeltiyor.** 193/295 ayrımı bir
-VADE sorusu değil, **mahsup zamanı** sorusudur:
-
-> **Bakiye zamanla uzun vadeliden kısa vadeliye GÖÇ EDER.** Hesap fiş
-> anında sabitlenirse, bir yıl sonra **yanlış sınıfta kalır.**
-
-Yani "bir kez seç, orada bıraksın" tasarımı doğası gereği eksiktir.
-Müşavirin önündeki iki seçenek:
-
-| seçenek | ne demek | koda etkisi |
+| tür | oran | hesap |
 |---|---|---|
-| **(a)** | hep **193**, dönem sonunda müşavir sınıflandırır | iki hesap alanı GEREKMEZ; kod basitleşir |
-| **(b)** | baştan vadeye göre ayır **+ yeniden sınıflandırma adımı** | iki alan + zamanla çalışan bir sınıflandırma işi |
+| Stopaj | **%5** | **193**, her zaman |
+| Damga vergisi | **varsayılan yok** | **193** |
+| Gecikme cezası | **varsayılan yok** | **689** |
+| Teminat *(mevcut)* | %5 | **226** |
+| KDV tevkifatı | — | **kesinti satırı yok** |
 
-**CEVAP GELMEDEN YENİDEN SINIFLANDIRMA KODU YAZILMAYACAK.**
-
-> Not: seçenek (a) çıkarsa `LongTermAccountingAccountId` alanı
-> gereksizleşir. Bu yüzden **kolon şimdi eklenmiyor** — kısa vade ayağı
-> onsuz çalışıyor ve gereksiz bir kolon eklemek, sonra kaldırmak
-> gerekirse veri taşıma işi doğurur.
-
-### 3. Vade çözümü — KURAL, KOD SABİTİ DEĞİL
-
-```
-uzunVadeli = (PlannedEndDate ?? ContractDeadlineDate) yılı
-             > (PlannedStartDate ?? ContractDate) yılı
-```
-
-Yani **yıl atlıyorsa** uzun vadeli. Hesap seçimi:
-
-```
-uzunVadeli && LongTermAccountingAccountId != null
-    -> LongTermAccountingAccountId
-    -> aksi hâlde AccountingAccountId
-```
-
-**ÜÇ HÂL, ÜÇÜ DE AÇIK (Kural 67):**
-
-| vade | davranış |
-|---|---|
-| **KISA** (bitiş yılı = başlangıç yılı) | 193 — fiş üretilir |
-| **UZUN** (bitiş yılı > başlangıç yılı) | **FİŞ ÜRETİLMEZ** — uzun vade hesabı henüz kararlaşmadı (Soru 1 ve 2) |
-| **BELİRSİZ** (bitiş tarihi NULL) | **FİŞ ÜRETİLMEZ** ← Mehmet Bey'in 3. maddesi |
-
-**BELİRSİZ VADE NEDEN AYRI BİR HÂL:** proje bitiş tarihi boşsa vade
-bilinmiyordur. "Kısa varsay" demek, bilinmeyeni iyi haber saymaktır —
-ve bu, uzun vade için koyduğum fail-closed kapısının **tam da kaçırdığı
-kapıdır**: kural `bitiş > başlangıç` ise NULL bitiş `false` döner ve
-sessizce KISA sayılır. Mehmet Bey bunu yakaladı.
-
-Testle çivileniyor: **bitiş tarihi NULL olan projede stopaj fişi
-üretilmiyor.**
-
-### 4. Varsayılan kural satırları — tohumlama DEĞİL, EKRAN
-
-| tür | varsayılan oran | varsayılan bayrak | hesap |
-|---|---|---|---|
-| Stopaj | **%5** | **AÇIK** | 193 / *(uzun vade: soru açık)* |
-| Damga vergisi | **YOK** | kapalı | 193 |
-| Gecikme cezası | **YOK** | kapalı | 689 |
-| Teminat (mevcut) | %5 | mevcut | **226** (müşavir onayladı) |
-
-**Stopajın varsayılanı AÇIK** çünkü işler genelde yıllara sari; ama
-bayrak **kapatılabilir** — tek yılda biten işte uygulanmaz.
-
-**Kod sabiti yazılmıyor.** Bu satırlar projeye kural satırı olarak
-düşecek; ekrandan değiştirilebilir. `DEDUCTION_TYPE_OPTIONS`taki
-`defaultRate` alanı yeni türler için **0** kalır (bkz.
-`tests/kesinti-varsayilan-oran.test.ts` — gerekçesiz varsayılan oran
-yasak).
-
-### 5. KDV tevkifatı — EKLENMİYOR
-
-Kesinti satırı yazılmayacak. Gerekçe: 4/10 oranı **391 tevkifatlı satış
-KDV** hesabında izleniyor; bu fatura/KDV katmanı ve hakedişin net
-tutarını düşürmüyor. Kesinti satırı **çifte düşüm** olurdu.
+Oran ve hesap **kural satırından** gelir, kod sabitinden değil.
+`DEDUCTION_TYPE_OPTIONS`taki `defaultRate` yeni türler için **0** kalır
+— gerekçesiz varsayılan oran yasağı (`tests/kesinti-varsayilan-oran.test.ts`)
+onları da kapsıyor. Stopajın %5'i **kural satırına** yazılır.
 
 ---
 
@@ -172,18 +89,17 @@ tutarını düşürmüyor. Kesinti satırı **çifte düşüm** olurdu.
 
 | adım | geri alınışı |
 |---|---|
-| enum üyeleri | kod; geri alma = commit geri alma |
-| iki yeni kolon | `DROP COLUMN` — **veri kaybı yok** (0 satır, NULL) |
+| enum üyeleri | kod; commit geri alma |
+| tek yeni kolon | `DROP COLUMN` — **veri kaybı yok** (0 satır, NULL) |
 | kural satırları | `IsActive=false` ya da soft delete |
 
-Göç **yıkıcı değil**; `YIKICI-BEYAN` gerekmiyor. Yine de göç provası
-(`goc-provasi.sh`) koşturulacak.
+Göç **yıkıcı değil**; `YIKICI-BEYAN` gerekmiyor. `goc-provasi.sh`
+koşturulacak.
 
 ---
 
 ## SIRA
 
-1. **293/295 sorusu cevaplanır.**
-2. Göç planı onaylanır.
-3. Kod + göç yazılır, `goc-provasi.sh` koşar.
-4. Dağıtım **19:00 sonrası**, ve **A (K5) önce iner**.
+1. Plan onaylanır.
+2. Kod + göç yazılır, `goc-provasi.sh` koşar.
+3. Dağıtım **19:00 sonrası**, ve **A (K5) önce iner**.
