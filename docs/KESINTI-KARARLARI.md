@@ -139,3 +139,110 @@ türlerin oranını yazarken `Other` için oran yazmıyor. Muhafız:
 **Açık kalan benzer bulgu: Barter %40.** Enum belgesi "şantiye bazında
 değişken oranlı" diyor, ekran %40'ı sabitliyor — belge ile davranış
 çelişiyor. Karar bekliyor.
+
+---
+
+## ⚠ KOD YAZMADAN ÖNCE — ÜÇ ÖLÇÜM PLANI DEĞİŞTİRDİ (17.09.2026)
+
+### 1. STOPAJ ZATEN VAR — kesinti türü yapılırsa ÇİFTE DÜŞÜM olur
+
+Stopaj bir kesinti türü değil, **hakediş başlığında ayrı bir alan** ve
+**uçtan uca uygulanmış**:
+
+| katman | nerede |
+|---|---|
+| ekran girişi | `hakedis-editor.tsx` → `incomeTaxWithholdingRate` |
+| saklama | `progress_payments.IncomeTaxWithholdingRate` / `...Amount` |
+| muhasebe fişi | `AccountingIntegrationService:1004` — ayrı satır üretiyor |
+| dışa aktarım | `HakedisExportController:156` — "Stopaj (%…)" |
+
+Ve bir **denge kapısı** var (`:931`):
+
+```
+net ödenecek + kesintiler + stopaj  ==  hakediş + beyan edilen KDV
+```
+
+Tutmazsa fiş üretilmiyor.
+
+**Stopajı `IncomeTaxWithholding = 10` diye kesinti türü olarak
+eklemek, ikinci bir stopaj yolu açar ve bu dengeyi bozar** — kesinti
+toplamı stopajı bir kez, ayrı alan bir kez daha sayar. Bu, KDV
+tevkifatı için reddedilen **çifte düşümün** aynısıdır.
+
+> **KARAR ÖNERİSİ: `IncomeTaxWithholding` enum üyesi EKLENMEYECEK.**
+> Eklenecek tür sayısı üç değil **İKİ**: damga vergisi, gecikme cezası.
+
+### 2. STOPAJ YANLIŞ HESABA YAZIYOR — 360, olması gereken 193
+
+```csharp
+TaxPayableAccountId = await FindAccountIdAsync(companyId, ..., "360")
+...
+var withholdingAccountId = settings.TaxPayableAccountId ?? ...
+```
+
+Stopaj **360 Ödenecek Vergi ve Fonlar**'a, borç tarafında yazıyor.
+
+| kaynak | ne diyor |
+|---|---|
+| mali müşavir | **193** Peşin Ödenen Vergiler ve Fonlar |
+| kodun kendi yorumu (`:1000`) | *"biz peşin ödenmiş vergi olarak izleriz"* → **193** |
+| kodun yaptığı | **360** |
+
+**360 pasif, 193 varlık — farklı muhasebe olgusu.** Kod, kendi
+yorumunun aksini yapıyor (bu gece Barter'da da aynı desen çıkmıştı).
+
+**Canlıda henüz zarar yok:** 1 hakediş var, stopaj oranı > 0 olan **0**.
+Ama ilk stopajlı hakediş yanlış hesaba yazacaktı.
+
+> **ASIL İŞ BU.** "Stopaj ekle" değil, **"stopajın hesabını 360'tan
+> 193'e çevir"**.
+
+### 3. HESAP ALANI ZATEN VAR — GÖÇ GEREKMİYOR
+
+`hakedis_deduction_account_mappings` tablosu mevcut:
+
+```
+CompanyId · DeductionType · AccountingAccountId · Notes · IsActive
+```
+
+Planın eklemeyi önerdiği `AccountingAccountId` **zaten var**, üstelik
+**daha doğru kapsamda**: tür→hesap eşlemesi **şirket** düzeyinde olmalı
+(stopajın hesabı 193'tür, proje başına değişmez), oran ve bayrak ise
+**proje** düzeyinde (`progress_payment_deduction_rules`).
+
+Tablo **boş (0 satır)** — yani eşleme hiç kurulmamış.
+
+> **GÖÇ İPTAL.** `ALTER TABLE ... ADD COLUMN` gerekmiyor. Şema
+> değişmiyor; yapılacak şey **satır eklemek**, kolon değil.
+
+### 4. GEREKÇE ALANI — ölçüldü, yeni kolon açılmadı
+
+`progress_payment_deduction_rules`: `Description (500)` ve
+`Notes (1000)` **var**. Kapatma gerekçesi `Notes`a yazılacak.
+
+---
+
+## GÜNCELLENMİŞ İŞ LİSTESİ (onay bekliyor)
+
+| # | iş | şema? |
+|---|---|---|
+| 1 | Stopaj hesabını **360 → 193** çevir (fail-closed korunarak) | hayır |
+| 2 | Enum'a **İKİ** üye: `StampDuty = 10`, `ContractPenalty = 11` | hayır |
+| 3 | `hakedis_deduction_account_mappings`e satır: damga→193, gecikme→689, teminat→226 | hayır, **veri** |
+| 4 | Kural satırı yoksa **görünür uyarı** (seçim ve gerekçe aşağıda) | hayır |
+| 5 | Oran var + hesap boş → **fiş üretilmez** (testle çivilenir) | hayır |
+
+**Hiçbiri şema değiştirmiyor.** Göç planı konusuz kaldı.
+
+### Madde 4 — hangisini seçtim ve neden
+
+**(b) görünür uyarı** seçildi, (a) tohumlama değil.
+
+Gerekçe: (a) her yeni projeye *"stopaj uygulanır, %5"* diye bir **karar**
+yazar — oysa bu karar projeye göre değişir ve kimse vermemiştir.
+Stopajın uygulanmaması gereken bir projede sessizce uygulanır hâle
+gelir; bu, düzeltmeye çalıştığımız sessizliğin **aynadaki hâli**dir.
+Ayrıca (a) mevcut projeleri kapsamaz, (b) hepsini kapsar.
+
+Uyarı **engel değil**: hakediş oluşturulabilir, ama ekranda *"bu projede
+stopaj kuralı tanımlı değil — kural satırı ekleyin"* yazar.
