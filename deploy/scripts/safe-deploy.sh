@@ -724,7 +724,6 @@ publish_backend() {
     surum_sha="$(cd "$REPO_ROOT" && git rev-parse --short HEAD 2>/dev/null || echo 'bilinmiyor')"
     log "INFO" "Yayınlanan sürüm çıktıya gömülüyor: ${surum_sha}"
 
-    if ! "${REPO_ROOT}/scripts/derleme-kos.sh" \
     # ═══ PAYLAŞILAN DERLEYİCİ SUNUCUSU KAPALI (2026-09-16, ölçüldü) ═══
     #
     # `dotnet` varsayılan olarak arkada bir Roslyn derleyici sunucusu
@@ -747,6 +746,7 @@ publish_backend() {
     #
     # SÜREÇ ÖLDÜRME YAYIN BETİĞİNE GİRMİYOR (Mehmet Bey): yanlış PID
     # canlıyı düşürür. Çözüm temizlik değil, sunucunun HİÇ DOĞMAMASI.
+    if ! "${REPO_ROOT}/scripts/derleme-kos.sh" \
             dotnet publish "$BACKEND_DIR" -c Release -o "$BACKEND_PUBLISH_YENI" \
                 -p:UseSharedCompilation=false \
             -p:SourceRevisionId="$surum_sha" 2>&1 | tee -a "$LOG_FILE"; then

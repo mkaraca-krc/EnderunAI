@@ -888,3 +888,88 @@ zorunda kaldım:
 `\` olan satır" diye arıyordu, oysa devam ÖNCEKİ satırın `\` ile
 bitmesiyle belirlenir ve **son devam satırında ters eğik çizgi yoktur**;
 bayrak tam oradaydı. Düzeltildi ve çok satırlı örnekle ayrıca sınandı.
+
+---
+
+## F) HAKEDİŞ-KESİNTİ/1 — **YALNIZ ÖLÇÜM** (kod yazılmadı, şema değişmedi)
+
+### (1) Kesinti kalemleri nerede tutuluyor
+
+| tablo | ne tutar |
+|---|---|
+| `progress_payment_deductions` | hakediş başına kesinti SATIRLARI |
+| `progress_payment_deduction_rules` | tür başına varsayılan ORAN/kural (`Rate`, `CalculationBase`, `IsAutomatic`) |
+| `subcontractor_progress_payment_deductions` | taşeron hakedişinin karşılığı |
+
+Satır alanları: `DeductionType` · `Description` · `Rate` · `BaseAmount`
+· `Amount` · `IsManualAmount` · `CumulativeAmount` ·
+`CumulativeBaseAmount` · `PreviousAmount` · `AccountingAccountId`.
+
+Yani yapı **kümülatif hakediş mantığına göre kurulmuş** (önceki dönem,
+bu dönem, kümülatif ayrı ayrı) ve muhasebe hesabına bağlanabiliyor.
+
+### (2) Kullanıcı nereden giriyor — **GİRİŞ YOLU VAR**
+
+`/hakedis/yeni` ve `/hakedis/[id]/duzenle` →
+`components/hakedis/hakedis-editor.tsx`.
+
+Kesinti tablosunun altında **her tür için bir düğme** var:
+`+ Kesin teminat`, `+ All-risk sigorta`, `+ Malzeme kesintisi`,
+`+ Barter`, `+ Yemek`, `+ Konaklama / kamp`, `+ İSG ceza`,
+`+ İSG katılımı`, `+ Diğer kesinti`. Basınca o türde bir satır ekleniyor
+ve varsayılan oranı geliyor.
+
+**Avans mahsubu AYRI bir yoldan** giriliyor (`offsets` / `advanceOffsets`),
+kesinti satırı olarak değil — açık avans malzemesine bağlanıyor.
+
+### (3) Tür listesi — **VAR**, 10 üye
+
+| # | enum | etiket (ekranda) | varsayılan oran |
+|---|---|---|---|
+| 0 | `Other` | Diğer kesinti | %0,3 |
+| 1 | `PerformanceBond` | Kesin teminat | %5 |
+| 2 | `AllRiskInsurance` | All-risk sigorta | %0,5 |
+| 3 | `MaterialDeduction` | Malzeme kesintisi | %10 |
+| 4 | `Barter` | Barter | %40 |
+| 5 | `Meal` | Yemek | alt kalemli (kahvaltı/öğlen/akşam/kumanya) |
+| 6 | `Accommodation` | Konaklama / kamp | alt kalemli (yatılı/evci) |
+| 7 | `OhsPenalty` | İSG ceza | alt kalemli |
+| 8 | `OhsContribution` | İSG katılımı | alt kalemli |
+| 9 | `AdvanceOffset` | *(ekranda düğmesi yok — ayrı yoldan)* | — |
+
+Ekranda **9 düğme**, enum'da **10 üye**; fark `AdvanceOffset` ve bu
+kasıtlı görünüyor.
+
+### CANLIDA HENÜZ KULLANILMAMIŞ
+
+```
+progress_payment_deductions ....... 0 satır
+progress_payment_deduction_rules .. 0 satır
+progress_payments ................. 1 satır
+```
+
+Yani mekanizma var, **hiç kesinti girilmemiş** ve **hiç kural
+tanımlanmamış** — varsayılan oranlar şu an yalnız koddaki sabitlerden
+geliyor.
+
+### ÖNERİ LİSTESİ — Mehmet Bey'in listesiyle karşılaştırma
+
+| Mehmet Bey'in maddesi | sistemde |
+|---|---|
+| stopaj | **YOK** |
+| teminat / kesin teminat | VAR (`PerformanceBond`) |
+| avans mahsubu | VAR (ayrı yoldan, `AdvanceOffset`) |
+| malzeme mahsubu | VAR (`MaterialDeduction`) |
+| ceza | VAR (`OhsPenalty` — ama YALNIZ İSG cezası) |
+| KDV tevkifatı | **YOK** |
+| diğer | VAR (`Other`) |
+
+**İKİ EKSİK: stopaj ve KDV tevkifatı.** İkisi de mevzuat kaynaklı ve
+ikisi de ORANI mevzuatla belirlenen kalemler — "diğer"e sıkıştırmak
+hakedişte yanlış hesaba düşmelerine yol açar (`AccountingAccountId`
+alanı tam da bunun için var).
+
+Ayrıca **`OhsPenalty` yalnız İSG cezası**; sözleşme gecikme cezası
+(likidite/gecikme tazminatı) için ayrı bir tür yok.
+
+**KARAR SABAH MEHMET BEY'DE. Gece şema değiştirilmedi, kod yazılmadı.**
