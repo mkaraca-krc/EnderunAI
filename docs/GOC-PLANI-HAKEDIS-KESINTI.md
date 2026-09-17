@@ -69,9 +69,16 @@ ContractPenalty      = 12   // GECİKME CEZASI (sözleşme)
 
 ```
 ALTER TABLE progress_payment_deduction_rules
-  ADD COLUMN "AccountingAccountId"         uuid NULL,
-  ADD COLUMN "LongTermAccountingAccountId" uuid NULL;
+  ADD COLUMN "AccountingAccountId" uuid NULL;
 ```
+
+**TEK KOLON — `LongTermAccountingAccountId` ŞİMDİ EKLENMİYOR.** Planın
+ilk hâlinde iki kolon vardı; 2b maddesi bunu değiştirdi. Müşavir
+seçenek (a)yı seçerse o kolon hiç gerekmeyecek. Gerekmeyebilecek bir
+kolonu şimdi eklemek, sonra kaldırmak gerekirse veri taşıma işi doğurur.
+
+Uzun vade ayağı kararlaştığında ayrı bir göçle eklenir — o göç de
+yıkıcı olmayacak (NULL kolon).
 
 **İKİ ALAN, TEK ALAN DEĞİL — mimari notun karşılığı.** Mehmet Bey:
 *"Tek alanlı tasarım uzun vadeli sözleşmede sessizce yanlış hesaba
@@ -79,6 +86,29 @@ yazar."* Kısa vade hesabı ve uzun vade hesabı ayrı tutuluyor; hangisinin
 kullanılacağını sözleşme vadesi belirliyor.
 
 İkisi de **NULL** açılıyor: mevcut 0 satır var, yani veri taşıma yok.
+
+### 2b. AYRIM "YILLARA SARİ MI" DEĞİL, "MAHSUP NE ZAMAN" (Mehmet Bey, 17.09)
+
+**Bu, planın ilk hâlindeki varsayımı düzeltiyor.** 193/295 ayrımı bir
+VADE sorusu değil, **mahsup zamanı** sorusudur:
+
+> **Bakiye zamanla uzun vadeliden kısa vadeliye GÖÇ EDER.** Hesap fiş
+> anında sabitlenirse, bir yıl sonra **yanlış sınıfta kalır.**
+
+Yani "bir kez seç, orada bıraksın" tasarımı doğası gereği eksiktir.
+Müşavirin önündeki iki seçenek:
+
+| seçenek | ne demek | koda etkisi |
+|---|---|---|
+| **(a)** | hep **193**, dönem sonunda müşavir sınıflandırır | iki hesap alanı GEREKMEZ; kod basitleşir |
+| **(b)** | baştan vadeye göre ayır **+ yeniden sınıflandırma adımı** | iki alan + zamanla çalışan bir sınıflandırma işi |
+
+**CEVAP GELMEDEN YENİDEN SINIFLANDIRMA KODU YAZILMAYACAK.**
+
+> Not: seçenek (a) çıkarsa `LongTermAccountingAccountId` alanı
+> gereksizleşir. Bu yüzden **kolon şimdi eklenmiyor** — kısa vade ayağı
+> onsuz çalışıyor ve gereksiz bir kolon eklemek, sonra kaldırmak
+> gerekirse veri taşıma işi doğurur.
 
 ### 3. Vade çözümü — KURAL, KOD SABİTİ DEĞİL
 
@@ -95,9 +125,22 @@ uzunVadeli && LongTermAccountingAccountId != null
     -> aksi hâlde AccountingAccountId
 ```
 
-**FAIL-CLOSED:** uzun vadeli bir sözleşmede uzun vade hesabı seçilmemişse
-**fiş üretilmez, hata verilir.** Sessizce kısa vade hesabına yazmak, tam
-da mimari notun uyardığı kusurdur.
+**ÜÇ HÂL, ÜÇÜ DE AÇIK (Kural 67):**
+
+| vade | davranış |
+|---|---|
+| **KISA** (bitiş yılı = başlangıç yılı) | 193 — fiş üretilir |
+| **UZUN** (bitiş yılı > başlangıç yılı) | **FİŞ ÜRETİLMEZ** — uzun vade hesabı henüz kararlaşmadı (Soru 1 ve 2) |
+| **BELİRSİZ** (bitiş tarihi NULL) | **FİŞ ÜRETİLMEZ** ← Mehmet Bey'in 3. maddesi |
+
+**BELİRSİZ VADE NEDEN AYRI BİR HÂL:** proje bitiş tarihi boşsa vade
+bilinmiyordur. "Kısa varsay" demek, bilinmeyeni iyi haber saymaktır —
+ve bu, uzun vade için koyduğum fail-closed kapısının **tam da kaçırdığı
+kapıdır**: kural `bitiş > başlangıç` ise NULL bitiş `false` döner ve
+sessizce KISA sayılır. Mehmet Bey bunu yakaladı.
+
+Testle çivileniyor: **bitiş tarihi NULL olan projede stopaj fişi
+üretilmiyor.**
 
 ### 4. Varsayılan kural satırları — tohumlama DEĞİL, EKRAN
 
