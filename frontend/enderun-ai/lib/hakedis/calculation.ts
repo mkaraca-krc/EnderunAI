@@ -340,5 +340,28 @@ export const DEDUCTION_TYPE_OPTIONS: Array<{
   },
   { value: DeductionType.OhsPenalty, label: "İSG ceza", hasLines: true, defaultRate: 0, defaultLines: ["İSG ceza"] },
   { value: DeductionType.OhsContribution, label: "İSG katılımı", hasLines: true, defaultRate: 0, defaultLines: ["İSG katılım payı"] },
-  { value: DeductionType.Other, label: "Diğer kesinti", hasLines: false, defaultRate: 0.3 },
+  /*
+   * "DİĞER" ORANSIZ — %0,3 KALDIRILDI (2026-09-17, ölçümle).
+   *
+   * Burada `defaultRate: 0.3` yazıyordu. Gerekçesi DÖRT YERDE arandı ve
+   * hiçbirinde bulunamadı:
+   *   · satırın yanında yorum ................ yok
+   *   · arka uçta karşılığı .................. yok (sunucuda böyle bir
+   *     varsayılan hiç tanımlı değil)
+   *   · belgeler ............................. yok
+   *   · doğuran commit (7119732e, 04.08.2026) . mesajında hiç geçmiyor
+   * Mali müşavir de tanımadı ("bilmiyorum").
+   *
+   * AYIRICI KANIT ENUM'UN KENDİSİ: `HakedisDeductionType` XML
+   * belgesinde PerformanceBond için "(%5)", AllRiskInsurance için
+   * "(%0,5)", MaterialDeduction için "(%10)" yazıyor — ama `Other`
+   * için yalnız "Serbest kalem" diyor, ORAN YOK. Oran enum'da tanımlı
+   * değil; yalnız bu listede belirmiş.
+   *
+   * Kimsenin açıklayamadığı bir varsayılan oran KUSURDUR: kullanıcı
+   * "Diğer" seçince ekrana kendiliğinden bir oran gelir ve o oran
+   * hakedişten para keser. "Diğer" tanımı gereği oransızdır — oranı
+   * kullanıcı girer.
+   */
+  { value: DeductionType.Other, label: "Diğer kesinti", hasLines: false, defaultRate: 0 },
 ];

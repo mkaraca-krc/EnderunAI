@@ -973,3 +973,128 @@ Ayrıca **`OhsPenalty` yalnız İSG cezası**; sözleşme gecikme cezası
 (likidite/gecikme tazminatı) için ayrı bir tür yok.
 
 **KARAR SABAH MEHMET BEY'DE. Gece şema değiştirilmedi, kod yazılmadı.**
+
+---
+
+## F KARARLARI — mali müşavir cevaplarıyla (2026-09-17)
+
+| tür | karar | hesap | not |
+|---|---|---|---|
+| **Damga vergisi** | EKLENECEK | **193** | oran KOD SABİTİ DEĞİL — sözleşme bazlı kural satırından |
+| **Gecikme cezası (sözleşme)** | EKLENECEK | **689** | `OhsPenalty`den AYRI tür |
+| **Stopaj** | **BEKLEMEDE** | — | müşavir cevapsız bıraktı (1. maddede KDV tevkifatını yazmış), tekrar soruldu |
+| **KDV tevkifatı** | **EKLENMEYECEK** | — | kesinti satırı olmayacak; aşağıda |
+| Teminat kesintisi | mevcut, teyit bekliyor | 193 mü 126/226 mı? | iade **kesin kabulde**; hesap sabitlenmeyecek |
+
+**KDV tevkifatı neden kesinti satırı olmayacak:** müşavir 4/10 oranını
+**391 tevkifatlı satış KDV** hesabında izliyor — bu fatura/KDV katmanı,
+ödemenin net tutarını düşüren bir kesinti değil. Kesinti tablosuna satır
+yazmak **çifte düşüm** olurdu. Hakediş ekranında bilgi amaçlı
+gösterilebilir.
+
+**Damga vergisi ve gecikme cezası sabah onayıyla girecek — gece kod
+yazılmadı, şema değişmedi.**
+
+### "Diğer %0,3" — ÖLÇÜLDÜ, GEREKÇE YOK, KALDIRILDI
+
+Dört yerde arandı:
+
+| nerede | sonuç |
+|---|---|
+| satırın yanında yorum | yok |
+| arka uçta karşılığı | **yok** (sunucuda böyle bir varsayılan hiç tanımlı değil) |
+| belgeler | yok |
+| doğuran commit `7119732e` (04.08.2026) | mesajında **hiç geçmiyor** |
+
+Pozitif kontrol: aynı arama `defaultRate: 5`i buldu, yani alet çalışıyor.
+
+**Ayırıcı kanıt enum'un kendisi:** `HakedisDeductionType` XML belgesi
+`PerformanceBond` için "(%5)", `AllRiskInsurance` için "(%0,5)",
+`MaterialDeduction` için "(%10)" yazıyor — `Other` için yalnız
+"Serbest kalem" diyor, **oran yok**.
+
+Müşavir de tanımadı. → `defaultRate: 0.3` → **0**. Muhafız:
+`tests/kesinti-varsayilan-oran.test.ts`.
+
+### MUHAFIZ İLK KOŞUSUNDA İKİNCİ BİR ORAN BULDU: **Barter %40**
+
+Ve bu **%0,3'ten daha ağır**: orada belge SESSİZDİ, burada belge
+**ÇELİŞİYOR**. Enum'un XML özeti aynen şöyle diyor:
+
+> *Barter — hakedişin mal/hizmet olarak ödenecek kısmı. **Şantiye
+> bazında değişken oranlı.***
+
+Ekran ise %40'ı sabitliyor. **Kod, kendi belgesinin aksini yapıyor.**
+
+KALDIRILMADI — o günkü karar yalnız "Diğer"i kapsıyordu. Bulgu testin
+içinde, adıyla, gerekçeli istisna olarak duruyor; liste büyüyemez
+(ölü istisna kapısı da var). **Karar sabah.**
+
+---
+
+## FATURA-TEVKİFAT/1 — **YALNIZ ÖLÇÜM** (kod yazılmadı)
+
+### (1) Alış faturasında tevkifat bayrağı/oranı var mı
+
+**TUTAR var, ORAN ve BAYRAK yok.**
+
+`supplier_invoices`: `Subtotal` · `VatTotal` · `GrandTotal` ·
+**`WithholdingAmount`**. Satırlarda (`supplier_invoice_items`):
+`VatRate` · `VatAmount`.
+
+Yani tevkifat **başlık düzeyinde tek bir TUTAR** olarak duruyor.
+Müşavirin tarif ettiği "alınan hizmete göre değişen oran (nakliye 2/10,
+demir çelik 5/10)" **modellenmemiş**: ne fatura başına oran alanı var,
+ne hizmet türü–oran tablosu, ne de tevkifatlı/değil bayrağı.
+
+**GİRİŞ YOLU YOK.** `WithholdingAmount` yalnız **e-Fatura içe
+aktarımından** doluyor (`EInvoiceImportService.cs:393,463`). Ön yüzde
+`satin-alma` altında tevkifat girişi bulunamadı.
+
+**Canlı veri: 14 alış faturası, tevkifatlı olan 0.**
+
+### (2) Tevkifat varken KDV nasıl hesaplanıyor
+
+Muhasebe tarafı **mevcut ve çift taraflı doğru**
+(`AccountingIntegrationService`):
+
+```
+tevkifat > VatTotal ise HATA (fail-closed)
+indirilecek KDV = VatTotal - tevkifat   -> 191 (borç)
+tevkifat kısmı                          -> 191.05 sorumlu sıfatıyla beyan (borç)
+                                        -> 360.002 sorumlu sıfatıyla ödenecek (alacak)
+```
+
+Hesaplar yapılandırılmamışsa **fişi üretmiyor, hata veriyor** — sessiz
+geçmiyor.
+
+### (3) 191 eşlemesi nerede
+
+`AccountingIntegrationService.cs:205-211`:
+`VatInAccountId` → **`191.01.03` / `191`** · `ReverseChargeVatInputAccountId`
+→ **`191.05`** · ayrıca `ReverseChargeVatPayableAccountId` → **`360.002`**.
+
+### ⚠ MÜŞAVİRİN TARİFİYLE BİR FARK VAR
+
+Müşavir *"hepsi 191'de tek kodda izlenebiliyor"* dedi. Sistem ise
+**ayırıyor**: indirilebilir kısım `191.01.03`, tevkifatlı kısım
+`191.05`, karşılığı `360.002`. Sistemin yaptığı muhasebe olarak daha
+ayrıntılı — ama **müşavirin beklediği düzen bu değil**. Tasarım
+konuşmasından önce bu farkın kapatılması gerekiyor: ya sistem tek koda
+iner, ya müşavir 191.05'i kabul eder.
+
+**Tasarım ölçümden sonra konuşulacak. Gece kod yazılmadı.**
+
+---
+
+## E1 AÇILIŞ STOKU — MÜŞAVİR KURALI (kayda geçti, BAŞLATILMADI)
+
+| konu | kural |
+|---|---|
+| tarih | **fiziki sayım tarihine** açılış fişi |
+| değerleme | **son alış fiyatı** üzerinden |
+| fark — noksan | **197 Sayım Tesellüm Noksanı** |
+| fark — fazla | **397 Sayım Tesellüm Fazlası** |
+
+**ENGEL KALKTI ama SIRA GELMEDİ.** Açılış girişi **malzeme kartları
+açılmadan başlatılmayacak** (Mehmet Bey, 2026-09-17).
