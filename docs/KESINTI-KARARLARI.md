@@ -246,3 +246,43 @@ Ayrıca (a) mevcut projeleri kapsamaz, (b) hepsini kapsar.
 
 Uyarı **engel değil**: hakediş oluşturulabilir, ama ekranda *"bu projede
 stopaj kuralı tanımlı değil — kural satırı ekleyin"* yazar.
+
+---
+
+## STOPAJ YÖN ÖLÇÜMÜ (17.09.2026) — **TEK YÖN: BİZ ALIYORUZ**
+
+Mehmet Bey'in sorusu: *"progress_payments tek yön mü taşıyor iki yön mü?"*
+
+| ölçüm | sonuç |
+|---|---|
+| `progress_payments`'ta yön/tip alanı | **YOK** — `direction`/`type`/`employer`/`subcontractor` deseniyle 0 kolon |
+| taşeron hakedişi | **AYRI TABLO** (`subcontractor_progress_payments`) |
+| taşeron tablosunda stopaj alanı | **HİÇ YOK** — `%withhold%` deseniyle 0 kolon |
+| stopaj fiş satırının bağlamı | `project.EmployerCurrentAccountId` → **işveren** |
+| taşeron hakedişi için ayrı fiş yolu | **YOK** (yalnız nakit akış projeksiyonu okuyor) |
+
+### Sonuç
+
+`progress_payments` **tek yönlüdür: işverene düzenlediğimiz, tahsil
+ettiğimiz hakediş.** Taşeron yönü ayrı tabloda ve o tarafta stopaj
+kavramı hiç kurulmamış.
+
+Dolayısıyla Mehmet Bey'in ayrımında **"tek yön (biz alıyoruz)" dalı
+geçerli**: işveren bizden kesiyor, bizde **peşin ödenen vergi** oluşuyor
+→ **193, AKTİF**.
+
+> **360 GERÇEK BİR KUSURDUR.** Taşeron yönü için doğru olabilirdi ama o
+> yön bu kod yolunda yok.
+>
+> Hem mali müşavir hem **kodun kendi yorumu** (`"biz peşin ödenmiş vergi
+> olarak izleriz"`) 193 diyor; yapılan iş 360.
+
+**Canlıda zarar yok:** 1 hakediş, stopaj oranı > 0 olan **0**.
+
+**SATIR DEĞİŞTİRİLMEDİ** — karar Mehmet Bey'de (17.09.2026 talimatı).
+
+### Not — taşeron yönü ileride gelirse
+
+O gün stopaj hesabı **yöne göre çözülmek zorunda kalacak**: aldığımızda
+193, ödediğimizde 360. Bugün tek sabit doğru, ama **sonsuza kadar
+değil**. Bu not, o günü bekleyen kişi içindir.
