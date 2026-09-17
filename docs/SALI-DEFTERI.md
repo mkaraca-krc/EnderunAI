@@ -1175,3 +1175,67 @@ geldikçe düzeltmek tek satır.
 Kapı çağrılarak sınandı: eşik 99999 → **dağıtım başlamaz**; ve şu anki
 gerçek durumda (475 MB) kapı **haklı olarak kırmızı** — bu, kapının
 canlı kanıtı.
+
+---
+
+## A DAĞITIMI — GERİ DÖNÜŞ YOLU (koşudan ÖNCE yazıldı, 2026-09-17)
+
+> *"Sonra öğrenilen geri dönüş yolu, geri dönüş yolu değildir."*
+
+### Komut
+
+```
+deploy/scripts/geri-al.sh --prova     # kuru koşum, dokunmaz
+deploy/scripts/geri-al.sh --uygula    # gerçek geri dönüş
+```
+
+### Prova KOŞULDU (varsayılmadı) — çıktısı
+
+```
+arka uç yedeği HAZIR : 75M, dll 2026-09-15 18:25:12
+ön yüz yedeği HAZIR  : 88M, BUILD_ID GXGK0CQakTv-DpyrGQjkp
+şu anki arka uç      : dll 2026-09-15 22:45:04
+şu anki ön yüz       : BUILD_ID MnWyVOWdp30tDYn5LhXoF
+çalışan sürüm        : 1.0.0+8abeb57c
+```
+
+Yapacakları: `publish ← publish-rollback` · `.next ←
+frontend-next-rollback` · iki servisi restart · healthcheck.
+
+### Dizin uyuşmazlığı ARANDI, YOK
+
+`safe-deploy` günlüğü "eski yayın `publish-eski`de bekliyor" diyor,
+`geri-al.sh` ise `publish-rollback` okuyor — **farklı dizinler**, bu
+yüzden kontrol edildi:
+
+`safe-deploy.sh:662-664` takastan ÖNCE `publish-rollback`i `publish`ten
+tazeliyor. `publish-eski` atomik takasın yer değiştirmiş eski dizini,
+geri dönüş kaynağı değil. **İkisi uyuşuyor.**
+
+### Süre
+
+Ölçülen bileşenler: **75 MB + 88 MB kopyalama**, iki servis restart,
+healthcheck (en çok 30 sn).
+
+**DÜRÜST SINIR: gerçek bir geri dönüş süresi ÖLÇÜLMEDİ.** Bileşenlerden
+tahmin ~1-2 dakika, kesinti dağıtım takasıyla benzer mertebede (ölçülen
+9 sn). Bu bir tahmindir; ilk gerçek geri dönüşte ölçülecek.
+
+### Veritabanına dokunur mu — **HAYIR**
+
+`geri-al.sh` göç geri almıyor ve bunu açıkça yazıyor
+(*"GÖÇ GERİ ALINMAZ"*).
+
+Ve bu akşam **zaten şema değişikliği yok** — ölçüldü:
+
+```
+paket        : 25 commit
+göç dosyası  : 0
+şema/sql     : 0
+```
+
+Yani geri dönüş **yalnız derlenmiş çıktıyı** değiştirir.
+
+### Uçuş öncesi
+
+`kullanılabilir bellek 6.089 MB` (eşik 2.048) → bellek kapısı **geçer**.
